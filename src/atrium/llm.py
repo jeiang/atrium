@@ -68,14 +68,14 @@ def folder_prompt(catalog, neighbors, message, body):
     )
 
 
-def chat_json(url, system, user, schema):
+def chat_json(url, system, user, schema, max_tokens=MAX_TOKENS):
     reply = post_json(
         f"{url}/chat/completions",
         {
             "model": MODEL,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "temperature": 0,
-            "max_tokens": MAX_TOKENS,
+            "max_tokens": max_tokens,
             "cache_prompt": True,
             "chat_template_kwargs": {"enable_thinking": False},
             "response_format": {

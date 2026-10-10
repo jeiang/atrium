@@ -157,4 +157,4 @@ def test_chat_outage_defers_llm_stage_only(tmp_path):
 
 
 def test_stage_order_constant():
-    assert router.STAGES == ("operator", "learned", "knn", "llm", "fallback")
+    assert router.STAGES == ("correction", "operator", "learned", "knn", "llm", "fallback")

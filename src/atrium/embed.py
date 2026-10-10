@@ -15,6 +15,10 @@ def document_text(subject, name, addr, body):
     return f"title: {subject or 'none'} | text: From: {name} <{addr}>\n\n{(body or '')[:EMBED_BODY_CHARS]}"
 
 
+def query_text(query):
+    return f"task: search result | query: {query}"
+
+
 def embed_texts(url, texts):
     reply = post_json(f"{url}/embeddings", {"model": MODEL, "input": texts})
     data = sorted(reply["data"], key=lambda d: d.get("index", 0))

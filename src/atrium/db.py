@@ -126,11 +126,47 @@ CREATE TABLE IF NOT EXISTS flag_decisions (
     security_event INTEGER,
     llm_flag INTEGER
 );
-CREATE VIEW IF NOT EXISTS filed_messages AS
-SELECT * FROM messages
-WHERE gone_at IS NULL AND in_inbox = 0 AND sent = 0
-  AND folder IS NOT NULL AND folder != '';
+CREATE TABLE IF NOT EXISTS corrections (
+    message_id INTEGER PRIMARY KEY REFERENCES messages(id),
+    account TEXT NOT NULL,
+    folder TEXT NOT NULL,
+    ts REAL NOT NULL,
+    source TEXT NOT NULL DEFAULT 'operator'
+);
 """
+
+
+def filed_view_sql(conn):
+    columns = []
+    for col in (r["name"] for r in conn.execute("PRAGMA table_info(messages)")):
+        if col == "folder":
+            columns.append("COALESCE(c.folder, m.folder) AS folder")
+        elif col == "in_inbox":
+            columns.append("CASE WHEN c.folder IS NULL THEN m.in_inbox ELSE 0 END AS in_inbox")
+        else:
+            columns.append(f"m.{col}")
+    return (
+        f"CREATE VIEW filed_messages AS SELECT {', '.join(columns)} "
+        "FROM messages m LEFT JOIN corrections c ON c.message_id = m.id "
+        "WHERE m.gone_at IS NULL AND m.sent = 0 "
+        "AND COALESCE(c.folder, m.folder) IS NOT NULL AND COALESCE(c.folder, m.folder) != '' "
+        "AND (c.folder IS NOT NULL OR m.in_inbox = 0)"
+    )
+
+
+def refresh_views(conn):
+    wanted = filed_view_sql(conn)
+    current = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'view' AND name = 'filed_messages'").fetchone()
+    if current is not None and current[0] == wanted:
+        return
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute("DROP VIEW IF EXISTS filed_messages")
+        conn.execute(wanted)
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
 
 
 def connect(path):
@@ -144,6 +180,7 @@ def connect(path):
     sqlite_vec.load(conn)
     conn.enable_load_extension(False)
     conn.executescript(SCHEMA)
+    refresh_views(conn)
     return conn
 
 
@@ -163,6 +200,7 @@ def connect_memory():
     sqlite_vec.load(conn)
     conn.enable_load_extension(False)
     conn.executescript(SCHEMA)
+    refresh_views(conn)
     return conn
 
 

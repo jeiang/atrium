@@ -10,12 +10,15 @@ SINCE = re.compile(r"^(\d+)([hd])$")
 DISAGREEMENT_LINES = 40
 TOP_DESTS = 15
 
-OUTCOME_SQL = """
+LIVE_COPY = (
+    "(SELECT l.{column} FROM messages l WHERE l.account = m.account AND l.digest = m.digest "
+    "AND l.gone_at IS NULL ORDER BY l.id DESC LIMIT 1)"
+)
+ACTUAL_SQL = f"{LIVE_COPY.format(column='location')} AS actual, {LIVE_COPY.format(column='in_inbox')} AS actual_inbox"
+
+OUTCOME_SQL = f"""
 SELECT d.id AS decision_id, d.stage, d.action, d.dest, m.id AS message_id, m.msgid, m.from_domain,
-  (SELECT l.location FROM messages l WHERE l.account = m.account AND l.digest = m.digest
-    AND l.gone_at IS NULL ORDER BY l.id DESC LIMIT 1) AS actual,
-  (SELECT l.in_inbox FROM messages l WHERE l.account = m.account AND l.digest = m.digest
-    AND l.gone_at IS NULL ORDER BY l.id DESC LIMIT 1) AS actual_inbox
+  {ACTUAL_SQL}
 FROM decisions d JOIN messages m ON m.id = d.message_id
 WHERE d.account = ? AND d.ts >= ?
 ORDER BY d.id
@@ -109,18 +112,30 @@ def disagreement_lines(title, pairs):
     return out
 
 
-def flag_section(conn, account, since):
+def flag_counts(conn, account, since):
     rows = conn.execute(
         "SELECT contacts_match, llm_flag FROM flag_decisions WHERE account = ? AND ts >= ?", (account, since)
     ).fetchall()
     judged = [r for r in rows if r["llm_flag"] is not None]
     contacts = sum(r["contacts_match"] for r in rows)
     llm = sum(r["llm_flag"] for r in judged)
-    both = sum(1 for r in judged if r["contacts_match"] and r["llm_flag"])
+    return {
+        "considered": len(rows),
+        "contacts": contacts,
+        "llm": llm,
+        "judged": len(judged),
+        "both": sum(1 for r in judged if r["contacts_match"] and r["llm_flag"]),
+        "contacts_only": sum(1 for r in judged if r["contacts_match"] and not r["llm_flag"]),
+        "llm_only": sum(1 for r in judged if r["llm_flag"] and not r["contacts_match"]),
+    }
+
+
+def flag_section(conn, account, since):
+    n = flag_counts(conn, account, since)
     return [
-        f"flags (unread inbox): considered={len(rows)}, contacts would-flag={contacts}, "
-        f"9B flag={llm} of {len(judged)} judged, both={both}, contacts-only={sum(1 for r in judged if r['contacts_match'] and not r['llm_flag'])}, "
-        f"9B-only={sum(1 for r in judged if r['llm_flag'] and not r['contacts_match'])}"
+        f"flags (unread inbox): considered={n['considered']}, contacts would-flag={n['contacts']}, "
+        f"9B flag={n['llm']} of {n['judged']} judged, both={n['both']}, contacts-only={n['contacts_only']}, "
+        f"9B-only={n['llm_only']}"
     ]
 
 

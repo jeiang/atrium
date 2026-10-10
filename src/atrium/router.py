@@ -2,7 +2,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 
-from . import llm
+from . import corrections, llm
 from .config import (
     ACCOUNTS,
     FOLDER_MIN_MESSAGES,
@@ -16,7 +16,7 @@ from .rules import first_match, learned_match, load_rules
 
 log = logging.getLogger("atrium.router")
 
-STAGES = ("operator", "learned", "knn", "llm", "fallback")
+STAGES = ("correction", "operator", "learned", "knn", "llm", "fallback")
 
 
 @dataclass
@@ -117,6 +117,11 @@ def message_body(conn, message_id):
 def decide(conn, row, rules, ctx, judge=llm.judge_folder):
     account = row["account"]
     spec = ACCOUNTS[account]
+    corrected = corrections.get_correction(conn, row["id"])
+    if corrected is not None:
+        return Decision(
+            "correction", "file", corrected["folder"], key=corrected["source"], confidence=1.0
+        )
     rule = first_match(row, rules)
     if rule is not None:
         return Decision("operator", rule.action, rule.dest, key=rule.id)
