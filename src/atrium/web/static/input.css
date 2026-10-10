@@ -78,3 +78,10 @@
   --color-success: var(--success);
   --color-chart-6: var(--chart-6);
 }
+
+@layer components {
+  .toaster .toast .toast-content section p {
+    word-break: normal;
+    overflow-wrap: anywhere;
+  }
+}

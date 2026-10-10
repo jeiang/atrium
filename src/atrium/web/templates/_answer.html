@@ -16,7 +16,7 @@
     <section><p>{{ answer.error }}</p></section>
   </div>
   {% elif answer.segments %}
-  <p class="text-base/relaxed text-pretty">
+  <p class="text-base/relaxed text-pretty whitespace-pre-line">
     {%- for s in answer.segments -%}
     {%- if s.cite is defined -%}
     <a class="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-sm bg-secondary px-1 align-baseline font-mono text-xs font-medium text-secondary-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {{ open_attrs(s.message_id) }} aria-label="Source {{ s.cite }}">{{ s.cite }}</a>
@@ -26,7 +26,7 @@
     {%- endfor -%}
   </p>
   {% else %}
-  <p class="text-base/relaxed">{{ answer.answer }}</p>
+  <p class="text-base/relaxed text-pretty whitespace-pre-line">{{ answer.answer }}</p>
   {% endif %}
   {% if answer.rejected %}
   <p class="text-xs text-muted-foreground">Removed {{ answer.rejected | length }} {{ "citation" if answer.rejected | length == 1 else "citations" }} ({{ answer.rejected | join(", ") }}) that pointed outside the retrieved messages.</p>

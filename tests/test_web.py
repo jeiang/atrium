@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -72,8 +73,9 @@ def rows(cfg, sql, params=()):
 
 
 def test_static_files_are_served(client):
-    c, _, _ = client
+    c, cfg, _ = client
     assert c.get("/static/app.css").text == "body{}"
+    assert f'href="/static/app.css?v={web.asset_version(cfg.static_dir)}"' in c.get("/").text
     assert c.get("/static/missing.js").status_code == 404
 
 
@@ -98,6 +100,19 @@ def test_search_filters_and_bad_date(client):
     assert "Weekly news" in hit.text and "Invoice" not in hit.text
     bad = c.get("/", params={"date_from": "not-a-date"}, headers=HX)
     assert bad.status_code == 200
+
+
+def test_search_pages_with_show_more(client, monkeypatch):
+    c, _, _ = client
+    monkeypatch.setattr(web, "SEARCH_PAGE", 1)
+    first = c.get("/", headers=HX)
+    assert "Show older mail" in first.text and "<title>Search · atrium</title>" in first.text
+    assert 'hx-get="/?offset=1"' in first.text
+    rest = c.get("/", params={"offset": 1}, headers=HX)
+    assert "<ul" not in rest.text and "<li>" in rest.text and "autofocus" in rest.text
+    assert "<title>" not in c.get("/").text.split("</head>")[1]
+    searched = c.get("/", params={"q": "statement"}, headers=HX)
+    assert "More than 1 matches" in searched.text and "Show more matches" in searched.text
 
 
 def test_search_degrades_without_embeddings(seeded):
@@ -187,8 +202,10 @@ def test_triage_full_partial_and_paging(client, monkeypatch):
     monkeypatch.setattr(web, "PAGE_SIZE", 1)
     first = c.get("/triage", headers=HX)
     assert "<html" not in first.text and "Show older decisions" in first.text and 'id="decision-list"' in first.text
+    assert "autofocus" not in first.text
     more = c.get("/triage", params={"offset": 1}, headers=HX)
     assert "decision-list" not in more.text and "Show older decisions" not in more.text and "<li" in more.text
+    assert "autofocus" in more.text
     filtered = c.get("/triage", params={"stage": "operator", "agreement": "pending", "account": "icloud"}, headers=HX)
     assert filtered.status_code == 200
     assert c.get("/triage", params={"stage": "nonsense"}).status_code == 422
@@ -229,7 +246,7 @@ def test_rules_lifecycle(client):
 def test_rule_validation_errors_rerender(client):
     c, cfg, _ = client
     bad = c.post("/rules", data={"id": "x", "action": "file", "dest": "", "field": ["from_addr"], "op": ["eq"], "value": ["a"]})
-    assert bad.status_code == 200 and "The rule was not saved" in bad.text and "file rule needs dest" in bad.text
+    assert bad.status_code == 200 and "The rule was not saved" in bad.text and "Choose a destination" in bad.text
     assert rows(cfg, "SELECT * FROM rules") == []
     assert c.post("/rules/ghost", data={"action": "file", "dest": "A", "field": ["from_addr"], "op": ["eq"], "value": ["a"]}).status_code == 200
     assert c.get("/rules/ghost/edit").status_code == 404
@@ -246,15 +263,21 @@ def test_rule_new_from_message_prefills(client):
 def test_rule_condition_row_and_preview(client):
     c, _, _ = client
     row = c.get("/rules/condition", params={"field": "subject", "op": "present"})
-    assert row.status_code == 200 and "No value needed" in row.text
+    assert row.status_code == 200 and "No value needed" in row.text and "autofocus" not in row.text
     assert c.get("/rules/condition").status_code == 200
+    added = c.get("/rules/condition", params={"focus": "field"}).text
+    assert re.search(r'name="field"[^>]*autofocus', added)
+    changed = c.get("/rules/condition", params={"op": "present", "focus": "op"}).text
+    assert re.search(r'name="op"[^>]*autofocus', changed)
     preview = c.post(
         "/rules/preview",
         data={"account": "icloud", "action": "file", "dest": "Bills", "field": ["from_domain"], "op": ["eq"], "value": ["shop.test"]},
     )
     assert preview.status_code == 200 and "Invoice" in preview.text
     broken = c.post("/rules/preview", data={"action": "file", "dest": "A", "field": ["nope"], "op": ["eq"], "value": ["a"]})
-    assert broken.status_code == 200 and "unknown field" in broken.text
+    assert broken.status_code == 200 and "Unknown field" in broken.text
+    incomplete = c.post("/rules/preview", data={"action": "file", "dest": "A"})
+    assert "Add at least one condition." in incomplete.text and "preview:" not in incomplete.text
 
 
 def test_rule_move_and_delete(client):
@@ -275,8 +298,11 @@ def test_rule_move_and_delete(client):
     assert order() == ["three", "one", "two"]
     assert c.post("/rules/ghost/move", data={"direction": "up"}).status_code == 404
     assert c.post("/rules/one/move", data={"direction": "sideways"}).status_code == 422
+    last = c.post("/rules/two/move", data={"direction": "down"}, headers=HX).text
+    assert re.search(r'aria-label="Move two up"[^>]*autofocus', last)
     gone = c.delete("/rules/one", headers=HX)
     assert gone.status_code == 200 and "Rule deleted" in gone.text and order() == ["three", "two"]
+    assert 'href="/rules/two/edit" autofocus' in gone.text
     assert "Rule not found" in c.delete("/rules/one", headers=HX).text
 
 

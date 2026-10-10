@@ -1,12 +1,13 @@
 {% from "_icons.html" import icon %}
 {% for row in rows %}
+{% set focus_row = offset and loop.first %}
 {% include "_triage_row.html" %}
 {% else %}
 {% if not offset %}
 <li class="flex flex-col items-center gap-2 px-4 py-10 text-center">
   <span class="grid size-8 place-items-center rounded-lg bg-muted">{{ icon("route") }}</span>
   <p class="text-sm font-medium">No decisions match</p>
-  <p class="max-w-sm text-sm text-muted-foreground">atrium decides on mail that has been read and is still in the inbox. Clear a filter, or check back after the next sync.</p>
+  <p class="max-w-sm text-sm text-muted-foreground">{{ "Clear a filter to see the rest." if stage or agreement else "atrium decides on mail that has been read and is still in the inbox. Check back after the next sync." }}</p>
 </li>
 {% endif %}
 {% endfor %}

@@ -19,14 +19,15 @@
         {% if rule.action == "delete" %}<span class="font-medium text-destructive">Delete</span>{% else %}<span class="text-muted-foreground">File into</span> <span class="font-medium">{{ rule.dest }}</span>{% endif %}
       </p>
     </div>
+    {% set mv = moved.direction if moved is defined and moved and moved.id == rule.id else "" %}
     <div class="col-start-2 flex flex-wrap gap-1 sm:col-start-3">
       <div class="button-group" role="group" aria-label="Move {{ rule.id }}">
         <button type="button" class="btn" data-size="icon-sm" data-variant="outline" aria-label="Move {{ rule.id }} up"{% if loop.first %} disabled{% endif %}
-                hx-post="/rules/{{ rule.id | urlencode }}/move" hx-vals='{{ {"direction": "up", "account": account} | tojson }}'{% if moved is defined and moved and moved.id == rule.id and moved.direction == "up" %} autofocus{% endif %} hx-target="#rule-list" hx-swap="outerHTML">{{ icon("chevron-up") }}</button>
+                hx-post="/rules/{{ rule.id | urlencode }}/move" hx-vals='{{ {"direction": "up", "account": account} | tojson }}'{% if (mv == "up" and not loop.first) or (mv == "down" and loop.last) %} autofocus{% endif %} hx-target="#rule-list" hx-swap="outerHTML">{{ icon("chevron-up") }}</button>
         <button type="button" class="btn" data-size="icon-sm" data-variant="outline" aria-label="Move {{ rule.id }} down"{% if loop.last %} disabled{% endif %}
-                hx-post="/rules/{{ rule.id | urlencode }}/move" hx-vals='{{ {"direction": "down", "account": account} | tojson }}'{% if moved is defined and moved and moved.id == rule.id and moved.direction == "down" %} autofocus{% endif %} hx-target="#rule-list" hx-swap="outerHTML">{{ icon("chevron-down") }}</button>
+                hx-post="/rules/{{ rule.id | urlencode }}/move" hx-vals='{{ {"direction": "down", "account": account} | tojson }}'{% if (mv == "down" and not loop.last) or (mv == "up" and loop.first) %} autofocus{% endif %} hx-target="#rule-list" hx-swap="outerHTML">{{ icon("chevron-down") }}</button>
       </div>
-      <a class="btn" data-size="sm" data-variant="ghost" href="/rules/{{ rule.id | urlencode }}/edit">{{ icon("pencil") }}Edit</a>
+      <a class="btn" data-size="sm" data-variant="ghost" href="/rules/{{ rule.id | urlencode }}/edit"{% if focus_id is defined and focus_id == rule.id %} autofocus{% endif %}>{{ icon("pencil") }}Edit</a>
       <button type="button" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Delete {{ rule.id }}"
               hx-delete="/rules/{{ rule.id | urlencode }}?account={{ account | urlencode }}" hx-confirm="Delete rule {{ rule.id }}?" hx-target="#rule-list" hx-swap="outerHTML">{{ icon("trash-2", "text-destructive") }}</button>
     </div>

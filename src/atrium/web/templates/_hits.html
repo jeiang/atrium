@@ -1,0 +1,38 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import open_attrs, place, sender, when %}
+{% for hit in results.hits %}
+<li>
+  <a class="item rounded-none px-4 py-3 hover:bg-accent/60 focus-visible:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset" {{ open_attrs(hit.id) }}{% if offset and loop.first %} autofocus{% endif %}>
+    <section class="min-w-0 gap-1">
+      <div class="flex items-center gap-2">
+        {% if not hit.seen %}<span class="size-2 shrink-0 rounded-full bg-warning" aria-hidden="true"></span><span class="sr-only">Unread:</span>{% endif %}
+        <h3 class="truncate text-sm {{ 'font-semibold' if not hit.seen else 'font-medium' }}">{{ sender(hit) }}</h3>
+        <span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{ when(hit.date_ts) }}</span>
+      </div>
+      <p class="truncate text-sm text-foreground">{{ hit.subject or "(no subject)" }}</p>
+      {% if hit.snippet_parts %}
+      <p class="line-clamp-2 text-sm text-muted-foreground">
+        {%- for text, matched in hit.snippet_parts -%}
+        {%- if matched -%}<mark class="rounded-sm bg-warning/20 px-0.5 text-foreground">{{ text }}</mark>{%- else -%}{{ text }}{%- endif -%}
+        {%- endfor -%}
+      </p>
+      {% endif %}
+      <div class="flex flex-wrap items-center gap-1.5 pt-1 text-muted-foreground">
+        <span class="badge" data-variant="secondary">{{ place(hit.folder) }}</span>
+        <span class="badge" data-variant="outline">{{ hit.account }}</span>
+        {% if hit.has_attachment %}<span class="inline-flex" title="Has attachment">{{ icon("paperclip", "size-3.5") }}<span class="sr-only">Has attachment</span></span>{% endif %}
+        {% if hit.flagged %}<span class="inline-flex text-warning" title="Flagged">{{ icon("flag", "size-3.5") }}<span class="sr-only">Flagged</span></span>{% endif %}
+      </div>
+    </section>
+  </a>
+</li>
+{% endfor %}
+{% if more_url %}
+<li class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+  <span class="text-xs text-muted-foreground tabular-nums">Showing {{ offset + results.hits | length }}</span>
+  <button type="button" class="btn" data-size="sm" data-variant="outline"
+          hx-get="{{ more_url }}" hx-target="closest li" hx-swap="outerHTML" hx-push-url="false">
+    {{ "Show more matches" if params.q else "Show older mail" }}
+  </button>
+</li>
+{% endif %}

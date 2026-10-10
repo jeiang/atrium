@@ -1,4 +1,6 @@
 import contextlib
+import hashlib
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
@@ -15,12 +17,26 @@ from ..rules import RuleError
 
 TEMPLATES = Path(__file__).parent / "templates"
 PAGE_SIZE = 50
+SEARCH_PAGE = 20
+LEARNED_LIMIT = 50
 ROW, MESSAGE = "row", "message"
 TS_FORMATS = {"date": "%Y-%m-%d", "datetime": "%Y-%m-%d %H:%M"}
 SEARCH_KEYS = ("q", "account", "folder", "from", "date_from", "date_to", "has_attachment", "unread", "flagged")
 FILTER_KEYS = SEARCH_KEYS[1:]
 LIST_OPS = ("in", "suffix")
 NO_QUESTION = "Type a question to ask."
+RULE_PROBLEMS = {
+    "file rule needs dest": "Choose a destination, or set the action to Delete.",
+    "when must be a non-empty list": "Add at least one condition.",
+    "op in needs a non-empty list of strings": "“is one of” needs at least one value.",
+    "op suffix needs a string or list of strings": "“is or ends in domain” needs at least one domain.",
+}
+RULE_ID_PREFIX = re.compile(r"^[^:\s]+: ")
+
+
+def rule_problem(error):
+    text = RULE_ID_PREFIX.sub("", str(error), count=1)
+    return RULE_PROBLEMS.get(text, text[:1].upper() + text[1:])
 
 
 def ts_filter(epoch, style="datetime"):
@@ -32,10 +48,19 @@ def ts_filter(epoch, style="datetime"):
     return moment.strftime(TS_FORMATS[style])
 
 
+def asset_version(static_dir):
+    digest = hashlib.sha256()
+    for path in sorted(Path(static_dir).rglob("*")):
+        if path.is_file():
+            digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
+
+
 def build_env(cfg):
     env = jinja2.Environment(loader=jinja2.FileSystemLoader(TEMPLATES), autoescape=True)
     env.filters["ts"] = ts_filter
     env.globals.update(
+        asset_version=asset_version(cfg.static_dir),
         mode=cfg.mode,
         accounts=list(ACCOUNTS),
         stages=router.STAGES,
@@ -70,7 +95,9 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
         return HTMLResponse(env.get_template(name).render(**context), status_code=status_code)
 
     def page(request, full, partial, **context):
-        return render(partial if is_partial(request) else full, **context)
+        if is_partial(request):
+            return render(partial, partial=True, **context)
+        return render(full, **context)
 
     @contextlib.contextmanager
     def connection():
@@ -90,16 +117,26 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
         return {k: params[k] for k in FILTER_KEYS}
 
     @app.get("/")
-    def search_page(request: Request):
+    def search_page(request: Request, offset: int = 0):
         params = params_of(request.query_params)
+        offset = max(offset, 0)
         with connection() as conn:
             try:
-                results = search.search(conn, cfg, params["q"], filters_of(params), embed_texts=embed_texts)
+                results = search.search(
+                    conn, cfg, params["q"], filters_of(params), limit=offset + SEARCH_PAGE + 1, embed_texts=embed_texts
+                )
             except ValueError as e:
                 results = {"hits": [], "semantic": False, "error": str(e), "filters": search.normalize_filters({})}
-            return page(
-                request, "search.html", "_results.html", params=params, results=results, folders=folder_map(conn)
-            )
+            more = len(results["hits"]) > offset + SEARCH_PAGE
+            context = {
+                "params": params,
+                "results": {**results, "hits": results["hits"][offset : offset + SEARCH_PAGE]},
+                "offset": offset,
+                "more_url": query_url("/", **params, offset=offset + SEARCH_PAGE) if more else None,
+            }
+            if offset and is_partial(request):
+                return render("_hits.html", **context)
+            return page(request, "search.html", "_results.html", folders=folder_map(conn), **context)
 
     @app.post("/ask")
     def ask_answer(
@@ -232,24 +269,30 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
             if is_partial(request):
                 return render("_triage_rows.html" if offset else "_decisions.html", **context)
             summaries = [s for s in triage.summaries(conn) if not account or s["account"] == account]
-            flags = triage.flag_judgments(conn, account or None)
-            return render("triage.html", summaries=summaries, flags=flags, **context)
+            flags = triage.flag_judgments(conn, account or None, limit=PAGE_SIZE + 1)
+            return render(
+                "triage.html", summaries=summaries, flags=flags[:PAGE_SIZE], flags_capped=len(flags) > PAGE_SIZE, **context
+            )
 
     def learned_for(conn, account):
-        found = []
+        found, capped = [], False
         for name in [account] if account else ACCOUNTS:
-            found.extend({**r, "account": name} for r in ruleedit.learned_rules_summary(conn, name))
+            summary = ruleedit.learned_rules_summary(conn, name, LEARNED_LIMIT)
+            capped = capped or len(summary) == LEARNED_LIMIT
+            found.extend({**r, "account": name} for r in summary)
         found.sort(key=lambda r: (-r["n"], -r["purity"], r["level"], r["key"]))
-        return found
+        return found, capped
 
     @app.get("/rules")
     def rules_page(account: str = ""):
         with connection() as conn:
+            learned, capped = learned_for(conn, account)
             return render(
                 "rules.html",
                 account=account,
                 rules=ruleedit.list_rules(conn, account or None),
-                learned=learned_for(conn, account),
+                learned=learned,
+                learned_limit=LEARNED_LIMIT if capped else None,
             )
 
     @app.get("/rules/new")
@@ -282,8 +325,8 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
             )
 
     @app.get("/rules/condition")
-    def rule_condition(field: str = "from_addr", op: str = "eq", value: str = ""):
-        return render("_condition_row.html", c={"field": field, "op": op, "value": value})
+    def rule_condition(field: str = "from_addr", op: str = "eq", value: str = "", focus: str = ""):
+        return render("_condition_row.html", c={"field": field, "op": op, "value": value}, focus=focus)
 
     def condition_list(fields, ops, values):
         conditions = []
@@ -317,7 +360,7 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
             try:
                 found = ruleedit.preview_rule(conn, {"id": ruleedit.PREVIEW_ID, **rule_raw(account, action, dest, field, op, value)})
             except RuleError as e:
-                return render("_rule_preview.html", error=str(e))
+                return render("_rule_preview.html", error=rule_problem(e))
         return render("_rule_preview.html", preview=found)
 
     def save_rule(conn, rule_id, is_new, form):
@@ -336,7 +379,7 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
                 folders=folder_map(conn),
                 suggestions=[],
                 source_message=None,
-                errors=[str(e)],
+                errors=[rule_problem(e)],
             )
         return RedirectResponse(query_url("/rules", account=form["account"]), status_code=303)
 
@@ -405,13 +448,15 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
     @app.delete("/rules/{rule_id}")
     def rule_delete(rule_id: str, account: str = ""):
         with connection() as conn:
+            before = [r["id"] for r in ruleedit.list_rules(conn, account or None)]
             deleted = ruleedit.delete_rule(conn, rule_id)
             notice = (
                 toast("success", "Rule deleted", rule_id) if deleted else toast("error", "Rule not found", rule_id)
             )
-            return render(
-                "_rule_list.html", account=account, rules=ruleedit.list_rules(conn, account or None), toast=notice
-            )
+            remaining = ruleedit.list_rules(conn, account or None)
+            index = before.index(rule_id) if rule_id in before else 0
+            focus_id = remaining[min(index, len(remaining) - 1)]["id"] if remaining else None
+            return render("_rule_list.html", account=account, rules=remaining, toast=notice, focus_id=focus_id)
 
     @app.get("/contacts")
     def contacts_page(request: Request, q: str = ""):

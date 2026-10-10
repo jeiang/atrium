@@ -1,6 +1,6 @@
 {% from "_icons.html" import icon %}
 {% from "_macros.html" import condition_text %}
-<form id="rule-form" method="post" action="{{ '/rules' if is_new else '/rules/' ~ (rule.id | urlencode) }}" class="flex flex-col gap-6">
+<form id="rule-form" method="post" action="{{ '/rules' if is_new else '/rules/' ~ (rule.id | urlencode) }}" class="flex min-w-0 flex-col gap-6">
   {% if errors %}
   <div class="alert" data-variant="destructive" role="alert">
     {{ icon("circle-alert") }}
@@ -11,7 +11,7 @@
 
   <fieldset class="fieldset">
     <legend>Rule</legend>
-    <div role="group" aria-label="Rule settings" class="grid gap-4 sm:grid-cols-2">
+    <div class="grid gap-4 sm:grid-cols-2">
       <div role="group" class="field">
         <label for="rule-id">Name</label>
         {% if is_new %}
@@ -70,18 +70,18 @@
       {% endfor %}
     </ol>
     <div class="flex flex-wrap items-center gap-2">
-      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/rules/condition" hx-target="#conditions" hx-swap="beforeend">{{ icon("plus") }}Add condition</button>
+      <button id="add-condition" type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/rules/condition?focus=field" hx-target="#conditions" hx-swap="beforeend">{{ icon("plus") }}Add condition</button>
     </div>
     {% if suggestions %}
-    <div class="flex flex-col gap-2 rounded-md bg-muted/60 p-3">
+    <div class="flex flex-col gap-2 rounded-md bg-muted/60 p-3 not-has-[li]:hidden">
       <p class="text-xs font-medium text-muted-foreground">From the message: add a condition</p>
       <ul class="flex flex-wrap gap-2" role="list">
         {% for s in suggestions %}
         {% set value = (s.value | join(", ")) if s.value is not string else s.value %}
-        <li>
-          <button type="button" class="btn h-auto max-w-full flex-wrap justify-start gap-x-1.5 py-1 text-left font-normal" data-size="sm" data-variant="outline"
+        <li class="max-w-full min-w-0">
+          <button type="button" class="btn h-auto max-w-full flex-wrap justify-start gap-x-1.5 py-1 text-left font-normal whitespace-normal" data-size="sm" data-variant="outline"
                   hx-get="/rules/condition?{{ {'field': s.field, 'op': s.op, 'value': value} | urlencode }}" hx-target="#conditions" hx-swap="beforeend"
-                  hx-on::after-request="if (event.detail.successful) this.closest('li').remove()">
+                  hx-on::after-request="if (event.detail.successful) { const item = this.closest('li'); const next = item.nextElementSibling || item.previousElementSibling; item.remove(); (next ? next.querySelector('button') : document.getElementById('add-condition')).focus() }">
             {{ icon("plus") }}{{ condition_text(s) }}
           </button>
         </li>

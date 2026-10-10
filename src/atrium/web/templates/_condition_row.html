@@ -5,13 +5,13 @@
 <li class="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md border p-2 sm:grid-cols-[--spacing(44)_--spacing(44)_minmax(0,1fr)_auto] sm:items-end sm:border-0 sm:p-0">
   <div role="group" class="field col-start-1 sm:col-start-auto">
     <label for="{{ uid }}-field" class="sm:sr-only">Field</label>
-    <select id="{{ uid }}-field" name="field" class="w-full">
+    <select id="{{ uid }}-field" name="field" class="w-full"{% if focus is defined and focus == "field" %} autofocus{% endif %}>
       {% for f in rule_fields %}<option value="{{ f }}"{% if f == c.field %} selected{% endif %}>{{ FIELD_LABELS.get(f, f) }}</option>{% endfor %}
     </select>
   </div>
   <div role="group" class="field col-start-1 sm:col-start-auto">
     <label for="{{ uid }}-op" class="sm:sr-only">Operator</label>
-    <select id="{{ uid }}-op" name="op" class="w-full" hx-get="/rules/condition" hx-include="closest li" hx-target="closest li" hx-swap="outerHTML" hx-trigger="change">
+    <select id="{{ uid }}-op" name="op" class="w-full" hx-get="/rules/condition" hx-include="closest li" hx-vals='{"focus": "op"}' hx-target="closest li" hx-swap="outerHTML" hx-trigger="change"{% if focus is defined and focus == "op" %} autofocus{% endif %}>
       {% for op in rule_ops %}<option value="{{ op }}"{% if op == c.op %} selected{% endif %}>{{ OP_LABELS.get(op, op) }}</option>{% endfor %}
     </select>
   </div>
@@ -24,5 +24,5 @@
     {% endif %}
   </div>
   <button type="button" class="btn col-start-2 row-start-1 sm:col-start-auto sm:row-start-auto" data-size="icon" data-variant="ghost" aria-label="Remove condition"
-          onclick="const form = this.form; this.closest('li').remove(); htmx.trigger(form, 'change')">{{ icon("x") }}</button>
+          onclick="const form = this.form; const row = this.closest('li'); const next = row.nextElementSibling || row.previousElementSibling; row.remove(); (next ? next.querySelector('select') : document.getElementById('add-condition')).focus(); htmx.trigger(form, 'change')">{{ icon("x") }}</button>
 </li>
