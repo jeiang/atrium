@@ -1,3 +1,5 @@
+import contextlib
+import fcntl
 import sqlite3
 import time
 
@@ -143,6 +145,15 @@ def connect(path):
     conn.enable_load_extension(False)
     conn.executescript(SCHEMA)
     return conn
+
+
+@contextlib.contextmanager
+def exclusive(path):
+    lock = path.with_name(path.name + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock, "a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        yield
 
 
 def connect_memory():

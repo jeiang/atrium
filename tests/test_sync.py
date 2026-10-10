@@ -163,3 +163,23 @@ def test_gmail_labels_categories_and_label_events(tmp_path):
     second = rows(conn, f"uid = {u2}")[0]
     assert (second["folder"], second["in_inbox"]) == ("Alerts/Porkbun", 0)
     assert conn.execute("SELECT COUNT(*) FROM events WHERE kind = 'labels'").fetchone()[0] == 1
+
+
+def test_exclusive_serializes_concurrent_passes(tmp_path):
+    import threading
+
+    from atrium import db
+
+    path = tmp_path / "atrium.db"
+    entered = threading.Event()
+
+    def second():
+        with db.exclusive(path):
+            entered.set()
+
+    with db.exclusive(path):
+        worker = threading.Thread(target=second)
+        worker.start()
+        assert not entered.wait(0.3)
+    worker.join(5)
+    assert entered.is_set()
