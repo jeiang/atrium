@@ -9,6 +9,7 @@ from .http import post_json
 log = logging.getLogger("atrium.embed")
 
 MODEL = "embeddinggemma"
+KNN_MAX = 4096
 
 
 def document_text(subject, name, addr, body):
