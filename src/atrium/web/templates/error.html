@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state %}
+{% block title %}Not found{% endblock %}
+{% block heading %}Not found{% endblock %}
+{% block content %}
+{% call empty_state("search", "Nothing here") %}This message or rule does not exist, or it is no longer indexed.{% endcall %}
+<a href="/" class="btn self-start" data-size="sm" data-variant="outline">{{ icon("arrow-left") }}Search</a>
+{% endblock %}

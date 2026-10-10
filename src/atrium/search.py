@@ -143,7 +143,7 @@ def semantic(conn, vector, f, limit=BRANCH_LIMIT):
     blob = embed.serialize(vector)
     k = 400 if _narrow(f) else limit * 4
     while True:
-        k = min(k, total)
+        k = min(k, total, embed.KNN_MAX)
         knn = "SELECT rowid, distance FROM message_vec WHERE embedding MATCH :vec AND k = :k"
         if f["account"]:
             knn += " AND account = :account"
@@ -159,7 +159,19 @@ def semantic(conn, vector, f, limit=BRANCH_LIMIT):
         ranked = [h["rowid"] for h in hits if h["rowid"] in allowed]
         if len(ranked) >= limit or k >= total or len(hits) < k:
             return ranked[:limit]
+        if k == embed.KNN_MAX:
+            return exact_semantic(conn, blob, where, params, limit)
         k *= 4
+
+
+def exact_semantic(conn, blob, where, params, limit):
+    rows = conn.execute(
+        "SELECT v.rowid FROM message_vec v WHERE v.rowid IN "
+        f"(SELECT m.id FROM messages m LEFT JOIN corrections c ON c.message_id = m.id WHERE {where}) "
+        "ORDER BY vec_distance_cosine(v.embedding, :vec) LIMIT :limit",
+        {**params, "vec": blob, "limit": limit},
+    )
+    return [r["rowid"] for r in rows]
 
 
 def _narrow(f):

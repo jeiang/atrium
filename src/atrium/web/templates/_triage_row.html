@@ -3,7 +3,7 @@
 {% set r = row %}
 <li id="decision-{{ r.message_id }}" class="group/row grid gap-x-4 gap-y-2 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_--spacing(64)_--spacing(48)_auto] lg:items-center">
   <div class="flex min-w-0 flex-col gap-0.5">
-    <a class="truncate text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm" {{ open_attrs(r.message_id) }}>{{ r.subject or "(no subject)" }}</a>
+    <a class="truncate text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm" {{ open_attrs(r.message_id) }}{% if focus_row is defined and focus_row %} autofocus{% endif %}>{{ r.subject or "(no subject)" }}</a>
     <p class="truncate text-xs text-muted-foreground">{{ sender(r) }} · {{ when(r.date_ts) }} · {{ r.account }}</p>
   </div>
   <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
@@ -22,12 +22,12 @@
     {% if r.key and r.stage not in ("knn", "llm", "correction") %}<code class="truncate font-mono text-xs text-muted-foreground">{{ r.key }}</code>{% endif %}
     {% if r.confidence is not none and r.stage != "correction" %}<span class="text-xs text-muted-foreground tabular-nums"><span class="sr-only">confidence </span>{{ pct(r.confidence) }}</span>{% endif %}
   </div>
-  <div class="flex gap-1 group-has-[form]/row:invisible lg:w-18 lg:justify-end">
-    <button type="button" class="btn" data-size="sm" data-variant="ghost" title="Correct"
+  <div class="flex gap-1 group-has-[form]/row:invisible max-lg:group-has-[form]/row:hidden lg:w-18 lg:justify-end">
+    <button type="button" class="btn transition-colors" data-size="sm" data-variant="ghost" title="Correct"
             hx-get="/messages/{{ r.message_id }}/correct?context=row" hx-target="#correct-slot-row-{{ r.message_id }}" hx-swap="innerHTML">
       {{ icon("folder-input") }}<span class="lg:sr-only">Correct</span>
     </button>
-    <a class="btn" data-size="sm" data-variant="ghost" title="Make rule" href="/rules/new?message={{ r.message_id }}">
+    <a class="btn transition-colors" data-size="sm" data-variant="ghost" title="Make rule" href="/rules/new?message={{ r.message_id }}">
       {{ icon("list-plus") }}<span class="lg:sr-only">Make rule</span>
     </a>
   </div>

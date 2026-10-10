@@ -93,6 +93,10 @@ def first_match(row, rules):
     return None
 
 
+def _value_list(value):
+    return isinstance(value, list) and value and all(isinstance(v, str) and v.strip() for v in value)
+
+
 def validate_condition(condition):
     if not isinstance(condition, dict):
         raise RuleError(f"condition must be an object: {condition!r}")
@@ -108,11 +112,11 @@ def validate_condition(condition):
         return {"field": field, "op": op}
     if op in ("eq", "re") and not isinstance(value, str):
         raise RuleError(f"op {op} needs a string value")
-    if op == "in" and not (isinstance(value, list) and value and all(isinstance(v, str) for v in value)):
+    if isinstance(value, str) and not value.strip():
+        raise RuleError(f"op {op} needs a value")
+    if op == "in" and not _value_list(value):
         raise RuleError("op in needs a non-empty list of strings")
-    if op == "suffix" and not (
-        isinstance(value, str) or (isinstance(value, list) and value and all(isinstance(v, str) for v in value))
-    ):
+    if op == "suffix" and not (isinstance(value, str) or _value_list(value)):
         raise RuleError("op suffix needs a string or list of strings")
     if op == "re":
         try:

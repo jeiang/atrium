@@ -6,7 +6,7 @@
 {% block heading %}Contacts{% endblock %}
 {% block content %}
 <form action="/contacts" method="get" role="search" class="max-w-xl"
-      hx-get="/contacts" hx-target="#contacts" hx-push-url="true" hx-sync="this:replace" hx-indicator="#contacts-spinner"
+      hx-get="/contacts" hx-target="#contacts" hx-replace-url="true" hx-sync="this:replace" hx-indicator="#contacts-spinner"
       hx-trigger="input changed delay:250ms from:#contact-q, search from:#contact-q, submit">
   <label for="contact-q" class="sr-only">Search contacts</label>
   <div class="input-group h-9">

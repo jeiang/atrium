@@ -115,6 +115,17 @@ def test_filters_apply_to_vector_branch(tmp_path):
     assert hit_ids(result) == [target]
 
 
+def test_vector_branch_falls_back_to_exact_past_knn_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr(embed, "KNN_MAX", 8)
+    conn = memory_db()
+    cfg = make_config(tmp_path)
+    for i in range(30):
+        filed(conn, 100 + i, "Noise", f"n{i}@x.test", subject="n", vector=unit(1, 2, 0.01 * i))
+    target = filed(conn, 1, "Target", "t@x.test", subject="t", vector=unit(3))
+    result = search.search(conn, cfg, "zzzz", {"folder": "Target"}, embed_texts=fake_embed(unit(1)))
+    assert hit_ids(result) == [target]
+
+
 def test_corrected_folder_is_searchable(tmp_path):
     from atrium.corrections import record_correction
 

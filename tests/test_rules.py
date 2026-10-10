@@ -69,6 +69,10 @@ def test_and_within_rule_and_first_match_wins():
         {"id": "x", "action": "delete", "dest": "A", "when": [cond("from_addr", "eq", "a")]},
         {"id": "x", "action": "nuke", "when": [cond("from_addr", "eq", "a")]},
         {"id": "x", "dest": "A", "when": [cond("from_addr", "present", "v")]},
+        {"id": "x", "dest": "A", "when": [cond("from_addr", "eq", "  ")]},
+        {"id": "x", "dest": "A", "when": [cond("subject", "re", "")]},
+        {"id": "x", "dest": "A", "when": [cond("from_domain", "suffix", "")]},
+        {"id": "x", "dest": "A", "when": [cond("dkim_d", "in", ["a.test", " "])]},
     ],
 )
 def test_invalid_rules_rejected(bad):

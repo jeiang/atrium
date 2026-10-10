@@ -6,6 +6,16 @@
 {% block title %}Rules{% endblock %}
 {% block heading %}Rules{% endblock %}
 {% block content %}
+{% if toast %}
+<script>
+  (() => {
+    const url = new URL(location.href);
+    url.searchParams.delete("saved");
+    url.searchParams.delete("created");
+    history.replaceState(history.state, "", url);
+  })();
+</script>
+{% endif %}
 <div class="flex flex-wrap items-center justify-between gap-3">
   {{ account_switch("/rules", account) }}
   <a class="btn" href="/rules/new{{ '?account=' ~ (account | urlencode) if account }}">{{ icon("plus") }}New rule</a>
@@ -14,13 +24,13 @@
 {% set operator_panel %}
 <div class="flex flex-col gap-3 pt-3">
   <p class="text-sm text-muted-foreground">Checked top to bottom before anything learned; the first rule whose conditions all hold decides.</p>
-  {% include "_rule_list.html" %}
+  {% with toast=None %}{% include "_rule_list.html" %}{% endwith %}
 </div>
 {% endset %}
 
 {% set learned_panel %}
 <div class="flex flex-col gap-3 pt-3">
-  <p class="text-sm text-muted-foreground">Learned from where you file mail with the same sender or subject template. Read-only: correct a message to teach atrium.</p>
+  <p class="text-sm text-muted-foreground">Learned from where you file mail with the same sender or subject template. Read-only: correct a message to teach atrium.{% if learned_limit %} Showing the {{ learned_limit }} keys with the most messages per account.{% endif %}</p>
   {% if learned %}
   <div class="table-container rounded-lg border bg-card">
     <table class="table">

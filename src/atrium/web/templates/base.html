@@ -9,6 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}{% endblock %} · atrium</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect%7Bfill:oklch(0.25 0.014 60)%7Dtext%7Bfill:oklch(0.985 0.003 85)%7D@media (prefers-color-scheme:dark)%7Brect%7Bfill:oklch(0.92 0.008 85)%7Dtext%7Bfill:oklch(0.2 0.012 60)%7D%7D%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='22.5' font-family='ui-monospace,monospace' font-size='19' font-weight='600' text-anchor='middle'%3Ea%3C/text%3E%3C/svg%3E">
   <script>
     (() => {
       const dark = window.matchMedia("(prefers-color-scheme: dark)");
@@ -17,13 +18,13 @@
       dark.addEventListener("change", apply);
     })();
   </script>
-  <link rel="stylesheet" href="/static/app.css">
-  <script src="/static/htmx.min.js" defer></script>
-  <script src="/static/basecoat/all.min.js" defer></script>
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_version }}">
+  <script src="/static/htmx.min.js?v={{ asset_version }}" defer></script>
+  <script src="/static/basecoat/all.min.js?v={{ asset_version }}" defer></script>
   <script>
     document.addEventListener("htmx:historyRestore", () => {
       const params = new URLSearchParams(window.location.search);
-      document.querySelectorAll("form[hx-push-url] [name]").forEach((field) => {
+      document.querySelectorAll("form:is([hx-push-url], [hx-replace-url]) [name]").forEach((field) => {
         if (field.type === "checkbox") field.checked = params.has(field.name);
         else if (field.type !== "hidden") field.value = params.get(field.name) ?? "";
       });
@@ -36,6 +37,24 @@
       const dialog = target && target.closest("dialog");
       if (dialog && !dialog.open) dialog.showModal();
     });
+    document.addEventListener("htmx:configRequest", (event) => {
+      if (event.detail.verb !== "get") return;
+      const data = event.detail.formData;
+      [...data.keys()].forEach((key) => {
+        if (data.getAll(key).every((value) => value === "")) data.delete(key);
+      });
+    });
+    const failed = (title, description) => (event) => {
+      const target = event.detail.target;
+      if (target && target.dataset.loading) {
+        target.replaceChildren();
+        const dialog = target.closest("dialog");
+        if (dialog) dialog.close();
+      }
+      document.getElementById("toaster").toast({ category: "error", title, description });
+    };
+    document.addEventListener("htmx:responseError", failed("Something went wrong", "atrium could not finish that request. Try again, or reload the page."));
+    document.addEventListener("htmx:sendError", failed("atrium is unreachable", "Check the connection to the server and try again."));
     document.addEventListener("keydown", (event) => {
       if (event.key === "/" && !event.target.closest("input, textarea, select, [contenteditable]")) {
         const search = document.querySelector("[data-search-input]");

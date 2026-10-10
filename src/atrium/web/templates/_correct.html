@@ -25,6 +25,7 @@
   </p>
   <div class="flex flex-wrap gap-2">
     <button type="submit" class="btn" data-size="sm">{{ icon("check") }}Record correction</button>
-    <button type="button" class="btn" data-size="sm" data-variant="ghost" onclick="this.closest('form').remove()">Cancel</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost"
+            onclick="const opener = this.closest('[id^=decision]').querySelector('[hx-get*=&quot;/correct?&quot;]'); this.closest('form').remove(); opener.focus()">Cancel</button>
   </div>
 </form>

@@ -2,7 +2,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 
-from . import corrections, llm
+from . import corrections, embed, llm
 from .config import (
     ACCOUNTS,
     FOLDER_MIN_MESSAGES,
@@ -58,7 +58,7 @@ def nearest_filed(conn, row, count):
     while True:
         hits = conn.execute(
             "SELECT rowid, distance FROM message_vec WHERE embedding MATCH ? AND k = ? AND account = ?",
-            (found["embedding"], min(k, max(total, 1)), row["account"]),
+            (found["embedding"], min(k, max(total, 1), embed.KNN_MAX), row["account"]),
         ).fetchall()
         ids = [h["rowid"] for h in hits if h["rowid"] != row["id"]]
         info = {}
@@ -75,7 +75,7 @@ def nearest_filed(conn, row, count):
             for h in hits
             if h["rowid"] in info
         ]
-        if len(neighbors) >= count or k >= total:
+        if len(neighbors) >= count or k >= min(total, embed.KNN_MAX):
             return neighbors[:count]
         k *= 4
 
