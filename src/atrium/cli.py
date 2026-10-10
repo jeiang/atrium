@@ -39,8 +39,12 @@ def main(argv=None):
         conn = db.connect(cfg.db_path)
         if args.rules_command == "import":
             try:
-                with open(args.file) as handle:
-                    count = rules.import_rules(conn, json.load(handle))
+                if args.file == "-":
+                    document = json.load(sys.stdin)
+                else:
+                    with open(args.file) as handle:
+                        document = json.load(handle)
+                count = rules.import_rules(conn, document)
             except rules.RuleError as e:
                 print(f"error: {e}", file=sys.stderr)
                 return 2

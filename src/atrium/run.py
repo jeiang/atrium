@@ -50,7 +50,8 @@ def process(conn, cfg, accounts):
 def run_sync(cfg, requested=None, opener=open_client):
     conn = db.connect(cfg.db_path)
     accounts = select_accounts(cfg, requested)
-    for account in accounts:
-        sync_one(conn, cfg, account, opener)
-    process(conn, cfg, accounts)
+    with db.exclusive(cfg.db_path):
+        for account in accounts:
+            sync_one(conn, cfg, account, opener)
+        process(conn, cfg, accounts)
     return accounts
