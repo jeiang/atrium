@@ -1,0 +1,98 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import condition_text %}
+<form id="rule-form" method="post" action="{{ '/rules' if is_new else '/rules/' ~ (rule.id | urlencode) }}" class="flex flex-col gap-6">
+  {% if errors %}
+  <div class="alert" data-variant="destructive" role="alert">
+    {{ icon("circle-alert") }}
+    <h2>The rule was not saved</h2>
+    <section><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></section>
+  </div>
+  {% endif %}
+
+  <fieldset class="fieldset">
+    <legend>Rule</legend>
+    <div role="group" aria-label="Rule settings" class="grid gap-4 sm:grid-cols-2">
+      <div role="group" class="field">
+        <label for="rule-id">Name</label>
+        {% if is_new %}
+        <input id="rule-id" name="id" type="text" value="{{ rule.id or '' }}" placeholder="Generated if empty" autocomplete="off" spellcheck="false" class="font-mono" aria-describedby="rule-id-help">
+        <p id="rule-id-help">Shown in Triage when this rule decides.</p>
+        {% else %}
+        <input id="rule-id" name="id" type="text" value="{{ rule.id }}" readonly class="font-mono" aria-describedby="rule-id-help">
+        <p id="rule-id-help">A rule keeps its name; delete it and create another to rename.</p>
+        {% endif %}
+      </div>
+      <div role="group" class="field">
+        <label for="rule-account">Account</label>
+        <select id="rule-account" name="account" class="w-full">
+          <option value="">All accounts</option>
+          {% for name in accounts %}<option value="{{ name }}"{% if rule.account == name %} selected{% endif %}>{{ name }}</option>{% endfor %}
+        </select>
+      </div>
+      <fieldset class="fieldset gap-2">
+        <legend data-variant="label">Action</legend>
+        <div role="radiogroup" aria-label="Action" class="flex gap-4">
+          <div role="group" class="field" data-orientation="horizontal">
+            <input id="action-file" type="radio" name="action" value="file"{% if rule.action != "delete" %} checked{% endif %}>
+            <label for="action-file" class="font-normal">File into</label>
+          </div>
+          <div role="group" class="field" data-orientation="horizontal">
+            <input id="action-delete" type="radio" name="action" value="delete"{% if rule.action == "delete" %} checked{% endif %}>
+            <label for="action-delete" class="font-normal">Delete</label>
+          </div>
+        </div>
+      </fieldset>
+      <div role="group" class="field [form:has(#action-delete:checked)_&]:hidden">
+        <label for="rule-dest">Destination</label>
+        <select id="rule-dest" name="dest" class="w-full">
+          <option value=""{% if not rule.dest %} selected{% endif %}>Choose a folder or label</option>
+          {% for name in accounts %}
+          <optgroup label="{{ name }}">
+            {% for f in folders.get(name, []) %}<option value="{{ f.folder }}"{% if rule.dest == f.folder %} selected{% endif %}>{{ f.folder }}</option>{% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend>Conditions</legend>
+    <p>A message matches when every condition holds. Values compare without regard to case.</p>
+    <div class="hidden gap-2 px-0 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[--spacing(44)_--spacing(44)_minmax(0,1fr)_--spacing(9)]" aria-hidden="true">
+      <span>Field</span><span>Operator</span><span>Value</span><span></span>
+    </div>
+    <ol id="conditions" class="flex flex-col gap-2" role="list" aria-label="Conditions" hx-on::after-swap="htmx.trigger('#rule-form', 'change')">
+      {% for cond in rule.when %}
+      {% set raw = cond.get("value") %}
+      {% set c = {"field": cond.field, "op": cond.op, "value": (raw | join(", ")) if raw is not none and raw is not string else raw} %}
+      {% include "_condition_row.html" %}
+      {% endfor %}
+    </ol>
+    <div class="flex flex-wrap items-center gap-2">
+      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/rules/condition" hx-target="#conditions" hx-swap="beforeend">{{ icon("plus") }}Add condition</button>
+    </div>
+    {% if suggestions %}
+    <div class="flex flex-col gap-2 rounded-md bg-muted/60 p-3">
+      <p class="text-xs font-medium text-muted-foreground">From the message: add a condition</p>
+      <ul class="flex flex-wrap gap-2" role="list">
+        {% for s in suggestions %}
+        {% set value = (s.value | join(", ")) if s.value is not string else s.value %}
+        <li>
+          <button type="button" class="btn h-auto max-w-full flex-wrap justify-start gap-x-1.5 py-1 text-left font-normal" data-size="sm" data-variant="outline"
+                  hx-get="/rules/condition?{{ {'field': s.field, 'op': s.op, 'value': value} | urlencode }}" hx-target="#conditions" hx-swap="beforeend"
+                  hx-on::after-request="if (event.detail.successful) this.closest('li').remove()">
+            {{ icon("plus") }}{{ condition_text(s) }}
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </fieldset>
+
+  <div class="flex flex-wrap gap-2 border-t pt-4">
+    <button type="submit" class="btn">{{ icon("check") }}{{ "Create rule" if is_new else "Save rule" }}</button>
+    <a class="btn" data-variant="outline" href="/rules{{ '?account=' ~ (rule.account | urlencode) if rule.account }}">Cancel</a>
+  </div>
+</form>

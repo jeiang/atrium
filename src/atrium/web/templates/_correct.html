@@ -1,0 +1,30 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import noun, folder_options %}
+{% set c = correct %}
+{% set uid = c.context ~ "-" ~ c.message_id %}
+<form class="flex flex-col gap-3 rounded-md border border-dashed bg-background p-3"
+      hx-post="/messages/{{ c.message_id }}/correct"
+      hx-target="#{{ 'decision-' if c.context == 'row' else 'decision-card-' }}{{ c.message_id }}"
+      hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="context" value="{{ c.context }}">
+  <div role="group" class="field"{% if c.error %} data-invalid{% endif %}>
+    <label for="dest-{{ uid }}">Where should this go?</label>
+    <select id="dest-{{ uid }}" name="dest" class="w-full sm:max-w-xs" required autofocus{% if c.error %} aria-invalid="true" aria-describedby="dest-error-{{ uid }}"{% endif %}>
+      <option value=""{% if not c.selected %} selected{% endif %} disabled>Choose a {{ noun(c.account) }}</option>
+      {{ folder_options(c.folders, c.selected) }}
+    </select>
+    {% if c.error %}<p id="dest-error-{{ uid }}" role="alert">{{ c.error }}</p>{% endif %}
+  </div>
+  <p class="flex gap-2 text-xs text-muted-foreground">
+    {{ icon("eye-off" if mode != "live" else "zap", "mt-0.5 size-3.5 shrink-0") }}
+    {% if mode == "live" -%}
+    Records the correction and moves the message to this {{ noun(c.account) }}.
+    {%- else -%}
+    Shadow mode: records the correction for the router, learned rules and kNN. The message stays where it is.
+    {%- endif %}
+  </p>
+  <div class="flex flex-wrap gap-2">
+    <button type="submit" class="btn" data-size="sm">{{ icon("check") }}Record correction</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" onclick="this.closest('form').remove()">Cancel</button>
+  </div>
+</form>

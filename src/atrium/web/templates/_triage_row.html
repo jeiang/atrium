@@ -1,0 +1,38 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import stage_badge, place, proposal, agreement, open_attrs, sender, when, pct %}
+{% set r = row %}
+<li id="decision-{{ r.message_id }}" class="group/row grid gap-x-4 gap-y-2 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_--spacing(64)_--spacing(48)_auto] lg:items-center">
+  <div class="flex min-w-0 flex-col gap-0.5">
+    <a class="truncate text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm" {{ open_attrs(r.message_id) }}>{{ r.subject or "(no subject)" }}</a>
+    <p class="truncate text-xs text-muted-foreground">{{ sender(r) }} · {{ when(r.date_ts) }} · {{ r.account }}</p>
+  </div>
+  <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+    <span class="sr-only">Now in</span>
+    <span class="max-w-full truncate text-muted-foreground">{{ place(r.current) }}</span>
+    {{ icon("arrow-right", "size-3.5 shrink-0 text-muted-foreground") }}
+    <span class="sr-only">proposed</span>
+    <span class="max-w-full truncate font-medium">{{ proposal(r.action, r.dest) }}</span>
+    {% if r.stage != "correction" %}<span class="text-xs">{{ agreement(r.agreement) }}</span>{% endif %}
+    {% if r.corrected_to and r.stage != "correction" %}
+    <span class="badge" data-variant="secondary">Corrected to {{ r.corrected_to }}</span>
+    {% endif %}
+  </div>
+  <div class="flex min-w-0 flex-wrap items-center gap-2">
+    {{ stage_badge(r.stage) }}
+    {% if r.key and r.stage not in ("knn", "llm", "correction") %}<code class="truncate font-mono text-xs text-muted-foreground">{{ r.key }}</code>{% endif %}
+    {% if r.confidence is not none and r.stage != "correction" %}<span class="text-xs text-muted-foreground tabular-nums"><span class="sr-only">confidence </span>{{ pct(r.confidence) }}</span>{% endif %}
+  </div>
+  <div class="flex gap-1 group-has-[form]/row:invisible lg:w-18 lg:justify-end">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" title="Correct"
+            hx-get="/messages/{{ r.message_id }}/correct?context=row" hx-target="#correct-slot-row-{{ r.message_id }}" hx-swap="innerHTML">
+      {{ icon("folder-input") }}<span class="lg:sr-only">Correct</span>
+    </button>
+    <a class="btn" data-size="sm" data-variant="ghost" title="Make rule" href="/rules/new?message={{ r.message_id }}">
+      {{ icon("list-plus") }}<span class="lg:sr-only">Make rule</span>
+    </a>
+  </div>
+  <div id="correct-slot-row-{{ r.message_id }}" class="empty:hidden lg:col-span-4">
+    {%- if correct is defined and correct %}{% include "_correct.html" %}{% endif -%}
+  </div>
+</li>
+{% if toast is defined and toast %}{% include "_toast.html" %}{% endif %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import spinner %}
+{% set page = "contacts" %}
+{% block title %}Contacts{% endblock %}
+{% block heading %}Contacts{% endblock %}
+{% block content %}
+<form action="/contacts" method="get" role="search" class="max-w-xl"
+      hx-get="/contacts" hx-target="#contacts" hx-push-url="true" hx-sync="this:replace" hx-indicator="#contacts-spinner"
+      hx-trigger="input changed delay:250ms from:#contact-q, search from:#contact-q, submit">
+  <label for="contact-q" class="sr-only">Search contacts</label>
+  <div class="input-group h-9">
+    <input id="contact-q" name="q" type="search" value="{{ q }}" placeholder="Name, organisation, address or phone" autocomplete="off" data-search-input>
+    <span data-align="start" aria-hidden="true">{{ icon("search") }}</span>
+    <span data-align="end">{{ spinner("contacts-spinner", "Searching contacts") }}</span>
+  </div>
+</form>
+<div id="contacts" class="flex flex-col gap-3">
+  {% include "_contacts.html" %}
+</div>
+{% endblock %}

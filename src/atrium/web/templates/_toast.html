@@ -1,0 +1,2 @@
+{% from "basecoat/toast.html.jinja" import toast as toast_item %}
+<div id="toaster" hx-swap-oob="beforeend">{{ toast_item(category=toast.category, title=toast.title, description=toast.description) }}</div>

@@ -1,0 +1,165 @@
+{% from "_icons.html" import icon %}
+{% set STAGE_LABELS = {
+  "correction": "Correction",
+  "operator": "Rule",
+  "learned": "Learned",
+  "knn": "kNN",
+  "llm": "9B",
+  "fallback": "Fallback",
+} %}
+{% set STAGE_DOTS = {
+  "correction": "bg-chart-5",
+  "operator": "bg-chart-4",
+  "learned": "bg-chart-3",
+  "knn": "bg-chart-2",
+  "llm": "bg-chart-1",
+  "fallback": "bg-chart-6",
+} %}
+{% set LEVEL_LABELS = {
+  "addr": "sender address",
+  "addr+tmpl": "sender and subject template",
+  "domain": "sender domain",
+} %}
+{% set FIELD_LABELS = {
+  "from_addr": "From address",
+  "from_domain": "From domain",
+  "from_name": "From name",
+  "reply_to": "Reply-To",
+  "rpath_domain": "Return-Path domain",
+  "list_id": "List-Id",
+  "subject": "Subject",
+  "subject_tmpl": "Subject template",
+  "msgid_domain": "Message-ID domain",
+  "precedence": "Precedence",
+  "category": "Category",
+  "to": "To",
+  "dkim_d": "DKIM domain",
+  "esp": "Sending service",
+  "att_type": "Attachment type",
+  "att_name": "Attachment name",
+} %}
+{% set OP_LABELS = {
+  "eq": "is",
+  "in": "is one of",
+  "suffix": "is or ends in domain",
+  "re": "matches regex",
+  "present": "is present",
+  "absent": "is absent",
+} %}
+{% set OP_HINTS = {
+  "eq": "Exact value, case-insensitive",
+  "in": "Values separated by commas",
+  "suffix": "Domains separated by commas",
+  "re": "Python regular expression, case-insensitive",
+} %}
+
+{% macro mode_badge(mode) -%}
+{% if mode == "live" -%}
+<span class="badge" data-variant="destructive">{{ icon("zap") }}Live</span>
+{%- else -%}
+<span class="badge border-warning/30 bg-warning/10 text-warning">{{ icon("eye-off") }}Shadow</span>
+{%- endif %}
+{%- endmacro %}
+
+{% macro mode_note(mode) -%}
+{% if mode == "live" -%}
+Live mode: atrium moves, labels and deletes mail.
+{%- else -%}
+Shadow mode: atrium records what it would do and never touches a mailbox.
+{%- endif %}
+{%- endmacro %}
+
+{% macro stage_label(stage) -%}{{ STAGE_LABELS.get(stage, stage) }}{%- endmacro %}
+
+{% macro stage_badge(stage) -%}
+<span class="badge" data-variant="outline"><span class="size-2 rounded-full {{ STAGE_DOTS.get(stage, 'bg-chart-6') }}" aria-hidden="true"></span>{{ stage_label(stage) }}</span>
+{%- endmacro %}
+
+{% macro pct(value) -%}{{ "%.0f%%" | format(value * 100) }}{%- endmacro %}
+
+{% macro reason(d) -%}
+{%- set detail = d.detail or {} -%}
+{%- if d.stage == "correction" -%}Recorded by you as a correction.{{ " Shadow mode leaves the message where it is." if mode != "live" }}
+{%- elif d.stage == "operator" -%}Rule <code class="font-mono">{{ d.key }}</code> matched first.
+{%- elif d.stage == "learned" -%}{{ pct(d.confidence) }} of {{ detail.n }} filed messages with this {{ LEVEL_LABELS.get(d.key, d.key) }} went here.
+{%- elif d.stage == "knn" -%}The most similar filed messages vote {{ pct(d.confidence) }} for this destination.
+{%- elif d.stage == "llm" -%}The 9B chose this {{ "and was confident" if detail.confident else "but was not confident" }}.
+{%- else -%}No stage was sure, so the fallback applies.
+{%- endif -%}
+{%- endmacro %}
+
+{% macro place(location) -%}
+{%- if location is none -%}Gone
+{%- elif location == "INBOX" -%}Inbox
+{%- else -%}{{ location | replace("|", " · ") }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro proposal(action, dest) -%}
+{%- if action == "delete" -%}Delete
+{%- elif action == "none" or not dest -%}Leave in inbox
+{%- else -%}{{ dest }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro agreement(value) -%}
+{% if value == "agree" -%}
+<span class="inline-flex items-center gap-1 text-success">{{ icon("check", "size-3.5") }}Matches</span>
+{%- elif value == "disagree" -%}
+<span class="inline-flex items-center gap-1 text-warning">{{ icon("equal-not", "size-3.5") }}Differs</span>
+{%- elif value == "pending" -%}
+<span class="inline-flex items-center gap-1 text-muted-foreground">{{ icon("inbox", "size-3.5") }}In inbox</span>
+{%- else -%}
+<span class="inline-flex items-center gap-1 text-muted-foreground">{{ icon("x", "size-3.5") }}Gone</span>
+{%- endif %}
+{%- endmacro %}
+
+{% macro noun(account) -%}{{ "label" if account == "gmail" else "folder" }}{%- endmacro %}
+
+{% macro sender(item) -%}{{ item.from_name or item.from_addr or "Unknown sender" }}{%- endmacro %}
+
+{% macro open_attrs(message_id) -%}
+href="/messages/{{ message_id }}" hx-get="/messages/{{ message_id }}" hx-target="#reader-body" hx-swap="innerHTML show:top"
+{%- endmacro %}
+
+{% macro when(epoch, style="date") -%}
+{%- if epoch -%}<time datetime="{{ epoch | ts('iso') }}">{{ epoch | ts(style) }}</time>{%- endif -%}
+{%- endmacro %}
+
+{% macro account_switch(path, current, label="Account") -%}
+<nav class="button-group" aria-label="{{ label }}">
+  <a class="btn" data-size="sm" data-variant="{{ 'secondary' if not current else 'outline' }}" href="{{ path }}"{% if not current %} aria-current="page"{% endif %}>All accounts</a>
+  {% for name in accounts %}
+  <a class="btn" data-size="sm" data-variant="{{ 'secondary' if current == name else 'outline' }}" href="{{ path }}?account={{ name | urlencode }}"{% if current == name %} aria-current="page"{% endif %}>{{ name }}</a>
+  {% endfor %}
+</nav>
+{%- endmacro %}
+
+{% macro folder_options(folders, selected=None) -%}
+{% for f in folders %}
+<option value="{{ f.folder }}"{% if f.folder == selected %} selected{% endif %}>{{ f.folder }}</option>
+{% endfor %}
+{%- endmacro %}
+
+{% macro empty_state(icon_name, title) -%}
+<div class="empty border">
+  <header>
+    <figure>{{ icon(icon_name) }}</figure>
+    <h3>{{ title }}</h3>
+    {% if caller is defined %}<p>{{ caller() }}</p>{% endif %}
+  </header>
+</div>
+{%- endmacro %}
+
+{% macro condition_text(c) -%}
+{%- set value = c.get("value") -%}
+<span class="font-medium">{{ FIELD_LABELS.get(c.field, c.field) }}</span>
+<span class="text-muted-foreground">{{ OP_LABELS.get(c.op, c.op) }}</span>
+{%- if value is not none and value != "" %}
+<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">{{ value | join(", ") if value is not string else value }}</code>
+{%- endif %}
+{%- endmacro %}
+
+{% macro spinner(id, label="Loading") -%}
+<span id="{{ id }}" class="htmx-indicator inline-flex text-muted-foreground" role="status" aria-label="{{ label }}">{{ icon("loader-circle", "size-4 animate-spin") }}</span>
+{%- endmacro %}

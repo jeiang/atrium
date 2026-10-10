@@ -1,0 +1,52 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import open_attrs, place, sender, when %}
+{% set cited = answer.citations | map(attribute="n") | list %}
+<section class="flex flex-col gap-3 rounded-lg border bg-card p-4" aria-labelledby="answer-title">
+  <header class="flex items-start gap-2">
+    <div class="flex min-w-0 flex-col gap-0.5">
+      <h2 id="answer-title" class="text-sm font-medium">Answer</h2>
+      <p class="text-xs text-muted-foreground">From the 9B, reading the top {{ answer.sources | length }} {{ "result" if answer.sources | length == 1 else "results" }} for “{{ answer.question }}”</p>
+    </div>
+    <button type="button" class="btn ml-auto" data-variant="ghost" data-size="icon-sm" aria-label="Dismiss answer" onclick="this.closest('#answer').replaceChildren()">{{ icon("x") }}</button>
+  </header>
+  {% if answer.error %}
+  <div class="alert" data-variant="destructive" role="alert">
+    {{ icon("circle-alert") }}
+    <h3>No answer</h3>
+    <section><p>{{ answer.error }}</p></section>
+  </div>
+  {% elif answer.segments %}
+  <p class="text-base/relaxed text-pretty">
+    {%- for s in answer.segments -%}
+    {%- if s.cite is defined -%}
+    <a class="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-sm bg-secondary px-1 align-baseline font-mono text-xs font-medium text-secondary-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {{ open_attrs(s.message_id) }} aria-label="Source {{ s.cite }}">{{ s.cite }}</a>
+    {%- else -%}
+    {{ s.text }}
+    {%- endif -%}
+    {%- endfor -%}
+  </p>
+  {% else %}
+  <p class="text-base/relaxed">{{ answer.answer }}</p>
+  {% endif %}
+  {% if answer.rejected %}
+  <p class="text-xs text-muted-foreground">Removed {{ answer.rejected | length }} {{ "citation" if answer.rejected | length == 1 else "citations" }} ({{ answer.rejected | join(", ") }}) that pointed outside the retrieved messages.</p>
+  {% endif %}
+  {% if answer.sources %}
+  <details class="group text-sm"{% if answer.error %} open{% endif %}>
+    <summary class="gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      {{ icon("chevron-down", "size-3.5 transition-transform group-open:rotate-180") }}Sources
+    </summary>
+    <ol class="mt-2 flex flex-col gap-1" role="list">
+      {% for s in answer.sources %}
+      <li>
+        <a class="flex items-baseline gap-2 rounded-md px-2 py-1.5 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring {{ '' if s.n in cited else 'text-muted-foreground' }}" {{ open_attrs(s.message_id) }}>
+          <span class="w-5 shrink-0 text-right font-mono text-xs">{{ s.n }}</span>
+          <span class="min-w-0 flex-1 truncate">{{ s.subject or "(no subject)" }} <span class="text-muted-foreground">· {{ sender(s) }}</span></span>
+          <span class="hidden shrink-0 text-xs text-muted-foreground sm:inline">{{ place(s.folder) }} · {{ when(s.date_ts) }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ol>
+  </details>
+  {% endif %}
+</section>

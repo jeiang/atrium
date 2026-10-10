@@ -1,0 +1,22 @@
+{% from "_icons.html" import icon %}
+{% for row in rows %}
+{% include "_triage_row.html" %}
+{% else %}
+{% if not offset %}
+<li class="flex flex-col items-center gap-2 px-4 py-10 text-center">
+  <span class="grid size-8 place-items-center rounded-lg bg-muted">{{ icon("route") }}</span>
+  <p class="text-sm font-medium">No decisions match</p>
+  <p class="max-w-sm text-sm text-muted-foreground">atrium decides on mail that has been read and is still in the inbox. Clear a filter, or check back after the next sync.</p>
+</li>
+{% endif %}
+{% endfor %}
+{% if next_offset %}
+<li id="load-more" class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+  <span class="text-xs text-muted-foreground tabular-nums">Showing {{ next_offset }} of {{ total }}</span>
+  <button type="button" class="btn" data-size="sm" data-variant="outline"
+          hx-get="/triage?{{ {'account': account, 'stage': stage, 'agreement': agreement, 'offset': next_offset} | urlencode }}"
+          hx-target="closest li" hx-swap="outerHTML" hx-push-url="false">
+    Show older decisions
+  </button>
+</li>
+{% endif %}

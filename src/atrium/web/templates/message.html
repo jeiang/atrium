@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% set page = "search" %}
+{% block title %}{{ message.subject or "Message" }}{% endblock %}
+{% block heading %}Message{% endblock %}
+{% block content %}
+<a href="/" class="btn self-start" data-size="sm" data-variant="ghost">{{ icon("arrow-left") }}Search</a>
+<div class="w-full max-w-3xl">
+  {% include "_message.html" %}
+</div>
+{% endblock %}

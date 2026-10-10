@@ -1,0 +1,53 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import open_attrs, place, sender, when, empty_state %}
+<div id="answer" data-loading="answer-loading" aria-live="polite" class="scroll-mt-20 empty:hidden"></div>
+{% if params.q and not results.semantic %}
+<div class="alert" role="status">
+  {{ icon("circle-alert") }}
+  <h3>Keyword matches only</h3>
+  <section><p>The embedding service did not answer, so meaning-based matches are missing.</p></section>
+</div>
+{% endif %}
+{% set hits = results.hits %}
+<h2 class="text-sm font-medium text-muted-foreground" role="status">
+  {%- if params.q -%}
+  {{ hits | length }} {{ "match" if hits | length == 1 else "matches" }} for “<span class="text-foreground">{{ params.q }}</span>”
+  {%- else -%}
+  Recent mail
+  {%- endif -%}
+</h2>
+{% if hits %}
+<ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
+  {% for hit in hits %}
+  <li>
+    <a class="item rounded-none px-4 py-3 hover:bg-accent/60 focus-visible:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset" {{ open_attrs(hit.id) }}>
+      <section class="min-w-0 gap-1">
+        <div class="flex items-center gap-2">
+          {% if not hit.seen %}<span class="size-2 shrink-0 rounded-full bg-warning" aria-hidden="true"></span><span class="sr-only">Unread:</span>{% endif %}
+          <h3 class="truncate text-sm {{ 'font-semibold' if not hit.seen else 'font-medium' }}">{{ sender(hit) }}</h3>
+          <span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{ when(hit.date_ts) }}</span>
+        </div>
+        <p class="truncate text-sm text-foreground">{{ hit.subject or "(no subject)" }}</p>
+        {% if hit.snippet_parts %}
+        <p class="line-clamp-2 text-sm text-muted-foreground">
+          {%- for text, matched in hit.snippet_parts -%}
+          {%- if matched -%}<mark class="rounded-sm bg-warning/20 px-0.5 text-foreground">{{ text }}</mark>{%- else -%}{{ text }}{%- endif -%}
+          {%- endfor -%}
+        </p>
+        {% endif %}
+        <div class="flex flex-wrap items-center gap-1.5 pt-1 text-muted-foreground">
+          <span class="badge" data-variant="secondary">{{ place(hit.folder) }}</span>
+          <span class="badge" data-variant="outline">{{ hit.account }}</span>
+          {% if hit.has_attachment %}<span class="inline-flex" title="Has attachment">{{ icon("paperclip", "size-3.5") }}<span class="sr-only">Has attachment</span></span>{% endif %}
+          {% if hit.flagged %}<span class="inline-flex text-warning" title="Flagged">{{ icon("flag", "size-3.5") }}<span class="sr-only">Flagged</span></span>{% endif %}
+        </div>
+      </section>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% elif params.q %}
+{% call empty_state("search", "Nothing matches") %}Try fewer words, widen the date range, or clear a filter. Meaning search also finds paraphrases, so a plain description often works.{% endcall %}
+{% else %}
+{% call empty_state("inbox", "No indexed mail yet") %}Mail appears here once atrium has synced an account.{% endcall %}
+{% endif %}

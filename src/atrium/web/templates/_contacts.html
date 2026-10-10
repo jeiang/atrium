@@ -1,0 +1,38 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state %}
+<p class="text-sm text-muted-foreground tabular-nums" role="status">
+  {%- if q -%}{{ contacts | length }} of {{ total }} contacts match “<span class="text-foreground">{{ q }}</span>”
+  {%- else -%}{{ total }} {{ "contact" if total == 1 else "contacts" }}{%- endif -%}
+</p>
+{% if contacts %}
+<ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
+  {% for c in contacts %}
+  {% set words = c.name.split() %}
+  <li class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 px-4 py-3 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] md:items-center">
+    <span class="avatar" aria-hidden="true"><span class="text-xs font-medium uppercase">{{ (words[0][:1] ~ (words[-1][:1] if words | length > 1 else "")) if words else "?" }}</span></span>
+    <div class="flex min-w-0 flex-col">
+      <h3 class="truncate text-sm font-medium">{{ c.name }}</h3>
+      {% if c.org %}<p class="flex items-center gap-1 truncate text-xs text-muted-foreground">{{ icon("building-2", "size-3 shrink-0") }}{{ c.org }}</p>{% endif %}
+    </div>
+    <ul class="col-start-2 flex min-w-0 flex-col gap-1 text-sm md:col-start-3" role="list">
+      {% for e in c.emails %}
+      <li class="flex min-w-0 items-center gap-1.5">
+        {{ icon("mail", "size-3.5 shrink-0 text-muted-foreground") }}
+        <a class="truncate underline-offset-4 hover:underline" href="/?from={{ e | urlencode }}" title="Search mail from {{ e }}">{{ e }}</a>
+      </li>
+      {% endfor %}
+      {% for ph in c.phones %}
+      <li class="flex min-w-0 items-center gap-1.5">
+        {{ icon("phone", "size-3.5 shrink-0 text-muted-foreground") }}
+        <a class="truncate tabular-nums underline-offset-4 hover:underline" href="tel:{{ ph | replace(' ', '') }}">{{ ph }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </li>
+  {% endfor %}
+</ul>
+{% elif total %}
+{% call empty_state("search", "No contact matches") %}Search looks at names, organisations, addresses and phone numbers.{% endcall %}
+{% else %}
+{% call empty_state("book-user", "No contacts loaded") %}atrium reads vCards (.vcf) from the directory in ATRIUM_CONTACTS_DIR. Export your address book there.{% endcall %}
+{% endif %}

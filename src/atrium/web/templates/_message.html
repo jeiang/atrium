@@ -1,0 +1,71 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import place, when, sender %}
+{% set m = message %}
+{% set h = m.headers %}
+<article id="message-{{ m.id }}" class="flex flex-col gap-5" aria-labelledby="message-subject-{{ m.id }}">
+  <header class="flex flex-col gap-3">
+    <h2 id="message-subject-{{ m.id }}" class="text-xl font-semibold tracking-tight text-balance">{{ m.subject or "(no subject)" }}</h2>
+    <div class="flex flex-wrap items-center gap-1.5">
+      <span class="badge" data-variant="secondary">{{ place("INBOX" if m.in_inbox else m.location) }}</span>
+      <span class="badge" data-variant="outline">{{ m.account }}</span>
+      {% if not m.seen %}<span class="badge border-warning/30 bg-warning/10 text-warning">Unread</span>{% endif %}
+      {% if m.flagged %}<span class="badge border-warning/30 bg-warning/10 text-warning">{{ icon("flag") }}Flagged</span>{% endif %}
+    </div>
+    <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+      <dt class="text-muted-foreground">From</dt>
+      <dd class="break-words">{{ h.From or sender(m) }}</dd>
+      {% for name in ["To", "Cc", "Reply-To", "List-Id"] %}
+      {% if h.get(name) %}
+      <dt class="text-muted-foreground">{{ name }}</dt>
+      <dd class="break-words">{{ h[name] }}</dd>
+      {% endif %}
+      {% endfor %}
+      <dt class="text-muted-foreground">Date</dt>
+      <dd>{{ when(m.date_ts, "datetime") }}</dd>
+    </dl>
+  </header>
+
+  {% include "_decision_card.html" %}
+
+  {% set f = m.flag_decision %}
+  {% if f %}
+  <section class="flex flex-col gap-2 rounded-lg border p-4" aria-labelledby="flag-title-{{ m.id }}">
+    <h3 id="flag-title-{{ m.id }}" class="text-sm font-medium">Flag judgment</h3>
+    <ul class="flex flex-wrap gap-1.5 text-xs" role="list">
+      {% for key, label in [("contacts_match", "Sender is a contact"), ("person_asking", "A person is asking"), ("deadline_or_payment_due", "Deadline or payment"), ("security_event", "Security event"), ("llm_flag", "9B would flag")] %}
+      <li class="badge" data-variant="{{ 'secondary' if f[key] else 'outline' }}">
+        {%- if f[key] is none -%}{{ icon("circle-dot") }}<span class="text-muted-foreground">{{ label }}: not judged</span>
+        {%- elif f[key] -%}{{ icon("check") }}{{ label }}
+        {%- else -%}<span class="text-muted-foreground line-through decoration-muted-foreground/50">{{ label }}</span><span class="sr-only">: no</span>
+        {%- endif -%}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if m.attachments %}
+  <section aria-labelledby="attachments-title-{{ m.id }}" class="flex flex-col gap-2">
+    <h3 id="attachments-title-{{ m.id }}" class="text-sm font-medium">Attachments</h3>
+    <ul class="flex flex-wrap gap-2" role="list">
+      {% for a in m.attachments %}
+      <li class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs">
+        {{ icon("paperclip", "size-3.5 text-muted-foreground") }}<span class="max-w-60 truncate">{{ a.filename or a.content_type }}</span>
+        <span class="text-muted-foreground tabular-nums">{{ a.size | filesizeformat }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <section aria-label="Message body" class="flex flex-col gap-2 border-t pt-5">
+    {% if m.body %}
+    <div class="max-w-prose whitespace-pre-wrap break-words text-sm/relaxed">{{ m.body }}</div>
+    {% else %}
+    <p class="text-sm text-muted-foreground">This message has no plain-text body.</p>
+    {% endif %}
+    {% if m.body_source == "index" %}
+    <p class="text-xs text-muted-foreground">Showing the indexed text; the raw message is not in the cache.</p>
+    {% endif %}
+  </section>
+</article>

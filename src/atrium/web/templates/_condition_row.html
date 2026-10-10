@@ -1,0 +1,28 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import FIELD_LABELS, OP_LABELS, OP_HINTS %}
+{% set uid = "cond-" ~ (range(100000, 1000000) | random) %}
+{% set valueless = c.op in valueless_ops %}
+<li class="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md border p-2 sm:grid-cols-[--spacing(44)_--spacing(44)_minmax(0,1fr)_auto] sm:items-end sm:border-0 sm:p-0">
+  <div role="group" class="field col-start-1 sm:col-start-auto">
+    <label for="{{ uid }}-field" class="sm:sr-only">Field</label>
+    <select id="{{ uid }}-field" name="field" class="w-full">
+      {% for f in rule_fields %}<option value="{{ f }}"{% if f == c.field %} selected{% endif %}>{{ FIELD_LABELS.get(f, f) }}</option>{% endfor %}
+    </select>
+  </div>
+  <div role="group" class="field col-start-1 sm:col-start-auto">
+    <label for="{{ uid }}-op" class="sm:sr-only">Operator</label>
+    <select id="{{ uid }}-op" name="op" class="w-full" hx-get="/rules/condition" hx-include="closest li" hx-target="closest li" hx-swap="outerHTML" hx-trigger="change">
+      {% for op in rule_ops %}<option value="{{ op }}"{% if op == c.op %} selected{% endif %}>{{ OP_LABELS.get(op, op) }}</option>{% endfor %}
+    </select>
+  </div>
+  <div role="group" class="field col-start-1 sm:col-start-auto">
+    <label for="{{ uid }}-value" class="sm:sr-only">Value</label>
+    {% if valueless %}
+    <input id="{{ uid }}-value" name="value" type="text" value="" readonly aria-disabled="true" placeholder="No value needed" class="cursor-not-allowed opacity-50">
+    {% else %}
+    <input id="{{ uid }}-value" name="value" type="text" value="{{ c.value or '' }}" placeholder="{{ OP_HINTS.get(c.op, '') }}" autocomplete="off" spellcheck="false" class="font-mono">
+    {% endif %}
+  </div>
+  <button type="button" class="btn col-start-2 row-start-1 sm:col-start-auto sm:row-start-auto" data-size="icon" data-variant="ghost" aria-label="Remove condition"
+          onclick="const form = this.form; this.closest('li').remove(); htmx.trigger(form, 'change')">{{ icon("x") }}</button>
+</li>

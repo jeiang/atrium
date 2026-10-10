@@ -1,0 +1,42 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import stage_badge, reason, place, proposal, agreement, when, noun %}
+{% set m = message %}
+{% set d = m.decision %}
+{% set current = "INBOX" if m.in_inbox else m.location %}
+<section id="decision-card-{{ m.id }}" class="group/card flex flex-col gap-3 rounded-lg border bg-card p-4" aria-labelledby="decision-title-{{ m.id }}">
+  <header class="flex flex-wrap items-center gap-2">
+    <h3 id="decision-title-{{ m.id }}" class="text-sm font-medium">atrium’s decision</h3>
+    {% if d %}{{ stage_badge(d.stage) }}{% if d.stage != "correction" and d.confidence is not none %}<span class="text-xs text-muted-foreground tabular-nums">{{ "%.0f%%" | format(d.confidence * 100) }}</span>{% endif %}{% endif %}
+    {% if d %}<span class="ml-auto text-xs text-muted-foreground">{{ when(d.ts, "datetime") }}</span>{% endif %}
+  </header>
+  {% if d %}
+  {% set state = "pending" if m.in_inbox else ("agree" if d.dest and d.dest in (m.location or "").split("|") else "disagree") %}
+  <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+    <span class="sr-only">Now in</span><span>{{ place(current) }}</span>
+    {{ icon("arrow-right", "size-3.5 text-muted-foreground") }}
+    <span class="sr-only">proposed</span><span class="font-medium">{{ proposal(d.action, d.dest) }}</span>
+    {% if d.stage != "correction" %}<span class="text-xs">{{ agreement(state) }}</span>{% endif %}
+  </div>
+  <p class="text-sm text-muted-foreground">{{ reason(d) }}</p>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No decision yet. atrium decides once a message has been read and is still in the inbox.</p>
+  {% endif %}
+  {% if m.corrected_to and (not d or d.stage != "correction") %}
+  <p class="text-sm">You corrected this to <span class="font-medium">{{ m.corrected_to }}</span>.</p>
+  {% endif %}
+  {% if toast is defined and toast %}
+  <p class="flex items-start gap-2 rounded-md bg-success/10 px-3 py-2 text-sm text-success" role="status">
+    {{ icon("check", "mt-0.5 size-4 shrink-0") }}<span><span class="font-medium">{{ toast.title }}</span>{% if toast.description %} {{ toast.description }}{% endif %}</span>
+  </p>
+  {% endif %}
+  <div id="correct-slot-message-{{ m.id }}" class="empty:hidden">
+    {%- if correct is defined and correct %}{% include "_correct.html" %}{% endif -%}
+  </div>
+  <div class="flex flex-wrap gap-2 group-has-[form]/card:hidden">
+    <button type="button" class="btn" data-size="sm" data-variant="outline"
+            hx-get="/messages/{{ m.id }}/correct?context=message" hx-target="#correct-slot-message-{{ m.id }}" hx-swap="innerHTML">
+      {{ icon("folder-input") }}Correct
+    </button>
+    <a class="btn" data-size="sm" data-variant="ghost" href="/rules/new?message={{ m.id }}">{{ icon("list-plus") }}Make rule</a>
+  </div>
+</section>

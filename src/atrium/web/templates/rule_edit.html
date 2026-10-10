@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import spinner, open_attrs %}
+{% set page = "rules" %}
+{% block title %}{{ "New rule" if is_new else "Edit " ~ rule.id }}{% endblock %}
+{% block heading %}{{ "New rule" if is_new else "Edit rule" }}{% endblock %}
+{% block content %}
+<a href="/rules{{ '?account=' ~ (rule.account | urlencode) if rule.account }}" class="btn self-start" data-size="sm" data-variant="ghost">{{ icon("arrow-left") }}Rules</a>
+{% if source_message %}
+<p class="text-sm text-muted-foreground">
+  Prefilled from <a class="font-medium text-foreground underline underline-offset-4" {{ open_attrs(source_message.id) }}>{{ source_message.subject or "(no subject)" }}</a>
+  · {{ source_message.from_addr }}
+</p>
+{% endif %}
+<div class="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_--spacing(96)]">
+  {% include "_rule_form.html" %}
+  <section class="flex flex-col gap-3 lg:sticky lg:top-20" aria-labelledby="preview-title">
+    <header class="flex items-center gap-2">
+      <h2 id="preview-title" class="text-sm font-medium">Preview</h2>
+      {{ spinner("preview-spinner", "Updating preview") }}
+      <button type="button" class="btn ml-auto" data-size="sm" data-variant="ghost"
+              hx-post="/rules/preview" hx-include="#rule-form" hx-target="#preview" hx-indicator="#preview-spinner">Refresh</button>
+    </header>
+    <div id="preview" class="flex flex-col gap-3" aria-live="polite"
+      hx-post="/rules/preview" hx-include="#rule-form" hx-sync="this:replace" hx-indicator="#preview-spinner"
+      hx-trigger="load, change from:#rule-form delay:300ms, input from:#rule-form delay:600ms">
+      <p class="text-sm text-muted-foreground">Counting matching messages…</p>
+    </div>
+  </section>
+</div>
+{% endblock %}

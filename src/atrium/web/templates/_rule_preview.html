@@ -1,0 +1,37 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import open_attrs, place, sender, when %}
+{% if error is defined and error %}
+<div class="alert" role="status">
+  {{ icon("circle-alert") }}
+  <h3>Not a complete rule yet</h3>
+  <section><p>{{ error }}</p></section>
+</div>
+{% else %}
+{% set p = preview %}
+<div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
+  <p class="text-sm"><span class="text-2xl font-semibold tabular-nums">{{ p.count }}</span> <span class="text-muted-foreground">of {{ p.total }} indexed messages match</span></p>
+  {% if p.count %}<p class="text-xs text-muted-foreground tabular-nums">{{ p.in_inbox }} of them are in the inbox now.</p>{% endif %}
+</div>
+{% if p.sample %}
+<div class="flex flex-col gap-2">
+  <h3 class="text-xs font-medium text-muted-foreground">{{ "Newest " ~ (p.sample | length) if p.count > p.sample | length else "All" }} {{ "match" if p.sample | length == 1 else "matches" }}</h3>
+  <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
+    {% for s in p.sample %}
+    <li>
+      <a class="flex flex-col gap-0.5 px-3 py-2 hover:bg-accent/60 focus-visible:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset" {{ open_attrs(s.id) }}>
+        <span class="truncate text-sm">{{ s.subject or "(no subject)" }}</span>
+        <span class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <span class="truncate">{{ sender(s) }}</span>
+          <span aria-hidden="true">·</span>
+          <span class="shrink-0 font-medium text-foreground">{{ place(s.folder) }}</span>
+          <span class="ml-auto shrink-0 tabular-nums">{{ when(s.date_ts) }}</span>
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% else %}
+<p class="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">No indexed message matches this draft.</p>
+{% endif %}
+{% endif %}

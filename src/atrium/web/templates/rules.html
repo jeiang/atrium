@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% from "basecoat/tabs.html.jinja" import tabs %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import account_switch, LEVEL_LABELS, pct %}
+{% set page = "rules" %}
+{% block title %}Rules{% endblock %}
+{% block heading %}Rules{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  {{ account_switch("/rules", account) }}
+  <a class="btn" href="/rules/new{{ '?account=' ~ (account | urlencode) if account }}">{{ icon("plus") }}New rule</a>
+</div>
+
+{% set operator_panel %}
+<div class="flex flex-col gap-3 pt-3">
+  <p class="text-sm text-muted-foreground">Checked top to bottom before anything learned; the first rule whose conditions all hold decides.</p>
+  {% include "_rule_list.html" %}
+</div>
+{% endset %}
+
+{% set learned_panel %}
+<div class="flex flex-col gap-3 pt-3">
+  <p class="text-sm text-muted-foreground">Learned from where you file mail with the same sender or subject template. Read-only: correct a message to teach atrium.</p>
+  {% if learned %}
+  <div class="table-container rounded-lg border bg-card">
+    <table class="table">
+      <caption class="sr-only">Learned rules, most messages first</caption>
+      <thead>
+        <tr>
+          <th scope="col">Key</th>
+          <th scope="col">Level</th>
+          <th scope="col">Destination</th>
+          <th scope="col" class="text-right">Purity</th>
+          <th scope="col" class="text-right">Messages</th>
+          {% if not account %}<th scope="col">Account</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in learned %}
+        <tr>
+          <td class="max-w-80 truncate font-mono text-xs" title="{{ r.key }}">{{ r.key }}</td>
+          <td class="text-muted-foreground">{{ LEVEL_LABELS.get(r.level, r.level) }}</td>
+          <td class="font-medium">{{ r.dest }}</td>
+          <td class="text-right tabular-nums">{{ pct(r.purity) }}</td>
+          <td class="text-right tabular-nums">{{ r.n }}</td>
+          {% if not account %}<td class="text-muted-foreground">{{ r.account }}</td>{% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Nothing learned yet. atrium needs a few filed messages that agree before it trusts a key.</p>
+  {% endif %}
+</div>
+{% endset %}
+
+{{ tabs(
+  id="rules-tabs",
+  tabsets=[
+    {"tab": "Operator <span class=\"badge\" data-variant=\"secondary\">" ~ (rules | length) ~ "</span>", "panel": operator_panel},
+    {"tab": "Learned <span class=\"badge\" data-variant=\"secondary\">" ~ (learned | length) ~ "</span>", "panel": learned_panel},
+  ],
+  main_attrs={"class": "gap-0"},
+  tablist_attrs={"data-variant": "line", "aria-label": "Rule sources"}
+) }}
+{% endblock %}

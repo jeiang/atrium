@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import spinner %}
+{% set page = "search" %}
+{% block title %}{{ params.q or "Search" }}{% endblock %}
+{% block heading %}Search{% endblock %}
+{% block content %}
+{% set filter_keys = ["account", "folder", "from", "date_from", "date_to", "has_attachment", "unread", "flagged"] %}
+{% set ns = namespace(active=0) %}
+{% for key in filter_keys %}{% if params.get(key) %}{% set ns.active = ns.active + 1 %}{% endif %}{% endfor %}
+<form id="search-form" action="/" method="get" role="search" class="flex flex-col gap-3"
+      hx-get="/" hx-target="#results" hx-push-url="true" hx-sync="this:replace"
+      hx-trigger="submit, change from:#filters" hx-indicator="#search-spinner">
+  <div class="flex flex-col gap-2 sm:flex-row">
+    <label for="q" class="sr-only">Search mail</label>
+    <div class="input-group h-9 flex-1">
+      <input id="q" name="q" type="search" value="{{ params.q or '' }}" placeholder="Search mail, or ask a question" autocomplete="off" data-search-input>
+      <span data-align="start" aria-hidden="true">{{ icon("search") }}</span>
+      <span data-align="end" class="gap-2">{{ spinner("search-spinner", "Searching") }}<kbd class="kbd hidden sm:inline-flex" aria-hidden="true">/</kbd></span>
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" class="btn flex-1 sm:flex-none" data-size="lg">Search</button>
+      <button type="button" class="btn flex-1 sm:flex-none" data-size="lg" data-variant="outline"
+              hx-post="/ask" hx-target="#answer" hx-swap="innerHTML show:top" hx-disabled-elt="this" hx-push-url="false">
+        {{ icon("message-circle-question") }}Ask
+      </button>
+    </div>
+  </div>
+  <div class="flex items-center gap-2 md:hidden">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" aria-controls="filters" aria-expanded="{{ 'true' if ns.active else 'false' }}"
+            onclick="const open = document.getElementById('filters').toggleAttribute('data-open'); this.setAttribute('aria-expanded', open)">
+      {{ icon("list-filter") }}Filters{% if ns.active %}<span class="badge" data-variant="secondary">{{ ns.active }}</span>{% endif %}
+    </button>
+  </div>
+  <fieldset id="filters" class="hidden grid-cols-2 gap-3 rounded-lg border bg-card p-3 data-open:grid md:grid md:grid-cols-4 lg:grid-cols-6"{% if ns.active %} data-open{% endif %}>
+    <legend class="sr-only">Filters</legend>
+    <div role="group" class="field">
+      <label for="f-account">Account</label>
+      <select id="f-account" name="account" class="w-full">
+        <option value="">All accounts</option>
+        {% for name in accounts %}<option value="{{ name }}"{% if params.account == name %} selected{% endif %}>{{ name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div role="group" class="field">
+      <label for="f-folder">Folder or label</label>
+      <select id="f-folder" name="folder" class="w-full">
+        <option value="">Anywhere</option>
+        <option value="INBOX"{% if params.folder == "INBOX" %} selected{% endif %}>Inbox</option>
+        {% for name in accounts %}
+        <optgroup label="{{ name }}">
+          {% for f in folders.get(name, []) %}<option value="{{ f.folder }}"{% if params.folder == f.folder %} selected{% endif %}>{{ f.folder }}</option>{% endfor %}
+        </optgroup>
+        {% endfor %}
+      </select>
+    </div>
+    <div role="group" class="field col-span-2 md:col-span-2 lg:col-span-1">
+      <label for="f-from">From</label>
+      <input id="f-from" name="from" type="text" value="{{ params.get('from') or '' }}" placeholder="Name or address" autocomplete="off">
+    </div>
+    <div role="group" class="field">
+      <label for="f-date-from">Since</label>
+      <input id="f-date-from" name="date_from" type="date" value="{{ params.date_from or '' }}">
+    </div>
+    <div role="group" class="field">
+      <label for="f-date-to">Until</label>
+      <input id="f-date-to" name="date_to" type="date" value="{{ params.date_to or '' }}">
+    </div>
+    <div role="group" aria-label="Message state" class="col-span-2 flex flex-wrap items-end gap-x-4 gap-y-2 pb-2 md:col-span-4 lg:col-span-1 lg:flex-col lg:items-start lg:gap-1 lg:pb-0">
+      <div role="group" class="field" data-orientation="horizontal">
+        <input id="f-attachment" name="has_attachment" type="checkbox" value="1"{% if params.has_attachment %} checked{% endif %}>
+        <label for="f-attachment" class="font-normal">Attachment</label>
+      </div>
+      <div role="group" class="field" data-orientation="horizontal">
+        <input id="f-unread" name="unread" type="checkbox" value="1"{% if params.unread %} checked{% endif %}>
+        <label for="f-unread" class="font-normal">Unread</label>
+      </div>
+      <div role="group" class="field" data-orientation="horizontal">
+        <input id="f-flagged" name="flagged" type="checkbox" value="1"{% if params.flagged %} checked{% endif %}>
+        <label for="f-flagged" class="font-normal">Flagged</label>
+      </div>
+    </div>
+  </fieldset>
+</form>
+
+<template id="answer-loading">
+  <div class="flex flex-col gap-2 rounded-lg border bg-card p-4" role="status" aria-label="The 9B is reading the top results">
+    <p class="flex items-center gap-2 text-sm text-muted-foreground">{{ icon("loader-circle", "size-4 animate-spin") }}Reading the top results…</p>
+    <div class="skeleton h-4 w-full rounded-md bg-muted"></div>
+    <div class="skeleton h-4 w-5/6 rounded-md bg-muted"></div>
+    <div class="skeleton h-4 w-2/3 rounded-md bg-muted"></div>
+  </div>
+</template>
+
+<div id="results" class="flex flex-col gap-4">
+  {% include "_results.html" %}
+</div>
+{% endblock %}

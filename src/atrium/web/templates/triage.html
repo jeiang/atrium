@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% from "basecoat/tabs.html.jinja" import tabs %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import account_switch, stage_label, STAGE_DOTS, open_attrs, sender, when %}
+{% set page = "triage" %}
+{% block title %}Triage{% endblock %}
+{% block heading %}Triage{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <p class="max-w-prose text-sm text-muted-foreground">What atrium would do with read mail still in the inbox, compared with where the mail actually went.</p>
+  {{ account_switch("/triage", account) }}
+</div>
+
+<div class="grid gap-4 {{ 'lg:grid-cols-2' if summaries | length > 1 else '' }}">
+  {% for s in summaries %}
+  {% set staged = s.by_stage.values() | sum %}
+  <section class="flex flex-col gap-4 rounded-lg border bg-card p-4" aria-labelledby="summary-{{ s.account }}">
+    <header class="flex flex-wrap items-baseline gap-x-2">
+      <h2 id="summary-{{ s.account }}" class="font-medium">{{ s.account }}</h2>
+      <span class="text-sm text-muted-foreground tabular-nums">{{ s.decisions }} {{ "decision" if s.decisions == 1 else "decisions" }}</span>
+    </header>
+    {% if staged %}
+    <div class="flex flex-col gap-2">
+      <div class="flex h-2 gap-px overflow-hidden rounded-full bg-muted" role="img"
+        aria-label="By stage: {% for stage, n in s.by_stage.items() if n %}{{ stage_label(stage) }} {{ n }}{{ ', ' if not loop.last }}{% endfor %}">
+        {% for stage, n in s.by_stage.items() if n %}
+        <span class="{{ STAGE_DOTS[stage] }}" style="flex-grow: {{ n }}"></span>
+        {% endfor %}
+      </div>
+      <ul class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" role="list" aria-hidden="true">
+        {% for stage, n in s.by_stage.items() %}
+        <li class="inline-flex items-center gap-1.5"><span class="size-2 rounded-full {{ STAGE_DOTS[stage] }}"></span>{{ stage_label(stage) }} <span class="text-foreground tabular-nums">{{ n }}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+      <div class="flex flex-col gap-0.5">
+        <dt class="text-xs text-muted-foreground">Proposed</dt>
+        <dd class="tabular-nums"><span class="font-medium">{{ s.proposed_moves }}</span> moves</dd>
+        <dd class="text-xs text-muted-foreground tabular-nums">{{ s.proposed_deletes }} deletes · {{ s.no_label }} stay</dd>
+      </div>
+      <div class="flex flex-col gap-0.5">
+        <dt class="text-xs text-muted-foreground">Since then</dt>
+        <dd class="tabular-nums"><span class="font-medium">{{ s.moved }}</span> moved</dd>
+        <dd class="text-xs text-muted-foreground tabular-nums">{{ s.still_in_inbox }} in inbox · {{ s.gone }} gone</dd>
+      </div>
+      <div class="flex flex-col gap-0.5">
+        <dt class="text-xs text-muted-foreground">Agreement</dt>
+        {% if s.agreement_pct is not none %}
+        <dd class="font-medium tabular-nums">{{ "%.0f%%" | format(s.agreement_pct) }}</dd>
+        <dd class="text-xs text-muted-foreground tabular-nums">{{ s.agreed }} of {{ s.moved }} moved</dd>
+        {% else %}
+        <dd class="text-muted-foreground">Nothing moved yet</dd>
+        {% endif %}
+      </div>
+      <div class="flex flex-col gap-0.5">
+        <dt class="text-xs text-muted-foreground">Unread flags</dt>
+        <dd class="tabular-nums"><span class="font-medium">{{ s.flags.llm }}</span> by 9B <span class="text-muted-foreground">of {{ s.flags.judged }}</span></dd>
+        <dd class="text-xs text-muted-foreground tabular-nums">{{ s.flags.contacts }} contacts · {{ s.flags.both }} both</dd>
+      </div>
+    </dl>
+  </section>
+  {% endfor %}
+</div>
+
+{% set decisions_panel %}
+<div class="flex flex-col gap-3 pt-3">
+  <form class="flex flex-wrap items-end gap-3" action="/triage" method="get"
+        hx-get="/triage" hx-target="#decisions" hx-push-url="true" hx-trigger="change" hx-sync="this:replace" hx-indicator="#decisions">
+    <input type="hidden" name="account" value="{{ account }}">
+    <div role="group" class="field w-auto">
+      <label for="t-stage">Stage</label>
+      <select id="t-stage" name="stage">
+        <option value="">All stages</option>
+        {% for name in stages %}<option value="{{ name }}"{% if stage == name %} selected{% endif %}>{{ stage_label(name) }}</option>{% endfor %}
+      </select>
+    </div>
+    <div role="group" class="field w-auto">
+      <label for="t-agreement">Outcome</label>
+      <select id="t-agreement" name="agreement">
+        {% for value, label in [("", "Any outcome"), ("agree", "Matches where it went"), ("disagree", "Differs from where it went"), ("pending", "Still in inbox"), ("gone", "Gone")] %}
+        <option value="{{ value }}"{% if agreement == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <noscript><button type="submit" class="btn" data-variant="outline">Apply</button></noscript>
+  </form>
+  <div id="decisions" class="flex flex-col gap-2 transition-opacity [&.htmx-request]:opacity-60">
+    {% include "_decisions.html" %}
+  </div>
+</div>
+{% endset %}
+
+{% set flags_panel %}
+<div class="flex flex-col gap-3 pt-3">
+  <p class="text-sm text-muted-foreground">Unread inbox mail and whether it would be flagged. Nothing is flagged in shadow mode.</p>
+  {% if flags %}
+  <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
+    {% for f in flags %}
+    <li class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <a class="truncate rounded-sm text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {{ open_attrs(f.message_id) }}>{{ f.subject or "(no subject)" }}</a>
+        <p class="truncate text-xs text-muted-foreground">{{ sender(f) }} · {{ when(f.date_ts) }} · {{ f.account }}</p>
+      </div>
+      <ul class="flex flex-wrap items-center gap-1.5" role="list" aria-label="Signals">
+        {% if f.contacts_match %}<li class="badge" data-variant="secondary">{{ icon("book-user") }}Contact</li>{% endif %}
+        {% if f.person_asking %}<li class="badge" data-variant="outline">Asking</li>{% endif %}
+        {% if f.deadline_or_payment_due %}<li class="badge" data-variant="outline">Deadline</li>{% endif %}
+        {% if f.security_event %}<li class="badge" data-variant="outline">Security</li>{% endif %}
+        {% if f.llm_flag is none %}
+        <li class="badge" data-variant="ghost">{{ icon("circle-dot") }}9B pending</li>
+        {% elif f.llm_flag %}
+        <li class="badge border-warning/30 bg-warning/10 text-warning">{{ icon("flag") }}9B flags</li>
+        {% else %}
+        <li class="badge" data-variant="ghost">9B: no flag</li>
+        {% endif %}
+      </ul>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">No unread inbox mail has been judged.</p>
+  {% endif %}
+</div>
+{% endset %}
+
+{{ tabs(
+  id="triage-tabs",
+  tabsets=[
+    {"tab": "Decisions", "panel": decisions_panel},
+    {"tab": "Unread flags <span class=\"badge\" data-variant=\"secondary\">" ~ (flags | length) ~ "</span>", "panel": flags_panel},
+  ],
+  main_attrs={"class": "gap-0"},
+  tablist_attrs={"data-variant": "line", "aria-label": "Triage views"}
+) }}
+{% endblock %}

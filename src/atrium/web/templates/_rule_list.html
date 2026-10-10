@@ -1,0 +1,42 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import condition_text %}
+<ol id="rule-list" class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list" aria-label="Operator rules, first match wins">
+  {% for rule in rules %}
+  <li id="rule-{{ rule.id }}" class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-[--spacing(6)_minmax(0,1fr)_auto] sm:items-start">
+    <span class="pt-0.5 text-right font-mono text-xs text-muted-foreground tabular-nums" aria-hidden="true">{{ loop.index }}</span>
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <div class="flex flex-wrap items-center gap-2">
+        <h3 class="font-mono text-sm font-medium break-all"><span class="sr-only">Rule {{ loop.index }}: </span>{{ rule.id }}</h3>
+        <span class="badge" data-variant="outline">{{ rule.account or "All accounts" }}</span>
+      </div>
+      <ul class="flex flex-col gap-1 text-sm" role="list" aria-label="Conditions, all must hold">
+        {% for c in rule.when %}
+        <li class="flex flex-wrap items-baseline gap-x-1.5">{% if not loop.first %}<span class="text-xs text-muted-foreground">and</span>{% endif %}{{ condition_text(c) }}</li>
+        {% endfor %}
+      </ul>
+      <p class="flex flex-wrap items-center gap-1.5 text-sm">
+        {{ icon("arrow-right", "size-3.5 text-muted-foreground") }}
+        {% if rule.action == "delete" %}<span class="font-medium text-destructive">Delete</span>{% else %}<span class="text-muted-foreground">File into</span> <span class="font-medium">{{ rule.dest }}</span>{% endif %}
+      </p>
+    </div>
+    <div class="col-start-2 flex flex-wrap gap-1 sm:col-start-3">
+      <div class="button-group" role="group" aria-label="Move {{ rule.id }}">
+        <button type="button" class="btn" data-size="icon-sm" data-variant="outline" aria-label="Move {{ rule.id }} up"{% if loop.first %} disabled{% endif %}
+                hx-post="/rules/{{ rule.id | urlencode }}/move" hx-vals='{{ {"direction": "up", "account": account} | tojson }}'{% if moved is defined and moved and moved.id == rule.id and moved.direction == "up" %} autofocus{% endif %} hx-target="#rule-list" hx-swap="outerHTML">{{ icon("chevron-up") }}</button>
+        <button type="button" class="btn" data-size="icon-sm" data-variant="outline" aria-label="Move {{ rule.id }} down"{% if loop.last %} disabled{% endif %}
+                hx-post="/rules/{{ rule.id | urlencode }}/move" hx-vals='{{ {"direction": "down", "account": account} | tojson }}'{% if moved is defined and moved and moved.id == rule.id and moved.direction == "down" %} autofocus{% endif %} hx-target="#rule-list" hx-swap="outerHTML">{{ icon("chevron-down") }}</button>
+      </div>
+      <a class="btn" data-size="sm" data-variant="ghost" href="/rules/{{ rule.id | urlencode }}/edit">{{ icon("pencil") }}Edit</a>
+      <button type="button" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Delete {{ rule.id }}"
+              hx-delete="/rules/{{ rule.id | urlencode }}?account={{ account | urlencode }}" hx-confirm="Delete rule {{ rule.id }}?" hx-target="#rule-list" hx-swap="outerHTML">{{ icon("trash-2", "text-destructive") }}</button>
+    </div>
+  </li>
+  {% else %}
+  <li class="flex flex-col items-center gap-2 px-4 py-10 text-center">
+    <span class="grid size-8 place-items-center rounded-lg bg-muted">{{ icon("scroll-text") }}</span>
+    <p class="text-sm font-medium">No operator rules{{ " for " ~ account if account }}</p>
+    <p class="max-w-sm text-sm text-muted-foreground">Rules run before anything learned. Start from a message in Triage with “Make rule”, or write one from scratch.</p>
+  </li>
+  {% endfor %}
+</ol>
+{% if toast is defined and toast %}{% include "_toast.html" %}{% endif %}

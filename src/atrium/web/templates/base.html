@@ -1,0 +1,119 @@
+{% from "basecoat/sidebar.html.jinja" import sidebar %}
+{% from "basecoat/toast.html.jinja" import toaster %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import mode_badge, mode_note %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}{% endblock %} · atrium</title>
+  <script>
+    (() => {
+      const dark = window.matchMedia("(prefers-color-scheme: dark)");
+      const apply = () => document.documentElement.classList.toggle("dark", dark.matches);
+      apply();
+      dark.addEventListener("change", apply);
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/basecoat/all.min.js" defer></script>
+  <script>
+    document.addEventListener("htmx:historyRestore", () => {
+      const params = new URLSearchParams(window.location.search);
+      document.querySelectorAll("form[hx-push-url] [name]").forEach((field) => {
+        if (field.type === "checkbox") field.checked = params.has(field.name);
+        else if (field.type !== "hidden") field.value = params.get(field.name) ?? "";
+      });
+      window.basecoat.initAll({ force: true });
+    });
+    document.addEventListener("htmx:beforeRequest", (event) => {
+      const target = event.detail.target;
+      const loading = target && target.dataset.loading && document.getElementById(target.dataset.loading);
+      if (loading) target.replaceChildren(loading.content.cloneNode(true));
+      const dialog = target && target.closest("dialog");
+      if (dialog && !dialog.open) dialog.showModal();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "/" && !event.target.closest("input, textarea, select, [contenteditable]")) {
+        const search = document.querySelector("[data-search-input]");
+        if (search) {
+          event.preventDefault();
+          search.focus();
+        }
+      }
+      const nav = document.getElementById("sidebar");
+      if (event.key === "Escape" && nav && nav.close && window.innerWidth < 768 && nav.getAttribute("aria-hidden") === "false") {
+        nav.close();
+        document.getElementById("nav-toggle").focus();
+      }
+    });
+  </script>
+</head>
+<body class="min-h-dvh">
+  <a href="#content" class="sr-only rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50">Skip to content</a>
+  {% set brand %}
+  <a href="/" class="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <span class="grid size-7 place-items-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground" aria-hidden="true">a</span>
+    <span class="text-base font-semibold tracking-tight">atrium</span>
+  </a>
+  {% endset %}
+  {% set footer %}
+  <div class="flex flex-col gap-1.5 rounded-lg border bg-background p-3 text-xs">
+    <div>{{ mode_badge(mode) }}</div>
+    <p class="text-pretty text-muted-foreground">{{ mode_note(mode) }}</p>
+  </div>
+  {% endset %}
+  {{ sidebar(
+    id="sidebar",
+    label="Primary",
+    header=brand,
+    footer=footer,
+    menu=[
+      {"type": "group", "label": "Mail", "items": [
+        {"label": "Search", "url": "/", "icon": icon("search"), "current": page == "search"},
+        {"label": "Contacts", "url": "/contacts", "icon": icon("book-user"), "current": page == "contacts"},
+      ]},
+      {"type": "group", "label": "Routing", "items": [
+        {"label": "Triage", "url": "/triage", "icon": icon("route"), "current": page == "triage"},
+        {"label": "Rules", "url": "/rules", "icon": icon("scroll-text"), "current": page == "rules"},
+      ]},
+    ]
+  ) }}
+  <main class="flex min-w-0 flex-col">
+    <header class="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-3 md:px-6">
+      <button id="nav-toggle" type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Toggle navigation" aria-controls="sidebar" onclick="document.getElementById('sidebar').toggle()">{{ icon("panel-left") }}</button>
+      <hr role="separator" aria-orientation="vertical" class="h-4 w-px border-0 bg-border">
+      <h1 class="truncate px-1 text-sm font-medium">{% block heading %}{% endblock %}</h1>
+      <div class="ml-auto flex items-center gap-3">
+        {{ mode_badge(mode) }}
+      </div>
+    </header>
+    <div id="content" tabindex="-1" class="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 outline-none md:px-8 md:py-8">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <dialog id="reader" class="drawer" data-side="right" aria-label="Message">
+    <article class="w-full max-w-none sm:max-w-2xl">
+      <header class="flex-row items-center justify-between border-b">
+        <h2 class="text-sm font-medium">Message</h2>
+        <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close message" onclick="this.closest('dialog').close()">{{ icon("x") }}</button>
+      </header>
+      <section id="reader-body" data-loading="reader-loading" class="p-4 md:p-6"></section>
+    </article>
+  </dialog>
+
+  <template id="reader-loading">
+    <div class="flex flex-col gap-3" role="status" aria-label="Loading message">
+      <div class="skeleton h-6 w-3/4 rounded-md bg-muted"></div>
+      <div class="skeleton h-4 w-1/2 rounded-md bg-muted"></div>
+      <div class="skeleton mt-4 h-40 w-full rounded-md bg-muted"></div>
+    </div>
+  </template>
+
+  {{ toaster(toasts=[toast] if toast is defined and toast else []) }}
+</body>
+</html>
