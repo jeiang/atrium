@@ -4,12 +4,14 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import jinja2
 from fastapi import FastAPI, Form, HTTPException, Query, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .. import ask, contacts, corrections, db, embed, llm, message, router, ruleedit, rules, search, triage
 from ..config import ACCOUNTS
@@ -26,11 +28,15 @@ FILTER_KEYS = SEARCH_KEYS[1:]
 LIST_OPS = ("in", "suffix")
 NO_QUESTION = "Type a question to ask."
 RULE_PROBLEMS = {
+    "op eq needs a value": "“is” needs a value.",
+    "op re needs a value": "“matches regex” needs a pattern.",
+    "op suffix needs a value": "“is or ends in domain” needs at least one domain.",
     "file rule needs dest": "Choose a destination, or set the action to Delete.",
     "when must be a non-empty list": "Add at least one condition.",
     "op in needs a non-empty list of strings": "“is one of” needs at least one value.",
     "op suffix needs a string or list of strings": "“is or ends in domain” needs at least one domain.",
 }
+BACK_LABELS = {"/": "Search", "/triage": "Triage"}
 RULE_ID_PREFIX = re.compile(r"^[^:\s]+: ")
 
 
@@ -82,6 +88,14 @@ def toast(category, title, description=""):
 def query_url(path, **params):
     live = {k: v for k, v in params.items() if v}
     return f"{path}?{urlencode(live)}" if live else path
+
+
+def back_link(request):
+    ref = urlsplit(request.headers.get("referer", ""))
+    label = BACK_LABELS.get(ref.path) if ref.netloc == request.url.netloc else None
+    if label is None:
+        return {"url": "/", "label": "Search"}
+    return {"url": ref.path + (f"?{ref.query}" if ref.query else ""), "label": label}
 
 
 def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
@@ -198,7 +212,8 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
     @app.get("/messages/{message_id}")
     def message_page(request: Request, message_id: int):
         with connection() as conn:
-            return page(request, "message.html", "_message.html", message=load_message(conn, message_id))
+            found = load_message(conn, message_id)
+            return page(request, "message.html", "_message.html", message=found, back=back_link(request))
 
     def correct_context(conn, found, context, selected=None, error=None):
         return {
@@ -244,7 +259,7 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
                 return render("_triage_row.html", row=row, correct=form, toast=notice)
             if is_partial(request):
                 return render("_decision_card.html", message=fresh, correct=form, toast=notice)
-            return render("message.html", message=fresh, correct=form)
+            return render("message.html", message=fresh, correct=form, back=back_link(request))
 
     @app.get("/triage")
     def triage_page(request: Request, account: str = "", stage: str = "", agreement: str = "", offset: int = 0):
@@ -284,7 +299,7 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
         return found, capped
 
     @app.get("/rules")
-    def rules_page(account: str = ""):
+    def rules_page(account: str = "", saved: str = "", created: str = ""):
         with connection() as conn:
             learned, capped = learned_for(conn, account)
             return render(
@@ -293,6 +308,7 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
                 rules=ruleedit.list_rules(conn, account or None),
                 learned=learned,
                 learned_limit=LEARNED_LIMIT if capped else None,
+                toast=toast("success", "Rule created" if created else "Rule saved", saved) if saved else None,
             )
 
     @app.get("/rules/new")
@@ -367,9 +383,9 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
         raw = rule_raw(form["account"], form["action"], form["dest"], form["field"], form["op"], form["value"])
         try:
             if is_new:
-                ruleedit.create_rule(conn, {"id": rule_id, **raw})
+                rule = ruleedit.create_rule(conn, {"id": rule_id, **raw})
             else:
-                ruleedit.update_rule(conn, rule_id, {"id": rule_id, **raw})
+                rule = ruleedit.update_rule(conn, rule_id, {"id": rule_id, **raw})
         except RuleError as e:
             shown = {"id": rule_id, **raw}
             return render(
@@ -381,7 +397,8 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
                 source_message=None,
                 errors=[rule_problem(e)],
             )
-        return RedirectResponse(query_url("/rules", account=form["account"]), status_code=303)
+        done = query_url("/rules", account=form["account"], saved=rule.id, created="1" if is_new else "")
+        return RedirectResponse(done, status_code=303)
 
     @app.post("/rules")
     def rule_create(
@@ -469,5 +486,11 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
             contacts=contacts.filter_contacts(everyone, q),
             total=len(everyone),
         )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request: Request, exc: StarletteHTTPException):
+        if exc.status_code != 404:
+            return await http_exception_handler(request, exc)
+        return render("_error.html" if is_partial(request) else "error.html", status_code=404)
 
     return app

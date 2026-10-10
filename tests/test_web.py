@@ -152,7 +152,15 @@ def test_message_page_full_partial_and_missing(client):
     assert "<html" in c.get(url).text
     partial = c.get(url, headers=HX)
     assert partial.status_code == 200 and "<html" not in partial.text and "invoice due friday" in partial.text
-    assert c.get("/messages/9999").status_code == 404
+    missing = c.get("/messages/9999")
+    assert missing.status_code == 404 and "<html" in missing.text and "Nothing here" in missing.text
+    missing_partial = c.get("/messages/9999", headers=HX)
+    assert missing_partial.status_code == 404 and "<html" not in missing_partial.text
+    assert 'href="/"' in c.get(url).text
+    from_triage = c.get(url, headers={"referer": "http://testserver/triage?stage=operator"}).text
+    assert 'href="/triage?stage=operator"' in from_triage and "</svg>Triage</a>" in from_triage
+    elsewhere = c.get(url, headers={"referer": "http://elsewhere.test/triage"}).text
+    assert "</svg>Triage</a>" not in elsewhere
 
 
 def test_correct_form_renders_account_folders(client):
@@ -224,7 +232,9 @@ def test_rules_lifecycle(client):
         "value": ["shop.test, mail.shop.test", "a.test,b.test", ""],
     }
     created = c.post("/rules", data=form, follow_redirects=False)
-    assert created.status_code == 303 and created.headers["location"] == "/rules?account=icloud"
+    assert created.status_code == 303 and created.headers["location"] == "/rules?account=icloud&saved=shop&created=1"
+    landed = c.get(created.headers["location"]).text
+    assert "Rule created" in landed and landed.count('id="toaster"') == 1
     stored = rows(cfg, "SELECT id, account, action, dest, conditions FROM rules")
     assert len(stored) == 1
     assert json.loads(stored[0]["conditions"]) == [
@@ -238,7 +248,8 @@ def test_rules_lifecycle(client):
     assert edit.status_code == 200 and "mail.shop.test" in edit.text
     form.update(id="shop", action="delete", dest="", account="", field=["from_addr"], op=["eq"], value=["x@shop.test"])
     updated = c.post("/rules/shop", data=form, follow_redirects=False)
-    assert updated.status_code == 303 and updated.headers["location"] == "/rules"
+    assert updated.status_code == 303 and updated.headers["location"] == "/rules?saved=shop"
+    assert "Rule saved" in c.get(updated.headers["location"]).text
     row = rows(cfg, "SELECT account, action, dest FROM rules")[0]
     assert (row["account"], row["action"], row["dest"]) == (None, "delete", None)
 

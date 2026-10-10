@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
-{% set page = "search" %}
+{% set page = "triage" if back.label == "Triage" else "search" %}
 {% block title %}{{ message.subject or "Message" }}{% endblock %}
 {% block heading %}Message{% endblock %}
 {% block content %}
-<a href="/" class="btn self-start" data-size="sm" data-variant="ghost">{{ icon("arrow-left") }}Search</a>
+<a href="{{ back.url }}" class="btn self-start" data-size="sm" data-variant="ghost">{{ icon("arrow-left") }}{{ back.label }}</a>
 <div class="w-full max-w-3xl">
   {% include "_message.html" %}
 </div>

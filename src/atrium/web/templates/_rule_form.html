@@ -56,10 +56,10 @@
     </div>
   </fieldset>
 
-  <fieldset class="fieldset">
+  <fieldset class="fieldset group/conditions">
     <legend>Conditions</legend>
     <p>A message matches when every condition holds. Values compare without regard to case.</p>
-    <div class="hidden gap-2 px-0 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[--spacing(44)_--spacing(44)_minmax(0,1fr)_--spacing(9)]" aria-hidden="true">
+    <div class="hidden gap-2 px-0 text-xs font-medium text-muted-foreground sm:group-has-[#conditions>li]/conditions:grid sm:grid-cols-[--spacing(44)_--spacing(44)_minmax(0,1fr)_--spacing(9)]" aria-hidden="true">
       <span>Field</span><span>Operator</span><span>Value</span><span></span>
     </div>
     <ol id="conditions" class="flex flex-col gap-2" role="list" aria-label="Conditions" hx-on::after-swap="htmx.trigger('#rule-form', 'change')">
