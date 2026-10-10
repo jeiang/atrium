@@ -97,7 +97,7 @@ Pipe the JSON through stdin, since the `atrium` user cannot read the
 operator's home:
 
 ```fish
-ssh artemis.jeiang.vpn doas atrium-run rules import /dev/stdin < rules.json
+ssh artemis.jeiang.vpn doas atrium-run rules import - < rules.json
 ssh artemis.jeiang.vpn doas atrium-run rules export > rules.json
 ```
 
