@@ -47,11 +47,18 @@ def triage(conn, account=None, stage=None, agreement=None, limit=50, offset=0):
     ).fetchall()
     return {
         "total": total,
-        "rows": [
-            {**dict(r), "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "current": _current(r)}
-            for r in rows
-        ],
+        "rows": [_shape(r) for r in rows],
     }
+
+
+def row(conn, message_id):
+    base = f"SELECT *, {AGREEMENT_SQL} AS agreement FROM ({LATEST_SQL})"
+    found = conn.execute(f"SELECT * FROM ({base}) WHERE message_id = ?", (message_id,)).fetchone()
+    return _shape(found) if found else None
+
+
+def _shape(r):
+    return {**dict(r), "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "current": _current(r)}
 
 
 def _current(row):

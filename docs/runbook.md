@@ -62,6 +62,7 @@ mailbox: `ATRIUM_MODE=shadow`, and every IMAP write path refuses outside
 | `atrium-embed` | llama-server, EmbeddingGemma 2, `127.0.0.1:8188` |
 | `atrium-watch` | `atrium watch`: IMAP IDLE on each INBOX, syncs on change |
 | `atrium-sync` | timer every 15 minutes, `atrium sync` as reconciliation |
+| `atrium-web` | `atrium serve` on `0.0.0.0:8480`; the web UI, reached at `http://artemis.jeiang.vpn:8480/` |
 
 The llama units are in `gaming.pauseUnits`, so a game session stops them.
 
@@ -69,6 +70,20 @@ The llama units are in `gaming.pauseUnits`, so a game session stops them.
 ssh artemis.jeiang.vpn systemctl status 'atrium-*'
 ssh artemis.jeiang.vpn journalctl -u atrium-watch.service -e
 ssh artemis.jeiang.vpn doas systemctl start atrium-sync.service
+```
+
+### Web UI
+
+`atrium-web` serves search, ask, message view, triage, rules and contacts.
+It has no login and no firewall opening: only the trusted NetBird
+interface reaches it, so use `http://artemis.jeiang.vpn:8480/` from a mesh
+peer. It reads no IMAP credentials and never writes to a mailbox. Correct
+only records a correction in `atrium.db`; rule edits change `atrium.db`.
+Assets (`app.css`, htmx, Basecoat) are built into `packages.atrium-static`;
+nothing loads from a CDN.
+
+```fish
+ssh artemis.jeiang.vpn journalctl -u atrium-web.service -e
 ```
 
 ### Running the CLI

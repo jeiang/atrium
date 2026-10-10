@@ -54,6 +54,7 @@ class Config:
     embed_url: str
     contacts_dir: Path | None
     jev_db: Path | None
+    static_dir: Path | None = None
     credentials: dict = field(default_factory=dict, repr=False)
 
     def credential(self, account):
@@ -87,5 +88,6 @@ def load(environ=None):
         embed_url=env.get("ATRIUM_EMBED_URL", "").rstrip("/"),
         contacts_dir=_path(env.get("ATRIUM_CONTACTS_DIR")),
         jev_db=_path(env.get("ATRIUM_JEV_DB")),
+        static_dir=_path(env.get("ATRIUM_STATIC_DIR")),
         credentials={k: env[k] for k in wanted if k in env},
     )

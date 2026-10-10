@@ -30,7 +30,10 @@ def make_config(tmp_path, **overrides):
 
 
 def memory_db():
-    conn = db.connect_memory()
+    return prepare(db.connect_memory())
+
+
+def prepare(conn):
     for account in ("icloud", "gmail"):
         db.ensure_account(conn, account)
         conn.execute(

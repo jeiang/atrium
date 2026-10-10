@@ -4,8 +4,13 @@ import logging
 import signal
 import sys
 
+import uvicorn
+
 from . import config, db, embed, report, rules, run, watch
 from .config import ACCOUNTS
+from .web.app import create_app
+
+DEFAULT_HOST = "127.0.0.1"
 
 
 def parser():
@@ -23,6 +28,9 @@ def parser():
     sr = sub.add_parser("shadow-report")
     sr.add_argument("--since")
     sub.add_parser("reindex")
+    sv = sub.add_parser("serve")
+    sv.add_argument("--host", default=DEFAULT_HOST)
+    sv.add_argument("--port", type=int, required=True)
     return p
 
 
@@ -56,6 +64,8 @@ def main(argv=None):
         sys.stdout.write(report.build(db.connect(cfg.db_path), cfg, args.since))
     elif args.command == "reindex":
         print(f"embedded {embed.reindex(db.connect(cfg.db_path), cfg.embed_url)} messages")
+    elif args.command == "serve":
+        uvicorn.run(create_app(cfg), host=args.host, port=args.port, log_level="info")
     return 0
 
 

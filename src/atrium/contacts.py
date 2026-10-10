@@ -68,9 +68,13 @@ def load_contacts(directory):
 
 
 def search_contacts(directory, query="", limit=None):
+    return filter_contacts(load_contacts(directory), query, limit)
+
+
+def filter_contacts(cards, query="", limit=None):
     terms = (query or "").casefold().split()
     out = []
-    for card in load_contacts(directory):
+    for card in cards:
         haystack = " ".join([card["name"], card["org"], *card["emails"], *card["phones"]]).casefold()
         if all(t in haystack for t in terms):
             out.append(card)

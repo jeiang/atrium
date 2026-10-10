@@ -6,13 +6,16 @@ build-backend = "setuptools.build_meta"
 name = "atrium"
 version = "0.1.0"
 requires-python = ">=3.14"
-dependencies = ["sqlite-vec"]
+dependencies = ["fastapi", "jinja2", "python-multipart", "sqlite-vec", "uvicorn"]
 
 [project.scripts]
 atrium = "atrium.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"atrium.web" = ["templates/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
