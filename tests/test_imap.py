@@ -74,3 +74,20 @@ def test_fetch_items_request_shape():
     assert "X-GM-LABELS" in imap.fetch_items(True, False)
     assert "BODY.PEEK[HEADER]" in imap.fetch_items(False, True)
     assert "BODY[" not in imap.fetch_items(False, True).replace("BODY.PEEK[", "")
+
+
+class RecordingConnection:
+    def __init__(self):
+        self.calls = []
+
+    def uid(self, *args):
+        self.calls.append(args)
+        return "OK", [b"1 (UID 5 FLAGS (\\Seen) MODSEQ (7))"]
+
+
+def test_uid_fetch_changedsince_is_one_parts_argument():
+    client = imap.ImapClient("h", "u", "p")
+    client._conn = RecordingConnection()
+    [item] = client.uid_fetch(["1:*"], "(UID FLAGS)", changedsince=6)
+    assert client._conn.calls == [("FETCH", "1:*", "(UID FLAGS) (CHANGEDSINCE 6)")]
+    assert item["modseq"] == 7

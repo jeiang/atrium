@@ -292,10 +292,9 @@ class ImapClient:
         return [int(x) for x in (data[0] or b"").split()]
 
     def uid_fetch(self, uids, items, changedsince=None):
-        args = [uid_set(uids), items]
         if changedsince is not None:
-            args.append(f"(CHANGEDSINCE {changedsince})")
-        typ, data = self._conn.uid("FETCH", *args)
+            items = f"{items} (CHANGEDSINCE {changedsince})"
+        typ, data = self._conn.uid("FETCH", uid_set(uids), items)
         _ok(typ, data)
         return parse_fetch(data)
 
