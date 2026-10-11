@@ -86,7 +86,7 @@
   }
 
   :is(.field > input[type="checkbox"]:not([role="switch"]), .input[type="checkbox"]:not([role="switch"])):indeterminate {
-    @apply border-primary bg-primary text-primary-foreground;
+    @apply border-primary bg-primary text-primary-foreground dark:bg-primary;
 
     &:after {
       @apply block h-0.5 w-2 rounded-full bg-current content-[''];

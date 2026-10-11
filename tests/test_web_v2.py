@@ -289,7 +289,8 @@ def test_deletion_proposal_with_an_age_condition_renders(cfg, conn):
     proposals.create(conn, "deletion_rule", "icloud", "Delete codes", {}, preview, "del-age")
     page = make_client(cfg).get("/proposals")
     assert page.status_code == 200
-    assert "Age in days" in page.text and "is at least" in page.text
+    assert "Age in days" in page.text and "is at least" in page.text and "is over" not in page.text
+    assert "data-approve-picked" in page.text and "Save rule only" in page.text
 
 
 def test_rule_editor_saves_and_reopens_an_age_condition(cfg, conn):

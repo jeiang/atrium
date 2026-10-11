@@ -143,9 +143,6 @@
         {% for c in v.rule.when %}
         <li class="flex flex-wrap items-baseline gap-x-1.5">{% if not loop.first %}<span class="text-xs text-muted-foreground">and</span>{% endif %}{{ condition_text(c) }}</li>
         {% endfor %}
-        {% if v.older_than_days %}
-        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="text-xs text-muted-foreground">and</span><span class="font-medium">Age</span><span class="text-muted-foreground">is over</span><span class="tabular-nums">{{ v.older_than_days }} days</span></li>
-        {% endif %}
       </ul>
       <p class="flex items-center gap-1.5 text-sm">{{ icon("arrow-right", "size-3.5 text-muted-foreground") }}<span class="font-medium text-destructive">Delete</span></p>
     </div>
@@ -237,7 +234,7 @@
   </button>
   {% if picker %}
   {% set picked = picks | map(attribute="messages") | map("length") | sum %}
-  <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("check") }}Approve <span class="tabular-nums" data-picked-total>{{ picked }}</span> selected</button>
+  <button type="submit" class="btn" data-size="sm" data-variant="outline" data-approve-picked>{{ icon("check") }}<span data-some>Approve <span class="tabular-nums" data-picked-total>{{ picked }}</span> selected</span>{% if p.kind == "deletion_rule" %}<span data-none hidden>Save rule only</span>{% endif %}</button>
   {% endif %}
   <span id="proposal-spinner-{{ p.id }}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{ icon("loader-circle", "size-4 animate-spin") }}Applying…</span>
   <div class="ml-auto flex gap-1">
