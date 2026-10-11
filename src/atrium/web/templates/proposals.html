@@ -57,5 +57,13 @@
     if (none) none.hidden = total > 0;
     button.disabled = total === 0 && none === null;
   });
+  document.addEventListener("htmx:confirm", (event) => {
+    const submitter = event.detail.triggeringEvent && event.detail.triggeringEvent.submitter;
+    if (!submitter || !submitter.dataset.confirm) return;
+    const none = submitter.querySelector("[data-none]");
+    const question = none && !none.hidden ? submitter.dataset.confirmNone : submitter.dataset.confirm;
+    event.preventDefault();
+    if (window.confirm(question)) event.detail.issueRequest(true);
+  });
 </script>
 {% endblock %}

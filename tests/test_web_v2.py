@@ -1,4 +1,5 @@
 import pytest
+import sqlite_vec
 from fastapi.testclient import TestClient
 
 from atrium import db, notion_proposals, proposals
@@ -299,6 +300,20 @@ def test_deletion_proposal_with_an_age_condition_renders(cfg, conn):
     assert page.status_code == 200
     assert "Age in days" in page.text and "is at least" in page.text and "is over" not in page.text
     assert "data-approve-picked" in page.text and "Save rule only" in page.text
+    assert 'data-confirm-none="Save the rule without moving any messages to Trash?"' in page.text
+    assert "hx-confirm=" not in page.text
+
+
+def test_propose_link_disables_every_link_button_while_running(cfg, conn):
+    add_page(conn, PAGE, "Plan", "x")
+    add_page(conn, SECRET, "Budget", "y")
+    for rid, vector in ((1, unit(0)), (2, unit(0, 1, 0.5))):
+        conn.execute(
+            "INSERT INTO notion_vec (rowid, visibility, embedding) VALUES (?, 'public', ?)",
+            (rid, sqlite_vec.serialize_float32(vector)),
+        )
+    page = make_client(cfg).get(f"/notion/{PAGE}").text
+    assert 'id="related-list"' in page and 'hx-disabled-elt="#related-list button"' in page
 
 
 def test_rule_editor_saves_and_reopens_an_age_condition(cfg, conn):
