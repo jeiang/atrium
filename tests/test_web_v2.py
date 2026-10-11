@@ -1,4 +1,5 @@
 import pytest
+import sqlite_vec
 from fastapi.testclient import TestClient
 
 from atrium import db, notion_proposals, proposals
@@ -153,8 +154,16 @@ def test_proposals_page_lists_by_status_with_counts_and_badge(cfg, conn):
     assert full.status_code == 200 and "Split Shop" in full.text and ">1<span" in full.text.replace(" ", "")
     assert client.get("/proposals?status=dismissed", headers=HX).text.count("Split Shop") >= 1
     assert client.get("/proposals?status=all", headers=HX).status_code == 200
-    assert client.get("/proposals?status=nonsense").status_code == 422
+    bad = client.get("/proposals?status=nonsense")
+    assert bad.status_code == 422 and "Unknown status." in bad.text and "Clear filters" in bad.text
+    bad_kind = client.get("/proposals?kind=nonsense", headers=HX)
+    assert bad_kind.status_code == 422 and "Unknown kind." in bad_kind.text and 'id="toaster"' in bad_kind.text
     assert make_client(cfg).get("/").text.count('id="pending-count"') >= 1
+
+
+def test_pages_are_compressed(cfg, conn):
+    reply = make_client(cfg).get("/proposals", headers={"Accept-Encoding": "gzip"})
+    assert reply.headers["content-encoding"] == "gzip"
 
 
 def add_page(conn, page_id, title, markdown, private=0):
@@ -175,6 +184,47 @@ def test_notion_page_markdown_is_sanitized(cfg, conn):
     assert 'href="https://example.test/x"' in body and 'rel="noopener noreferrer"' in body
     assert 'href="notion://page/1"' in body and 'href="/relative"' not in body
     assert make_client(cfg).get("/notion/00000000-0000-0000-0000-000000000000").status_code == 404
+
+
+NOTION_MARKDOWN = (
+    "Intro line\nSecond line\n"
+    f'<page url="https://app.notion.com/p/{SECRET.replace("-", "")}">Child</page>\n'
+    f'See <mention-page url="https://app.notion.com/p/{SECRET.replace("-", "")}"/> soon.\n'
+    "<empty-block/>\n"
+    '## Tasks {color="blue"}\n'
+    "- [ ] Open\n- [x] Done\n"
+    '<table header-row="true">\n\t<tr>\n\t\t<td>Bill</td>\n\t\t<td>Cost</td>\n\t</tr>\n'
+    "\t<tr>\n\t\t<td>Phone</td>\n\t\t<td>1<br>2</td>\n\t</tr>\n</table>\n"
+    '<callout icon="x">\n\tCallout text\n</callout>\n'
+    '```\n<page url="https://example.test">kept</page>\n```\n'
+)
+
+
+def test_notion_page_renders_notion_flavoured_markdown(cfg, conn):
+    add_page(conn, PAGE, "Plan", NOTION_MARKDOWN)
+    add_page(conn, SECRET, "Budget", "x")
+    body = make_client(cfg).get(f"/notion/{PAGE}").text
+    assert "Intro line<br>" in body and "&lt;page" not in body.split("<pre>")[0]
+    assert f'<a href="/notion/{SECRET}" rel="noopener noreferrer">Child</a>' in body
+    assert f'See <a href="/notion/{SECRET}" rel="noopener noreferrer">Budget</a> soon.' in body
+    assert "empty-block" not in body and "{color=" not in body and "<h2>Tasks</h2>" in body
+    assert '<input class="input" type="checkbox" disabled> Open' in body
+    assert '<input class="input" type="checkbox" disabled checked> Done' in body
+    assert "<th>Bill</th>" in body and "<td>1 2</td>" in body
+    assert "<p>Callout text</p>" in body and "<pre>" in body and "&lt;page url=" in body
+
+
+def test_notion_snippets_and_properties_are_plain(cfg, conn):
+    add_page(conn, PAGE, "Plan", NOTION_MARKDOWN)
+    add_page(conn, SECRET, "Budget", "x")
+    conn.execute(
+        "UPDATE notion_pages SET properties = ? WHERE id = ?",
+        ('{"Links": {"type": "relation", "relation": []}, "Amount": {"type": "number", "number": 5}}', PAGE),
+    )
+    listing = make_client(cfg).get("/?source=notion").text
+    assert "Intro line Second line Child See Budget soon. Tasks Open Done Bill Cost Phone 1 2" in listing
+    page = make_client(cfg).get(f"/notion/{PAGE}").text
+    assert "Amount" in page and "Links" not in page and "0 linked" not in page
 
 
 def test_notion_search_hides_private_pages_unless_asked(cfg, conn):
@@ -226,6 +276,9 @@ def test_web_page_renders_shell_then_answer(cfg):
     failed = {**answer, "answer": "", "segments": [], "citations": [], "sources": [], "error": "down", "error_kind": "search"}
     client = make_client(cfg, web_answer=lambda *args, **kwargs: failed)
     assert "down" in client.get("/web?q=x", headers=HX).text
+    empty = {**failed, "error": "no results", "error_kind": "empty"}
+    client = make_client(cfg, web_answer=lambda *args, **kwargs: empty)
+    assert "The search found no pages" in client.get("/web?q=x", headers=HX).text
 
 
 def test_deletion_proposal_with_an_age_condition_renders(cfg, conn):
@@ -245,7 +298,22 @@ def test_deletion_proposal_with_an_age_condition_renders(cfg, conn):
     proposals.create(conn, "deletion_rule", "icloud", "Delete codes", {}, preview, "del-age")
     page = make_client(cfg).get("/proposals")
     assert page.status_code == 200
-    assert "Age in days" in page.text and "is at least" in page.text
+    assert "Age in days" in page.text and "is at least" in page.text and "is over" not in page.text
+    assert "data-approve-picked" in page.text and "Save rule only" in page.text
+    assert 'data-confirm-none="Save the rule without moving any messages to Trash?"' in page.text
+    assert "hx-confirm=" not in page.text
+
+
+def test_propose_link_disables_every_link_button_while_running(cfg, conn):
+    add_page(conn, PAGE, "Plan", "x")
+    add_page(conn, SECRET, "Budget", "y")
+    for rid, vector in ((1, unit(0)), (2, unit(0, 1, 0.5))):
+        conn.execute(
+            "INSERT INTO notion_vec (rowid, visibility, embedding) VALUES (?, 'public', ?)",
+            (rid, sqlite_vec.serialize_float32(vector)),
+        )
+    page = make_client(cfg).get(f"/notion/{PAGE}").text
+    assert 'id="related-list"' in page and 'hx-disabled-elt="#related-list button"' in page
 
 
 def test_rule_editor_saves_and_reopens_an_age_condition(cfg, conn):

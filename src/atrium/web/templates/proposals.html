@@ -49,7 +49,21 @@
     toggle.indeterminate = picked > 0 && picked < boxes.length;
     group.querySelector("[data-picked]").textContent = picked;
     const form = group.closest("form");
-    form.querySelector("[data-picked-total]").textContent = form.querySelectorAll("input[data-message]:checked").length;
+    const total = form.querySelectorAll("input[data-message]:checked").length;
+    const button = form.querySelector("[data-approve-picked]");
+    const none = button.querySelector("[data-none]");
+    form.querySelector("[data-picked-total]").textContent = total;
+    button.querySelector("[data-some]").hidden = total === 0 && none !== null;
+    if (none) none.hidden = total > 0;
+    button.disabled = total === 0 && none === null;
+  });
+  document.addEventListener("htmx:confirm", (event) => {
+    const submitter = event.detail.triggeringEvent && event.detail.triggeringEvent.submitter;
+    if (!submitter || !submitter.dataset.confirm) return;
+    const none = submitter.querySelector("[data-none]");
+    const question = none && !none.hidden ? submitter.dataset.confirmNone : submitter.dataset.confirm;
+    event.preventDefault();
+    if (window.confirm(question)) event.detail.issueRequest(true);
   });
 </script>
 {% endblock %}

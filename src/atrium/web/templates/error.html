@@ -1,9 +1,15 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% from "_macros.html" import empty_state %}
-{% block title %}Not found{% endblock %}
-{% block heading %}Not found{% endblock %}
+{% set bad_filter = status == 422 %}
+{% block title %}{{ "Filter not understood" if bad_filter else "Not found" }}{% endblock %}
+{% block heading %}{{ "Filter not understood" if bad_filter else "Not found" }}{% endblock %}
 {% block content %}
+{% if bad_filter %}
+{% call empty_state("circle-alert", "atrium cannot show this") %}{{ problem }} Pick the filter again from the page.{% endcall %}
+<a href="{{ path }}" class="btn self-start" data-size="sm" data-variant="outline">{{ icon("arrow-left") }}Clear filters</a>
+{% else %}
 {% call empty_state("search", "Nothing here") %}This message or rule does not exist, or it is no longer indexed.{% endcall %}
 <a href="/" class="btn self-start" data-size="sm" data-variant="outline">{{ icon("arrow-left") }}Search</a>
+{% endif %}
 {% endblock %}

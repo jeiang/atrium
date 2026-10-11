@@ -351,7 +351,8 @@ def test_pipeline_errors(tmp_path):
         raise ServiceUnavailable("refused")
 
     assert pipeline(tmp_path, chat, search=down)["error_kind"] == "search"
-    assert pipeline(tmp_path, chat, pages=[])["error"] == "no readable sources"
+    unreadable = pipeline(tmp_path, chat, pages=[])
+    assert unreadable["error"] == "no readable sources" and unreadable["error_kind"] == "empty"
     assert pipeline(tmp_path, chat, pages=[], search=lambda u, q: [])["error"] == "no results"
 
     def bad_chat(*a, **k):

@@ -143,9 +143,6 @@
         {% for c in v.rule.when %}
         <li class="flex flex-wrap items-baseline gap-x-1.5">{% if not loop.first %}<span class="text-xs text-muted-foreground">and</span>{% endif %}{{ condition_text(c) }}</li>
         {% endfor %}
-        {% if v.older_than_days %}
-        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="text-xs text-muted-foreground">and</span><span class="font-medium">Age</span><span class="text-muted-foreground">is over</span><span class="tabular-nums">{{ v.older_than_days }} days</span></li>
-        {% endif %}
       </ul>
       <p class="flex items-center gap-1.5 text-sm">{{ icon("arrow-right", "size-3.5 text-muted-foreground") }}<span class="font-medium text-destructive">Delete</span></p>
     </div>
@@ -232,17 +229,18 @@
 {% set footer %}
 {% if pending %}
 <div class="flex flex-wrap items-center gap-2">
-  <button type="submit" class="btn" data-size="sm" name="all" value="1">
+  {% set deletes = p.kind == "deletion_rule" %}
+  <button type="submit" class="btn" data-size="sm" name="all" value="1"{% if deletes %} data-confirm="{{ 'Move all matching messages to Trash now and save the rule?' if picker else 'Save the rule? Nothing moves to Trash now.' }}"{% endif %}>
     {{ icon("check-check" if picker else "check") }}{{ "Approve all" if picker else "Approve" }}
   </button>
   {% if picker %}
   {% set picked = picks | map(attribute="messages") | map("length") | sum %}
-  <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("check") }}Approve <span class="tabular-nums" data-picked-total>{{ picked }}</span> selected</button>
+  <button type="submit" class="btn" data-size="sm" data-variant="outline" data-approve-picked{% if deletes %} data-confirm="Move the selected messages to Trash now and save the rule?" data-confirm-none="Save the rule without moving any messages to Trash?"{% endif %}>{{ icon("check") }}<span data-some>Approve <span class="tabular-nums" data-picked-total>{{ picked }}</span> selected</span>{% if deletes %}<span data-none hidden>Save rule only</span>{% endif %}</button>
   {% endif %}
   <span id="proposal-spinner-{{ p.id }}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{ icon("loader-circle", "size-4 animate-spin") }}Applying…</span>
   <div class="ml-auto flex gap-1">
-    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{ p.id }}/dismiss" hx-confirm="unset" hx-indicator="unset">Dismiss</button>
-    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{ p.id }}/dismiss" hx-vals='{"forever": "1"}' hx-confirm="unset" hx-indicator="unset"
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{ p.id }}/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{ p.id }}/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
             title="Never propose this again">Dismiss forever</button>
   </div>
 </div>
@@ -271,8 +269,7 @@
   <article aria-labelledby="proposal-title-{{ p.id }}">
     {% if pending %}
     <form class="flex flex-col" hx-post="/proposals/{{ p.id }}/approve" hx-target="#proposal-{{ p.id }}" hx-swap="outerHTML"
-          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-{{ p.id }}"{% if picker %} data-selection{% endif %}
-          {% if p.kind == "deletion_rule" %} hx-confirm="Move the chosen messages to Trash now and save the rule?"{% endif %}>
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-{{ p.id }}"{% if picker %} data-selection{% endif %}>
     {% endif %}
     <header class="flex flex-col gap-2 p-4 pb-3">
       <div class="flex flex-wrap items-center gap-2">

@@ -18,14 +18,20 @@
   <div class="alert" data-variant="destructive" role="alert">
     {{ icon("circle-alert") }}
     <h3>Web search is unavailable</h3>
-    <section><p>SearXNG did not answer, so there is nothing to read. {{ a.error }}</p></section>
+    <section><p>SearXNG did not answer, so there is nothing to read.</p><p class="font-mono text-xs break-all">{{ a.error }}</p></section>
   </div>
   <div>{{ retry }}</div>
+  {% elif a.error_kind == "empty" %}
+  <div class="alert" role="status">
+    {{ icon("search") }}
+    <h3>Nothing to read</h3>
+    <section><p>{{ "The search found no pages. Try different words." if a.error == "no results" else "The search found pages, but none of them could be read. Try different words." }}</p></section>
+  </div>
   {% elif a.error_kind == "model" %}
   <div class="alert" role="alert">
     {{ icon("circle-alert") }}
     <h3>No answer from the 9B</h3>
-    <section><p>{{ a.error }}{{ " The pages the search found are listed below." if a.sources }}</p></section>
+    <section>{% if a.sources %}<p>The pages the search found are listed below.</p>{% endif %}<p class="font-mono text-xs break-all">{{ a.error }}</p></section>
   </div>
   <div>{{ retry }}</div>
   {% elif a.error %}

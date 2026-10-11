@@ -211,7 +211,7 @@ href="/messages/{{ message_id }}" hx-get="/messages/{{ message_id }}" hx-target=
 {%- endmacro %}
 
 {% macro snippet(parts) -%}
-<p class="line-clamp-2 text-sm text-muted-foreground">
+<p class="line-clamp-2 text-sm break-words text-muted-foreground">
   {%- for text, matched in parts -%}
   {%- if matched -%}<mark class="rounded-sm bg-warning/20 px-0.5 text-foreground">{{ text }}</mark>{%- else -%}{{ text }}{%- endif -%}
   {%- endfor -%}

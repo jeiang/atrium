@@ -8,6 +8,11 @@ from .router import message_body
 TOP_SOURCES = 8
 SOURCE_BODY_CHARS = 1500
 ANSWER_TOKENS = 400
+CHARS_PER_TOKEN = 2
+TOKEN_BUDGET = 6500
+PROMPT_CHARS = (TOKEN_BUDGET - ANSWER_TOKENS) * CHARS_PER_TOKEN
+QUESTION_CHARS = 500
+FIELD_CHARS = 150
 MARKER = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 
 SYSTEM = (
@@ -44,11 +49,22 @@ def build_sources(conn, hits):
 
 
 def prompt(question, sources):
-    blocks = [
-        f"[{s['n']}] Subject: {s['subject']}\nFrom: {s['from_name']} <{s['from_addr']}>\n"
-        f"Date: {_date(s['date_ts'])}\nFolder: {s['folder']}\n{s['body']}"
-        for s in sources
-    ]
+    question = question[:QUESTION_CHARS]
+    heads = [source_head(s) for s in sources]
+    frame = len(SYSTEM) + len(assemble(question, heads))
+    cap = max(0, (PROMPT_CHARS - frame) // max(len(sources), 1))
+    return assemble(question, [h + s["body"][:cap] for h, s in zip(heads, sources, strict=True)])
+
+
+def source_head(s):
+    return (
+        f"[{s['n']}] Subject: {(s['subject'] or '')[:FIELD_CHARS]}\n"
+        f"From: {(s['from_name'] or '')[:FIELD_CHARS]} <{(s['from_addr'] or '')[:FIELD_CHARS]}>\n"
+        f"Date: {_date(s['date_ts'])}\nFolder: {(s['folder'] or '')[:FIELD_CHARS]}\n"
+    )
+
+
+def assemble(question, blocks):
     return "Sources:\n\n" + "\n\n".join(blocks) + f"\n\nQuestion: {question}"
 
 
