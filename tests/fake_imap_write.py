@@ -58,22 +58,22 @@ class WriteClient(FakeClient):
             return [f"[COPYUID {dest.validity} {src} {dst}] Done".encode()]
         if verb == "STORE":
             mode, value = args[1], args[2]
+            names = [n.strip('"') for n in value.strip("()").split()]
             for uid in uids:
                 m = box.messages[uid]
                 if "X-GM-LABELS" in mode:
-                    names = [n.strip('"') for n in value.strip("()").split()]
-                    labels = list(m["labels"] or [])
-                    for n in names:
-                        if mode.startswith("+") and n not in labels:
-                            labels.append(n)
-                        if mode.startswith("-") and n in labels:
-                            labels.remove(n)
-                    m["labels"] = labels
+                    target = list(m["labels"] or [])
                 else:
-                    flags = list(m["flags"])
-                    if mode.startswith("+") and "\\Deleted" not in flags:
-                        flags.append("\\Deleted")
-                    m["flags"] = flags
+                    target = list(m["flags"])
+                for n in names:
+                    if mode.startswith("+") and n not in target:
+                        target.append(n)
+                    if mode.startswith("-") and n in target:
+                        target.remove(n)
+                if "X-GM-LABELS" in mode:
+                    box.set_flags(uid, labels=target)
+                else:
+                    box.set_flags(uid, flags=target)
             return []
         if verb == "EXPUNGE":
             for uid in uids:

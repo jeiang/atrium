@@ -8,6 +8,8 @@ from .run import open_client
 
 BATCH = 100
 DELETED_FLAG = "(\\Deleted)"
+FLAGGED = "\\Flagged"
+SEEN = "\\Seen"
 INBOX_LABEL = "\\Inbox"
 TRASH_LABEL = "\\Trash"
 TRASH_NAMES = frozenset({"deleted messages", "deleted items", "trash", "bin"})
@@ -173,6 +175,12 @@ def store_labels(client, imap_name, uids, add=(), remove=()):
             client.mutate("STORE", wanted, "+X-GM-LABELS", label_list(add))
         if remove:
             client.mutate("STORE", wanted, "-X-GM-LABELS", label_list(remove))
+
+
+def store_flag(client, imap_name, uids, flag, add=True):
+    client.select_rw(imap_name)
+    for batch in chunks(uids):
+        client.mutate("STORE", uid_set(batch), "+FLAGS.SILENT" if add else "-FLAGS.SILENT", f"({flag})")
 
 
 def archive_uids(client, imap_name, uids):

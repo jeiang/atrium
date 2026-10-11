@@ -7,7 +7,7 @@
 {% block heading %}Triage{% endblock %}
 {% block content %}
 <div class="flex flex-wrap items-center justify-between gap-3">
-  <p class="max-w-prose text-sm text-muted-foreground">What atrium would do with read mail still in the inbox, compared with where the mail actually went.</p>
+  <p class="max-w-prose text-sm text-muted-foreground">{% if mode == "live" %}What atrium decided for read mail in the inbox, whether it was applied, and where the mail is now.{% else %}What atrium would do with read mail still in the inbox, compared with where the mail actually went.{% endif %}</p>
   {{ account_switch("/triage", account) }}
 </div>
 
@@ -94,7 +94,7 @@
 
 {% set flags_panel %}
 <div class="flex flex-col gap-3 pt-3">
-  <p class="text-sm text-muted-foreground">Unread inbox mail and whether it would be flagged. Nothing is flagged in shadow mode.{% if flags_capped %} Showing the newest {{ flags | length }}.{% endif %}</p>
+  <p class="text-sm text-muted-foreground">Unread inbox mail and whether it {% if mode == "live" %}is flagged: mail from a contact is flagged automatically, the 9B judgment is only logged{% else %}would be flagged. Nothing is flagged in shadow mode{% endif %}.{% if flags_capped %} Showing the newest {{ flags | length }}.{% endif %}</p>
   {% if flags %}
   <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
     {% for f in flags %}

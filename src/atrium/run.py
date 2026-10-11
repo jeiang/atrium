@@ -1,6 +1,6 @@
 import logging
 
-from . import db, embed, flags, router
+from . import db, embed, flags, live, router, safety
 from .config import ACCOUNTS
 from .http import ServiceUnavailable
 from .imap import ImapClient
@@ -36,7 +36,11 @@ def sync_one(conn, cfg, account, opener=open_client):
     return stats
 
 
-def process(conn, cfg, accounts):
+def process(conn, cfg, accounts, opener=open_client):
+    from . import applier
+
+    if cfg.mode == safety.LIVE:
+        live.ensure_golive(conn)
     try:
         embed.embed_pending(conn, cfg.embed_url)
     except ServiceUnavailable as e:
@@ -45,6 +49,10 @@ def process(conn, cfg, accounts):
         routed = router.route_account(conn, cfg, account)
         flagged = flags.flag_account(conn, cfg, account)
         log.info("%s: %d routed, %d flag judgments", account, routed, flagged)
+        try:
+            applier.apply_all(conn, cfg, account, opener)
+        except Exception:
+            log.exception("%s: live pass failed", account)
 
 
 def run_sync(cfg, requested=None, opener=open_client):
@@ -53,5 +61,5 @@ def run_sync(cfg, requested=None, opener=open_client):
     with db.exclusive(cfg.db_path):
         for account in accounts:
             sync_one(conn, cfg, account, opener)
-        process(conn, cfg, accounts)
+        process(conn, cfg, accounts, opener)
     return accounts

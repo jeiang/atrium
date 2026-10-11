@@ -56,20 +56,36 @@
   "gte": "Whole number of days",
 } %}
 
-{% macro mode_badge(mode) -%}
-{% if mode == "live" -%}
+{% macro mode_badge(mode, paused=false) -%}
+{% if mode == "live" and paused -%}
+<span class="badge border-warning/30 bg-warning/10 text-warning">{{ icon("lock") }}Live, paused</span>
+{%- elif mode == "live" -%}
 <span class="badge" data-variant="destructive">{{ icon("zap") }}Live</span>
 {%- else -%}
 <span class="badge border-warning/30 bg-warning/10 text-warning">{{ icon("eye-off") }}Shadow</span>
 {%- endif %}
 {%- endmacro %}
 
-{% macro mode_note(mode) -%}
-{% if mode == "live" -%}
-Live mode: atrium moves, labels and deletes mail.
+{% macro mode_note(mode, paused=false) -%}
+{% if mode == "live" and paused -%}
+Paused: routing is recorded but no mail is changed. Resume to apply it.
+{%- elif mode == "live" -%}
+Live mode: atrium files read mail, flags unread mail from your contacts and trashes mail your deletion rules match.
 {%- else -%}
-Shadow mode: routing only records what it would do. Proposals you approve still run.
+Shadow mode: nothing is changed automatically. Proposals you approve still run.
 {%- endif %}
+{%- endmacro %}
+
+{% set ACTION_BADGES = {
+  "applied": ("secondary", "Applied"),
+  "skipped": ("outline", "Skipped"),
+  "undone": ("ghost", "Undone"),
+  "interrupted": ("outline", "Interrupted"),
+} %}
+
+{% macro action_badge(action) -%}
+{% set variant, label = ACTION_BADGES[action.status] %}
+<span class="badge" data-variant="{{ variant }}"{% if action.error %} title="{{ action.error }}"{% endif %}>{{ label }}</span>
 {%- endmacro %}
 
 {% macro stage_label(stage) -%}{{ STAGE_LABELS.get(stage, stage) }}{%- endmacro %}
@@ -172,6 +188,7 @@ href="/messages/{{ message_id }}" hx-get="/messages/{{ message_id }}" hx-target=
   "rebalance_merge": "Merge folders",
   "deletion_rule": "Deletion rule",
   "gmail_label_merge": "Merge labels",
+  "inbox_backlog": "Inbox backlog",
   "notion_link": "Notion link",
   "notion_edit": "Notion edit",
 } %}
@@ -180,6 +197,7 @@ href="/messages/{{ message_id }}" hx-get="/messages/{{ message_id }}" hx-target=
   "rebalance_merge": "merge",
   "deletion_rule": "trash-2",
   "gmail_label_merge": "tag",
+  "inbox_backlog": "inbox",
   "notion_link": "link",
   "notion_edit": "pencil",
 } %}

@@ -1,5 +1,6 @@
 import contextlib
 import hashlib
+import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .. import (
+    applier,
     ask,
     contacts,
     corrections,
@@ -23,6 +25,7 @@ from .. import (
     embed,
     executors,
     handlers,
+    live,
     llm,
     message,
     notion_proposals,
@@ -30,7 +33,9 @@ from .. import (
     proposals,
     router,
     ruleedit,
+    run,
     rules,
+    safety,
     search,
     triage,
     websearch,
@@ -40,6 +45,7 @@ from ..http import ServiceUnavailable
 from ..rules import RuleError
 from .markup import markdown_html
 
+log = logging.getLogger("atrium.web")
 TEMPLATES = Path(__file__).parent / "templates"
 PAGE_SIZE = 50
 SEARCH_PAGE = 20
@@ -61,7 +67,8 @@ PROPOSAL_STATUSES = (
 LIST_OPS = ("in", "suffix")
 NO_QUESTION = "Type a question to ask."
 NO_NOTION_PROPOSAL = "No proposal was made. The pages may already be linked, or the model saw no reason to change them."
-SPLIT_KINDS = (executors.REBALANCE_SPLIT, executors.REBALANCE_MERGE)
+SPLIT_KINDS = (executors.REBALANCE_SPLIT, executors.REBALANCE_MERGE, executors.INBOX_BACKLOG)
+GROUPED_KINDS = (executors.REBALANCE_SPLIT, executors.INBOX_BACKLOG)
 MESSAGE_KINDS = (executors.DELETION_RULE, executors.GMAIL_LABEL_MERGE)
 PROPOSAL_KINDS = (*SPLIT_KINDS, *MESSAGE_KINDS, notion_proposals.KIND_LINK, notion_proposals.KIND_EDIT)
 RULE_PROBLEMS = {
@@ -151,6 +158,7 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
     def render(name, status_code=200, **context):
         if "pending_count" not in context:
             context["pending_count"] = pending()
+        context.setdefault("paused", live.paused(cfg))
         return HTMLResponse(env.get_template(name).render(**context), status_code=status_code)
 
     def page(request, full, partial, **context):
@@ -299,7 +307,8 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
                 error = str(e)
             if recorded and not is_partial(request):
                 return RedirectResponse(f"/messages/{message_id}", status_code=303)
-            notice = toast("success", "Correction recorded", f"Corrected to {recorded['folder']}.") if recorded else None
+            moved = move_correction(conn, found, message_id) if recorded else ""
+            notice = toast("success", "Correction recorded", f"Corrected to {recorded['folder']}.{moved}") if recorded else None
             fresh = load_message(conn, message_id)
             shown = context if is_partial(request) else MESSAGE
             form = None if recorded else correct_context(conn, fresh, shown, dest.strip() or None, error)
@@ -311,6 +320,54 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
             if is_partial(request):
                 return render("_decision_card.html", message=fresh, correct=form, toast=notice)
             return render("message.html", message=fresh, correct=form, back=back_link(request))
+
+    def move_correction(conn, found, message_id):
+        if cfg.mode != safety.LIVE:
+            return ""
+        try:
+            with db.exclusive(cfg.db_path):
+                done = applier.apply_corrections(conn, cfg, found["account"], run.open_client, [message_id])
+        except Exception as e:
+            log.exception("moving corrected message %s failed", message_id)
+            return f" It could not be moved yet: {type(e).__name__}."
+        if not done.ran:
+            return " Moving is paused; it will move after you resume."
+        if done.written:
+            return " The message was moved."
+        if done.failed or done.skipped:
+            return " It could not be moved; see Triage."
+        return ""
+
+    def toggle_pause(request, paused):
+        live.set_paused(cfg, paused)
+        ref = urlsplit(request.headers.get("referer", ""))
+        local = ref.netloc == request.url.netloc and ref.path.startswith("/") and not ref.path.startswith("//")
+        target = ref.path + (f"?{ref.query}" if ref.query else "") if local else "/triage"
+        return RedirectResponse(target, status_code=303)
+
+    @app.post("/live/pause")
+    def live_pause(request: Request):
+        return toggle_pause(request, True)
+
+    @app.post("/live/resume")
+    def live_resume(request: Request):
+        return toggle_pause(request, False)
+
+    @app.post("/live/actions/{action_id}/undo")
+    def live_undo(action_id: int):
+        with connection() as conn:
+            found = live.get(conn, action_id)
+            if found is None:
+                raise HTTPException(404, "unknown action")
+            try:
+                live.undo(conn, cfg, action_id)
+                notice = toast("success", "Undone")
+            except live.UndoError as e:
+                notice = toast("error", "Not undone", str(e))
+            row = triage.row(conn, found["message_id"])
+            if row is None:
+                raise HTTPException(404, "message has no decision")
+            return render("_triage_row.html", row=row, toast=notice)
 
     @app.get("/triage")
     def triage_page(request: Request, account: str = "", stage: str = "", agreement: str = "", offset: int = 0):
@@ -624,7 +681,7 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
     def selection_of(proposal, form):
         kind, view = proposal["kind"], proposal["preview"]
         if kind in SPLIT_KINDS:
-            groups = view["groups"] if kind == executors.REBALANCE_SPLIT else [view["group"]]
+            groups = view["groups"] if kind in GROUPED_KINDS else [view["group"]]
             return {
                 "groups": [
                     {"name": form.get(f"name-{i}"), "message_ids": picked(form, i, g.get("messages"))}

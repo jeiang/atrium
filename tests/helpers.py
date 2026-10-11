@@ -22,7 +22,6 @@ def make_config(tmp_path, **overrides):
         chat_url="http://chat.invalid/v1",
         embed_url="http://embed.invalid/v1",
         contacts_dir=None,
-        jev_db=None,
         credentials={},
     )
     values.update(overrides)

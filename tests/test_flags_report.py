@@ -79,16 +79,7 @@ def seed_decision(conn, uid, dest, actual_location, msgid, domain="shop.test", a
     )
 
 
-def test_shadow_report_summarizes_agreement_and_jev(tmp_path):
-    jev_path = tmp_path / "jev.db"
-    import sqlite3
-
-    j = sqlite3.connect(jev_path)
-    j.execute("CREATE TABLE decisions (message_id TEXT, folder TEXT, confidence REAL)")
-    j.executemany("INSERT INTO decisions VALUES (?, ?, 0.9)", [("m1", "Bills"), ("m2", "Bills"), ("m3", "Travel")])
-    j.commit()
-    j.close()
-    cfg = make_config(tmp_path, jev_db=jev_path)
+def test_shadow_report_summarizes_agreement(tmp_path):
     conn = memory_db()
     seed_decision(conn, 1, "Bills", "Bills", "m1")
     seed_decision(conn, 2, "Bills", "Finance", "m2", domain="bank.test")
@@ -97,22 +88,18 @@ def test_shadow_report_summarizes_agreement_and_jev(tmp_path):
     conn.execute(
         "INSERT INTO flag_decisions VALUES (1, 'icloud', 10, 1, 1, 0, 0, 1), (2, 'icloud', 10, 0, 0, 0, 0, 1)"
     )
-    text = report.build(conn, cfg)
+    text = report.build(conn)
     assert "== icloud ==" in text and "== gmail ==" in text
     assert "decisions: 4" in text
     assert "learned=3" in text and "fallback=1" in text
     assert "still in inbox=1, gone=1, moved=2, proposal equals actual=1 (50.0%)" in text
-    assert "decided by both=3" in text
-    assert "atrium == jev: 3 (100.0%)" in text
-    assert "of 2 settled: atrium == actual 1, jev == actual 1" in text
-    assert "bank.test: Bills -> Finance (jev: Bills)" in text
+    assert "bank.test: Bills -> Finance" in text
     assert "contacts would-flag=1" in text and "9B flag=2 of 2 judged" in text and "both=1" in text
     assert "m1" not in text
 
 
 def test_shadow_report_since_filters(tmp_path):
-    cfg = make_config(tmp_path)
     conn = memory_db()
     seed_decision(conn, 1, "Bills", "Bills", "m1")
-    assert "decisions: 1" in report.build(conn, cfg)
-    assert "decisions: 0" in report.build(conn, cfg, since="1h")
+    assert "decisions: 1" in report.build(conn)
+    assert "decisions: 0" in report.build(conn, since="1h")

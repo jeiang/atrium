@@ -7,6 +7,7 @@ REBALANCE_SPLIT = "rebalance_split"
 REBALANCE_MERGE = "rebalance_merge"
 DELETION_RULE = "deletion_rule"
 GMAIL_LABEL_MERGE = "gmail_label_merge"
+INBOX_BACKLOG = "inbox_backlog"
 MAX_NAME_CHARS = 200
 
 
@@ -260,6 +261,14 @@ def undo_gmail_untrash(conn, cfg, proposal, undo):
     return {"messages": len(undo["uids"])}
 
 
+def undo_unflag(conn, cfg, proposal, undo):
+    with mailops.session(cfg, undo["account"]) as client:
+        if client.status(undo["imap_name"])["uidvalidity"] != undo["uidvalidity"]:
+            raise mailops.MailOpError("UIDVALIDITY changed")
+        mailops.store_flag(client, undo["imap_name"], undo["uids"], mailops.FLAGGED, add=False)
+    return {"messages": len(undo["uids"])}
+
+
 def undo_rule_delete(conn, cfg, proposal, undo):
     return {"deleted": ruleedit.delete_rule(conn, undo["id"])}
 
@@ -274,9 +283,11 @@ def register():
     proposals.register_executor(REBALANCE_MERGE, execute_moves)
     proposals.register_executor(DELETION_RULE, execute_deletion)
     proposals.register_executor(GMAIL_LABEL_MERGE, execute_label_merge)
+    proposals.register_executor(INBOX_BACKLOG, execute_moves)
     proposals.register_undoer("move_back", undo_move_back)
     proposals.register_undoer("delete_folder", undo_delete_folder)
     proposals.register_undoer("gmail_labels", undo_gmail_labels)
     proposals.register_undoer("gmail_untrash", undo_gmail_untrash)
+    proposals.register_undoer("unflag", undo_unflag)
     proposals.register_undoer("rule_delete", undo_rule_delete)
     proposals.set_sync_hook(sync_after)

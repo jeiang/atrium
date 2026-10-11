@@ -5,6 +5,7 @@
 {% set pending = p.status == "pending" %}
 {% set PICKS = {
   "rebalance_split": v.groups,
+  "inbox_backlog": v.groups,
   "rebalance_merge": [v.group],
   "deletion_rule": [{"messages": v.messages, "count": v.backlog}],
   "gmail_label_merge": [{"messages": v.messages, "count": v.from_count}],
@@ -122,6 +123,12 @@
 <p class="text-sm"><span class="text-muted-foreground">Split</span> <span class="font-medium">{{ place(v.folder) }}</span> <span class="text-muted-foreground">into {{ v.groups | length }} new {{ noun(p.account) }}{{ "s" if v.groups | length != 1 }}. Anything not moved stays where it is.</span></p>
 <div class="flex flex-col gap-3">
   {% for g in v.groups %}{{ group_picker(loop.index0, g, true) }}{% endfor %}
+</div>
+
+{% elif p.kind == "inbox_backlog" %}
+<p class="text-sm text-muted-foreground">Read mail that was already in the inbox when atrium went live, grouped by where atrium would file it. Anything not moved stays where it is.</p>
+<div class="flex flex-col gap-3">
+  {% for g in v.groups %}{{ group_picker(loop.index0, g, false) }}{% endfor %}
 </div>
 
 {% elif p.kind == "rebalance_merge" %}

@@ -37,7 +37,7 @@ def watch_account(cfg, account, stop, opener=open_client, sleep=None):
             conn = db.connect(cfg.db_path)
             with db.exclusive(cfg.db_path):
                 sync_one(conn, cfg, account, opener)
-                process(conn, cfg, [account])
+                process(conn, cfg, [account], opener)
             client = opener(cfg, account)
             backoff = 0
             while not stop.is_set():
@@ -48,7 +48,7 @@ def watch_account(cfg, account, stop, opener=open_client, sleep=None):
                     sleep(IDLE_SETTLE_SECONDS)
                 with db.exclusive(cfg.db_path):
                     sync_one(conn, cfg, account, opener)
-                    process(conn, cfg, [account])
+                    process(conn, cfg, [account], opener)
         except Exception:
             backoff = next_backoff(backoff)
             log.exception("%s watch failed, retrying in %ds", account, backoff)
