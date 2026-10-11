@@ -63,6 +63,7 @@ NO_QUESTION = "Type a question to ask."
 NO_NOTION_PROPOSAL = "No proposal was made. The pages may already be linked, or the model saw no reason to change them."
 SPLIT_KINDS = (executors.REBALANCE_SPLIT, executors.REBALANCE_MERGE)
 MESSAGE_KINDS = (executors.DELETION_RULE, executors.GMAIL_LABEL_MERGE)
+PROPOSAL_KINDS = (*SPLIT_KINDS, *MESSAGE_KINDS, notion_proposals.KIND_LINK, notion_proposals.KIND_EDIT)
 RULE_PROBLEMS = {
     "op eq needs a value": "“is” needs a value.",
     "op re needs a value": "“matches regex” needs a pattern.",
@@ -587,6 +588,8 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
         status = status or proposals.PENDING
         if status not in PROPOSAL_STATUSES:
             raise HTTPException(422, "unknown status")
+        if kind and kind not in PROPOSAL_KINDS:
+            raise HTTPException(422, "unknown kind")
         with connection() as conn:
             context = {
                 "proposals": proposals.list(conn, None if status == ALL else status, kind or None),
@@ -676,8 +679,13 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException):
-        if exc.status_code != 404:
+        if exc.status_code not in (404, 422):
             return await http_exception_handler(request, exc)
-        return render("_error.html" if is_partial(request) else "error.html", status_code=404)
+        problem = f"{exc.detail[:1].upper()}{exc.detail[1:]}."
+        context = {"status": exc.status_code, "problem": problem, "path": request.url.path}
+        if not is_partial(request):
+            return render("error.html", status_code=exc.status_code, **context)
+        notice = toast("error", "Filter not understood", problem) if exc.status_code == 422 else None
+        return render("_error.html", status_code=exc.status_code, toast=notice, **context)
 
     return app

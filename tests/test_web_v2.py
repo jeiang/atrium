@@ -153,7 +153,10 @@ def test_proposals_page_lists_by_status_with_counts_and_badge(cfg, conn):
     assert full.status_code == 200 and "Split Shop" in full.text and ">1<span" in full.text.replace(" ", "")
     assert client.get("/proposals?status=dismissed", headers=HX).text.count("Split Shop") >= 1
     assert client.get("/proposals?status=all", headers=HX).status_code == 200
-    assert client.get("/proposals?status=nonsense").status_code == 422
+    bad = client.get("/proposals?status=nonsense")
+    assert bad.status_code == 422 and "Unknown status." in bad.text and "Clear filters" in bad.text
+    bad_kind = client.get("/proposals?kind=nonsense", headers=HX)
+    assert bad_kind.status_code == 422 and "Unknown kind." in bad_kind.text and 'id="toaster"' in bad_kind.text
     assert make_client(cfg).get("/").text.count('id="pending-count"') >= 1
 
 
