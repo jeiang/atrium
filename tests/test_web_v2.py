@@ -157,6 +157,11 @@ def test_proposals_page_lists_by_status_with_counts_and_badge(cfg, conn):
     assert make_client(cfg).get("/").text.count('id="pending-count"') >= 1
 
 
+def test_pages_are_compressed(cfg, conn):
+    reply = make_client(cfg).get("/proposals", headers={"Accept-Encoding": "gzip"})
+    assert reply.headers["content-encoding"] == "gzip"
+
+
 def add_page(conn, page_id, title, markdown, private=0):
     conn.execute(
         "INSERT INTO notion_pages (id, title, url, markdown, private, last_edited_time, edited_ts) "

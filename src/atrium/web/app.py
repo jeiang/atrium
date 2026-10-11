@@ -9,6 +9,7 @@ from urllib.parse import urlencode, urlsplit
 import jinja2
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.exception_handlers import http_exception_handler
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -139,6 +140,7 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
     handlers.register()
     env = build_env(cfg)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.mount("/static", StaticFiles(directory=cfg.static_dir), name="static")
 
     def pending():
