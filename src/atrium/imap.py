@@ -31,6 +31,48 @@ def utf7_decode(value):
     return re.sub(r"&([^-]*)-", decode, value)
 
 
+def utf7_encode(value):
+    out = []
+    pending = []
+
+    def flush():
+        if pending:
+            chunk = base64.b64encode("".join(pending).encode("utf-16-be")).decode("ascii")
+            out.append("&" + chunk.rstrip("=").replace("/", ",") + "-")
+            pending.clear()
+
+    for ch in value:
+        if ch == "&":
+            flush()
+            out.append("&-")
+        elif 0x20 <= ord(ch) <= 0x7E:
+            flush()
+            out.append(ch)
+        else:
+            pending.append(ch)
+    flush()
+    return "".join(out)
+
+
+def expand_uid_set(text):
+    uids = []
+    for part in text.split(","):
+        if ":" in part:
+            low, high = (int(x) for x in part.split(":"))
+            uids.extend(range(min(low, high), max(low, high) + 1))
+        elif part:
+            uids.append(int(part))
+    return uids
+
+
+def parse_copyuid(data):
+    text = " ".join(d.decode("latin1") if isinstance(d, bytes) else str(d) for d in data if d)
+    m = re.search(r"COPYUID (\d+) ([\d:,]+) ([\d:,]+)", text)
+    if not m:
+        return None
+    return int(m.group(1)), dict(zip(expand_uid_set(m.group(2)), expand_uid_set(m.group(3)), strict=False))
+
+
 def _unquote(token):
     return re.sub(r"\\(.)", r"\1", token)
 
@@ -278,12 +320,12 @@ class ImapClient:
         attrs = "UIDVALIDITY UIDNEXT MESSAGES"
         if "CONDSTORE" in self.capabilities:
             attrs += " HIGHESTMODSEQ"
-        typ, data = self._conn.status(_quote(imap_name), f"({attrs})")
+        typ, data = self._conn.status(quote_name(imap_name), f"({attrs})")
         _ok(typ, data)
         return parse_status(data)
 
     def select(self, imap_name):
-        typ, data = self._conn.select(_quote(imap_name), readonly=True)
+        typ, data = self._conn.select(quote_name(imap_name), readonly=True)
         _ok(typ, data)
 
     def uid_search(self, *criteria):
@@ -298,9 +340,20 @@ class ImapClient:
         _ok(typ, data)
         return parse_fetch(data)
 
+    def select_rw(self, imap_name):
+        write_gate("IMAP SELECT read-write")
+        typ, data = self._conn.select(quote_name(imap_name), readonly=False)
+        _ok(typ, data)
+
     def mutate(self, verb, *args):
         write_gate(f"IMAP {verb}")
         typ, data = self._conn.uid(verb, *args)
+        _ok(typ, data)
+        return data
+
+    def mutate_mailbox(self, verb, imap_name):
+        write_gate(f"IMAP {verb}")
+        typ, data = getattr(self._conn, verb.lower())(quote_name(imap_name))
         _ok(typ, data)
         return data
 
@@ -315,7 +368,7 @@ class ImapClient:
         self._conn.noop()
 
 
-def _quote(name):
+def quote_name(name):
     return '"' + name.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 

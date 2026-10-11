@@ -91,3 +91,12 @@ def test_uid_fetch_changedsince_is_one_parts_argument():
     [item] = client.uid_fetch(["1:*"], "(UID FLAGS)", changedsince=6)
     assert client._conn.calls == [("FETCH", "1:*", "(UID FLAGS) (CHANGEDSINCE 6)")]
     assert item["modseq"] == 7
+
+
+def test_utf7_roundtrip_and_copyuid():
+    for name in ("Plain/Box", "Caf\u00e9 & Co", "\u65e5\u672c"):
+        assert imap.utf7_decode(imap.utf7_encode(name)) == name
+    assert imap.utf7_encode("a&b") == "a&-b"
+    validity, mapping = imap.parse_copyuid([b"[COPYUID 38505 304,319:320 3956:3958] Done"])
+    assert validity == 38505 and mapping == {304: 3956, 319: 3957, 320: 3958}
+    assert imap.parse_copyuid([b"Done"]) is None

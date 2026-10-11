@@ -6,7 +6,7 @@ import sys
 
 import uvicorn
 
-from . import config, db, embed, report, rules, run, watch
+from . import config, db, deletions, embed, executors, gmail_labels, proposals, rebalance, report, rules, run, scans, watch
 from .config import ACCOUNTS
 from .web.app import create_app
 
@@ -28,10 +28,59 @@ def parser():
     sr = sub.add_parser("shadow-report")
     sr.add_argument("--since")
     sub.add_parser("reindex")
+    rb = sub.add_parser("rebalance")
+    rb.add_subparsers(dest="rebalance_command", required=True).add_parser("scan")
+    dl = sub.add_parser("deletions")
+    dl.add_subparsers(dest="deletions_command", required=True).add_parser("scan")
+    gl = sub.add_parser("gmail-labels")
+    gl.add_subparsers(dest="gmail_labels_command", required=True).add_parser("scan")
+    pr = sub.add_parser("proposals")
+    psub = pr.add_subparsers(dest="proposals_command", required=True)
+    psub.add_parser("scan-all")
+    pl = psub.add_parser("list")
+    pl.add_argument("--status", choices=proposals.STATUSES)
+    pl.add_argument("--kind")
+    for name in ("approve", "dismiss", "undo"):
+        pp = psub.add_parser(name)
+        pp.add_argument("id", type=int)
+        if name == "approve":
+            pp.add_argument("--selection", help="JSON selection document")
+        if name == "dismiss":
+            pp.add_argument("--forever", action="store_true")
     sv = sub.add_parser("serve")
     sv.add_argument("--host", default=DEFAULT_HOST)
     sv.add_argument("--port", type=int, required=True)
     return p
+
+
+def proposals_command(cfg, args):
+    conn = db.connect(cfg.db_path)
+    scans.init_schemas(conn)
+    executors.register()
+    if args.command == "rebalance":
+        out = rebalance.scan(conn, cfg)
+    elif args.command == "deletions":
+        out = deletions.scan(conn, cfg)
+    elif args.command == "gmail-labels":
+        out = gmail_labels.scan(conn, cfg)
+    elif args.proposals_command == "scan-all":
+        out = scans.scan_all(conn, cfg)
+    elif args.proposals_command == "list":
+        out = [
+            {k: p[k] for k in ("id", "kind", "account", "status", "title", "undoable")}
+            for p in proposals.list(conn, args.status, args.kind)
+        ]
+    elif args.proposals_command == "approve":
+        selection = json.loads(args.selection) if args.selection else None
+        out = proposals.approve_and_apply(conn, cfg, args.id, selection)
+    elif args.proposals_command == "dismiss":
+        proposals.dismiss(conn, args.id, args.forever)
+        out = {"id": args.id, "dismissed": True}
+    else:
+        out = proposals.undo(conn, cfg, args.id)
+    json.dump(out, sys.stdout, indent=2, default=str)
+    sys.stdout.write("\n")
+    return 0
 
 
 def main(argv=None):
@@ -64,6 +113,8 @@ def main(argv=None):
         sys.stdout.write(report.build(db.connect(cfg.db_path), cfg, args.since))
     elif args.command == "reindex":
         print(f"embedded {embed.reindex(db.connect(cfg.db_path), cfg.embed_url)} messages")
+    elif args.command in ("rebalance", "deletions", "gmail-labels", "proposals"):
+        return proposals_command(cfg, args)
     elif args.command == "serve":
         uvicorn.run(create_app(cfg), host=args.host, port=args.port, log_level="info")
     return 0

@@ -23,3 +23,35 @@ def test_client_mutation_refused_before_touching_connection(monkeypatch):
     client = imap.ImapClient("host", "u", "p")
     with pytest.raises(safety.WriteRefused):
         client.mutate("STORE", "1", "+FLAGS", "(\\Seen)")
+
+
+def test_approved_writes_scope_permits_shadow_writes_only_inside():
+    with safety.approved_writes(7):
+        assert safety.approved_proposal() == 7
+        safety.write_gate("move", {"ATRIUM_MODE": "shadow"})
+    assert safety.approved_proposal() is None
+    with pytest.raises(safety.WriteRefused):
+        safety.write_gate("move", {"ATRIUM_MODE": "shadow"})
+
+
+def test_client_mutation_allowed_inside_approved_scope(monkeypatch):
+    monkeypatch.setenv("ATRIUM_MODE", "shadow")
+    calls = []
+
+    class Conn:
+        def uid(self, *args):
+            calls.append(args)
+            return "OK", [b""]
+
+        def create(self, name):
+            calls.append(("CREATE", name))
+            return "OK", [b""]
+
+    client = imap.ImapClient("host", "u", "p")
+    client._conn = Conn()
+    with safety.approved_writes(1):
+        client.mutate("STORE", "1", "+FLAGS", "(\\Seen)")
+        client.mutate_mailbox("CREATE", "New Box")
+    assert calls == [("STORE", "1", "+FLAGS", "(\\Seen)"), ("CREATE", '"New Box"')]
+    with pytest.raises(safety.WriteRefused):
+        client.mutate_mailbox("CREATE", "x")
