@@ -1,0 +1,77 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import cite_chip, external %}
+{% set a = answer %}
+{% set cited = a.citations | map(attribute="n") | list %}
+{% if partial is defined and partial %}<title>{{ a.query }} · atrium</title>{% endif %}
+{% set retry %}
+<button type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/web?{{ {'q': a.query} | urlencode }}" hx-target="#web-answer" hx-push-url="false">{{ icon("undo-2") }}Try again</button>
+{% endset %}
+<section class="flex flex-col gap-3 rounded-lg border bg-card p-4" aria-labelledby="web-answer-title">
+  <header class="flex flex-col gap-0.5">
+    <h2 id="web-answer-title" class="text-sm font-medium">Answer</h2>
+    <p class="text-xs text-muted-foreground">
+      {%- if a.sources and not a.error -%}From the 9B, reading {{ a.sources | length }} {{ "page" if a.sources | length == 1 else "pages" }} for “{{ a.query }}”{%- else -%}For “{{ a.query }}”{%- endif -%}
+      {%- if a.rewritten and a.rewritten != a.query %} · searched as “{{ a.rewritten }}”{% endif -%}
+    </p>
+  </header>
+  {% if a.error_kind == "search" %}
+  <div class="alert" data-variant="destructive" role="alert">
+    {{ icon("circle-alert") }}
+    <h3>Web search is unavailable</h3>
+    <section><p>SearXNG did not answer, so there is nothing to read. {{ a.error }}</p></section>
+  </div>
+  <div>{{ retry }}</div>
+  {% elif a.error_kind == "model" %}
+  <div class="alert" role="alert">
+    {{ icon("circle-alert") }}
+    <h3>No answer from the 9B</h3>
+    <section><p>{{ a.error }}{{ " The pages the search found are listed below." if a.sources }}</p></section>
+  </div>
+  <div>{{ retry }}</div>
+  {% elif a.error %}
+  <div class="alert" data-variant="destructive" role="alert">
+    {{ icon("circle-alert") }}
+    <h3>No answer</h3>
+    <section><p>{{ a.error }}</p></section>
+  </div>
+  {% elif a.segments %}
+  <p class="text-base/relaxed text-pretty whitespace-pre-line">
+    {%- for s in a.segments -%}
+    {%- if s.cite is defined -%}
+    {%- set src = a.sources | selectattr("n", "equalto", s.cite) | first -%}
+    {{ cite_chip(s.cite, external(s.url), (src.title or src.site) if src else "") }}
+    {%- else -%}
+    {{ s.text }}
+    {%- endif -%}
+    {%- endfor -%}
+  </p>
+  {% else %}
+  <p class="text-base/relaxed text-pretty whitespace-pre-line">{{ a.answer }}</p>
+  {% endif %}
+</section>
+
+{% if a.sources %}
+<section class="flex flex-col gap-2" aria-labelledby="web-sources-title">
+  <h2 id="web-sources-title" class="text-sm font-medium text-muted-foreground">Sources</h2>
+  <ol class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
+    {% for s in a.sources %}
+    {% set used = s.n in cited or not cited %}
+    <li id="web-source-{{ s.n }}" class="relative grid grid-cols-[--spacing(6)_minmax(0,1fr)] gap-x-3 gap-y-1 px-4 py-3 hover:bg-accent/60 has-[a:focus-visible]:bg-accent/60">
+      <span class="pt-0.5 text-right font-mono text-xs {{ 'font-medium text-foreground' if used else 'text-muted-foreground' }}" aria-hidden="true">{{ s.n }}</span>
+      <div class="flex min-w-0 flex-col gap-1">
+        <h3 class="text-sm {{ 'font-medium' if used else 'text-muted-foreground' }}">
+          <a class="rounded-sm outline-none after:absolute after:inset-0 focus-visible:ring-2 focus-visible:ring-ring" {{ external(s.url) }}><span class="sr-only">Source {{ s.n }}: </span>{{ s.title or s.url }}</a>
+        </h3>
+        <p class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <span class="shrink-0 font-medium text-foreground">{{ s.site }}</span>
+          <span aria-hidden="true">·</span>
+          <span class="truncate font-mono">{{ s.url }}</span>
+          {% if not used %}<span class="badge ml-auto shrink-0" data-variant="ghost">Not cited</span>{% endif %}
+        </p>
+        {% if s.snippet %}<p class="line-clamp-2 text-sm text-muted-foreground">{{ s.snippet }}</p>{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}

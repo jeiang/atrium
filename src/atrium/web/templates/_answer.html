@@ -1,5 +1,5 @@
 {% from "_icons.html" import icon %}
-{% from "_macros.html" import open_attrs, place, sender, when %}
+{% from "_macros.html" import cite_chip, open_attrs, place, sender, when %}
 {% set cited = answer.citations | map(attribute="n") | list %}
 <section class="flex flex-col gap-3 rounded-lg border bg-card p-4" aria-labelledby="answer-title">
   <header class="flex items-start gap-2">
@@ -19,7 +19,7 @@
   <p class="text-base/relaxed text-pretty whitespace-pre-line">
     {%- for s in answer.segments -%}
     {%- if s.cite is defined -%}
-    <a class="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-sm bg-secondary px-1 align-baseline font-mono text-xs font-medium text-secondary-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {{ open_attrs(s.message_id) }} aria-label="Source {{ s.cite }}">{{ s.cite }}</a>
+    {{ cite_chip(s.cite, open_attrs(s.message_id)) }}
     {%- else -%}
     {{ s.text }}
     {%- endif -%}
