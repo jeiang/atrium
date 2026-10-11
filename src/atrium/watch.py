@@ -1,3 +1,4 @@
+import imaplib
 import logging
 import threading
 
@@ -49,6 +50,10 @@ def watch_account(cfg, account, stop, opener=open_client, sleep=None):
                 with db.exclusive(cfg.db_path):
                     sync_one(conn, cfg, account, opener)
                     process(conn, cfg, [account], opener)
+        except (imaplib.IMAP4.abort, OSError) as e:
+            backoff = next_backoff(backoff)
+            log.warning("%s connection lost (%s), reconnecting in %ds", account, e, backoff)
+            sleep(backoff)
         except Exception:
             backoff = next_backoff(backoff)
             log.exception("%s watch failed, retrying in %ds", account, backoff)
