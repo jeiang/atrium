@@ -3,13 +3,15 @@ import json
 from . import embed
 from . import search as mail_search
 from .http import ServiceUnavailable
-from .notion_api import normalize_id
+from .notion_api import ids_in_text, normalize_id
+from .notion_markdown import plain
 from .notion_sync import PATH_SEPARATOR, PRIVATE, PUBLIC
 
 ACCOUNT = "notion"
 BRANCH_LIMIT = 50
 RELATED_LIMIT = 10
 SNIPPET_CHARS = 220
+HEAD_SOURCE_CHARS = 1000
 
 HIT_SELECT = (
     "SELECT rid, id, title, path, url, last_edited_time, edited_ts, private FROM notion_pages "
@@ -43,7 +45,7 @@ def property_text(prop):
     if kind == "date":
         return " → ".join(x for x in ((value or {}).get("start"), (value or {}).get("end")) if x)
     if kind == "relation":
-        return f"{len(value or [])} linked"
+        return f"{len(value)} linked" if value else ""
     if kind == "people":
         return ", ".join(v.get("name", "") for v in value or [])
     if value is None or isinstance(value, dict | list):
@@ -112,14 +114,26 @@ def hydrate(conn, rids):
     return {r["rid"]: dict(r) for r in conn.execute(HIT_SELECT, (json.dumps(list(rids)),))}
 
 
+def page_titles(conn, texts):
+    ids = ids_in_text(" ".join(texts))
+    if not ids:
+        return {}
+    rows = conn.execute(
+        "SELECT id, title FROM notion_pages WHERE in_trash = 0 AND id IN (SELECT value FROM json_each(?))",
+        (json.dumps(ids),),
+    )
+    return {r["id"]: r["title"] for r in rows}
+
+
 def heads(conn, rids):
     if not rids:
         return {}
     rows = conn.execute(
         "SELECT rid, substr(markdown, 1, ?) AS head FROM notion_pages WHERE rid IN (SELECT value FROM json_each(?))",
-        (SNIPPET_CHARS, json.dumps(list(rids))),
-    )
-    return {r["rid"]: " ".join((r["head"] or "").split()) for r in rows}
+        (HEAD_SOURCE_CHARS, json.dumps(list(rids))),
+    ).fetchall()
+    titles = page_titles(conn, [r["head"] or "" for r in rows])
+    return {r["rid"]: plain(r["head"], titles)[:SNIPPET_CHARS] for r in rows}
 
 
 def hit(info, score, lex_rank, sem_rank, head, marked):
@@ -172,7 +186,8 @@ def search(conn, cfg, query, include_private=False, limit=20, embed_texts=embed.
         available = False
         error = str(e)
     lex_rank = {rid: i for i, (rid, _) in enumerate(lex, 1)}
-    marked = dict(lex)
+    titles = page_titles(conn, [snip for _, snip in lex])
+    marked = {rid: plain(snip, titles) for rid, snip in lex}
     sem_rank = {rid: i for i, rid in enumerate(sem, 1)}
     fused = mail_search.rrf([[rid for rid, _ in lex], sem])[:limit]
     rids = [rid for rid, _ in fused]

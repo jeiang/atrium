@@ -126,8 +126,8 @@
     & li:has(> input[type="checkbox"]) {
       @apply -ms-5 list-none;
     }
-    & input[type="checkbox"] {
-      @apply me-2 align-middle accent-primary;
+    & li > input.input[type="checkbox"]:disabled {
+      @apply me-2 inline-flex cursor-default align-[-0.125em] opacity-100;
     }
     & blockquote {
       @apply border-s-2 ps-3 text-muted-foreground;

@@ -177,6 +177,47 @@ def test_notion_page_markdown_is_sanitized(cfg, conn):
     assert make_client(cfg).get("/notion/00000000-0000-0000-0000-000000000000").status_code == 404
 
 
+NOTION_MARKDOWN = (
+    "Intro line\nSecond line\n"
+    f'<page url="https://app.notion.com/p/{SECRET.replace("-", "")}">Child</page>\n'
+    f'See <mention-page url="https://app.notion.com/p/{SECRET.replace("-", "")}"/> soon.\n'
+    "<empty-block/>\n"
+    '## Tasks {color="blue"}\n'
+    "- [ ] Open\n- [x] Done\n"
+    '<table header-row="true">\n\t<tr>\n\t\t<td>Bill</td>\n\t\t<td>Cost</td>\n\t</tr>\n'
+    "\t<tr>\n\t\t<td>Phone</td>\n\t\t<td>1<br>2</td>\n\t</tr>\n</table>\n"
+    '<callout icon="x">\n\tCallout text\n</callout>\n'
+    '```\n<page url="https://example.test">kept</page>\n```\n'
+)
+
+
+def test_notion_page_renders_notion_flavoured_markdown(cfg, conn):
+    add_page(conn, PAGE, "Plan", NOTION_MARKDOWN)
+    add_page(conn, SECRET, "Budget", "x")
+    body = make_client(cfg).get(f"/notion/{PAGE}").text
+    assert "Intro line<br>" in body and "&lt;page" not in body.split("<pre>")[0]
+    assert f'<a href="/notion/{SECRET}" rel="noopener noreferrer">Child</a>' in body
+    assert f'See <a href="/notion/{SECRET}" rel="noopener noreferrer">Budget</a> soon.' in body
+    assert "empty-block" not in body and "{color=" not in body and "<h2>Tasks</h2>" in body
+    assert '<input class="input" type="checkbox" disabled> Open' in body
+    assert '<input class="input" type="checkbox" disabled checked> Done' in body
+    assert "<th>Bill</th>" in body and "<td>1 2</td>" in body
+    assert "<p>Callout text</p>" in body and "<pre>" in body and "&lt;page url=" in body
+
+
+def test_notion_snippets_and_properties_are_plain(cfg, conn):
+    add_page(conn, PAGE, "Plan", NOTION_MARKDOWN)
+    add_page(conn, SECRET, "Budget", "x")
+    conn.execute(
+        "UPDATE notion_pages SET properties = ? WHERE id = ?",
+        ('{"Links": {"type": "relation", "relation": []}, "Amount": {"type": "number", "number": 5}}', PAGE),
+    )
+    listing = make_client(cfg).get("/?source=notion").text
+    assert "Intro line Second line Child See Budget soon. Tasks Open Done Bill Cost Phone 1 2" in listing
+    page = make_client(cfg).get(f"/notion/{PAGE}").text
+    assert "Amount" in page and "Links" not in page and "0 linked" not in page
+
+
 def test_notion_search_hides_private_pages_unless_asked(cfg, conn):
     add_page(conn, PAGE, "Public plan", "x")
     add_page(conn, SECRET, "Secret plan", "y", private=1)

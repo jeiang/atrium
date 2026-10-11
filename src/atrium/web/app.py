@@ -544,9 +544,10 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
             if view is None:
                 raise HTTPException(404, "unknown page")
             markdown = view.pop("markdown")
+            pages = notion_search.page_titles(conn, [markdown])
             return render(
                 "notion_page.html",
-                notion_page={**view, "body_html": markdown_html(markdown)},
+                notion_page={**view, "body_html": markdown_html(markdown, pages)},
                 related=notion_search.related(conn, view["id"]),
                 back=back_link(request),
             )
