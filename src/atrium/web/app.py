@@ -353,8 +353,30 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
     def live_resume(request: Request):
         return toggle_pause(request, False)
 
+    @app.get("/actions")
+    def actions_page(request: Request, account: str = "", kind: str = "", offset: int = 0):
+        offset = max(offset, 0)
+        if kind and kind not in live.KINDS:
+            raise HTTPException(422, "unknown kind")
+        with connection() as conn:
+            found = live.list_actions(conn, account or None, kind or None, PAGE_SIZE, offset)
+            total = live.count_actions(conn, account or None, kind or None)
+            shown = offset + len(found)
+            context = {
+                "actions": found,
+                "account": account,
+                "kind": kind,
+                "kinds": live.KINDS,
+                "total": total,
+                "offset": offset,
+                "next_offset": shown if shown < total else None,
+            }
+            if is_partial(request) and offset:
+                return render("_action_rows.html", **context)
+            return render("actions.html", **context)
+
     @app.post("/live/actions/{action_id}/undo")
-    def live_undo(action_id: int):
+    def live_undo(action_id: int, view: str = ""):
         with connection() as conn:
             found = live.get(conn, action_id)
             if found is None:
@@ -364,6 +386,8 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
                 notice = toast("success", "Undone")
             except live.UndoError as e:
                 notice = toast("error", "Not undone", str(e))
+            if view == "actions":
+                return render("_action_row.html", a=live.get(conn, action_id), toast=notice)
             row = triage.row(conn, found["message_id"])
             if row is None:
                 raise HTTPException(404, "message has no decision")

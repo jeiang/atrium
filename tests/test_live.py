@@ -611,3 +611,220 @@ def test_ui_correction_moves_the_message_in_live_mode_and_defers_when_paused(web
     again = client.post(f"/messages/{mid}/correct", data={"dest": "Bills", "context": "row"}, headers=HX)
     assert "The message was moved" in again.text
     assert uids(w.client.boxes["Bills"]) == [1]
+
+
+def correct_before_go_live(w, subject):
+    mid = w.mid(subject)
+    corrections.record_correction(w.conn, mid, "Bills")
+    w.conn.execute("UPDATE corrections SET ts = 1.0 WHERE message_id = ?", (mid,))
+    return mid
+
+
+def test_shadow_era_corrections_are_never_moved_automatically_and_enter_the_backlog(tmp_path, monkeypatch):
+    monkeypatch.setenv("ATRIUM_MODE", "live")
+    boxes = {"INBOX": FakeBox(), "Bills": FakeBox(validity=3), "Misc": FakeBox(validity=4)}
+    for subject, flags in (("read", (SEEN,)), ("unread", ()), ("flagged", (SEEN, FLAGGED))):
+        boxes["INBOX"].add(*raw(subject, msgid=subject), flags=flags)
+    w = World(tmp_path, monkeypatch, ICLOUD, WriteClient(boxes, ICLOUD_FLAGS))
+    for subject in ("read", "unread", "flagged"):
+        correct_before_go_live(w, subject)
+    assert w.apply().written == 0
+    assert w.client.writes == []
+    (pid,) = backlog.backlog(w.conn, w.cfg)["created"]
+    (group,) = proposals.get(w.conn, pid)["payload"]["groups"]
+    assert group["dest"] == "Bills" and [m["id"] for m in group["messages"]] == [w.mid("read")]
+    mid = w.mid("flagged")
+    corrections.record_correction(w.conn, mid, "Bills")
+    assert w.apply().written == 1
+    assert uids(w.client.boxes["Bills"]) == [1]
+
+
+def test_pre_go_live_correction_files_mail_that_becomes_eligible_later(tmp_path, monkeypatch):
+    monkeypatch.setenv("ATRIUM_MODE", "live")
+    boxes = {"INBOX": FakeBox(), "Bills": FakeBox(validity=3), "Misc": FakeBox(validity=4)}
+    boxes["INBOX"].add(*raw("later", msgid="later"), flags=[])
+    w = World(tmp_path, monkeypatch, ICLOUD, WriteClient(boxes, ICLOUD_FLAGS))
+    correct_before_go_live(w, "later")
+    assert w.apply().written == 0
+    boxes["INBOX"].set_flags(1, flags=[SEEN])
+    w.sync()
+    assert w.apply().written == 1
+    assert uids(boxes["Bills"]) == [1]
+
+
+def test_deletion_pass_reaches_mail_atrium_filed_but_not_undone_or_already_trashed(tmp_path, monkeypatch):
+    w = icloud(tmp_path, monkeypatch)
+    w.arrive("filed", sender="x@spam.test")
+    w.decide("filed")
+    w.apply()
+    w.sync()
+    age(w, "filed", 1.0)
+    delete_rule(w.conn)
+    out = applier.deletion_pass(w.conn, w.cfg, ICLOUD, w.opener, force=True)
+    assert out.by_kind == {"trash": 1}
+    assert uids(w.client.boxes["Deleted Messages"]) == [1]
+    trashed = [a for a in w.actions() if a["kind"] == "trash"][0]
+    live.undo(w.conn, w.cfg, trashed["id"])
+    w.sync()
+    assert applier.deletion_pass(w.conn, w.cfg, ICLOUD, w.opener, force=True).written == 0
+
+
+def test_gmail_select_failure_does_not_strand_other_actions(tmp_path, monkeypatch):
+    w = gmail(tmp_path, monkeypatch)
+    w.arrive("doomed", flags=(SEEN,), sender="x@spam.test")
+    w.arrive("friend", flags=())
+    w.decide("doomed", action="delete", dest=None, stage="operator")
+    w.conn.execute(
+        "INSERT INTO flag_decisions (message_id, account, ts, contacts_match) VALUES (?, 'gmail', 1, 1)",
+        (w.mid("friend"),),
+    )
+    original = w.client.select_rw
+    calls = []
+
+    def flaky(name):
+        calls.append(name)
+        if len(calls) == 1:
+            raise RuntimeError("NO [SERVERBUG] try later")
+        return original(name)
+
+    monkeypatch.setattr(w.client, "select_rw", flaky)
+    out = w.apply()
+    assert out.failed == 1 and out.written == 1
+    assert not [a for a in w.actions() if a["ok"] is None]
+    kinds = {a["kind"]: a["ok"] for a in w.actions()}
+    assert kinds == {"trash": 0, "flag": 1}
+    assert w.apply().written == 1
+
+
+def test_gmail_partial_label_store_records_what_the_server_has_and_undo_reverses_it(tmp_path, monkeypatch):
+    w = gmail(tmp_path, monkeypatch)
+    w.arrive("half")
+    w.decide("half", dest="Receipts")
+    original = w.client.mutate
+
+    def after_add(verb, *args):
+        if verb == "STORE" and args[1] == "-X-GM-LABELS":
+            raise RuntimeError("NO try later")
+        return original(verb, *args)
+
+    monkeypatch.setattr(w.client, "mutate", after_add)
+    out = w.apply()
+    assert out.written == 1 and out.failed == 0
+    (row,) = w.actions()
+    assert row["ok"] == 1 and row["error"].startswith("partial:")
+    assert json.loads(row["undo"]) | {"uids": None} == {
+        "op": "gmail_labels",
+        "imap_name": ALL_MAIL,
+        "uidvalidity": 1,
+        "uids": None,
+        "add": [],
+        "remove": ["Receipts"],
+    }
+    monkeypatch.setattr(w.client, "mutate", original)
+    live.undo(w.conn, w.cfg, row["id"])
+    assert w.client.boxes[ALL_MAIL].messages[1]["labels"] == [INBOX_LABEL]
+
+
+def test_gmail_trash_copy_that_failed_after_copying_still_gets_an_undo(tmp_path, monkeypatch):
+    w = gmail(tmp_path, monkeypatch)
+    w.arrive("gone", sender="x@spam.test")
+    w.decide("gone", action="delete", dest=None, stage="operator")
+    original = w.client.mutate
+
+    def copy_then_no(verb, *args):
+        result = original(verb, *args)
+        if verb == "COPY":
+            raise RuntimeError("NO connection dropped")
+        return result
+
+    monkeypatch.setattr(w.client, "mutate", copy_then_no)
+    assert w.apply().written == 1
+    (row,) = w.actions()
+    assert row["ok"] == 1 and json.loads(row["undo"])["op"] == "gmail_untrash"
+    monkeypatch.setattr(w.client, "mutate", original)
+    assert live.undo(w.conn, w.cfg, row["id"])["undone"]
+
+
+def test_actions_view_lists_every_automatic_action_with_undo_and_cli_lists_ids(tmp_path, monkeypatch, capsys):
+    from fastapi.testclient import TestClient
+
+    from atrium.web import app as web
+
+    w = icloud(tmp_path, monkeypatch, file_db=True)
+    w.arrive("friend", flags=(), sender="f@shop.test")
+    w.conn.execute(
+        "INSERT INTO flag_decisions (message_id, account, ts, contacts_match) VALUES (?, 'icloud', 1, 1)",
+        (w.mid("friend"),),
+    )
+    w.arrive("old-spam", sender="x@spam.test", box="Bills")
+    age(w, "old-spam", 1.0)
+    delete_rule(w.conn)
+    w.apply()
+    applier.deletion_pass(w.conn, w.cfg, ICLOUD, w.opener, force=True)
+    ids = {a["kind"]: a["id"] for a in w.actions()}
+    assert set(ids) == {"flag", "trash"}
+    client = TestClient(web.create_app(w.cfg))
+    page = client.get("/actions").text
+    assert "friend" in page and "old-spam" in page
+    assert f"/live/actions/{ids['flag']}/undo?view=actions" in page
+    assert "Actions" in client.get("/triage").text
+    assert client.get("/actions?kind=flag").text.count("hx-post") == 1
+    undone = client.post(f"/live/actions/{ids['flag']}/undo?view=actions", headers=HX).text
+    assert "Undone" in undone and "/undo" not in undone
+    monkeypatch.setenv("ATRIUM_DB", str(w.cfg.db_path))
+    monkeypatch.setenv("ATRIUM_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("ATRIUM_MODE", "live")
+    assert cli.main(["live", "actions"]) == 0
+    listed = json.loads(capsys.readouterr().out)
+    assert {a["id"] for a in listed} == set(ids.values())
+    assert cli.main(["live", "actions", "--kind", "trash"]) == 0
+    assert [a["id"] for a in json.loads(capsys.readouterr().out)] == [ids["trash"]]
+
+
+CREDENTIALS = {
+    "ICLOUD_MAIL_USERNAME": "u",
+    "ICLOUD_APP_PASSWORD": "p",
+    "GMAIL_ADDRESS": "g",
+    "GMAIL_APP_PASSWORD": "p",
+}
+
+
+def test_baseline_is_taken_after_syncing_every_account(tmp_path, monkeypatch):
+    monkeypatch.setenv("ATRIUM_MODE", "live")
+    monkeypatch.setattr(run.embed, "embed_pending", lambda *a, **k: 0)
+    icloud_client = WriteClient({"INBOX": FakeBox()}, ICLOUD_FLAGS)
+    gmail_client = WriteClient({ALL_MAIL: FakeBox(), "[Gmail]/Trash": FakeBox()}, GMAIL_FLAGS, gmail=True)
+    gmail_client.boxes[ALL_MAIL].add(*raw("g-read", msgid="g-read"), flags=[SEEN], labels=[INBOX_LABEL])
+    conn = memory_db()
+    conn.execute("DELETE FROM mailboxes")
+    cfg = make_config(tmp_path, mode="live", credentials=CREDENTIALS)
+    clients = {ICLOUD: icloud_client, GMAIL: gmail_client}
+    run.process(conn, cfg, [ICLOUD], lambda c, a: clients[a])
+    gid = conn.execute("SELECT id FROM messages WHERE account = 'gmail'").fetchone()["id"]
+    assert gid in {r[0] for r in conn.execute("SELECT message_id FROM live_baseline")}
+
+
+def test_rebaseline_refreshes_baseline_and_backlog_proposal(tmp_path, monkeypatch, capsys):
+    w = icloud(tmp_path, monkeypatch, seed=[("old", (SEEN,))], file_db=True)
+    monkeypatch.setattr(run, "open_client", w.opener)
+    monkeypatch.setenv("ATRIUM_DB", str(w.cfg.db_path))
+    monkeypatch.setenv("ATRIUM_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("ATRIUM_MODE", "live")
+    monkeypatch.setenv("ICLOUD_MAIL_USERNAME", "u")
+    monkeypatch.setenv("ICLOUD_APP_PASSWORD", "p")
+    w.decide("old")
+    (first,) = backlog.backlog(w.conn, w.cfg)["created"]
+    w.arrive("rolled-forward")
+    w.decide("rolled-forward")
+    assert w.apply().written == 1
+    w.client.boxes["INBOX"].add(*raw("again", msgid="again"), flags=[SEEN])
+    w.sync()
+    w.decide("again")
+    assert cli.main(["live", "rebaseline"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["baseline"] == 2
+    assert proposals.get(w.conn, first)["status"] == "dismissed"
+    (second,) = out["created"]
+    names = [m["id"] for g in proposals.get(w.conn, second)["payload"]["groups"] for m in g["messages"]]
+    assert sorted(names) == sorted([w.mid("old"), w.mid("again")])
+    assert w.apply().written == 0

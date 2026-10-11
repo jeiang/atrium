@@ -36,11 +36,16 @@ def sync_one(conn, cfg, account, opener=open_client):
     return stats
 
 
+def sync_all(conn, cfg, opener):
+    for account in select_accounts(cfg):
+        sync_one(conn, cfg, account, opener)
+
+
 def process(conn, cfg, accounts, opener=open_client):
     from . import applier
 
     if cfg.mode == safety.LIVE:
-        live.ensure_golive(conn)
+        live.ensure_golive(conn, lambda: sync_all(conn, cfg, opener))
     try:
         embed.embed_pending(conn, cfg.embed_url)
     except ServiceUnavailable as e:

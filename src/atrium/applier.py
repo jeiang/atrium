@@ -18,13 +18,21 @@ from .sync import SYSTEM_FLAGS, SYSTEM_NAMES, SYSTEM_ROLES
 
 log = logging.getLogger("atrium.applier")
 
-ATTEMPTS = {"attempts": WRITE_ATTEMPTS}
+LABEL_ITEMS = "(UID FLAGS X-GM-LABELS)"
+
 NOT_BLOCKED = (
     "NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.account = m.account AND a.digest = m.digest "
     "AND a.kind IN ('file', 'trash') AND a.ok IS NOT 0) "
     "AND (SELECT COUNT(*) FROM auto_actions a WHERE a.account = m.account AND a.digest = m.digest "
     "AND a.kind IN ('file', 'trash') AND a.ok = 0) < :attempts"
 )
+DELETION_NOT_BLOCKED = (
+    "NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.account = m.account AND a.digest = m.digest "
+    "AND ((a.kind = 'trash' AND a.ok IS NOT 0) OR a.undone_ts IS NOT NULL)) "
+    "AND (SELECT COUNT(*) FROM auto_actions a WHERE a.account = m.account AND a.digest = m.digest "
+    "AND a.kind = 'trash' AND a.ok = 0) < :attempts"
+)
+NO_NEW_CORRECTION = "NOT EXISTS (SELECT 1 FROM corrections c WHERE c.message_id = m.id AND c.ts >= :golive)"
 NO_CORRECTION = "NOT EXISTS (SELECT 1 FROM corrections c WHERE c.message_id = m.id)"
 INBOX_CANDIDATES = f"""
 SELECT m.*, d.id AS decision_id, d.action AS decision_action, d.dest AS decision_dest
@@ -32,13 +40,13 @@ FROM messages m JOIN decisions d ON d.id = (SELECT MAX(x.id) FROM decisions x WH
 WHERE m.account = :account AND m.in_inbox = 1 AND m.seen = 1 AND m.flagged = 0 AND m.sent = 0
   AND m.gone_at IS NULL AND (d.action = 'delete' OR (d.action = 'file' AND d.dest IS NOT NULL))
   AND m.id NOT IN (SELECT message_id FROM live_baseline)
-  AND {NO_CORRECTION} AND {NOT_BLOCKED}
+  AND {NO_NEW_CORRECTION} AND {NOT_BLOCKED}
 ORDER BY m.id
 """
 CORRECTION_CANDIDATES = """
 SELECT m.*, c.folder AS target
 FROM corrections c JOIN messages m ON m.id = c.message_id
-WHERE c.account = :account AND m.gone_at IS NULL AND m.sent = 0
+WHERE c.account = :account AND c.ts >= :golive AND m.gone_at IS NULL AND m.sent = 0
   AND NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'correct'
     AND a.dest = c.folder AND a.ok IS NOT 0)
   AND (SELECT COUNT(*) FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'correct'
@@ -57,13 +65,18 @@ DELETION_CANDIDATES = f"""
 SELECT m.* FROM messages m JOIN mailboxes mb ON mb.id = m.mailbox_id
 WHERE m.account = :account AND m.gone_at IS NULL AND m.sent = 0 AND m.flagged = 0
   AND mb.role NOT IN ({",".join(f"'{r}'" for r in sorted(SYSTEM_ROLES | {"system"}))})
-  AND {NO_CORRECTION} AND {NOT_BLOCKED}
+  AND {NO_CORRECTION} AND {DELETION_NOT_BLOCKED}
 ORDER BY m.id
 """
 PRIOR_LABEL = (
     "SELECT dest FROM auto_actions WHERE account = ? AND digest = ? AND kind IN ('file', 'correct') "
     "AND ok = 1 AND undone_ts IS NULL ORDER BY id DESC LIMIT 1"
 )
+
+
+def query_params(conn, account):
+    golive = live.get_state(conn, live.GOLIVE_KEY)
+    return {"account": account, "attempts": WRITE_ATTEMPTS, "golive": float(golive) if golive else float("inf")}
 
 
 @dataclass
@@ -229,6 +242,26 @@ def move_group(conn, client, account, src, dest_imap, entries, outcome):
         log.error("%s: move from %s to %s failed: %s", account, src, dest_imap, e)
 
 
+def observed_labels(client, imap_name, uids):
+    try:
+        client.select(imap_name)
+        return {i["uid"]: set(i["labels"] or []) for i in client.uid_fetch(uids, LABEL_ITEMS)}
+    except Exception:
+        log.exception("could not re-read labels after a failed store")
+        return {}
+
+
+def locate_in_trash(client, trash, msgid):
+    try:
+        validity = client.status(trash)["uidvalidity"]
+        client.select(trash)
+        found = client.uid_search("HEADER", "Message-ID", msgid) if msgid else []
+    except Exception:
+        log.exception("could not look for the message in Trash after a failed copy")
+        return None
+    return (validity, found[0]) if len(found) == 1 else None
+
+
 def label_group(conn, client, account, imap_name, validity, added, removed, entries, outcome):
     by_uid = {item["uid"]: (item, intent, aid) for item, intent, aid in entries}
     uids = sorted(by_uid)
@@ -236,9 +269,28 @@ def label_group(conn, client, account, imap_name, validity, added, removed, entr
         try:
             mailops.store_labels(client, imap_name, chunk, added, removed)
         except Exception as e:
+            error = f"{type(e).__name__}: {e}"
+            actual = observed_labels(client, imap_name, chunk)
             for uid in chunk:
-                live.fail(conn, by_uid[uid][2], f"{type(e).__name__}: {e}")
-            outcome.failed += len(chunk)
+                item, intent, aid = by_uid[uid]
+                have = actual.get(uid)
+                before = set(item["labels"])
+                did_add = [l for l in added if have is not None and l in have and l not in before]
+                did_remove = [l for l in removed if have is not None and l not in have and l in before]
+                if not did_add and not did_remove:
+                    live.fail(conn, aid, error)
+                    outcome.failed += 1
+                    continue
+                undo = {
+                    "op": "gmail_labels",
+                    "imap_name": imap_name,
+                    "uidvalidity": validity,
+                    "uids": [uid],
+                    "add": did_remove,
+                    "remove": did_add,
+                }
+                live.finish(conn, aid, after={"add": did_add, "remove": did_remove}, undo=undo, note=f"partial: {error}")
+                outcome.count(intent.kind, 1)
             for uid in uids[uids.index(chunk[-1]) + 1 :]:
                 live.discard(conn, by_uid[uid][2])
             log.error("%s: relabel in %s failed: %s", account, imap_name, e)
@@ -261,14 +313,24 @@ def label_group(conn, client, account, imap_name, validity, added, removed, entr
 def gmail_trash_group(conn, client, account, imap_name, validity, trash, entries, outcome):
     by_uid = {item["uid"]: (item, intent, aid) for item, intent, aid in entries}
     uids = sorted(by_uid)
-    client.select_rw(imap_name)
     for chunk in mailops.chunks(uids):
         try:
+            client.select_rw(imap_name)
             copied = mailops.copy_uids(client, trash, chunk)
         except Exception as e:
+            error = f"{type(e).__name__}: {e}"
             for uid in chunk:
-                live.fail(conn, by_uid[uid][2], f"{type(e).__name__}: {e}")
-            outcome.failed += len(chunk)
+                item, intent, aid = by_uid[uid]
+                found = None if isinstance(e, safety.WriteRefused) else locate_in_trash(client, trash, item["msgid"])
+                if found is None:
+                    live.fail(conn, aid, error)
+                    outcome.failed += 1
+                    continue
+                dest_validity, dest_uid = found
+                undo = {"op": "gmail_untrash", "trash_imap": trash, "dest_uidvalidity": dest_validity, "uids": [dest_uid]}
+                after = {"imap_name": trash, "uidvalidity": dest_validity, "uid": dest_uid}
+                live.finish(conn, aid, after=after, undo=undo, note=f"partial: {error}")
+                outcome.count(intent.kind, 1)
             for uid in uids[uids.index(chunk[-1]) + 1 :]:
                 live.discard(conn, by_uid[uid][2])
             log.error("%s: trash copy failed: %s", account, e)
@@ -277,6 +339,10 @@ def gmail_trash_group(conn, client, account, imap_name, validity, trash, entries
         for uid in chunk:
             item, intent, aid = by_uid[uid]
             dest_uid = mapping.get(uid)
+            if dest_uid is None:
+                found = locate_in_trash(client, trash, item["msgid"])
+                if found is not None:
+                    dest_validity, dest_uid = found
             undo = None
             if dest_uid is not None:
                 undo = {"op": "gmail_untrash", "trash_imap": trash, "dest_uidvalidity": dest_validity, "uids": [dest_uid]}
@@ -380,18 +446,36 @@ def execute(conn, client, account, intents, outcome):
             labels.setdefault((*key, added, removed), []).append(entry)
         else:
             moves.setdefault((*key, dest_imap), []).append(entry)
-    for (src, _, dest_imap), entries in moves.items():
-        move_group(conn, client, account, src, dest_imap, entries, outcome)
-    for (imap_name, validity, added, removed), entries in labels.items():
-        label_group(conn, client, account, imap_name, validity, [*added], [*removed], entries, outcome)
-    for (imap_name, validity, dest_trash), entries in trashes.items():
-        gmail_trash_group(conn, client, account, imap_name, validity, dest_trash, entries, outcome)
-    for (imap_name, validity), entries in flagging.items():
-        flag_group(conn, client, account, imap_name, validity, entries, outcome)
+    groups = [
+        (entries, lambda e=entries, k=key: move_group(conn, client, account, k[0], k[2], e, outcome))
+        for key, entries in moves.items()
+    ]
+    groups += [
+        (entries, lambda e=entries, k=key: label_group(conn, client, account, k[0], k[1], [*k[2]], [*k[3]], e, outcome))
+        for key, entries in labels.items()
+    ]
+    groups += [
+        (entries, lambda e=entries, k=key: gmail_trash_group(conn, client, account, k[0], k[1], k[2], e, outcome))
+        for key, entries in trashes.items()
+    ]
+    groups += [
+        (entries, lambda e=entries, k=key: flag_group(conn, client, account, k[0], k[1], e, outcome))
+        for key, entries in flagging.items()
+    ]
+    for entries, run_group in groups:
+        try:
+            run_group()
+        except Exception as e:
+            log.exception("%s: group failed unexpectedly", account)
+            for _, _, aid in entries:
+                if isinstance(e, safety.WriteRefused):
+                    live.discard(conn, aid)
+                else:
+                    live.hold(conn, aid, f"{type(e).__name__}: {e}")
 
 
 def inbox_intents(conn, account, budget):
-    rows = conn.execute(INBOX_CANDIDATES, {"account": account, **ATTEMPTS}).fetchall()
+    rows = conn.execute(INBOX_CANDIDATES, query_params(conn, account)).fetchall()
     out = []
     for row in budget.take(rows, "inbox decisions"):
         if row["decision_action"] == "delete":
@@ -402,7 +486,7 @@ def inbox_intents(conn, account, budget):
 
 
 def correction_intents(conn, account, budget):
-    rows = conn.execute(CORRECTION_CANDIDATES, {"account": account, **ATTEMPTS}).fetchall()
+    rows = conn.execute(CORRECTION_CANDIDATES, query_params(conn, account)).fetchall()
     pending = []
     for row in rows:
         if account == GMAIL:
@@ -422,7 +506,7 @@ def correction_intents(conn, account, budget):
 
 
 def flag_intents(conn, account, budget):
-    rows = conn.execute(FLAG_CANDIDATES, {"account": account, **ATTEMPTS}).fetchall()
+    rows = conn.execute(FLAG_CANDIDATES, query_params(conn, account)).fetchall()
     return [Intent(row, live.FLAG, unread_inbox) for row in budget.take(rows, "flags")]
 
 
@@ -434,7 +518,7 @@ def deletion_intents(conn, account, budget):
     ruleset = rules.load_rules(conn, account)
     if not any(r.action == "delete" for r in ruleset):
         return []
-    rows = conn.execute(DELETION_CANDIDATES, {"account": account, **ATTEMPTS}).fetchall()
+    rows = conn.execute(DELETION_CANDIDATES, query_params(conn, account)).fetchall()
     matched = []
     for row in rows:
         rule = rules.first_match(row, ruleset)

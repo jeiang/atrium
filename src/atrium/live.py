@@ -70,13 +70,12 @@ def set_state(conn, key, value):
     conn.execute("INSERT OR REPLACE INTO live_state (key, value) VALUES (?, ?)", (key, str(value)))
 
 
-def ensure_golive(conn):
-    if get_state(conn, GOLIVE_KEY) is not None:
-        return False
+def take_baseline(conn):
     conn.execute("BEGIN")
     try:
+        conn.execute("DELETE FROM live_baseline")
         conn.execute(
-            "INSERT OR IGNORE INTO live_baseline (message_id) SELECT id FROM messages "
+            "INSERT INTO live_baseline (message_id) SELECT id FROM messages "
             "WHERE in_inbox = 1 AND seen = 1 AND flagged = 0 AND sent = 0 AND gone_at IS NULL"
         )
         set_state(conn, GOLIVE_KEY, now())
@@ -84,7 +83,20 @@ def ensure_golive(conn):
     except BaseException:
         conn.execute("ROLLBACK")
         raise
+
+
+def ensure_golive(conn, before=None):
+    if get_state(conn, GOLIVE_KEY) is not None:
+        return False
+    if before is not None:
+        before()
+    take_baseline(conn)
     return True
+
+
+def rebaseline(conn):
+    take_baseline(conn)
+    return conn.execute("SELECT COUNT(*) FROM live_baseline").fetchone()[0]
 
 
 def begin(conn, account, message_id, digest, kind, src, dest, before, decision_id=None):
@@ -99,10 +111,15 @@ def begin(conn, account, message_id, digest, kind, src, dest, before, decision_i
     return cur.lastrowid
 
 
-def finish(conn, action_id, after=None, undo=None):
+def finish(conn, action_id, after=None, undo=None, note=None):
     conn.execute(
-        "UPDATE auto_actions SET ok = 1, error = NULL, after = ?, undo = ? WHERE id = ?",
-        (json.dumps(after) if after is not None else None, json.dumps(undo) if undo is not None else None, action_id),
+        "UPDATE auto_actions SET ok = 1, error = ?, after = ?, undo = ? WHERE id = ?",
+        (
+            note,
+            json.dumps(after) if after is not None else None,
+            json.dumps(undo) if undo is not None else None,
+            action_id,
+        ),
     )
 
 
@@ -112,7 +129,7 @@ def fail(conn, action_id, error):
 
 def hold(conn, action_id, error, after=None):
     conn.execute(
-        "UPDATE auto_actions SET error = ?, after = ? WHERE id = ?",
+        "UPDATE auto_actions SET error = ?, after = ? WHERE id = ? AND ok IS NULL",
         (error, json.dumps(after) if after is not None else None, action_id),
     )
 
@@ -154,19 +171,41 @@ def shape(row):
 
 
 def get(conn, action_id):
-    row = conn.execute("SELECT * FROM auto_actions WHERE id = ?", (action_id,)).fetchone()
+    row = conn.execute(
+        "SELECT a.*, m.subject, m.from_addr, m.from_name FROM auto_actions a "
+        "LEFT JOIN messages m ON m.id = a.message_id WHERE a.id = ?",
+        (action_id,),
+    ).fetchone()
     return shape(row) if row else None
 
 
-def list_actions(conn, account=None, limit=100):
-    sql = "SELECT * FROM auto_actions"
-    params = []
+def list_actions(conn, account=None, kind=None, limit=100, offset=0):
+    clauses, params = [], []
     if account:
-        sql += " WHERE account = ?"
+        clauses.append("a.account = ?")
         params.append(account)
-    sql += " ORDER BY id DESC LIMIT ?"
-    params.append(limit)
-    return [shape(r) for r in conn.execute(sql, params)]
+    if kind:
+        clauses.append("a.kind = ?")
+        params.append(kind)
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = conn.execute(
+        "SELECT a.*, m.subject, m.from_addr, m.from_name FROM auto_actions a "
+        f"LEFT JOIN messages m ON m.id = a.message_id{where} ORDER BY a.id DESC LIMIT ? OFFSET ?",
+        [*params, limit, offset],
+    )
+    return [shape(r) for r in rows]
+
+
+def count_actions(conn, account=None, kind=None):
+    clauses, params = [], []
+    if account:
+        clauses.append("account = ?")
+        params.append(account)
+    if kind:
+        clauses.append("kind = ?")
+        params.append(kind)
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    return conn.execute(f"SELECT COUNT(*) FROM auto_actions{where}", params).fetchone()[0]
 
 
 def undo(conn, cfg, action_id):

@@ -7,6 +7,7 @@ from .config import BODY_CAP_BYTES, IMAP_PORT
 from .safety import write_gate
 
 READ_VERBS = frozenset({"SEARCH", "FETCH"})
+COPYUID = "COPYUID"
 LIST_LINE = re.compile(rb'\((?P<flags>[^)]*)\)\s+(?P<delim>"(?:[^"\\]|\\.)*"|NIL)\s+(?P<name>.+)$', re.S)
 TOKEN = re.compile(r'\(|\)|"((?:[^"\\]|\\.)*)"|([^\s()"]+)')
 
@@ -347,9 +348,11 @@ class ImapClient:
 
     def mutate(self, verb, *args):
         write_gate(f"IMAP {verb}")
+        self._conn.untagged_responses.pop(COPYUID, None)
         typ, data = self._conn.uid(verb, *args)
         _ok(typ, data)
-        return data
+        copied = self._conn.untagged_responses.pop(COPYUID, [])
+        return [*data, *(b"COPYUID " + c for c in copied)]
 
     def mutate_mailbox(self, verb, imap_name):
         write_gate(f"IMAP {verb}")

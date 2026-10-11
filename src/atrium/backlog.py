@@ -3,6 +3,7 @@ from collections import defaultdict
 
 from . import applier, executors, live, mailops, proposals
 from .config import ACCOUNTS, GMAIL, INBOX
+from .db import now
 from .scanutil import digest, message_view, sample_subjects, top_counts
 
 log = logging.getLogger("atrium.backlog")
@@ -14,7 +15,7 @@ FROM messages m JOIN decisions d ON d.id = (SELECT MAX(x.id) FROM decisions x WH
 WHERE m.account = :account AND m.in_inbox = 1 AND m.seen = 1 AND m.flagged = 0 AND m.sent = 0
   AND m.gone_at IS NULL AND d.action = 'file' AND d.dest IS NOT NULL
   AND m.id IN (SELECT message_id FROM live_baseline)
-  AND {applier.NO_CORRECTION} AND {applier.NOT_BLOCKED}
+  AND {applier.NO_NEW_CORRECTION} AND {applier.NOT_BLOCKED}
 ORDER BY m.id
 """
 
@@ -24,7 +25,7 @@ class BacklogError(RuntimeError):
 
 
 def build(conn, account):
-    rows = conn.execute(CANDIDATES, {"account": account, **applier.ATTEMPTS}).fetchall()
+    rows = conn.execute(CANDIDATES, applier.query_params(conn, account)).fetchall()
     if not rows:
         return None
     grouped = defaultdict(list)
@@ -34,7 +35,7 @@ def build(conn, account):
     ids = [r["id"] for r in rows]
     gmail = account == GMAIL
     return {
-        "fingerprint": f"{KIND}:{account}:{digest(*ids)}",
+        "fingerprint": f"{KIND}:{account}:{digest(live.get_state(conn, live.GOLIVE_KEY), *ids)}",
         "account": account,
         "title": f"File {len(rows)} read inbox messages into {len(ordered)} {'labels' if gmail else 'folders'}",
         "payload": {
@@ -81,3 +82,11 @@ def backlog(conn, cfg=None):
             created.append(made)
     log.info("inbox backlog proposals: %s", accounts)
     return {"created": created, "accounts": accounts}
+
+
+def refresh(conn, cfg=None):
+    conn.execute(
+        "UPDATE proposals SET status = 'dismissed', decided_ts = ? WHERE kind = ? AND status = 'pending'",
+        (now(), KIND),
+    )
+    return backlog(conn, cfg)

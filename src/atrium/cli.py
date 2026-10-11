@@ -58,8 +58,11 @@ def parser():
     gl.add_subparsers(dest="gmail_labels_command", required=True).add_parser("scan")
     lv = sub.add_parser("live")
     lsub = lv.add_subparsers(dest="live_command", required=True)
-    for name in ("backlog", "pause", "resume", "status", "deletions"):
+    for name in ("backlog", "rebaseline", "pause", "resume", "status", "deletions"):
         lsub.add_parser(name)
+    la = lsub.add_parser("actions")
+    la.add_argument("--limit", type=int, default=20)
+    la.add_argument("--kind", choices=live.KINDS)
     lu = lsub.add_parser("undo")
     lu.add_argument("id", type=int)
     pr = sub.add_parser("proposals")
@@ -129,6 +132,16 @@ def live_command(cfg, args):
         except backlog.BacklogError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
+    elif args.live_command == "rebaseline":
+        with db.exclusive(cfg.db_path):
+            run.sync_all(conn, cfg, run.open_client)
+            baseline = live.rebaseline(conn)
+            out = {"baseline": baseline, **backlog.refresh(conn, cfg)}
+    elif args.live_command == "actions":
+        out = [
+            {k: a[k] for k in ("id", "ts", "account", "kind", "status", "src", "dest", "subject", "error", "undoable")}
+            for a in live.list_actions(conn, kind=args.kind, limit=args.limit)
+        ]
     elif args.live_command in ("pause", "resume"):
         live.set_paused(cfg, args.live_command == "pause")
         out = {"paused": live.paused(cfg)}

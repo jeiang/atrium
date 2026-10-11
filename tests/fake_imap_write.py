@@ -55,7 +55,7 @@ class WriteClient(FakeClient):
                 mapping[uid] = dest.add(m["header"], m["text"], m["flags"], m["labels"])
             src = ",".join(str(u) for u in mapping)
             dst = ",".join(str(v) for v in mapping.values())
-            return [f"[COPYUID {dest.validity} {src} {dst}] Done".encode()]
+            return [None, f"COPYUID {dest.validity} {src} {dst}".encode()]
         if verb == "STORE":
             mode, value = args[1], args[2]
             names = [n.strip('"') for n in value.strip("()").split()]

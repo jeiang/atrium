@@ -47,7 +47,7 @@ It runs in the `atrium-watch` and `atrium-sync` passes, right after routing.
   The 9B flag judgment is only logged. atrium never clears a flag.
 - Operator `delete` rules (including `age_days gte N`) trash matching mail
   from every folder once a day and when new mail already matches.
-- Corrections in the UI move the message to the corrected folder or label.
+- Corrections made in the UI after go-live move the message to the corrected folder or label. Corrections recorded before go-live never move automatically; they appear in the backlog proposal.
 - Every automatic write is verified against the server first, logged in
   `auto_actions`, capped at 100 messages per account per pass (the rest wait
   for the next pass), and never touches Trash, Sent, Drafts or Spam/Junk.
@@ -134,16 +134,22 @@ went.
 ssh artemis.jeiang.vpn doas atrium-run live pause
 ssh artemis.jeiang.vpn doas atrium-run live resume
 ssh artemis.jeiang.vpn doas atrium-run live status
+ssh artemis.jeiang.vpn doas atrium-run live actions --limit 20
+ssh artemis.jeiang.vpn doas atrium-run live rebaseline
 ssh artemis.jeiang.vpn doas atrium-run live undo ACTION_ID
 ssh artemis.jeiang.vpn doas atrium-run live deletions
 ```
 
 Pause and Resume are also buttons in the UI header. Pausing skips every
 automatic write; decisions are still recorded and applied after resume.
-Approving a proposal and undoing an action still work while paused. Each
-automatic action has a Triage row with Applied, Skipped, Undone or Interrupted
-and an Undo button; `ACTION_ID` is `auto_actions.id`. Undoing a filing or
-trash is never reapplied. `live deletions` runs the daily deletion pass now.
+Approving a proposal and undoing an action still work while paused. Every
+automatic action, including flags and deletion-pass trashes, is listed on
+`/actions` (and by `live actions`) with Applied, Skipped, Undone or Interrupted
+and an Undo button; filing decisions also show it on Triage. `ACTION_ID` is
+`auto_actions.id`. Undoing a filing or
+trash is never reapplied. `live deletions` runs the daily deletion pass now. `live rebaseline` syncs both
+accounts, takes a new go-live baseline and replaces the pending backlog
+proposals; run it after rolling back to shadow mode and forward again.
 
 An Interrupted action means the service stopped between the IMAP write and its
 record, or after an iCloud copy but before the expunge. It is not retried: check
