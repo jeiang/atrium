@@ -8,31 +8,45 @@
 {% set filter_keys = ["account", "folder", "from", "date_from", "date_to", "has_attachment", "unread", "flagged"] %}
 {% set ns = namespace(active=0) %}
 {% for key in filter_keys %}{% if params.get(key) %}{% set ns.active = ns.active + 1 %}{% endif %}{% endfor %}
+{% set notion_only = "[form:not(:has(#source-notion:checked))_&]:hidden" %}
+{% set mail_only = "[form:has(#source-notion:checked)_&]:hidden!" %}
 <form id="search-form" action="/" method="get" role="search" class="flex flex-col gap-3"
       hx-get="/" hx-target="#results" hx-push-url="true" hx-sync="this:replace"
-      hx-trigger="submit, change from:#filters" hx-indicator="#search-spinner">
+      hx-trigger="submit, change from:#filters, change from:#source" hx-indicator="#search-spinner">
   <div class="flex flex-col gap-2 sm:flex-row">
-    <label for="q" class="sr-only">Search mail</label>
+    <label for="q" class="sr-only">Search</label>
     <div class="input-group h-9 flex-1">
-      <input id="q" name="q" type="search" value="{{ params.q or '' }}" placeholder="Search mail, or ask a question" autocomplete="off" data-search-input>
+      <input id="q" name="q" type="search" value="{{ params.q or '' }}" placeholder="Words, a name, or a question" autocomplete="off" data-search-input>
       <span data-align="start" aria-hidden="true">{{ icon("search") }}</span>
       <span data-align="end" class="gap-2">{{ spinner("search-spinner", "Searching") }}<kbd class="kbd hidden sm:inline-flex" aria-hidden="true">/</kbd></span>
     </div>
     <div class="flex gap-2">
       <button type="submit" class="btn flex-1 sm:flex-none" data-size="lg">Search</button>
-      <button type="button" class="btn flex-1 sm:flex-none" data-size="lg" data-variant="outline"
+      <button type="button" class="btn flex-1 sm:flex-none {{ mail_only }}" data-size="lg" data-variant="outline"
               hx-post="/ask" hx-target="#answer" hx-swap="innerHTML show:top" hx-disabled-elt="this" hx-push-url="false">
         {{ icon("message-circle-question") }}Ask
       </button>
     </div>
   </div>
-  <div class="flex items-center gap-2 md:hidden">
-    <button type="button" class="btn" data-size="sm" data-variant="ghost" aria-controls="filters" aria-expanded="{{ 'true' if ns.active else 'false' }}"
+  <div id="source" class="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <fieldset class="button-group" aria-label="Search in">
+      {% for value, label, icon_name in [("", "Mail", "mail"), ("notion", "Notion", "file-text")] %}
+      <label class="btn has-checked:bg-secondary has-checked:text-secondary-foreground has-focus-visible:ring-2 has-focus-visible:ring-ring" data-size="sm" data-variant="outline">
+        <input id="source-{{ value or 'mail' }}" type="radio" name="source" value="{{ value }}" class="sr-only"{% if (params.source or "") == value %} checked{% endif %}>
+        {{ icon(icon_name) }}{{ label }}
+      </label>
+      {% endfor %}
+    </fieldset>
+    <div role="group" class="field w-auto {{ notion_only }}" data-orientation="horizontal">
+      <input id="f-private" name="private" type="checkbox" value="1"{% if params.private %} checked{% endif %}>
+      <label for="f-private" class="font-normal">{{ icon("lock", "size-3.5 text-muted-foreground") }}Include private pages</label>
+    </div>
+    <button type="button" class="btn ml-auto md:hidden {{ mail_only }}" data-size="sm" data-variant="ghost" aria-controls="filters" aria-expanded="{{ 'true' if ns.active else 'false' }}"
             onclick="const open = document.getElementById('filters').toggleAttribute('data-open'); this.setAttribute('aria-expanded', open)">
       {{ icon("list-filter") }}Filters{% if ns.active %}<span class="badge" data-variant="secondary">{{ ns.active }}</span>{% endif %}
     </button>
   </div>
-  <fieldset id="filters" class="hidden grid-cols-2 gap-3 rounded-lg border bg-card p-3 data-open:grid md:grid md:grid-cols-4 lg:grid-cols-6"{% if ns.active %} data-open{% endif %}>
+  <fieldset id="filters" class="hidden grid-cols-2 gap-3 rounded-lg border bg-card p-3 data-open:grid md:grid md:grid-cols-4 lg:grid-cols-6 {{ mail_only }}"{% if ns.active %} data-open{% endif %}>
     <legend class="sr-only">Filters</legend>
     <div role="group" class="field">
       <label for="f-account">Account</label>
