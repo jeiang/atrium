@@ -31,7 +31,7 @@ URL_PREFIXES = tuple(f"{s}://" for s in SCHEMES)
 REDIRECT_STATUSES = (301, 302, 303, 307, 308)
 TEXT_TYPES = ("text/html", "application/xhtml+xml", "text/plain")
 USER_AGENT = "atrium-websearch/1"
-CHUNK_CHARS = 3200
+CHUNK_CHARS = 2000
 PAGE_TEXT_CHARS = 60000
 EMBED_WEB_BATCH = 8
 TOP_CHUNKS = 6
@@ -446,7 +446,7 @@ def answer(
     pages = load(candidates)
     chunks, result["semantic"] = select_chunks(cfg, query, pages, embed_texts)
     if not chunks:
-        result.update(error="no readable sources" if candidates else "no results", error_kind="search")
+        result.update(error="no readable sources" if candidates else "no results", error_kind="empty")
         return result
     sources, grouped = build_sources(pages, chunks)
     result["sources"] = sources

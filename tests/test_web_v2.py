@@ -267,6 +267,9 @@ def test_web_page_renders_shell_then_answer(cfg):
     failed = {**answer, "answer": "", "segments": [], "citations": [], "sources": [], "error": "down", "error_kind": "search"}
     client = make_client(cfg, web_answer=lambda *args, **kwargs: failed)
     assert "down" in client.get("/web?q=x", headers=HX).text
+    empty = {**failed, "error": "no results", "error_kind": "empty"}
+    client = make_client(cfg, web_answer=lambda *args, **kwargs: empty)
+    assert "The search found no pages" in client.get("/web?q=x", headers=HX).text
 
 
 def test_deletion_proposal_with_an_age_condition_renders(cfg, conn):
