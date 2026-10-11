@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import KIND_LABELS, STATUS_LABELS %}
+{% set page = "proposals" %}
+{% block title %}Proposals{% endblock %}
+{% block heading %}Proposals{% endblock %}
+{% block content %}
+<div class="alert" role="note">
+  {{ icon("zap", "text-warning") }}
+  <h2>Approving runs it now</h2>
+  <section>
+    <p>An approved proposal moves or relabels mail, deletes to Trash, or edits Notion as soon as you approve it{% if mode != "live" %}, even though routing is in shadow mode. Routing itself still only records what it would do{% endif %}. Applied proposals can be undone here.</p>
+  </section>
+</div>
+
+<form class="flex flex-wrap items-end gap-3" action="/proposals" method="get"
+      hx-get="/proposals" hx-target="#proposal-list" hx-push-url="true" hx-trigger="change" hx-sync="this:replace" hx-indicator="#proposal-list">
+  <div role="group" class="field w-auto">
+    <label for="p-status">Status</label>
+    <select id="p-status" name="status">
+      {% for value in ["pending", "applied", "failed", "dismissed", "suppressed", "all"] %}
+      <option value="{{ value }}"{% if status == value %} selected{% endif %}>{{ STATUS_LABELS.get(value, "Any status") }}{% if counts.get(value) %} ({{ counts[value] }}){% endif %}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div role="group" class="field w-auto">
+    <label for="p-kind">Kind</label>
+    <select id="p-kind" name="kind">
+      <option value="">All kinds</option>
+      {% for value, label in KIND_LABELS.items() %}<option value="{{ value }}"{% if kind == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  <noscript><button type="submit" class="btn" data-variant="outline">Apply</button></noscript>
+</form>
+
+<div id="proposal-list" class="flex flex-col gap-3 transition-opacity [&.htmx-request]:opacity-60">
+  {% include "_proposal_list.html" %}
+</div>
+
+<script>
+  document.addEventListener("change", (event) => {
+    const group = event.target.closest("form[data-selection] [data-group]");
+    if (!group) return;
+    const boxes = [...group.querySelectorAll("input[data-message]")];
+    const toggle = group.querySelector("[data-group-toggle]");
+    if (event.target === toggle) boxes.forEach((box) => { box.checked = toggle.checked; });
+    const picked = boxes.filter((box) => box.checked).length;
+    toggle.checked = picked > 0;
+    toggle.indeterminate = picked > 0 && picked < boxes.length;
+    group.querySelector("[data-picked]").textContent = picked;
+    const form = group.closest("form");
+    form.querySelector("[data-picked-total]").textContent = form.querySelectorAll("input[data-message]:checked").length;
+  });
+</script>
+{% endblock %}

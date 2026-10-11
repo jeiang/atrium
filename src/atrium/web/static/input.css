@@ -84,4 +84,80 @@
     word-break: normal;
     overflow-wrap: anywhere;
   }
+
+  :is(.field > input[type="checkbox"]:not([role="switch"]), .input[type="checkbox"]:not([role="switch"])):indeterminate {
+    @apply border-primary bg-primary text-primary-foreground;
+
+    &:after {
+      @apply block h-0.5 w-2 rounded-full bg-current content-[''];
+    }
+  }
+
+  .markdown {
+    @apply flex max-w-prose flex-col gap-3 text-sm/relaxed break-words;
+
+    & :is(h1, h2, h3, h4, h5, h6) {
+      @apply mt-3 font-semibold tracking-tight text-balance;
+    }
+    & h1 {
+      @apply text-xl;
+    }
+    & h2 {
+      @apply text-lg;
+    }
+    & :is(h3, h4, h5, h6) {
+      @apply text-base;
+    }
+    & a {
+      @apply font-medium underline underline-offset-4;
+    }
+    & :is(ul, ol) {
+      @apply flex flex-col gap-1 ps-5;
+    }
+    & ul {
+      @apply list-disc;
+    }
+    & ol {
+      @apply list-decimal;
+    }
+    & li > :is(ul, ol) {
+      @apply mt-1;
+    }
+    & li:has(> input[type="checkbox"]) {
+      @apply -ms-5 list-none;
+    }
+    & input[type="checkbox"] {
+      @apply me-2 align-middle accent-primary;
+    }
+    & blockquote {
+      @apply border-s-2 ps-3 text-muted-foreground;
+    }
+    & code {
+      @apply rounded-sm bg-muted px-1 py-0.5 font-mono text-xs;
+    }
+    & pre {
+      @apply overflow-x-auto rounded-md bg-muted p-3;
+    }
+    & pre code {
+      @apply bg-transparent p-0;
+    }
+    & hr {
+      @apply border-border;
+    }
+    & table {
+      @apply block overflow-x-auto border-collapse text-sm;
+    }
+    & :is(th, td) {
+      @apply border px-2 py-1 text-left align-top;
+    }
+    & th {
+      @apply bg-muted font-medium;
+    }
+    & img {
+      @apply max-w-full rounded-md;
+    }
+    & details > summary {
+      @apply cursor-pointer font-medium;
+    }
+  }
 }

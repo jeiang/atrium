@@ -22,7 +22,8 @@ backup set, except `cache/`.
 `KEY=VALUE` blob read as an `EnvironmentFile` by every atrium unit:
 `ICLOUD_MAIL_USERNAME` (the IMAP short name, not the Apple ID),
 `ICLOUD_APP_PASSWORD`, `TYPESAFE_API_KEY`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`
-(whitespace in the Gmail app password is stripped). A change reaches the units through
+(whitespace in the Gmail app password is stripped), `NOTION_TOKEN` (the internal
+integration token). `atrium.searxng` holds `SEARXNG_SECRET` for SearXNG. A change reaches the units through
 `restartUnits` on deploy.
 
 ## Checking the mail triage
@@ -74,16 +75,34 @@ ssh artemis.jeiang.vpn doas systemctl start atrium-sync.service
 
 ### Web UI
 
-`atrium-web` serves search, ask, message view, triage, rules and contacts.
+`atrium-web` serves search (mail or Notion), ask, message view, Notion pages,
+web answers (`/web`, through the local SearXNG), proposals, triage, rules and contacts.
 It has no login and no firewall opening: only the trusted NetBird
 interface reaches it, so use `http://artemis.jeiang.vpn:8480/` from a mesh
-peer. It reads no IMAP credentials and never writes to a mailbox. Correct
-only records a correction in `atrium.db`; rule edits change `atrium.db`.
+peer. It reads the IMAP and Notion credentials, because approving a proposal
+moves, relabels or deletes mail and edits Notion immediately, even in shadow
+mode; every such write is gated to an approved proposal and can be undone from
+`/proposals`. Correct only records a correction in `atrium.db`; rule edits
+change `atrium.db`.
 Assets (`app.css`, htmx, Basecoat) are built into `packages.atrium-static`;
 nothing loads from a CDN.
 
 ```fish
 ssh artemis.jeiang.vpn journalctl -u atrium-web.service -e
+```
+
+### Notion, scans and web search
+
+`atrium-notion-sync.timer` mirrors Notion every 15 minutes
+(`atrium notion sync`). `atrium-scan.timer` runs
+`atrium proposals scan-all` monthly with `Persistent=true`. Rebalance
+proposals only appear after two scans at least 14 days apart see the same
+candidate, so the first scan after deploy creates none of those:
+
+```fish
+ssh artemis.jeiang.vpn doas systemctl start atrium-notion-sync.service
+ssh artemis.jeiang.vpn doas systemctl start atrium-scan.service
+ssh artemis.jeiang.vpn doas atrium-run web "a question"
 ```
 
 ### Running the CLI

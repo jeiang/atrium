@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "atrium"
 version = "0.1.0"
 requires-python = ">=3.14"
-dependencies = ["fastapi", "jinja2", "python-multipart", "sqlite-vec", "uvicorn"]
+dependencies = ["fastapi", "jinja2", "markdown-it-py", "nh3", "python-multipart", "sqlite-vec", "trafilatura", "uvicorn"]
 
 [project.scripts]
 atrium = "atrium.cli:main"

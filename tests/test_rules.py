@@ -145,3 +145,19 @@ def test_learned_excludes_inbox_gone_and_unfiled():
         add_message(conn, i, from_addr="s@s.test", from_domain="s.test", folder="X", gone_at=1.0)
     q = inbox(conn, 50, "s@s.test", "s.test")
     assert rules.learned_match(conn, conn.execute("SELECT * FROM messages WHERE id = ?", (q,)).fetchone()) is None
+
+
+def test_age_days_condition():
+    import time
+
+    old = {"date_ts": time.time() - 10 * 86400}
+    new = {"date_ts": time.time()}
+    unknown = {"date_ts": 0}
+    cond = {"field": "age_days", "op": "gte", "value": 7}
+    assert rules.condition_matches(old, cond)
+    assert not rules.condition_matches(new, cond) and not rules.condition_matches(unknown, cond)
+    assert rules.validate_condition(cond) == cond
+    for bad in ({"field": "age_days", "op": "eq", "value": 7}, {"field": "age_days", "op": "gte", "value": 0},
+                {"field": "age_days", "op": "gte", "value": "7"}):
+        with pytest.raises(rules.RuleError):
+            rules.validate_condition(bad)

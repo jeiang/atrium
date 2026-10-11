@@ -169,6 +169,13 @@ def refresh_views(conn):
         raise
 
 
+def init_extra_schemas(conn):
+    from . import notion_sync, scans
+
+    scans.init_schemas(conn)
+    notion_sync.init_schema(conn)
+
+
 def connect(path):
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=30, isolation_level=None)
@@ -180,6 +187,7 @@ def connect(path):
     sqlite_vec.load(conn)
     conn.enable_load_extension(False)
     conn.executescript(SCHEMA)
+    init_extra_schemas(conn)
     refresh_views(conn)
     return conn
 
@@ -200,6 +208,7 @@ def connect_memory():
     sqlite_vec.load(conn)
     conn.enable_load_extension(False)
     conn.executescript(SCHEMA)
+    init_extra_schemas(conn)
     refresh_views(conn)
     return conn
 

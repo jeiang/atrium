@@ -1,7 +1,7 @@
 {% from "basecoat/sidebar.html.jinja" import sidebar %}
 {% from "basecoat/toast.html.jinja" import toaster %}
 {% from "_icons.html" import icon %}
-{% from "_macros.html" import mode_badge, mode_note %}
+{% from "_macros.html" import mode_badge, mode_note, pending_badge %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -26,6 +26,7 @@
       const params = new URLSearchParams(window.location.search);
       document.querySelectorAll("form:is([hx-push-url], [hx-replace-url]) [name]").forEach((field) => {
         if (field.type === "checkbox") field.checked = params.has(field.name);
+        else if (field.type === "radio") field.checked = field.value === (params.get(field.name) ?? "");
         else if (field.type !== "hidden") field.value = params.get(field.name) ?? "";
       });
       window.basecoat.initAll({ force: true });
@@ -85,17 +86,20 @@
     <p class="text-pretty text-muted-foreground">{{ mode_note(mode) }}</p>
   </div>
   {% endset %}
+  {% set proposals_label %}<span class="flex items-center gap-2">Proposals{{ pending_badge(pending_count) }}</span>{% endset %}
   {{ sidebar(
     id="sidebar",
     label="Primary",
     header=brand,
     footer=footer,
     menu=[
-      {"type": "group", "label": "Mail", "items": [
+      {"type": "group", "label": "Find", "items": [
         {"label": "Search", "url": "/", "icon": icon("search"), "current": page == "search"},
+        {"label": "Web", "url": "/web", "icon": icon("globe"), "current": page == "web"},
         {"label": "Contacts", "url": "/contacts", "icon": icon("book-user"), "current": page == "contacts"},
       ]},
-      {"type": "group", "label": "Routing", "items": [
+      {"type": "group", "label": "Organise", "items": [
+        {"label": proposals_label, "url": "/proposals", "icon": icon("list-checks"), "current": page == "proposals", "attrs": {"class": "[&>span:last-child]:flex-1"}},
         {"label": "Triage", "url": "/triage", "icon": icon("route"), "current": page == "triage"},
         {"label": "Rules", "url": "/rules", "icon": icon("scroll-text"), "current": page == "rules"},
       ]},

@@ -65,7 +65,7 @@
 {% if mode == "live" -%}
 Live mode: atrium moves, labels and deletes mail.
 {%- else -%}
-Shadow mode: atrium records what it would do and never touches a mailbox.
+Shadow mode: routing only records what it would do. Proposals you approve still run.
 {%- endif %}
 {%- endmacro %}
 
@@ -162,4 +162,71 @@ href="/messages/{{ message_id }}" hx-get="/messages/{{ message_id }}" hx-target=
 
 {% macro spinner(id, label="Loading") -%}
 <span id="{{ id }}" class="htmx-indicator inline-flex text-muted-foreground" role="status" aria-label="{{ label }}">{{ icon("loader-circle", "size-4 animate-spin") }}</span>
+{%- endmacro %}
+
+{% set KIND_LABELS = {
+  "rebalance_split": "Split folder",
+  "rebalance_merge": "Merge folders",
+  "deletion_rule": "Deletion rule",
+  "gmail_label_merge": "Merge labels",
+  "notion_link": "Notion link",
+  "notion_edit": "Notion edit",
+} %}
+{% set KIND_ICONS = {
+  "rebalance_split": "split",
+  "rebalance_merge": "merge",
+  "deletion_rule": "trash-2",
+  "gmail_label_merge": "tag",
+  "notion_link": "link",
+  "notion_edit": "pencil",
+} %}
+{% set STATUS_LABELS = {
+  "pending": "Pending",
+  "approved": "Applying",
+  "applied": "Applied",
+  "failed": "Failed",
+  "dismissed": "Dismissed",
+  "suppressed": "Dismissed forever",
+} %}
+
+{% macro status_badge(status) -%}
+{% if status == "applied" -%}
+<span class="badge border-success/30 bg-success/10 text-success">{{ icon("check") }}{{ STATUS_LABELS[status] }}</span>
+{%- elif status == "failed" -%}
+<span class="badge" data-variant="destructive">{{ icon("circle-alert") }}{{ STATUS_LABELS[status] }}</span>
+{%- elif status == "approved" -%}
+<span class="badge" data-variant="outline">{{ icon("loader-circle", "animate-spin") }}{{ STATUS_LABELS[status] }}</span>
+{%- elif status == "pending" -%}
+<span class="badge" data-variant="outline">{{ STATUS_LABELS[status] }}</span>
+{%- else -%}
+<span class="badge" data-variant="secondary">{{ STATUS_LABELS.get(status, status) }}</span>
+{%- endif %}
+{%- endmacro %}
+
+{% macro pending_badge(count, oob=False) -%}
+<span id="pending-count" class="badge ms-auto empty:hidden" data-variant="secondary"{% if oob %} hx-swap-oob="true"{% endif %}>{% if count %}{{ count }}<span class="sr-only"> pending</span>{% endif %}</span>
+{%- endmacro %}
+
+{% macro snippet(parts) -%}
+<p class="line-clamp-2 text-sm text-muted-foreground">
+  {%- for text, matched in parts -%}
+  {%- if matched -%}<mark class="rounded-sm bg-warning/20 px-0.5 text-foreground">{{ text }}</mark>{%- else -%}{{ text }}{%- endif -%}
+  {%- endfor -%}
+</p>
+{%- endmacro %}
+
+{% macro external(url) -%}
+href="{{ url }}" target="_blank" rel="noopener noreferrer"
+{%- endmacro %}
+
+{% macro page_path(path) -%}
+{%- for crumb in path -%}{{ crumb.title }}{{ " / " if not loop.last }}{%- endfor -%}
+{%- endmacro %}
+
+{% macro page_link(ref, class="") -%}
+<a class="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring {{ class }}" href="/notion/{{ ref.id | urlencode }}">{{ ref.title or "Untitled" }}</a>
+{%- endmacro %}
+
+{% macro cite_chip(n, attrs, label="") -%}
+<a class="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-sm bg-secondary px-1 align-baseline font-mono text-xs font-medium text-secondary-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {{ attrs }} aria-label="Source {{ n }}{{ ': ' ~ label if label }}"{% if label %} title="{{ label }}"{% endif %}>{{ n }}</a>
 {%- endmacro %}

@@ -1,0 +1,14 @@
+{% from "_macros.html" import KIND_LABELS, STATUS_LABELS, empty_state %}
+{% if partial is defined and partial %}<title>Proposals · atrium</title>{% endif %}
+<p class="text-xs text-muted-foreground tabular-nums" role="status">
+  {{- proposals | length }} {{ (STATUS_LABELS.get(status, "") | lower ~ " ") if status != "all" }}{{ "proposal" if proposals | length == 1 else "proposals" }}{{ " · " ~ KIND_LABELS.get(kind, kind) if kind -}}
+</p>
+{% if proposals %}
+<ul class="flex flex-col gap-3" role="list">
+  {% for proposal in proposals %}{% include "_proposal.html" %}{% endfor %}
+</ul>
+{% elif status == "pending" %}
+{% call empty_state("list-checks", "Nothing to review") %}Folder rebalancing is proposed monthly. Notion links and edits appear here when you propose them from a Notion page.{% endcall %}
+{% else %}
+{% call empty_state("list-checks", "No proposals match") %}Choose another status or kind.{% endcall %}
+{% endif %}
