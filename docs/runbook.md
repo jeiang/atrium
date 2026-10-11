@@ -13,7 +13,6 @@ backup set, except `cache/`.
 | `cache/models` | GGUF weights, fetched by `atrium-models-fetch`; not backed up |
 | `cache/messages` | raw message store of the mail core; not backed up |
 | `pause` | exists while automatic mailbox writes are paused |
-| `jev-mail.db` | retired mail triage history; nothing reads it |
 | `vdirsyncer/{calendars,contacts,status}` | iCloud CalDAV/CardDAV mirror |
 
 ## Secrets
