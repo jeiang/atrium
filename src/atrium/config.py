@@ -28,6 +28,10 @@ BACKOFF_MAX = 300
 GMAIL_CATEGORIES = ("social", "promotions", "updates", "forums")
 GMAIL_ALL_MAIL = "[Gmail]/All Mail"
 INBOX = "INBOX"
+PAUSE_FILE = "pause"
+WRITE_CAP = 100
+WRITE_ATTEMPTS = 3
+DELETION_INTERVAL_SECONDS = 86400
 
 
 @dataclass(frozen=True)
@@ -53,10 +57,13 @@ class Config:
     chat_url: str
     embed_url: str
     contacts_dir: Path | None
-    jev_db: Path | None
     static_dir: Path | None = None
     searx_url: str = ""
     credentials: dict = field(default_factory=dict, repr=False)
+
+    @property
+    def pause_path(self):
+        return self.db_path.with_name(PAUSE_FILE)
 
     def credential(self, account):
         spec = ACCOUNTS[account]
@@ -88,7 +95,6 @@ def load(environ=None):
         chat_url=env.get("ATRIUM_CHAT_URL", "").rstrip("/"),
         embed_url=env.get("ATRIUM_EMBED_URL", "").rstrip("/"),
         contacts_dir=_path(env.get("ATRIUM_CONTACTS_DIR")),
-        jev_db=_path(env.get("ATRIUM_JEV_DB")),
         static_dir=_path(env.get("ATRIUM_STATIC_DIR")),
         searx_url=env.get("ATRIUM_SEARX_URL", "").rstrip("/"),
         credentials={k: env[k] for k in wanted if k in env},

@@ -7,12 +7,15 @@ import sys
 import uvicorn
 
 from . import (
+    applier,
+    backlog,
     config,
     db,
     deletions,
     embed,
     gmail_labels,
     handlers,
+    live,
     notion_api,
     notion_search,
     notion_sync,
@@ -53,6 +56,15 @@ def parser():
     dl.add_subparsers(dest="deletions_command", required=True).add_parser("scan")
     gl = sub.add_parser("gmail-labels")
     gl.add_subparsers(dest="gmail_labels_command", required=True).add_parser("scan")
+    lv = sub.add_parser("live")
+    lsub = lv.add_subparsers(dest="live_command", required=True)
+    for name in ("backlog", "rebaseline", "pause", "resume", "status", "deletions"):
+        lsub.add_parser(name)
+    la = lsub.add_parser("actions")
+    la.add_argument("--limit", type=int, default=20)
+    la.add_argument("--kind", choices=live.KINDS)
+    lu = lsub.add_parser("undo")
+    lu.add_argument("id", type=int)
     pr = sub.add_parser("proposals")
     psub = pr.add_subparsers(dest="proposals_command", required=True)
     psub.add_parser("scan-all")
@@ -111,6 +123,47 @@ def proposals_command(cfg, args):
     return 0
 
 
+def live_command(cfg, args):
+    conn = db.connect(cfg.db_path)
+    handlers.register()
+    if args.live_command == "backlog":
+        try:
+            out = backlog.backlog(conn, cfg)
+        except backlog.BacklogError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+    elif args.live_command == "rebaseline":
+        with db.exclusive(cfg.db_path):
+            run.sync_all(conn, cfg, run.open_client)
+            baseline = live.rebaseline(conn)
+            out = {"baseline": baseline, **backlog.refresh(conn, cfg)}
+    elif args.live_command == "actions":
+        out = [
+            {k: a[k] for k in ("id", "ts", "account", "kind", "status", "src", "dest", "subject", "error", "undoable")}
+            for a in live.list_actions(conn, kind=args.kind, limit=args.limit)
+        ]
+    elif args.live_command in ("pause", "resume"):
+        live.set_paused(cfg, args.live_command == "pause")
+        out = {"paused": live.paused(cfg)}
+    elif args.live_command == "status":
+        out = live.status(conn, cfg)
+    elif args.live_command == "deletions":
+        out = {}
+        with db.exclusive(cfg.db_path):
+            for account in run.select_accounts(cfg):
+                done = applier.deletion_pass(conn, cfg, account, run.open_client, force=True)
+                out[account] = {"ran": done.ran, "trashed": done.by_kind.get(live.TRASH, 0), "skipped": done.skipped, "failed": done.failed}
+    else:
+        try:
+            out = live.undo(conn, cfg, args.id)
+        except live.UndoError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+    json.dump(out, sys.stdout, indent=2, default=str)
+    sys.stdout.write("\n")
+    return 0
+
+
 def notion_command(cfg, args):
     conn = db.connect(cfg.db_path)
     if args.notion_command == "sync":
@@ -151,11 +204,13 @@ def main(argv=None):
             json.dump(rules.export_rules(conn), sys.stdout, indent=2)
             sys.stdout.write("\n")
     elif args.command == "shadow-report":
-        sys.stdout.write(report.build(db.connect(cfg.db_path), cfg, args.since))
+        sys.stdout.write(report.build(db.connect(cfg.db_path), args.since))
     elif args.command == "reindex":
         print(f"embedded {embed.reindex(db.connect(cfg.db_path), cfg.embed_url)} messages")
     elif args.command in ("rebalance", "deletions", "gmail-labels", "proposals"):
         return proposals_command(cfg, args)
+    elif args.command == "live":
+        return live_command(cfg, args)
     elif args.command == "notion":
         notion_command(cfg, args)
     elif args.command == "web":

@@ -39,6 +39,8 @@ def test_client_mutation_allowed_inside_approved_scope(monkeypatch):
     calls = []
 
     class Conn:
+        untagged_responses = {}
+
         def uid(self, *args):
             calls.append(args)
             return "OK", [b""]

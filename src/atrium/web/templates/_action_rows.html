@@ -1,0 +1,15 @@
+{% for a in actions %}
+{% include "_action_row.html" %}
+{% else %}
+{% if not offset %}
+<li class="px-4 py-10 text-center text-sm text-muted-foreground">Nothing has been applied automatically yet.</li>
+{% endif %}
+{% endfor %}
+{% if next_offset %}
+<li id="load-more" class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+  <span class="text-xs text-muted-foreground tabular-nums">Showing {{ next_offset }} of {{ total }}</span>
+  <button type="button" class="btn" data-size="sm" data-variant="outline"
+          hx-get="/actions?{{ {'account': account, 'kind': kind, 'offset': next_offset} | urlencode }}"
+          hx-target="closest li" hx-swap="outerHTML" hx-push-url="false">Show older actions</button>
+</li>
+{% endif %}

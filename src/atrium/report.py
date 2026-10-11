@@ -1,9 +1,8 @@
 import re
-import sqlite3
 import time
 from collections import Counter
 
-from .config import ACCOUNTS, ICLOUD, INBOX
+from .config import ACCOUNTS, INBOX
 from .router import STAGES
 
 SINCE = re.compile(r"^(\d+)([hd])$")
@@ -35,16 +34,6 @@ def parse_since(value, at=None):
     return time.mktime(time.strptime(value, "%Y-%m-%d"))
 
 
-def jev_decisions(path):
-    if path is None or not path.exists():
-        return None
-    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    try:
-        return {str(mid).strip("<>"): folder for mid, folder in conn.execute("SELECT message_id, folder FROM decisions")}
-    finally:
-        conn.close()
-
-
 def outcome(row):
     if row["actual"] is None:
         return "(gone)"
@@ -57,7 +46,7 @@ def matches(dest, actual):
     return dest is not None and dest in actual.split("|")
 
 
-def account_section(conn, cfg, account, since, jev):
+def account_section(conn, account, since):
     rows = conn.execute(OUTCOME_SQL, (account, since)).fetchall()
     out = [f"== {account} ==", f"decisions: {len(rows)}"]
     stages = Counter(r["stage"] for r in rows)
@@ -76,31 +65,13 @@ def account_section(conn, cfg, account, since, jev):
         f"proposal equals actual={len(agree)}"
         + (f" ({100 * len(agree) / len(moved):.1f}%)" if moved else "")
     )
-    if jev is not None and account == ICLOUD:
-        out.extend(jev_section(rows, moved, jev))
-    else:
-        out.extend(disagreement_lines("disagreements (proposed -> actual)", [(r, r["actual"]) for r in moved if not matches(r["dest"], r["actual"])]))
+    out.extend(
+        disagreement_lines(
+            "disagreements (proposed -> actual)",
+            [(r, r["actual"]) for r in moved if not matches(r["dest"], r["actual"])],
+        )
+    )
     out.extend(flag_section(conn, account, since))
-    return out
-
-
-def jev_section(rows, moved, jev):
-    both = [r for r in rows if r["msgid"] in jev]
-    out = [f"jev comparison: decided by both={len(both)}"]
-    if both:
-        same = sum(1 for r in both if jev[r["msgid"]] == r["dest"])
-        out.append(f"  atrium == jev: {same} ({100 * same / len(both):.1f}%)")
-        settled = [r for r in both if outcome(r) not in (INBOX, "(gone)")]
-        if settled:
-            a = sum(1 for r in settled if matches(r["dest"], r["actual"]))
-            j = sum(1 for r in settled if jev[r["msgid"]] == r["actual"])
-            out.append(f"  of {len(settled)} settled: atrium == actual {a}, jev == actual {j}")
-    disagreeing = [
-        (r, f"{r['actual']} (jev: {jev.get(r['msgid'], '-')})")
-        for r in moved
-        if not matches(r["dest"], r["actual"])
-    ]
-    out.extend(disagreement_lines("disagreements (proposed -> actual)", disagreeing))
     return out
 
 
@@ -139,13 +110,12 @@ def flag_section(conn, account, since):
     ]
 
 
-def build(conn, cfg, since=None):
+def build(conn, since=None):
     start = parse_since(since)
-    jev = jev_decisions(cfg.jev_db)
     lines = []
     for account in ACCOUNTS:
         if conn.execute("SELECT 1 FROM accounts WHERE name = ?", (account,)).fetchone() is None:
             continue
-        lines.extend(account_section(conn, cfg, account, start, jev))
+        lines.extend(account_section(conn, account, start))
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"

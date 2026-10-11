@@ -1,6 +1,6 @@
 from collections import Counter
 
-from . import report
+from . import live, report
 from .config import ACCOUNTS
 from .router import STAGES
 
@@ -17,9 +17,14 @@ LATEST_SQL = f"""
 SELECT d.id AS decision_id, d.ts, d.stage, d.key, d.action, d.dest, d.confidence, d.detail,
   m.id AS message_id, m.account, m.subject, m.from_addr, m.from_name, m.date_ts, m.seen, m.flagged,
   {report.ACTUAL_SQL},
-  c.folder AS corrected_to
+  c.folder AS corrected_to,
+  aa.id AS action_id, aa.kind AS action_kind, aa.ok AS action_ok, aa.error AS action_error,
+  aa.undone_ts AS action_undone_ts, aa.undo IS NOT NULL AS action_has_undo
 FROM decisions d JOIN messages m ON m.id = d.message_id
 LEFT JOIN corrections c ON c.message_id = m.id
+LEFT JOIN auto_actions aa ON aa.id = (
+  SELECT MAX(y.id) FROM auto_actions y WHERE y.message_id = m.id AND y.kind IN ('file', 'trash', 'correct')
+)
 WHERE d.id = (SELECT MAX(x.id) FROM decisions x WHERE x.message_id = d.message_id)
 """
 
@@ -57,8 +62,26 @@ def row(conn, message_id):
     return _shape(found) if found else None
 
 
+def _action(r):
+    if r["action_id"] is None:
+        return None
+    return {
+        "id": r["action_id"],
+        "kind": r["action_kind"],
+        "status": live.state_of(r["action_ok"], r["action_undone_ts"]),
+        "error": r["action_error"],
+        "undoable": r["action_ok"] in (0, 1) and r["action_undone_ts"] is None and bool(r["action_has_undo"]),
+    }
+
+
 def _shape(r):
-    return {**dict(r), "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "current": _current(r)}
+    return {
+        **dict(r),
+        "seen": bool(r["seen"]),
+        "flagged": bool(r["flagged"]),
+        "current": _current(r),
+        "action": _action(r),
+    }
 
 
 def _current(row):

@@ -43,8 +43,12 @@ def record_correction(conn, message_id, folder, source=SOURCE):
     return {"message_id": message_id, "account": row["account"], "folder": folder, "ts": ts, "source": source}
 
 
-def clear_correction(conn, message_id):
-    cur = conn.execute("DELETE FROM corrections WHERE message_id = ?", (message_id,))
+def clear_correction(conn, message_id, folder=None):
+    sql, params = "DELETE FROM corrections WHERE message_id = ?", [message_id]
+    if folder is not None:
+        sql += " AND folder = ?"
+        params.append(folder)
+    cur = conn.execute(sql, params)
     return cur.rowcount > 0
 
 
