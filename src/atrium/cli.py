@@ -24,6 +24,7 @@ from . import (
     run,
     scans,
     watch,
+    websearch,
 )
 from .config import ACCOUNTS
 from .web.app import create_app
@@ -73,6 +74,9 @@ def parser():
     ns.add_argument("query")
     ns.add_argument("--private", action="store_true")
     ns.add_argument("--limit", type=int, default=10)
+    wb = sub.add_parser("web")
+    wb.add_argument("query")
+    wb.add_argument("--json", action="store_true")
     sv = sub.add_parser("serve")
     sv.add_argument("--host", default=DEFAULT_HOST)
     sv.add_argument("--port", type=int, required=True)
@@ -157,6 +161,14 @@ def main(argv=None):
         return proposals_command(cfg, args)
     elif args.command == "notion":
         notion_command(cfg, args)
+    elif args.command == "web":
+        result = websearch.answer(cfg, args.query)
+        if args.json:
+            json.dump(result, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            sys.stdout.write(websearch.render(result))
+        return 1 if result["error"] else 0
     elif args.command == "serve":
         uvicorn.run(create_app(cfg), host=args.host, port=args.port, log_level="info")
     return 0
