@@ -65,7 +65,7 @@
     <ol id="conditions" class="flex flex-col gap-2" role="list" aria-label="Conditions" hx-on::after-swap="htmx.trigger('#rule-form', 'change')">
       {% for cond in rule.when %}
       {% set raw = cond.get("value") %}
-      {% set c = {"field": cond.field, "op": cond.op, "value": (raw | join(", ")) if raw is not none and raw is not string else raw} %}
+      {% set c = {"field": cond.field, "op": cond.op, "value": (raw | join(", ")) if raw is iterable and raw is not string else raw} %}
       {% include "_condition_row.html" %}
       {% endfor %}
     </ol>
@@ -77,7 +77,7 @@
       <p class="text-xs font-medium text-muted-foreground">From the message: add a condition</p>
       <ul class="flex flex-wrap gap-2" role="list">
         {% for s in suggestions %}
-        {% set value = (s.value | join(", ")) if s.value is not string else s.value %}
+        {% set value = (s.value | join(", ")) if s.value is iterable and s.value is not string else s.value %}
         <li class="max-w-full min-w-0">
           <button type="button" class="btn h-auto max-w-full flex-wrap justify-start gap-x-1.5 py-1 text-left font-normal whitespace-normal" data-size="sm" data-variant="outline"
                   hx-get="/rules/condition?{{ {'field': s.field, 'op': s.op, 'value': value} | urlencode }}" hx-target="#conditions" hx-swap="beforeend"

@@ -105,8 +105,8 @@ def build_env(cfg):
         mode=cfg.mode,
         accounts=list(ACCOUNTS),
         stages=router.STAGES,
-        rule_fields=list(rules.FIELDS),
-        rule_ops=rules.OPS,
+        rule_fields=[*rules.FIELDS, rules.AGE_FIELD],
+        rule_ops=(*rules.OPS, rules.AGE_OP),
         valueless_ops=rules.VALUELESS_OPS,
     )
     return env
@@ -399,6 +399,8 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
                 conditions.append({"field": field, "op": op})
             elif op in LIST_OPS:
                 conditions.append({"field": field, "op": op, "value": [v.strip() for v in value.split(",") if v.strip()]})
+            elif field == rules.AGE_FIELD and value.strip().isdigit():
+                conditions.append({"field": field, "op": op, "value": int(value)})
             else:
                 conditions.append({"field": field, "op": op, "value": value})
         return conditions

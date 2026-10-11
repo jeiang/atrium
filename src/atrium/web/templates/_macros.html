@@ -37,6 +37,7 @@
   "esp": "Sending service",
   "att_type": "Attachment type",
   "att_name": "Attachment name",
+  "age_days": "Age in days",
 } %}
 {% set OP_LABELS = {
   "eq": "is",
@@ -45,12 +46,14 @@
   "re": "matches regex",
   "present": "is present",
   "absent": "is absent",
+  "gte": "is at least",
 } %}
 {% set OP_HINTS = {
   "eq": "Exact value, case-insensitive",
   "in": "Values separated by commas",
   "suffix": "Domains separated by commas",
   "re": "Python regular expression, case-insensitive",
+  "gte": "Whole number of days",
 } %}
 
 {% macro mode_badge(mode) -%}
@@ -156,7 +159,7 @@ href="/messages/{{ message_id }}" hx-get="/messages/{{ message_id }}" hx-target=
 <span class="font-medium">{{ FIELD_LABELS.get(c.field, c.field) }}</span>
 <span class="text-muted-foreground">{{ OP_LABELS.get(c.op, c.op) }}</span>
 {%- if value is not none and value != "" %}
-<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">{{ value | join(", ") if value is not string else value }}</code>
+<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">{{ value | join(", ") if value is iterable and value is not string else value }}</code>
 {%- endif %}
 {%- endmacro %}
 

@@ -226,3 +226,41 @@ def test_web_page_renders_shell_then_answer(cfg):
     failed = {**answer, "answer": "", "segments": [], "citations": [], "sources": [], "error": "down", "error_kind": "search"}
     client = make_client(cfg, web_answer=lambda *args, **kwargs: failed)
     assert "down" in client.get("/web?q=x", headers=HX).text
+
+
+def test_deletion_proposal_with_an_age_condition_renders(cfg, conn):
+    rule = {
+        "account": "icloud",
+        "when": [{"field": "subject", "op": "re", "value": "code"}, {"field": "age_days", "op": "gte", "value": 7}],
+    }
+    preview = {
+        "rule": rule,
+        "reason": "otp",
+        "older_than_days": 7,
+        "backlog": 1,
+        "senders": [],
+        "subjects": [],
+        "messages": [message(5)],
+    }
+    proposals.create(conn, "deletion_rule", "icloud", "Delete codes", {}, preview, "del-age")
+    page = make_client(cfg).get("/proposals")
+    assert page.status_code == 200
+    assert "Age in days" in page.text and "is at least" in page.text
+
+
+def test_rule_editor_saves_and_reopens_an_age_condition(cfg, conn):
+    client = make_client(cfg)
+    form = {
+        "id": "",
+        "account": "icloud",
+        "action": "delete",
+        "dest": "",
+        "field": ["subject", "age_days"],
+        "op": ["re", "gte"],
+        "value": ["code", "7"],
+    }
+    saved = client.post("/rules", data=form, follow_redirects=False)
+    assert saved.status_code == 303
+    (stored,) = [r for r in db.connect(cfg.db_path).execute("SELECT id, conditions FROM rules")]
+    assert '"value": 7' in stored["conditions"] or '"value":7' in stored["conditions"]
+    assert client.get(f"/rules/{stored['id']}/edit").status_code == 200
