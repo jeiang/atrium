@@ -189,3 +189,17 @@ def test_ask_handles_chat_down_and_no_sources(tmp_path):
     assert "chat down" in result["error"] and len(result["sources"]) == 1 and result["answer"] == ""
     empty = ask.ask(conn, cfg, "nothingmatches", chat=chat, embed_texts=down)
     assert empty["sources"] == [] and empty["error"] is None
+
+
+def test_ask_prompt_fits_the_chat_context_in_the_worst_case():
+    huge = "x" * 5000
+    sources = [
+        {"n": n, "subject": huge, "from_name": huge, "from_addr": huge, "date_ts": 1.0, "folder": huge, "body": huge}
+        for n in range(1, ask.TOP_SOURCES + 1)
+    ]
+    text = ask.prompt(huge, sources)
+    tokens = (len(ask.SYSTEM) + len(text)) / ask.CHARS_PER_TOKEN + ask.ANSWER_TOKENS
+    assert ask.TOKEN_BUDGET * 0.9 < tokens <= ask.TOKEN_BUDGET < 8192
+    assert all(f"[{n}] Subject:" in text for n in range(1, ask.TOP_SOURCES + 1))
+    short = [{**s, "subject": "s", "from_name": "n", "from_addr": "a", "folder": "f"} for s in sources]
+    assert "x" * 1000 in ask.prompt("q", short)
