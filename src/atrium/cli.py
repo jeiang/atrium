@@ -6,11 +6,12 @@ import sys
 
 import uvicorn
 
-from . import config, db, embed, report, rules, run, watch
+from . import config, db, embed, notion_api, notion_search, notion_sync, report, rules, run, watch
 from .config import ACCOUNTS
 from .web.app import create_app
 
 DEFAULT_HOST = "127.0.0.1"
+NOTION_LOCK = "notion"
 
 
 def parser():
@@ -28,10 +29,31 @@ def parser():
     sr = sub.add_parser("shadow-report")
     sr.add_argument("--since")
     sub.add_parser("reindex")
+    n = sub.add_parser("notion")
+    nsub = n.add_subparsers(dest="notion_command", required=True)
+    nsub.add_parser("sync")
+    ns = nsub.add_parser("search")
+    ns.add_argument("query")
+    ns.add_argument("--private", action="store_true")
+    ns.add_argument("--limit", type=int, default=10)
     sv = sub.add_parser("serve")
     sv.add_argument("--host", default=DEFAULT_HOST)
     sv.add_argument("--port", type=int, required=True)
     return p
+
+
+def notion_command(cfg, args):
+    conn = db.connect(cfg.db_path)
+    notion_sync.init_schema(conn)
+    if args.notion_command == "sync":
+        client = notion_api.NotionClient(notion_api.token_from_env())
+        with db.exclusive(cfg.db_path.with_name(NOTION_LOCK)):
+            stats = notion_sync.sync(conn, cfg, client)
+        print(json.dumps({**vars(stats), **notion_sync.counts(conn)}))
+    else:
+        result = notion_search.search(conn, cfg, args.query, include_private=args.private, limit=args.limit)
+        for h in result["hits"]:
+            print(f"{h['title']}\t{h['url']}")
 
 
 def main(argv=None):
@@ -64,6 +86,8 @@ def main(argv=None):
         sys.stdout.write(report.build(db.connect(cfg.db_path), cfg, args.since))
     elif args.command == "reindex":
         print(f"embedded {embed.reindex(db.connect(cfg.db_path), cfg.embed_url)} messages")
+    elif args.command == "notion":
+        notion_command(cfg, args)
     elif args.command == "serve":
         uvicorn.run(create_app(cfg), host=args.host, port=args.port, log_level="info")
     return 0
