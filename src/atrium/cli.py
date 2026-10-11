@@ -6,7 +6,7 @@ import sys
 
 import uvicorn
 
-from . import config, db, embed, report, rules, run, watch
+from . import config, db, embed, report, rules, run, watch, websearch
 from .config import ACCOUNTS
 from .web.app import create_app
 
@@ -28,6 +28,9 @@ def parser():
     sr = sub.add_parser("shadow-report")
     sr.add_argument("--since")
     sub.add_parser("reindex")
+    wb = sub.add_parser("web")
+    wb.add_argument("query")
+    wb.add_argument("--json", action="store_true")
     sv = sub.add_parser("serve")
     sv.add_argument("--host", default=DEFAULT_HOST)
     sv.add_argument("--port", type=int, required=True)
@@ -64,6 +67,14 @@ def main(argv=None):
         sys.stdout.write(report.build(db.connect(cfg.db_path), cfg, args.since))
     elif args.command == "reindex":
         print(f"embedded {embed.reindex(db.connect(cfg.db_path), cfg.embed_url)} messages")
+    elif args.command == "web":
+        result = websearch.answer(cfg, args.query)
+        if args.json:
+            json.dump(result, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            sys.stdout.write(websearch.render(result))
+        return 1 if result["error"] else 0
     elif args.command == "serve":
         uvicorn.run(create_app(cfg), host=args.host, port=args.port, log_level="info")
     return 0
