@@ -70,7 +70,7 @@ def _action(r):
         "kind": r["action_kind"],
         "status": live.state_of(r["action_ok"], r["action_undone_ts"]),
         "error": r["action_error"],
-        "undoable": r["action_ok"] == 1 and r["action_undone_ts"] is None and bool(r["action_has_undo"]),
+        "undoable": r["action_ok"] in (0, 1) and r["action_undone_ts"] is None and bool(r["action_has_undo"]),
     }
 
 

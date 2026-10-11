@@ -127,6 +127,32 @@ def fail(conn, action_id, error):
     conn.execute("UPDATE auto_actions SET ok = 0, error = ? WHERE id = ?", (error, action_id))
 
 
+def partial(conn, action_id, error, after, undo):
+    conn.execute(
+        "UPDATE auto_actions SET ok = 0, error = ?, after = ?, undo = ? WHERE id = ?",
+        (error, json.dumps(after), json.dumps(undo), action_id),
+    )
+
+
+def absorb_label_undo(conn, message_id, kind):
+    merged = {"add": [], "remove": []}
+    rows = conn.execute(
+        "SELECT undo FROM auto_actions WHERE message_id = ? AND kind = ? AND ok = 0 AND undo IS NOT NULL "
+        "AND undone_ts IS NULL ORDER BY id",
+        (message_id, kind),
+    ).fetchall()
+    for r in rows:
+        plan = json.loads(r["undo"])
+        for key in merged:
+            merged[key].extend(l for l in plan.get(key, []) if l not in merged[key])
+    conn.execute(
+        "UPDATE auto_actions SET undo = NULL WHERE message_id = ? AND kind = ? AND ok = 0 AND undo IS NOT NULL "
+        "AND undone_ts IS NULL",
+        (message_id, kind),
+    )
+    return merged
+
+
 def hold(conn, action_id, error, after=None):
     conn.execute(
         "UPDATE auto_actions SET error = ?, after = ? WHERE id = ? AND ok IS NULL",
@@ -166,7 +192,7 @@ def state_of(ok, undone_ts):
 def shape(row):
     out = dict(row)
     out["status"] = state_of(row["ok"], row["undone_ts"])
-    out["undoable"] = row["ok"] == 1 and row["undone_ts"] is None and row["undo"] is not None
+    out["undoable"] = row["ok"] in (0, 1) and row["undone_ts"] is None and row["undo"] is not None
     return out
 
 
@@ -212,7 +238,7 @@ def undo(conn, cfg, action_id):
     row = conn.execute("SELECT * FROM auto_actions WHERE id = ?", (action_id,)).fetchone()
     if row is None:
         raise UndoError(f"unknown action {action_id}")
-    if row["ok"] != 1 or row["undone_ts"] is not None or row["undo"] is None:
+    if row["ok"] not in (0, 1) or row["undone_ts"] is not None or row["undo"] is None:
         raise UndoError(f"action {action_id} cannot be undone")
     plan = json.loads(row["undo"])
     undoer = proposals.UNDOERS.get(plan["op"])

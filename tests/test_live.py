@@ -709,9 +709,9 @@ def test_gmail_partial_label_store_records_what_the_server_has_and_undo_reverses
 
     monkeypatch.setattr(w.client, "mutate", after_add)
     out = w.apply()
-    assert out.written == 1 and out.failed == 0
+    assert out.written == 0 and out.failed == 1
     (row,) = w.actions()
-    assert row["ok"] == 1 and row["error"].startswith("partial:")
+    assert row["ok"] == 0 and row["error"].startswith("partial:")
     assert json.loads(row["undo"]) | {"uids": None} == {
         "op": "gmail_labels",
         "imap_name": ALL_MAIL,
@@ -828,3 +828,73 @@ def test_rebaseline_refreshes_baseline_and_backlog_proposal(tmp_path, monkeypatc
     names = [m["id"] for g in proposals.get(w.conn, second)["payload"]["groups"] for m in g["messages"]]
     assert sorted(names) == sorted([w.mid("old"), w.mid("again")])
     assert w.apply().written == 0
+
+
+def test_gmail_partial_relabel_is_retried_and_one_undo_reverses_both_attempts(tmp_path, monkeypatch):
+    w = gmail(tmp_path, monkeypatch)
+    w.arrive("stuck")
+    w.decide("stuck", dest="Receipts")
+    original = w.client.mutate
+
+    def remove_refused(verb, *args):
+        if verb == "STORE" and args[1] == "-X-GM-LABELS":
+            raise RuntimeError("NO try later")
+        return original(verb, *args)
+
+    monkeypatch.setattr(w.client, "mutate", remove_refused)
+    out = w.apply()
+    assert out.written == 0 and out.failed == 1
+    assert w.client.boxes[ALL_MAIL].messages[1]["labels"] == [INBOX_LABEL, "Receipts"]
+    w.sync()
+    monkeypatch.setattr(w.client, "mutate", original)
+    assert w.apply().written == 1
+    assert w.client.boxes[ALL_MAIL].messages[1]["labels"] == ["Receipts"]
+    rows = w.actions()
+    assert [r["ok"] for r in rows] == [0, 1] and rows[0]["undo"] is None
+    live.undo(w.conn, w.cfg, rows[1]["id"])
+    assert sorted(w.client.boxes[ALL_MAIL].messages[1]["labels"]) == [INBOX_LABEL]
+    w.sync()
+    assert w.apply().written == 0
+
+
+def test_partial_relabel_stops_after_the_attempt_limit_but_stays_undoable(tmp_path, monkeypatch):
+    w = gmail(tmp_path, monkeypatch)
+    w.arrive("stubborn")
+    w.decide("stubborn", dest="Receipts")
+    original = w.client.mutate
+
+    def remove_refused(verb, *args):
+        if verb == "STORE" and args[1] == "-X-GM-LABELS":
+            raise RuntimeError("NO")
+        return original(verb, *args)
+
+    monkeypatch.setattr(w.client, "mutate", remove_refused)
+    for _ in range(applier.WRITE_ATTEMPTS + 2):
+        w.sync()
+        w.apply()
+    rows = w.actions()
+    assert len(rows) == applier.WRITE_ATTEMPTS
+    holder = [r for r in rows if r["undo"] is not None]
+    assert len(holder) == 1 and live.get(w.conn, holder[0]["id"])["undoable"]
+    monkeypatch.setattr(w.client, "mutate", original)
+    live.undo(w.conn, w.cfg, holder[0]["id"])
+    assert sorted(w.client.boxes[ALL_MAIL].messages[1]["labels"]) == [INBOX_LABEL]
+
+
+def test_trash_lookup_ignores_a_different_message_with_the_same_message_id(tmp_path, monkeypatch):
+    w = gmail(tmp_path, monkeypatch)
+    w.arrive("dup", sender="x@spam.test")
+    w.decide("dup", action="delete", dest=None, stage="operator")
+    w.client.boxes["[Gmail]/Trash"].add(*raw("dup", sender="other@x.test", msgid="dup", body="different body"))
+    original = w.client.mutate
+
+    def copy_without_trace(verb, *args):
+        if verb == "COPY":
+            raise RuntimeError("NO nothing was copied")
+        return original(verb, *args)
+
+    monkeypatch.setattr(w.client, "mutate", copy_without_trace)
+    out = w.apply()
+    assert out.written == 0 and out.failed == 1
+    (row,) = w.actions()
+    assert row["ok"] == 0 and row["undo"] is None

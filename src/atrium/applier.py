@@ -3,7 +3,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 
-from . import executors, live, mailops, rules, safety
+from . import executors, features, live, mailops, rules, safety
 from .config import (
     DELETION_INTERVAL_SECONDS,
     GMAIL,
@@ -13,7 +13,7 @@ from .config import (
 )
 from .db import now
 from .executors import SelectionError
-from .imap import collapse_labels
+from .imap import collapse_labels, fetch_items
 from .sync import SYSTEM_FLAGS, SYSTEM_NAMES, SYSTEM_ROLES
 
 log = logging.getLogger("atrium.applier")
@@ -251,15 +251,20 @@ def observed_labels(client, imap_name, uids):
         return {}
 
 
-def locate_in_trash(client, trash, msgid):
+def locate_in_trash(client, trash, item):
     try:
         validity = client.status(trash)["uidvalidity"]
         client.select(trash)
-        found = client.uid_search("HEADER", "Message-ID", msgid) if msgid else []
+        found = client.uid_search("HEADER", "Message-ID", item["msgid"]) if item["msgid"] else []
+        same = [
+            f["uid"]
+            for f in (client.uid_fetch(found, fetch_items(True, True)) if found else [])
+            if features.content_digest(f["header"], f["text"]) == item["digest"]
+        ]
     except Exception:
         log.exception("could not look for the message in Trash after a failed copy")
         return None
-    return (validity, found[0]) if len(found) == 1 else None
+    return (validity, same[0]) if len(same) == 1 else None
 
 
 def label_group(conn, client, account, imap_name, validity, added, removed, entries, outcome):
@@ -281,16 +286,22 @@ def label_group(conn, client, account, imap_name, validity, added, removed, entr
                     live.fail(conn, aid, error)
                     outcome.failed += 1
                     continue
+                prior = live.absorb_label_undo(conn, item["id"], intent.kind)
                 undo = {
                     "op": "gmail_labels",
                     "imap_name": imap_name,
                     "uidvalidity": validity,
                     "uids": [uid],
-                    "add": did_remove,
-                    "remove": did_add,
+                    "add": [*dict.fromkeys([*did_remove, *prior["add"]])],
+                    "remove": [*dict.fromkeys([*did_add, *prior["remove"]])],
                 }
-                live.finish(conn, aid, after={"add": did_add, "remove": did_remove}, undo=undo, note=f"partial: {error}")
-                outcome.count(intent.kind, 1)
+                after = {"add": did_add, "remove": did_remove}
+                if did_add == [*added] and did_remove == [*removed]:
+                    live.finish(conn, aid, after=after, undo=undo, note=f"completed after: {error}")
+                    outcome.count(intent.kind, 1)
+                else:
+                    live.partial(conn, aid, f"partial: {error}", after, undo)
+                    outcome.failed += 1
             for uid in uids[uids.index(chunk[-1]) + 1 :]:
                 live.discard(conn, by_uid[uid][2])
             log.error("%s: relabel in %s failed: %s", account, imap_name, e)
@@ -298,13 +309,14 @@ def label_group(conn, client, account, imap_name, validity, added, removed, entr
         for uid in chunk:
             item, intent, aid = by_uid[uid]
             after = {"add": [*added], "remove": [*removed]}
+            prior = live.absorb_label_undo(conn, item["id"], intent.kind)
             undo = {
                 "op": "gmail_labels",
                 "imap_name": imap_name,
                 "uidvalidity": validity,
                 "uids": [uid],
-                "add": [*removed],
-                "remove": [*added],
+                "add": [*dict.fromkeys([*removed, *prior["add"]])],
+                "remove": [*dict.fromkeys([*added, *prior["remove"]])],
             }
             live.finish(conn, aid, after=after, undo=undo)
             outcome.count(intent.kind, 1)
@@ -321,7 +333,7 @@ def gmail_trash_group(conn, client, account, imap_name, validity, trash, entries
             error = f"{type(e).__name__}: {e}"
             for uid in chunk:
                 item, intent, aid = by_uid[uid]
-                found = None if isinstance(e, safety.WriteRefused) else locate_in_trash(client, trash, item["msgid"])
+                found = None if isinstance(e, safety.WriteRefused) else locate_in_trash(client, trash, item)
                 if found is None:
                     live.fail(conn, aid, error)
                     outcome.failed += 1
@@ -340,7 +352,7 @@ def gmail_trash_group(conn, client, account, imap_name, validity, trash, entries
             item, intent, aid = by_uid[uid]
             dest_uid = mapping.get(uid)
             if dest_uid is None:
-                found = locate_in_trash(client, trash, item["msgid"])
+                found = locate_in_trash(client, trash, item)
                 if found is not None:
                     dest_validity, dest_uid = found
             undo = None
