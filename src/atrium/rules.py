@@ -1,5 +1,6 @@
 import json
 import re
+import time
 from dataclasses import dataclass
 
 from .config import RULE_MIN_N, RULE_MIN_PURITY
@@ -25,6 +26,9 @@ SCALAR_FIELDS = {
     "category": "category",
 }
 FIELDS = {**SCALAR_FIELDS, **LIST_FIELDS}
+AGE_FIELD = "age_days"
+AGE_OP = "gte"
+SECONDS_PER_DAY = 86400
 OPS = ("eq", "in", "suffix", "re", "present", "absent")
 VALUELESS_OPS = ("present", "absent")
 ACTIONS = ("file", "delete")
@@ -63,8 +67,15 @@ def _members(value):
     return [value] if isinstance(value, str) else list(value)
 
 
+def age_matches(row, days):
+    ts = row["date_ts"]
+    return bool(ts) and (time.time() - ts) / SECONDS_PER_DAY >= days
+
+
 def condition_matches(row, condition):
     field, op, value = condition["field"], condition["op"], condition.get("value")
+    if field == AGE_FIELD:
+        return age_matches(row, value)
     values = field_values(row, field)
     if op == "present":
         return any(values)
@@ -101,6 +112,11 @@ def validate_condition(condition):
     if not isinstance(condition, dict):
         raise RuleError(f"condition must be an object: {condition!r}")
     field, op = condition.get("field"), condition.get("op")
+    if field == AGE_FIELD:
+        value = condition.get("value")
+        if op != AGE_OP or isinstance(value, bool) or not isinstance(value, int | float) or value <= 0:
+            raise RuleError(f"{AGE_FIELD} needs op {AGE_OP} and a positive number of days")
+        return {"field": field, "op": op, "value": value}
     if field not in FIELDS:
         raise RuleError(f"unknown field {field!r}")
     if op not in OPS:
