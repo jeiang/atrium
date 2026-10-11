@@ -10,10 +10,6 @@ from fake_notion import FakeNotion, relation_prop, rich, select_prop
 from helpers import make_config, unit
 
 TOKEN = "secret-token-value"
-ACTIONS = (
-    "CREATE TABLE proposal_actions (id INTEGER PRIMARY KEY, proposal_id INTEGER, ts REAL, action TEXT, "
-    "undo TEXT, ok INTEGER, error TEXT)"
-)
 TOPICS = {"alpha": 0, "beta": 1, "gamma": 2}
 
 
@@ -50,10 +46,7 @@ def down(url, texts):
 
 
 def fresh_db():
-    conn = db.connect_memory()
-    notion_sync.init_schema(conn)
-    conn.execute(ACTIONS)
-    return conn
+    return db.connect_memory()
 
 
 def cfg():

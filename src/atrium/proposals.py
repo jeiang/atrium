@@ -149,6 +149,11 @@ def pending_count(conn):
     return conn.execute("SELECT COUNT(*) FROM proposals WHERE status = 'pending'").fetchone()[0]
 
 
+def counts_by_status(conn):
+    counts = {r["status"]: r["n"] for r in conn.execute("SELECT status, COUNT(*) AS n FROM proposals GROUP BY status")}
+    return {**counts, "all": sum(counts.values())}
+
+
 def counts_by_kind(conn, status=PENDING):
     return {
         r["kind"]: r["n"]

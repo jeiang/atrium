@@ -10,6 +10,7 @@ from .notion_api import NotionClient, normalize_id, token_from_env
 KIND_LINK = "notion_link"
 KIND_EDIT = "notion_edit"
 ACCOUNT = "notion"
+UNDO_OP = "notion_restore"
 MODE_RELATION = "relation"
 MODE_MENTION = "mention"
 RELATED_HEADING = "Related"
@@ -349,6 +350,7 @@ def _apply_relation(client, live, p):
     client.patch_properties(p["source_id"], {p["property"]: {"relation": [{"id": i} for i in merged]}})
     after = client.get_page(p["source_id"])
     undo = {
+        "op": UNDO_OP,
         "type": MODE_RELATION,
         "page_id": p["source_id"],
         "property": p["property"],
@@ -373,6 +375,7 @@ def _apply_mention(client, p):
         )
     after = client.get_page(p["source_id"])
     undo = {
+        "op": UNDO_OP,
         "type": "markdown",
         "page_id": p["source_id"],
         "previous_markdown": previous,
@@ -397,6 +400,7 @@ def execute_edit(conn, cfg, proposal, selection=None, client=None):
         _record(conn, proposal, {"type": KIND_EDIT, "page_id": p["page_id"]}, None, False, str(e))
         raise
     undo = {
+        "op": UNDO_OP,
         "type": "markdown",
         "page_id": p["page_id"],
         "previous_markdown": previous,
@@ -422,8 +426,16 @@ def undo(conn, cfg, undo_info, client=None):
     return {"restored": undo_info["page_id"]}
 
 
-def register(register_executor=None):
-    if register_executor is None:
-        from .proposals import register_executor
+def undo_restore(conn, cfg, proposal, info):
+    return undo(conn, cfg, info)
+
+
+def register(register_executor=None, register_undoer=None):
+    if register_executor is None or register_undoer is None:
+        from . import proposals
+
+        register_executor = register_executor or proposals.register_executor
+        register_undoer = register_undoer or proposals.register_undoer
     register_executor(KIND_LINK, execute_link)
     register_executor(KIND_EDIT, execute_edit)
+    register_undoer(UNDO_OP, undo_restore)

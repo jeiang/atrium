@@ -11,11 +11,33 @@ from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .. import ask, contacts, corrections, db, embed, llm, message, router, ruleedit, rules, search, triage
+from .. import (
+    ask,
+    contacts,
+    corrections,
+    db,
+    embed,
+    executors,
+    handlers,
+    llm,
+    message,
+    notion_proposals,
+    notion_search,
+    proposals,
+    router,
+    ruleedit,
+    rules,
+    search,
+    triage,
+    websearch,
+)
 from ..config import ACCOUNTS
+from ..http import ServiceUnavailable
 from ..rules import RuleError
+from .markup import markdown_html
 
 TEMPLATES = Path(__file__).parent / "templates"
 PAGE_SIZE = 50
@@ -23,10 +45,23 @@ SEARCH_PAGE = 20
 LEARNED_LIMIT = 50
 ROW, MESSAGE = "row", "message"
 TS_FORMATS = {"date": "%Y-%m-%d", "datetime": "%Y-%m-%d %H:%M"}
-SEARCH_KEYS = ("q", "account", "folder", "from", "date_from", "date_to", "has_attachment", "unread", "flagged")
-FILTER_KEYS = SEARCH_KEYS[1:]
+SEARCH_KEYS = ("q", "account", "folder", "from", "date_from", "date_to", "has_attachment", "unread", "flagged", "source", "private")
+FILTER_KEYS = SEARCH_KEYS[1:-2]
+NOTION_SOURCE = "notion"
+ALL = "all"
+PROPOSAL_STATUSES = (
+    proposals.PENDING,
+    proposals.APPLIED,
+    proposals.FAILED,
+    proposals.DISMISSED,
+    proposals.SUPPRESSED,
+    ALL,
+)
 LIST_OPS = ("in", "suffix")
 NO_QUESTION = "Type a question to ask."
+NO_NOTION_PROPOSAL = "No proposal was made. The pages may already be linked, or the model saw no reason to change them."
+SPLIT_KINDS = (executors.REBALANCE_SPLIT, executors.REBALANCE_MERGE)
+MESSAGE_KINDS = (executors.DELETION_RULE, executors.GMAIL_LABEL_MERGE)
 RULE_PROBLEMS = {
     "op eq needs a value": "“is” needs a value.",
     "op re needs a value": "“matches regex” needs a pattern.",
@@ -98,14 +133,21 @@ def back_link(request):
     return {"url": ref.path + (f"?{ref.query}" if ref.query else ""), "label": label}
 
 
-def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
+def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answer=websearch.answer):
     if cfg.static_dir is None:
         raise ValueError("ATRIUM_STATIC_DIR is required")
+    handlers.register()
     env = build_env(cfg)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.mount("/static", StaticFiles(directory=cfg.static_dir), name="static")
 
+    def pending():
+        with connection() as conn:
+            return proposals.pending_count(conn)
+
     def render(name, status_code=200, **context):
+        if "pending_count" not in context:
+            context["pending_count"] = pending()
         return HTMLResponse(env.get_template(name).render(**context), status_code=status_code)
 
     def page(request, full, partial, **context):
@@ -130,17 +172,23 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
     def filters_of(params):
         return {k: params[k] for k in FILTER_KEYS}
 
+    def run_search(conn, params, offset):
+        limit = offset + SEARCH_PAGE + 1
+        if params["source"] == NOTION_SOURCE:
+            return notion_search.search(
+                conn, cfg, params["q"], include_private=bool(params["private"]), limit=limit, embed_texts=embed_texts
+            )
+        try:
+            return search.search(conn, cfg, params["q"], filters_of(params), limit=limit, embed_texts=embed_texts)
+        except ValueError as e:
+            return {"hits": [], "semantic": False, "error": str(e), "filters": search.normalize_filters({})}
+
     @app.get("/")
     def search_page(request: Request, offset: int = 0):
         params = params_of(request.query_params)
         offset = max(offset, 0)
         with connection() as conn:
-            try:
-                results = search.search(
-                    conn, cfg, params["q"], filters_of(params), limit=offset + SEARCH_PAGE + 1, embed_texts=embed_texts
-                )
-            except ValueError as e:
-                results = {"hits": [], "semantic": False, "error": str(e), "filters": search.normalize_filters({})}
+            results = run_search(conn, params, offset)
             more = len(results["hits"]) > offset + SEARCH_PAGE
             context = {
                 "params": params,
@@ -149,7 +197,7 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
                 "more_url": query_url("/", **params, offset=offset + SEARCH_PAGE) if more else None,
             }
             if offset and is_partial(request):
-                return render("_hits.html", **context)
+                return render("_notion_hits.html" if params["source"] == NOTION_SOURCE else "_hits.html", **context)
             return page(request, "search.html", "_results.html", folders=folder_map(conn), **context)
 
     @app.post("/ask")
@@ -486,6 +534,140 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json):
             contacts=contacts.filter_contacts(everyone, q),
             total=len(everyone),
         )
+
+    @app.get("/notion/{page_id}")
+    def notion_view(request: Request, page_id: str):
+        with connection() as conn:
+            view = notion_search.page_view(conn, page_id)
+            if view is None:
+                raise HTTPException(404, "unknown page")
+            markdown = view.pop("markdown")
+            return render(
+                "notion_page.html",
+                notion_page={**view, "body_html": markdown_html(markdown)},
+                related=notion_search.related(conn, view["id"]),
+                back=back_link(request),
+            )
+
+    def notion_action(propose):
+        with connection() as conn:
+            try:
+                created = propose(conn)
+            except (notion_proposals.ProposalError, ServiceUnavailable) as e:
+                return render("_notion_action.html", error=str(e))
+            if created is None:
+                return render("_notion_action.html", error=NO_NOTION_PROPOSAL)
+            found = proposals.get(conn, created)
+            return render(
+                "_notion_action.html", created={"id": found["id"], "kind": found["kind"], "title": found["title"]}
+            )
+
+    @app.post("/notion/{page_id}/link")
+    def notion_link(page_id: str, target: Annotated[str, Form()]):
+        return notion_action(lambda conn: notion_proposals.propose_link(conn, cfg, page_id, target, chat=chat))
+
+    @app.post("/notion/{page_id}/edit")
+    def notion_edit(page_id: str, instruction: Annotated[str, Form()] = ""):
+        return notion_action(lambda conn: notion_proposals.propose_edit(conn, cfg, page_id, instruction, chat=chat))
+
+    @app.get("/web")
+    def web_page(request: Request, q: str = ""):
+        q = q.strip()
+        if q and is_partial(request):
+            return render("_web_answer.html", answer=web_answer(cfg, q, chat=chat, embed_texts=embed_texts), partial=True)
+        return render("web.html", q=q)
+
+    @app.get("/proposals")
+    def proposals_page(request: Request, status: str = "", kind: str = ""):
+        status = status or proposals.PENDING
+        if status not in PROPOSAL_STATUSES:
+            raise HTTPException(422, "unknown status")
+        with connection() as conn:
+            context = {
+                "proposals": proposals.list(conn, None if status == ALL else status, kind or None),
+                "status": status,
+                "kind": kind,
+                "counts": proposals.counts_by_status(conn),
+            }
+            if is_partial(request):
+                return render("_proposal_list.html", partial=True, **context)
+            return render("proposals.html", **context)
+
+    def proposal_card(conn, proposal_id, notice):
+        found = proposals.get(conn, proposal_id)
+        if found is None:
+            raise HTTPException(404, "unknown proposal")
+        return render(
+            "_proposal.html",
+            proposal=found,
+            toast=notice,
+            pending_oob=True,
+            pending_count=proposals.pending_count(conn),
+        )
+
+    def picked(form, index, messages):
+        if not messages:
+            return None
+        try:
+            return [int(value) for value in form.getlist(f"msg-{index}")]
+        except ValueError as e:
+            raise proposals.SelectionError("invalid message selection") from e
+
+    def selection_of(proposal, form):
+        kind, view = proposal["kind"], proposal["preview"]
+        if kind in SPLIT_KINDS:
+            groups = view["groups"] if kind == executors.REBALANCE_SPLIT else [view["group"]]
+            return {
+                "groups": [
+                    {"name": form.get(f"name-{i}"), "message_ids": picked(form, i, g.get("messages"))}
+                    for i, g in enumerate(groups)
+                ]
+            }
+        if kind in MESSAGE_KINDS:
+            return {"message_ids": picked(form, 0, view.get("messages"))}
+        return None
+
+    def approve(proposal_id, form):
+        with connection() as conn:
+            found = proposals.get(conn, proposal_id)
+            if found is None:
+                raise HTTPException(404, "unknown proposal")
+            try:
+                selection = None if form.get("all") else selection_of(found, form)
+                done = proposals.approve_and_apply(conn, cfg, proposal_id, selection)
+            except proposals.ProposalError as e:
+                return proposal_card(conn, proposal_id, toast("error", "Not approved", str(e)))
+            result = done["result"] or {}
+            if done["status"] == proposals.APPLIED:
+                notice = toast("success", "Applied", result.get("summary", ""))
+            else:
+                notice = toast("error", "It did not finish", result.get("error", ""))
+            return proposal_card(conn, proposal_id, notice)
+
+    @app.post("/proposals/{proposal_id}/approve")
+    async def proposal_approve(request: Request, proposal_id: int):
+        return await run_in_threadpool(approve, proposal_id, await request.form())
+
+    @app.post("/proposals/{proposal_id}/dismiss")
+    def proposal_dismiss(proposal_id: int, forever: Annotated[str, Form()] = ""):
+        with connection() as conn:
+            try:
+                proposals.dismiss(conn, proposal_id, bool(forever))
+            except proposals.ProposalError as e:
+                return proposal_card(conn, proposal_id, toast("error", "Not dismissed", str(e)))
+            return proposal_card(conn, proposal_id, toast("success", "Dismissed forever" if forever else "Dismissed"))
+
+    @app.post("/proposals/{proposal_id}/undo")
+    def proposal_undo(proposal_id: int):
+        with connection() as conn:
+            try:
+                outcome = proposals.undo(conn, cfg, proposal_id)
+            except proposals.ProposalError as e:
+                return proposal_card(conn, proposal_id, toast("error", "Not undone", str(e)))
+            if outcome["undone"]:
+                return proposal_card(conn, proposal_id, toast("success", "Undone"))
+            failed = next((o["error"] for o in outcome["outcomes"] if not o["ok"]), "")
+            return proposal_card(conn, proposal_id, toast("error", "Undo did not finish", failed))
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException):

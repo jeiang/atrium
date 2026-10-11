@@ -11,10 +11,9 @@ from . import (
     db,
     deletions,
     embed,
-    executors,
     gmail_labels,
+    handlers,
     notion_api,
-    notion_proposals,
     notion_search,
     notion_sync,
     proposals,
@@ -85,8 +84,7 @@ def parser():
 
 def proposals_command(cfg, args):
     conn = db.connect(cfg.db_path)
-    scans.init_schemas(conn)
-    executors.register()
+    handlers.register()
     if args.command == "rebalance":
         out = rebalance.scan(conn, cfg)
     elif args.command == "deletions":
@@ -115,7 +113,6 @@ def proposals_command(cfg, args):
 
 def notion_command(cfg, args):
     conn = db.connect(cfg.db_path)
-    notion_sync.init_schema(conn)
     if args.notion_command == "sync":
         client = notion_api.NotionClient(notion_api.token_from_env())
         with db.exclusive(cfg.db_path.with_name(NOTION_LOCK)):
