@@ -32,6 +32,7 @@ PAUSE_FILE = "pause"
 WRITE_CAP = 100
 WRITE_ATTEMPTS = 3
 DELETION_INTERVAL_SECONDS = 86400
+TIMEZONE = "America/Port_of_Spain"
 
 
 @dataclass(frozen=True)
@@ -58,7 +59,6 @@ class Config:
     embed_url: str
     contacts_dir: Path | None
     static_dir: Path | None = None
-    searx_url: str = ""
     credentials: dict = field(default_factory=dict, repr=False)
 
     @property
@@ -96,6 +96,5 @@ def load(environ=None):
         embed_url=env.get("ATRIUM_EMBED_URL", "").rstrip("/"),
         contacts_dir=_path(env.get("ATRIUM_CONTACTS_DIR")),
         static_dir=_path(env.get("ATRIUM_STATIC_DIR")),
-        searx_url=env.get("ATRIUM_SEARX_URL", "").rstrip("/"),
         credentials={k: env[k] for k in wanted if k in env},
     )

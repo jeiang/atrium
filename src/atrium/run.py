@@ -1,6 +1,6 @@
 import logging
 
-from . import db, embed, flags, live, router, safety
+from . import db, embed, event_candidates, flags, live, router, safety
 from .config import ACCOUNTS
 from .http import ServiceUnavailable
 from .imap import ImapClient
@@ -54,6 +54,11 @@ def process(conn, cfg, accounts, opener=open_client):
         routed = router.route_account(conn, cfg, account)
         flagged = flags.flag_account(conn, cfg, account)
         log.info("%s: %d routed, %d flag judgments", account, routed, flagged)
+        try:
+            invites, candidates = event_candidates.scan_account(conn, cfg, account)
+            log.info("%s: %d invitation proposals, %d event candidates", account, invites, candidates)
+        except Exception:
+            log.exception("%s: event scan failed", account)
         try:
             applier.apply_all(conn, cfg, account, opener)
         except Exception:

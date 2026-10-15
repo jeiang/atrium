@@ -2,19 +2,12 @@ import json
 import re
 
 import pytest
-from fastapi.testclient import TestClient
 
 from atrium import cli, db, safety
 from atrium.web import app as web
-from helpers import filed, inbox, make_config, prepare, unit
+from helpers import filed, inbox, make_config, prepare, static_dir, unit, web_client
 
 HX = {"HX-Request": "true"}
-RESTORE = {"HX-Request": "true", "HX-History-Restore-Request": "true"}
-VCARD = "BEGIN:VCARD\nVERSION:3.0\nFN:Pat Example\nEMAIL:pat@example.test\nORG:Example Org\nEND:VCARD\n"
-
-
-def fake_embed(url, texts):
-    return [unit(0) for _ in texts]
 
 
 def fake_chat(url, system, user, schema, max_tokens=None):
@@ -31,13 +24,7 @@ def decide(conn, message_id, account="icloud", stage="operator", dest="Bills", k
 
 @pytest.fixture
 def seeded(tmp_path):
-    static = tmp_path / "static"
-    (static / "basecoat").mkdir(parents=True)
-    (static / "app.css").write_text("body{}")
-    contacts = tmp_path / "contacts"
-    contacts.mkdir()
-    (contacts / "pat.vcf").write_text(VCARD)
-    cfg = make_config(tmp_path, static_dir=static, contacts_dir=contacts)
+    cfg = make_config(tmp_path, static_dir=static_dir(tmp_path))
     conn = prepare(db.connect(cfg.db_path))
     for i in range(3):
         filed(conn, i + 1, "Bills", "pay@bank.test", "bank.test", subject=f"Statement {i}", body="statement body")
@@ -61,7 +48,7 @@ def seeded(tmp_path):
 @pytest.fixture
 def client(seeded):
     cfg, ids = seeded
-    return TestClient(web.create_app(cfg, embed_texts=fake_embed, chat=fake_chat)), cfg, ids
+    return web_client(cfg, chat=fake_chat), cfg, ids
 
 
 def rows(cfg, sql, params=()):
@@ -75,75 +62,19 @@ def rows(cfg, sql, params=()):
 def test_static_files_are_served(client):
     c, cfg, _ = client
     assert c.get("/static/app.css").text == "body{}"
-    assert f'href="/static/app.css?v={web.asset_version(cfg.static_dir)}"' in c.get("/").text
+    assert f'href="/static/app.css?v={web.asset_version(cfg.static_dir)}"' in c.get("/chat").text
     assert c.get("/static/missing.js").status_code == 404
+
+
+def test_root_redirects_to_chat(client):
+    c, _, _ = client
+    response = c.get("/", follow_redirects=False)
+    assert response.status_code == 303 and response.headers["location"] == "/chat"
 
 
 def test_create_app_requires_static_dir(tmp_path):
     with pytest.raises(ValueError):
         web.create_app(make_config(tmp_path))
-
-
-def test_search_page_full_partial_and_restore(client):
-    c, _, _ = client
-    full = c.get("/")
-    assert full.status_code == 200 and "<html" in full.text and "Recent mail" in full.text
-    partial = c.get("/", params={"q": "invoice"}, headers=HX)
-    assert partial.status_code == 200 and "<html" not in partial.text and "Invoice" in partial.text
-    assert "&lt;b&gt;due&lt;/b&gt;" in partial.text and "<b>due</b>" not in partial.text
-    assert "<html" in c.get("/", params={"q": "invoice"}, headers=RESTORE).text
-
-
-def test_search_filters_and_bad_date(client):
-    c, _, _ = client
-    hit = c.get("/", params={"q": "news", "account": "icloud", "unread": "", "from": "list.test"}, headers=HX)
-    assert "Weekly news" in hit.text and "Invoice" not in hit.text
-    bad = c.get("/", params={"date_from": "not-a-date"}, headers=HX)
-    assert bad.status_code == 200
-
-
-def test_search_pages_with_show_more(client, monkeypatch):
-    c, _, _ = client
-    monkeypatch.setattr(web, "SEARCH_PAGE", 1)
-    first = c.get("/", headers=HX)
-    assert "Show older mail" in first.text and "<title>Search · atrium</title>" in first.text
-    assert 'hx-get="/?offset=1"' in first.text
-    rest = c.get("/", params={"offset": 1}, headers=HX)
-    assert "<ul" not in rest.text and "<li>" in rest.text and "autofocus" in rest.text
-    assert "<title>" not in c.get("/").text.split("</head>")[1]
-    searched = c.get("/", params={"q": "statement"}, headers=HX)
-    assert "More than 1 matches" in searched.text and "Show more matches" in searched.text
-
-
-def test_search_degrades_without_embeddings(seeded):
-    cfg, _ = seeded
-
-    def down(url, texts):
-        raise web.search.ServiceUnavailable("offline")
-
-    c = TestClient(web.create_app(cfg, embed_texts=down, chat=fake_chat))
-    response = c.get("/", params={"q": "invoice"}, headers=HX)
-    assert response.status_code == 200 and "Keyword matches only" in response.text
-
-
-def test_ask_returns_cited_answer(client):
-    c, _, ids = client
-    response = c.post("/ask", data={"q": "when is the invoice due?", "account": "icloud"}, headers=HX)
-    assert response.status_code == 200
-    assert "The invoice is due soon" in response.text
-    assert f"/messages/{ids['invoice']}" in response.text
-
-
-def test_ask_without_question_and_chat_failure(seeded):
-    cfg, _ = seeded
-    c = TestClient(web.create_app(cfg, embed_texts=fake_embed, chat=fake_chat))
-    assert web.NO_QUESTION in c.post("/ask", data={"q": "  "}).text
-
-    def broken(url, system, user, schema, max_tokens=None):
-        raise web.ask.ServiceUnavailable("chat down")
-
-    c = TestClient(web.create_app(cfg, embed_texts=fake_embed, chat=broken))
-    assert "chat unavailable" in c.post("/ask", data={"q": "invoice"}).text
 
 
 def test_message_page_full_partial_and_missing(client):
@@ -156,7 +87,7 @@ def test_message_page_full_partial_and_missing(client):
     assert missing.status_code == 404 and "<html" in missing.text and "Nothing here" in missing.text
     missing_partial = c.get("/messages/9999", headers=HX)
     assert missing_partial.status_code == 404 and "<html" not in missing_partial.text
-    assert 'href="/"' in c.get(url).text
+    assert 'href="/chat"' in c.get(url).text
     from_triage = c.get(url, headers={"referer": "http://testserver/triage?stage=operator"}).text
     assert 'href="/triage?stage=operator"' in from_triage and "</svg>Triage</a>" in from_triage
     elsewhere = c.get(url, headers={"referer": "http://elsewhere.test/triage"}).text
@@ -317,21 +248,6 @@ def test_rule_move_and_delete(client):
     assert "Rule not found" in c.delete("/rules/one", headers=HX).text
 
 
-def test_contacts_full_partial_and_filter(client):
-    c, _, _ = client
-    assert "<html" in c.get("/contacts").text
-    partial = c.get("/contacts", params={"q": "example org"}, headers=HX)
-    assert "<html" not in partial.text and "Pat Example" in partial.text and "/?from=pat%40example.test" in partial.text
-    assert "No contact matches" in c.get("/contacts", params={"q": "zzz"}, headers=HX).text
-
-
-def test_contacts_without_directory(tmp_path):
-    static = tmp_path / "static"
-    static.mkdir()
-    c = TestClient(web.create_app(make_config(tmp_path, static_dir=static)))
-    assert "No contacts loaded" in c.get("/contacts").text
-
-
 def test_ts_filter():
     assert web.ts_filter(None) == ""
     assert web.ts_filter(0, "date") == "1970-01-01"
@@ -341,11 +257,13 @@ def test_ts_filter():
 
 def test_serve_command_parses():
     args = cli.parser().parse_args(["serve", "--port", "8123"])
-    assert (args.command, args.host, args.port) == ("serve", cli.DEFAULT_HOST, 8123)
+    assert (args.command, args.host, args.port, args.auth) == ("serve", cli.DEFAULT_HOST, 8123, "proxy")
+    assert cli.parser().parse_args(["serve", "--port", "1", "--auth", "local"]).auth == "local"
+    run = cli.parser().parse_args(["agent", "run", "--text", "hi", "--kind", "cron"])
+    assert (run.command, run.agent_command, run.thread, run.text, run.kind) == ("agent", "run", None, "hi", "cron")
+    assert cli.parser().parse_args(["agent", "resume-interrupted"]).agent_command == "resume-interrupted"
 
 
 def test_modes_reach_templates(tmp_path):
-    static = tmp_path / "static"
-    static.mkdir()
-    live = TestClient(web.create_app(make_config(tmp_path, static_dir=static, mode="live")))
-    assert "Live" in live.get("/contacts").text
+    live = web_client(make_config(tmp_path, static_dir=static_dir(tmp_path), mode="live"))
+    assert "Live" in live.get("/chat").text

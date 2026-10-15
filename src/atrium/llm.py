@@ -101,3 +101,25 @@ def judge_flag(url, message, body):
     )
     answer = chat_json(url, FLAG_SYSTEM, user, FLAG_SCHEMA)
     return {k: bool(answer[k]) for k in FLAG_FIELDS}
+
+
+EVENT_SYSTEM = (
+    "You scan the mailbox owner's email for calendar events. has_event=true only when the message mentions a "
+    "specific event the owner themself would attend or must block time for (appointment, meeting, flight, "
+    "reservation, class, delivery window) with a concrete date or time. Newsletters, promotions, generic "
+    "deadlines, past events and events of other people are has_event=false."
+)
+EVENT_SCHEMA = {
+    "type": "object",
+    "properties": {"has_event": {"type": "boolean"}},
+    "required": ["has_event"],
+    "additionalProperties": False,
+}
+
+
+def judge_event(url, message, body):
+    user = (
+        f"From: {message['from_name']} <{message['from_addr']}>\nSubject: {message['subject']}\n"
+        f"Body:\n{(body or '')[:LLM_BODY_CHARS]}"
+    )
+    return bool(chat_json(url, EVENT_SYSTEM, user, EVENT_SCHEMA)["has_event"])

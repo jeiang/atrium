@@ -12,7 +12,7 @@
   <input type="hidden" name="account" value="{{ account }}">
   <div role="group" class="field w-auto">
     <label for="a-kind">Kind</label>
-    <select id="a-kind" name="kind" onchange="this.form.submit()">
+    <select id="a-kind" name="kind" data-submit-on-change>
       <option value="">All kinds</option>
       {% for k in kinds %}<option value="{{ k }}"{% if kind == k %} selected{% endif %}>{{ k }}</option>{% endfor %}
     </select>

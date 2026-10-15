@@ -201,6 +201,18 @@
 </div>
 {% if v.reason %}<blockquote class="border-s-2 ps-3 text-sm text-muted-foreground">{{ v.reason }}</blockquote>{% endif %}
 
+{% elif p.kind == "calendar_event" %}
+<dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+  <dt class="text-muted-foreground">Calendar</dt>
+  <dd>{{ "Google" if v.calendar == "google" else "iCloud" }}</dd>
+  <dt class="text-muted-foreground">{{ "Date" if v.all_day else "When" }}</dt>
+  <dd class="tabular-nums">{{ v.start }} → {{ v.end }}</dd>
+  {% if v.location %}<dt class="text-muted-foreground">Where</dt><dd>{{ v.location }}</dd>{% endif %}
+  {% if v.notes %}<dt class="text-muted-foreground">Notes</dt><dd class="whitespace-pre-wrap">{{ v.notes }}</dd>{% endif %}
+  {% if v.source and v.source.subject %}<dt class="text-muted-foreground">From mail</dt><dd>{{ v.source.subject }}</dd>{% endif %}
+</dl>
+<p class="text-xs text-muted-foreground">Nobody is invited and no notification is sent.</p>
+
 {% elif p.kind == "notion_edit" %}
 {{ page_ref(v.page) }}
 <dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">

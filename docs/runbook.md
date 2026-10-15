@@ -70,23 +70,93 @@ ssh artemis.jeiang.vpn doas systemctl start atrium-sync.service
 
 ### Web UI
 
-`atrium-web` serves search (mail or Notion), ask, message view, Notion pages,
-web answers (`/web`, through the local SearXNG), proposals, triage, rules and contacts.
-It has no login and no firewall opening: only the trusted NetBird
-interface reaches it, so use `http://artemis.jeiang.vpn:8480/` from a mesh
-peer. It reads the IMAP and Notion credentials, because approving a proposal
+`atrium-web` serves the assistant chat (`/chat`, the only search entry: threads
+are full-text searchable), the usage page (`/usage`), message view, Notion
+pages, proposals, triage, rules and actions. With `--auth proxy` (the default)
+every request except `/static` must carry a `Remote-Groups` header containing
+`atrium_access`, which tinyauth adds in front of alda's Caddy; `--auth local` is
+the loopback listener reached over an SSH tunnel and skips that check. Every
+POST carries a per-session CSRF token (cookie `atrium_csrf`, sent by HTMX as
+`X-CSRF-Token` or as a `csrf_token` form field) and must be same-origin;
+responses carry a CSP that only allows same-origin scripts and `data:` images.
+It reads the IMAP and Notion credentials, because approving a proposal
 moves, relabels or deletes mail and edits Notion immediately; every such write
 is gated to an approved proposal and can be undone from `/proposals`. Correct
 records a correction and moves the message unless paused; rule edits change
 `atrium.db`.
-Assets (`app.css`, htmx, Basecoat) are built into `packages.atrium-static`;
-nothing loads from a CDN.
+Assets (`app.css`, `app.js`, htmx, Basecoat) are built into `packages.atrium-static`;
+nothing loads from a CDN and no script is inline.
+
+### Assistant
+
+The chat agent is a tool loop on the Anthropic Messages API (`claude-haiku-5-5`,
+adaptive thinking, effort pinned per thread kind). Every run is journaled in
+`atrium.db` (`threads`, `thread_messages`, `runs`, `tool_calls`, `tool_results`,
+`usage`): user input and each model response are stored byte for byte, and
+each tool call is recorded before it executes. Tool results over ~2K tokens are
+stored and replaced by a stub the model pages with `recall`. Spend is counted
+per API call against `monthly_budget_usd` in `settings` (default 75): unattended
+runs refuse at 80%, chat at 100%. `atrium serve` marks runs left `running`
+as interrupted and resumes those with only read tools pending; a run with a
+write in flight shows a Resume button in its thread.
+
+Context size is kept in check in layers. Requests go through the beta Messages
+API with `clear_tool_uses_20250919` (old tool results cleared server-side from
+75K input tokens, keeping the last 3, `recall` excluded) and threshold
+compaction `compact_20260112` at 350K with `pause_after_compaction`: the
+compaction block is journaled, a context manifest (pinned ids, dropped
+`result_id`s, folds) is appended and the last messages are re-sent without
+thinking blocks. A local preflight estimates every request from the previous
+response's usage; above 380K the loop writes its own summary with one
+low-effort call and continues from summary + manifest + the operator's last
+message, and nothing over 400K is ever sent. The model can also manage its own
+context with `context_status`, `context_pin`, `context_drop` and
+`context_fold`: drops and folds are staged in `context_ledger` and applied at
+the next operator message (or mid-run when ~20K tokens would be saved and the
+current tool loop carries no signed thinking); the resulting message
+projection lives in `context_projections` while `thread_messages` is never
+rewritten, so dropped results stay readable through `recall`. `usage` rows
+record `clear_edits`, `cleared_tokens` and `compaction` per call. Prompt
+caching uses at most four breakpoints (tools, system prompt, last stable
+profile/skills block, end of history); `cache_ttl_chat` in `settings` (`5m`
+default, `1h`) sets the chat prefix TTL.
+
+```fish
+ssh artemis.jeiang.vpn doas atrium-run agent resume-interrupted
+ssh artemis.jeiang.vpn doas atrium-run agent run --kind chat --text "what is due this week?"
+ssh artemis.jeiang.vpn doas atrium-run agent run --thread 12 --text "and next week?"
+```
 
 ```fish
 ssh artemis.jeiang.vpn journalctl -u atrium-web.service -e
 ```
 
-### Notion, scans and web search
+### Calendar tools
+
+`calendar_list` merges the vdirsyncer iCloud mirror (`ATRIUM_CALENDAR_DIR`) with
+the primary Google calendar; `calendar_create` / `calendar_delete` (chat only)
+write to iCloud CalDAV (`ICLOUD_MAIL_USERNAME`, `ICLOUD_APP_PASSWORD`; the
+first event calendar, or the one named in `ATRIUM_ICLOUD_CALENDAR`) or Google
+(`sendUpdates=none`). There is no attendee parameter anywhere. Delete only
+touches events recorded in `agent_events`. Mail-derived events are
+`calendar_event` proposals: `.ics` invitations are parsed on arrival, other
+mail the local model flags waits in `event_candidates` until
+`atrium calendar candidates` (cron-kind Haiku run) drafts proposals from it.
+
+Google setup, once: create an OAuth client of type Desktop in a Cloud project
+with the Calendar API enabled and the `calendar.events` scope, set the consent
+screen to In production (testing-mode refresh tokens expire after 7 days), put
+`GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` in `atrium.env`, then
+on a machine with a browser (client id/secret exported in the shell):
+
+```fish
+atrium calendar google-auth --port 8765
+```
+
+Open the printed URL, approve, and put the printed `GOOGLE_REFRESH_TOKEN=...`
+in `atrium.env`.
+
+### Notion and scans
 
 `atrium-notion-sync.timer` mirrors Notion every 15 minutes
 (`atrium notion sync`). `atrium-scan.timer` runs
@@ -97,7 +167,6 @@ candidate, so the first scan after deploy creates none of those:
 ```fish
 ssh artemis.jeiang.vpn doas systemctl start atrium-notion-sync.service
 ssh artemis.jeiang.vpn doas systemctl start atrium-scan.service
-ssh artemis.jeiang.vpn doas atrium-run web "a question"
 ```
 
 ### Running the CLI

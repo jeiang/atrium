@@ -1,0 +1,453 @@
+import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+import httpx
+import pytest
+from agent_tool_helpers import make_ctx
+from fake_anthropic import FakeClient, response, text
+from helpers import make_config, memory_db, web_client
+
+from atrium import db, notion_proposals
+from atrium.agent import budget, journal, nightly, registry, scheduler, service, skills
+from atrium.agent.tools import notify, propose
+from atrium.agent.tools import schedule as schedule_tools
+from atrium.agent.tools.base import ToolError
+
+TZ = "America/Port_of_Spain"
+ZONE = ZoneInfo(TZ)
+
+
+def local(y, mo, d, h=0, mi=0):
+    return datetime(y, mo, d, h, mi, tzinfo=ZONE).timestamp()
+
+
+NOW = local(2026, 10, 15, 12, 0)
+
+
+@pytest.fixture
+def cfg(tmp_path):
+    return make_config(tmp_path)
+
+
+@pytest.fixture
+def conn(cfg):
+    c = db.connect(cfg.db_path)
+    yield c
+    c.close()
+
+
+def clock():
+    state = {"t": NOW}
+
+    def now():
+        state["t"] += 0.001
+        return state["t"]
+
+    return now
+
+
+def make_job(conn, schedule="daily 07:00", **kw):
+    return scheduler.create_job(conn, name="brief", prompt="Check the inbox.", schedule=schedule, tz=TZ, now=NOW - 86400 * 4, **kw)
+
+
+def test_parse_forms():
+    assert scheduler.parse("daily 07:30", TZ).next_after(NOW) == local(2026, 10, 16, 7, 30)
+    assert scheduler.parse("daily 12:30", TZ).next_after(NOW) == local(2026, 10, 15, 12, 30)
+    # 2026-10-15 is a Thursday
+    assert scheduler.parse("weekly mon 09:00", TZ).next_after(NOW) == local(2026, 10, 19, 9, 0)
+    assert scheduler.parse("weekly Thursday 13:00", TZ).next_after(NOW) == local(2026, 10, 15, 13, 0)
+    assert scheduler.parse("0 9 * * 1-5", TZ).next_after(NOW) == local(2026, 10, 16, 9, 0)
+    assert scheduler.parse("*/15 13 * * *", TZ).next_after(NOW) == local(2026, 10, 15, 13, 0)
+    assert scheduler.parse("30 8 1 * *", TZ).next_after(NOW) == local(2026, 11, 1, 8, 30)
+    assert scheduler.parse("0 8 * * 7", TZ).next_after(NOW) == local(2026, 10, 18, 8, 0)
+    once = scheduler.parse("2026-11-02T09:00", TZ)
+    assert once.next_after(NOW) == local(2026, 11, 2, 9, 0)
+    assert once.next_after(local(2026, 11, 3)) is None
+    assert not once.recurring
+
+
+@pytest.mark.parametrize("bad", ["", "daily 25:00", "weekly funday 09:00", "61 * * * *", "* * * *", "tomorrow-ish", "*/0 * * * *"])
+def test_parse_rejects(bad):
+    with pytest.raises(scheduler.ScheduleError):
+        scheduler.parse(bad, TZ)
+
+
+def test_min_interval_and_future(conn):
+    for bad in ("*/30 * * * *", "0,30 9 * * *", "* * * * *"):
+        with pytest.raises(scheduler.ScheduleError, match="at least"):
+            scheduler.validate(bad, TZ, NOW)
+    scheduler.validate("0 * * * *", TZ, NOW)
+    scheduler.validate("*/30 * * * *", TZ, NOW, enforce_min=False)
+    scheduler.validate("2026-10-15T12:05", TZ, NOW)
+    with pytest.raises(scheduler.ScheduleError, match="future"):
+        scheduler.validate("2026-10-01T09:00", TZ, NOW)
+
+
+def test_max_active_jobs(conn):
+    for i in range(scheduler.MAX_ACTIVE_JOBS):
+        scheduler.create_job(conn, name=f"j{i}", prompt="p", schedule="daily 07:00", tz=TZ, now=NOW)
+    with pytest.raises(scheduler.ScheduleError, match="at most"):
+        scheduler.create_job(conn, name="x", prompt="p", schedule="daily 07:00", tz=TZ, now=NOW)
+    scheduler.cancel_job(conn, 1)
+    scheduler.create_job(conn, name="x", prompt="p", schedule="daily 07:00", tz=TZ, now=NOW)
+
+
+def test_missed_runs_coalesce_to_one(cfg, conn):
+    job_id = make_job(conn)
+    assert scheduler.get_job(conn, job_id)["next_due"] == local(2026, 10, 12, 7, 0)
+    claims, skipped = scheduler.claim_due(conn, cfg, NOW, "w1")
+    assert len(claims) == 1 and not skipped
+    assert claims[0].missed and claims[0].due_at == local(2026, 10, 12, 7, 0)
+    assert scheduler.get_job(conn, job_id)["next_due"] == local(2026, 10, 16, 7, 0)
+    assert scheduler.claim_due(conn, cfg, NOW + 60, "w1")[0] == []
+    run = FakeClient([response([text("done")])])
+    status = scheduler.execute_claim(cfg, claims[0], client=run, env={}, now=clock())
+    assert status == scheduler.MISSED_COALESCED
+    row = conn.execute("SELECT * FROM job_runs").fetchone()
+    assert row["status"] == scheduler.MISSED_COALESCED and row["thread_id"]
+    assert conn.execute("SELECT COUNT(*) FROM job_runs").fetchone()[0] == 1
+
+
+def test_on_time_run_is_ok_and_uses_cron_thread(cfg, conn):
+    job_id = scheduler.create_job(conn, name="brief", prompt="Check the inbox.", schedule="daily 12:30", tz=TZ, now=NOW)
+    client = FakeClient([response([text("all quiet")])])
+    ran = []
+    claims, _ = scheduler.tick(cfg, "w1", client=client, env={}, now=lambda: local(2026, 10, 15, 12, 30) + 5, spawn=lambda fn, name: ran.append(fn()))
+    assert [c.job["id"] for c in claims] == [job_id] and ran == [scheduler.OK]
+    thread = conn.execute("SELECT * FROM threads WHERE job_id = ?", (job_id,)).fetchone()
+    assert thread["kind"] == "cron" and thread["effort"] == "high" and thread["title"] == "brief"
+    assert journal.runs_of(conn, thread["id"])[0]["kind"] == "cron"
+    assert scheduler.get_job(conn, job_id)["lease_owner"] is None
+    listed = [j for j in scheduler.list_jobs(conn) if j["id"] == job_id][0]
+    assert listed["last_status"] == "ok" and listed["last_thread_id"] == thread["id"]
+
+
+def test_once_job_fires_once_then_disables(cfg, conn):
+    job_id = scheduler.create_job(conn, name="ping", prompt="p", schedule="2026-10-15T12:30", tz=TZ, now=NOW)
+    claims, _ = scheduler.claim_due(conn, cfg, local(2026, 10, 15, 12, 31), "w1")
+    assert len(claims) == 1 and not claims[0].missed
+    job = scheduler.get_job(conn, job_id)
+    assert job["enabled"] == 0 and job["next_due"] is None
+
+
+def test_lease_prevents_double_claim(cfg, conn):
+    job_id = make_job(conn)
+    first, _ = scheduler.claim_due(conn, cfg, NOW, "w1")
+    assert len(first) == 1
+    # even if due again, a live lease blocks a second worker
+    conn.execute("UPDATE jobs SET next_due = ? WHERE id = ?", (NOW - 10, job_id))
+    assert scheduler.claim_due(conn, cfg, NOW + 1, "w2")[0] == []
+    assert scheduler.claim_due(conn, cfg, NOW + scheduler.LEASE_SECONDS + 1, "w2")[0] != []
+
+
+def test_two_connections_cannot_both_claim(cfg, conn):
+    make_job(conn)
+    other = db.connect(cfg.db_path)
+    try:
+        a, _ = scheduler.claim_due(conn, cfg, NOW, "w1")
+        b, _ = scheduler.claim_due(other, cfg, NOW, "w2")
+    finally:
+        other.close()
+    assert len(a) + len(b) == 1
+
+
+def test_pause_skips(cfg, conn):
+    job_id = make_job(conn)
+    cfg.pause_path.write_text("")
+    claims, skipped = scheduler.claim_due(conn, cfg, NOW, "w1")
+    assert claims == [] and [s["status"] for s in skipped] == [scheduler.SKIPPED_PAUSE]
+    job = scheduler.get_job(conn, job_id)
+    assert job["next_due"] == local(2026, 10, 16, 7, 0) and job["lease_owner"] is None
+    assert conn.execute("SELECT status, thread_id FROM job_runs").fetchone()["status"] == "skipped_pause"
+
+
+def test_budget_skip_notifies_once(cfg, conn):
+    job_id = make_job(conn)
+    budget.set_setting(conn, budget.BUDGET_KEY, 0)
+    ran = []
+    scheduler.tick(cfg, "w1", env={}, now=lambda: NOW, spawn=lambda fn, name: ran.append(fn))
+    assert ran == []
+    assert conn.execute("SELECT status FROM job_runs").fetchone()["status"] == "skipped_budget"
+    assert conn.execute("SELECT title FROM notifications").fetchone()["title"] == "Skipped: brief"
+    conn.execute("UPDATE jobs SET next_due = ? WHERE id = ?", (NOW - 10, job_id))
+    scheduler.tick(cfg, "w1", env={}, now=lambda: NOW + 1, spawn=lambda fn, name: ran.append(fn))
+    assert conn.execute("SELECT COUNT(*) FROM job_runs").fetchone()[0] == 2
+    assert conn.execute("SELECT COUNT(*) FROM notifications").fetchone()[0] == 1
+
+
+def test_nightly_is_seeded_and_runs_as_nightly(cfg, conn):
+    ran = []
+    client = FakeClient([response([text("tidy")])])
+    now = lambda: local(2026, 10, 16, 2, 31)  # noqa: E731
+    scheduler.tick(cfg, "w1", client=client, env={"ATRIUM_TZ": TZ}, now=lambda: local(2026, 10, 15, 12), spawn=lambda fn, name: ran.append(fn))
+    nightly_job = conn.execute("SELECT * FROM jobs WHERE kind = 'nightly'").fetchone()
+    assert nightly_job["schedule"] == "daily 02:30" and nightly_job["next_due"] == local(2026, 10, 16, 2, 30)
+    scheduler.tick(cfg, "w1", client=client, env={"ATRIUM_TZ": TZ}, now=now, spawn=lambda fn, name: ran.append(fn()))
+    thread = conn.execute("SELECT * FROM threads WHERE job_id = ?", (nightly_job["id"],)).fetchone()
+    assert thread["kind"] == "nightly"
+    first_message = journal.messages_of(conn, thread["id"])[0]["content"][0]["text"]
+    assert first_message == nightly.NIGHTLY_PROMPT
+    assert scheduler.ensure_nightly(conn, TZ, NOW) is None
+    assert conn.execute("SELECT COUNT(*) FROM jobs WHERE kind = 'nightly'").fetchone()[0] == 1
+
+
+def test_update_cancel_and_nightly_protected(cfg, conn):
+    ensured = scheduler.ensure_nightly(conn, TZ, NOW)
+    assert ensured is None
+    nightly_id = conn.execute("SELECT id FROM jobs WHERE kind = 'nightly'").fetchone()["id"]
+    with pytest.raises(scheduler.ScheduleError):
+        scheduler.cancel_job(conn, nightly_id)
+    job_id = make_job(conn)
+    updated = scheduler.update_job(conn, job_id, NOW, schedule="weekly mon 09:00")
+    assert updated["next_due"] == local(2026, 10, 19, 9, 0)
+    scheduler.update_job(conn, job_id, NOW, enabled=False)
+    assert scheduler.claim_due(conn, cfg, NOW, "w1")[0] == []
+    assert scheduler.update_job(conn, job_id, NOW, enabled=True)["next_due"] == local(2026, 10, 19, 9, 0)
+    scheduler.cancel_job(conn, job_id)
+    with pytest.raises(scheduler.ScheduleError):
+        scheduler.update_job(conn, job_id, NOW, name="x")
+
+
+# ---- tools
+
+def test_schedule_tools_flow():
+    conn = memory_db()
+    ctx = make_ctx(conn, make_config(__import__("pathlib").Path("/tmp")), env={"ATRIUM_TZ": TZ}, now=lambda: NOW)
+    made = schedule_tools.schedule_create(ctx, {"name": "weekly", "prompt": "Review.", "schedule": "weekly fri 16:00"})
+    assert made["created_by"] == "agent" and made["next_due"].startswith("2026-10-16T16:00")
+    assert conn.execute("SELECT created_in_thread FROM jobs").fetchone()[0] == ctx.thread_id
+    with pytest.raises(ToolError, match="at least"):
+        schedule_tools.schedule_create(ctx, {"name": "x", "prompt": "p", "schedule": "*/10 * * * *"})
+    assert schedule_tools.schedule_update(ctx, {"id": made["id"], "schedule": "daily 08:00"})["schedule"] == "daily 08:00"
+    assert len(schedule_tools.schedule_list(ctx, {})["schedules"]) == 1
+    schedule_tools.schedule_cancel(ctx, {"id": made["id"]})
+    assert schedule_tools.schedule_list(ctx, {})["schedules"] == []
+    with pytest.raises(ToolError):
+        schedule_tools.schedule_cancel(ctx, {"id": made["id"]})
+
+
+def test_schedule_tools_cannot_touch_nightly():
+    conn = memory_db()
+    scheduler.ensure_nightly(conn, TZ, NOW)
+    ctx = make_ctx(conn, make_config(__import__("pathlib").Path("/tmp")), now=lambda: NOW)
+    assert schedule_tools.schedule_list(ctx, {})["schedules"] == []
+    with pytest.raises(ToolError, match="operator"):
+        schedule_tools.schedule_update(ctx, {"id": 1, "enabled": False})
+
+
+def test_schedule_tools_are_chat_only():
+    by_kind = {k: {t.name for t in registry.tools_for(k) if t.name.startswith("schedule_")} for k in ("chat", "cron", "nightly", "code", "sub:web")}
+    assert by_kind["chat"] == {"schedule_create", "schedule_update", "schedule_cancel", "schedule_list"}
+    assert all(not v for k, v in by_kind.items() if k != "chat")
+
+
+# ---- notify
+
+class FakeNtfy:
+    def __init__(self, status=200):
+        self.requests = []
+        self.status = status
+
+    def __call__(self, request):
+        self.requests.append(request)
+        return httpx.Response(self.status, json={"id": "x"})
+
+
+@pytest.fixture
+def ntfy(monkeypatch):
+    fake = FakeNtfy()
+    monkeypatch.setattr(notify, "transport", httpx.MockTransport(fake))
+    return fake
+
+
+ENV = {"NTFY_URL": "https://ntfy.test", "NTFY_TOPIC": "atrium", "NTFY_TOKEN": "tok"}
+
+
+def test_notify_posts_to_ntfy_and_records(ntfy):
+    conn = memory_db()
+    ctx = make_ctx(conn, None, env=ENV, kind="cron")
+    out = notify.notify(ctx, {"title": "Renewal", "body": "Domain expires Friday.", "thread_link": "7"})
+    assert out == {"recorded": True, "delivered": True, "note": None}
+    (request,) = ntfy.requests
+    assert str(request.url) == "https://ntfy.test" and request.headers["authorization"] == "Bearer tok"
+    sent = json.loads(request.content)
+    assert sent["topic"] == "atrium" and sent["title"] == "Renewal" and "Domain expires Friday." in sent["message"] and "/chat/7" in sent["message"]
+    row = conn.execute("SELECT * FROM notifications").fetchone()
+    assert row["delivered"] == 1 and row["thread_link"] == "/chat/7" and row["run_id"] == ctx.run_id
+
+
+def test_notify_without_ntfy_still_records(ntfy):
+    conn = memory_db()
+    out = notify.notify(make_ctx(conn, None, env={}), {"title": "T", "body": "B"})
+    assert out["recorded"] and not out["delivered"] and "not configured" in out["note"]
+    assert ntfy.requests == []
+    assert conn.execute("SELECT thread_link FROM notifications").fetchone()[0] == "/chat/1"
+
+
+def test_notify_failure_is_recorded_not_raised(monkeypatch):
+    monkeypatch.setattr(notify, "transport", httpx.MockTransport(FakeNtfy(500)))
+    conn = memory_db()
+    out = notify.notify(make_ctx(conn, None, env=ENV), {"title": "T", "body": "B"})
+    assert not out["delivered"] and out["note"] == "ntfy 500"
+
+
+def test_notify_cap_and_link_validation(ntfy):
+    conn = memory_db()
+    ctx = make_ctx(conn, None, env=ENV)
+    for i in range(notify.PER_RUN_CAP):
+        notify.notify(ctx, {"title": f"t{i}", "body": "b"})
+    with pytest.raises(ToolError, match="at most 3"):
+        notify.notify(ctx, {"title": "t4", "body": "b"})
+    other = make_ctx(conn, None, env=ENV)
+    other.run_id = 2
+    with pytest.raises(ToolError, match="thread_link"):
+        notify.notify(other, {"title": "t", "body": "b", "thread_link": "https://evil.test/x"})
+
+
+def test_notify_tool_contexts():
+    assert {k for k in ("chat", "cron", "nightly", "code", "sub:web") if "notify" in {t.name for t in registry.tools_for(k)}} == {"chat", "cron", "nightly"}
+
+
+# ---- nightly registry
+
+NIGHTLY_TOOLS = {
+    "calendar_list", "context_drop", "context_fold", "context_pin", "context_status", "fetch_knowledge", "load_skill", "notify", "notion_archive_page", "notion_create_page",
+    "notion_update_page", "profile_get", "profile_set", "recall", "search_knowledge", "threads_today",
+}
+NIGHTLY_FORBIDDEN = (
+    "mail_search", "mail_read", "contacts_lookup", "web_fetch", "web_search", "schedule_create", "schedule_update",
+    "schedule_cancel", "schedule_list", "draft_email_create", "draft_email_update", "calendar_create", "calendar_delete",
+    "event_propose", "propose", "research", "run_code",
+)
+
+
+def test_nightly_tool_set_is_exact():
+    names = {t.name for t in registry.tools_for("nightly")}
+    assert names == NIGHTLY_TOOLS
+    assert not [n for n in names if n.startswith(("grafana_", "schedule_", "sub", "research"))]
+    assert not names & set(NIGHTLY_FORBIDDEN)
+    assert registry.server_tools_for("nightly") == []
+
+
+def test_threads_today_only_nightly():
+    assert {k for k in ("chat", "cron", "nightly") if "threads_today" in {t.name for t in registry.tools_for(k)}} == {"nightly"}
+
+
+def test_threads_today_reads_the_window():
+    conn = memory_db()
+    service.create_thread(conn, "chat", title="old", now=lambda: NOW)
+    recent = service.create_thread(conn, "chat", title="recent", now=lambda: NOW)
+    old = service.create_thread(conn, "chat", title="older", now=lambda: NOW)
+    cron_thread = service.create_thread(conn, "cron", title="cron", now=lambda: NOW)
+    journal.append_message(conn, recent, None, journal.USER, [{"type": "text", "text": "Plan the trip " + "x" * 5000}], NOW - 3600)
+    journal.append_message(conn, old, None, journal.USER, [{"type": "text", "text": "ancient"}], NOW - 3 * 86400)
+    journal.append_message(conn, cron_thread, None, journal.ASSISTANT, [{"type": "text", "text": "report"}], NOW - 60)
+    ctx = make_ctx(conn, None, env={"ATRIUM_TZ": TZ}, kind="nightly", now=lambda: NOW)
+    out = nightly.threads_today(ctx, {})
+    ids = {t["thread_id"] for t in out["threads"]}
+    assert ids == {recent, cron_thread} and out["untrusted"]
+    assert all(len(t["text"]) <= nightly.THREAD_CHARS for t in out["threads"])
+    dated = nightly.threads_today(ctx, {"date": "2026-10-12"})
+    assert {t["thread_id"] for t in dated["threads"]} == {old}
+    with pytest.raises(ToolError):
+        nightly.threads_today(ctx, {"date": "not-a-date"})
+
+
+# ---- propose
+
+def test_propose_rejects_unknown_kinds():
+    ctx = make_ctx(memory_db(), make_config(__import__("pathlib").Path("/tmp")), kind="cron")
+    for kind in ("rebalance_move", "send_email", "notion_delete"):
+        with pytest.raises(ToolError, match="unknown proposal kind"):
+            propose.propose(ctx, {"kind": kind, "payload": {}})
+    with pytest.raises(ToolError, match="payload"):
+        propose.propose(ctx, {"kind": "notion_edit", "payload": "x"})
+    assert set(propose.KINDS) == {"notion_edit", "notion_link"}
+
+
+def test_propose_creates_registered_kinds(monkeypatch):
+    calls = []
+
+    def fake_edit(conn, cfg, page_id, instruction):
+        calls.append((page_id, instruction))
+        return 42
+
+    monkeypatch.setattr(notion_proposals, "propose_edit", fake_edit)
+    ctx = make_ctx(memory_db(), None, kind="chat")
+    out = propose.propose(ctx, {"kind": "notion_edit", "payload": {"page_id": "p1", "instruction": "fix typo"}})
+    assert out["proposal_id"] == 42 and calls == [("p1", "fix typo")]
+    monkeypatch.setattr(notion_proposals, "propose_edit", lambda *a: (_ for _ in ()).throw(notion_proposals.ProposalError("unknown page p9")))
+    with pytest.raises(ToolError, match="unknown page"):
+        propose.propose(ctx, {"kind": "notion_edit", "payload": {"page_id": "p9", "instruction": "x"}})
+
+
+def test_propose_contexts():
+    assert {k for k in ("chat", "cron", "nightly", "code") if "propose" in {t.name for t in registry.tools_for(k)}} == {"chat", "cron"}
+
+
+# ---- skills
+
+def test_skills_index_and_load():
+    conn = memory_db()
+    assert skills.index_block(conn) == ""
+    skills.save(conn, "weekly-review", "How to run the weekly review", "# Steps\n1. Look at mail", NOW)
+    skills.save(conn, "a-first", "Sorted first", "body", NOW)
+    assert skills.index_block(conn).splitlines()[1:] == ["- a-first: Sorted first", "- weekly-review: How to run the weekly review"]
+    from atrium.agent.tools import skills as skill_tool
+
+    out = skill_tool.load_skill(make_ctx(conn, None), {"name": "weekly-review"})
+    assert out["body"].startswith("# Steps")
+    with pytest.raises(ToolError):
+        skill_tool.load_skill(make_ctx(conn, None), {"name": "nope"})
+    with pytest.raises(skills.SkillError):
+        skills.save(conn, "Bad Name", "d", "b", NOW)
+    with pytest.raises(skills.SkillError):
+        skills.save(conn, "ok", "", "b", NOW)
+    assert skills.delete(conn, "a-first") and not skills.delete(conn, "a-first")
+
+
+def test_load_skill_contexts():
+    have = {k for k in ("chat", "cron", "nightly", "code", "sub:web", "sub:mail", "sub:notion", "sub:observability", "sub:calendar") if "load_skill" in {t.name for t in registry.tools_for(k)}}
+    assert have == {"chat", "cron", "nightly", "code"}
+
+
+# ---- web
+
+def test_pages(tmp_path):
+    from helpers import static_dir
+
+    cfg = make_config(tmp_path, static_dir=static_dir(tmp_path))
+    client = web_client(cfg, env={"ATRIUM_TZ": TZ})
+    page = client.get("/schedules")
+    assert page.status_code == 200 and "nightly" in page.text and "daily 02:30" in page.text
+    created = client.post("/schedules", data={"name": "Digest", "prompt": "Summarize mail.", "schedule": "daily 08:00"})
+    assert created.status_code == 200 and "Digest" in created.text
+    bad = client.post("/schedules", data={"name": "Bad", "prompt": "p", "schedule": "nonsense"})
+    assert bad.status_code == 422
+    conn = db.connect(cfg.db_path)
+    job = conn.execute("SELECT * FROM jobs WHERE name = 'Digest'").fetchone()
+    assert client.post(f"/schedules/{job['id']}", data={"name": "Digest", "prompt": "New prompt", "schedule": "weekly mon 09:00"}).status_code == 200
+    assert conn.execute("SELECT prompt, schedule FROM jobs WHERE id = ?", (job["id"],)).fetchone()["prompt"] == "New prompt"
+    client.post(f"/schedules/{job['id']}/toggle")
+    assert conn.execute("SELECT enabled FROM jobs WHERE id = ?", (job["id"],)).fetchone()[0] == 0
+    client.post(f"/schedules/{job['id']}/cancel")
+    assert conn.execute("SELECT cancelled FROM jobs WHERE id = ?", (job["id"],)).fetchone()[0] == 1
+    assert client.post("/schedules/999/cancel").status_code == 404
+
+    assert "No notifications" in client.get("/notifications").text
+    notify.send(conn, {}, "Hello", "World", thread_link="3", thread_id=3)
+    assert "Hello" in client.get("/notifications").text
+
+    assert client.post("/skills", data={"name": "recipe", "description": "Cooking steps", "body": "# Cook"}).status_code == 200
+    assert "Cooking steps" in client.get("/skills").text
+    assert client.post("/skills", data={"name": "BAD", "description": "d", "body": "b"}).status_code == 422
+    client.post("/skills/recipe/delete")
+    assert skills.list_skills(conn) == []
+    conn.close()
+
+
+def test_cli_registers_scheduler_command():
+    from atrium import cli
+
+    assert cli.parser().parse_args(["agent", "scheduler"]).agent_command == "scheduler"

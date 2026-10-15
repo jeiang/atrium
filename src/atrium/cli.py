@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 import signal
 import sys
 
@@ -9,14 +10,18 @@ import uvicorn
 from . import (
     applier,
     backlog,
+    calendar,
     config,
     db,
     deletions,
     embed,
+    event_candidates,
     gmail_labels,
+    google_auth,
     handlers,
     live,
     notion_api,
+    notion_migrate,
     notion_search,
     notion_sync,
     proposals,
@@ -26,9 +31,11 @@ from . import (
     run,
     scans,
     watch,
-    websearch,
 )
+from .agent import scheduler, service
+from .agent.tools.base import CHAT, KINDS
 from .config import ACCOUNTS
+from .web import auth
 from .web.app import create_app
 
 DEFAULT_HOST = "127.0.0.1"
@@ -85,12 +92,77 @@ def parser():
     ns.add_argument("query")
     ns.add_argument("--private", action="store_true")
     ns.add_argument("--limit", type=int, default=10)
-    wb = sub.add_parser("web")
-    wb.add_argument("query")
-    wb.add_argument("--json", action="store_true")
+    nm = nsub.add_parser("migrate").add_subparsers(dest="migrate_command", required=True)
+    nm.add_parser("ensure-schema")
+    mi = nm.add_parser("inventory")
+    mi.add_argument("--out")
+    mp = nm.add_parser("plan")
+    mp.add_argument("--inventory")
+    mp.add_argument("--out")
+    mp.add_argument("--skip-source", action="append", help="source id or title to skip; repeatable")
+    for name in ("apply", "verify", "rollback"):
+        mm = nm.add_parser(name)
+        mm.add_argument("--manifest", required=True)
+        if name != "verify":
+            mm.add_argument("--limit", type=int)
+    ag = sub.add_parser("agent")
+    asub = ag.add_subparsers(dest="agent_command", required=True)
+    asub.add_parser("resume-interrupted")
+    asub.add_parser("scheduler")
+    ar = asub.add_parser("run")
+    ar.add_argument("--thread", type=int, help="existing thread id; omitted creates a new thread of --kind")
+    ar.add_argument("--text", required=True)
+    ar.add_argument("--kind", choices=KINDS, default=CHAT)
+    cal = sub.add_parser("calendar")
+    csub = cal.add_subparsers(dest="calendar_command", required=True)
+    csub.add_parser("candidates")
+    ga = csub.add_parser("google-auth")
+    ga.add_argument("--port", type=int, default=0)
     sv = sub.add_parser("serve")
     sv.add_argument("--host", default=DEFAULT_HOST)
     sv.add_argument("--port", type=int, required=True)
+    sv.add_argument("--auth", choices=auth.MODES, default=auth.PROXY)
+    return p
+
+
+def calendar_command(cfg, args):
+    if args.calendar_command == "google-auth":
+        try:
+            token = google_auth.authorize(
+                os.environ.get("GOOGLE_OAUTH_CLIENT_ID"), os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"), port=args.port
+            )
+        except calendar.CalendarError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        print(f"\nGOOGLE_REFRESH_TOKEN={token}")
+        return 0
+    handlers.register()
+    conn = db.connect(cfg.db_path)
+    out = event_candidates.draft_event_proposals(cfg, conn)
+    json.dump(out, sys.stdout, indent=2, default=str)
+    sys.stdout.write("\n")
+    return 0
+
+
+def agent_command(cfg, args):
+    handlers.register()
+    if args.agent_command == "scheduler":
+        signal.signal(signal.SIGTERM, lambda *_: signal.raise_signal(signal.SIGINT))
+        try:
+            scheduler.run_worker(cfg)
+        except KeyboardInterrupt:
+            pass
+        return 0
+    if args.agent_command == "resume-interrupted":
+        out = service.resume_interrupted(cfg, background=False)
+    else:
+        conn = db.connect(cfg.db_path)
+        thread_id = args.thread if args.thread is not None else service.create_thread(conn, args.kind)
+        run_id = service.run_once(cfg, conn, thread_id, args.text, kind=args.kind)
+        out = service.run_view(conn, run_id)
+    json.dump(out, sys.stdout, indent=2, default=str)
+    sys.stdout.write("\n")
+    return 0
     return p
 
 
@@ -171,6 +243,8 @@ def notion_command(cfg, args):
         with db.exclusive(cfg.db_path.with_name(NOTION_LOCK)):
             stats = notion_sync.sync(conn, cfg, client)
         print(json.dumps({**vars(stats), **notion_sync.counts(conn)}))
+    elif args.notion_command == "migrate":
+        return notion_migrate.run_cli(cfg, args)
     else:
         result = notion_search.search(conn, cfg, args.query, include_private=args.private, limit=args.limit)
         for h in result["hits"]:
@@ -180,6 +254,8 @@ def notion_command(cfg, args):
 def main(argv=None):
     args = parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    if args.command == "calendar" and args.calendar_command == "google-auth":
+        return calendar_command(None, args)
     cfg = config.load()
     if args.command == "sync":
         run.run_sync(cfg, args.account)
@@ -212,17 +288,14 @@ def main(argv=None):
     elif args.command == "live":
         return live_command(cfg, args)
     elif args.command == "notion":
-        notion_command(cfg, args)
-    elif args.command == "web":
-        result = websearch.answer(cfg, args.query)
-        if args.json:
-            json.dump(result, sys.stdout, indent=2)
-            sys.stdout.write("\n")
-        else:
-            sys.stdout.write(websearch.render(result))
-        return 1 if result["error"] else 0
+        return notion_command(cfg, args) or 0
+    elif args.command == "calendar":
+        return calendar_command(cfg, args)
+    elif args.command == "agent":
+        return agent_command(cfg, args)
     elif args.command == "serve":
-        uvicorn.run(create_app(cfg), host=args.host, port=args.port, log_level="info")
+        service.resume_interrupted(cfg)
+        uvicorn.run(create_app(cfg, auth_mode=args.auth), host=args.host, port=args.port, log_level="info")
     return 0
 
 

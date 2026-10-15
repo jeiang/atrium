@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import spinner %}
+{% set page = "chat" %}
+{% block title %}Chat{% endblock %}
+{% block heading %}Chat{% endblock %}
+{% block content %}
+<form method="post" action="/chat" class="flex flex-col gap-2 rounded-lg border bg-card p-4" data-reset>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label for="new-text" class="text-sm font-medium">New thread</label>
+  <textarea id="new-text" name="text" rows="3" class="textarea w-full" placeholder="Ask about your mail, contacts, Notion, calendar or the web… (⌘⏎ to send)" data-submit-on-enter autofocus></textarea>
+  <div class="flex items-center justify-between gap-3">
+    <p class="text-xs text-muted-foreground">Mail, web and Notion content is treated as untrusted data. The assistant never sends mail; it only drafts.</p>
+    <button type="submit" class="btn">{{ icon("send") }}Start</button>
+  </div>
+</form>
+<form action="/chat" method="get" role="search" class="flex flex-col gap-2 sm:flex-row sm:items-end"
+      hx-get="/chat" hx-target="#threads" hx-replace-url="true" hx-sync="this:replace" hx-indicator="#thread-spinner"
+      hx-trigger="input changed delay:250ms from:#thread-q, search from:#thread-q, change from:#thread-kind, submit">
+  <div role="group" class="field flex-1">
+    <label for="thread-q" class="sr-only">Search threads</label>
+    <div class="input-group h-9">
+      {{ icon("search", "size-4 text-muted-foreground") }}
+      <input id="thread-q" name="q" type="search" value="{{ q }}" placeholder="Search threads" autocomplete="off" data-search-input>
+      {{ spinner("thread-spinner", "Searching") }}
+    </div>
+  </div>
+  <div role="group" class="field w-auto">
+    <label for="thread-kind" class="sr-only">Kind</label>
+    <select id="thread-kind" name="kind">
+      <option value="">All kinds</option>
+      {% for k in kinds %}<option value="{{ k }}"{% if kind == k %} selected{% endif %}>{{ k }}</option>{% endfor %}
+    </select>
+  </div>
+  <noscript><button type="submit" class="btn" data-variant="outline">Search</button></noscript>
+</form>
+<div id="threads" class="flex flex-col gap-3">
+  {% include "_thread_list.html" %}
+</div>
+{% endblock %}

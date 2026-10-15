@@ -1,9 +1,12 @@
 import json
 
 import sqlite_vec
+from fastapi.testclient import TestClient
 
 from atrium import db
 from atrium.config import EMBED_DIM, Config
+from atrium.web import auth
+from atrium.web import app as web
 
 COLUMNS = {
     "account": "icloud",
@@ -26,6 +29,20 @@ def make_config(tmp_path, **overrides):
     )
     values.update(overrides)
     return Config(**values)
+
+
+def static_dir(tmp_path):
+    static = tmp_path / "static"
+    (static / "basecoat").mkdir(parents=True, exist_ok=True)
+    (static / "app.css").write_text("body{}")
+    return static
+
+
+def web_client(cfg, **kwargs):
+    client = TestClient(web.create_app(cfg, auth_mode=auth.LOCAL, **kwargs))
+    client.get("/chat")
+    client.headers["X-CSRF-Token"] = client.cookies[auth.CSRF_COOKIE]
+    return client
 
 
 def memory_db():

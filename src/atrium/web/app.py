@@ -1,6 +1,7 @@
 import contextlib
 import hashlib
 import logging
+import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,11 +19,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .. import (
     applier,
-    ask,
-    contacts,
     corrections,
     db,
-    embed,
     executors,
     handlers,
     live,
@@ -36,25 +34,27 @@ from .. import (
     run,
     rules,
     safety,
-    search,
     triage,
-    websearch,
 )
 from ..config import ACCOUNTS
 from ..http import ServiceUnavailable
 from ..rules import RuleError
+from . import auth
+from . import changes as changes_ui
+from . import chat as chat_ui, runs as runs_ui
+from . import drafts as drafts_ui
+from . import notifications as notifications_ui
+from . import schedules as schedules_ui
+from . import skills as skills_ui
+from .deps import Deps, is_partial
 from .markup import markdown_html
 
 log = logging.getLogger("atrium.web")
 TEMPLATES = Path(__file__).parent / "templates"
 PAGE_SIZE = 50
-SEARCH_PAGE = 20
 LEARNED_LIMIT = 50
 ROW, MESSAGE = "row", "message"
 TS_FORMATS = {"date": "%Y-%m-%d", "datetime": "%Y-%m-%d %H:%M"}
-SEARCH_KEYS = ("q", "account", "folder", "from", "date_from", "date_to", "has_attachment", "unread", "flagged", "source", "private")
-FILTER_KEYS = SEARCH_KEYS[1:-2]
-NOTION_SOURCE = "notion"
 ALL = "all"
 PROPOSAL_STATUSES = (
     proposals.PENDING,
@@ -65,7 +65,6 @@ PROPOSAL_STATUSES = (
     ALL,
 )
 LIST_OPS = ("in", "suffix")
-NO_QUESTION = "Type a question to ask."
 NO_NOTION_PROPOSAL = "No proposal was made. The pages may already be linked, or the model saw no reason to change them."
 SPLIT_KINDS = (executors.REBALANCE_SPLIT, executors.REBALANCE_MERGE, executors.INBOX_BACKLOG)
 GROUPED_KINDS = (executors.REBALANCE_SPLIT, executors.INBOX_BACKLOG)
@@ -80,7 +79,7 @@ RULE_PROBLEMS = {
     "op in needs a non-empty list of strings": "“is one of” needs at least one value.",
     "op suffix needs a string or list of strings": "“is or ends in domain” needs at least one domain.",
 }
-BACK_LABELS = {"/": "Search", "/triage": "Triage"}
+BACK_LABELS = {"/chat": "Chat", "/triage": "Triage"}
 RULE_ID_PREFIX = re.compile(r"^[^:\s]+: ")
 
 
@@ -109,6 +108,7 @@ def asset_version(static_dir):
 def build_env(cfg):
     env = jinja2.Environment(loader=jinja2.FileSystemLoader(TEMPLATES), autoescape=True)
     env.filters["ts"] = ts_filter
+    env.filters["markdown"] = markdown_html
     env.globals.update(
         asset_version=asset_version(cfg.static_dir),
         mode=cfg.mode,
@@ -119,10 +119,6 @@ def build_env(cfg):
         valueless_ops=rules.VALUELESS_OPS,
     )
     return env
-
-
-def is_partial(request):
-    return "hx-request" in request.headers and "hx-history-restore-request" not in request.headers
 
 
 def toast(category, title, description=""):
@@ -138,17 +134,21 @@ def back_link(request):
     ref = urlsplit(request.headers.get("referer", ""))
     label = BACK_LABELS.get(ref.path) if ref.netloc == request.url.netloc else None
     if label is None:
-        return {"url": "/", "label": "Search"}
+        return {"url": "/chat", "label": "Chat"}
     return {"url": ref.path + (f"?{ref.query}" if ref.query else ""), "label": label}
 
 
-def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answer=websearch.answer):
+def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None, env=None):
     if cfg.static_dir is None:
         raise ValueError("ATRIUM_STATIC_DIR is required")
+    if auth_mode not in auth.MODES:
+        raise ValueError(f"unknown auth mode {auth_mode!r}")
     handlers.register()
-    env = build_env(cfg)
+    jinja = build_env(cfg)
+    jinja.globals["csrf_token"] = auth.csrf_token.get
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(GZipMiddleware, minimum_size=1024)
+    app.add_middleware(auth.Guard, auth=auth_mode)
     app.mount("/static", StaticFiles(directory=cfg.static_dir), name="static")
 
     def pending():
@@ -159,7 +159,7 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
         if "pending_count" not in context:
             context["pending_count"] = pending()
         context.setdefault("paused", live.paused(cfg))
-        return HTMLResponse(env.get_template(name).render(**context), status_code=status_code)
+        return HTMLResponse(jinja.get_template(name).render(**context), status_code=status_code)
 
     def page(request, full, partial, **context):
         if is_partial(request):
@@ -177,90 +177,22 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
     def folder_map(conn):
         return {name: triage.folders(conn, name) for name in ACCOUNTS}
 
-    def params_of(values):
-        return {k: (values.get(k) or "") for k in SEARCH_KEYS}
-
-    def filters_of(params):
-        return {k: params[k] for k in FILTER_KEYS}
-
-    def run_search(conn, params, offset):
-        limit = offset + SEARCH_PAGE + 1
-        if params["source"] == NOTION_SOURCE:
-            return notion_search.search(
-                conn, cfg, params["q"], include_private=bool(params["private"]), limit=limit, embed_texts=embed_texts
-            )
-        try:
-            return search.search(conn, cfg, params["q"], filters_of(params), limit=limit, embed_texts=embed_texts)
-        except ValueError as e:
-            return {"hits": [], "semantic": False, "error": str(e), "filters": search.normalize_filters({})}
-
-    @app.get("/")
-    def search_page(request: Request, offset: int = 0):
-        params = params_of(request.query_params)
-        offset = max(offset, 0)
-        with connection() as conn:
-            results = run_search(conn, params, offset)
-            more = len(results["hits"]) > offset + SEARCH_PAGE
-            context = {
-                "params": params,
-                "results": {**results, "hits": results["hits"][offset : offset + SEARCH_PAGE]},
-                "offset": offset,
-                "more_url": query_url("/", **params, offset=offset + SEARCH_PAGE) if more else None,
-            }
-            if offset and is_partial(request):
-                return render("_notion_hits.html" if params["source"] == NOTION_SOURCE else "_hits.html", **context)
-            return page(request, "search.html", "_results.html", folders=folder_map(conn), **context)
-
-    @app.post("/ask")
-    def ask_answer(
-        q: Annotated[str, Form()] = "",
-        account: Annotated[str, Form()] = "",
-        folder: Annotated[str, Form()] = "",
-        from_: Annotated[str, Form(alias="from")] = "",
-        date_from: Annotated[str, Form()] = "",
-        date_to: Annotated[str, Form()] = "",
-        has_attachment: Annotated[str, Form()] = "",
-        unread: Annotated[str, Form()] = "",
-        flagged: Annotated[str, Form()] = "",
-    ):
-        question = q.strip()
-        filters = {
-            "account": account,
-            "folder": folder,
-            "from": from_,
-            "date_from": date_from,
-            "date_to": date_to,
-            "has_attachment": has_attachment,
-            "unread": unread,
-            "flagged": flagged,
-        }
-        if not question:
-            answer = {
-                "question": "",
-                "answer": "",
-                "segments": [],
-                "citations": [],
-                "rejected": [],
-                "sources": [],
-                "semantic": False,
-                "error": NO_QUESTION,
-            }
-            return render("_answer.html", answer=answer)
-        with connection() as conn:
-            try:
-                answer = ask.ask(conn, cfg, question, filters, chat=chat, embed_texts=embed_texts)
-            except ValueError as e:
-                answer = {
-                    "question": question,
-                    "answer": "",
-                    "segments": [],
-                    "citations": [],
-                    "rejected": [],
-                    "sources": [],
-                    "semantic": False,
-                    "error": str(e),
-                }
-        return render("_answer.html", answer=answer)
+    deps = Deps(
+        cfg=cfg,
+        render=render,
+        page=page,
+        connection=connection,
+        toast=toast,
+        agent_client=agent_client or (lambda: None),
+        env=os.environ if env is None else env,
+    )
+    chat_ui.register(app, deps)
+    runs_ui.register(app, deps)
+    changes_ui.register(app, deps)
+    drafts_ui.register(app, deps)
+    notifications_ui.register(app, deps)
+    schedules_ui.register(app, deps)
+    skills_ui.register(app, deps)
 
     def load_message(conn, message_id):
         found = message.get_message(conn, cfg, message_id)
@@ -609,18 +541,6 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
             focus_id = remaining[min(index, len(remaining) - 1)]["id"] if remaining else None
             return render("_rule_list.html", account=account, rules=remaining, toast=notice, focus_id=focus_id)
 
-    @app.get("/contacts")
-    def contacts_page(request: Request, q: str = ""):
-        everyone = contacts.load_contacts(cfg.contacts_dir)
-        return page(
-            request,
-            "contacts.html",
-            "_contacts.html",
-            q=q,
-            contacts=contacts.filter_contacts(everyone, q),
-            total=len(everyone),
-        )
-
     @app.get("/notion/{page_id}")
     def notion_view(request: Request, page_id: str):
         with connection() as conn:
@@ -656,13 +576,6 @@ def create_app(cfg, embed_texts=embed.embed_texts, chat=llm.chat_json, web_answe
     @app.post("/notion/{page_id}/edit")
     def notion_edit(page_id: str, instruction: Annotated[str, Form()] = ""):
         return notion_action(lambda conn: notion_proposals.propose_edit(conn, cfg, page_id, instruction, chat=chat))
-
-    @app.get("/web")
-    def web_page(request: Request, q: str = ""):
-        q = q.strip()
-        if q and is_partial(request):
-            return render("_web_answer.html", answer=web_answer(cfg, q, chat=chat, embed_texts=embed_texts), partial=True)
-        return render("web.html", q=q)
 
     @app.get("/proposals")
     def proposals_page(request: Request, status: str = "", kind: str = ""):

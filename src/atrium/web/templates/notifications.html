@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "_macros.html" import empty_state %}
+{% set page = "notifications" %}
+{% block title %}Notifications{% endblock %}
+{% block heading %}Notifications{% endblock %}
+{% block content %}
+{% if notifications %}
+<div class="table-container rounded-lg border bg-card">
+  <table class="table">
+    <caption class="sr-only">Notifications sent by the assistant, newest first</caption>
+    <thead><tr><th scope="col">When</th><th scope="col">Notification</th><th scope="col">Thread</th><th scope="col">Push</th></tr></thead>
+    <tbody>
+      {% for n in notifications %}
+      <tr>
+        <td class="whitespace-nowrap text-muted-foreground">{{ n.ts | ts }}</td>
+        <td><span class="font-medium">{{ n.title }}</span><br><span class="whitespace-pre-line text-muted-foreground">{{ n.body }}</span></td>
+        <td>{% if n.thread_link %}<a class="underline underline-offset-4" href="{{ n.thread_link }}">open</a>{% endif %}</td>
+        <td>{% if n.delivered %}<span class="badge" data-variant="secondary">Sent</span>{% else %}<span class="badge" data-variant="outline" title="{{ n.error or '' }}">Local only</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{% call empty_state("inbox", "No notifications") %}Notifications the assistant sends appear here, even when push is not configured.{% endcall %}
+{% endif %}
+{% endblock %}

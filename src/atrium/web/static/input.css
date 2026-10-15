@@ -80,6 +80,14 @@
 }
 
 @layer components {
+  .htmx-indicator {
+    opacity: 0;
+  }
+  .htmx-request .htmx-indicator,
+  .htmx-request.htmx-indicator {
+    opacity: 1;
+  }
+
   .toaster .toast .toast-content section p {
     word-break: normal;
     overflow-wrap: anywhere;

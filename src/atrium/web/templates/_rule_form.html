@@ -1,6 +1,7 @@
 {% from "_icons.html" import icon %}
 {% from "_macros.html" import condition_text %}
 <form id="rule-form" method="post" action="{{ '/rules' if is_new else '/rules/' ~ (rule.id | urlencode) }}" class="flex min-w-0 flex-col gap-6">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if errors %}
   <div class="alert" data-variant="destructive" role="alert">
     {{ icon("circle-alert") }}

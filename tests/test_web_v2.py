@@ -1,10 +1,8 @@
 import pytest
 import sqlite_vec
-from fastapi.testclient import TestClient
 
 from atrium import db, notion_proposals, proposals
-from atrium.web import app as web
-from helpers import make_config, unit
+from helpers import make_config, static_dir, unit, web_client
 
 HX = {"HX-Request": "true"}
 PAGE = "11111111-1111-1111-1111-111111111111"
@@ -32,10 +30,7 @@ def group(name, ids):
 
 @pytest.fixture
 def cfg(tmp_path):
-    static = tmp_path / "static"
-    (static / "basecoat").mkdir(parents=True)
-    (static / "app.css").write_text("body{}")
-    return make_config(tmp_path, static_dir=static)
+    return make_config(tmp_path, static_dir=static_dir(tmp_path))
 
 
 @pytest.fixture
@@ -53,7 +48,7 @@ def executors(monkeypatch):
 
 
 def make_client(cfg, **kwargs):
-    return TestClient(web.create_app(cfg, **kwargs))
+    return web_client(cfg, **kwargs)
 
 
 def split_proposal(conn, fingerprint="split-1"):
@@ -158,7 +153,7 @@ def test_proposals_page_lists_by_status_with_counts_and_badge(cfg, conn):
     assert bad.status_code == 422 and "Unknown status." in bad.text and "Clear filters" in bad.text
     bad_kind = client.get("/proposals?kind=nonsense", headers=HX)
     assert bad_kind.status_code == 422 and "Unknown kind." in bad_kind.text and 'id="toaster"' in bad_kind.text
-    assert make_client(cfg).get("/").text.count('id="pending-count"') >= 1
+    assert make_client(cfg).get("/chat").text.count('id="pending-count"') >= 1
 
 
 def test_pages_are_compressed(cfg, conn):
@@ -214,27 +209,15 @@ def test_notion_page_renders_notion_flavoured_markdown(cfg, conn):
     assert "<p>Callout text</p>" in body and "<pre>" in body and "&lt;page url=" in body
 
 
-def test_notion_snippets_and_properties_are_plain(cfg, conn):
+def test_notion_page_properties_are_plain(cfg, conn):
     add_page(conn, PAGE, "Plan", NOTION_MARKDOWN)
     add_page(conn, SECRET, "Budget", "x")
     conn.execute(
         "UPDATE notion_pages SET properties = ? WHERE id = ?",
         ('{"Links": {"type": "relation", "relation": []}, "Amount": {"type": "number", "number": 5}}', PAGE),
     )
-    listing = make_client(cfg).get("/?source=notion").text
-    assert "Intro line Second line Child See Budget soon. Tasks Open Done Bill Cost Phone 1 2" in listing
     page = make_client(cfg).get(f"/notion/{PAGE}").text
     assert "Amount" in page and "Links" not in page and "0 linked" not in page
-
-
-def test_notion_search_hides_private_pages_unless_asked(cfg, conn):
-    add_page(conn, PAGE, "Public plan", "x")
-    add_page(conn, SECRET, "Secret plan", "y", private=1)
-    client = make_client(cfg, embed_texts=lambda url, texts: [unit(0) for _ in texts])
-    hidden = client.get("/?source=notion")
-    assert "Public plan" in hidden.text and "Secret plan" not in hidden.text
-    shown = client.get("/?source=notion&private=1", headers=HX)
-    assert "Secret plan" in shown.text
 
 
 def test_notion_actions_create_proposals_or_report_errors(cfg, conn, monkeypatch):
@@ -253,32 +236,6 @@ def test_notion_actions_create_proposals_or_report_errors(cfg, conn, monkeypatch
     assert "Review proposal #1" in made.text and "Edit Plan" in made.text
     monkeypatch.setattr(notion_proposals, "propose_edit", lambda *args, **kwargs: None)
     assert "No proposal was made" in client.post(f"/notion/{PAGE}/edit", data={"instruction": "x"}, headers=HX).text
-
-
-def test_web_page_renders_shell_then_answer(cfg):
-    calls = []
-    answer = {
-        "query": "why sky blue",
-        "rewritten": None,
-        "answer": "Rayleigh scattering [1].",
-        "segments": [{"text": "Rayleigh scattering "}, {"cite": 1, "url": "https://example.test/sky"}],
-        "citations": [{"n": 1, "url": "https://example.test/sky"}],
-        "sources": [{"n": 1, "url": "https://example.test/sky", "title": "Sky", "site": "example.test", "snippet": "s"}],
-        "semantic": True,
-        "error": None,
-        "error_kind": None,
-    }
-    client = make_client(cfg, web_answer=lambda config, q, **kwargs: calls.append(q) or answer)
-    shell = client.get("/web?q=why+sky+blue")
-    assert shell.status_code == 200 and calls == [] and 'hx-trigger="load"' in shell.text
-    filled = client.get("/web?q=why+sky+blue", headers=HX)
-    assert calls == ["why sky blue"] and "Rayleigh scattering" in filled.text and "https://example.test/sky" in filled.text
-    failed = {**answer, "answer": "", "segments": [], "citations": [], "sources": [], "error": "down", "error_kind": "search"}
-    client = make_client(cfg, web_answer=lambda *args, **kwargs: failed)
-    assert "down" in client.get("/web?q=x", headers=HX).text
-    empty = {**failed, "error": "no results", "error_kind": "empty"}
-    client = make_client(cfg, web_answer=lambda *args, **kwargs: empty)
-    assert "The search found no pages" in client.get("/web?q=x", headers=HX).text
 
 
 def test_deletion_proposal_with_an_age_condition_renders(cfg, conn):

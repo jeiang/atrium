@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state, when %}
+{% set page = "drafts" %}
+{% block title %}Drafts{% endblock %}
+{% block heading %}Drafts{% endblock %}
+{% block content %}
+<div class="alert" role="note">
+  {{ icon("send", "text-warning") }}
+  <h2>Sending is your decision</h2>
+  <section><p>The assistant can only save drafts. Pressing Send delivers the mail immediately through your own account; check the recipients first.</p></section>
+</div>
+<nav class="button-group" aria-label="Status">
+  {% for s in statuses %}<a class="btn" data-size="sm" data-variant="{{ 'secondary' if status == s else 'outline' }}" href="/drafts?status={{ s }}">{{ s | capitalize }}</a>{% endfor %}
+</nav>
+{% if drafts %}
+<ul class="flex flex-col gap-4" role="list" aria-label="Drafts">
+  {% for d in drafts %}
+  <li class="flex flex-col gap-3 rounded-lg border bg-card p-4">
+    <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <span class="badge" data-variant="outline">{{ d.status }}</span>
+      <span>{{ d.account }}</span>
+      {% if d.in_reply_to_message_id %}<a class="underline" href="/messages/{{ d.in_reply_to_message_id }}">reply to message {{ d.in_reply_to_message_id }}</a>{% endif %}
+      <span class="tabular-nums">{{ when(d.updated_at, "datetime") }}</span>
+    </div>
+    {% if d.unexpected %}
+    <div class="alert" data-variant="destructive" role="alert">
+      {{ icon("circle-alert") }}
+      <h2>Recipients differ from the original thread</h2>
+      <section><p>Not on the original message: <strong>{{ d.unexpected | join(", ") }}</strong></p></section>
+    </div>
+    {% endif %}
+    {% if d.status == "draft" %}
+    <form method="post" action="/drafts/{{ d.id }}" class="flex flex-col gap-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div role="group" class="field">
+        <label for="acc-{{ d.id }}">Send from</label>
+        <select id="acc-{{ d.id }}" name="account">
+          {% for a in accounts %}<option value="{{ a }}"{% if d.account == a %} selected{% endif %}>{{ a }}{% if not configured[a] %} (not configured){% endif %}</option>{% endfor %}
+        </select>
+      </div>
+      <div role="group" class="field"><label for="to-{{ d.id }}">To</label><input id="to-{{ d.id }}" name="to" type="text" value="{{ d.to_addrs }}"></div>
+      <div role="group" class="field"><label for="cc-{{ d.id }}">Cc</label><input id="cc-{{ d.id }}" name="cc" type="text" value="{{ d.cc_addrs }}"></div>
+      <div role="group" class="field"><label for="sub-{{ d.id }}">Subject</label><input id="sub-{{ d.id }}" name="subject" type="text" value="{{ d.subject }}"></div>
+      <div role="group" class="field"><label for="body-{{ d.id }}">Body</label><textarea id="body-{{ d.id }}" name="body" rows="10" class="textarea w-full">{{ d.body }}</textarea></div>
+      <div><button type="submit" class="btn" data-variant="outline">{{ icon("pencil") }}Save changes</button></div>
+    </form>
+    <div class="flex gap-2">
+      <form method="post" action="/drafts/{{ d.id }}/send" onsubmit="return confirm('Send this email now?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn">{{ icon("send") }}Send</button>
+      </form>
+      <form method="post" action="/drafts/{{ d.id }}/discard">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn" data-variant="outline">{{ icon("trash-2") }}Discard</button>
+      </form>
+    </div>
+    {% else %}
+    <dl class="grid gap-1 text-sm">
+      <div><dt class="inline font-medium">To:</dt> <dd class="inline">{{ d.to_addrs }}</dd></div>
+      {% if d.cc_addrs %}<div><dt class="inline font-medium">Cc:</dt> <dd class="inline">{{ d.cc_addrs }}</dd></div>{% endif %}
+      <div><dt class="inline font-medium">Subject:</dt> <dd class="inline">{{ d.subject }}</dd></div>
+    </dl>
+    <pre class="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">{{ d.body }}</pre>
+    {% endif %}
+    {% if d.smtp_result %}<p class="text-xs text-muted-foreground">{{ d.smtp_result }}</p>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+{% call empty_state("mail", "No " ~ status ~ " drafts") %}Ask the assistant in chat to draft a reply.{% endcall %}
+{% endif %}
+{% endblock %}

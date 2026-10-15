@@ -573,14 +573,12 @@ def web_world(tmp_path, monkeypatch):
 
 
 def test_triage_shows_status_undo_and_header_controls(web_world):
-    from fastapi.testclient import TestClient
-
-    from atrium.web import app as web
+    from helpers import web_client
 
     w = web_world
     w.apply()
     (row,) = [a for a in w.actions() if a["kind"] == "file"][:1]
-    client = TestClient(web.create_app(w.cfg))
+    client = web_client(w.cfg)
     page = client.get("/triage?account=icloud").text
     assert "Applied" in page and f"/live/actions/{row['id']}/undo" in page
     assert "Pause" in page and "Live" in page and "routing is shadow" not in page
@@ -597,12 +595,10 @@ def test_triage_shows_status_undo_and_header_controls(web_world):
 
 
 def test_ui_correction_moves_the_message_in_live_mode_and_defers_when_paused(web_world):
-    from fastapi.testclient import TestClient
-
-    from atrium.web import app as web
+    from helpers import web_client
 
     w = web_world
-    client = TestClient(web.create_app(w.cfg))
+    client = web_client(w.cfg)
     mid = w.mid("fix-me")
     live.set_paused(w.cfg, True)
     held = client.post(f"/messages/{mid}/correct", data={"dest": "Bills", "context": "row"}, headers=HX)
@@ -746,9 +742,7 @@ def test_gmail_trash_copy_that_failed_after_copying_still_gets_an_undo(tmp_path,
 
 
 def test_actions_view_lists_every_automatic_action_with_undo_and_cli_lists_ids(tmp_path, monkeypatch, capsys):
-    from fastapi.testclient import TestClient
-
-    from atrium.web import app as web
+    from helpers import web_client
 
     w = icloud(tmp_path, monkeypatch, file_db=True)
     w.arrive("friend", flags=(), sender="f@shop.test")
@@ -763,7 +757,7 @@ def test_actions_view_lists_every_automatic_action_with_undo_and_cli_lists_ids(t
     applier.deletion_pass(w.conn, w.cfg, ICLOUD, w.opener, force=True)
     ids = {a["kind"]: a["id"] for a in w.actions()}
     assert set(ids) == {"flag", "trash"}
-    client = TestClient(web.create_app(w.cfg))
+    client = web_client(w.cfg)
     page = client.get("/actions").text
     assert "friend" in page and "old-spam" in page
     assert f"/live/actions/{ids['flag']}/undo?view=actions" in page

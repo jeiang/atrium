@@ -1,4 +1,4 @@
-from atrium import ask, embed, search
+from atrium import embed, search
 from atrium.http import ServiceUnavailable
 from helpers import add_message, filed, inbox, make_config, memory_db, unit
 
@@ -144,62 +144,3 @@ def test_empty_query_lists_recent(tmp_path):
     result = search.search(conn, make_config(tmp_path), "", limit=5)
     assert hit_ids(result) == [new, old]
     assert result["hits"][0]["snippet"] == "new body"
-
-
-def sources_for(conn, tmp_path, n):
-    for i in range(n):
-        filed(conn, 1 + i, "Alpha", f"s{i}@x.test", subject=f"parcel {i}", body=f"parcel body {i}")
-    return make_config(tmp_path)
-
-
-def test_ask_strips_citations_outside_sources(tmp_path):
-    conn = memory_db()
-    cfg = sources_for(conn, tmp_path, 2)
-
-    def chat(url, system, user, schema, max_tokens):
-        assert "[1] Subject:" in user and "[2] Subject:" in user and "[3] Subject:" not in user
-        return {"answer": "It arrived [1] and shipped [7], see [2, 9].", "citations": [2, 9, 1]}
-
-    result = ask.ask(conn, cfg, "parcel", chat=chat, embed_texts=down)
-    ids = {s["n"]: s["message_id"] for s in result["sources"]}
-    assert result["answer"] == "It arrived [1] and shipped, see [2]."
-    assert result["citations"] == [{"n": 1, "message_id": ids[1]}, {"n": 2, "message_id": ids[2]}]
-    assert result["rejected"] == [7, 9]
-    assert [s["cite"] for s in result["segments"] if "cite" in s] == [1, 2]
-    assert result["error"] is None
-
-
-def test_ask_citation_array_only_valid(tmp_path):
-    conn = memory_db()
-    cfg = sources_for(conn, tmp_path, 1)
-    chat = lambda *a, **k: {"answer": "plain", "citations": [1, 4, 0]}
-    result = ask.ask(conn, cfg, "parcel", chat=chat, embed_texts=down)
-    assert [c["n"] for c in result["citations"]] == [1]
-    assert result["rejected"] == [0, 4]
-
-
-def test_ask_handles_chat_down_and_no_sources(tmp_path):
-    conn = memory_db()
-    cfg = sources_for(conn, tmp_path, 1)
-
-    def chat(*a, **k):
-        raise ServiceUnavailable("chat down")
-
-    result = ask.ask(conn, cfg, "parcel", chat=chat, embed_texts=down)
-    assert "chat down" in result["error"] and len(result["sources"]) == 1 and result["answer"] == ""
-    empty = ask.ask(conn, cfg, "nothingmatches", chat=chat, embed_texts=down)
-    assert empty["sources"] == [] and empty["error"] is None
-
-
-def test_ask_prompt_fits_the_chat_context_in_the_worst_case():
-    huge = "x" * 5000
-    sources = [
-        {"n": n, "subject": huge, "from_name": huge, "from_addr": huge, "date_ts": 1.0, "folder": huge, "body": huge}
-        for n in range(1, ask.TOP_SOURCES + 1)
-    ]
-    text = ask.prompt(huge, sources)
-    tokens = (len(ask.SYSTEM) + len(text)) / ask.CHARS_PER_TOKEN + ask.ANSWER_TOKENS
-    assert ask.TOKEN_BUDGET * 0.9 < tokens <= ask.TOKEN_BUDGET < 8192
-    assert all(f"[{n}] Subject:" in text for n in range(1, ask.TOP_SOURCES + 1))
-    short = [{**s, "subject": "s", "from_name": "n", "from_addr": "a", "folder": "f"} for s in sources]
-    assert "x" * 1000 in ask.prompt("q", short)

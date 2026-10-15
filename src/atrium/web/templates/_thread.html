@@ -1,0 +1,45 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import chat_item, empty_state, run_badge, spinner, when %}
+{% set t = view.thread %}
+{% set active = view.active %}
+<header class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+  <a href="/chat" class="btn" data-size="sm" data-variant="ghost">{{ icon("arrow-left") }}Threads</a>
+  <span class="badge" data-variant="outline">{{ t.kind }}</span>
+  <span class="badge" data-variant="outline">effort {{ t.effort }}</span>
+  <span class="tabular-nums">started {{ when(t.created_at, "datetime") }}</span>
+  <span class="tabular-nums">${{ "%.3f" | format(view.cost) }}</span>
+  {% if t.parent_run_id %}<a href="/runs/{{ t.parent_run_id }}" class="btn" data-size="sm" data-variant="ghost">Parent run</a>{% endif %}
+  {% for rid in child_runs or [] %}<a href="/runs/{{ rid }}" class="btn" data-size="sm" data-variant="outline">Subagents (run {{ rid }})</a>{% endfor %}
+</header>
+<ol id="transcript" class="flex flex-col gap-4" aria-live="polite" aria-label="Conversation">
+  {% for item in view["items"] %}{{ chat_item(item) }}{% endfor %}
+  {% for r in view.runs if r.state == "failed" %}
+  <li class="ps-10" data-run="{{ r.id }}"><div class="alert" data-variant="destructive" role="alert">{{ icon("circle-alert") }}<p>Run {{ r.id }} stopped: {{ r.error }}</p></div></li>
+  {% endfor %}
+  {% if not view["items"] %}
+  <li>{% call empty_state("messages-square", "Say something") %}The assistant can search your mail, contacts, Notion and the web, and read what it finds.{% endcall %}</li>
+  {% endif %}
+  {% if active and active.state == "running" %}
+  {% with thread_id=t.id, run_id=active.id, after=(view["items"][-1].seq if view["items"] else 0), items=[], current=None %}{% include "_run_poll.html" %}{% endwith %}
+  {% elif active and active.state == "interrupted" %}
+  <li class="ps-10" id="run-{{ active.id }}">
+    <div class="alert" role="alert">
+      {{ icon("circle-alert") }}
+      <p>This run was interrupted while a write was in flight. Resume to let the assistant check what happened and continue.</p>
+      <button type="button" class="btn" data-size="sm" hx-post="/chat/{{ t.id }}/runs/{{ active.id }}/resume" hx-target="#run-{{ active.id }}" hx-swap="outerHTML" hx-disabled-elt="this">{{ icon("play") }}Resume</button>
+    </div>
+  </li>
+  {% endif %}
+</ol>
+{% if t.kind != "subagent" %}
+<form id="composer" class="flex flex-col gap-2 rounded-lg border bg-card p-3" method="post" action="/chat/{{ t.id }}/messages"
+      hx-post="/chat/{{ t.id }}/messages" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label for="composer-text" class="sr-only">Message</label>
+  <textarea id="composer-text" name="text" rows="3" class="textarea w-full" placeholder="Message the assistant… (⌘⏎ to send)" data-submit-on-enter required autofocus></textarea>
+  <div class="flex items-center gap-2">
+    {{ spinner("composer-spinner", "Sending") }}
+    <button type="submit" class="btn ms-auto" data-size="sm">{{ icon("send") }}Send</button>
+  </div>
+</form>
+{% endif %}
