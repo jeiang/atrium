@@ -363,7 +363,7 @@ def test_propose_rejects_unknown_kinds():
             propose.propose(ctx, {"kind": kind, "payload": {}})
     with pytest.raises(ToolError, match="payload"):
         propose.propose(ctx, {"kind": "notion_edit", "payload": "x"})
-    assert set(propose.KINDS) == {"notion_edit", "notion_link"}
+    assert set(propose.KINDS) == {"notion_edit", "notion_link", "notion_receipt", "actual_categorize"}
 
 
 def test_propose_creates_registered_kinds(monkeypatch):

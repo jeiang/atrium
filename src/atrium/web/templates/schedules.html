@@ -14,7 +14,7 @@
   <section class="flex flex-col gap-3 rounded-lg border bg-card p-4" aria-label="{{ j.name }}">
     <header class="flex flex-wrap items-center gap-2">
       <h2 class="text-sm font-medium">{{ j.name }}</h2>
-      <span class="badge" data-variant="outline">{{ "nightly" if j.kind == "nightly" else j.created_by }}</span>
+      <span class="badge" data-variant="outline">{{ j.kind if j.kind in ("nightly", "builtin") else j.created_by }}</span>
       <span class="badge" data-variant="{{ 'secondary' if j.enabled else 'outline' }}">{{ "Enabled" if j.enabled else "Disabled" }}</span>
       <span class="ml-auto text-xs text-muted-foreground">
         {% if j.next_due_text %}Next due {{ j.next_due_text }}{% else %}Not scheduled{% endif %}
@@ -33,7 +33,7 @@
       <div class="grid gap-3 sm:grid-cols-2">
         <div role="group" class="field">
           <label for="name-{{ j.id }}">Name</label>
-          <input id="name-{{ j.id }}" name="name" type="text" value="{{ j.name }}"{% if j.kind == "nightly" %} readonly{% endif %}>
+          <input id="name-{{ j.id }}" name="name" type="text" value="{{ j.name }}"{% if j.kind in ("nightly", "builtin") %} readonly{% endif %}>
         </div>
         <div role="group" class="field">
           <label for="schedule-{{ j.id }}">Schedule</label>
@@ -42,13 +42,13 @@
       </div>
       <div role="group" class="field">
         <label for="prompt-{{ j.id }}">Prompt</label>
-        <textarea id="prompt-{{ j.id }}" name="prompt" rows="{{ 3 if j.kind != 'nightly' else 5 }}" class="w-full"{% if j.kind == "nightly" %} readonly{% endif %}>{{ j.prompt }}</textarea>
-        {% if j.kind == "nightly" %}<p>The nightly prompt is fixed in code.</p>{% endif %}
+        <textarea id="prompt-{{ j.id }}" name="prompt" rows="{{ 3 if j.kind not in ('nightly', 'builtin') else 5 }}" class="w-full"{% if j.kind in ("nightly", "builtin") %} readonly{% endif %}>{{ j.prompt }}</textarea>
+        {% if j.kind in ("nightly", "builtin") %}<p>The {{ j.kind }} prompt is fixed in code.</p>{% endif %}
       </div>
       <div class="flex flex-wrap gap-2">
         <button type="submit" class="btn" data-size="sm">{{ icon("check") }}Save</button>
         <button type="submit" class="btn" data-size="sm" data-variant="outline" formaction="/schedules/{{ j.id }}/toggle">{{ "Disable" if j.enabled else "Enable" }}</button>
-        {% if j.kind != "nightly" %}
+        {% if j.kind not in ("nightly", "builtin") %}
         <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/schedules/{{ j.id }}/cancel">{{ icon("trash-2") }}Cancel</button>
         {% endif %}
       </div>

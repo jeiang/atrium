@@ -22,6 +22,7 @@ def register(app, deps):
     def show(notice=None, status_code=200):
         with connection() as conn:
             scheduler.ensure_nightly(conn, scheduler.tz_name(deps.env), time.time())
+            scheduler.ensure_builtins(conn, scheduler.tz_name(deps.env), time.time())
             return render("schedules.html", jobs=view(conn), tz=scheduler.tz_name(deps.env), toast=notice, status_code=status_code)
 
     def attempt(action, success):
@@ -64,7 +65,7 @@ def register(app, deps):
     ):
         def edit(conn):
             job = load(conn, job_id)
-            fixed = job["kind"] == scheduler.NIGHTLY
+            fixed = job["kind"] in (scheduler.NIGHTLY, scheduler.BUILTIN)
             scheduler.update_job(
                 conn, job_id, time.time(), name=None if fixed else name, prompt=None if fixed else prompt, schedule=schedule, enforce=False
             )

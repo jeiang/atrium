@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS messages (
     subject TEXT NOT NULL DEFAULT '',
     subject_tmpl TEXT NOT NULL DEFAULT '',
     msgid_domain TEXT NOT NULL DEFAULT '',
+    in_reply_to TEXT,
+    refs TEXT,
     dkim_d TEXT NOT NULL DEFAULT '[]',
     esp TEXT NOT NULL DEFAULT '[]',
     att_types TEXT NOT NULL DEFAULT '[]',

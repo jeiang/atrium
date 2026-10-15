@@ -13,8 +13,9 @@ from .sync import mailbox_role
 
 log = logging.getLogger("atrium.drafts")
 
-DRAFT, SENDING, SENT, DISCARDED = "draft", "sending", "sent", "discarded"
-STATUSES = (DRAFT, SENDING, SENT, DISCARDED)
+DRAFT, SENDING, SENT, DISCARDED, UNKNOWN = "draft", "sending", "sent", "discarded", "unknown"
+STATUSES = (DRAFT, SENDING, SENT, DISCARDED, UNKNOWN)
+SENDING_STALE_SECONDS = 600
 FIELDS = ("to_addrs", "cc_addrs", "subject", "body")
 MAX_BODY = 100_000
 MAX_SUBJECT = 300
@@ -181,6 +182,31 @@ def discard(conn, draft_id, now=time.time):
     conn.commit()
     if cur.rowcount == 0:
         raise DraftError("only an unsent draft can be discarded")
+
+
+def recover_stuck(conn, now=time.time, older_than=SENDING_STALE_SECONDS):
+    """Drafts left in 'sending' by a crash may or may not have gone out: never resend, ask the operator."""
+    cur = conn.execute(
+        "UPDATE drafts SET status = ?, smtp_result = ?, updated_at = ? WHERE status = ? AND updated_at < ?",
+        (UNKNOWN, "send interrupted; outcome unknown", now(), SENDING, now() - older_than),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def resolve_unknown(conn, draft_id, status, now=time.time):
+    """Operator verdict on an 'unknown' draft after checking the Sent folder: SENT or back to DRAFT."""
+    if status not in (SENT, DRAFT):
+        raise DraftError("an unknown draft can only be marked sent or returned to draft")
+    note = "marked sent by operator" if status == SENT else "returned to draft by operator"
+    cur = conn.execute(
+        "UPDATE drafts SET status = ?, sent_at = CASE WHEN ? = ? THEN ? ELSE sent_at END, smtp_result = ?, updated_at = ? "
+        "WHERE id = ? AND status = ?",
+        (status, status, SENT, now(), note, now(), draft_id, UNKNOWN),
+    )
+    conn.commit()
+    if cur.rowcount == 0:
+        raise DraftError("draft is not in the unknown state")
 
 
 def list_drafts(conn, status=None, limit=100):

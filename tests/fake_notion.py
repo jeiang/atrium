@@ -90,6 +90,8 @@ class FakeNotion:
                 self.append(m.group(1), data["children"])
                 return 200, {"object": "list", "results": []}
             return 200, self.paged(self.blocks.get(m.group(1), []), (query.get("start_cursor") or [None])[0], 100)
+        if method == "POST" and path == "/v1/pages":
+            return self.create_page(data)
         m = PAGE_ROUTE.match(path)
         if not m or m.group(1) not in self.pages:
             return 404, {"code": "object_not_found", "message": "missing"}
@@ -101,11 +103,32 @@ class FakeNotion:
                 return 200, {"object": "page_markdown", "id": pid, "markdown": self.markdown[pid], "truncated": False}
             return self.patch_markdown(pid, data)
         if method == "PATCH":
-            for name, value in data["properties"].items():
-                self.pages[pid]["properties"][name]["relation"] = value["relation"]
-                self.pages[pid]["properties"][name]["has_more"] = False
-            self.touch(pid)
+            return self.patch_page(pid, data)
         return 200, self.pages[pid]
+
+    def create_page(self, data):
+        # Real API (2026-03-11): POST /v1/pages takes `markdown` directly; `archived` does not exist.
+        if "archived" in data or not {"parent", "properties", "markdown"} >= set(data):
+            return 400, {"code": "validation_error", "message": "unknown body parameter"}
+        self.created = getattr(self, "created", 100) + 1
+        pid = f"00000000-0000-0000-0000-{self.created:012d}"
+        title = next(p["title"][0]["text"]["content"] for p in data["properties"].values() if "title" in p)
+        self.add_page(pid, title, data.get("markdown", ""), parent=data["parent"])
+        for name, value in data["properties"].items():
+            if "title" not in value:
+                self.pages[pid]["properties"][name] = value
+        return 200, self.pages[pid]
+
+    def patch_page(self, pid, data):
+        if "archived" in data:
+            return 400, {"code": "validation_error", "message": "archived was removed in 2026-03-11; use in_trash"}
+        page = self.pages[pid]
+        if "in_trash" in data:
+            page["in_trash"] = data["in_trash"]
+        for name, value in (data.get("properties") or {}).items():
+            page["properties"][name] = {**page["properties"].get(name, {}), **value, **({"has_more": False} if "relation" in value else {})}
+        self.touch(pid)
+        return 200, page
 
     def patch_markdown(self, pid, data):
         if data["type"] == "replace_content":

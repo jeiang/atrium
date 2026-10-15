@@ -5,7 +5,7 @@ import threading
 import time
 
 from .. import db, embed
-from . import budget, journal, loop, threads, usage
+from . import budget, context, journal, loop, threads, usage
 from .client import make_client
 from .tools.base import CHAT, CRON, NIGHTLY, NotConfigured
 
@@ -37,8 +37,8 @@ def create_thread(conn, kind=CHAT, title=None, parent_id=None, job_id=None, now=
     return thread_id
 
 
-def list_threads(conn, q=None, kind=None, limit=50):
-    return threads.list_threads(conn, q, kind, limit)
+def list_threads(conn, q=None, kind=None, limit=50, include_subagents=False):
+    return threads.list_threads(conn, q, kind, limit, include_subagents)
 
 
 def short_args(args):
@@ -101,6 +101,8 @@ def items_of(messages, calls):
                 if item is not None:
                     item["result"] = f"{len(results)} results"
                 items.append({**base, "kind": "web_search", "results": results, "error": content.get("error_code") if isinstance(content, dict) else None})
+            elif kind == context.COMPACTION:
+                items.append({**base, "kind": "compaction"})
             elif kind in THINKING:
                 continue
     return items
@@ -135,7 +137,7 @@ def run_view(conn, run_id):
     return found
 
 
-def prepare(conn, thread_id, text, kind, now, parent_run_id=None):
+def prepare(conn, thread_id, text, kind, now, parent_run_id=None, limits=None):
     thread = threads.get(conn, thread_id)
     if thread is None:
         raise UnknownThread(thread_id)
@@ -145,6 +147,8 @@ def prepare(conn, thread_id, text, kind, now, parent_run_id=None):
     threads.set_title(conn, thread_id, threads.title_from(text))
     threads.add_allowed_urls(conn, thread_id, threads.urls_in(text))
     run_id = journal.start_run(conn, thread_id, kind, loop.MODEL, thread["effort"], now, parent_run_id)
+    if limits:
+        journal.set_limits(conn, run_id, limits)
     journal.append_message(conn, thread_id, run_id, journal.USER, [{"type": loop.TEXT, "text": text}], now)
     return run_id
 
@@ -157,12 +161,13 @@ def execute(cfg, conn, run_id, client, env, now=time.time, **limits):
         except NotConfigured as e:
             journal.finish_run(conn, run_id, journal.FAILED, now(), error=str(e))
             return journal.get_run(conn, run_id)
+    limits = {**journal.limits_of(conn, run_id), **limits}
     return loop.run(conn, cfg, env, client, run_id, embed=embedder(cfg), now=now, **limits)
 
 
 def run_once(cfg, conn, thread_id, text, *, kind=CHAT, client=None, env=None, now=time.time, parent_run_id=None, **limits):
     """limits: optional loop.run keyword overrides (max_steps, max_cost_usd, system_extra)."""
-    run_id = prepare(conn, thread_id, text, kind, now(), parent_run_id)
+    run_id = prepare(conn, thread_id, text, kind, now(), parent_run_id, limits)
     execute(cfg, conn, run_id, client, env, now, **limits)
     return run_id
 

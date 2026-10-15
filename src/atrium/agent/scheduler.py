@@ -25,6 +25,7 @@ CHECKED_OCCURRENCES = 64
 SEARCH_DAYS = 366 * 5
 NIGHTLY_SCHEDULE = "daily 02:30"
 NIGHTLY_NAME = "nightly"
+BUILTIN = "builtin"
 
 OK = "ok"
 ERROR = "error"
@@ -312,8 +313,8 @@ def cancel_job(conn, job_id):
     job = get_job(conn, job_id)
     if job is None or job["cancelled"]:
         raise ScheduleError(f"no active schedule {job_id}")
-    if job["kind"] == NIGHTLY:
-        raise ScheduleError("the nightly run cannot be cancelled; disable it instead")
+    if job["kind"] in (NIGHTLY, BUILTIN):
+        raise ScheduleError("built-in runs cannot be cancelled; disable them instead")
     conn.execute("UPDATE jobs SET cancelled = 1, enabled = 0, next_due = NULL WHERE id = ?", (job_id,))
 
 
@@ -335,6 +336,19 @@ def ensure_nightly(conn, tz, now):
         conn, name=NIGHTLY_NAME, prompt=NIGHTLY_PROMPT, schedule=NIGHTLY_SCHEDULE, tz=tz, now=now,
         created_by=OPERATOR, kind=NIGHTLY, enforce=False,
     )
+
+
+def ensure_builtins(conn, tz, now):
+    """Seed each built-in job once; an operator who disables one keeps it disabled."""
+    from .builtin_jobs import BUILTIN_JOBS
+
+    have = {r["name"] for r in conn.execute("SELECT name FROM jobs WHERE kind = ?", (BUILTIN,))}
+    for spec in BUILTIN_JOBS:
+        if spec.name not in have:
+            create_job(
+                conn, name=spec.name, prompt=spec.prompt, schedule=spec.schedule, tz=tz, now=now,
+                created_by=OPERATOR, kind=BUILTIN, enforce=False,
+            )
 
 
 @dataclass
@@ -424,11 +438,16 @@ def run_tokens(conn, run_id):
 
 def execute_claim(cfg, claim, *, client=None, env=None, now=time.time):
     from . import service
+    from .builtin_jobs import BUILTIN_JOBS, CALLABLES
     from .nightly import NIGHTLY_PROMPT
 
     job = claim.job
+    if job["kind"] == BUILTIN and job["name"] in CALLABLES:
+        return execute_callable(cfg, claim, CALLABLES[job["name"]], client=client, env=env, now=now)
     kind = NIGHTLY if job["kind"] == NIGHTLY else CRON
     prompt = NIGHTLY_PROMPT if kind == NIGHTLY else job["prompt"]
+    if job["kind"] == BUILTIN:  # built-in prompts live in code so upgrades reach existing jobs
+        prompt = next((s.prompt for s in BUILTIN_JOBS if s.name == job["name"]), prompt)
     conn = db.connect(cfg.db_path)
     thread_id = None
     try:
@@ -456,6 +475,33 @@ def execute_claim(cfg, claim, *, client=None, env=None, now=time.time):
         conn.close()
 
 
+def execute_callable(cfg, claim, fn, *, client=None, env=None, now=time.time):
+    """Run a built-in Python job; it may start one agent run, whose thread and cost are recorded on the job run."""
+    conn = db.connect(cfg.db_path)
+    try:
+        try:
+            result = fn(cfg, conn, client=client, env=env) or {}
+        except budget.BudgetExceeded as e:
+            finish_run(conn, claim, SKIPPED_BUDGET, now(), None, str(e))
+            return SKIPPED_BUDGET
+        except Exception as e:
+            log.exception("job %s crashed", claim.job["id"])
+            finish_run(conn, claim, ERROR, now(), None, f"{type(e).__name__}: {e}")
+            return ERROR
+        run_id = result.get("run_id")
+        found = journal.get_run(conn, run_id) if run_id else None
+        thread_id = found["thread_id"] if found else None
+        tokens, cost = (run_tokens(conn, run_id), usage.run_cost(conn, run_id)) if found else (0, 0.0)
+        if found and found["state"] != journal.DONE:
+            finish_run(conn, claim, ERROR, now(), thread_id, found["error"] or found["state"], tokens, cost)
+            return ERROR
+        status = MISSED_COALESCED if claim.missed else OK
+        finish_run(conn, claim, status, now(), thread_id, None, tokens, cost)
+        return status
+    finally:
+        conn.close()
+
+
 def notify_skipped(conn, env, skip, now):
     from .tools import notify
 
@@ -475,6 +521,7 @@ def tick(cfg, owner, *, client=None, env=None, now=time.time, spawn=None):
     try:
         stamp = now()
         ensure_nightly(conn, tz_name(env), stamp)
+        ensure_builtins(conn, tz_name(env), stamp)
         claims, skipped = claim_due(conn, cfg, stamp, owner)
         for skip in skipped:
             notify_skipped(conn, env, skip, stamp)

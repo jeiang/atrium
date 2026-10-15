@@ -5,7 +5,7 @@ from fastapi import Form, HTTPException
 from .. import drafts, smtp
 from ..config import ACCOUNTS
 
-STATUS_FILTERS = (drafts.DRAFT, drafts.SENT, drafts.DISCARDED)
+STATUS_FILTERS = (drafts.DRAFT, drafts.UNKNOWN, drafts.SENT, drafts.DISCARDED)
 
 
 def register(app, deps):
@@ -69,3 +69,15 @@ def register(app, deps):
                 return show(drafts.DRAFT, 409, toast("error", "Not sent", str(e)))
         detail = result["filed"] + (f"; refused: {', '.join(result['refused'])}" if result["refused"] else "")
         return show(drafts.DRAFT, notice=toast("success", "Sent", detail))
+
+    @app.post("/drafts/{draft_id}/resolve")
+    def drafts_resolve(draft_id: int, outcome: Annotated[str, Form()] = ""):
+        verdict = {"sent": drafts.SENT, "draft": drafts.DRAFT}.get(outcome)
+        if verdict is None:
+            raise HTTPException(422, "outcome must be sent or draft")
+        with connection() as conn:
+            try:
+                drafts.resolve_unknown(conn, draft_id, verdict)
+            except drafts.DraftError as e:
+                return show(drafts.UNKNOWN, 409, toast("error", "Not updated", str(e)))
+        return show(drafts.UNKNOWN, notice=toast("success", "Updated", f"Draft marked {verdict}."))

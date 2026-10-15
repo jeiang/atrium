@@ -2,7 +2,7 @@ import json
 
 import pytest
 from agent_tool_helpers import make_ctx
-from fake_notion import PAGE_ROUTE, FakeNotion, select_prop
+from fake_notion import FakeNotion, select_prop
 from helpers import make_config
 
 from atrium import db, notion_api
@@ -18,34 +18,9 @@ def uid(n):
 A, SRC = uid(1), uid(50)
 
 
-class WritableNotion(FakeNotion):
-    created = 100
-
-    def route(self, method, path, query, data):
-        if method == "POST" and path == "/v1/pages":
-            self.created += 1
-            pid = uid(self.created)
-            title = next(p["title"][0]["text"]["content"] for p in data["properties"].values() if "title" in p)
-            self.add_page(pid, title, data.get("markdown", ""), parent=data["parent"])
-            for name, value in data["properties"].items():
-                if "title" not in value:
-                    self.pages[pid]["properties"][name] = value
-            return 200, self.pages[pid]
-        m = PAGE_ROUTE.match(path)
-        if method == "PATCH" and m and m.group(2) is None and m.group(1) in self.pages:
-            page = self.pages[m.group(1)]
-            if "in_trash" in data:
-                page["in_trash"] = data["in_trash"]
-            for name, value in (data.get("properties") or {}).items():
-                page["properties"][name] = {**page["properties"].get(name, {}), **value}
-            self.touch(m.group(1))
-            return 200, page
-        return super().route(method, path, query, data)
-
-
 @pytest.fixture
 def world(tmp_path, monkeypatch):
-    fake = WritableNotion()
+    fake = FakeNotion()
     fake.add_page(A, "Alpha", "alpha body", properties={"Type": select_prop("Note")})
     cfg = make_config(tmp_path)
     conn = db.connect_memory()

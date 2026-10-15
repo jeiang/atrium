@@ -31,8 +31,8 @@ def agent_job(conn, args):
     job = scheduler.get_job(conn, job_id)
     if job is None or job["cancelled"]:
         raise ToolError(f"no active schedule {job_id}")
-    if job["kind"] == scheduler.NIGHTLY:
-        raise ToolError("the nightly run is managed by the operator")
+    if job["kind"] in (scheduler.NIGHTLY, scheduler.BUILTIN):
+        raise ToolError("built-in runs are managed by the operator")
     return job
 
 
@@ -80,7 +80,7 @@ def schedule_cancel(ctx: ToolContext, args: dict):
 
 
 def schedule_list(ctx: ToolContext, args: dict):
-    return {"schedules": [describe(j) for j in scheduler.list_jobs(ctx.conn) if j["kind"] != scheduler.NIGHTLY]}
+    return {"schedules": [describe(j) for j in scheduler.list_jobs(ctx.conn) if j["kind"] not in (scheduler.NIGHTLY, scheduler.BUILTIN)]}
 
 
 def object_schema(properties, required=()):

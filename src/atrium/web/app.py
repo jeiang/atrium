@@ -21,6 +21,7 @@ from .. import (
     applier,
     corrections,
     db,
+    drafts,
     executors,
     handlers,
     live,
@@ -44,8 +45,10 @@ from . import changes as changes_ui
 from . import chat as chat_ui, runs as runs_ui
 from . import drafts as drafts_ui
 from . import notifications as notifications_ui
+from . import openloops as openloops_ui
 from . import schedules as schedules_ui
 from . import skills as skills_ui
+from . import watches as watches_ui
 from .deps import Deps, is_partial
 from .markup import markdown_html
 
@@ -186,12 +189,16 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
         agent_client=agent_client or (lambda: None),
         env=os.environ if env is None else env,
     )
+    with connection() as conn:
+        drafts.recover_stuck(conn)
     chat_ui.register(app, deps)
     runs_ui.register(app, deps)
     changes_ui.register(app, deps)
     drafts_ui.register(app, deps)
     notifications_ui.register(app, deps)
     schedules_ui.register(app, deps)
+    openloops_ui.register(app, deps)
+    watches_ui.register(app, deps)
     skills_ui.register(app, deps)
 
     def load_message(conn, message_id):

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state, when %}
+{% set page = "loops" %}
+{% block title %}Open loops{% endblock %}
+{% block heading %}Open loops{% endblock %}
+{% macro loop_list(items, label, empty) %}
+{% if items %}
+<ul class="flex flex-col gap-3" role="list" aria-label="{{ label }}">
+  {% for l in items %}
+  <li class="flex flex-col gap-2 rounded-lg border bg-card p-4">
+    <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <span class="badge" data-variant="outline">{{ l.account }}</span>
+      <span class="tabular-nums">{{ l.days }} day{{ "" if l.days == 1 else "s" }}</span>
+      <span>{{ l.counterpart }}</span>
+    </div>
+    <a class="text-sm font-medium underline-offset-4 hover:underline" href="/messages/{{ l.last_message_id }}">{{ l.subject or "(no subject)" }}</a>
+    <div class="flex flex-wrap items-center gap-2">
+      <form method="post" action="/chat">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="text" value="Draft a reply to mail {{ l.last_message_id }}">
+        <button type="submit" class="btn" data-size="sm">{{ icon("pencil") }}Draft reply</button>
+      </form>
+      <form method="post" action="/loops/{{ l.id }}/snooze" class="flex items-center gap-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <select name="days" aria-label="Snooze for" class="select">
+          {% for d in snooze_choices %}<option value="{{ d }}"{% if d == 3 %} selected{% endif %}>{{ d }} day{{ "" if d == 1 else "s" }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">Snooze</button>
+      </form>
+      <form method="post" action="/loops/{{ l.id }}/dismiss">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("x") }}Dismiss</button>
+      </form>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+{% call empty_state("check", "Nothing here") %}{{ empty }}{% endcall %}
+{% endif %}
+{% endmacro %}
+{% block content %}
+<section class="flex flex-col gap-3" aria-labelledby="owe-h">
+  <h2 id="owe-h" class="text-sm font-medium">You owe a reply ({{ owe | length }})</h2>
+  {{ loop_list(owe, "Owe a reply", "No one is waiting on you.") }}
+</section>
+<section class="flex flex-col gap-3" aria-labelledby="waiting-h">
+  <h2 id="waiting-h" class="text-sm font-medium">Waiting on them ({{ waiting | length }})</h2>
+  {{ loop_list(waiting, "Waiting on them", "No sent mail is waiting for an answer.") }}
+</section>
+<section class="flex flex-col gap-3" aria-labelledby="commit-h">
+  <h2 id="commit-h" class="text-sm font-medium">Commitments ({{ commitments | length }})</h2>
+  {% if commitments %}
+  <ul class="flex flex-col gap-3" role="list" aria-label="Commitments">
+    {% for c in commitments %}
+    <li class="flex flex-col gap-2 rounded-lg border bg-card p-4">
+      <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span class="badge" data-variant="{{ 'secondary' if c.owner == 'me' else 'outline' }}">{{ "You" if c.owner == "me" else "Them" }}</span>
+        <span class="tabular-nums">{% if c.due %}Due {{ c.due }}{% else %}No date{% endif %}</span>
+        {% if c.subject %}<a class="underline" href="/messages/{{ c.message_id }}">{{ c.subject }}</a>{% endif %}
+      </div>
+      <p class="text-sm">{{ c.text }}</p>
+      <div class="flex flex-wrap gap-2">
+        <form method="post" action="/loops/commitments/{{ c.id }}/done">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn" data-size="sm">{{ icon("check") }}Done</button>
+        </form>
+        <form method="post" action="/loops/commitments/{{ c.id }}/dismiss">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("x") }}Dismiss</button>
+        </form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  {% call empty_state("check", "No open commitments") %}Commitments are extracted from new mail by the local model.{% endcall %}
+  {% endif %}
+</section>
+{% endblock %}

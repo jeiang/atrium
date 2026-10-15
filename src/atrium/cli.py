@@ -24,6 +24,7 @@ from . import (
     notion_migrate,
     notion_search,
     notion_sync,
+    openloops,
     proposals,
     rebalance,
     report,
@@ -31,6 +32,7 @@ from . import (
     run,
     scans,
     watch,
+    watches,
 )
 from .agent import scheduler, service
 from .agent.tools.base import CHAT, KINDS
@@ -118,6 +120,10 @@ def parser():
     csub.add_parser("candidates")
     ga = csub.add_parser("google-auth")
     ga.add_argument("--port", type=int, default=0)
+    lo = sub.add_parser("loops")
+    lo.add_subparsers(dest="loops_command", required=True).add_parser("refresh")
+    wt = sub.add_parser("watches")
+    wt.add_subparsers(dest="watches_command", required=True).add_parser("refresh")
     sv = sub.add_parser("serve")
     sv.add_argument("--host", default=DEFAULT_HOST)
     sv.add_argument("--port", type=int, required=True)
@@ -139,6 +145,26 @@ def calendar_command(cfg, args):
     handlers.register()
     conn = db.connect(cfg.db_path)
     out = event_candidates.draft_event_proposals(cfg, conn)
+    json.dump(out, sys.stdout, indent=2, default=str)
+    sys.stdout.write("\n")
+    return 0
+
+
+def loops_command(cfg):
+    handlers.register()
+    conn = db.connect(cfg.db_path)
+    with db.exclusive(cfg.db_path):
+        out = openloops.refresh(conn, cfg)
+    json.dump(out, sys.stdout, indent=2, default=str)
+    sys.stdout.write("\n")
+    return 0
+
+
+def watches_command(cfg):
+    handlers.register()
+    conn = db.connect(cfg.db_path)
+    with db.exclusive(cfg.db_path):
+        out = watches.refresh(conn, cfg)
     json.dump(out, sys.stdout, indent=2, default=str)
     sys.stdout.write("\n")
     return 0
@@ -293,6 +319,10 @@ def main(argv=None):
         return calendar_command(cfg, args)
     elif args.command == "agent":
         return agent_command(cfg, args)
+    elif args.command == "loops":
+        return loops_command(cfg)
+    elif args.command == "watches":
+        return watches_command(cfg)
     elif args.command == "serve":
         service.resume_interrupted(cfg)
         uvicorn.run(create_app(cfg, auth_mode=args.auth), host=args.host, port=args.port, log_level="info")

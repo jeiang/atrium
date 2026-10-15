@@ -1,7 +1,7 @@
 import json
 import re
 
-from ... import notion_api, notion_markdown, notion_sync
+from ... import notion_api, notion_markdown, notion_sync, notion_wiki
 from .. import writes
 from ._args import text_arg
 from .base import CHAT, NIGHTLY, WRITE, Tool, ToolContext, ToolError
@@ -141,6 +141,22 @@ def _source_schema(ctx, data_source_id):
     return json.loads(row["properties"])
 
 
+def _is_wiki(ctx, source):
+    try:
+        return notion_wiki.wiki_data_source(ctx.env) == source
+    except notion_wiki.WikiError:
+        return False
+
+
+def _identity(args, title):
+    """Canonical key and aliases for a wiki create: explicit properties win, else the title."""
+    given = _property_args(args)
+    key = str(given.get(notion_wiki.CANONICAL_KEY) or "").strip() or title
+    raw = given.get(notion_wiki.ALIASES) or ""
+    aliases = [a.strip() for a in notion_wiki.ALIAS_SPLIT.split(raw if isinstance(raw, str) else ",".join(map(str, raw))) if a.strip()]
+    return key, aliases
+
+
 def notion_create_page(ctx: ToolContext, args: dict):
     title = text_arg(args, "title", required=True)
     markdown = args.get("markdown") or ""
@@ -152,6 +168,9 @@ def notion_create_page(ctx: ToolContext, args: dict):
         raise ToolError("give exactly one of parent_page_id or data_source_id")
     check_markdown(ctx, markdown)
     given = _property_args(args)
+    allow_duplicate = args.get("allow_duplicate", False)
+    if not isinstance(allow_duplicate, bool):
+        raise ToolError("allow_duplicate must be true or false")
     if parent_page:
         if given:
             raise ToolError("properties only apply to pages created in a data source")
@@ -164,6 +183,19 @@ def notion_create_page(ctx: ToolContext, args: dict):
         if title_name is None:
             raise ToolError("data source has no title property")
         properties = {title_name: {"title": _rich(title)}}
+        if _is_wiki(ctx, source):
+            key, aliases = _identity(args, title)
+            if not allow_duplicate:
+                hits = notion_wiki.find_existing(ctx.conn, key, aliases, source)
+                if hits:
+                    raise ToolError(
+                        "wiki already has matching page(s): "
+                        + ", ".join(f"{h['id']} ({h['title']!r}, {h['match']})" for h in hits[:5])
+                        + ". Update that page, or pass allow_duplicate=true if this is genuinely a different entity."
+                    )
+            for prop, text in ((notion_wiki.CANONICAL_KEY, key), (notion_wiki.ALIASES, ", ".join(aliases))):
+                if prop in schema and prop not in given and text:
+                    properties[prop] = to_write(prop, schema[prop]["type"], text)
         for name, value in given.items():
             if name not in schema:
                 raise ToolError(f"data source has no property {name!r}")
@@ -329,6 +361,7 @@ TOOLS = [
                 "title": {"type": "string"},
                 "properties": PROPERTIES_SCHEMA,
                 "markdown": {"type": "string"},
+                "allow_duplicate": {"type": "boolean", "description": "Wiki only: create even though a page with the same Canonical key, alias or title exists."},
             },
             "required": ["title", "markdown"],
             "additionalProperties": False,

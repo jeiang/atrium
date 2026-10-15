@@ -5,6 +5,7 @@ from fastapi import Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from ..agent import budget, journal, service, subagents, usage
+from ..agent.threads import SUBAGENT
 from ..agent.tools.base import CHAT, KINDS
 from .deps import is_partial
 
@@ -53,11 +54,11 @@ def register(app, deps):
     @app.get("/chat")
     def chat_index(request: Request, q: str = "", kind: str = ""):
         q = q.strip()
-        if kind and kind not in KINDS:
+        if kind and kind not in (*KINDS, SUBAGENT):
             raise HTTPException(422, "unknown kind")
         with connection() as conn:
             found = service.list_threads(conn, q or None, kind or None, THREAD_LIMIT)
-            return page(request, "chat.html", "_thread_list.html", threads=found, q=q, kind=kind, kinds=KINDS)
+            return page(request, "chat.html", "_thread_list.html", threads=found, q=q, kind=kind, kinds=(*KINDS, SUBAGENT))
 
     @app.post("/chat")
     def chat_new(request: Request, text: Annotated[str, Form()] = ""):

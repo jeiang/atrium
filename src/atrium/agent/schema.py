@@ -118,15 +118,17 @@ CREATE TABLE IF NOT EXISTS context_ledger (
 );
 """
 
-from .. import calendar as _calendar, drafts as _drafts, event_candidates as _event_candidates  # noqa: E402
+from .. import calendar as _calendar, drafts as _drafts, event_candidates as _event_candidates, openloops as _openloops, receipts as _receipts, watches as _watches  # noqa: E402
 from . import context as _context, scheduler as _scheduler, skills as _skills  # noqa: E402
 from .tools import notify as _notify  # noqa: E402
 from . import subagents as _subagents  # noqa: E402
 
-INITS = [_calendar.init_schema, _event_candidates.init_schema, _drafts.init, _scheduler.init, _skills.init, _notify.init, _subagents.init, _context.init]
+INITS = [_calendar.init_schema, _event_candidates.init_schema, _drafts.init, _scheduler.init, _skills.init, _notify.init, _subagents.init, _context.init, _openloops.init, _watches.init_schema, _receipts.init_schema]
 
 
 def init(conn):
     conn.executescript(SCHEMA)
+    if "limits_json" not in {r["name"] for r in conn.execute("PRAGMA table_info(runs)")}:
+        conn.execute("ALTER TABLE runs ADD COLUMN limits_json TEXT")
     for extra in INITS:
         extra(conn)

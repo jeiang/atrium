@@ -22,7 +22,10 @@ backup set, except `cache/`.
 `ICLOUD_MAIL_USERNAME` (the IMAP short name, not the Apple ID),
 `ICLOUD_APP_PASSWORD`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`
 (whitespace in the Gmail app password is stripped), `NOTION_TOKEN` (the internal
-integration token). `atrium.searxng` holds `SEARXNG_SECRET` for SearXNG. A change reaches the units through
+integration token), `ATRIUM_NOTION_WIKI_DATA_SOURCE` (the wiki data source id;
+an env-file value, not Nix: it gates duplicate-checked `notion_create_page` and
+the wiki schema/migration commands, and is unset until you create the wiki).
+`atrium.searxng` holds `SEARXNG_SECRET` for SearXNG. A change reaches the units through
 `restartUnits` on deploy.
 
 ## Calendar and contacts sync
@@ -168,6 +171,29 @@ candidate, so the first scan after deploy creates none of those:
 ssh artemis.jeiang.vpn doas systemctl start atrium-notion-sync.service
 ssh artemis.jeiang.vpn doas systemctl start atrium-scan.service
 ```
+
+Drafts left in `sending` for more than 10 minutes (a crash mid-send) become
+`unknown` when the web app starts. /drafts?status=unknown asks you to check the
+account's Sent folder, then mark the draft sent or return it to draft; it is
+never resent automatically.
+
+### Watches, birthdays, receipts and built-in jobs
+
+After each mail pass atrium reads statement/receipt/order mail with the local model
+and keeps renewals (merchant, amount, cadence, next date only when the mail states it)
+and packages (UPS/FedEx/USPS/DHL numbers by regex, model fallback for orders without one).
+Package status changes only when a later email says so; there is no carrier lookup.
+`atrium watches refresh` runs the same scan by hand. /watches lists renewals, packages
+and birthdays/anniversaries for the next 60 days with Dismiss. Dates come from vCard
+`BDAY`, `ANNIVERSARY`, `X-ANNIVERSARY` and iOS `item*.X-ABDATE` entries in
+`ATRIUM_CONTACTS_DIR`. Receipt mail is offered by `receipt_candidates`; in cron runs the
+assistant proposes `notion_receipt`, which creates a `Type=Receipt` page in
+`ATRIUM_NOTION_WIKI_DATA_SOURCE` (needs a `Type` select property) and undo trashes it.
+
+The scheduler seeds three built-in jobs once (kind `builtin`, listed on /schedules, disable
+but not cancel): `weekly-review` (Sunday 18:00), `daily-nudges` (08:00, notifies only
+when something is due) and `calendar-candidates` (hourly, drafts calendar proposals only
+when event candidates are queued). Their prompts live in code.
 
 ### Running the CLI
 

@@ -1,7 +1,7 @@
 from .. import nightly
-from . import calendar, contacts, context_ops, drafts, grafana, mail, notify, notion_read, notion_write, profile, propose, recall, research, run_code, schedule, skills, web_fetch
+from . import actual, calendar, contacts, context_ops, drafts, grafana, mail, notify, notion_read, notion_write, openloops, profile, propose, recall, research, run_code, schedule, skills, watches, web_fetch
 
-MODULES = (calendar, contacts, context_ops, drafts, grafana, mail, nightly, notify, notion_read, notion_write, profile, propose, recall, research, run_code, schedule, skills, web_fetch)
+MODULES = (actual, calendar, contacts, context_ops, drafts, grafana, mail, nightly, notify, notion_read, notion_write, openloops, profile, propose, recall, research, run_code, schedule, skills, watches, web_fetch)
 
 
 def all_tools():

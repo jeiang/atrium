@@ -32,6 +32,16 @@ def start_run(conn, thread_id, kind, model, effort, now, parent_run_id=None):
     return cur.lastrowid
 
 
+def set_limits(conn, run_id, limits):
+    conn.execute("UPDATE runs SET limits_json = ? WHERE id = ?", (json.dumps(limits), run_id))
+
+
+def limits_of(conn, run_id):
+    """Per-run loop.run overrides (max_steps, max_cost_usd, system_extra) stored at start, for resume."""
+    row = conn.execute("SELECT limits_json FROM runs WHERE id = ?", (run_id,)).fetchone()
+    return json.loads(row["limits_json"]) if row and row["limits_json"] else {}
+
+
 def get_run(conn, run_id):
     row = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
     return dict(row) if row else None

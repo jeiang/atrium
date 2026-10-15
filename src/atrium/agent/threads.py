@@ -89,13 +89,16 @@ LIST_SQL = (
 )
 
 
-def list_threads(conn, q=None, kind=None, limit=50):
+def list_threads(conn, q=None, kind=None, limit=50, include_subagents=False):
     match = fts_query(q) if q else ""
     params = []
     sql = LIST_SQL
     if kind:
         sql += " AND t.kind = ?"
         params.append(kind)
+    elif not include_subagents:
+        sql += " AND t.kind != ?"
+        params.append(SUBAGENT)
     if match:
         sql += " AND t.id IN (SELECT thread_id FROM thread_fts WHERE thread_fts MATCH ?)"
         params.append(match)
