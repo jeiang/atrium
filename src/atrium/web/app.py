@@ -42,7 +42,7 @@ from ..http import ServiceUnavailable
 from ..rules import RuleError
 from . import activity as activity_ui
 from . import auth
-from . import chat as chat_ui, runs as runs_ui
+from . import chat as chat_ui
 from . import drafts as drafts_ui
 from . import media as media_ui
 from . import money as money_ui
@@ -197,7 +197,6 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
     with connection() as conn:
         drafts.recover_stuck(conn)
     chat_ui.register(app, deps)
-    runs_ui.register(app, deps)
     activity_ui.register(app, deps)
     drafts_ui.register(app, deps)
     settings_ui.register(app, deps)
@@ -220,7 +219,7 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
     def message_page(request: Request, message_id: int):
         with connection() as conn:
             found = load_message(conn, message_id)
-            return page(request, "message.html", "_message.html", message=found, back=back_link(request))
+            return page(request, "message.html", "_message.html", message=found, back=back_link(request), from_draft=drafts.for_message(conn, message_id))
 
     def correct_context(conn, found, context, selected=None, error=None):
         return {
@@ -542,9 +541,12 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
                 raise HTTPException(404, "unknown page")
             markdown = view.pop("markdown")
             pages = notion_search.page_titles(conn, [markdown])
+            notion_page = {**view, "body_html": markdown_html(markdown, pages)}
+            if is_partial(request):
+                return render("_notion_page.html", notion_page=notion_page)
             return render(
                 "notion_page.html",
-                notion_page={**view, "body_html": markdown_html(markdown, pages)},
+                notion_page=notion_page,
                 related=notion_search.related(conn, view["id"]),
                 back=back_link(request),
             )

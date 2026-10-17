@@ -123,7 +123,7 @@ def test_send_requires_the_reviewed_version_and_confirmation_is_not_inline(conn,
     did = drafts.create(conn, cfg, 1, "gmail", "a@x.test", None, "Hi", "body")
     client = web_client(cfg)
     page = client.get("/drafts").text
-    assert "onsubmit" not in page and 'data-confirm-submit="Send this email now?"' in page
+    assert "onsubmit" not in page and 'hx-confirm="Send this email now?"' in page
     assert f'name="updated_at" value="{drafts.get(conn, did)["updated_at"]}"' in page
     stale = send_form(conn, did)
     ctx = make_ctx(conn, cfg)

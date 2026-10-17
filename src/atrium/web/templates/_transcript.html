@@ -1,0 +1,32 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import chat_item, empty_state %}
+{% set t = view.thread %}
+{% set active = view.active %}
+{% set busy = active and active.state == "running" %}
+{% for item in view["items"] %}{{ chat_item(item, t, view.last_operator_seq, busy) }}{% endfor %}
+{% for r in view.runs if r.state == "failed" and not r.superseded %}
+<li class="ps-10" data-run="{{ r.id }}">
+  <div class="alert" data-variant="destructive" role="alert">
+    {{ icon("circle-alert") }}
+    <p>Run {{ r.id }} stopped: {{ r.error }}</p>
+    {% if t.kind == "chat" and r.id == view.runs[-1].id and view.last_operator_seq and not busy %}
+    <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/chat/{{ t.id }}/regenerate" hx-target="#transcript" hx-swap="innerHTML" hx-disabled-elt="this">{{ icon("refresh-cw", "size-3.5") }}Try again</button>
+    {% endif %}
+  </div>
+</li>
+{% endfor %}
+{% if not view["items"] %}
+<li>{% call empty_state("messages-square", "Say something") %}The assistant can search your mail, contacts, Notion and the web, and read what it finds.{% endcall %}</li>
+{% endif %}
+{% if busy %}
+{% with thread_id=t.id, run_id=active.id, after=(view["items"][-1].seq if view["items"] else 0) %}{% include "_run_live.html" %}{% endwith %}
+{% elif active and active.state == "interrupted" %}
+<li class="ps-10" id="run-{{ active.id }}">
+  <div class="alert" role="alert">
+    {{ icon("circle-alert") }}
+    <p>This run was interrupted while a write was in flight. Resume to let the assistant check what happened and continue.</p>
+    <button type="button" class="btn" data-size="sm" hx-post="/chat/{{ t.id }}/runs/{{ active.id }}/resume" hx-target="#run-{{ active.id }}" hx-swap="outerHTML" hx-disabled-elt="this">{{ icon("play") }}Resume</button>
+  </div>
+</li>
+{% endif %}
+{% for q in view.queued %}{{ chat_item({"kind": "queued", "id": q.id, "text": q.text}) }}{% endfor %}

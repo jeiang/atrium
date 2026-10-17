@@ -9,13 +9,15 @@ STUB_TOKENS = 2000
 PREVIEW_CHARS = 600
 STUB_NOTE = "Result stored; call recall(result_id, offset, limit) to read it in pages."
 
-# Decision 24 thresholds, all in input tokens.
-CLEAR_TRIGGER = 75_000
+# Thresholds are shares of the thread's context limit (operator choice; MODEL_CONTEXT caps it): tool-result
+# clearing from CLEAR_SHARE, server compaction at COMPACT_SHARE, client preflight compaction at PREFLIGHT_SHARE,
+# and nothing is sent over the limit itself.
+MODEL_CONTEXT = 1_000_000
+CLEAR_SHARE = 0.1875
 CLEAR_KEEP = 3
-CLEAR_AT_LEAST = 20_000
-COMPACT_TRIGGER = 350_000
-PREFLIGHT_LIMIT = 380_000
-HARD_LIMIT = 400_000
+CLEAR_AT_LEAST_SHARE = 0.05
+COMPACT_SHARE = 0.875
+PREFLIGHT_SHARE = 0.95
 COMMIT_SAVINGS = 20_000
 PRESERVE_MESSAGES = 3
 SUMMARY_MAX_TOKENS = 8192
@@ -131,20 +133,31 @@ def ingest(conn, run_id, call_id, tool, value, now):
 # Request configuration (decision 24) and response accounting.
 
 
-def context_management():
+def limits_for(context_limit):
+    hard = min(int(context_limit), MODEL_CONTEXT)
+    return {
+        "hard": hard,
+        "preflight": int(hard * PREFLIGHT_SHARE),
+        "compact": int(hard * COMPACT_SHARE),
+        "clear": int(hard * CLEAR_SHARE),
+        "clear_at_least": int(hard * CLEAR_AT_LEAST_SHARE),
+    }
+
+
+def context_management(limits):
     return {
         "edits": [
             {
                 "type": CLEAR_TOOL_USES,
-                "trigger": {"type": "input_tokens", "value": CLEAR_TRIGGER},
+                "trigger": {"type": "input_tokens", "value": limits["clear"]},
                 "keep": {"type": "tool_uses", "value": CLEAR_KEEP},
-                "clear_at_least": {"type": "input_tokens", "value": CLEAR_AT_LEAST},
+                "clear_at_least": {"type": "input_tokens", "value": limits["clear_at_least"]},
                 "clear_tool_inputs": False,
                 "exclude_tools": ["recall"],
             },
             {
                 "type": COMPACT,
-                "trigger": {"type": "input_tokens", "value": COMPACT_TRIGGER},
+                "trigger": {"type": "input_tokens", "value": limits["compact"]},
                 "pause_after_compaction": True,
                 "instructions": COMPACTION_INSTRUCTIONS,
             },
@@ -580,10 +593,10 @@ def last_operator_blocks(sent):
     return []
 
 
-def client_compact(conn, client, model, active, thread_id, run_id, kind, now):
+def client_compact(conn, client, model, active, thread_id, run_id, kind, hard_limit, now):
     """One low-effort, tool-free, thinking-free summarization request; the journal stays intact and the new
     projection is summary + manifest + the operator's latest message (as sent, so its date stamp is kept)."""
-    messages = shrink(active, HARD_LIMIT - SUMMARY_MAX_TOKENS - estimate_tokens(SUMMARY_REQUEST) - 1000)
+    messages = shrink(active, hard_limit - SUMMARY_MAX_TOKENS - estimate_tokens(SUMMARY_REQUEST) - 1000)
     ask = {"type": TEXT, "text": SUMMARY_REQUEST}
     if messages and messages[-1]["role"] == journal.USER:
         messages[-1]["content"].append(ask)

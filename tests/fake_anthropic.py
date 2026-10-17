@@ -52,6 +52,30 @@ def web_search(id, query, urls):
     ]
 
 
+class FakeStream:
+    """What `client.beta.messages.stream(...)` yields: SDK-shaped `thinking` and `text` events for the scripted
+    response's blocks, then the response itself as the final message."""
+
+    def __init__(self, response):
+        self.response = response
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def __iter__(self):
+        for block in self.response.content:
+            if block.get("type") == "thinking" and block.get("thinking"):
+                yield SimpleNamespace(type="thinking", thinking=block["thinking"], snapshot=block["thinking"])
+            elif block.get("type") == "text":
+                yield SimpleNamespace(type="text", text=block["text"], snapshot=block["text"])
+
+    def get_final_message(self):
+        return self.response
+
+
 class FakeClient:
     def __init__(self, responses):
         self.responses = list(responses)
@@ -67,3 +91,6 @@ class FakeClient:
         if isinstance(found, Exception):
             raise found
         return found
+
+    def stream(self, **params):
+        return FakeStream(self.create(**params))

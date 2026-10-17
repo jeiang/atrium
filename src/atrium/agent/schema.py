@@ -122,10 +122,12 @@ from .. import calendar as _calendar, drafts as _drafts, event_candidates as _ev
 from ..media import channels as _media_channels  # noqa: E402
 from . import context as _context, scheduler as _scheduler, skills as _skills  # noqa: E402
 from .tools import notify as _notify  # noqa: E402
-from . import subagents as _subagents  # noqa: E402
+from . import journal as _journal, progress as _progress, subagents as _subagents, workspace as _workspace  # noqa: E402
 
-INITS = [_calendar.init_schema, _event_candidates.init_schema, _drafts.init, _scheduler.init, _skills.init, _notify.init, _subagents.init, _context.init, _openloops.init, _watches.init_schema, _money.init_schema, _media_channels.init]
-RUN_COLUMNS = (("limits_json", "TEXT"), ("owner", "TEXT"), ("lease_until", "REAL"), ("skills_json", "TEXT"))
+INITS = [_calendar.init_schema, _event_candidates.init_schema, _drafts.init, _scheduler.init, _skills.init, _notify.init, _subagents.init, _context.init, _openloops.init, _watches.init_schema, _money.init_schema, _media_channels.init, _journal.init_queue, _progress.init, _workspace.init]
+RUN_COLUMNS = (("limits_json", "TEXT"), ("owner", "TEXT"), ("lease_until", "REAL"), ("skills_json", "TEXT"), ("superseded", "INTEGER NOT NULL DEFAULT 0"), ("stop_requested", "INTEGER NOT NULL DEFAULT 0"))
+THREAD_COLUMNS = (("pinned", "INTEGER NOT NULL DEFAULT 0"), ("context_limit", "INTEGER"), ("branched_from_thread_id", "INTEGER"), ("branched_from_seq", "INTEGER"))
+MESSAGE_COLUMNS = (("system_sig", "TEXT"), ("superseded", "INTEGER NOT NULL DEFAULT 0"))
 
 
 def _relax_writes(conn):
@@ -146,7 +148,7 @@ def init(conn):
     conn.executescript(SCHEMA)
     _relax_writes(conn)
     _context.add_columns(conn, "runs", RUN_COLUMNS)
-    _context.add_columns(conn, "threads", (("pinned", "INTEGER NOT NULL DEFAULT 0"),))
-    _context.add_columns(conn, "thread_messages", (("system_sig", "TEXT"),))
+    _context.add_columns(conn, "threads", THREAD_COLUMNS)
+    _context.add_columns(conn, "thread_messages", MESSAGE_COLUMNS)
     for extra in INITS:
         extra(conn)

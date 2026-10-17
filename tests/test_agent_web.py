@@ -152,20 +152,20 @@ def test_chat_thread_renders_markdown_tools_and_citations(cfg):
     assert client.get("/chat/999").status_code == 404
 
 
-def test_message_post_returns_polling_partial_until_done(cfg):
+def test_message_post_returns_live_view_until_done(cfg):
     client = web_client(cfg, agent_client=lambda: FakeClient([response([text("hello there")])]))
     thread_id = int(client.post("/chat", data={"text": ""}, follow_redirects=False).headers["location"].rsplit("/", 1)[1])
     empty = client.post(f"/chat/{thread_id}/messages", data={"text": "  "}, headers=HX)
     assert empty.status_code == 422 and "Nothing sent" in empty.text
     partial = client.post(f"/chat/{thread_id}/messages", data={"text": "hi"}, headers=HX)
     assert partial.status_code == 200 and "hi" in partial.text
-    assert f'hx-get="/chat/{thread_id}/runs/' in partial.text and 'hx-trigger="load delay:1s"' in partial.text
+    assert "data-live-run=" in partial.text and f'hx-get="/chat/{thread_id}/runs/' in partial.text and 'hx-trigger="run-done"' in partial.text
     run = wait_done(cfg, thread_id)
     done = client.get(f"/chat/{thread_id}/runs/{run['id']}", params={"after": 1})
-    assert done.status_code == 200 and "hello there" in done.text and "hx-trigger" not in done.text
+    assert done.status_code == 200 and "hello there" in done.text and "data-live-run" not in done.text and 'id="meter"' in done.text
     assert client.get(f"/chat/{thread_id}/runs/999").status_code == 404
     page = client.get(f"/chat/{thread_id}").text
-    assert "hello there" in page and "Working" not in page
+    assert "hello there" in page and "Working" not in page and 'id="panel"' in page and 'id="panel-handle"' in page
 
 
 def test_budget_refusal_shows_a_toast(cfg):

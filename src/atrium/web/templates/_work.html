@@ -1,0 +1,90 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import preview_attrs, external, when %}
+{% set w = work %}
+<section class="flex flex-col gap-2" aria-labelledby="work-plan">
+  <h2 id="work-plan" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ icon("list-checks", "size-3.5") }}Plan</h2>
+  {% if w.plan %}
+  <ol class="flex flex-col gap-1 text-sm" data-plan>
+    {% for step in w.plan["items"] %}
+    <li class="flex items-start gap-2">{{ icon("check" if step.done else "circle-dot", "mt-0.5 size-3.5 shrink-0 " ~ ("text-success" if step.done else "text-muted-foreground")) }}<span class="{{ 'text-muted-foreground line-through' if step.done }}">{{ step.text }}</span></li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="text-xs text-muted-foreground">The assistant posts a checklist here for longer tasks.</p>
+  {% endif %}
+</section>
+
+<section class="flex flex-col gap-2" aria-labelledby="work-sources">
+  <h2 id="work-sources" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ icon("globe", "size-3.5") }}Sources</h2>
+  {% if w.sources %}
+  <ul class="flex flex-col gap-1 text-sm" data-sources>
+    {% for s in w.sources %}
+    <li class="flex min-w-0 items-center gap-2">
+      {{ icon("mail" if s.kind == "mail" else ("book-user" if s.kind == "notion" else "globe"), "size-3.5 shrink-0 text-muted-foreground") }}
+      {% if s.kind == "web" %}<a class="truncate underline-offset-4 hover:underline" {{ external(s.url) }}>{{ s.title }}</a>
+      {% else %}<a class="truncate underline-offset-4 hover:underline" {{ preview_attrs(s.url) }}>{{ s.title }}</a>{% endif %}
+      {% if s.via %}<span class="badge shrink-0" data-variant="outline">{{ s.via }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-xs text-muted-foreground">Pages, mail and Notion pages the assistant reads show up here.</p>
+  {% endif %}
+</section>
+
+<section class="flex flex-col gap-2" aria-labelledby="work-subagents">
+  <h2 id="work-subagents" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ icon("users", "size-3.5") }}Subagents</h2>
+  {% if w.subagents %}
+  <ul class="flex flex-col gap-2" data-subagents>
+    {% for c in w.subagents %}
+    <li class="flex flex-col gap-1 rounded-md border px-3 py-2 text-xs" data-child="{{ c.thread_id }}" data-status="{{ c.status }}">
+      <span class="flex flex-wrap items-center gap-1.5">
+        <span class="badge" data-variant="secondary">{{ c.role or c.kind }}</span>
+        <span class="badge" data-variant="outline">effort {{ c.effort }}</span>
+        <span class="badge" data-variant="{{ 'destructive' if c.status in ('error', 'interrupted') else 'outline' }}">{% if c.status == "running" %}{{ icon("loader-circle", "animate-spin") }}{% endif %}{{ c.status }}</span>
+        {% if c.current %}<code class="font-mono">{{ c.current }}</code>{% endif %}
+      </span>
+      <a class="truncate underline-offset-4 hover:underline" href="/chat/{{ c.thread_id }}">{{ c.title or "Untitled" }}</a>
+      <span class="flex gap-2 text-muted-foreground tabular-nums"><span>${{ "%.4f" | format(c.cost) }}</span>{% if c.elapsed is not none %}<span>{{ "%.0f" | format(c.elapsed) }}s</span>{% endif %}{% if c.error %}<span class="truncate text-destructive" title="{{ c.error }}">{{ c.error | truncate(80) }}</span>{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-xs text-muted-foreground">Research the assistant delegates appears here; each transcript opens from its card.</p>
+  {% endif %}
+</section>
+
+<section class="flex flex-col gap-2" aria-labelledby="work-files">
+  <h2 id="work-files" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ icon("file-text", "size-3.5") }}Files</h2>
+  {% if w.files or w.drafts %}
+  <ul class="flex flex-col gap-1 text-sm" data-files>
+    {% for f in w.files %}
+    <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{ preview_attrs("/chat/" ~ f.thread_id ~ "/files/" ~ f.id) }}>{{ icon("file-text", "size-3.5 shrink-0 text-muted-foreground") }}<span class="truncate">{{ f.name }}</span><span class="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{ f.bytes | filesizeformat }}</span></a></li>
+    {% endfor %}
+    {% for d in w.drafts %}
+    <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{ preview_attrs("/drafts/" ~ d.id) }}>{{ icon("mail", "size-3.5 shrink-0 text-muted-foreground") }}<span class="truncate">{{ d.subject or "(no subject)" }}</span><span class="badge ms-auto shrink-0" data-variant="{{ 'secondary' if d.status == 'sent' else 'outline' }}">{{ d.status }}</span></a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-xs text-muted-foreground">Drafts and files made in this thread are listed here.</p>
+  {% endif %}
+</section>
+
+<section class="flex flex-col gap-2" aria-labelledby="work-code">
+  <h2 id="work-code" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ icon("code", "size-3.5") }}Code sessions</h2>
+  {% if w.code %}
+  <ul class="flex flex-col gap-1 text-xs" data-code>
+    {% for c in w.code %}
+    <li>
+      <details class="rounded-md border">
+        <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">{{ icon("code", "size-3.5") }}run_code<span class="tabular-nums">{{ when(c.started_at, "datetime") }}</span>{% if c.state == "error" %}<span class="badge ms-auto" data-variant="destructive">error</span>{% endif %}</summary>
+        <pre class="overflow-x-auto border-t bg-muted px-3 py-2 font-mono whitespace-pre-wrap break-words">{{ c.script }}</pre>
+        <pre class="overflow-x-auto border-t px-3 py-2 font-mono whitespace-pre-wrap break-words">{{ c.result or "(no result)" }}</pre>
+      </details>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-xs text-muted-foreground">Scripts the assistant runs with run_code appear here with their output.</p>
+  {% endif %}
+</section>

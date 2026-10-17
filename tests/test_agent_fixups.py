@@ -75,8 +75,8 @@ def test_compaction_block_renders_as_marker(world):
     cfg, conn = world
     thread_id = service.create_thread(conn, "chat")
     run_id = service.prepare(conn, thread_id, "go", "chat", 1.0)
-    journal.append_message(conn, thread_id, run_id, journal.ASSISTANT, [compaction("summary")], 2.0)
+    journal.append_message(conn, thread_id, run_id, journal.ASSISTANT, [compaction("COMPACTED-DETAILS")], 2.0)
     items = service.thread_view(conn, thread_id)["items"]
     assert [i["kind"] for i in items] == ["user", "compaction"]
     page = web_client(cfg).get(f"/chat/{thread_id}").text
-    assert "Context compacted" in page and "summary" not in page
+    assert "Context compacted" in page and "COMPACTED-DETAILS" not in page

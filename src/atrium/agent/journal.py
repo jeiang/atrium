@@ -73,6 +73,27 @@ def set_run_state(conn, run_id, state):
     conn.execute("UPDATE runs SET state = ? WHERE id = ?", (state, run_id))
 
 
+def request_stop(conn, run_id):
+    cur = conn.execute("UPDATE runs SET stop_requested = 1 WHERE id = ? AND state = ?", (run_id, RUNNING))
+    return cur.rowcount == 1
+
+
+def finish_unless_queued(conn, run_id, thread_id, state, now):
+    """Finish the run unless the operator queued a message meanwhile: the queue insert and this check are both
+    IMMEDIATE transactions, so a message is either consumed by the run or starts the next one, never lost."""
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        if queued(conn, thread_id):
+            conn.execute("ROLLBACK")
+            return False
+        finish_run(conn, run_id, state, now)
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return True
+
+
 def bump_steps(conn, run_id):
     conn.execute("UPDATE runs SET steps = steps + 1 WHERE id = ?", (run_id,))
 
@@ -139,21 +160,97 @@ def append_message(conn, thread_id, run_id, role, content, now, system_sig=None)
     return seq
 
 
-def messages_of(conn, thread_id):
+def messages_of(conn, thread_id, include_superseded=False):
+    where = "" if include_superseded else " AND superseded = 0"
     return [
         {
             "id": r["id"], "run_id": r["run_id"], "seq": r["seq"], "role": r["role"], "content": json.loads(r["content_json"]),
-            "created_at": r["created_at"], "system_sig": r["system_sig"],
+            "created_at": r["created_at"], "system_sig": r["system_sig"], "superseded": bool(r["superseded"]),
         }
-        for r in conn.execute("SELECT * FROM thread_messages WHERE thread_id = ? ORDER BY seq", (thread_id,))
+        for r in conn.execute(f"SELECT * FROM thread_messages WHERE thread_id = ?{where} ORDER BY seq", (thread_id,))
     ]
 
 
 def last_message(conn, thread_id):
-    row = conn.execute("SELECT * FROM thread_messages WHERE thread_id = ? ORDER BY seq DESC LIMIT 1", (thread_id,)).fetchone()
+    row = conn.execute("SELECT * FROM thread_messages WHERE thread_id = ? AND superseded = 0 ORDER BY seq DESC LIMIT 1", (thread_id,)).fetchone()
     if row is None:
         return None
     return {"id": row["id"], "run_id": row["run_id"], "seq": row["seq"], "role": row["role"], "content": json.loads(row["content_json"])}
+
+
+def last_operator_message(conn, thread_id):
+    """The latest live operator (text) user message: the only one that can be edited or regenerated."""
+    for m in reversed(messages_of(conn, thread_id)):
+        if m["role"] == USER and any(b.get("type") == "text" for b in m["content"]):
+            return m
+    return None
+
+
+def supersede(conn, thread_id, from_seq, keep_message=False):
+    """Retire the tail of the conversation from `from_seq` (the message itself stays when `keep_message`):
+    messages and their runs are kept for audit but leave the active history, together with the context
+    projections and staged ledger entries those runs made."""
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        first = from_seq + 1 if keep_message else from_seq
+        conn.execute("UPDATE thread_messages SET superseded = 1 WHERE thread_id = ? AND seq >= ?", (thread_id, first))
+        row = conn.execute("SELECT run_id FROM thread_messages WHERE thread_id = ? AND seq = ?", (thread_id, from_seq)).fetchone()
+        if row is not None and row["run_id"] is not None:
+            conn.execute("UPDATE runs SET superseded = 1 WHERE thread_id = ? AND id >= ?", (thread_id, row["run_id"]))
+            conn.execute(
+                "DELETE FROM context_ledger WHERE state IN ('staged_drop', 'staged_fold') AND run_id IN (SELECT id FROM runs WHERE thread_id = ? AND superseded = 1)",
+                (thread_id,),
+            )
+        conn.execute("DELETE FROM context_projections WHERE thread_id = ? AND base_seq > ?", (thread_id, from_seq))
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+
+QUEUE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS thread_queue (
+    id INTEGER PRIMARY KEY,
+    thread_id INTEGER NOT NULL REFERENCES threads(id),
+    text TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    consumed_at REAL,
+    run_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS thread_queue_open ON thread_queue (thread_id, consumed_at);
+"""
+
+
+def init_queue(conn):
+    conn.executescript(QUEUE_SCHEMA)
+
+
+def queue_message(conn, thread_id, text, now):
+    """Store a message for the running run to pick up at its next step. None when no run is running (the caller
+    starts a run instead)."""
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        active = active_run(conn, thread_id)
+        if active is None or active["state"] != RUNNING:
+            conn.execute("ROLLBACK")
+            return None
+        cur = conn.execute("INSERT INTO thread_queue (thread_id, text, created_at) VALUES (?, ?, ?)", (thread_id, text, now))
+        conn.execute("COMMIT")
+        return cur.lastrowid
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+
+def queued(conn, thread_id):
+    return [dict(r) for r in conn.execute("SELECT * FROM thread_queue WHERE thread_id = ? AND consumed_at IS NULL ORDER BY id", (thread_id,))]
+
+
+def take_queued(conn, thread_id, run_id, now):
+    rows = queued(conn, thread_id)
+    for r in rows:
+        conn.execute("UPDATE thread_queue SET consumed_at = ?, run_id = ? WHERE id = ?", (now, run_id, r["id"]))
+    return rows
 
 
 def start_tool_call(conn, run_id, tool_use_id, name, args, replay_class, now):
