@@ -34,8 +34,6 @@ backup set, except `cache/`.
   service account with the Viewer role), `NTFY_TOPIC`, `NTFY_TOKEN`.
 - Google Calendar: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
   `GOOGLE_REFRESH_TOKEN`; optional `ATRIUM_ICLOUD_CALENDAR`.
-- Actual Budget: `ACTUAL_PASSWORD`, `ACTUAL_SYNC_ID`, and
-  `ACTUAL_ENCRYPTION_PASSWORD` if the budget is end-to-end encrypted.
 
 A missing value disables only the tools that need it; they answer "not
 configured". A change reaches the units through `restartUnits` on deploy.
