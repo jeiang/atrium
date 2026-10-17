@@ -297,8 +297,7 @@ The assistant release also changes alda (Caddy vhost, tinyauth ACL) and peria
 - Create the Pocket ID group `atrium_access` and add yourself.
 - Add the assistant secrets above, at least `ANTHROPIC_API_KEY`.
 - Deploy alda, then artemis. Until alda is deployed,
-  `https://atrium.jeiang.dev` has no upstream; once artemis switches, port
-  8480 answers only alda.
+  `https://atrium.jeiang.dev` has no upstream.
 - Emergency access without alda:
   `ssh -L 8481:127.0.0.1:8481 artemis.jeiang.vpn`, then open
   `http://localhost:8481`.
