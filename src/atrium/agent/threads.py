@@ -84,7 +84,7 @@ def context_limit_of(thread):
 
 
 def get(conn, thread_id):
-    row = conn.execute("SELECT * FROM threads WHERE id = ?", (thread_id,)).fetchone()
+    row = conn.execute("SELECT * FROM threads WHERE id = ? AND deleted_at IS NULL", (thread_id,)).fetchone()
     if row is None:
         return None
     found = dict(row)
@@ -140,7 +140,7 @@ LIST_SQL = (
     "(SELECT name FROM projects p WHERE p.id = t.project_id) AS project_name, "
     "(SELECT state FROM runs r WHERE r.thread_id = t.id ORDER BY r.id DESC LIMIT 1) AS run_state, "
     "(SELECT COALESCE(SUM(cost_usd), 0) FROM usage u WHERE u.thread_id = t.id) AS cost "
-    "FROM threads t WHERE t.kind = ? AND t.archived = ?"
+    "FROM threads t WHERE t.kind = ? AND t.archived = ? AND t.deleted_at IS NULL"
 )
 
 
@@ -160,7 +160,30 @@ def list_threads(conn, q=None, limit=50, archived=False, project_id=None):
 
 
 def set_flag(conn, thread_id, column, value):
-    if column not in ("pinned", "archived"):
+    if column not in ("pinned", "archived", "code_sandbox"):
         raise ValueError(column)
-    cur = conn.execute(f"UPDATE threads SET {column} = ? WHERE id = ? AND kind = ?", (int(value), thread_id, CHAT))
+    cur = conn.execute(f"UPDATE threads SET {column} = ? WHERE id = ? AND kind = ? AND deleted_at IS NULL", (int(value), thread_id, CHAT))
     return cur.rowcount > 0
+
+
+def set_container(conn, thread_id, container_id):
+    conn.execute("UPDATE threads SET container_id = ? WHERE id = ?", (container_id, thread_id))
+
+
+def purge(conn, thread_id, now):
+    """Deletes a thread's conversation, queue, plan, projections and tool records. The thread row stays as a tombstone
+    (deleted_at set, hidden everywhere) because usage, agent_writes and runs reference it for accounting."""
+    runs = "SELECT id FROM runs WHERE thread_id = ?"
+    for sql in (
+        f"DELETE FROM run_events WHERE run_id IN ({runs})",
+        f"DELETE FROM context_ledger WHERE run_id IN ({runs})",
+        f"DELETE FROM tool_results WHERE run_id IN ({runs})",
+        f"DELETE FROM tool_calls WHERE run_id IN ({runs})",
+        "DELETE FROM context_projections WHERE thread_id = ?",
+        "DELETE FROM thread_queue WHERE thread_id = ?",
+        "DELETE FROM thread_plans WHERE thread_id = ?",
+        "DELETE FROM thread_messages WHERE thread_id = ?",
+        "DELETE FROM thread_fts WHERE thread_id = ?",
+    ):
+        conn.execute(sql, (thread_id,))
+    conn.execute("UPDATE threads SET deleted_at = ?, archived = 1, pinned = 0, title = NULL, container_id = NULL WHERE id = ?", (now, thread_id))

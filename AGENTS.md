@@ -89,6 +89,12 @@ and backups; nothing of that lives here.
 - Code mode runs in `atrium-codemode@`, one socket-activated instance per
   connection under `DynamicUser` with no network and a read-only filesystem.
   That sandbox is the security boundary; the Monty interpreter is not one.
+  Anthropic's code execution sandbox is a separate, per-thread opt-in
+  (`threads.code_sandbox`, off by default): only then do attached files go to
+  the Files API and does the model get `code_execution`. Uploaded and project
+  files are stored under the state directory's `files/` (backed up with it,
+  deleted with the thread) and are untrusted data like mail: their content
+  never adds to the web_fetch allowlist or expands skills.
 - The web UI has no login of its own. The public listener (`atrium-web`,
   `--auth proxy`) trusts a reverse proxy that authenticates the operator and
   sets `Remote-Groups`; the app rejects any request whose `Host` is not

@@ -1,16 +1,19 @@
 {% from "_icons.html" import icon %}
-{% from "_macros.html" import when %}
+{% from "_macros.html" import when, file_icon %}
 <article class="flex min-w-0 flex-col gap-4" aria-labelledby="file-title">
   <header class="flex flex-col gap-2">
-    <h2 id="file-title" class="flex items-center gap-2 text-lg font-semibold tracking-tight break-all">{{ icon("file-text", "size-4 shrink-0 text-muted-foreground") }}{{ file.name }}</h2>
+    <h2 id="file-title" class="flex items-center gap-2 text-lg font-semibold tracking-tight break-all">{{ file_icon(file.media_type, "size-4 shrink-0 text-muted-foreground") }}{{ file.name }}</h2>
     <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
       <span class="badge" data-variant="outline">{{ file.media_type }}</span>
       <span class="tabular-nums">{{ file.bytes | filesizeformat }}</span>
       <span class="tabular-nums">{{ when(file.created_at, "datetime") }}</span>
       <span class="badge" data-variant="secondary">{{ file.origin }}</span>
+      <a class="btn ms-auto" data-size="sm" data-variant="outline" href="{{ file_url }}/download" download>{{ icon("download", "size-3.5") }}Download</a>
     </div>
   </header>
-  {% if file.render == "markdown" %}
+  {% if file.render == "image" %}
+  <img class="max-w-full rounded-md border" src="{{ file_url }}/raw" alt="{{ file.name }}">
+  {% elif file.render == "markdown" %}
   <div class="markdown">{{ file.text | markdown }}</div>
   {% elif file.render == "table" %}
   <div class="overflow-x-auto">
@@ -24,7 +27,7 @@
   {% elif file.render == "text" %}
   <pre class="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-words">{{ file.text }}</pre>
   {% else %}
-  <p class="text-sm text-muted-foreground">No preview for this file type.</p>
+  <p class="text-sm text-muted-foreground">No preview for this file type; download it instead.</p>
   {% endif %}
   {% if file.truncated %}<p class="text-xs text-muted-foreground">Showing the first part of the file.</p>{% endif %}
 </article>

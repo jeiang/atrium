@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_macros.html" import attach_field, attach_button %}
 {% set page = "projects" %}
 {% block title %}{{ project.name }}{% endblock %}
 {% block heading %}{{ project.name }}{% endblock %}
@@ -20,6 +21,9 @@
     </span>
   </header>
   {% if project.instructions %}<p class="line-clamp-3 max-w-prose text-sm text-muted-foreground">{{ project.instructions }}</p>{% endif %}
+  <section id="project-files" class="flex flex-col gap-2" aria-labelledby="project-files-title">
+    {% include "_project_files.html" %}
+  </section>
   <form id="thread-search" action="/projects/{{ project.id }}" method="get" class="flex items-center">
     <input type="hidden" name="view" value="{{ view }}">
     <nav class="button-group" aria-label="Thread view">
@@ -31,12 +35,15 @@
     {% include "_thread_list.html" %}
   </div>
   {% if not project.archived %}
-  <form method="post" action="/chat" class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" data-reset>
+  <form method="post" action="/chat" enctype="multipart/form-data" hx-post="/chat" hx-encoding="multipart/form-data" hx-swap="none" hx-disabled-elt="find button[type=submit]"
+        class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" data-reset data-attach>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="project_id" value="{{ project.id }}">
     <label for="new-text" class="sr-only">New thread in {{ project.name }}</label>
-    <textarea id="new-text" name="text" rows="2" class="textarea w-full" placeholder="Start a chat in {{ project.name }}… (⌘⏎ to send)" data-submit-on-enter autofocus></textarea>
-    <div class="flex items-center justify-end">
+    <textarea id="new-text" name="text" rows="2" class="textarea w-full" placeholder="Start a chat in {{ project.name }}… (⌘⏎ to send, drop files to attach)" data-submit-on-enter autofocus></textarea>
+    {{ attach_field() }}
+    <div class="flex items-center justify-between gap-3">
+      {{ attach_button() }}
       <button type="submit" class="btn">{{ icon("send") }}Start</button>
     </div>
   </form>

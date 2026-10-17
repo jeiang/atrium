@@ -1,52 +1,29 @@
 import asyncio
-import csv
-import io
 import json
 import time
-from pathlib import Path
 from typing import Annotated
 
-from fastapi import Form, HTTPException, Request
+from fastapi import File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from .. import db
-from ..agent import budget, journal, progress, projects, service, threads, workspace
+from ..agent import budget, files, journal, progress, projects, service, threads, workspace
 from ..agent.tools.base import CHAT
 from .deps import is_partial
+from .files import client_for, uploads_of
 
 THREAD_LIMIT = 50
 EMPTY_MESSAGE = "Type a message first."
 ARCHIVED = "archived"
 POLL_SECONDS = 0.3
 KEEPALIVE_SECONDS = 15.0
-PREVIEW_BYTES = 200_000
-MARKDOWN_TYPES = ("text/markdown", "text/x-markdown")
-CSV_TYPES = ("text/csv", "application/csv")
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 
 def sse(kind, data, event_id=None):
     head = f"id: {event_id}\n" if event_id is not None else ""
     return f"{head}event: {kind}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-
-def file_preview(found):
-    path = Path(found["path"])
-    if not path.is_file():
-        return {**found, "render": None, "text": "", "rows": [], "truncated": False}
-    raw = path.read_bytes()
-    text = raw[:PREVIEW_BYTES].decode("utf-8", errors="replace")
-    truncated = len(raw) > PREVIEW_BYTES
-    media = found["media_type"]
-    suffix = path.suffix.lower()
-    if media in MARKDOWN_TYPES or suffix in (".md", ".markdown"):
-        return {**found, "render": "markdown", "text": text, "rows": [], "truncated": truncated}
-    if media in CSV_TYPES or suffix == ".csv":
-        return {**found, "render": "table", "text": "", "rows": list(csv.reader(io.StringIO(text))), "truncated": truncated}
-    if media.startswith("text/") or media in ("application/json", "application/xml") or b"\0" not in raw[:4096]:
-        return {**found, "render": "text", "text": text, "rows": [], "truncated": truncated}
-    return {**found, "render": None, "text": "", "rows": [], "truncated": False}
 
 
 def register(app, deps):
@@ -81,10 +58,24 @@ def register(app, deps):
         except service.UnknownThread as e:
             raise HTTPException(404, "unknown thread") from e
 
-    def start(request, thread_id, text):
+    def start(request, thread_id, text, attached=None):
         # Operator-typed text (the chat form and the Loops "Draft reply" button both post here) is the only
-        # input that may add URLs to the thread's web_fetch allowlist.
-        return attempt(request, lambda: service.start_run(cfg, thread_id, text, kind=CHAT, client=deps.agent_client(), env=deps.env, operator=True))
+        # input that may add URLs to the thread's web_fetch allowlist; attached files never do.
+        return attempt(request, lambda: service.start_run(cfg, thread_id, text, kind=CHAT, client=deps.agent_client(), env=deps.env, operator=True, files=attached))
+
+    def attach(request, conn, thread, parts):
+        """Stores the message's uploads under the thread and returns their attachment blocks, or a 422 toast."""
+        if not parts:
+            return [], None
+        sandbox = files.sandbox_on(thread)
+        try:
+            blocks = files.ingest_uploads(
+                cfg, conn, parts, time.time(), thread_id=thread["id"], context_limit=threads.context_limit_of(thread),
+                client=client_for(deps) if sandbox else None, sandbox=sandbox,
+            )
+        except files.FileError as e:
+            return None, failure(request, "Not attached", str(e))
+        return blocks, None
 
     def thread_context(conn, thread_id):
         return {"view": load_thread(conn, thread_id), "thread_id": thread_id, "efforts": threads.EFFORTS, "context_limits": threads.CONTEXT_LIMITS}
@@ -114,16 +105,24 @@ def register(app, deps):
         return listing(request, q.strip(), view)
 
     @app.post("/chat")
-    def chat_new(request: Request, text: Annotated[str, Form()] = "", project_id: Annotated[int, Form()] = 0):
+    def chat_new(request: Request, text: Annotated[str, Form()] = "", project_id: Annotated[int, Form()] = 0, upload: Annotated[list[UploadFile], File()] = []):
         text = text.strip()
+        parts = uploads_of(upload)
+        if parts and not text:
+            return failure(request, "Nothing sent", "Type a message to go with the files.")
         with connection() as conn:
             if project_id and not (projects.get(conn, project_id) or {}).get("id"):
                 raise HTTPException(404, "unknown project")
             thread_id = service.create_thread(conn, CHAT, project_id=project_id or None)
-        if text:
-            _, failed = start(request, thread_id, text)
+            attached, failed = attach(request, conn, threads.get(conn, thread_id), parts)
             if failed is not None:
                 return failed
+        if text:
+            _, failed = start(request, thread_id, text, attached)
+            if failed is not None:
+                return failed
+        if is_partial(request):
+            return Response(status_code=204, headers={"HX-Redirect": f"/chat/{thread_id}"})
         return RedirectResponse(f"/chat/{thread_id}", status_code=303)
 
     def set_flag(request, thread_id, column, value, q, view, back, project_id=0):
@@ -176,23 +175,48 @@ def register(app, deps):
                 return RedirectResponse(f"/chat/{thread_id}", status_code=303)
             return render("_meter.html", **thread_context(conn, thread_id))
 
+    @app.post("/chat/{thread_id}/sandbox")
+    def chat_sandbox(request: Request, thread_id: int, code_sandbox: Annotated[str, Form()] = ""):
+        with connection() as conn:
+            if not threads.set_flag(conn, thread_id, "code_sandbox", bool(code_sandbox)):
+                raise HTTPException(404, "unknown chat thread")
+            if not is_partial(request):
+                return RedirectResponse(f"/chat/{thread_id}", status_code=303)
+            return render("_sandbox.html", **thread_context(conn, thread_id))
+
+    @app.post("/chat/{thread_id}/delete")
+    def chat_delete(request: Request, thread_id: int):
+        with connection() as conn:
+            _, failed = attempt(request, lambda: service.delete_thread(cfg, conn, thread_id, client_for(deps)))
+        if failed is not None:
+            return failed
+        if is_partial(request):
+            return Response(status_code=204, headers={"HX-Redirect": "/chat"})
+        return RedirectResponse("/chat", status_code=303)
+
     @app.post("/chat/{thread_id}/messages")
-    def chat_message(request: Request, thread_id: int, text: Annotated[str, Form()] = "", edit: Annotated[str, Form()] = ""):
+    def chat_message(
+        request: Request, thread_id: int, text: Annotated[str, Form()] = "", edit: Annotated[str, Form()] = "", upload: Annotated[list[UploadFile], File()] = [],
+    ):
         text = text.strip()
         if not text:
             return failure(request, "Nothing sent", EMPTY_MESSAGE)
         with connection() as conn:
-            if load_thread(conn, thread_id)["thread"]["kind"] == "subagent":
+            thread = load_thread(conn, thread_id)["thread"]
+            if thread["kind"] == "subagent":
                 raise HTTPException(409, "subagent threads are read-only")
+            attached, failed = attach(request, conn, thread, uploads_of(upload))
+            if failed is not None:
+                return failed
         if edit:
-            _, failed = attempt(request, lambda: service.edit_last(cfg, thread_id, text, client=deps.agent_client(), env=deps.env))
+            _, failed = attempt(request, lambda: service.edit_last(cfg, thread_id, text, client=deps.agent_client(), env=deps.env, files=attached))
             if failed is not None:
                 return failed
             if not is_partial(request):
                 return RedirectResponse(f"/chat/{thread_id}", status_code=303)
             with connection() as conn:
                 return transcript(conn, thread_id, reswap="innerHTML")
-        outcome, failed = attempt(request, lambda: service.send(cfg, thread_id, text, client=deps.agent_client(), env=deps.env))
+        outcome, failed = attempt(request, lambda: service.send(cfg, thread_id, text, client=deps.agent_client(), env=deps.env, files=attached))
         if failed is not None:
             return failed
         if not is_partial(request):
@@ -240,15 +264,6 @@ def register(app, deps):
         with connection() as conn:
             context = thread_context(conn, thread_id)
             return render("_work_update.html", work=workspace.view(conn, thread_id, time.time()), **context)
-
-    @app.get("/chat/{thread_id}/files/{file_id}")
-    def chat_file(request: Request, thread_id: int, file_id: int):
-        with connection() as conn:
-            load_thread(conn, thread_id)
-            found = workspace.get_file(conn, thread_id, file_id)
-        if found is None:
-            raise HTTPException(404, "unknown file")
-        return render("_file.html", file=file_preview(found))
 
     @app.get("/chat/{thread_id}/events")
     async def chat_events(request: Request, thread_id: int, run: int, after: int = 0):

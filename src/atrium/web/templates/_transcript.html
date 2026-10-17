@@ -29,4 +29,4 @@
   </div>
 </li>
 {% endif %}
-{% for q in view.queued %}{{ chat_item({"kind": "queued", "id": q.id, "text": q.text}) }}{% endfor %}
+{% for q in view.queued %}{{ chat_item({"kind": "queued", "id": q.id, "text": q.text, "files": q.files}) }}{% endfor %}

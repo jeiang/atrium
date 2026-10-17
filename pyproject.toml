@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "atrium"
 version = "0.1.0"
 requires-python = ">=3.14"
-dependencies = ["anthropic", "caldav", "fastapi", "google-api-python-client", "google-auth", "httpx", "icalendar", "jinja2", "markdown-it-py", "nh3", "pydantic-monty", "python-multipart", "sqlite-vec", "trafilatura", "uvicorn", "vobject"]
+dependencies = ["anthropic", "caldav", "fastapi", "google-api-python-client", "google-auth", "httpx", "icalendar", "jinja2", "markdown-it-py", "nh3", "openpyxl", "pydantic-monty", "python-docx", "python-multipart", "sqlite-vec", "trafilatura", "uvicorn", "vobject"]
 
 [project.scripts]
 atrium = "atrium.cli:main"

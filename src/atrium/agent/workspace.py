@@ -1,6 +1,6 @@
 import json
 
-from . import journal, subagents
+from . import files, journal, subagents
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS thread_plans (
@@ -30,7 +30,9 @@ MAIL_READ = "mail_read"
 FETCH_KNOWLEDGE = "fetch_knowledge"
 RUN_CODE = "run_code"
 WEB_SEARCH_RESULT = "web_search_tool_result"
+SERVER_TOOL_USE = "server_tool_use"
 TOOL_RESULT = "tool_result"
+ERROR = "error"
 WEB, MAIL, NOTION = "web", "mail", "notion"
 RESULT_CHARS = 4000
 
@@ -81,7 +83,7 @@ def get_file(conn, thread_id, file_id):
 
 
 def child_threads(conn, thread_id):
-    return [dict(r) for r in conn.execute("SELECT * FROM threads WHERE parent_thread_id = ? ORDER BY id", (thread_id,))]
+    return [dict(r) for r in conn.execute("SELECT * FROM threads WHERE parent_thread_id = ? AND deleted_at IS NULL ORDER BY id", (thread_id,))]
 
 
 def parse(body):
@@ -175,6 +177,38 @@ def sources_of(conn, thread_id, children=None):
     return out
 
 
+def execution_result(block):
+    content = block.get("content") if isinstance(block.get("content"), dict) else {}
+    if "error_code" in content:
+        return content["error_code"], ERROR
+    if "stdout" in content or "stderr" in content:
+        text = content.get("stdout") or ""
+        if content.get("stderr"):
+            text += ("\n" if text else "") + content["stderr"]
+        return text, (ERROR if content.get("return_code") else journal.OK)
+    return json.dumps({k: v for k, v in content.items() if k != "type"}, ensure_ascii=False), journal.OK
+
+
+def execution_sessions(conn, thread_id):
+    """Anthropic code execution steps: each server tool use paired with its result in the same assistant turn."""
+    found, by_use = [], {}
+    for m in journal.messages_of(conn, thread_id):
+        if m["role"] != journal.ASSISTANT:
+            continue
+        for b in m["content"]:
+            kind = b.get("type")
+            if kind == SERVER_TOOL_USE and b.get("name") in files.CODE_EXECUTION_NAMES:
+                args = b.get("input") or {}
+                script = args.get("command", "") if b["name"] == "bash_code_execution" else json.dumps(args, ensure_ascii=False)
+                session = {"id": b.get("id"), "run_id": m["run_id"], "tool": "code_execution", "script": script, "result": "", "state": journal.STARTED, "started_at": m["created_at"]}
+                by_use[b.get("id")] = session
+                found.append(session)
+            elif kind in files.CODE_EXECUTION_RESULTS and b.get("tool_use_id") in by_use:
+                result, state = execution_result(b)
+                by_use[b["tool_use_id"]].update(result=result[:RESULT_CHARS], state=state)
+    return found
+
+
 def code_sessions(conn, thread_id):
     bodies = result_bodies(conn, [thread_id])
     found = []
@@ -186,12 +220,15 @@ def code_sessions(conn, thread_id):
             {
                 "id": call["id"],
                 "run_id": call["run_id"],
+                "tool": RUN_CODE,
                 "script": json.loads(call["args_json"]).get("code", ""),
                 "result": (call["error"] or body)[:RESULT_CHARS],
                 "state": call["state"],
                 "started_at": call["started_at"],
             }
         )
+    found.extend(execution_sessions(conn, thread_id))
+    found.sort(key=lambda s: s["started_at"])
     return found
 
 

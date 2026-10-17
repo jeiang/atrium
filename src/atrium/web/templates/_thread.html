@@ -1,5 +1,5 @@
 {% from "_icons.html" import icon %}
-{% from "_macros.html" import spinner, when %}
+{% from "_macros.html" import spinner, when, attach_field, attach_button %}
 {% set t = view.thread %}
 {% set active = view.active %}
 {% set busy = active and active.state == "running" %}
@@ -36,6 +36,10 @@
       <input type="hidden" name="archived" value="{{ 0 if t.archived else 1 }}">
       <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{ icon("archive-restore" if t.archived else "archive") }}{{ "Unarchive" if t.archived else "Archive" }}</button>
     </form>
+    <form method="post" action="/chat/{{ t.id }}/delete" data-confirm-submit="Delete this thread, its subagent transcripts and its files? This cannot be undone.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{ icon("trash-2") }}Delete</button>
+    </form>
     {% endif %}
     <button type="button" class="btn md:hidden" data-size="sm" data-variant="outline" data-action="toggle-panel" aria-controls="panel" aria-expanded="false">{{ icon("panel-right") }}Panel</button>
   </span>
@@ -44,14 +48,16 @@
   {% include "_transcript.html" %}
 </ol>
 {% if t.kind != "subagent" %}
-<form id="composer" class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" method="post" action="/chat/{{ t.id }}/messages"
-      hx-post="/chat/{{ t.id }}/messages" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset>
+<form id="composer" class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" method="post" action="/chat/{{ t.id }}/messages" enctype="multipart/form-data"
+      hx-post="/chat/{{ t.id }}/messages" hx-encoding="multipart/form-data" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset data-attach>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="edit" value="">
   <p id="composer-editing" class="flex items-center gap-2 text-xs text-muted-foreground" hidden>{{ icon("pencil", "size-3.5") }}Editing your last message: sending replaces it and the reply.<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="cancel-edit">Cancel</button></p>
   <label for="composer-text" class="sr-only">Message</label>
-  <textarea id="composer-text" name="text" rows="2" class="textarea w-full" placeholder="Message the assistant… (⌘⏎ to send)" data-submit-on-enter required autofocus></textarea>
+  <textarea id="composer-text" name="text" rows="2" class="textarea w-full" placeholder="Message the assistant… (⌘⏎ to send, drop files to attach)" data-submit-on-enter required autofocus></textarea>
+  {{ attach_field() }}
   <div class="flex flex-wrap items-center gap-2 text-xs">
+    {{ attach_button() }}
     {% if t.kind == "chat" %}
     <label class="flex items-center gap-1 text-muted-foreground">Effort
       <select name="effort" class="select h-7 py-0 text-xs" data-option hx-post="/chat/{{ t.id }}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML">
@@ -64,6 +70,9 @@
       </select>
     </label>
     <span class="hidden text-muted-foreground lg:inline">Above 100K input tokens Haiku 5.5 bills input at 5×.</span>
+    <label class="flex items-center gap-1 text-muted-foreground" title="Let the assistant run code in Anthropic's sandbox and produce files">
+      <input type="checkbox" name="code_sandbox" class="size-3.5 accent-primary" hx-post="/chat/{{ t.id }}/sandbox" hx-trigger="change" hx-params="code_sandbox" hx-target="#sandbox" hx-swap="outerHTML"{% if t.code_sandbox %} checked{% endif %}>Code sandbox
+    </label>
     {% endif %}
     {{ spinner("composer-spinner", "Sending") }}
     <span class="ms-auto flex items-center gap-1">
@@ -71,5 +80,6 @@
       <button type="submit" class="btn" data-size="sm">{{ icon("send") }}<span data-send{% if busy %} hidden{% endif %}>Send</span><span data-queue{% if not busy %} hidden{% endif %}>Queue</span></button>
     </span>
   </div>
+  {% if t.kind == "chat" %}{% include "_sandbox.html" %}{% endif %}
 </form>
 {% endif %}

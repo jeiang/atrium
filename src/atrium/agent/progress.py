@@ -18,6 +18,7 @@ TOOL_START = "tool_start"
 TOOL_DONE = "tool_done"
 USER = "user"
 PLAN = "plan"
+FILES = "files"
 RUN_DONE = "run_done"
 FLUSH_SECONDS = 0.2
 CHECK_SECONDS = 1.0
@@ -27,6 +28,7 @@ PREVIEW_CHARS = 240
 CONTENT_BLOCK_STOP = "content_block_stop"
 SERVER_TOOL_USE = "server_tool_use"
 WEB_SEARCH_RESULT = "web_search_tool_result"
+CODE_EXECUTION_RESULT = "code_execution_tool_result"
 
 
 def short_args(args):
@@ -120,4 +122,9 @@ class Writer:
                 content = block.content
                 count = len(content) if isinstance(content, list) else 0
                 self.event(TOOL_DONE, id=block.tool_use_id, ok=isinstance(content, list), preview=f"{count} results")
+            elif block.type.endswith(CODE_EXECUTION_RESULT):
+                content = block.content
+                error = getattr(content, "error_code", None)
+                output = error or "\n".join(t for t in (getattr(content, "stdout", ""), getattr(content, "stderr", "")) if t) or getattr(content, "type", "")
+                self.event(TOOL_DONE, id=block.tool_use_id, ok=not error and not getattr(content, "return_code", 0), preview=preview_of(output))
         self.check_stop()

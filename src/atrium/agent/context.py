@@ -35,6 +35,7 @@ TEXT = "text"
 TOOL_USE = "tool_use"
 TOOL_RESULT = "tool_result"
 THINKING = ("thinking", "redacted_thinking")
+ATTACHMENT = "attachment"
 
 RESULT = "result"
 FOLD = "fold"
@@ -588,7 +589,7 @@ def shrink(messages, limit):
 def last_operator_blocks(sent):
     for m in reversed(sent):
         if m["role"] == journal.USER and has_text(m):
-            return [b for b in m["content"] if b.get("type") == TEXT]
+            return [b for b in m["content"] if b.get("type") in (TEXT, ATTACHMENT)]
     return []
 
 

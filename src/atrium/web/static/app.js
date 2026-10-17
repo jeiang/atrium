@@ -193,6 +193,72 @@ document.addEventListener("change", (event) => {
   file.arrayBuffer().then((buffer) => setTorrent(form, base64url(buffer), file.name));
 });
 
+// Composer attachments: files picked or dropped on a form[data-attach] accumulate in a DataTransfer that backs the
+// hidden file input, shown as chips until the form is sent or reset.
+const pendingFiles = new WeakMap();
+const uploadInput = (form) => form.querySelector("[data-upload]");
+const formatBytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+
+const renderChips = (form) => {
+  const list = form.querySelector("[data-chips]");
+  const files = [...(pendingFiles.get(form)?.files || [])];
+  list.replaceChildren(...files.map((file, index) => {
+    const chip = document.createElement("li");
+    chip.className = "badge gap-1 max-w-64";
+    chip.dataset.variant = "secondary";
+    chip.innerHTML = `<span class="truncate"></span><span class="text-muted-foreground tabular-nums"></span><button type="button" class="rounded-sm hover:text-destructive" data-action="remove-file" data-index="${index}" aria-label="Remove"><span aria-hidden="true">×</span></button>`;
+    chip.children[0].textContent = file.name;
+    chip.children[1].textContent = formatBytes(file.size);
+    return chip;
+  }));
+};
+
+const setFiles = (form, files) => {
+  const transfer = new DataTransfer();
+  files.forEach((file) => transfer.items.add(file));
+  pendingFiles.set(form, transfer);
+  uploadInput(form).files = transfer.files;
+  renderChips(form);
+};
+
+const addFiles = (form, files) => setFiles(form, [...(pendingFiles.get(form)?.files || []), ...files]);
+
+actions["pick-files"] = (button) => uploadInput(button.form).click();
+actions["remove-file"] = (button) => {
+  const form = button.form;
+  setFiles(form, [...pendingFiles.get(form).files].filter((_, i) => i !== Number(button.dataset.index)));
+};
+
+document.addEventListener("change", (event) => {
+  if (event.target.matches("form[data-attach] [data-upload]")) addFiles(event.target.form, [...event.target.files]);
+});
+document.addEventListener("reset", (event) => {
+  const form = event.target;
+  if (!form.matches || !form.matches("form[data-attach]")) return;
+  pendingFiles.delete(form);
+  form.querySelector("[data-chips]").replaceChildren();
+  // Options saved by their own requests (effort, context, sandbox) must survive the reset that clears the text.
+  form.querySelectorAll("select[data-option] option").forEach((option) => { option.defaultSelected = option.selected; });
+  form.querySelectorAll("input[type=checkbox][hx-post]").forEach((box) => { box.defaultChecked = box.checked; });
+});
+["dragenter", "dragover"].forEach((name) => document.addEventListener(name, (event) => {
+  const form = event.target.closest && event.target.closest("form[data-attach]");
+  if (!form || ![...event.dataTransfer.types].includes("Files")) return;
+  event.preventDefault();
+  form.classList.add("ring-2", "ring-ring");
+}));
+document.addEventListener("dragleave", (event) => {
+  const form = event.target.closest && event.target.closest("form[data-attach]");
+  if (form && !form.contains(event.relatedTarget)) form.classList.remove("ring-2", "ring-ring");
+});
+document.addEventListener("drop", (event) => {
+  const form = event.target.closest && event.target.closest("form[data-attach]");
+  if (!form) return;
+  event.preventDefault();
+  form.classList.remove("ring-2", "ring-ring");
+  if (event.dataTransfer.files.length) addFiles(form, [...event.dataTransfer.files]);
+});
+
 // Thread workspace: the right panel (Work/Preview tabs, drag to resize, drawer on small screens), the composer's
 // edit mode, and the live run view fed by server-sent events written by whichever process executes the run.
 const PANEL_WIDTH_KEY = "atrium.panel.width";
@@ -378,6 +444,7 @@ const connectLive = (li) => {
     if (queued) queued.remove();
   });
   on("plan", refreshWork);
+  on("files", refreshWork);
   on("run_done", (data) => {
     const group = li.querySelector(`[data-child-run="${data.run_id}"] [data-child-state]`);
     if (group) { group.textContent = data.state; if (data.state !== "done") group.dataset.variant = "destructive"; }
