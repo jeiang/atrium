@@ -2,13 +2,13 @@
 {% from "_macros.html" import action_badge, open_attrs, place, when %}
 {% if toast is defined and toast %}{% include "_toast.html" %}{% endif %}
 <li id="activity-{{ e.source }}-{{ e.id }}" class="flex flex-col gap-2 px-4 py-3">
-  <div class="grid gap-x-4 gap-y-2 lg:grid-cols-[--spacing(24)_minmax(0,1fr)_auto] lg:items-center">
-    <div class="flex items-center gap-2 text-xs text-muted-foreground">
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div class="flex items-center gap-2 whitespace-nowrap text-xs text-muted-foreground sm:w-48 sm:shrink-0">
       <span class="badge" data-variant="secondary">{{ e.category }}</span>
       <span class="tabular-nums">{{ when(e.ts, "datetime") }}</span>
     </div>
     {% if e.source == "mail" %}
-    <div class="flex min-w-0 flex-col gap-0.5">
+    <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
       <a class="truncate rounded-sm text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {{ open_attrs(e.message_id) }}>{{ e.subject or "(no subject)" }}</a>
       <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <span class="badge" data-variant="outline">{{ e.kind }}</span>
@@ -23,7 +23,7 @@
       </div>
     </div>
     {% else %}
-    <div class="flex min-w-0 flex-col gap-0.5">
+    <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
       <div class="flex min-w-0 flex-wrap items-center gap-2">
         <span class="badge" data-variant="outline">{{ e.tool }}</span>
         <span class="truncate font-mono text-xs">{{ e.target }}</span>
@@ -33,7 +33,7 @@
       </p>
     </div>
     {% endif %}
-    <div class="flex lg:justify-end">
+    <div class="flex sm:ms-auto">
       {% if e.source == "write" and e.undone_at %}
       <span class="badge" data-variant="outline">Undone {{ when(e.undone_at, "datetime") }}</span>
       {% elif e.undoable %}
