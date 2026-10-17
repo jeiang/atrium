@@ -58,12 +58,15 @@ def title_from(text):
     return line if len(line) <= TITLE_CHARS else line[: TITLE_CHARS - 1] + "…"
 
 
-def create(conn, kind, now, title=None, parent_id=None, job_id=None):
+def create(conn, kind, now, title=None, parent_id=None, job_id=None, project_id=None):
     chosen = defaults(conn)
+    if project_id:
+        project = conn.execute("SELECT effort, context_limit FROM projects WHERE id = ?", (project_id,)).fetchone()
+        chosen = {"effort": project["effort"], "context_limit": project["context_limit"]}
     effort = chosen["effort"] if kind == CHAT else EFFORT[kind]
     cur = conn.execute(
-        "INSERT INTO threads (kind, title, job_id, parent_thread_id, effort, context_limit, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (kind, title, job_id, parent_id, effort, chosen["context_limit"], now, now),
+        "INSERT INTO threads (kind, title, job_id, parent_thread_id, effort, context_limit, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (kind, title, job_id, parent_id, effort, chosen["context_limit"], project_id, now, now),
     )
     return cur.lastrowid
 
@@ -133,17 +136,21 @@ def urls_in(text):
 
 
 LIST_SQL = (
-    "SELECT t.id, t.kind, t.title, t.pinned, t.archived, t.created_at, t.updated_at, "
+    "SELECT t.id, t.kind, t.title, t.pinned, t.archived, t.created_at, t.updated_at, t.project_id, "
+    "(SELECT name FROM projects p WHERE p.id = t.project_id) AS project_name, "
     "(SELECT state FROM runs r WHERE r.thread_id = t.id ORDER BY r.id DESC LIMIT 1) AS run_state, "
     "(SELECT COALESCE(SUM(cost_usd), 0) FROM usage u WHERE u.thread_id = t.id) AS cost "
     "FROM threads t WHERE t.kind = ? AND t.archived = ?"
 )
 
 
-def list_threads(conn, q=None, limit=50, archived=False):
+def list_threads(conn, q=None, limit=50, archived=False, project_id=None):
     match = fts_query(q) if q else ""
     params = [CHAT, int(archived)]
     sql = LIST_SQL
+    if project_id:
+        sql += " AND t.project_id = ?"
+        params.append(project_id)
     if match:
         sql += " AND t.id IN (SELECT thread_id FROM thread_fts WHERE thread_fts MATCH ?)"
         params.append(match)

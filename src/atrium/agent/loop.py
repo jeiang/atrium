@@ -6,7 +6,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ..config import TIMEZONE
-from . import budget, context, journal, pricing, progress, registry, threads, usage
+from . import budget, context, journal, pricing, progress, projects, registry, threads, usage
 from .prompts import SYSTEM
 from .tools.base import CHAT, CRON, NIGHTLY, READ, ToolContext, ToolError
 from .tools.profile import profile_block
@@ -72,14 +72,16 @@ def skills_index(conn):
     return index(conn) if index else ""
 
 
-def system_blocks(conn, prefix_cc=CACHE_CONTROL, extra=None):
-    """Breakpoints: after SYSTEM and after the last stable block (profile, skills index, role addendum)."""
+def system_blocks(conn, prefix_cc=CACHE_CONTROL, extra=None, project=None):
+    """Breakpoints: after SYSTEM and after the last stable block (profile, skills index, role addendum); the project block follows uncached."""
     blocks = [{"type": TEXT, "text": SYSTEM, "cache_control": prefix_cc}]
     for text in (profile_block(conn), skills_index(conn), extra or ""):
         if text:
             blocks.append({"type": TEXT, "text": text})
     if len(blocks) > 1:
         blocks[-1] = {**blocks[-1], "cache_control": prefix_cc}
+    if project:
+        blocks.append({"type": TEXT, "text": project})
     return blocks
 
 
@@ -306,7 +308,7 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
     by_name = {t.name: t for t in tools}
     unattended = threads.root_kind(conn, thread_id) in UNATTENDED
     prefix_cc = prefix_cache_control(conn, kind)
-    params = request_params(tools, kind, effort, system_blocks(conn, prefix_cc, system_extra), limits, prefix_cc, allowed_tools)
+    params = request_params(tools, kind, effort, system_blocks(conn, prefix_cc, system_extra, projects.system_block(conn, thread)), limits, prefix_cc, allowed_tools)
     sig = system_signature(params)
     writer = progress.Writer(conn, run_id, now)
     ctx = ToolContext(

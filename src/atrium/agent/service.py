@@ -35,15 +35,15 @@ def embedder(cfg):
     return lambda texts: embed.embed_texts(cfg.embed_url, texts)
 
 
-def create_thread(conn, kind=CHAT, title=None, parent_id=None, job_id=None, now=time.time):
-    thread_id = threads.create(conn, kind, now(), title=title, parent_id=parent_id, job_id=job_id)
+def create_thread(conn, kind=CHAT, title=None, parent_id=None, job_id=None, now=time.time, project_id=None):
+    thread_id = threads.create(conn, kind, now(), title=title, parent_id=parent_id, job_id=job_id, project_id=project_id)
     if title:
         conn.execute("INSERT INTO thread_fts (thread_id, text) VALUES (?, ?)", (thread_id, title))
     return thread_id
 
 
-def list_threads(conn, q=None, limit=50, archived=False):
-    return threads.list_threads(conn, q, limit, archived)
+def list_threads(conn, q=None, limit=50, archived=False, project_id=None):
+    return threads.list_threads(conn, q, limit, archived, project_id)
 
 
 def set_thread_flag(conn, thread_id, column, value):
@@ -356,8 +356,8 @@ def branch(conn, thread_id, seq, now=time.time):
     messages = branch_messages(all_messages, seq)
     child = create_thread(conn, CHAT, title=source["title"], now=now)
     conn.execute(
-        "UPDATE threads SET effort = ?, context_limit = ?, allowed_urls = ?, branched_from_thread_id = ?, branched_from_seq = ? WHERE id = ?",
-        (source["effort"], source["context_limit"], json.dumps(source["allowed_urls"]), thread_id, seq, child),
+        "UPDATE threads SET effort = ?, context_limit = ?, allowed_urls = ?, project_id = ?, branched_from_thread_id = ?, branched_from_seq = ? WHERE id = ?",
+        (source["effort"], source["context_limit"], json.dumps(source["allowed_urls"]), source["project_id"], thread_id, seq, child),
     )
     for m in messages:
         journal.append_message(conn, child, None, m["role"], m["content"], now(), system_sig=m["system_sig"])

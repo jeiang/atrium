@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state, when %}
+{% set page = "projects" %}
+{% block title %}Projects{% endblock %}
+{% block heading %}Projects{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <p class="max-w-prose text-sm text-muted-foreground">A project groups chats under shared instructions, default effort and context, and a wiki hub page the assistant keeps updated.</p>
+  <div class="flex items-center gap-2">
+    <nav class="button-group" aria-label="Project view">
+      <a class="btn" data-size="sm" data-variant="{{ 'outline' if view else 'secondary' }}" href="/projects">Active</a>
+      <a class="btn" data-size="sm" data-variant="{{ 'secondary' if view else 'outline' }}" href="/projects?view=archived">Archived</a>
+    </nav>
+    <button type="button" class="btn" data-size="sm" hx-get="/projects/new" hx-target="#project-dialog" hx-swap="innerHTML">{{ icon("plus") }}New project</button>
+  </div>
+</div>
+{% if projects %}
+<ul class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" role="list">
+  {% for p in projects %}
+  <li class="relative flex flex-col gap-2 rounded-lg border bg-card p-4 hover:bg-accent">
+    <h2 class="truncate text-sm font-medium"><a href="/projects/{{ p.id }}" class="after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:rounded-lg">{{ p.name }}</a></h2>
+    <p class="line-clamp-2 min-h-8 text-xs text-muted-foreground">{{ p.instructions or "No instructions." }}</p>
+    <p class="flex gap-3 text-xs text-muted-foreground tabular-nums">
+      <span>{{ p.thread_count }} {{ "thread" if p.thread_count == 1 else "threads" }}</span>
+      <span>{% if p.last_activity %}active {{ when(p.last_activity, "datetime") }}{% else %}no activity yet{% endif %}</span>
+    </p>
+  </li>
+  {% endfor %}
+</ul>
+{% elif view == "archived" %}
+{% call empty_state("archive", "Nothing archived") %}Archived projects appear here.{% endcall %}
+{% else %}
+{% call empty_state("folder", "No projects yet") %}Create one to give a set of chats shared instructions and a wiki hub.{% endcall %}
+{% endif %}
+<dialog id="project-dialog" class="dialog" aria-label="Project"></dialog>
+{% endblock %}

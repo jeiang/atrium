@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% set page = "projects" %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block heading %}{{ project.name }}{% endblock %}
+{% block content %}
+<div class="flex min-h-[calc(100dvh-6.5rem)] flex-col gap-4 md:min-h-[calc(100dvh-7.5rem)]">
+  <header class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+    <a href="/projects" class="btn" data-size="sm" data-variant="ghost">{{ icon("arrow-left") }}Projects</a>
+    {% if project.archived %}<span class="badge" data-variant="secondary">archived</span>{% endif %}
+    <span>effort {{ project.effort }} · context {{ project.context_limit // 1000 }}K</span>
+    {% if project.wiki_hub_id %}<a class="btn" data-size="sm" data-variant="ghost" href="https://www.notion.so/{{ project.wiki_hub_id | replace('-', '') }}" target="_blank" rel="noopener">{{ icon("book-open") }}Wiki hub</a>{% endif %}
+    <span class="ms-auto flex items-center gap-1">
+      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/projects/{{ project.id }}/edit" hx-target="#project-dialog" hx-swap="innerHTML">{{ icon("pencil") }}Edit</button>
+      <form method="post" action="/projects/{{ project.id }}/archive">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="archived" value="{{ 0 if project.archived else 1 }}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("archive-restore" if project.archived else "archive") }}{{ "Restore" if project.archived else "Archive" }}</button>
+      </form>
+    </span>
+  </header>
+  {% if project.instructions %}<p class="line-clamp-3 max-w-prose text-sm text-muted-foreground">{{ project.instructions }}</p>{% endif %}
+  <form id="thread-search" action="/projects/{{ project.id }}" method="get" class="flex items-center">
+    <input type="hidden" name="view" value="{{ view }}">
+    <nav class="button-group" aria-label="Thread view">
+      <a class="btn" data-size="sm" data-variant="{{ 'outline' if view else 'secondary' }}" href="/projects/{{ project.id }}">Active</a>
+      <a class="btn" data-size="sm" data-variant="{{ 'secondary' if view else 'outline' }}" href="/projects/{{ project.id }}?view=archived">Archived</a>
+    </nav>
+  </form>
+  <div id="threads" class="flex flex-col gap-3">
+    {% include "_thread_list.html" %}
+  </div>
+  {% if not project.archived %}
+  <form method="post" action="/chat" class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" data-reset>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="project_id" value="{{ project.id }}">
+    <label for="new-text" class="sr-only">New thread in {{ project.name }}</label>
+    <textarea id="new-text" name="text" rows="2" class="textarea w-full" placeholder="Start a chat in {{ project.name }}… (⌘⏎ to send)" data-submit-on-enter autofocus></textarea>
+    <div class="flex items-center justify-end">
+      <button type="submit" class="btn">{{ icon("send") }}Start</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+<dialog id="project-dialog" class="dialog" aria-label="Project"></dialog>
+{% endblock %}
