@@ -371,6 +371,8 @@ def main(argv=None):
     elif args.command == "media":
         return media_command(cfg, args)
     elif args.command == "serve":
+        from .web.app import create_app
+
         hosts = args.allowed_host or [h for h in [os.environ.get("ATRIUM_PUBLIC_HOST", "").strip()] if h]
         if args.auth == auth.PROXY and not hosts:
             raise SystemExit("proxy mode needs --allowed-host or ATRIUM_PUBLIC_HOST")

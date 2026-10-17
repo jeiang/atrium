@@ -392,6 +392,25 @@ def test_every_entry_module_imports_in_a_fresh_interpreter():
         assert done.returncode == 0, f"{module}: {done.stderr[-2000:]}"
 
 
+def test_serve_builds_the_app_in_a_fresh_interpreter(tmp_path):
+    """`atrium serve` reaches uvicorn.run with a built app (import-order and NameError regressions)."""
+    import subprocess
+    import sys
+
+    from helpers import static_dir
+
+    script = (
+        "import uvicorn, sys\n"
+        "uvicorn.run = lambda app, **kw: print('APP', type(app).__name__)\n"
+        "from atrium.cli import main\n"
+        "sys.exit(main(['serve', '--auth', 'local', '--host', '127.0.0.1', '--port', '1']))\n"
+    )
+    env = {"PYTHONPATH": ":".join(sys.path), "ATRIUM_DB": str(tmp_path / "a.db"), "ATRIUM_CACHE_DIR": str(tmp_path / "c"), "ATRIUM_STATIC_DIR": str(static_dir(tmp_path)), "ATRIUM_MODE": "shadow"}
+    done = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, env=env)
+    assert done.returncode == 0 and "APP FastAPI" in done.stdout, done.stderr[-2000:]
+
+
+
 def test_thread_listing_and_search(world):
     cfg, conn = world
     client = FakeClient([response([text("Rayleigh scattering explains it.")]), response([text("ok")])])
