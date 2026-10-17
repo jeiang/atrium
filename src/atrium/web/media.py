@@ -248,7 +248,7 @@ def register(app, deps):
         with connection() as conn:
             return render(
                 "media_channels.html", channels=channels.list_channels(conn), status=channels.status(conn), q=q, results=results,
-                form=form or {}, tmdb=tmdb_client is not None, toast=notice, status_code=status_code,
+                form=form or {"backfill": True}, tmdb=tmdb_client is not None, toast=notice, status_code=status_code,
             )
 
     @app.get("/media/channels")
@@ -265,7 +265,7 @@ def register(app, deps):
                     error = toast("error", "No IMDb id on TMDB", "Enter it by hand.")
         except tmdb.TmdbError as e:
             error = toast("error", "TMDB failed", str(e))
-        form = {"imdb": imdb, "name": name.strip(), "tmdb_id": tmdb_id, "pattern": pattern, "case_sensitive": False}
+        form = {"imdb": imdb, "name": name.strip(), "tmdb_id": tmdb_id, "pattern": pattern, "case_sensitive": False, "backfill": True}
         return channels_page(error, q=q, form=form, results=results)
 
     @app.post("/media/channels")
@@ -275,14 +275,23 @@ def register(app, deps):
         tmdb_id: Annotated[str, Form()] = "",
         pattern: Annotated[str, Form()] = "",
         case_sensitive: Annotated[str, Form()] = "",
+        backfill: Annotated[str, Form()] = "",
     ):
-        form = {"imdb": imdb, "name": name, "tmdb_id": tmdb_id, "pattern": pattern, "case_sensitive": bool(case_sensitive)}
+        form = {"imdb": imdb, "name": name, "tmdb_id": tmdb_id, "pattern": pattern, "case_sensitive": bool(case_sensitive), "backfill": bool(backfill)}
         with connection() as conn:
             try:
                 row = channels.add_channel(conn, name, imdb, pattern, bool(case_sensitive), tmdb_id=int(tmdb_id) if tmdb_id.strip().isdigit() else None)
             except channels.ChannelError as e:
                 return channels_page(toast("error", "Not saved", str(e)), 422, form=form)
-        return channels_page(toast("success", f"Watching {row['name']}", "The first poll only records what is already out; later matches are downloaded."))
+            if not backfill:
+                return channels_page(toast("success", f"Watching {row['name']}", "The first poll only records what is already out; later matches are downloaded."))
+            try:
+                out = channels.poll(conn, env, qb(), settings, only=row["id"], force=True)
+            except media_settings.NotConfigured as e:
+                return channels_page(toast("error", f"Watching {row['name']}", f"Nothing downloaded: {e}"))
+        added = ", ".join(a["title"] for a in out["added"]) or "no matching releases yet"
+        errors = " Errors: " + "; ".join(out["errors"]) if out["errors"] else ""
+        return channels_page(toast("error" if out["errors"] else "success", f"Watching {row['name']}", f"Added: {added}.{errors}"))
 
     @app.post("/media/channels/preview")
     def channel_preview(imdb: Annotated[str, Form()] = "", pattern: Annotated[str, Form()] = "", case_sensitive: Annotated[str, Form()] = ""):

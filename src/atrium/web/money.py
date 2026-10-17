@@ -66,23 +66,25 @@ def register(app, deps):
     # ---------- transactions ----------
 
     def transactions_page_render(notice=None, status_code=200, **filters):
-        unassigned = filters.get("unassigned", False)
-        wanted = {k: v for k, v in filters.items() if k != "unassigned"}
+        unassigned, dismissed = filters.get("unassigned", False), filters.get("dismissed", False)
+        wanted = {k: v for k, v in filters.items() if k not in ("unassigned", "dismissed")}
         with connection() as conn:
             return render(
                 "money_transactions.html",
-                transactions=money.list_transactions(conn, unassigned=unassigned, limit=TRANSACTION_LIMIT, **wanted),
+                transactions=money.list_transactions(conn, unassigned=unassigned, dismissed=dismissed, limit=TRANSACTION_LIMIT, **wanted),
                 filters=filters,
                 accounts=money.list_accounts(conn),
                 categories=money.categories(conn),
                 kinds=KINDS,
+                currencies=money.TX_CURRENCIES,
                 toast=notice,
                 status_code=status_code,
             )
 
     @app.get("/money/transactions")
-    def transactions_page(start: str = "", end: str = "", account_id: int | None = None, payee: str = "", category: str = "", kind: str = "", currency: str = "", unassigned: bool = False):
-        return transactions_page_render(start=start, end=end, account_id=account_id, payee=payee, category=category, kind=kind, currency=currency.upper(), unassigned=unassigned)
+    def transactions_page(start: str = "", end: str = "", account_id: str = "", payee: str = "", category: str = "", kind: str = "", currency: str = "", unassigned: bool = False, dismissed: bool = False):
+        account = int(account_id) if account_id.strip().isdigit() else None  # the filter's "Any" option submits an empty value
+        return transactions_page_render(start=start, end=end, account_id=account, payee=payee, category=category, kind=kind, currency=currency.upper(), unassigned=unassigned, dismissed=dismissed)
 
     @app.post("/money/transactions/merge")
     def transactions_merge(transaction_ids: Annotated[list[int], Form()]):
@@ -104,6 +106,34 @@ def register(app, deps):
             change = ledger(money.transaction_set_category, conn, tx_id, category_id or None)
             commit(conn, "transaction_set_category", f"transaction:{tx_id}", change)
         return transactions_page_render(toast("success", "Category set"))
+
+    @app.post("/money/transactions/{tx_id}/currency")
+    def transaction_currency(tx_id: int, currency: Annotated[str, Form()]):
+        with connection() as conn:
+            change = ledger(money.transaction_set_currency, conn, tx_id, currency)
+            commit(conn, "transaction_set_currency", f"transaction:{tx_id}", change)
+        return transactions_page_render(toast("success", "Currency set", "Amount resolved in the account currency."))
+
+    @app.post("/money/transactions/{tx_id}/dismiss")
+    def transaction_dismiss(tx_id: int, reason: Annotated[str, Form()] = ""):
+        with connection() as conn:
+            change = ledger(money.transaction_dismiss, conn, tx_id, reason.strip() or "dismissed")
+            commit(conn, "transaction_dismiss", f"transaction:{tx_id}", change)
+        return transactions_page_render(toast("success", "Dismissed", "Left out of lists, spending and bills. Tick Dismissed only to restore it."))
+
+    @app.post("/money/transactions/{tx_id}/restore")
+    def transaction_restore(tx_id: int):
+        with connection() as conn:
+            change = ledger(money.transaction_dismiss, conn, tx_id, "")
+            commit(conn, "transaction_restore", f"transaction:{tx_id}", change)
+        return transactions_page_render(toast("success", "Restored"), dismissed=True)
+
+    @app.post("/money/transactions/dismiss-before")
+    def transactions_dismiss_before(before: Annotated[str, Form()]):
+        with connection() as conn:
+            count, change = ledger(money.transactions_dismiss_before, conn, before)
+            commit(conn, "transactions_dismiss_before", f"before:{before}", change)
+        return accounts_page_render(toast("success", f"Dismissed {count} transactions", "Undo it from Changes."))
 
     # ---------- payees ----------
 
@@ -206,15 +236,19 @@ def register(app, deps):
     def account_add(
         bank: Annotated[str, Form()], name: Annotated[str, Form()], kind: Annotated[str, Form()],
         currency: Annotated[str, Form()], last4: Annotated[str, Form()] = "", sender_patterns: Annotated[str, Form()] = "",
+        forex: Annotated[str, Form()] = "",
     ):
         with connection() as conn:
-            ledger(money.add_account, conn, bank, name, kind, currency, last4, sender_patterns or None)
+            ledger(money.add_account, conn, bank, name, kind, currency, last4, sender_patterns or None, None, bool(forex))
         return accounts_page_render(toast("success", "Account added"))
 
     @app.post("/money/accounts/{account_id}")
-    def account_update(account_id: int, name: Annotated[str, Form()], last4: Annotated[str, Form()] = "", sender_patterns: Annotated[str, Form()] = ""):
+    def account_update(
+        account_id: int, name: Annotated[str, Form()], last4: Annotated[str, Form()] = "", sender_patterns: Annotated[str, Form()] = "",
+        forex: Annotated[str, Form()] = "",
+    ):
         with connection() as conn:
-            found(ledger(money.update_account, conn, account_id, name, last4, sender_patterns), "account")
+            found(ledger(money.update_account, conn, account_id, name, last4, sender_patterns, bool(forex)), "account")
         return accounts_page_render(toast("success", "Account updated"))
 
     @app.post("/money/since")

@@ -9,14 +9,14 @@ from ..agent import skills
 def register(app, deps):
     render, connection, toast = deps.render, deps.connection, deps.toast
 
-    def show(notice=None, status_code=200, draft=None):
+    def show(notice=None, status_code=200, draft=None, q=""):
         with connection() as conn:
-            found = skills.with_references(skills.list_skills(conn), conn)
-            return render("skills.html", skills=found, draft=draft or {}, toast=notice, status_code=status_code)
+            found = skills.with_references(skills.list_skills(conn, q), conn)
+            return render("skills.html", skills=found, draft=draft or {}, q=q, toast=notice, status_code=status_code)
 
     @app.get("/settings/skills")
-    def skills_page():
-        return show()
+    def skills_page(q: str = ""):
+        return show(q=q.strip())
 
     @app.post("/settings/skills")
     def skill_save(

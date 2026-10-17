@@ -37,7 +37,9 @@ BANK_ACCOUNT, CREDIT_CARD = "bank", "credit_card"
 ACCOUNT_KINDS = (BANK_ACCOUNT, CREDIT_CARD)
 TTD, BBD, USD = "TTD", "BBD", "USD"
 CURRENCIES = (TTD, BBD)
-CIBC_USD_TO_BBD = 2.0 * 1.02  # pegged 2:1 plus the 2% forex fee
+TX_CURRENCIES = (TTD, BBD, USD)
+BBD_PER_USD = 2.0
+BBD_FOREX_FEE = 1.02
 
 PURCHASE, ATM, TRANSFER, CARD_PAYMENT, REFUND, STATEMENT, FX_ADJUSTMENT, NONE = (
     "purchase", "atm_withdrawal", "transfer", "card_payment", "refund", "statement", "fx_adjustment", "none",
@@ -82,6 +84,7 @@ CREATE TABLE IF NOT EXISTS money_accounts (
     currency TEXT NOT NULL,
     last4 TEXT NOT NULL DEFAULT '',
     sender_patterns TEXT NOT NULL DEFAULT '[]',
+    forex INTEGER NOT NULL DEFAULT 0,
     created_ts REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS fx_rates (
@@ -131,6 +134,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     category_id INTEGER REFERENCES categories(id),
     transfer_id INTEGER REFERENCES transactions(id),
     review TEXT NOT NULL DEFAULT '',
+    dismissed TEXT NOT NULL DEFAULT '',
     created_ts REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS transactions_date ON transactions (date);
@@ -157,9 +161,22 @@ class LedgerError(ValueError):
     pass
 
 
+def _add_column(conn, table, column, ddl):
+    if column in {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}:
+        return False
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+    return True
+
+
 def init_schema(conn):
     conn.executescript(SCHEMA)
     conn.executemany("INSERT OR IGNORE INTO categories (name) VALUES (?)", [(c,) for c in STARTER_CATEGORIES])
+    if _add_column(conn, "money_accounts", "forex", "INTEGER NOT NULL DEFAULT 0"):
+        conn.execute(
+            "UPDATE money_accounts SET forex = 1 WHERE (bank = ? AND kind = ? AND currency = ?) OR (bank = ? AND currency = ?)",
+            (REPUBLIC, CREDIT_CARD, TTD, CIBC, BBD),
+        )
+    _add_column(conn, "transactions", "dismissed", "TEXT NOT NULL DEFAULT ''")
 
 
 def _zone():
@@ -267,6 +284,7 @@ def _account_dict(row):
     found = dict(row)
     found["sender_patterns"] = json.loads(found["sender_patterns"])
     found["bank_label"] = BANK_LABELS.get(found["bank"], found["bank"])
+    found["forex"] = bool(found["forex"])
     return found
 
 
@@ -285,7 +303,7 @@ def _patterns(value):
     return sorted({p.strip().lower() for p in value or () if p and p.strip()})
 
 
-def add_account(conn, bank, name, kind, currency, last4="", sender_patterns=None, now=None):
+def add_account(conn, bank, name, kind, currency, last4="", sender_patterns=None, now=None, forex=False):
     if bank not in BANKS:
         raise LedgerError(f"bank must be one of {', '.join(BANKS)}")
     if kind not in ACCOUNT_KINDS:
@@ -298,13 +316,14 @@ def add_account(conn, bank, name, kind, currency, last4="", sender_patterns=None
     last4 = re.sub(r"\D", "", last4 or "")[-4:]
     patterns = _patterns(sender_patterns if sender_patterns is not None else DEFAULT_SENDERS[bank])
     cur = conn.execute(
-        "INSERT INTO money_accounts (bank, name, kind, currency, last4, sender_patterns, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (bank, name, kind, currency, last4, json.dumps(patterns), now or time.time()),
+        "INSERT INTO money_accounts (bank, name, kind, currency, last4, sender_patterns, forex, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (bank, name, kind, currency, last4, json.dumps(patterns), int(bool(forex)), now or time.time()),
     )
     return cur.lastrowid
 
 
-def update_account(conn, account_id, name=None, last4=None, sender_patterns=None):
+def update_account(conn, account_id, name=None, last4=None, sender_patterns=None, forex=None):
+    """Changing `forex` re-resolves the account's transactions under the new rule."""
     fields = {}
     if name is not None:
         fields["name"] = _clip(name, 60)
@@ -314,10 +333,17 @@ def update_account(conn, account_id, name=None, last4=None, sender_patterns=None
         fields["last4"] = re.sub(r"\D", "", last4)[-4:]
     if sender_patterns is not None:
         fields["sender_patterns"] = json.dumps(_patterns(sender_patterns))
+    if forex is not None:
+        fields["forex"] = int(bool(forex))
     if not fields:
         return get_account(conn, account_id) is not None
     sets = ", ".join(f"{k} = ?" for k in fields)
-    return conn.execute(f"UPDATE money_accounts SET {sets} WHERE id = ?", (*fields.values(), account_id)).rowcount == 1
+    if conn.execute(f"UPDATE money_accounts SET {sets} WHERE id = ?", (*fields.values(), account_id)).rowcount != 1:
+        return False
+    if forex is not None:
+        for r in conn.execute("SELECT id FROM transactions WHERE account_id = ? AND kind != ?", (account_id, FX_ADJUSTMENT)).fetchall():
+            _rederive(conn, r["id"])
+    return True
 
 
 def delete_account(conn, account_id):
@@ -435,20 +461,26 @@ def list_rates(conn, limit=20):
 
 
 def resolve(conn, account, amount, currency, day):
-    """(amount in the account currency, rate, rate date, review note). amount is None when the pair is not allowed."""
+    """(amount in the account currency, rate, rate date, review note). amount is None when the pair is not allowed.
+    Only forex-enabled accounts take foreign charges: a TTD account converts at the CBTT USD selling rate (BBD at
+    half of it), a BBD account at the 2:1 peg plus the 2% forex fee (TTD through the CBTT rate)."""
     held = account["currency"]
     if currency == held:
         return _round(amount), None, None, ""
-    if account["bank"] == REPUBLIC and account["kind"] == CREDIT_CARD and held == TTD and currency in (USD, BBD):
-        found = rate_on(conn, day)
-        if found is None:
-            return None, None, None, "no CBTT rate stored yet"
-        selling, rate_date = found
-        rate = selling if currency == USD else selling / 2
-        return _round(amount * rate), rate, rate_date, ""
-    if account["bank"] == CIBC and held == BBD and currency == USD:
-        return _round(amount * CIBC_USD_TO_BBD), CIBC_USD_TO_BBD, None, ""
-    return None, None, None, f"{currency} charge on a {held} account"
+    if not account["forex"] or currency not in TX_CURRENCIES:
+        return None, None, None, f"{currency} charge on a {held} account"
+    if held == BBD and currency == USD:
+        rate = BBD_PER_USD * BBD_FOREX_FEE
+        return _round(amount * rate), rate, None, ""
+    found = rate_on(conn, day)
+    if found is None:
+        return None, None, None, "no CBTT rate stored yet"
+    selling, rate_date = found
+    if held == TTD:
+        rate = selling if currency == USD else selling / BBD_PER_USD
+    else:
+        rate = BBD_PER_USD * BBD_FOREX_FEE / selling
+    return _round(amount * rate), rate, rate_date, ""
 
 
 # ---------- payees and aliases ----------
@@ -1112,6 +1144,46 @@ def transaction_set_category(conn, tx_id, cat_id):
     return change
 
 
+def transaction_set_currency(conn, tx_id, currency):
+    """Correct the charged currency the mail was read as; the amount is re-resolved in the account currency."""
+    tx = _need(conn, "transactions", tx_id, "transaction")
+    if tx["kind"] == FX_ADJUSTMENT:
+        raise LedgerError("an FX adjustment is always in the card's currency")
+    currency = (currency or "").strip().upper()
+    if currency not in TX_CURRENCIES:
+        raise LedgerError(f"currency must be one of {', '.join(TX_CURRENCIES)}")
+    change = Change(conn)
+    change.touch_transaction(tx_id)
+    for s in _sources(conn, tx_id):
+        conn.execute(
+            "UPDATE transaction_sources SET extracted = ? WHERE id = ?",
+            (json.dumps({**s["item"], "currency": currency}, sort_keys=True), s["id"]),
+        )
+    _rederive(conn, tx_id)
+    return change
+
+
+def transaction_dismiss(conn, tx_id, reason="dismissed"):
+    """Hide a transaction from lists, spending and bills (not mine, a duplicate); an empty reason restores it."""
+    _need(conn, "transactions", tx_id, "transaction")
+    change = Change(conn)
+    change.touch("transactions", tx_id)
+    conn.execute("UPDATE transactions SET dismissed = ? WHERE id = ?", (_clip(reason, 80), tx_id))
+    return change
+
+
+def transactions_dismiss_before(conn, day, reason=None):
+    try:
+        day = date.fromisoformat((day or "").strip()).isoformat()
+    except ValueError as e:
+        raise LedgerError("date must be YYYY-MM-DD") from e
+    change = Change(conn)
+    ids = [r["id"] for r in conn.execute("SELECT id FROM transactions WHERE dismissed = '' AND date < ?", (day,))]
+    change.touch("transactions", *ids)
+    conn.execute("UPDATE transactions SET dismissed = ? WHERE dismissed = '' AND date < ?", (_clip(reason or f"before {day}", 80), day))
+    return len(ids), change
+
+
 def payee_rename(conn, payee_id, name):
     _need(conn, "payees", payee_id, "payee")
     name = _clip(name, 80)
@@ -1222,10 +1294,11 @@ def set_tracked_since(conn, value):
     return value or None
 
 
-def list_transactions(conn, unassigned=False, limit=100, **filters):
+def list_transactions(conn, unassigned=False, limit=100, dismissed=False, **filters):
     """Newest first; filters are start, end, account_id, payee (substring), category, kind, currency.
+    Dismissed transactions are left out, or listed alone with dismissed=True.
     Before the tracking start date only bill charges are listed (bill detection itself uses all history)."""
-    where, params = [], []
+    where, params = ["t.dismissed != ''" if dismissed else "t.dismissed = ''"], []
     for name, value in filters.items():
         clause, count = FILTERS[name]
         if value:
@@ -1337,7 +1410,7 @@ def bills(conn, today, upcoming_days=None):
             continue
         rows = conn.execute(
             "SELECT date, COALESCE(amount, original_amount) AS amount, COALESCE(currency, original_currency) AS currency "
-            "FROM transactions WHERE payee_id = ? AND kind = ? ORDER BY date",
+            "FROM transactions WHERE payee_id = ? AND kind = ? AND dismissed = '' ORDER BY date",
             (p["id"], PURCHASE),
         ).fetchall()
         series = {}

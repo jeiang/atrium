@@ -26,10 +26,10 @@
 {%- endmacro %}
 
 {% macro assign_form(t, accounts, back="overview") -%}
-<form method="post" action="/money/transactions/{{ t.id }}/account" class="flex items-center gap-2">
+<form method="post" action="/money/transactions/{{ t.id }}/account" class="flex min-w-0 max-w-full items-center gap-2">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="back" value="{{ back }}">
-  <select name="account_id" class="select" aria-label="Account for transaction {{ t.id }}">
+  <select name="account_id" class="select min-w-0" aria-label="Account for transaction {{ t.id }}">
     {% for a in accounts %}<option value="{{ a.id }}"{% if a.id == t.account_id %} selected{% endif %}>{{ a.name }} ({{ a.currency }})</option>{% endfor %}
   </select>
   <button type="submit" class="btn" data-size="sm" data-variant="outline">Assign</button>

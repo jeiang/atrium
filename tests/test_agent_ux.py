@@ -47,7 +47,7 @@ def test_agents_page_lists_runs_and_polls_while_running(cfg):
 
     page = client.get("/agents").text
     assert 'href="/agents"' in page and "<title>Agents" in page
-    assert 'hx-get="/agents/runs"' in page and 'id="agent-runs"' in page
+    assert 'hx-get="/agents/runs?q="' in page and 'id="agent-runs"' in page
     cards = page[page.index('id="agent-runs"') :]
     assert cards.index(f'data-run="{chat_run}"') < cards.index(f'data-run="{cron_run}"') < cards.index(f'data-run="{kid_run}"')  # running first, then newest
     assert 'data-status="running"' in cards and 'data-status="done"' in cards and 'data-status="error"' in cards
@@ -58,7 +58,7 @@ def test_agents_page_lists_runs_and_polls_while_running(cfg):
     assert "in 10 · out 5 · cache read 20 · cache write 0 · $0.5000" in cards
 
     partial = client.get("/agents/runs", headers=HX).text
-    assert '<section id="agent-runs"' in partial and 'hx-get="/agents/runs"' in partial and "<html" not in partial
+    assert '<section id="agent-runs"' in partial and 'hx-get="/agents/runs?q="' in partial and "<html" not in partial
     journal.finish_run(conn, chat_run, journal.DONE, time.time())
     done = client.get("/agents/runs").text
     assert "hx-get" not in done and 'data-status="running"' not in done
@@ -105,3 +105,20 @@ def test_old_settings_urls_are_gone(cfg):
     client = web_client(cfg)
     for path in ("/usage", "/skills", "/schedules", "/notifications"):
         assert client.get(path).status_code == 404, path
+
+
+def test_agents_search_filters_runs_and_polling_carries_it(cfg):
+    conn = db.connect(cfg.db_path)
+    trip = service.create_thread(conn, "chat", title="Plan the trip")
+    trip_run = run(conn, trip, "chat", journal.RUNNING)
+    brief = service.create_thread(conn, "cron", title="Morning brief")
+    brief_run = run(conn, brief, "cron", journal.DONE)
+    client = web_client(cfg)
+    page = client.get("/agents", params={"q": "trip"}).text
+    assert f'data-run="{trip_run}"' in page and f'data-run="{brief_run}"' not in page
+    assert 'hx-get="/agents/runs?q=trip"' in page
+    partial = client.get("/agents/runs", params={"q": "trip"}, headers=HX).text
+    assert f'data-run="{trip_run}"' in partial and f'data-run="{brief_run}"' not in partial
+    assert f'data-run="{brief_run}"' in client.get("/agents", params={"q": "done"}).text
+    assert 'data-run="' not in client.get("/agents", params={"q": "zzz"}).text
+    conn.close()

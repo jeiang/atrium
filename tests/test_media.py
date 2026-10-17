@@ -310,6 +310,22 @@ def test_poll_primes_then_adds_tagged_and_notifies(world):
     assert "EZTV: 503" in channels.poll(conn, w["env"], qb, w["settings"], now=lambda: NOW + 240)["errors"][0]
 
 
+def test_forced_single_channel_poll_backfills_seen_release_and_keeps_global_state(world):
+    w = world
+    conn, ez, fake = w["conn"], w["eztv"], w["qb"]
+    ez.release("1234567", HASH_A, "Lanterns S01E07 1080p WEB h264")
+    ez.release("7654321", HASH_B, "Other S01E01 1080p")
+    lanterns = channels.add_channel(conn, "Lanterns", "tt1234567", r"^Lanterns S\d+E\d+ 1080p", now=lambda: NOW)
+    channels.add_channel(conn, "Other", "tt7654321", "1080p", now=lambda: NOW)
+    qb = qbit.Qbit("http://qbit.test")
+    channels.poll(conn, w["env"], qb, w["settings"], now=lambda: NOW)
+    assert fake.added == [] and channels.is_seen(conn, HASH_A)
+    out = channels.poll(conn, w["env"], qb, w["settings"], now=lambda: NOW + 60, only=lanterns["id"], force=True)
+    assert [a["hash"] for a in out["added"]] == [HASH_A]
+    assert [a["hash"] for a in fake.added] == [HASH_A]
+    assert channels.status(conn) == {"last_check": NOW, "errors": []}
+
+
 def test_poll_selects_files_of_added_torrents(world):
     w = world
     conn, fake = w["conn"], w["qb"]
@@ -321,42 +337,17 @@ def test_poll_selects_files_of_added_torrents(world):
     assert [f["priority"] for f in fake.torrents[HASH_A]["files"]] == [1, 0] and "selected" in fake.torrents[HASH_A]["tags"]
 
 
-def test_import_organizer_state(world):
-    conn = world["conn"]
-    document = {
-        "rules": [
-            {"id": "abc", "name": "Lanterns", "imdb": "1234567", "pattern": "^Lanterns S\\d+E\\d+ 1080p", "primed": True},
-            {"id": "def", "name": "Other", "imdb": "tt7654321", "pattern": "720p", "primed": False},
-        ],
-        "seen": {HASH_A: int(NOW) - 86400, HASH_B: int(NOW) - 100 * 86400},
-    }
-    assert channels.import_state(conn, document, now=lambda: NOW) == {"channels": 2, "seen": 2}
-    rows = channels.list_channels(conn)
-    assert [(r["name"], r["imdb"], r["case_sensitive"], r["primed"]) for r in rows] == [("Lanterns", "1234567", True, True), ("Other", "7654321", True, False)]
-    assert channels.is_seen(conn, HASH_A) and not channels.is_seen(conn, HASH_B)  # expired on import
-    assert channels.import_state(conn, document, now=lambda: NOW) == {"channels": 0, "seen": 2}  # idempotent
-    with pytest.raises(channels.ChannelError):
-        channels.import_state(conn, {"rules": [{"name": "x", "imdb": "bad", "pattern": "x"}]}, now=lambda: NOW)
-    with pytest.raises(channels.ChannelError):
-        channels.import_state(conn, [], now=lambda: NOW)
-
-
-def test_cli_import_poll_and_sweep(world, tmp_path, monkeypatch, capsys):
+def test_cli_poll_and_sweep(world, tmp_path, monkeypatch, capsys):
     w = world
     for k, v in {**w["env"], "ATRIUM_DB": str(w["cfg"].db_path), "ATRIUM_CACHE_DIR": str(w["cfg"].cache_dir)}.items():
         monkeypatch.setenv(k, v)
-    state = tmp_path / "state.json"
-    state.write_text(json.dumps({"rules": [{"name": "Lanterns", "imdb": "tt1234567", "pattern": "1080p", "primed": True}], "seen": {}}))
-    assert cli.main(["media", "import-organizer-state", str(state)]) == 0
-    assert json.loads(capsys.readouterr().out) == {"channels": 1, "seen": 0}
+    channels.add_channel(w["conn"], "Lanterns", "tt1234567", "1080p", now=lambda: NOW, primed=True)
     w["eztv"].release("1234567", HASH_A, "Lanterns S01E01 1080p")
     assert cli.main(["media", "poll"]) == 0
     assert [a["hash"] for a in json.loads(capsys.readouterr().out)["added"]] == [HASH_A]
     completed_media(w, HASH_B, name="B", tags=("media", "filed"))
     assert cli.main(["media", "sweep"]) == 0
     assert json.loads(capsys.readouterr().out)["removed"] == ["B"]
-    state.write_text("not json")
-    assert cli.main(["media", "import-organizer-state", str(state)]) == 2
 
 
 def test_builtin_media_jobs_registered_and_skip_when_unconfigured(world):

@@ -5,7 +5,7 @@
 {% block title %}Channels{% endblock %}
 {% block heading %}Media · Channels{% endblock %}
 {% block content %}
-<p class="text-sm text-muted-foreground">A channel is a show plus a regex over its EZTV release titles, checked every 30 minutes. New matches are downloaded as media torrents and announced on ntfy; a new channel's first check only records what is already out.</p>
+<p class="text-sm text-muted-foreground">A channel is a show plus a regex over its EZTV release titles, checked every 30 minutes. New matches are downloaded as media torrents and announced on ntfy. Adding a channel also downloads the matching releases that are already out; untick the download box below to only record them.</p>
 
 <section class="flex flex-col gap-3" aria-labelledby="channels-h">
   <div class="flex flex-wrap items-center justify-between gap-2">
@@ -21,7 +21,7 @@
   <ul class="flex flex-col gap-3" role="list" aria-label="Channels">
     {% for c in channels %}
     <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
-      <div class="flex min-w-0 flex-col gap-1">
+      <div class="flex min-w-0 grow basis-64 flex-col gap-1">
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-sm font-medium">{{ c.name }}</span>
           <span class="badge" data-variant="outline">tt{{ c.imdb }}</span>
@@ -88,8 +88,9 @@
       <label for="pattern">Title regex</label>
       <input id="pattern" name="pattern" type="text" value="{{ form.pattern }}" class="font-mono" placeholder="^Lanterns S\d+E\d+ 1080p" spellcheck="false" autocomplete="off" required>
     </div>
-    <label class="flex items-center gap-2 self-end pb-2 text-sm"><input id="case" type="checkbox" name="case_sensitive" value="1"{% if form.case_sensitive %} checked{% endif %}>Case-sensitive</label>
+    <label class="flex h-8 items-center gap-2 self-end text-sm"><input id="case" class="input" type="checkbox" name="case_sensitive" value="1"{% if form.case_sensitive %} checked{% endif %}>Case-sensitive</label>
   </div>
+  <label class="flex items-start gap-2 text-sm"><input class="input mt-0.5" type="checkbox" name="backfill" value="1"{% if form.backfill %} checked{% endif %}>Download matching releases that are already out</label>
   <div class="flex flex-wrap items-center gap-2">
     <button type="submit" class="btn" data-size="sm">{{ icon("plus") }}Watch</button>
     <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/media/channels/preview" hx-include="#new-channel" hx-target="#preview" hx-indicator="#preview-spinner">{{ icon("search") }}Preview against EZTV</button>

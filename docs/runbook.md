@@ -271,7 +271,8 @@ PATH. Missing values make the pages say "not configured" and the media jobs repo
   toggled; the preview runs the regex against the show's current EZTV list
   (`https://eztvx.to/api/get-torrents?imdb_id=<digits>&limit=100`) before saving.
   `media-channels` polls every 30 min (also `Check now` or `atrium-run media poll`): a new
-  channel's first poll only records what exists; later matches are added to qBittorrent
+  channel's first poll only records what exists (unless "Download matching releases that are
+  already out" is ticked on the form, which downloads them at once); later matches are added to qBittorrent
   tagged `media` and one ntfy message per poll on `media-releases` lists them, its click
   URL being `/media/downloads` (no action buttons). Seen hashes expire after 90 days;
   errors show on the page.
@@ -292,15 +293,7 @@ PATH. Missing values make the pages say "not configured" and the media jobs repo
   torrent and its data unless it was already filed), `media_channel_add`,
   `media_channel_remove`.
 
-Migrating the organizer's state (rules and seen hashes) is a one-time CLI run by the
-operator, since atrium cannot read `/var/lib/media-organizer/state.json` as root:
-
-```fish
-ssh artemis.jeiang.vpn doas cat /var/lib/media-organizer/state.json | ssh artemis.jeiang.vpn doas atrium-run media import-organizer-state -
-```
-
-Imported rules keep Go's case-sensitive matching; it is idempotent. `atrium-run media
-sweep` runs the selection and sweep pass by hand.
+`atrium-run media sweep` runs the selection and sweep pass by hand.
 
 ### Spending ledger (/money)
 
@@ -320,9 +313,15 @@ deduplicated by message, and logged on /changes with Undo. Rules:
 - Every transaction stores the original amount and currency plus the amount resolved in the
   account currency (both shown when they differ). If the alert itself states the account
   currency amount, that wins and the computed one is kept for the FX audit.
-- Republic credit card: USD at the CBTT USD selling rate, BBD at half of it. CIBC BBD
-  account: USD at 2.00 x 1.02 (USD 100 -> BBD 204). TTD accounts never hold foreign
-  charges; such alerts are flagged for review. TTD and BBD are reported separately.
+- Only accounts marked "Forex enabled" on /money/accounts take charges in another
+  currency. A TTD account converts USD at the CBTT USD selling rate and BBD at half of it;
+  a BBD account converts USD at 2.00 x 1.02 (USD 100 -> BBD 204) and TTD through the CBTT
+  rate. Foreign charges on other accounts are flagged for review. Changing the flag
+  re-resolves the account's transactions. TTD and BBD are reported separately.
+- A transaction's charged currency can be corrected from its Edit menu on
+  /money/transactions. Dismiss hides one (not your account, or a duplicate) from lists,
+  spending and bills; "Dismissed only" lists them with Restore. /money/accounts can
+  dismiss everything before a date. Both are undoable on /changes.
 - CBTT rate: the `fx-rates` job reads `table.rate_table` on
   https://www.central-bank.org.tt/ weekly (also once when the ledger is empty, and "Fetch
   now" on /money/accounts). A transaction uses the latest rate on or before its date.

@@ -150,6 +150,14 @@ def test_triage_full_partial_and_paging(client, monkeypatch):
     assert c.get("/triage", params={"stage": "nonsense"}).status_code == 422
 
 
+def test_triage_search_filters_decisions(client):
+    c, _, _ = client
+    hit = c.get("/triage", params={"q": "BILLING@shop"}, headers=HX).text
+    assert "Invoice" in hit and "Weekly news" not in hit
+    assert "Weekly news" in c.get("/triage", params={"q": "list.test"}, headers=HX).text
+    assert "No decisions match" in c.get("/triage", params={"q": "zzz-nothing"}, headers=HX).text
+
+
 def test_rules_lifecycle(client):
     c, cfg, ids = client
     assert c.get("/rules").status_code == 200

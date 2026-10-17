@@ -129,8 +129,6 @@ def parser():
     mr.add_argument("--limit", type=int, default=money.CLI_SCAN_LIMIT, help="messages to extract in this run")
     md = sub.add_parser("media")
     msub = md.add_subparsers(dest="media_command", required=True)
-    mi = msub.add_parser("import-organizer-state", help="load rules and seen hashes from the old media-organizer state.json")
-    mi.add_argument("file", help="path to state.json, or - for stdin")
     msub.add_parser("poll", help="poll EZTV for every channel now")
     msub.add_parser("sweep", help="select files in new media torrents and remove filed torrents qBittorrent stopped")
     sv = sub.add_parser("serve")
@@ -193,18 +191,7 @@ def money_command(cfg, args):
 
 def media_command(cfg, args):
     conn = db.connect(cfg.db_path)
-    if args.media_command == "import-organizer-state":
-        try:
-            if args.file == "-":
-                document = json.load(sys.stdin)
-            else:
-                with open(args.file) as handle:
-                    document = json.load(handle)
-            out = channels.import_state(conn, document)
-        except (OSError, ValueError, channels.ChannelError) as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 2
-    elif args.media_command == "poll":
+    if args.media_command == "poll":
         out = builtin_jobs.media_channels(cfg, conn)
     else:
         out = builtin_jobs.media_sweep(cfg, conn)

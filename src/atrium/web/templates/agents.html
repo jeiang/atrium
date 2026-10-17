@@ -1,8 +1,13 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% set page = "agents" %}
 {% block title %}Agents{% endblock %}
 {% block heading %}Agents{% endblock %}
 {% block content %}
 <p class="text-sm text-muted-foreground">Running and recent runs: chat replies, scheduled and nightly runs, and research subagents. Running runs are listed first and this page refreshes while anything is active. Define subagents under <a class="underline underline-offset-4" href="/settings/subagents">Settings › Subagents</a>.</p>
+<form method="get" action="/agents" class="flex items-end gap-2 text-sm">
+  <label class="flex min-w-0 flex-1 flex-col gap-1 text-xs sm:max-w-sm">Search<input class="input w-full" type="search" name="q" value="{{ q }}" placeholder="agent, kind, status, prompt or title"></label>
+  <button type="submit" class="btn" data-size="sm">{{ icon("search") }}Find</button>
+</form>
 {% include "_agent_runs.html" %}
 {% endblock %}

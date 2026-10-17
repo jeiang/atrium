@@ -149,3 +149,17 @@ def test_skills_editor_shows_references_and_warns_on_unknown(tmp_path):
     conn = db.connect(cfg.db_path)
     assert skills.referenced_by(conn, "b") == ["a"]
     conn.close()
+
+
+def test_skills_page_search_excludes_non_matching(tmp_path):
+    cfg = make_config(tmp_path, static_dir=static_dir(tmp_path))
+    conn = db.connect(cfg.db_path)
+    skills.save(conn, "weekly-review", "Review the week", "check the calendar", NOW)
+    skills.save(conn, "trip-plan", "Plan trips", "book flights", NOW)
+    conn.close()
+    client = web_client(cfg)
+    by_body = client.get("/settings/skills", params={"q": "FLIGHTS"}).text
+    assert 'data-skill="trip-plan"' in by_body and 'data-skill="weekly-review"' not in by_body
+    by_description = client.get("/settings/skills", params={"q": "review the"}).text
+    assert 'data-skill="weekly-review"' in by_description and 'data-skill="trip-plan"' not in by_description
+    assert 'data-skill="' not in client.get("/settings/skills", params={"q": "zzz"}).text
