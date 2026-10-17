@@ -257,7 +257,8 @@ def test_profile_block_is_a_separate_cached_system_block(world):
     client = FakeClient([response([text("hi")])])
     run_chat(cfg, conn, client)
     system = client.calls[0]["system"]
-    assert len(system) == 2 and "city: Port of Spain" in system[1]["text"] and system[1]["cache_control"] == loop.CACHE_CONTROL
+    assert len(system) == 3 and "city: Port of Spain" in system[1]["text"] and "cache_control" not in system[1]
+    assert "wiki-capture" in system[2]["text"] and system[2]["cache_control"] == loop.CACHE_CONTROL
 
 
 def test_thinking_from_a_different_system_prompt_is_dropped(world):
