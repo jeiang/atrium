@@ -355,10 +355,11 @@ def _http_status(error):
 
 
 def default_icloud_calendar(env):
-    _require(env, "ICLOUD_MAIL_USERNAME", "ICLOUD_APP_PASSWORD")
+    # CalDAV authenticates with the Apple ID, which is not the IMAP short name.
+    _require(env, "ICLOUD_APPLE_ID", "ICLOUD_APP_PASSWORD")
     import caldav
 
-    client = caldav.DAVClient(url=CALDAV_URL, username=env["ICLOUD_MAIL_USERNAME"], password=env["ICLOUD_APP_PASSWORD"])
+    client = caldav.DAVClient(url=CALDAV_URL, username=env["ICLOUD_APPLE_ID"], password=env["ICLOUD_APP_PASSWORD"])
     calendars = client.principal().calendars()
     named = (env.get("ATRIUM_ICLOUD_CALENDAR") or "").strip().lower()
     for cal in calendars:

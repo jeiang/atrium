@@ -19,14 +19,27 @@ backup set, except `cache/`.
 
 `just sops-edit modules/atrium/secrets.yaml` edits `atrium.env`, a
 `KEY=VALUE` blob read as an `EnvironmentFile` by every atrium unit:
-`ICLOUD_MAIL_USERNAME` (the IMAP short name, not the Apple ID),
-`ICLOUD_APP_PASSWORD`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`
-(whitespace in the Gmail app password is stripped), `NOTION_TOKEN` (the internal
-integration token), `ATRIUM_NOTION_WIKI_DATA_SOURCE` (the wiki data source id;
-an env-file value, not Nix: it gates duplicate-checked `notion_create_page` and
-the wiki schema/migration commands, and is unset until you create the wiki).
-`atrium.searxng` holds `SEARXNG_SECRET` for SearXNG. A change reaches the units through
-`restartUnits` on deploy.
+
+- Mail: `ICLOUD_MAIL_USERNAME` (the IMAP short name, not the Apple ID; Send
+  logs in to iCloud SMTP as `<short name>@icloud.com`), `ICLOUD_APP_PASSWORD`
+  (also used by CalDAV writes, with the Apple ID Nix sets in
+  `ICLOUD_APPLE_ID`), `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD` (whitespace is
+  stripped).
+- Notion: `NOTION_TOKEN` (the internal integration token),
+  `ATRIUM_NOTION_WIKI_DATA_SOURCE` (the wiki data source id; unset until you
+  create the wiki; it gates duplicate-checked `notion_create_page` and the
+  wiki schema/migration commands).
+- Assistant: `ANTHROPIC_API_KEY` (a Console key of the organization that
+  holds the plan's monthly API credits), `GRAFANA_VIEWER_TOKEN` (a Grafana
+  service account with the Viewer role), `NTFY_TOPIC`, `NTFY_TOKEN`.
+- Google Calendar: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
+  `GOOGLE_REFRESH_TOKEN`; optional `ATRIUM_ICLOUD_CALENDAR`.
+- Actual Budget: `ACTUAL_PASSWORD`, `ACTUAL_SYNC_ID`, and
+  `ACTUAL_ENCRYPTION_PASSWORD` if the budget is end-to-end encrypted.
+
+A missing value disables only the tools that need it; they answer "not
+configured". A change reaches the units through `restartUnits` on deploy.
+The `atrium.searxng` key is no longer read; delete it with `just sops-edit`.
 
 ## Calendar and contacts sync
 
@@ -142,7 +155,7 @@ ssh artemis.jeiang.vpn journalctl -u atrium-web.service -e
 
 `calendar_list` merges the vdirsyncer iCloud mirror (`ATRIUM_CALENDAR_DIR`) with
 the primary Google calendar; `calendar_create` / `calendar_delete` (chat only)
-write to iCloud CalDAV (`ICLOUD_MAIL_USERNAME`, `ICLOUD_APP_PASSWORD`; the
+write to iCloud CalDAV (`ICLOUD_APPLE_ID`, `ICLOUD_APP_PASSWORD`; the
 first event calendar, or the one named in `ATRIUM_ICLOUD_CALENDAR`) or Google
 (`sendUpdates=none`). There is no attendee parameter anywhere. Delete only
 touches events recorded in `agent_events`. Mail-derived events are
@@ -277,3 +290,16 @@ restarting the fetch unit.
 No `persistence.*` entry changed, so a normal live switch is enough. The
 first start downloads about 6 GB; follow it with
 `journalctl -u atrium-models-fetch.service -f`.
+
+The assistant release also changes alda (Caddy vhost, tinyauth ACL) and peria
+(Glance link). Before it is usable from outside:
+
+- Create the Pocket ID group `atrium_access` and add yourself.
+- Add the assistant secrets above, at least `ANTHROPIC_API_KEY`.
+- Deploy alda, then artemis. Until alda is deployed,
+  `https://atrium.jeiang.dev` has no upstream; once artemis switches, port
+  8480 answers only alda.
+- Emergency access without alda:
+  `ssh -L 8481:127.0.0.1:8481 artemis.jeiang.vpn`, then open
+  `http://localhost:8481`.
+- Run `atrium-run loops refresh` once to backfill threading headers.
