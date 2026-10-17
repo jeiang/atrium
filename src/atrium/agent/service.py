@@ -216,6 +216,8 @@ def prepare(conn, thread_id, text, kind, now, parent_run_id=None, limits=None, o
     used = []
     if kind in EXPAND_SKILLS:
         text, used, _ = skills.expand(conn, text)
+    if parent_run_id is None:
+        progress.clear_thread(conn, thread_id)
     run_id = journal.start_run(conn, thread_id, kind, loop.MODEL, thread["effort"], now, parent_run_id, owner=journal.OWNER)
     if limits:
         journal.set_limits(conn, run_id, limits)
@@ -228,6 +230,7 @@ def prepare(conn, thread_id, text, kind, now, parent_run_id=None, limits=None, o
 def prepare_rerun(conn, thread_id, now):
     """A run that answers the thread's last operator message again (regenerate): no new message is journaled."""
     thread = load(conn, thread_id, now)
+    progress.clear_thread(conn, thread_id)
     return journal.start_run(conn, thread_id, CHAT, loop.MODEL, thread["effort"], now, owner=journal.OWNER)
 
 

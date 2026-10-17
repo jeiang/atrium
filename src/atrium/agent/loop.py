@@ -396,6 +396,4 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
         error = f"{type(e).__name__}: {e}"
         journal.finish_run(conn, run_id, journal.FAILED, now(), error=error)
     writer.event(progress.RUN_DONE, state=state, error=error)
-    if found["parent_run_id"] is None:
-        progress.clear(conn, run_id)
     return journal.get_run(conn, run_id)

@@ -1,8 +1,8 @@
 import json
 import re
-import sqlite3
 import time
 
+from .. import db
 from . import journal, threads
 
 SUBAGENT = threads.SUBAGENT
@@ -60,15 +60,8 @@ class SubagentError(ValueError):
 
 
 def init(conn):
-    have = {r["name"] for r in conn.execute("PRAGMA table_info(threads)")}
     for column, ddl in (("role", "TEXT"), ("parent_run_id", "INTEGER")):
-        if column in have:
-            continue
-        try:
-            conn.execute(f"ALTER TABLE threads ADD COLUMN {column} {ddl}")
-        except sqlite3.OperationalError as e:
-            if "duplicate column" not in str(e):
-                raise
+        db.add_column(conn, "threads", column, ddl)
     conn.execute("CREATE INDEX IF NOT EXISTS threads_parent_run ON threads (parent_run_id)")
     conn.executescript(SCHEMA)
     now = time.time()

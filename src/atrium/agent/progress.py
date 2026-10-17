@@ -57,8 +57,13 @@ def since(conn, run_id, after_id):
     return [{"id": r["id"], "run_id": r["run_id"], "kind": r["kind"], "data": json.loads(r["data_json"])} for r in rows]
 
 
-def clear(conn, run_id):
-    conn.execute("DELETE FROM run_events WHERE run_id = ? OR run_id IN (SELECT id FROM runs WHERE parent_run_id = ?)", (run_id, run_id))
+def clear_thread(conn, thread_id):
+    """Drop the progress of the thread's earlier runs (and their subagent runs). Called when a new run starts,
+    so a finished run's events stay readable until then: a page that connects late still replays them."""
+    conn.execute(
+        "DELETE FROM run_events WHERE run_id IN (SELECT id FROM runs WHERE thread_id = ? OR parent_run_id IN (SELECT id FROM runs WHERE thread_id = ?))",
+        (thread_id, thread_id),
+    )
 
 
 class Stopped(RuntimeError):

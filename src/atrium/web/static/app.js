@@ -295,6 +295,7 @@ const toolMarkup = (data) => `
   </details>`;
 
 const liveRuns = new Map();
+const RETRY_MS = 2000;
 
 const connectLive = (li) => {
   const runId = Number(li.dataset.liveRun);
@@ -382,27 +383,30 @@ const connectLive = (li) => {
     if (group) { group.textContent = data.state; if (data.state !== "done") group.dataset.variant = "destructive"; }
     refreshWork();
   });
-  on("done", () => {
+  // Whatever ends the stream (the server's `done`, a dropped connection, a proxy timeout), the live view is
+  // replaced by what the journal says: the run partial is the finished transcript, or a fresh live view that
+  // reconnects and replays the run's events when the run is still going.
+  let settled = false;
+  const settle = () => {
+    if (settled) return;
+    settled = true;
     source.close();
     liveRuns.delete(runId);
     setBusy(false);
     refreshWork();
     document.querySelectorAll(`[data-live-user="${runId}"]`).forEach((bubble) => bubble.remove());
     if (li.isConnected) htmx.trigger(li, "run-done");
-  });
-  source.onerror = () => { if (!li.isConnected) { source.close(); liveRuns.delete(runId); } };
+  };
+  on("done", settle);
+  source.onerror = () => setTimeout(settle, RETRY_MS);
   setBusy(true);
 };
 
-const connectAll = (root) => {
-  if (!root || !root.querySelectorAll) return;
-  if (root.matches && root.matches("[data-live-run]")) connectLive(root);
-  root.querySelectorAll("[data-live-run]").forEach(connectLive);
-};
+const connectAll = () => document.querySelectorAll("[data-live-run]").forEach(connectLive);
 
-document.addEventListener("DOMContentLoaded", () => connectAll(document));
+document.addEventListener("DOMContentLoaded", connectAll);
 document.addEventListener("htmx:afterSettle", (event) => {
-  connectAll(event.detail.target || event.target);
+  connectAll();
   const form = document.getElementById("composer");
   if (form && event.detail.elt === form) {
     form.elements.edit.value = "";
