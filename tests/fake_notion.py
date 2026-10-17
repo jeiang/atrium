@@ -2,8 +2,9 @@ import json
 import re
 from urllib.parse import parse_qs, urlparse
 
-PAGE_ROUTE = re.compile(r"^/v1/pages/([^/]+)(?:/(markdown|properties/[^/]+))?$")
+PAGE_ROUTE = re.compile(r"^/v1/pages/([^/]+)(?:/(markdown|move|properties/[^/]+))?$")
 BLOCK_ROUTE = re.compile(r"^/v1/blocks/([^/]+)/children$")
+DATABASE_ROUTE = re.compile(r"^/v1/databases/([^/]+)$")
 
 
 def rich(text):
@@ -92,6 +93,14 @@ class FakeNotion:
             return 200, self.paged(self.blocks.get(m.group(1), []), (query.get("start_cursor") or [None])[0], 100)
         if method == "POST" and path == "/v1/pages":
             return self.create_page(data)
+        m = DATABASE_ROUTE.match(path)
+        if m and method == "PATCH":
+            hit = [s for s in self.sources.values() if s["parent"]["database_id"] == m.group(1)]
+            if not hit:
+                return 404, {"code": "object_not_found", "message": "missing"}
+            for source in hit:
+                source["in_trash"] = data["in_trash"]
+            return 200, {"object": "database", "id": m.group(1), "in_trash": data["in_trash"]}
         m = PAGE_ROUTE.match(path)
         if not m or m.group(1) not in self.pages:
             return 404, {"code": "object_not_found", "message": "missing"}
@@ -102,6 +111,10 @@ class FakeNotion:
                     return self.markdown_status, {"code": "validation_error", "message": "no"}
                 return 200, {"object": "page_markdown", "id": pid, "markdown": self.markdown[pid], "truncated": False}
             return self.patch_markdown(pid, data)
+        if sub == "move":
+            self.pages[pid]["parent"] = data["parent"]
+            self.touch(pid)
+            return 200, self.pages[pid]
         if method == "PATCH":
             return self.patch_page(pid, data)
         return 200, self.pages[pid]
@@ -113,7 +126,8 @@ class FakeNotion:
         self.created = getattr(self, "created", 100) + 1
         pid = f"00000000-0000-0000-0000-{self.created:012d}"
         title = next(p["title"][0]["text"]["content"] for p in data["properties"].values() if "title" in p)
-        self.add_page(pid, title, data.get("markdown", ""), parent=data["parent"])
+        parent = data["parent"] if "type" in data["parent"] else {"type": next(iter(data["parent"])), **data["parent"]}
+        self.add_page(pid, title, data.get("markdown", ""), parent=parent)
         for name, value in data["properties"].items():
             if "title" not in value:
                 self.pages[pid]["properties"][name] = value
@@ -152,10 +166,6 @@ class FakeNotion:
             lines.append(f"## {text['content']}" if kind == "heading_2" else f"- [{text['content']}]({url})")
         self.markdown[pid] = self.markdown[pid].rstrip("\n") + "\n\n" + "\n".join(lines)
         self.touch(pid)
-
-
-def relation_prop(pid_list, prop_id="rel"):
-    return {"id": prop_id, "type": "relation", "relation": [{"id": i} for i in pid_list], "has_more": False}
 
 
 def select_prop(name):

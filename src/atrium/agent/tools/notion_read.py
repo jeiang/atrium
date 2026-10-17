@@ -1,13 +1,10 @@
-import json
-
-from ... import notion_api, notion_search, notion_sync
+from ... import notion_api, notion_markdown, notion_search, notion_sync, notion_wiki
 from ...http import ServiceUnavailable
 from ._args import bounded_int, clip, text_arg
 from .base import NotConfigured, Tool, ToolContext, ToolError
 
 MAX_RESULTS = 10
 PAGE_DEFAULT = 12000
-OVERFETCH = 5
 STALE_SECONDS = 24 * 3600
 SNIPPET_CHARS = 300
 NOTION_CONTEXTS = frozenset({"chat", "cron", "nightly", "sub", "code"})
@@ -29,40 +26,53 @@ def _embedder(ctx):
     return embed_texts
 
 
-def _type_of(conn, page_id):
-    row = conn.execute("SELECT properties FROM notion_pages WHERE id = ?", (page_id,)).fetchone()
-    if row is None:
-        return ""
-    for name, prop in json.loads(row["properties"]).items():
-        if name.strip().lower() == "type":
-            return notion_search.property_text(prop)
-    return ""
+def _meta(conn, page_id):
+    local = notion_wiki.get(conn, page_id)
+    return {"aliases": local["aliases"] if local else [], "last_reviewed": local["last_reviewed"] if local else ""}
+
+
+def _alias_hits(ctx, query):
+    hits = []
+    for page_id in notion_wiki.alias_matches(ctx.conn, query):
+        row = notion_search.get_page(ctx.conn, page_id)
+        if row is not None and (row["in_trash"] or row["private"]):
+            continue
+        local = notion_wiki.get(ctx.conn, page_id)
+        hits.append(
+            {
+                "page_id": page_id,
+                "title": row["title"] if row else local["title"],
+                "path": row["path"] if row else "",
+                "url": row["url"] if row else "",
+                "snippet": clip(notion_markdown.plain(row["markdown"][: notion_search.HEAD_SOURCE_CHARS], {}), SNIPPET_CHARS) if row else "",
+                "match": "alias",
+                **_meta(ctx.conn, page_id),
+            }
+        )
+    return hits
 
 
 def search_knowledge(ctx: ToolContext, args: dict):
     query = text_arg(args, "query", required=True)
-    wanted = text_arg(args, "type")
     limit = bounded_int(args, "limit", 5, MAX_RESULTS)
-    fetch = min(limit * OVERFETCH, notion_search.BRANCH_LIMIT) if wanted else limit
-    found = notion_search.search(ctx.conn, ctx.cfg, query, False, fetch, _embedder(ctx))
-    results = []
+    results = _alias_hits(ctx, query)
+    seen = {r["page_id"] for r in results}
+    found = notion_search.search(ctx.conn, ctx.cfg, query, False, limit, _embedder(ctx))
     for h in found["hits"]:
-        kind = _type_of(ctx.conn, h["id"])
-        if wanted and kind.casefold() != wanted.casefold():
+        if h["id"] in seen:
             continue
         results.append(
             {
                 "page_id": h["id"],
                 "title": h["title"],
                 "path": h["folder"],
-                "type": kind or None,
                 "url": h["url"],
                 "snippet": clip(h["snippet"], SNIPPET_CHARS),
+                "match": "search",
+                **_meta(ctx.conn, h["id"]),
             }
         )
-        if len(results) >= limit:
-            break
-    return {"semantic": found["semantic"], "results": results}
+    return {"semantic": found["semantic"], "results": results[:limit]}
 
 
 def _live(ctx, page_id):
@@ -102,18 +112,18 @@ def fetch_knowledge(ctx: ToolContext, args: dict):
         "markdown": text[:max_chars],
         "truncated": len(text) > max_chars,
         "source": source,
+        **_meta(ctx.conn, page_id),
     }
 
 
 TOOLS = [
     Tool(
         name="search_knowledge",
-        description="Search the operator's Notion knowledge mirror (full-text plus semantic). Private pages are never returned. Use fetch_knowledge for a full page.",
+        description="Search the operator's Notion wiki mirror: exact title/alias matches first, then full-text plus semantic hits. Private pages are never returned. Use fetch_knowledge for a full page.",
         input_schema={
             "type": "object",
             "properties": {
                 "query": {"type": "string"},
-                "type": {"type": "string", "description": "Match the page's Type property"},
                 "limit": {"type": "integer", "minimum": 1, "maximum": MAX_RESULTS},
             },
             "required": ["query"],

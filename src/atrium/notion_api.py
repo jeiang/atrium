@@ -79,15 +79,7 @@ def rich_text(items):
 
 
 class NotionClient:
-    def __init__(
-        self,
-        token,
-        transport=urllib_transport,
-        base_url=BASE_URL,
-        sleep=time.sleep,
-        clock=time.monotonic,
-        limiter=None,
-    ):
+    def __init__(self, token, transport=urllib_transport, base_url=BASE_URL, sleep=time.sleep, clock=time.monotonic):
         self._headers = {
             "Authorization": f"Bearer {token}",
             "Notion-Version": NOTION_VERSION,
@@ -97,7 +89,6 @@ class NotionClient:
         self._base = base_url.rstrip("/")
         self._sleep = sleep
         self._clock = clock
-        self._limiter = limiter
         self._last = None
 
     def __repr__(self):
@@ -116,8 +107,6 @@ class NotionClient:
             url += "?" + urllib.parse.urlencode({k: v for k, v in query.items() if v is not None})
         data = json.dumps(body).encode() if body is not None else None
         for attempt in range(MAX_RETRIES + 1):
-            if self._limiter is not None:
-                self._limiter.acquire()
             self._pace()
             status, headers, raw = self._transport(method, url, self._headers, data)
             if status < 300:
@@ -179,11 +168,8 @@ class NotionClient:
     def move_page(self, page_id, parent):
         return self.request("POST", f"/v1/pages/{page_id}/move", {"parent": parent})
 
-    def retrieve_data_source(self, data_source_id):
-        return self.request("GET", f"/v1/data_sources/{data_source_id}")
-
-    def update_data_source(self, data_source_id, properties):
-        return self.request("PATCH", f"/v1/data_sources/{data_source_id}", {"properties": properties})
+    def set_database_trash(self, database_id, in_trash):
+        return self.request("PATCH", f"/v1/databases/{database_id}", {"in_trash": in_trash})
 
     def create_page(self, body):
         return self.request("POST", "/v1/pages", body)

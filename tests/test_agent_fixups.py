@@ -1,87 +1,9 @@
-import json
-
 import pytest
-from agent_tool_helpers import make_ctx
 from fake_anthropic import FakeClient, compaction, response, text
-from fake_notion import FakeNotion, rich
 from helpers import make_config, static_dir, web_client
 
-from atrium import db, drafts, notion_api
+from atrium import db, drafts
 from atrium.agent import journal, registry, service, subagents
-from atrium.agent.tools import notion_write
-from atrium.agent.tools.base import ToolError
-
-WIKI = "00000000-0000-0000-0000-000000000050"
-PLAIN = "00000000-0000-0000-0000-000000000051"
-EXISTING = "00000000-0000-0000-0000-000000000007"
-SCHEMA = {
-    "Name": {"type": "title"},
-    "Canonical key": {"type": "rich_text"},
-    "Aliases": {"type": "rich_text"},
-}
-
-
-def text_prop(value):
-    return {"type": "rich_text", "rich_text": rich(value)}
-
-
-@pytest.fixture
-def notion(tmp_path, monkeypatch):
-    fake = FakeNotion()
-    cfg = make_config(tmp_path)
-    conn = db.connect_memory()
-    for sid in (WIKI, PLAIN):
-        conn.execute("INSERT INTO notion_sources (id, properties) VALUES (?, ?)", (sid, json.dumps(SCHEMA)))
-    props = {"Canonical key": text_prop("postgresql"), "Aliases": text_prop("pg, postgres db")}
-    conn.execute(
-        "INSERT INTO notion_pages (id, title, data_source_id, properties) VALUES (?, 'Postgres', ?, ?)",
-        (EXISTING, WIKI, json.dumps(props)),
-    )
-    client = notion_api.NotionClient("tok", fake.transport, sleep=lambda s: None, clock=lambda: 0.0)
-    monkeypatch.setattr(notion_write, "make_client", lambda env: client)
-    conn.execute("INSERT INTO threads (id, kind, effort, created_at, updated_at) VALUES (1, 'chat', 'low', 0, 0)")
-    conn.execute(
-        "INSERT INTO runs (id, thread_id, kind, model, effort, state, started_at) VALUES (1, 1, 'chat', 'm', 'low', 'running', 0)"
-    )
-    env = {"NOTION_TOKEN": "tok", "ATRIUM_NOTION_WIKI_DATA_SOURCE": WIKI}
-    return fake, make_ctx(conn, cfg, env=env, now=lambda: 5.0)
-
-
-def test_wiki_create_refuses_duplicates_by_key_alias_and_title(notion):
-    fake, ctx = notion
-    for args in (
-        {"title": "PostgreSQL"},
-        {"title": "Something", "properties": {"Aliases": "PG"}},
-        {"title": "Other", "properties": {"Canonical key": "postgresql"}},
-    ):
-        with pytest.raises(ToolError, match=EXISTING):
-            notion_write.notion_create_page(ctx, {**args, "data_source_id": WIKI, "markdown": "x"})
-    assert not fake.requests
-
-
-def test_wiki_create_sets_identity_and_allow_duplicate_overrides(notion):
-    fake, ctx = notion
-    out = notion_write.notion_create_page(ctx, {"data_source_id": WIKI, "title": "Redis", "markdown": "# r"})
-    created = fake.pages[out["page_id"]]["properties"]
-    assert created["Canonical key"] == {"rich_text": [{"type": "text", "text": {"content": "Redis"}}]}
-    assert "Aliases" not in created and fake.markdown[out["page_id"]] == "# r"
-    out = notion_write.notion_create_page(
-        ctx,
-        {"data_source_id": WIKI, "title": "Postgres", "markdown": "x", "properties": {"Aliases": "pgsql, db"}, "allow_duplicate": True},
-    )
-    assert fake.pages[out["page_id"]]["properties"]["Aliases"]["rich_text"][0]["text"]["content"] == "pgsql, db"
-    with pytest.raises(ToolError, match="allow_duplicate"):
-        notion_write.notion_create_page(ctx, {"data_source_id": WIKI, "title": "Z", "markdown": "x", "allow_duplicate": "yes"})
-
-
-def test_non_wiki_source_is_not_deduped_and_trash_uses_in_trash(notion):
-    fake, ctx = notion
-    out = notion_write.notion_create_page(ctx, {"data_source_id": PLAIN, "title": "Postgres", "markdown": "x"})
-    assert "Canonical key" not in fake.pages[out["page_id"]]["properties"]
-    assert next(r for r in fake.requests if r[0] == "POST" and r[1] == "/v1/pages")[3]["markdown"] == "x"
-    notion_write.notion_archive_page(ctx, {"page_id": out["page_id"]})
-    patch = [r for r in fake.requests if r[0] == "PATCH"][-1]
-    assert patch[3] == {"in_trash": True} and fake.pages[out["page_id"]]["in_trash"] is True
 
 
 @pytest.fixture

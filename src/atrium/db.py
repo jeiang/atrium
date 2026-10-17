@@ -172,12 +172,13 @@ def refresh_views(conn):
 
 
 def init_extra_schemas(conn):
-    from . import live, notion_sync, scans
+    from . import live, notion_sync, notion_wiki, scans
     from .agent import schema as agent_schema
 
     scans.init_schemas(conn)
     live.init_schema(conn)
     notion_sync.init_schema(conn)
+    notion_wiki.init_schema(conn)
     agent_schema.init(conn)
 
 
