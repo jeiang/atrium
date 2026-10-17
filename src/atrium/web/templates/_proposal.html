@@ -283,7 +283,7 @@
         <a class="truncate text-sm hover:underline" href="/notion/{{ i.id }}">{{ i.title or "Untitled" }}</a>
         {% if i.source %}<span class="shrink-0 text-xs text-muted-foreground">{{ i.source }}</span>{% endif %}
         {% if i.hub %}<span class="shrink-0 text-xs text-muted-foreground">→ {{ i.hub }}</span>{% endif %}
-        {% if i.merge_into %}<span class="shrink-0 text-xs text-muted-foreground">→ into {{ i.merge_into }}</span>{% endif %}
+        {% if i.merge_into %}<span class="truncate text-xs text-muted-foreground">→ into {{ i.merge_into }}</span>{% endif %}
       </span>
       <span class="text-xs text-muted-foreground">{{ i.reason }}</span>
     </li>
