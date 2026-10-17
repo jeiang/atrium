@@ -1,0 +1,37 @@
+{% from "_icons.html" import icon %}
+{% set MONEY_PAGES = [("/money", "Overview"), ("/money/transactions", "Transactions"), ("/money/payees", "Payees"), ("/money/bills", "Bills"), ("/money/accounts", "Accounts")] %}
+
+{% macro money_nav(current) -%}
+<nav class="button-group" aria-label="Money pages">
+  {% for url, label in MONEY_PAGES %}
+  <a class="btn" data-size="sm" data-variant="{{ 'secondary' if current == url else 'outline' }}" href="{{ url }}"{% if current == url %} aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
+{%- endmacro %}
+
+{% macro amount(value, currency) -%}
+{%- if value is not none -%}<span class="tabular-nums">{{ "%.2f"|format(value) }} {{ currency }}</span>{%- else -%}<span class="text-muted-foreground">—</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro money_amount(t) -%}
+{%- if t.amount is not none -%}
+{{ amount(t.amount, t.currency) }}{% if t.original_currency != t.currency or (t.original_amount != t.amount) %} <span class="text-xs text-muted-foreground">(paid {{ "%.2f"|format(t.original_amount) }} {{ t.original_currency }}{% if t.computed_amount is not none %}, computed {{ "%.2f"|format(t.computed_amount) }} {{ t.currency }}{% endif %})</span>{% endif %}
+{%- else -%}
+{{ amount(t.original_amount, t.original_currency) }} <span class="text-xs text-muted-foreground">(unresolved)</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro kind_badge(kind) -%}
+<span class="badge" data-variant="{{ 'secondary' if kind in ('transfer', 'card_payment') else 'outline' }}">{{ kind | replace("_", " ") }}</span>
+{%- endmacro %}
+
+{% macro assign_form(t, accounts, back="overview") -%}
+<form method="post" action="/money/transactions/{{ t.id }}/account" class="flex items-center gap-2">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="back" value="{{ back }}">
+  <select name="account_id" class="select" aria-label="Account for transaction {{ t.id }}">
+    {% for a in accounts %}<option value="{{ a.id }}"{% if a.id == t.account_id %} selected{% endif %}>{{ a.name }} ({{ a.currency }})</option>{% endfor %}
+  </select>
+  <button type="submit" class="btn" data-size="sm" data-variant="outline">Assign</button>
+</form>
+{%- endmacro %}

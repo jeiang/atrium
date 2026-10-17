@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state %}
+{% from "_money.html" import money_nav, amount, money_amount, kind_badge, assign_form %}
+{% set page = "money" %}
+{% block title %}Money{% endblock %}
+{% block heading %}Money{% endblock %}
+{% block content %}
+{{ money_nav("/money") }}
+<p class="text-sm text-muted-foreground">Bank alerts, receipts and statements read from your mail by a local model. TTD and BBD are shown side by side and never added together. Every automatic posting is on <a class="underline" href="/changes">Changes</a> with Undo.{% if rates %} CBTT USD selling {{ rates[0].selling }} (as of {{ rates[0].as_of or rates[0].date }}).{% else %} No CBTT rate stored yet; foreign charges on the Republic card wait for the weekly fetch.{% endif %}</p>
+
+{% if not accounts %}
+{% call empty_state("wallet", "No accounts yet") %}Add your bank accounts and cards on <a class="underline" href="/money/accounts">Accounts</a> so alerts can be matched.{% endcall %}
+{% endif %}
+
+<section class="flex flex-col gap-3" aria-labelledby="spend-h">
+  <h2 id="spend-h" class="text-sm font-medium">{{ month }} by category</h2>
+  {% if spending %}
+  <div class="grid gap-4 md:grid-cols-2">
+    {% for currency, bucket in spending.items() %}
+    <div class="rounded-lg border bg-card p-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-medium">{{ currency }}</h3>
+        <span class="text-sm font-medium">{{ amount(bucket.total, currency) }}</span>
+      </div>
+      <table class="mt-2 w-full text-sm">
+        <tbody>
+          {% for g in bucket.groups %}
+          <tr><td class="py-1">{{ g.name }} <span class="text-xs text-muted-foreground">({{ g.count }})</span></td><td class="py-1 text-right">{{ amount(g.total, currency) }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  {% call empty_state("receipt", "Nothing posted this month") %}Transactions appear after the next mail pass or <code>atrium money refresh</code>.{% endcall %}
+  {% endif %}
+</section>
+
+<section class="flex flex-col gap-3" aria-labelledby="unassigned-h">
+  <h2 id="unassigned-h" class="text-sm font-medium">Needs an account or a look ({{ unassigned | length }})</h2>
+  {% if unassigned %}
+  <ul class="flex flex-col gap-3" role="list" aria-label="Unassigned transactions">
+    {% for t in unassigned %}
+    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+      <div class="flex min-w-0 flex-col gap-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-sm font-medium">{{ t.display_payee }}</span>
+          {{ kind_badge(t.kind) }}
+          {% if t.review %}<span class="badge border-warning/30 bg-warning/10 text-warning">{{ t.review }}</span>{% endif %}
+        </div>
+        <p class="text-xs text-muted-foreground"><span class="tabular-nums">{{ t.date }}</span> · {{ money_amount(t) }}{% if t.account %} · {{ t.account }}{% endif %}{% if t.description %} · {{ t.description }}{% endif %}{% if t.message_id %} · <a class="underline" href="/messages/{{ t.message_id }}">source mail</a>{% endif %}</p>
+      </div>
+      {% if accounts %}{{ assign_form(t, accounts) }}{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  {% call empty_state("check", "Everything is assigned") %}Alerts whose bank sender and last four digits match no account land here.{% endcall %}
+  {% endif %}
+</section>
+
+<section class="flex flex-col gap-3" aria-labelledby="bills-h">
+  <h2 id="bills-h" class="text-sm font-medium">Bills expected in the next 14 days ({{ bills | length }})</h2>
+  {% if bills %}
+  <ul class="flex flex-col gap-2" role="list" aria-label="Upcoming bills">
+    {% for b in bills %}
+    <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-4 py-2 text-sm">
+      <span>{{ b.payee }} <span class="badge" data-variant="outline">{{ b.cadence }}</span></span>
+      <span class="text-xs text-muted-foreground tabular-nums">{{ b.next_expected }} (in {{ b.days_until }} days) · {% for c, v in b.typical.items() %}{{ "%.2f"|format(v) }} {{ c }}{{ ", " if not loop.last }}{% endfor %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground">None expected. See <a class="underline" href="/money/bills">Bills</a> for the full list.</p>
+  {% endif %}
+</section>
+{% endblock %}

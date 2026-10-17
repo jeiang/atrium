@@ -44,6 +44,7 @@ from . import auth
 from . import changes as changes_ui
 from . import chat as chat_ui, runs as runs_ui
 from . import drafts as drafts_ui
+from . import money as money_ui
 from . import notifications as notifications_ui
 from . import openloops as openloops_ui
 from . import schedules as schedules_ui
@@ -199,6 +200,7 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
     schedules_ui.register(app, deps)
     openloops_ui.register(app, deps)
     watches_ui.register(app, deps)
+    money_ui.register(app, deps)
     skills_ui.register(app, deps)
 
     def load_message(conn, message_id):

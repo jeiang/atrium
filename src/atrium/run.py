@@ -1,6 +1,6 @@
 import logging
 
-from . import db, embed, event_candidates, flags, live, openloops, router, safety, watches
+from . import db, embed, event_candidates, flags, live, money, openloops, router, safety, watches
 from .config import ACCOUNTS
 from .http import ServiceUnavailable
 from .imap import ImapClient
@@ -71,6 +71,10 @@ def process(conn, cfg, accounts, opener=open_client):
         log.info("watches: %s", watches.refresh(conn, cfg))
     except Exception:
         log.exception("watches refresh failed")
+    try:
+        log.info("money: %s", money.refresh(conn, cfg))
+    except Exception:
+        log.exception("money refresh failed")
 
 
 def run_sync(cfg, requested=None, opener=open_client):

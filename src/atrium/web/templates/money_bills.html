@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state %}
+{% from "_money.html" import money_nav %}
+{% set page = "money" %}
+{% block title %}Bills{% endblock %}
+{% block heading %}Money · Bills{% endblock %}
+{% block content %}
+{{ money_nav("/money/bills") }}
+<p class="text-sm text-muted-foreground">A payee is a bill when its mail used subscription or renewal wording, or when it charged at a regular interval with similar amounts. Next expected is computed from the last charge. Override per payee here or on Payees.</p>
+{% if bills %}
+<ul class="flex flex-col gap-3" role="list" aria-label="Bills">
+  {% for b in bills %}
+  <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+    <div class="flex min-w-0 flex-col gap-1">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-sm font-medium">{{ b.payee }}</span>
+        <span class="badge" data-variant="outline">{{ b.cadence }}</span>
+        {% if b.category %}<span class="badge" data-variant="outline">{{ b.category }}</span>{% endif %}
+        {% if b.override %}<span class="badge" data-variant="secondary">forced</span>{% elif b.subscription_seen %}<span class="badge" data-variant="secondary">subscription wording</span>{% endif %}
+      </div>
+      <p class="text-xs text-muted-foreground tabular-nums">
+        Typical {% for c, v in b.typical.items() %}{{ "%.2f"|format(v) }} {{ c }}{{ ", " if not loop.last }}{% endfor %} · last {{ b.last_charge }} ·
+        {% if b.next_expected %}next {{ b.next_expected }} ({{ "in " ~ b.days_until ~ " days" if b.days_until >= 0 else (-b.days_until) ~ " days overdue" }}){% else %}cadence unknown{% endif %}
+        · {{ b.charges }} charge{{ "" if b.charges == 1 else "s" }}
+      </p>
+    </div>
+    <form method="post" action="/money/bills/{{ b.payee_id }}/override" class="flex items-center gap-1">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <select name="override" class="select" aria-label="Bill override for {{ b.payee }}">
+        <option value=""{% if not b.override %} selected{% endif %}>Automatic</option>
+        <option value="bill"{% if b.override == "bill" %} selected{% endif %}>Always a bill</option>
+        <option value="not_bill">Not a bill</option>
+      </select>
+      <button type="submit" class="btn" data-size="sm" data-variant="outline">Set</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+{% call empty_state("receipt", "No bills detected") %}Bills show up once a payee has recurring charges or subscription wording in its mail.{% endcall %}
+{% endif %}
+{% endblock %}

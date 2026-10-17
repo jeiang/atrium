@@ -8,7 +8,7 @@
 <div class="alert" role="note">
   {{ icon("undo-2", "text-muted-foreground") }}
   <h2>Direct writes by the assistant</h2>
-  <section><p>Notion and profile changes made without review, newest first. Undo restores the previous state, and refuses when the target changed since.</p></section>
+  <section><p>Notion, profile and spending-ledger changes made without review, newest first. Undo restores the previous state, and refuses when the target changed since.</p></section>
 </div>
 <nav class="button-group" aria-label="Run kind">
   <a class="btn" data-size="sm" data-variant="{{ 'outline' if kind else 'secondary' }}" href="/changes">All</a>
@@ -20,7 +20,7 @@
   <li class="flex flex-col gap-2 rounded-lg border bg-card p-4">
     <div class="flex flex-wrap items-center gap-2">
       <span class="badge" data-variant="outline">{{ w.tool }}</span>
-      <span class="badge" data-variant="secondary">{{ w.thread_kind or "unknown" }}</span>
+      <span class="badge" data-variant="secondary">{{ w.thread_kind or "ledger" }}</span>
       <span class="truncate font-mono text-xs">{{ w.target }}</span>
       <span class="text-xs text-muted-foreground tabular-nums">{{ when(w.ts, "datetime") }}</span>
       <span class="ml-auto">

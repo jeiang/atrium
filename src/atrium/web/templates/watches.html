@@ -5,37 +5,7 @@
 {% block title %}Watches{% endblock %}
 {% block heading %}Watches{% endblock %}
 {% block content %}
-<p class="text-sm text-muted-foreground">Read from your mail and address book by a local model. Dates and statuses can be wrong or stale; open the source mail to check. Nothing here pays, cancels or contacts anyone.</p>
-
-<section class="flex flex-col gap-3" aria-labelledby="renewals-h">
-  <h2 id="renewals-h" class="text-sm font-medium">Subscriptions, bills and renewals ({{ renewals | length }})</h2>
-  {% if renewals %}
-  <ul class="flex flex-col gap-3" role="list" aria-label="Renewals">
-    {% for r in renewals %}
-    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
-      <div class="flex min-w-0 flex-col gap-1">
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="text-sm font-medium">{{ r.merchant }}</span>
-          <span class="badge" data-variant="outline">{{ r.kind }}</span>
-          <span class="badge" data-variant="outline">{{ r.cadence }}</span>
-        </div>
-        <p class="text-xs text-muted-foreground tabular-nums">
-          {% if r.amount is not none %}{{ "%.2f"|format(r.amount) }} {{ r.currency }} · {% endif %}
-          {% if r.next_date %}Next {{ r.next_date }}{% if r.days_until is not none %} ({{ "in " ~ r.days_until ~ " days" if r.days_until >= 0 else (-r.days_until) ~ " days ago" }}){% endif %}{% else %}No date stated{% endif %}
-          · <a class="underline" href="/messages/{{ r.source_message_id }}">source mail</a>
-        </p>
-      </div>
-      <form method="post" action="/watches/renewals/{{ r.id }}/dismiss">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("x") }}Dismiss</button>
-      </form>
-    </li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  {% call empty_state("receipt", "No renewals found") %}Statements and subscription mail will show up here after the next sync.{% endcall %}
-  {% endif %}
-</section>
+<p class="text-sm text-muted-foreground">Read from your mail and address book by a local model. Dates and statuses can be wrong or stale; open the source mail to check. Nothing here pays, cancels or contacts anyone. Subscriptions and bills live on <a class="underline" href="/money/bills">Money · Bills</a>.</p>
 
 <section class="flex flex-col gap-3" aria-labelledby="packages-h">
   <h2 id="packages-h" class="text-sm font-medium">Packages in transit ({{ packages | length }})</h2>

@@ -20,3 +20,12 @@ def post_json(url, payload):
             return json.load(response)
     except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
         raise ServiceUnavailable(f"{url}: {e}") from e
+
+
+def get_text(url, timeout=30):
+    request = urllib.request.Request(url, headers={"user-agent": "atrium/1 (ledger rate fetch)"}, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.read().decode("utf-8", "replace")
+    except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
+        raise ServiceUnavailable(f"{url}: {e}") from e

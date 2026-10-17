@@ -20,6 +20,7 @@ from . import (
     google_auth,
     handlers,
     live,
+    money,
     notion_api,
     notion_migrate,
     notion_search,
@@ -123,6 +124,9 @@ def parser():
     lo.add_subparsers(dest="loops_command", required=True).add_parser("refresh")
     wt = sub.add_parser("watches")
     wt.add_subparsers(dest="watches_command", required=True).add_parser("refresh")
+    mo = sub.add_parser("money")
+    mr = mo.add_subparsers(dest="money_command", required=True).add_parser("refresh")
+    mr.add_argument("--limit", type=int, default=money.CLI_SCAN_LIMIT, help="messages to extract in this run")
     sv = sub.add_parser("serve")
     sv.add_argument("--host", default=DEFAULT_HOST)
     sv.add_argument("--port", type=int, required=True)
@@ -166,6 +170,16 @@ def watches_command(cfg):
     conn = db.connect(cfg.db_path)
     with db.exclusive(cfg.db_path):
         out = watches.refresh(conn, cfg)
+    json.dump(out, sys.stdout, indent=2, default=str)
+    sys.stdout.write("\n")
+    return 0
+
+
+def money_command(cfg, args):
+    handlers.register()
+    conn = db.connect(cfg.db_path)
+    with db.exclusive(cfg.db_path):
+        out = money.refresh(conn, cfg, limit=args.limit)
     json.dump(out, sys.stdout, indent=2, default=str)
     sys.stdout.write("\n")
     return 0
@@ -324,6 +338,8 @@ def main(argv=None):
         return loops_command(cfg)
     elif args.command == "watches":
         return watches_command(cfg)
+    elif args.command == "money":
+        return money_command(cfg, args)
     elif args.command == "serve":
         hosts = args.allowed_host or [h for h in [os.environ.get("ATRIUM_PUBLIC_HOST", "").strip()] if h]
         if args.auth == auth.PROXY and not hosts:

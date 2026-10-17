@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state %}
+{% from "_money.html" import money_nav %}
+{% set page = "money" %}
+{% block title %}Accounts{% endblock %}
+{% block heading %}Money · Accounts{% endblock %}
+{% block content %}
+{{ money_nav("/money/accounts") }}
+<p class="text-sm text-muted-foreground">Alerts map to an account by the bank's sender address and the last four digits in the mail. Republic credit card: USD at the CBTT selling rate, BBD at half of it. CIBC BBD account: USD at 2.00 × 1.02. TTD bank accounts never hold foreign charges; such alerts are flagged.</p>
+
+{% if accounts %}
+<ul class="flex flex-col gap-3" role="list" aria-label="Accounts">
+  {% for a in accounts %}
+  <li class="flex flex-col gap-2 rounded-lg border bg-card p-4">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-sm font-medium">{{ a.name }}</span>
+      <span class="badge" data-variant="outline">{{ a.bank_label }}</span>
+      <span class="badge" data-variant="outline">{{ a.kind | replace("_", " ") }}</span>
+      <span class="badge" data-variant="secondary">{{ a.currency }}</span>
+      {% if a.last4 %}<span class="font-mono text-xs text-muted-foreground">…{{ a.last4 }}</span>{% endif %}
+      <span class="text-xs text-muted-foreground">#{{ a.id }}</span>
+    </div>
+    <form method="post" action="/money/accounts/{{ a.id }}" class="flex flex-wrap items-end gap-2 text-sm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="flex flex-col gap-1 text-xs">Name<input class="input" type="text" name="name" value="{{ a.name }}" maxlength="60" required></label>
+      <label class="flex flex-col gap-1 text-xs">Last 4<input class="input w-20" type="text" name="last4" value="{{ a.last4 }}" maxlength="4" inputmode="numeric"></label>
+      <label class="flex flex-col gap-1 text-xs">Alert senders (domains or addresses, comma separated)<input class="input w-80" type="text" name="sender_patterns" value="{{ a.sender_patterns | join(', ') }}"></label>
+      <button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button>
+    </form>
+    <form method="post" action="/money/accounts/{{ a.id }}/delete" data-confirm-submit="Remove {{ a.name }}? Only possible while it has no transactions.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{ icon("trash-2") }}Remove</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+{% call empty_state("wallet", "No accounts yet") %}Add each bank account and card once; alerts from those banks are then posted automatically.{% endcall %}
+{% endif %}
+
+<section class="flex flex-col gap-3" aria-labelledby="add-h">
+  <h2 id="add-h" class="text-sm font-medium">Add an account</h2>
+  <form method="post" action="/money/accounts" class="flex flex-wrap items-end gap-2 rounded-lg border bg-card p-4 text-sm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="flex flex-col gap-1 text-xs">Bank
+      <select class="select" name="bank" required>{% for key, label in banks.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+    </label>
+    <label class="flex flex-col gap-1 text-xs">Name<input class="input" type="text" name="name" maxlength="60" required placeholder="e.g. FCB chequing"></label>
+    <label class="flex flex-col gap-1 text-xs">Kind
+      <select class="select" name="kind">{% for k in kinds %}<option value="{{ k }}">{{ k | replace("_", " ") }}</option>{% endfor %}</select>
+    </label>
+    <label class="flex flex-col gap-1 text-xs">Currency
+      <select class="select" name="currency">{% for c in currencies %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select>
+    </label>
+    <label class="flex flex-col gap-1 text-xs">Last 4<input class="input w-20" type="text" name="last4" maxlength="4" inputmode="numeric"></label>
+    <label class="flex flex-col gap-1 text-xs">Alert senders (blank = bank default: {% for b, ds in default_senders.items() %}{{ banks[b] }} {{ ds | join("/") }}{{ "; " if not loop.last }}{% endfor %})<input class="input w-80" type="text" name="sender_patterns"></label>
+    <button type="submit" class="btn" data-size="sm">{{ icon("plus") }}Add account</button>
+  </form>
+</section>
+
+<section class="flex flex-col gap-3" aria-labelledby="rates-h">
+  <div class="flex items-center justify-between gap-2">
+    <h2 id="rates-h" class="text-sm font-medium">CBTT USD selling rate</h2>
+    <form method="post" action="/money/rates/fetch">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("globe") }}Fetch now</button>
+    </form>
+  </div>
+  {% if rates %}
+  <table class="w-full text-sm"><thead><tr class="text-left text-xs text-muted-foreground"><th>Stored</th><th>As of</th><th>Selling</th></tr></thead><tbody>
+    {% for r in rates %}<tr><td class="tabular-nums">{{ r.date }}</td><td class="tabular-nums">{{ r.as_of or "—" }}</td><td class="tabular-nums">{{ r.selling }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No rate stored yet. The weekly <code>fx-rates</code> job fetches it; Fetch now does it immediately.</p>
+  {% endif %}
+</section>
+{% endblock %}

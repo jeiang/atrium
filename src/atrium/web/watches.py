@@ -19,7 +19,6 @@ def register(app, deps):
         with connection() as conn:
             return render(
                 "watches.html",
-                renewals=watches.list_renewals(conn, today),
                 packages=watches.list_packages(conn, now, active_only=True),
                 birthdays=birthdays.upcoming_for(conn, cfg, today, BIRTHDAY_WINDOW_DAYS),
                 toast=notice,
@@ -33,12 +32,6 @@ def register(app, deps):
     @app.get("/watches")
     def watches_page():
         return show()
-
-    @app.post("/watches/renewals/{renewal_id}/dismiss")
-    def renewal_dismiss(renewal_id: int):
-        with connection() as conn:
-            found(watches.dismiss_renewal(conn, renewal_id), "renewal")
-        return show(toast("success", "Dismissed"))
 
     @app.post("/watches/packages/{package_id}/dismiss")
     def package_dismiss(package_id: int):
