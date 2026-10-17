@@ -110,7 +110,9 @@ def runs_of(conn, thread_id):
 
 
 def append_message(conn, thread_id, run_id, role, content, now):
-    conn.execute("BEGIN")
+    # IMMEDIATE: a deferred read-then-write transaction fails at once (no busy wait) when
+    # another connection commits in between, which parallel subagent runs do.
+    conn.execute("BEGIN IMMEDIATE")
     try:
         seq = conn.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM thread_messages WHERE thread_id = ?", (thread_id,)).fetchone()[0]
         cur = conn.execute(

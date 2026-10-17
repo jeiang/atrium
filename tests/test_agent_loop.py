@@ -367,6 +367,15 @@ def test_registry_is_deterministic_and_rejects_duplicates(monkeypatch):
         all_tools()
 
 
+def test_every_entry_module_imports_in_a_fresh_interpreter():
+    import subprocess
+    import sys
+
+    for module in ("atrium.cli", "atrium.agent.scheduler", "atrium.web.app", "atrium.agent.codemode_worker"):
+        done = subprocess.run([sys.executable, "-c", f"import {module}"], capture_output=True, text=True, env={"PYTHONPATH": ":".join(sys.path)})
+        assert done.returncode == 0, f"{module}: {done.stderr[-2000:]}"
+
+
 def test_thread_listing_and_search(world):
     cfg, conn = world
     client = FakeClient([response([text("Rayleigh scattering explains it.")]), response([text("ok")])])
