@@ -98,6 +98,8 @@ class FakeNotion:
             hit = [s for s in self.sources.values() if s["parent"]["database_id"] == m.group(1)]
             if not hit:
                 return 404, {"code": "object_not_found", "message": "missing"}
+            if data["in_trash"] and all(s["in_trash"] for s in hit):
+                return 400, {"code": "validation_error", "message": "Can't edit block that is archived. You must unarchive the block before editing."}
             for source in hit:
                 source["in_trash"] = data["in_trash"]
             return 200, {"object": "database", "id": m.group(1), "in_trash": data["in_trash"]}
@@ -137,6 +139,8 @@ class FakeNotion:
         if "archived" in data:
             return 400, {"code": "validation_error", "message": "archived was removed in 2026-03-11; use in_trash"}
         page = self.pages[pid]
+        if data.get("in_trash") and page.get("in_trash"):
+            return 400, {"code": "validation_error", "message": "Can't edit block that is archived. You must unarchive the block before editing."}
         if "in_trash" in data:
             page["in_trash"] = data["in_trash"]
         for name, value in (data.get("properties") or {}).items():

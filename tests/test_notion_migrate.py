@@ -198,6 +198,34 @@ def test_failure_mid_apply_is_recorded(world):
     assert actions[-1]["ok"] is False and all(a["ok"] for a in actions[:-1])
 
 
+def test_reapproving_a_failed_plan_resumes_without_duplicates(world):
+    fake, conn, cfg = world
+    pid = notion_migrate.run_cli(cfg, conn, model(STRUCTURE, ITEMS), {"ATRIUM_NOTION_WIKI_ROOT": ROOT})["proposal_id"]
+    note = fake.pages.pop(NOTE1)
+    assert proposals.approve_and_apply(conn, cfg, pid)["status"] == "failed"
+    fake.pages[NOTE1] = note
+    applied = proposals.approve_and_apply(conn, cfg, pid)
+    assert applied["status"] == "applied", applied
+    for title in ("Home", "Reference", "Books"):
+        assert len(titled(fake, title)) == 1, title
+    assert fake.markdown[LOOSE].count("## From Bob the contractor") == 1
+    assert all(fake.pages[i]["in_trash"] for i in (BOOK1, BOOK2, BOOK3, NOTE1, NOTE2))
+    assert fake.sources[BOOKS]["in_trash"] is True
+    log = fake.markdown[LOG]
+    assert "created Home" in log and "moved Kitchen renovation" in log and "archived database Books" in log
+    assert proposals.undo(conn, cfg, pid)["undone"] is True
+    assert all(not fake.pages[i]["in_trash"] for i in (BOOK1, BOOK2, NOTE1)) and fake.sources[BOOKS]["in_trash"] is False
+
+
+def test_a_database_already_archived_with_its_parent_is_not_an_error(world):
+    fake, conn, cfg = world
+    pid = notion_migrate.run_cli(cfg, conn, model(STRUCTURE, ITEMS), {"ATRIUM_NOTION_WIKI_ROOT": ROOT})["proposal_id"]
+    fake.sources[NOTES]["in_trash"] = True
+    applied = proposals.approve_and_apply(conn, cfg, pid)
+    assert applied["status"] == "applied", applied
+    assert applied["result"]["databases"] == 2
+
+
 def test_existing_hubs_are_reused_and_private_rows_keep_their_database(world):
     fake, conn, cfg = world
     fake.add_page(uid(60), "Home", "existing hub", parent={"type": "page_id", "page_id": ROOT})
