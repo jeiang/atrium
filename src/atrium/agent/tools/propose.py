@@ -1,6 +1,5 @@
-from ... import actual_proposals, notion_proposals, receipts
+from ... import notion_proposals, receipts
 from ._args import text_arg
-from .actual import categorize_proposal
 from .base import CHAT, CRON, PROPOSE, Tool, ToolContext, ToolError
 from .watches import receipt_proposal
 
@@ -26,10 +25,6 @@ def notion_link(ctx, payload):
 # kind -> builder(ctx, payload) returning a proposal id, or None when an identical proposal already exists.
 KINDS = {
     notion_proposals.KIND_EDIT: (notion_edit, "{page_id, instruction}: propose an edit to a Notion page for the operator to approve"),
-    actual_proposals.KIND: (
-        categorize_proposal,
-        "{transaction_id, category_id, reason, description?, category_name?}: propose recategorizing an Actual Budget transaction",
-    ),
     receipts.KIND: (
         receipt_proposal,
         "{message_id, merchant, amount?, currency?, date?}: propose saving a receipt email to the Notion wiki as a Receipt page",

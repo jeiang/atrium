@@ -3,7 +3,7 @@ import importlib
 # Imported on first use: tool modules import agent modules (scheduler, service)
 # that themselves import tools.base, so loading them with the package is circular.
 NAMES = (
-    "actual", "calendar", "contacts", "context_ops", "drafts", "grafana", "mail", "..nightly", "notify",
+    "calendar", "contacts", "context_ops", "drafts", "grafana", "mail", "..nightly", "notify",
     "notion_read", "notion_write", "openloops", "profile", "propose", "recall", "research", "run_code",
     "schedule", "skills", "watches", "web_fetch",
 )
