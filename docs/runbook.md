@@ -223,8 +223,8 @@ date and sources of every page it touches live in the `wiki_pages` table of
 title/alias hits first) refuse a create whose title or alias already names a
 page, prepend a dated one-line entry to the "Wiki Log" page under Wiki Home
 (created on first use, newest first) and keep a `Last reviewed <date> ·
-sources: ...` footer at the end of each page. Every write is on /changes
-with Undo; undo refuses when the page changed in Notion since.
+sources: ...` footer at the end of each page. Every write is on /activity
+(filter "wiki") with Undo; undo refuses when the page changed in Notion since.
 
 Setting up the wiki, or converting an existing workspace, once:
 

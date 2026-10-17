@@ -3,7 +3,7 @@ import json
 import pytest
 from agent_tool_helpers import make_ctx
 from fake_notion import FakeNotion, select_prop
-from helpers import make_config
+from helpers import make_config, static_dir, web_client
 
 from atrium import db, notion_api, notion_wiki
 from atrium.agent import registry, writes
@@ -40,8 +40,8 @@ def world(tmp_path, monkeypatch):
     fake.add_page(HUB, "Projects", "hub", parent=under(ROOT))
     fake.add_page(A, "Alpha", "alpha body\n\n## Status\n\nstarted\n\n## Notes\n\nnone", parent=under(HUB))
     fake.add_page(LOOSE, "Loose", "outside the tree")
-    cfg = make_config(tmp_path)
-    conn = db.connect_memory()
+    cfg = make_config(tmp_path, static_dir=static_dir(tmp_path))
+    conn = db.connect(cfg.db_path)
     for pid, title, parent in ((ROOT, "Wiki Home", ""), (HUB, "Projects", ROOT), (A, "Alpha", HUB), (LOOSE, "Loose", "")):
         mirror(conn, pid, title, parent)
     conn.execute("INSERT INTO threads (id, kind, effort, created_at, updated_at) VALUES (1, 'chat', 'low', 0, 0)")
@@ -49,13 +49,29 @@ def world(tmp_path, monkeypatch):
     client = notion_api.NotionClient("tok", fake.transport, sleep=lambda s: None, clock=lambda: 0.0)
     monkeypatch.setattr(notion_write, "make_client", lambda env: client)
     env = {"NOTION_TOKEN": "tok", "ATRIUM_NOTION_WIKI_ROOT": ROOT, "ATRIUM_TZ": TZ}
-    return fake, conn, cfg, make_ctx(conn, cfg, env=env, now=lambda: NOW)
+    yield fake, conn, cfg, make_ctx(conn, cfg, env=env, now=lambda: NOW)
+    conn.close()
 
 
 def log_of(fake):
     page = next((p for p in fake.pages.values() if p["properties"]["Name"]["title"][0]["plain_text"] == "Wiki Log"), None)
     assert page is not None and page["parent"] == under(ROOT)
     return fake.markdown[page["id"]]
+
+
+def test_wiki_writes_are_on_activity_wiki_filter_and_undo_from_there(world):
+    fake, conn, cfg, ctx = world
+    hub = notion_write.notion_create_page(ctx, {"title": "Areas", "markdown": "hub"})
+    moved = notion_write.notion_move_page(ctx, {"page_id": A, "parent_page_id": hub["page_id"]})
+    notion_write.notion_add_alias(ctx, {"page_id": A, "aliases": ["alpha project"]})
+    client = web_client(cfg)
+    wiki = client.get("/activity?category=wiki").text
+    assert all(tool in wiki for tool in ("notion_create_page", "notion_move_page", "notion_add_alias"))
+    assert "notion_move_page" not in client.get("/activity?category=assistant").text
+    undone = client.post(f"/activity/write/{moved['write_id']}/undo", headers={"HX-Request": "true"})
+    assert undone.status_code == 200 and "Undone" in undone.text
+    assert fake.pages[A]["parent"] == under(HUB) and notion_wiki.get(conn, A)["hub_id"] == HUB
+    assert writes.get(conn, moved["write_id"])["undone_at"] is not None
 
 
 def test_no_send_tool_in_any_kind():

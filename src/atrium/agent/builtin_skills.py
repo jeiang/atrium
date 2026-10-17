@@ -12,7 +12,7 @@ WIKI_SHAPE = """## How the wiki is shaped
 - One page per subject; the title is the subject's usual name, aliases hold the other names.
 - A page is short prose a person would read: one-paragraph summary, then a few headings with bullets, dates on anything that can change ("as of 2026-10").
 - Every page ends with `Last reviewed <date> · sources: ...`; the tools keep that line, you only pass `sources`.
-- Every write lands on the Wiki Log page and on /changes with Undo."""
+- Every write lands on the Wiki Log page and on /activity (wiki filter) with Undo."""
 
 WIKI_CAPTURE = f"""# wiki-capture: save durable context from a conversation
 
