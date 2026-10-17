@@ -124,7 +124,7 @@ def test_registry_attaches_stubs_per_kind(world):
     chat = {t.name: t for t in registry.tools_for("chat")}
     assert "def mail_search(" in chat["run_code"].description and "def direct_only" not in chat["run_code"].description
     assert "run_code" not in {t.name for t in registry.tools_for("nightly")}
-    assert "run_code" not in {t.name for t in registry.tools_for("sub:mail")}
+    assert "run_code" not in {t.name for t in registry.tools_for("sub")}
     assert "run_code" in {t.name for t in registry.tools_for("cron")}
 
 

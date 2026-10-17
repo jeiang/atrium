@@ -40,6 +40,7 @@ from .. import (
 from ..config import ACCOUNTS
 from ..http import ServiceUnavailable
 from ..rules import RuleError
+from . import agents as agents_ui
 from . import auth
 from . import changes as changes_ui
 from . import chat as chat_ui, runs as runs_ui
@@ -49,7 +50,9 @@ from . import money as money_ui
 from . import notifications as notifications_ui
 from . import openloops as openloops_ui
 from . import schedules as schedules_ui
+from . import settings as settings_ui
 from . import skills as skills_ui
+from . import subagents as subagents_ui
 from . import watches as watches_ui
 from .deps import Deps, is_partial
 from .markup import markdown_html
@@ -196,14 +199,17 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
         drafts.recover_stuck(conn)
     chat_ui.register(app, deps)
     runs_ui.register(app, deps)
+    agents_ui.register(app, deps)
     changes_ui.register(app, deps)
     drafts_ui.register(app, deps)
+    settings_ui.register(app, deps)
     notifications_ui.register(app, deps)
     schedules_ui.register(app, deps)
     openloops_ui.register(app, deps)
     watches_ui.register(app, deps)
     money_ui.register(app, deps)
     skills_ui.register(app, deps)
+    subagents_ui.register(app, deps)
     media_ui.register(app, deps)
 
     def load_message(conn, message_id):

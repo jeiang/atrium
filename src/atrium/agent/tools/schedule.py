@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from .. import scheduler
+from .. import scheduler, skills
 from ._args import text_arg
 from .base import CHAT, READ, WRITE, Tool, ToolContext, ToolError
 
@@ -11,9 +11,9 @@ SCHEDULE_HELP = (
 CHAT_ONLY = frozenset({CHAT})
 
 
-def describe(job):
+def describe(job, conn=None):
     due = job["next_due"]
-    return {
+    found = {
         "id": job["id"],
         "name": job["name"],
         "prompt": job["prompt"],
@@ -22,6 +22,13 @@ def describe(job):
         "next_due": datetime.fromtimestamp(due, scheduler.zone(job["tz"])).isoformat(timespec="minutes") if due else None,
         "created_by": job["created_by"],
     }
+    if conn is not None and skills.references(job["prompt"]):
+        # /skill:name tokens are expanded into the prompt when the job runs; unknown ones stay as text.
+        known, unknown = skills.split_known(conn, skills.references(job["prompt"]))
+        found["skills"] = known
+        if unknown:
+            found["note"] = "unknown skills in prompt (left as text): " + ", ".join(unknown)
+    return found
 
 
 def agent_job(conn, args):
@@ -51,7 +58,7 @@ def schedule_create(ctx: ToolContext, args: dict):
         )
     except scheduler.ScheduleError as e:
         raise ToolError(str(e)) from e
-    return describe(scheduler.get_job(ctx.conn, job_id))
+    return describe(scheduler.get_job(ctx.conn, job_id), ctx.conn)
 
 
 def schedule_update(ctx: ToolContext, args: dict):
@@ -72,7 +79,7 @@ def schedule_update(ctx: ToolContext, args: dict):
         )
     except scheduler.ScheduleError as e:
         raise ToolError(str(e)) from e
-    return describe(updated)
+    return describe(updated, ctx.conn)
 
 
 def schedule_cancel(ctx: ToolContext, args: dict):

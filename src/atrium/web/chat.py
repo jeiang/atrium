@@ -1,10 +1,9 @@
-import time
 from typing import Annotated
 
 from fastapi import Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from ..agent import budget, journal, service, subagents, usage
+from ..agent import budget, journal, service, subagents
 from ..agent.threads import SUBAGENT
 from ..agent.tools.base import CHAT, KINDS
 from .deps import is_partial
@@ -120,15 +119,3 @@ def register(app, deps):
         with connection() as conn:
             last_seq = max((i["seq"] for i in load_thread(conn, thread_id)["items"]), default=0)
             return poll(conn, thread_id, run_id, last_seq)
-
-    @app.get("/usage")
-    def usage_page():
-        now = time.time()
-        with connection() as conn:
-            return render(
-                "usage.html",
-                budget=budget.status(conn, now),
-                summary=usage.summary(conn, now),
-                by_kind=usage.by_kind(conn, now),
-                by_thread=usage.by_thread(conn, now),
-            )

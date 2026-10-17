@@ -125,7 +125,7 @@ from .tools import notify as _notify  # noqa: E402
 from . import subagents as _subagents  # noqa: E402
 
 INITS = [_calendar.init_schema, _event_candidates.init_schema, _drafts.init, _scheduler.init, _skills.init, _notify.init, _subagents.init, _context.init, _openloops.init, _watches.init_schema, _receipts.init_schema, _money.init_schema, _media_channels.init]
-RUN_COLUMNS = (("limits_json", "TEXT"), ("owner", "TEXT"), ("lease_until", "REAL"))
+RUN_COLUMNS = (("limits_json", "TEXT"), ("owner", "TEXT"), ("lease_until", "REAL"), ("skills_json", "TEXT"))
 
 
 def _relax_writes(conn):

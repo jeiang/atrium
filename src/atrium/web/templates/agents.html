@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% set page = "agents" %}
+{% block title %}Agents{% endblock %}
+{% block heading %}Agents{% endblock %}
+{% block content %}
+<p class="text-sm text-muted-foreground">Running and recent runs: chat replies, scheduled and nightly runs, and research subagents. Running runs are listed first and this page refreshes while anything is active. Define subagents under <a class="underline underline-offset-4" href="/settings/subagents">Settings › Subagents</a>.</p>
+{% include "_agent_runs.html" %}
+{% endblock %}

@@ -1,13 +1,13 @@
-"""Media tools: downloads, library and channels are readable from chat, cron and code; adding a torrent or
-changing channels is chat-only and lands in the agent writes ledger with undo."""
+"""Media tools: downloads, library and channels are readable from chat, cron, code and allowlisted subagents;
+adding a torrent or changing channels is chat-only and lands in the agent writes ledger with undo."""
 
 from ...media import channels, eztv, library, links, organizer, qbit, tmdb
 from ...media import settings as media_settings
 from .. import writes
 from ._args import bounded_int, text_arg
-from .base import CHAT, CODE, CRON, READ, WRITE, NotConfigured, Tool, ToolContext, ToolError
+from .base import CHAT, CODE, CRON, READ, SUB, WRITE, NotConfigured, Tool, ToolContext, ToolError
 
-READ_CONTEXTS = frozenset({CHAT, CRON, CODE})
+READ_CONTEXTS = frozenset({CHAT, CRON, SUB, CODE})
 WRITE_CONTEXTS = frozenset({CHAT})
 UNDO_TORRENT = "media_torrent_delete"
 UNDO_CHANNEL_DELETE = "media_channel_delete"

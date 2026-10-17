@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% set page = "settings" %}
+{% set SETTINGS_TABS = [
+  ("skills", "Skills", "/settings/skills"),
+  ("subagents", "Subagents", "/settings/subagents"),
+  ("schedules", "Schedules", "/settings/schedules"),
+  ("notifications", "Notifications", "/settings/notifications"),
+  ("usage", "Usage", "/settings/usage"),
+] %}
+{% block title %}{% block tab_title %}{% endblock %} · Settings{% endblock %}
+{% block heading %}Settings · {{ self.tab_title() }}{% endblock %}
+{% block content %}
+<nav aria-label="Settings sections" class="-mb-2 flex gap-1 overflow-x-auto border-b text-sm">
+  {% for id, label, url in SETTINGS_TABS %}
+  <a href="{{ url }}" class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 font-medium {{ 'border-primary text-foreground' if tab == id else 'border-transparent text-muted-foreground hover:text-foreground' }}"{% if tab == id %} aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
+{% block tab %}{% endblock %}
+{% endblock %}

@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from helpers import make_config, static_dir, web_client
 
 from atrium import cli, db
-from atrium.agent import builtin_jobs, registry, scheduler, writes
+from atrium.agent import builtin_jobs, registry, scheduler, subagents, writes
 from atrium.agent.tools import media as media_tools
 from atrium.agent.tools import notify
 from atrium.agent.tools.base import NotConfigured, ToolError
@@ -627,16 +627,18 @@ def test_nav_groups(world):
 
 # ---------- agent tools ----------
 
-
 def test_tool_contexts():
     reads = {"media_downloads", "media_library_search", "media_channels"}
     writes_ = {"media_add_magnet", "media_channel_add", "media_channel_remove"}
     for kind in ("chat", "cron", "code"):
         assert reads <= {t.name for t in registry.tools_for(kind)}, kind
-    for kind in ("nightly", "sub:web", "sub:mail"):
-        assert not reads & {t.name for t in registry.tools_for(kind)}, kind
+    assert not reads & {t.name for t in registry.tools_for("nightly")}
+    # Subagents only see what their allowlist names: the built-in web and mail agents never get media reads.
+    assert reads <= {t.name for t in registry.subagent_pool()}
+    for _, _, _, tools in subagents.BUILTINS:
+        assert not reads & {t.name for t in registry.run_tools("sub", tools)}
     assert writes_ <= {t.name for t in registry.tools_for("chat")}
-    for kind in ("cron", "nightly", "code", "sub:web"):
+    for kind in ("cron", "nightly", "code", "sub"):
         assert not writes_ & {t.name for t in registry.tools_for(kind)}, kind
     by_name = {t.name: t for t in media_tools.TOOLS}
     assert all(by_name[n].effect == "write" for n in writes_) and all(by_name[n].effect == "read" for n in reads)

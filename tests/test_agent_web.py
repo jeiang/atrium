@@ -128,7 +128,7 @@ def test_removed_pages_are_gone(cfg):
             assert reply.headers["location"] == "/chat"
     assert client.post("/ask", data={"q": "x"}).status_code == 404
     nav = client.get("/chat").text
-    assert 'href="/chat"' in nav and 'href="/usage"' in nav and 'href="/web"' not in nav and 'href="/contacts"' not in nav
+    assert 'href="/chat"' in nav and 'href="/agents"' in nav and 'href="/settings"' in nav and 'href="/web"' not in nav and 'href="/contacts"' not in nav
 
 
 def test_chat_thread_renders_markdown_tools_and_citations(cfg):
@@ -182,7 +182,7 @@ def test_budget_refusal_shows_a_toast(cfg):
     reply = client.post(f"/chat/{thread_id}/messages", data={"text": "hi"}, headers=HX)
     assert reply.status_code == 422 and "Budget reached" in reply.text
     assert client.post(f"/chat/{thread_id}/messages", data={"text": "hi"}).status_code == 422
-    usage_page = client.get("/usage").text
+    usage_page = client.get("/settings/usage").text
     assert "$80.00" in usage_page and "$0.00" in usage_page and "107%" in usage_page
 
 
@@ -190,7 +190,7 @@ def test_usage_page_breakdown(cfg):
     client = web_client(cfg, agent_client=scripted)
     thread_id = int(client.post("/chat", data={"text": "sky"}, follow_redirects=False).headers["location"].rsplit("/", 1)[1])
     wait_done(cfg, thread_id)
-    page = client.get("/usage").text
+    page = client.get("/settings/usage").text
     assert "Spent this month" in page and "chat" in page and f'href="/chat/{thread_id}"' in page
     assert "Requests over 100K tokens" in page and "web searches" in page
 

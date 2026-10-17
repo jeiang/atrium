@@ -5,7 +5,7 @@ import threading
 import time
 
 from .. import db, embed
-from . import budget, context, journal, loop, threads, usage
+from . import budget, context, journal, loop, skills, threads, usage
 from .client import make_client
 from .tools.base import CHAT, CRON, NIGHTLY, NotConfigured
 
@@ -16,6 +16,7 @@ PREVIEW_CHARS = 240
 THINKING = ("thinking", "redacted_thinking")
 SERVER_TOOL_USE = "server_tool_use"
 UNATTENDED = (CRON, NIGHTLY)
+EXPAND_SKILLS = (CHAT, CRON, NIGHTLY)
 
 
 class RunActive(RuntimeError):
@@ -134,12 +135,15 @@ def run_view(conn, run_id):
         return None
     found["calls"] = journal.tool_calls_of(conn, run_id)
     found["cost"] = usage.run_cost(conn, run_id)
+    found["skills"] = journal.skills_of(found)
     return found
 
 
 def prepare(conn, thread_id, text, kind, now, parent_run_id=None, limits=None, operator=False):
     """`operator` marks text typed by the operator: only that text may add URLs to the thread's web_fetch
-    allowlist. Model-written text (research tasks, agent-made schedules, reminders) never does."""
+    allowlist. Model-written text (research tasks, agent-made schedules, reminders) never does.
+
+    `/skill:name` tokens in operator messages and job prompts are expanded into the message before the run."""
     thread = threads.get(conn, thread_id)
     if thread is None:
         raise UnknownThread(thread_id)
@@ -149,9 +153,14 @@ def prepare(conn, thread_id, text, kind, now, parent_run_id=None, limits=None, o
     threads.set_title(conn, thread_id, threads.title_from(text))
     if operator:
         threads.add_allowed_urls(conn, thread_id, threads.urls_in(text))
+    used = []
+    if kind in EXPAND_SKILLS:
+        text, used, _ = skills.expand(conn, text)
     run_id = journal.start_run(conn, thread_id, kind, loop.MODEL, thread["effort"], now, parent_run_id, owner=journal.OWNER)
     if limits:
         journal.set_limits(conn, run_id, limits)
+    if used:
+        journal.set_skills(conn, run_id, used)
     journal.append_message(conn, thread_id, run_id, journal.USER, [{"type": loop.TEXT, "text": text}], now)
     return run_id
 

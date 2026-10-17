@@ -2,9 +2,9 @@ from datetime import datetime
 
 from ... import openloops
 from ._args import bounded_int, clip, text_arg
-from .base import CHAT, CODE, CRON, READ, Tool, ToolContext, ToolError
+from .base import CHAT, CODE, CRON, READ, SUB, Tool, ToolContext, ToolError
 
-CONTEXTS = frozenset({CHAT, CRON, CODE})
+CONTEXTS = frozenset({CHAT, CRON, SUB, CODE})
 MAX_LIMIT = 100
 
 

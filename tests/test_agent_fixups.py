@@ -131,7 +131,7 @@ def test_startup_recovers_and_drafts_page_offers_resolution(world):
 def test_subagent_threads_hidden_from_default_list(world):
     cfg, conn = world
     chat = service.create_thread(conn, "chat", title="main")
-    child = subagents.create_child(conn, chat, None, "web", "web: x", lambda: 1.0)
+    child = subagents.create_child(conn, chat, None, subagents.get(conn, "web"), "web: x", lambda: 1.0)
     assert [t["id"] for t in service.list_threads(conn)] == [chat]
     assert {t["id"] for t in service.list_threads(conn, include_subagents=True)} == {chat, child}
     assert [t["id"] for t in service.list_threads(conn, kind="subagent")] == [child]

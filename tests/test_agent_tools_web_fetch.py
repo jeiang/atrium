@@ -12,7 +12,7 @@ URL = "https://Example.test:443/guide?a=1#frag"
 
 
 def ctx_for(*urls):
-    return make_ctx(memory_db(), make_config(__import__("pathlib").Path("/tmp")), allowed_urls=urls, kind="sub:web")
+    return make_ctx(memory_db(), make_config(__import__("pathlib").Path("/tmp")), allowed_urls=urls, kind="sub")
 
 
 def resolving_to(address):
