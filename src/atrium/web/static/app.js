@@ -192,3 +192,220 @@ document.addEventListener("change", (event) => {
   if (!file) { setTorrent(form, "", ""); return; }
   file.arrayBuffer().then((buffer) => setTorrent(form, base64url(buffer), file.name));
 });
+
+// Thread workspace: the right panel (Work/Preview tabs, drag to resize, drawer on small screens), the composer's
+// edit mode, and the live run view fed by server-sent events written by whichever process executes the run.
+const PANEL_WIDTH_KEY = "atrium.panel.width";
+const PANEL_MIN = 260;
+
+const workspace = () => document.getElementById("workspace");
+const panelOpen = (open) => {
+  const panel = document.getElementById("panel");
+  if (!panel) return;
+  panel.toggleAttribute("data-open", open);
+  document.getElementById("panel-backdrop").classList.toggle("hidden", !open);
+  document.querySelectorAll('[data-action="toggle-panel"][aria-controls]').forEach((button) => button.setAttribute("aria-expanded", String(open)));
+};
+
+actions["toggle-panel"] = () => panelOpen(!document.getElementById("panel").hasAttribute("data-open"));
+actions["edit-message"] = (button) => {
+  const form = document.getElementById("composer");
+  form.elements.text.value = button.closest("li").querySelector("[data-text]").textContent;
+  form.elements.edit.value = "1";
+  document.getElementById("composer-editing").hidden = false;
+  form.elements.text.focus();
+};
+actions["cancel-edit"] = () => {
+  const form = document.getElementById("composer");
+  form.elements.edit.value = "";
+  form.elements.text.value = "";
+  document.getElementById("composer-editing").hidden = true;
+};
+
+const showPreview = () => {
+  const tab = document.getElementById("panel-tab-preview");
+  if (!tab) return;
+  if (tab.getAttribute("aria-selected") !== "true") tab.click();
+  if (window.innerWidth < 768) panelOpen(true);
+};
+
+document.addEventListener("htmx:beforeRequest", (event) => {
+  const target = event.detail.target;
+  if (target && target.id === "preview-body") showPreview();
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const root = workspace();
+  if (!root) return;
+  const stored = Number(localStorage.getItem(PANEL_WIDTH_KEY));
+  if (stored >= PANEL_MIN) root.style.setProperty("--panel-w", `${stored}px`);
+  const handle = document.getElementById("panel-handle");
+  const apply = (width) => {
+    const clamped = Math.min(Math.max(width, PANEL_MIN), Math.floor(root.getBoundingClientRect().width * 0.6));
+    root.style.setProperty("--panel-w", `${clamped}px`);
+    return clamped;
+  };
+  handle.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+    const right = root.getBoundingClientRect().right;
+    let width = parseFloat(getComputedStyle(root).getPropertyValue("--panel-w"));
+    const move = (e) => { width = apply(right - e.clientX); };
+    const stop = () => {
+      handle.removeEventListener("pointermove", move);
+      localStorage.setItem(PANEL_WIDTH_KEY, String(Math.round(width)));
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", stop, { once: true });
+    handle.addEventListener("pointercancel", stop, { once: true });
+  });
+  handle.addEventListener("keydown", (event) => {
+    const delta = { ArrowLeft: 24, ArrowRight: -24 }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    const width = apply(parseFloat(getComputedStyle(root).getPropertyValue("--panel-w")) + delta);
+    localStorage.setItem(PANEL_WIDTH_KEY, String(Math.round(width)));
+  });
+});
+
+document.addEventListener("keydown", (event) => {
+  const panel = document.getElementById("panel");
+  if (event.key === "Escape" && panel && panel.hasAttribute("data-open")) panelOpen(false);
+});
+
+const setBusy = (busy) => {
+  const form = document.getElementById("composer");
+  if (!form) return;
+  form.querySelector("[data-stop]").hidden = !busy;
+  form.querySelector("[data-send]").hidden = busy;
+  form.querySelector("[data-queue]").hidden = !busy;
+};
+
+const refreshWork = () => {
+  const work = document.getElementById("panel-work");
+  if (work) htmx.trigger(work, "work-changed");
+};
+
+const escapeHtml = (text) => text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+const toolMarkup = (data) => `
+  <details class="rounded-md border bg-card">
+    <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground"><code class="font-mono text-foreground">${escapeHtml(data.name)}</code><span class="truncate font-mono">${escapeHtml(data.args || "")}</span><span class="badge ms-auto" data-variant="outline" data-tool-state>running</span></summary>
+    <div class="border-t px-3 py-2 font-mono whitespace-pre-wrap break-words" data-tool-result>(no result yet)</div>
+  </details>`;
+
+const liveRuns = new Map();
+
+const connectLive = (li) => {
+  const runId = Number(li.dataset.liveRun);
+  if (liveRuns.has(runId)) return;
+  const thread = li.dataset.thread;
+  const label = li.querySelector("[data-live-label]");
+  const answer = li.querySelector("[data-live-answer]");
+  const answerText = li.querySelector("[data-live-text]");
+  const mainSteps = li.querySelector("[data-live-steps]");
+  const groups = new Map([[runId, mainSteps]]);
+
+  const stepsFor = (id) => groups.get(id) || mainSteps;
+  const lastStep = (list) => list.lastElementChild;
+  const appendStep = (list, kind, html) => {
+    const step = document.createElement("li");
+    step.dataset.step = kind;
+    step.innerHTML = html;
+    list.appendChild(step);
+    return step;
+  };
+  const flushAnswer = () => {
+    if (answer.hidden || !answerText.textContent) return;
+    appendStep(mainSteps, "note", `<div class="whitespace-pre-wrap break-words">${escapeHtml(answerText.textContent)}</div>`);
+    answerText.textContent = "";
+    answer.hidden = true;
+  };
+
+  const source = new EventSource(`/chat/${thread}/events?run=${runId}`);
+  liveRuns.set(runId, source);
+  const on = (kind, handler) => source.addEventListener(kind, (event) => handler(JSON.parse(event.data)));
+
+  on("run_start", (data) => {
+    if (data.run_id === runId) return;
+    const group = appendStep(mainSteps, "subagent", `<div class="flex flex-col gap-1 rounded-md border px-3 py-2"><span class="flex items-center gap-2 text-muted-foreground"><span class="badge" data-variant="secondary">${escapeHtml(data.role || data.thread_kind)}</span><span class="truncate">${escapeHtml(data.title || "")}</span><span class="badge ms-auto" data-variant="outline" data-child-state>running</span></span><ol class="flex flex-col gap-1.5 border-s ps-3"></ol></div>`);
+    group.dataset.childRun = data.run_id;
+    groups.set(data.run_id, group.querySelector("ol"));
+    label.textContent = `waiting for ${data.role || "subagent"}…`;
+  });
+  on("thinking", (data) => {
+    if (data.run_id === runId) { flushAnswer(); label.textContent = "thinking…"; }
+    const list = stepsFor(data.run_id);
+    const last = lastStep(list);
+    if (last && last.dataset.step === "thinking") last.firstElementChild.textContent += data.text;
+    else appendStep(list, "thinking", `<div class="whitespace-pre-wrap break-words text-muted-foreground">${escapeHtml(data.text)}</div>`);
+  });
+  on("text", (data) => {
+    if (data.run_id !== runId) {
+      const list = stepsFor(data.run_id);
+      const last = lastStep(list);
+      if (last && last.dataset.step === "note") last.firstElementChild.textContent += data.text;
+      else appendStep(list, "note", `<div class="whitespace-pre-wrap break-words">${escapeHtml(data.text)}</div>`);
+      return;
+    }
+    answer.hidden = false;
+    answerText.textContent += data.text;
+    label.textContent = "writing…";
+  });
+  on("tool_start", (data) => {
+    if (data.run_id === runId) { flushAnswer(); label.textContent = `running ${data.name}…`; }
+    const step = appendStep(stepsFor(data.run_id), "tool", toolMarkup(data));
+    step.dataset.toolId = data.id;
+  });
+  on("tool_done", (data) => {
+    const step = li.querySelector(`[data-tool-id="${CSS.escape(data.id)}"]`);
+    if (!step) return;
+    step.querySelector("[data-tool-result]").textContent = data.preview || "";
+    const state = step.querySelector("[data-tool-state]");
+    if (data.ok) state.remove();
+    else { state.textContent = "error"; state.dataset.variant = "destructive"; }
+    if (data.run_id === runId) label.textContent = "thinking…";
+  });
+  on("user", (data) => {
+    const queued = document.querySelector(`[data-queued="${data.queue_id}"]`);
+    const bubble = document.createElement("li");
+    bubble.className = "flex gap-3";
+    bubble.innerHTML = `<span class="mt-1 size-7 shrink-0 rounded-full bg-secondary" aria-hidden="true"></span><div class="min-w-0 flex-1 rounded-lg bg-secondary/60 px-4 py-3 text-sm whitespace-pre-wrap break-words"></div>`;
+    bubble.lastElementChild.textContent = data.text;
+    li.before(bubble);
+    if (queued) queued.remove();
+  });
+  on("plan", refreshWork);
+  on("run_done", (data) => {
+    const group = li.querySelector(`[data-child-run="${data.run_id}"] [data-child-state]`);
+    if (group) { group.textContent = data.state; if (data.state !== "done") group.dataset.variant = "destructive"; }
+    refreshWork();
+  });
+  on("done", () => {
+    source.close();
+    liveRuns.delete(runId);
+    setBusy(false);
+    refreshWork();
+    if (li.isConnected) htmx.trigger(li, "run-done");
+  });
+  source.onerror = () => { if (!li.isConnected) { source.close(); liveRuns.delete(runId); } };
+  setBusy(true);
+};
+
+const connectAll = (root) => {
+  if (!root || !root.querySelectorAll) return;
+  if (root.matches && root.matches("[data-live-run]")) connectLive(root);
+  root.querySelectorAll("[data-live-run]").forEach(connectLive);
+};
+
+document.addEventListener("DOMContentLoaded", () => connectAll(document));
+document.addEventListener("htmx:afterSettle", (event) => {
+  connectAll(event.detail.target || event.target);
+  const form = document.getElementById("composer");
+  if (form && event.detail.elt === form) {
+    form.elements.edit.value = "";
+    document.getElementById("composer-editing").hidden = true;
+  }
+  const transcript = document.getElementById("transcript");
+  if (transcript && transcript.contains(event.detail.target)) transcript.lastElementChild?.scrollIntoView({ block: "end" });
+});

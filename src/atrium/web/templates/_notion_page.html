@@ -1,0 +1,44 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import external, when %}
+{% set p = notion_page %}
+<article class="flex min-w-0 flex-col gap-6" aria-labelledby="page-title">
+  <header class="flex flex-col gap-3">
+    {% if p.path %}
+    <nav class="breadcrumb" aria-label="Location in Notion">
+      <ol class="flex flex-wrap items-center">
+        {% for crumb in p.path %}
+        <li class="inline-flex items-center">{% if crumb.id %}<a href="/notion/{{ crumb.id | urlencode }}">{{ crumb.title }}</a>{% else %}<span>{{ crumb.title }}</span>{% endif %}</li>
+        <li aria-hidden="true" class="inline-flex items-center"><span>/</span></li>
+        {% endfor %}
+        <li class="inline-flex items-center"><span aria-current="page" class="text-foreground">{{ p.title or "Untitled" }}</span></li>
+      </ol>
+    </nav>
+    {% endif %}
+    <h2 id="page-title" class="text-2xl font-semibold tracking-tight text-balance">{{ p.title or "Untitled" }}</h2>
+    <div class="flex flex-wrap items-center gap-2">
+      {% if p.private %}<span class="badge" data-variant="outline">{{ icon("lock") }}Private</span>{% endif %}
+      {% if p.in_trash %}<span class="badge" data-variant="destructive">{{ icon("trash-2") }}In Notion’s trash</span>{% endif %}
+      {% if p.edited_ts %}<span class="text-xs text-muted-foreground">Edited {{ when(p.edited_ts, "datetime") }}</span>{% endif %}
+      <a class="btn ml-auto" data-size="sm" data-variant="outline" {{ external(p.url) }}>{{ icon("external-link") }}Open in Notion</a>
+    </div>
+  </header>
+
+  {% if p.properties %}
+  <section aria-label="Properties" class="rounded-lg border bg-card">
+    <dl class="grid grid-cols-[minmax(0,--spacing(40))_minmax(0,1fr)] text-sm">
+      {% for prop in p.properties %}
+      <dt class="px-4 py-2 text-muted-foreground {{ 'border-t' if not loop.first }}">{{ prop.name }}</dt>
+      <dd class="px-4 py-2 break-words {{ 'border-t' if not loop.first }}">{{ prop.value if prop.value not in (none, "") else "—" }}</dd>
+      {% endfor %}
+    </dl>
+  </section>
+  {% endif %}
+
+  <section aria-label="Page content" class="border-t pt-6">
+    {% if p.body_html %}
+    <div class="markdown">{{ p.body_html }}</div>
+    {% else %}
+    <p class="text-sm text-muted-foreground">This page has no text.</p>
+    {% endif %}
+  </section>
+</article>

@@ -256,14 +256,65 @@ href="{{ url }}" target="_blank" rel="noopener noreferrer"
 {% if state in RUN_BADGES %}{% set variant, label = RUN_BADGES[state] %}<span class="badge" data-variant="{{ variant }}">{% if state == "running" %}{{ icon("loader-circle", "animate-spin") }}{% endif %}{{ label }}</span>{% endif %}
 {%- endmacro %}
 
-{% macro chat_item(item) -%}
+{% macro preview_attrs(url) -%}
+href="{{ url }}" hx-get="{{ url }}" hx-target="#preview-body" hx-swap="innerHTML show:top"
+{%- endmacro %}
+
+{% macro branch_button(thread, seq) -%}
+<form method="post" action="/chat/{{ thread.id }}/branch" class="inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="seq" value="{{ seq }}">
+  <button type="submit" class="btn" data-size="sm" data-variant="ghost" title="Start a new thread with the conversation up to here">{{ icon("git-branch", "size-3.5") }}Branch</button>
+</form>
+{%- endmacro %}
+
+{% macro activity_step(step) -%}
+{% if step.kind == "thinking" %}
+<li class="flex gap-2" data-step="thinking">{{ icon("brain", "mt-0.5 size-3.5 shrink-0") }}<div class="min-w-0 whitespace-pre-wrap break-words text-muted-foreground">{{ step.text }}</div></li>
+{% elif step.kind == "note" %}
+<li class="flex gap-2" data-step="note">{{ icon("bot", "mt-0.5 size-3.5 shrink-0") }}<div class="markdown min-w-0">{{ step.text | markdown }}</div></li>
+{% elif step.kind == "tool" %}
+<li data-step="tool" data-tool-id="{{ step.id }}">
+  <details class="rounded-md border bg-card">
+    <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">
+      {{ icon("users" if step.name == "research" else "wrench", "size-3.5 shrink-0") }}<code class="font-mono text-foreground">{{ step.name }}</code>
+      <span class="truncate font-mono">{{ step.args }}</span>
+      {% if step.state == "unknown" %}<span class="badge ms-auto" data-variant="destructive">unverified</span>
+      {% elif step.is_error %}<span class="badge ms-auto" data-variant="destructive">error</span>
+      {% elif step.state == "started" %}<span class="badge ms-auto" data-variant="outline">{{ icon("loader-circle", "animate-spin") }}running</span>{% endif %}
+    </summary>
+    <div class="border-t px-3 py-2 font-mono whitespace-pre-wrap break-words">{{ step.result or "(no result yet)" }}</div>
+    {% if step.child_thread_id %}<a class="block border-t px-3 py-1.5 underline underline-offset-4" href="/chat/{{ step.child_thread_id }}">Subagent transcript</a>{% endif %}
+  </details>
+</li>
+{% elif step.kind == "web_search" %}
+<li data-step="web_search">
+  <details class="rounded-md border bg-card">
+    <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">{{ icon("globe", "size-3.5") }}web search: {{ step.results | length }} results{% if step.error %} <span class="badge ms-auto" data-variant="destructive">{{ step.error }}</span>{% endif %}</summary>
+    <ul class="flex flex-col gap-1 border-t px-3 py-2">
+      {% for r in step.results %}<li><a class="underline underline-offset-4" {{ external(r.url) }}>{{ r.title | truncate(80) }}</a></li>{% endfor %}
+    </ul>
+  </details>
+</li>
+{% endif %}
+{%- endmacro %}
+
+{% macro chat_item(item, thread=None, last_seq=None, busy=False) -%}
 {% if item.kind == "user" %}
-<li class="flex gap-3" data-seq="{{ item.seq }}">
+<li class="group flex gap-3" data-seq="{{ item.seq }}">
   <span class="mt-1 grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-secondary-foreground" aria-hidden="true">{{ icon("user", "size-4") }}</span>
-  <div class="min-w-0 flex-1 rounded-lg bg-secondary/60 px-4 py-3 text-sm whitespace-pre-wrap break-words">{{ item.text }}</div>
+  <div class="flex min-w-0 flex-1 flex-col gap-1">
+    <div class="rounded-lg bg-secondary/60 px-4 py-3 text-sm whitespace-pre-wrap break-words" data-text>{{ item.text }}</div>
+    {% if thread and thread.kind == "chat" %}
+    <div class="flex items-center gap-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+      {% if item.seq == last_seq and not busy %}<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="edit-message">{{ icon("pencil", "size-3.5") }}Edit</button>{% endif %}
+      {{ branch_button(thread, item.seq) }}
+    </div>
+    {% endif %}
+  </div>
 </li>
 {% elif item.kind == "assistant" %}
-<li class="flex gap-3" data-seq="{{ item.seq }}">
+<li class="group flex gap-3" data-seq="{{ item.seq }}">
   <span class="mt-1 grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground" aria-hidden="true">{{ icon("bot", "size-4") }}</span>
   <div class="min-w-0 flex-1 flex flex-col gap-2 px-1 py-2">
     <div class="markdown">{{ item.text | markdown }}</div>
@@ -274,33 +325,48 @@ href="{{ url }}" target="_blank" rel="noopener noreferrer"
       {% endfor %}
     </ol>
     {% endif %}
+    {% if thread and thread.kind == "chat" %}
+    <div class="flex items-center gap-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+      {% if last_seq and item.seq > last_seq and not busy %}
+      <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/chat/{{ thread.id }}/regenerate" hx-target="#transcript" hx-swap="innerHTML" hx-disabled-elt="this">{{ icon("refresh-cw", "size-3.5") }}Regenerate</button>
+      {% endif %}
+      {{ branch_button(thread, item.seq) }}
+    </div>
+    {% endif %}
   </div>
 </li>
-{% elif item.kind == "tool_use" %}
-<li class="ps-10" data-seq="{{ item.seq }}">
-  <details class="rounded-md border bg-card text-xs">
-    <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">
-      {{ icon("wrench", "size-3.5") }}<code class="font-mono text-foreground">{{ item.name }}</code>
-      <span class="truncate font-mono">{{ item.args }}</span>
-      {% if item.state == "unknown" %}<span class="badge ms-auto" data-variant="destructive">unverified</span>
-      {% elif item.is_error %}<span class="badge ms-auto" data-variant="destructive">error</span>
-      {% elif item.state == "started" %}<span class="badge ms-auto" data-variant="outline">running</span>{% endif %}
-    </summary>
-    <div class="border-t px-3 py-2 font-mono whitespace-pre-wrap break-words">{{ item.result or "(no result yet)" }}</div>
+{% elif item.kind == "activity" %}
+<li class="ps-10" data-seq="{{ item.seq }}" data-run="{{ item.run_id }}">
+  <details class="activity text-xs">
+    <summary class="flex cursor-pointer items-center gap-2 text-muted-foreground">{{ icon("chevron-down", "size-3.5") }}{{ item.steps | length }} step{{ "" if item.steps | length == 1 else "s" }}</summary>
+    <ol class="mt-2 flex flex-col gap-1.5 border-s ps-3">
+      {% for step in item.steps %}{{ activity_step(step) }}{% endfor %}
+    </ol>
   </details>
+</li>
+{% elif item.kind == "draft" %}
+{% set d = item.draft %}
+<li class="ps-10" data-seq="{{ item.seq }}" data-draft="{{ d.id }}">
+  <a class="flex items-center gap-3 rounded-lg border bg-card px-3 py-2 text-sm hover:bg-accent" {{ preview_attrs("/drafts/" ~ d.id) }}>
+    {{ icon("mail", "size-4 shrink-0 text-muted-foreground") }}
+    <span class="flex min-w-0 flex-1 flex-col">
+      <span class="truncate font-medium">{{ d.subject or "(no subject)" }}</span>
+      <span class="truncate text-xs text-muted-foreground">to {{ d.to_addrs }}</span>
+    </span>
+    <span class="badge" data-variant="{{ 'secondary' if d.status == 'sent' else 'outline' }}">{{ d.status }}</span>
+  </a>
+</li>
+{% elif item.kind == "queued" %}
+<li class="flex gap-3" data-queued="{{ item.id }}">
+  <span class="mt-1 grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-secondary-foreground" aria-hidden="true">{{ icon("user", "size-4") }}</span>
+  <div class="flex min-w-0 flex-1 flex-col gap-1">
+    <div class="rounded-lg border border-dashed px-4 py-3 text-sm whitespace-pre-wrap break-words">{{ item.text }}</div>
+    <span class="text-xs text-muted-foreground">{{ icon("clock", "size-3") }} Queued: joins the conversation at the assistant's next step</span>
+  </div>
 </li>
 {% elif item.kind == "compaction" %}
 <li class="flex items-center gap-3 text-xs text-muted-foreground" data-seq="{{ item.seq }}" role="separator">
   <span class="h-px flex-1 bg-border"></span>Context compacted<span class="h-px flex-1 bg-border"></span>
-</li>
-{% elif item.kind == "web_search" %}
-<li class="ps-10" data-seq="{{ item.seq }}">
-  <details class="rounded-md border bg-card text-xs">
-    <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">{{ icon("globe", "size-3.5") }}web search: {{ item.results | length }} results{% if item.error %} <span class="badge ms-auto" data-variant="destructive">{{ item.error }}</span>{% endif %}</summary>
-    <ul class="flex flex-col gap-1 border-t px-3 py-2">
-      {% for r in item.results %}<li><a class="underline underline-offset-4" {{ external(r.url) }}>{{ r.title | truncate(80) }}</a></li>{% endfor %}
-    </ul>
-  </details>
 </li>
 {% endif %}
 {%- endmacro %}

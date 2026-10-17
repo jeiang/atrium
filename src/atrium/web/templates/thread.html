@@ -1,10 +1,31 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% set page = "chat" %}
-{% block title %}{{ view.thread.title or "Thread" }}{% endblock %}
-{% block heading %}{{ view.thread.title or "Thread" }}{% endblock %}
+{% set t = view.thread %}
+{% block title %}{{ t.title or "Thread" }}{% endblock %}
+{% block heading %}{{ t.title or "Thread" }}{% endblock %}
+{% block content_class %}max-w-[96rem]{% endblock %}
 {% block content %}
-<div id="thread" class="flex min-h-[calc(100dvh-6.5rem)] flex-col gap-6 md:min-h-[calc(100dvh-7.5rem)]">
-  {% include "_thread.html" %}
+<div id="workspace" class="flex min-h-[calc(100dvh-6.5rem)] flex-col gap-6 md:grid md:min-h-[calc(100dvh-7.5rem)] md:grid-cols-[minmax(0,1fr)_auto_var(--panel-w)] md:items-start" style="--panel-w: 24rem" data-thread="{{ t.id }}">
+  <div id="thread" class="flex min-h-full min-w-0 flex-col gap-6">
+    {% include "_thread.html" %}
+  </div>
+  <div id="panel-handle" class="hidden h-full w-1.5 cursor-col-resize rounded-full bg-border transition-colors hover:bg-ring md:block" role="separator" aria-orientation="vertical" aria-label="Resize panel" tabindex="0"></div>
+  <div id="panel-backdrop" class="fixed inset-0 z-30 hidden bg-black/40 md:hidden" data-action="toggle-panel"></div>
+  <aside id="panel" class="tabs flex-col gap-3 rounded-lg border bg-card p-3 max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-40 max-md:w-[88vw] max-md:max-w-sm max-md:overflow-y-auto max-md:rounded-none max-md:shadow-xl max-md:hidden max-md:data-open:flex md:sticky md:top-20 md:flex md:max-h-[calc(100dvh-6rem)] md:overflow-y-auto" aria-label="Thread workspace">
+    <nav role="tablist" aria-orientation="horizontal" class="w-full">
+      <button type="button" role="tab" id="panel-tab-work" aria-controls="panel-work" aria-selected="true" tabindex="0">{{ icon("list-checks", "size-3.5") }}Work</button>
+      <button type="button" role="tab" id="panel-tab-preview" aria-controls="panel-preview" aria-selected="false" tabindex="-1">{{ icon("eye", "size-3.5") }}Preview</button>
+      <button type="button" class="btn ms-auto md:hidden" data-variant="ghost" data-size="icon-sm" aria-label="Close panel" data-action="toggle-panel">{{ icon("x") }}</button>
+    </nav>
+    <div role="tabpanel" id="panel-work" aria-labelledby="panel-tab-work" tabindex="-1" aria-selected="true" class="flex flex-col gap-4" hx-get="/chat/{{ t.id }}/work" hx-trigger="work-changed" hx-swap="innerHTML">
+      {% include "_work.html" %}
+    </div>
+    <div role="tabpanel" id="panel-preview" aria-labelledby="panel-tab-preview" tabindex="-1" aria-selected="false" hidden>
+      <div id="preview-body" data-loading="reader-loading" class="flex flex-col gap-4">
+        <p class="text-sm text-muted-foreground">Open an email, a draft, a Notion page or a file from the conversation or the Work tab to read it here.</p>
+      </div>
+    </div>
+  </aside>
 </div>
 {% endblock %}

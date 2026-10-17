@@ -51,3 +51,4 @@ class ToolContext:
     embed: Callable[[list[str]], list[list[float]]] | None
     now: Callable[[], float]
     client: Any = None
+    progress: Any = None

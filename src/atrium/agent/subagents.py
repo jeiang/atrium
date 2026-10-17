@@ -133,7 +133,7 @@ def save(conn, name, description, prompt, effort, tools, now, enabled=True):
     if not prompt or len(prompt) > PROMPT_CHARS:
         raise SubagentError(f"prompt is required, at most {PROMPT_CHARS} characters")
     if effort not in threads.EFFORTS:
-        raise SubagentError("effort must be low, medium or high")
+        raise SubagentError("effort must be one of " + ", ".join(threads.EFFORTS))
     tools = clean_tools(tools)
     conn.execute(
         "INSERT INTO subagents (name, description, prompt, effort, tools_json, enabled, builtin, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?) "
@@ -180,12 +180,8 @@ def digest_of(conn, thread_id):
     return ""
 
 
-def runs_with_children(conn, thread_id):
-    return [r["parent_run_id"] for r in conn.execute("SELECT DISTINCT parent_run_id FROM threads WHERE parent_thread_id = ? AND parent_run_id IS NOT NULL ORDER BY 1", (thread_id,))]
-
-
 def run_card(conn, thread, run, now):
-    """One card for the /runs/{id} child list: status, current tool, elapsed, tokens, cost."""
+    """One card for the thread's Work panel: status, current tool, elapsed, tokens, cost."""
     card = {
         "thread_id": thread["id"],
         "kind": thread["kind"],
@@ -224,17 +220,7 @@ def run_card(conn, thread, run, now):
     return card
 
 
-THREAD_COLUMNS = "id, kind, role, title, effort, parent_run_id, created_at"
-
-
 def child_card(conn, row, now):
     run = conn.execute("SELECT * FROM runs WHERE thread_id = ? ORDER BY id DESC LIMIT 1", (row["id"],)).fetchone()
     return run_card(conn, row, run, now)
 
-
-def children_view(conn, run_id, now):
-    rows = conn.execute(f"SELECT {THREAD_COLUMNS} FROM threads WHERE parent_run_id = ? ORDER BY id", (run_id,)).fetchall()
-    cards = [child_card(conn, r, now) for r in rows]
-    parent = journal.get_run(conn, run_id)
-    polling = parent is not None and (parent["state"] == journal.RUNNING or any(c["status"] == RUNNING for c in cards))
-    return {"cards": cards, "polling": polling}

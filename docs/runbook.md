@@ -109,10 +109,12 @@ systemctl start atrium-sync.service
 ### Web UI
 
 `atrium-web` serves the assistant chat (`/chat`, the only search entry: threads
-are full-text searchable; operator threads only, pinnable and archivable), Scheduled (`/scheduled`:
+are full-text searchable; operator threads only, pinnable and archivable; each thread page
+is a workspace: transcript with per-run activity, a composer with effort and context limit,
+and a resizable right panel with Work and Preview tabs), Scheduled (`/scheduled`:
 schedule cards, an edit modal and the run history linking each run's thread), Activity (`/activity`:
 one timeline of automatic mailbox writes and the assistant's direct writes, with Undo),
-Settings (`/settings/<tab>`: Skills, Subagents, Notifications, Usage),
+Settings (`/settings/<tab>`: Assistant, Skills, Subagents, Notifications, Usage),
 message view, Notion pages, proposals, decisions, rules and drafts. With `--auth proxy` (`web.auth`)
 every request except `/static` and validly signed `/media/file/*` links must
 carry a `Remote-Groups` header containing `atrium_access`, set by the
@@ -133,7 +135,7 @@ nothing loads from a CDN and no script is inline.
 ### Assistant
 
 The chat agent is a tool loop on the Anthropic Messages API (`claude-haiku-5-5`,
-adaptive thinking, effort pinned per thread kind). Every run is journaled in
+adaptive thinking with summarized display, streamed). Every run is journaled in
 `atrium.db` (`threads`, `thread_messages`, `runs`, `tool_calls`, `tool_results`,
 `usage`): user input and each model response are stored byte for byte, and
 each tool call is recorded before it executes. Tool results over ~2K tokens are
@@ -146,18 +148,51 @@ lease lapsed as interrupted and resumes those with only read tools pending; a
 run with a write in flight shows a Resume button in its thread. Resuming claims
 the run atomically, so a web restart or a double click never runs it twice.
 
-Context size is kept in check in layers. Requests go through the beta Messages
-API with `clear_tool_uses_20250919` (old tool results cleared server-side from
-75K input tokens, keeping the last 3, `recall` excluded) and threshold
-compaction `compact_20260112` at 350K with `pause_after_compaction`: the
+Live progress goes through SQLite, never process memory, because runs execute in
+`atrium-web` (chat) or `atrium-agent-scheduler` (cron, nightly, resumed runs): the loop
+writes `run_events` rows (`run_start`, `thinking`, `text`, `tool_start`, `tool_done`,
+`user`, `plan`, `run_done`; streamed deltas are coalesced to one row per 200 ms) for the
+run and its subagent runs, and the thread page subscribes with `EventSource` to
+`GET /chat/{id}/events?run=N`, a same-origin SSE endpoint that polls the table every
+300 ms, sends a keepalive comment every 15 s and ends with `done` when the run is no
+longer running. The reverse proxy must not buffer it (`X-Accel-Buffering: no` is set;
+Caddy's `reverse_proxy` flushes by default). A root run's events are deleted when it ends;
+the transcript is then rendered from the journal (one expandable activity per run:
+thinking summaries, tool steps with results, subagent spawns, web searches).
+
+Each chat thread keeps an effort (`low`, `medium`, `high`, `xhigh`, `max`; `max_tokens`
+rises from 16K to 64K at `xhigh`/`max` because thinking counts toward it) and a context
+limit (90K default, 200K, 500K, 1M); new threads take the operator defaults from
+Settings › Assistant (`default_effort`, `default_context_limit` in `settings`). Above
+100K input tokens Haiku 5.5 bills input at 5×, which the composer and settings note.
+Sending while a run is active queues the text (`thread_queue`); the loop injects it as a
+user turn before its next model call, and a run that would finish while a message is
+queued continues instead. Stop sets `runs.stop_requested`, checked between stream events
+and before each step. Edit (last operator message) and Regenerate (last answer) mark the
+old tail `superseded` on `thread_messages` and `runs` (kept for audit, left out of the
+conversation); Branch copies the live history up to a message into a new thread
+(`branched_from_thread_id`, `branched_from_seq`). The `plan` tool stores a checklist in
+`thread_plans` for the Work tab, which also lists sources (derived from `web_fetch`,
+`web_search`, `mail_read` and `fetch_knowledge` calls of the thread and its subagents),
+subagent cards (the only entry point to their transcripts), files (`thread_files`,
+filled by uploads and generated files) with the thread's drafts, and `run_code` sessions.
+Drafts and sent mail created in a thread appear as cards in it and open in the Preview
+tab (`GET /drafts/{id}`); a sent copy found in the mailbox links back to its thread
+through `drafts.sent_msgid`.
+
+Context size is kept in check in layers, all scaled from the thread's context limit
+(never above the model's 1M). Requests go through the beta Messages API with
+`clear_tool_uses_20250919` (old tool results cleared server-side from 18.75% of the
+limit, keeping the last 3, clearing at least 5%, `recall` excluded) and threshold
+compaction `compact_20260112` at 87.5% with `pause_after_compaction`: the
 compaction block is journaled, a context manifest (pinned ids, dropped
 `result_id`s, folds) is appended and the last complete units (an operator
 message, or a tool_use turn with its tool_results; never a lone tool_result)
 are re-sent without thinking blocks. A local preflight estimates every request
-from the previous response's usage; above 380K the loop writes its own summary
+from the previous response's usage; above 95% the loop writes its own summary
 with one low-effort, tool-free, thinking-free call (tool blocks flattened to
 text) and continues from summary + manifest + the operator's last
-message, and nothing over 400K is ever sent. The model can also manage its own
+message, and nothing over the limit is ever sent. The model can also manage its own
 context with `context_status`, `context_pin`, `context_drop` and
 `context_fold`: drops and folds are staged in `context_ledger` and applied at
 the next operator message (or mid-run when ~20K tokens would be saved and the
@@ -283,11 +318,11 @@ references, referenced-by and unknown names. The same tokens in a chat message o
 schedule prompt are expanded before the run into `<skill name="...">body</skill>` blocks
 appended to the message (references followed transitively, deduplicated, at most 5
 skills / 20K characters; unknown names stay as text with a note) and recorded on the run
-(`runs.skills_json`, shown on /runs/{id}).
+(`runs.skills_json`).
 
 Subagents (/settings/subagents, table `subagents`) are what `research(role=...)` delegates
-to: name, description (the role list the model sees), prompt addendum, effort (low/medium/
-high) and a tool allowlist limited to read-only tools open to subagents (`sub` context)
+to: name, description (the role list the model sees), prompt addendum, effort (low to
+max) and a tool allowlist limited to read-only tools open to subagents (`sub` context)
 plus the `web_search` server tool. The five built-ins (web, mail, notion, observability,
 calendar) are seeded once and can be edited or disabled but not deleted. Children run as
 kind `sub` with the allowlist stored in the run's limits, so a resumed child sees the same

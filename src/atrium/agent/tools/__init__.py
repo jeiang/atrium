@@ -4,7 +4,7 @@ import importlib
 # that themselves import tools.base, so loading them with the package is circular.
 NAMES = (
     "calendar", "contacts", "context_ops", "drafts", "grafana", "mail", "media", "money", "..nightly", "notify",
-    "notion_read", "notion_write", "openloops", "profile", "propose", "recall", "research", "run_code",
+    "notion_read", "notion_write", "openloops", "plan", "profile", "propose", "recall", "research", "run_code",
     "schedule", "skills", "watches", "web_fetch",
 )
 MODULES = None

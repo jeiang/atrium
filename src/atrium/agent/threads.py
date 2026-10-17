@@ -2,20 +2,55 @@ import json
 import re
 
 from ..search import fts_query
+from . import budget
 from .tools.base import CHAT, CRON, NIGHTLY, SUB
 
 LOW = "low"
 MEDIUM = "medium"
 HIGH = "high"
-EFFORTS = (LOW, MEDIUM, HIGH)
+XHIGH = "xhigh"
+MAX = "max"
+EFFORTS = (LOW, MEDIUM, HIGH, XHIGH, MAX)
 SUBAGENT = "subagent"
 EFFORT = {CHAT: MEDIUM, SUBAGENT: MEDIUM, CRON: HIGH, NIGHTLY: HIGH, SUB: MEDIUM}
+CONTEXT_LIMITS = (90_000, 200_000, 500_000, 1_000_000)
+DEFAULT_CONTEXT_LIMIT = CONTEXT_LIMITS[0]
+EFFORT_KEY = "default_effort"
+CONTEXT_LIMIT_KEY = "default_context_limit"
 TITLE_CHARS = 80
 URL = re.compile(r"https?://[^\s<>\"'()\[\]]+")
 
 
-def effort_for(kind):
-    return EFFORT[kind]
+class OptionError(ValueError):
+    pass
+
+
+def clean_effort(value):
+    if value not in EFFORTS:
+        raise OptionError("effort must be one of " + ", ".join(EFFORTS))
+    return value
+
+
+def clean_context_limit(value):
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        limit = None
+    if limit not in CONTEXT_LIMITS:
+        raise OptionError("context limit must be one of " + ", ".join(f"{n // 1000}K" for n in CONTEXT_LIMITS))
+    return limit
+
+
+def defaults(conn):
+    """Operator defaults for new chat threads (Settings › Assistant)."""
+    effort = budget.get_setting(conn, EFFORT_KEY, EFFORT[CHAT])
+    limit = budget.get_setting(conn, CONTEXT_LIMIT_KEY, DEFAULT_CONTEXT_LIMIT)
+    return {"effort": effort if effort in EFFORTS else EFFORT[CHAT], "context_limit": int(limit) if str(limit).isdigit() and int(limit) in CONTEXT_LIMITS else DEFAULT_CONTEXT_LIMIT}
+
+
+def set_defaults(conn, effort, context_limit):
+    budget.set_setting(conn, EFFORT_KEY, clean_effort(effort))
+    budget.set_setting(conn, CONTEXT_LIMIT_KEY, clean_context_limit(context_limit))
 
 
 def title_from(text):
@@ -24,11 +59,25 @@ def title_from(text):
 
 
 def create(conn, kind, now, title=None, parent_id=None, job_id=None):
+    chosen = defaults(conn)
+    effort = chosen["effort"] if kind == CHAT else EFFORT[kind]
     cur = conn.execute(
-        "INSERT INTO threads (kind, title, job_id, parent_thread_id, effort, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (kind, title, job_id, parent_id, effort_for(kind), now, now),
+        "INSERT INTO threads (kind, title, job_id, parent_thread_id, effort, context_limit, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (kind, title, job_id, parent_id, effort, chosen["context_limit"], now, now),
     )
     return cur.lastrowid
+
+
+def set_options(conn, thread_id, effort, context_limit):
+    cur = conn.execute(
+        "UPDATE threads SET effort = ?, context_limit = ? WHERE id = ? AND kind = ?",
+        (clean_effort(effort), clean_context_limit(context_limit), thread_id, CHAT),
+    )
+    return cur.rowcount > 0
+
+
+def context_limit_of(thread):
+    return thread["context_limit"] or DEFAULT_CONTEXT_LIMIT
 
 
 def get(conn, thread_id):

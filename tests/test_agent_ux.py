@@ -20,7 +20,7 @@ def sidebar(page):
 def test_settings_index_redirects_and_tabs_render(cfg):
     client = web_client(cfg)
     reply = client.get("/settings", follow_redirects=False)
-    assert reply.status_code == 303 and reply.headers["location"] == "/settings/skills"
+    assert reply.status_code == 303 and reply.headers["location"] == "/settings/assistant"
     for tab in TABS:
         page = client.get(f"/settings/{tab}")
         assert page.status_code == 200, tab

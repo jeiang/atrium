@@ -48,6 +48,17 @@ class DraftError(ValueError):
 
 def init(conn):
     conn.executescript(SCHEMA)
+    if "sent_msgid" not in {r["name"] for r in conn.execute("PRAGMA table_info(drafts)")}:
+        conn.execute("ALTER TABLE drafts ADD COLUMN sent_msgid TEXT")
+
+
+def for_message(conn, message_id):
+    """The thread-made draft a mailbox message is the sent copy of (by Message-ID), for the 'from thread' link."""
+    row = conn.execute(
+        "SELECT d.* FROM drafts d JOIN messages m ON m.msgid = d.sent_msgid WHERE m.id = ? AND d.sent_msgid != '' AND d.thread_id IS NOT NULL",
+        (message_id,),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def _clean_line(name, value, limit):
@@ -285,8 +296,8 @@ def send(conn, cfg, draft_id, reviewed_at, now=time.time):
         raise
     result = "sent" + (f"; refused: {json.dumps(refused)}" if refused else "")
     conn.execute(
-        "UPDATE drafts SET status = ?, sent_at = ?, smtp_result = ?, updated_at = ? WHERE id = ?",
-        (SENT, now(), result, now(), draft_id),
+        "UPDATE drafts SET status = ?, sent_at = ?, smtp_result = ?, updated_at = ?, sent_msgid = ? WHERE id = ?",
+        (SENT, now(), result, now(), re.sub(r"[<>\s]", "", msg["Message-ID"]), draft_id),
     )
     conn.commit()
     try:

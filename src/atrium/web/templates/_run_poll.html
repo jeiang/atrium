@@ -1,7 +1,0 @@
-{% from "_icons.html" import icon %}
-{% from "_macros.html" import chat_item %}
-{% for item in items %}{{ chat_item(item) }}{% endfor %}
-<li id="run-{{ run_id }}" class="flex items-center gap-2 ps-10 text-xs text-muted-foreground" role="status"
-    hx-get="/chat/{{ thread_id }}/runs/{{ run_id }}?after={{ after }}" hx-trigger="load delay:1s" hx-swap="outerHTML">
-  {{ icon("loader-circle", "size-3.5 animate-spin") }}{% if current %}running <code class="font-mono">{{ current }}</code>{% else %}thinking…{% endif %}
-</li>

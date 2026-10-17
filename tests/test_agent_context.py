@@ -3,7 +3,7 @@ import json
 import pytest
 
 from atrium import db
-from atrium.agent import budget, context, journal, loop, registry, service, skills
+from atrium.agent import budget, context, journal, loop, registry, service, skills, threads
 from atrium.agent.tools import context_ops
 from atrium.agent.tools import recall as recall_tool
 from atrium.agent.tools.base import Tool
@@ -114,14 +114,27 @@ def test_request_carries_context_management_and_betas(world):
     clear, compact = params["context_management"]["edits"]
     assert clear == {
         "type": "clear_tool_uses_20250919",
-        "trigger": {"type": "input_tokens", "value": 75_000},
+        "trigger": {"type": "input_tokens", "value": 16_875},
         "keep": {"type": "tool_uses", "value": 3},
-        "clear_at_least": {"type": "input_tokens", "value": 20_000},
+        "clear_at_least": {"type": "input_tokens", "value": 4_500},
         "clear_tool_inputs": False,
         "exclude_tools": ["recall"],
     }
-    assert compact["type"] == "compact_20260112" and compact["trigger"] == {"type": "input_tokens", "value": 350_000}
+    assert compact["type"] == "compact_20260112" and compact["trigger"] == {"type": "input_tokens", "value": 78_750}
     assert compact["pause_after_compaction"] is True and "result_id" in compact["instructions"] and "draft" in compact["instructions"]
+
+
+def test_thresholds_follow_the_thread_context_limit(world):
+    cfg, conn = world
+    thread_id = service.create_thread(conn, "chat")
+    threads.set_options(conn, thread_id, "high", 1_000_000)
+    client = FakeClient([response([text("hi")])])
+    run_turn(cfg, conn, client, "hello", thread_id)
+    clear, compact = client.calls[0]["context_management"]["edits"]
+    assert clear["trigger"]["value"] == 187_500 and clear["clear_at_least"]["value"] == 50_000
+    assert compact["trigger"]["value"] == 875_000 and client.calls[0]["output_config"] == {"effort": "high"}
+    assert context.limits_for(1_000_000)["hard"] == 1_000_000 and context.limits_for(5_000_000)["hard"] == context.MODEL_CONTEXT
+    assert context.limits_for(200_000) == {"hard": 200_000, "preflight": 190_000, "compact": 175_000, "clear": 37_500, "clear_at_least": 10_000}
 
 
 def test_usage_ledger_records_server_clears(world):
@@ -184,7 +197,7 @@ def test_preflight_compacts_on_the_client_before_exceeding_the_limit(world):
     assert len(resumed) == 1 and resumed[0]["role"] == "user"
     texts = [b["text"] for b in resumed[0]["content"]]
     assert "SUMMARY: goal hello" in texts[0] and texts[1].startswith("Context manifest") and texts[2] == "hello there" and texts[3].startswith("Current date")
-    assert loop.estimate(client.calls[2], context.active_messages(conn, thread_id)[0], None) < context.HARD_LIMIT
+    assert loop.estimate(client.calls[2], context.active_messages(conn, thread_id)[0], None) < context.limits_for(threads.DEFAULT_CONTEXT_LIMIT)["hard"]
     assert conn.execute("SELECT COUNT(*) FROM usage WHERE run_id = ? AND compaction = 1", (run_id,)).fetchone()[0] == 1
     assert len(journal.messages_of(conn, thread_id)) == 4
     assert context.projection(conn, thread_id)["kind"] == context.CLIENT
@@ -192,8 +205,7 @@ def test_preflight_compacts_on_the_client_before_exceeding_the_limit(world):
 
 def test_no_request_is_sent_over_the_hard_limit(world, monkeypatch):
     cfg, conn = world
-    monkeypatch.setattr(context, "PREFLIGHT_LIMIT", 50)
-    monkeypatch.setattr(context, "HARD_LIMIT", 60)
+    monkeypatch.setattr(context, "limits_for", lambda limit: {"hard": 60, "preflight": 50, "compact": 40, "clear": 10, "clear_at_least": 5})
     client = FakeClient([response([text("summary")]), response([text("never")])])
     _, run_id = run_turn(cfg, conn, client, "x" * 600)
     found = journal.get_run(conn, run_id)

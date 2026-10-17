@@ -386,7 +386,7 @@ def test_notify_tool_contexts():
 
 NIGHTLY_TOOLS = {
     "calendar_list", "contacts_lookup", "context_drop", "context_fold", "context_pin", "context_status", "fetch_knowledge", "load_skill", "mail_read", "mail_search", "notify",
-    "notion_add_alias", "notion_archive_page", "notion_create_page", "notion_move_page", "notion_update_page", "profile_get", "profile_set", "recall", "search_knowledge", "threads_today",
+    "notion_add_alias", "notion_archive_page", "notion_create_page", "notion_move_page", "notion_update_page", "plan", "profile_get", "profile_set", "recall", "search_knowledge", "threads_today",
 }
 NIGHTLY_FORBIDDEN = (
     "web_fetch", "web_search", "schedule_create", "schedule_update",

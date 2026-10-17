@@ -100,8 +100,8 @@ def test_request_shape_pins_effort_caching_and_stamp(world):
     client = FakeClient([response([text("hi")])])
     thread_id, _ = run_chat(cfg, conn, client, "see https://example.test/a, please")
     params = client.calls[0]
-    assert params["model"] == pricing.MODEL and params["thinking"] == {"type": "adaptive"}
-    assert params["output_config"] == {"effort": "medium"}
+    assert params["model"] == pricing.MODEL and params["thinking"] == {"type": "adaptive", "display": "summarized"}
+    assert params["output_config"] == {"effort": "medium"} and params["max_tokens"] == loop.MAX_TOKENS
     assert params["system"][0]["text"] == loop.SYSTEM and params["system"][0]["cache_control"] == loop.CACHE_CONTROL
     names = [t["name"] for t in params["tools"]]
     assert names == sorted(names[:-1]) + ["web_search"]

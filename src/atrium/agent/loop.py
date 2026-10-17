@@ -6,7 +6,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ..config import TIMEZONE
-from . import budget, context, journal, pricing, registry, threads, usage
+from . import budget, context, journal, pricing, progress, registry, threads, usage
 from .prompts import SYSTEM
 from .tools.base import CHAT, CRON, NIGHTLY, READ, ToolContext, ToolError
 from .tools.profile import profile_block
@@ -17,6 +17,9 @@ log = logging.getLogger("atrium.agent")
 MODEL = pricing.MODEL
 MAX_STEPS = 24
 MAX_TOKENS = 16384
+# Thinking counts toward max_tokens; xhigh and max think at length, and streaming makes the larger ceiling safe.
+MAX_TOKENS_DEEP = 65536
+DEEP_EFFORTS = (threads.XHIGH, threads.MAX)
 MAX_RUN_COST_USD = 2.0
 CACHE_CONTROL = {"type": "ephemeral"}
 CACHE_TTL_KEY = "cache_ttl_chat"
@@ -28,6 +31,7 @@ PAUSE_TURN = "pause_turn"
 WEB_SEARCH_RESULT = "web_search_tool_result"
 RESEARCH = "research"
 UNATTENDED = (CRON, NIGHTLY)
+EXPAND_SKILLS = (CHAT, CRON, NIGHTLY)
 VERIFY = (
     "atrium was interrupted while this call was in flight; it may or may not have taken effect. "
     "Check the current state before retrying it."
@@ -86,14 +90,18 @@ def system_signature(params):
     return hashlib.sha256(json.dumps([texts, tools], sort_keys=True).encode()).hexdigest()[:16]
 
 
-def request_params(tools, kind, effort, system, prefix_cc=CACHE_CONTROL, allow=None):
+def max_tokens_for(effort):
+    return MAX_TOKENS_DEEP if effort in DEEP_EFFORTS else MAX_TOKENS
+
+
+def request_params(tools, kind, effort, system, limits, prefix_cc=CACHE_CONTROL, allow=None):
     params = {
         "model": MODEL,
-        "max_tokens": MAX_TOKENS,
-        "thinking": {"type": "adaptive"},
+        "max_tokens": max_tokens_for(effort),
+        "thinking": {"type": "adaptive", "display": "summarized"},
         "output_config": {"effort": effort},
         "system": system,
-        "context_management": context.context_management(),
+        "context_management": context.context_management(limits),
         "betas": list(context.BETAS),
     }
     tool_params = registry.anthropic_tool_params(tools) + registry.server_tools_for(kind, allow)
@@ -131,6 +139,7 @@ def build_messages(messages):
         content[-1] = {**content[-1], "cache_control": CACHE_CONTROL}
     return out
 
+
 def estimate(params, active, anchor):
     """Next-request size: the last response's usage plus everything appended since, else chars/4 of it all."""
     if anchor is not None:
@@ -138,6 +147,16 @@ def estimate(params, active, anchor):
         return tokens + sum(context.estimate_value(m["content"]) for m in active if m["seq"] is not None and m["seq"] > seq)
     fixed = {k: params[k] for k in ("system", "tools") if k in params}
     return context.estimate_value(fixed) + sum(context.estimate_value(m["content"]) for m in active)
+
+
+def stream_response(client, params, messages, writer):
+    """One streamed model call; thinking and answer deltas reach the progress journal as they arrive."""
+    with client.beta.messages.stream(**params, messages=messages) as stream:
+        for event in stream:
+            writer.observe(event)
+        response = stream.get_final_message()
+    writer.flush()
+    return response
 
 
 def tool_result(tool_use_id, content, is_error):
@@ -170,9 +189,11 @@ def invoke(ctx, tool, use):
 def finish(conn, ctx, call_id, use, error, value, now):
     if error is not None:
         journal.finish_tool_call(conn, call_id, journal.ERROR, now(), error=error)
+        ctx.progress.event(progress.TOOL_DONE, id=use["id"], ok=False, preview=progress.preview_of(error))
         return tool_result(use["id"], error, True)
     content, result_id = context.ingest(conn, ctx.run_id, call_id, use["name"], value, now())
     journal.finish_tool_call(conn, call_id, journal.OK, now(), result_id=result_id)
+    ctx.progress.event(progress.TOOL_DONE, id=use["id"], ok=True, preview=progress.preview_of(content))
     return tool_result(use["id"], content, False)
 
 
@@ -183,7 +204,9 @@ def perform(conn, ctx, tool, call_id, use, now):
 
 def start_call(conn, ctx, by_name, use, now):
     tool = by_name.get(use["name"])
-    return journal.start_tool_call(conn, ctx.run_id, use["id"], use["name"], use.get("input") or {}, replay_class(tool), now())
+    args = use.get("input") or {}
+    ctx.progress.event(progress.TOOL_START, id=use["id"], name=use["name"], args=progress.short_args(args))
+    return journal.start_tool_call(conn, ctx.run_id, use["id"], use["name"], args, replay_class(tool), now())
 
 
 def execute(conn, ctx, by_name, use, now):
@@ -214,6 +237,7 @@ def settle(conn, ctx, by_name, use, call, now):
             "UPDATE tool_calls SET state = ?, error = NULL, result_id = NULL, finished_at = NULL, started_at = ? WHERE id = ?",
             (journal.STARTED, now(), call["id"]),
         )
+        ctx.progress.event(progress.TOOL_START, id=use["id"], name=use["name"], args=progress.short_args(use.get("input") or {}))
         return perform(conn, ctx, by_name.get(use["name"]), call["id"], use, now)
     if call["state"] == journal.ERROR:
         return tool_result(use["id"], call["error"] or "failed", True)
@@ -252,16 +276,39 @@ def fresh_turn(conn, thread_id):
     return last is not None and last["role"] == journal.USER and has_text(last)
 
 
+def inject_queued(conn, ctx, now):
+    """Messages the operator sent while the run was busy join the conversation as user turns before the next
+    model call. Operator text: it may add URLs to the allowlist and expands `/skill:name` references."""
+    rows = journal.take_queued(conn, ctx.thread_id, ctx.run_id, now())
+    for row in rows:
+        text = row["text"]
+        allow_urls(conn, ctx, threads.urls_in(text))
+        if ctx.kind in EXPAND_SKILLS:
+            from . import skills
+
+            text, _, _ = skills.expand(conn, text)
+        journal.append_message(conn, ctx.thread_id, ctx.run_id, journal.USER, [{"type": TEXT, "text": text}], now())
+        ctx.progress.event(progress.USER, text=text, queue_id=row["id"])
+    return bool(rows)
+
+
+def run_start_event(thread, effort, writer):
+    writer.event(progress.RUN_START, thread_id=thread["id"], thread_kind=thread["kind"], role=thread.get("role"), title=thread.get("title"), effort=effort)
+
+
 def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=MAX_STEPS, max_cost_usd=MAX_RUN_COST_USD, system_extra=None, allowed_tools=None):
     """allowed_tools: a subagent's tool allowlist (stored with the run's limits so a resume enforces the same set)."""
     found = journal.get_run(conn, run_id)
     thread_id, kind, effort = found["thread_id"], found["kind"], found["effort"]
+    thread = threads.get(conn, thread_id)
+    limits = context.limits_for(threads.context_limit_of(thread))
     tools = registry.run_tools(kind, allowed_tools, conn)
     by_name = {t.name: t for t in tools}
     unattended = threads.root_kind(conn, thread_id) in UNATTENDED
     prefix_cc = prefix_cache_control(conn, kind)
-    params = request_params(tools, kind, effort, system_blocks(conn, prefix_cc, system_extra), prefix_cc, allowed_tools)
+    params = request_params(tools, kind, effort, system_blocks(conn, prefix_cc, system_extra), limits, prefix_cc, allowed_tools)
     sig = system_signature(params)
+    writer = progress.Writer(conn, run_id, now)
     ctx = ToolContext(
         conn=conn,
         cfg=cfg,
@@ -273,8 +320,11 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
         embed=embed,
         now=now,
         client=client,
+        progress=writer,
     )
+    state, error = journal.FAILED, None
     try:
+        run_start_event(thread, effort, writer)
         boundary = fresh_turn(conn, thread_id)
         last, pending = pending_uses(conn, thread_id)
         if pending:
@@ -285,20 +335,23 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
         for _ in range(max_steps):
             budget.check(conn, now(), unattended)
             renew(conn, run_id, now)
+            writer.check_stop(force=True)
+            if inject_queued(conn, ctx, now):
+                anchor = None
             spent = usage.run_cost(conn, run_id)
             if spent >= max_cost_usd:
                 raise RunLimit(f"run cost ceiling reached (${spent:.2f} of ${max_cost_usd:.2f})")
             active = stamp_messages(conn, thread_id, context.active_messages(conn, thread_id, sig)[0])
             size = estimate(params, active, anchor)
-            if size > context.PREFLIGHT_LIMIT:
+            if size > limits["preflight"]:
                 log.info("run %s: next request ~%d tokens, compacting on the client", run_id, size)
-                context.client_compact(conn, client, MODEL, active, thread_id, run_id, kind, now())
+                context.client_compact(conn, client, MODEL, active, thread_id, run_id, kind, limits["hard"], now())
                 anchor = None
                 active = stamp_messages(conn, thread_id, context.active_messages(conn, thread_id, sig)[0])
                 size = estimate(params, active, anchor)
-            if size > context.HARD_LIMIT:
-                raise RunLimit(f"next request would be about {size} tokens, over the {context.HARD_LIMIT} limit")
-            response = client.beta.messages.create(**params, messages=build_messages(active))
+            if size > limits["hard"]:
+                raise RunLimit(f"next request would be about {size} tokens, over the {limits['hard']} limit")
+            response = stream_response(client, params, build_messages(active), writer)
             journal.bump_steps(conn, run_id)
             blocks = [block_dict(b) for b in field(response, "content", [])]
             stop = field(response, "stop_reason")
@@ -325,14 +378,22 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
                 continue
             if stop == PAUSE_TURN:
                 continue
-            journal.finish_run(conn, run_id, journal.DONE, now())
-            return journal.get_run(conn, run_id)
-        raise RunLimit(f"stopped after {max_steps} steps")
+            if journal.finish_unless_queued(conn, run_id, thread_id, journal.DONE, now()):
+                state = journal.DONE
+                break
+        else:
+            raise RunLimit(f"stopped after {max_steps} steps")
     except LeaseLost as e:
         log.warning("%s; leaving it to the new owner", e)
-    except (budget.BudgetExceeded, RunLimit) as e:
-        journal.finish_run(conn, run_id, journal.FAILED, now(), error=str(e))
+        return journal.get_run(conn, run_id)
+    except (budget.BudgetExceeded, RunLimit, progress.Stopped) as e:
+        error = str(e)
+        journal.finish_run(conn, run_id, journal.FAILED, now(), error=error)
     except Exception as e:
         log.exception("run %s failed", run_id)
-        journal.finish_run(conn, run_id, journal.FAILED, now(), error=f"{type(e).__name__}: {e}")
+        error = f"{type(e).__name__}: {e}"
+        journal.finish_run(conn, run_id, journal.FAILED, now(), error=error)
+    writer.event(progress.RUN_DONE, state=state, error=error)
+    if found["parent_run_id"] is None:
+        progress.clear(conn, run_id)
     return journal.get_run(conn, run_id)

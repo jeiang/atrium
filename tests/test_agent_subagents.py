@@ -225,35 +225,29 @@ def child(conn, parent_thread, parent_run, role, state=None, tool=None):
     return tid
 
 
-def test_run_page_lists_children_and_polling_stops_at_terminal(conn, cfg):
+def test_work_tab_lists_subagents_and_is_their_only_entry_point(conn, cfg):
     thread_id, run_id, _ = parent(conn, cfg, None)
     a = child(conn, thread_id, run_id, "mail", journal.RUNNING, "mail_search")
     b = child(conn, thread_id, run_id, "web")
     c = child(conn, thread_id, run_id, "notion", journal.FAILED)
     client = web_client(cfg)
-    page = client.get(f"/runs/{run_id}").text
+    page = client.get(f"/chat/{thread_id}").text
     assert f'href="/chat/{a}"' in page and f'href="/chat/{b}"' in page and f'href="/chat/{c}"' in page
     assert 'data-status="running"' in page and 'data-status="queued"' in page and 'data-status="error"' in page
-    assert "mail_search" in page and "TOPSECRET" not in page
-    assert "in 111" in page and "out 44" in page and "cache read 333" in page and "cache write 22" in page and "$0.0123" in page
-    assert page.count("effort medium") >= 4  # the run header plus every child card
-    assert f'hx-get="/runs/{run_id}/children"' in page
-    assert f'hx-get="/runs/{run_id}/children"' in client.get(f"/runs/{run_id}/children").text
-
+    assert "mail_search" in page and "TOPSECRET" not in page and "$0.0123" in page
+    assert client.get(f"/runs/{run_id}").status_code == 404
     journal.finish_run(conn, conn.execute("SELECT id FROM runs WHERE thread_id = ?", (a,)).fetchone()["id"], journal.DONE, time.time())
-    journal.finish_run(conn, run_id, journal.DONE, time.time())
-    done = client.get(f"/runs/{run_id}/children").text
-    assert "hx-get" not in done and 'data-status="done"' in done
-    assert client.get("/runs/9999").status_code == 404
+    work = client.get(f"/chat/{thread_id}/work", headers={"HX-Request": "true"}).text
+    assert 'data-status="done"' in work and 'id="meter"' in work
+    assert f'href="/chat/{a}"' not in client.get("/chat").text  # subagent threads are reachable only from their parent
 
 
-def test_thread_links_to_run_page_and_subagent_thread_is_read_only(conn, cfg):
+def test_subagent_thread_links_to_parent_and_is_read_only(conn, cfg):
     thread_id, run_id, _ = parent(conn, cfg, None)
     kid = child(conn, thread_id, run_id, "web", journal.DONE)
     client = web_client(cfg)
-    assert f'href="/runs/{run_id}"' in client.get(f"/chat/{thread_id}").text
     kid_page = client.get(f"/chat/{kid}").text
-    assert f'href="/runs/{run_id}"' in kid_page and 'id="composer"' not in kid_page
+    assert f'href="/chat/{thread_id}"' in kid_page and 'id="composer"' not in kid_page
     assert client.post(f"/chat/{kid}/messages", data={"text": "hi"}).status_code == 409
 
 
