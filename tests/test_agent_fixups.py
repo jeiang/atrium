@@ -133,11 +133,8 @@ def test_subagent_threads_hidden_from_default_list(world):
     chat = service.create_thread(conn, "chat", title="main")
     child = subagents.create_child(conn, chat, None, subagents.get(conn, "web"), "web: x", lambda: 1.0)
     assert [t["id"] for t in service.list_threads(conn)] == [chat]
-    assert {t["id"] for t in service.list_threads(conn, include_subagents=True)} == {chat, child}
-    assert [t["id"] for t in service.list_threads(conn, kind="subagent")] == [child]
-    client = web_client(cfg)
-    assert "web: x" not in client.get("/chat").text
-    assert "web: x" in client.get("/chat?kind=subagent").text
+    assert child not in [t["id"] for t in service.list_threads(conn, archived=True)]
+    assert "web: x" not in web_client(cfg).get("/chat").text
 
 
 def test_resume_restores_child_limits(world, monkeypatch):

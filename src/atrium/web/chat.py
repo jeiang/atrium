@@ -4,12 +4,12 @@ from fastapi import Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from ..agent import budget, journal, service, subagents
-from ..agent.threads import SUBAGENT
-from ..agent.tools.base import CHAT, KINDS
+from ..agent.tools.base import CHAT
 from .deps import is_partial
 
 THREAD_LIMIT = 50
 EMPTY_MESSAGE = "Type a message first."
+ARCHIVED = "archived"
 
 
 def register(app, deps):
@@ -52,14 +52,19 @@ def register(app, deps):
     def home():
         return RedirectResponse("/chat", status_code=303)
 
-    @app.get("/chat")
-    def chat_index(request: Request, q: str = "", kind: str = ""):
-        q = q.strip()
-        if kind and kind not in (*KINDS, SUBAGENT):
-            raise HTTPException(422, "unknown kind")
+    def listing(request, q, view, status_code=200):
         with connection() as conn:
-            found = service.list_threads(conn, q or None, kind or None, THREAD_LIMIT)
-            return page(request, "chat.html", "_thread_list.html", threads=found, q=q, kind=kind, kinds=(*KINDS, SUBAGENT))
+            found = service.list_threads(conn, q or None, THREAD_LIMIT, view == ARCHIVED)
+        context = {"threads": found, "q": q, "view": view}
+        if is_partial(request):
+            return render("_thread_list.html", status_code=status_code, **context)
+        return render("chat.html", status_code=status_code, **context)
+
+    @app.get("/chat")
+    def chat_index(request: Request, q: str = "", view: str = ""):
+        if view not in ("", ARCHIVED):
+            raise HTTPException(422, "unknown view")
+        return listing(request, q.strip(), view)
 
     @app.post("/chat")
     def chat_new(request: Request, text: Annotated[str, Form()] = ""):
@@ -71,6 +76,26 @@ def register(app, deps):
             if failed is not None:
                 return failed
         return RedirectResponse(f"/chat/{thread_id}", status_code=303)
+
+    def set_flag(request, thread_id, column, value, q, view, back):
+        with connection() as conn:
+            if not service.set_thread_flag(conn, thread_id, column, value):
+                raise HTTPException(404, "unknown thread")
+        if is_partial(request):
+            return listing(request, q.strip(), view if view == ARCHIVED else "")
+        return RedirectResponse(back, status_code=303)
+
+    @app.post("/chat/{thread_id}/pin")
+    def chat_pin(
+        request: Request, thread_id: int, pinned: Annotated[int, Form()] = 1, q: Annotated[str, Form()] = "", view: Annotated[str, Form()] = "",
+    ):
+        return set_flag(request, thread_id, "pinned", bool(pinned), q, view, f"/chat/{thread_id}")
+
+    @app.post("/chat/{thread_id}/archive")
+    def chat_archive(
+        request: Request, thread_id: int, archived: Annotated[int, Form()] = 1, q: Annotated[str, Form()] = "", view: Annotated[str, Form()] = "",
+    ):
+        return set_flag(request, thread_id, "archived", bool(archived), q, view, "/chat" if archived else f"/chat/{thread_id}")
 
     @app.get("/chat/{thread_id}")
     def chat_thread(request: Request, thread_id: int):

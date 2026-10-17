@@ -420,6 +420,5 @@ def test_thread_listing_and_search(world):
     assert [t["id"] for t in listed] == [second, first] and listed[0]["run_state"] == journal.DONE
     assert [t["id"] for t in service.list_threads(conn, q="rayleigh")] == [first]
     assert [t["id"] for t in service.list_threads(conn, q="taxes")] == [second]
-    assert service.list_threads(conn, kind="cron") == []
     view = service.thread_view(conn, first)
     assert [i["kind"] for i in view["items"]] == ["user", "assistant"] and view["cost"] > 0

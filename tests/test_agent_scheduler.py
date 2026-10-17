@@ -491,22 +491,7 @@ def test_pages(tmp_path):
 
     cfg = make_config(tmp_path, static_dir=static_dir(tmp_path))
     client = web_client(cfg, env={"ATRIUM_TZ": TZ})
-    page = client.get("/settings/schedules")
-    assert page.status_code == 200 and "nightly" in page.text and "daily 02:30" in page.text
-    created = client.post("/settings/schedules", data={"name": "Digest", "prompt": "Summarize mail.", "schedule": "daily 08:00"})
-    assert created.status_code == 200 and "Digest" in created.text
-    bad = client.post("/settings/schedules", data={"name": "Bad", "prompt": "p", "schedule": "nonsense"})
-    assert bad.status_code == 422
     conn = db.connect(cfg.db_path)
-    job = conn.execute("SELECT * FROM jobs WHERE name = 'Digest'").fetchone()
-    assert client.post(f"/settings/schedules/{job['id']}", data={"name": "Digest", "prompt": "New prompt", "schedule": "weekly mon 09:00"}).status_code == 200
-    assert conn.execute("SELECT prompt, schedule FROM jobs WHERE id = ?", (job["id"],)).fetchone()["prompt"] == "New prompt"
-    client.post(f"/settings/schedules/{job['id']}/toggle")
-    assert conn.execute("SELECT enabled FROM jobs WHERE id = ?", (job["id"],)).fetchone()[0] == 0
-    client.post(f"/settings/schedules/{job['id']}/cancel")
-    assert conn.execute("SELECT cancelled FROM jobs WHERE id = ?", (job["id"],)).fetchone()[0] == 1
-    assert client.post("/settings/schedules/999/cancel").status_code == 404
-
     assert "No notifications" in client.get("/settings/notifications").text
     notify.send(conn, {}, "Hello", "World", thread_link="3", thread_id=3)
     assert "Hello" in client.get("/settings/notifications").text

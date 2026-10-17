@@ -17,7 +17,7 @@
         <label for="rule-id">Name</label>
         {% if is_new %}
         <input id="rule-id" name="id" type="text" value="{{ rule.id or '' }}" placeholder="Generated if empty" autocomplete="off" spellcheck="false" class="font-mono" aria-describedby="rule-id-help">
-        <p id="rule-id-help">Shown in Triage when this rule decides.</p>
+        <p id="rule-id-help">Shown in Decisions when this rule decides.</p>
         {% else %}
         <input id="rule-id" name="id" type="text" value="{{ rule.id }}" readonly class="font-mono" aria-describedby="rule-id-help">
         <p id="rule-id-help">A rule keeps its name; delete it and create another to rename.</p>

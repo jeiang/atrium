@@ -84,26 +84,27 @@ def urls_in(text):
 
 
 LIST_SQL = (
-    "SELECT t.id, t.kind, t.title, t.created_at, t.updated_at, "
+    "SELECT t.id, t.kind, t.title, t.pinned, t.archived, t.created_at, t.updated_at, "
     "(SELECT state FROM runs r WHERE r.thread_id = t.id ORDER BY r.id DESC LIMIT 1) AS run_state, "
     "(SELECT COALESCE(SUM(cost_usd), 0) FROM usage u WHERE u.thread_id = t.id) AS cost "
-    "FROM threads t WHERE t.archived = 0"
+    "FROM threads t WHERE t.kind = ? AND t.archived = ?"
 )
 
 
-def list_threads(conn, q=None, kind=None, limit=50, include_subagents=False):
+def list_threads(conn, q=None, limit=50, archived=False):
     match = fts_query(q) if q else ""
-    params = []
+    params = [CHAT, int(archived)]
     sql = LIST_SQL
-    if kind:
-        sql += " AND t.kind = ?"
-        params.append(kind)
-    elif not include_subagents:
-        sql += " AND t.kind != ?"
-        params.append(SUBAGENT)
     if match:
         sql += " AND t.id IN (SELECT thread_id FROM thread_fts WHERE thread_fts MATCH ?)"
         params.append(match)
-    sql += " ORDER BY t.updated_at DESC, t.id DESC LIMIT ?"
+    sql += " ORDER BY t.pinned DESC, t.updated_at DESC, t.id DESC LIMIT ?"
     params.append(limit)
     return [dict(r) for r in conn.execute(sql, params)]
+
+
+def set_flag(conn, thread_id, column, value):
+    if column not in ("pinned", "archived"):
+        raise ValueError(column)
+    cur = conn.execute(f"UPDATE threads SET {column} = ? WHERE id = ? AND kind = ?", (int(value), thread_id, CHAT))
+    return cur.rowcount > 0

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% set page = "scheduled" %}
+{% block title %}Scheduled{% endblock %}
+{% block heading %}Scheduled{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <p class="max-w-prose text-sm text-muted-foreground">Scheduled runs start a new thread with read, notify and propose tools only; the nightly run also writes to Notion and the profile. Times are {{ tz }}.</p>
+  <button type="button" class="btn" data-size="sm" hx-get="/scheduled/new" hx-target="#schedule-dialog" hx-swap="innerHTML">{{ icon("plus") }}New schedule</button>
+</div>
+{% include "_scheduled_list.html" %}
+<dialog id="schedule-dialog" class="dialog" aria-label="Schedule"></dialog>
+{% endblock %}

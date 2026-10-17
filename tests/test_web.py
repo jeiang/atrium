@@ -89,9 +89,9 @@ def test_message_page_full_partial_and_missing(client):
     assert missing_partial.status_code == 404 and "<html" not in missing_partial.text
     assert 'href="/chat"' in c.get(url).text
     from_triage = c.get(url, headers={"referer": "http://testserver/triage?stage=operator"}).text
-    assert 'href="/triage?stage=operator"' in from_triage and "</svg>Triage</a>" in from_triage
+    assert 'href="/triage?stage=operator"' in from_triage and "</svg>Decisions</a>" in from_triage
     elsewhere = c.get(url, headers={"referer": "http://elsewhere.test/triage"}).text
-    assert "</svg>Triage</a>" not in elsewhere
+    assert "</svg>Decisions</a>" not in elsewhere
 
 
 def test_correct_form_renders_account_folders(client):

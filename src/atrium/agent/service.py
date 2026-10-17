@@ -38,8 +38,12 @@ def create_thread(conn, kind=CHAT, title=None, parent_id=None, job_id=None, now=
     return thread_id
 
 
-def list_threads(conn, q=None, kind=None, limit=50, include_subagents=False):
-    return threads.list_threads(conn, q, kind, limit, include_subagents)
+def list_threads(conn, q=None, limit=50, archived=False):
+    return threads.list_threads(conn, q, limit, archived)
+
+
+def set_thread_flag(conn, thread_id, column, value):
+    return threads.set_flag(conn, thread_id, column, value)
 
 
 def short_args(args):

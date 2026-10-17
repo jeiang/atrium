@@ -71,7 +71,7 @@
         <select name="kind" class="select" aria-label="Alias kind">{% for k in alias_kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}</select>
         <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("plus") }}Alias</button>
       </form>
-      <form method="post" action="/money/payees/{{ p.id }}/merge" class="flex items-center gap-1" data-confirm-submit="Merge {{ p.name }} into the chosen payee? Its aliases and transactions move; this is undoable on Changes.">
+      <form method="post" action="/money/payees/{{ p.id }}/merge" class="flex items-center gap-1" data-confirm-submit="Merge {{ p.name }} into the chosen payee? Its aliases and transactions move; this is undoable on Activity.">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <select name="target_id" class="select" aria-label="Merge {{ p.name }} into">
           {% for o in payees if o.id != p.id %}<option value="{{ o.id }}">{{ o.name }}</option>{% endfor %}

@@ -108,7 +108,7 @@ def test_security_headers_and_no_inline_scripts(cfg):
     assert "<script>" not in page.text and 'src="/static/app.js' in page.text
     assert "onclick=" not in page.text and 'hx-headers=' in page.text
     assert client.get("/proposals").text.count("<script>") == 0
-    assert "onclick=" not in client.get("/actions").text
+    assert "onclick=" not in client.get("/activity").text
 
 
 def test_existing_htmx_posts_keep_working_with_csrf(cfg):
@@ -128,7 +128,7 @@ def test_removed_pages_are_gone(cfg):
             assert reply.headers["location"] == "/chat"
     assert client.post("/ask", data={"q": "x"}).status_code == 404
     nav = client.get("/chat").text
-    assert 'href="/chat"' in nav and 'href="/agents"' in nav and 'href="/settings"' in nav and 'href="/web"' not in nav and 'href="/contacts"' not in nav
+    assert 'href="/chat"' in nav and 'href="/scheduled"' in nav and 'href="/activity"' in nav and 'href="/agents"' not in nav and 'href="/settings"' in nav and 'href="/web"' not in nav and 'href="/contacts"' not in nav
 
 
 def test_chat_thread_renders_markdown_tools_and_citations(cfg):
@@ -148,7 +148,7 @@ def test_chat_thread_renders_markdown_tools_and_citations(cfg):
     assert "why is the sky blue?" in listing and f'href="/chat/{thread_id}"' in listing
     assert "why is the sky blue?" in client.get("/chat", params={"q": "rayleigh"}, headers=HX).text
     assert "Nothing matches" in client.get("/chat", params={"q": "zzz"}, headers=HX).text
-    assert client.get("/chat", params={"kind": "nonsense"}).status_code == 422
+    assert client.get("/chat", params={"view": "nonsense"}).status_code == 422
     assert client.get("/chat/999").status_code == 404
 
 

@@ -84,7 +84,7 @@ and backups; nothing of that lives here.
   fetches a URL the operator did not type or a search did not return.
   Scheduled runs only read, notify and create proposals; the nightly run
   writes Notion and the profile directly, each write logged with undo on
-  `/changes`; research subagents and code mode are read-only. A monthly
+  `/activity`; research subagents and code mode are read-only. A monthly
   budget (default $75) pauses scheduled runs at 80% and chat at 100%.
 - Code mode runs in `atrium-codemode@`, one socket-activated instance per
   connection under `DynamicUser` with no network and a read-only filesystem.

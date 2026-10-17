@@ -720,10 +720,10 @@ def test_money_pages_render_and_edit(cfg, conn, accounts):
     massy = next(p for p in money.list_payees(conn) if p["name"] == "Massy Stores")
     assert client.post(f"/money/payees/{massy['id']}/rename", data={"name": "Massy"}).status_code == 200
     assert money.get_payee(conn, massy["id"])["name"] == "Massy"
-    changes = client.get("/changes")
-    assert "money_post" in changes.text and "transaction_merge" in changes.text and "ledger" in changes.text
+    changes = client.get("/activity?category=money")
+    assert "money_post" in changes.text and "transaction_merge" in changes.text
     write_id = conn.execute("SELECT id FROM agent_writes WHERE tool = 'payee_rename'").fetchone()[0]
-    assert client.post(f"/changes/{write_id}/undo").status_code == 200
+    assert client.post(f"/activity/write/{write_id}/undo").status_code == 200
     assert money.get_payee(conn, massy["id"])["name"] == "Massy Stores"
     assert client.post(f"/money/payees/{massy['id']}/override", data={"override": "bill"}).status_code == 200
     assert client.post(f"/money/payees/{massy['id']}/aliases", data={"pattern": "MASSY", "kind": "prefix"}).status_code == 200

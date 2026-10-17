@@ -31,6 +31,10 @@ document.addEventListener("htmx:beforeRequest", (event) => {
   if (dialog && !dialog.open) dialog.showModal();
 });
 
+document.addEventListener("close-dialogs", () => {
+  document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+});
+
 document.addEventListener("htmx:beforeSwap", (event) => {
   const xhr = event.detail.xhr;
   if (xhr.status === 422 && (xhr.getResponseHeader("content-type") || "").startsWith("text/html")) {
