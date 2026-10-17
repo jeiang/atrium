@@ -233,7 +233,13 @@ document.addEventListener("change", (event) => {
   if (event.target.matches("form[data-attach] [data-upload]")) addFiles(event.target.form, [...event.target.files]);
 });
 document.addEventListener("reset", (event) => {
-  if (event.target.matches("form[data-attach]")) { pendingFiles.delete(event.target); event.target.querySelector("[data-chips]").replaceChildren(); }
+  const form = event.target;
+  if (!form.matches || !form.matches("form[data-attach]")) return;
+  pendingFiles.delete(form);
+  form.querySelector("[data-chips]").replaceChildren();
+  // Options saved by their own requests (effort, context, sandbox) must survive the reset that clears the text.
+  form.querySelectorAll("select[data-option] option").forEach((option) => { option.defaultSelected = option.selected; });
+  form.querySelectorAll("input[type=checkbox][hx-post]").forEach((box) => { box.defaultChecked = box.checked; });
 });
 ["dragenter", "dragover"].forEach((name) => document.addEventListener(name, (event) => {
   const form = event.target.closest && event.target.closest("form[data-attach]");

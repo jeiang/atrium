@@ -36,6 +36,8 @@ def file_preview(found):
     truncated = False
     if media in files.IMAGE_TYPES:
         return {**found, "render": "image", "text": "", "rows": [], "truncated": False}
+    if media == files.PDF_TYPE:
+        return {**found, "render": None, "text": "", "rows": [], "truncated": False}
     if text is None:
         if not path.is_file():
             return {**found, "render": None, "text": "", "rows": [], "truncated": False}
