@@ -280,7 +280,7 @@ rooted at `movies/` and `tv/` on the private network) and `NTFY_MEDIA_TOPIC`
 - **Add torrent** (`/media/add`): paste a magnet or pick a `.torrent` (read in the browser
   into a base64url field, so the form stays urlencoded and CSRF-checked; files above
   ~750 KB are rejected by the 1 MiB body cap), choose Media (tag `media`) or Plain. The
-  zakkart shim opens `/media/add?magnet=<urlencoded>` or
+  operator's desktop shim opens `/media/add?magnet=<urlencoded>` or
   `/media/add#torrent=<base64url>&name=<file>`; `app.js` moves the fragment into the form
   so the bytes never reach a URL log.
 - **Channels** (`/media/channels`): a show (TMDB search → IMDb id via `external_ids`, or
