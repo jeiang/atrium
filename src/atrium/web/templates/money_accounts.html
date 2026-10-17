@@ -59,6 +59,15 @@
   </form>
 </section>
 
+<section class="flex flex-col gap-3" aria-labelledby="since-h">
+  <h2 id="since-h" class="text-sm font-medium">Track spending from</h2>
+  <form method="post" action="/money/since" class="flex flex-wrap items-end gap-2 rounded-lg border bg-card p-4 text-sm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="flex flex-col gap-1 text-xs">Before this date only bill charges count (blank = all history)<input class="input w-44" type="date" name="since" value="{{ since or '' }}"></label>
+    <button type="submit" class="btn" data-size="sm">Save</button>
+  </form>
+</section>
+
 <section class="flex flex-col gap-3" aria-labelledby="rates-h">
   <div class="flex items-center justify-between gap-2">
     <h2 id="rates-h" class="text-sm font-medium">CBTT USD selling rate</h2>
