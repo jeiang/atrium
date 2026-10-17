@@ -1,6 +1,7 @@
 import hashlib
 import json
 
+from .. import db
 from . import journal, usage
 from .usage import field
 
@@ -85,10 +86,8 @@ class ContextError(ValueError):
 
 
 def add_columns(conn, table, columns):
-    have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
     for name, decl in columns:
-        if name not in have:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+        db.add_column(conn, table, name, decl)
 
 
 def init(conn):

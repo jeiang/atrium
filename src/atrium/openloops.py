@@ -14,7 +14,7 @@ import os
 import re
 from datetime import date, datetime, timedelta
 
-from . import llm, message, proposals
+from . import db, llm, message, proposals
 from .config import LLM_BODY_CHARS
 from .db import now as clock
 from .flags import AUTOMATED_LOCAL
@@ -112,10 +112,8 @@ COMMITMENT_SCHEMA = {
 
 
 def init(conn):
-    have = {r["name"] for r in conn.execute("PRAGMA table_info(messages)")}
     for column in ("in_reply_to", "refs"):
-        if column not in have:
-            conn.execute(f"ALTER TABLE messages ADD COLUMN {column} TEXT")
+        db.add_column(conn, "messages", column, "TEXT")
     conn.executescript(SCHEMA)
 
 

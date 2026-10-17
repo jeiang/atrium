@@ -1,9 +1,11 @@
+import sqlite3
+
 import pytest
 from fake_anthropic import FakeClient, compaction, response, text
 from helpers import make_config, static_dir, web_client
 
 from atrium import db, drafts
-from atrium.agent import journal, registry, service, subagents
+from atrium.agent import context, journal, registry, service, subagents
 
 
 @pytest.fixture
@@ -80,3 +82,20 @@ def test_compaction_block_renders_as_marker(world):
     assert [i["kind"] for i in items] == ["user", "compaction"]
     page = web_client(cfg).get(f"/chat/{thread_id}").text
     assert "Context compacted" in page and "COMPACTED-DETAILS" not in page
+
+
+def test_column_migrations_survive_concurrent_init(tmp_path):
+    """atrium-web, atrium-web-local and the scheduler all run init at startup: a second connection whose
+    check-then-ALTER lost the race must not fail with 'duplicate column name'."""
+    cfg = make_config(tmp_path)
+    first = db.connect(cfg.db_path)
+    second = db.connect(cfg.db_path)
+    assert db.add_column(first, "runs", "probe_col", "INTEGER NOT NULL DEFAULT 0")
+    assert db.add_column(second, "runs", "probe_col", "INTEGER NOT NULL DEFAULT 0") is False
+    context.add_columns(second, "runs", (("probe_col", "INTEGER NOT NULL DEFAULT 0"), ("other_col", "TEXT")))
+    names = [r["name"] for r in first.execute("PRAGMA table_info(runs)")]
+    assert names.count("probe_col") == 1 and "other_col" in names
+    with pytest.raises(sqlite3.OperationalError):
+        db.add_column(first, "no_such_table", "x", "TEXT")
+    first.close()
+    second.close()

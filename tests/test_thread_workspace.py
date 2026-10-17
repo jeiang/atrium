@@ -105,7 +105,26 @@ def test_loop_streams_and_journals_progress_for_the_run(cfg, conn):
     steps = items[1]["steps"]
     assert [s["kind"] for s in steps] == ["thinking", "tool"]
     assert steps[0]["text"] == "plan it" and steps[1]["name"] == "probe" and json.loads(steps[1]["result"]) == {"echo": 1}
-    assert progress.since(conn, run_id, 0) == []  # a finished root run leaves no live rows behind
+    kinds = [e["kind"] for e in progress.since(conn, run_id, 0)]
+    assert kinds[0] == "run_start" and kinds[-1] == "run_done" and "tool_start" in kinds  # kept for late readers
+    turn(cfg, conn, FakeClient([response([text("again")])]), "more", thread_id)
+    assert progress.since(conn, run_id, 0) == []  # the thread's next run drops them
+
+
+def test_events_stream_settles_a_run_that_finished_before_the_page_connected(cfg, conn):
+    client = FakeClient([response([thinking("quick", "s1"), text("Smoke test passed.")])])
+    thread_id, run_id = turn(cfg, conn, client, "reply with exactly three words, no tools")
+    web = web_client(cfg)
+    with web.stream("GET", f"/chat/{thread_id}/events", params={"run": run_id}) as reply:
+        body = "".join(reply.iter_text())
+    kinds = [line.split(": ", 1)[1] for line in body.splitlines() if line.startswith("event: ")]
+    assert kinds == ["run_start", "thinking", "text", "run_done", "done"] and '"state": "done"' in body
+    ids = [int(line.split(": ", 1)[1]) for line in body.splitlines() if line.startswith("id: ")]
+    with web.stream("GET", f"/chat/{thread_id}/events", params={"run": run_id}, headers={"Last-Event-ID": str(ids[1])}) as reply:
+        resumed = "".join(reply.iter_text())
+    assert [line.split(": ", 1)[1] for line in resumed.splitlines() if line.startswith("event: ")] == ["text", "run_done", "done"]
+    finished = web.get(f"/chat/{thread_id}/runs/{run_id}", params={"after": 1}).text
+    assert "Smoke test passed." in finished and "data-live-run" not in finished
 
 
 def test_progress_rows_are_written_as_the_stream_arrives(cfg, conn):

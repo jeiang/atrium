@@ -6,7 +6,7 @@ import logging
 import re
 import time
 
-from . import message, safety, smtp
+from . import db, message, safety, smtp
 from .config import ACCOUNTS, ICLOUD
 from .smtp import SendError, split_addresses
 from .sync import mailbox_role
@@ -48,8 +48,7 @@ class DraftError(ValueError):
 
 def init(conn):
     conn.executescript(SCHEMA)
-    if "sent_msgid" not in {r["name"] for r in conn.execute("PRAGMA table_info(drafts)")}:
-        conn.execute("ALTER TABLE drafts ADD COLUMN sent_msgid TEXT")
+    db.add_column(conn, "drafts", "sent_msgid", "TEXT")
 
 
 def for_message(conn, message_id):

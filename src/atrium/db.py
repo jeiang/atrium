@@ -182,9 +182,23 @@ def init_extra_schemas(conn):
     agent_schema.init(conn)
 
 
-def connect(path):
+def add_column(conn, table, column, ddl):
+    """Idempotent column migration. atrium-web, atrium-web-local and the scheduler all run init at startup, so
+    a check-then-ALTER races; the ALTER's own duplicate-column error is the only reliable check. True when
+    this call added the column."""
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" not in str(e):
+            raise
+        return False
+    return True
+
+
+def connect(path, check_same_thread=True):
+    """check_same_thread=False only for a connection used by one coroutine whose reads hop worker threads."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=30, isolation_level=None)
+    conn = sqlite3.connect(path, timeout=30, isolation_level=None, check_same_thread=check_same_thread)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=30000")

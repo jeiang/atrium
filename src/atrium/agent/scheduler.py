@@ -78,8 +78,7 @@ def init(conn):
     conn.executescript(SCHEMA)
     # prompt_by: who last wrote the prompt (OPERATOR via the web form, AGENT via the schedule tools, NULL for
     # reminders and prompts that live in code). Only OPERATOR prompts may allowlist URLs for web_fetch.
-    if "prompt_by" not in {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}:
-        conn.execute("ALTER TABLE jobs ADD COLUMN prompt_by TEXT")
+    db.add_column(conn, "jobs", "prompt_by", "TEXT")
 
 
 class ScheduleError(ValueError):

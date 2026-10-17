@@ -154,11 +154,17 @@ writes `run_events` rows (`run_start`, `thinking`, `text`, `tool_start`, `tool_d
 `user`, `plan`, `run_done`; streamed deltas are coalesced to one row per 200 ms) for the
 run and its subagent runs, and the thread page subscribes with `EventSource` to
 `GET /chat/{id}/events?run=N`, a same-origin SSE endpoint that polls the table every
-300 ms, sends a keepalive comment every 15 s and ends with `done` when the run is no
-longer running. The reverse proxy must not buffer it (`X-Accel-Buffering: no` is set;
-Caddy's `reverse_proxy` flushes by default). A root run's events are deleted when it ends;
-the transcript is then rendered from the journal (one expandable activity per run:
-thinking summaries, tool steps with results, subagent spawns, web searches).
+300 ms on a worker thread, sends a keepalive comment every 15 s, resumes from
+`Last-Event-ID` on a reconnect and ends with `done` as soon as the run is not running
+(also when it finished before the page connected). The reverse proxy must not buffer it
+(`X-Accel-Buffering: no` is set; Caddy's `reverse_proxy` flushes by default). Whatever
+ends the stream (`done` or a dropped connection, retried after 2 s), the page swaps in the
+run partial: the journaled transcript once the run is over (one expandable activity per
+run: thinking summaries, tool steps with results, subagent spawns, web searches), or a
+fresh live view that replays the events. A thread's events are kept until its next run
+starts (`progress.clear_thread`). Column migrations go through `db.add_column`, which
+treats SQLite's duplicate-column error as "already migrated": the web, web-local and
+scheduler units all run init at startup.
 
 Each chat thread keeps an effort (`low`, `medium`, `high`, `xhigh`, `max`; `max_tokens`
 rises from 16K to 64K at `xhigh`/`max` because thinking counts toward it) and a context

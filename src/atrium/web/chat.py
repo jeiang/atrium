@@ -8,7 +8,9 @@ from typing import Annotated
 
 from fastapi import Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
+from .. import db
 from ..agent import budget, journal, progress, projects, service, threads, workspace
 from ..agent.tools.base import CHAT
 from .deps import is_partial
@@ -249,28 +251,41 @@ def register(app, deps):
         return render("_file.html", file=file_preview(found))
 
     @app.get("/chat/{thread_id}/events")
-    async def chat_events(thread_id: int, run: int, after: int = 0):
-        with connection() as conn:
+    async def chat_events(request: Request, thread_id: int, run: int, after: int = 0):
+        # One connection for the whole stream, read on a worker thread: a per-poll db.connect() runs every
+        # schema init on the event loop, which stalls every other request while a run is streaming. A browser
+        # that reconnects sends Last-Event-ID, so a reconnect resumes rather than replays. The stream always
+        # ends with `done` once the run is not running, also when the run finished before the page connected.
+        after = int(request.headers.get("last-event-id") or after)
+        conn = db.connect(cfg.db_path, check_same_thread=False)
+        try:
             load_run(conn, thread_id, run)
+        except BaseException:
+            conn.close()
+            raise
+
+        def poll(last):
+            return progress.since(conn, run, last), journal.get_run(conn, run)
 
         async def stream():
             last, quiet = after, time.monotonic()
-            while True:
-                with connection() as conn:
-                    events = progress.since(conn, run, last)
-                    found = journal.get_run(conn, run)
-                for e in events:
-                    last = e["id"]
-                    yield sse(e["kind"], {"run_id": e["run_id"], **e["data"]}, e["id"])
-                if events:
-                    quiet = time.monotonic()
-                if found is None or found["state"] != journal.RUNNING:
-                    yield sse("done", {"state": found["state"] if found else None})
-                    return
-                if time.monotonic() - quiet >= KEEPALIVE_SECONDS:
-                    quiet = time.monotonic()
-                    yield ": keepalive\n\n"
-                await asyncio.sleep(POLL_SECONDS)
+            try:
+                while True:
+                    events, found = await run_in_threadpool(poll, last)
+                    for e in events:
+                        last = e["id"]
+                        yield sse(e["kind"], {"run_id": e["run_id"], **e["data"]}, e["id"])
+                    if events:
+                        quiet = time.monotonic()
+                    if found is None or found["state"] != journal.RUNNING:
+                        yield sse("done", {"state": found["state"] if found else None})
+                        return
+                    if time.monotonic() - quiet >= KEEPALIVE_SECONDS:
+                        quiet = time.monotonic()
+                        yield ": keepalive\n\n"
+                    await asyncio.sleep(POLL_SECONDS)
+            finally:
+                conn.close()
 
         return StreamingResponse(stream(), media_type="text/event-stream", headers=SSE_HEADERS)
 

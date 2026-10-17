@@ -16,7 +16,7 @@ from html.parser import HTMLParser
 from itertools import pairwise
 from zoneinfo import ZoneInfo
 
-from . import llm
+from . import db, llm
 from .agent import writes
 from .config import TIMEZONE
 from .http import ServiceUnavailable, get_text
@@ -161,22 +161,15 @@ class LedgerError(ValueError):
     pass
 
 
-def _add_column(conn, table, column, ddl):
-    if column in {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}:
-        return False
-    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
-    return True
-
-
 def init_schema(conn):
     conn.executescript(SCHEMA)
     conn.executemany("INSERT OR IGNORE INTO categories (name) VALUES (?)", [(c,) for c in STARTER_CATEGORIES])
-    if _add_column(conn, "money_accounts", "forex", "INTEGER NOT NULL DEFAULT 0"):
+    if db.add_column(conn, "money_accounts", "forex", "INTEGER NOT NULL DEFAULT 0"):
         conn.execute(
             "UPDATE money_accounts SET forex = 1 WHERE (bank = ? AND kind = ? AND currency = ?) OR (bank = ? AND currency = ?)",
             (REPUBLIC, CREDIT_CARD, TTD, CIBC, BBD),
         )
-    _add_column(conn, "transactions", "dismissed", "TEXT NOT NULL DEFAULT ''")
+    db.add_column(conn, "transactions", "dismissed", "TEXT NOT NULL DEFAULT ''")
 
 
 def _zone():
