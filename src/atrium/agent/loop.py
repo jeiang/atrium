@@ -1,3 +1,5 @@
+import hashlib
+import json
 import logging
 import time
 from datetime import datetime
@@ -75,6 +77,13 @@ def system_blocks(conn, prefix_cc=CACHE_CONTROL, extra=None):
     if len(blocks) > 1:
         blocks[-1] = {**blocks[-1], "cache_control": prefix_cc}
     return blocks
+
+
+def system_signature(params):
+    """Identity of what signed thinking blocks are bound to: system prompt text and tool definitions."""
+    texts = [b["text"] for b in params["system"]]
+    tools = [{k: v for k, v in t.items() if k != "cache_control"} for t in params.get("tools", [])]
+    return hashlib.sha256(json.dumps([texts, tools], sort_keys=True).encode()).hexdigest()[:16]
 
 
 def request_params(tools, kind, effort, system, prefix_cc=CACHE_CONTROL):
@@ -251,6 +260,7 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
     unattended = threads.root_kind(conn, thread_id) in UNATTENDED
     prefix_cc = prefix_cache_control(conn, kind)
     params = request_params(tools, kind, effort, system_blocks(conn, prefix_cc, system_extra), prefix_cc)
+    sig = system_signature(params)
     ctx = ToolContext(
         conn=conn,
         cfg=cfg,
@@ -277,13 +287,13 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
             spent = usage.run_cost(conn, run_id)
             if spent >= max_cost_usd:
                 raise RunLimit(f"run cost ceiling reached (${spent:.2f} of ${max_cost_usd:.2f})")
-            active = stamp_messages(conn, thread_id, context.active_messages(conn, thread_id)[0])
+            active = stamp_messages(conn, thread_id, context.active_messages(conn, thread_id, sig)[0])
             size = estimate(params, active, anchor)
             if size > context.PREFLIGHT_LIMIT:
                 log.info("run %s: next request ~%d tokens, compacting on the client", run_id, size)
                 context.client_compact(conn, client, MODEL, active, thread_id, run_id, kind, now())
                 anchor = None
-                active = stamp_messages(conn, thread_id, context.active_messages(conn, thread_id)[0])
+                active = stamp_messages(conn, thread_id, context.active_messages(conn, thread_id, sig)[0])
                 size = estimate(params, active, anchor)
             if size > context.HARD_LIMIT:
                 raise RunLimit(f"next request would be about {size} tokens, over the {context.HARD_LIMIT} limit")
@@ -297,7 +307,7 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
                 conn, now(), thread_id, run_id, kind, MODEL, effort, field(response, "usage"),
                 clear_edits=clear_edits, cleared_tokens=cleared, compaction=int(compacted),
             )
-            seq = journal.append_message(conn, thread_id, run_id, journal.ASSISTANT, blocks, now())
+            seq = journal.append_message(conn, thread_id, run_id, journal.ASSISTANT, blocks, now(), system_sig=sig)
             if compacted:
                 context.server_compacted(conn, thread_id, run_id, blocks, active, now())
                 anchor = None

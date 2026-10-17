@@ -299,6 +299,13 @@ def dismiss(conn, loop_id):
     return cur.rowcount == 1
 
 
+def dismiss_all(conn, state):
+    """Dismiss every visible loop in one state; returns how many. Each stays dismissed until its thread changes."""
+    if state not in STATES:
+        raise ValueError(f"unknown state {state!r}")
+    return conn.execute("UPDATE open_loops SET dismissed = 1 WHERE state = ? AND dismissed = 0", (state,)).rowcount
+
+
 # ---------- commitments ----------
 
 

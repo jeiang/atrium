@@ -109,15 +109,15 @@ def runs_of(conn, thread_id):
     return [dict(r) for r in conn.execute("SELECT * FROM runs WHERE thread_id = ? ORDER BY id", (thread_id,))]
 
 
-def append_message(conn, thread_id, run_id, role, content, now):
+def append_message(conn, thread_id, run_id, role, content, now, system_sig=None):
     # IMMEDIATE: a deferred read-then-write transaction fails at once (no busy wait) when
     # another connection commits in between, which parallel subagent runs do.
     conn.execute("BEGIN IMMEDIATE")
     try:
         seq = conn.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM thread_messages WHERE thread_id = ?", (thread_id,)).fetchone()[0]
         cur = conn.execute(
-            "INSERT INTO thread_messages (thread_id, run_id, seq, role, content_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (thread_id, run_id, seq, role, dumps(content), now),
+            "INSERT INTO thread_messages (thread_id, run_id, seq, role, content_json, created_at, system_sig) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (thread_id, run_id, seq, role, dumps(content), now, system_sig),
         )
         text = "\n".join(b.get("text", "") for b in content if b.get("type") == "text").strip()
         if text:
@@ -132,7 +132,10 @@ def append_message(conn, thread_id, run_id, role, content, now):
 
 def messages_of(conn, thread_id):
     return [
-        {"id": r["id"], "run_id": r["run_id"], "seq": r["seq"], "role": r["role"], "content": json.loads(r["content_json"]), "created_at": r["created_at"]}
+        {
+            "id": r["id"], "run_id": r["run_id"], "seq": r["seq"], "role": r["role"], "content": json.loads(r["content_json"]),
+            "created_at": r["created_at"], "system_sig": r["system_sig"],
+        }
         for r in conn.execute("SELECT * FROM thread_messages WHERE thread_id = ? ORDER BY seq", (thread_id,))
     ]
 

@@ -112,6 +112,7 @@ def by_thread(conn, now, limit=50):
         for r in conn.execute(
             "SELECT u.thread_id, t.title, t.kind, COUNT(*) AS calls, SUM(u.cost_usd) AS cost, "
             "SUM(u.input_tokens + u.cache_write_5m + u.cache_write_1h + u.cache_read) AS prompt_tokens, "
+            "MAX(u.input_tokens + u.cache_write_5m + u.cache_write_1h + u.cache_read) AS max_prompt_tokens, "
             "SUM(u.output_tokens) AS output_tokens, SUM(u.searches) AS searches "
             "FROM usage u JOIN threads t ON t.id = u.thread_id WHERE u.ts >= ? "
             "GROUP BY u.thread_id ORDER BY cost DESC LIMIT ?",

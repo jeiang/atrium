@@ -130,5 +130,6 @@ RUN_COLUMNS = (("limits_json", "TEXT"), ("owner", "TEXT"), ("lease_until", "REAL
 def init(conn):
     conn.executescript(SCHEMA)
     _context.add_columns(conn, "runs", RUN_COLUMNS)
+    _context.add_columns(conn, "thread_messages", (("system_sig", "TEXT"),))
     for extra in INITS:
         extra(conn)

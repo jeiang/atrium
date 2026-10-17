@@ -4,6 +4,15 @@
 {% set page = "loops" %}
 {% block title %}Open loops{% endblock %}
 {% block heading %}Open loops{% endblock %}
+{% macro dismiss_all(state, items) %}
+{% if items %}
+<form method="post" action="/loops/dismiss-all" data-confirm-submit="Dismiss all {{ items | length }}? Each comes back only if its thread gets new mail.">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="state" value="{{ state }}">
+  <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("x") }}Dismiss all</button>
+</form>
+{% endif %}
+{% endmacro %}
 {% macro loop_list(items, label, empty) %}
 {% if items %}
 <ul class="flex flex-col gap-3" role="list" aria-label="{{ label }}">
@@ -42,11 +51,17 @@
 {% endmacro %}
 {% block content %}
 <section class="flex flex-col gap-3" aria-labelledby="owe-h">
-  <h2 id="owe-h" class="text-sm font-medium">You owe a reply ({{ owe | length }})</h2>
+  <div class="flex items-center justify-between gap-2">
+    <h2 id="owe-h" class="text-sm font-medium">You owe a reply ({{ owe | length }})</h2>
+    {{ dismiss_all("owe_reply", owe) }}
+  </div>
   {{ loop_list(owe, "Owe a reply", "No one is waiting on you.") }}
 </section>
 <section class="flex flex-col gap-3" aria-labelledby="waiting-h">
-  <h2 id="waiting-h" class="text-sm font-medium">Waiting on them ({{ waiting | length }})</h2>
+  <div class="flex items-center justify-between gap-2">
+    <h2 id="waiting-h" class="text-sm font-medium">Waiting on them ({{ waiting | length }})</h2>
+    {{ dismiss_all("waiting_on_them", waiting) }}
+  </div>
   {{ loop_list(waiting, "Waiting on them", "No sent mail is waiting for an answer.") }}
 </section>
 <section class="flex flex-col gap-3" aria-labelledby="commit-h">
