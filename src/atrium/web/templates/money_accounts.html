@@ -27,7 +27,7 @@
       <label class="flex flex-col gap-1 text-xs">Name<input class="input" type="text" name="name" value="{{ a.name }}" maxlength="60" required></label>
       <label class="flex flex-col gap-1 text-xs">Last 4<input class="input w-20" type="text" name="last4" value="{{ a.last4 }}" maxlength="4" inputmode="numeric"></label>
       <label class="flex flex-col gap-1 text-xs">Alert senders (domains or addresses, comma separated)<input class="input w-80" type="text" name="sender_patterns" value="{{ a.sender_patterns | join(', ') }}"></label>
-      <label class="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" name="forex" value="1"{% if a.forex %} checked{% endif %}>Forex enabled</label>
+      <label class="flex h-8 items-center gap-2 text-xs"><input class="input" type="checkbox" name="forex" value="1"{% if a.forex %} checked{% endif %}>Forex enabled</label>
       <button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button>
     </form>
     <form method="post" action="/money/accounts/{{ a.id }}/delete" data-confirm-submit="Remove {{ a.name }}? Only possible while it has no transactions.">
@@ -57,7 +57,7 @@
     </label>
     <label class="flex flex-col gap-1 text-xs">Last 4<input class="input w-20" type="text" name="last4" maxlength="4" inputmode="numeric"></label>
     <label class="flex flex-col gap-1 text-xs">Alert senders (blank = bank default: {% for b, ds in default_senders.items() %}{{ banks[b] }} {{ ds | join("/") }}{{ "; " if not loop.last }}{% endfor %})<input class="input w-80" type="text" name="sender_patterns"></label>
-    <label class="flex items-center gap-2 pb-2 text-xs"><input type="checkbox" name="forex" value="1">Forex enabled</label>
+    <label class="flex h-8 items-center gap-2 text-xs"><input class="input" type="checkbox" name="forex" value="1">Forex enabled</label>
     <button type="submit" class="btn" data-size="sm">{{ icon("plus") }}Add account</button>
   </form>
 </section>
@@ -73,9 +73,10 @@
 
 <section class="flex flex-col gap-3" aria-labelledby="dismiss-h">
   <h2 id="dismiss-h" class="text-sm font-medium">Dismiss old transactions</h2>
+  <p class="text-xs text-muted-foreground">Dismissed transactions are left out of lists, spending and bills. Restore one from Transactions with Dismissed only ticked, or undo the whole batch from Changes.</p>
   <form method="post" action="/money/transactions/dismiss-before" class="flex flex-wrap items-end gap-2 rounded-lg border bg-card p-4 text-sm" data-confirm-submit="Dismiss every transaction before this date? Undo it from Changes.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label class="flex flex-col gap-1 text-xs">Dismiss every transaction dated before<input class="input w-44" type="date" name="before" required></label>
+    <label class="flex flex-col gap-1 text-xs">Dated before<input class="input w-44" type="date" name="before" required></label>
     <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("x") }}Dismiss</button>
   </form>
 </section>

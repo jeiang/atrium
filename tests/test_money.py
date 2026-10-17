@@ -700,6 +700,8 @@ def test_money_pages_render_and_edit(cfg, conn, accounts):
     assert "BBD" not in page.text.split("by category")[1].split("Needs an account")[0]  # no BBD spending yet
     page = client.get("/money/transactions?payee=massy")
     assert page.status_code == 200 and "Massy Stores" in page.text and "Anthropic" not in page.text
+    page = client.get("/money/transactions?start=&end=&account_id=&payee=massy&category=&kind=&currency=")  # the filter form as submitted
+    assert page.status_code == 200 and "Massy Stores" in page.text and "Anthropic" not in page.text
     assert "paid 20.00 USD" in client.get("/money/transactions?payee=anthropic").text
     assert "late receipt" in client.get("/money/transactions?unassigned=true").text
     assert client.get("/money/payees").status_code == 200

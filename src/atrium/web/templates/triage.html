@@ -69,7 +69,7 @@
   <form class="flex flex-wrap items-end gap-3" action="/triage" method="get"
         hx-get="/triage" hx-target="#decisions" hx-push-url="true" hx-trigger="change, input changed delay:300ms from:#t-q" hx-sync="this:replace" hx-indicator="#decisions">
     <input type="hidden" name="account" value="{{ account }}">
-    <div role="group" class="field w-auto">
+    <div role="group" class="field w-full sm:w-72">
       <label for="t-q">Search</label>
       <input id="t-q" name="q" type="search" value="{{ q }}" placeholder="sender, subject, folder, rule">
     </div>

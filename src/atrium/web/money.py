@@ -82,8 +82,9 @@ def register(app, deps):
             )
 
     @app.get("/money/transactions")
-    def transactions_page(start: str = "", end: str = "", account_id: int | None = None, payee: str = "", category: str = "", kind: str = "", currency: str = "", unassigned: bool = False, dismissed: bool = False):
-        return transactions_page_render(start=start, end=end, account_id=account_id, payee=payee, category=category, kind=kind, currency=currency.upper(), unassigned=unassigned, dismissed=dismissed)
+    def transactions_page(start: str = "", end: str = "", account_id: str = "", payee: str = "", category: str = "", kind: str = "", currency: str = "", unassigned: bool = False, dismissed: bool = False):
+        account = int(account_id) if account_id.strip().isdigit() else None  # the filter's "Any" option submits an empty value
+        return transactions_page_render(start=start, end=end, account_id=account, payee=payee, category=category, kind=kind, currency=currency.upper(), unassigned=unassigned, dismissed=dismissed)
 
     @app.post("/money/transactions/merge")
     def transactions_merge(transaction_ids: Annotated[list[int], Form()]):
@@ -118,7 +119,7 @@ def register(app, deps):
         with connection() as conn:
             change = ledger(money.transaction_dismiss, conn, tx_id, reason.strip() or "dismissed")
             commit(conn, "transaction_dismiss", f"transaction:{tx_id}", change)
-        return transactions_page_render(toast("success", "Dismissed", "Left out of lists, spending and bills. Show dismissed to restore it."))
+        return transactions_page_render(toast("success", "Dismissed", "Left out of lists, spending and bills. Tick Dismissed only to restore it."))
 
     @app.post("/money/transactions/{tx_id}/restore")
     def transaction_restore(tx_id: int):
