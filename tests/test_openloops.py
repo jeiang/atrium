@@ -150,6 +150,18 @@ def test_snooze_and_dismiss_survive_recompute_until_thread_changes(conn):
     assert len(openloops.list_loops(conn, NOW)) == 1
 
 
+def test_dismiss_all_clears_one_state_and_survives_recompute(conn):
+    mail(conn, 1, 2, subject="First")
+    mail(conn, 2, 2, subject="Second")
+    sent(conn, 3, 5, subject="Quote?")
+    openloops.compute(conn, NOW)
+    assert openloops.dismiss_all(conn, "owe_reply") == 2
+    openloops.compute(conn, NOW)
+    assert [l["state"] for l in openloops.list_loops(conn, NOW)] == ["waiting_on_them"]
+    with pytest.raises(ValueError):
+        openloops.dismiss_all(conn, "everything")
+
+
 def test_resolved_loops_are_removed(conn):
     mail(conn, 1, 2)
     openloops.compute(conn, NOW)

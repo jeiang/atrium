@@ -260,6 +260,22 @@ def test_profile_block_is_a_separate_cached_system_block(world):
     assert len(system) == 2 and "city: Port of Spain" in system[1]["text"] and system[1]["cache_control"] == loop.CACHE_CONTROL
 
 
+def test_thinking_from_a_different_system_prompt_is_dropped(world):
+    cfg, conn = world
+    client = FakeClient([response([thinking("one", "sig-1"), text("first")]), response([thinking("two", "sig-2"), text("second")]), response([text("third")])])
+    thread_id = service.create_thread(conn, "chat")
+    service.run_once(cfg, conn, thread_id, "hello", kind="chat", client=client, env={}, now=clock())
+    conn.execute("INSERT INTO agent_profile (key, value, updated_at) VALUES ('tone', 'brief', 1.0)")  # system prompt changes
+    service.run_once(cfg, conn, thread_id, "again", kind="chat", client=client, env={}, now=clock())
+    service.run_once(cfg, conn, thread_id, "and again", kind="chat", client=client, env={}, now=clock())
+
+    def signatures(call):
+        return [b.get("signature") for m in call["messages"] if m["role"] == "assistant" for b in m["content"] if b.get("type") == "thinking"]
+
+    assert signatures(client.calls[1]) == []  # sig-1 was made under the old system prompt
+    assert signatures(client.calls[2]) == ["sig-2"]  # same system prompt: kept, so the cache prefix holds
+
+
 def interrupted_run(conn, write_state=journal.STARTED):
     thread_id = service.create_thread(conn, "chat")
     run_id = service.prepare(conn, thread_id, "save this", "chat", NOW)

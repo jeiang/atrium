@@ -248,7 +248,9 @@ def in_fold(folds, seq):
     return any(f["from_seq"] < seq <= f["to_seq"] for f in folds)
 
 
-def active_messages(conn, thread_id):
+def active_messages(conn, thread_id, system_sig=None):
+    """system_sig: thinking is signed against the system prompt and tools it was made with, so
+    assistant turns made under a different one (the profile or skills changed) lose their thinking."""
     proj = projection(conn, thread_id)
     rows = ledger_rows(conn, thread_id)
     dropped = {k: r for k, r in rows.items() if r["state"] == DROPPED}
@@ -268,7 +270,7 @@ def active_messages(conn, thread_id):
                 drop_stub(b, dropped[b["tool_use_id"]]["result_id"]) if b.get("type") == TOOL_RESULT and b.get("tool_use_id") in dropped else b
                 for b in content
             ]
-        elif proj["strip_from_seq"] <= seq < proj["strip_before_seq"]:
+        elif proj["strip_from_seq"] <= seq < proj["strip_before_seq"] or (system_sig and m.get("system_sig") != system_sig):
             content = strip_thinking(content)
             if not content:
                 continue

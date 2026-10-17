@@ -46,6 +46,14 @@ def register(app, deps):
             found(openloops.dismiss(conn, loop_id), "loop")
         return show(toast("success", "Dismissed"))
 
+    @app.post("/loops/dismiss-all")
+    def loop_dismiss_all(state: Annotated[str, Form()]):
+        if state not in openloops.STATES:
+            raise HTTPException(400, "unknown state")
+        with connection() as conn:
+            count = openloops.dismiss_all(conn, state)
+        return show(toast("success", "Dismissed", f"{count} loop{'s' if count != 1 else ''} cleared."))
+
     @app.post("/loops/commitments/{commitment_id}/{outcome}")
     def commitment_update(commitment_id: int, outcome: str):
         status = {"done": openloops.DONE, "dismiss": openloops.DISMISSED}.get(outcome)

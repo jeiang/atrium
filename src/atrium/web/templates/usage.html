@@ -49,7 +49,7 @@
   <h2 id="by-thread" class="text-sm font-medium">By thread</h2>
   {% if by_thread %}
   <table class="w-full text-sm">
-    <thead><tr class="text-left text-xs text-muted-foreground"><th class="py-1">Thread</th><th class="py-1">Kind</th><th class="py-1 text-right">Calls</th><th class="py-1 text-right">Prompt tokens</th><th class="py-1 text-right">Output</th><th class="py-1 text-right">Cost</th></tr></thead>
+    <thead><tr class="text-left text-xs text-muted-foreground"><th class="py-1">Thread</th><th class="py-1">Kind</th><th class="py-1 text-right">Calls</th><th class="py-1 text-right" title="Summed over every call in the thread">Prompt tokens (all calls)</th><th class="py-1 text-right" title="Largest single request; over 100K bills at 5x">Largest request</th><th class="py-1 text-right">Output</th><th class="py-1 text-right">Cost</th></tr></thead>
     <tbody>
       {% for r in by_thread %}
       <tr class="border-t">
@@ -57,6 +57,7 @@
         <td class="py-1">{{ r.kind }}</td>
         <td class="py-1 text-right tabular-nums">{{ r.calls }}</td>
         <td class="py-1 text-right tabular-nums">{{ r.prompt_tokens }}</td>
+        <td class="py-1 text-right tabular-nums">{{ r.max_prompt_tokens }}</td>
         <td class="py-1 text-right tabular-nums">{{ r.output_tokens }}</td>
         <td class="py-1 text-right tabular-nums">${{ "%.3f" | format(r.cost) }}</td>
       </tr>
