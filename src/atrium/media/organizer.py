@@ -63,6 +63,9 @@ class View:
 
 
 def videos_under(root):
+    """Videos under root, or root itself when it is a video file (a single-file torrent's content_path)."""
+    if os.path.isfile(root):
+        return (root,) if parse.is_video(os.path.basename(root)) and not os.path.islink(root) else ()
     out = []
     for dirpath, _dirs, names in os.walk(root):
         for name in names:
@@ -151,6 +154,8 @@ def defaults(item, root):
 def plan(view, root):
     """Fill destinations into view and return the (src, dst) operations; an episode row without a number is skipped."""
     ops = []
+    if not view.item.files:
+        raise PlanError("no video files found")
     if view.kind == MOVIE:
         src = largest(view.item.files)
         try:

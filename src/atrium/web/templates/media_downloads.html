@@ -11,7 +11,9 @@
 </div>
 
 {% include "_media_torrents.html" %}
-<div id="torrent-files"></div>
+<dialog class="dialog" aria-label="Torrent files">
+  <div id="torrent-files" class="w-full sm:max-w-2xl"></div>
+</dialog>
 
 <section class="flex flex-col gap-3" aria-labelledby="queue-h">
   <h2 id="queue-h" class="text-sm font-medium">Ready to file ({{ queue | length }})</h2>

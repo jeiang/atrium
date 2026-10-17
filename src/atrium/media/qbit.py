@@ -2,6 +2,7 @@
 
 import base64
 import hashlib
+import json
 import re
 from urllib.parse import parse_qs, urlsplit
 
@@ -16,6 +17,19 @@ PRIORITY_SKIP = 0
 PRIORITY_NORMAL = 1
 TIMEOUT_SECONDS = 15
 OK = "Ok."
+
+
+def accepted(reply):
+    """torrents/add answers "Ok." on older qBittorrent and a JSON tally on newer ones."""
+    reply = reply.strip()
+    if reply == OK:
+        return True
+    try:
+        tally = json.loads(reply)
+    except ValueError:
+        return False
+    return isinstance(tally, dict) and not tally.get("failure_count") and (tally.get("success_count", 0) + tally.get("pending_count", 0)) > 0
+
 
 ACTIVE_STATES = frozenset({
     "downloading", "metaDL", "forcedMetaDL", "stalledDL", "checkingDL", "forcedDL", "queuedDL", "allocating",
@@ -122,7 +136,7 @@ class Qbit:
 
     def _post(self, path, data=None, files=None):
         response = self._request("POST", path, data=data, files=files)
-        if path == "torrents/add" and response.text.strip() != OK:
+        if path == "torrents/add" and not accepted(response.text):
             raise QbitError(f"qBittorrent did not accept the torrent: {response.text.strip() or 'no reply'}")
         return response
 

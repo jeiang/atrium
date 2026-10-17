@@ -171,6 +171,25 @@ def test_filing_hardlinks_torrent_and_tags_filed(world):
         organizer.plan(organizer.defaults(items[0], w["root"]), w["root"])
 
 
+def test_single_file_torrent_is_filed_and_the_downloads_page_renders(world):
+    w = world
+    name = "VisionQuest.S01E01.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+    content = w["root"] / "downloads" / name
+    content.write_bytes(b"x" * 100)
+    w["qb"].add(HASH_A, name, tags=("media",), state=qbit.STOPPED_UP, content_path=str(content))
+    qb = qbit.Qbit("http://qbit.test")
+    (item,), _ = organizer.items(qb, w["root"])
+    ops = organizer.plan(organizer.defaults(item, w["root"]), w["root"])
+    assert ops == [(str(content), "tv/VisionQuest/Season 01/VisionQuest - S01E01.mkv")]
+    page = web_client(w["cfg"], env=w["env"]).get("/media/downloads")
+    assert page.status_code == 200 and "tv/VisionQuest/Season 01/VisionQuest - S01E01.mkv" in page.text
+
+
+def test_qbittorrent_add_replies():
+    assert qbit.accepted("Ok.") and qbit.accepted('{"added_torrent_ids":["e2"],"failure_count":0,"pending_count":0,"success_count":1}')
+    assert not qbit.accepted("Fails.") and not qbit.accepted('{"added_torrent_ids":[],"failure_count":1,"pending_count":0,"success_count":0}')
+
+
 def test_show_year_joins_existing_folder(world):
     w = world
     (w["root"] / "tv/Lanterns (2026)").mkdir(parents=True)

@@ -87,7 +87,7 @@ class FakeQbit:
                 self.added.append({"kind": "magnet", "magnet": magnet, "hash": hash_, "tags": tags})
                 if hash_ not in self.torrents:
                     self.add(hash_, f"magnet {hash_[:8]}", tags=tags, state="metaDL")
-            return httpx.Response(200, text="Ok.")
+            return httpx.Response(200, json={"added_torrent_ids": [hash_], "failure_count": 0, "pending_count": 0, "success_count": 1})
         if path == "torrents/addTags":
             for h in fields["hashes"].split("|"):
                 for tag in fields["tags"].split(","):
