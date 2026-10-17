@@ -6,7 +6,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ..config import TIMEZONE
-from . import budget, context, journal, pricing, progress, projects, registry, threads, usage
+from . import budget, context, files, journal, pricing, progress, projects, registry, threads, usage
 from .prompts import SYSTEM
 from .tools.base import CHAT, CRON, NIGHTLY, READ, ToolContext, ToolError
 from .tools.profile import profile_block
@@ -72,16 +72,17 @@ def skills_index(conn):
     return index(conn) if index else ""
 
 
-def system_blocks(conn, prefix_cc=CACHE_CONTROL, extra=None, project=None):
-    """Breakpoints: after SYSTEM and after the last stable block (profile, skills index, role addendum); the project block follows uncached."""
+def system_blocks(conn, prefix_cc=CACHE_CONTROL, extra=None, project=None, sandbox=False):
+    """Breakpoints: after SYSTEM and after the last stable block (profile, skills index, role addendum); the project and sandbox blocks follow uncached."""
     blocks = [{"type": TEXT, "text": SYSTEM, "cache_control": prefix_cc}]
     for text in (profile_block(conn), skills_index(conn), extra or ""):
         if text:
             blocks.append({"type": TEXT, "text": text})
     if len(blocks) > 1:
         blocks[-1] = {**blocks[-1], "cache_control": prefix_cc}
-    if project:
-        blocks.append({"type": TEXT, "text": project})
+    for text in (project, files.SANDBOX_PROMPT if sandbox else None):
+        if text:
+            blocks.append({"type": TEXT, "text": text})
     return blocks
 
 
@@ -96,7 +97,7 @@ def max_tokens_for(effort):
     return MAX_TOKENS_DEEP if effort in DEEP_EFFORTS else MAX_TOKENS
 
 
-def request_params(tools, kind, effort, system, limits, prefix_cc=CACHE_CONTROL, allow=None):
+def request_params(tools, kind, effort, system, limits, prefix_cc=CACHE_CONTROL, allow=None, sandbox=False):
     params = {
         "model": MODEL,
         "max_tokens": max_tokens_for(effort),
@@ -106,7 +107,7 @@ def request_params(tools, kind, effort, system, limits, prefix_cc=CACHE_CONTROL,
         "context_management": context.context_management(limits),
         "betas": list(context.BETAS),
     }
-    tool_params = registry.anthropic_tool_params(tools) + registry.server_tools_for(kind, allow)
+    tool_params = registry.anthropic_tool_params(tools) + registry.server_tools_for(kind, allow) + ([dict(files.CODE_EXECUTION_TOOL)] if sandbox else [])
     if tool_params:
         tool_params[-1] = {**tool_params[-1], "cache_control": prefix_cc}
         params["tools"] = tool_params
@@ -142,13 +143,17 @@ def build_messages(messages):
     return out
 
 
+def message_tokens(message):
+    return context.estimate_value(message["content"]) + files.hidden_tokens(message["content"])
+
+
 def estimate(params, active, anchor):
     """Next-request size: the last response's usage plus everything appended since, else chars/4 of it all."""
     if anchor is not None:
         tokens, seq = anchor
-        return tokens + sum(context.estimate_value(m["content"]) for m in active if m["seq"] is not None and m["seq"] > seq)
+        return tokens + sum(message_tokens(m) for m in active if m["seq"] is not None and m["seq"] > seq)
     fixed = {k: params[k] for k in ("system", "tools") if k in params}
-    return context.estimate_value(fixed) + sum(context.estimate_value(m["content"]) for m in active)
+    return context.estimate_value(fixed) + sum(message_tokens(m) for m in active)
 
 
 def stream_response(client, params, messages, writer):
@@ -159,6 +164,23 @@ def stream_response(client, params, messages, writer):
         response = stream.get_final_message()
     writer.flush()
     return response
+
+
+def stream_in_container(conn, thread, client, params, messages, writer):
+    """With the thread's code execution container when it has one; a container the API no longer accepts
+    (expired after 30 days) is dropped and the call repeated in a fresh one."""
+    container = thread["container_id"]
+    if not container:
+        return stream_response(client, params, messages, writer)
+    try:
+        return stream_response(client, {**params, "container": container}, messages, writer)
+    except Exception as e:
+        if getattr(e, "status_code", None) != 400:
+            raise
+        log.info("thread %s: container %s rejected (%s); starting a new one", thread["id"], container, e)
+        thread["container_id"] = None
+        threads.set_container(conn, thread["id"], None)
+        return stream_response(client, params, messages, writer)
 
 
 def tool_result(tool_use_id, content, is_error):
@@ -289,7 +311,7 @@ def inject_queued(conn, ctx, now):
             from . import skills
 
             text, _, _ = skills.expand(conn, text)
-        journal.append_message(conn, ctx.thread_id, ctx.run_id, journal.USER, [{"type": TEXT, "text": text}], now())
+        journal.append_message(conn, ctx.thread_id, ctx.run_id, journal.USER, [*row["files"], {"type": TEXT, "text": text}], now())
         ctx.progress.event(progress.USER, text=text, queue_id=row["id"])
     return bool(rows)
 
@@ -308,7 +330,8 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
     by_name = {t.name: t for t in tools}
     unattended = threads.root_kind(conn, thread_id) in UNATTENDED
     prefix_cc = prefix_cache_control(conn, kind)
-    params = request_params(tools, kind, effort, system_blocks(conn, prefix_cc, system_extra, projects.system_block(conn, thread)), limits, prefix_cc, allowed_tools)
+    sandbox = files.sandbox_on(thread)
+    params = request_params(tools, kind, effort, system_blocks(conn, prefix_cc, system_extra, projects.system_block(conn, thread), sandbox), limits, prefix_cc, allowed_tools, sandbox)
     sig = system_signature(params)
     writer = progress.Writer(conn, run_id, now)
     ctx = ToolContext(
@@ -344,16 +367,17 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
             if spent >= max_cost_usd:
                 raise RunLimit(f"run cost ceiling reached (${spent:.2f} of ${max_cost_usd:.2f})")
             active = stamp_messages(conn, thread_id, context.active_messages(conn, thread_id, sig)[0])
-            size = estimate(params, active, anchor)
+            size = estimate(params, files.with_project_files(conn, thread, active), anchor)
             if size > limits["preflight"]:
                 log.info("run %s: next request ~%d tokens, compacting on the client", run_id, size)
                 context.client_compact(conn, client, MODEL, active, thread_id, run_id, kind, limits["hard"], now())
                 anchor = None
                 active = stamp_messages(conn, thread_id, context.active_messages(conn, thread_id, sig)[0])
-                size = estimate(params, active, anchor)
+                size = estimate(params, files.with_project_files(conn, thread, active), anchor)
             if size > limits["hard"]:
                 raise RunLimit(f"next request would be about {size} tokens, over the {limits['hard']} limit")
-            response = stream_response(client, params, build_messages(active), writer)
+            messages = files.expand(conn, build_messages(files.with_project_files(conn, thread, active)), sandbox)
+            response = stream_in_container(conn, thread, client, params, messages, writer) if sandbox else stream_response(client, params, messages, writer)
             journal.bump_steps(conn, run_id)
             blocks = [block_dict(b) for b in field(response, "content", [])]
             stop = field(response, "stop_reason")
@@ -364,6 +388,14 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
                 clear_edits=clear_edits, cleared_tokens=cleared, compaction=int(compacted),
             )
             seq = journal.append_message(conn, thread_id, run_id, journal.ASSISTANT, blocks, now(), system_sig=sig)
+            if sandbox:
+                thread["container_id"] = files.container_of(response) or thread["container_id"]
+                threads.set_container(conn, thread_id, thread["container_id"])
+                try:
+                    if files.ingest_generated(cfg, conn, client, thread_id, run_id, blocks, now()):
+                        writer.event(progress.FILES)
+                except Exception:
+                    log.exception("run %s: generated files were not stored", run_id)
             if compacted:
                 context.server_compacted(conn, thread_id, run_id, blocks, active, now())
                 anchor = None

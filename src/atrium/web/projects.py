@@ -6,7 +6,7 @@ from fastapi import Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
 from .. import notion_api, notion_wiki
-from ..agent import projects, service, threads
+from ..agent import files, projects, service, threads
 from ..agent.tools import notion_write
 from ..agent.tools.base import CHAT, NotConfigured, ToolContext, ToolError
 from .deps import is_partial
@@ -72,7 +72,8 @@ def register(app, deps):
         with connection() as conn:
             project = load(conn, project_id)
             found = service.list_threads(conn, None, THREAD_LIMIT, view == ARCHIVED, project_id)
-        return render("project.html", project=project, threads=found, view=view, q="", project_id=project_id)
+            attached = files.of_project(conn, project_id)
+        return render("project.html", project=project, threads=found, view=view, q="", project_id=project_id, files=attached, error=None)
 
     @app.get("/projects/{project_id}/edit")
     def project_edit_form(project_id: int):

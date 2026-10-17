@@ -44,6 +44,7 @@ from . import activity as activity_ui
 from . import auth
 from . import chat as chat_ui
 from . import drafts as drafts_ui
+from . import files as files_ui
 from . import media as media_ui
 from . import money as money_ui
 from . import notifications as notifications_ui
@@ -204,6 +205,7 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
     notifications_ui.register(app, deps)
     scheduled_ui.register(app, deps)
     projects_ui.register(app, deps)
+    files_ui.register(app, deps)
     openloops_ui.register(app, deps)
     watches_ui.register(app, deps)
     money_ui.register(app, deps)

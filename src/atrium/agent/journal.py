@@ -225,16 +225,16 @@ def init_queue(conn):
     conn.executescript(QUEUE_SCHEMA)
 
 
-def queue_message(conn, thread_id, text, now):
-    """Store a message for the running run to pick up at its next step. None when no run is running (the caller
-    starts a run instead)."""
+def queue_message(conn, thread_id, text, now, files=None):
+    """Store a message (text plus attachment blocks) for the running run to pick up at its next step. None when
+    no run is running (the caller starts a run instead)."""
     conn.execute("BEGIN IMMEDIATE")
     try:
         active = active_run(conn, thread_id)
         if active is None or active["state"] != RUNNING:
             conn.execute("ROLLBACK")
             return None
-        cur = conn.execute("INSERT INTO thread_queue (thread_id, text, created_at) VALUES (?, ?, ?)", (thread_id, text, now))
+        cur = conn.execute("INSERT INTO thread_queue (thread_id, text, created_at, files_json) VALUES (?, ?, ?, ?)", (thread_id, text, now, dumps(files or [])))
         conn.execute("COMMIT")
         return cur.lastrowid
     except Exception:
@@ -243,7 +243,8 @@ def queue_message(conn, thread_id, text, now):
 
 
 def queued(conn, thread_id):
-    return [dict(r) for r in conn.execute("SELECT * FROM thread_queue WHERE thread_id = ? AND consumed_at IS NULL ORDER BY id", (thread_id,))]
+    rows = conn.execute("SELECT * FROM thread_queue WHERE thread_id = ? AND consumed_at IS NULL ORDER BY id", (thread_id,))
+    return [{**r, "files": json.loads(r["files_json"] or "[]")} for r in (dict(r) for r in rows)]
 
 
 def take_queued(conn, thread_id, run_id, now):

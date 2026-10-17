@@ -1,5 +1,5 @@
 {% from "_icons.html" import icon %}
-{% from "_macros.html" import preview_attrs, external, when %}
+{% from "_macros.html" import preview_attrs, external, when, file_icon %}
 {% set w = work %}
 <section class="flex flex-col gap-2" aria-labelledby="work-plan">
   <h2 id="work-plan" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ icon("list-checks", "size-3.5") }}Plan</h2>
@@ -59,14 +59,17 @@
   {% if w.files or w.drafts %}
   <ul class="flex flex-col gap-1 text-sm" data-files>
     {% for f in w.files %}
-    <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{ preview_attrs("/chat/" ~ f.thread_id ~ "/files/" ~ f.id) }}>{{ icon("file-text", "size-3.5 shrink-0 text-muted-foreground") }}<span class="truncate">{{ f.name }}</span><span class="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{ f.bytes | filesizeformat }}</span></a></li>
+    <li class="flex items-center gap-1 rounded-md border px-3 py-2 hover:bg-accent" data-file="{{ f.id }}">
+      <a class="flex min-w-0 flex-1 items-center gap-2" {{ preview_attrs("/chat/" ~ f.thread_id ~ "/files/" ~ f.id) }}>{{ file_icon(f.media_type) }}<span class="truncate">{{ f.name }}</span><span class="badge shrink-0" data-variant="{{ 'secondary' if f.origin == 'generated' else 'outline' }}">{{ f.origin }}</span><span class="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{ f.bytes | filesizeformat }}</span></a>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/chat/{{ f.thread_id }}/files/{{ f.id }}/download" download aria-label="Download {{ f.name }}">{{ icon("download", "size-3.5") }}</a>
+    </li>
     {% endfor %}
     {% for d in w.drafts %}
     <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{ preview_attrs("/drafts/" ~ d.id) }}>{{ icon("mail", "size-3.5 shrink-0 text-muted-foreground") }}<span class="truncate">{{ d.subject or "(no subject)" }}</span><span class="badge ms-auto shrink-0" data-variant="{{ 'secondary' if d.status == 'sent' else 'outline' }}">{{ d.status }}</span></a></li>
     {% endfor %}
   </ul>
   {% else %}
-  <p class="text-xs text-muted-foreground">Drafts and files made in this thread are listed here.</p>
+  <p class="text-xs text-muted-foreground">Files you attach, files the sandbox produces and drafts made in this thread are listed here.</p>
   {% endif %}
 </section>
 
@@ -77,7 +80,7 @@
     {% for c in w.code %}
     <li>
       <details class="rounded-md border">
-        <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">{{ icon("code", "size-3.5") }}run_code<span class="tabular-nums">{{ when(c.started_at, "datetime") }}</span>{% if c.state == "error" %}<span class="badge ms-auto" data-variant="destructive">error</span>{% endif %}</summary>
+        <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">{{ icon("code", "size-3.5") }}{{ c.tool }}<span class="tabular-nums">{{ when(c.started_at, "datetime") }}</span>{% if c.state == "error" %}<span class="badge ms-auto" data-variant="destructive">error</span>{% endif %}</summary>
         <pre class="overflow-x-auto border-t bg-muted px-3 py-2 font-mono whitespace-pre-wrap break-words">{{ c.script }}</pre>
         <pre class="overflow-x-auto border-t px-3 py-2 font-mono whitespace-pre-wrap break-words">{{ c.result or "(no result)" }}</pre>
       </details>
@@ -85,6 +88,6 @@
     {% endfor %}
   </ul>
   {% else %}
-  <p class="text-xs text-muted-foreground">Scripts the assistant runs with run_code appear here with their output.</p>
+  <p class="text-xs text-muted-foreground">Scripts the assistant runs with run_code or in the code sandbox appear here with their output.</p>
   {% endif %}
 </section>

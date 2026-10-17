@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
-{% from "_macros.html" import spinner %}
+{% from "_macros.html" import spinner, attach_field, attach_button %}
 {% set page = "chat" %}
 {% block title %}Chat{% endblock %}
 {% block heading %}Chat{% endblock %}
@@ -27,12 +27,15 @@
   <div id="threads" class="flex flex-col gap-3">
     {% include "_thread_list.html" %}
   </div>
-  <form method="post" action="/chat" class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" data-reset>
+  <form method="post" action="/chat" enctype="multipart/form-data" hx-post="/chat" hx-encoding="multipart/form-data" hx-swap="none" hx-disabled-elt="find button[type=submit]"
+        class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" data-reset data-attach>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="new-text" class="sr-only">New thread</label>
-    <textarea id="new-text" name="text" rows="2" class="textarea w-full" placeholder="Ask about your mail, contacts, Notion, calendar or the web… (⌘⏎ to send)" data-submit-on-enter autofocus></textarea>
+    <textarea id="new-text" name="text" rows="2" class="textarea w-full" placeholder="Ask about your mail, contacts, Notion, calendar or the web… (⌘⏎ to send, drop files to attach)" data-submit-on-enter autofocus></textarea>
+    {{ attach_field() }}
     <div class="flex items-center justify-between gap-3">
-      <p class="hidden text-xs text-muted-foreground sm:block">Mail, web and Notion content is treated as untrusted data. The assistant never sends mail; it only drafts.</p>
+      {{ attach_button() }}
+      <p class="hidden text-xs text-muted-foreground sm:block">Mail, web, Notion and attached file content is treated as untrusted data. The assistant never sends mail; it only drafts.</p>
       <button type="submit" class="btn ms-auto">{{ icon("send") }}Start</button>
     </div>
   </form>

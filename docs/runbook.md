@@ -13,6 +13,7 @@ back up; `cache/` can be rebuilt.
 | Path | Content |
 | --- | --- |
 | `atrium.db` | SQLite index, rules, decisions, automatic-action log and proposals of the mail core |
+| `files/<thread id>/`, `files/p<project id>/` | originals of chat and project uploads and files the code sandbox produced; deleted with the thread |
 | `cache/models` | where a host may keep local model weights; not atrium's |
 | `cache/messages` | raw message store of the mail core; not backed up |
 | `pause` | exists while automatic mailbox writes are paused |
@@ -185,6 +186,36 @@ filled by uploads and generated files) with the thread's drafts, and `run_code` 
 Drafts and sent mail created in a thread appear as cards in it and open in the Preview
 tab (`GET /drafts/{id}`); a sent copy found in the mailbox links back to its thread
 through `drafts.sent_msgid`.
+
+Files: the composer (new chat and in-thread) attaches files by drag and drop or the
+Attach button, sent as multipart with the CSRF header (so the attach forms are HTMX-driven).
+Per file 32 MB (images 5 MB), 64 MB per message; readable types are PDF, PNG/JPEG/GIF/WebP,
+text, Markdown, CSV, JSON, XML, code, `.docx` (python-docx) and `.xlsx` (openpyxl, one
+CSV block per sheet). Originals go to `files/<thread id>/` under the state directory and
+a `thread_files` row (`origin` upload or generated; `text` holds the extracted text,
+`tokens` the estimate). The journal keeps an `attachment` reference block ahead of the
+operator's text; the request builder turns it into a `document` (PDF base64 or extracted
+text, citations on, `context` marking it untrusted operator-supplied data) or `image`
+block on every request, so later turns hit the prompt cache and the base64 is never stored
+twice. URLs inside files never join the web_fetch allowlist. A message whose attachments
+would not fit under the thread's compaction point is refused with the limit to raise.
+`GET /chat/{id}/files/{fid}` previews (Markdown, tables for CSV/xlsx, text, images),
+`/download` serves any file as an attachment (never inline HTML/SVG). Delete on a thread
+(`POST /chat/{id}/delete`) purges its messages, tool records, files and subagent threads
+and deletes its Files API uploads; the thread row stays as a hidden tombstone because
+`usage` and `agent_writes` reference it. Projects carry files too (`thread_files.project_id`,
+`files/p<id>/`, managed on the project page); they are attached ahead of the first user
+turn of every request in the project's threads.
+
+Code sandbox: a per-thread switch in the composer (`threads.code_sandbox`, off by default)
+adds Anthropic's `code_execution_20260521` server tool and a system note, uploads files
+attached while it is on to the Files API (`thread_files.anthropic_file_id`) and references
+them with `container_upload` blocks, reuses the thread's container
+(`threads.container_id`; a rejected one is dropped and the call repeated) and, after each
+response, downloads files the container left in `$OUTPUT_DIR` into `thread_files` as
+`generated`. The switch shows the data note: files go to Anthropic, not under zero data
+retention, containers keep data up to 30 days. Monty `run_code` is unchanged and runs on
+the host in `atrium-codemode@`; the Work tab lists both as code sessions.
 
 Context size is kept in check in layers, all scaled from the thread's context limit
 (never above the model's 1M). Requests go through the beta Messages API with

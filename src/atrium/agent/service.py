@@ -5,7 +5,7 @@ import threading
 import time
 
 from .. import db, embed
-from . import budget, context, journal, loop, progress, skills, threads, usage, workspace
+from . import budget, context, files, journal, loop, progress, skills, threads, usage, workspace
 from .client import make_client
 from .tools.base import CHAT, CRON, NIGHTLY, NotConfigured
 
@@ -74,7 +74,7 @@ def items_of(messages, calls, drafts=None):
     their results, subagent spawns, searches, notes written between tool calls), the run's answers, mail cards
     for drafts it created, and compaction markers."""
     drafts = drafts or {}
-    items, uses = [], {}
+    items, uses, attached = [], {}, []
     activity = None
 
     def step(base, found):
@@ -90,9 +90,12 @@ def items_of(messages, calls, drafts=None):
         final = m["role"] == journal.ASSISTANT and not any(b.get("type") == loop.TOOL_USE for b in m["content"])
         for block in m["content"]:
             kind = block.get("type")
-            if kind == loop.TEXT and m["role"] == journal.USER:
+            if kind == context.ATTACHMENT and m["role"] == journal.USER:
+                attached.append({"id": block.get("file_id"), "name": block.get("name", "file"), "media_type": block.get("media_type", ""), "kind": block.get("kind")})
+            elif kind == loop.TEXT and m["role"] == journal.USER:
                 activity = None
-                items.append({**base, "kind": "user", "text": block.get("text", "")})
+                items.append({**base, "kind": "user", "text": block.get("text", ""), "files": attached})
+                attached = []
             elif kind == loop.TEXT and final:
                 activity = None
                 items.append({**base, "kind": "assistant", "text": block.get("text", ""), "citations": citations_of(block)})
@@ -136,6 +139,11 @@ def items_of(messages, calls, drafts=None):
                 if found is not None:
                     found["result"] = f"{len(results)} results"
                 step(base, {"kind": "web_search", "results": results, "error": content.get("error_code") if isinstance(content, dict) else None})
+            elif kind in files.CODE_EXECUTION_RESULTS:
+                found = uses.get(block.get("tool_use_id"))
+                if found is not None:
+                    result, state = workspace.execution_result(block)
+                    found["result"], found["is_error"] = progress.preview_of(result), state == workspace.ERROR
             elif kind == context.COMPACTION:
                 activity = None
                 items.append({**base, "kind": "compaction"})
@@ -204,11 +212,12 @@ def load(conn, thread_id, now):
     return thread
 
 
-def prepare(conn, thread_id, text, kind, now, parent_run_id=None, limits=None, operator=False):
+def prepare(conn, thread_id, text, kind, now, parent_run_id=None, limits=None, operator=False, files=None):
     """`operator` marks text typed by the operator: only that text may add URLs to the thread's web_fetch
     allowlist. Model-written text (research tasks, agent-made schedules, reminders) never does.
 
-    `/skill:name` tokens in operator messages and job prompts are expanded into the message before the run."""
+    `/skill:name` tokens in operator messages and job prompts are expanded into the message before the run.
+    `files`: attachment blocks (files.ingest_uploads) journaled ahead of the text; their content never reaches the allowlist."""
     thread = load(conn, thread_id, now)
     threads.set_title(conn, thread_id, threads.title_from(text))
     if operator:
@@ -223,7 +232,7 @@ def prepare(conn, thread_id, text, kind, now, parent_run_id=None, limits=None, o
         journal.set_limits(conn, run_id, limits)
     if used:
         journal.set_skills(conn, run_id, used)
-    journal.append_message(conn, thread_id, run_id, journal.USER, [{"type": loop.TEXT, "text": text}], now)
+    journal.append_message(conn, thread_id, run_id, journal.USER, [*(files or []), {"type": loop.TEXT, "text": text}], now)
     return run_id
 
 
@@ -265,33 +274,32 @@ def in_background(cfg, run_id, client, env):
 
     threading.Thread(target=work, name=f"atrium-run-{run_id}", daemon=True).start()
 
-
-def start_run(cfg, thread_id, text, *, kind=CHAT, client=None, env=None, operator=False):
+def start_run(cfg, thread_id, text, *, kind=CHAT, client=None, env=None, operator=False, files=None):
     conn = db.connect(cfg.db_path)
     try:
-        run_id = prepare(conn, thread_id, text, kind, time.time(), operator=operator)
+        run_id = prepare(conn, thread_id, text, kind, time.time(), operator=operator, files=files)
     finally:
         conn.close()
     in_background(cfg, run_id, client, env)
     return run_id
 
 
-def send(cfg, thread_id, text, *, client=None, env=None):
-    """Operator text for a chat thread: queued for the running run to take at its next step, else a new run.
-    Returns ("queued", queue_id) or ("started", run_id)."""
+def send(cfg, thread_id, text, *, client=None, env=None, files=None):
+    """Operator text (with attachments) for a chat thread: queued for the running run to take at its next step,
+    else a new run. Returns ("queued", queue_id) or ("started", run_id)."""
     conn = db.connect(cfg.db_path)
     try:
         if threads.get(conn, thread_id) is None:
             raise UnknownThread(thread_id)
-        queue_id = journal.queue_message(conn, thread_id, text, time.time())
+        queue_id = journal.queue_message(conn, thread_id, text, time.time(), files)
     finally:
         conn.close()
     if queue_id is not None:
         return "queued", queue_id
-    return "started", start_run(cfg, thread_id, text, kind=CHAT, client=client, env=env, operator=True)
+    return "started", start_run(cfg, thread_id, text, kind=CHAT, client=client, env=env, operator=True, files=files)
 
 
-def edit_last(cfg, thread_id, text, *, client=None, env=None):
+def edit_last(cfg, thread_id, text, *, client=None, env=None, files=None):
     """Replace the last operator message and answer it again; the old tail stays journaled as superseded."""
     conn = db.connect(cfg.db_path)
     try:
@@ -302,7 +310,7 @@ def edit_last(cfg, thread_id, text, *, client=None, env=None):
         journal.supersede(conn, thread_id, last["seq"])
     finally:
         conn.close()
-    return start_run(cfg, thread_id, text, kind=CHAT, client=client, env=env, operator=True)
+    return start_run(cfg, thread_id, text, kind=CHAT, client=client, env=env, operator=True, files=files)
 
 
 def regenerate(cfg, thread_id, *, client=None, env=None):
@@ -359,12 +367,26 @@ def branch(conn, thread_id, seq, now=time.time):
     messages = branch_messages(all_messages, seq)
     child = create_thread(conn, CHAT, title=source["title"], now=now)
     conn.execute(
-        "UPDATE threads SET effort = ?, context_limit = ?, allowed_urls = ?, project_id = ?, branched_from_thread_id = ?, branched_from_seq = ? WHERE id = ?",
-        (source["effort"], source["context_limit"], json.dumps(source["allowed_urls"]), source["project_id"], thread_id, seq, child),
+        "UPDATE threads SET effort = ?, context_limit = ?, allowed_urls = ?, project_id = ?, code_sandbox = ?, branched_from_thread_id = ?, branched_from_seq = ? WHERE id = ?",
+        (source["effort"], source["context_limit"], json.dumps(source["allowed_urls"]), source["project_id"], source["code_sandbox"], thread_id, seq, child),
     )
     for m in messages:
-        journal.append_message(conn, child, None, m["role"], m["content"], now(), system_sig=m["system_sig"])
+        journal.append_message(conn, child, None, m["role"], files.clone_content(conn, m["content"], child, now()), now(), system_sig=m["system_sig"])
     return child
+
+
+def delete_thread(cfg, conn, thread_id, client, now=time.time):
+    """Purges a chat thread and its subagent threads: files (local and Files API), messages and tool records.
+    Refused while a run is active."""
+    thread = threads.get(conn, thread_id)
+    if thread is None or thread["kind"] != CHAT:
+        raise UnknownThread(thread_id)
+    for row in (thread, *workspace.child_threads(conn, thread_id)):
+        if journal.active_run(conn, row["id"]):
+            raise RunActive(f"thread {row['id']} has a run in progress")
+    for row in (*workspace.child_threads(conn, thread_id), thread):
+        files.delete_owned(cfg, conn, client, thread_id=row["id"])
+        threads.purge(conn, row["id"], now())
 
 
 def needs_operator(conn, run):
