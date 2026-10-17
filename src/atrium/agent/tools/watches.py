@@ -1,9 +1,9 @@
 from datetime import datetime
 
-from ... import birthdays, receipts, watches
+from ... import birthdays, watches
 from .. import scheduler
-from ._args import bounded_int, clip, text_arg
-from .base import CHAT, CODE, CRON, READ, SUB, WRITE, NotConfigured, Tool, ToolContext, ToolError
+from ._args import bounded_int, clip
+from .base import CHAT, CODE, CRON, READ, SUB, NotConfigured, Tool, ToolContext, ToolError
 
 CONTEXTS = frozenset({CHAT, CRON, SUB, CODE})
 
@@ -47,33 +47,6 @@ def upcoming_birthdays(ctx: ToolContext, args: dict):
     }
 
 
-def receipt_candidates(ctx: ToolContext, args: dict):
-    limit = bounded_int(args, "limit", 10, receipts.MAX_LIMIT)
-    return {
-        "candidates": receipts.candidates(ctx.conn, limit, ctx.now()),
-        "note": "Read a candidate with mail_read. In chat save it with the Notion write tools, then call receipt_mark; in scheduled runs call propose kind notion_receipt.",
-    }
-
-
-def receipt_mark(ctx: ToolContext, args: dict):
-    message_id = args.get("message_id")
-    if isinstance(message_id, bool) or not isinstance(message_id, int):
-        raise ToolError("message_id must be an integer")
-    status = text_arg(args, "status", required=True)
-    try:
-        receipts.mark(ctx.conn, message_id, status, text_arg(args, "ref") or "")
-    except receipts.ReceiptError as e:
-        raise ToolError(str(e)) from e
-    return {"message_id": message_id, "status": status}
-
-
-def receipt_proposal(ctx: ToolContext, payload: dict):
-    try:
-        return receipts.propose(ctx.conn, payload)
-    except receipts.ReceiptError as e:
-        raise ToolError(str(e)) from e
-
-
 TOOLS = [
     Tool(
         name="packages",
@@ -98,34 +71,5 @@ TOOLS = [
         handler=upcoming_birthdays,
         effect=READ,
         contexts=CONTEXTS,
-    ),
-    Tool(
-        name="receipt_candidates",
-        description="List recent receipt emails that have not yet been saved to Notion or skipped.",
-        input_schema={
-            "type": "object",
-            "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": receipts.MAX_LIMIT}},
-            "additionalProperties": False,
-        },
-        handler=receipt_candidates,
-        effect=READ,
-        contexts=CONTEXTS,
-    ),
-    Tool(
-        name="receipt_mark",
-        description="Record that a receipt email was saved to Notion (status captured, ref = the page id) or should not be offered again (skipped).",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "message_id": {"type": "integer"},
-                "status": {"type": "string", "enum": [receipts.CAPTURED, receipts.SKIPPED]},
-                "ref": {"type": "string"},
-            },
-            "required": ["message_id", "status"],
-            "additionalProperties": False,
-        },
-        handler=receipt_mark,
-        effect=WRITE,
-        contexts=frozenset({CHAT}),
     ),
 ]

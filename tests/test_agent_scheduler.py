@@ -385,7 +385,7 @@ def test_notify_tool_contexts():
 
 NIGHTLY_TOOLS = {
     "calendar_list", "contacts_lookup", "context_drop", "context_fold", "context_pin", "context_status", "fetch_knowledge", "load_skill", "mail_read", "mail_search", "notify",
-    "notion_archive_page", "notion_create_page", "notion_update_page", "profile_get", "profile_set", "recall", "search_knowledge", "threads_today",
+    "notion_add_alias", "notion_archive_page", "notion_create_page", "notion_move_page", "notion_update_page", "profile_get", "profile_set", "recall", "search_knowledge", "threads_today",
 }
 NIGHTLY_FORBIDDEN = (
     "web_fetch", "web_search", "schedule_create", "schedule_update",
@@ -435,7 +435,7 @@ def test_propose_rejects_unknown_kinds():
             propose.propose(ctx, {"kind": kind, "payload": {}})
     with pytest.raises(ToolError, match="payload"):
         propose.propose(ctx, {"kind": "notion_edit", "payload": "x"})
-    assert set(propose.KINDS) == {"notion_edit", "notion_link", "notion_receipt"}
+    assert set(propose.KINDS) == {"notion_edit", "notion_link"}
 
 
 def test_propose_creates_registered_kinds(monkeypatch):

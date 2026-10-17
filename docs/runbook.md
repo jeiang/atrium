@@ -218,7 +218,7 @@ Drafts left in `sending` for more than 10 minutes (a crash mid-send) become
 account's Sent folder, then mark the draft sent or return it to draft; it is
 never resent automatically.
 
-### Watches, birthdays, receipts and built-in jobs
+### Watches, birthdays and built-in jobs
 
 After each mail pass atrium reads order/shipping mail with the local model and keeps
 packages (UPS/FedEx/USPS/DHL numbers by regex, model fallback for orders without one).
@@ -226,9 +226,8 @@ Package status changes only when a later email says so; there is no carrier look
 `atrium watches refresh` runs the same scan by hand. /watches lists packages and
 birthdays/anniversaries for the next 60 days with Dismiss. Dates come from vCard
 `BDAY`, `ANNIVERSARY`, `X-ANNIVERSARY` and iOS `item*.X-ABDATE` entries in
-`ATRIUM_CONTACTS_DIR`. Receipt mail is offered by `receipt_candidates`; in cron runs the
-assistant proposes `notion_receipt`, which creates a `Type=Receipt` page in
-`ATRIUM_NOTION_WIKI_DATA_SOURCE` (needs a `Type` select property) and undo trashes it.
+`ATRIUM_CONTACTS_DIR`. Receipt mail feeds the money ledger (`/money`) only; nothing
+about purchases is written to Notion.
 
 The scheduler seeds seven built-in jobs once (kind `builtin`, listed on /scheduled, disable
 but not cancel): `weekly-review` (Sunday 18:00), `daily-nudges` (08:00, notifies only

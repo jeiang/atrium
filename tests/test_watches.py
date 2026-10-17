@@ -1,21 +1,17 @@
-import json
 from datetime import date, datetime
 
 import pytest
 from agent_tool_helpers import make_ctx
-from fake_notion import FakeNotion
 from helpers import add_message, make_config, prepare, static_dir, web_client
 
-from atrium import birthdays, contacts, db, notion_api, notion_proposals, proposals, receipts, watches
+from atrium import birthdays, contacts, db, watches
 from atrium.agent import builtin_jobs, registry, scheduler
-from atrium.agent.tools import propose
 from atrium.agent.tools import watches as watch_tools
 from atrium.agent.tools.base import NotConfigured, ToolError
 
 NOW = datetime(2026, 10, 15, 12, 0).timestamp()
 DAY = 86400
 TZ = "America/Port_of_Spain"
-WIKI = "00000000-0000-0000-0000-0000000000aa"
 
 
 @pytest.fixture
@@ -235,90 +231,9 @@ def test_refresh_swallows_scan_failures(conn, cfg, monkeypatch):
     assert out == {"packages": {"error": True}}
 
 
-# ---------- receipts ----------
-
-
-@pytest.fixture
-def notion_world(conn, monkeypatch):
-    fake = FakeNotion()
-    conn.execute(
-        "INSERT INTO notion_sources (id, properties) VALUES (?, ?)",
-        (WIKI, json.dumps({"Name": {"type": "title"}, "Type": {"type": "select"}})),
-    )
-    monkeypatch.setenv("ATRIUM_NOTION_WIKI_DATA_SOURCE", WIKI)
-    client = notion_api.NotionClient("tok", fake.transport, sleep=lambda s: None, clock=lambda: 0.0)
-    monkeypatch.setattr(notion_proposals, "CLIENT_FACTORY", [lambda cfg: client])
-    return fake
-
-
-def test_receipt_candidates_and_mark(conn):
-    a = mail(conn, 1, 2, "paid", subject="Your receipt", k_receipt=1, has_money=1)
-    mail(conn, 2, 2, "hello", subject="Not a receipt")
-    mail(conn, 3, 200, "old", subject="Ancient receipt", k_receipt=1)
-    found = receipts.candidates(conn, 10, NOW)
-    assert [c["message_id"] for c in found] == [a]
-    receipts.mark(conn, a, receipts.SKIPPED)
-    assert receipts.candidates(conn, 10, NOW) == []
-    with pytest.raises(receipts.ReceiptError):
-        receipts.mark(conn, 999, receipts.CAPTURED)
-    with pytest.raises(receipts.ReceiptError):
-        receipts.mark(conn, a, "weird")
-
-
-def test_receipt_proposal_executes_and_undoes(conn, cfg, notion_world):
-    fake = notion_world
-    a = mail(conn, 1, 2, "Total 12.50", subject="Your receipt from Cafe", k_receipt=1, has_money=1, from_name="Cafe")
-    ctx = make_ctx(conn, cfg, env={}, kind="cron", now=lambda: NOW)
-    payload = {"message_id": a, "merchant": "Cafe Uno", "amount": 12.5, "currency": "usd", "date": "2026-10-13"}
-    pid = propose.KINDS[receipts.KIND][0](ctx, payload)
-    assert pid is not None
-    assert receipts.candidates(conn, 10, NOW) == []  # pending proposal hides it
-    assert propose.KINDS[receipts.KIND][0](ctx, payload) is None  # identical proposal exists
-    receipts.register()
-    applied = proposals.approve_and_apply(conn, cfg, pid)
-    assert applied["status"] == "applied", applied
-    created = next(p for p in fake.pages.values() if p["properties"].get("Type"))
-    assert created["parent"] == {"data_source_id": WIKI}
-    assert created["properties"]["Type"] == {"select": {"name": "Receipt"}}
-    markdown = fake.markdown[created["id"]]
-    assert "Cafe Uno" in markdown and "12.50 USD" in markdown and "2026-10-13" in markdown and f"message #{a}" in markdown
-    assert conn.execute("SELECT status, ref FROM receipts").fetchone()["status"] == "captured"
-    assert receipts.candidates(conn, 10, NOW) == []
-    assert proposals.can_undo(conn, pid)
-    result = proposals.undo(conn, cfg, pid)
-    assert result["undone"] is True
-    assert fake.pages[created["id"]]["in_trash"] is True
-    assert conn.execute("SELECT COUNT(*) FROM receipts").fetchone()[0] == 0
-
-
-def test_receipt_proposal_validation(conn, cfg):
-    a = mail(conn, 1, 2, "x", subject="r", k_receipt=1)
-    ctx = make_ctx(conn, cfg, env={}, kind="cron", now=lambda: NOW)
-    build = propose.KINDS[receipts.KIND][0]
-    for bad in ({}, {"message_id": a}, {"message_id": 999, "merchant": "X"}, {"message_id": a, "merchant": "X", "date": "13 Oct"}):
-        with pytest.raises(ToolError):
-            build(ctx, bad)
-
-
-def test_receipt_execution_needs_wiki_type_property(conn, cfg, monkeypatch):
-    fake = FakeNotion()
-    conn.execute("INSERT INTO notion_sources (id, properties) VALUES (?, ?)", (WIKI, json.dumps({"Name": {"type": "title"}})))
-    monkeypatch.setenv("ATRIUM_NOTION_WIKI_DATA_SOURCE", WIKI)
-    client = notion_api.NotionClient("tok", fake.transport, sleep=lambda s: None, clock=lambda: 0.0)
-    monkeypatch.setattr(notion_proposals, "CLIENT_FACTORY", [lambda c: client])
-    a = mail(conn, 1, 2, "x", subject="r", k_receipt=1)
-    pid = receipts.propose(conn, {"message_id": a, "merchant": "Cafe"})
-    receipts.register()
-    assert proposals.approve_and_apply(conn, cfg, pid)["status"] == "failed"
-    assert not fake.pages
-
-
 def test_tools_registered_by_kind():
     cron = {t.name for t in registry.tools_for("cron")}
-    chat = {t.name for t in registry.tools_for("chat")}
-    assert {"packages", "upcoming_birthdays", "receipt_candidates", "bills", "spending"} <= cron
-    assert "receipt_mark" in chat and "receipt_mark" not in cron
-    assert "receipt_mark" not in {t.name for t in registry.tools_for("nightly")}
+    assert {"packages", "upcoming_birthdays", "bills", "spending"} <= cron
 
 
 # ---------- built-in jobs ----------
