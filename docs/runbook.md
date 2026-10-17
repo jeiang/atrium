@@ -1,54 +1,68 @@
 # Runbook: atrium
 
-`modules/atrium/` runs on artemis as the static `atrium` user (uid/gid 880).
+The `services.atrium` module (`nix/module.nix`) runs atrium as the static
+`atrium` user (uid/gid `services.atrium.id`, default 880). Commands below
+run on the host as root; `atrium-run` runs the CLI as that user with the
+units' environment.
 
 ## State
 
-`/var/lib/atrium` is a persisted directory and part of the artemis restic
-backup set, except `cache/`.
+`/var/lib/atrium` holds everything. The host persists it and decides what to
+back up; `cache/` can be rebuilt.
 
 | Path | Content |
 | --- | --- |
 | `atrium.db` | SQLite index, rules, decisions, automatic-action log and proposals of the mail core |
-| `cache/models` | GGUF weights, fetched by `atrium-models-fetch`; not backed up |
+| `cache/models` | where a host may keep local model weights; not atrium's |
 | `cache/messages` | raw message store of the mail core; not backed up |
 | `pause` | exists while automatic mailbox writes are paused |
 | `media-link.key` | HMAC key for public media links, created on first use when `ATRIUM_MEDIA_LINK_KEY` is unset |
 | `cache/media` | TMDB posters and ffmpeg episode thumbnails; not backed up |
 | `vdirsyncer/{calendars,contacts,status}` | iCloud CalDAV/CardDAV mirror |
 
-## Secrets
+## Environment
 
-`just sops-edit modules/atrium/secrets.yaml` edits `atrium.env`, a
-`KEY=VALUE` blob read as an `EnvironmentFile` by every atrium unit:
+`services.atrium.environmentFiles` names `KEY=VALUE` files read as
+`EnvironmentFile` by every atrium unit and by `atrium-run`. They carry the
+credentials:
 
 - Mail: `ICLOUD_MAIL_USERNAME` (the IMAP short name, not the Apple ID; Send
   logs in to iCloud SMTP as `<short name>@icloud.com`), `ICLOUD_APP_PASSWORD`
-  (also used by CalDAV writes, with the Apple ID Nix sets in
-  `ICLOUD_APPLE_ID`), `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD` (whitespace is
-  stripped).
+  (also used by CalDAV writes, with the Apple ID the module sets in
+  `ICLOUD_APPLE_ID` from `services.atrium.icloudAppleId`), `GMAIL_ADDRESS`,
+  `GMAIL_APP_PASSWORD` (whitespace is stripped).
 - Notion: `NOTION_TOKEN` (the internal integration token),
   `ATRIUM_NOTION_WIKI_DATA_SOURCE` (the wiki data source id; unset until you
   create the wiki; it gates duplicate-checked `notion_create_page` and the
   wiki schema/migration commands).
 - Assistant: `ANTHROPIC_API_KEY` (a Console key of the organization that
   holds the plan's monthly API credits), `GRAFANA_VIEWER_TOKEN` (a Grafana
-  service account with the Viewer role), `NTFY_TOPIC`, `NTFY_TOKEN`.
+  service account with the Viewer role), `NTFY_TOKEN`.
 - Google Calendar: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
   `GOOGLE_REFRESH_TOKEN`; optional `ATRIUM_ICLOUD_CALENDAR`.
 - Media: `TMDB_API_KEY` (a TMDB v3 API key; without it the Library shows names
   only and Channels need the IMDb id typed in), optional `ATRIUM_MEDIA_LINK_KEY`
   (any long random string; unset means a key file in the state dir).
 
+The module sets the rest from its options: `ATRIUM_DB`, `ATRIUM_CACHE_DIR`,
+`ATRIUM_CODEMODE_SOCKET`, `ATRIUM_MODE` (`mode`), `ATRIUM_CHAT_URL` and
+`ATRIUM_EMBED_URL` (`chatUrl`, `embedUrl`), `ATRIUM_TZ` (`timeZone`),
+`ATRIUM_PUBLIC_URL` (`publicUrl`), `ATRIUM_PUBLIC_HOST` (`web.allowedHost`,
+public listener only), `ATRIUM_STATIC_DIR` (`staticPackage`), `GRAFANA_URL`
+(`grafanaUrl`), `NTFY_URL`, `NTFY_TOPIC`, `NTFY_MEDIA_TOPIC` (`ntfy.*`),
+`ICLOUD_APPLE_ID`, `ATRIUM_CONTACTS_DIR` and `ATRIUM_CALENDAR_DIR`
+(`icloudAppleId`), `ATRIUM_MEDIA_ROOT`, `QBITTORRENT_URL`,
+`ATRIUM_MEDIA_MOVIES_URL` and `ATRIUM_MEDIA_TV_URL` (`media.*`), plus
+`extraEnvironment`.
+
 A missing value disables only the tools that need it; they answer "not
-configured". A change reaches the units through `restartUnits` on deploy.
-The `atrium.searxng` key is no longer read; delete it with `just sops-edit`.
+configured". A changed file reaches a running unit only through a restart.
 
 ## Calendar and contacts sync
 
-```fish
-ssh artemis.jeiang.vpn doas systemctl start atrium-vdirsyncer-sync.service
-ssh artemis.jeiang.vpn journalctl -u atrium-vdirsyncer-sync.service -e
+```sh
+systemctl start atrium-vdirsyncer-sync.service
+journalctl -u atrium-vdirsyncer-sync.service -e
 ```
 
 ## Mail core (live mode)
@@ -62,7 +76,7 @@ It runs in the `atrium-watch` and `atrium-sync` passes, right after routing.
   the label and removes `\Inbox`. A Gmail fallback or uncertain decision stays
   in the Inbox.
 - Unread Inbox mail from a contact (no `List-Id`, not no-reply) gets `\Flagged`.
-  The 9B flag judgment is only logged. atrium never clears a flag.
+  The local model's flag judgment is only logged. atrium never clears a flag.
 - Operator `delete` rules (including `age_days gte N`) trash matching mail
   from every folder once a day and when new mail already matches.
 - Corrections made in the UI after go-live move the message to the corrected folder or label. Corrections recorded before go-live never move automatically; they appear in the backlog proposal.
@@ -72,19 +86,24 @@ It runs in the `atrium-watch` and `atrium-sync` passes, right after routing.
 
 | Unit | Role |
 | --- | --- |
-| `atrium-models-fetch` | oneshot; downloads and sha256-verifies the weights into `cache/models`, runs only when one is missing |
-| `atrium-llm` | llama-server, Qwen3.5-9B, `127.0.0.1:8187`, thinking off |
-| `atrium-embed` | llama-server, EmbeddingGemma 2, `127.0.0.1:8188` |
 | `atrium-watch` | `atrium watch`: IMAP IDLE on each INBOX, syncs, routes and applies on change |
 | `atrium-sync` | timer every 15 minutes, `atrium sync` as reconciliation |
-| `atrium-web` | `atrium serve` on `0.0.0.0:8480`; the web UI, reached at `http://artemis.jeiang.vpn:8480/` |
+| `atrium-notion-sync` | timer every 15 minutes, `atrium notion sync` |
+| `atrium-scan` | monthly timer, `atrium proposals scan-all` |
+| `atrium-agent-scheduler` | `atrium agent scheduler`: scheduled and nightly agent jobs |
+| `atrium-web` | `atrium serve` on `web.host:web.port` (default `0.0.0.0:8480`) with `web.auth` |
+| `atrium-web-local` | `atrium serve` on `127.0.0.1:web.local.port` (default 8481) with `--auth local` |
+| `atrium-codemode@` | code-mode worker, one sandboxed instance per connection on `atrium-codemode.socket` |
+| `atrium-vdirsyncer-sync` | timer every 15 minutes, iCloud CalDAV/CardDAV mirror (with `icloudAppleId`) |
 
-The llama units are in `gaming.pauseUnits`, so a game session stops them.
+The chat and embedding servers behind `chatUrl` and `embedUrl` are the
+host's; naming their units in `modelServerUnits` makes the app units start
+after them.
 
-```fish
-ssh artemis.jeiang.vpn systemctl status 'atrium-*'
-ssh artemis.jeiang.vpn journalctl -u atrium-watch.service -e
-ssh artemis.jeiang.vpn doas systemctl start atrium-sync.service
+```sh
+systemctl status 'atrium-*'
+journalctl -u atrium-watch.service -e
+systemctl start atrium-sync.service
 ```
 
 ### Web UI
@@ -93,11 +112,12 @@ ssh artemis.jeiang.vpn doas systemctl start atrium-sync.service
 are full-text searchable), the Agents page (`/agents`: running and recent runs of
 every kind with effort, current tool, tokens and cost; polls while anything runs),
 Settings (`/settings/<tab>`: Skills, Subagents, Schedules, Notifications, Usage),
-message view, Notion pages, proposals, triage, rules and actions. With `--auth proxy` (the default)
+message view, Notion pages, proposals, triage, rules and actions. With `--auth proxy` (`web.auth`)
 every request except `/static` and validly signed `/media/file/*` links must
-carry a `Remote-Groups` header containing `atrium_access`, which tinyauth adds
-in front of alda's Caddy; `--auth local` is the loopback listener reached over
-an SSH tunnel and skips that check. Every
+carry a `Remote-Groups` header containing `atrium_access`, set by the
+authenticating reverse proxy in front of the public listener, and a `Host`
+equal to `web.allowedHost`; `--auth local` is the loopback listener reached
+over an SSH tunnel and skips that check. Every
 POST carries a per-session CSRF token (cookie `atrium_csrf`, sent by HTMX as
 `X-CSRF-Token` or as a `csrf_token` form field) and must be same-origin;
 responses carry a CSP that only allows same-origin scripts and `data:` images.
@@ -106,7 +126,7 @@ moves, relabels or deletes mail and edits Notion immediately; every such write
 is gated to an approved proposal and can be undone from `/proposals`. Correct
 records a correction and moves the message unless paused; rule edits change
 `atrium.db`.
-Assets (`app.css`, `app.js`, htmx, Basecoat) are built into `packages.atrium-static`;
+Assets (`app.css`, `app.js`, htmx, Basecoat) are built into `atrium-static` (`staticPackage`);
 nothing loads from a CDN and no script is inline.
 
 ### Assistant
@@ -148,13 +168,10 @@ caching uses at most four breakpoints (tools, system prompt, last stable
 profile/skills block, end of history); `cache_ttl_chat` in `settings` (`5m`
 default, `1h`) sets the chat prefix TTL.
 
-```fish
-ssh artemis.jeiang.vpn doas atrium-run agent run --kind chat --text "what is due this week?"
-ssh artemis.jeiang.vpn doas atrium-run agent run --thread 12 --text "and next week?"
-```
-
-```fish
-ssh artemis.jeiang.vpn journalctl -u atrium-web.service -e
+```sh
+atrium-run agent run --kind chat --text "what is due this week?"
+atrium-run agent run --thread 12 --text "and next week?"
+journalctl -u atrium-web.service -e
 ```
 
 ### Calendar tools
@@ -175,7 +192,7 @@ screen to In production (testing-mode refresh tokens expire after 7 days), put
 `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` in `atrium.env`, then
 on a machine with a browser (client id/secret exported in the shell):
 
-```fish
+```sh
 atrium calendar google-auth --port 8765
 ```
 
@@ -190,9 +207,9 @@ in `atrium.env`.
 proposals only appear after two scans at least 14 days apart see the same
 candidate, so the first scan after deploy creates none of those:
 
-```fish
-ssh artemis.jeiang.vpn doas systemctl start atrium-notion-sync.service
-ssh artemis.jeiang.vpn doas systemctl start atrium-scan.service
+```sh
+systemctl start atrium-notion-sync.service
+systemctl start atrium-scan.service
 ```
 
 Drafts left in `sending` for more than 10 minutes (a crash mid-send) become
@@ -237,16 +254,16 @@ tools; they still cannot write, notify, schedule or spawn.
 
 ### Media (/media)
 
-The Media section replaced the Go media-organizer. Everything runs inside atrium-web and
-the scheduler, which write `/var/lib/media` through the `media` group (umask 0002).
-Settings come from Nix: `ATRIUM_MEDIA_ROOT` (`/var/lib/media`, with `downloads/`,
-`import/`, `movies/`, `tv/`), `QBITTORRENT_URL` (the host socket proxy on
-`127.0.0.1:8081`, loopback whitelist so no login), `ATRIUM_PUBLIC_URL`,
-`ATRIUM_MEDIA_MOVIES_URL` / `ATRIUM_MEDIA_TV_URL` (darkhttpd on artemis, mesh-only ports
-8084 and 8085 rooted at `movies/` and `tv/`) and `NTFY_MEDIA_TOPIC` (`media-releases`,
-published with atrium's own `NTFY_URL`/`NTFY_TOKEN`). `ffmpeg`/`ffprobe` are on the unit
-PATH. Missing values make the pages say "not configured" and the media jobs report
-`skipped`; nothing crashes.
+Everything runs inside atrium-web and the scheduler, which write
+`media.root` through `media.group` (umask 0002). Settings come from the
+module: `ATRIUM_MEDIA_ROOT` (`media.root`, with `downloads/`, `import/`,
+`movies/`, `tv/`), `QBITTORRENT_URL` (`media.qbittorrentUrl`, a Web UI that
+needs no login), `ATRIUM_PUBLIC_URL` (`publicUrl`), `ATRIUM_MEDIA_MOVIES_URL` /
+`ATRIUM_MEDIA_TV_URL` (`media.moviesUrl`, `media.tvUrl`: read-only servers
+rooted at `movies/` and `tv/` on the private network) and `NTFY_MEDIA_TOPIC`
+(`ntfy.mediaTopic`, published with atrium's own `NTFY_URL`/`NTFY_TOKEN`).
+`ffmpeg`/`ffprobe` are on the unit PATH. Missing values make the pages say
+"not configured" and the media jobs report `skipped`; nothing crashes.
 
 - **Downloads** (`/media/downloads`): every qBittorrent torrent with progress, speed, ETA
   and a per-file Wanted/Skipped toggle (`filePrio`); the list polls every 5 s while a
@@ -282,9 +299,9 @@ PATH. Missing values make the pages say "not configured" and the media jobs repo
   frame at 10 % of the duration (`nice -n 10`, one at a time), cached under
   `cache/media/thumbs`, made lazily on first view and by `media-thumbnails` (04:00, at most
   200 per run). Each file has two links: the **public** one,
-  `https://atrium.jeiang.dev/media/file/<path>?exp=<unix>&sig=<hmac>` (HMAC-SHA256 over
+  `<publicUrl>/media/file/<path>?exp=<unix>&sig=<hmac>` (HMAC-SHA256 over
   `path\nexp`, valid 12 h, served by atrium with HTTP Range so VLC/Infuse can seek), and
-  the **VPN** one on darkhttpd 8084/8085. Caddy lets `/media/file/*` past tinyauth (still
+  the **private** one on `media.moviesUrl` / `media.tvUrl`. The reverse proxy must let `/media/file/*` past its auth (still
   stripping `Remote-*`); atrium's Guard admits that prefix without `Remote-Groups` only
   when the signature verifies, the Host check still applies, and the route verifies again.
   Rotate links by changing `ATRIUM_MEDIA_LINK_KEY` (or deleting `media-link.key`).
@@ -349,12 +366,12 @@ on /changes). The nightly run has none of the writes.
 `atrium-run` runs `atrium` as the `atrium` user with the units' environment
 through `systemd-run`:
 
-```fish
-ssh artemis.jeiang.vpn doas atrium-run shadow-report --since 7d
-ssh artemis.jeiang.vpn doas atrium-run sync --account gmail
-ssh artemis.jeiang.vpn doas atrium-run reindex
-ssh artemis.jeiang.vpn doas atrium-run money refresh --limit 500
-ssh artemis.jeiang.vpn doas atrium-run media poll
+```sh
+atrium-run shadow-report --since 7d
+atrium-run sync --account gmail
+atrium-run reindex
+atrium-run money refresh --limit 500
+atrium-run media poll
 ```
 
 ### Going live
@@ -363,8 +380,8 @@ Deploy, then create the backlog proposals once. The first live pass records
 every message that is already eligible as the go-live baseline; those are
 never filed automatically.
 
-```fish
-ssh artemis.jeiang.vpn doas atrium-run live backlog
+```sh
+atrium-run live backlog
 ```
 
 This makes one `inbox_backlog` proposal per account, grouped by destination,
@@ -375,14 +392,14 @@ went.
 
 ### Pause, resume and undo
 
-```fish
-ssh artemis.jeiang.vpn doas atrium-run live pause
-ssh artemis.jeiang.vpn doas atrium-run live resume
-ssh artemis.jeiang.vpn doas atrium-run live status
-ssh artemis.jeiang.vpn doas atrium-run live actions --limit 20
-ssh artemis.jeiang.vpn doas atrium-run live rebaseline
-ssh artemis.jeiang.vpn doas atrium-run live undo ACTION_ID
-ssh artemis.jeiang.vpn doas atrium-run live deletions
+```sh
+atrium-run live pause
+atrium-run live resume
+atrium-run live status
+atrium-run live actions --limit 20
+atrium-run live rebaseline
+atrium-run live undo ACTION_ID
+atrium-run live deletions
 ```
 
 Pause and Resume are also buttons in the UI header. Pausing skips every
@@ -406,33 +423,17 @@ Rules and folder data are never committed; they live in `atrium.db`.
 Pipe the JSON through stdin, since the `atrium` user cannot read the
 operator's home:
 
-```fish
-ssh artemis.jeiang.vpn doas atrium-run rules import - < rules.json
-ssh artemis.jeiang.vpn doas atrium-run rules export > rules.json
+```sh
+atrium-run rules import - < rules.json
+atrium-run rules export > rules.json
 ```
 
-### Models
+### First deploy
 
-A missing or changed weight is fetched by `atrium-models-fetch`; a checksum
-mismatch deletes the partial file and fails the unit, which keeps the llama
-units down. Changing a model means changing its pinned URL and sha256 in
-`modules/atrium/default.nix`, deleting the old file from `cache/models`, and
-restarting the fetch unit.
-
-### Deploy
-
-No `persistence.*` entry changed, so a normal live switch is enough. The
-first start downloads about 6 GB; follow it with
-`journalctl -u atrium-models-fetch.service -f`.
-
-The assistant release also changes alda (Caddy vhost, tinyauth ACL) and peria
-(Glance link). Before it is usable from outside:
-
-- Create the Pocket ID group `atrium_access` and add yourself.
-- Add the assistant secrets above, at least `ANTHROPIC_API_KEY`.
-- Deploy alda, then artemis. Until alda is deployed,
-  `https://atrium.jeiang.dev` has no upstream.
-- Emergency access without alda:
-  `ssh -L 8481:127.0.0.1:8481 artemis.jeiang.vpn`, then open
-  `http://localhost:8481`.
+- Put the reverse proxy in front of the public listener and add the operator
+  to its `atrium_access` group.
+- Add the environment file with at least the mail credentials and
+  `ANTHROPIC_API_KEY`.
+- Emergency access without the proxy:
+  `ssh -L 8481:127.0.0.1:8481 <host>`, then open `http://localhost:8481`.
 - Run `atrium-run loops refresh` once to backfill threading headers.
