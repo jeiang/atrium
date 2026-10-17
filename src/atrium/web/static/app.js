@@ -370,6 +370,7 @@ const connectLive = (li) => {
     const queued = document.querySelector(`[data-queued="${data.queue_id}"]`);
     const bubble = document.createElement("li");
     bubble.className = "flex gap-3";
+    bubble.dataset.liveUser = runId;
     bubble.innerHTML = `<span class="mt-1 size-7 shrink-0 rounded-full bg-secondary" aria-hidden="true"></span><div class="min-w-0 flex-1 rounded-lg bg-secondary/60 px-4 py-3 text-sm whitespace-pre-wrap break-words"></div>`;
     bubble.lastElementChild.textContent = data.text;
     li.before(bubble);
@@ -386,6 +387,7 @@ const connectLive = (li) => {
     liveRuns.delete(runId);
     setBusy(false);
     refreshWork();
+    document.querySelectorAll(`[data-live-user="${runId}"]`).forEach((bubble) => bubble.remove());
     if (li.isConnected) htmx.trigger(li, "run-done");
   });
   source.onerror = () => { if (!li.isConnected) { source.close(); liveRuns.delete(runId); } };
