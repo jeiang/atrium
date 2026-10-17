@@ -245,6 +245,29 @@ def parse(text, tz):
     return Spec("once", tzinfo, once_at=moment.timestamp(), minutes=frozenset(), hours=frozenset())
 
 
+WEEKDAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+
+
+def describe(text, tz):
+    try:
+        spec = parse(text, tz)
+    except ScheduleError:
+        return text
+    if spec.kind == "once":
+        return datetime.fromtimestamp(spec.once_at, spec.tz).strftime("Once on %a %d %b %Y at %H:%M")
+    if len(spec.hours) != 1 or len(spec.minutes) != 1 or spec.months is not None:
+        return f"Cron {text}"
+    at = f"{next(iter(spec.hours)):02d}:{next(iter(spec.minutes)):02d}"
+    if spec.dom is None and (spec.dow is None or len(spec.dow) == 7):
+        return f"Every day at {at}"
+    if spec.dom is None:
+        days = sorted(spec.dow, key=lambda d: (d - 1) % 7)
+        return f"Every {', '.join(WEEKDAYS[d][:3] if len(days) > 1 else WEEKDAYS[d] for d in days)} at {at}"
+    if spec.dow is None:
+        return f"Day {', '.join(str(d) for d in sorted(spec.dom))} of every month at {at}"
+    return f"Cron {text}"
+
+
 def validate(text, tz, now, *, enforce_min=True):
     spec = parse(text, tz)
     due = spec.next_after(now)
@@ -328,6 +351,16 @@ def list_jobs(conn, include_cancelled=False):
     rows = conn.execute(
         "SELECT j.*, r.status AS last_status, r.thread_id AS last_thread_id, r.started_at AS last_started, r.error AS last_error "
         f"FROM jobs j LEFT JOIN job_runs r ON r.id = j.last_run_id {where} ORDER BY j.kind DESC, j.id"
+    )
+    return [dict(r) for r in rows]
+
+
+def list_runs(conn, job_id=None, limit=30):
+    where = "WHERE r.job_id = ?" if job_id else ""
+    rows = conn.execute(
+        "SELECT r.*, j.name AS job_name, j.kind AS job_kind, (SELECT id FROM runs x WHERE x.thread_id = r.thread_id ORDER BY id DESC LIMIT 1) AS run_id "
+        f"FROM job_runs r JOIN jobs j ON j.id = r.job_id {where} ORDER BY r.id DESC LIMIT ?",
+        (job_id, limit) if job_id else (limit,),
     )
     return [dict(r) for r in rows]
 

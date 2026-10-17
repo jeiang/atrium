@@ -4,7 +4,7 @@
 {% block title %}{{ view.thread.title or "Thread" }}{% endblock %}
 {% block heading %}{{ view.thread.title or "Thread" }}{% endblock %}
 {% block content %}
-<div id="thread" class="flex flex-col gap-6">
+<div id="thread" class="flex min-h-[calc(100dvh-6.5rem)] flex-col gap-6 md:min-h-[calc(100dvh-7.5rem)]">
   {% include "_thread.html" %}
 </div>
 {% endblock %}

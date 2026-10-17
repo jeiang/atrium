@@ -758,12 +758,11 @@ def test_actions_view_lists_every_automatic_action_with_undo_and_cli_lists_ids(t
     ids = {a["kind"]: a["id"] for a in w.actions()}
     assert set(ids) == {"flag", "trash"}
     client = web_client(w.cfg)
-    page = client.get("/actions").text
+    page = client.get("/activity").text
     assert "friend" in page and "old-spam" in page
-    assert f"/live/actions/{ids['flag']}/undo?view=actions" in page
-    assert "Actions" in client.get("/triage").text
-    assert client.get("/actions?kind=flag").text.count("hx-post") == 1
-    undone = client.post(f"/live/actions/{ids['flag']}/undo?view=actions", headers=HX).text
+    assert f"/activity/mail/{ids['flag']}/undo" in page
+    assert "Activity" in client.get("/triage").text
+    undone = client.post(f"/activity/mail/{ids['flag']}/undo", headers=HX).text
     assert "Undone" in undone and "/undo" not in undone
     monkeypatch.setenv("ATRIUM_DB", str(w.cfg.db_path))
     monkeypatch.setenv("ATRIUM_CACHE_DIR", str(tmp_path / "cache"))

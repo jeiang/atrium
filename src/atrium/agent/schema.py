@@ -146,6 +146,7 @@ def init(conn):
     conn.executescript(SCHEMA)
     _relax_writes(conn)
     _context.add_columns(conn, "runs", RUN_COLUMNS)
+    _context.add_columns(conn, "threads", (("pinned", "INTEGER NOT NULL DEFAULT 0"),))
     _context.add_columns(conn, "thread_messages", (("system_sig", "TEXT"),))
     for extra in INITS:
         extra(conn)

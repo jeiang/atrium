@@ -109,10 +109,11 @@ systemctl start atrium-sync.service
 ### Web UI
 
 `atrium-web` serves the assistant chat (`/chat`, the only search entry: threads
-are full-text searchable), the Agents page (`/agents`: running and recent runs of
-every kind with effort, current tool, tokens and cost; polls while anything runs),
-Settings (`/settings/<tab>`: Skills, Subagents, Schedules, Notifications, Usage),
-message view, Notion pages, proposals, triage, rules and actions. With `--auth proxy` (`web.auth`)
+are full-text searchable; operator threads only, pinnable and archivable), Scheduled (`/scheduled`:
+schedule cards, an edit modal and the run history linking each run's thread), Activity (`/activity`:
+one timeline of automatic mailbox writes and the assistant's direct writes, with Undo),
+Settings (`/settings/<tab>`: Skills, Subagents, Notifications, Usage),
+message view, Notion pages, proposals, decisions, rules and drafts. With `--auth proxy` (`web.auth`)
 every request except `/static` and validly signed `/media/file/*` links must
 carry a `Remote-Groups` header containing `atrium_access`, set by the
 authenticating reverse proxy in front of the public listener, and a `Host`
@@ -229,7 +230,7 @@ birthdays/anniversaries for the next 60 days with Dismiss. Dates come from vCard
 assistant proposes `notion_receipt`, which creates a `Type=Receipt` page in
 `ATRIUM_NOTION_WIKI_DATA_SOURCE` (needs a `Type` select property) and undo trashes it.
 
-The scheduler seeds seven built-in jobs once (kind `builtin`, listed on /settings/schedules, disable
+The scheduler seeds seven built-in jobs once (kind `builtin`, listed on /scheduled, disable
 but not cancel): `weekly-review` (Sunday 18:00), `daily-nudges` (08:00, notifies only
 when something is due, using upcoming bills from the ledger), `calendar-candidates`
 (hourly, drafts calendar proposals only when event candidates are queued), `fx-rates`
@@ -306,7 +307,7 @@ rooted at `movies/` and `tv/` on the private network) and `NTFY_MEDIA_TOPIC`
   when the signature verifies, the Host check still applies, and the route verifies again.
   Rotate links by changing `ATRIUM_MEDIA_LINK_KEY` (or deleting `media-link.key`).
 - **Assistant tools**: `media_downloads`, `media_library_search`, `media_channels` (chat,
-  cron, code) and, chat-only with undo on /changes, `media_add_magnet` (undo deletes the
+  cron, code) and, chat-only with undo on /activity, `media_add_magnet` (undo deletes the
   torrent and its data unless it was already filed), `media_channel_add`,
   `media_channel_remove`.
 
@@ -325,7 +326,7 @@ queue on /money with an Assign button.
 After each mail pass (and on `atrium money refresh`, which also backfills the last 90 days
 the first time) the local model extracts kind, payee, amount, currency, date, bank and
 last four from money/receipt/statement/order mail; each hit is posted automatically,
-deduplicated by message, and logged on /changes with Undo. Rules:
+deduplicated by message, and logged on /activity with Undo. Rules:
 
 - Every transaction stores the original amount and currency plus the amount resolved in the
   account currency (both shown when they differ). If the alert itself states the account
@@ -338,7 +339,7 @@ deduplicated by message, and logged on /changes with Undo. Rules:
 - A transaction's charged currency can be corrected from its Edit menu on
   /money/transactions. Dismiss hides one (not your account, or a duplicate) from lists,
   spending and bills; "Dismissed only" lists them with Restore. /money/accounts can
-  dismiss everything before a date. Both are undoable on /changes.
+  dismiss everything before a date. Both are undoable on /activity.
 - CBTT rate: the `fx-rates` job reads `table.rate_table` on
   https://www.central-bank.org.tt/ weekly (also once when the ledger is empty, and "Fetch
   now" on /money/accounts). A transaction uses the latest rate on or before its date.
@@ -359,7 +360,7 @@ deduplicated by message, and logged on /changes with Undo. Rules:
 Assistant tools: `spending`, `transactions`, `bills`, `payees` (chat, cron, code);
 `payee_rename`, `payee_merge`, `payee_alias_add`, `payee_set_category`,
 `transaction_merge`, `transaction_split`, `transaction_set_account` (chat only, undoable
-on /changes). The nightly run has none of the writes.
+on /activity). The nightly run has none of the writes.
 
 ### Running the CLI
 
@@ -406,8 +407,8 @@ Pause and Resume are also buttons in the UI header. Pausing skips every
 automatic write; decisions are still recorded and applied after resume.
 Approving a proposal and undoing an action still work while paused. Every
 automatic action, including flags and deletion-pass trashes, is listed on
-`/actions` (and by `live actions`) with Applied, Skipped, Undone or Interrupted
-and an Undo button; filing decisions also show it on Triage. `ACTION_ID` is
+`/activity` (and by `live actions`) with Applied, Skipped, Undone or Interrupted
+and an Undo button; filing decisions also show it on Decisions. `ACTION_ID` is
 `auto_actions.id`. Undoing a filing or
 trash is never reapplied. `live deletions` runs the daily deletion pass now. `live rebaseline` syncs both
 accounts, takes a new go-live baseline and replaces the pending backlog

@@ -630,9 +630,10 @@ def test_library_search(world):
 
 def test_nav_groups(world):
     page = web_client(world["cfg"], env=world["env"]).get("/chat").text
-    for label in ("Assistant", "Mail", "Media", "/media/downloads", "/media/channels", "/media/library", "/media/add"):
+    for label in ("Assistant", "Mail", "Media", "/media/downloads", "/media/channels", "/media/library"):
         assert label in page
-    assert "Organise" not in page
+    assert "Organise" not in page and 'href="/media/add"' not in page
+    assert 'href="/media/add"' in web_client(world["cfg"], env=world["env"]).get("/media/downloads").text
 
 
 # ---------- agent tools ----------

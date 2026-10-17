@@ -7,7 +7,7 @@
 {% block heading %}Money{% endblock %}
 {% block content %}
 {{ money_nav("/money") }}
-<p class="text-sm text-muted-foreground">Bank alerts, receipts and statements read from your mail by a local model. TTD and BBD are shown side by side and never added together. Every automatic posting is on <a class="underline" href="/changes">Changes</a> with Undo.{% if rates %} CBTT USD selling {{ rates[0].selling }} (as of {{ rates[0].as_of or rates[0].date }}).{% else %} No CBTT rate stored yet; foreign charges on the Republic card wait for the weekly fetch.{% endif %}</p>
+<p class="text-sm text-muted-foreground">Bank alerts, receipts and statements read from your mail by a local model. TTD and BBD are shown side by side and never added together. Every automatic posting is on <a class="underline" href="/activity?category=money">Activity</a> with Undo.{% if rates %} CBTT USD selling {{ rates[0].selling }} (as of {{ rates[0].as_of or rates[0].date }}).{% else %} No CBTT rate stored yet; foreign charges on the Republic card wait for the weekly fetch.{% endif %}</p>
 
 {% if not accounts %}
 {% call empty_state("wallet", "No accounts yet") %}Add your bank accounts and cards on <a class="underline" href="/money/accounts">Accounts</a> so alerts can be matched.{% endcall %}

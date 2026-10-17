@@ -40,16 +40,15 @@ from .. import (
 from ..config import ACCOUNTS
 from ..http import ServiceUnavailable
 from ..rules import RuleError
-from . import agents as agents_ui
+from . import activity as activity_ui
 from . import auth
-from . import changes as changes_ui
 from . import chat as chat_ui, runs as runs_ui
 from . import drafts as drafts_ui
 from . import media as media_ui
 from . import money as money_ui
 from . import notifications as notifications_ui
 from . import openloops as openloops_ui
-from . import schedules as schedules_ui
+from . import scheduled as scheduled_ui
 from . import settings as settings_ui
 from . import skills as skills_ui
 from . import subagents as subagents_ui
@@ -87,7 +86,7 @@ RULE_PROBLEMS = {
     "op in needs a non-empty list of strings": "“is one of” needs at least one value.",
     "op suffix needs a string or list of strings": "“is or ends in domain” needs at least one domain.",
 }
-BACK_LABELS = {"/chat": "Chat", "/triage": "Triage"}
+BACK_LABELS = {"/chat": "Chat", "/triage": "Decisions"}
 RULE_ID_PREFIX = re.compile(r"^[^:\s]+: ")
 
 
@@ -199,12 +198,11 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
         drafts.recover_stuck(conn)
     chat_ui.register(app, deps)
     runs_ui.register(app, deps)
-    agents_ui.register(app, deps)
-    changes_ui.register(app, deps)
+    activity_ui.register(app, deps)
     drafts_ui.register(app, deps)
     settings_ui.register(app, deps)
     notifications_ui.register(app, deps)
-    schedules_ui.register(app, deps)
+    scheduled_ui.register(app, deps)
     openloops_ui.register(app, deps)
     watches_ui.register(app, deps)
     money_ui.register(app, deps)
@@ -285,7 +283,7 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
         if done.written:
             return " The message was moved."
         if done.failed or done.skipped:
-            return " It could not be moved; see Triage."
+            return " It could not be moved; see Decisions."
         return ""
 
     def toggle_pause(request, paused):
@@ -303,30 +301,8 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
     def live_resume(request: Request):
         return toggle_pause(request, False)
 
-    @app.get("/actions")
-    def actions_page(request: Request, account: str = "", kind: str = "", offset: int = 0):
-        offset = max(offset, 0)
-        if kind and kind not in live.KINDS:
-            raise HTTPException(422, "unknown kind")
-        with connection() as conn:
-            found = live.list_actions(conn, account or None, kind or None, PAGE_SIZE, offset)
-            total = live.count_actions(conn, account or None, kind or None)
-            shown = offset + len(found)
-            context = {
-                "actions": found,
-                "account": account,
-                "kind": kind,
-                "kinds": live.KINDS,
-                "total": total,
-                "offset": offset,
-                "next_offset": shown if shown < total else None,
-            }
-            if is_partial(request) and offset:
-                return render("_action_rows.html", **context)
-            return render("actions.html", **context)
-
     @app.post("/live/actions/{action_id}/undo")
-    def live_undo(action_id: int, view: str = ""):
+    def live_undo(action_id: int):
         with connection() as conn:
             found = live.get(conn, action_id)
             if found is None:
@@ -336,8 +312,6 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
                 notice = toast("success", "Undone")
             except live.UndoError as e:
                 notice = toast("error", "Not undone", str(e))
-            if view == "actions":
-                return render("_action_row.html", a=live.get(conn, action_id), toast=notice)
             row = triage.row(conn, found["message_id"])
             if row is None:
                 raise HTTPException(404, "message has no decision")

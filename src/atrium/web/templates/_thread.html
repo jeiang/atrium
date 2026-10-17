@@ -9,6 +9,22 @@
   <span class="tabular-nums">started {{ when(t.created_at, "datetime") }}</span>
   <span class="tabular-nums">${{ "%.3f" | format(view.cost) }}</span>
   {% if t.parent_run_id %}<a href="/runs/{{ t.parent_run_id }}" class="btn" data-size="sm" data-variant="ghost">Parent run</a>{% endif %}
+  {% if t.kind == "chat" %}
+  <span class="ms-auto flex items-center gap-1">
+    {% if not t.archived %}
+    <form method="post" action="/chat/{{ t.id }}/pin">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="pinned" value="{{ 0 if t.pinned else 1 }}">
+      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{ icon("pin-off" if t.pinned else "pin") }}{{ "Unpin" if t.pinned else "Pin" }}</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/chat/{{ t.id }}/archive">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="archived" value="{{ 0 if t.archived else 1 }}">
+      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{ icon("archive-restore" if t.archived else "archive") }}{{ "Unarchive" if t.archived else "Archive" }}</button>
+    </form>
+  </span>
+  {% endif %}
   {% for rid in child_runs or [] %}<a href="/runs/{{ rid }}" class="btn" data-size="sm" data-variant="outline">Subagents (run {{ rid }})</a>{% endfor %}
 </header>
 <ol id="transcript" class="flex flex-col gap-4" aria-live="polite" aria-label="Conversation">
@@ -32,11 +48,11 @@
   {% endif %}
 </ol>
 {% if t.kind != "subagent" %}
-<form id="composer" class="flex flex-col gap-2 rounded-lg border bg-card p-3" method="post" action="/chat/{{ t.id }}/messages"
+<form id="composer" class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" method="post" action="/chat/{{ t.id }}/messages"
       hx-post="/chat/{{ t.id }}/messages" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label for="composer-text" class="sr-only">Message</label>
-  <textarea id="composer-text" name="text" rows="3" class="textarea w-full" placeholder="Message the assistant… (⌘⏎ to send)" data-submit-on-enter required autofocus></textarea>
+  <textarea id="composer-text" name="text" rows="2" class="textarea w-full" placeholder="Message the assistant… (⌘⏎ to send)" data-submit-on-enter required autofocus></textarea>
   <div class="flex items-center gap-2">
     {{ spinner("composer-spinner", "Sending") }}
     <button type="submit" class="btn ms-auto" data-size="sm">{{ icon("send") }}Send</button>

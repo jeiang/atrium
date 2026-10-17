@@ -3,8 +3,8 @@
 {% from "_icons.html" import icon %}
 {% from "_macros.html" import account_switch, stage_label, STAGE_DOTS, open_attrs, sender, when %}
 {% set page = "triage" %}
-{% block title %}Triage{% endblock %}
-{% block heading %}Triage{% endblock %}
+{% block title %}Decisions{% endblock %}
+{% block heading %}Decisions{% endblock %}
 {% block content %}
 <div class="flex flex-wrap items-center justify-between gap-3">
   <p class="max-w-prose text-sm text-muted-foreground">{% if mode == "live" %}What atrium decided for read mail in the inbox, whether it was applied, and where the mail is now.{% else %}What atrium would do with read mail still in the inbox, compared with where the mail actually went.{% endif %}</p>
@@ -136,6 +136,6 @@
     {"tab": "Unread flags <span class=\"badge\" data-variant=\"secondary\">" ~ (flags | length) ~ ("+" if flags_capped else "") ~ "</span>", "panel": flags_panel},
   ],
   main_attrs={"class": "gap-0"},
-  tablist_attrs={"data-variant": "line", "aria-label": "Triage views"}
+  tablist_attrs={"data-variant": "line", "aria-label": "Decisions views"}
 ) }}
 {% endblock %}

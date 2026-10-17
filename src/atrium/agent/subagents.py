@@ -185,7 +185,7 @@ def runs_with_children(conn, thread_id):
 
 
 def run_card(conn, thread, run, now):
-    """One card for the Agents page and the /runs/{id} child list: status, current tool, elapsed, tokens, cost."""
+    """One card for the /runs/{id} child list: status, current tool, elapsed, tokens, cost."""
     card = {
         "thread_id": thread["id"],
         "kind": thread["kind"],
@@ -238,21 +238,3 @@ def children_view(conn, run_id, now):
     parent = journal.get_run(conn, run_id)
     polling = parent is not None and (parent["state"] == journal.RUNNING or any(c["status"] == RUNNING for c in cards))
     return {"cards": cards, "polling": polling}
-
-
-def recent_runs(conn, now, limit=50, q=""):
-    """Running runs first, then the most recent finished ones, across every kind (chat, cron, nightly, subagents).
-    `q` keeps runs whose agent name, kind, status, subagent prompt or thread title contains it."""
-    states = [state for state, status in STATUS_OF_RUN.items() if q.lower() in status]
-    rows = conn.execute(
-        "SELECT r.* FROM runs r JOIN threads t ON t.id = r.thread_id LEFT JOIN subagents s ON s.name = t.role "
-        "WHERE ? = '' OR r.state IN (SELECT value FROM json_each(?)) OR instr(lower(coalesce(t.role, '') || char(10) || t.kind || char(10) || "
-        "coalesce(t.title, '') || char(10) || coalesce(s.prompt, '')), lower(?)) > 0 "
-        "ORDER BY (r.state = ?) DESC, r.id DESC LIMIT ?",
-        (q, json.dumps(states), q, journal.RUNNING, limit),
-    ).fetchall()
-    cards = []
-    for run in rows:
-        thread = conn.execute(f"SELECT {THREAD_COLUMNS} FROM threads WHERE id = ?", (run["thread_id"],)).fetchone()
-        cards.append(run_card(conn, thread, run, now))
-    return {"cards": cards, "polling": any(c["status"] == RUNNING for c in cards), "q": q}

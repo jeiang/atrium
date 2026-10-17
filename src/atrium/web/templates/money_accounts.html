@@ -73,8 +73,8 @@
 
 <section class="flex flex-col gap-3" aria-labelledby="dismiss-h">
   <h2 id="dismiss-h" class="text-sm font-medium">Dismiss old transactions</h2>
-  <p class="text-xs text-muted-foreground">Dismissed transactions are left out of lists, spending and bills. Restore one from Transactions with Dismissed only ticked, or undo the whole batch from Changes.</p>
-  <form method="post" action="/money/transactions/dismiss-before" class="flex flex-wrap items-end gap-2 rounded-lg border bg-card p-4 text-sm" data-confirm-submit="Dismiss every transaction before this date? Undo it from Changes.">
+  <p class="text-xs text-muted-foreground">Dismissed transactions are left out of lists, spending and bills. Restore one from Transactions with Dismissed only ticked, or undo the whole batch from Activity.</p>
+  <form method="post" action="/money/transactions/dismiss-before" class="flex flex-wrap items-end gap-2 rounded-lg border bg-card p-4 text-sm" data-confirm-submit="Dismiss every transaction before this date? Undo it from Activity.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label class="flex flex-col gap-1 text-xs">Dated before<input class="input w-44" type="date" name="before" required></label>
     <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("x") }}Dismiss</button>

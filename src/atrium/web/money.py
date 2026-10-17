@@ -133,7 +133,7 @@ def register(app, deps):
         with connection() as conn:
             count, change = ledger(money.transactions_dismiss_before, conn, before)
             commit(conn, "transactions_dismiss_before", f"before:{before}", change)
-        return accounts_page_render(toast("success", f"Dismissed {count} transactions", "Undo it from Changes."))
+        return accounts_page_render(toast("success", f"Dismissed {count} transactions", "Undo it from Activity."))
 
     # ---------- payees ----------
 

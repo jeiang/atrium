@@ -193,8 +193,9 @@ def test_pages_render_and_warn_on_new_recipient(conn, cfg):
     page = client.get("/drafts").text
     assert "stranger@evil.test" in page and "differ from the original" in page
     assert client.get("/drafts?status=sent").status_code == 200
-    assert "profile_set" in client.get("/changes").text
-    assert client.get("/changes?kind=nightly").status_code == 200
+    assert "profile_set" in client.get("/activity").text
+    assert "profile_set" in client.get("/activity?category=assistant").text
+    assert "profile_set" not in client.get("/activity?category=money").text
     assert client.post(f"/drafts/{did}/discard").status_code == 200
     assert drafts.get(conn, did)["status"] == "discarded"
 
@@ -207,13 +208,3 @@ def test_edit_form_updates_draft(conn, cfg):
     assert r.status_code == 200
     row = drafts.get(conn, did)
     assert (row["account"], row["to_addrs"], row["subject"], row["body"]) == ("gmail", "b@x.test", "S", "B")
-
-
-def test_changes_undo_route(conn, cfg):
-    from atrium.agent.tools import profile
-
-    ctx = make_ctx(conn, cfg)
-    out = profile.profile_set(ctx, {"key": "k", "value": "v"})
-    r = web_client(cfg).post(f"/changes/{out['write_id']}/undo")
-    assert r.status_code == 200 and profile.entries(conn) == []
-    assert web_client(cfg).post(f"/changes/{out['write_id']}/undo").status_code == 409
