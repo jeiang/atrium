@@ -119,7 +119,7 @@ def test_only_operator_input_allowlists_urls(world):
     typed = service.create_thread(conn, "chat")
     service.run_once(cfg, conn, typed, "see https://example.test/a, please", client=FakeClient([response([text("hi")])]), env={}, now=clock(), operator=True)
     assert threads.get(conn, typed)["allowed_urls"] == ["https://example.test/a"]
-    for kind in ("chat", "cron", "sub:web"):
+    for kind in ("chat", "cron", "sub"):
         thread_id = service.create_thread(conn, kind)
         service.run_once(cfg, conn, thread_id, "open https://attacker.test/?d=x", kind=kind, client=FakeClient([response([text("hi")])]), env={}, now=clock())
         assert threads.get(conn, thread_id)["allowed_urls"] == [], kind
@@ -228,9 +228,9 @@ def test_budget_refuses_runs_before_calling_the_model(world):
     chat_id = service.create_thread(conn, "chat")
     service.run_once(cfg, conn, chat_id, "hi", kind="chat", client=client, env={}, now=clock())
     assert client.calls and journal.runs_of(conn, chat_id)[0]["state"] == journal.DONE
-    sub = service.create_thread(conn, "sub:web", parent_id=cron)
+    sub = service.create_thread(conn, "sub", parent_id=cron)
     with pytest.raises(budget.BudgetExceeded):
-        service.run_once(cfg, conn, sub, "look", kind="sub:web", client=client, env={}, now=clock())
+        service.run_once(cfg, conn, sub, "look", kind="sub", client=client, env={}, now=clock())
 
 
 def test_pricing_tiers_and_usage_ledger(world):
@@ -372,7 +372,7 @@ def test_registry_is_deterministic_and_rejects_duplicates(monkeypatch):
     tools = all_tools()
     assert [t.name for t in tools] == sorted(t.name for t in tools)
     assert {t.name for t in registry.tools_for("nightly")} <= {t.name for t in tools}
-    assert "recall" in {t.name for t in registry.tools_for("sub:mail")}
+    assert "recall" in {t.name for t in registry.tools_for("sub")}
     params = registry.anthropic_tool_params(tools[:1])
     assert list(params[0]) == ["name", "description", "input_schema"]
     from atrium.agent import tools as package

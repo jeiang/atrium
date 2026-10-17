@@ -14,7 +14,7 @@ MAX_DASHBOARDS = 20
 CELL_CHARS = 300
 DROP_FIELDS = {"id", "tsNs"}
 KINDS = ("prometheus", "logs")
-CONTEXTS = frozenset({"chat", "cron", "sub:observability", "code"})
+CONTEXTS = frozenset({"chat", "cron", "sub", "code"})
 
 transport = None
 

@@ -39,12 +39,9 @@
     menu=[
       {"type": "group", "label": "Assistant", "items": [
         {"label": "Chat", "url": "/chat", "icon": icon("messages-square"), "current": page == "chat"},
-        {"label": "Usage", "url": "/usage", "icon": icon("chart-column"), "current": page == "usage"},
-        {"label": "Schedules", "url": "/schedules", "icon": icon("scroll-text"), "current": page == "schedules"},
-        {"label": "Skills", "url": "/skills", "icon": icon("pencil"), "current": page == "skills"},
-        {"label": "Notifications", "url": "/notifications", "icon": icon("inbox"), "current": page == "notifications"},
-        {"label": "Changes", "url": "/changes", "icon": icon("undo-2"), "current": page == "changes"},
+        {"label": "Agents", "url": "/agents", "icon": icon("bot"), "current": page == "agents"},
         {"label": "Drafts", "url": "/drafts", "icon": icon("mail"), "current": page == "drafts"},
+        {"label": "Changes", "url": "/changes", "icon": icon("undo-2"), "current": page == "changes"},
       ]},
       {"type": "group", "label": "Mail", "items": [
         {"label": proposals_label, "url": "/proposals", "icon": icon("list-checks"), "current": page == "proposals", "attrs": {"class": "[&>span:last-child]:flex-1"}},
@@ -69,6 +66,7 @@
       <hr role="separator" aria-orientation="vertical" class="h-4 w-px border-0 bg-border">
       <h1 class="truncate px-1 text-sm font-medium">{% block heading %}{% endblock %}</h1>
       <div class="ml-auto flex items-center gap-3">
+        <a href="/settings" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{% if page == "settings" %} aria-current="page"{% endif %}>{{ icon("settings") }}</a>
         {{ mode_badge(mode, paused) }}
         {% if mode == "live" %}
         <form method="post" action="/live/{{ 'resume' if paused else 'pause' }}">

@@ -10,7 +10,7 @@ PAGE_DEFAULT = 12000
 OVERFETCH = 5
 STALE_SECONDS = 24 * 3600
 SNIPPET_CHARS = 300
-NOTION_CONTEXTS = frozenset({"chat", "cron", "nightly", "sub:notion", "code"})
+NOTION_CONTEXTS = frozenset({"chat", "cron", "nightly", "sub", "code"})
 
 
 def make_client(env):

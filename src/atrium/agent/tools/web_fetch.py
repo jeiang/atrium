@@ -52,6 +52,6 @@ TOOLS = [
             "additionalProperties": False,
         },
         handler=web_fetch,
-        contexts=frozenset({"chat", "cron", "sub:web"}),
+        contexts=frozenset({"chat", "cron", "sub"}),
     ),
 ]

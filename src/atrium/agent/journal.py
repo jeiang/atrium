@@ -51,6 +51,15 @@ def limits_of(conn, run_id):
     return json.loads(row["limits_json"]) if row and row["limits_json"] else {}
 
 
+def set_skills(conn, run_id, names):
+    """Skills expanded into the run's operator message (see skills.expand)."""
+    conn.execute("UPDATE runs SET skills_json = ? WHERE id = ?", (json.dumps(list(names)), run_id))
+
+
+def skills_of(run):
+    return json.loads(run["skills_json"]) if run.get("skills_json") else []
+
+
 def get_run(conn, run_id):
     row = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
     return dict(row) if row else None

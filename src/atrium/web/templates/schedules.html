@@ -1,12 +1,11 @@
-{% extends "base.html" %}
+{% extends "settings.html" %}
 {% from "_icons.html" import icon %}
 {% from "_macros.html" import empty_state %}
-{% set page = "schedules" %}
-{% block title %}Schedules{% endblock %}
-{% block heading %}Schedules{% endblock %}
+{% set tab = "schedules" %}
+{% block tab_title %}Schedules{% endblock %}
 {% set STATUS_VARIANTS = {"ok": "secondary", "missed_coalesced": "secondary", "error": "destructive", "running": "outline", "skipped_budget": "outline", "skipped_pause": "outline"} %}
-{% block content %}
-<p class="text-sm text-muted-foreground">Scheduled runs start a new thread with read, notify and propose tools only; the nightly run also writes to Notion and the profile. Times are {{ tz }}. Formats: an ISO datetime, <code class="font-mono">daily 07:30</code>, <code class="font-mono">weekly mon 07:30</code> or a 5-field cron expression.</p>
+{% block tab %}
+<p class="text-sm text-muted-foreground">Scheduled runs start a new thread with read, notify and propose tools only; the nightly run also writes to Notion and the profile. Times are {{ tz }}. Formats: an ISO datetime, <code class="font-mono">daily 07:30</code>, <code class="font-mono">weekly mon 07:30</code> or a 5-field cron expression. A prompt may reference skills as <code class="font-mono">/skill:name</code>; they are expanded into the prompt when the job runs.</p>
 
 {% if jobs %}
 <div class="flex flex-col gap-4">
@@ -28,7 +27,7 @@
       {% if j.last_thread_id %}· <a class="underline underline-offset-4" href="/chat/{{ j.last_thread_id }}">open thread</a>{% endif %}
       {% else %}Never run.{% endif %}
     </p>
-    <form method="post" action="/schedules/{{ j.id }}" class="flex flex-col gap-3">
+    <form method="post" action="/settings/schedules/{{ j.id }}" class="flex flex-col gap-3">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="grid gap-3 sm:grid-cols-2">
         <div role="group" class="field">
@@ -47,9 +46,9 @@
       </div>
       <div class="flex flex-wrap gap-2">
         <button type="submit" class="btn" data-size="sm">{{ icon("check") }}Save</button>
-        <button type="submit" class="btn" data-size="sm" data-variant="outline" formaction="/schedules/{{ j.id }}/toggle">{{ "Disable" if j.enabled else "Enable" }}</button>
+        <button type="submit" class="btn" data-size="sm" data-variant="outline" formaction="/settings/schedules/{{ j.id }}/toggle">{{ "Disable" if j.enabled else "Enable" }}</button>
         {% if j.kind not in ("nightly", "builtin") %}
-        <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/schedules/{{ j.id }}/cancel">{{ icon("trash-2") }}Cancel</button>
+        <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/schedules/{{ j.id }}/cancel">{{ icon("trash-2") }}Cancel</button>
         {% endif %}
       </div>
     </form>
@@ -60,7 +59,7 @@
 {% call empty_state("scroll-text", "No schedules") %}Ask the assistant in chat to schedule something, or add one below.{% endcall %}
 {% endif %}
 
-<form method="post" action="/schedules" class="flex flex-col gap-3 rounded-lg border p-4">
+<form method="post" action="/settings/schedules" class="flex flex-col gap-3 rounded-lg border p-4">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <h2 class="text-sm font-medium">New schedule</h2>
   <div class="grid gap-3 sm:grid-cols-2">

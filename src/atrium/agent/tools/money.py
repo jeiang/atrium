@@ -1,13 +1,13 @@
-"""Spending ledger tools. Reads in chat, cron and code; writes in chat only, each logged and undoable."""
+"""Spending ledger tools. Reads in chat, cron, code and allowlisted subagents; writes in chat only, each logged and undoable."""
 
 from datetime import datetime
 
 from ... import money
 from .. import scheduler
 from ._args import bounded_int, text_arg
-from .base import CHAT, CODE, CRON, READ, WRITE, Tool, ToolContext, ToolError
+from .base import CHAT, CODE, CRON, READ, SUB, WRITE, Tool, ToolContext, ToolError
 
-READ_CONTEXTS = frozenset({CHAT, CRON, CODE})
+READ_CONTEXTS = frozenset({CHAT, CRON, SUB, CODE})
 WRITE_CONTEXTS = frozenset({CHAT})
 MAX_LIMIT = 200
 MAX_DAYS = 365

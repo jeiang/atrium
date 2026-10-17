@@ -1,10 +1,9 @@
-{% extends "base.html" %}
+{% extends "settings.html" %}
 {% from "_icons.html" import icon %}
 {% from "_macros.html" import empty_state %}
-{% set page = "usage" %}
-{% block title %}Usage{% endblock %}
-{% block heading %}Usage{% endblock %}
-{% block content %}
+{% set tab = "usage" %}
+{% block tab_title %}Usage{% endblock %}
+{% block tab %}
 {% set s = summary %}
 <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="This month">
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">

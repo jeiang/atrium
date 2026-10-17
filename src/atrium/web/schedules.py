@@ -39,11 +39,11 @@ def register(app, deps):
             raise HTTPException(404, "unknown schedule")
         return job
 
-    @app.get("/schedules")
+    @app.get("/settings/schedules")
     def schedules_page():
         return show()
 
-    @app.post("/schedules")
+    @app.post("/settings/schedules")
     def schedule_new(
         name: Annotated[str, Form()] = "",
         prompt: Annotated[str, Form()] = "",
@@ -57,7 +57,7 @@ def register(app, deps):
 
         return attempt(create, "Schedule created")
 
-    @app.post("/schedules/{job_id}")
+    @app.post("/settings/schedules/{job_id}")
     def schedule_edit(
         job_id: int,
         name: Annotated[str, Form()] = "",
@@ -74,7 +74,7 @@ def register(app, deps):
 
         return attempt(edit, "Schedule saved")
 
-    @app.post("/schedules/{job_id}/toggle")
+    @app.post("/settings/schedules/{job_id}/toggle")
     def schedule_toggle(job_id: int):
         def toggle(conn):
             job = load(conn, job_id)
@@ -82,7 +82,7 @@ def register(app, deps):
 
         return attempt(toggle, "Schedule updated")
 
-    @app.post("/schedules/{job_id}/cancel")
+    @app.post("/settings/schedules/{job_id}/cancel")
     def schedule_cancel(job_id: int):
         def cancel(conn):
             load(conn, job_id)

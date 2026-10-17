@@ -1,0 +1,11 @@
+{% from "_macros.html" import empty_state %}
+<section id="agent-runs" class="flex flex-col gap-2" aria-live="polite" aria-label="Runs"
+  {% if polling %}hx-get="/agents/runs" hx-trigger="load delay:2s" hx-swap="outerHTML"{% endif %}>
+  {% if cards %}
+  <ul class="flex flex-col gap-2">
+    {% for c in cards %}{% include "_run_card.html" %}{% endfor %}
+  </ul>
+  {% else %}
+  {% call empty_state("bot", "No runs yet") %}Runs appear here as soon as the assistant, a schedule or a subagent starts working.{% endcall %}
+  {% endif %}
+</section>

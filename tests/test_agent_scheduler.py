@@ -293,7 +293,7 @@ def test_schedule_tools_cannot_touch_nightly():
 
 
 def test_schedule_tools_are_chat_only():
-    by_kind = {k: {t.name for t in registry.tools_for(k) if t.name.startswith("schedule_")} for k in ("chat", "cron", "nightly", "code", "sub:web")}
+    by_kind = {k: {t.name for t in registry.tools_for(k) if t.name.startswith("schedule_")} for k in ("chat", "cron", "nightly", "code", "sub")}
     assert by_kind["chat"] == {"schedule_create", "schedule_update", "schedule_cancel", "schedule_list"}
     assert all(not v for k, v in by_kind.items() if k != "chat")
 
@@ -378,7 +378,7 @@ def test_nightly_notify_is_capped_at_one_per_run(tmp_path):
 
 
 def test_notify_tool_contexts():
-    assert {k for k in ("chat", "cron", "nightly", "code", "sub:web") if "notify" in {t.name for t in registry.tools_for(k)}} == {"chat", "cron", "nightly"}
+    assert {k for k in ("chat", "cron", "nightly", "code", "sub") if "notify" in {t.name for t in registry.tools_for(k)}} == {"chat", "cron", "nightly"}
 
 
 # ---- nightly registry
@@ -480,7 +480,7 @@ def test_skills_index_and_load():
 
 
 def test_load_skill_contexts():
-    have = {k for k in ("chat", "cron", "nightly", "code", "sub:web", "sub:mail", "sub:notion", "sub:observability", "sub:calendar") if "load_skill" in {t.name for t in registry.tools_for(k)}}
+    have = {k for k in ("chat", "cron", "nightly", "code", "sub") if "load_skill" in {t.name for t in registry.tools_for(k)}}
     assert have == {"chat", "cron", "nightly", "code"}
 
 
@@ -491,30 +491,30 @@ def test_pages(tmp_path):
 
     cfg = make_config(tmp_path, static_dir=static_dir(tmp_path))
     client = web_client(cfg, env={"ATRIUM_TZ": TZ})
-    page = client.get("/schedules")
+    page = client.get("/settings/schedules")
     assert page.status_code == 200 and "nightly" in page.text and "daily 02:30" in page.text
-    created = client.post("/schedules", data={"name": "Digest", "prompt": "Summarize mail.", "schedule": "daily 08:00"})
+    created = client.post("/settings/schedules", data={"name": "Digest", "prompt": "Summarize mail.", "schedule": "daily 08:00"})
     assert created.status_code == 200 and "Digest" in created.text
-    bad = client.post("/schedules", data={"name": "Bad", "prompt": "p", "schedule": "nonsense"})
+    bad = client.post("/settings/schedules", data={"name": "Bad", "prompt": "p", "schedule": "nonsense"})
     assert bad.status_code == 422
     conn = db.connect(cfg.db_path)
     job = conn.execute("SELECT * FROM jobs WHERE name = 'Digest'").fetchone()
-    assert client.post(f"/schedules/{job['id']}", data={"name": "Digest", "prompt": "New prompt", "schedule": "weekly mon 09:00"}).status_code == 200
+    assert client.post(f"/settings/schedules/{job['id']}", data={"name": "Digest", "prompt": "New prompt", "schedule": "weekly mon 09:00"}).status_code == 200
     assert conn.execute("SELECT prompt, schedule FROM jobs WHERE id = ?", (job["id"],)).fetchone()["prompt"] == "New prompt"
-    client.post(f"/schedules/{job['id']}/toggle")
+    client.post(f"/settings/schedules/{job['id']}/toggle")
     assert conn.execute("SELECT enabled FROM jobs WHERE id = ?", (job["id"],)).fetchone()[0] == 0
-    client.post(f"/schedules/{job['id']}/cancel")
+    client.post(f"/settings/schedules/{job['id']}/cancel")
     assert conn.execute("SELECT cancelled FROM jobs WHERE id = ?", (job["id"],)).fetchone()[0] == 1
-    assert client.post("/schedules/999/cancel").status_code == 404
+    assert client.post("/settings/schedules/999/cancel").status_code == 404
 
-    assert "No notifications" in client.get("/notifications").text
+    assert "No notifications" in client.get("/settings/notifications").text
     notify.send(conn, {}, "Hello", "World", thread_link="3", thread_id=3)
-    assert "Hello" in client.get("/notifications").text
+    assert "Hello" in client.get("/settings/notifications").text
 
-    assert client.post("/skills", data={"name": "recipe", "description": "Cooking steps", "body": "# Cook"}).status_code == 200
-    assert "Cooking steps" in client.get("/skills").text
-    assert client.post("/skills", data={"name": "BAD", "description": "d", "body": "b"}).status_code == 422
-    client.post("/skills/recipe/delete")
+    assert client.post("/settings/skills", data={"name": "recipe", "description": "Cooking steps", "body": "# Cook"}).status_code == 200
+    assert "Cooking steps" in client.get("/settings/skills").text
+    assert client.post("/settings/skills", data={"name": "BAD", "description": "d", "body": "b"}).status_code == 422
+    client.post("/settings/skills/recipe/delete")
     assert skills.list_skills(conn) == []
     conn.close()
 

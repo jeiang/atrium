@@ -4,7 +4,7 @@ import uuid
 from ... import calendar, calendar_proposals
 from .. import writes
 from ._args import text_arg
-from .base import CHAT, CODE, CRON, NIGHTLY, PROPOSE, READ, SUB_CALENDAR, WRITE, NotConfigured, Tool, ToolContext, ToolError
+from .base import CHAT, CODE, CRON, NIGHTLY, PROPOSE, READ, SUB, WRITE, NotConfigured, Tool, ToolContext, ToolError
 
 TIME_NOTE = "ISO-8601 (2026-10-16T09:00 or 2026-10-16); times without an offset are in the operator's timezone."
 EVENT_PROPERTIES = {
@@ -152,7 +152,7 @@ TOOLS = [
         },
         handler=calendar_list,
         effect=READ,
-        contexts=frozenset({CHAT, CRON, NIGHTLY, SUB_CALENDAR, CODE}),
+        contexts=frozenset({CHAT, CRON, NIGHTLY, SUB, CODE}),
     ),
     Tool(
         name="calendar_create",

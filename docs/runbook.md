@@ -90,8 +90,10 @@ ssh artemis.jeiang.vpn doas systemctl start atrium-sync.service
 ### Web UI
 
 `atrium-web` serves the assistant chat (`/chat`, the only search entry: threads
-are full-text searchable), the usage page (`/usage`), message view, Notion
-pages, proposals, triage, rules and actions. With `--auth proxy` (the default)
+are full-text searchable), the Agents page (`/agents`: running and recent runs of
+every kind with effort, current tool, tokens and cost; polls while anything runs),
+Settings (`/settings/<tab>`: Skills, Subagents, Schedules, Notifications, Usage),
+message view, Notion pages, proposals, triage, rules and actions. With `--auth proxy` (the default)
 every request except `/static` and validly signed `/media/file/*` links must
 carry a `Remote-Groups` header containing `atrium_access`, which tinyauth adds
 in front of alda's Caddy; `--auth local` is the loopback listener reached over
@@ -210,12 +212,28 @@ birthdays/anniversaries for the next 60 days with Dismiss. Dates come from vCard
 assistant proposes `notion_receipt`, which creates a `Type=Receipt` page in
 `ATRIUM_NOTION_WIKI_DATA_SOURCE` (needs a `Type` select property) and undo trashes it.
 
-The scheduler seeds seven built-in jobs once (kind `builtin`, listed on /schedules, disable
+The scheduler seeds seven built-in jobs once (kind `builtin`, listed on /settings/schedules, disable
 but not cancel): `weekly-review` (Sunday 18:00), `daily-nudges` (08:00, notifies only
 when something is due, using upcoming bills from the ledger), `calendar-candidates`
 (hourly, drafts calendar proposals only when event candidates are queued), `fx-rates`
 (Monday 06:00, stores the CBTT USD selling rate; no model) and the three media jobs below
 (`media-channels`, `media-sweep`, `media-thumbnails`; no model). Their prompts live in code.
+
+Skills (/settings/skills) are operator-written playbooks. A body may reference another
+skill as `/skill:name` or `[[skill:name]]`; `load_skill` appends the referenced skills not
+yet loaded in the thread, and the editor shows references, referenced-by and unknown names.
+The same tokens in a chat message or a schedule prompt are expanded before the run into
+`<skill name="...">body</skill>` blocks appended to the message (references followed
+transitively, deduplicated, at most 5 skills / 20K characters; unknown names stay as text
+with a note) and recorded on the run (`runs.skills_json`, shown on /runs/{id}).
+
+Subagents (/settings/subagents, table `subagents`) are what `research(role=...)` delegates
+to: name, description (the role list the model sees), prompt addendum, effort (low/medium/
+high) and a tool allowlist limited to read-only tools open to subagents (`sub` context)
+plus the `web_search` server tool. The five built-ins (web, mail, notion, observability,
+calendar) are seeded once and can be edited or disabled but not deleted. Children run as
+kind `sub` with the allowlist stored in the run's limits, so a resumed child sees the same
+tools; they still cannot write, notify, schedule or spawn.
 
 ### Media (/media)
 

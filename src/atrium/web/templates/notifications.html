@@ -1,9 +1,8 @@
-{% extends "base.html" %}
+{% extends "settings.html" %}
 {% from "_macros.html" import empty_state %}
-{% set page = "notifications" %}
-{% block title %}Notifications{% endblock %}
-{% block heading %}Notifications{% endblock %}
-{% block content %}
+{% set tab = "notifications" %}
+{% block tab_title %}Notifications{% endblock %}
+{% block tab %}
 {% if notifications %}
 <div class="table-container rounded-lg border bg-card">
   <table class="table">

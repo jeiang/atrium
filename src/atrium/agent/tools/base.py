@@ -14,14 +14,10 @@ EFFECTS = (READ, WRITE, PROPOSE, NOTIFY)
 CHAT = "chat"
 CRON = "cron"
 NIGHTLY = "nightly"
-SUB_WEB = "sub:web"
-SUB_MAIL = "sub:mail"
-SUB_NOTION = "sub:notion"
-SUB_OBSERVABILITY = "sub:observability"
-SUB_CALENDAR = "sub:calendar"
+# A research subagent: the run's tool allowlist (from the operator-defined agent) narrows this further.
+SUB = "sub"
 CODE = "code"
-KINDS = (CHAT, CRON, NIGHTLY, SUB_WEB, SUB_MAIL, SUB_NOTION, SUB_OBSERVABILITY, SUB_CALENDAR, CODE)
-SUB_KINDS = (SUB_WEB, SUB_MAIL, SUB_NOTION, SUB_OBSERVABILITY, SUB_CALENDAR)
+KINDS = (CHAT, CRON, NIGHTLY, SUB, CODE)
 ALL_KINDS = frozenset(KINDS)
 
 

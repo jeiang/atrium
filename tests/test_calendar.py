@@ -257,7 +257,7 @@ def test_tool_contexts_and_schemas():
     by_name = {t.name: t for t in tool.TOOLS}
     assert by_name["calendar_create"].contexts == {"chat"} and by_name["calendar_delete"].contexts == {"chat"}
     assert by_name["event_propose"].contexts == {"chat", "cron"}
-    assert {"chat", "cron", "nightly", "sub:calendar", "code"} == set(by_name["calendar_list"].contexts)
+    assert {"chat", "cron", "nightly", "sub", "code"} == set(by_name["calendar_list"].contexts)
     for t in by_name.values():
         assert "attendees" not in t.input_schema["properties"]
     assert "calendar_create" not in {t.name for t in registry.tools_for("cron")}

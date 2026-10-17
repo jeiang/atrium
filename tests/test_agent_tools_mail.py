@@ -63,4 +63,4 @@ def test_tools_declare_schemas():
     assert {t.name for t in mail.TOOLS} == {"mail_search", "mail_read"}
     for t in mail.TOOLS:
         assert t.input_schema["type"] == "object" and t.effect == "read"
-        assert {"chat", "cron", "nightly", "sub:mail", "code"} == set(t.contexts)
+        assert {"chat", "cron", "nightly", "sub", "code"} == set(t.contexts)

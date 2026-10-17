@@ -9,7 +9,7 @@ from .base import Tool, ToolContext, ToolError
 MAX_RESULTS = 20
 SNIPPET_CHARS = 300
 BODY_DEFAULT = 8000
-CONTEXTS = frozenset({"chat", "cron", "nightly", "sub:mail", "code"})
+CONTEXTS = frozenset({"chat", "cron", "nightly", "sub", "code"})
 
 
 def _iso(ts):

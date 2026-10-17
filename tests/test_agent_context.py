@@ -413,7 +413,7 @@ def test_chat_prefix_ttl_setting(world):
 
 
 def test_context_ops_are_not_offered_to_subagents_or_code():
-    for kind in ("sub:web", "sub:mail", "code"):
+    for kind in ("sub", "code"):
         assert not any(t.name.startswith("context_") for t in registry.tools_for(kind))
     for kind in ("chat", "cron", "nightly"):
         assert {"context_status", "context_pin", "context_drop", "context_fold"} <= {t.name for t in registry.tools_for(kind)}

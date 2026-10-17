@@ -3,9 +3,9 @@ from datetime import datetime
 from ... import birthdays, receipts, watches
 from .. import scheduler
 from ._args import bounded_int, clip, text_arg
-from .base import CHAT, CODE, CRON, READ, WRITE, NotConfigured, Tool, ToolContext, ToolError
+from .base import CHAT, CODE, CRON, READ, SUB, WRITE, NotConfigured, Tool, ToolContext, ToolError
 
-CONTEXTS = frozenset({CHAT, CRON, CODE})
+CONTEXTS = frozenset({CHAT, CRON, SUB, CODE})
 
 
 def _today(ctx):

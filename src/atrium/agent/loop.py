@@ -86,7 +86,7 @@ def system_signature(params):
     return hashlib.sha256(json.dumps([texts, tools], sort_keys=True).encode()).hexdigest()[:16]
 
 
-def request_params(tools, kind, effort, system, prefix_cc=CACHE_CONTROL):
+def request_params(tools, kind, effort, system, prefix_cc=CACHE_CONTROL, allow=None):
     params = {
         "model": MODEL,
         "max_tokens": MAX_TOKENS,
@@ -96,7 +96,7 @@ def request_params(tools, kind, effort, system, prefix_cc=CACHE_CONTROL):
         "context_management": context.context_management(),
         "betas": list(context.BETAS),
     }
-    tool_params = registry.anthropic_tool_params(tools) + registry.server_tools_for(kind)
+    tool_params = registry.anthropic_tool_params(tools) + registry.server_tools_for(kind, allow)
     if tool_params:
         tool_params[-1] = {**tool_params[-1], "cache_control": prefix_cc}
         params["tools"] = tool_params
@@ -252,14 +252,15 @@ def fresh_turn(conn, thread_id):
     return last is not None and last["role"] == journal.USER and has_text(last)
 
 
-def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=MAX_STEPS, max_cost_usd=MAX_RUN_COST_USD, system_extra=None):
+def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=MAX_STEPS, max_cost_usd=MAX_RUN_COST_USD, system_extra=None, allowed_tools=None):
+    """allowed_tools: a subagent's tool allowlist (stored with the run's limits so a resume enforces the same set)."""
     found = journal.get_run(conn, run_id)
     thread_id, kind, effort = found["thread_id"], found["kind"], found["effort"]
-    tools = registry.tools_for(kind)
+    tools = registry.run_tools(kind, allowed_tools, conn)
     by_name = {t.name: t for t in tools}
     unattended = threads.root_kind(conn, thread_id) in UNATTENDED
     prefix_cc = prefix_cache_control(conn, kind)
-    params = request_params(tools, kind, effort, system_blocks(conn, prefix_cc, system_extra), prefix_cc)
+    params = request_params(tools, kind, effort, system_blocks(conn, prefix_cc, system_extra), prefix_cc, allowed_tools)
     sig = system_signature(params)
     ctx = ToolContext(
         conn=conn,

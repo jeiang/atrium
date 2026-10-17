@@ -2,12 +2,14 @@ import json
 import re
 
 from ..search import fts_query
-from .tools.base import CHAT, CRON, NIGHTLY, SUB_KINDS
+from .tools.base import CHAT, CRON, NIGHTLY, SUB
 
+LOW = "low"
 MEDIUM = "medium"
 HIGH = "high"
+EFFORTS = (LOW, MEDIUM, HIGH)
 SUBAGENT = "subagent"
-EFFORT = {CHAT: MEDIUM, SUBAGENT: MEDIUM, CRON: HIGH, NIGHTLY: HIGH, **dict.fromkeys(SUB_KINDS, MEDIUM)}
+EFFORT = {CHAT: MEDIUM, SUBAGENT: MEDIUM, CRON: HIGH, NIGHTLY: HIGH, SUB: MEDIUM}
 TITLE_CHARS = 80
 URL = re.compile(r"https?://[^\s<>\"'()\[\]]+")
 
