@@ -546,6 +546,24 @@ def test_monthly_similar_charges_are_a_bill_and_irregular_ones_are_not(conn, acc
     assert [b["payee"] for b in money.bills(conn, date(2026, 10, 5), upcoming_days=7)] == ["Anthropic"]
 
 
+def test_before_tracking_start_only_bill_charges_count(conn, accounts):
+    anthropic = money.create_payee(conn, "Anthropic", "Subscriptions")
+    kfc = money.create_payee(conn, "KFC", "Fast food")
+    for day in ("2026-08-10", "2026-09-10"):
+        charge(conn, anthropic, accounts["republic_card"], day, 135.3)
+    charge(conn, kfc, accounts["republic_card"], "2026-08-20", 60.0)  # before the move: not tracked
+    charge(conn, kfc, accounts["republic_card"], "2026-09-25", 70.0)
+    assert money.set_tracked_since(conn, "2026-09-17") == "2026-09-17"
+    payees = sorted((t["display_payee"], t["date"]) for t in money.list_transactions(conn))
+    assert payees == [("Anthropic", "2026-08-10"), ("Anthropic", "2026-09-10"), ("KFC", "2026-09-25")]
+    groups = money.spending(conn, "2026-08-01", "2026-09-30", group_by="payee")["TTD"]["groups"]
+    assert {g["name"]: g["count"] for g in groups} == {"Anthropic": 2, "KFC": 1}
+    assert [b["payee"] for b in money.bills(conn, date(2026, 10, 1))] == ["Anthropic"]  # detection still sees all history
+    assert money.set_tracked_since(conn, "") is None and len(money.list_transactions(conn)) == 4
+    with pytest.raises(money.LedgerError):
+        money.set_tracked_since(conn, "last month")
+
+
 def test_subscription_wording_and_overrides(conn, accounts):
     streamly = money.create_payee(conn, "Streamly", "Entertainment")
     charge(conn, streamly, accounts["fcb"], "2026-10-01", 45.0)

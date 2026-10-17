@@ -193,6 +193,7 @@ def register(app, deps):
                 currencies=money.CURRENCIES,
                 default_senders=money.DEFAULT_SENDERS,
                 rates=money.list_rates(conn, 8),
+                since=money.tracked_since(conn),
                 toast=notice,
                 status_code=status_code,
             )
@@ -215,6 +216,12 @@ def register(app, deps):
         with connection() as conn:
             found(ledger(money.update_account, conn, account_id, name, last4, sender_patterns), "account")
         return accounts_page_render(toast("success", "Account updated"))
+
+    @app.post("/money/since")
+    def tracking_since(since: Annotated[str, Form()] = ""):
+        with connection() as conn:
+            value = ledger(money.set_tracked_since, conn, since)
+        return accounts_page_render(toast("success", "Tracking start saved", f"Spending before {value} counts only bill charges." if value else "All history is tracked."))
 
     @app.post("/money/accounts/{account_id}/delete")
     def account_delete(account_id: int):

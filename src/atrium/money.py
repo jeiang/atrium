@@ -1202,8 +1202,29 @@ FILTERS = {
 }
 
 
+SINCE_KEY = "money_since"
+
+
+def tracked_since(conn):
+    """ISO date before which only bill charges are tracked, or None."""
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (SINCE_KEY,)).fetchone()
+    return row["value"] if row and row["value"] else None
+
+
+def set_tracked_since(conn, value):
+    value = (value or "").strip()
+    if value:
+        try:
+            value = date.fromisoformat(value).isoformat()
+        except ValueError as e:
+            raise LedgerError("tracking start must be a YYYY-MM-DD date") from e
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (SINCE_KEY, value))
+    return value or None
+
+
 def list_transactions(conn, unassigned=False, limit=100, **filters):
-    """Newest first; filters are start, end, account_id, payee (substring), category, kind, currency."""
+    """Newest first; filters are start, end, account_id, payee (substring), category, kind, currency.
+    Before the tracking start date only bill charges are listed (bill detection itself uses all history)."""
     where, params = [], []
     for name, value in filters.items():
         clause, count = FILTERS[name]
@@ -1212,6 +1233,12 @@ def list_transactions(conn, unassigned=False, limit=100, **filters):
             params.extend([f"%{value}%" if name == "payee" else value] * count)
     if unassigned:
         where.append("(t.account_id IS NULL OR t.review != '')")
+    since = tracked_since(conn)
+    if since:
+        bill_ids = sorted({b["payee_id"] for b in bills(conn, date.today())})
+        marks = ", ".join("?" * len(bill_ids))
+        where.append(f"(t.date >= ? OR t.payee_id IN ({marks}))" if bill_ids else "t.date >= ?")
+        params.extend([since, *bill_ids])
     sql = LIST_SQL + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY t.date DESC, t.id DESC LIMIT ?"
     rows = [dict(r) for r in conn.execute(sql, (*params, limit))]
     for r in rows:
