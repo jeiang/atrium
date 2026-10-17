@@ -376,8 +376,17 @@ def table_markdown(rows, bodies):
 # ---- applying an approved plan
 
 
+def already_archived(error):
+    """Archiving a page also archives what it contains, so a later archive of a child is refused, not missing."""
+    return error.status == 400 and "archived" in str(error)
+
+
 class Applier:
+    """Applies a wiki plan. Re-approving a failed plan resumes it: steps its earlier attempts recorded are skipped."""
+
     def __init__(self, conn, client, proposal, now=time.time, environ=None):
+        from . import proposals
+
         self.conn, self.client, self.proposal, self.now = conn, client, proposal, now
         self.plan = notion_proposals._payload(proposal)
         self.root = normalize_id(self.plan["root"])
@@ -386,27 +395,49 @@ class Applier:
         self.created = {}
         self.log_lines = []
         self.counts = {"hubs": 0, "pages": 0, "merged": 0, "archived": 0, "databases": 0}
+        self.done = {"archive": set(), "move": set(), "archive_database": set(), "merge": set()}
+        prior = [a["action"] for a in proposals.actions(conn, proposal["id"]) if a["ok"]]
+        for a in prior:
+            if a["type"] in ("archive", "move", "merge"):
+                self.done[a["type"]].add(a["page_id"])
+            elif a["type"] == "archive_database":
+                self.done["archive_database"].add(a["database_id"])
+            elif a["type"] == "create":
+                for source in a.get("sources", ()):
+                    self.created[source] = a["page_id"]
+        if not any(a["type"] == "log" for a in prior):
+            verbs = {"create": "created", "move": "moved", "archive": "archived", "merge": "merged", "archive_database": "archived database"}
+            self.log_lines = [notion_wiki.log_line(self.date, verbs[a["type"]], a["title"], "") for a in prior if a["type"] in verbs]
 
     def act(self, action, undo):
         from . import proposals
 
         proposals.record_action(self.conn, self.proposal["id"], action, undo)
 
-    def create(self, parent, title, markdown, hub_title, sources=()):
+    def create(self, parent, title, markdown, hub_title, sources=(), items=()):
         body, merged = notion_wiki.with_footer(markdown, self.date, sources)
         page = self.client.create_page(
             {"parent": {"page_id": parent}, "properties": {"title": {"title": [{"type": "text", "text": {"content": title}}]}}, "markdown": body}
         )
         page_id = normalize_id(page["id"])
         notion_wiki.upsert(self.conn, page_id, self.now(), title=title, hub_id=parent, last_reviewed=self.date, sources=merged, in_trash=False)
-        self.act({"type": "create", "page_id": page_id, "title": title, "hub": hub_title}, {"op": UNDO_OP, "kind": "trash", "page_id": page_id})
+        self.act({"type": "create", "page_id": page_id, "title": title, "hub": hub_title, "sources": list(items)}, {"op": UNDO_OP, "kind": "trash", "page_id": page_id})
         self.log_lines.append(notion_wiki.log_line(self.date, "created", title, page.get("url", "")))
         return page_id, page.get("url", "")
 
     def archive(self, item):
-        self.client.set_trash(item["id"], True)
+        if item["id"] in self.done["archive"]:
+            return
+        undo = {"op": UNDO_OP, "kind": "untrash", "page_id": item["id"]}
+        try:
+            self.client.set_trash(item["id"], True)
+        except NotionError as e:
+            if not already_archived(e):
+                raise
+            undo = None
         notion_wiki.upsert(self.conn, item["id"], self.now(), title=item["title"], in_trash=True)
-        self.act({"type": "archive", "page_id": item["id"], "title": item["title"], "decision": item["decision"]}, {"op": UNDO_OP, "kind": "untrash", "page_id": item["id"]})
+        self.act({"type": "archive", "page_id": item["id"], "title": item["title"], "decision": item["decision"]}, undo)
+        self.done["archive"].add(item["id"])
         self.counts["archived"] += 1
 
     def body_of(self, item):
@@ -431,12 +462,12 @@ class Applier:
         for db in self.plan["databases"]:
             if db["mode"] != TABLE:
                 continue
-            rows = [i for i in items if i["kind"] == ROW and i["source_id"] == db["id"] and i["decision"] == CONVERT]
+            rows = [i for i in items if i["kind"] == ROW and i["source_id"] == db["id"] and i["decision"] == CONVERT and i["id"] not in self.done["archive"]]
             if not rows:
                 continue
             bodies = {r["id"]: self.body_of(r) for r in rows}
             inv = {i["id"]: i for i in inventory_rows(self.conn, [r["id"] for r in rows])}
-            page_id, url = self.create(self.hub_of(db["hub"]), db["title"], table_markdown([inv[r["id"]] for r in rows], bodies), db["hub"], [db["url"]] if db["url"] else ())
+            page_id, url = self.create(self.hub_of(db["hub"]), db["title"], table_markdown([inv[r["id"]] for r in rows], bodies), db["hub"], [db["url"]] if db["url"] else (), [r["id"] for r in rows])
             self.counts["pages"] += 1
             for r in rows:
                 self.created[r["id"]] = page_id
@@ -447,10 +478,12 @@ class Applier:
         for item in self.plan["items"]:
             if item["decision"] != CONVERT or (item["kind"] == ROW and item["source_id"] in table_sources):
                 continue
+            if item["id"] in self.done["archive"] or item["id"] in self.done["move"]:
+                continue
             parent = self.hub_of(item["hub"])
             if item["kind"] == ROW:
                 full = next(iter(inventory_rows(self.conn, [item["id"]])), None)
-                page_id, _ = self.create(parent, item["title"], row_markdown(full or {"properties": {}}, self.body_of(item)), item["hub"], [item["url"]] if item["url"] else ())
+                page_id, _ = self.create(parent, item["title"], row_markdown(full or {"properties": {}}, self.body_of(item)), item["hub"], [item["url"]] if item["url"] else (), [item["id"]])
                 self.created[item["id"]] = page_id
                 self.archive(item)
             else:
@@ -464,7 +497,10 @@ class Applier:
 
     def merges(self):
         for item in self.plan["items"]:
-            if item["decision"] != MERGE:
+            if item["decision"] != MERGE or item["id"] in self.done["archive"]:
+                continue
+            if item["id"] in self.done["merge"]:
+                self.archive(item)
                 continue
             target = self.created.get(item["merge_into"], item["merge_into"])
             full = next(iter(inventory_rows(self.conn, [item["id"]])), None) if item["kind"] == ROW else None
@@ -489,7 +525,7 @@ class Applier:
 
     def drops(self):
         for item in self.plan["items"]:
-            if item["decision"] == DROP:
+            if item["decision"] == DROP and item["id"] not in self.done["archive"]:
                 self.archive(item)
                 self.log_lines.append(notion_wiki.log_line(self.date, "archived", item["title"], item["url"]))
 
@@ -497,14 +533,20 @@ class Applier:
         kept = {i["source_id"] for i in self.plan["items"] if i["kind"] == ROW and i["decision"] == KEEP}
         done = set()
         for db in self.plan["databases"]:
-            if db["id"] in kept or not db["database_id"] or db["database_id"] in done:
+            if db["id"] in kept or not db["database_id"] or db["database_id"] in done or db["database_id"] in self.done["archive_database"]:
                 continue
             siblings = {d["id"] for d in self.plan["databases"] if d["database_id"] == db["database_id"]}
             if siblings & kept:
                 continue
-            self.client.set_database_trash(db["database_id"], True)
+            undo = {"op": UNDO_OP, "kind": "database_untrash", "database_id": db["database_id"]}
+            try:
+                self.client.set_database_trash(db["database_id"], True)
+            except NotionError as e:
+                if not already_archived(e):
+                    raise
+                undo = None
             self.conn.execute("UPDATE notion_sources SET in_trash = 1 WHERE database_id = ?", (db["database_id"],))
-            self.act({"type": "archive_database", "database_id": db["database_id"], "title": db["title"]}, {"op": UNDO_OP, "kind": "database_untrash", "database_id": db["database_id"]})
+            self.act({"type": "archive_database", "database_id": db["database_id"], "title": db["title"]}, undo)
             self.log_lines.append(notion_wiki.log_line(self.date, "archived database", db["title"], ""))
             done.add(db["database_id"])
             self.counts["databases"] += 1
