@@ -20,7 +20,8 @@ KINDS = (MOVIE, TV)
 SKIPPED = "(skipped)"
 NOT_THE_MOVIE = "(not the movie)"
 IMPORT_PREFIX = IMPORT + "/"
-DIR_MODE = 0o2775
+# The setgid bit comes from the library roots; asking for it fails under RestrictSUIDSGID.
+DIR_MODE = 0o775
 
 
 class PlanError(Exception):
