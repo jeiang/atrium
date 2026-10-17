@@ -39,21 +39,27 @@
     menu=[
       {"type": "group", "label": "Assistant", "items": [
         {"label": "Chat", "url": "/chat", "icon": icon("messages-square"), "current": page == "chat"},
-        {"label": "Drafts", "url": "/drafts", "icon": icon("mail"), "current": page == "drafts"},
-        {"label": "Changes", "url": "/changes", "icon": icon("undo-2"), "current": page == "changes"},
-        {"label": "Loops", "url": "/loops", "icon": icon("list-checks"), "current": page == "loops"},
-        {"label": "Watches", "url": "/watches", "icon": icon("package"), "current": page == "watches"},
-        {"label": "Money", "url": "/money", "icon": icon("wallet"), "current": page == "money"},
-        {"label": "Schedules", "url": "/schedules", "icon": icon("scroll-text"), "current": page == "schedules"},
-        {"label": "Notifications", "url": "/notifications", "icon": icon("inbox"), "current": page == "notifications"},
-        {"label": "Skills", "url": "/skills", "icon": icon("pencil"), "current": page == "skills"},
         {"label": "Usage", "url": "/usage", "icon": icon("chart-column"), "current": page == "usage"},
+        {"label": "Schedules", "url": "/schedules", "icon": icon("scroll-text"), "current": page == "schedules"},
+        {"label": "Skills", "url": "/skills", "icon": icon("pencil"), "current": page == "skills"},
+        {"label": "Notifications", "url": "/notifications", "icon": icon("inbox"), "current": page == "notifications"},
+        {"label": "Changes", "url": "/changes", "icon": icon("undo-2"), "current": page == "changes"},
+        {"label": "Drafts", "url": "/drafts", "icon": icon("mail"), "current": page == "drafts"},
       ]},
-      {"type": "group", "label": "Organise", "items": [
+      {"type": "group", "label": "Mail", "items": [
         {"label": proposals_label, "url": "/proposals", "icon": icon("list-checks"), "current": page == "proposals", "attrs": {"class": "[&>span:last-child]:flex-1"}},
         {"label": "Triage", "url": "/triage", "icon": icon("route"), "current": page == "triage"},
         {"label": "Actions", "url": "/actions", "icon": icon("undo-2"), "current": page == "actions"},
         {"label": "Rules", "url": "/rules", "icon": icon("scroll-text"), "current": page == "rules"},
+        {"label": "Loops", "url": "/loops", "icon": icon("list-checks"), "current": page == "loops"},
+        {"label": "Watches", "url": "/watches", "icon": icon("package"), "current": page == "watches"},
+        {"label": "Money", "url": "/money", "icon": icon("wallet"), "current": page == "money"},
+      ]},
+      {"type": "group", "label": "Media", "items": [
+        {"label": "Downloads", "url": "/media/downloads", "icon": icon("download"), "current": page == "media_downloads"},
+        {"label": "Add torrent", "url": "/media/add", "icon": icon("plus"), "current": page == "media_add"},
+        {"label": "Channels", "url": "/media/channels", "icon": icon("tv"), "current": page == "media_channels"},
+        {"label": "Library", "url": "/media/library", "icon": icon("film"), "current": page == "media_library"},
       ]},
     ]
   ) }}

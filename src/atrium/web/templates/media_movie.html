@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_media_links.html" import file_links with context %}
+{% set page = "media_library" %}
+{% block title %}{{ movie.title }}{% endblock %}
+{% block heading %}Media · {{ movie.title }}{% if movie.year %} ({{ movie.year }}){% endif %}{% endblock %}
+{% block content %}
+<p class="text-xs"><a class="underline underline-offset-4" href="/media/library">{{ icon("arrow-left", "inline size-3.5") }} Library</a></p>
+<div class="flex flex-col gap-4 sm:flex-row">
+  <img class="aspect-[2/3] w-40 shrink-0 rounded-lg border bg-muted object-cover" src="/media/art/movie/{{ movie.dir | urlencode }}" alt="">
+  <ul class="flex flex-1 flex-col gap-3" role="list" aria-label="Files">
+    {% for f in movie.files %}
+    <li class="flex flex-col gap-2 rounded-lg border bg-card p-4">
+      <span class="break-all font-mono text-xs">{{ f.name }} <span class="text-muted-foreground">· {{ "%.1f" | format(f.size / 1e9) }} GB</span></span>
+      {{ file_links(f) }}
+    </li>
+    {% else %}
+    <li class="text-sm text-muted-foreground">No video files in this folder.</li>
+    {% endfor %}
+  </ul>
+</div>
+<p class="text-xs text-muted-foreground">Public links are signed and expire after {{ ttl_hours }} hours; they support seeking (HTTP Range) in VLC and Infuse. VPN links need the mesh.</p>
+{% endblock %}

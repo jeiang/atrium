@@ -157,3 +157,35 @@ document.addEventListener("DOMContentLoaded", () => {
   strip.split(",").forEach((name) => url.searchParams.delete(name));
   history.replaceState(history.state, "", url);
 });
+
+// Add-torrent form: the zakkart shim opens /media/add#torrent=<base64url>&name=<file> so the bytes never reach a
+// URL log; a locally chosen .torrent is read the same way. Both land in the hidden "torrent" and "name" fields.
+const torrentForm = () => document.querySelector("form[data-torrent-form]");
+
+const setTorrent = (form, b64, name) => {
+  form.elements.torrent.value = b64;
+  form.elements.name.value = name;
+  form.querySelector("[data-torrent-chosen]").textContent = name ? `${name} ready to add` : "";
+};
+
+const base64url = (buffer) => {
+  let binary = "";
+  new Uint8Array(buffer).forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  const form = torrentForm();
+  if (!form || !location.hash.startsWith("#torrent=")) return;
+  const params = new URLSearchParams(location.hash.slice(1));
+  setTorrent(form, params.get("torrent") || "", params.get("name") || "upload.torrent");
+  history.replaceState(history.state, "", location.pathname + location.search);
+});
+
+document.addEventListener("change", (event) => {
+  if (!event.target.matches("[data-torrent-file]")) return;
+  const form = event.target.form || torrentForm();
+  const file = event.target.files[0];
+  if (!file) { setTorrent(form, "", ""); return; }
+  file.arrayBuffer().then((buffer) => setTorrent(form, base64url(buffer), file.name));
+});

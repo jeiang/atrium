@@ -44,6 +44,7 @@ from . import auth
 from . import changes as changes_ui
 from . import chat as chat_ui, runs as runs_ui
 from . import drafts as drafts_ui
+from . import media as media_ui
 from . import money as money_ui
 from . import notifications as notifications_ui
 from . import openloops as openloops_ui
@@ -152,7 +153,8 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
     jinja.globals["csrf_token"] = auth.csrf_token.get
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(GZipMiddleware, minimum_size=1024)
-    app.add_middleware(auth.Guard, auth=auth_mode, allowed_hosts=allowed_hosts)
+    environ = os.environ if env is None else env
+    app.add_middleware(auth.Guard, auth=auth_mode, allowed_hosts=allowed_hosts, public=media_ui.public_check(cfg, environ))
     app.mount("/static", StaticFiles(directory=cfg.static_dir), name="static")
 
     def pending():
@@ -188,7 +190,7 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
         connection=connection,
         toast=toast,
         agent_client=agent_client or (lambda: None),
-        env=os.environ if env is None else env,
+        env=environ,
     )
     with connection() as conn:
         drafts.recover_stuck(conn)
@@ -202,6 +204,7 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
     watches_ui.register(app, deps)
     money_ui.register(app, deps)
     skills_ui.register(app, deps)
+    media_ui.register(app, deps)
 
     def load_message(conn, message_id):
         found = message.get_message(conn, cfg, message_id)

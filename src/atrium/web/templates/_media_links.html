@@ -1,0 +1,7 @@
+{% from "_icons.html" import icon %}
+{% macro file_links(f) -%}
+<span class="flex flex-wrap gap-2">
+  {% if f.public %}<a class="btn" data-size="sm" data-variant="outline" href="{{ f.public }}" title="Signed public link, valid {{ ttl_hours }} h">{{ icon("globe", "size-3.5") }}Public link</a>{% endif %}
+  {% if f.vpn %}<a class="btn" data-size="sm" data-variant="outline" href="{{ f.vpn }}" title="Direct over the VPN">{{ icon("link", "size-3.5") }}VPN link</a>{% endif %}
+</span>
+{%- endmacro %}

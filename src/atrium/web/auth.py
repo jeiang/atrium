@@ -102,12 +102,15 @@ async def deny(send, status, text):
 
 
 class Guard:
-    def __init__(self, app, auth=PROXY, allowed_hosts=None):
+    def __init__(self, app, auth=PROXY, allowed_hosts=None, public=None):
         self.app = app
         self.auth = auth
         # Rejecting unknown Host values defeats DNS rebinding. PROXY has no default: the public host must be configured.
         defaults = LOCAL_HOSTS if auth == LOCAL else frozenset()
         self.hosts = frozenset(hostname(h) for h in allowed_hosts) if allowed_hosts else defaults
+        # public(scope) admits a request without Remote-Groups: the signed /media/file/ links, which Caddy passes
+        # around tinyauth. The Host check above still applies to them.
+        self.public = public or (lambda scope: False)
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -117,7 +120,7 @@ class Guard:
             await deny(send, 400, "Bad Host header")
             return
         path = scope["path"]
-        if self.auth == PROXY and not path.startswith(STATIC_PREFIX) and not has_group(header(scope, GROUPS_HEADER)):
+        if self.auth == PROXY and not path.startswith(STATIC_PREFIX) and not has_group(header(scope, GROUPS_HEADER)) and not self.public(scope):
             await deny(send, 403, "Forbidden")
             return
         token = cookie_token(scope)
