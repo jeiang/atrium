@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state %}
+{% set page = "watches" %}
+{% block title %}Watches{% endblock %}
+{% block heading %}Watches{% endblock %}
+{% block content %}
+<p class="text-sm text-muted-foreground">Read from your mail and address book by a local model. Dates and statuses can be wrong or stale; open the source mail to check. Nothing here pays, cancels or contacts anyone.</p>
+
+<section class="flex flex-col gap-3" aria-labelledby="renewals-h">
+  <h2 id="renewals-h" class="text-sm font-medium">Subscriptions, bills and renewals ({{ renewals | length }})</h2>
+  {% if renewals %}
+  <ul class="flex flex-col gap-3" role="list" aria-label="Renewals">
+    {% for r in renewals %}
+    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+      <div class="flex min-w-0 flex-col gap-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-sm font-medium">{{ r.merchant }}</span>
+          <span class="badge" data-variant="outline">{{ r.kind }}</span>
+          <span class="badge" data-variant="outline">{{ r.cadence }}</span>
+        </div>
+        <p class="text-xs text-muted-foreground tabular-nums">
+          {% if r.amount is not none %}{{ "%.2f"|format(r.amount) }} {{ r.currency }} · {% endif %}
+          {% if r.next_date %}Next {{ r.next_date }}{% if r.days_until is not none %} ({{ "in " ~ r.days_until ~ " days" if r.days_until >= 0 else (-r.days_until) ~ " days ago" }}){% endif %}{% else %}No date stated{% endif %}
+          · <a class="underline" href="/messages/{{ r.source_message_id }}">source mail</a>
+        </p>
+      </div>
+      <form method="post" action="/watches/renewals/{{ r.id }}/dismiss">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("x") }}Dismiss</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  {% call empty_state("receipt", "No renewals found") %}Statements and subscription mail will show up here after the next sync.{% endcall %}
+  {% endif %}
+</section>
+
+<section class="flex flex-col gap-3" aria-labelledby="packages-h">
+  <h2 id="packages-h" class="text-sm font-medium">Packages in transit ({{ packages | length }})</h2>
+  {% if packages %}
+  <ul class="flex flex-col gap-3" role="list" aria-label="Packages">
+    {% for p in packages %}
+    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+      <div class="flex min-w-0 flex-col gap-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-sm font-medium">{{ p.merchant or p.carrier or "Package" }}</span>
+          <span class="badge" data-variant="secondary">{{ p.status | replace("_", " ") }}</span>
+          {% if p.carrier %}<span class="badge" data-variant="outline">{{ p.carrier }}</span>{% endif %}
+        </div>
+        <p class="text-xs text-muted-foreground">
+          {% if p.tracking_number %}<span class="font-mono">{{ p.tracking_number }}</span> · {% endif %}
+          {% if p.order_ref %}order {{ p.order_ref }} · {% endif %}
+          {{ p.status_text }} · <span class="tabular-nums">{{ p.updated }}</span> ·
+          <a class="underline" href="/messages/{{ p.last_message_id }}">latest mail</a>
+        </p>
+      </div>
+      <form method="post" action="/watches/packages/{{ p.id }}/dismiss">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("x") }}Dismiss</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  {% call empty_state("package", "No packages in transit") %}Status only changes when a later shipping email arrives.{% endcall %}
+  {% endif %}
+</section>
+
+<section class="flex flex-col gap-3" aria-labelledby="birthdays-h">
+  <h2 id="birthdays-h" class="text-sm font-medium">Birthdays and anniversaries, next 60 days{% if birthdays is not none %} ({{ birthdays | length }}){% endif %}</h2>
+  {% if birthdays is none %}
+  {% call empty_state("book-user", "Address book not configured") %}ATRIUM_CONTACTS_DIR is not set.{% endcall %}
+  {% elif birthdays %}
+  <ul class="flex flex-col gap-3" role="list" aria-label="Birthdays">
+    {% for b in birthdays %}
+    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+      <div class="flex min-w-0 flex-col gap-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-sm font-medium">{{ b.name }}</span>
+          <span class="badge" data-variant="outline">{{ b.label }}</span>
+        </div>
+        <p class="text-xs text-muted-foreground tabular-nums">{{ b.date }} ({{ "today" if b.days_until == 0 else "in " ~ b.days_until ~ " days" }}){% if b.turning %} · turning {{ b.turning }}{% endif %}</p>
+      </div>
+      <form method="post" action="/watches/birthdays/dismiss">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="key" value="{{ b.key }}">
+        <input type="hidden" name="date" value="{{ b.date }}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("x") }}Dismiss</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  {% call empty_state("check", "Nothing coming up") %}No contact has a birthday or anniversary in the next 60 days.{% endcall %}
+  {% endif %}
+</section>
+{% endblock %}

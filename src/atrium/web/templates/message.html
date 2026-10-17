@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
-{% set page = "triage" if back.label == "Triage" else "search" %}
+{% set page = "triage" if back.label == "Triage" else "chat" %}
 {% block title %}{{ message.subject or "Message" }}{% endblock %}
 {% block heading %}Message{% endblock %}
 {% block content %}

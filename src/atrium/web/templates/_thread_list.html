@@ -1,0 +1,25 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state, when, run_badge %}
+{% if threads %}
+<ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list" aria-label="Threads">
+  {% for t in threads %}
+  <li>
+    <a href="/chat/{{ t.id }}" class="flex flex-col gap-1 px-4 py-3 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <span class="flex items-center gap-2">
+        <span class="truncate text-sm font-medium">{{ t.title or "Untitled thread" }}</span>
+        <span class="badge" data-variant="outline">{{ t.kind }}</span>
+        {{ run_badge(t.run_state) }}
+      </span>
+      <span class="flex gap-3 text-xs text-muted-foreground tabular-nums">
+        <span>{{ when(t.updated_at, "datetime") }}</span>
+        <span>${{ "%.3f" | format(t.cost) }}</span>
+      </span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% elif q %}
+{% call empty_state("search", "Nothing matches") %}No thread mentions “{{ q }}”.{% endcall %}
+{% else %}
+{% call empty_state("messages-square", "No threads yet") %}Start one above. Each scheduled run also gets its own thread here.{% endcall %}
+{% endif %}

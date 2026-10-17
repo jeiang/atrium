@@ -48,22 +48,22 @@ def test_message_state_gmail_leaf_and_inbox():
     assert sent["sent"] == 1
 
 
-def test_first_sync_skips_system_mailboxes_and_stores_raw(tmp_path):
+def test_first_sync_skips_unindexed_system_mailboxes_and_stores_raw(tmp_path):
     boxes = icloud_boxes()
     boxes["INBOX"].add(*raw("one"), flags=["\\Seen"])
     boxes["Bills"].add(*raw("two", sender="b@bills.test"))
     boxes["Sent Messages"].add(*raw("sent"))
     conn, cfg, client = setup(tmp_path, boxes, FLAGS)
     stats = sync.sync_account(conn, cfg, "icloud", client)
-    assert stats.new == 2 and stats.mailboxes == 3
+    assert stats.new == 3 and stats.mailboxes == 4
     names = {r["name"] for r in conn.execute("SELECT name FROM mailboxes")}
-    assert names == {"INBOX", "Bills", "Misc"}
+    assert names == {"INBOX", "Bills", "Misc", "Sent Messages"}
     inbox_row, bills_row = sorted(rows(conn), key=lambda r: r["location"])[::-1][0], rows(conn, "location = 'Bills'")[0]
     assert rows(conn, "location = 'INBOX'")[0]["in_inbox"] == 1
     assert bills_row["folder"] == "Bills" and bills_row["in_inbox"] == 0
     assert bills_row["from_domain"] == "bills.test"
     assert (cfg.cache_dir / bills_row["raw_path"]).read_bytes().startswith(b"From: b@bills.test")
-    assert conn.execute("SELECT COUNT(*) FROM message_fts").fetchone()[0] == 2
+    assert conn.execute("SELECT COUNT(*) FROM message_fts").fetchone()[0] == 3
     mbx = conn.execute("SELECT * FROM mailboxes WHERE name = 'INBOX'").fetchone()
     assert (mbx["uidvalidity"], mbx["highest_uid"], mbx["highestmodseq"]) == (1, 1, boxes["INBOX"].modseq)
     assert inbox_row is not None
@@ -183,3 +183,47 @@ def test_exclusive_serializes_concurrent_passes(tmp_path):
         assert not entered.wait(0.3)
     worker.join(5)
     assert entered.is_set()
+
+
+def test_sent_mailbox_is_indexed_since_cutoff_and_marked_sent(tmp_path):
+    boxes = icloud_boxes()
+    boxes["Sent Messages"].add(*raw("outgoing"))
+    conn, cfg, client = setup(tmp_path, boxes, FLAGS)
+    sync.sync_account(conn, cfg, "icloud", client)
+    (row,) = rows(conn, "location = 'Sent Messages'")
+    assert (row["sent"], row["in_inbox"], row["folder"]) == (1, 0, None)
+    assert row["in_reply_to"] == "" and row["refs"] == ""
+    assert conn.execute("SELECT role FROM mailboxes WHERE name = 'Sent Messages'").fetchone()[0] == "sent"
+    since = [c for c in client.searches if c[0] == "SINCE"]
+    assert len(since) == 1
+    expected = sync.imap_date(sync.now() - sync.SENT_BACKFILL_DAYS * 86400)
+    assert abs(sync.datetime.strptime(since[0][1], "%d-%b-%Y") - sync.datetime.strptime(expected, "%d-%b-%Y")).days <= 1
+    sync.sync_account(conn, cfg, "icloud", client)  # older indexed mail is not mistaken for vanished mail
+    assert rows(conn, "sent = 1 AND gone_at IS NOT NULL") == []
+    assert [c for c in client.searches if c[0] == "ALL"]  # other mailboxes keep the full search
+
+
+def test_sent_since_reaches_back_to_oldest_indexed_mail(tmp_path):
+    conn, cfg, client = setup(tmp_path, icloud_boxes(), FLAGS)
+    sync.sync_account(conn, cfg, "icloud", client)
+    mbx = conn.execute("SELECT * FROM mailboxes WHERE name = 'Sent Messages'").fetchone()
+    run = sync.now()
+    assert sync.sent_since(conn, mbx, 1, run) == sync.imap_date(run - 90 * 86400)
+    conn.execute(
+        "INSERT INTO messages (account, mailbox_id, uidvalidity, uid, digest, date_ts, first_seen, sent) VALUES ('icloud', ?, 1, 99, 'z', ?, 0, 1)",
+        (mbx["id"], run - 200 * 86400),
+    )
+    assert sync.sent_since(conn, mbx, 1, run) == sync.imap_date(run - 202 * 86400)
+
+
+def test_ingest_stores_reply_headers(tmp_path):
+    boxes = icloud_boxes()
+    header = (
+        b"From: a@x.test\r\nTo: me@x.test\r\nSubject: Re: hi\r\nMessage-ID: <c@x.test>\r\n"
+        b"In-Reply-To: <b@x.test>\r\nReferences: <a@x.test> <b@x.test>\r\nDate: Tue, 06 Oct 2026 10:00:00 +0000\r\n\r\n"
+    )
+    boxes["INBOX"].add(header, b"hello")
+    conn, cfg, client = setup(tmp_path, boxes, FLAGS)
+    sync.sync_account(conn, cfg, "icloud", client)
+    (row,) = rows(conn, "location = 'INBOX'")
+    assert (row["in_reply_to"], row["refs"]) == ("b@x.test", "a@x.test b@x.test")

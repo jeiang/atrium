@@ -1,0 +1,11 @@
+{% from "_icons.html" import icon %}
+<section id="children" class="flex flex-col gap-2" aria-live="polite" aria-label="Subagents"
+  {% if polling %}hx-get="/runs/{{ run.id }}/children" hx-trigger="load delay:1s" hx-swap="outerHTML"{% endif %}>
+  {% if cards %}
+  <ul class="flex flex-col gap-2">
+    {% for c in cards %}{% include "_child_card.html" %}{% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No subagents{% if polling %} yet{% endif %}.</p>
+  {% endif %}
+</section>

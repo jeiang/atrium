@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
@@ -20,6 +21,10 @@ from .imap import collapse_labels, fetch_items
 log = logging.getLogger("atrium.sync")
 
 SYSTEM_ROLES = {"trash", "sent", "drafts", "junk"}
+# Indexed for reply tracking only; the organizer never routes, files, flags or deletes `sent` rows.
+INDEXED_SYSTEM_ROLES = {"sent"}
+SENT_BACKFILL_DAYS = 90
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 SYSTEM_FLAGS = {"\\trash": "trash", "\\sent": "sent", "\\drafts": "drafts", "\\junk": "junk"}
 SYSTEM_NAMES = {
     "trash": "trash",
@@ -99,7 +104,7 @@ def upsert_mailboxes(conn, account, client):
     chosen = []
     for info in listed:
         role = mailbox_role(info.name, info.flags, account)
-        if role in SYSTEM_ROLES or role == "system":
+        if (role in SYSTEM_ROLES and role not in INDEXED_SYSTEM_ROLES) or role == "system":
             continue
         if "\\NOSELECT" in {f.upper() for f in info.flags}:
             continue
@@ -149,7 +154,10 @@ def sync_mailbox(conn, cfg, client, account, mbx, run, stats):
         )
         stored_modseq = None
     client.select(mbx["imap_name"])
-    server_uids = client.uid_search("ALL")
+    if mbx["role"] == "sent":
+        server_uids = client.uid_search("SINCE", sent_since(conn, mbx, validity, run))
+    else:
+        server_uids = client.uid_search("ALL")
     rows = conn.execute(
         "SELECT id, uid, gone_at, flags, labels, location, folder, in_inbox FROM messages "
         "WHERE mailbox_id = ? AND uidvalidity = ?",
@@ -186,6 +194,26 @@ def sync_mailbox(conn, cfg, client, account, mbx, run, stats):
         "UPDATE mailboxes SET uidvalidity = ?, highest_uid = ?, highestmodseq = ?, synced_at = ? WHERE id = ?",
         (validity, max(top, mbx["highest_uid"] if mbx["uidvalidity"] == validity else 0), modseq, run, mbx["id"]),
     )
+
+
+def imap_date(ts):
+    day = datetime.fromtimestamp(ts, UTC)
+    return f"{day.day:02d}-{MONTHS[day.month - 1]}-{day.year}"
+
+
+def sent_since(conn, mbx, validity, run):
+    """SEARCH SINCE date for a Sent mailbox: the backfill cutoff, or earlier when older mail is already indexed.
+
+    Going back to the oldest indexed message keeps those rows from looking vanished on later syncs.
+    """
+    cutoff = run - timedelta(days=SENT_BACKFILL_DAYS).total_seconds()
+    oldest = conn.execute(
+        "SELECT MIN(date_ts) FROM messages WHERE mailbox_id = ? AND uidvalidity = ? AND gone_at IS NULL AND date_ts > 0",
+        (mbx["id"], validity),
+    ).fetchone()[0]
+    if oldest is not None:
+        cutoff = min(cutoff, oldest - 2 * 86400)
+    return imap_date(cutoff)
 
 
 def refresh_flags(conn, client, account, mbx, survivors, stored_modseq, modseq, stats):
@@ -278,13 +306,13 @@ def ingest(conn, cfg, account, mbx, validity, item):
             account, mailbox_id, uidvalidity, uid, msgid, digest, gm_msgid, gm_thrid, internaldate, date_ts,
             size, raw_path, flags, seen, flagged, labels, in_inbox, sent, location, folder,
             from_addr, from_domain, from_name, to_addrs, reply_to, rpath_domain, list_id, precedence,
-            subject, subject_tmpl, msgid_domain, dkim_d, esp, att_types, att_names,
+            subject, subject_tmpl, msgid_domain, in_reply_to, refs, dkim_d, esp, att_types, att_names,
             has_money, k_statement, k_receipt, k_order, k_vcode, k_otp6, body_len, first_seen
         ) VALUES (
             :account, :mailbox_id, :uidvalidity, :uid, :msgid, :digest, :gm_msgid, :gm_thrid, :internaldate,
             :date_ts, :size, :raw_path, :flags, :seen, :flagged, :labels, :in_inbox, :sent, :location, :folder,
             :from_addr, :from_domain, :from_name, :to_addrs, :reply_to, :rpath_domain, :list_id, :precedence,
-            :subject, :subject_tmpl, :msgid_domain, :dkim_d, :esp, :att_types, :att_names,
+            :subject, :subject_tmpl, :msgid_domain, :in_reply_to, :refs, :dkim_d, :esp, :att_types, :att_names,
             :has_money, :k_statement, :k_receipt, :k_order, :k_vcode, :k_otp6, :body_len, :first_seen
         )
         """,

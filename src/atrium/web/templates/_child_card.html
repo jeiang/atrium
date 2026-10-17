@@ -1,0 +1,13 @@
+{% from "_icons.html" import icon %}
+<li data-child="{{ c.thread_id }}" data-status="{{ c.status }}">
+  <a href="/chat/{{ c.thread_id }}" class="flex flex-col gap-1 rounded-lg border bg-card p-3 text-sm hover:bg-accent">
+    <span class="flex items-center gap-2">
+      <span class="badge" data-variant="secondary">{{ c.role }}</span>
+      <span class="badge" data-variant="{{ 'destructive' if c.status in ('error', 'interrupted') else 'outline' }}">{% if c.status == "running" %}{{ icon("loader-circle", "animate-spin") }}{% endif %}{{ c.status }}</span>
+      {% if c.current %}<code class="font-mono text-xs">{{ c.current }}</code>{% endif %}
+      <span class="ms-auto tabular-nums text-xs text-muted-foreground">{% if c.elapsed is not none %}{{ "%.1f" | format(c.elapsed) }}s{% endif %}</span>
+    </span>
+    <span class="text-xs text-muted-foreground tabular-nums">in {{ c.input }} · out {{ c.output }} · cache read {{ c.cache_read }} · cache write {{ c.cache_write }} · ${{ "%.4f" | format(c.cost) }}</span>
+    {% if c.error %}<span class="text-xs text-destructive">{{ c.error | truncate(160) }}</span>{% endif %}
+  </a>
+</li>

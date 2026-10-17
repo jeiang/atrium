@@ -1,6 +1,7 @@
 {% from "_icons.html" import icon %}
 {% from "_macros.html" import condition_text %}
 <form id="rule-form" method="post" action="{{ '/rules' if is_new else '/rules/' ~ (rule.id | urlencode) }}" class="flex min-w-0 flex-col gap-6">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if errors %}
   <div class="alert" data-variant="destructive" role="alert">
     {{ icon("circle-alert") }}
@@ -62,7 +63,7 @@
     <div class="hidden gap-2 px-0 text-xs font-medium text-muted-foreground sm:group-has-[#conditions>li]/conditions:grid sm:grid-cols-[--spacing(44)_--spacing(44)_minmax(0,1fr)_--spacing(9)]" aria-hidden="true">
       <span>Field</span><span>Operator</span><span>Value</span><span></span>
     </div>
-    <ol id="conditions" class="flex flex-col gap-2" role="list" aria-label="Conditions" hx-on::after-swap="htmx.trigger('#rule-form', 'change')">
+    <ol id="conditions" class="flex flex-col gap-2" role="list" aria-label="Conditions">
       {% for cond in rule.when %}
       {% set raw = cond.get("value") %}
       {% set c = {"field": cond.field, "op": cond.op, "value": (raw | join(", ")) if raw is iterable and raw is not string else raw} %}
@@ -81,7 +82,7 @@
         <li class="max-w-full min-w-0">
           <button type="button" class="btn h-auto max-w-full flex-wrap justify-start gap-x-1.5 py-1 text-left font-normal whitespace-normal" data-size="sm" data-variant="outline"
                   hx-get="/rules/condition?{{ {'field': s.field, 'op': s.op, 'value': value} | urlencode }}" hx-target="#conditions" hx-swap="beforeend"
-                  hx-on::after-request="if (event.detail.successful) { const item = this.closest('li'); const next = item.nextElementSibling || item.previousElementSibling; item.remove(); (next ? next.querySelector('button') : document.getElementById('add-condition')).focus() }">
+                  data-suggestion>
             {{ icon("plus") }}{{ condition_text(s) }}
           </button>
         </li>

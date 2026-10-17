@@ -1,10 +1,11 @@
 import base64
 import imaplib
 import re
+import time
 from dataclasses import dataclass
 
 from .config import BODY_CAP_BYTES, IMAP_PORT
-from .safety import write_gate
+from .safety import APPEND_ACTION, write_gate
 
 READ_VERBS = frozenset({"SEARCH", "FETCH"})
 COPYUID = "COPYUID"
@@ -353,6 +354,12 @@ class ImapClient:
         _ok(typ, data)
         copied = self._conn.untagged_responses.pop(COPYUID, [])
         return [*data, *(b"COPYUID " + c for c in copied)]
+
+    def append(self, imap_name, raw, flags="(\\Seen)"):
+        write_gate(APPEND_ACTION, target=imap_name)
+        typ, data = self._conn.append(quote_name(imap_name), flags, imaplib.Time2Internaldate(time.time()), raw)
+        _ok(typ, data)
+        return data
 
     def mutate_mailbox(self, verb, imap_name):
         write_gate(f"IMAP {verb}")

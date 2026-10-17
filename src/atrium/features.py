@@ -129,6 +129,10 @@ def normalize_msgid(value):
     return re.sub(r"[<>\s]", "", value)
 
 
+def msgid_list(value):
+    return [normalize_msgid(m) for m in re.findall(r"<[^<>\s]+>", value)]
+
+
 def content_digest(header_bytes, text_bytes):
     h = hashlib.sha256()
     h.update(header_bytes)
@@ -160,6 +164,8 @@ def extract(header_bytes, text_bytes, attachments=None, fallback_ts=0.0):
     return {
         "msgid": msgid,
         "msgid_domain": domain_of(msgid),
+        "in_reply_to": " ".join(msgid_list(header(msg, "In-Reply-To"))),
+        "refs": " ".join(msgid_list(header(msg, "References"))),
         "date_ts": date_ts,
         "from_addr": addr,
         "from_domain": domain_of(addr),

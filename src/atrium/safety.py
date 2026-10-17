@@ -6,8 +6,10 @@ from pathlib import Path
 LIVE = "live"
 SHADOW = "shadow"
 MODES = (SHADOW, LIVE)
+APPEND_ACTION = "IMAP APPEND"
 
 _approved = contextvars.ContextVar("atrium_approved_proposal", default=None)
+_operator_send = contextvars.ContextVar("atrium_operator_send_mailbox", default=None)
 _automatic = contextvars.ContextVar("atrium_automatic_pause_path", default=None)
 
 
@@ -29,6 +31,16 @@ def approved_writes(proposal_id):
         yield
     finally:
         _approved.reset(token)
+
+
+@contextlib.contextmanager
+def operator_send(sent_mailbox):
+    """Allow IMAP APPEND of the sent copy to exactly this mailbox; no other mailbox write."""
+    token = _operator_send.set(sent_mailbox)
+    try:
+        yield
+    finally:
+        _operator_send.reset(token)
 
 
 @contextlib.contextmanager
@@ -57,11 +69,14 @@ def set_paused(pause_path, paused):
         path.unlink(missing_ok=True)
 
 
-def write_gate(action, environ=None):
+def write_gate(action, environ=None, target=None):
     pause_path = _automatic.get()
     if pause_path is not None and is_paused(pause_path):
         raise WriteRefused(f"refusing automatic mailbox write {action!r}: atrium is paused")
     if _approved.get() is not None:
+        return
+    sent = _operator_send.get()
+    if sent is not None and action == APPEND_ACTION and target == sent:
         return
     if mode_from_env(environ) != LIVE:
         raise WriteRefused(f"refusing mailbox write {action!r}: ATRIUM_MODE is not {LIVE}")

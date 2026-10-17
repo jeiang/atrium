@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% set page = "chat" %}
+{% block title %}Run {{ run.id }}{% endblock %}
+{% block heading %}Run {{ run.id }}{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-6">
+  <header class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+    <a href="/chat/{{ run.thread_id }}" class="btn" data-size="sm" data-variant="ghost">{{ icon("arrow-left") }}Thread</a>
+    <span class="badge" data-variant="outline">{{ run.kind }}</span>
+    <span class="badge" data-variant="{{ 'destructive' if run.state in ('failed', 'interrupted') else 'outline' }}">{{ run.state }}</span>
+    <span class="tabular-nums">{{ run.steps }} steps</span>
+    <span class="tabular-nums">${{ "%.3f" | format(run.cost) }}</span>
+  </header>
+  {% if run.calls %}
+  <p class="text-xs text-muted-foreground">Tools: {% for c in run.calls %}<code class="font-mono">{{ c.name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  {% endif %}
+  <h2 class="text-sm font-medium">Subagents</h2>
+  {% include "_run_children.html" %}
+</div>
+{% endblock %}

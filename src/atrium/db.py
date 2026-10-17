@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS messages (
     subject TEXT NOT NULL DEFAULT '',
     subject_tmpl TEXT NOT NULL DEFAULT '',
     msgid_domain TEXT NOT NULL DEFAULT '',
+    in_reply_to TEXT,
+    refs TEXT,
     dkim_d TEXT NOT NULL DEFAULT '[]',
     esp TEXT NOT NULL DEFAULT '[]',
     att_types TEXT NOT NULL DEFAULT '[]',
@@ -171,10 +173,12 @@ def refresh_views(conn):
 
 def init_extra_schemas(conn):
     from . import live, notion_sync, scans
+    from .agent import schema as agent_schema
 
     scans.init_schemas(conn)
     live.init_schema(conn)
     notion_sync.init_schema(conn)
+    agent_schema.init(conn)
 
 
 def connect(path):

@@ -5,17 +5,8 @@
 {% set page = "rules" %}
 {% block title %}Rules{% endblock %}
 {% block heading %}Rules{% endblock %}
+{% block body_attrs %}{% if toast %} data-strip-params="saved,created"{% endif %}{% endblock %}
 {% block content %}
-{% if toast %}
-<script>
-  (() => {
-    const url = new URL(location.href);
-    url.searchParams.delete("saved");
-    url.searchParams.delete("created");
-    history.replaceState(history.state, "", url);
-  })();
-</script>
-{% endif %}
 <div class="flex flex-wrap items-center justify-between gap-3">
   {{ account_switch("/rules", account) }}
   <a class="btn" href="/rules/new{{ '?account=' ~ (account | urlencode) if account }}">{{ icon("plus") }}New rule</a>
