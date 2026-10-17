@@ -137,7 +137,9 @@ def run_view(conn, run_id):
     return found
 
 
-def prepare(conn, thread_id, text, kind, now, parent_run_id=None, limits=None):
+def prepare(conn, thread_id, text, kind, now, parent_run_id=None, limits=None, operator=False):
+    """`operator` marks text typed by the operator: only that text may add URLs to the thread's web_fetch
+    allowlist. Model-written text (research tasks, agent-made schedules, reminders) never does."""
     thread = threads.get(conn, thread_id)
     if thread is None:
         raise UnknownThread(thread_id)
@@ -145,8 +147,9 @@ def prepare(conn, thread_id, text, kind, now, parent_run_id=None, limits=None):
         raise RunActive(f"thread {thread_id} already has a run in progress")
     budget.check(conn, now, threads.root_kind(conn, thread_id) in UNATTENDED)
     threads.set_title(conn, thread_id, threads.title_from(text))
-    threads.add_allowed_urls(conn, thread_id, threads.urls_in(text))
-    run_id = journal.start_run(conn, thread_id, kind, loop.MODEL, thread["effort"], now, parent_run_id)
+    if operator:
+        threads.add_allowed_urls(conn, thread_id, threads.urls_in(text))
+    run_id = journal.start_run(conn, thread_id, kind, loop.MODEL, thread["effort"], now, parent_run_id, owner=journal.OWNER)
     if limits:
         journal.set_limits(conn, run_id, limits)
     journal.append_message(conn, thread_id, run_id, journal.USER, [{"type": loop.TEXT, "text": text}], now)
@@ -165,9 +168,9 @@ def execute(cfg, conn, run_id, client, env, now=time.time, **limits):
     return loop.run(conn, cfg, env, client, run_id, embed=embedder(cfg), now=now, **limits)
 
 
-def run_once(cfg, conn, thread_id, text, *, kind=CHAT, client=None, env=None, now=time.time, parent_run_id=None, **limits):
+def run_once(cfg, conn, thread_id, text, *, kind=CHAT, client=None, env=None, now=time.time, parent_run_id=None, operator=False, **limits):
     """limits: optional loop.run keyword overrides (max_steps, max_cost_usd, system_extra)."""
-    run_id = prepare(conn, thread_id, text, kind, now(), parent_run_id, limits)
+    run_id = prepare(conn, thread_id, text, kind, now(), parent_run_id, limits, operator=operator)
     execute(cfg, conn, run_id, client, env, now, **limits)
     return run_id
 
@@ -185,10 +188,10 @@ def in_background(cfg, run_id, client, env):
     threading.Thread(target=work, name=f"atrium-run-{run_id}", daemon=True).start()
 
 
-def start_run(cfg, thread_id, text, *, kind=CHAT, client=None, env=None):
+def start_run(cfg, thread_id, text, *, kind=CHAT, client=None, env=None, operator=False):
     conn = db.connect(cfg.db_path)
     try:
-        run_id = prepare(conn, thread_id, text, kind, time.time())
+        run_id = prepare(conn, thread_id, text, kind, time.time(), operator=operator)
     finally:
         conn.close()
     in_background(cfg, run_id, client, env)
@@ -204,40 +207,42 @@ def needs_operator(conn, run):
     return False
 
 
-def resume_run(cfg, conn, run_id, client=None, env=None, now=time.time):
-    found = journal.get_run(conn, run_id)
-    if found is None or found["state"] != journal.INTERRUPTED:
+def claim(conn, run_id, now):
+    if not journal.claim_resume(conn, run_id, journal.OWNER, now):
         raise ValueError(f"run {run_id} is not interrupted")
-    journal.set_run_state(conn, run_id, journal.RUNNING)
+
+
+def resume_run(cfg, conn, run_id, client=None, env=None, now=time.time):
+    claim(conn, run_id, now())
     return execute(cfg, conn, run_id, client, env, now)
 
 
 def start_resume(cfg, run_id, client=None, env=None):
     conn = db.connect(cfg.db_path)
     try:
-        found = journal.get_run(conn, run_id)
-        if found is None or found["state"] != journal.INTERRUPTED:
-            raise ValueError(f"run {run_id} is not interrupted")
-        journal.set_run_state(conn, run_id, journal.RUNNING)
+        claim(conn, run_id, time.time())
     finally:
         conn.close()
     in_background(cfg, run_id, client, env)
 
 
-def resume_interrupted(cfg, client=None, env=None, background=True):
+def resume_interrupted(cfg, client=None, env=None, background=True, now=time.time):
+    """Called only by the scheduler worker (at startup and every tick): runs whose owner's lease lapsed are
+    marked interrupted, and each interrupted run that needs no operator decision is claimed and continued."""
     conn = db.connect(cfg.db_path)
     try:
-        journal.mark_interrupted(conn)
+        journal.mark_interrupted(conn, now())
         outcome = []
         for found in journal.interrupted_runs(conn):
             if needs_operator(conn, found):
                 outcome.append({"run_id": found["id"], "action": "awaiting operator"})
                 continue
-            journal.set_run_state(conn, found["id"], journal.RUNNING)
+            if not journal.claim_resume(conn, found["id"], journal.OWNER, now()):
+                continue
             if background:
                 in_background(cfg, found["id"], client, env)
             else:
-                execute(cfg, conn, found["id"], client, env)
+                execute(cfg, conn, found["id"], client, env, now)
             outcome.append({"run_id": found["id"], "action": "resumed"})
         return outcome
     finally:

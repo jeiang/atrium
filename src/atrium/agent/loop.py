@@ -37,6 +37,15 @@ class RunLimit(RuntimeError):
     pass
 
 
+class LeaseLost(RuntimeError):
+    pass
+
+
+def renew(conn, run_id, now):
+    if not journal.renew_lease(conn, run_id, journal.OWNER, now()):
+        raise LeaseLost(f"run {run_id} was taken over by another process")
+
+
 def block_dict(block):
     if hasattr(block, "model_dump"):
         return block.model_dump(mode="json", exclude_unset=True)
@@ -264,6 +273,7 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
         anchor = None
         for _ in range(max_steps):
             budget.check(conn, now(), unattended)
+            renew(conn, run_id, now)
             spent = usage.run_cost(conn, run_id)
             if spent >= max_cost_usd:
                 raise RunLimit(f"run cost ceiling reached (${spent:.2f} of ${max_cost_usd:.2f})")
@@ -297,6 +307,7 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
             uses = [b for b in blocks if b.get("type") == TOOL_USE]
             if uses:
                 results = execute_all(conn, ctx, by_name, uses, now)
+                renew(conn, run_id, now)
                 journal.append_message(conn, thread_id, run_id, journal.USER, results, now())
                 if context.staged_savings(conn, thread_id) >= context.COMMIT_SAVINGS and context.commit(conn, thread_id, run_id, now()):
                     anchor = None
@@ -306,6 +317,8 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
             journal.finish_run(conn, run_id, journal.DONE, now())
             return journal.get_run(conn, run_id)
         raise RunLimit(f"stopped after {max_steps} steps")
+    except LeaseLost as e:
+        log.warning("%s; leaving it to the new owner", e)
     except (budget.BudgetExceeded, RunLimit) as e:
         journal.finish_run(conn, run_id, journal.FAILED, now(), error=str(e))
     except Exception as e:

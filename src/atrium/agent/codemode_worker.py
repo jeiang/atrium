@@ -1,6 +1,7 @@
 """Code-mode worker: hosts the Monty interpreter in its own process.
 
-It holds no tool implementations and no secrets. Protocol (JSON lines):
+It holds no tool implementations and no secrets. It runs either as a child process or as a socket-activated
+systemd instance (stdin and stdout are then the same connection). Protocol (JSON lines):
   stdin first line: {"code", "functions", "limits", "output_cap", "rlimits"}
   stdout: {"call": {"name", "args", "kwargs"}} -> reply line {"ok": v} | {"error": msg}
   stdout: {"done": {"output", "result"}} | {"failed": {"output", "error"}}
@@ -41,7 +42,7 @@ def apply_rlimits(rlimits):
         try:
             resource.setrlimit(limit, (value, value))
         except (ValueError, OSError):
-            pass  # not every platform enforces every limit; systemd is the outer boundary
+            pass  # not every platform enforces every limit; the sandbox around the worker is the outer boundary
 
 
 def main():

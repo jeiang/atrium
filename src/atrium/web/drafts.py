@@ -61,10 +61,14 @@ def register(app, deps):
         return show(drafts.DRAFT, notice=toast("success", "Discarded", "Draft discarded."))
 
     @app.post("/drafts/{draft_id}/send")
-    def drafts_send(draft_id: int):
+    def drafts_send(draft_id: int, updated_at: Annotated[str, Form()] = ""):
         with connection() as conn:
             try:
-                result = drafts.send(conn, cfg, draft_id)
+                try:
+                    reviewed_at = float(updated_at)
+                except ValueError:
+                    raise drafts.DraftError("draft changed, review again") from None
+                result = drafts.send(conn, cfg, draft_id, reviewed_at)
             except (drafts.DraftError, smtp.SendError) as e:
                 return show(drafts.DRAFT, 409, toast("error", "Not sent", str(e)))
         detail = result["filed"] + (f"; refused: {', '.join(result['refused'])}" if result["refused"] else "")

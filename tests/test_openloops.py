@@ -220,7 +220,8 @@ def test_judge_commitments_uses_local_model(conn, monkeypatch):
 # ---------- reminders ----------
 
 
-def test_reminder_proposal_executor_creates_one_shot_job(conn, cfg):
+def test_reminder_proposal_executor_creates_one_shot_job(conn, cfg, monkeypatch):
+    monkeypatch.setattr(openloops, "clock", lambda: NOW)
     openloops.register()
     mid = mail(conn, 1, 1)
     conn.execute(

@@ -256,13 +256,18 @@ def _file_sent_copy(cfg, account, msg):
         client.close()
 
 
-def send(conn, cfg, draft_id, now=time.time):
-    """Operator-initiated send. Claim first so a double click cannot send twice."""
+def send(conn, cfg, draft_id, reviewed_at, now=time.time):
+    """Operator-initiated send of the version last reviewed (`reviewed_at` is its updated_at).
+    Claim first so a double click cannot send twice."""
     cur = conn.execute(
-        "UPDATE drafts SET status = ?, updated_at = ? WHERE id = ? AND status = ?", (SENDING, now(), draft_id, DRAFT)
+        "UPDATE drafts SET status = ?, updated_at = ? WHERE id = ? AND status = ? AND updated_at = ?",
+        (SENDING, now(), draft_id, DRAFT, reviewed_at),
     )
     conn.commit()
     if cur.rowcount == 0:
+        current = get(conn, draft_id)
+        if current is not None and current["status"] == DRAFT:
+            raise DraftError("draft changed, review again")
         raise DraftError("draft is not in a sendable state")
     draft = get(conn, draft_id)
     try:

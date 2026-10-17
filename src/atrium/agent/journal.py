@@ -1,5 +1,7 @@
 import hashlib
 import json
+import os
+import uuid
 
 RUNNING = "running"
 INTERRUPTED = "interrupted"
@@ -24,10 +26,17 @@ def dumps(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=False)
 
 
-def start_run(conn, thread_id, kind, model, effort, now, parent_run_id=None):
+# A running run belongs to one process (OWNER) for LEASE_SECONDS at a time; the loop renews it each step.
+# Only a run whose lease lapsed can be marked interrupted, and resuming claims it atomically, so two
+# processes never execute the same run.
+LEASE_SECONDS = 1800
+OWNER = f"{os.uname().nodename}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
+
+
+def start_run(conn, thread_id, kind, model, effort, now, parent_run_id=None, owner=None):
     cur = conn.execute(
-        "INSERT INTO runs (thread_id, parent_run_id, kind, model, effort, state, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (thread_id, parent_run_id, kind, model, effort, RUNNING, now),
+        "INSERT INTO runs (thread_id, parent_run_id, kind, model, effort, state, started_at, owner, lease_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (thread_id, parent_run_id, kind, model, effort, RUNNING, now, owner, now + LEASE_SECONDS),
     )
     return cur.lastrowid
 
@@ -59,9 +68,29 @@ def bump_steps(conn, run_id):
     conn.execute("UPDATE runs SET steps = steps + 1 WHERE id = ?", (run_id,))
 
 
-def mark_interrupted(conn):
-    cur = conn.execute("UPDATE runs SET state = ? WHERE state = ?", (INTERRUPTED, RUNNING))
+def renew_lease(conn, run_id, owner, now):
+    """False when another process has taken the run over (it lapsed and was resumed elsewhere)."""
+    cur = conn.execute(
+        "UPDATE runs SET lease_until = ? WHERE id = ? AND owner = ? AND state = ?", (now + LEASE_SECONDS, run_id, owner, RUNNING)
+    )
+    return cur.rowcount == 1
+
+
+def mark_interrupted(conn, now):
+    cur = conn.execute(
+        "UPDATE runs SET state = ?, owner = NULL, lease_until = NULL WHERE state = ? AND (lease_until IS NULL OR lease_until < ?)",
+        (INTERRUPTED, RUNNING, now),
+    )
     return cur.rowcount
+
+
+def claim_resume(conn, run_id, owner, now):
+    """Atomically take an interrupted run back to running under `owner`; False if it was not interrupted."""
+    cur = conn.execute(
+        "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state = ?",
+        (RUNNING, owner, now + LEASE_SECONDS, run_id, INTERRUPTED),
+    )
+    return cur.rowcount == 1
 
 
 def interrupted_runs(conn):

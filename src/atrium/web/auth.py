@@ -12,6 +12,7 @@ CSRF_COOKIE = "atrium_csrf"
 CSRF_HEADER = b"x-csrf-token"
 CSRF_FIELD = "csrf_token"
 UNSAFE_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]"})
 STATIC_PREFIX = "/static/"
 FORM_TYPE = "application/x-www-form-urlencoded"
 BODY_CAP = 1 << 20
@@ -39,6 +40,18 @@ def cookie_token(scope):
         return None
     found = jar.get(CSRF_COOKIE)
     return found.value if found else None
+
+
+def hostname(value):
+    """Host header without its port; bracketed IPv6 literals stay bracketed."""
+    value = (value or "").strip().lower()
+    if value.startswith("["):
+        return value[: value.find("]") + 1] if "]" in value else value
+    return value.partition(":")[0]
+
+
+def allowed_host(scope, hosts):
+    return hostname(header(scope, b"host")) in hosts
 
 
 def same_origin(scope):
@@ -89,13 +102,19 @@ async def deny(send, status, text):
 
 
 class Guard:
-    def __init__(self, app, auth=PROXY):
+    def __init__(self, app, auth=PROXY, allowed_hosts=None):
         self.app = app
         self.auth = auth
+        # Rejecting unknown Host values defeats DNS rebinding. PROXY has no default: the public host must be configured.
+        defaults = LOCAL_HOSTS if auth == LOCAL else frozenset()
+        self.hosts = frozenset(hostname(h) for h in allowed_hosts) if allowed_hosts else defaults
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             await self.app(scope, receive, send)
+            return
+        if not allowed_host(scope, self.hosts):
+            await deny(send, 400, "Bad Host header")
             return
         path = scope["path"]
         if self.auth == PROXY and not path.startswith(STATIC_PREFIX) and not has_group(header(scope, GROUPS_HEADER)):

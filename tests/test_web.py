@@ -261,7 +261,8 @@ def test_serve_command_parses():
     assert cli.parser().parse_args(["serve", "--port", "1", "--auth", "local"]).auth == "local"
     run = cli.parser().parse_args(["agent", "run", "--text", "hi", "--kind", "cron"])
     assert (run.command, run.agent_command, run.thread, run.text, run.kind) == ("agent", "run", None, "hi", "cron")
-    assert cli.parser().parse_args(["agent", "resume-interrupted"]).agent_command == "resume-interrupted"
+    with pytest.raises(SystemExit):  # resuming interrupted runs belongs to the scheduler worker alone
+        cli.parser().parse_args(["agent", "resume-interrupted"])
 
 
 def test_modes_reach_templates(tmp_path):

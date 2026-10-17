@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from atrium import db
-from atrium.agent import journal, registry, service
+from atrium.agent import journal, registry, service, threads
 from atrium.agent.tools.base import Tool
 from atrium.web import auth
 from atrium.web import app as web
@@ -53,7 +53,7 @@ def wait_done(cfg, thread_id, timeout=5.0):
 
 
 def test_proxy_auth_requires_group_except_static(cfg):
-    client = TestClient(web.create_app(cfg))
+    client = TestClient(web.create_app(cfg, allowed_hosts={"testserver"}))
     assert client.get("/chat").status_code == 403
     assert client.get("/chat", headers={"Remote-Groups": "users"}).status_code == 403
     assert client.get("/chat", headers=GROUP).status_code == 200
@@ -62,14 +62,30 @@ def test_proxy_auth_requires_group_except_static(cfg):
     assert "atrium_access" in auth.GROUP
 
 
+def test_host_allowlist(cfg):
+    proxy = TestClient(web.create_app(cfg, allowed_hosts={"atrium.test"}))
+    assert proxy.get("/chat", headers={**GROUP, "Host": "atrium.test"}).status_code == 200
+    assert proxy.get("/chat", headers={**GROUP, "Host": "evil.test"}).status_code == 400
+    assert proxy.get("/static/app.css", headers={"Host": "evil.test"}).status_code == 400
+    unconfigured = TestClient(web.create_app(cfg))
+    assert unconfigured.get("/chat", headers=GROUP).status_code == 400
+    local = TestClient(web.create_app(cfg, auth_mode=auth.LOCAL))
+    for good in ("localhost", "localhost:8481", "127.0.0.1:8481", "[::1]:8481"):
+        assert local.get("/chat", headers={"Host": good}).status_code == 200, good
+    for bad in ("evil.test:8481", "testserver", "127.0.0.1.evil.test", "localhost.evil.test"):
+        assert local.get("/chat", headers={"Host": bad}).status_code == 400, bad
+    # a forged group header cannot stand in for the host check
+    assert TestClient(web.create_app(cfg, allowed_hosts={"atrium.test"})).post("/chat", headers={**GROUP, "Host": "evil.test"}).status_code == 400
+
+
 def test_local_auth_skips_group_check(cfg):
-    assert TestClient(web.create_app(cfg, auth_mode=auth.LOCAL)).get("/chat").status_code == 200
+    assert TestClient(web.create_app(cfg, auth_mode=auth.LOCAL, allowed_hosts={"testserver"})).get("/chat").status_code == 200
     with pytest.raises(ValueError):
         web.create_app(cfg, auth_mode="open")
 
 
 def test_csrf_rejects_unknown_tokens_and_cross_origin(cfg):
-    client = TestClient(web.create_app(cfg, auth_mode=auth.LOCAL))
+    client = TestClient(web.create_app(cfg, auth_mode=auth.LOCAL, allowed_hosts={"testserver"}))
     assert client.post("/chat", data={"text": ""}).status_code == 403
     first = client.get("/chat")
     token = client.cookies[auth.CSRF_COOKIE]
@@ -186,7 +202,7 @@ def test_interrupted_run_offers_resume(cfg):
     run_id = service.prepare(conn, thread_id, "write it", "chat", time.time())
     journal.append_message(conn, thread_id, run_id, journal.ASSISTANT, [tool_use("w1", "note_write", body="x")], time.time())
     journal.start_tool_call(conn, run_id, "w1", "note_write", {"body": "x"}, journal.WRITE, time.time())
-    journal.mark_interrupted(conn)
+    journal.mark_interrupted(conn, time.time() + journal.LEASE_SECONDS + 1)  # the owner's lease lapsed
     conn.close()
     page = client.get(f"/chat/{thread_id}").text
     assert "interrupted" in page and f'hx-post="/chat/{thread_id}/runs/{run_id}/resume"' in page
@@ -197,3 +213,34 @@ def test_interrupted_run_offers_resume(cfg):
     assert client.post(f"/chat/{thread_id}/runs/{run_id}/resume", headers=HX).status_code == 409
     page = client.get(f"/chat/{thread_id}").text
     assert "verified" in page and "unverified" in page
+
+
+def test_operator_chat_posts_allowlist_urls(cfg):
+    client = web_client(cfg, agent_client=lambda: FakeClient([response([text("ok")]), response([text("ok")])]))
+    created = client.post("/chat", data={"text": "Draft a reply using https://docs.test/style-guide."}, follow_redirects=False)
+    thread_id = int(created.headers["location"].rsplit("/", 1)[1])
+    wait_done(cfg, thread_id)
+    client.post(f"/chat/{thread_id}/messages", data={"text": "also see https://docs.test/tone"}, headers=HX)
+    wait_done(cfg, thread_id)
+    conn = db.connect(cfg.db_path)
+    try:
+        assert threads.allowed_urls(conn, thread_id) == {"https://docs.test/style-guide", "https://docs.test/tone"}
+    finally:
+        conn.close()
+
+
+def test_manual_resume_claims_once(cfg):
+    client = web_client(cfg, agent_client=lambda: FakeClient([response([text("done")])]))
+    conn = db.connect(cfg.db_path)
+    thread_id = service.create_thread(conn, "chat")
+    run_id = service.prepare(conn, thread_id, "find it", "chat", time.time())
+    journal.append_message(conn, thread_id, run_id, journal.ASSISTANT, [tool_use("s1", "lookup", q="x")], time.time())
+    journal.mark_interrupted(conn, time.time() + journal.LEASE_SECONDS + 1)
+    assert journal.claim_resume(conn, run_id, "scheduler:elsewhere", time.time())  # another process got there first
+    conn.close()
+    assert client.post(f"/chat/{thread_id}/runs/{run_id}/resume", headers=HX).status_code == 409
+    conn = db.connect(cfg.db_path)
+    try:
+        assert journal.get_run(conn, run_id)["owner"] == "scheduler:elsewhere"
+    finally:
+        conn.close()

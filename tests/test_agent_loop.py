@@ -110,8 +110,19 @@ def test_request_shape_pins_effort_caching_and_stamp(world):
     user = params["messages"][0]["content"]
     assert user[0]["text"] == "see https://example.test/a, please"
     assert user[1]["text"].startswith("Current date and time:") and "cache_control" in user[1]
-    assert threads.get(conn, thread_id)["allowed_urls"] == ["https://example.test/a"]
+    assert threads.get(conn, thread_id)["allowed_urls"] == []  # model-visible text is not operator input by default
     assert "timestamp" not in params["system"][0]["text"].lower()
+
+
+def test_only_operator_input_allowlists_urls(world):
+    cfg, conn = world
+    typed = service.create_thread(conn, "chat")
+    service.run_once(cfg, conn, typed, "see https://example.test/a, please", client=FakeClient([response([text("hi")])]), env={}, now=clock(), operator=True)
+    assert threads.get(conn, typed)["allowed_urls"] == ["https://example.test/a"]
+    for kind in ("chat", "cron", "sub:web"):
+        thread_id = service.create_thread(conn, kind)
+        service.run_once(cfg, conn, thread_id, "open https://attacker.test/?d=x", kind=kind, client=FakeClient([response([text("hi")])]), env={}, now=clock())
+        assert threads.get(conn, thread_id)["allowed_urls"] == [], kind
 
 
 def test_cron_runs_at_high_effort_without_web_search_for_nightly(world):
@@ -260,11 +271,14 @@ def interrupted_run(conn, write_state=journal.STARTED):
     return thread_id, run_id
 
 
+LAPSED = NOW + journal.LEASE_SECONDS + 1
+
+
 def test_restart_marks_running_runs_interrupted_and_resume_reconciles(world):
     cfg, conn = world
     thread_id, run_id = interrupted_run(conn)
     client = FakeClient([response([text("checked")])])
-    outcome = service.resume_interrupted(cfg, client=client, env={}, background=False)
+    outcome = service.resume_interrupted(cfg, client=client, env={}, background=False, now=clock(LAPSED))
     assert outcome == [{"run_id": run_id, "action": "awaiting operator"}]
     assert journal.get_run(conn, run_id)["state"] == journal.INTERRUPTED and client.calls == []
     service.resume_run(cfg, conn, run_id, client=client, env={}, now=clock())
@@ -283,9 +297,59 @@ def test_safe_only_tails_resume_automatically(world):
     run_id = service.prepare(conn, thread_id, "find", "chat", NOW)
     journal.append_message(conn, thread_id, run_id, journal.ASSISTANT, [tool_use("s1", "probe", id="s1")], NOW)
     client = FakeClient([response([text("found")])])
-    outcome = service.resume_interrupted(cfg, client=client, env={}, background=False)
+    outcome = service.resume_interrupted(cfg, client=client, env={}, background=False, now=clock(LAPSED))
     assert outcome == [{"run_id": run_id, "action": "resumed"}]
-    assert journal.get_run(conn, run_id)["state"] == journal.DONE and len(client.calls) == 1
+    found = journal.get_run(conn, run_id)
+    assert found["state"] == journal.DONE and found["owner"] == journal.OWNER and len(client.calls) == 1
+
+
+def test_live_lease_is_never_interrupted(world):
+    """A second process starting up must not take over a run another process is still executing."""
+    cfg, conn = world
+    thread_id = service.create_thread(conn, "chat")
+    run_id = service.prepare(conn, thread_id, "find", "chat", NOW)
+    journal.append_message(conn, thread_id, run_id, journal.ASSISTANT, [tool_use("s1", "probe", id="s1")], NOW)
+    client = FakeClient([response([text("found")])])
+    assert service.resume_interrupted(cfg, client=client, env={}, background=False, now=clock(NOW + 10)) == []
+    found = journal.get_run(conn, run_id)
+    assert found["state"] == journal.RUNNING and found["owner"] == journal.OWNER and client.calls == []
+    assert journal.mark_interrupted(conn, NOW + journal.LEASE_SECONDS - 1) == 0
+    assert journal.mark_interrupted(conn, LAPSED) == 1
+    assert service.resume_interrupted(cfg, client=client, env={}, background=False, now=clock(LAPSED)) == [{"run_id": run_id, "action": "resumed"}]
+    assert journal.get_run(conn, run_id)["state"] == journal.DONE
+
+
+def test_resume_claim_is_atomic(world):
+    cfg, conn = world
+    thread_id = service.create_thread(conn, "chat")
+    run_id = service.prepare(conn, thread_id, "find", "chat", NOW)
+    journal.append_message(conn, thread_id, run_id, journal.ASSISTANT, [tool_use("s1", "probe", id="s1")], NOW)
+    journal.mark_interrupted(conn, LAPSED)
+    assert journal.claim_resume(conn, run_id, "web:other", LAPSED) is True
+    assert journal.claim_resume(conn, run_id, journal.OWNER, LAPSED) is False
+    with pytest.raises(ValueError, match="not interrupted"):
+        service.resume_run(cfg, conn, run_id, client=FakeClient([]), env={}, now=clock(LAPSED))
+    assert service.resume_interrupted(cfg, client=FakeClient([]), env={}, background=False, now=clock(LAPSED)) == []
+    assert journal.get_run(conn, run_id)["owner"] == "web:other"
+
+
+def test_loop_renews_its_lease_and_stops_when_taken_over(world):
+    cfg, conn = world
+    client = FakeClient([response([tool_use("a", "probe", id="a")], "tool_use"), response([text("ok")])])
+    thread_id = service.create_thread(conn, "chat")
+    run_id = service.prepare(conn, thread_id, "go", "chat", NOW)
+    before = journal.get_run(conn, run_id)["lease_until"]
+    loop.run(conn, cfg, {}, client, run_id, now=clock(NOW + 100))
+    after = journal.get_run(conn, run_id)
+    assert after["state"] == journal.DONE and after["lease_until"] > before
+    # Another process claimed the run while this loop was mid-step: it must not append or finish anything.
+    taken = FakeClient([response([tool_use("b", "probe", id="b")], "tool_use"), response([text("never")])])
+    run_id = service.prepare(conn, thread_id, "again", "chat", NOW + 200)
+    conn.execute("UPDATE runs SET owner = 'scheduler:other' WHERE id = ?", (run_id,))
+    loop.run(conn, cfg, {}, taken, run_id, now=clock(NOW + 300))
+    found = journal.get_run(conn, run_id)
+    assert found["state"] == journal.RUNNING and found["owner"] == "scheduler:other" and found["error"] is None
+    assert taken.calls == [] and journal.messages_of(conn, thread_id)[-1]["role"] == journal.USER
 
 
 def test_registry_is_deterministic_and_rejects_duplicates(monkeypatch):

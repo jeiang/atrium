@@ -99,19 +99,24 @@ adaptive thinking, effort pinned per thread kind). Every run is journaled in
 each tool call is recorded before it executes. Tool results over ~2K tokens are
 stored and replaced by a stub the model pages with `recall`. Spend is counted
 per API call against `monthly_budget_usd` in `settings` (default 75): unattended
-runs refuse at 80%, chat at 100%. `atrium serve` marks runs left `running`
-as interrupted and resumes those with only read tools pending; a run with a
-write in flight shows a Resume button in its thread.
+runs refuse at 80%, chat at 100%. Each run carries an `owner` and a 30-minute
+`lease_until` that the executing process renews every step. Only the scheduler
+worker (`atrium agent scheduler`, at startup and every tick) marks runs whose
+lease lapsed as interrupted and resumes those with only read tools pending; a
+run with a write in flight shows a Resume button in its thread. Resuming claims
+the run atomically, so a web restart or a double click never runs it twice.
 
 Context size is kept in check in layers. Requests go through the beta Messages
 API with `clear_tool_uses_20250919` (old tool results cleared server-side from
 75K input tokens, keeping the last 3, `recall` excluded) and threshold
 compaction `compact_20260112` at 350K with `pause_after_compaction`: the
 compaction block is journaled, a context manifest (pinned ids, dropped
-`result_id`s, folds) is appended and the last messages are re-sent without
-thinking blocks. A local preflight estimates every request from the previous
-response's usage; above 380K the loop writes its own summary with one
-low-effort call and continues from summary + manifest + the operator's last
+`result_id`s, folds) is appended and the last complete units (an operator
+message, or a tool_use turn with its tool_results; never a lone tool_result)
+are re-sent without thinking blocks. A local preflight estimates every request
+from the previous response's usage; above 380K the loop writes its own summary
+with one low-effort, tool-free, thinking-free call (tool blocks flattened to
+text) and continues from summary + manifest + the operator's last
 message, and nothing over 400K is ever sent. The model can also manage its own
 context with `context_status`, `context_pin`, `context_drop` and
 `context_fold`: drops and folds are staged in `context_ledger` and applied at
@@ -125,7 +130,6 @@ profile/skills block, end of history); `cache_ttl_chat` in `settings` (`5m`
 default, `1h`) sets the chat prefix TTL.
 
 ```fish
-ssh artemis.jeiang.vpn doas atrium-run agent resume-interrupted
 ssh artemis.jeiang.vpn doas atrium-run agent run --kind chat --text "what is due this week?"
 ssh artemis.jeiang.vpn doas atrium-run agent run --thread 12 --text "and next week?"
 ```

@@ -34,8 +34,10 @@ def register(app, deps):
         raise HTTPException(422, description)
 
     def start(request, thread_id, text):
+        # Operator-typed text (the chat form and the Loops "Draft reply" button both post here) is the only
+        # input that may add URLs to the thread's web_fetch allowlist.
         try:
-            return service.start_run(cfg, thread_id, text, kind=CHAT, client=deps.agent_client(), env=deps.env), None
+            return service.start_run(cfg, thread_id, text, kind=CHAT, client=deps.agent_client(), env=deps.env, operator=True), None
         except budget.BudgetExceeded as e:
             return None, failure(request, "Budget reached", str(e))
         except service.RunActive:
@@ -108,10 +110,11 @@ def register(app, deps):
     @app.post("/chat/{thread_id}/runs/{run_id}/resume")
     def chat_resume(request: Request, thread_id: int, run_id: int):
         with connection() as conn:
-            found = load_run(conn, thread_id, run_id)
-            if found["state"] != journal.INTERRUPTED:
-                raise HTTPException(409, "run is not interrupted")
-        service.start_resume(cfg, run_id, client=deps.agent_client(), env=deps.env)
+            load_run(conn, thread_id, run_id)
+        try:  # the claim is the only check: two clicks (or the scheduler) racing here resume the run once
+            service.start_resume(cfg, run_id, client=deps.agent_client(), env=deps.env)
+        except ValueError as e:
+            raise HTTPException(409, "run is not interrupted") from e
         if not is_partial(request):
             return RedirectResponse(f"/chat/{thread_id}", status_code=303)
         with connection() as conn:

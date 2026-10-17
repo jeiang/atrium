@@ -505,9 +505,20 @@ def manifest_block(conn, thread_id):
     return {"type": TEXT, "text": manifest(conn, thread_id)}
 
 
-def preserved(messages):
+def unit_start(message):
+    """Where a re-inserted tail may begin: an assistant turn (its tool_uses are answered by the next message)
+    or a user message without tool_results (operator text). Starting at a tool_result would leave it dangling."""
+    return message["role"] == journal.ASSISTANT or not any(b.get("type") == TOOL_RESULT for b in message["content"])
+
+
+def preserved(sent):
+    """The last PRESERVE_MESSAGES sent messages, moved forward to the next complete unit. Thinking is removed
+    from re-inserted assistant turns: threshold compaction requires it, and adaptive thinking needs none."""
+    start = max(len(sent) - PRESERVE_MESSAGES, 0)
+    while start < len(sent) and not unit_start(sent[start]):
+        start += 1
     kept = []
-    for m in messages[-PRESERVE_MESSAGES:]:
+    for m in sent[start:]:
         content = strip_thinking(m["content"]) if m["role"] == journal.ASSISTANT else list(m["content"])
         if content:
             kept.append({"role": m["role"], "content": content})
@@ -516,16 +527,35 @@ def preserved(messages):
 
 def server_compacted(conn, thread_id, run_id, blocks, sent, now):
     """Called after a `compaction` stop: the journaled compaction block plus the manifest and the last
-    messages (thinking stripped, as the API requires after a compaction) become the new head."""
+    complete units of what was sent become the new head."""
     commit(conn, thread_id, run_id, now, boundary=True)
     head = [{"role": journal.ASSISTANT, "content": blocks}, {"role": journal.USER, "content": [manifest_block(conn, thread_id)]}, *preserved(sent)]
     base = journal.last_message(conn, thread_id)["seq"] + 1
     return save_projection(conn, thread_id, run_id, SERVER, base, base, base, head, 0, now)
 
 
+def flatten(block):
+    """The summary request carries no `tools`, so every non-text block is rendered as text."""
+    kind = block.get("type")
+    if kind == TEXT:
+        return {"type": TEXT, "text": block.get("text", "")}
+    if kind == COMPACTION:
+        return {"type": TEXT, "text": f"[earlier context summary] {block.get('content', '')}"}
+    return {"type": TEXT, "text": f"[{kind}] {serialize({k: v for k, v in block.items() if k not in ('type', 'cache_control')})}"}
+
+
 def shrink(messages, limit):
-    out = [{"role": m["role"], "content": [dict(b) for b in strip_thinking(m["content"])]} for m in messages]
-    out = [m for m in out if m["content"]]
+    """Thinking-free, text-only copy of the messages for the summary request, with long tool results
+    truncated until the request fits `limit`. Roles alternate and the first message is a user message."""
+    out = []
+    for m in messages:
+        content = [dict(b) for b in strip_thinking(m["content"])]
+        if not content:
+            continue
+        if out and out[-1]["role"] == m["role"]:
+            out[-1]["content"].extend(content)
+        else:
+            out.append({"role": m["role"], "content": content})
     total = sum(estimate_value(m["content"]) for m in out)
     for m in out:
         if total <= limit:
@@ -535,6 +565,9 @@ def shrink(messages, limit):
                 cut = b["content"][:PREVIEW_CHARS] + " [truncated for compaction]"
                 total -= estimate_tokens(b["content"]) - estimate_tokens(cut)
                 b["content"] = cut
+    out = [{"role": m["role"], "content": [flatten(b) for b in m["content"]]} for m in out]
+    if out and out[0]["role"] == journal.ASSISTANT:
+        out.insert(0, {"role": journal.USER, "content": [{"type": TEXT, "text": "[conversation continues from an earlier compaction]"}]})
     return out
 
 
@@ -546,8 +579,8 @@ def last_operator_blocks(sent):
 
 
 def client_compact(conn, client, model, active, thread_id, run_id, kind, now):
-    """One low-effort, tool-free summarization request; the journal stays intact and the new projection is
-    summary + manifest + the operator's latest message (as sent, so its date stamp is kept)."""
+    """One low-effort, tool-free, thinking-free summarization request; the journal stays intact and the new
+    projection is summary + manifest + the operator's latest message (as sent, so its date stamp is kept)."""
     messages = shrink(active, HARD_LIMIT - SUMMARY_MAX_TOKENS - estimate_tokens(SUMMARY_REQUEST) - 1000)
     ask = {"type": TEXT, "text": SUMMARY_REQUEST}
     if messages and messages[-1]["role"] == journal.USER:
@@ -557,7 +590,6 @@ def client_compact(conn, client, model, active, thread_id, run_id, kind, now):
     response = client.beta.messages.create(
         model=model,
         max_tokens=SUMMARY_MAX_TOKENS,
-        thinking={"type": "adaptive"},
         output_config={"effort": SUMMARY_EFFORT},
         system=SUMMARY_SYSTEM,
         messages=messages,

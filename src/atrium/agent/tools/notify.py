@@ -7,6 +7,7 @@ from ._args import clip, text_arg
 from .base import CHAT, CRON, NIGHTLY, NOTIFY, Tool, ToolContext, ToolError
 
 PER_RUN_CAP = 3
+NIGHTLY_CAP = 1
 TITLE_CHARS = 120
 BODY_CHARS = 1000
 TIMEOUT_SECONDS = 10
@@ -93,8 +94,9 @@ def notify(ctx: ToolContext, args: dict):
     title = text_arg(args, "title", required=True)
     body = text_arg(args, "body", required=True)
     used = ctx.conn.execute("SELECT COUNT(*) AS n FROM notifications WHERE run_id = ?", (ctx.run_id,)).fetchone()["n"]
-    if used >= PER_RUN_CAP:
-        raise ToolError(f"at most {PER_RUN_CAP} notifications per run")
+    cap = NIGHTLY_CAP if ctx.kind == NIGHTLY else PER_RUN_CAP
+    if used >= cap:
+        raise ToolError(f"at most {cap} notification{'s' if cap != 1 else ''} per run")
     sent = send(
         ctx.conn, ctx.env, title, body, thread_id=ctx.thread_id, run_id=ctx.run_id, thread_link=text_arg(args, "thread_link"), now=ctx.now
     )
@@ -106,7 +108,7 @@ TOOLS = [
         name="notify",
         description=(
             "Send the operator a short plain-text notification (phone push plus the Notifications page). "
-            f"At most {PER_RUN_CAP} per run; use only for things that need the operator's attention. "
+            f"At most {PER_RUN_CAP} per run ({NIGHTLY_CAP} in the nightly run: its summary); use only for things that need the operator's attention. "
             "thread_link is a thread id or /chat/<id>; defaults to this thread."
         ),
         input_schema={

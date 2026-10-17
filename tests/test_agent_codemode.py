@@ -152,14 +152,14 @@ def test_wall_clock_kills_worker(world, monkeypatch):
     _, _, ctx = world
     workers = []
     real = codemode.start_worker
-    monkeypatch.setattr(codemode, "start_worker", lambda argv=None: workers.append(real(argv)) or workers[-1])
+    monkeypatch.setattr(codemode, "start_worker", lambda *a, **k: workers.append(real(*a, **k)) or workers[-1])
     monkeypatch.setattr(codemode, "WALL_SECONDS", 1.0)
     monkeypatch.setattr(codemode, "MONTY_LIMITS", {})
     started = time.monotonic()
     out = run(ctx, "while True:\n    pass")
     assert time.monotonic() - started < 10
     assert "wall-clock limit" in out["error"]
-    assert workers[0].poll() is not None
+    assert workers[0].proc.poll() is not None
 
 
 def test_interpreter_limits_end_runaway_scripts(world):
@@ -186,10 +186,72 @@ def test_oversized_tool_result_is_an_error_not_corruption(world, monkeypatch):
 def test_worker_environment_has_no_secrets(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret")
     monkeypatch.setenv("NOTION_TOKEN", "secret")
-    proc = codemode.start_worker([sys.executable, "-c", "import os, json; print(json.dumps(dict(os.environ)))"])
+    proc = codemode.start_worker([sys.executable, "-c", "import os, json; print(json.dumps(dict(os.environ)))"]).proc
     seen = json.loads(proc.communicate(timeout=20)[0])
     assert "ANTHROPIC_API_KEY" not in seen and "NOTION_TOKEN" not in seen
     assert all(k in {"PATH", "LC_CTYPE", "__CF_USER_TEXT_ENCODING"} or k.startswith("PYTHON") for k in seen)
+
+
+@pytest.fixture
+def worker_socket(monkeypatch):
+    """Stands in for systemd socket activation: each connection becomes a worker's stdin and stdout."""
+    import os
+    import shutil
+    import socket
+    import tempfile
+    import threading
+
+    directory = tempfile.mkdtemp(dir="/tmp")
+    path = os.path.join(directory, "codemode.sock")
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(path)
+    server.listen(4)
+    children = []
+
+    def serve():
+        while True:
+            try:
+                conn, _ = server.accept()
+            except OSError:
+                return
+            children.append(
+                subprocess.Popen(
+                    [sys.executable, "-m", "atrium.agent.codemode_worker"], stdin=conn, stdout=conn, stderr=subprocess.DEVNULL,
+                    env=codemode.spawn_env(), cwd="/",
+                )
+            )
+            conn.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    monkeypatch.setenv(codemode.SOCKET_ENV, path)
+    yield children
+    server.close()
+    for child in children:
+        child.kill()
+        child.wait()
+    shutil.rmtree(directory, ignore_errors=True)
+
+
+def test_socket_worker_runs_scripts_and_dispatches_calls(world, worker_socket):
+    _, conn, ctx = world
+    out = run(ctx, 'hits = mail_search("invoice")["results"]\nprint(len(hits))\n"done"')
+    assert out == {"output": "2\n\"done\"", "tool_calls": 1}
+    assert len(worker_socket) == 1
+
+
+def test_socket_worker_wall_clock_closes_connection(world, worker_socket, monkeypatch):
+    _, _, ctx = world
+    monkeypatch.setattr(codemode, "WALL_SECONDS", 1.0)
+    monkeypatch.setattr(codemode, "MONTY_LIMITS", {})
+    out = run(ctx, "while True:\n    pass")
+    assert "wall-clock limit" in out["error"]
+
+
+def test_missing_socket_is_a_tool_error(world, monkeypatch):
+    _, _, ctx = world
+    monkeypatch.setenv(codemode.SOCKET_ENV, "/nonexistent/codemode.sock")
+    with pytest.raises(ToolError, match="code worker socket"):
+        run(ctx, "1")
 
 
 def test_input_validation(world):

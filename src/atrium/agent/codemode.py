@@ -1,10 +1,16 @@
-"""Code mode host: runs model-written restricted Python in a Monty worker process.
+"""Code mode host: runs model-written restricted Python in a Monty worker.
 
 The worker (`codemode_worker`) owns the interpreter and has no tool implementations; each external function
 call comes back over JSON lines and is dispatched here through the canonical tool registry, restricted to
-read-only tools whose contexts include `code` and the caller's kind. The worker runs with an empty
-environment (no secrets) and best-effort rlimits; Monty is not an OS boundary, so the systemd hardening of the
-service (no extra network, no filesystem beyond the state dir, MemoryMax/CPUQuota) is the outer boundary.
+read-only tools whose contexts include `code` and the caller's kind.
+
+Where the worker runs depends on `ATRIUM_CODEMODE_SOCKET`:
+- set (production): connect to a systemd socket-activated template unit (`atrium-codemode@`), one fresh
+  instance per connection under DynamicUser with no network, a read-only filesystem, no access to the
+  service's state directory or its /proc, and MemoryMax/CPUQuota/RuntimeMaxSec limits. That separate uid and
+  sandbox is the security boundary; Monty is not one.
+- unset (development, tests): a plain child process with an empty environment and best-effort rlimits only.
+  It shares the parent's uid and is NOT a security boundary.
 """
 
 import json
@@ -12,6 +18,7 @@ import keyword
 import logging
 import os
 import selectors
+import socket
 import subprocess
 import sys
 import time
@@ -97,14 +104,62 @@ def spawn_env():
     }
 
 
-def start_worker(argv=None):
-    argv = argv or [sys.executable, "-m", "atrium.agent.codemode_worker"]
-    try:
-        return subprocess.Popen(
-            argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=spawn_env(), close_fds=True, cwd="/"
-        )
-    except OSError as e:
-        raise ToolError(f"could not start the code worker: {e}") from e
+SOCKET_ENV = "ATRIUM_CODEMODE_SOCKET"
+
+
+class ProcessChannel:
+    def __init__(self, argv):
+        try:
+            self.proc = subprocess.Popen(
+                argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=spawn_env(), close_fds=True, cwd="/"
+            )
+        except OSError as e:
+            raise ToolError(f"could not start the code worker: {e}") from e
+
+    def fileno(self):
+        return self.proc.stdout.fileno()
+
+    def write(self, data):
+        self.proc.stdin.write(data)
+        self.proc.stdin.flush()
+
+    def close(self):
+        self.proc.kill()
+        self.proc.wait()
+        self.proc.stdout.close()
+        try:
+            self.proc.stdin.close()
+        except OSError:
+            pass
+
+
+class SocketChannel:
+    """One connection to the socket-activated worker; closing it ends the worker instance."""
+
+    def __init__(self, path):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(WALL_SECONDS)
+        try:
+            self.sock.connect(path)
+        except OSError as e:
+            self.sock.close()
+            raise ToolError(f"could not reach the code worker socket: {e}") from e
+
+    def fileno(self):
+        return self.sock.fileno()
+
+    def write(self, data):
+        self.sock.sendall(data)
+
+    def close(self):
+        self.sock.close()
+
+
+def start_worker(argv=None, socket_path=None):
+    socket_path = socket_path or os.environ.get(SOCKET_ENV)
+    if argv is None and socket_path:
+        return SocketChannel(socket_path)
+    return ProcessChannel(argv or [sys.executable, "-m", "atrium.agent.codemode_worker"])
 
 
 class WorkerGone(Exception):
@@ -228,7 +283,7 @@ def render(final):
     return clip(output)
 
 
-def execute(ctx, code, tools, argv=None):
+def execute(ctx, code, tools, argv=None, socket_path=None):
     """Run `code` in a worker with `tools` as external functions; returns {"output", "tool_calls"[, "error"]}."""
     host = Host(ctx, tools)
     spec = {
@@ -238,21 +293,19 @@ def execute(ctx, code, tools, argv=None):
         "output_cap": OUTPUT_BYTES * 2,
         "rlimits": RLIMITS,
     }
-    proc = start_worker(argv)
-    reader = LineReader(proc.stdout.fileno())
+    channel = start_worker(argv, socket_path)
+    reader = LineReader(channel.fileno())
     deadline = time.monotonic() + WALL_SECONDS
     error = None
     final = {}
     try:
-        proc.stdin.write((json.dumps(spec) + "\n").encode())
-        proc.stdin.flush()
+        channel.write((json.dumps(spec) + "\n").encode())
         while True:
             message = reader.read(deadline)
             if "call" in message:
                 call = message["call"]
                 reply = host.call(str(call.get("name")), list(call.get("args") or []), dict(call.get("kwargs") or {}))
-                proc.stdin.write((json.dumps(reply, ensure_ascii=False) + "\n").encode())
-                proc.stdin.flush()
+                channel.write((json.dumps(reply, ensure_ascii=False) + "\n").encode())
             elif "done" in message:
                 final = message["done"]
                 break
@@ -264,17 +317,11 @@ def execute(ctx, code, tools, argv=None):
                 raise WorkerGone("unexpected worker message")
     except WorkerTimeout:
         error = f"wall-clock limit of {WALL_SECONDS:g}s exceeded; worker killed"
-    except (WorkerGone, BrokenPipeError) as e:
+    except (WorkerGone, OSError) as e:
         error = f"code worker failed: {e or 'channel closed'}"
     finally:
-        proc.kill()
-        proc.wait()
         reader.close()
-        proc.stdout.close()
-        try:
-            proc.stdin.close()
-        except OSError:
-            pass
+        channel.close()
     out = {"output": render(final), "tool_calls": host.calls}
     if error:
         out["error"] = error

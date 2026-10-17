@@ -51,7 +51,8 @@ def register(app, deps):
     ):
         def create(conn):
             scheduler.create_job(
-                conn, name=name, prompt=prompt, schedule=schedule, tz=scheduler.tz_name(deps.env), now=time.time(), enforce=False
+                conn, name=name, prompt=prompt, schedule=schedule, tz=scheduler.tz_name(deps.env), now=time.time(), enforce=False,
+                prompt_by=scheduler.OPERATOR,
             )
 
         return attempt(create, "Schedule created")
@@ -67,7 +68,8 @@ def register(app, deps):
             job = load(conn, job_id)
             fixed = job["kind"] in (scheduler.NIGHTLY, scheduler.BUILTIN)
             scheduler.update_job(
-                conn, job_id, time.time(), name=None if fixed else name, prompt=None if fixed else prompt, schedule=schedule, enforce=False
+                conn, job_id, time.time(), name=None if fixed else name, prompt=None if fixed else prompt, schedule=schedule, enforce=False,
+                prompt_by=scheduler.OPERATOR,
             )
 
         return attempt(edit, "Schedule saved")

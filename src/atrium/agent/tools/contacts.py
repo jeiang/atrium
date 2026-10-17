@@ -28,6 +28,6 @@ TOOLS = [
             "additionalProperties": False,
         },
         handler=contacts_lookup,
-        contexts=frozenset({"chat", "cron", "sub:mail", "code"}),
+        contexts=frozenset({"chat", "cron", "nightly", "sub:mail", "code"}),
     ),
 ]

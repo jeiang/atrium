@@ -76,6 +76,10 @@ CREATE INDEX IF NOT EXISTS job_runs_job ON job_runs (job_id, id);
 
 def init(conn):
     conn.executescript(SCHEMA)
+    # prompt_by: who last wrote the prompt (OPERATOR via the web form, AGENT via the schedule tools, NULL for
+    # reminders and prompts that live in code). Only OPERATOR prompts may allowlist URLs for web_fetch.
+    if "prompt_by" not in {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}:
+        conn.execute("ALTER TABLE jobs ADD COLUMN prompt_by TEXT")
 
 
 class ScheduleError(ValueError):
@@ -262,7 +266,7 @@ def active_count(conn):
     return conn.execute("SELECT COUNT(*) AS n FROM jobs WHERE enabled = 1 AND cancelled = 0 AND kind = ?", (CRON,)).fetchone()["n"]
 
 
-def create_job(conn, *, name, prompt, schedule, tz, now, created_by=OPERATOR, thread_id=None, kind=CRON, enforce=True):
+def create_job(conn, *, name, prompt, schedule, tz, now, created_by=OPERATOR, thread_id=None, kind=CRON, enforce=True, prompt_by=None):
     name = (name or "").strip()
     prompt = (prompt or "").strip()
     if not name or not prompt:
@@ -271,14 +275,14 @@ def create_job(conn, *, name, prompt, schedule, tz, now, created_by=OPERATOR, th
     if enforce and kind == CRON and active_count(conn) >= MAX_ACTIVE_JOBS:
         raise ScheduleError(f"at most {MAX_ACTIVE_JOBS} active schedules; cancel one first")
     cur = conn.execute(
-        "INSERT INTO jobs (name, prompt, schedule, tz, kind, next_due, created_by, created_in_thread, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (name, prompt, schedule.strip(), tz, kind, due, created_by, thread_id, now),
+        "INSERT INTO jobs (name, prompt, schedule, tz, kind, next_due, created_by, created_in_thread, created_at, prompt_by) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (name, prompt, schedule.strip(), tz, kind, due, created_by, thread_id, now, prompt_by),
     )
     return cur.lastrowid
 
 
-def update_job(conn, job_id, now, *, name=None, prompt=None, schedule=None, enabled=None, enforce=True):
+def update_job(conn, job_id, now, *, name=None, prompt=None, schedule=None, enabled=None, enforce=True, prompt_by=None):
     job = get_job(conn, job_id)
     if job is None or job["cancelled"]:
         raise ScheduleError(f"no active schedule {job_id}")
@@ -291,6 +295,7 @@ def update_job(conn, job_id, now, *, name=None, prompt=None, schedule=None, enab
         if not prompt.strip():
             raise ScheduleError("prompt is empty")
         changes["prompt"] = prompt.strip()
+        changes["prompt_by"] = prompt_by
     new_schedule = schedule if schedule is not None else job["schedule"]
     will_enable = bool(job["enabled"]) if enabled is None else bool(enabled)
     if schedule is not None:
@@ -448,13 +453,14 @@ def execute_claim(cfg, claim, *, client=None, env=None, now=time.time):
     prompt = NIGHTLY_PROMPT if kind == NIGHTLY else job["prompt"]
     if job["kind"] == BUILTIN:  # built-in prompts live in code so upgrades reach existing jobs
         prompt = next((s.prompt for s in BUILTIN_JOBS if s.name == job["name"]), prompt)
+    operator = job["kind"] == CRON and job["prompt_by"] == OPERATOR
     conn = db.connect(cfg.db_path)
     thread_id = None
     try:
         try:
             thread_id = service.create_thread(conn, kind, title=job["name"], job_id=job["id"], now=now)
             conn.execute("UPDATE job_runs SET thread_id = ? WHERE id = ?", (thread_id, claim.job_run_id))
-            run_id = service.run_once(cfg, conn, thread_id, prompt, kind=kind, client=client, env=env, now=now)
+            run_id = service.run_once(cfg, conn, thread_id, prompt, kind=kind, client=client, env=env, now=now, operator=operator)
         except budget.BudgetExceeded as e:
             finish_run(conn, claim, SKIPPED_BUDGET, now(), thread_id, str(e))
             return SKIPPED_BUDGET
@@ -551,6 +557,10 @@ def release_stale(conn, now):
 
 
 def run_worker(cfg, *, client=None, env=None, stop=None, tick_seconds=TICK_SECONDS):
+    """The only process that resumes interrupted agent runs (service.resume_interrupted): at startup and then
+    every tick, so a web process restart never takes over a run that is still executing elsewhere."""
+    from . import service
+
     stop = stop or threading.Event()
     owner = f"{os.uname().nodename}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
     log.info("scheduler %s started", owner)
@@ -561,6 +571,7 @@ def run_worker(cfg, *, client=None, env=None, stop=None, tick_seconds=TICK_SECON
                 release_stale(conn, time.time())
             finally:
                 conn.close()
+            service.resume_interrupted(cfg, client=client, env=env)
             tick(cfg, owner, client=client, env=env)
         except sqlite3.Error:
             log.exception("scheduler tick failed")

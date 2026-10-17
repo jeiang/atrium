@@ -79,6 +79,32 @@ def plain(messages):
     return [{"role": m["role"], "content": [{k: v for k, v in b.items() if k != "cache_control"} for b in m["content"]]} for m in messages]
 
 
+def assert_valid_request(call):
+    """What the Messages API checks: roles alternate from a user message (or an assistant message holding only
+    the compaction block), every tool_use is answered by the tool_results of the next message and nothing else,
+    tool blocks need `tools`, thinking blocks need `thinking`."""
+    messages = call["messages"]
+    assert messages and messages[-1]["role"] == "user"
+    assert messages[0]["role"] == "user" or [b["type"] for b in messages[0]["content"]] == [context.COMPACTION]
+    pending = set()
+    for i, m in enumerate(messages):
+        assert i == 0 or messages[i - 1]["role"] != m["role"], f"message {i} repeats role {m['role']}"
+        uses = {b["id"] for b in m["content"] if b.get("type") == "tool_use"}
+        results = [b["tool_use_id"] for b in m["content"] if b.get("type") == "tool_result"]
+        if m["role"] == "assistant":
+            assert not results
+            pending = uses
+        else:
+            assert not uses
+            assert set(results) == pending and len(results) == len(pending), f"message {i}: results {results} vs pending {pending}"
+            pending = set()
+        if "tools" not in call:
+            assert not uses and not results, f"message {i} has tool blocks but the request defines no tools"
+        if "thinking" not in call:
+            assert not [b for b in m["content"] if b.get("type") in context.THINKING]
+    assert not pending
+
+
 def test_request_carries_context_management_and_betas(world):
     cfg, conn = world
     client = FakeClient([response([text("hi")])])
@@ -150,7 +176,8 @@ def test_preflight_compacts_on_the_client_before_exceeding_the_limit(world):
     thread_id, run_id = run_turn(cfg, conn, client, "hello there")
     assert journal.get_run(conn, run_id)["state"] == journal.DONE and len(client.calls) == 3
     summary_call = client.calls[1]
-    assert "tools" not in summary_call and summary_call["output_config"] == {"effort": "low"} and summary_call["system"] == context.SUMMARY_SYSTEM
+    assert "tools" not in summary_call and "thinking" not in summary_call
+    assert summary_call["output_config"] == {"effort": "low"} and summary_call["system"] == context.SUMMARY_SYSTEM
     assert thinking_blocks(summary_call) == [] and summary_call["messages"][-1]["content"][-1]["text"].endswith("Write the summary now.")
     assert MEDIUM in str(summary_call["messages"])
     resumed = client.calls[2]["messages"]
@@ -172,6 +199,100 @@ def test_no_request_is_sent_over_the_hard_limit(world, monkeypatch):
     found = journal.get_run(conn, run_id)
     assert found["state"] == journal.FAILED and "over the 60" in found["error"]
     assert len(client.calls) == 1 and client.calls[0]["system"] == context.SUMMARY_SYSTEM
+
+
+def test_server_compaction_mid_tool_loop_keeps_only_complete_units(world):
+    cfg, conn = world
+    block = compaction("Goal: answer hello. Seen: probe x=1 and x=2.")
+    client = FakeClient(
+        [
+            response([thinking("t1", "s1"), tool_use("tu1", "probe", x=1)], "tool_use"),
+            response([thinking("t2", "s2"), tool_use("tu2", "probe", x=2)], "tool_use"),
+            response([block], "compaction", input_tokens=360_000),
+            response([thinking("t3", "s3"), tool_use("tu3", "probe", x=3)], "tool_use"),
+            response([text("done")]),
+        ]
+    )
+    thread_id, run_id = run_turn(cfg, conn, client, "hello")
+    assert journal.get_run(conn, run_id)["state"] == journal.DONE and len(client.calls) == 5
+    for call in client.calls:
+        assert_valid_request(call)
+    # Sent at compaction: [hello, tu1, tr1, tu2, tr2]; the last three would start at tr1, whose tool_use
+    # is gone, so the tail begins at the tu2 unit instead.
+    after = client.calls[3]["messages"]
+    assert after[0] == {"role": "assistant", "content": [block]}
+    assert after[1]["role"] == "user" and after[1]["content"][0]["text"].startswith("Context manifest") and len(after[1]["content"]) == 1
+    assert after[2] == {"role": "assistant", "content": [tool_use("tu2", "probe", x=2)]}
+    assert [b["tool_use_id"] for b in after[3]["content"]] == ["tu2"] and len(after) == 4
+    assert "tu1" not in json.dumps(after) and thinking_blocks(client.calls[3]) == []
+    assert plain(client.calls[4]["messages"][:4]) == plain(after)
+    assert [b["tool_use_id"] for b in client.calls[4]["messages"][5]["content"] if b.get("type") == "tool_result"] == ["tu3"]
+    later = FakeClient([response([text("still here")])])
+    run_turn(cfg, conn, later, "next", thread_id)
+    assert_valid_request(later.calls[0])
+    assert plain(later.calls[0]["messages"][:4]) == plain(after)
+
+
+def test_preserved_tail_never_starts_with_a_lone_tool_result():
+    hello = {"role": "user", "content": [text("hello")]}
+    a1 = {"role": "assistant", "content": [thinking("t", "s"), tool_use("tu1", "probe")]}
+    r1 = {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tu1", "content": "1"}]}
+    a2 = {"role": "assistant", "content": [thinking("t", "s"), tool_use("tu2", "probe")]}
+    r2 = {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tu2", "content": "2"}]}
+    bare1 = {"role": "assistant", "content": [tool_use("tu1", "probe")]}
+    bare2 = {"role": "assistant", "content": [tool_use("tu2", "probe")]}
+    assert context.preserved([hello, a1, r1]) == [hello, bare1, r1]
+    assert context.preserved([hello, a1, r1, a2, r2]) == [bare2, r2]
+    assert context.preserved([a1, r1, hello]) == [bare1, r1, hello]
+    assert context.preserved([r1, hello]) == [hello]
+    assert context.preserved([a1, r1, a2, r2, hello]) == [bare2, r2, hello]
+
+
+def test_client_compaction_mid_tool_loop_sends_a_valid_tool_free_request(world):
+    cfg, conn = world
+    client = FakeClient(
+        [
+            response([thinking("t1", "s1"), tool_use("tu1", "probe", x=1)], "tool_use"),
+            response([thinking("t2", "s2"), tool_use("tu2", "medium")], "tool_use", input_tokens=390_000, output_tokens=500),
+            response([text("SUMMARY: goal hello; probe echoed 1; medium read.")]),
+            response([thinking("t3", "s3"), tool_use("tu3", "probe", x=3)], "tool_use"),
+            response([text("done")]),
+        ]
+    )
+    thread_id, run_id = run_turn(cfg, conn, client, "hello there")
+    assert journal.get_run(conn, run_id)["state"] == journal.DONE and len(client.calls) == 5
+    for call in client.calls:
+        assert_valid_request(call)
+    summary_call = client.calls[2]
+    assert "tools" not in summary_call and "thinking" not in summary_call
+    flat = summary_call["messages"]
+    assert [m["role"] for m in flat] == ["user", "assistant", "user", "assistant", "user"]
+    assert all(b["type"] == "text" for m in flat for b in m["content"])
+    assert "[tool_use]" in flat[1]["content"][0]["text"] and '"tu1"' in flat[1]["content"][0]["text"]
+    assert "[tool_result]" in flat[2]["content"][0]["text"] and MEDIUM in flat[4]["content"][0]["text"]
+    assert flat[4]["content"][-1]["text"].endswith("Write the summary now.")
+    resumed = client.calls[3]["messages"]
+    assert len(resumed) == 1 and [b["type"] for b in resumed[0]["content"]] == ["text"] * 4
+    assert "SUMMARY: goal hello" in resumed[0]["content"][0]["text"] and resumed[0]["content"][2]["text"] == "hello there"
+    assert context.projection(conn, thread_id)["kind"] == context.CLIENT
+    later = FakeClient([response([text("still here")])])
+    run_turn(cfg, conn, later, "next", thread_id)
+    assert_valid_request(later.calls[0])
+
+
+def test_summary_request_after_a_server_compaction_starts_with_a_user_message():
+    block = compaction("earlier summary")
+    active = [
+        {"role": "assistant", "content": [block], "seq": None, "run_id": None},
+        {"role": "user", "content": [text("manifest"), text("go on")], "seq": None, "run_id": None},
+        {"role": "assistant", "content": [thinking("t", "s"), tool_use("tu9", "probe")], "seq": 9, "run_id": 1},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tu9", "content": "x" * 2000}], "seq": 10, "run_id": 1},
+    ]
+    out = context.shrink(active, 10)
+    assert [m["role"] for m in out] == ["user", "assistant", "user", "assistant", "user"]
+    assert out[1]["content"] == [text("[earlier context summary] earlier summary")]
+    assert all(b["type"] == "text" for m in out for b in m["content"])
+    assert "[truncated for compaction]" in out[4]["content"][0]["text"] and "thinking" not in json.dumps(out)
 
 
 def test_drop_is_staged_then_committed_at_the_next_turn_and_stays_recallable(world):

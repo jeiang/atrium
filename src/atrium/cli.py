@@ -109,7 +109,6 @@ def parser():
             mm.add_argument("--limit", type=int)
     ag = sub.add_parser("agent")
     asub = ag.add_subparsers(dest="agent_command", required=True)
-    asub.add_parser("resume-interrupted")
     asub.add_parser("scheduler")
     ar = asub.add_parser("run")
     ar.add_argument("--thread", type=int, help="existing thread id; omitted creates a new thread of --kind")
@@ -128,6 +127,8 @@ def parser():
     sv.add_argument("--host", default=DEFAULT_HOST)
     sv.add_argument("--port", type=int, required=True)
     sv.add_argument("--auth", choices=auth.MODES, default=auth.PROXY)
+    sv.add_argument("--allowed-host", action="append", default=[], help="accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)")
+    sub.add_parser("codemode-worker")
     return p
 
 
@@ -179,17 +180,12 @@ def agent_command(cfg, args):
         except KeyboardInterrupt:
             pass
         return 0
-    if args.agent_command == "resume-interrupted":
-        out = service.resume_interrupted(cfg, background=False)
-    else:
-        conn = db.connect(cfg.db_path)
-        thread_id = args.thread if args.thread is not None else service.create_thread(conn, args.kind)
-        run_id = service.run_once(cfg, conn, thread_id, args.text, kind=args.kind)
-        out = service.run_view(conn, run_id)
-    json.dump(out, sys.stdout, indent=2, default=str)
+    conn = db.connect(cfg.db_path)
+    thread_id = args.thread if args.thread is not None else service.create_thread(conn, args.kind)
+    run_id = service.run_once(cfg, conn, thread_id, args.text, kind=args.kind)
+    json.dump(service.run_view(conn, run_id), sys.stdout, indent=2, default=str)
     sys.stdout.write("\n")
     return 0
-    return p
 
 
 def proposals_command(cfg, args):
@@ -282,6 +278,11 @@ def main(argv=None):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     if args.command == "calendar" and args.calendar_command == "google-auth":
         return calendar_command(None, args)
+    if args.command == "codemode-worker":
+        from .agent import codemode_worker
+
+        codemode_worker.main()
+        return 0
     cfg = config.load()
     if args.command == "sync":
         run.run_sync(cfg, args.account)
@@ -324,8 +325,10 @@ def main(argv=None):
     elif args.command == "watches":
         return watches_command(cfg)
     elif args.command == "serve":
-        service.resume_interrupted(cfg)
-        uvicorn.run(create_app(cfg, auth_mode=args.auth), host=args.host, port=args.port, log_level="info")
+        hosts = args.allowed_host or [h for h in [os.environ.get("ATRIUM_PUBLIC_HOST", "").strip()] if h]
+        if args.auth == auth.PROXY and not hosts:
+            raise SystemExit("proxy mode needs --allowed-host or ATRIUM_PUBLIC_HOST")
+        uvicorn.run(create_app(cfg, auth_mode=args.auth, allowed_hosts=hosts), host=args.host, port=args.port, log_level="info")
     return 0
 
 

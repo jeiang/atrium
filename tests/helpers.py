@@ -38,8 +38,11 @@ def static_dir(tmp_path):
     return static
 
 
+TEST_HOSTS = {"testserver"}
+
+
 def web_client(cfg, **kwargs):
-    client = TestClient(web.create_app(cfg, auth_mode=auth.LOCAL, **kwargs))
+    client = TestClient(web.create_app(cfg, auth_mode=auth.LOCAL, allowed_hosts=TEST_HOSTS, **kwargs))
     client.get("/chat")
     client.headers["X-CSRF-Token"] = client.cookies[auth.CSRF_COOKIE]
     return client

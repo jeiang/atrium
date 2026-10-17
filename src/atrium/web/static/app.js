@@ -42,6 +42,22 @@ document.addEventListener("htmx:beforeSwap", (event) => {
 document.addEventListener("htmx:afterRequest", (event) => {
   const form = event.detail.elt;
   if (form.matches && form.matches("form[data-reset]") && event.detail.successful) form.reset();
+  if (form.matches && form.matches("button[data-suggestion]") && event.detail.successful) {
+    const item = form.closest("li");
+    const next = item.nextElementSibling || item.previousElementSibling;
+    item.remove();
+    (next ? next.querySelector("button") : document.getElementById("add-condition")).focus();
+  }
+});
+
+document.addEventListener("htmx:afterSwap", (event) => {
+  const target = event.detail.target || event.target;
+  if (target && target.id === "conditions") htmx.trigger("#rule-form", "change");
+});
+
+document.addEventListener("submit", (event) => {
+  const question = event.target.dataset && event.target.dataset.confirmSubmit;
+  if (question && !window.confirm(question)) event.preventDefault();
 });
 
 const failed = (title, description) => (event) => {

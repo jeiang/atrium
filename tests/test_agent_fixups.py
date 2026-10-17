@@ -107,7 +107,7 @@ def test_stuck_sending_drafts_become_unknown_never_resent(world):
     assert drafts.get(conn, old)["status"] == drafts.UNKNOWN
     assert drafts.get(conn, fresh)["status"] == drafts.SENDING
     with pytest.raises(drafts.DraftError):
-        drafts.send(conn, cfg, old)
+        drafts.send(conn, cfg, old, 1000)
     drafts.resolve_unknown(conn, old, drafts.DRAFT)
     assert drafts.get(conn, old)["status"] == drafts.DRAFT
     with pytest.raises(drafts.DraftError):

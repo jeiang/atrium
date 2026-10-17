@@ -46,6 +46,7 @@ def schedule_create(ctx: ToolContext, args: dict):
             tz=scheduler.tz_name(ctx.env),
             now=ctx.now(),
             created_by=scheduler.AGENT,
+            prompt_by=scheduler.AGENT,
             thread_id=ctx.thread_id,
         )
     except scheduler.ScheduleError as e:
@@ -67,6 +68,7 @@ def schedule_update(ctx: ToolContext, args: dict):
             prompt=text_arg(args, "prompt"),
             schedule=text_arg(args, "schedule"),
             enabled=enabled,
+            prompt_by=scheduler.AGENT,
         )
     except scheduler.ScheduleError as e:
         raise ToolError(str(e)) from e

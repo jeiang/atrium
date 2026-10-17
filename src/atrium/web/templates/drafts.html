@@ -46,8 +46,9 @@
       <div><button type="submit" class="btn" data-variant="outline">{{ icon("pencil") }}Save changes</button></div>
     </form>
     <div class="flex gap-2">
-      <form method="post" action="/drafts/{{ d.id }}/send" onsubmit="return confirm('Send this email now?')">
+      <form method="post" action="/drafts/{{ d.id }}/send" data-confirm-submit="Send this email now?">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="updated_at" value="{{ d.updated_at }}">
         <button type="submit" class="btn">{{ icon("send") }}Send</button>
       </form>
       <form method="post" action="/drafts/{{ d.id }}/discard">

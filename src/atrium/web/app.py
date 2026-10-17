@@ -141,7 +141,7 @@ def back_link(request):
     return {"url": ref.path + (f"?{ref.query}" if ref.query else ""), "label": label}
 
 
-def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None, env=None):
+def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None, env=None, allowed_hosts=None):
     if cfg.static_dir is None:
         raise ValueError("ATRIUM_STATIC_DIR is required")
     if auth_mode not in auth.MODES:
@@ -151,7 +151,7 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
     jinja.globals["csrf_token"] = auth.csrf_token.get
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(GZipMiddleware, minimum_size=1024)
-    app.add_middleware(auth.Guard, auth=auth_mode)
+    app.add_middleware(auth.Guard, auth=auth_mode, allowed_hosts=allowed_hosts)
     app.mount("/static", StaticFiles(directory=cfg.static_dir), name="static")
 
     def pending():

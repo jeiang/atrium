@@ -1,4 +1,6 @@
 import json
+import threading
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -9,7 +11,7 @@ from fake_anthropic import FakeClient, response, text
 from helpers import make_config, memory_db, web_client
 
 from atrium import db, notion_proposals
-from atrium.agent import budget, journal, nightly, registry, scheduler, service, skills
+from atrium.agent import budget, journal, nightly, registry, scheduler, service, skills, threads
 from atrium.agent.tools import notify, propose
 from atrium.agent.tools import schedule as schedule_tools
 from atrium.agent.tools.base import ToolError
@@ -123,6 +125,36 @@ def test_on_time_run_is_ok_and_uses_cron_thread(cfg, conn):
     assert listed["last_status"] == "ok" and listed["last_thread_id"] == thread["id"]
 
 
+URL_PROMPT = "Read https://docs.test/brief and summarize it."
+
+
+def run_job(cfg, conn, job_id, due):
+    client = FakeClient([response([text("ok")])])
+    claims, _ = scheduler.tick(cfg, "w1", client=client, env={}, now=lambda: due + 5, spawn=lambda fn, name: fn())
+    assert [c.job["id"] for c in claims] == [job_id]
+    thread_id = conn.execute("SELECT id FROM threads WHERE job_id = ?", (job_id,)).fetchone()["id"]
+    return threads.allowed_urls(conn, thread_id)
+
+
+def test_only_operator_written_prompts_allowlist_urls(cfg, conn):
+    due = local(2026, 10, 15, 12, 30)
+    by_operator = scheduler.create_job(conn, name="op", prompt=URL_PROMPT, schedule="2026-10-15T12:30", tz=TZ, now=NOW, prompt_by=scheduler.OPERATOR)
+    assert run_job(cfg, conn, by_operator, due) == {"https://docs.test/brief"}
+    by_agent = scheduler.create_job(conn, name="ag", prompt=URL_PROMPT, schedule="2026-10-15T12:30", tz=TZ, now=NOW, created_by=scheduler.AGENT, prompt_by=scheduler.AGENT)
+    assert run_job(cfg, conn, by_agent, due) == set()
+    reminder = scheduler.create_job(conn, name="Reminder: x", prompt=URL_PROMPT, schedule="2026-10-15T12:30", tz=TZ, now=NOW)  # mail-derived text
+    assert scheduler.get_job(conn, reminder)["prompt_by"] is None
+    assert run_job(cfg, conn, reminder, due) == set()
+    # An operator job whose prompt the agent rewrote is agent-authored from then on.
+    rewritten = scheduler.create_job(conn, name="rw", prompt="Check mail.", schedule="2026-10-15T12:30", tz=TZ, now=NOW, prompt_by=scheduler.OPERATOR)
+    ctx = make_ctx(conn, cfg, env={"ATRIUM_TZ": TZ}, now=lambda: NOW)
+    schedule_tools.schedule_update(ctx, {"id": rewritten, "prompt": URL_PROMPT})
+    assert scheduler.get_job(conn, rewritten)["prompt_by"] == scheduler.AGENT
+    assert run_job(cfg, conn, rewritten, due) == set()
+    assert scheduler.update_job(conn, rewritten, NOW, prompt=URL_PROMPT, prompt_by=scheduler.OPERATOR)["prompt_by"] == scheduler.OPERATOR
+    assert scheduler.update_job(conn, rewritten, NOW, schedule="daily 09:00")["prompt_by"] == scheduler.OPERATOR
+
+
 def test_once_job_fires_once_then_disables(cfg, conn):
     job_id = scheduler.create_job(conn, name="ping", prompt="p", schedule="2026-10-15T12:30", tz=TZ, now=NOW)
     claims, _ = scheduler.claim_due(conn, cfg, local(2026, 10, 15, 12, 31), "w1")
@@ -150,6 +182,30 @@ def test_two_connections_cannot_both_claim(cfg, conn):
     finally:
         other.close()
     assert len(a) + len(b) == 1
+
+
+def test_worker_resumes_lapsed_runs_once(cfg, conn):
+    """The scheduler worker is the only resumer: a run whose lease lapsed is claimed on the first tick, and
+    later ticks leave it alone because it is running again under a live lease."""
+    stale = time.time() - journal.LEASE_SECONDS - 10
+    thread_id = service.create_thread(conn, "chat")
+    run_id = service.prepare(conn, thread_id, "find", "chat", stale)
+    journal.append_message(conn, thread_id, run_id, journal.ASSISTANT, [text("looking")], stale)
+    stop = threading.Event()
+
+    class Stopper(FakeClient):
+        def create(self, **params):
+            time.sleep(0.05)  # several ticks pass while the resumed run is still in flight
+            stop.set()
+            return super().create(**params)
+
+    client = Stopper([response([text("found")])])
+    scheduler.run_worker(cfg, client=client, env={}, stop=stop, tick_seconds=0.005)
+    deadline = time.monotonic() + 5
+    while journal.get_run(conn, run_id)["state"] == journal.RUNNING and time.monotonic() < deadline:
+        time.sleep(0.02)
+    found = journal.get_run(conn, run_id)
+    assert found["state"] == journal.DONE and found["owner"] == journal.OWNER and len(client.calls) == 1
 
 
 def test_pause_skips(cfg, conn):
@@ -305,6 +361,22 @@ def test_notify_cap_and_link_validation(ntfy):
         notify.notify(other, {"title": "t", "body": "b", "thread_link": "https://evil.test/x"})
 
 
+def test_nightly_notify_is_capped_at_one_per_run(tmp_path):
+    from atrium import db
+    from atrium.agent.tools import notify as notify_tool
+    from atrium.agent.tools.base import ToolContext, ToolError
+
+    conn = db.connect(tmp_path / "n.db")
+    mk = lambda kind, run_id: ToolContext(conn=conn, cfg=None, env={}, kind=kind, thread_id=1, run_id=run_id, allowed_urls=set(), embed=None, now=lambda: 1.0)
+    night = mk("nightly", 7)
+    notify_tool.notify(night, {"title": "t", "body": "b"})
+    with pytest.raises(ToolError, match="at most 1 notification per run"):
+        notify_tool.notify(night, {"title": "t2", "body": "b"})
+    chat = mk("chat", 8)
+    for _ in range(notify_tool.PER_RUN_CAP):
+        notify_tool.notify(chat, {"title": "t", "body": "b"})
+
+
 def test_notify_tool_contexts():
     assert {k for k in ("chat", "cron", "nightly", "code", "sub:web") if "notify" in {t.name for t in registry.tools_for(k)}} == {"chat", "cron", "nightly"}
 
@@ -312,11 +384,11 @@ def test_notify_tool_contexts():
 # ---- nightly registry
 
 NIGHTLY_TOOLS = {
-    "calendar_list", "context_drop", "context_fold", "context_pin", "context_status", "fetch_knowledge", "load_skill", "notify", "notion_archive_page", "notion_create_page",
-    "notion_update_page", "profile_get", "profile_set", "recall", "search_knowledge", "threads_today",
+    "calendar_list", "contacts_lookup", "context_drop", "context_fold", "context_pin", "context_status", "fetch_knowledge", "load_skill", "mail_read", "mail_search", "notify",
+    "notion_archive_page", "notion_create_page", "notion_update_page", "profile_get", "profile_set", "recall", "search_knowledge", "threads_today",
 }
 NIGHTLY_FORBIDDEN = (
-    "mail_search", "mail_read", "contacts_lookup", "web_fetch", "web_search", "schedule_create", "schedule_update",
+    "web_fetch", "web_search", "schedule_create", "schedule_update",
     "schedule_cancel", "schedule_list", "draft_email_create", "draft_email_update", "calendar_create", "calendar_delete",
     "event_propose", "propose", "research", "run_code",
 )

@@ -115,11 +115,32 @@ def test_draft_tool_creates_with_threading_and_never_sends(conn, cfg):
         draft_tools.draft_email_create(ctx, {"account": "icloud", "to": ["a@x.test\r\nBcc: z@x.test"], "subject": "s", "body": "b"})
 
 
+def send_form(conn, did):
+    return {"updated_at": str(drafts.get(conn, did)["updated_at"])}
+
+
+def test_send_requires_the_reviewed_version_and_confirmation_is_not_inline(conn, cfg, fakes):
+    did = drafts.create(conn, cfg, 1, "gmail", "a@x.test", None, "Hi", "body")
+    client = web_client(cfg)
+    page = client.get("/drafts").text
+    assert "onsubmit" not in page and 'data-confirm-submit="Send this email now?"' in page
+    assert f'name="updated_at" value="{drafts.get(conn, did)["updated_at"]}"' in page
+    stale = send_form(conn, did)
+    ctx = make_ctx(conn, cfg)
+    draft_tools.draft_email_update(ctx, {"draft_id": did, "to": ["attacker@x.test"]})
+    r = client.post(f"/drafts/{did}/send", data=stale)
+    assert r.status_code == 409 and "draft changed, review again" in r.text
+    assert client.post(f"/drafts/{did}/send").status_code == 409
+    assert FakeSMTP.sent == [] and drafts.get(conn, did)["status"] == "draft"
+    assert client.post(f"/drafts/{did}/send", data=send_form(conn, did)).status_code == 200
+    assert FakeSMTP.sent[0][3] == ["attacker@x.test"]
+
+
 def test_send_icloud_uses_smtp_and_appends_sent(conn, cfg, fakes):
     mid = original(conn)
     did = drafts.create(conn, cfg, 1, "icloud", ["friend@x.test"], ["boss@x.test"], "Re: Lunch?", "Yes", mid)
     client = web_client(cfg)
-    r = client.post(f"/drafts/{did}/send")
+    r = client.post(f"/drafts/{did}/send", data=send_form(conn, did))
     assert r.status_code == 200, r.text
     host, msg, from_addr, to_addrs = FakeSMTP.sent[0]
     assert host == "smtp.mail.me.com" and from_addr == "me@icloud.com"
@@ -129,13 +150,13 @@ def test_send_icloud_uses_smtp_and_appends_sent(conn, cfg, fakes):
     assert [a[0] for a in fakes.appended] == ["Sent Messages"] and fakes.closed
     row = drafts.get(conn, did)
     assert row["status"] == "sent" and row["sent_at"] is not None
-    assert client.post(f"/drafts/{did}/send").status_code == 409
+    assert client.post(f"/drafts/{did}/send", data=send_form(conn, did)).status_code == 409
     assert len(FakeSMTP.sent) == 1
 
 
 def test_send_gmail_does_not_append(conn, cfg, fakes):
     did = drafts.create(conn, cfg, 1, "gmail", "a@x.test", None, "Hi", "body")
-    assert web_client(cfg).post(f"/drafts/{did}/send").status_code == 200
+    assert web_client(cfg).post(f"/drafts/{did}/send", data=send_form(conn, did)).status_code == 200
     assert FakeSMTP.sent[0][0] == "smtp.gmail.com" and FakeSMTP.sent[0][2] == "me@gmail.test"
     assert fakes.appended == []
 
@@ -147,7 +168,7 @@ def test_smtp_failure_reverts_to_draft(conn, cfg, monkeypatch):
 
     monkeypatch.setattr(smtp, "SMTP_FACTORY", [Boom])
     did = drafts.create(conn, cfg, 1, "gmail", "a@x.test", None, "Hi", "body")
-    assert web_client(cfg).post(f"/drafts/{did}/send").status_code == 409
+    assert web_client(cfg).post(f"/drafts/{did}/send", data=send_form(conn, did)).status_code == 409
     row = drafts.get(conn, did)
     assert row["status"] == "draft" and "failed" in row["smtp_result"]
 
