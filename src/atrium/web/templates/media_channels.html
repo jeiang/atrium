@@ -5,7 +5,7 @@
 {% block title %}Channels{% endblock %}
 {% block heading %}Media · Channels{% endblock %}
 {% block content %}
-<p class="text-sm text-muted-foreground">A channel is a show plus a regex over its EZTV release titles, checked every 30 minutes. New matches are downloaded as media torrents and announced on ntfy; a new channel's first check only records what is already out.</p>
+<p class="text-sm text-muted-foreground">A channel is a show plus a regex over its EZTV release titles, checked every 30 minutes. New matches are downloaded as media torrents and announced on ntfy; a new channel's first check only records what is already out unless you tick the download box when adding it.</p>
 
 <section class="flex flex-col gap-3" aria-labelledby="channels-h">
   <div class="flex flex-wrap items-center justify-between gap-2">
@@ -90,6 +90,7 @@
     </div>
     <label class="flex items-center gap-2 self-end pb-2 text-sm"><input id="case" type="checkbox" name="case_sensitive" value="1"{% if form.case_sensitive %} checked{% endif %}>Case-sensitive</label>
   </div>
+  <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="backfill" value="1"{% if form.backfill %} checked{% endif %}>Download matching releases that are already out</label>
   <div class="flex flex-wrap items-center gap-2">
     <button type="submit" class="btn" data-size="sm">{{ icon("plus") }}Watch</button>
     <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/media/channels/preview" hx-include="#new-channel" hx-target="#preview" hx-indicator="#preview-spinner">{{ icon("search") }}Preview against EZTV</button>

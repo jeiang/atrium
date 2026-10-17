@@ -29,7 +29,7 @@ WHERE d.id = (SELECT MAX(x.id) FROM decisions x WHERE x.message_id = d.message_i
 """
 
 
-def triage(conn, account=None, stage=None, agreement=None, limit=50, offset=0):
+def triage(conn, account=None, stage=None, agreement=None, limit=50, offset=0, q=""):
     if stage is not None and stage not in STAGES:
         raise ValueError(f"unknown stage {stage!r}")
     if agreement is not None and agreement not in AGREEMENTS:
@@ -44,6 +44,13 @@ def triage(conn, account=None, stage=None, agreement=None, limit=50, offset=0):
     if agreement:
         clauses.append(f"{AGREEMENT_SQL} = ?")
         params.append(agreement)
+    if q:
+        clauses.append(
+            "instr(lower(coalesce(subject, '') || char(10) || coalesce(from_addr, '') || char(10) || coalesce(from_name, '') || char(10) || "
+            "coalesce(actual, '') || char(10) || coalesce(dest, '') || char(10) || coalesce(corrected_to, '') || char(10) || "
+            "coalesce(key, '') || char(10) || coalesce(stage, '') || char(10) || coalesce(account, '')), lower(?)) > 0"
+        )
+        params.append(q)
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     base = f"SELECT *, {AGREEMENT_SQL} AS agreement FROM ({LATEST_SQL})"
     total = conn.execute(f"SELECT COUNT(*) FROM ({base}){where}", params).fetchone()[0]

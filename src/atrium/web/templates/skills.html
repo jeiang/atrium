@@ -6,12 +6,21 @@
 {% block tab %}
 <p class="text-sm text-muted-foreground">Markdown playbooks the assistant can load by name. Only the name and one-line description are in every conversation; the body is read on demand. A skill may reference another as <code class="font-mono">/skill:name</code> or <code class="font-mono">[[skill:name]]</code>; the same tokens in a chat message or schedule prompt expand the skill into the message before the run. The assistant cannot edit skills.</p>
 
+<form method="get" action="/settings/skills" class="flex items-end gap-2 text-sm">
+  <label class="flex flex-col gap-1 text-xs">Search<input class="input" type="search" name="q" value="{{ q }}" placeholder="name, description or body"></label>
+  <button type="submit" class="btn" data-size="sm">{{ icon("search") }}Find</button>
+</form>
+
 {% if skills %}
 <div class="flex flex-col gap-4">
   {% for s in skills %}
   <details class="rounded-lg border bg-card p-4" data-skill="{{ s.name }}">
-    <summary class="cursor-pointer text-sm"><span class="font-mono font-medium">{{ s.name }}</span> <span class="text-muted-foreground">{{ s.description }}</span>
-      {% if s.references.unknown %}<span class="badge" data-variant="destructive" title="References skills that do not exist: {{ s.references.unknown | join(', ') }}">{{ icon("circle-alert") }}unknown reference</span>{% endif %}
+    <summary class="flex cursor-pointer flex-col gap-1 text-sm">
+      <span class="flex flex-wrap items-center gap-2">
+        <span class="font-mono font-medium">{{ s.name }}</span>
+        {% if s.references.unknown %}<span class="badge" data-variant="destructive" title="References skills that do not exist: {{ s.references.unknown | join(', ') }}">{{ icon("circle-alert") }}unknown reference</span>{% endif %}
+      </span>
+      <span class="line-clamp-2 text-muted-foreground">{{ s.description }}</span>
     </summary>
     <dl class="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
       <div class="flex gap-2"><dt>References</dt><dd>{% for r in s.references.known %}<code class="font-mono">{{ r }}</code>{{ ", " if not loop.last }}{% else %}none{% endfor %}</dd></div>
@@ -32,7 +41,7 @@
   {% endfor %}
 </div>
 {% else %}
-{% call empty_state("scroll-text", "No skills yet") %}Add a playbook below.{% endcall %}
+{% if q %}{% call empty_state("search", "No skills match") %}Nothing matches "{{ q }}".{% endcall %}{% else %}{% call empty_state("scroll-text", "No skills yet") %}Add a playbook below.{% endcall %}{% endif %}
 {% endif %}
 
 <form method="post" action="/settings/skills" class="flex flex-col gap-3 rounded-lg border p-4">

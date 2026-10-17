@@ -27,8 +27,14 @@ class SkillError(ValueError):
     pass
 
 
-def list_skills(conn):
-    return [dict(r) for r in conn.execute("SELECT name, description, body, updated_at FROM skills ORDER BY name")]
+def list_skills(conn, q=""):
+    return [
+        dict(r)
+        for r in conn.execute(
+            "SELECT name, description, body, updated_at FROM skills WHERE ? = '' OR instr(lower(name || char(10) || description || char(10) || body), lower(?)) > 0 ORDER BY name",
+            (q, q),
+        )
+    ]
 
 
 def get(conn, name):

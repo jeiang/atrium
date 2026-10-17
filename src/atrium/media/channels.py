@@ -141,11 +141,14 @@ def gb(size_bytes):
     return f" ({size_bytes / 1e9:.1f} GB)" if size_bytes > 0 else ""
 
 
-def poll(conn, env, qb, settings, *, now=time.time, fetch=eztv.fetch):
-    """One pass over every channel; returns what was added and the errors, which are also kept for the page."""
+def poll(conn, env, qb, settings, *, now=time.time, fetch=eztv.fetch, only=None, force=False):
+    """One pass over every channel, or just channel `only`; returns what was added and the errors.
+    A full pass keeps the errors for the page. `force` ignores seen hashes and treats the channel as primed."""
     stamp = now()
     added, errors = [], []
     for rule in list_channels(conn):
+        if only is not None and rule["id"] != only:
+            continue
         try:
             regex = compile_pattern(rule["pattern"], rule["case_sensitive"])
             releases = fetch(rule["imdb"])
@@ -153,9 +156,9 @@ def poll(conn, env, qb, settings, *, now=time.time, fetch=eztv.fetch):
             errors.append(f"{rule['name']}: {e}")
             continue
         for t in releases:
-            if is_seen(conn, t["hash"]) or not regex.search(t["title"]):
+            if not regex.search(t["title"]) or (is_seen(conn, t["hash"]) and not force):
                 continue
-            if rule["primed"]:
+            if rule["primed"] or force:
                 try:
                     qb.add_magnet(t["magnet_url"], tags=TAG_MEDIA)
                 except QbitError as e:
@@ -172,33 +175,9 @@ def poll(conn, env, qb, settings, *, now=time.time, fetch=eztv.fetch):
         if not sent["delivered"]:
             errors.append(f"ntfy: {sent['error']}")
         organizer.select_files(qb)
-    _set_state(conn, LAST_CHECK, stamp)
-    _set_state(conn, LAST_ERRORS, errors)
+    if only is None:
+        _set_state(conn, LAST_CHECK, stamp)
+        _set_state(conn, LAST_ERRORS, errors)
     for line in errors:
         log.warning("channels: %s", line)
     return {"added": added, "errors": errors}
-
-
-def import_state(conn, document, now=time.time):
-    """Load the organizer's state.json (rules and seen hashes). Go regexes were case-sensitive, so imported rules are too."""
-    if not isinstance(document, dict):
-        raise ChannelError("state must be a JSON object")
-    existing = {(c["imdb"], c["pattern"]) for c in list_channels(conn)}
-    channels = 0
-    for rule in document.get("rules") or []:
-        if not isinstance(rule, dict):
-            raise ChannelError("rules must be objects")
-        key = (eztv.imdb_digits(rule.get("imdb")), (rule.get("pattern") or "").strip())
-        if key in existing:
-            continue
-        add_channel(conn, rule.get("name"), rule.get("imdb"), rule.get("pattern"), case_sensitive=True, now=now, primed=bool(rule.get("primed")))
-        existing.add(key)
-        channels += 1
-    seen = document.get("seen") or {}
-    if not isinstance(seen, dict):
-        raise ChannelError("seen must be an object of hash -> unix time")
-    for hash_, ts in seen.items():
-        if not is_seen(conn, hash_):
-            mark_seen(conn, str(hash_).lower(), float(ts))
-    expire_seen(conn, now())
-    return {"channels": channels, "seen": len(seen)}

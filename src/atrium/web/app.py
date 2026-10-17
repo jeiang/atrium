@@ -344,12 +344,12 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
             return render("_triage_row.html", row=row, toast=notice)
 
     @app.get("/triage")
-    def triage_page(request: Request, account: str = "", stage: str = "", agreement: str = "", offset: int = 0):
-        offset = max(offset, 0)
+    def triage_page(request: Request, account: str = "", stage: str = "", agreement: str = "", q: str = "", offset: int = 0):
+        offset, q = max(offset, 0), q.strip()
         with connection() as conn:
             try:
                 found = triage.triage(
-                    conn, account or None, stage or None, agreement or None, limit=PAGE_SIZE, offset=offset
+                    conn, account or None, stage or None, agreement or None, limit=PAGE_SIZE, offset=offset, q=q
                 )
             except ValueError as e:
                 raise HTTPException(422, str(e)) from e
@@ -358,6 +358,7 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
                 "account": account,
                 "stage": stage,
                 "agreement": agreement,
+                "q": q,
                 "rows": found["rows"],
                 "total": found["total"],
                 "offset": offset,
