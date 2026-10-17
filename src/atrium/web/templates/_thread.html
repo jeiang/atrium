@@ -11,7 +11,7 @@
   {% if t.project_id %}<a href="/projects/{{ t.project_id }}" class="btn" data-size="sm" data-variant="ghost">{{ icon("folder") }}{{ project.name if project else "Project" }}</a>{% endif %}
   {% if t.parent_thread_id %}<a href="/chat/{{ t.parent_thread_id }}" class="btn" data-size="sm" data-variant="ghost">{{ icon("arrow-left") }}Parent thread</a>{% endif %}
   {% if view.branched_from %}<a href="/chat/{{ view.branched_from.id }}" class="btn" data-size="sm" data-variant="ghost" title="Branched from message {{ t.branched_from_seq }}">{{ icon("git-branch") }}Branched from “{{ (view.branched_from.title or "Untitled thread") | truncate(40) }}”</a>{% endif %}
-  <span class="ms-auto flex items-center gap-1">
+  <span class="ms-auto flex flex-wrap items-center gap-1">
     {% if t.kind == "chat" %}
     {% if projects is defined and (projects or t.project_id) %}
     <form method="post" action="/chat/{{ t.id }}/project" class="flex items-center gap-1">
