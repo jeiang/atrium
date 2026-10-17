@@ -536,3 +536,15 @@ def test_file_preview_renders_markdown_csv_and_text(cfg, conn, tmp_path):
     assert web.get(f"/chat/{thread_id}/files/999").status_code == 404
     page = web.get(f"/chat/{thread_id}").text
     assert "notes.md" in page and f'hx-get="/chat/{thread_id}/files/{rows[0]}"' in page
+
+
+def test_cited_text_blocks_render_as_one_answer_with_numbered_sources():
+    cited = {"type": "char_location", "cited_text": "apples,3\npears,5", "document_index": 0, "document_title": "smoke.csv"}
+    message = {"seq": 2, "run_id": 1, "created_at": 0, "role": journal.ASSISTANT, "content": [
+        {"type": "text", "text": "The total is 8, since "},
+        {"type": "text", "text": "apples are 3 and pears are 5", "citations": [cited]},
+        {"type": "text", "text": " sum to that."},
+    ]}
+    (answer,) = service.items_of([message], {})
+    assert answer["text"] == "The total is 8, since apples are 3 and pears are 5 [1] sum to that."
+    assert answer["citations"] == [{"url": "", "title": "smoke.csv", "cited": "apples,3\npears,5"}]

@@ -343,7 +343,11 @@ href="{{ url }}" hx-get="{{ url }}" hx-target="#preview-body" hx-swap="innerHTML
     {% if item.citations %}
     <ol class="flex flex-wrap gap-2 text-xs" aria-label="Sources">
       {% for c in item.citations %}
-      <li><a class="badge" data-variant="secondary" {{ external(c.url) }}>{{ icon("external-link", "size-3") }}{{ c.title | truncate(60) }}</a></li>
+      {% if c.url %}
+      <li><a class="badge" data-variant="secondary" {{ external(c.url) }}>[{{ loop.index }}] {{ icon("external-link", "size-3") }}{{ c.title | truncate(60) }}</a></li>
+      {% else %}
+      <li><span class="badge" data-variant="secondary" title="{{ c.cited }}">[{{ loop.index }}] {{ icon("file-text", "size-3") }}{{ c.title | truncate(40) }}: “{{ c.cited | truncate(60) }}”</span></li>
+      {% endif %}
       {% endfor %}
     </ol>
     {% endif %}

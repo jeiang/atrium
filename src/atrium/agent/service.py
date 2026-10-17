@@ -51,14 +51,31 @@ def set_thread_flag(conn, thread_id, column, value):
 
 
 def citations_of(block):
+    """Web citations carry a URL; document citations (attachments) carry the document title and the cited text."""
     found = []
-    seen = set()
     for c in block.get("citations") or []:
-        url = c.get("url")
-        if url and url not in seen:
-            seen.add(url)
-            found.append({"url": url, "title": c.get("title") or url})
+        if c.get("url"):
+            found.append({"url": c["url"], "title": c.get("title") or c["url"], "cited": ""})
+        elif c.get("cited_text"):
+            found.append({"url": "", "title": c.get("document_title") or "attachment", "cited": c["cited_text"].strip()})
     return found
+
+
+def add_answer(items, base, block):
+    """Consecutive text blocks of one answer form one item; each cited span gets a [n] marker into its sources."""
+    last = items[-1] if items else None
+    if not (last and last["kind"] == "assistant" and last["seq"] == base["seq"]):
+        last = {**base, "kind": "assistant", "text": "", "citations": []}
+        items.append(last)
+    text = block.get("text", "")
+    for c in citations_of(block):
+        key = (c["url"], c["title"], c["cited"])
+        keys = [(o["url"], o["title"], o["cited"]) for o in last["citations"]]
+        if key not in keys:
+            last["citations"].append(c)
+            keys.append(key)
+        text = text.rstrip() + f" [{keys.index(key) + 1}]" + (" " if text.endswith(" ") else "")
+    last["text"] += text
 
 
 def parsed(text):
@@ -98,7 +115,7 @@ def items_of(messages, calls, drafts=None):
                 attached = []
             elif kind == loop.TEXT and final:
                 activity = None
-                items.append({**base, "kind": "assistant", "text": block.get("text", ""), "citations": citations_of(block)})
+                add_answer(items, base, block)
             elif kind == loop.TEXT:
                 if block.get("text", "").strip():
                     step(base, {"kind": "note", "text": block["text"]})
