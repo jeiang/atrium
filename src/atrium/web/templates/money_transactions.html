@@ -24,6 +24,7 @@
     <select class="select" name="currency"><option value="">Any</option>{% for c in ("TTD", "BBD") %}<option value="{{ c }}"{% if c == filters.currency %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
   </label>
   <label class="flex items-center gap-1 text-xs"><input type="checkbox" name="unassigned" value="true"{% if filters.unassigned %} checked{% endif %}>Unassigned or flagged</label>
+  <label class="flex items-center gap-1 text-xs"><input type="checkbox" name="dismissed" value="true"{% if filters.dismissed %} checked{% endif %}>Dismissed only</label>
   <button type="submit" class="btn" data-size="sm">{{ icon("search") }}Filter</button>
 </form>
 
@@ -47,13 +48,36 @@
           {% if t.source_count > 1 %}<span class="badge" data-variant="secondary">{{ t.source_count }} sources</span>{% endif %}
           {% if t.transfer_id %}<span class="badge" data-variant="outline">linked #{{ t.transfer_id }}</span>{% endif %}
           {% if t.review %}<span class="badge border-warning/30 bg-warning/10 text-warning">{{ t.review }}</span>{% endif %}
+          {% if t.dismissed %}<span class="badge" data-variant="secondary">dismissed: {{ t.dismissed }}</span>{% endif %}
         </div>
         <p class="text-xs text-muted-foreground">{{ money_amount(t) }} · {{ t.account or "no account" }}{% if t.description %} · {{ t.description }}{% endif %}{% if t.message_id %} · <a class="underline" href="/messages/{{ t.message_id }}">source mail</a>{% endif %} · #{{ t.id }}</p>
+        <details class="text-xs">
+          <summary class="cursor-pointer text-muted-foreground">Edit</summary>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            {% if t.kind != "fx_adjustment" %}
+            <select name="currency" form="tx-{{ t.id }}-currency" class="select" aria-label="Charged currency for transaction {{ t.id }}">
+              {% for c in currencies %}<option value="{{ c }}"{% if c == t.original_currency %} selected{% endif %}>{{ c }}</option>{% endfor %}
+            </select>
+            <button type="submit" form="tx-{{ t.id }}-currency" class="btn" data-size="sm" data-variant="outline">Set charged currency</button>
+            {% endif %}
+            {% if t.dismissed %}
+            <button type="submit" form="tx-{{ t.id }}-restore" class="btn" data-size="sm" data-variant="outline">{{ icon("undo-2") }}Restore</button>
+            {% else %}
+            <input name="reason" form="tx-{{ t.id }}-dismiss" class="input w-48" type="text" maxlength="80" placeholder="Reason (not mine, duplicate)" aria-label="Dismiss reason for transaction {{ t.id }}">
+            <button type="submit" form="tx-{{ t.id }}-dismiss" class="btn" data-size="sm" data-variant="outline">{{ icon("x") }}Dismiss</button>
+            {% endif %}
+          </div>
+        </details>
       </div>
     </li>
     {% endfor %}
   </ul>
 </form>
+{% for t in transactions %}
+{% for action in ("currency", "dismiss", "restore") %}
+<form id="tx-{{ t.id }}-{{ action }}" method="post" action="/money/transactions/{{ t.id }}/{{ action }}" hidden><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
+{% endfor %}
+{% endfor %}
 <section class="flex flex-col gap-3" aria-labelledby="edit-h">
   <h2 id="edit-h" class="text-sm font-medium">Edit a transaction</h2>
   <ul class="flex flex-col gap-2" role="list" aria-label="Transaction actions">

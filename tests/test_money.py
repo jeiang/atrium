@@ -55,9 +55,9 @@ def conn(cfg):
 @pytest.fixture
 def accounts(conn):
     return {
-        "republic_card": money.add_account(conn, "republic", "Republic Visa", "credit_card", "TTD", "1234"),
+        "republic_card": money.add_account(conn, "republic", "Republic Visa", "credit_card", "TTD", "1234", forex=True),
         "republic_ttd": money.add_account(conn, "republic", "Republic chequing", "bank", "TTD", "5678"),
-        "cibc_bbd": money.add_account(conn, "cibc", "CIBC BBD", "bank", "BBD", "9999"),
+        "cibc_bbd": money.add_account(conn, "cibc", "CIBC BBD", "bank", "BBD", "9999", forex=True),
         "cibc_ttd": money.add_account(conn, "cibc", "CIBC TTD", "bank", "TTD", "8888"),
         "fcb": money.add_account(conn, "first_citizens", "FCB", "bank", "TTD", "1111"),
     }
@@ -129,16 +129,40 @@ def test_usd_and_bbd_on_republic_card_use_cbtt_selling(conn, accounts):
     assert money.resolve(conn, card, 50, "TTD", "2026-10-10") == (50.0, None, None, "")
 
 
-def test_ttd_accounts_reject_foreign_and_bbd_rule_is_card_only(conn, accounts):
+def test_only_forex_accounts_take_foreign_charges(conn, accounts):
     for key in ("republic_ttd", "cibc_ttd", "fcb"):
         assert money.resolve(conn, account(conn, accounts, key), 10, "USD", "2026-10-10") == (None, None, None, "USD charge on a TTD account")
-    assert money.resolve(conn, account(conn, accounts, "cibc_bbd"), 10, "TTD", "2026-10-10")[3] == "TTD charge on a BBD account"
     assert money.resolve(conn, account(conn, accounts, "fcb"), 10, "BBD", "2026-10-10")[3] == "BBD charge on a TTD account"
+
+
+def test_ttd_on_forex_bbd_account_converts_through_cbtt(conn, accounts):
+    amount, rate, rate_date, review = money.resolve(conn, account(conn, accounts, "cibc_bbd"), RATE * 100, "TTD", "2026-10-10")
+    assert (amount, rate_date, review) == (204.0, "2026-10-01", "")
+
+
+def test_forex_toggle_re_resolves_flagged_charges(conn, cfg, accounts):
+    alert(conn, 1, bank="firstcitizenstt.com")
+    scan(conn, cfg, extraction(account_last4="1111"))
+    money.update_account(conn, accounts["fcb"], forex=True)
+    (t,) = transactions(conn)
+    assert (t["amount"], t["review"]) == (135.3, "")
+    money.update_account(conn, accounts["fcb"], forex=False)
+    assert transactions(conn)[0]["review"] == "USD charge on a TTD account"
+
+
+def test_existing_accounts_keep_their_foreign_rules_after_upgrade(cfg):
+    old = prepare(db.connect(cfg.db_path.with_name("old.db")))
+    old.execute("DELETE FROM money_accounts")
+    old.execute("ALTER TABLE money_accounts DROP COLUMN forex")
+    rows = [("republic", "card", "credit_card", "TTD"), ("republic", "chq", "bank", "TTD"), ("cibc", "bb", "bank", "BBD"), ("cibc", "tt", "bank", "TTD")]
+    old.executemany("INSERT INTO money_accounts (bank, name, kind, currency, created_ts) VALUES (?, ?, ?, ?, 0)", rows)
+    money.init_schema(old)
+    assert {a["name"]: a["forex"] for a in money.list_accounts(old)} == {"card": True, "chq": False, "bb": True, "tt": False}
 
 
 def test_republic_card_without_rate_is_flagged(cfg):
     bare = prepare(db.connect(cfg.db_path.with_name("bare.db")))
-    card_id = money.add_account(bare, "republic", "Card", "credit_card", "TTD", "1234")
+    card_id = money.add_account(bare, "republic", "Card", "credit_card", "TTD", "1234", forex=True)
     assert money.resolve(bare, money.get_account(bare, card_id), 10, "USD", "2026-10-10")[3] == "no CBTT rate stored yet"
 
 
@@ -252,6 +276,37 @@ def test_foreign_alert_on_ttd_account_is_flagged_for_review(conn, cfg, accounts)
     (t,) = transactions(conn)
     assert t["amount"] is None and t["review"] == "USD charge on a TTD account"
     assert money.unassigned(conn)[0]["id"] == t["id"]
+
+
+def test_currency_override_re_resolves_and_undoes(conn, cfg, accounts):
+    alert(conn, 1, bank="cibcfcib.com")
+    scan(conn, cfg, extraction(amount=50, currency="USD", account_last4="9999"))
+    (t,) = transactions(conn)
+    assert t["amount"] == 102.0
+    change = money.transaction_set_currency(conn, t["id"], "bbd")
+    (t,) = transactions(conn)
+    assert (t["original_currency"], t["amount"], t["currency"]) == ("BBD", 50.0, "BBD")
+    write_id = change.record(money.Context(conn), "transaction_set_currency", f"transaction:{t['id']}")
+    writes.undo(conn, cfg, {}, write_id)
+    assert transactions(conn)[0]["amount"] == 102.0
+    with pytest.raises(money.LedgerError):
+        money.transaction_set_currency(conn, t["id"], "EUR")
+
+
+def test_dismissed_transactions_leave_lists_spending_and_bills(conn, cfg, accounts):
+    for uid, days in ((1, 40), (2, 10)):
+        alert(conn, uid, days_ago=days)
+    scan(conn, cfg, extraction(account_last4="1234", date="2026-09-07"), extraction(account_last4="1234", date="2026-10-07"))
+    assert [b["payee"] for b in money.bills(conn, TODAY)] == ["Anthropic"]
+    count, _ = money.transactions_dismiss_before(conn, "2026-10-01")
+    assert count == 1 and [t["date"] for t in transactions(conn)] == ["2026-10-07"]
+    assert money.bills(conn, TODAY) == []
+    (late,) = transactions(conn)
+    money.transaction_dismiss(conn, late["id"], "duplicate")
+    assert transactions(conn) == [] and money.spending(conn, "2026-09-01", "2026-10-31") == {}
+    assert {t["dismissed"] for t in money.list_transactions(conn, dismissed=True)} == {"before 2026-10-01", "duplicate"}
+    money.transaction_dismiss(conn, late["id"], "")
+    assert [t["id"] for t in transactions(conn)] == [late["id"]]
 
 
 def test_unmatched_alert_queues_and_assign_resolves(conn, cfg, accounts):
@@ -672,6 +727,14 @@ def test_money_pages_render_and_edit(cfg, conn, accounts):
     assert client.post(f"/money/payees/{massy['id']}/aliases", data={"pattern": "MASSY", "kind": "prefix"}).status_code == 200
     assert client.post("/money/categories", data={"name": "Pets"}).status_code == 200
     assert "Pets" in client.get("/money/payees").text and "Massy Stores" in client.get("/money/bills").text
+    massy_tx = next(t for t in transactions(conn) if t["display_payee"] == "Massy Stores")
+    assert client.post(f"/money/transactions/{massy_tx['id']}/currency", data={"currency": "USD"}).status_code == 200
+    assert next(t for t in transactions(conn) if t["id"] == massy_tx["id"])["original_currency"] == "USD"
+    assert client.post(f"/money/transactions/{massy_tx['id']}/dismiss", data={"reason": "mom's card"}).status_code == 200
+    assert "mom&#39;s card" in client.get("/money/transactions?dismissed=true").text
+    assert client.post(f"/money/transactions/{massy_tx['id']}/restore").status_code == 200
+    assert client.post("/money/transactions/dismiss-before", data={"before": "2026-10-13"}).status_code == 200
+    assert all(t["date"] >= "2026-10-13" for t in transactions(conn))
     assert client.post("/money/transactions/merge", data={"transaction_ids": [str(ids[0])]}).status_code == 422
 
 
@@ -682,8 +745,8 @@ def test_accounts_page_add_update_delete_and_rate_fetch(cfg, monkeypatch):
     conn = db.connect(cfg.db_path)
     (acct,) = money.list_accounts(conn)
     assert acct["sender_patterns"] == ["cibc.com", "cibcfcib.com"]
-    assert client.post(f"/money/accounts/{acct['id']}", data={"name": "CIBC Barbados", "last4": "9998", "sender_patterns": "cibcfcib.com"}).status_code == 200
-    assert money.get_account(conn, acct["id"])["name"] == "CIBC Barbados"
+    assert client.post(f"/money/accounts/{acct['id']}", data={"name": "CIBC Barbados", "last4": "9998", "sender_patterns": "cibcfcib.com", "forex": "1"}).status_code == 200
+    assert money.get_account(conn, acct["id"])["name"] == "CIBC Barbados" and money.get_account(conn, acct["id"])["forex"]
     assert client.post("/money/accounts", data={"bank": "nope", "name": "X", "kind": "bank", "currency": "TTD"}).status_code == 422
     monkeypatch.setattr(money, "get_text", lambda url, timeout=30: CBTT_HTML)
     assert client.post("/money/rates/fetch").status_code == 200
