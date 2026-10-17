@@ -4,9 +4,12 @@ Prompt jobs run as ordinary `cron` threads (read + propose + notify). A job whos
 that Python function instead of a model prompt.
 """
 
+import os
 from collections import namedtuple
 
 from .. import event_candidates, money
+from ..media import artwork, channels, organizer, qbit
+from ..media import settings as media_settings
 
 Builtin = namedtuple("Builtin", "name schedule prompt")
 
@@ -43,6 +46,9 @@ DAILY_NUDGES_PROMPT = (
 
 CALENDAR_CANDIDATES_NAME = "calendar-candidates"
 FX_RATES_NAME = "fx-rates"
+MEDIA_CHANNELS_NAME = "media-channels"
+MEDIA_SWEEP_NAME = "media-sweep"
+MEDIA_THUMBNAILS_NAME = "media-thumbnails"
 
 
 def calendar_candidates(cfg, conn, *, client=None, env=None):
@@ -55,7 +61,48 @@ def fx_rates(cfg, conn, *, client=None, env=None):
     return money.fetch_rates(conn)
 
 
-CALLABLES = {CALENDAR_CANDIDATES_NAME: calendar_candidates, FX_RATES_NAME: fx_rates}
+def _media_job(fn):
+    """Run fn(conn, settings, env); a host without the media variables reports skipped instead of failing every run."""
+
+    def run(cfg, conn, *, client=None, env=None):
+        env = os.environ if env is None else env
+        try:
+            return fn(conn, media_settings.load(cfg, env), env)
+        except media_settings.NotConfigured as e:
+            return {"skipped": str(e)}
+
+    run.__doc__ = fn.__doc__
+    return run
+
+
+@_media_job
+def media_channels(conn, settings, env):
+    """Poll EZTV for every channel; new matches are added to qBittorrent tagged media and announced on ntfy."""
+    if not channels.list_channels(conn):
+        return {}
+    return channels.poll(conn, env, qbit.Qbit(settings.need_qbit()), settings)
+
+
+@_media_job
+def media_sweep(conn, settings, env):
+    """Apply pending file selections and remove filed torrents that qBittorrent stopped at the share limit."""
+    qb = qbit.Qbit(settings.need_qbit())
+    return {"selected": organizer.select_files(qb), **organizer.sweep(qb)}
+
+
+@_media_job
+def media_thumbnails(conn, settings, env):
+    """Generate missing episode thumbnails (ffmpeg, niced, one at a time)."""
+    return artwork.thumbnail_pass(settings.cache, settings.need_root())
+
+
+CALLABLES = {
+    CALENDAR_CANDIDATES_NAME: calendar_candidates,
+    FX_RATES_NAME: fx_rates,
+    MEDIA_CHANNELS_NAME: media_channels,
+    MEDIA_SWEEP_NAME: media_sweep,
+    MEDIA_THUMBNAILS_NAME: media_thumbnails,
+}
 
 BUILTIN_JOBS = (
     Builtin("weekly-review", "weekly sun 18:00", WEEKLY_REVIEW_PROMPT),
@@ -66,4 +113,7 @@ BUILTIN_JOBS = (
         "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty).",
     ),
     Builtin(FX_RATES_NAME, "weekly mon 06:00", "Weekly: fetch the CBTT USD selling rate for the spending ledger (no model run)."),
+    Builtin(MEDIA_CHANNELS_NAME, "*/30 * * * *", "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run)."),
+    Builtin(MEDIA_SWEEP_NAME, "*/10 * * * *", "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run)."),
+    Builtin(MEDIA_THUMBNAILS_NAME, "daily 04:00", "Daily: generate missing episode thumbnails for the media library (no model run)."),
 )

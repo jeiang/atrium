@@ -13,6 +13,8 @@ backup set, except `cache/`.
 | `cache/models` | GGUF weights, fetched by `atrium-models-fetch`; not backed up |
 | `cache/messages` | raw message store of the mail core; not backed up |
 | `pause` | exists while automatic mailbox writes are paused |
+| `media-link.key` | HMAC key for public media links, created on first use when `ATRIUM_MEDIA_LINK_KEY` is unset |
+| `cache/media` | TMDB posters and ffmpeg episode thumbnails; not backed up |
 | `vdirsyncer/{calendars,contacts,status}` | iCloud CalDAV/CardDAV mirror |
 
 ## Secrets
@@ -34,6 +36,9 @@ backup set, except `cache/`.
   service account with the Viewer role), `NTFY_TOPIC`, `NTFY_TOKEN`.
 - Google Calendar: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
   `GOOGLE_REFRESH_TOKEN`; optional `ATRIUM_ICLOUD_CALENDAR`.
+- Media: `TMDB_API_KEY` (a TMDB v3 API key; without it the Library shows names
+  only and Channels need the IMDb id typed in), optional `ATRIUM_MEDIA_LINK_KEY`
+  (any long random string; unset means a key file in the state dir).
 
 A missing value disables only the tools that need it; they answer "not
 configured". A change reaches the units through `restartUnits` on deploy.
@@ -87,9 +92,10 @@ ssh artemis.jeiang.vpn doas systemctl start atrium-sync.service
 `atrium-web` serves the assistant chat (`/chat`, the only search entry: threads
 are full-text searchable), the usage page (`/usage`), message view, Notion
 pages, proposals, triage, rules and actions. With `--auth proxy` (the default)
-every request except `/static` must carry a `Remote-Groups` header containing
-`atrium_access`, which tinyauth adds in front of alda's Caddy; `--auth local` is
-the loopback listener reached over an SSH tunnel and skips that check. Every
+every request except `/static` and validly signed `/media/file/*` links must
+carry a `Remote-Groups` header containing `atrium_access`, which tinyauth adds
+in front of alda's Caddy; `--auth local` is the loopback listener reached over
+an SSH tunnel and skips that check. Every
 POST carries a per-session CSRF token (cookie `atrium_csrf`, sent by HTMX as
 `X-CSRF-Token` or as a `csrf_token` form field) and must be same-origin;
 responses carry a CSP that only allows same-origin scripts and `data:` images.
@@ -204,11 +210,79 @@ birthdays/anniversaries for the next 60 days with Dismiss. Dates come from vCard
 assistant proposes `notion_receipt`, which creates a `Type=Receipt` page in
 `ATRIUM_NOTION_WIKI_DATA_SOURCE` (needs a `Type` select property) and undo trashes it.
 
-The scheduler seeds four built-in jobs once (kind `builtin`, listed on /schedules, disable
+The scheduler seeds seven built-in jobs once (kind `builtin`, listed on /schedules, disable
 but not cancel): `weekly-review` (Sunday 18:00), `daily-nudges` (08:00, notifies only
 when something is due, using upcoming bills from the ledger), `calendar-candidates`
-(hourly, drafts calendar proposals only when event candidates are queued) and `fx-rates`
-(Monday 06:00, stores the CBTT USD selling rate; no model). Their prompts live in code.
+(hourly, drafts calendar proposals only when event candidates are queued), `fx-rates`
+(Monday 06:00, stores the CBTT USD selling rate; no model) and the three media jobs below
+(`media-channels`, `media-sweep`, `media-thumbnails`; no model). Their prompts live in code.
+
+### Media (/media)
+
+The Media section replaced the Go media-organizer. Everything runs inside atrium-web and
+the scheduler, which write `/var/lib/media` through the `media` group (umask 0002).
+Settings come from Nix: `ATRIUM_MEDIA_ROOT` (`/var/lib/media`, with `downloads/`,
+`import/`, `movies/`, `tv/`), `QBITTORRENT_URL` (the host socket proxy on
+`127.0.0.1:8081`, loopback whitelist so no login), `ATRIUM_PUBLIC_URL`,
+`ATRIUM_MEDIA_MOVIES_URL` / `ATRIUM_MEDIA_TV_URL` (darkhttpd on artemis, mesh-only ports
+8084 and 8085 rooted at `movies/` and `tv/`) and `NTFY_MEDIA_TOPIC` (`media-releases`,
+published with atrium's own `NTFY_URL`/`NTFY_TOKEN`). `ffmpeg`/`ffprobe` are on the unit
+PATH. Missing values make the pages say "not configured" and the media jobs report
+`skipped`; nothing crashes.
+
+- **Downloads** (`/media/downloads`): every qBittorrent torrent with progress, speed, ETA
+  and a per-file Wanted/Skipped toggle (`filePrio`); the list polls every 5 s while a
+  torrent is active. Below it, "Ready to file" lists completed torrents tagged `media` and
+  folders under `import/` with the parsed kind/title/year/season/episode; Preview shows the
+  destination (`movies/Title (Year)/Title (Year).ext` or
+  `tv/Show (Year)/Season NN/Show (Year) - SNNEMM.ext`), File hardlinks torrent content
+  (seeding continues) or moves imports, Ignore tags a torrent `ignored`. Torrents without
+  the `media` tag (added in qBittorrent's own UI, or added here as "plain") are never
+  touched. `media-sweep` (every 10 min) applies the one-time video+subtitle selection to
+  new `media` torrents (other files priority 0, tag `selected`) and deletes torrents
+  tagged `filed` once qBittorrent has stopped them at the share limit (`stoppedUP`), with
+  their data; the library keeps its hardlink.
+- **Add torrent** (`/media/add`): paste a magnet or pick a `.torrent` (read in the browser
+  into a base64url field, so the form stays urlencoded and CSRF-checked; files above
+  ~750 KB are rejected by the 1 MiB body cap), choose Media (tag `media`) or Plain. The
+  zakkart shim opens `/media/add?magnet=<urlencoded>` or
+  `/media/add#torrent=<base64url>&name=<file>`; `app.js` moves the fragment into the form
+  so the bytes never reach a URL log.
+- **Channels** (`/media/channels`): a show (TMDB search → IMDb id via `external_ids`, or
+  the IMDb id typed in) plus a regex over EZTV release titles, case-insensitive unless
+  toggled; the preview runs the regex against the show's current EZTV list
+  (`https://eztvx.to/api/get-torrents?imdb_id=<digits>&limit=100`) before saving.
+  `media-channels` polls every 30 min (also `Check now` or `atrium-run media poll`): a new
+  channel's first poll only records what exists; later matches are added to qBittorrent
+  tagged `media` and one ntfy message per poll on `media-releases` lists them, its click
+  URL being `/media/downloads` (no action buttons). Seen hashes expire after 90 days;
+  errors show on the page.
+- **Library** (`/media/library`): Movies and TV (show → seasons → episodes) read from the
+  filesystem. Posters (movie, show, season) come from TMDB and are cached under
+  `cache/media/posters`; a miss is remembered for a week. Episode thumbnails are one ffmpeg
+  frame at 10 % of the duration (`nice -n 10`, one at a time), cached under
+  `cache/media/thumbs`, made lazily on first view and by `media-thumbnails` (04:00, at most
+  200 per run). Each file has two links: the **public** one,
+  `https://atrium.jeiang.dev/media/file/<path>?exp=<unix>&sig=<hmac>` (HMAC-SHA256 over
+  `path\nexp`, valid 12 h, served by atrium with HTTP Range so VLC/Infuse can seek), and
+  the **VPN** one on darkhttpd 8084/8085. Caddy lets `/media/file/*` past tinyauth (still
+  stripping `Remote-*`); atrium's Guard admits that prefix without `Remote-Groups` only
+  when the signature verifies, the Host check still applies, and the route verifies again.
+  Rotate links by changing `ATRIUM_MEDIA_LINK_KEY` (or deleting `media-link.key`).
+- **Assistant tools**: `media_downloads`, `media_library_search`, `media_channels` (chat,
+  cron, code) and, chat-only with undo on /changes, `media_add_magnet` (undo deletes the
+  torrent and its data unless it was already filed), `media_channel_add`,
+  `media_channel_remove`.
+
+Migrating the organizer's state (rules and seen hashes) is a one-time CLI run by the
+operator, since atrium cannot read `/var/lib/media-organizer/state.json` as root:
+
+```fish
+ssh artemis.jeiang.vpn doas cat /var/lib/media-organizer/state.json | ssh artemis.jeiang.vpn doas atrium-run media import-organizer-state -
+```
+
+Imported rules keep Go's case-sensitive matching; it is idempotent. `atrium-run media
+sweep` runs the selection and sweep pass by hand.
 
 ### Spending ledger (/money)
 
@@ -263,6 +337,7 @@ ssh artemis.jeiang.vpn doas atrium-run shadow-report --since 7d
 ssh artemis.jeiang.vpn doas atrium-run sync --account gmail
 ssh artemis.jeiang.vpn doas atrium-run reindex
 ssh artemis.jeiang.vpn doas atrium-run money refresh --limit 500
+ssh artemis.jeiang.vpn doas atrium-run media poll
 ```
 
 ### Going live

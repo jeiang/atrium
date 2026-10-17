@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state %}
+{% set page = "media_downloads" %}
+{% block title %}Downloads{% endblock %}
+{% block heading %}Media · Downloads{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <p class="text-sm text-muted-foreground">qBittorrent on artemis. <strong>media</strong> torrents are filed into the library from here once complete; <strong>plain</strong> ones stay in downloads/.</p>
+  <a class="btn" data-size="sm" href="/media/add">{{ icon("plus") }}Add torrent</a>
+</div>
+
+{% include "_media_torrents.html" %}
+<div id="torrent-files"></div>
+
+<section class="flex flex-col gap-3" aria-labelledby="queue-h">
+  <h2 id="queue-h" class="text-sm font-medium">Ready to file ({{ queue | length }})</h2>
+  {% if queue_error %}
+  <p class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{{ queue_error }}</p>
+  {% endif %}
+  {% for v in queue %}
+  <form method="post" action="/media/file" class="flex flex-col gap-3 rounded-lg border bg-card p-4" aria-label="{{ v.item.name }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="id" value="{{ v.item.id }}">
+    <header class="flex flex-col gap-1">
+      <h3 class="break-all text-sm font-medium">{{ v.item.name }}</h3>
+      <p class="text-xs text-muted-foreground">{% if v.item.torrent %}torrent: hardlinked, keeps seeding{% else %}import: moved{% endif %}</p>
+    </header>
+    <div class="grid gap-3 sm:grid-cols-[8rem_1fr_6rem]">
+      <div role="group" class="field">
+        <label for="kind-{{ loop.index }}">Kind</label>
+        <select id="kind-{{ loop.index }}" name="kind" class="select">
+          {% for k in kinds %}<option value="{{ k }}"{% if v.kind == k %} selected{% endif %}>{{ "Movie" if k == "movie" else "TV" }}</option>{% endfor %}
+        </select>
+      </div>
+      <div role="group" class="field">
+        <label for="title-{{ loop.index }}">Title</label>
+        <input id="title-{{ loop.index }}" name="title" type="text" value="{{ v.title }}" required>
+      </div>
+      <div role="group" class="field">
+        <label for="year-{{ loop.index }}">Year</label>
+        <input id="year-{{ loop.index }}" name="year" type="text" value="{{ v.year }}" inputmode="numeric" placeholder="optional">
+      </div>
+    </div>
+    <table class="w-full text-xs">
+      <thead><tr class="text-left text-muted-foreground"><th class="py-1 pr-2 font-medium">File</th><th class="py-1 pr-2 font-medium">S</th><th class="py-1 pr-2 font-medium">E</th><th class="py-1 font-medium">Destination</th></tr></thead>
+      <tbody>
+        {% for f in v.files %}
+        <tr class="border-t align-top">
+          <td class="break-all py-1 pr-2 font-mono">{{ f.rel }}</td>
+          <td class="py-1 pr-2"><input class="w-14 font-mono" type="number" min="0" name="s{{ loop.index0 }}" value="{{ f.season }}" aria-label="Season of {{ f.rel }}"></td>
+          <td class="py-1 pr-2"><input class="w-14 font-mono" type="number" min="1" name="e{{ loop.index0 }}" value="{{ f.episode }}" aria-label="Episode of {{ f.rel }}"></td>
+          <td class="break-all py-1 font-mono">{% if v.kind == "movie" %}{{ v.movie_dest if f.rel == v.movie_file else "(not the movie)" }}{% else %}{{ f.dest }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if v.error %}<p class="text-sm text-destructive" role="alert">{{ v.error }}</p>{% endif %}
+    <div class="flex flex-wrap gap-2">
+      <button type="submit" name="action" value="preview" class="btn" data-size="sm" data-variant="outline">Preview</button>
+      <button type="submit" name="action" value="file" class="btn" data-size="sm"{% if v.error %} disabled{% endif %}>{{ icon("folder-input") }}File</button>
+      {% if v.item.torrent %}<button type="submit" class="btn" data-size="sm" data-variant="ghost" formaction="/media/ignore" formnovalidate>Ignore</button>{% endif %}
+    </div>
+  </form>
+  {% else %}
+  {% if not queue_error %}{% call empty_state("folder-input", "Nothing is waiting") %}Completed media torrents and folders dropped into import/ appear here.{% endcall %}{% endif %}
+  {% endfor %}
+</section>
+{% endblock %}

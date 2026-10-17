@@ -35,11 +35,11 @@ from . import (
     watch,
     watches,
 )
-from .agent import scheduler, service
+from .agent import builtin_jobs, scheduler, service
 from .agent.tools.base import CHAT, KINDS
 from .config import ACCOUNTS
+from .media import channels
 from .web import auth
-from .web.app import create_app
 
 DEFAULT_HOST = "127.0.0.1"
 NOTION_LOCK = "notion"
@@ -127,6 +127,12 @@ def parser():
     mo = sub.add_parser("money")
     mr = mo.add_subparsers(dest="money_command", required=True).add_parser("refresh")
     mr.add_argument("--limit", type=int, default=money.CLI_SCAN_LIMIT, help="messages to extract in this run")
+    md = sub.add_parser("media")
+    msub = md.add_subparsers(dest="media_command", required=True)
+    mi = msub.add_parser("import-organizer-state", help="load rules and seen hashes from the old media-organizer state.json")
+    mi.add_argument("file", help="path to state.json, or - for stdin")
+    msub.add_parser("poll", help="poll EZTV for every channel now")
+    msub.add_parser("sweep", help="select files in new media torrents and remove filed torrents qBittorrent stopped")
     sv = sub.add_parser("serve")
     sv.add_argument("--host", default=DEFAULT_HOST)
     sv.add_argument("--port", type=int, required=True)
@@ -180,6 +186,28 @@ def money_command(cfg, args):
     conn = db.connect(cfg.db_path)
     with db.exclusive(cfg.db_path):
         out = money.refresh(conn, cfg, limit=args.limit)
+    json.dump(out, sys.stdout, indent=2, default=str)
+    sys.stdout.write("\n")
+    return 0
+
+
+def media_command(cfg, args):
+    conn = db.connect(cfg.db_path)
+    if args.media_command == "import-organizer-state":
+        try:
+            if args.file == "-":
+                document = json.load(sys.stdin)
+            else:
+                with open(args.file) as handle:
+                    document = json.load(handle)
+            out = channels.import_state(conn, document)
+        except (OSError, ValueError, channels.ChannelError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+    elif args.media_command == "poll":
+        out = builtin_jobs.media_channels(cfg, conn)
+    else:
+        out = builtin_jobs.media_sweep(cfg, conn)
     json.dump(out, sys.stdout, indent=2, default=str)
     sys.stdout.write("\n")
     return 0
@@ -340,7 +368,11 @@ def main(argv=None):
         return watches_command(cfg)
     elif args.command == "money":
         return money_command(cfg, args)
+    elif args.command == "media":
+        return media_command(cfg, args)
     elif args.command == "serve":
+        from .web.app import create_app
+
         hosts = args.allowed_host or [h for h in [os.environ.get("ATRIUM_PUBLIC_HOST", "").strip()] if h]
         if args.auth == auth.PROXY and not hosts:
             raise SystemExit("proxy mode needs --allowed-host or ATRIUM_PUBLIC_HOST")

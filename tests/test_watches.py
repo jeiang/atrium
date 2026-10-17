@@ -328,12 +328,12 @@ def test_builtin_jobs_seeded_once_and_stay_disabled(conn):
     scheduler.ensure_builtins(conn, TZ, NOW)
     scheduler.ensure_builtins(conn, TZ, NOW + 10)
     rows = conn.execute("SELECT * FROM jobs WHERE kind = 'builtin' ORDER BY id").fetchall()
-    assert [r["name"] for r in rows] == ["weekly-review", "daily-nudges", "calendar-candidates", "fx-rates"]
-    assert [r["schedule"] for r in rows] == ["weekly sun 18:00", "daily 08:00", "0 * * * *", "weekly mon 06:00"]
+    assert [r["name"] for r in rows] == ["weekly-review", "daily-nudges", "calendar-candidates", "fx-rates", "media-channels", "media-sweep", "media-thumbnails"]
+    assert [r["schedule"] for r in rows] == ["weekly sun 18:00", "daily 08:00", "0 * * * *", "weekly mon 06:00", "*/30 * * * *", "*/10 * * * *", "daily 04:00"]
     assert all(r["next_due"] and r["enabled"] for r in rows)
     scheduler.update_job(conn, rows[1]["id"], NOW, enabled=False, enforce=False)
     scheduler.ensure_builtins(conn, TZ, NOW + 20)
-    assert conn.execute("SELECT COUNT(*) FROM jobs WHERE kind = 'builtin'").fetchone()[0] == 4
+    assert conn.execute("SELECT COUNT(*) FROM jobs WHERE kind = 'builtin'").fetchone()[0] == 7
     assert conn.execute("SELECT enabled FROM jobs WHERE name = 'daily-nudges'").fetchone()[0] == 0
     with pytest.raises(scheduler.ScheduleError):
         scheduler.cancel_job(conn, rows[0]["id"])

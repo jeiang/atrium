@@ -1,0 +1,27 @@
+{% from "_icons.html" import icon %}
+<section class="flex flex-col gap-3 rounded-lg border bg-card p-4" aria-label="Files of {{ torrent_name or hash }}">
+  <header class="flex flex-wrap items-center gap-2">
+    <h2 class="min-w-0 flex-1 truncate text-sm font-medium" title="{{ torrent_name or hash }}">{{ torrent_name or hash }}</h2>
+    <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close files" data-action="clear" data-target="torrent-files">{{ icon("x") }}</button>
+  </header>
+  {% if error %}
+  <p class="text-sm text-destructive" role="alert">{{ error }}</p>
+  {% elif files %}
+  <ul class="flex flex-col divide-y text-xs" role="list">
+    {% for f in files %}
+    <li class="flex flex-wrap items-center gap-3 py-2">
+      <form hx-post="/media/torrents/{{ hash }}/files" hx-target="#torrent-files" hx-swap="innerHTML" class="contents">
+        <input type="hidden" name="index" value="{{ f.index }}">
+        <input type="hidden" name="wanted" value="{{ 0 if f.wanted else 1 }}">
+        <button type="submit" class="btn" data-size="sm" data-variant="{{ 'secondary' if f.wanted else 'outline' }}" aria-pressed="{{ 'true' if f.wanted else 'false' }}" title="{{ 'Skip this file' if f.wanted else 'Download this file' }}">{{ icon("check" if f.wanted else "x", "size-3.5") }}{{ "Wanted" if f.wanted else "Skipped" }}</button>
+      </form>
+      <span class="min-w-0 flex-1 break-all font-mono">{{ f.name }}</span>
+      <span class="text-muted-foreground tabular-nums">{{ f.size_text }} · {{ f.percent }}%</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No file list yet: metadata has not arrived.</p>
+  {% endif %}
+</section>
+{% if toast %}{% include "_toast.html" %}{% endif %}

@@ -52,18 +52,19 @@ def link_for(raw, thread_id):
     return raw
 
 
-def deliver(env, title, body):
+def deliver(env, title, body, *, topic=None, click=None):
     url = (env.get("NTFY_URL") or "").strip()
-    topic = (env.get("NTFY_TOPIC") or "").strip()
+    topic = topic or (env.get("NTFY_TOPIC") or "").strip()
     if not url or not topic:
         return False, "ntfy not configured (NTFY_URL and NTFY_TOPIC)"
     headers = {}
     token = (env.get("NTFY_TOKEN") or "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    payload = {"topic": topic, "title": title, "message": body, **({"click": click} if click else {})}
     try:
         with httpx.Client(timeout=TIMEOUT_SECONDS, transport=transport) as client:
-            response = client.post(url, json={"topic": topic, "title": title, "message": body}, headers=headers)
+            response = client.post(url, json=payload, headers=headers)
     except httpx.HTTPError as e:
         return False, f"ntfy unreachable: {type(e).__name__}"
     if response.status_code >= 400:
@@ -71,7 +72,7 @@ def deliver(env, title, body):
     return True, None
 
 
-def send(conn, env, title, body, *, thread_id=None, run_id=None, thread_link=None, now=time.time):
+def send(conn, env, title, body, *, thread_id=None, run_id=None, thread_link=None, now=time.time, topic=None, click=None):
     title, body = plain(title, TITLE_CHARS), plain(body, BODY_CHARS)
     if not title:
         raise ToolError("title is required")
@@ -81,7 +82,7 @@ def send(conn, env, title, body, *, thread_id=None, run_id=None, thread_link=Non
         "INSERT INTO notifications (ts, title, body, thread_id, run_id, thread_link) VALUES (?, ?, ?, ?, ?, ?)",
         (now(), title, body, thread_id, run_id, link),
     )
-    delivered, error = deliver(env, title, message)
+    delivered, error = deliver(env, title, message, topic=topic, click=click)
     conn.execute("UPDATE notifications SET delivered = ?, error = ? WHERE id = ?", (int(delivered), error, cur.lastrowid))
     return {"id": cur.lastrowid, "delivered": delivered, "error": error}
 
