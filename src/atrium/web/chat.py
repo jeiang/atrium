@@ -9,7 +9,7 @@ from typing import Annotated
 from fastapi import Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 
-from ..agent import budget, journal, progress, service, threads, workspace
+from ..agent import budget, journal, progress, projects, service, threads, workspace
 from ..agent.tools.base import CHAT
 from .deps import is_partial
 
@@ -97,10 +97,10 @@ def register(app, deps):
     def home():
         return RedirectResponse("/chat", status_code=303)
 
-    def listing(request, q, view, status_code=200):
+    def listing(request, q, view, status_code=200, project_id=0):
         with connection() as conn:
-            found = service.list_threads(conn, q or None, THREAD_LIMIT, view == ARCHIVED)
-        context = {"threads": found, "q": q, "view": view}
+            found = service.list_threads(conn, q or None, THREAD_LIMIT, view == ARCHIVED, project_id or None)
+        context = {"threads": found, "q": q, "view": view, "project_id": project_id}
         if is_partial(request):
             return render("_thread_list.html", status_code=status_code, **context)
         return render("chat.html", status_code=status_code, **context)
@@ -112,41 +112,55 @@ def register(app, deps):
         return listing(request, q.strip(), view)
 
     @app.post("/chat")
-    def chat_new(request: Request, text: Annotated[str, Form()] = ""):
+    def chat_new(request: Request, text: Annotated[str, Form()] = "", project_id: Annotated[int, Form()] = 0):
         text = text.strip()
         with connection() as conn:
-            thread_id = service.create_thread(conn, CHAT)
+            if project_id and not (projects.get(conn, project_id) or {}).get("id"):
+                raise HTTPException(404, "unknown project")
+            thread_id = service.create_thread(conn, CHAT, project_id=project_id or None)
         if text:
             _, failed = start(request, thread_id, text)
             if failed is not None:
                 return failed
         return RedirectResponse(f"/chat/{thread_id}", status_code=303)
 
-    def set_flag(request, thread_id, column, value, q, view, back):
+    def set_flag(request, thread_id, column, value, q, view, back, project_id=0):
         with connection() as conn:
             if not service.set_thread_flag(conn, thread_id, column, value):
                 raise HTTPException(404, "unknown thread")
         if is_partial(request):
-            return listing(request, q.strip(), view if view == ARCHIVED else "")
+            return listing(request, q.strip(), view if view == ARCHIVED else "", project_id=project_id)
         return RedirectResponse(back, status_code=303)
 
     @app.post("/chat/{thread_id}/pin")
     def chat_pin(
         request: Request, thread_id: int, pinned: Annotated[int, Form()] = 1, q: Annotated[str, Form()] = "", view: Annotated[str, Form()] = "",
+        project_id: Annotated[int, Form()] = 0,
     ):
-        return set_flag(request, thread_id, "pinned", bool(pinned), q, view, f"/chat/{thread_id}")
+        return set_flag(request, thread_id, "pinned", bool(pinned), q, view, f"/chat/{thread_id}", project_id)
 
     @app.post("/chat/{thread_id}/archive")
     def chat_archive(
         request: Request, thread_id: int, archived: Annotated[int, Form()] = 1, q: Annotated[str, Form()] = "", view: Annotated[str, Form()] = "",
+        project_id: Annotated[int, Form()] = 0,
     ):
-        return set_flag(request, thread_id, "archived", bool(archived), q, view, "/chat" if archived else f"/chat/{thread_id}")
+        return set_flag(request, thread_id, "archived", bool(archived), q, view, "/chat" if archived else f"/chat/{thread_id}", project_id)
 
     @app.get("/chat/{thread_id}")
     def chat_thread(request: Request, thread_id: int):
         with connection() as conn:
             context = thread_context(conn, thread_id)
-            return page(request, "thread.html", "_thread.html", work=workspace.view(conn, thread_id, time.time()), **context)
+            return page(request, "thread.html", "_thread.html", work=workspace.view(conn, thread_id, time.time()), projects=projects.list_projects(conn), project=projects.get(conn, context["view"]["thread"]["project_id"]) if context["view"]["thread"]["project_id"] else None, **context)
+
+    @app.post("/chat/{thread_id}/project")
+    def chat_project(thread_id: int, project_id: Annotated[int, Form()] = 0):
+        with connection() as conn:
+            try:
+                if not projects.move_thread(conn, thread_id, project_id or None):
+                    raise HTTPException(404, "unknown chat thread")
+            except projects.ProjectError as e:
+                raise HTTPException(404, str(e)) from e
+        return RedirectResponse(f"/chat/{thread_id}", status_code=303)
 
     @app.post("/chat/{thread_id}/options")
     def chat_options(request: Request, thread_id: int, effort: Annotated[str, Form()] = "", context_limit: Annotated[str, Form()] = ""):

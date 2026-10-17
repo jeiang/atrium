@@ -1,0 +1,43 @@
+{% from "_icons.html" import icon %}
+{% set v = values %}
+{% set action = "/projects/" ~ project.id if project else "/projects" %}
+<form method="post" action="{{ action }}" class="w-full sm:max-w-2xl" hx-post="{{ action }}" hx-target="#project-dialog" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <header class="flex-row items-center gap-2">
+    <h2 class="min-w-0 flex-1 truncate">{{ "Edit " ~ project.name if project else "New project" }}</h2>
+    <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close" data-action="close-dialog">{{ icon("x") }}</button>
+  </header>
+  <section class="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
+    {% if error %}<p class="text-sm text-destructive" role="alert">{{ error }}</p>{% endif %}
+    <div role="group" class="field">
+      <label for="project-name">Name</label>
+      <input id="project-name" name="name" type="text" value="{{ v.name }}" required>
+    </div>
+    <div role="group" class="field">
+      <label for="project-instructions">Instructions</label>
+      <textarea id="project-instructions" name="instructions" rows="6" class="w-full" placeholder="Markdown. Added to the assistant's system prompt in every chat of this project.">{{ v.instructions }}</textarea>
+    </div>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <div role="group" class="field">
+        <label for="project-effort">Default effort</label>
+        <select id="project-effort" name="effort" class="select">
+          {% for e in efforts %}<option value="{{ e }}"{% if e == v.effort %} selected{% endif %}>{{ e }}</option>{% endfor %}
+        </select>
+      </div>
+      <div role="group" class="field">
+        <label for="project-context">Default context limit</label>
+        <select id="project-context" name="context_limit" class="select">
+          {% for n in context_limits %}<option value="{{ n }}"{% if n == v.context_limit %} selected{% endif %}>{{ n // 1000 }}K{% if n > 100000 %} (5× price over 100K){% endif %}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    {% with hub_id = v.wiki_hub_id or "", notice = none, error = none %}{% include "_project_hub.html" %}{% endwith %}
+  </section>
+  <footer class="flex-wrap">
+    {% if project and not project.archived %}
+    <button type="button" class="btn me-auto" data-size="sm" data-variant="destructive" hx-post="/projects/{{ project.id }}/archive" hx-confirm="Archive this project? Its threads stay in the chat list.">{{ icon("archive") }}Archive</button>
+    {% endif %}
+    <button type="button" class="btn" data-variant="outline" data-action="close-dialog">Cancel</button>
+    <button type="submit" class="btn">{{ icon("check") }}{{ "Save" if project else "Create" }}</button>
+  </footer>
+</form>

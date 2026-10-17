@@ -124,7 +124,9 @@ from . import context as _context, scheduler as _scheduler, skills as _skills  #
 from .tools import notify as _notify  # noqa: E402
 from . import journal as _journal, progress as _progress, subagents as _subagents, workspace as _workspace  # noqa: E402
 
-INITS = [_calendar.init_schema, _event_candidates.init_schema, _drafts.init, _scheduler.init, _skills.init, _notify.init, _subagents.init, _context.init, _openloops.init, _watches.init_schema, _money.init_schema, _media_channels.init, _journal.init_queue, _progress.init, _workspace.init]
+from . import projects as _projects  # noqa: E402
+
+INITS = [_calendar.init_schema, _event_candidates.init_schema, _drafts.init, _scheduler.init, _skills.init, _notify.init, _subagents.init, _context.init, _openloops.init, _watches.init_schema, _money.init_schema, _media_channels.init, _journal.init_queue, _progress.init, _workspace.init, _projects.init]
 RUN_COLUMNS = (("limits_json", "TEXT"), ("owner", "TEXT"), ("lease_until", "REAL"), ("skills_json", "TEXT"), ("superseded", "INTEGER NOT NULL DEFAULT 0"), ("stop_requested", "INTEGER NOT NULL DEFAULT 0"))
 THREAD_COLUMNS = (("pinned", "INTEGER NOT NULL DEFAULT 0"), ("context_limit", "INTEGER"), ("branched_from_thread_id", "INTEGER"), ("branched_from_seq", "INTEGER"))
 MESSAGE_COLUMNS = (("system_sig", "TEXT"), ("superseded", "INTEGER NOT NULL DEFAULT 0"))

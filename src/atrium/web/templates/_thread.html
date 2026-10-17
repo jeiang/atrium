@@ -8,10 +8,22 @@
   <span class="badge" data-variant="outline">{{ t.kind }}</span>
   <span class="tabular-nums">started {{ when(t.created_at, "datetime") }}</span>
   {% include "_meter.html" %}
+  {% if t.project_id %}<a href="/projects/{{ t.project_id }}" class="btn" data-size="sm" data-variant="ghost">{{ icon("folder") }}{{ project.name if project else "Project" }}</a>{% endif %}
   {% if t.parent_thread_id %}<a href="/chat/{{ t.parent_thread_id }}" class="btn" data-size="sm" data-variant="ghost">{{ icon("arrow-left") }}Parent thread</a>{% endif %}
   {% if view.branched_from %}<a href="/chat/{{ view.branched_from.id }}" class="btn" data-size="sm" data-variant="ghost" title="Branched from message {{ t.branched_from_seq }}">{{ icon("git-branch") }}Branched from “{{ (view.branched_from.title or "Untitled thread") | truncate(40) }}”</a>{% endif %}
   <span class="ms-auto flex items-center gap-1">
     {% if t.kind == "chat" %}
+    {% if projects is defined and (projects or t.project_id) %}
+    <form method="post" action="/chat/{{ t.id }}/project" class="flex items-center gap-1">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="move-project" class="sr-only">Project</label>
+      <select id="move-project" name="project_id" class="select h-8 max-w-40 py-0 text-xs">
+        <option value="0">No project</option>
+        {% for p in projects %}<option value="{{ p.id }}"{% if p.id == t.project_id %} selected{% endif %}>{{ p.name }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{ icon("folder-input") }}Move</button>
+    </form>
+    {% endif %}
     {% if not t.archived %}
     <form method="post" action="/chat/{{ t.id }}/pin">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

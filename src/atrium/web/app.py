@@ -48,6 +48,7 @@ from . import media as media_ui
 from . import money as money_ui
 from . import notifications as notifications_ui
 from . import openloops as openloops_ui
+from . import projects as projects_ui
 from . import scheduled as scheduled_ui
 from . import settings as settings_ui
 from . import skills as skills_ui
@@ -202,6 +203,7 @@ def create_app(cfg, chat=llm.chat_json, auth_mode=auth.PROXY, agent_client=None,
     settings_ui.register(app, deps)
     notifications_ui.register(app, deps)
     scheduled_ui.register(app, deps)
+    projects_ui.register(app, deps)
     openloops_ui.register(app, deps)
     watches_ui.register(app, deps)
     money_ui.register(app, deps)
