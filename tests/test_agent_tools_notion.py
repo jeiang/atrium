@@ -3,7 +3,7 @@ from agent_tool_helpers import make_ctx
 from fake_notion import FakeNotion, select_prop
 from helpers import make_config, unit
 
-from atrium import db, notion_api, notion_sync
+from atrium import db, notion_api, notion_sync, notion_wiki
 from atrium.agent.tools import notion_read
 from atrium.agent.tools.base import NotConfigured, ToolError
 
@@ -34,14 +34,17 @@ def world(tmp_path, env=None):
     return fake, conn, make_ctx(conn, cfg, env=env or {}, embed=embed, now=lambda: 0.0)
 
 
-def test_search_hides_private_and_filters_type(tmp_path):
-    _, _, ctx = world(tmp_path)
+def test_search_hides_private_and_puts_alias_matches_first(tmp_path):
+    _, conn, ctx = world(tmp_path)
     out = notion_read.search_knowledge(ctx, {"query": "alpha"})
     # KNN ranks every public page; the private "secret alpha" page never appears
     assert [r["page_id"] for r in out["results"]] == [A, B]
-    assert out["results"][0]["type"] == "Project" and out["results"][0]["title"] == "Alpha plan"
-    assert notion_read.search_knowledge(ctx, {"query": "alpha", "type": "task"})["results"] == []
-    assert [r["page_id"] for r in notion_read.search_knowledge(ctx, {"query": "alpha", "type": "note"})["results"]] == [B]
+    assert out["results"][0]["title"] == "Alpha plan" and out["results"][0]["match"] == "search" and out["results"][0]["aliases"] == []
+    notion_wiki.upsert(conn, B, 1.0, title="Beta notes", aliases=["the alpha retro"], last_reviewed="2026-10-01")
+    out = notion_read.search_knowledge(ctx, {"query": "The Alpha Retro", "limit": 2})
+    assert [(r["page_id"], r["match"]) for r in out["results"]] == [(B, "alias"), (A, "search")]
+    assert out["results"][0]["aliases"] == ["the alpha retro"] and out["results"][0]["last_reviewed"] == "2026-10-01"
+    assert out["results"][0]["snippet"].startswith("beta retrospective")
 
 
 def test_fetch_from_mirror_and_private_refused(tmp_path):

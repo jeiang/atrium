@@ -25,6 +25,7 @@ from . import (
     notion_migrate,
     notion_search,
     notion_sync,
+    notion_wiki,
     openloops,
     proposals,
     rebalance,
@@ -35,8 +36,9 @@ from . import (
     watch,
     watches,
 )
-from .agent import builtin_jobs, scheduler, service
-from .agent.tools.base import CHAT, KINDS
+from .agent import budget, builtin_jobs, scheduler, service
+from .agent.client import make_client as anthropic_client
+from .agent.tools.base import CHAT, KINDS, NotConfigured
 from .config import ACCOUNTS
 from .media import channels
 from .web import auth
@@ -95,19 +97,7 @@ def parser():
     ns.add_argument("query")
     ns.add_argument("--private", action="store_true")
     ns.add_argument("--limit", type=int, default=10)
-    nm = nsub.add_parser("migrate").add_subparsers(dest="migrate_command", required=True)
-    nm.add_parser("ensure-schema")
-    mi = nm.add_parser("inventory")
-    mi.add_argument("--out")
-    mp = nm.add_parser("plan")
-    mp.add_argument("--inventory")
-    mp.add_argument("--out")
-    mp.add_argument("--skip-source", action="append", help="source id or title to skip; repeatable")
-    for name in ("apply", "verify", "rollback"):
-        mm = nm.add_parser(name)
-        mm.add_argument("--manifest", required=True)
-        if name != "verify":
-            mm.add_argument("--limit", type=int)
+    nsub.add_parser("wiki-plan", help="draft one proposal that turns every database and page into the wiki page tree")
     ag = sub.add_parser("agent")
     asub = ag.add_subparsers(dest="agent_command", required=True)
     asub.add_parser("scheduler")
@@ -294,8 +284,13 @@ def notion_command(cfg, args):
         with db.exclusive(cfg.db_path.with_name(NOTION_LOCK)):
             stats = notion_sync.sync(conn, cfg, client)
         print(json.dumps({**vars(stats), **notion_sync.counts(conn)}))
-    elif args.notion_command == "migrate":
-        return notion_migrate.run_cli(cfg, args)
+    elif args.notion_command == "wiki-plan":
+        try:
+            out = notion_migrate.run_cli(cfg, conn, anthropic_client(os.environ))
+        except (notion_migrate.PlanError, notion_wiki.WikiError, NotConfigured, budget.BudgetExceeded) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        print(json.dumps(out))
     else:
         result = notion_search.search(conn, cfg, args.query, include_private=args.private, limit=args.limit)
         for h in result["hits"]:

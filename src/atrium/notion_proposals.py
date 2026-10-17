@@ -5,14 +5,12 @@ import re
 import time
 
 from . import llm, notion_search
-from .notion_api import NotionClient, normalize_id, token_from_env
+from .notion_api import NotionClient, token_from_env
 
 KIND_LINK = "notion_link"
 KIND_EDIT = "notion_edit"
 ACCOUNT = "notion"
 UNDO_OP = "notion_restore"
-MODE_RELATION = "relation"
-MODE_MENTION = "mention"
 RELATED_HEADING = "Related"
 LINK_PAGE_CHARS = 2500
 EDIT_PAGE_CHARS = 12000
@@ -109,20 +107,6 @@ def _load(conn, page_id):
     return page
 
 
-def relation_property(conn, source, target):
-    if not source["data_source_id"] or not target["data_source_id"]:
-        return None
-    row = conn.execute("SELECT properties FROM notion_sources WHERE id = ?", (source["data_source_id"],)).fetchone()
-    if row is None:
-        return None
-    for name, prop in json.loads(row["properties"]).items():
-        relation = prop.get("relation") or {}
-        if prop.get("type") == "relation" and normalize_id(relation.get("data_source_id")) == target["data_source_id"]:
-            if name in json.loads(source["properties"]):
-                return name
-    return None
-
-
 def link_user(source, target):
     def block(label, page):
         return f"{label}:\nTitle: {page['title']}\nLocation: {page['path']}\nText:\n{page['markdown'][:LINK_PAGE_CHARS]}"
@@ -142,16 +126,12 @@ def propose_link(conn, cfg, source_id, target_id, chat=llm.chat_json, create=_cr
     answer = chat(cfg.chat_url, LINK_SYSTEM, link_user(source, target), LINK_SCHEMA, LINK_MAX_TOKENS)
     if not answer.get("link"):
         return None
-    prop = relation_property(conn, source, target)
-    mode = MODE_RELATION if prop else MODE_MENTION
     payload = {
         "source_id": source["id"],
         "target_id": target["id"],
         "source_title": source["title"],
         "target_title": target["title"],
         "target_url": target["url"],
-        "mode": mode,
-        "property": prop,
         "reason": answer.get("reason", ""),
         "snapshot": source["last_edited_time"],
     }
@@ -159,8 +139,6 @@ def propose_link(conn, cfg, source_id, target_id, chat=llm.chat_json, create=_cr
         "a": notion_search.pageref(source),
         "b": notion_search.pageref(target),
         "reason": payload["reason"],
-        "link_type": mode,
-        "property": prop,
     }
     return create(
         conn,
@@ -270,12 +248,6 @@ def fresh_page(client, page_id, snapshot):
     return live
 
 
-def live_relation_ids(client, page_id, prop):
-    if prop.get("relation") is not None and not prop.get("has_more"):
-        return [normalize_id(r["id"]) for r in prop["relation"]]
-    return [normalize_id(item["relation"]["id"]) for item in client.property_items(page_id, prop["id"])]
-
-
 def related_section_anchor(markdown):
     lines = markdown.split("\n")
     start = None
@@ -329,59 +301,31 @@ def execute_link(conn, cfg, proposal, selection=None, client=None):
     client = client or make_client(cfg)
     p = _payload(proposal)
     try:
-        live = fresh_page(client, p["source_id"], p["snapshot"])
-        if p["mode"] == MODE_RELATION:
-            result, undo = _apply_relation(client, live, p)
+        fresh_page(client, p["source_id"], p["snapshot"])
+        previous = client.page_markdown(p["source_id"]).get("markdown", "")
+        line = link_markdown(p["target_title"], p["target_url"])
+        anchor = related_section_anchor(previous)
+        if anchor is not None and previous.count(anchor) == 1:
+            client.update_markdown(
+                p["source_id"],
+                {"type": "update_content", "update_content": {"content_updates": [{"old_str": anchor, "new_str": f"{anchor}\n{line}"}]}},
+            )
         else:
-            result, undo = _apply_mention(client, p)
+            client.append_children(
+                p["source_id"], link_blocks(p["target_title"], p["target_url"], not has_related_section(previous))
+            )
+        after = client.get_page(p["source_id"])
     except Exception as e:
         _record(conn, proposal, {"type": KIND_LINK, "payload": p}, None, False, str(e))
         raise
-    _record(conn, proposal, {"type": KIND_LINK, "mode": p["mode"], "page_id": p["source_id"]}, undo, True)
-    return result
-
-
-def _apply_relation(client, live, p):
-    prop = (live.get("properties") or {}).get(p["property"])
-    if prop is None or prop.get("type") != "relation":
-        raise StaleError(f"relation property {p['property']!r} is gone")
-    previous = live_relation_ids(client, p["source_id"], prop)
-    merged = previous if p["target_id"] in previous else [*previous, p["target_id"]]
-    client.patch_properties(p["source_id"], {p["property"]: {"relation": [{"id": i} for i in merged]}})
-    after = client.get_page(p["source_id"])
     undo = {
         "op": UNDO_OP,
-        "type": MODE_RELATION,
-        "page_id": p["source_id"],
-        "property": p["property"],
-        "previous_ids": previous,
-        "applied_edited_time": after.get("last_edited_time"),
-    }
-    return {"mode": MODE_RELATION, "property": p["property"], "ids": merged}, undo
-
-
-def _apply_mention(client, p):
-    previous = client.page_markdown(p["source_id"]).get("markdown", "")
-    line = link_markdown(p["target_title"], p["target_url"])
-    anchor = related_section_anchor(previous)
-    if anchor is not None and previous.count(anchor) == 1:
-        client.update_markdown(
-            p["source_id"],
-            {"type": "update_content", "update_content": {"content_updates": [{"old_str": anchor, "new_str": f"{anchor}\n{line}"}]}},
-        )
-    else:
-        client.append_children(
-            p["source_id"], link_blocks(p["target_title"], p["target_url"], not has_related_section(previous))
-        )
-    after = client.get_page(p["source_id"])
-    undo = {
-        "op": UNDO_OP,
-        "type": "markdown",
         "page_id": p["source_id"],
         "previous_markdown": previous,
         "applied_edited_time": after.get("last_edited_time"),
     }
-    return {"mode": MODE_MENTION}, undo
+    _record(conn, proposal, {"type": KIND_LINK, "page_id": p["source_id"]}, undo, True)
+    return {"linked": p["target_id"]}
 
 
 def execute_edit(conn, cfg, proposal, selection=None, client=None):
@@ -401,7 +345,6 @@ def execute_edit(conn, cfg, proposal, selection=None, client=None):
         raise
     undo = {
         "op": UNDO_OP,
-        "type": "markdown",
         "page_id": p["page_id"],
         "previous_markdown": previous,
         "applied_edited_time": after.get("last_edited_time"),
@@ -413,16 +356,10 @@ def execute_edit(conn, cfg, proposal, selection=None, client=None):
 def undo(conn, cfg, undo_info, client=None):
     client = client or make_client(cfg)
     fresh_page(client, undo_info["page_id"], undo_info["applied_edited_time"])
-    if undo_info["type"] == MODE_RELATION:
-        client.patch_properties(
-            undo_info["page_id"],
-            {undo_info["property"]: {"relation": [{"id": i} for i in undo_info["previous_ids"]]}},
-        )
-    else:
-        client.update_markdown(
-            undo_info["page_id"],
-            {"type": "replace_content", "replace_content": {"new_str": undo_info["previous_markdown"]}},
-        )
+    client.update_markdown(
+        undo_info["page_id"],
+        {"type": "replace_content", "replace_content": {"new_str": undo_info["previous_markdown"]}},
+    )
     return {"restored": undo_info["page_id"]}
 
 

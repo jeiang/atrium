@@ -1,5 +1,8 @@
 import json
 import re
+import time
+
+from .builtin_skills import BUILTINS
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
 # `/skill:name` (omp style) or `[[skill:name]]`, in skill bodies, chat messages and schedule prompts.
@@ -21,6 +24,9 @@ CREATE TABLE IF NOT EXISTS skills (
 
 def init(conn):
     conn.executescript(SCHEMA)
+    now = time.time()
+    for name, description, body in BUILTINS:
+        conn.execute("INSERT OR IGNORE INTO skills (name, description, body, updated_at) VALUES (?, ?, ?, ?)", (name, description, body, now))
 
 
 class SkillError(ValueError):

@@ -1,4 +1,4 @@
-from . import calendar_proposals, executors, notion_proposals, openloops, receipts
+from . import calendar_proposals, executors, notion_migrate, notion_proposals, openloops
 
 
 def register():
@@ -6,4 +6,4 @@ def register():
     notion_proposals.register()
     calendar_proposals.register()
     openloops.register()
-    receipts.register()
+    notion_migrate.register()

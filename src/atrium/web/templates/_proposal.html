@@ -192,13 +192,7 @@
   <span class="flex items-center gap-2 text-muted-foreground max-sm:ps-1">{{ icon("link", "size-4") }}<span class="sr-only">linked with</span></span>
   {{ page_ref(v.b) }}
 </div>
-<div class="flex flex-wrap items-center gap-2">
-  {% if v.link_type == "relation" %}
-  <span class="badge" data-variant="outline">Relation{{ " · " ~ v.property if v.property }}</span>
-  {% else %}
-  <span class="badge" data-variant="outline">Mention in page text</span>
-  {% endif %}
-</div>
+<p class="text-xs text-muted-foreground">Adds a link to the page text under a “Related” heading.</p>
 {% if v.reason %}<blockquote class="border-s-2 ps-3 text-sm text-muted-foreground">{{ v.reason }}</blockquote>{% endif %}
 
 {% elif p.kind == "calendar_event" %}
@@ -212,17 +206,6 @@
   {% if v.source and v.source.subject %}<dt class="text-muted-foreground">From mail</dt><dd>{{ v.source.subject }}</dd>{% endif %}
 </dl>
 <p class="text-xs text-muted-foreground">Nobody is invited and no notification is sent.</p>
-
-{% elif p.kind == "notion_receipt" %}
-<dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
-  <dt class="text-muted-foreground">Merchant</dt>
-  <dd>{{ v.merchant }}</dd>
-  {% if v.amount %}<dt class="text-muted-foreground">Amount</dt><dd class="tabular-nums">{{ v.amount }} {{ v.currency }}</dd>{% endif %}
-  {% if v.date %}<dt class="text-muted-foreground">Date</dt><dd class="tabular-nums">{{ v.date }}</dd>{% endif %}
-  <dt class="text-muted-foreground">From mail</dt>
-  <dd><a class="underline" href="/messages/{{ v.message_id }}">{{ v.subject }}</a></dd>
-</dl>
-<p class="text-xs text-muted-foreground">Approving creates a Receipt page in the Notion wiki. Undo moves it to the trash.</p>
 
 {% elif p.kind == "reminder" %}
 <dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
@@ -265,6 +248,48 @@
     {% endfor %}
   </div>
 </div>
+
+{% elif p.kind == "notion_wiki_plan" %}
+{% set DECISION_LABELS = {"convert": "Convert", "merge": "Merge", "drop": "Drop", "keep": "Keep"} %}
+<p class="text-sm text-muted-foreground">Turns the Notion workspace into the wiki page tree under Wiki Home. Dropped rows and emptied databases are archived (never deleted); every step is undoable.</p>
+<div class="flex flex-wrap gap-1.5">
+  {% for d, n in v.counts.items() %}<span class="badge" data-variant="{{ 'destructive' if d == 'drop' else 'secondary' }}">{{ n }} {{ DECISION_LABELS.get(d, d) | lower }}</span>{% endfor %}
+</div>
+<div class="grid gap-4 md:grid-cols-2">
+  <div class="flex min-w-0 flex-col gap-1.5">
+    <h4 class="text-xs font-medium text-muted-foreground">Hubs under Wiki Home</h4>
+    <ul class="flex flex-col gap-1 text-sm" role="list">
+      {% for h in v.hubs %}<li><span class="font-medium">{{ h.title }}</span>{% if h.description %} <span class="text-muted-foreground">{{ h.description }}</span>{% endif %}</li>{% endfor %}
+    </ul>
+  </div>
+  <div class="flex min-w-0 flex-col gap-1.5">
+    <h4 class="text-xs font-medium text-muted-foreground">Databases</h4>
+    <ul class="flex flex-col gap-1 text-sm" role="list">
+      {% for d in v.databases %}
+      <li class="flex min-w-0 flex-col"><span><span class="font-medium">{{ d.title }}</span> <span class="text-muted-foreground">→ {{ "one page with a table" if d.mode == "table" else "hub with child pages" }} under {{ d.hub }}</span></span><span class="truncate text-xs text-muted-foreground">{{ d.reason }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+<details class="group/list">
+  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    {{ icon("chevron-down", "size-3.5 transition-transform group-open/list:rotate-180") }}Every row and page ({{ v["items"] | length }})
+  </summary>
+  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
+    {% for i in v["items"] %}
+    <li class="flex min-w-0 flex-col gap-0.5 px-3 py-2">
+      <span class="flex min-w-0 items-center gap-2">
+        <span class="badge shrink-0" data-variant="{{ 'destructive' if i.decision == 'drop' else ('outline' if i.decision == 'keep' else 'secondary') }}">{{ DECISION_LABELS.get(i.decision, i.decision) }}</span>
+        <a class="truncate text-sm hover:underline" href="/notion/{{ i.id }}">{{ i.title or "Untitled" }}</a>
+        {% if i.source %}<span class="shrink-0 text-xs text-muted-foreground">{{ i.source }}</span>{% endif %}
+        {% if i.hub %}<span class="shrink-0 text-xs text-muted-foreground">→ {{ i.hub }}</span>{% endif %}
+        {% if i.merge_into %}<span class="truncate text-xs text-muted-foreground">→ into {{ i.merge_into }}</span>{% endif %}
+      </span>
+      <span class="text-xs text-muted-foreground">{{ i.reason }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</details>
 {% endif %}
 {% endset %}
 

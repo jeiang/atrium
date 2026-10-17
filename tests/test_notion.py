@@ -6,7 +6,7 @@ import pytest
 
 from atrium import db, notion_api, notion_proposals, notion_search, notion_sync
 from atrium.http import ServiceUnavailable
-from fake_notion import FakeNotion, relation_prop, rich, select_prop
+from fake_notion import FakeNotion, rich, select_prop
 from helpers import make_config, unit
 
 TOKEN = "secret-token-value"
@@ -243,14 +243,11 @@ def test_sensitivity_flip_reindexes_visibility():
     ).fetchone()[0] == "private"
 
 
-def relation_world():
+def rows_world():
     fake = FakeNotion()
-    rel = {"Related": {"id": "rel", "type": "relation", "relation": {"data_source_id": SRC2}}}
-    fake.add_source(SRC1, "Tasks", rel)
+    fake.add_source(SRC1, "Tasks", {})
     fake.add_source(SRC2, "Projects", {})
-    fake.add_page(
-        A, "Task one", "alpha task", parent={"type": "data_source_id", "data_source_id": SRC1}, properties={"Related": relation_prop([E])}
-    )
+    fake.add_page(A, "Task one", "alpha task", parent={"type": "data_source_id", "data_source_id": SRC1})
     fake.add_page(B, "Project one", "alpha project", parent={"type": "data_source_id", "data_source_id": SRC2})
     fake.add_page(E, "Project two", "other", parent={"type": "data_source_id", "data_source_id": SRC2})
     fake.add_page(C, "Loose page", "alpha loose")
@@ -265,17 +262,15 @@ def capture(*args):
     return args
 
 
-def test_propose_link_relation_and_mention_modes():
-    fake = relation_world()
+def test_propose_link_is_always_a_mention_in_page_text():
+    fake = rows_world()
     conn, _ = synced(fake)
-    rel = notion_proposals.propose_link(conn, cfg(), A, B, chat_yes, capture)
-    assert rel[1] == "notion_link"
-    payload, preview = rel[4], rel[5]
-    assert payload["mode"] == "relation" and payload["property"] == "Related"
-    assert preview["link_type"] == "relation" and preview["a"]["title"] == "Task one" and preview["b"]["id"] == B
-    mention = notion_proposals.propose_link(conn, cfg(), A, C, chat_yes, capture)
-    assert mention[4]["mode"] == "mention"
-    assert notion_proposals.propose_link(conn, cfg(), A, E, chat_yes, capture) is None
+    link = notion_proposals.propose_link(conn, cfg(), A, B, chat_yes, capture)
+    assert link[1] == "notion_link"
+    payload, preview = link[4], link[5]
+    assert set(payload) == {"source_id", "target_id", "source_title", "target_title", "target_url", "reason", "snapshot"}
+    assert preview["a"]["title"] == "Task one" and preview["b"]["id"] == B and "link_type" not in preview
+    assert notion_proposals.propose_link(conn, cfg(), A, C, chat_yes, capture)[4]["target_id"] == C
     assert notion_proposals.propose_link(conn, cfg(), A, C, lambda *a: {"link": False, "reason": ""}, capture) is None
 
 
@@ -303,26 +298,27 @@ def proposal_row(args, pid=1):
     return {"id": pid, "payload": json.dumps(args[4])}
 
 
-def test_relation_execution_merges_existing_ids_and_undoes():
-    fake = relation_world()
+def test_link_between_database_rows_edits_text_never_properties():
+    fake = rows_world()
     conn, _ = synced(fake)
     proposal = proposal_row(notion_proposals.propose_link(conn, cfg(), A, B, chat_yes, capture))
     notion_proposals.CLIENT_FACTORY[0] = lambda c: client_for(fake)
     try:
         result = notion_proposals.execute_link(conn, cfg(), proposal)
-        assert result["ids"] == [E, B]
-        assert fake.pages[A]["properties"]["Related"]["relation"] == [{"id": E}, {"id": B}]
+        assert result == {"linked": B}
+        assert fake.markdown[A].endswith(f"## Related\n- [Project one](https://notion.invalid/{B})")
+        assert not any(r[0] == "PATCH" and "properties" in (r[3] or {}) for r in fake.requests)
         row = conn.execute("SELECT * FROM proposal_actions").fetchone()
         undo = json.loads(row["undo"])
-        assert row["ok"] == 1 and undo["previous_ids"] == [E]
+        assert row["ok"] == 1 and undo["previous_markdown"] == "alpha task"
         notion_proposals.undo(conn, cfg(), undo)
-        assert fake.pages[A]["properties"]["Related"]["relation"] == [{"id": E}]
+        assert fake.markdown[A] == "alpha task"
     finally:
         notion_proposals.CLIENT_FACTORY[0] = notion_proposals.default_client
 
 
 def test_execution_aborts_when_page_changed():
-    fake = relation_world()
+    fake = rows_world()
     conn, _ = synced(fake)
     proposal = proposal_row(notion_proposals.propose_link(conn, cfg(), A, C, chat_yes, capture))
     fake.set_markdown(A, "edited elsewhere")

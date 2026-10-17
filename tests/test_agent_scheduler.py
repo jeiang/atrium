@@ -243,7 +243,8 @@ def test_nightly_is_seeded_and_runs_as_nightly(cfg, conn):
     thread = conn.execute("SELECT * FROM threads WHERE job_id = ?", (nightly_job["id"],)).fetchone()
     assert thread["kind"] == "nightly"
     first_message = journal.messages_of(conn, thread["id"])[0]["content"][0]["text"]
-    assert first_message == nightly.NIGHTLY_PROMPT
+    assert first_message.startswith(nightly.NIGHTLY_PROMPT) and '<skill name="wiki-capture">' in first_message
+    assert journal.skills_of(journal.get_run(conn, journal.runs_of(conn, thread["id"])[0]["id"])) == ["wiki-capture"]
     assert scheduler.ensure_nightly(conn, TZ, NOW) is None
     assert conn.execute("SELECT COUNT(*) FROM jobs WHERE kind = 'nightly'").fetchone()[0] == 1
 
@@ -385,7 +386,7 @@ def test_notify_tool_contexts():
 
 NIGHTLY_TOOLS = {
     "calendar_list", "contacts_lookup", "context_drop", "context_fold", "context_pin", "context_status", "fetch_knowledge", "load_skill", "mail_read", "mail_search", "notify",
-    "notion_archive_page", "notion_create_page", "notion_update_page", "profile_get", "profile_set", "recall", "search_knowledge", "threads_today",
+    "notion_add_alias", "notion_archive_page", "notion_create_page", "notion_move_page", "notion_update_page", "profile_get", "profile_set", "recall", "search_knowledge", "threads_today",
 }
 NIGHTLY_FORBIDDEN = (
     "web_fetch", "web_search", "schedule_create", "schedule_update",
@@ -435,7 +436,7 @@ def test_propose_rejects_unknown_kinds():
             propose.propose(ctx, {"kind": kind, "payload": {}})
     with pytest.raises(ToolError, match="payload"):
         propose.propose(ctx, {"kind": "notion_edit", "payload": "x"})
-    assert set(propose.KINDS) == {"notion_edit", "notion_link", "notion_receipt"}
+    assert set(propose.KINDS) == {"notion_edit", "notion_link"}
 
 
 def test_propose_creates_registered_kinds(monkeypatch):
@@ -462,6 +463,13 @@ def test_propose_contexts():
 
 def test_skills_index_and_load():
     conn = memory_db()
+    seeded = skills.index_block(conn).splitlines()
+    assert seeded[0].startswith("Skills (") and [line.split(":")[0] for line in seeded[1:]] == ["- wiki-capture", "- wiki-ingest", "- wiki-query", "- wiki-review"]
+    skills.save(conn, "wiki-query", "Edited by the operator", "# mine", NOW)
+    assert skills.get(conn, "wiki-query")["body"] == "# mine"
+    skills.init(conn)
+    assert skills.get(conn, "wiki-query")["body"] == "# mine"
+    conn.execute("DELETE FROM skills")
     assert skills.index_block(conn) == ""
     skills.save(conn, "weekly-review", "How to run the weekly review", "# Steps\n1. Look at mail", NOW)
     skills.save(conn, "a-first", "Sorted first", "body", NOW)
@@ -500,7 +508,7 @@ def test_pages(tmp_path):
     assert "Cooking steps" in client.get("/settings/skills").text
     assert client.post("/settings/skills", data={"name": "BAD", "description": "d", "body": "b"}).status_code == 422
     client.post("/settings/skills/recipe/delete")
-    assert skills.list_skills(conn) == []
+    assert [s["name"] for s in skills.list_skills(conn)] == ["wiki-capture", "wiki-ingest", "wiki-query", "wiki-review"]
     conn.close()
 
 

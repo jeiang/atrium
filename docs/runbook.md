@@ -31,10 +31,10 @@ credentials:
   (also used by CalDAV writes, with the Apple ID the module sets in
   `ICLOUD_APPLE_ID` from `services.atrium.icloudAppleId`), `GMAIL_ADDRESS`,
   `GMAIL_APP_PASSWORD` (whitespace is stripped).
-- Notion: `NOTION_TOKEN` (the internal integration token),
-  `ATRIUM_NOTION_WIKI_DATA_SOURCE` (the wiki data source id; unset until you
-  create the wiki; it gates duplicate-checked `notion_create_page` and the
-  wiki schema/migration commands).
+- Notion: `NOTION_TOKEN` (the internal integration token) and
+  `ATRIUM_NOTION_WIKI_ROOT` (the page id of "Wiki Home", the root of the
+  wiki page tree; it is not a secret, so `extraEnvironment` works too).
+  Without the root the Notion write tools answer "not configured".
 - Assistant: `ANTHROPIC_API_KEY` (a Console key of the organization that
   holds the plan's monthly API credits), `GRAFANA_VIEWER_TOKEN` (a Grafana
   service account with the Viewer role), `NTFY_TOKEN`.
@@ -200,7 +200,7 @@ atrium calendar google-auth --port 8765
 Open the printed URL, approve, and put the printed `GOOGLE_REFRESH_TOKEN=...`
 in `atrium.env`.
 
-### Notion and scans
+### Notion wiki and scans
 
 `atrium-notion-sync.timer` mirrors Notion every 15 minutes
 (`atrium notion sync`). `atrium-scan.timer` runs
@@ -213,12 +213,48 @@ systemctl start atrium-notion-sync.service
 systemctl start atrium-scan.service
 ```
 
+The whole Notion workspace is the assistant's wiki: one page tree, Wiki Home ->
+hub pages (People, Projects, Home...) -> plain pages. atrium never writes
+database rows or page properties. Dedupe keys, aliases, hub, last-reviewed
+date and sources of every page it touches live in the `wiki_pages` table of
+`atrium.db`; the Notion side is plain pages. The tools (`notion_create_page`,
+`notion_update_page` with optional `section`, `notion_move_page`,
+`notion_archive_page`, `notion_add_alias`; `search_knowledge` returns exact
+title/alias hits first) refuse a create whose title or alias already names a
+page, prepend a dated one-line entry to the "Wiki Log" page under Wiki Home
+(created on first use, newest first) and keep a `Last reviewed <date> ·
+sources: ...` footer at the end of each page. Every write is on /activity
+(filter "wiki") with Undo; undo refuses when the page changed in Notion since.
+
+Setting up the wiki, or converting an existing workspace, once:
+
+1. Create a page "Wiki Home" in Notion and share it (and the databases and
+   pages that should move) with the integration.
+2. Put its page id in `atrium.env` as `ATRIUM_NOTION_WIKI_ROOT=...` and
+   restart the units (`systemctl restart atrium-web atrium-agent-scheduler`).
+3. `atrium-run notion sync`, then `atrium-run notion wiki-plan`. The command
+   reads every database, row and page from the mirror, asks the assistant model
+   (structured output, chunked) for the hub structure, a mode per database
+   (one page with a table, or a hub with child pages) and a keep/merge/drop/
+   convert decision with a reason per item (drop: past one-off events,
+   receipts and purchases, facts available again from mail or the calendar,
+   unsourced guesses; private pages are kept and never sent to the model), and
+   queues one `notion_wiki_plan` proposal. The model calls are billed to a
+   "Wiki plan" chat thread on /usage.
+4. Review it on /proposals (hubs, database modes, every item with its
+   decision and reason). Approve: hubs and converted pages are created under
+   Wiki Home, loose pages are moved, merged content is appended under a
+   "From <title>" heading, dropped rows and pages and every emptied database
+   are archived (never deleted), and the Wiki Log gets one line per step.
+   Undo on the proposal puts everything back. Dismiss and rerun `wiki-plan`
+   for a fresh draft; only one plan can be pending at a time.
+
 Drafts left in `sending` for more than 10 minutes (a crash mid-send) become
 `unknown` when the web app starts. /drafts?status=unknown asks you to check the
 account's Sent folder, then mark the draft sent or return it to draft; it is
 never resent automatically.
 
-### Watches, birthdays, receipts and built-in jobs
+### Watches, birthdays and built-in jobs
 
 After each mail pass atrium reads order/shipping mail with the local model and keeps
 packages (UPS/FedEx/USPS/DHL numbers by regex, model fallback for orders without one).
@@ -226,9 +262,8 @@ Package status changes only when a later email says so; there is no carrier look
 `atrium watches refresh` runs the same scan by hand. /watches lists packages and
 birthdays/anniversaries for the next 60 days with Dismiss. Dates come from vCard
 `BDAY`, `ANNIVERSARY`, `X-ANNIVERSARY` and iOS `item*.X-ABDATE` entries in
-`ATRIUM_CONTACTS_DIR`. Receipt mail is offered by `receipt_candidates`; in cron runs the
-assistant proposes `notion_receipt`, which creates a `Type=Receipt` page in
-`ATRIUM_NOTION_WIKI_DATA_SOURCE` (needs a `Type` select property) and undo trashes it.
+`ATRIUM_CONTACTS_DIR`. Receipt mail feeds the money ledger (`/money`) only; nothing
+about purchases is written to Notion.
 
 The scheduler seeds seven built-in jobs once (kind `builtin`, listed on /scheduled, disable
 but not cancel): `weekly-review` (Sunday 18:00), `daily-nudges` (08:00, notifies only
@@ -237,13 +272,18 @@ when something is due, using upcoming bills from the ledger), `calendar-candidat
 (Monday 06:00, stores the CBTT USD selling rate; no model) and the three media jobs below
 (`media-channels`, `media-sweep`, `media-thumbnails`; no model). Their prompts live in code.
 
-Skills (/settings/skills) are operator-written playbooks. A body may reference another
-skill as `/skill:name` or `[[skill:name]]`; `load_skill` appends the referenced skills not
-yet loaded in the thread, and the editor shows references, referenced-by and unknown names.
-The same tokens in a chat message or a schedule prompt are expanded before the run into
-`<skill name="...">body</skill>` blocks appended to the message (references followed
-transitively, deduplicated, at most 5 skills / 20K characters; unknown names stay as text
-with a note) and recorded on the run (`runs.skills_json`, shown on /runs/{id}).
+Skills (/settings/skills) are playbooks. Four wiki skills are seeded once and can be
+edited or deleted: `wiki-capture` (save a durable fact from a conversation; the nightly
+run follows it), `wiki-ingest` (turn a mail thread or document into cited page updates),
+`wiki-query` (answer from the wiki, cite pages, say when it is missing or stale) and
+`wiki-review` (duplicates, orphans, stale footers, contradictions; merges as proposals).
+A body may reference another skill as `/skill:name` or `[[skill:name]]`; `load_skill`
+appends the referenced skills not yet loaded in the thread, and the editor shows
+references, referenced-by and unknown names. The same tokens in a chat message or a
+schedule prompt are expanded before the run into `<skill name="...">body</skill>` blocks
+appended to the message (references followed transitively, deduplicated, at most 5
+skills / 20K characters; unknown names stay as text with a note) and recorded on the run
+(`runs.skills_json`, shown on /runs/{id}).
 
 Subagents (/settings/subagents, table `subagents`) are what `research(role=...)` delegates
 to: name, description (the role list the model sees), prompt addendum, effort (low/medium/

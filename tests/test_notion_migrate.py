@@ -1,373 +1,218 @@
 import json
-import re
-from argparse import Namespace
+import time
 
 import pytest
+from fake_anthropic import FakeClient, response, text
+from fake_notion import FakeNotion, select_prop
+from helpers import make_config, static_dir, unit, web_client
 
-from atrium import db, notion_api, notion_migrate, notion_wiki
-from fake_notion import FakeNotion, relation_prop, rich, select_prop
+from atrium import db, notion_api, notion_migrate, notion_proposals, notion_sync, notion_wiki, proposals
 
-TOKEN = "secret-token-value"
-WIKI, SRC1, SRC2, SRC3 = "wiki-ds", "src-projects", "src-notes", "src-journal"
-P1, P2, P3, N1, J1, S1, W1, ROOT = "p1", "p2", "p3", "n1", "j1", "s1", "w1", "root"
-MOVE = re.compile(r"^/v1/pages/([^/]+)/move$")
-SOURCE = re.compile(r"^/v1/data_sources/([^/]+)$")
-PAGE = re.compile(r"^/v1/pages/([^/]+)$")
+NOW = 1_780_000_000.0
+TODAY = notion_wiki.local_date(time.time())
 
 
-def tag(*names):
-    return {"id": "lab", "type": "multi_select", "multi_select": [{"name": n} for n in names]}
+def uid(n):
+    return f"00000000-0000-0000-0000-{n:012d}"
 
 
-def row(sid):
-    return {"type": "data_source_id", "data_source_id": sid, "database_id": "db-" + sid}
+ROOT, LOG, LOOSE, CHILD, PRIV = uid(900), uid(901), uid(1), uid(2), uid(3)
+BOOKS, NOTES = uid(50), uid(51)
+BOOK1, BOOK2, BOOK3, NOTE1, NOTE2 = uid(10), uid(11), uid(12), uid(20), uid(21)
 
 
-class MigrationNotion(FakeNotion):
-    """FakeNotion plus move, data-source PATCH and generic property writes."""
-
-    def __init__(self):
-        super().__init__()
-        self.lose_move_response = set()
-
-    def route(self, method, path, query, data):
-        m = SOURCE.match(path)
-        if m:
-            if m.group(1) not in self.sources:
-                return 404, {"code": "object_not_found", "message": "missing"}
-            source = self.sources[m.group(1)]
-            if method == "PATCH":
-                for name, body in data["properties"].items():
-                    kind = next(iter(body))
-                    source["properties"][name] = {"id": name, "type": kind, **body}
-            return 200, source
-        m = MOVE.match(path)
-        if m:
-            if m.group(1) not in self.pages:
-                return 404, {"code": "object_not_found", "message": "missing"}
-            return self.move(m.group(1), data["parent"])
-        m = PAGE.match(path)
-        if m and method == "PATCH" and m.group(1) in self.pages:
-            return self.write(m.group(1), data["properties"])
-        return super().route(method, path, query, data)
-
-    def move(self, pid, parent):
-        page = self.pages[pid]
-        if parent["type"] == "data_source_id":
-            schema = self.sources[parent["data_source_id"]]["properties"]
-            title = next(n for n, p in schema.items() if p["type"] == "title")
-            kept = {}
-            for name, prop in page["properties"].items():
-                if prop["type"] == "title":
-                    kept[title] = {**prop, "id": "title"}
-                elif name in schema:
-                    kept[name] = prop
-            page["properties"] = kept
-            page["parent"] = row(parent["data_source_id"])
-        else:
-            page["parent"] = parent
-        self.touch(pid)
-        if pid in self.lose_move_response:
-            return 500, {"code": "internal_server_error", "message": "lost"}
-        return 200, page
-
-    def write(self, pid, props):
-        page = self.pages[pid]
-        ds = page["parent"].get("data_source_id")
-        schema = self.sources[ds]["properties"] if ds in self.sources else None
-        for name, value in props.items():
-            if schema is not None and name not in schema:
-                return 400, {"code": "validation_error", "message": f"no property {name}"}
-            kind = next(iter(value))
-            body = value[kind]
-            if kind in ("title", "rich_text"):
-                body = rich("".join(i["text"]["content"] for i in body))
-            elif kind == "relation":
-                body = [{"id": i["id"]} for i in body]
-            page["properties"][name] = {"id": name, "type": kind, kind: body}
-        self.touch(pid)
-        return 200, page
+def row(source, database):
+    return {"type": "data_source_id", "data_source_id": source, "database_id": database}
 
 
-def client_for(fake, limiter=None):
-    return notion_api.NotionClient(TOKEN, fake.transport, sleep=lambda s: None, clock=lambda: 0.0, limiter=limiter)
+def text_prop(value):
+    return {"id": "t", "type": "rich_text", "rich_text": [{"plain_text": value, "type": "text", "text": {"content": value}}]}
 
 
-def build():
-    fake = MigrationNotion()
-    fake.add_source(WIKI, "Knowledge", {"Title": {"id": "title", "type": "title"}, "Verification": {"id": "v", "type": "verification"}})
-    schema = {
-        "Name": {"type": "title"},
-        "Labels": {"type": "multi_select"},
-        "Rel": {"type": "relation"},
-        "Sensitivity": {"type": "select"},
-    }
-    fake.add_source(SRC1, "Projects", dict(schema))
-    fake.add_source(SRC2, "Notes", dict(schema))
-    fake.add_source(SRC3, "Journal", dict(schema), parent={"type": "page_id", "page_id": ROOT})
-    fake.add_page(ROOT, "Root", properties={"Sensitivity": select_prop("private")})
-    fake.add_page(
-        P1,
-        "Alpha Project",
-        "body one",
-        row(SRC1),
-        {"Labels": tag("a", "b"), "Rel": relation_prop([P2]), "Sensitivity": select_prop("private")},
-    )
-    fake.add_page(P2, "Beta", "body two", row(SRC1), {"Labels": tag("b"), "Rel": relation_prop([P1, P3])})
-    fake.add_page(P3, "Gamma", "body three", row(SRC2))
-    fake.add_page(N1, "Note", "n", row(SRC2))
-    fake.add_page(J1, "Diary", "private by ancestry", row(SRC3))
-    fake.add_page(S1, "Standalone")
-    fake.add_page(W1, "Existing", "w", row(WIKI))
+def workspace():
+    fake = FakeNotion(page_cap=50)
+    fake.add_page(ROOT, "Wiki Home", "# Wiki Home")
+    fake.add_page(LOG, "Wiki Log", "- 2026-01-01 · created [Wiki Home](https://notion.invalid/x)", parent={"type": "page_id", "page_id": ROOT})
+    fake.add_page(LOOSE, "Kitchen renovation", "Plans for the kitchen; contractor is Bob.")
+    fake.add_page(CHILD, "Tile choices", "Porcelain, matte.", parent={"type": "page_id", "page_id": LOOSE})
+    fake.add_page(PRIV, "Therapy notes", "private stuff", properties={"Sensitivity": select_prop("Private")})
+    fake.add_source(BOOKS, "Books", {"Name": {"type": "title"}, "Author": {"type": "rich_text"}, "Rating": {"type": "select"}}, database_id="db-books")
+    fake.add_source(NOTES, "Notes", {"Name": {"type": "title"}}, database_id="db-notes")
+    fake.add_page(BOOK1, "Dune", "", parent=row(BOOKS, "db-books"), properties={"Author": text_prop("Herbert"), "Rating": select_prop("5")})
+    fake.add_page(BOOK2, "Emma", "a comedy of manners", parent=row(BOOKS, "db-books"), properties={"Author": text_prop("Austen")})
+    fake.add_page(BOOK3, "Dinner with Ann 2024-03-01", "we had pasta", parent=row(BOOKS, "db-books"))
+    fake.add_page(NOTE1, "Bob the contractor", "Phone 555-0100, does kitchens.", parent=row(NOTES, "db-notes"))
+    fake.add_page(NOTE2, "Receipt: Home Depot 2026-02-02", "paid 120 USD", parent=row(NOTES, "db-notes"))
     return fake
 
 
-def manifest_for(fake, skip=("Notes",)):
-    inv = notion_migrate.inventory(client_for(fake))
-    return notion_migrate.plan(inv, WIKI, skip)
+def client_for(fake):
+    return notion_api.NotionClient("tok", fake.transport, sleep=lambda s: None, clock=lambda: 0.0)
 
 
-def entry(manifest, pid):
-    return next(p for p in manifest["pages"] if p["page_id"] == pid)
+@pytest.fixture
+def world(tmp_path, monkeypatch):
+    fake = workspace()
+    cfg = make_config(tmp_path, static_dir=static_dir(tmp_path))
+    conn = db.connect(cfg.db_path)
+    notion_sync.sync(conn, cfg, client_for(fake), lambda url, texts: [unit(0) for _ in texts])
+    monkeypatch.setattr(notion_proposals, "CLIENT_FACTORY", [lambda c: client_for(fake)])
+    monkeypatch.setenv("ATRIUM_NOTION_WIKI_ROOT", ROOT)
+    notion_migrate.register()
+    yield fake, conn, cfg
+    conn.close()
 
 
-def states(conn):
-    return {r["page_id"]: r["state"] for r in conn.execute("SELECT page_id, state FROM notion_migration")}
+STRUCTURE = {
+    "hubs": [{"title": "Home", "description": "The house and the people who work on it."}, {"title": "Reference", "description": "Lists and reading."}],
+    "databases": [
+        {"id": BOOKS, "mode": "table", "hub": "Reference", "reason": "small uniform records"},
+        {"id": NOTES, "mode": "hub", "hub": "Home", "reason": "documents with bodies"},
+    ],
+}
+ITEMS = {
+    "items": [
+        {"id": LOOSE, "decision": "convert", "hub": "Home", "merge_into": "", "reason": "an ongoing project"},
+        {"id": CHILD, "decision": "keep", "hub": "", "merge_into": "", "reason": "stays with its parent"},
+        {"id": BOOK1, "decision": "convert", "hub": "Reference", "merge_into": "", "reason": "reading list"},
+        {"id": BOOK2, "decision": "convert", "hub": "Reference", "merge_into": "", "reason": "reading list"},
+        {"id": BOOK3, "decision": "drop", "hub": "", "merge_into": "", "reason": "past one-off event"},
+        {"id": NOTE1, "decision": "merge", "hub": "", "merge_into": LOOSE, "reason": "belongs with the renovation"},
+        {"id": NOTE2, "decision": "drop", "hub": "", "merge_into": "", "reason": "receipt; the money ledger has it"},
+    ]
+}
 
 
-def test_plan_mapping_and_skip_rules():
-    manifest = manifest_for(build())
-    assert entry(manifest, P1)["tags"] == ["a", "b"]
-    assert entry(manifest, P1)["related"] == [P2]
-    assert entry(manifest, P2)["related"] == [P1, P3]
-    assert entry(manifest, W1)["reason"] == "already in the wiki"
-    assert manifest["in_wiki"] == [W1]
-    assert entry(manifest, S1)["skip"] and "standalone" in entry(manifest, S1)["reason"]
-    sources = {s["id"]: s for s in manifest["sources"]}
-    assert sources[SRC1]["type"] == "Projects" and not sources[SRC1]["skip"]
-    assert sources[SRC2]["skip"] and sources[WIKI]["skip"]
-    moving = {p["page_id"]: kind for p, kind in notion_migrate.effective_pages(manifest)}
-    assert moving == {P1: "Projects", P2: "Projects", J1: "Journal"}
-    summary = notion_migrate.plan_markdown(manifest)
-    assert "Projects" in summary and "skipped by operator" in summary
+def model(*answers):
+    return FakeClient([response([text(json.dumps(a))], input_tokens=2000, output_tokens=500) for a in answers])
 
 
-def test_plan_carries_sensitivity_including_inherited():
-    manifest = manifest_for(build())
-    assert entry(manifest, P1)["sensitivity"] == "private"
-    assert entry(manifest, J1)["sensitivity"] == "private"
-    assert entry(manifest, P2)["sensitivity"] is None
+def test_draft_makes_one_proposal_with_a_decision_per_item(world):
+    fake, conn, cfg = world
+    anthropic = model(STRUCTURE, ITEMS)
+    out = notion_migrate.run_cli(cfg, conn, anthropic, {"ATRIUM_NOTION_WIKI_ROOT": ROOT})
+    assert out["hubs"] == ["Home", "Reference"] and out["model_calls"] == 2 and out["cost_usd"] > 0
+    assert {k: out[k] for k in ("keep", "merge", "drop", "convert")} == {"keep": 2, "merge": 1, "drop": 2, "convert": 3}
+    structure_call = json.loads(anthropic.calls[0]["messages"][0]["content"][0]["text"])
+    assert structure_call["existing_hubs"] == [] and {d["title"]: d["rows"] for d in structure_call["databases"]} == {"Books": 3, "Notes": 2}
+    assert [p["title"] for p in structure_call["pages"]] == ["Kitchen renovation", "Tile choices"]
+    assert anthropic.calls[0]["output_config"]["format"]["type"] == "json_schema"
+    items_call = json.loads(anthropic.calls[1]["messages"][0]["content"][0]["text"])
+    assert "Therapy notes" not in json.dumps(items_call) and items_call["hubs"] == ["Home", "Reference"]
+    pending = proposals.list(conn, "pending", notion_migrate.KIND)
+    assert len(pending) == 1 and pending[0]["id"] == out["proposal_id"]
+    found = proposals.get(conn, out["proposal_id"])
+    assert found["title"] == "Wiki plan: 2 hubs, 3 converted, 1 merged, 2 dropped, 2 kept"
+    by_id = {i["id"]: i for i in found["payload"]["items"]}
+    assert by_id[PRIV]["decision"] == "keep" and "private" in by_id[PRIV]["reason"]
+    assert by_id[NOTE1]["merge_into"] == LOOSE and by_id[BOOK3]["reason"] == "past one-off event"
+    assert {d["id"]: d["mode"] for d in found["payload"]["databases"]} == {BOOKS: "table", NOTES: "hub"}
+    assert next(i for i in found["preview"]["items"] if i["id"] == NOTE1)["merge_into"] == "Kitchen renovation"
+    assert conn.execute("SELECT COUNT(*) FROM usage").fetchone()[0] == 2
+    assert conn.execute("SELECT title FROM threads").fetchone()["title"] == "Wiki plan"
+    with pytest.raises(notion_migrate.PlanError, match="already pending"):
+        notion_migrate.run_cli(cfg, conn, model(STRUCTURE, ITEMS), {"ATRIUM_NOTION_WIKI_ROOT": ROOT})
 
 
-def test_operator_edits_override_type_and_skip():
-    manifest = manifest_for(build())
-    entry(manifest, P2)["type"] = "Decision"
-    entry(manifest, J1)["skip"] = True
-    moving = {p["page_id"]: kind for p, kind in notion_migrate.effective_pages(manifest)}
-    assert moving == {P1: "Projects", P2: "Decision"}
+def test_draft_cleans_bad_model_output(world):
+    fake, conn, cfg = world
+    bad_items = {"items": [{"id": LOOSE, "decision": "merge", "hub": "", "merge_into": uid(999), "reason": "x"}, {"id": BOOK1, "decision": "convert", "hub": "Nowhere", "merge_into": "", "reason": ""}]}
+    plan = notion_migrate.draft(conn, model({"hubs": [{"title": "Only", "description": ""}], "databases": []}, bad_items), ROOT, now=lambda: NOW)
+    by_id = {i["id"]: i for i in plan["items"]}
+    assert by_id[LOOSE]["decision"] == "keep" and "merge target unknown" in by_id[LOOSE]["reason"]
+    assert by_id[BOOK1]["hub"] == "Only" and by_id[BOOK1]["reason"] == "no reason given"
+    assert by_id[CHILD]["decision"] == "keep" and "no decision" in by_id[CHILD]["reason"]
+    assert all(d["mode"] == "hub" and d["hub"] == "Only" for d in plan["databases"])
+    with pytest.raises(notion_migrate.PlanError, match="no hubs"):
+        notion_migrate.draft(conn, model({"hubs": [], "databases": []}), ROOT)
 
 
-def test_ensure_schema_adds_missing_and_never_touches_verification():
-    fake = build()
-    client = client_for(fake)
-    added, _ = notion_wiki.ensure_schema(client, WIKI)
-    assert added == sorted(
-        [notion_wiki.TYPE, notion_wiki.CANONICAL_KEY, notion_wiki.ALIASES, notion_wiki.RELATED, notion_wiki.TAGS, notion_wiki.SENSITIVITY]
-    )
-    patch = next(r for r in fake.requests if r[0] == "PATCH")
-    assert "Verification" not in patch[3]["properties"]
-    assert patch[3]["properties"]["Related"]["relation"]["data_source_id"] == WIKI
-    before = len(fake.requests)
-    assert notion_wiki.ensure_schema(client, WIKI)[0] == []
-    assert [r[0] for r in fake.requests[before:]] == ["GET"]
+def apply(world):
+    fake, conn, cfg = world
+    pid = notion_migrate.run_cli(cfg, conn, model(STRUCTURE, ITEMS), {"ATRIUM_NOTION_WIKI_ROOT": ROOT})["proposal_id"]
+    applied = proposals.approve_and_apply(conn, cfg, pid)
+    assert applied["status"] == "applied", applied
+    return pid, applied
 
 
-def test_ensure_schema_rejects_wrong_type():
-    fake = build()
-    fake.sources[WIKI]["properties"]["Type"] = {"id": "t", "type": "rich_text"}
-    with pytest.raises(notion_wiki.WikiError):
-        notion_wiki.ensure_schema(client_for(fake), WIKI)
+def titled(fake, title):
+    return [p for p in fake.pages.values() if p["properties"]["Name"]["title"][0]["plain_text"] == title]
 
 
-def test_apply_moves_and_writes_properties():
-    fake = build()
-    conn = db.connect_memory()
-    manifest = manifest_for(fake)
-    result = notion_migrate.apply(conn, client_for(fake), manifest)
-    assert result == {"done": 3, "attempted": 3, "total": 3}
-    for pid in (P1, P2, J1):
-        assert fake.pages[pid]["parent"]["data_source_id"] == WIKI
-    props = fake.pages[P1]["properties"]
-    assert props["Title"]["title"][0]["plain_text"] == "Alpha Project"
-    assert props["Type"]["select"]["name"] == "Projects"
-    assert props["Canonical key"]["rich_text"][0]["plain_text"] == "Alpha Project"
-    assert [t["name"] for t in props["Tags"]["multi_select"]] == ["a", "b"]
-    assert props["Sensitivity"]["select"]["name"] == "private"
-    assert [r["id"] for r in props["Related"]["relation"]] == [P2]
-    assert [r["id"] for r in fake.pages[P2]["properties"]["Related"]["relation"]] == [P1]
-    assert fake.pages[J1]["properties"]["Sensitivity"]["select"]["name"] == "private"
-    assert "Sensitivity" not in fake.pages[P2]["properties"]
-    stored = conn.execute("SELECT result FROM notion_migration WHERE page_id = ?", (P2,)).fetchone()
-    assert json.loads(stored["result"])["dropped_related"] == [P3]
-    assert fake.pages[P3]["parent"]["data_source_id"] == SRC2
-    assert not [r for r in fake.requests if r[0] == "PATCH" and r[3] and "in_trash" in r[3]]
-    assert all(not s.get("in_trash") for s in fake.sources.values())
+def test_apply_builds_the_tree_and_archives_the_rest(world):
+    fake, conn, cfg = world
+    pid, applied = apply(world)
+    home, reference = titled(fake, "Home")[0], titled(fake, "Reference")[0]
+    assert home["parent"] == {"type": "page_id", "page_id": ROOT} and reference["parent"] == {"type": "page_id", "page_id": ROOT}
+    assert fake.markdown[home["id"]] == f"The house and the people who work on it.\n\nLast reviewed {TODAY}"
+    books = titled(fake, "Books")[0]
+    assert books["parent"] == {"type": "page_id", "page_id": reference["id"]}
+    table = fake.markdown[books["id"]]
+    assert "| Title | Author | Rating | Notes |" in table and f"[Dune](https://notion.invalid/{BOOK1}) | Herbert | 5 |" in table and "Emma" in table
+    assert "Dinner with Ann" not in table and table.endswith(f"Last reviewed {TODAY} · sources: " + notion_wiki.render_source(f"https://notion.invalid/{BOOKS}"))
+    assert fake.pages[LOOSE]["parent"] == {"type": "page_id", "page_id": home["id"]}
+    assert fake.pages[CHILD]["parent"] == {"type": "page_id", "page_id": LOOSE}
+    merged = fake.markdown[LOOSE]
+    assert merged.startswith("Plans for the kitchen; contractor is Bob.\n\n## From Bob the contractor\n\nPhone 555-0100, does kitchens.")
+    assert merged.endswith(f"Last reviewed {TODAY} · sources: " + notion_wiki.render_source(f"https://notion.invalid/{NOTE1}"))
+    for archived in (BOOK1, BOOK2, BOOK3, NOTE1, NOTE2):
+        assert fake.pages[archived]["in_trash"] is True, archived
+    assert fake.pages[PRIV]["in_trash"] is False and fake.pages[CHILD]["in_trash"] is False
+    assert fake.sources[BOOKS]["in_trash"] is True and fake.sources[NOTES]["in_trash"] is True
+    assert not any(r[0] == "DELETE" for r in fake.requests)
+    assert not any(r[0] == "PATCH" and "properties" in (r[3] or {}) for r in fake.requests)
+    log = fake.markdown[LOG].split("\n")
+    assert log[0] == f"- {TODAY} · wiki plan applied: 2 hubs, 2 pages, 1 merged, 5 archived"
+    assert f"- {TODAY} · created [Home]" in log[-2] and log[-1] == "- 2026-01-01 · created [Wiki Home](https://notion.invalid/x)"
+    assert any("archived database Books" in line for line in log)
+    assert notion_wiki.get(conn, LOOSE)["hub_id"] == home["id"] and notion_wiki.get(conn, BOOK1)["in_trash"] is True
+    assert applied["result"]["summary"] == "2 hubs and 2 pages placed, 1 merged, 5 items and 2 databases archived"
+    assert proposals.can_undo(conn, pid)
 
 
-def test_apply_limit_then_rerun_is_idempotent():
-    fake = build()
-    conn = db.connect_memory()
-    manifest = manifest_for(fake)
-    client = client_for(fake)
-    first = notion_migrate.apply(conn, client, manifest, limit=1)
-    assert first["attempted"] == 1
-    assert states(conn)[P1] == "remapped"
-    assert fake.pages[P2]["parent"]["data_source_id"] == SRC1
-    second = notion_migrate.apply(conn, client, manifest)
-    assert second["done"] == 3
-    assert len([r for r in fake.requests if r[1].endswith("/move")]) == 3
-    before = len(fake.requests)
-    third = notion_migrate.apply(conn, client, manifest)
-    assert third["attempted"] == 0 and third["done"] == 3
-    assert [r[:2] for r in fake.requests[before:]] == [("GET", f"/v1/data_sources/{WIKI}")]
+def test_undo_puts_everything_back(world):
+    fake, conn, cfg = world
+    pid, _ = apply(world)
+    before_log = "- 2026-01-01 · created [Wiki Home](https://notion.invalid/x)"
+    result = proposals.undo(conn, cfg, pid)
+    assert result["undone"] is True, result
+    for created in ("Home", "Reference", "Books"):
+        assert all(p["in_trash"] for p in titled(fake, created)), created
+    for restored in (BOOK1, BOOK2, BOOK3, NOTE1, NOTE2):
+        assert fake.pages[restored]["in_trash"] is False, restored
+    assert fake.pages[LOOSE]["parent"] == {"type": "workspace", "workspace": True}
+    assert fake.markdown[LOOSE] == "Plans for the kitchen; contractor is Bob."
+    assert fake.sources[BOOKS]["in_trash"] is False and fake.markdown[LOG] == before_log
+    assert conn.execute("SELECT in_trash FROM notion_sources WHERE id = ?", (BOOKS,)).fetchone()[0] == 0
+    assert notion_wiki.get(conn, BOOK1)["in_trash"] is False
 
 
-def test_apply_rereads_after_lost_move_response():
-    fake = build()
-    fake.lose_move_response.add(P2)
-    conn = db.connect_memory()
-    result = notion_migrate.apply(conn, client_for(fake), manifest_for(fake))
-    assert result["done"] == 3
-    assert fake.pages[P2]["parent"]["data_source_id"] == WIKI
+def test_failure_mid_apply_is_recorded(world):
+    fake, conn, cfg = world
+    pid = notion_migrate.run_cli(cfg, conn, model(STRUCTURE, ITEMS), {"ATRIUM_NOTION_WIKI_ROOT": ROOT})["proposal_id"]
+    del fake.pages[NOTE1]
+    failed = proposals.approve_and_apply(conn, cfg, pid)
+    assert failed["status"] == "failed" and "404" in failed["result"]["error"]
+    assert titled(fake, "Home") and proposals.can_undo(conn, pid) is False
+    actions = proposals.actions(conn, pid)
+    assert actions[-1]["ok"] is False and all(a["ok"] for a in actions[:-1])
 
 
-def test_apply_records_failure_and_continues():
-    fake = build()
-    conn = db.connect_memory()
-    manifest = manifest_for(fake)
-    del fake.pages[P2]
-    result = notion_migrate.apply(conn, client_for(fake), manifest)
-    assert result["failed"] == 1 and result["done"] == 1
-    assert states(conn)[P2] == "failed"
-    assert states(conn)[P1] == "remapped"
+def test_existing_hubs_are_reused_and_private_rows_keep_their_database(world):
+    fake, conn, cfg = world
+    fake.add_page(uid(60), "Home", "existing hub", parent={"type": "page_id", "page_id": ROOT})
+    fake.add_page(uid(61), "Secret row", "x", parent=row(NOTES, "db-notes"), properties={"Sensitivity": select_prop("Private")})
+    notion_sync.sync(conn, cfg, client_for(fake), lambda url, texts: [unit(0) for _ in texts])
+    pid = notion_migrate.run_cli(cfg, conn, model(STRUCTURE, ITEMS), {"ATRIUM_NOTION_WIKI_ROOT": ROOT})["proposal_id"]
+    assert proposals.approve_and_apply(conn, cfg, pid)["status"] == "applied"
+    assert len(titled(fake, "Home")) == 1 and fake.pages[LOOSE]["parent"] == {"type": "page_id", "page_id": uid(60)}
+    assert fake.sources[NOTES]["in_trash"] is False and fake.sources[BOOKS]["in_trash"] is True
+    assert fake.pages[uid(61)]["in_trash"] is False
 
 
-def test_verify_reports_ok_and_detects_drift():
-    fake = build()
-    conn = db.connect_memory()
-    manifest = manifest_for(fake)
-    client = client_for(fake)
-    notion_migrate.apply(conn, client, manifest)
-    assert notion_migrate.verify(conn, client, manifest, conn)["ok"]
-    fake.pages[P1]["properties"]["Type"]["select"]["name"] = "Wrong"
-    report = notion_migrate.verify(conn, client, manifest)
-    assert not report["ok"]
-    assert report["problems"][0]["page_id"] == P1
-
-
-def test_verify_flags_pages_not_yet_applied():
-    fake = build()
-    conn = db.connect_memory()
-    manifest = manifest_for(fake)
-    notion_migrate.apply(conn, client_for(fake), manifest, limit=1)
-    report = notion_migrate.verify(conn, client_for(fake), manifest)
-    assert not report["ok"] and report["done"] < report["expected"]
-
-
-def test_rollback_restores_parents_and_properties():
-    fake = build()
-    conn = db.connect_memory()
-    manifest = manifest_for(fake)
-    client = client_for(fake)
-    notion_migrate.apply(conn, client, manifest)
-    result = notion_migrate.rollback(conn, client, manifest)
-    assert result["rolled_back"] == 3
-    assert fake.pages[P1]["parent"]["data_source_id"] == SRC1
-    assert fake.pages[J1]["parent"]["data_source_id"] == SRC3
-    props = fake.pages[P1]["properties"]
-    assert [t["name"] for t in props["Labels"]["multi_select"]] == ["a", "b"]
-    assert [r["id"] for r in props["Rel"]["relation"]] == [P2]
-    assert props["Name"]["title"][0]["plain_text"] == "Alpha Project"
-    assert set(states(conn).values()) == {"rolled_back"}
-    before = len(fake.requests)
-    assert notion_migrate.rollback(conn, client, manifest)["rolled_back"] == 0
-    assert len(fake.requests) == before
-    assert notion_migrate.apply(conn, client, manifest)["done"] == 3
-
-
-def test_rate_limiter_caps_window():
-    now = [0.0]
-
-    def sleep(seconds):
-        now[0] += seconds
-
-    limiter = notion_migrate.RateLimiter(3, 60.0, clock=lambda: now[0], sleep=sleep)
-    stamps = []
-    for _ in range(7):
-        limiter.acquire()
-        stamps.append(now[0])
-    assert limiter.total == 7 and limiter.waited > 0
-    for stamp in stamps:
-        assert len([s for s in stamps if stamp - 60 < s <= stamp]) <= 3
-
-
-def test_rate_limiter_counts_client_retries():
-    fake = build()
-    fake.throttle = 2
-    limiter = notion_migrate.RateLimiter(180, 60.0, clock=lambda: 0.0, sleep=lambda s: None)
-    client_for(fake, limiter).get_page(P1)
-    assert limiter.total == 3 == len(fake.requests)
-
-
-def test_apply_request_budget():
-    fake = build()
-    manifest = manifest_for(fake)
-    limiter = notion_migrate.RateLimiter(180, 60.0, clock=lambda: 0.0, sleep=lambda s: None)
-    notion_migrate.apply(db.connect_memory(), client_for(fake, limiter), manifest)
-    # schema GET+PATCH; move+patch per page; related patch for two pages; one read-back per page
-    assert limiter.total == 2 + 3 * 2 + 2 + 3
-
-
-def seed_mirror(conn, pid, title, ds, props):
-    conn.execute(
-        "INSERT INTO notion_pages (id, title, data_source_id, properties) VALUES (?, ?, ?, ?)",
-        (pid, title, ds, json.dumps(props)),
-    )
-
-
-def text_prop(text):
-    return {"type": "rich_text", "rich_text": rich(text)}
-
-
-def test_find_existing_matches_key_alias_and_title():
-    conn = db.connect_memory()
-    seed_mirror(conn, "k1", "Postgres", WIKI, {"Canonical key": text_prop("postgresql"), "Aliases": text_prop("PG, Postgres DB")})
-    seed_mirror(conn, "k2", "Redis", WIKI, {})
-    seed_mirror(conn, "k3", "Other", "elsewhere", {"Canonical key": text_prop("postgresql")})
-    hits = notion_wiki.find_existing(conn, "PostgreSQL", [], WIKI)
-    assert [(h["id"], h["match"]) for h in hits] == [("k1", "canonical_key")]
-    assert [h["id"] for h in notion_wiki.find_existing(conn, "unknown", ["pg"], WIKI)] == ["k1"]
-    assert notion_wiki.find_existing(conn, "redis", [], WIKI)[0]["match"] == "title"
-    assert {h["id"] for h in notion_wiki.find_existing(conn, "postgresql")} == {"k1", "k3"}
-    assert notion_wiki.find_existing(conn, "", []) == []
-
-
-def test_wiki_env(monkeypatch):
-    monkeypatch.delenv(notion_wiki.WIKI_ENV, raising=False)
-    with pytest.raises(notion_wiki.WikiError):
-        notion_wiki.wiki_data_source()
-    assert notion_wiki.wiki_data_source({notion_wiki.WIKI_ENV: "0123456789abcdef0123456789abcdef"}).count("-") == 4
-
-
-def test_cli_plan_writes_manifest_and_summary(tmp_path, monkeypatch):
-    from helpers import make_config
-
-    cfg = make_config(tmp_path)
-    inv = notion_migrate.inventory(client_for(build()))
-    notion_migrate.write_json(tmp_path / "inv.json", inv)
-    monkeypatch.setenv(notion_wiki.WIKI_ENV, WIKI)
-    args = Namespace(migrate_command="plan", inventory=str(tmp_path / "inv.json"), out=None, skip_source=["Notes"])
-    assert notion_migrate.run_cli(cfg, args) == 0
-    manifest = notion_migrate.read_json(tmp_path / notion_migrate.MANIFEST_FILE)
-    assert manifest["wiki"] == WIKI
-    assert (tmp_path / "notion_migration_manifest.md").read_text().startswith("# Notion wiki migration plan")
+def test_proposal_page_renders_the_plan(world):
+    fake, conn, cfg = world
+    pid = notion_migrate.run_cli(cfg, conn, model(STRUCTURE, ITEMS), {"ATRIUM_NOTION_WIKI_ROOT": ROOT})["proposal_id"]
+    page = web_client(cfg).get("/proposals").text
+    assert "Wiki plan" in page and "Reference" in page and "past one-off event" in page and "Kitchen renovation" in page
+    assert f'hx-post="/proposals/{pid}/approve"' in page and "one page with a table" in page
