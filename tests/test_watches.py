@@ -11,7 +11,6 @@ from atrium.agent import builtin_jobs, registry, scheduler
 from atrium.agent.tools import propose
 from atrium.agent.tools import watches as watch_tools
 from atrium.agent.tools.base import NotConfigured, ToolError
-from atrium.http import ServiceUnavailable
 
 NOW = datetime(2026, 10, 15, 12, 0).timestamp()
 DAY = 86400
@@ -132,69 +131,20 @@ def test_upcoming_birthdays_tool(cfg, conn, tmp_path):
         watch_tools.upcoming_birthdays(make_ctx(conn, cfg, env={}, now=lambda: NOW), {})
 
 
-# ---------- renewals ----------
+# ---------- renewals are gone ----------
 
 
-RENEWAL = {
-    "found": True,
-    "merchant": "Streamly",
-    "amount": 9.99,
-    "currency": "usd",
-    "cadence": "monthly",
-    "next_date": "2026-11-03",
-    "kind": "subscription",
-}
-
-
-def test_renewal_extraction_dedupes_and_keeps_explicit_dates(conn, cfg):
-    first = mail(conn, 1, 3, "Your Streamly plan renews on November 3, 2026 for $9.99", subject="Streamly receipt", has_money=1)
-    second = mail(conn, 2, 1, "Charged $10.99. Next renewal Dec 3.", subject="Streamly receipt", k_receipt=1)
-    calls = []
-    out = watches.scan_renewals(conn, cfg, fake_chat(RENEWAL, calls), now=NOW)
-    assert out == {"scanned": 2, "found": 2} and len(calls) == 2
-    rows = conn.execute("SELECT * FROM renewals").fetchall()
-    assert len(rows) == 1  # same merchant + cadence
-    row = rows[0]
-    assert (row["merchant"], row["currency"], row["cadence"], row["kind"]) == ("Streamly", "USD", "monthly", "subscription")
-    assert row["source_message_id"] == second  # the later mail wins
-    assert row["next_date"] == "2026-11-03"  # second mail did not state this date, but the first one did
-    again = watches.scan_renewals(conn, cfg, fake_chat(RENEWAL, calls), now=NOW)
-    assert again == {"scanned": 0, "found": 0} and len(calls) == 2
-    assert first != second
-
-
-def test_renewal_invented_date_is_dropped(conn, cfg):
-    mail(conn, 1, 1, "Thanks for your payment of $9.99.", subject="Receipt", k_receipt=1)
-    watches.scan_renewals(conn, cfg, fake_chat(RENEWAL), now=NOW)
-    assert conn.execute("SELECT next_date FROM renewals").fetchone()["next_date"] is None
-
-
-def test_renewal_skips_non_recurring_and_invalid(conn, cfg):
-    mail(conn, 1, 1, "one-off", subject="Receipt", k_receipt=1)
-    mail(conn, 2, 1, "x", subject="Statement", k_statement=1)
-    mail(conn, 3, 1, "plain mail without hints", subject="Hello")
-    answers = iter([{**RENEWAL, "found": False}, {**RENEWAL, "cadence": "sometimes"}])
-    out = watches.scan_renewals(conn, cfg, lambda *a: next(answers), now=NOW)
-    assert out == {"scanned": 2, "found": 0}
-    assert conn.execute("SELECT COUNT(*) FROM renewals").fetchone()[0] == 0
-
-
-def test_renewal_scan_defers_when_model_down(conn, cfg):
-    mail(conn, 1, 1, "x", subject="Receipt", k_receipt=1)
-    out = watches.scan_renewals(conn, cfg, fake_chat(ServiceUnavailable("down")), now=NOW)
-    assert out == {"scanned": 0, "found": 0}
-    assert conn.execute("SELECT COUNT(*) FROM watch_scans").fetchone()[0] == 0
-
-
-def test_renewals_tool_filters_by_upcoming_days(conn, cfg):
-    mail(conn, 1, 1, "renews 2026-10-20", subject="Receipt", k_receipt=1)
-    watches.scan_renewals(conn, cfg, fake_chat({**RENEWAL, "next_date": "2026-10-20"}), now=NOW)
-    ctx = make_ctx(conn, cfg, env={"ATRIUM_TZ": TZ}, now=lambda: NOW)
-    assert watch_tools.renewals(ctx, {})["renewals"][0]["days_until"] == 5
-    assert len(watch_tools.renewals(ctx, {"upcoming_days": 7})["renewals"]) == 1
-    assert watch_tools.renewals(ctx, {"upcoming_days": 2})["renewals"] == []
-    watches.dismiss_renewal(conn, 1)
-    assert watch_tools.renewals(ctx, {})["renewals"] == []
+def test_renewals_table_dropped_and_scans_cleared(conn):
+    conn.execute("CREATE TABLE renewals (id INTEGER PRIMARY KEY, merchant TEXT)")
+    conn.execute("INSERT INTO watch_scans (watch, message_id, ts, found) VALUES ('renewals', 1, 0, 1), ('packages', 2, 0, 0)")
+    watches.init_schema(conn)
+    assert conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE name = 'renewals'").fetchone()[0] == 0
+    assert [r["watch"] for r in conn.execute("SELECT watch FROM watch_scans")] == ["packages"]
+    assert not hasattr(watches, "scan_renewals") and not hasattr(watch_tools, "renewals")
+    for kind in ("chat", "cron", "code"):
+        assert "renewals" not in {t.name for t in registry.tools_for(kind)}
+    assert "renewals" not in builtin_jobs.WEEKLY_REVIEW_PROMPT and "renewals" not in builtin_jobs.DAILY_NUDGES_PROMPT
+    assert "bills upcoming_days=7" in builtin_jobs.DAILY_NUDGES_PROMPT
 
 
 # ---------- packages ----------
@@ -274,14 +224,15 @@ def test_packages_tool(conn, cfg):
     assert watch_tools.packages(ctx, {})["packages"] == []
 
 
-def test_refresh_swallows_scan_failures(conn, cfg):
-    mail(conn, 1, 1, "x", subject="Receipt", k_receipt=1)
+def test_refresh_swallows_scan_failures(conn, cfg, monkeypatch):
+    mail(conn, 1, 1, "1Z999AA10123456784", subject="Shipped", k_order=1)
 
     def boom(*a):
         raise RuntimeError("bad")
 
-    out = watches.refresh(conn, cfg, boom, now=NOW)
-    assert out == {"renewals": {"error": True}, "packages": {"scanned": 0, "found": 0}}
+    monkeypatch.setattr(watches, "regex_packages", boom)
+    out = watches.refresh(conn, cfg, fake_chat({}), now=NOW)
+    assert out == {"packages": {"error": True}}
 
 
 # ---------- receipts ----------
@@ -365,7 +316,7 @@ def test_receipt_execution_needs_wiki_type_property(conn, cfg, monkeypatch):
 def test_tools_registered_by_kind():
     cron = {t.name for t in registry.tools_for("cron")}
     chat = {t.name for t in registry.tools_for("chat")}
-    assert {"renewals", "packages", "upcoming_birthdays", "receipt_candidates"} <= cron
+    assert {"packages", "upcoming_birthdays", "receipt_candidates", "bills", "spending"} <= cron
     assert "receipt_mark" in chat and "receipt_mark" not in cron
     assert "receipt_mark" not in {t.name for t in registry.tools_for("nightly")}
 
@@ -377,12 +328,12 @@ def test_builtin_jobs_seeded_once_and_stay_disabled(conn):
     scheduler.ensure_builtins(conn, TZ, NOW)
     scheduler.ensure_builtins(conn, TZ, NOW + 10)
     rows = conn.execute("SELECT * FROM jobs WHERE kind = 'builtin' ORDER BY id").fetchall()
-    assert [r["name"] for r in rows] == ["weekly-review", "daily-nudges", "calendar-candidates"]
-    assert [r["schedule"] for r in rows] == ["weekly sun 18:00", "daily 08:00", "0 * * * *"]
+    assert [r["name"] for r in rows] == ["weekly-review", "daily-nudges", "calendar-candidates", "fx-rates"]
+    assert [r["schedule"] for r in rows] == ["weekly sun 18:00", "daily 08:00", "0 * * * *", "weekly mon 06:00"]
     assert all(r["next_due"] and r["enabled"] for r in rows)
     scheduler.update_job(conn, rows[1]["id"], NOW, enabled=False, enforce=False)
     scheduler.ensure_builtins(conn, TZ, NOW + 20)
-    assert conn.execute("SELECT COUNT(*) FROM jobs WHERE kind = 'builtin'").fetchone()[0] == 3
+    assert conn.execute("SELECT COUNT(*) FROM jobs WHERE kind = 'builtin'").fetchone()[0] == 4
     assert conn.execute("SELECT enabled FROM jobs WHERE name = 'daily-nudges'").fetchone()[0] == 0
     with pytest.raises(scheduler.ScheduleError):
         scheduler.cancel_job(conn, rows[0]["id"])
@@ -392,7 +343,7 @@ def test_builtin_jobs_seeded_once_and_stay_disabled(conn):
 def test_builtin_prompts_use_available_tools():
     names = {t.name for t in registry.tools_for("cron")}
     for prompt in (builtin_jobs.WEEKLY_REVIEW_PROMPT, builtin_jobs.DAILY_NUDGES_PROMPT):
-        for tool in ("open_loops", "commitments", "renewals", "upcoming_birthdays", "notify"):
+        for tool in ("open_loops", "commitments", "bills", "upcoming_birthdays", "notify"):
             if tool in prompt:
                 assert tool in names, tool
 
@@ -438,21 +389,19 @@ def test_calendar_candidates_builtin_calls_draft(cfg, conn, monkeypatch):
 
 
 def test_watches_page_and_dismissals(cfg, conn, tmp_path):
-    mail(conn, 1, 1, "renews 2026-12-01 $5", subject="Receipt", k_receipt=1)
-    watches.scan_renewals(conn, cfg, fake_chat({**RENEWAL, "next_date": "2026-12-01"}), now=NOW)
     mail(conn, 2, 1, "1Z999AA10123456784", subject="Shipped", k_order=1)
     watches.scan_packages(conn, cfg, fake_chat({}), now=NOW)
     conn.commit()
     client = web_client(cfg)
     page = client.get("/watches")
     assert page.status_code == 200
-    assert "Streamly" in page.text and "1Z999AA10123456784" in page.text and "Address book not configured" in page.text
-    assert 'href="/watches"' in page.text
-    assert client.post("/watches/renewals/1/dismiss").status_code == 200
+    assert "1Z999AA10123456784" in page.text and "Address book not configured" in page.text
+    assert 'href="/watches"' in page.text and "Renewals" not in page.text and 'href="/money/bills"' in page.text
     assert client.post("/watches/packages/1/dismiss").status_code == 200
     page = client.get("/watches")
-    assert "Streamly" not in page.text and "1Z999AA10123456784" not in page.text
+    assert "1Z999AA10123456784" not in page.text
     assert client.post("/watches/renewals/99/dismiss").status_code == 404
+    assert client.post("/watches/packages/99/dismiss").status_code == 404
 
 
 def test_watches_page_lists_and_dismisses_birthdays(tmp_path):

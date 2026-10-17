@@ -84,8 +84,8 @@ CREATE INDEX IF NOT EXISTS usage_ts ON usage (ts);
 CREATE TABLE IF NOT EXISTS agent_writes (
     id INTEGER PRIMARY KEY,
     ts REAL NOT NULL,
-    thread_id INTEGER NOT NULL REFERENCES threads(id),
-    run_id INTEGER NOT NULL REFERENCES runs(id),
+    thread_id INTEGER REFERENCES threads(id),
+    run_id INTEGER REFERENCES runs(id),
     tool TEXT NOT NULL,
     target TEXT NOT NULL,
     before_json TEXT,
@@ -118,17 +118,32 @@ CREATE TABLE IF NOT EXISTS context_ledger (
 );
 """
 
-from .. import calendar as _calendar, drafts as _drafts, event_candidates as _event_candidates, openloops as _openloops, receipts as _receipts, watches as _watches  # noqa: E402
+from .. import calendar as _calendar, drafts as _drafts, event_candidates as _event_candidates, money as _money, openloops as _openloops, receipts as _receipts, watches as _watches  # noqa: E402
 from . import context as _context, scheduler as _scheduler, skills as _skills  # noqa: E402
 from .tools import notify as _notify  # noqa: E402
 from . import subagents as _subagents  # noqa: E402
 
-INITS = [_calendar.init_schema, _event_candidates.init_schema, _drafts.init, _scheduler.init, _skills.init, _notify.init, _subagents.init, _context.init, _openloops.init, _watches.init_schema, _receipts.init_schema]
+INITS = [_calendar.init_schema, _event_candidates.init_schema, _drafts.init, _scheduler.init, _skills.init, _notify.init, _subagents.init, _context.init, _openloops.init, _watches.init_schema, _receipts.init_schema, _money.init_schema]
 RUN_COLUMNS = (("limits_json", "TEXT"), ("owner", "TEXT"), ("lease_until", "REAL"))
+
+
+def _relax_writes(conn):
+    """Ledger writes made outside an agent run (mail pass, web, CLI) have no thread or run: rebuild the table once."""
+    columns = {r["name"]: r for r in conn.execute("PRAGMA table_info(agent_writes)")}
+    if not columns["thread_id"]["notnull"]:
+        return
+    conn.executescript(
+        "BEGIN; CREATE TABLE agent_writes_new (id INTEGER PRIMARY KEY, ts REAL NOT NULL, "
+        "thread_id INTEGER REFERENCES threads(id), run_id INTEGER REFERENCES runs(id), tool TEXT NOT NULL, "
+        "target TEXT NOT NULL, before_json TEXT, after_json TEXT, undo_json TEXT, undone_at REAL); "
+        "INSERT INTO agent_writes_new SELECT id, ts, thread_id, run_id, tool, target, before_json, after_json, undo_json, undone_at FROM agent_writes; "
+        "DROP TABLE agent_writes; ALTER TABLE agent_writes_new RENAME TO agent_writes; COMMIT;"
+    )
 
 
 def init(conn):
     conn.executescript(SCHEMA)
+    _relax_writes(conn)
     _context.add_columns(conn, "runs", RUN_COLUMNS)
     _context.add_columns(conn, "thread_messages", (("system_sig", "TEXT"),))
     for extra in INITS:

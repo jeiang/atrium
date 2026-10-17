@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state %}
+{% from "_money.html" import money_nav, money_amount, kind_badge, assign_form %}
+{% set page = "money" %}
+{% block title %}Transactions{% endblock %}
+{% block heading %}Money · Transactions{% endblock %}
+{% block content %}
+{{ money_nav("/money/transactions") }}
+<form method="get" action="/money/transactions" class="flex flex-wrap items-end gap-2 rounded-lg border bg-card p-4 text-sm">
+  <label class="flex flex-col gap-1 text-xs">From<input class="input" type="date" name="start" value="{{ filters.start }}"></label>
+  <label class="flex flex-col gap-1 text-xs">To<input class="input" type="date" name="end" value="{{ filters.end }}"></label>
+  <label class="flex flex-col gap-1 text-xs">Account
+    <select class="select" name="account_id"><option value="">Any</option>{% for a in accounts %}<option value="{{ a.id }}"{% if a.id == filters.account_id %} selected{% endif %}>{{ a.name }}</option>{% endfor %}</select>
+  </label>
+  <label class="flex flex-col gap-1 text-xs">Payee<input class="input" type="text" name="payee" value="{{ filters.payee }}" placeholder="contains"></label>
+  <label class="flex flex-col gap-1 text-xs">Category
+    <select class="select" name="category"><option value="">Any</option>{% for c in categories %}<option value="{{ c.name }}"{% if c.name == filters.category %} selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+  </label>
+  <label class="flex flex-col gap-1 text-xs">Kind
+    <select class="select" name="kind"><option value="">Any</option>{% for k in kinds %}<option value="{{ k }}"{% if k == filters.kind %} selected{% endif %}>{{ k | replace("_", " ") }}</option>{% endfor %}</select>
+  </label>
+  <label class="flex flex-col gap-1 text-xs">Currency
+    <select class="select" name="currency"><option value="">Any</option>{% for c in ("TTD", "BBD") %}<option value="{{ c }}"{% if c == filters.currency %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+  </label>
+  <label class="flex items-center gap-1 text-xs"><input type="checkbox" name="unassigned" value="true"{% if filters.unassigned %} checked{% endif %}>Unassigned or flagged</label>
+  <button type="submit" class="btn" data-size="sm">{{ icon("search") }}Filter</button>
+</form>
+
+{% if transactions %}
+<form method="post" action="/money/transactions/merge" class="flex flex-col gap-3">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="flex items-center justify-between gap-2">
+    <p class="text-sm text-muted-foreground">{{ transactions | length }} transactions. Tick two or more that describe one purchase and merge them.</p>
+    <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("merge") }}Merge selected</button>
+  </div>
+  <ul class="flex flex-col gap-2" role="list" aria-label="Transactions">
+    {% for t in transactions %}
+    <li class="flex flex-wrap items-start gap-3 rounded-lg border bg-card p-3{% if t.is_transfer %} opacity-80{% endif %}">
+      <input type="checkbox" name="transaction_ids" value="{{ t.id }}" class="mt-1" aria-label="Select transaction {{ t.id }}">
+      <div class="flex min-w-0 flex-1 flex-col gap-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-muted-foreground tabular-nums">{{ t.date }}</span>
+          <span class="text-sm font-medium">{{ t.display_payee }}</span>
+          {{ kind_badge(t.kind) }}
+          {% if t.category %}<span class="badge" data-variant="outline">{{ t.category }}</span>{% endif %}
+          {% if t.source_count > 1 %}<span class="badge" data-variant="secondary">{{ t.source_count }} sources</span>{% endif %}
+          {% if t.transfer_id %}<span class="badge" data-variant="outline">linked #{{ t.transfer_id }}</span>{% endif %}
+          {% if t.review %}<span class="badge border-warning/30 bg-warning/10 text-warning">{{ t.review }}</span>{% endif %}
+        </div>
+        <p class="text-xs text-muted-foreground">{{ money_amount(t) }} · {{ t.account or "no account" }}{% if t.description %} · {{ t.description }}{% endif %}{% if t.message_id %} · <a class="underline" href="/messages/{{ t.message_id }}">source mail</a>{% endif %} · #{{ t.id }}</p>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</form>
+<section class="flex flex-col gap-3" aria-labelledby="edit-h">
+  <h2 id="edit-h" class="text-sm font-medium">Edit a transaction</h2>
+  <ul class="flex flex-col gap-2" role="list" aria-label="Transaction actions">
+    {% for t in transactions if t.source_count > 1 or t.account_id is none or t.review %}
+    <li class="flex flex-wrap items-center gap-3 rounded-lg border bg-card px-3 py-2 text-sm">
+      <span class="text-xs text-muted-foreground">#{{ t.id }} {{ t.display_payee }}</span>
+      {% if t.source_count > 1 %}
+      <form method="post" action="/money/transactions/{{ t.id }}/split">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{ icon("split") }}Split</button>
+      </form>
+      {% endif %}
+      {% if accounts and t.kind != "fx_adjustment" %}{{ assign_form(t, accounts, "transactions") }}{% endif %}
+      <form method="post" action="/money/transactions/{{ t.id }}/category" class="flex items-center gap-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <select name="category_id" class="select" aria-label="Category for transaction {{ t.id }}">
+          <option value="">Payee's category</option>
+          {% for c in categories %}<option value="{{ c.id }}"{% if c.id == t.category_id %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">Set category</button>
+      </form>
+    </li>
+    {% else %}
+    <li class="text-sm text-muted-foreground">Merged, unassigned or flagged transactions get split, assign and category controls here.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% else %}
+{% call empty_state("receipt", "No transactions match") %}Loosen the filters, or wait for the next mail pass.{% endcall %}
+{% endif %}
+{% endblock %}

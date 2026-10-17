@@ -194,21 +194,64 @@ never resent automatically.
 
 ### Watches, birthdays, receipts and built-in jobs
 
-After each mail pass atrium reads statement/receipt/order mail with the local model
-and keeps renewals (merchant, amount, cadence, next date only when the mail states it)
-and packages (UPS/FedEx/USPS/DHL numbers by regex, model fallback for orders without one).
+After each mail pass atrium reads order/shipping mail with the local model and keeps
+packages (UPS/FedEx/USPS/DHL numbers by regex, model fallback for orders without one).
 Package status changes only when a later email says so; there is no carrier lookup.
-`atrium watches refresh` runs the same scan by hand. /watches lists renewals, packages
-and birthdays/anniversaries for the next 60 days with Dismiss. Dates come from vCard
+`atrium watches refresh` runs the same scan by hand. /watches lists packages and
+birthdays/anniversaries for the next 60 days with Dismiss. Dates come from vCard
 `BDAY`, `ANNIVERSARY`, `X-ANNIVERSARY` and iOS `item*.X-ABDATE` entries in
 `ATRIUM_CONTACTS_DIR`. Receipt mail is offered by `receipt_candidates`; in cron runs the
 assistant proposes `notion_receipt`, which creates a `Type=Receipt` page in
 `ATRIUM_NOTION_WIKI_DATA_SOURCE` (needs a `Type` select property) and undo trashes it.
 
-The scheduler seeds three built-in jobs once (kind `builtin`, listed on /schedules, disable
+The scheduler seeds four built-in jobs once (kind `builtin`, listed on /schedules, disable
 but not cancel): `weekly-review` (Sunday 18:00), `daily-nudges` (08:00, notifies only
-when something is due) and `calendar-candidates` (hourly, drafts calendar proposals only
-when event candidates are queued). Their prompts live in code.
+when something is due, using upcoming bills from the ledger), `calendar-candidates`
+(hourly, drafts calendar proposals only when event candidates are queued) and `fx-rates`
+(Monday 06:00, stores the CBTT USD selling rate; no model). Their prompts live in code.
+
+### Spending ledger (/money)
+
+atrium keeps its own ledger from mail; there is no external budgeting app. Set up once on
+/money/accounts: one entry per bank account or card with bank (First Citizens, Scotiabank,
+Republic, CIBC), name, kind (bank or credit card), currency (TTD or BBD), last four digits
+and the alert sender patterns (bank defaults are filled in; edit if alerts come from another
+address). A bank alert maps to the account whose sender pattern matches and whose last four
+digits appear in the mail; anything that matches no account waits in the "Needs an account"
+queue on /money with an Assign button.
+
+After each mail pass (and on `atrium money refresh`, which also backfills the last 90 days
+the first time) the local model extracts kind, payee, amount, currency, date, bank and
+last four from money/receipt/statement/order mail; each hit is posted automatically,
+deduplicated by message, and logged on /changes with Undo. Rules:
+
+- Every transaction stores the original amount and currency plus the amount resolved in the
+  account currency (both shown when they differ). If the alert itself states the account
+  currency amount, that wins and the computed one is kept for the FX audit.
+- Republic credit card: USD at the CBTT USD selling rate, BBD at half of it. CIBC BBD
+  account: USD at 2.00 x 1.02 (USD 100 -> BBD 204). TTD accounts never hold foreign
+  charges; such alerts are flagged for review. TTD and BBD are reported separately.
+- CBTT rate: the `fx-rates` job reads `table.rate_table` on
+  https://www.central-bank.org.tt/ weekly (also once when the ledger is empty, and "Fetch
+  now" on /money/accounts). A transaction uses the latest rate on or before its date.
+- Payees: raw descriptors are normalized (uppercase, no `*`, store numbers or trailing
+  country) and matched against aliases (exact, prefix, regex); an unknown descriptor gets a
+  new payee with a model-suggested name and category. Category per payee is the
+  store-to-category rule; the starter list and renames are on /money/payees.
+- A bank alert and a receipt for the same purchase merge automatically (same payee, within
+  3% after conversion, within 3 days); the alert's account and amount win, the receipt
+  contributes the original-currency amount and description. Merge/split by hand on
+  /money/transactions.
+- ATM withdrawals are spending in "Cash". Transfers and card payments are not spending and
+  link both sides when both alerts exist. A Republic card statement posts an "FX
+  adjustment" = statement total minus the converted charges of that cycle.
+- Bills (/money/bills) are payees with subscription wording in their mail or 2+ charges at
+  a regular interval with similar amounts; override per payee. `daily-nudges` uses them.
+
+Assistant tools: `spending`, `transactions`, `bills`, `payees` (chat, cron, code);
+`payee_rename`, `payee_merge`, `payee_alias_add`, `payee_set_category`,
+`transaction_merge`, `transaction_split`, `transaction_set_account` (chat only, undoable
+on /changes). The nightly run has none of the writes.
 
 ### Running the CLI
 
@@ -219,6 +262,7 @@ through `systemd-run`:
 ssh artemis.jeiang.vpn doas atrium-run shadow-report --since 7d
 ssh artemis.jeiang.vpn doas atrium-run sync --account gmail
 ssh artemis.jeiang.vpn doas atrium-run reindex
+ssh artemis.jeiang.vpn doas atrium-run money refresh --limit 500
 ```
 
 ### Going live

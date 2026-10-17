@@ -6,35 +6,10 @@ from ._args import bounded_int, clip, text_arg
 from .base import CHAT, CODE, CRON, READ, WRITE, NotConfigured, Tool, ToolContext, ToolError
 
 CONTEXTS = frozenset({CHAT, CRON, CODE})
-MAX_LIMIT = 100
-MAX_DAYS = 365
 
 
 def _today(ctx):
     return datetime.fromtimestamp(ctx.now(), scheduler.zone(scheduler.tz_name(ctx.env))).date()
-
-
-def renewals(ctx: ToolContext, args: dict):
-    days = args.get("upcoming_days")
-    if days is not None:
-        days = bounded_int(args, "upcoming_days", 30, MAX_DAYS, minimum=0)
-    items = watches.list_renewals(ctx.conn, _today(ctx), days)
-    return {
-        "renewals": [
-            {
-                "merchant": i["merchant"],
-                "kind": i["kind"],
-                "cadence": i["cadence"],
-                "amount": i["amount"],
-                "currency": i["currency"],
-                "next_date": i["next_date"],
-                "days_until": i["days_until"],
-                "source_message_id": i["source_message_id"],
-            }
-            for i in items
-        ],
-        "note": "Extracted from mail by a local model; next_date is only set when the mail states it. Verify against the source message before acting.",
-    }
 
 
 def packages(ctx: ToolContext, args: dict):
@@ -100,18 +75,6 @@ def receipt_proposal(ctx: ToolContext, payload: dict):
 
 
 TOOLS = [
-    Tool(
-        name="renewals",
-        description="List subscriptions, bills and renewals found in the operator's mail (merchant, amount, cadence, next date when the mail states one). upcoming_days limits to renewals dated within that many days from today.",
-        input_schema={
-            "type": "object",
-            "properties": {"upcoming_days": {"type": "integer", "minimum": 0, "maximum": MAX_DAYS}},
-            "additionalProperties": False,
-        },
-        handler=renewals,
-        effect=READ,
-        contexts=CONTEXTS,
-    ),
     Tool(
         name="packages",
         description="List packages and orders tracked from shipping and order emails (carrier, tracking number, merchant, status). active_only (default true) hides delivered and stale ones.",
