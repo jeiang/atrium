@@ -1,13 +1,13 @@
 {% from "_icons.html" import icon %}
-<section class="flex flex-col gap-3 rounded-lg border bg-card p-4" aria-label="Files of {{ torrent_name or hash }}">
-  <header class="flex flex-wrap items-center gap-2">
-    <h2 class="min-w-0 flex-1 truncate text-sm font-medium" title="{{ torrent_name or hash }}">{{ torrent_name or hash }}</h2>
-    <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close files" data-action="clear" data-target="torrent-files">{{ icon("x") }}</button>
-  </header>
+<header class="flex-row items-center gap-2">
+  <h2 class="min-w-0 flex-1 truncate" title="{{ torrent_name or hash }}">{{ torrent_name or hash }}</h2>
+  <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close files" data-action="close-dialog">{{ icon("x") }}</button>
+</header>
+<section class="max-h-[70vh] overflow-y-auto">
   {% if error %}
   <p class="text-sm text-destructive" role="alert">{{ error }}</p>
   {% elif files %}
-  <ul class="flex flex-col divide-y text-xs" role="list">
+  <ul class="flex flex-col divide-y text-xs" role="list" aria-label="Files of {{ torrent_name or hash }}">
     {% for f in files %}
     <li class="flex flex-wrap items-center gap-3 py-2">
       <form hx-post="/media/torrents/{{ hash }}/files" hx-target="#torrent-files" hx-swap="innerHTML" class="contents">

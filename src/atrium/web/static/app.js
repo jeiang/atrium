@@ -107,7 +107,6 @@ const actions = {
     button.closest("form").remove();
     opener.focus();
   },
-  "clear": (button) => document.getElementById(button.dataset.target).replaceChildren(),
 };
 
 document.addEventListener("click", (event) => {
