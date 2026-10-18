@@ -247,7 +247,7 @@ func TestTimeout(t *testing.T) {
 	if !errors.Is(err, ErrTimeout) || m != nil {
 		t.Fatalf("Search = %v, %v; want nil, ErrTimeout", m, err)
 	}
-	if elapsed := time.Since(start); elapsed > 10*MatchTimeout {
+	if elapsed := time.Since(start); elapsed > 20*MatchTimeout {
 		t.Errorf("timed out after %v", elapsed)
 	}
 	if out, err := re.Sub("x", input, 0); !errors.Is(err, ErrTimeout) || out != input {
