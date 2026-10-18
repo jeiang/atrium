@@ -129,6 +129,14 @@ and backups; nothing of that lives here.
   every write method calls the gate before the connection;
   `mail/mailtest.FakeClient` runs the same gate. A move is COPY, STORE
   `\Deleted`, UID EXPUNGE: nothing under `internal/mail` uses IMAP MOVE.
+- `internal/mail/mime/`: CPython 3.14.7's `email` package as `policy.default`
+  applies it to bytes (feedparser, header registry and value parser,
+  `parseaddr`/`getaddresses`, `parsedate_to_datetime`, codecs, transfer
+  decoding), including where Python raises; tables come from
+  `tools/mime/gen_tables.py`.
+- `internal/mail/features/`: `features.py` (`Extract`, `ContentDigest`,
+  `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
+- `internal/pyhtml/`: `html.unescape`; tables from `tools/pyhtml/gen_entities.py`.
 - `internal/web/`: the embedded web assets (`Static`, `AssetVersion`);
   `internal/web/static` is staged, never committed.
 - `third_party/`: vendored sources, each its own Go module wired by
