@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from agent_tool_helpers import make_ctx
@@ -9,9 +10,9 @@ from atrium.agent import builtin_jobs, registry, scheduler
 from atrium.agent.tools import watches as watch_tools
 from atrium.agent.tools.base import NotConfigured, ToolError
 
-NOW = datetime(2026, 10, 15, 12, 0).timestamp()
-DAY = 86400
 TZ = "America/Port_of_Spain"
+NOW = datetime(2026, 10, 15, 12, 0, tzinfo=ZoneInfo(TZ)).timestamp()
+DAY = 86400
 
 
 @pytest.fixture
