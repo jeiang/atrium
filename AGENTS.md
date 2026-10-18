@@ -11,6 +11,8 @@ and backups; nothing of that lives here.
 
 - Never commit to `main`. Use a branch and a pull request; CI runs
   `nix flake check`.
+- `main` requires signed commits and the `check` status. Merge with
+  `gh pr merge --auto --merge`.
 - Use Conventional Commits.
 - Tests: `nix build .#atrium` runs pytest in the package's checkPhase.
   For a faster loop, `nix develop -c python -m pytest` runs the suite
