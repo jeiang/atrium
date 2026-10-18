@@ -170,7 +170,7 @@ def register(app, deps):
     # ---------- add ----------
 
     def add_page(magnet="", name="", mode=MEDIA, error=None, status_code=200):
-        return render("media_add.html", magnet=magnet, torrent_name=name, mode=mode, error=error, modes=MODES, status_code=status_code)
+        return render("media_add.html", magnet=magnet, torrent_name=name, add_mode=mode, error=error, modes=MODES, status_code=status_code)
 
     @app.get("/media/add")
     def add_form(magnet: str = ""):
