@@ -15,6 +15,7 @@ either run differs from the committed files.
 | --- | --- |
 | `../atrium.db` | Fresh install populated through the real write paths: sync, embed, router, flags, event candidates, applier (shadow, then live), corrections, undo, backlog and scanner proposals, open loops, packages, money, Notion mirror and wiki, media channels, agent threads/runs/journal, scheduler, settings. |
 | `../atrium-legacy.db` | The same data in the pre-migration shapes a fresh DB never has (see below). `db.connect` migrates it. |
+| `../atrium-vec016.db`, `../atrium-vec016.json` | A minimal DB written by the live host's stack (SQLite 3.51.2, sqlite-vec 0.1.6) and what Python recorded from it (below). |
 | `schema.sql`, `rowcounts.json`, `quick_check.json`, `readpaths.json` | Schema, per-table row counts, `PRAGMA quick_check` and read-path results of `atrium.db`. |
 | `legacy/pre/` | Schema, row counts and quick check of `atrium-legacy.db` as committed. |
 | `legacy/migrated/` | The same after Python's `db.connect` migrated a copy, plus its read-path results. |
@@ -75,6 +76,30 @@ columns and NOT NULL `thread_id` (project files dropped), `messages` without
 card and CIBC BBD rows get the backfill), `drafts` without `sent_msgid`,
 `transactions` without `dismissed`, and a `renewals` table plus a
 `watch_scans` row with `watch='renewals'`.
+
+## sqlite-vec 0.1.6 fixture (`../atrium-vec016.db`)
+
+The live host's nixpkgs (cornn-flaek `flake.lock`, rev
+`c5c4a43b0e8056328ec4529f735cabdb8f1942bb`) ships SQLite 3.51.2 and
+sqlite-vec 0.1.6, older than what the devshell and the Go binary bundle, so
+the files above prove nothing about it. `tools/golden/make_vec016.py` runs
+the frozen `db.connect` and both embed write paths (`embed.embed_pending`,
+`notion_sync.embed_pending`, the local model replaced by fixed 768-d
+vectors) on six messages (icloud, gmail) and four Notion pages (public,
+private); every other table is empty or holds only the seeds.
+`atrium-vec016.json` holds the versions, `quick_check`, the vec0 shadow
+tables, a SHA-256 per stored embedding and the KNN rows and distances of
+three queries. It is not part of `just golden` or the `golden-db` check, as
+it needs that exact nixpkgs; regenerate it on an x86_64-linux host from the
+repo root with
+
+```sh
+nix shell --impure --expr '(builtins.getFlake "github:NixOS/nixpkgs/c5c4a43b0e8056328ec4529f735cabdb8f1942bb").legacyPackages.x86_64-linux.python314.withPackages (py: [py.anthropic py.caldav py.fastapi py.google-api-python-client py.google-auth py.httpx py.icalendar py.jinja2 py.markdown-it-py py.nh3 py.openpyxl py.pydantic-monty py.python-docx py.python-multipart py.sqlite-vec py.trafilatura py.uvicorn])' -c python tools/golden/make_vec016.py
+```
+
+The generator refuses other SQLite or sqlite-vec versions; two runs give
+byte-identical files. `TestVec016DB` (`internal/db`) migrates a copy on both
+Go drivers.
 
 ## Pipeline fixtures (`../pipeline/`)
 
