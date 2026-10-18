@@ -42,6 +42,25 @@
       "93.184.216.34"
     ]
   },
+  "dns_sequence_semantics": "the n-th lookup (0-based) of a host within one fetch_page or web_fetch call gets answer n; past the end, the last answer repeats",
+  "dns_sequences": {
+    "flip-hop.example.test": [
+      [
+        "93.184.216.34"
+      ],
+      [
+        "127.0.0.1"
+      ]
+    ],
+    "flip.example.test": [
+      [
+        "93.184.216.34"
+      ],
+      [
+        "127.0.0.1"
+      ]
+    ]
+  },
   "fixtures": [],
   "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
   "functions": [
@@ -54,7 +73,7 @@
   ],
   "process_tz": "America/Port_of_Spain",
   "python": "3.14",
-  "records": 215,
+  "records": 231,
   "responses": [
     {
       "body": {
@@ -782,7 +801,7 @@
     {
       "body": {
         "count": 2097152,
-        "repeat": "a"
+        "repeat_b64": "YQ=="
       },
       "chunk": null,
       "headers": [
@@ -825,7 +844,7 @@
     {
       "body": {
         "count": 2162688,
-        "repeat": "a"
+        "repeat_b64": "YQ=="
       },
       "chunk": 65536,
       "headers": [
@@ -944,6 +963,90 @@
         ]
       ],
       "host": "93.184.216.34",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/ok"
+    },
+    {
+      "body": {
+        "b64": "PHA+ZXhhbXBsZSByb290PC9wPg=="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "19"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/"
+    },
+    {
+      "body": {
+        "b64": "PHA+cGlubmVkIHRvIHRoZSBmaXJzdCBhbnN3ZXI8L3A+"
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "33"
+        ]
+      ],
+      "host": "flip.example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/ok"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "/ok"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "flip-hop.example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/hop"
+    },
+    {
+      "body": {
+        "b64": "PHA+bmV2ZXIgcmVhY2hlZDwvcD4="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "20"
+        ]
+      ],
+      "host": "flip-hop.example.test",
       "port": 80,
       "scheme": "http",
       "status": 200,

@@ -220,15 +220,27 @@ case whose text differs, with the reason.
 network is used: the manifest's `dns` table answers `getaddrinfo` (an IP
 literal resolves to itself, and a host `inet_aton` accepts such as
 `2130706433`, `0x7f.1` or `127.1` resolves to that IPv4 address, as glibc
-does; anything else fails), and `responses` lists the scripted HTTP reply
-per `scheme`, `host`, `port` and request `target` (`status`, `headers`,
-`body`, `chunk`: chunked framing size). A request with no scripted reply fails
-with `connection refused`. `fetch_page` records output `{body_b64 (null over
-4 KB), body_len, charset, url}` and `connections`: each pinned connection
-(`address`, `host`, `port`, `target`, request headers) in order.
+does; anything else fails). `dns_sequences` models DNS rebinding: the n-th
+lookup (0-based) of such a host within one `fetch_page` or `web_fetch` call
+gets the n-th answer list, and past the end the last one repeats.
+`flip.example.test` answers public first and `127.0.0.1` after: a single hop
+connects to the first answer (the pinned address), and the
+`flip-hop.example.test/hop` same-host redirect is blocked on its second
+lookup. `responses` lists the scripted HTTP reply per `scheme`, `host`, `port`
+and request `target` (`status`, `headers`, `body`, `chunk`: chunked framing
+size). A request with no scripted reply fails with `connection refused`.
+`fetch_page` records output `{body_b64 (null over 4 KB), body_len, charset,
+url}`, `lookups` (each `getaddrinfo` call in order: `host`, `port`, `answers`,
+`null` when the name does not resolve) and `connections` (each pinned
+connection: `address`, `host`, `port`, `target`, request headers). The URL
+cases include userinfo and authority tricks (`example.test@127.0.0.1`,
+`127.0.0.1#@example.test`, `127.0.0.1\@example.test`), numeric IPv4 forms
+(octal, hex, a single integer, `0`) and IPv6 forms (`[::]`, a scoped
+link-local address, NAT64 `64:ff9b::/96`, IPv4-compatible `::127.0.0.1`,
+site-local `fec0::/10`), recorded as the frozen Python treats them.
 `default_allowed` covers IPv4 and IPv6 special-purpose ranges. `plain_text`
 and `extract_text` run over the pages in the generator; `web_fetch` records
-add `allowed_urls`.
+add `allowed_urls`, `lookups` and `connections`.
 
 ### Web fetch divergences
 

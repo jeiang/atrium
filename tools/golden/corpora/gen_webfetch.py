@@ -46,10 +46,21 @@ DNS = {
     "empty.example.test": [],
 }
 
+# Rebinding: the n-th lookup of a host within one fetch gets the n-th answer (the last answer repeats).
+DNS_SEQUENCES = {
+    "flip.example.test": [[PUBLIC], ["127.0.0.1"]],
+    "flip-hop.example.test": [[PUBLIC], ["127.0.0.1"]],
+}
+LOOKUPS = []
+
 
 def getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
-    if host.rstrip(".") in DNS:
-        addresses = DNS[host.rstrip(".")]
+    name = host.rstrip(".")
+    if name in DNS_SEQUENCES:
+        answers = DNS_SEQUENCES[name]
+        addresses = answers[min(sum(1 for lookup in LOOKUPS if lookup["host"] == host), len(answers) - 1)]
+    elif name in DNS:
+        addresses = DNS[name]
     else:
         try:
             addresses = [str(ipaddress.ip_address(host))]
@@ -57,7 +68,9 @@ def getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
             try:
                 addresses = [socket.inet_ntoa(socket.inet_aton(host))]
             except OSError:
+                LOOKUPS.append({"host": host, "port": port, "answers": None})
                 raise socket.gaierror(-2, "Name or service not known") from None
+    LOOKUPS.append({"host": host, "port": port, "answers": list(addresses)})
     return [(socket.AF_INET6 if ":" in a else socket.AF_INET, socket.SOCK_STREAM, 6, "", (a, port)) for a in addresses]
 
 
@@ -81,7 +94,7 @@ def wire(spec):
 
 def described(spec):
     body = spec["body"]
-    encoded = {"repeat": body[:1].decode(), "count": len(body)} if len(body) > 4096 and len(set(body)) == 1 else {"b64": b64(body)}
+    encoded = {"repeat_b64": b64(body[:1]), "count": len(body)} if len(body) > 4096 and len(set(body)) == 1 else {"b64": b64(body)}
     return {**spec, "body": encoded}
 
 
@@ -166,6 +179,10 @@ RESPONSES = {
     ("http", "v6.example.test", 80, "/ok"): reply(200, [("Content-Type", HTML)], b"<p>v6</p>"),
     ("http", "dual.example.test", 80, "/ok"): reply(200, [("Content-Type", HTML)], b"<p>dual</p>"),
     ("http", "93.184.216.34", 80, "/ok"): reply(200, [("Content-Type", HTML)], b"<p>literal</p>"),
+    ("http", "example.test", 80, "/"): reply(200, [("Content-Type", HTML)], b"<p>example root</p>"),
+    ("http", "flip.example.test", 80, "/ok"): reply(200, [("Content-Type", HTML)], b"<p>pinned to the first answer</p>"),
+    ("http", "flip-hop.example.test", 80, "/hop"): reply(302, [("Location", "/ok")]),
+    ("http", "flip-hop.example.test", 80, "/ok"): reply(200, [("Content-Type", HTML)], b"<p>never reached</p>"),
 }
 
 CONNECTIONS = []
@@ -241,6 +258,22 @@ FETCHES = [
     "http://v6.example.test/ok",
     "http://dual.example.test/ok",
     "http://93.184.216.34/ok",
+    "http://flip.example.test/ok",
+    "http://flip-hop.example.test/hop",
+    "http://example.test@127.0.0.1/",
+    "http://127.0.0.1#@example.test/",
+    "http://a@b@127.0.0.1/",
+    "http://example.test:80@127.0.0.1/",
+    "http://127.0.0.1:80@example.test/ok",
+    "http://127.0.0.1\\@example.test/",
+    "http://[::]/",
+    "http://0177.0.0.1/",
+    "http://0x7f000001/",
+    "http://0/",
+    "http://[fe80::1%25eth0]/",
+    "http://[64:ff9b::7f00:1]/",
+    "http://[::127.0.0.1]/",
+    "http://[fec0::1]/",
     "http://127.0.0.1/",
     "http://10.0.0.5/",
     "http://192.168.1.1/",
@@ -336,12 +369,13 @@ TOOL_CALLS = [
 
 def fetch(url):
     CONNECTIONS.clear()
+    LOOKUPS.clear()
     try:
         body, charset, final_url = webfetch.fetch_page(url)
         result = {"output": {"body_b64": b64(body) if len(body) <= 4096 else None, "body_len": len(body), "charset": charset, "url": final_url}}
     except (webfetch.Blocked, webfetch.FetchError, ValueError) as e:
         result = {"error": error(e)}
-    return {**result, "connections": list(CONNECTIONS)}
+    return {**result, "lookups": list(LOOKUPS), "connections": list(CONNECTIONS)}
 
 
 def build():
@@ -361,11 +395,12 @@ def build():
         records.append({"fn": "extract_text", "case": name, "input": [PAGES[name], "https://example.test/page"], "output": list(webfetch.extract_text(PAGES[name], "https://example.test/page"))})
     for args, allowed in TOOL_CALLS:
         CONNECTIONS.clear()
+        LOOKUPS.clear()
         try:
             result = {"output": web_fetch.web_fetch(SimpleNamespace(allowed_urls=set(allowed)), dict(args))}
         except ToolError as e:
             result = {"error": error(e)}
-        records.append({"fn": "web_fetch", "input": [args], "allowed_urls": allowed, **result, "connections": list(CONNECTIONS)})
+        records.append({"fn": "web_fetch", "input": [args], "allowed_urls": allowed, **result, "lookups": list(LOOKUPS), "connections": list(CONNECTIONS)})
     return records
 
 
@@ -381,6 +416,8 @@ if __name__ == "__main__":
             "functions": ["default_allowed", "normalize_url", "fetch_page", "plain_text", "extract_text", "web_fetch"],
             "versions": versions("trafilatura"),
             "dns": DNS,
+            "dns_sequences": DNS_SEQUENCES,
+            "dns_sequence_semantics": "the n-th lookup (0-based) of a host within one fetch_page or web_fetch call gets answer n; past the end, the last answer repeats",
             "responses": [{"scheme": s, "host": h, "port": p, "target": t, **described(spec)} for (s, h, p, t), spec in RESPONSES.items()],
         },
     )
