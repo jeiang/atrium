@@ -20,6 +20,11 @@ def test_vcard_emails_handles_groups_params_and_folding():
     assert flags.vcard_emails(VCARD) == {"pal@friends.test", "other@bar.test"}
 
 
+def test_vcard_emails_handles_dotted_params():
+    text = "BEGIN:VCARD\r\nEMAIL;TYPE=a.b:x@y.test\r\nitem2.EMAIL;X-LABEL=v1.2:z@y.test\r\nEND:VCARD\r\n"
+    assert flags.vcard_emails(text) == {"x@y.test", "z@y.test"}
+
+
 def test_contacts_rule_conditions(tmp_path):
     contacts = flags.load_contacts(contacts_dir(tmp_path))
     conn = memory_db()
