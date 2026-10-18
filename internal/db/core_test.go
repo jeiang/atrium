@@ -143,6 +143,24 @@ func TestConnectCreatesDirectory(t *testing.T) {
 	}
 }
 
+func TestConcurrentConnectFreshFile(t *testing.T) {
+	for range 20 {
+		path := filepath.Join(t.TempDir(), "atrium.db")
+		var wg sync.WaitGroup
+		for range 6 {
+			wg.Go(func() {
+				d, err := db.Connect(path)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				_ = d.Close()
+			})
+		}
+		wg.Wait()
+	}
+}
+
 func TestWithTx(t *testing.T) {
 	ctx := t.Context()
 	d := dbtest.File(t)
