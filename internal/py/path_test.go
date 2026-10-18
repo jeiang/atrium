@@ -42,7 +42,21 @@ func TestResolve(t *testing.T) {
 	if err := os.Symlink(loop, loop); err != nil {
 		t.Fatal(err)
 	}
-	if got := Resolve(loop); got == "" {
-		t.Error("Resolve of a symlink loop is empty")
+	for in, want := range map[string]string{loop: loop, loop + "/x/../y": loop + "/y"} {
+		if got := Resolve(in); got != want {
+			t.Errorf("Resolve(%s) = %s, want %s", in, got, want)
+		}
+	}
+	if err := os.Symlink(".", filepath.Join(cache, "d")); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []int{1, 40, 41, 100} {
+		in := cache + "/" + strings.Repeat("d/", n) + strings.Repeat("../", 40) + "nonexistent/passwd"
+		if got, want := Resolve(in), "/nonexistent/passwd"; got != want {
+			t.Errorf("Resolve through %d self-links = %s, want %s", n, got, want)
+		}
+		if got, want := Resolve(cache+"/"+strings.Repeat("d/", n)+"raw/a.eml"), cache+"/raw/a.eml"; got != want {
+			t.Errorf("Resolve through %d self-links = %s, want %s", n, got, want)
+		}
 	}
 }

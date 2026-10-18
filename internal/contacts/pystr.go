@@ -7,27 +7,6 @@ import (
 	"unicode/utf8"
 )
 
-// Casefold is Python's str.casefold.
-func Casefold(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		switch {
-		case r >= 'A' && r <= 'Z':
-			b.WriteRune(r + 'a' - 'A')
-		case r < utf8.RuneSelf:
-			b.WriteRune(r)
-		default:
-			if f, ok := pyFold[r]; ok {
-				b.WriteString(f)
-			} else {
-				b.WriteRune(r)
-			}
-		}
-	}
-	return b.String()
-}
-
 // decimal is int() of a string of \d characters.
 func decimal(s string) int {
 	n := 0

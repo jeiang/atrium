@@ -2,56 +2,84 @@ package py
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 )
 
-const maxSymlinks = 40
-
-// Resolve is pathlib.Path(p).resolve() (os.path.realpath, non-strict): a relative p is taken against the
-// working directory, every symlink is followed before a following "..", and components that do not exist
-// are kept as they are.
+// Resolve is pathlib.Path(p).resolve(), CPython 3.14's posixpath.realpath(p, strict=False): a relative p is
+// taken against the working directory, symlinks are followed, a ".." removes the last resolved component, a
+// component that cannot be inspected is kept as it is, and a symlink loop leaves the link in place. The result
+// is absolute and normalized.
 func Resolve(p string) string {
-	if !filepath.IsAbs(p) {
+	path := "/"
+	if !strings.HasPrefix(p, "/") {
 		wd, err := os.Getwd()
 		if err != nil {
-			return filepath.Clean(p)
+			wd = "/"
 		}
-		p = wd + "/" + p
+		path = wd
 	}
-	pending := strings.Split(p, "/")
-	resolved := ""
-	links := 0
-	for len(pending) > 0 {
-		name := pending[0]
-		pending = pending[1:]
+	type marker struct{ resolved bool }
+	rest := []any{}
+	push := func(s string) {
+		parts := strings.Split(s, "/")
+		for i := len(parts) - 1; i >= 0; i-- {
+			rest = append(rest, parts[i])
+		}
+	}
+	push(p)
+	partCount := len(rest)
+	seen := map[string]*string{}
+	for partCount > 0 {
+		top := rest[len(rest)-1]
+		rest = rest[:len(rest)-1]
+		if m, ok := top.(marker); ok && m.resolved {
+			link := rest[len(rest)-1].(string)
+			rest = rest[:len(rest)-1]
+			resolved := path
+			seen[link] = &resolved
+			continue
+		}
+		name := top.(string)
+		partCount--
 		switch name {
 		case "", ".":
 			continue
 		case "..":
-			resolved = filepath.Dir(resolved)
-			if resolved == "." || resolved == "/" {
-				resolved = ""
+			if i := strings.LastIndex(path, "/"); i > 0 {
+				path = path[:i]
+			} else {
+				path = "/"
 			}
 			continue
 		}
-		next := resolved + "/" + name
-		target, err := os.Readlink(next)
-		if err != nil {
-			resolved = next
+		newpath := path + "/" + name
+		if path == "/" {
+			newpath = "/" + name
+		}
+		if info, err := os.Lstat(newpath); err != nil || info.Mode()&os.ModeSymlink == 0 {
+			path = newpath
 			continue
 		}
-		links++
-		if links > maxSymlinks {
-			return next + "/" + strings.Join(pending, "/")
+		if cached, ok := seen[newpath]; ok {
+			path = newpath
+			if cached != nil {
+				path = *cached
+			}
+			continue
+		}
+		target, err := os.Readlink(newpath)
+		if err != nil {
+			path = newpath
+			continue
 		}
 		if strings.HasPrefix(target, "/") {
-			resolved = ""
+			path = "/"
 		}
-		pending = append(strings.Split(target, "/"), pending...)
+		seen[newpath] = nil
+		rest = append(rest, newpath, marker{resolved: true})
+		before := len(rest)
+		push(target)
+		partCount += len(rest) - before
 	}
-	if resolved == "" {
-		return "/"
-	}
-	return resolved
+	return path
 }

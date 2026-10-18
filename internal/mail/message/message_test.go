@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -146,10 +147,17 @@ func TestRawFileRejectsEscapes(t *testing.T) {
 	if err := os.Symlink(filepath.Join(cache, "raw", "a.eml"), filepath.Join(cache, "inner.eml")); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Symlink(".", filepath.Join(cache, "d")); err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(outside, "secret.eml")
 	for _, tc := range []struct {
 		raw string
 		ok  bool
 	}{
+		{strings.Repeat("d/", 41) + strings.Repeat("../", 10) + secret, false},
+		{strings.Repeat("d/", 41) + strings.Repeat("../", 3) + "outside/secret.eml", false},
+		{strings.Repeat("d/", 41) + "raw/a.eml", true},
 		{"raw/a.eml", true},
 		{"raw/../raw/a.eml", true},
 		{"inner.eml", true},
