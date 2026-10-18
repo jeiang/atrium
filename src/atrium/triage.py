@@ -87,7 +87,7 @@ def _shape(r):
         "seen": bool(r["seen"]),
         "flagged": bool(r["flagged"]),
         "current": _current(r),
-        "action": _action(r),
+        "applied": _action(r),
     }
 
 
