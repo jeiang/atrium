@@ -28,6 +28,15 @@
       "dates": []
     },
     {
+      "name": "Bom First",
+      "emails": [
+        "bom@example.test"
+      ],
+      "phones": [],
+      "org": "",
+      "dates": []
+    },
+    {
       "name": "Escaped, Name;\\x\\q",
       "emails": [],
       "phones": [],
@@ -145,6 +154,7 @@
         "Ada Lovelace",
         "ada lovelace",
         "Bad �� bytes �",
+        "Bom First",
         "Escaped, Name;\\x\\q",
         "Jürgen Straße",
         "only@address.test",
@@ -171,6 +181,7 @@
         "Ada Lovelace",
         "ada lovelace",
         "Bad �� bytes �",
+        "Bom First",
         "Jürgen Straße",
         "Ren=C3=A9e =C3=89lo=die",
         "Zed In Dir",
