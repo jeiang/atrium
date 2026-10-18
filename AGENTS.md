@@ -83,6 +83,10 @@ and backups; nothing of that lives here.
   (https://github.com/jeiang/atrium/issues/152). `atrium-static` is staged
   into `internal/web/static` before `go build` and embedded; `vendorHash`
   changes with `go.sum`.
+- Go Anthropic: only `internal/anthropic` imports `anthropic-sdk-go`
+  (pinned v1.82.0; `just lint` enforces it). Callers hand it request parts
+  as JSON values and get content blocks back as raw JSON; the body it sends
+  equals the Python request as canonical JSON (`testdata/golden/anthropic`).
 
 ## Layout
 
@@ -161,6 +165,9 @@ and backups; nothing of that lives here.
   `testdata/expected.json` by `tools/contacts/gen_expected.py`.
 - `internal/web/`: the embedded web assets (`Static`, `AssetVersion`);
   `internal/web/static` is staged, never committed.
+- `internal/anthropic/`: Messages create and stream, progress events from
+  the stream, Files API delete, the Python SDK's error classes;
+  `anthropictest` is the fake API (httptest SSE server, recording transport).
 - `third_party/`: vendored sources, each its own Go module wired by
   `replace`, with upstream licence files.
 - `third_party/go-imap/`: go-imap v2 plus atrium's Gmail patch (new files
