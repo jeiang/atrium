@@ -2,9 +2,9 @@
   perSystem = {
     pkgs,
     self',
+    go,
     ...
   }: let
-    go = pkgs.go_1_26;
     root = ../.;
     src = lib.fileset.toSource {
       inherit root;
@@ -22,7 +22,7 @@
     stageAssets = "cp -r --no-preserve=mode ${self'.packages.atrium-static} internal/web/static";
     # Every check reuses this one module set; update vendorHash whenever go.sum changes. proxyVendor,
     # because go-licenses cannot resolve a directory `replace` under -mod=vendor.
-    base = pkgs.buildGo126Module {
+    base = pkgs.buildGo126Module.override {inherit go;} {
       pname = "atrium-go";
       version = "0";
       inherit src;

@@ -120,6 +120,8 @@ and backups; nothing of that lives here.
   `atrium-legacy.db` against the Python results in
   `testdata/golden/db/readpaths.json`. A module registers its paths in
   `init` and adds a blank import to that test.
+- `internal/rx/`: Python `re` patterns on regexp2 with Python semantics and
+  a 100 ms match timeout; `rxtest` runs them against the regex corpus.
 - `internal/safety/`: the mailbox write gate. `ATRIUM_MODE` is read on
   every call; approved-proposal/undo, operator-send and automatic-write
   scopes are `context.Context` values; the pause file is existence-only.
@@ -135,8 +137,6 @@ and backups; nothing of that lives here.
 - `internal/mail/features/`: `features.py` (`Extract`, `ContentDigest`,
   `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
 - `internal/pyhtml/`: `html.unescape`; tables from `tools/pyhtml/gen_entities.py`.
-- `internal/rx/`: Python `re` patterns on regexp2 with Python semantics and
-  a 100 ms match timeout; `rxtest` runs them against the regex corpus.
 - `internal/web/`: the embedded web assets (`Static`, `AssetVersion`);
   `internal/web/static` is staged, never committed.
 - `third_party/`: vendored sources, each its own Go module wired by
