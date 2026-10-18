@@ -74,7 +74,7 @@ Top level: `freeze_commit`, `python`, `source`, `call_sites` (146),
 
 | Field | Meaning |
 | --- | --- |
-| `id` | The site id; dynamic sites add `[<binding>]`, e.g. `src/atrium/imap.py:284[UIDNEXT]`. |
+| `id` | The site id; dynamic sites add `[<binding>]`, e.g. `src/atrium/imap.py:285[UIDNEXT]`. |
 | `site`, `call` | The owning site and its call. |
 | `pattern` | The pattern text. Bytes patterns are decoded as Latin-1. |
 | `bytes` | Python compiled a bytes pattern (`\w`, `\d`, `\s`, `\b` are ASCII-only there). |
@@ -97,7 +97,7 @@ including invalid ones and Python-specific syntax (`(?P<name>…)`, `\Z`,
 One line per (pattern, input), in manifest pattern order then input order:
 
 ```json
-{"id": "src/atrium/imap.py:79", "input": "a\\\"b", "search": Match, "match": Match, "fullmatch": Match, "finditer": [Match], "calls": [Call]}
+{"id": "src/atrium/imap.py:80", "input": "a\\\"b", "search": Match, "match": Match, "fullmatch": Match, "finditer": [Match], "calls": [Call]}
 ```
 
 - `search`, `match`, `fullmatch`: the Python method result on the whole input, `null` for no match.

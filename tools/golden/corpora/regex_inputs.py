@@ -68,8 +68,8 @@ def _user(name, flagged):
 
 
 BINDINGS = {
-    "src/atrium/imap.py:139": {key: {"key": key} for key in ("FLAGS", "X-GM-LABELS")},
-    "src/atrium/imap.py:284": {key: {"key": key} for key in ("UIDVALIDITY", "UIDNEXT", "HIGHESTMODSEQ", "MESSAGES")},
+    "src/atrium/imap.py:140": {key: {"key": key} for key in ("FLAGS", "X-GM-LABELS")},
+    "src/atrium/imap.py:285": {key: {"key": key} for key in ("UIDVALIDITY", "UIDNEXT", "HIGHESTMODSEQ", "MESSAGES")},
     "src/atrium/media/channels.py:61": _user("pattern", True),
     "src/atrium/money.py:512": {label: {"r": {"pattern": v["value"]}} for label, v in _user("value", False).items()},
     "src/atrium/money.py:575": _user("pattern", False),
@@ -169,30 +169,30 @@ INPUTS = {
     ],
     "src/atrium/flags.py:12": ["noreply", "no-reply", "Do.Not_Reply", "notifications", "mailer-daemon", "bounce", "bounces+x", "john"],
     "src/atrium/flags.py:18": ["Subject: a\r\n b\n\tc", "no fold\nhere"],
-    "src/atrium/imap.py:12": [
+    "src/atrium/imap.py:13": [
         b'(\\HasNoChildren \\Sent) "/" "Sent Messages"',
         b'(\\Noselect) NIL Archive',
         b'() "\\\\" "Quoted \\"name\\""',
         b'(\\Marked) "." INBOX\r\n',
     ],
-    "src/atrium/imap.py:13": ['(\\Seen "a \\"b\\"" NIL)', '("\\\\Inbox" Receipts)', "plain"],
-    "src/atrium/imap.py:33": ["Entw&APw-rfe", "&AOQA9gD8-", "no shift", "a&-b"],
-    "src/atrium/imap.py:72": ["[COPYUID 38505 304,319:320 3956:3958] Done", "COPYUID 1 2 3", "COPYUID x 1 2"],
-    "src/atrium/imap.py:79": ['a\\"b\\\\c', "\\", "plain"],
-    "src/atrium/imap.py:109": ['"a b" c "d\\"e" f', "single", '"unterminated x'],
-    "src/atrium/imap.py:139": [FETCH_META, "XFLAGS (a) FLAGS(b)", "X-GM-LABELS ()"],
-    "src/atrium/imap.py:217": [FETCH_META, "BODYSTRUCTURE"],
-    "src/atrium/imap.py:236": ["1 (UID 3", "  12 (", "* 1 FETCH (", "1  ("],
-    "src/atrium/imap.py:243": [FETCH_META, "BODY[TEXT] {5}", "BODY[MIME]"],
-    "src/atrium/imap.py:248": ["1 (UID 3", "  12 (", "x 1 ("],
-    "src/atrium/imap.py:253": [FETCH_META, "XUID 5 UID 6", "UID x"],
-    "src/atrium/imap.py:260": [FETCH_META, "MODSEQ (x)"],
-    "src/atrium/imap.py:261": [FETCH_META, "RFC822xSIZE 5"],
-    "src/atrium/imap.py:262": [FETCH_META],
+    "src/atrium/imap.py:14": ['(\\Seen "a \\"b\\"" NIL)', '("\\\\Inbox" Receipts)', "plain"],
+    "src/atrium/imap.py:34": ["Entw&APw-rfe", "&AOQA9gD8-", "no shift", "a&-b"],
+    "src/atrium/imap.py:73": ["[COPYUID 38505 304,319:320 3956:3958] Done", "COPYUID 1 2 3", "COPYUID x 1 2"],
+    "src/atrium/imap.py:80": ['a\\"b\\\\c', "\\", "plain"],
+    "src/atrium/imap.py:110": ['"a b" c "d\\"e" f', "single", '"unterminated x'],
+    "src/atrium/imap.py:140": [FETCH_META, "XFLAGS (a) FLAGS(b)", "X-GM-LABELS ()"],
+    "src/atrium/imap.py:218": [FETCH_META, "BODYSTRUCTURE"],
+    "src/atrium/imap.py:237": ["1 (UID 3", "  12 (", "* 1 FETCH (", "1  ("],
+    "src/atrium/imap.py:244": [FETCH_META, "BODY[TEXT] {5}", "BODY[MIME]"],
+    "src/atrium/imap.py:249": ["1 (UID 3", "  12 (", "x 1 ("],
+    "src/atrium/imap.py:254": [FETCH_META, "XUID 5 UID 6", "UID x"],
+    "src/atrium/imap.py:261": [FETCH_META, "MODSEQ (x)"],
+    "src/atrium/imap.py:262": [FETCH_META, "RFC822xSIZE 5"],
     "src/atrium/imap.py:263": [FETCH_META],
-    "src/atrium/imap.py:264": [FETCH_META, 'INTERNALDATE ""'],
-    "src/atrium/imap.py:266": [FETCH_META, "UID 7"],
-    "src/atrium/imap.py:284": [STATUS_LINE, "MESSAGES x UIDNEXT 5", "XUIDNEXT 9"],
+    "src/atrium/imap.py:264": [FETCH_META],
+    "src/atrium/imap.py:265": [FETCH_META, 'INTERNALDATE ""'],
+    "src/atrium/imap.py:267": [FETCH_META, "UID 7"],
+    "src/atrium/imap.py:285": [STATUS_LINE, "MESSAGES x UIDNEXT 5", "XUIDNEXT 9"],
     "src/atrium/media/eztv.py:8": ["tt1234567", "1234567", "tt12345678901", "tt123456", "TT1234567", "tt1234567\n"],
     "src/atrium/media/library.py:9": ["Season 1", "Season 012", "Season 1000", "season 1", "Season ٣"],
     "src/atrium/media/library.py:10": ["Show - S01E02", "Show - S01E123", "Show - S1E02", "Show - S01E02.mkv"],
@@ -283,7 +283,7 @@ INPUTS = {
     "src/atrium/report.py:10": ["24h", "7d", "1w", "h", "07d", "٧d"],
     "src/atrium/search.py:14": ['find "exact phrase" and words_with-dash', 'unterminated "quote', "café ٣٤ 中文"],
     "src/atrium/search.py:15": ["hello_world foo-bar", "Ünïcödé ٣", "___", "😀hi𝒜b😀 𐐷"],
-    "src/atrium/smtp.py:27": ["a@example.test,, ,b@example.test", " , a@example.test ,\r\n ", '"B, c" <b@x.test>,a@x.test', "plain", ""],
+    "src/atrium/smtp.py:28": ["a@example.test,, ,b@example.test", " , a@example.test ,\r\n ", '"B, c" <b@x.test>,a@x.test', "plain", ""],
     "src/atrium/watches.py:77": ["Amazon.com, Inc.", "Café Ünï", ""],
     "src/atrium/watches.py:108": ["Tracking 1Z999AA10123456784 now", "1Z999AA1012345678", "x1Z999AA10123456784"],
     "src/atrium/watches.py:109": ["Parcel RA123456789US arrives", "ra123456789us", "RA123456789USA"],
@@ -331,7 +331,7 @@ NOT_PATTERN_CALLS = {
     "src/atrium/notion_sync.py:334",
 }
 
-CALLABLE_REPL = {"src/atrium/imap.py:33", "src/atrium/notion_markdown.py:91"}
+CALLABLE_REPL = {"src/atrium/imap.py:34", "src/atrium/notion_markdown.py:91"}
 
 USE_BINDINGS = {
     "src/atrium/media/parse.py:62": [{"cut": 0}, {"cut": 6}, {"cut": 12}, {"cut": 1000}],
