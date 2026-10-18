@@ -60,6 +60,11 @@
 {"fn":"default_allowed","input":["2a00:1450:4001:80b::200e"],"output":true}
 {"fn":"default_allowed","input":["3fff::1"],"output":false}
 {"fn":"default_allowed","input":["5f00::1"],"output":true}
+{"fn":"default_allowed","input":["::ffff:0:7f00:1"],"output":false}
+{"fn":"default_allowed","input":["::ffff:0:a9fe:a9fe"],"output":false}
+{"fn":"default_allowed","input":["::ffff:0:5db8:d822"],"output":true}
+{"fn":"default_allowed","input":["64:ff9b::5db8:d822"],"output":true}
+{"fn":"default_allowed","input":["::5db8:d822"],"output":true}
 {"fn":"normalize_url","input":["https://Example.test:443/guide?a=1#frag"],"output":"https://example.test/guide?a=1"}
 {"fn":"normalize_url","input":["http://example.test"],"output":"http://example.test/"}
 {"fn":"normalize_url","input":["http://example.test:80"],"output":"http://example.test/"}
