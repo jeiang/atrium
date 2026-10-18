@@ -21,6 +21,10 @@ Run `just` to list them.
 - `just fast-check`: the same checks built in parallel with nix-fast-build,
   skipping what the substituters already have.
 - `just test`: the pytest suite against the working tree.
+- `just golden`: regenerates `testdata/golden/` from the frozen Python app
+  (every `tools/golden/gen_*.py`, `make_db.py` and `render_pages.py`). Run it
+  only after a Python fix and commit the result; the `golden-*` flake checks
+  regenerate twice and fail on any difference.
 
 The Go recipes run inside the dev shell:
 
