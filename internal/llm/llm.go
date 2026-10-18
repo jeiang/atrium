@@ -15,6 +15,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -144,15 +145,15 @@ func FolderCatalog(rows []FolderSender) string {
 func FolderPrompt(catalog string, neighbors []Neighbor, m Message, body string) string {
 	similar := make([]string, len(neighbors))
 	for i, n := range neighbors {
-		similar[i] = fmt.Sprintf("%d. [%s] from %s: %s", i+1, n.Folder, n.FromDomain, clip(n.Subject, 100))
+		similar[i] = fmt.Sprintf("%d. [%s] from %s: %s", i+1, n.Folder, n.FromDomain, py.Clip(n.Subject, 100))
 	}
 	return "Allowed folders:\n" + catalog + "\n\nSimilar filed messages (folder in brackets):\n" + strings.Join(similar, "\n") + "\n\n" +
 		"Message to file:\nSubject: " + m.Subject + "\nFrom: " + m.FromName + " <" + m.FromAddr + ">\n" +
-		"Body:\n" + clip(body, config.LLMBodyChars)
+		"Body:\n" + py.Clip(body, config.LLMBodyChars)
 }
 
 func messagePrompt(m Message, body string) string {
-	return "From: " + m.FromName + " <" + m.FromAddr + ">\nSubject: " + m.Subject + "\nBody:\n" + clip(body, config.LLMBodyChars)
+	return "From: " + m.FromName + " <" + m.FromAddr + ">\nSubject: " + m.Subject + "\nBody:\n" + py.Clip(body, config.LLMBodyChars)
 }
 
 type chatRequest struct {
@@ -301,14 +302,4 @@ func JudgeEvent(ctx context.Context, url string, m Message, body string) (bool, 
 		return false, err
 	}
 	return field(a, "has_event")
-}
-
-func clip(s string, n int) string {
-	for i := range s {
-		if n == 0 {
-			return s[:i]
-		}
-		n--
-	}
-	return s
 }

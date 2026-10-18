@@ -294,18 +294,6 @@ func TestPythonStrings(t *testing.T) {
 	if got := Casefold("Straße ÄRZTE ﬁ İ"); got != "strasse ärzte fi i̇" {
 		t.Errorf("Casefold = %q", got)
 	}
-	for in, want := range map[string][]string{
-		"":              nil,
-		"a\nb":          {"a", "b"},
-		"a\r\nb\rc\n":   {"a", "b", "c"},
-		"\n":            {""},
-		"a\x1cb\u2028c": {"a", "b", "c"},
-		"a\n\nb":        {"a", "", "b"},
-	} {
-		if got := splitLines(in); !reflect.DeepEqual(got, want) {
-			t.Errorf("splitLines(%q) = %q", in, got)
-		}
-	}
 	for in, want := range map[string]string{
 		"a\r\nb\rc":                 "a\nb\nc",
 		"\xff\xe2\x82a\xf0\x9f\x98": "\ufffd\ufffda\ufffd",

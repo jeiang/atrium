@@ -107,19 +107,6 @@ func queryVector(query string) []byte {
 	return db.SerializeFloat32(v)
 }
 
-func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
-	defer func() { _ = rows.Close() }()
-	var out []T
-	for rows.Next() {
-		v, err := scan(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, v)
-	}
-	return out, rows.Err()
-}
-
 func init() {
 	readpaths.Register(readpaths.Path{
 		Name:   "db.message_fts lexical",
@@ -133,7 +120,7 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			return collect(rows, func(r *sql.Rows) (lexRow, error) {
+			return db.Collect(rows, func(r *sql.Rows) (lexRow, error) {
 				var id int64
 				var row lexRow
 				err := r.Scan(&id, &row.Snippet)
@@ -158,7 +145,7 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			return collect(rows, func(r *sql.Rows) (lexRow, error) {
+			return db.Collect(rows, func(r *sql.Rows) (lexRow, error) {
 				var id string
 				err := r.Scan(&id)
 				raw, _ := json.Marshal(id)
@@ -181,7 +168,7 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			return collect(rows, func(r *sql.Rows) (json.RawMessage, error) {
+			return db.Collect(rows, func(r *sql.Rows) (json.RawMessage, error) {
 				var id int64
 				err := r.Scan(&id)
 				raw, _ := json.Marshal(id)
@@ -219,7 +206,7 @@ func init() {
 				if err != nil {
 					return nil, err
 				}
-				got, err := collect(rows, func(r *sql.Rows) (near, error) {
+				got, err := db.Collect(rows, func(r *sql.Rows) (near, error) {
 					var n near
 					return n, r.Scan(&n.id, &n.distance)
 				})

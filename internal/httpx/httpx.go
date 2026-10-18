@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -53,7 +55,7 @@ var client = &http.Client{CheckRedirect: func(req *http.Request, via []*http.Req
 // is not JSON is an ErrValue.
 func PostJSON(ctx context.Context, rawURL string, payload any) (json.RawMessage, error) {
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
-		return nil, &ServiceUnavailable{"no service URL configured for " + pyRepr(rawURL)}
+		return nil, &ServiceUnavailable{"no service URL configured for " + py.Repr(rawURL)}
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -191,35 +193,4 @@ func invalidPrefix(b []byte) int {
 		lo, hi = 0x80, 0xBF
 	}
 	return n
-}
-
-// pyRepr is Python's repr of a str.
-func pyRepr(s string) string {
-	quote := byte('\'')
-	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
-		quote = '"'
-	}
-	var b strings.Builder
-	b.WriteByte(quote)
-	for _, r := range s {
-		switch {
-		case r == '\\':
-			b.WriteString(`\\`)
-		case r == rune(quote):
-			b.WriteByte('\\')
-			b.WriteByte(quote)
-		case r == '\n':
-			b.WriteString(`\n`)
-		case r == '\r':
-			b.WriteString(`\r`)
-		case r == '\t':
-			b.WriteString(`\t`)
-		case r < 0x20 || r == 0x7f:
-			fmt.Fprintf(&b, `\x%02x`, r)
-		default:
-			b.WriteRune(r)
-		}
-	}
-	b.WriteByte(quote)
-	return b.String()
 }

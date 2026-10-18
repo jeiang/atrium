@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/readpaths"
+	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -68,8 +69,6 @@ func nullable(s string) *string {
 	return &s
 }
 
-func pyStrip(s string) string { return strings.TrimFunc(s, pyIsSpace) }
-
 func errNoActive(id int64) error { return Error(fmt.Sprintf("no active schedule %d", id)) }
 
 func errTooMany() error {
@@ -119,7 +118,7 @@ type NewJob struct {
 }
 
 func CreateJob(ctx context.Context, q Querier, n NewJob) (int64, error) {
-	name, prompt := pyStrip(n.Name), pyStrip(n.Prompt)
+	name, prompt := py.Strip(n.Name), py.Strip(n.Prompt)
 	if name == "" || prompt == "" {
 		return 0, Error("name and prompt are required")
 	}
@@ -141,7 +140,7 @@ func CreateJob(ctx context.Context, q Querier, n NewJob) (int64, error) {
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO jobs (name, prompt, schedule, tz, kind, next_due, created_by, created_in_thread, created_at, prompt_by) "+
 			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		name, prompt, pyStrip(n.Schedule), n.TZ, n.Kind, due, n.CreatedBy, n.ThreadID, n.Now, nullable(n.PromptBy))
+		name, prompt, py.Strip(n.Schedule), n.TZ, n.Kind, due, n.CreatedBy, n.ThreadID, n.Now, nullable(n.PromptBy))
 	if err != nil {
 		return 0, err
 	}
@@ -172,14 +171,14 @@ func UpdateJob(ctx context.Context, q Querier, id int64, now float64, u JobUpdat
 		args = append(args, v)
 	}
 	if u.Name != nil {
-		name := pyStrip(*u.Name)
+		name := py.Strip(*u.Name)
 		if name == "" {
 			return nil, Error("name is empty")
 		}
 		set("name", name)
 	}
 	if u.Prompt != nil {
-		prompt := pyStrip(*u.Prompt)
+		prompt := py.Strip(*u.Prompt)
 		if prompt == "" {
 			return nil, Error("prompt is empty")
 		}
@@ -201,7 +200,7 @@ func UpdateJob(ctx context.Context, q Querier, id int64, now float64, u JobUpdat
 		if err != nil {
 			return nil, err
 		}
-		set("schedule", pyStrip(*u.Schedule))
+		set("schedule", py.Strip(*u.Schedule))
 		if willEnable {
 			nextDue = &due
 		}

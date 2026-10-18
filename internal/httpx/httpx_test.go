@@ -30,21 +30,6 @@ func TestDecodeReplaceMatchesPython(t *testing.T) {
 	}
 }
 
-func TestPyRepr(t *testing.T) {
-	for in, want := range map[string]string{
-		"":         "''",
-		"it's":     `"it's"`,
-		`a"b'c`:    `'a"b\'c'`,
-		"x\ny\\":   `'x\ny\\'`,
-		"\x01":     `'\x01'`,
-		"/v1/chat": "'/v1/chat'",
-	} {
-		if got := pyRepr(in); got != want {
-			t.Errorf("pyRepr(%q) = %s, want %s", in, got, want)
-		}
-	}
-}
-
 func unavailable(t *testing.T, err error, prefix string) {
 	t.Helper()
 	var su *ServiceUnavailable
