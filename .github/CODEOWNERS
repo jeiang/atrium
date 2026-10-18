@@ -1,4 +1,4 @@
-# Safety-critical paths: mail write paths, auth, spend limits, the IMAP fork and the host module.
+# Safety-critical paths: mail write paths, auth, spend limits, the IMAP fork, the host module and CI.
 /internal/safety/ @jeiang
 /internal/mail/**/applier* @jeiang
 /internal/mail/**/live* @jeiang
@@ -9,3 +9,6 @@
 /third_party/go-imap/ @jeiang
 /nix/module.nix @jeiang
 /src/atrium/safety.py @jeiang
+/.github/ @jeiang
+/.ci/ @jeiang
+/flake-modules/ @jeiang
