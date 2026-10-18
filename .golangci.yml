@@ -17,3 +17,10 @@ linters:
           deny:
             - pkg: regexp
               desc: ported patterns use the regexp2 package (https://github.com/jeiang/atrium/issues/71)
+        anthropic-sdk:
+          files:
+            - $all
+            - "!**/internal/anthropic/*.go"
+          deny:
+            - pkg: github.com/anthropics/anthropic-sdk-go
+              desc: only internal/anthropic talks to the Anthropic SDK (https://github.com/jeiang/atrium/issues/123)

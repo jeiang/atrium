@@ -58,6 +58,10 @@ and backups; nothing of that lives here.
   the same tests. The bundled SQLite never drops below the version that
   wrote `atrium.db` (`atriumDBSQLiteVersion`); bump it only by a pull request
   that passes the driver tests on both.
+- Go Anthropic: only `internal/anthropic` imports `anthropic-sdk-go`
+  (pinned v1.82.0; `just lint` enforces it). Callers hand it request parts
+  as JSON values and get content blocks back as raw JSON; the body it sends
+  equals the Python request as canonical JSON (`testdata/golden/anthropic`).
 
 ## Layout
 
@@ -85,6 +89,9 @@ and backups; nothing of that lives here.
   secret, token, key, cookie, credential or authorization is logged as
   `[redacted]`; token counts (`*_TOKENS`) are not.
 - `internal/db/`: the SQLite driver seam (`Open`), vec0 and FTS5 tests.
+- `internal/anthropic/`: Messages create and stream, progress events from
+  the stream, Files API delete, the Python SDK's error classes;
+  `anthropictest` is the fake API (httptest SSE server, recording transport).
 - `third_party/`: vendored sources, each its own Go module wired by
   `replace`, with upstream licence files.
 - `internal/<module>/`: one package per runtime-toggled module, each with a
