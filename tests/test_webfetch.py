@@ -125,6 +125,40 @@ def test_public_address_is_allowed_by_default():
     assert not webfetch.default_allowed(ipaddress.ip_address("100.64.0.1"))
 
 
+@pytest.mark.parametrize(
+    "address",
+    [
+        "64:ff9b::7f00:1",
+        "64:ff9b::a9fe:a9fe",
+        "64:ff9b::a00:1",
+        "64:ff9b::c0a8:101",
+        "64:ff9b::6440:1",
+        "64:ff9b:1::a00:1",
+        "64:ff9b:1::808:808",
+        "::7f00:1",
+        "::a9fe:a9fe",
+        "::a00:1",
+        "::",
+        "::1",
+        "::ffff:7f00:1",
+        "::ffff:a9fe:a9fe",
+        "fec0::1",
+        "feff:ffff::1",
+        "fe80::1",
+        "fc00::1",
+        "ff02::1",
+        "2001:db8::1",
+    ],
+)
+def test_non_global_ipv6_and_embedded_private_ipv4_are_blocked(address):
+    assert not webfetch.default_allowed(ipaddress.ip_address(address))
+
+
+@pytest.mark.parametrize("address", ["64:ff9b::5db8:d822", "::5db8:d822", "::ffff:5db8:d822", "2606:4700::1111"])
+def test_embedded_public_ipv4_and_global_ipv6_are_allowed(address):
+    assert webfetch.default_allowed(ipaddress.ip_address(address))
+
+
 def test_fetch_ok_and_redirect(server):
     body, charset, url = webfetch.fetch_page(f"{server}/hop", only_loopback)
     assert b"calibration" in body and charset == "utf-8" and url.endswith("/ok")
