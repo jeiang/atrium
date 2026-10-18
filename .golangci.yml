@@ -1,0 +1,19 @@
+version: "2"
+
+run:
+  go: "1.26"
+
+linters:
+  default: none
+  enable:
+    - depguard
+    - errcheck
+    - govet
+    - staticcheck
+  settings:
+    depguard:
+      rules:
+        regexp:
+          deny:
+            - pkg: regexp
+              desc: ported patterns use the regexp2 package (https://github.com/jeiang/atrium/issues/71)
