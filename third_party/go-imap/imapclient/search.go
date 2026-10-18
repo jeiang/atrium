@@ -245,6 +245,7 @@ func writeSearchKey(enc *imapwire.Encoder, criteria *imap.SearchCriteria) {
 			enc.Atom("0")
 		}
 	}
+	writeSearchKeyGmail(encodeItem, &criteria.Gmail)
 
 	for _, not := range criteria.Not {
 		encodeItem().Atom("NOT").SP()
@@ -377,6 +378,9 @@ func searchCriteriaIsASCII(criteria *imap.SearchCriteria) bool {
 		if !isASCII(s) {
 			return false
 		}
+	}
+	if !searchCriteriaGmailIsASCII(&criteria.Gmail) {
+		return false
 	}
 	for _, not := range criteria.Not {
 		if !searchCriteriaIsASCII(&not) {
