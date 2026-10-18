@@ -406,6 +406,23 @@ TRIAGE_ROWS = [
         "key": "",
         "confidence": None,
     },
+    {
+        "message_id": 507,
+        "subject": "Promo blast",
+        "from_name": "Deals",
+        "from_addr": "deals@promo.example",
+        "date_ts": NOW - 5 * DAY,
+        "account": "icloud",
+        "current": None,
+        "action": "delete",
+        "applied": {**action(13, "applied"), "kind": "trash"},
+        "dest": None,
+        "stage": "operator",
+        "agreement": "gone",
+        "corrected_to": None,
+        "key": "spam-promo",
+        "confidence": 1.0,
+    },
 ]
 
 

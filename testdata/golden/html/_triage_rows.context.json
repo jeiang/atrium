@@ -175,6 +175,29 @@
         "corrected_to": null,
         "key": "",
         "confidence": null
+      },
+      {
+        "message_id": 507,
+        "subject": "Promo blast",
+        "from_name": "Deals",
+        "from_addr": "deals@promo.example",
+        "date_ts": 1759568000,
+        "account": "icloud",
+        "current": null,
+        "action": "delete",
+        "applied": {
+          "id": 13,
+          "kind": "trash",
+          "status": "applied",
+          "error": null,
+          "undoable": true
+        },
+        "dest": null,
+        "stage": "operator",
+        "agreement": "gone",
+        "corrected_to": null,
+        "key": "spam-promo",
+        "confidence": 1.0
       }
     ],
     "total": 120,
