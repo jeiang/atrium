@@ -1,4 +1,17 @@
-from atrium import features
+import time
+
+import pytest
+
+from atrium import features, sync
+
+
+@pytest.fixture
+def tokyo_tz(monkeypatch):
+    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
 
 
 def template(s):
@@ -39,3 +52,10 @@ def test_extract_basic_fields():
 def test_extract_survives_garbage():
     f = features.extract(b"\xff\xfe not a header", b"")
     assert f["from_addr"] == ""
+
+
+def test_minus_zero_offset_is_utc(tokyo_tz):
+    header = b"From: a@x.test\r\nDate: Tue, 06 Oct 2026 10:00:00 -0000\r\n\r\n"
+    assert features.extract(header, b"")["date_ts"] == 1_791_280_800.0
+    assert sync.internal_ts("06-Oct-2026 10:00:00 -0000") == 1_791_280_800.0
+    assert features.email_ts("Tue, 06 Oct 2026 19:00:00 +0900") == 1_791_280_800.0

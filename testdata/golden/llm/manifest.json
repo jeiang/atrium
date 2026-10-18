@@ -1,0 +1,122 @@
+{
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "generator": "tools/golden/gen_llm.py",
+  "notes": [
+    "Chat goes to `http://chat.invalid/v1/chat/completions`, embeddings to `http://embed.invalid/v1/embeddings` (the test config's URLs); the host's llama.cpp servers take the same paths.",
+    "Embedding responses carry one-hot 768-dimension vectors.",
+    "Only the Notion requests that seed the page mirror run against tests/fake_notion.py in-process; they are not recorded here (see testdata/golden/notion)."
+  ],
+  "scenarios": [
+    {
+      "description": "router.route_account: an ambiguous KNN vote asks judge_folder with the folder catalog and 10 nearest filed neighbors.",
+      "file": "router_folder.json",
+      "name": "router_folder",
+      "requests": 1,
+      "source_tests": [
+        "tests/test_router.py::test_chat_outage_defers_llm_stage_only"
+      ]
+    },
+    {
+      "description": "flags.flag_account: judge_flag with FLAG_SCHEMA for an unread inbox message.",
+      "file": "flag_judgment.json",
+      "name": "flag_judgment",
+      "requests": 1,
+      "source_tests": [
+        "tests/test_flags_report.py::test_flag_account_records_both_signals_and_defers_llm"
+      ]
+    },
+    {
+      "description": "event_candidates.scan_account: judge_event with EVENT_SCHEMA for unread mail without an invitation.",
+      "file": "event_candidate.json",
+      "name": "event_candidate",
+      "requests": 1,
+      "source_tests": [
+        "tests/test_calendar.py::test_local_flag_queues_and_agent_drafts_proposal"
+      ]
+    },
+    {
+      "description": "openloops.scan_commitments: inbound human mail and Sent mail, COMMITMENT_SCHEMA at max_tokens 500, newest first.",
+      "file": "commitments.json",
+      "name": "commitments",
+      "requests": 2,
+      "source_tests": [
+        "tests/test_openloops.py::test_commitment_extraction_stores_valid_items_once",
+        "tests/test_openloops.py::test_judge_commitments_uses_local_model"
+      ]
+    },
+    {
+      "description": "money.scan: EXTRACT_SCHEMA at max_tokens 400 per unscanned money mail (oldest first), then payee naming with the category enum at max_tokens 60 for a new descriptor.",
+      "file": "money_extraction.json",
+      "name": "money_extraction",
+      "requests": 3,
+      "source_tests": [
+        "tests/test_money.py::test_unknown_payee_gets_model_name_and_category"
+      ]
+    },
+    {
+      "description": "watches.scan_packages: mail without a regex tracking number asks PACKAGE_SCHEMA at max_tokens 200.",
+      "file": "packages.json",
+      "name": "packages",
+      "requests": 1,
+      "source_tests": [
+        "tests/test_watches.py::test_llm_fallback_for_orders_without_carrier_numbers"
+      ]
+    },
+    {
+      "description": "rebalance.suggest_name: NAME_SCHEMA for a split folder.",
+      "file": "rebalance_naming.json",
+      "name": "rebalance_naming",
+      "requests": 1,
+      "source_tests": [
+        "src/atrium/rebalance.py::suggest_name (no dedicated test; tests/test_scans.py passes its own namer)"
+      ]
+    },
+    {
+      "description": "notion_proposals.propose_link: LINK_SCHEMA at max_tokens 160 with both pages' title, location and opening text.",
+      "file": "notion_link.json",
+      "name": "notion_link",
+      "requests": 1,
+      "source_tests": [
+        "tests/test_notion.py::test_propose_link_is_always_a_mention_in_page_text"
+      ]
+    },
+    {
+      "description": "notion_proposals.propose_edit: EDIT_SCHEMA at max_tokens 1500 with the instruction and page markdown.",
+      "file": "notion_edit.json",
+      "name": "notion_edit",
+      "requests": 1,
+      "source_tests": [
+        "tests/test_notion.py::test_edit_proposal_preview_execution_and_undo"
+      ]
+    },
+    {
+      "description": "embed.embed_pending: one batch of document texts (title/text format, missing subject as none).",
+      "file": "embeddings_mail.json",
+      "name": "embeddings_mail",
+      "requests": 1,
+      "source_tests": [
+        "src/atrium/embed.py::embed_pending (no dedicated test)"
+      ]
+    },
+    {
+      "description": "search.search: the query embedding (task: search result format).",
+      "file": "embeddings_search.json",
+      "name": "embeddings_search",
+      "requests": 1,
+      "source_tests": [
+        "tests/test_search.py::test_query_prompt_used"
+      ]
+    },
+    {
+      "description": "notion_sync.sync embeds each changed page with the default embed_texts.",
+      "file": "embeddings_notion.json",
+      "name": "embeddings_notion",
+      "requests": 1,
+      "source_tests": [
+        "tests/test_notion.py::test_sync_mirrors_pages_paths_and_index"
+      ]
+    }
+  ],
+  "slice": "llm",
+  "timezone": "America/Port_of_Spain"
+}

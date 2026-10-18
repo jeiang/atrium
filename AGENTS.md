@@ -93,6 +93,13 @@ and backups; nothing of that lives here.
   secret, token, key, cookie, credential or authorization is logged as
   `[redacted]`; token counts (`*_TOKENS`) are not.
 - `internal/db/`: the SQLite driver seam (`Open`), vec0 and FTS5 tests.
+- `internal/safety/`: the mailbox write gate. `ATRIUM_MODE` is read on
+  every call; approved-proposal/undo, operator-send and automatic-write
+  scopes are `context.Context` values; the pause file is existence-only.
+- `internal/mail/`: the `Client` interface. Only `Gated` builds one, and
+  every write method calls the gate before the connection;
+  `mail/mailtest.FakeClient` runs the same gate. A move is COPY, STORE
+  `\Deleted`, UID EXPUNGE: nothing under `internal/mail` uses IMAP MOVE.
 - `internal/web/`: the embedded web assets (`Static`, `AssetVersion`);
   `internal/web/static` is staged, never committed.
 - `third_party/`: vendored sources, each its own Go module wired by

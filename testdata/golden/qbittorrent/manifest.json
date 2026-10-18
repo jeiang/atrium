@@ -1,0 +1,43 @@
+{
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "generator": "tools/golden/gen_qbittorrent.py",
+  "notes": [
+    "No login request: the Python client never calls auth/login; the host's loopback whitelist on the qBittorrent socket proxy admits it (src/atrium/media/qbit.py). The Go port keeps that.",
+    "The base URL is `http://qbit.test` (QBITTORRENT_URL); every path sits under `/api/v2/`."
+  ],
+  "scenarios": [
+    {
+      "description": "Every Qbit request: torrents/info (no filter, filter=completed, tag=media, hashes=), torrents/files, torrents/add (magnet with and without tags; .torrent upload as multipart with and without tags), addTags, filePrio (skip and normal), start, delete (deleteFiles true and false).",
+      "file": "client_requests.json",
+      "name": "client_requests",
+      "requests": 15,
+      "source_tests": [
+        "tests/test_media.py::test_select_files_keeps_video_and_subtitles_and_starts",
+        "tests/test_media.py::test_add_page_prefill_and_submit",
+        "tests/test_media.py::test_add_magnet_tool_and_undo",
+        "src/atrium/media/qbit.py::Qbit (every method)"
+      ]
+    },
+    {
+      "description": "torrents/add accepted with the legacy \"Ok.\" body, then refused by a JSON tally with failure_count and by \"Fails.\" (both raise QbitError).",
+      "file": "add_answers.json",
+      "name": "add_answers",
+      "requests": 3,
+      "source_tests": [
+        "tests/test_media.py::test_qbittorrent_add_replies"
+      ]
+    },
+    {
+      "description": "channels.poll twice: the first pass primes (EZTV only), the second adds the new matching release tagged media, notifies ntfy with topic and click, then selects files (info tag=media, files, filePrio, addTags selected, start). Holds the EZTV and ntfy requests of the flow too.",
+      "file": "channel_poll.json",
+      "name": "channel_poll",
+      "requests": 10,
+      "source_tests": [
+        "tests/test_media.py::test_poll_primes_then_adds_tagged_and_notifies",
+        "tests/test_media.py::test_poll_selects_files_of_added_torrents"
+      ]
+    }
+  ],
+  "slice": "qbittorrent",
+  "timezone": "America/Port_of_Spain"
+}
