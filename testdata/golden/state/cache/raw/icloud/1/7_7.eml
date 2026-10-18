@@ -1,0 +1,32 @@
+From: Clinic <calendar@clinic.example>
+To: operator@icloud.example
+Subject: Invitation: Dentist appointment
+Message-ID: <dentist@golden.example>
+Date: Thu, 15 Oct 2026 08:48:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="golden-dentist"
+
+--golden-dentist
+Content-Type: text/plain; charset=utf-8
+
+You are invited to a dentist appointment.
+--golden-dentist
+Content-Type: text/calendar; charset=utf-8; method=REQUEST
+Content-Disposition: attachment; filename="invite.ics"
+
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//clinic//golden//EN
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:dentist-20261020@clinic.example
+DTSTAMP:20261012T090000Z
+DTSTART:20261020T140000Z
+DTEND:20261020T150000Z
+SUMMARY:Dentist appointment
+LOCATION:Clinic Room 2
+DESCRIPTION:Routine check-up
+END:VEVENT
+END:VCALENDAR
+
+--golden-dentist--

@@ -1,0 +1,22 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Friend
+EMAIL:friend@people.example
+BDAY:1990-10-17
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Friend Two
+EMAIL:friend2@people.example
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Mom
+EMAIL:mom@family.example
+BDAY:--10-20
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Pal
+EMAIL:pal@people.example
+END:VCARD

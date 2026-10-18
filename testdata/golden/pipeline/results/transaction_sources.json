@@ -1,0 +1,42 @@
+[
+  {
+    "extracted": "{\"account_amount\": null, \"account_currency\": \"\", \"account_id\": 1, \"account_last4\": \"1234\", \"amount\": 120.0, \"bank\": \"\", \"cadence\": \"unknown\", \"currency\": \"TTD\", \"date\": \"2026-10-14\", \"description\": \"Receipt 2001\", \"kind\": \"purchase\", \"payee_raw\": \"SHOP A PORT OF SPAIN\", \"statement_total\": null, \"subscription\": false}",
+    "id": 1,
+    "message_id": 87,
+    "role": "receipt",
+    "transaction_id": 1,
+    "ts": 1792083600.0
+  },
+  {
+    "extracted": "{\"account_amount\": null, \"account_currency\": \"\", \"account_id\": 1, \"account_last4\": \"1234\", \"amount\": 120.0, \"bank\": \"first_citizens\", \"cadence\": \"unknown\", \"currency\": \"TTD\", \"date\": \"2026-10-14\", \"description\": \"Card purchase\", \"kind\": \"purchase\", \"payee_raw\": \"SHOP A PORT OF SPAIN\", \"statement_total\": null, \"subscription\": false}",
+    "id": 2,
+    "message_id": 88,
+    "role": "bank_alert",
+    "transaction_id": 1,
+    "ts": 1792083600.0
+  },
+  {
+    "extracted": "{\"account_amount\": null, \"account_currency\": \"\", \"account_id\": null, \"account_last4\": \"\", \"amount\": 25.0, \"bank\": \"\", \"cadence\": \"monthly\", \"currency\": \"USD\", \"date\": \"2026-10-14\", \"description\": \"Gift card\", \"kind\": \"purchase\", \"payee_raw\": \"STORE.EXAMPLE GIFT\", \"statement_total\": null, \"subscription\": true}",
+    "id": 3,
+    "message_id": 138,
+    "role": "receipt",
+    "transaction_id": 2,
+    "ts": 1792083600.0
+  },
+  {
+    "extracted": "{\"account_amount\": null, \"account_currency\": \"\", \"account_id\": 1, \"account_last4\": \"1234\", \"amount\": 45.5, \"bank\": \"\", \"cadence\": \"unknown\", \"currency\": \"TTD\", \"date\": \"2026-10-15\", \"description\": \"Receipt 2002\", \"kind\": \"purchase\", \"payee_raw\": \"SHOP A PORT OF SPAIN\", \"statement_total\": null, \"subscription\": false}",
+    "id": 4,
+    "message_id": 148,
+    "role": "receipt",
+    "transaction_id": 3,
+    "ts": 1792090800.0
+  },
+  {
+    "extracted": "{\"account_amount\": null, \"account_currency\": \"\", \"account_id\": 1, \"account_last4\": \"1234\", \"amount\": 45.5, \"bank\": \"\", \"cadence\": \"unknown\", \"currency\": \"TTD\", \"date\": \"2026-10-15\", \"description\": \"Receipt 2002\", \"kind\": \"purchase\", \"payee_raw\": \"SHOP A PORT OF SPAIN\", \"statement_total\": null, \"subscription\": false}",
+    "id": 5,
+    "message_id": 149,
+    "role": "receipt",
+    "transaction_id": 4,
+    "ts": 1792094400.0
+  }
+]

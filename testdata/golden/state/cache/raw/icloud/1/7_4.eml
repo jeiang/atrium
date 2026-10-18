@@ -1,0 +1,9 @@
+From: FCB Alerts <alerts@fcb.example>
+To: operator@icloud.example
+Subject: Card alert: purchase at SHOP A
+Message-ID: <alert-shopa@golden.example>
+Date: Wed, 14 Oct 2026 16:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Your card ending 1234 was charged TTD 120.00 at SHOP A PORT OF SPAIN on 2026-10-14.

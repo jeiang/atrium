@@ -1,0 +1,1438 @@
+{
+  "accounts": {
+    "gmail": {
+      "mailboxes": {
+        "[Gmail]/All Mail": [
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 1\r\nMessage-ID: <status-1@golden.example>\r\nDate: Thu, 01 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-1",
+            "labels": [
+              "Work"
+            ],
+            "text": "Status update 1 for the team.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 2\r\nMessage-ID: <status-2@golden.example>\r\nDate: Thu, 24 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-2",
+            "labels": [
+              "Work"
+            ],
+            "text": "Status update 2 for the team.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 3\r\nMessage-ID: <status-3@golden.example>\r\nDate: Thu, 17 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-3",
+            "labels": [
+              "Work"
+            ],
+            "text": "Status update 3 for the team.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 4\r\nMessage-ID: <status-4@golden.example>\r\nDate: Thu, 10 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-4",
+            "labels": [
+              "Work"
+            ],
+            "text": "Status update 4 for the team.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 5\r\nMessage-ID: <status-5@golden.example>\r\nDate: Thu, 03 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-5",
+            "labels": [
+              "Work"
+            ],
+            "text": "Status update 5 for the team.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 6\r\nMessage-ID: <status-6@golden.example>\r\nDate: Thu, 27 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-6",
+            "labels": [
+              "Work"
+            ],
+            "text": "Status update 6 for the team.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 7\r\nMessage-ID: <status-7@golden.example>\r\nDate: Thu, 20 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-7",
+            "labels": [
+              "Work"
+            ],
+            "text": "Status update 7 for the team.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 8\r\nMessage-ID: <status-8@golden.example>\r\nDate: Thu, 13 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-8",
+            "labels": [
+              "Work"
+            ],
+            "text": "Status update 8 for the team.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 9\r\nMessage-ID: <status-9@golden.example>\r\nDate: Thu, 06 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-9",
+            "labels": [
+              "Work"
+            ],
+            "text": "Status update 9 for the team.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 10\r\nMessage-ID: <status-10@golden.example>\r\nDate: Thu, 30 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-10",
+            "labels": [
+              "Work"
+            ],
+            "text": "Status update 10 for the team.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 11\r\nMessage-ID: <status-11@golden.example>\r\nDate: Thu, 23 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-11",
+            "labels": [
+              "Work"
+            ],
+            "text": "Status update 11 for the team.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 12\r\nMessage-ID: <status-12@golden.example>\r\nDate: Thu, 16 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-12",
+            "labels": [
+              "Work"
+            ],
+            "text": "Status update 12 for the team.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Mom <mom@family.example>\r\nTo: operator@gmail.example\r\nSubject: Family news 1\r\nMessage-ID: <family-1@golden.example>\r\nDate: Thu, 01 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "family-1",
+            "labels": [
+              "Family"
+            ],
+            "text": "Family news number 1.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Mom <mom@family.example>\r\nTo: operator@gmail.example\r\nSubject: Family news 2\r\nMessage-ID: <family-2@golden.example>\r\nDate: Wed, 23 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "family-2",
+            "labels": [
+              "Family"
+            ],
+            "text": "Family news number 2.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Mom <mom@family.example>\r\nTo: operator@gmail.example\r\nSubject: Family news 3\r\nMessage-ID: <family-3@golden.example>\r\nDate: Tue, 15 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "family-3",
+            "labels": [
+              "Family"
+            ],
+            "text": "Family news number 3.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Mom <mom@family.example>\r\nTo: operator@gmail.example\r\nSubject: Family news 4\r\nMessage-ID: <family-4@golden.example>\r\nDate: Mon, 07 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "family-4",
+            "labels": [
+              "Family"
+            ],
+            "text": "Family news number 4.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Mom <mom@family.example>\r\nTo: operator@gmail.example\r\nSubject: Family news 5\r\nMessage-ID: <family-5@golden.example>\r\nDate: Sun, 30 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "family-5",
+            "labels": [
+              "Family"
+            ],
+            "text": "Family news number 5.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Mom <mom@family.example>\r\nTo: operator@gmail.example\r\nSubject: Family news 6\r\nMessage-ID: <family-6@golden.example>\r\nDate: Sat, 22 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "family-6",
+            "labels": [
+              "Family"
+            ],
+            "text": "Family news number 6.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Mom <mom@family.example>\r\nTo: operator@gmail.example\r\nSubject: Family news 7\r\nMessage-ID: <family-7@golden.example>\r\nDate: Fri, 14 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "family-7",
+            "labels": [
+              "Family"
+            ],
+            "text": "Family news number 7.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Mom <mom@family.example>\r\nTo: operator@gmail.example\r\nSubject: Family news 8\r\nMessage-ID: <family-8@golden.example>\r\nDate: Thu, 06 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "family-8",
+            "labels": [
+              "Family"
+            ],
+            "text": "Family news number 8.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Mom <mom@family.example>\r\nTo: operator@gmail.example\r\nSubject: Family news 9\r\nMessage-ID: <family-9@golden.example>\r\nDate: Wed, 29 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "family-9",
+            "labels": [
+              "Family"
+            ],
+            "text": "Family news number 9.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Mom <mom@family.example>\r\nTo: operator@gmail.example\r\nSubject: Family news 10\r\nMessage-ID: <family-10@golden.example>\r\nDate: Tue, 21 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "family-10",
+            "labels": [
+              "Family"
+            ],
+            "text": "Family news number 10.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Archived memo 1\r\nMessage-ID: <oldwork-1@golden.example>\r\nDate: Tue, 24 Mar 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "oldwork-1",
+            "labels": [
+              "Work/Old"
+            ],
+            "text": "Old memo 1.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Archived memo 2\r\nMessage-ID: <oldwork-2@golden.example>\r\nDate: Thu, 19 Mar 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "oldwork-2",
+            "labels": [
+              "Work/Old"
+            ],
+            "text": "Old memo 2.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Archived memo 3\r\nMessage-ID: <oldwork-3@golden.example>\r\nDate: Sat, 14 Mar 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "oldwork-3",
+            "labels": [
+              "Work/Old"
+            ],
+            "text": "Old memo 3.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Deals <deals@promo.example>\r\nTo: operator@gmail.example\r\nSubject: Flash sale 10% off\r\nMessage-ID: <flash-1@golden.example>\r\nDate: Sat, 10 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "flash-1",
+            "labels": [
+              "\\Inbox"
+            ],
+            "text": "Flash sale 10 percent off everything.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Deals <deals@promo.example>\r\nTo: operator@gmail.example\r\nSubject: Flash sale 20% off\r\nMessage-ID: <flash-2@golden.example>\r\nDate: Thu, 08 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "flash-2",
+            "labels": [
+              "\\Inbox"
+            ],
+            "text": "Flash sale 20 percent off everything.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Deals <deals@promo.example>\r\nTo: operator@gmail.example\r\nSubject: Flash sale 30% off\r\nMessage-ID: <flash-3@golden.example>\r\nDate: Tue, 06 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "flash-3",
+            "labels": [
+              "\\Inbox"
+            ],
+            "text": "Flash sale 30 percent off everything.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Deals <deals@promo.example>\r\nTo: operator@gmail.example\r\nSubject: Flash sale 40% off\r\nMessage-ID: <flash-4@golden.example>\r\nDate: Sun, 04 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "flash-4",
+            "labels": [
+              "\\Inbox"
+            ],
+            "text": "Flash sale 40 percent off everything.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Deals <deals@promo.example>\r\nTo: operator@gmail.example\r\nSubject: Flash sale 50% off\r\nMessage-ID: <flash-5@golden.example>\r\nDate: Fri, 02 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "flash-5",
+            "labels": [
+              "\\Inbox"
+            ],
+            "text": "Flash sale 50 percent off everything.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Deals <deals@promo.example>\r\nTo: operator@gmail.example\r\nSubject: Flash sale 60% off\r\nMessage-ID: <flash-6@golden.example>\r\nDate: Wed, 30 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "flash-6",
+            "labels": [
+              "\\Inbox"
+            ],
+            "text": "Flash sale 60 percent off everything.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Login <verify@login.example>\r\nTo: operator@gmail.example\r\nSubject: Your login code 1\r\nMessage-ID: <otp-1@golden.example>\r\nDate: Mon, 12 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "otp-1",
+            "labels": [
+              "Codes"
+            ],
+            "text": "Your verification code is 484021.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Login <verify@login.example>\r\nTo: operator@gmail.example\r\nSubject: Your login code 2\r\nMessage-ID: <otp-2@golden.example>\r\nDate: Sun, 11 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "otp-2",
+            "labels": [
+              "Codes"
+            ],
+            "text": "Your verification code is 485132.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Login <verify@login.example>\r\nTo: operator@gmail.example\r\nSubject: Your login code 3\r\nMessage-ID: <otp-3@golden.example>\r\nDate: Sat, 10 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "otp-3",
+            "labels": [
+              "Codes"
+            ],
+            "text": "Your verification code is 486243.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Login <verify@login.example>\r\nTo: operator@gmail.example\r\nSubject: Your login code 4\r\nMessage-ID: <otp-4@golden.example>\r\nDate: Fri, 09 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "otp-4",
+            "labels": [
+              "Codes"
+            ],
+            "text": "Your verification code is 487354.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Login <verify@login.example>\r\nTo: operator@gmail.example\r\nSubject: Your login code 5\r\nMessage-ID: <otp-5@golden.example>\r\nDate: Thu, 08 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "otp-5",
+            "labels": [
+              "Codes"
+            ],
+            "text": "Your verification code is 488465.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 13\r\nMessage-ID: <status-13@golden.example>\r\nDate: Wed, 14 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "status-13",
+            "labels": [
+              "\\Inbox"
+            ],
+            "text": "Status update 13 for the team.\r\n"
+          },
+          {
+            "flags": [],
+            "header": "From: Mom <mom@family.example>\r\nTo: operator@gmail.example\r\nSubject: Call me this weekend\r\nMessage-ID: <mom-call@golden.example>\r\nDate: Thu, 15 Oct 2026 11:12:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "mom-call",
+            "labels": [
+              "\\Inbox"
+            ],
+            "text": "Can you call me on Sunday?\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Store <gifts@store.example>\r\nTo: operator@gmail.example\r\nSubject: Gift card balance\r\nMessage-ID: <gift@golden.example>\r\nDate: Wed, 14 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "gift",
+            "labels": [
+              "\\Inbox"
+            ],
+            "text": "Your gift card balance is USD 25.00.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Operator <operator@gmail.example>\r\nTo: boss@work.example\r\nSubject: Re: Weekly status 12\r\nMessage-ID: <gsent-1@golden.example>\r\nDate: Mon, 05 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nIn-Reply-To: <status-12@golden.example>\r\nReferences: <status-12@golden.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "gsent-1",
+            "labels": [
+              "\\Sent"
+            ],
+            "text": "Thanks, noted.\r\n"
+          }
+        ],
+        "[Gmail]/Trash": []
+      },
+      "special_use": {
+        "[Gmail]/Trash": [
+          "\\Trash"
+        ]
+      },
+      "uidvalidity": 11
+    },
+    "icloud": {
+      "mailboxes": {
+        "Bills": [
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Power Co <billing@power.example>\r\nTo: operator@icloud.example\r\nSubject: Power bill 1\r\nMessage-ID: <power-1@golden.example>\r\nDate: Fri, 11 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "power-1",
+            "labels": null,
+            "text": "Your power bill 1 is ready.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Power Co <billing@power.example>\r\nTo: operator@icloud.example\r\nSubject: Power bill 2\r\nMessage-ID: <power-2@golden.example>\r\nDate: Fri, 28 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "power-2",
+            "labels": null,
+            "text": "Your power bill 2 is ready.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Power Co <billing@power.example>\r\nTo: operator@icloud.example\r\nSubject: Power bill 3\r\nMessage-ID: <power-3@golden.example>\r\nDate: Fri, 14 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "power-3",
+            "labels": null,
+            "text": "Your power bill 3 is ready.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Power Co <billing@power.example>\r\nTo: operator@icloud.example\r\nSubject: Power bill 4\r\nMessage-ID: <power-4@golden.example>\r\nDate: Fri, 31 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "power-4",
+            "labels": null,
+            "text": "Your power bill 4 is ready.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Power Co <billing@power.example>\r\nTo: operator@icloud.example\r\nSubject: Power bill 5\r\nMessage-ID: <power-5@golden.example>\r\nDate: Fri, 17 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "power-5",
+            "labels": null,
+            "text": "Your power bill 5 is ready.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Power Co <billing@power.example>\r\nTo: operator@icloud.example\r\nSubject: Power bill 6\r\nMessage-ID: <power-6@golden.example>\r\nDate: Fri, 03 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "power-6",
+            "labels": null,
+            "text": "Your power bill 6 is ready.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Water Authority <statements@water.example>\r\nTo: operator@icloud.example\r\nSubject: Water statement 1\r\nMessage-ID: <water-1@golden.example>\r\nDate: Thu, 10 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "water-1",
+            "labels": null,
+            "text": "Water statement 1.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Water Authority <statements@water.example>\r\nTo: operator@icloud.example\r\nSubject: Water statement 2\r\nMessage-ID: <water-2@golden.example>\r\nDate: Thu, 27 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "water-2",
+            "labels": null,
+            "text": "Water statement 2.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Water Authority <statements@water.example>\r\nTo: operator@icloud.example\r\nSubject: Water statement 3\r\nMessage-ID: <water-3@golden.example>\r\nDate: Thu, 13 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "water-3",
+            "labels": null,
+            "text": "Water statement 3.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Water Authority <statements@water.example>\r\nTo: operator@icloud.example\r\nSubject: Water statement 4\r\nMessage-ID: <water-4@golden.example>\r\nDate: Thu, 30 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "water-4",
+            "labels": null,
+            "text": "Water statement 4.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Water Authority <statements@water.example>\r\nTo: operator@icloud.example\r\nSubject: Water statement 5\r\nMessage-ID: <water-5@golden.example>\r\nDate: Thu, 16 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "water-5",
+            "labels": null,
+            "text": "Water statement 5.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Water Authority <statements@water.example>\r\nTo: operator@icloud.example\r\nSubject: Water statement 6\r\nMessage-ID: <water-6@golden.example>\r\nDate: Thu, 02 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "water-6",
+            "labels": null,
+            "text": "Water statement 6.\r\n"
+          }
+        ],
+        "Deleted Messages": [],
+        "INBOX": [
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Pal <pal@people.example>\r\nTo: operator@icloud.example\r\nSubject: Lunch next week\r\nMessage-ID: <lunch@golden.example>\r\nDate: Fri, 09 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "lunch",
+            "labels": null,
+            "text": "Are you free for lunch next week?\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Power Co <billing@power.example>\r\nTo: operator@icloud.example\r\nSubject: Power bill October\r\nMessage-ID: <power-oct@golden.example>\r\nDate: Wed, 14 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "power-oct",
+            "labels": null,
+            "text": "Your October power bill is TTD 350.00, due 2026-10-30.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #2001\r\nMessage-ID: <shopa-2001@golden.example>\r\nDate: Wed, 14 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-2001",
+            "labels": null,
+            "text": "Total TTD 120.00 paid with card ending 1234 at SHOP A PORT OF SPAIN on 2026-10-14.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: FCB Alerts <alerts@fcb.example>\r\nTo: operator@icloud.example\r\nSubject: Card alert: purchase at SHOP A\r\nMessage-ID: <alert-shopa@golden.example>\r\nDate: Wed, 14 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "alert-shopa",
+            "labels": null,
+            "text": "Your card ending 1234 was charged TTD 120.00 at SHOP A PORT OF SPAIN on 2026-10-14.\r\n"
+          },
+          {
+            "flags": [],
+            "header": "From: Friend <friend@people.example>\r\nTo: operator@icloud.example\r\nSubject: Question about the trip\r\nMessage-ID: <trip@golden.example>\r\nDate: Thu, 15 Oct 2026 04:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "trip",
+            "labels": null,
+            "text": "Could you send me the itinerary by 2026-10-16? I need it to book.\r\n"
+          },
+          {
+            "flags": [],
+            "header": "From: Friend Two <friend2@people.example>\r\nTo: operator@icloud.example\r\nSubject: Dinner on Saturday\r\nMessage-ID: <dinner@golden.example>\r\nDate: Thu, 15 Oct 2026 06:24:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "dinner",
+            "labels": null,
+            "text": "Dinner at our place on 2026-10-17 at 19:00?\r\n"
+          },
+          {
+            "flags": [],
+            "header": "From: Clinic <calendar@clinic.example>\r\nTo: operator@icloud.example\r\nSubject: Invitation: Dentist appointment\r\nMessage-ID: <dentist@golden.example>\r\nDate: Thu, 15 Oct 2026 08:48:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"golden-dentist\"\r\n\r\n",
+            "key": "dentist",
+            "labels": null,
+            "text": "--golden-dentist\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nYou are invited to a dentist appointment.\r\n--golden-dentist\r\nContent-Type: text/calendar; charset=utf-8; method=REQUEST\r\nContent-Disposition: attachment; filename=\"invite.ics\"\r\n\r\nBEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//clinic//golden//EN\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:dentist-20261020@clinic.example\r\nDTSTAMP:20261012T090000Z\r\nDTSTART:20261020T140000Z\r\nDTEND:20261020T150000Z\r\nSUMMARY:Dentist appointment\r\nLOCATION:Clinic Room 2\r\nDESCRIPTION:Routine check-up\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n\r\n--golden-dentist--\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <ship@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Your order has shipped\r\nMessage-ID: <shipped@golden.example>\r\nDate: Tue, 13 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shipped",
+            "labels": null,
+            "text": "Your package is on its way with UPS tracking 1Z999AA10123456784.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Gadgets <orders@gadgets.example>\r\nTo: operator@icloud.example\r\nSubject: Order confirmation 55123\r\nMessage-ID: <gadget@golden.example>\r\nDate: Tue, 13 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "gadget",
+            "labels": null,
+            "text": "Thank you for your order GX-55123. We will email you when it ships.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: News Weekly <digest@news.example>\r\nTo: operator@icloud.example\r\nSubject: Weekly digest #11\r\nMessage-ID: <digest-11@golden.example>\r\nDate: Wed, 14 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nList-Id: <weekly.news.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "digest-11",
+            "labels": null,
+            "text": "This week in news, issue 11.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Someone <someone@unknown.example>\r\nTo: operator@icloud.example\r\nSubject: Mystery message\r\nMessage-ID: <mystery@golden.example>\r\nDate: Wed, 14 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "mystery",
+            "labels": null,
+            "text": "Nothing in particular.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 13\r\nMessage-ID: <itin-13@golden.example>\r\nDate: Wed, 14 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-13",
+            "labels": null,
+            "text": "Your flight itinerary 13 is attached.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Club <news@club.example>\r\nTo: operator@icloud.example\r\nSubject: Club news\r\nMessage-ID: <club@golden.example>\r\nDate: Wed, 14 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "club",
+            "labels": null,
+            "text": "Club news for October.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Promo <spam@promo.example>\r\nTo: operator@icloud.example\r\nSubject: Big promo\r\nMessage-ID: <promo@golden.example>\r\nDate: Wed, 14 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "promo",
+            "labels": null,
+            "text": "Huge discounts this week only.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Colleague <colleague@work.example>\r\nTo: operator@icloud.example\r\nSubject: Re: Project kickoff\r\nMessage-ID: <kickoff-reply@golden.example>\r\nDate: Thu, 08 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nIn-Reply-To: <sent-kickoff@golden.example>\r\nReferences: <sent-kickoff@golden.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "kickoff-reply",
+            "labels": null,
+            "text": "Will send the agenda tomorrow.\r\n"
+          }
+        ],
+        "Misc": [
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: hello@random.example\r\nTo: operator@icloud.example\r\nSubject: Hello there\r\nMessage-ID: <misc-1@golden.example>\r\nDate: Sat, 05 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "misc-1",
+            "labels": null,
+            "text": "Just saying hi.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: info@random.example\r\nTo: operator@icloud.example\r\nSubject: Random notice\r\nMessage-ID: <misc-2@golden.example>\r\nDate: Fri, 04 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "misc-2",
+            "labels": null,
+            "text": "A random notice.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Club <reports@club.example>\r\nTo: operator@icloud.example\r\nSubject: Annual report 2026\r\nMessage-ID: <misc-report@golden.example>\r\nDate: Thu, 03 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "misc-report",
+            "labels": null,
+            "text": "Line 1 of the annual report. Line 2 of the annual report. Line 3 of the annual report. Line 4 of the annual report. Line 5 of the annual report. Line 6 of the annual report. Line 7 of the annual report. Line 8 of the annual report. Line 9 of the annual report. Line 10 of the annual report. Line 11 of the annual report. Line 12 of the annual report. Line 13 of the annual report. Line 14 of the annual report. Line 15 of the annual report. Line 16 of the annual report. Line 17 of the annual report. Line 18 of the annual report. Line 19 of the annual report. Line 20 of the annual report. Line 21 of the annual report. Line 22 of the annual report. Line 23 of the annual report. Line 24 of the annual report. Line 25 of the annual report. Line 26 of the annual report. Line 27 of the annual report. Line 28 of the annual report. Line 29 of the annual report. Line 30 of the annual report. Line 31 of the annual report. Line 32 of the annual report. Line 33 of the annual report. Line 34 of the annual report. Line 35 of the annual report. Line 36 of the annual report. Line 37 of the annual report. Line 38 of the annual report. Line 39 of the annual report. Line 40 of the annual report. Line 41 of the annual report. Line 42 of the annual report. Line 43 of the annual report. Line 44 of the annual report. Line 45 of the annual report. Line 46 of the annual report. Line 47 of the annual report. Line 48 of the annual report. Line 49 of the annual report. Line 50 of the annual report. Line 51 of the annual report. Line 52 of the annual report. Line 53 of the annual report. Line 54 of the annual report. Line 55 of the annual report. Line 56 of the annual report. Line 57 of the annual report. Line 58 of the annual report. Line 59 of the annual report. Line 60 of the annual report. Line 61 of the annual report. Line 62 of the annual report. Line 63 of the annual report. Line 64 of the annual report. Line 65 of the annual report. Line 66 of the annual report. Line 67 of the annual report. Line 68 of the annual report. Line 69 of the annual report. Line 70 of the annual report. Line 71 of the annual report. Line 72 of the annual report. Line 73 of the annual report. Line 74 of the annual report. Line 75 of the annual report. Line 76 of the annual report. Line 77 of the annual report. Line 78 of the annual report. Line 79 of the annual report. Line 80 of the annual report. Line 81 of the annual report. Line 82 of the annual report. Line 83 of the annual report. Line 84 of the annual report. Line 85 of the annual report. Line 86 of the annual report. Line 87 of the annual report. Line 88 of the annual report. Line 89 of the annual report. Line 90 of the annual report. Line 91 of the annual report. Line 92 of the annual report. Line 93 of the annual report. Line 94 of the annual report. Line 95 of the annual report. Line 96 of the annual report. Line 97 of the annual report. Line 98 of the annual report. Line 99 of the annual report. Line 100 of the annual report. Line 101 of the annual report. Line 102 of the annual report. Line 103 of the annual report. Line 104 of the annual report. Line 105 of the annual report. Line 106 of the annual report. Line 107 of the annual report. Line 108 of the annual report. Line 109 of the annual report. Line 110 of the annual report. Line 111 of the annual report. Line 112 of the annual report. Line 113 of the annual report. Line 114 of the annual report. Line 115 of the annual report. Line 116 of the annual report. Line 117 of the annual report. Line 118 of the annual report. Line 119 of the annual report. Line 120 of the annual report. Line 121 of the annual report. Line 122 of the annual report. Line 123 of the annual report. Line 124 of the annual report. Line 125 of the annual report. Line 126 of the annual report. Line 127 of the annual report. Line 128 of the annual report. Line 129 of the annual report. Line 130 of the annual report. Line 131 of the annual report. Line 132 of the annual report. Line 133 of the annual report. Line 134 of the annual report. Line 135 of the annual report. Line 136 of the annual report. Line 137 of the annual report. Line 138 of the annual report. Line 139 of the annual report. Line 140 of the annual report. Line 141 of the annual report. Line 142 of the annual report. Line 143 of the annual report. Line 144 of the annual report. Line 145 of the annual report. Line 146 of the annual report. Line 147 of the annual report. Line 148 of the annual report. Line 149 of the annual report. Line 150 of the annual report. Line 151 of the annual report. Line 152 of the annual report. Line 153 of the annual report. Line 154 of the annual report. Line 155 of the annual report. Line 156 of the annual report. Line 157 of the annual report. Line 158 of the annual report. Line 159 of the annual report. Line 160 of the annual report. Line 161 of the annual report. Line 162 of the annual report. Line 163 of the annual report. Line 164 of the annual report. Line 165 of the annual report. Line 166 of the annual report. Line 167 of the annual report. Line 168 of the annual report. Line 169 of the annual report. Line 170 of the annual report. Line 171 of the annual report. Line 172 of the annual report. Line 173 of the annual report. Line 174 of the annual report. Line 175 of the annual report. Line 176 of the annual report. Line 177 of the annual report. Line 178 of the annual report. Line 179 of the annual report. Line 180 of the annual report. Line 181 of the annual report. Line 182 of the annual report. Line 183 of the annual report. Line 184 of the annual report. Line 185 of the annual report. Line 186 of the annual report. Line 187 of the annual report. Line 188 of the annual report. Line 189 of the annual report. Line 190 of the annual report. Line 191 of the annual report. Line 192 of the annual report. Line 193 of the annual report. Line 194 of the annual report. Line 195 of the annual report. Line 196 of the annual report. Line 197 of the annual report. Line 198 of the annual report. Line 199 of the annual report. Line 200 of the annual report. Line 201 of the annual report. Line 202 of the annual report. Line 203 of the annual report. Line 204 of the annual report. Line 205 of the annual report. Line 206 of the annual report. Line 207 of the annual report. Line 208 of the annual report. Line 209 of the annual report. Line 210 of the annual report. Line 211 of the annual report. Line 212 of the annual report. Line 213 of the annual report. Line 214 of the annual report. Line 215 of the annual report. Line 216 of the annual report. Line 217 of the annual report. Line 218 of the annual report. Line 219 of the annual report. Line 220 of the annual report. Line 221 of the annual report. Line 222 of the annual report. Line 223 of the annual report. Line 224 of the annual report. Line 225 of the annual report. Line 226 of the annual report. Line 227 of the annual report. Line 228 of the annual report. Line 229 of the annual report. Line 230 of the annual report. Line 231 of the annual report. Line 232 of the annual report. Line 233 of the annual report. Line 234 of the annual report. Line 235 of the annual report. Line 236 of the annual report. Line 237 of the annual report. Line 238 of the annual report. Line 239 of the annual report. Line 240 of the annual report. Line 241 of the annual report. Line 242 of the annual report. Line 243 of the annual report. Line 244 of the annual report. Line 245 of the annual report. Line 246 of the annual report. Line 247 of the annual report. Line 248 of the annual report. Line 249 of the annual report. Line 250 of the annual report. Line 251 of the annual report. Line 252 of the annual report. Line 253 of the annual report. Line 254 of the annual report. Line 255 of the annual report. Line 256 of the annual report. Line 257 of the annual report. Line 258 of the annual report. Line 259 of the annual report. Line 260 of the annual report. Line 261 of the annual report. Line 262 of the annual report. Line 263 of the annual report. Line 264 of the annual report. Line 265 of the annual report. Line 266 of the annual report. Line 267 of the annual report. Line 268 of the annual report. Line 269 of the annual report. Line 270 of the annual report. Line 271 of the annual report. Line 272 of the annual report. Line 273 of the annual report. Line 274 of the annual report. Line 275 of the annual report. Line 276 of the annual report. Line 277 of the annual report. Line 278 of the annual report. Line 279 of the annual report. Line 280 of the annual report. Line 281 of the annual report. Line 282 of the annual report. Line 283 of the annual report. Line 284 of the annual report. Line 285 of the annual report. Line 286 of the annual report. Line 287 of the annual report. Line 288 of the annual report. Line 289 of the annual report. Line 290 of the annual report. Line 291 of the annual report. Line 292 of the annual report. Line 293 of the annual report. Line 294 of the annual report. Line 295 of the annual report. Line 296 of the annual report. Line 297 of the annual report. Line 298 of the annual report. Line 299 of the annual report. Line 300 of the annual report. Line 301 of the annual report. Line 302 of the annual report. Line 303 of the annual report. Line 304 of the annual report. Line 305 of the annual report. Line 306 of the annual report. Line 307 of the annual report. Line 308 of the annual report. Line 309 of the annual report. Line 310 of the annual report. Line 311 of the annual report. Line 312 of the annual report. Line 313 of the annual report. Line 314 of the annual report. Line 315 of the annual report. Line 316 of the annual report. Line 317 of the annual report. Line 318 of the annual report. Line 319 of the annual report. Line 320 of the annual report. Line 321 of the annual report. Line 322 of the annual report. Line 323 of the annual report. Line 324 of the annual report. Line 325 of the annual report. Line 326 of the annual report. Line 327 of the annual report. Line 328 of the annual report. Line 329 of the annual report. Line 330 of the annual report. Line 331 of the annual report. Line 332 of the annual report. Line 333 of the annual report. Line 334 of the annual report. Line 335 of the annual report. Line 336 of the annual report. Line 337 of the annual report. Line 338 of the annual report. Line 339 of the annual report. Line 340 of the annual report. Line 341 of the annual report. Line 342 of the annual report. Line 343 of the annual report. Line 344 of the annual report. Line 345 of the annual report. Line 346 of the annual report. Line 347 of the annual report. Line 348 of the annual report. Line 349 of the annual report. Line 350 of the annual report. Line 351 of the annual report. Line 352 of the annual report. Line 353 of the annual report. Line 354 of the annual report. Line 355 of the annual report. Line 356 of the annual report. Line 357 of the annual report. Line 358 of the annual report. Line 359 of the annual report. Line 360 of the annual report. Line 361 of the annual report. Line 362 of the annual report. Line 363 of the annual report. Line 364 of the annual report. Line 365 of the annual report. Line 366 of the annual report. Line 367 of the annual report. Line 368 of the annual report. Line 369 of the annual report. Line 370 of the annual report. Line 371 of the annual report. Line 372 of the annual report. Line 373 of the annual report. Line 374 of the annual report. Line 375 of the annual report. Line 376 of the annual report. Line 377 of the annual report. Line 378 of the annual report. Line 379 of the annual report. Line 380 of the annual report. Line 381 of the annual report. Line 382 of the annual report. Line 383 of the annual report. Line 384 of the annual report. Line 385 of the annual report. Line 386 of the annual report. Line 387 of the annual report. Line 388 of the annual report. Line 389 of the annual report. Line 390 of the annual report. Line 391 of the annual report. Line 392 of the annual report. Line 393 of the annual report. Line 394 of the annual report. Line 395 of the annual report. Line 396 of the annual report. Line 397 of the annual report. Line 398 of the annual report. Line 399 of the annual report. Line 400 of the annual report.\r\n"
+          }
+        ],
+        "Newsletters": [
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: News Weekly <digest@news.example>\r\nTo: operator@icloud.example\r\nSubject: Weekly digest #1\r\nMessage-ID: <digest-1@golden.example>\r\nDate: Sun, 04 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nList-Id: <weekly.news.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "digest-1",
+            "labels": null,
+            "text": "This week in news, issue 1.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: News Weekly <digest@news.example>\r\nTo: operator@icloud.example\r\nSubject: Weekly digest #2\r\nMessage-ID: <digest-2@golden.example>\r\nDate: Sun, 27 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nList-Id: <weekly.news.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "digest-2",
+            "labels": null,
+            "text": "This week in news, issue 2.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: News Weekly <digest@news.example>\r\nTo: operator@icloud.example\r\nSubject: Weekly digest #3\r\nMessage-ID: <digest-3@golden.example>\r\nDate: Sun, 20 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nList-Id: <weekly.news.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "digest-3",
+            "labels": null,
+            "text": "This week in news, issue 3.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: News Weekly <digest@news.example>\r\nTo: operator@icloud.example\r\nSubject: Weekly digest #4\r\nMessage-ID: <digest-4@golden.example>\r\nDate: Sun, 13 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nList-Id: <weekly.news.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "digest-4",
+            "labels": null,
+            "text": "This week in news, issue 4.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: News Weekly <digest@news.example>\r\nTo: operator@icloud.example\r\nSubject: Weekly digest #5\r\nMessage-ID: <digest-5@golden.example>\r\nDate: Sun, 06 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nList-Id: <weekly.news.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "digest-5",
+            "labels": null,
+            "text": "This week in news, issue 5.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: News Weekly <digest@news.example>\r\nTo: operator@icloud.example\r\nSubject: Weekly digest #6\r\nMessage-ID: <digest-6@golden.example>\r\nDate: Sun, 30 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nList-Id: <weekly.news.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "digest-6",
+            "labels": null,
+            "text": "This week in news, issue 6.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: News Weekly <digest@news.example>\r\nTo: operator@icloud.example\r\nSubject: Weekly digest #7\r\nMessage-ID: <digest-7@golden.example>\r\nDate: Sun, 23 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nList-Id: <weekly.news.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "digest-7",
+            "labels": null,
+            "text": "This week in news, issue 7.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: News Weekly <digest@news.example>\r\nTo: operator@icloud.example\r\nSubject: Weekly digest #8\r\nMessage-ID: <digest-8@golden.example>\r\nDate: Sun, 16 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nList-Id: <weekly.news.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "digest-8",
+            "labels": null,
+            "text": "This week in news, issue 8.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: News Weekly <digest@news.example>\r\nTo: operator@icloud.example\r\nSubject: Weekly digest #9\r\nMessage-ID: <digest-9@golden.example>\r\nDate: Sun, 09 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nList-Id: <weekly.news.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "digest-9",
+            "labels": null,
+            "text": "This week in news, issue 9.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: News Weekly <digest@news.example>\r\nTo: operator@icloud.example\r\nSubject: Weekly digest #10\r\nMessage-ID: <digest-10@golden.example>\r\nDate: Sun, 02 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nList-Id: <weekly.news.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "digest-10",
+            "labels": null,
+            "text": "This week in news, issue 10.\r\n"
+          }
+        ],
+        "Receipts": [
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #1\r\nMessage-ID: <shopa-1@golden.example>\r\nDate: Fri, 02 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-1",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 1.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #2\r\nMessage-ID: <shopa-2@golden.example>\r\nDate: Tue, 29 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-2",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 2.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #3\r\nMessage-ID: <shopa-3@golden.example>\r\nDate: Sat, 26 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-3",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 3.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #4\r\nMessage-ID: <shopa-4@golden.example>\r\nDate: Wed, 23 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-4",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 4.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #5\r\nMessage-ID: <shopa-5@golden.example>\r\nDate: Sun, 20 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-5",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 5.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #6\r\nMessage-ID: <shopa-6@golden.example>\r\nDate: Thu, 17 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-6",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 6.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #7\r\nMessage-ID: <shopa-7@golden.example>\r\nDate: Mon, 14 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-7",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 7.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #8\r\nMessage-ID: <shopa-8@golden.example>\r\nDate: Fri, 11 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-8",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 8.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #9\r\nMessage-ID: <shopa-9@golden.example>\r\nDate: Tue, 08 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-9",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 9.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #10\r\nMessage-ID: <shopa-10@golden.example>\r\nDate: Sat, 05 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-10",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 10.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #11\r\nMessage-ID: <shopa-11@golden.example>\r\nDate: Wed, 02 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-11",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 11.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #12\r\nMessage-ID: <shopa-12@golden.example>\r\nDate: Sun, 30 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-12",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 12.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #13\r\nMessage-ID: <shopa-13@golden.example>\r\nDate: Thu, 27 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-13",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 13.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #14\r\nMessage-ID: <shopa-14@golden.example>\r\nDate: Mon, 24 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-14",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 14.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #15\r\nMessage-ID: <shopa-15@golden.example>\r\nDate: Fri, 21 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-15",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 15.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #16\r\nMessage-ID: <shopa-16@golden.example>\r\nDate: Tue, 18 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-16",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 16.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #17\r\nMessage-ID: <shopa-17@golden.example>\r\nDate: Sat, 15 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-17",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 17.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #18\r\nMessage-ID: <shopa-18@golden.example>\r\nDate: Wed, 12 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-18",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 18.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #19\r\nMessage-ID: <shopa-19@golden.example>\r\nDate: Sun, 09 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-19",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 19.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #20\r\nMessage-ID: <shopa-20@golden.example>\r\nDate: Thu, 06 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-20",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 20.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #21\r\nMessage-ID: <shopa-21@golden.example>\r\nDate: Mon, 03 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-21",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 21.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #22\r\nMessage-ID: <shopa-22@golden.example>\r\nDate: Fri, 31 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopa-22",
+            "labels": null,
+            "text": "Thanks for shopping at Shop A. Receipt 22.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 1 receipt\r\nMessage-ID: <shopb-1@golden.example>\r\nDate: Thu, 01 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-1",
+            "labels": null,
+            "text": "Shop B receipt for order 1.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 2 receipt\r\nMessage-ID: <shopb-2@golden.example>\r\nDate: Mon, 28 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-2",
+            "labels": null,
+            "text": "Shop B receipt for order 2.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 3 receipt\r\nMessage-ID: <shopb-3@golden.example>\r\nDate: Fri, 25 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-3",
+            "labels": null,
+            "text": "Shop B receipt for order 3.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 4 receipt\r\nMessage-ID: <shopb-4@golden.example>\r\nDate: Tue, 22 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-4",
+            "labels": null,
+            "text": "Shop B receipt for order 4.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 5 receipt\r\nMessage-ID: <shopb-5@golden.example>\r\nDate: Sat, 19 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-5",
+            "labels": null,
+            "text": "Shop B receipt for order 5.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 6 receipt\r\nMessage-ID: <shopb-6@golden.example>\r\nDate: Wed, 16 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-6",
+            "labels": null,
+            "text": "Shop B receipt for order 6.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 7 receipt\r\nMessage-ID: <shopb-7@golden.example>\r\nDate: Sun, 13 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-7",
+            "labels": null,
+            "text": "Shop B receipt for order 7.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 8 receipt\r\nMessage-ID: <shopb-8@golden.example>\r\nDate: Thu, 10 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-8",
+            "labels": null,
+            "text": "Shop B receipt for order 8.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 9 receipt\r\nMessage-ID: <shopb-9@golden.example>\r\nDate: Mon, 07 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-9",
+            "labels": null,
+            "text": "Shop B receipt for order 9.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 10 receipt\r\nMessage-ID: <shopb-10@golden.example>\r\nDate: Fri, 04 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-10",
+            "labels": null,
+            "text": "Shop B receipt for order 10.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 11 receipt\r\nMessage-ID: <shopb-11@golden.example>\r\nDate: Tue, 01 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-11",
+            "labels": null,
+            "text": "Shop B receipt for order 11.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 12 receipt\r\nMessage-ID: <shopb-12@golden.example>\r\nDate: Sat, 29 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-12",
+            "labels": null,
+            "text": "Shop B receipt for order 12.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 13 receipt\r\nMessage-ID: <shopb-13@golden.example>\r\nDate: Wed, 26 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-13",
+            "labels": null,
+            "text": "Shop B receipt for order 13.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 14 receipt\r\nMessage-ID: <shopb-14@golden.example>\r\nDate: Sun, 23 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-14",
+            "labels": null,
+            "text": "Shop B receipt for order 14.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 15 receipt\r\nMessage-ID: <shopb-15@golden.example>\r\nDate: Thu, 20 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-15",
+            "labels": null,
+            "text": "Shop B receipt for order 15.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 16 receipt\r\nMessage-ID: <shopb-16@golden.example>\r\nDate: Mon, 17 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-16",
+            "labels": null,
+            "text": "Shop B receipt for order 16.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 17 receipt\r\nMessage-ID: <shopb-17@golden.example>\r\nDate: Fri, 14 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-17",
+            "labels": null,
+            "text": "Shop B receipt for order 17.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 18 receipt\r\nMessage-ID: <shopb-18@golden.example>\r\nDate: Tue, 11 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-18",
+            "labels": null,
+            "text": "Shop B receipt for order 18.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 19 receipt\r\nMessage-ID: <shopb-19@golden.example>\r\nDate: Sat, 08 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-19",
+            "labels": null,
+            "text": "Shop B receipt for order 19.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Shop B <receipts@shopb.example>\r\nTo: operator@icloud.example\r\nSubject: Shop B order 20 receipt\r\nMessage-ID: <shopb-20@golden.example>\r\nDate: Wed, 05 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "shopb-20",
+            "labels": null,
+            "text": "Shop B receipt for order 20.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Booking 1 receipt\r\nMessage-ID: <airrcpt-1@golden.example>\r\nDate: Sat, 26 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "airrcpt-1",
+            "labels": null,
+            "text": "Receipt for booking 1.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Booking 2 receipt\r\nMessage-ID: <airrcpt-2@golden.example>\r\nDate: Sat, 19 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "airrcpt-2",
+            "labels": null,
+            "text": "Receipt for booking 2.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Booking 3 receipt\r\nMessage-ID: <airrcpt-3@golden.example>\r\nDate: Sat, 12 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "airrcpt-3",
+            "labels": null,
+            "text": "Receipt for booking 3.\r\n"
+          }
+        ],
+        "Sent Messages": [
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Operator <operator@icloud.example>\r\nTo: pal@people.example\r\nSubject: Re: Lunch next week\r\nMessage-ID: <sent-lunch@golden.example>\r\nDate: Sat, 10 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nIn-Reply-To: <lunch@golden.example>\r\nReferences: <lunch@golden.example>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "sent-lunch",
+            "labels": null,
+            "text": "Lunch on Thursday works, see you then.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Operator <operator@icloud.example>\r\nTo: colleague@work.example\r\nSubject: Project kickoff\r\nMessage-ID: <sent-kickoff@golden.example>\r\nDate: Wed, 07 Oct 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "sent-kickoff",
+            "labels": null,
+            "text": "Can you send the kickoff agenda?\r\n"
+          }
+        ],
+        "Travel": [
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 1\r\nMessage-ID: <itin-1@golden.example>\r\nDate: Wed, 30 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-1",
+            "labels": null,
+            "text": "Your flight itinerary 1 is attached.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 2\r\nMessage-ID: <itin-2@golden.example>\r\nDate: Thu, 24 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-2",
+            "labels": null,
+            "text": "Your flight itinerary 2 is attached.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 3\r\nMessage-ID: <itin-3@golden.example>\r\nDate: Fri, 18 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-3",
+            "labels": null,
+            "text": "Your flight itinerary 3 is attached.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 4\r\nMessage-ID: <itin-4@golden.example>\r\nDate: Sat, 12 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-4",
+            "labels": null,
+            "text": "Your flight itinerary 4 is attached.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 5\r\nMessage-ID: <itin-5@golden.example>\r\nDate: Sun, 06 Sep 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-5",
+            "labels": null,
+            "text": "Your flight itinerary 5 is attached.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 6\r\nMessage-ID: <itin-6@golden.example>\r\nDate: Mon, 31 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-6",
+            "labels": null,
+            "text": "Your flight itinerary 6 is attached.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 7\r\nMessage-ID: <itin-7@golden.example>\r\nDate: Tue, 25 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-7",
+            "labels": null,
+            "text": "Your flight itinerary 7 is attached.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 8\r\nMessage-ID: <itin-8@golden.example>\r\nDate: Wed, 19 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-8",
+            "labels": null,
+            "text": "Your flight itinerary 8 is attached.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 9\r\nMessage-ID: <itin-9@golden.example>\r\nDate: Thu, 13 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-9",
+            "labels": null,
+            "text": "Your flight itinerary 9 is attached.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 10\r\nMessage-ID: <itin-10@golden.example>\r\nDate: Fri, 07 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-10",
+            "labels": null,
+            "text": "Your flight itinerary 10 is attached.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 11\r\nMessage-ID: <itin-11@golden.example>\r\nDate: Sat, 01 Aug 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-11",
+            "labels": null,
+            "text": "Your flight itinerary 11 is attached.\r\n"
+          },
+          {
+            "flags": [
+              "\\Seen"
+            ],
+            "header": "From: Island Air <noreply@airline.example>\r\nTo: operator@icloud.example\r\nSubject: Flight itinerary 12\r\nMessage-ID: <itin-12@golden.example>\r\nDate: Sun, 26 Jul 2026 16:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+            "key": "itin-12",
+            "labels": null,
+            "text": "Your flight itinerary 12 is attached.\r\n"
+          }
+        ]
+      },
+      "special_use": {
+        "Deleted Messages": [
+          "\\Trash"
+        ],
+        "Sent Messages": [
+          "\\Sent"
+        ]
+      },
+      "uidvalidity": 7
+    }
+  },
+  "arrivals": [
+    {
+      "account": "icloud",
+      "flags": [
+        "\\Seen"
+      ],
+      "header": "From: Power Co <billing@power.example>\r\nTo: operator@icloud.example\r\nSubject: Power bill reminder\r\nMessage-ID: <power-reminder@golden.example>\r\nDate: Thu, 15 Oct 2026 13:36:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+      "key": "power-reminder",
+      "mailbox": "INBOX",
+      "text": "A reminder that your power bill is due.\r\n"
+    },
+    {
+      "account": "icloud",
+      "flags": [
+        "\\Seen"
+      ],
+      "header": "From: Shop A <orders@shopa.example>\r\nTo: operator@icloud.example\r\nSubject: Your Shop A receipt #2002\r\nMessage-ID: <shopa-2002@golden.example>\r\nDate: Thu, 15 Oct 2026 14:48:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+      "key": "shopa-2002",
+      "mailbox": "INBOX",
+      "text": "Total TTD 45.50 paid with card ending 1234 at SHOP A PORT OF SPAIN on 2026-10-15.\r\n"
+    },
+    {
+      "account": "icloud",
+      "flags": [
+        "\\Seen"
+      ],
+      "header": "From: Water Authority <statements@water.example>\r\nTo: operator@icloud.example\r\nSubject: Water statement October\r\nMessage-ID: <water-oct@golden.example>\r\nDate: Thu, 15 Oct 2026 14:48:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+      "key": "water-oct",
+      "mailbox": "INBOX",
+      "text": "Your October water statement.\r\n"
+    },
+    {
+      "account": "gmail",
+      "flags": [
+        "\\Seen"
+      ],
+      "header": "From: Boss <boss@work.example>\r\nTo: operator@gmail.example\r\nSubject: Weekly status 14\r\nMessage-ID: <status-14@golden.example>\r\nDate: Thu, 15 Oct 2026 14:48:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+      "key": "status-14",
+      "mailbox": "[Gmail]/All Mail",
+      "text": "Status update 14 for the team.\r\n"
+    },
+    {
+      "account": "gmail",
+      "flags": [
+        "\\Seen"
+      ],
+      "header": "From: Mom <mom@family.example>\r\nTo: operator@gmail.example\r\nSubject: Family news 11\r\nMessage-ID: <family-11@golden.example>\r\nDate: Thu, 15 Oct 2026 14:48:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
+      "key": "family-11",
+      "mailbox": "[Gmail]/All Mail",
+      "text": "Family news number 11.\r\n"
+    }
+  ],
+  "contacts_vcf": "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Friend\r\nEMAIL:friend@people.example\r\nBDAY:1990-10-17\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:3.0\r\nFN:Friend Two\r\nEMAIL:friend2@people.example\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:3.0\r\nFN:Mom\r\nEMAIL:mom@family.example\r\nBDAY:--10-20\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:3.0\r\nFN:Pal\r\nEMAIL:pal@people.example\r\nEND:VCARD\r\n",
+  "gmail_categories": {
+    "promotions": [
+      "flash-1",
+      "flash-2",
+      "flash-3",
+      "flash-4",
+      "flash-5",
+      "flash-6"
+    ],
+    "updates": [
+      "otp-1",
+      "otp-2",
+      "otp-3",
+      "otp-4",
+      "otp-5"
+    ]
+  }
+}

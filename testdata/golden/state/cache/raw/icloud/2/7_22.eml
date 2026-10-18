@@ -1,0 +1,9 @@
+From: Shop A <orders@shopa.example>
+To: operator@icloud.example
+Subject: Your Shop A receipt #22
+Message-ID: <shopa-22@golden.example>
+Date: Fri, 31 Jul 2026 16:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Thanks for shopping at Shop A. Receipt 22.
