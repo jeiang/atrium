@@ -6174,15 +6174,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/smtp.py:27",
+      "id": "src/atrium/smtp.py:30",
       "pattern": "[\\s,]*,[\\s,]*",
-      "site": "src/atrium/smtp.py:27",
+      "site": "src/atrium/smtp.py:30",
       "uses": [
         {
           "args": {
             "repl": ", "
           },
-          "at": "src/atrium/smtp.py:27",
+          "at": "src/atrium/smtp.py:30",
           "op": "sub",
           "source": "re.sub('[\\\\s,]*,[\\\\s,]*', ', ', text or '')"
         }
@@ -8388,12 +8388,12 @@
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/smtp.py",
-      "line": 27,
+      "line": 30,
       "pattern_source": "'[\\\\s,]*,[\\\\s,]*'",
       "patterns": [
-        "src/atrium/smtp.py:27"
+        "src/atrium/smtp.py:30"
       ],
-      "site": "src/atrium/smtp.py:27"
+      "site": "src/atrium/smtp.py:30"
     },
     {
       "call": "sub",
