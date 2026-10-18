@@ -1,0 +1,87 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "runs": [
+      {
+        "job_name": "Nightly",
+        "status": "ok",
+        "started_text": "Thu 09 Oct 03:00",
+        "cost": 0.123,
+        "error": null,
+        "thread_id": 30
+      },
+      {
+        "job_name": "Morning <brief>",
+        "status": "error",
+        "started_text": "Mon 06 Oct 07:30",
+        "cost": 0.0,
+        "error": "<script>alert(\"xss\")</script>",
+        "thread_id": null
+      },
+      {
+        "job_name": "Weekly",
+        "status": "skipped_budget",
+        "started_text": "Sun 05 Oct 07:30",
+        "cost": 0.0,
+        "error": null,
+        "thread_id": null
+      },
+      {
+        "job_name": "Other",
+        "status": "running",
+        "started_text": "Sat 04 Oct 07:30",
+        "cost": 1.5,
+        "error": null,
+        "thread_id": 31
+      }
+    ]
+  }
+}

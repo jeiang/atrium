@@ -1,0 +1,154 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "torrents": [
+      {
+        "name": "Show.S01E01.1080p <x> & y",
+        "kind": "media",
+        "filed": true,
+        "ignored": false,
+        "label": "seeding",
+        "percent": 100,
+        "size": "1.4 GB",
+        "down": "",
+        "up": "120 KB/s",
+        "eta": "",
+        "hash": "abc123",
+        "active": true
+      },
+      {
+        "name": "Café naïve — 東京 🎉 مرحبا SupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilistic",
+        "kind": "plain",
+        "filed": false,
+        "ignored": true,
+        "label": "downloading",
+        "percent": 42,
+        "size": "700 MB",
+        "down": "2.1 MB/s",
+        "up": "",
+        "eta": "5m",
+        "hash": "def456",
+        "active": false
+      }
+    ],
+    "error": null,
+    "active": true,
+    "poll": 5,
+    "queue": [
+      {
+        "item": {
+          "id": "q1",
+          "name": "Movie.2024.1080p <x>",
+          "torrent": true
+        },
+        "kind": "movie",
+        "title": "Movie \"Title\" & co",
+        "year": "2024",
+        "files": [
+          {
+            "rel": "Movie.2024.1080p/movie.mkv",
+            "season": "",
+            "episode": "",
+            "dest": ""
+          },
+          {
+            "rel": "Movie.2024.1080p/sample.mkv",
+            "season": "",
+            "episode": "",
+            "dest": ""
+          }
+        ],
+        "movie_file": "Movie.2024.1080p/movie.mkv",
+        "movie_dest": "movies/Movie (2024)/Movie (2024).mkv",
+        "error": ""
+      },
+      {
+        "item": {
+          "id": "q2",
+          "name": "import/Show Café naïve — 東京 🎉 مرحبا",
+          "torrent": false
+        },
+        "kind": "tv",
+        "title": "Show",
+        "year": "",
+        "files": [
+          {
+            "rel": "Show/S01E01.mkv",
+            "season": "1",
+            "episode": "1",
+            "dest": "tv/Show/Season 01/Show S01E01.mkv"
+          },
+          {
+            "rel": "Show/extra <x>.mkv",
+            "season": "",
+            "episode": "",
+            "dest": "(skipped)"
+          }
+        ],
+        "movie_file": "",
+        "movie_dest": "",
+        "error": "Episode numbers missing for <script>alert(\"xss\")</script>"
+      }
+    ],
+    "queue_error": "Library <missing>",
+    "kinds": [
+      "movie",
+      "tv"
+    ],
+    "toast": {
+      "category": "success",
+      "title": "Saved",
+      "description": "He said \"hi\" & 'bye' <b>bold</b>"
+    }
+  }
+}

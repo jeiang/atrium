@@ -1,0 +1,60 @@
+
+
+
+<form method="post" action="/scheduled/2" class="w-full sm:max-w-2xl"
+      hx-post="/scheduled/2" hx-target="#schedule-dialog" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="csrf_token" value="csrf-golden-token">
+  <header class="flex-row items-center gap-2">
+    <h2 class="min-w-0 flex-1 truncate">Edit Morning &lt;brief&gt; Café naïve — 東京 🎉 مرحبا</h2>
+    <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close" data-action="close-dialog"><svg class="lucide lucide-x " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+  </header>
+  <section class="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
+    <p class="text-sm text-destructive" role="alert">Unrecognised schedule &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</p>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <div role="group" class="field">
+        <label for="sched-name">Name</label>
+        <input id="sched-name" name="name" type="text" value="Edited &lt;name&gt;" required>
+      </div>
+      <div role="group" class="field">
+        <label for="sched-schedule">Schedule</label>
+        <input id="sched-schedule" name="schedule" type="text" value="bad cron" class="font-mono" spellcheck="false" autocomplete="off" placeholder="daily 08:00" required>
+      </div>
+    </div>
+    <p class="-mt-2 text-xs text-muted-foreground">Times are America/Port_of_Spain. Formats: an ISO datetime, <code class="font-mono">daily 07:30</code>, <code class="font-mono">weekly mon 07:30</code> or a 5-field cron expression.</p>
+    <div role="group" class="field">
+      <label for="sched-prompt">Prompt</label>
+      <textarea id="sched-prompt" name="prompt" rows="4" class="w-full" required>&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</textarea>
+      <p>A prompt may reference skills as <code class="font-mono">/skill:name</code>; they are expanded into the prompt when the job runs.</p>
+    </div>
+    
+    <div class="flex flex-col gap-2">
+      <h3 class="text-sm font-medium">Recent runs</h3>
+      
+
+
+<ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card text-sm" role="list" aria-label="Run history">
+  
+  <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+    
+    <span class="badge" data-variant="destructive" title="&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;">error</span>
+    <span class="text-xs text-muted-foreground tabular-nums">Mon 06 Oct 07:30</span>
+    
+    <span class="min-w-0 max-w-full truncate text-xs text-muted-foreground" title="&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;">&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</span>
+    <span class="ms-auto flex items-center gap-1">
+      
+    </span>
+  </li>
+  
+</ul>
+
+    </div>
+    
+  </section>
+  <footer class="flex-wrap">
+    
+    <button type="button" class="btn me-auto" data-size="sm" data-variant="destructive" hx-post="/scheduled/2/cancel" hx-target="#scheduled-list" hx-swap="outerHTML" hx-confirm="Delete this schedule?"><svg class="lucide lucide-trash-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete</button>
+    
+    <button type="button" class="btn" data-variant="outline" data-action="close-dialog">Cancel</button>
+    <button type="submit" class="btn"><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Save</button>
+  </footer>
+</form>

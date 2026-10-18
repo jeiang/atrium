@@ -1,0 +1,101 @@
+
+
+
+<li id="decision-501" class="group/row grid gap-x-4 gap-y-2 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_--spacing(64)_--spacing(48)_auto] lg:items-center">
+  <div class="flex min-w-0 flex-col gap-0.5">
+    <a class="truncate text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm" href="/messages/501" hx-get="/messages/501" hx-target="#reader-body" hx-swap="innerHTML show:top" autofocus>Your receipt &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</a>
+    <p class="truncate text-xs text-muted-foreground">Shop &lt;Co&gt; · <time datetime="2025-10-09T07:53:20+00:00">2025-10-09</time> · icloud</p>
+  </div>
+  <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+    <span class="sr-only">Now in</span>
+    <span class="max-w-full truncate text-muted-foreground">Receipts</span>
+    <svg class="lucide lucide-arrow-right size-3.5 shrink-0 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+    <span class="sr-only">proposed</span>
+    <span class="max-w-full truncate font-medium">Receipts</span>
+    
+<span class="badge" data-variant="secondary">Applied</span>
+    
+  </div>
+  <div class="flex min-w-0 flex-wrap items-center gap-2">
+    <span class="badge" data-variant="outline"><span class="size-2 rounded-full bg-chart-3" aria-hidden="true"></span>Learned</span>
+    <code class="truncate font-mono text-xs text-muted-foreground">no-reply@shop.example</code>
+    <span class="text-xs text-muted-foreground tabular-nums"><span class="sr-only">confidence </span>93%</span>
+  </div>
+  <div class="flex gap-1 group-has-[form]/row:invisible max-lg:group-has-[form]/row:hidden lg:w-18 lg:justify-end">
+    
+    <button type="button" class="btn transition-colors" data-size="sm" data-variant="ghost" title="Undo"
+            hx-post="/live/actions/9/undo" hx-target="#decision-501" hx-swap="outerHTML" hx-disabled-elt="this"
+            hx-confirm="Undo this and put the message back?">
+      <svg class="lucide lucide-undo-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg><span class="lg:sr-only">Undo</span>
+    </button>
+    
+    <button type="button" class="btn transition-colors" data-size="sm" data-variant="ghost" title="Correct"
+            hx-get="/messages/501/correct?context=row" hx-target="#correct-slot-row-501" hx-swap="innerHTML">
+      <svg class="lucide lucide-folder-input " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg><span class="lg:sr-only">Correct</span>
+    </button>
+    <a class="btn transition-colors" data-size="sm" data-variant="ghost" title="Make rule" href="/rules/new?message=501">
+      <svg class="lucide lucide-list-plus " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 5H3"/><path d="M11 12H3"/><path d="M16 19H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></svg><span class="lg:sr-only">Make rule</span>
+    </a>
+  </div>
+  <div id="correct-slot-row-501" class="empty:hidden lg:col-span-4">
+
+
+
+<form class="flex flex-col gap-3 rounded-md border border-dashed bg-background p-3"
+      hx-post="/messages/502/correct"
+      hx-target="#decision-502"
+      hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="context" value="row">
+  <div role="group" class="field">
+    <label for="dest-row-502">Where should this go?</label>
+    <select id="dest-row-502" name="dest" class="w-full sm:max-w-xs" required autofocus>
+      <option value="" disabled>Choose a label</option>
+      
+<option value="Receipts">Receipts</option>
+
+<option value="Travel|Flights" selected>Travel|Flights</option>
+
+<option value="Odd &lt;folder&gt; &amp; co">Odd &lt;folder&gt; &amp; co</option>
+
+    </select>
+    
+  </div>
+  <p class="flex gap-2 text-xs text-muted-foreground">
+    <svg class="lucide lucide-zap mt-0.5 size-3.5 shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></svg>
+    Records the correction and moves the message to this label.
+  </p>
+  <div class="flex flex-wrap gap-2">
+    <button type="submit" class="btn" data-size="sm"><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Record correction</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost"
+            data-action="cancel-correct">Cancel</button>
+  </div>
+</form></div>
+</li>
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>

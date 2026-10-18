@@ -1,0 +1,70 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "proposal": {
+      "id": 14,
+      "kind": "reminder",
+      "status": "suppressed",
+      "account": "",
+      "title": "Proposal 14 \"reminder\" & more <i>",
+      "created_ts": 1759913600,
+      "applied_ts": 1759913700,
+      "decided_ts": 1759913800,
+      "undoable": false,
+      "result": null,
+      "preview": {
+        "text": "t",
+        "due": "d",
+        "remind_at": "r"
+      }
+    }
+  }
+}
