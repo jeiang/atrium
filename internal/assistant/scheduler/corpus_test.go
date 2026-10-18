@@ -181,5 +181,5 @@ func TestSchedulerCorpus(t *testing.T) {
 }
 
 func TestTimePattern(t *testing.T) {
-	rxtest.Run(t, map[string]*rx.Regexp{"src/atrium/agent/scheduler.py:99": timePattern})
+	rxtest.Run(t, map[string]*rx.Regexp{"src/atrium/agent/scheduler.py:TIME": timePattern})
 }

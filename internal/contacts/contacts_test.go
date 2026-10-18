@@ -13,11 +13,11 @@ import (
 
 func TestPatterns(t *testing.T) {
 	rxtest.Run(t, map[string]*rx.Regexp{
-		"src/atrium/flags.py:18":    unfoldRe,
-		"src/atrium/contacts.py:6":  escapeRe,
-		"src/atrium/contacts.py:7":  splitRe,
-		"src/atrium/contacts.py:8":  dateRe,
-		"src/atrium/contacts.py:10": appleLabel,
+		"src/atrium/flags.py:unfold:ceb3ae39": unfoldRe,
+		"src/atrium/contacts.py:ESCAPE":       escapeRe,
+		"src/atrium/contacts.py:SPLIT":        splitRe,
+		"src/atrium/contacts.py:DATE":         dateRe,
+		"src/atrium/contacts.py:APPLE_LABEL":  appleLabel,
 	})
 }
 
