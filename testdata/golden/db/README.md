@@ -6,7 +6,8 @@ against fake IMAP, llama.cpp, Anthropic, Notion, qBittorrent, EZTV, TMDB, ntfy,
 CBTT and CalDAV. No data comes from a real instance. Regenerate from the repo
 root with `nix develop --impure -c python tools/golden/make_db.py`; two runs give
 byte-identical files, and a run on x86_64-linux gave the same bytes as one on
-aarch64-darwin.
+aarch64-darwin. The `golden-db` flake check regenerates twice and fails when
+either run differs from the committed files.
 
 ## Files
 
