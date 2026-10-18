@@ -33,7 +33,7 @@ class FakeSMTP:
     def __exit__(self, *exc):
         return False
 
-    def starttls(self):
+    def starttls(self, context):
         self.log.append("starttls")
 
     def login(self, user, password):
