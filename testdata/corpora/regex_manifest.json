@@ -5203,13 +5203,13 @@
       "flags": [],
       "group_names": {},
       "groups": 2,
-      "id": "src/atrium/report.py:8",
+      "id": "src/atrium/report.py:10",
       "pattern": "^(\\d+)([hd])$",
-      "site": "src/atrium/report.py:8",
+      "site": "src/atrium/report.py:10",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/report.py:31",
+          "at": "src/atrium/report.py:33",
           "op": "match",
           "source": "SINCE.match(value)"
         }
@@ -8259,13 +8259,13 @@
       "col": 8,
       "dynamic": false,
       "file": "src/atrium/report.py",
-      "line": 8,
+      "line": 10,
       "name": "SINCE",
       "pattern_source": "'^(\\\\d+)([hd])$'",
       "patterns": [
-        "src/atrium/report.py:8"
+        "src/atrium/report.py:10"
       ],
-      "site": "src/atrium/report.py:8"
+      "site": "src/atrium/report.py:10"
     },
     {
       "call": "search",

@@ -280,7 +280,7 @@ INPUTS = {
     "src/atrium/rebalance.py:246": ["Your {order} from Amazon #123", "ab cd éèé ÉCOLE"],
     "src/atrium/rebalance.py:253": ["Bills/2026|Q4\\x\x01y", "plain"],
     "src/atrium/rebalance.py:254": ["a   b\t c"],
-    "src/atrium/report.py:8": ["24h", "7d", "1w", "h", "07d", "٧d"],
+    "src/atrium/report.py:10": ["24h", "7d", "1w", "h", "07d", "٧d"],
     "src/atrium/search.py:14": ['find "exact phrase" and words_with-dash', 'unterminated "quote', "café ٣٤ 中文"],
     "src/atrium/search.py:15": ["hello_world foo-bar", "Ünïcödé ٣", "___", "😀hi𝒜b😀 𐐷"],
     "src/atrium/watches.py:77": ["Amazon.com, Inc.", "Café Ünï", ""],
