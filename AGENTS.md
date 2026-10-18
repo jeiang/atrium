@@ -123,7 +123,9 @@ and backups; nothing of that lives here.
   queries; its test runs them on migrated copies of `atrium.db` and
   `atrium-legacy.db` against the Python results in
   `testdata/golden/db/readpaths.json`. A module registers its paths in
-  `init` and adds a blank import to that test.
+  `init` and adds a blank import to that test. A path that needs the
+  cache directory reads it with `config.Load(config.OS)`; the test sets
+  `ATRIUM_DB` and `ATRIUM_CACHE_DIR` (`testdata/golden/state/cache`).
 - `internal/assistant/scheduler/`: the schedule grammar (`Parse`,
   `Describe`, `Validate`, `Spec.NextAfter`/`MinGap`; wall times resolve
   as zoneinfo's `fold=0`, one-shots through a port of CPython's
@@ -158,12 +160,28 @@ and backups; nothing of that lives here.
 - `internal/mail/features/`: `features.py` (`Extract`, `ContentDigest`,
   `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
 - `internal/pyhtml/`: `html.unescape`; tables from `tools/pyhtml/gen_entities.py`.
+- `internal/mail/sync/`: `sync.py`'s read path. `Syncer.Account` discovers
+  mailboxes (`mail.MailboxRole`), handles UIDVALIDITY, fetches new mail in
+  batches of `config.FetchBatch`, refreshes flags with CHANGEDSINCE when
+  CONDSTORE and both modseqs exist, ingests through `features.Extract` into
+  `messages`/`message_fts`, writes the raw `.eml` to
+  `<cache>/raw/<account>/<mailbox id>/<validity>_<uid>.eml` and records
+  `move`/`delete`/`flags`/`labels` events; `One` is `run.sync_one` and its
+  log line. It calls no gated write. Its golden test replays
+  `testdata/golden/pipeline` through the first two syncs; the scripted-server
+  test lives in `internal/mail/imapclient/sync_test.go`.
+- `internal/mail/message/`: `message.py`'s `Get` view; `RawFile` reads
+  `messages.raw_path` only when it resolves inside the cache directory and
+  otherwise falls back to the `message_fts` body.
 - `internal/mail/imapclient/`: `imap.py`'s client on go-imap v2; go-imap
   drives the session and the bytes it reads are parsed again as Python
   3.14's imaplib does, so results match what Python stored. Wire tests are
   imapscript transcripts in its `testdata/`.
 - `internal/py/`: the shared CPython emulation: `Repr`/`ReprBytes`, `IsSpace`/`Strip`/
   `Split`/`SplitLines`/`Clip`/`Lower`, `Sum`/`SumSq` (Neumaier, as `sum()`),
+  `JSONDumps` (`json.dumps` defaults over `Dict`, `[]string`, `[]any` and
+  scalars; stored JSON text such as `flags`, `labels` and `events.detail`
+  is written only through it) and `Resolve` (`Path.resolve()`),
   `FromISOFormat` with `DateTime.Timestamp`/`WallToUnix`/`SplitTimestamp`,
   `B64Decode` (non-strict `base64.b64decode`) and `DecodeUTF16BE`.
   Python-emulation helpers live here; never add a per-package copy (the one
