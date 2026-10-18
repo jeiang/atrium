@@ -4,14 +4,18 @@ go 1.26.0
 
 require (
 	github.com/dlclark/regexp2 v1.12.0
+	github.com/emersion/go-imap/v2 v2.0.0-beta.8
 	github.com/jeiang/atrium/third_party/sqlite-vec v0.0.0
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/systemd/slog-journal v0.1.2
+	golang.org/x/text v0.43.0
 	modernc.org/sqlite v1.60.1
 )
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/emersion/go-message v0.18.2 // indirect
+	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
@@ -23,3 +27,5 @@ require (
 )
 
 replace github.com/jeiang/atrium/third_party/sqlite-vec => ./third_party/sqlite-vec
+
+replace github.com/emersion/go-imap/v2 => ./third_party/go-imap

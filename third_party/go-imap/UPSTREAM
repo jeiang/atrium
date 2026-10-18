@@ -1,0 +1,3 @@
+url: https://github.com/emersion/go-imap.git
+base: v2.0.0-beta.8
+commit: 7ac47a9cfd9a06ff5f3bdee52d7420137f023a1e
