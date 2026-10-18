@@ -23,6 +23,14 @@ test *args:
 go-test *args="./...":
   go test {{args}}
 
+# Run the SQLite driver tests on the pure-Go modernc fallback (inside the dev shell)
+go-test-modernc *args:
+  go test -tags modernc {{args}} ./internal/db/...
+
+# Run the SQLite driver tests as a static musl cgo binary (inside the Linux dev shell)
+go-test-musl *args:
+  CC="${ATRIUM_MUSL_CC:?set by the Linux dev shell}" go test -ldflags '-linkmode external -extldflags -static' {{args}} ./internal/db/...
+
 # Lint the Go code with golangci-lint (inside the dev shell)
 lint *args="./...":
   golangci-lint run {{args}}

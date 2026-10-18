@@ -1,0 +1,145 @@
+{
+  "knn": [
+    {
+      "rowid": 195,
+      "distance_bits": 1064010958
+    },
+    {
+      "rowid": 160,
+      "distance_bits": 1064027158
+    },
+    {
+      "rowid": 16,
+      "distance_bits": 1064093191
+    },
+    {
+      "rowid": 11,
+      "distance_bits": 1064148691
+    },
+    {
+      "rowid": 18,
+      "distance_bits": 1064162148
+    },
+    {
+      "rowid": 17,
+      "distance_bits": 1064210353
+    },
+    {
+      "rowid": 12,
+      "distance_bits": 1064238800
+    },
+    {
+      "rowid": 96,
+      "distance_bits": 1064241973
+    },
+    {
+      "rowid": 169,
+      "distance_bits": 1064276286
+    },
+    {
+      "rowid": 6,
+      "distance_bits": 1064325996
+    }
+  ],
+  "knn_partition": [
+    {
+      "rowid": 160,
+      "distance_bits": 1064027158
+    },
+    {
+      "rowid": 16,
+      "distance_bits": 1064093191
+    },
+    {
+      "rowid": 18,
+      "distance_bits": 1064162148
+    },
+    {
+      "rowid": 12,
+      "distance_bits": 1064238800
+    },
+    {
+      "rowid": 96,
+      "distance_bits": 1064241973
+    },
+    {
+      "rowid": 6,
+      "distance_bits": 1064325996
+    },
+    {
+      "rowid": 162,
+      "distance_bits": 1064343526
+    },
+    {
+      "rowid": 156,
+      "distance_bits": 1064360861
+    },
+    {
+      "rowid": 102,
+      "distance_bits": 1064395044
+    },
+    {
+      "rowid": 108,
+      "distance_bits": 1064412396
+    }
+  ],
+  "exact": [
+    {
+      "rowid": 160,
+      "distance_bits": 1064027158
+    },
+    {
+      "rowid": 16,
+      "distance_bits": 1064093191
+    },
+    {
+      "rowid": 18,
+      "distance_bits": 1064162148
+    },
+    {
+      "rowid": 12,
+      "distance_bits": 1064238800
+    },
+    {
+      "rowid": 96,
+      "distance_bits": 1064241973
+    },
+    {
+      "rowid": 6,
+      "distance_bits": 1064325996
+    },
+    {
+      "rowid": 162,
+      "distance_bits": 1064343526
+    },
+    {
+      "rowid": 156,
+      "distance_bits": 1064360861
+    },
+    {
+      "rowid": 102,
+      "distance_bits": 1064395044
+    },
+    {
+      "rowid": 108,
+      "distance_bits": 1064412396
+    }
+  ],
+  "fts": [
+    {
+      "rowid": 1,
+      "bm25": -0.7918545145095677,
+      "snippet": "Your [invoice] is attached. [Payment] due in thirty…"
+    },
+    {
+      "rowid": 3,
+      "bm25": -0.5180962723045714,
+      "snippet": "The [invoice] total looks wrong; the [invoice] lists…"
+    },
+    {
+      "rowid": 5,
+      "bm25": -0.35226493612364274,
+      "snippet": "[Payment] apps, invoices and other news this week."
+    }
+  ]
+}
