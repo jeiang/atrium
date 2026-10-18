@@ -24,3 +24,5 @@ require (
 )
 
 replace github.com/jeiang/atrium/third_party/sqlite-vec => ./third_party/sqlite-vec
+
+replace github.com/emersion/go-imap/v2 => ./third_party/go-imap
