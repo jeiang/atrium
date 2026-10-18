@@ -1,0 +1,134 @@
+{
+  "description": "calendar.list_events for Google: refresh grant, then events.list (singleEvents, orderBy startTime, maxResults 250) following nextPageToken.",
+  "exchanges": [
+    {
+      "request": {
+        "body": [
+          [
+            "grant_type",
+            "refresh_token"
+          ],
+          [
+            "client_id",
+            "golden-google-client-id"
+          ],
+          [
+            "client_secret",
+            "golden-google-client-secret"
+          ],
+          [
+            "refresh_token",
+            "golden-google-refresh-token"
+          ],
+          [
+            "scope",
+            "https://www.googleapis.com/auth/calendar.events"
+          ]
+        ],
+        "body_encoding": "form",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "method": "POST",
+        "path": "/token",
+        "query": "",
+        "url": "https://oauth2.googleapis.com/token"
+      },
+      "response": {
+        "body": {
+          "access_token": "golden-google-access-token",
+          "expires_in": 3599,
+          "scope": "https://www.googleapis.com/auth/calendar.events",
+          "token_type": "Bearer"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer golden-google-access-token"
+        },
+        "method": "GET",
+        "path": "/calendar/v3/calendars/primary/events",
+        "query": "timeMin=2026-10-20T00%3A00%3A00-04%3A00&timeMax=2026-10-27T00%3A00%3A00-04%3A00&singleEvents=true&orderBy=startTime&maxResults=250&alt=json",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "end": {
+                "dateTime": "2026-10-20T13:30:00Z"
+              },
+              "id": "e1",
+              "start": {
+                "dateTime": "2026-10-20T13:00:00Z"
+              },
+              "status": "confirmed",
+              "summary": "Standup"
+            }
+          ],
+          "nextPageToken": "golden-page-2"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer golden-google-access-token"
+        },
+        "method": "GET",
+        "path": "/calendar/v3/calendars/primary/events",
+        "query": "timeMin=2026-10-20T00%3A00%3A00-04%3A00&timeMax=2026-10-27T00%3A00%3A00-04%3A00&singleEvents=true&orderBy=startTime&maxResults=250&pageToken=golden-page-2&alt=json",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "id": "e2",
+              "status": "cancelled"
+            },
+            {
+              "end": {
+                "date": "2026-10-31"
+              },
+              "id": "e3",
+              "location": "Home",
+              "start": {
+                "date": "2026-10-30"
+              },
+              "summary": "Holiday"
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "events_list",
+  "source_tests": [
+    "tests/test_calendar.py::test_list_merges_mirror_and_google"
+  ]
+}

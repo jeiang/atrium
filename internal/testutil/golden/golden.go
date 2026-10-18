@@ -41,13 +41,17 @@ type ManifestEntry struct {
 	Requests    int      `json:"requests"`
 }
 
-// Request is one recorded HTTP request; Body is the JSON the Python client sent.
+// Request is one recorded HTTP request; Body is what the Python client sent, as JSON. The integration goldens
+// also record the URL (scheme, host and path) and BodyEncoding: json (Body is the parsed body), form (ordered
+// [name, value] pairs), multipart (parts), text, base64 or none; the Anthropic goldens leave both empty.
 type Request struct {
-	Method  string            `json:"method"`
-	Path    string            `json:"path"`
-	Query   string            `json:"query"`
-	Headers map[string]string `json:"headers"`
-	Body    json.RawMessage   `json:"body"`
+	Method       string            `json:"method"`
+	URL          string            `json:"url"`
+	Path         string            `json:"path"`
+	Query        string            `json:"query"`
+	Headers      map[string]string `json:"headers"`
+	BodyEncoding string            `json:"body_encoding"`
+	Body         json.RawMessage   `json:"body"`
 }
 
 // Exchange is a recorded request and the response the Python code received for it.

@@ -1,0 +1,80 @@
+{
+  "description": "rebalance.suggest_name: NAME_SCHEMA for a split folder.",
+  "exchanges": [
+    {
+      "request": {
+        "body": {
+          "cache_prompt": true,
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          },
+          "max_tokens": 80,
+          "messages": [
+            {
+              "content": "You name a mail folder. You get the existing parent folder, the top sender domains and common subject words of a group of messages that will move into a new folder. Answer a short, plain folder name of one to three words that describes what the messages are, without the sender's name unless that is what they are about.",
+              "role": "system"
+            },
+            {
+              "content": "Parent folder: Shopping\nTop sender domains: shoply.test, amazon.test\nCommon subject words: order, receipt, shipped",
+              "role": "user"
+            }
+          ],
+          "model": "qwen",
+          "response_format": {
+            "json_schema": {
+              "name": "answer",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "maxLength": 40,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "type": "object"
+              },
+              "strict": true
+            },
+            "type": "json_schema"
+          },
+          "temperature": 0
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "query": "",
+        "url": "http://chat.invalid/v1/chat/completions"
+      },
+      "response": {
+        "body": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "{\"name\": \"Receipts\"}",
+                "role": "assistant"
+              }
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "rebalance_naming",
+  "source_tests": [
+    "src/atrium/rebalance.py::suggest_name (no dedicated test; tests/test_scans.py passes its own namer)"
+  ]
+}
