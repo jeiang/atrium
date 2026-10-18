@@ -14,7 +14,7 @@ in
     };
     pyproject = true;
     build-system = [py.setuptools];
-    dependencies = [py.anthropic py.caldav py.fastapi py.google-api-python-client py.google-auth py.httpx py.icalendar py.jinja2 py.markdown-it-py py.nh3 py.openpyxl py.pydantic-monty py.python-docx py.python-multipart py.sqlite-vec py.trafilatura py.uvicorn py.vobject];
+    dependencies = [py.anthropic py.caldav py.fastapi py.google-api-python-client py.google-auth py.httpx py.icalendar py.jinja2 py.markdown-it-py py.nh3 py.openpyxl py.pydantic-monty py.python-docx py.python-multipart py.sqlite-vec py.trafilatura py.uvicorn];
     nativeCheckInputs = [py.respx py.pytestCheckHook];
     meta = {
       mainProgram = "atrium";
