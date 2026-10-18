@@ -7,7 +7,7 @@ from atrium.agent import budget, context, journal, loop, registry, service, skil
 from atrium.agent.tools import context_ops
 from atrium.agent.tools import recall as recall_tool
 from atrium.agent.tools.base import Tool
-from fake_anthropic import FakeClient, cleared, compaction, response, text, thinking, tool_use
+from fake_anthropic import FakeClient, cleared, compaction, iteration, response, text, thinking, tool_use
 from helpers import make_config
 
 NOW = 1_780_000_000.0
@@ -175,6 +175,21 @@ def test_server_compaction_journals_block_and_continues_with_manifest_and_stripp
     later = FakeClient([response([text("still here")])])
     run_turn(cfg, conn, later, "next", thread_id)
     assert plain(later.calls[0]["messages"][:4]) == plain(client.calls[2]["messages"][:4])
+
+
+def test_server_compaction_bills_every_usage_iteration(world):
+    cfg, conn = world
+    iterations = [iteration("compaction", input_tokens=300_000, output_tokens=4_000), iteration("message", input_tokens=2_000, cache_read=10_000, output_tokens=50)]
+    client = FakeClient(
+        [
+            response([compaction("Goal: answer hello.")], "compaction", input_tokens=2_000, cache_read=10_000, output_tokens=50, iterations=iterations),
+            response([text("done")]),
+        ]
+    )
+    _, run_id = run_turn(cfg, conn, client, "hello")
+    row = conn.execute("SELECT input_tokens, cache_read, output_tokens, tier, cost_usd FROM usage WHERE run_id = ? AND compaction = 1", (run_id,)).fetchone()
+    assert (row["input_tokens"], row["cache_read"], row["output_tokens"], row["tier"]) == (302_000, 10_000, 4_050, ">100K")
+    assert row["cost_usd"] == pytest.approx((300_000 * 0.50 + 4_000 * 2.50 + 2_000 * 0.10 + 10_000 * 0.01 + 50 * 0.50) / 1_000_000)
 
 
 def test_preflight_compacts_on_the_client_before_exceeding_the_limit(world):

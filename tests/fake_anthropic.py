@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 
-def usage(input_tokens=1000, cache_creation=0, cache_read=0, output_tokens=100, searches=0, cache_1h=0):
+def usage(input_tokens=1000, cache_creation=0, cache_read=0, output_tokens=100, searches=0, cache_1h=0, iterations=None):
     return SimpleNamespace(
         input_tokens=input_tokens,
         cache_creation_input_tokens=cache_creation,
@@ -9,6 +9,18 @@ def usage(input_tokens=1000, cache_creation=0, cache_read=0, output_tokens=100, 
         cache_read_input_tokens=cache_read,
         output_tokens=output_tokens,
         server_tool_use=SimpleNamespace(web_search_requests=searches, web_fetch_requests=0),
+        iterations=iterations,
+    )
+
+
+def iteration(type, input_tokens=0, cache_creation=0, cache_read=0, output_tokens=0):
+    return SimpleNamespace(
+        type=type,
+        input_tokens=input_tokens,
+        cache_creation_input_tokens=cache_creation,
+        cache_creation=SimpleNamespace(ephemeral_5m_input_tokens=cache_creation, ephemeral_1h_input_tokens=0),
+        cache_read_input_tokens=cache_read,
+        output_tokens=output_tokens,
     )
 
 
