@@ -9,17 +9,21 @@ and backups; nothing of that lives here.
 
 ## Workflow
 
-- Never commit to `main`. Use a branch and a pull request; CI runs
-  `nix flake check`.
+- Never commit to `main`. Use a branch and a pull request; CI builds every
+  `checks.x86_64-linux` attribute as a matrix and the `check` job aggregates
+  them.
 - `main` requires signed commits and the `check` status. Merge with
   `gh pr merge --auto --merge`.
 - Use Conventional Commits.
 - Tests: `nix build .#atrium` runs pytest in the package's checkPhase.
-  For a faster loop, `nix develop -c python -m pytest` runs the suite
-  against the working tree.
+  For a faster loop, `just test` (`nix develop --impure -c python -m pytest`)
+  runs the suite against the working tree. `.envrc` loads the devshell with
+  direnv.
 - `nix flake check` also builds `atrium-static` and the `module` check, which
   renders every unit of an example host and greps the wiring it expects.
-- `nix fmt` formats Nix (alejandra). Python has no formatter in the flake.
+- `nix fmt` (treefmt: alejandra, deadnix) formats Nix; `just fmt` also runs
+  `statix fix`. The devshell installs git hooks for editorconfig-checker,
+  statix and treefmt. Python has no formatter in the flake.
 - After a change lands on `main`, bump the `atrium` input in cornn-flaek
   (`nix flake update atrium`) and open a pull request there; `just
   artemis-kernel` is not needed for an atrium bump.
@@ -46,6 +50,8 @@ and backups; nothing of that lives here.
 - `src/atrium/media/`: filing, EZTV channels and the library.
 - `src/atrium/web/`: the FastAPI app, templates and `static/` sources.
 - `tests/`: pytest, with fakes for IMAP, Anthropic, Notion and qBittorrent.
+- `flake.nix` and `flake-modules/`: flake-parts modules (outputs, checks,
+  devshell), loaded by import-tree. `.ci/` holds the garret cache push helper.
 - `nix/`: package, static assets and the NixOS module.
 - `docs/runbook.md`: the environment the units read and the operating
   procedures, host-neutral.
