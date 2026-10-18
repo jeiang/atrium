@@ -20,7 +20,7 @@ func connPragmas(foreignKeys bool) []string {
 	if foreignKeys {
 		fk = "PRAGMA foreign_keys = ON"
 	}
-	return []string{"PRAGMA busy_timeout = 30000", fk, "PRAGMA synchronous = FULL"}
+	return []string{"PRAGMA busy_timeout = 30000", fk, "PRAGMA synchronous = FULL", "PRAGMA journal_size_limit = 67108864"}
 }
 
 // DB is atrium.db: Write is the single writer connection, whose

@@ -8,7 +8,6 @@ package rx
 import (
 	"container/list"
 	"errors"
-	"log/slog"
 	"maps"
 	"math"
 	"strings"
@@ -16,7 +15,11 @@ import (
 	"time"
 
 	"github.com/dlclark/regexp2"
+
+	"github.com/jeiang/atrium/internal/logx"
 )
+
+var log = logx.Logger("atrium.rx")
 
 // Flags are Python's re flags.
 type Flags uint16
@@ -205,7 +208,7 @@ func (m *Match) Named(name string) (string, bool) {
 func (re *Regexp) find(prog *regexp2.Regexp, text []rune, pos int) (*Match, error) {
 	m, err := prog.FindRunesMatchStartingAt(text, pos)
 	if err != nil {
-		slog.Warn("rx: match timed out", "pattern", re.pattern, "timeout", MatchTimeout)
+		log.Warn("rx: match timed out", "pattern", re.pattern, "timeout", MatchTimeout)
 		return nil, ErrTimeout
 	}
 	if m == nil {

@@ -2,6 +2,8 @@ module github.com/jeiang/atrium
 
 go 1.26.0
 
+toolchain go1.26.9
+
 require (
 	github.com/anthropics/anthropic-sdk-go v1.82.0
 	github.com/dlclark/regexp2 v1.12.0

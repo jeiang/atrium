@@ -6,15 +6,17 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/pyhtml"
 	"github.com/jeiang/atrium/internal/rx"
 )
+
+var log = logx.Logger("atrium.features")
 
 const month = `(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?`
 
@@ -294,7 +296,7 @@ func mimeAttachments(msg *mime.Message) []Attachment {
 func Extract(header, text []byte, attachments []Attachment, fallbackTS float64) (f Features, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("features: recovered from a panic in extract", "ERR", fmt.Sprint(r))
+			log.Error("features: recovered from a panic in extract", logx.Err, fmt.Sprint(r))
 			f, err = Features{}, fmt.Errorf("features: internal error: %v", r)
 		}
 	}()

@@ -105,22 +105,22 @@ func TestConnectPragmas(t *testing.T) {
 		pool      *sql.DB
 		queryOnly int
 	}{{"write", d.Write, 0}, {"read", d.Read, 1}} {
-		var fk, busy, sync, qo int
+		var fk, busy, sync, qo, jsl int
 		var mode string
 		for _, q := range []struct {
 			pragma string
 			dst    any
 		}{
 			{"foreign_keys", &fk}, {"busy_timeout", &busy}, {"synchronous", &sync},
-			{"query_only", &qo}, {"journal_mode", &mode},
+			{"query_only", &qo}, {"journal_mode", &mode}, {"journal_size_limit", &jsl},
 		} {
 			if err := c.pool.QueryRow("PRAGMA " + q.pragma).Scan(q.dst); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if fk != 1 || busy != 30000 || sync != 2 || qo != c.queryOnly || mode != "wal" {
-			t.Errorf("%s: foreign_keys=%d busy_timeout=%d synchronous=%d query_only=%d journal_mode=%s",
-				c.name, fk, busy, sync, qo, mode)
+		if fk != 1 || busy != 30000 || sync != 2 || qo != c.queryOnly || jsl != 64<<20 || mode != "wal" {
+			t.Errorf("%s: foreign_keys=%d busy_timeout=%d synchronous=%d query_only=%d journal_size_limit=%d journal_mode=%s",
+				c.name, fk, busy, sync, qo, jsl, mode)
 		}
 	}
 	if _, err := d.Read.Exec("CREATE TABLE t (x)"); err == nil {

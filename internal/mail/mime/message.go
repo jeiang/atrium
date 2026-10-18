@@ -8,9 +8,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
+
+	"github.com/jeiang/atrium/internal/logx"
 )
+
+var log = logx.Logger("atrium.mime")
 
 // MaxDepth is the deepest message nesting (multipart and message/* containers) CPython 3.14.7 parses before
 // RecursionError, measured with features.extract called four frames below a module; Parse fails deeper, as
@@ -139,7 +142,7 @@ func trimEOL(b []byte) []byte {
 }
 
 func unexpected(r any) error {
-	slog.Error("mime: recovered from a parser panic", "ERR", fmt.Sprint(r))
+	log.Error("mime: recovered from a parser panic", logx.Err, fmt.Sprint(r))
 	return fmt.Errorf("mime: internal error: %v", r)
 }
 
