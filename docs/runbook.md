@@ -15,10 +15,9 @@ back up; `cache/` can be rebuilt.
 | `atrium.db` | SQLite index, rules, decisions, automatic-action log and proposals of the mail core |
 | `files/<thread id>/`, `files/p<project id>/` | originals of chat and project uploads and files the code sandbox produced; deleted with the thread |
 | `cache/models` | where a host may keep local model weights; not atrium's |
-| `cache/messages` | raw message store of the mail core; not backed up |
+| `cache/messages` | `ATRIUM_CACHE_DIR`: `raw/<account>/<mailbox id>/<uidvalidity>_<uid>.eml` (raw message store of the mail core) and `media/` (TMDB posters in `media/posters`, ffmpeg episode thumbnails in `media/thumbs`); not backed up |
 | `pause` | exists while automatic mailbox writes are paused |
 | `media-link.key` | HMAC key for public media links, created on first use when `ATRIUM_MEDIA_LINK_KEY` is unset |
-| `cache/media` | TMDB posters and ffmpeg episode thumbnails; not backed up |
 | `vdirsyncer/{calendars,contacts,status}` | iCloud CalDAV/CardDAV mirror |
 
 ## Environment
@@ -408,9 +407,9 @@ rooted at `movies/` and `tv/` on the private network) and `NTFY_MEDIA_TOPIC`
   errors show on the page.
 - **Library** (`/media/library`): Movies and TV (show → seasons → episodes) read from the
   filesystem. Posters (movie, show, season) come from TMDB and are cached under
-  `cache/media/posters`; a miss is remembered for a week. Episode thumbnails are one ffmpeg
+  `cache/messages/media/posters`; a miss is remembered for a week. Episode thumbnails are one ffmpeg
   frame at 10 % of the duration (`nice -n 10`, one at a time), cached under
-  `cache/media/thumbs`, made lazily on first view and by `media-thumbnails` (04:00, at most
+  `cache/messages/media/thumbs`, made lazily on first view and by `media-thumbnails` (04:00, at most
   200 per run). Each file has two links: the **public** one,
   `<publicUrl>/media/file/<path>?exp=<unix>&sig=<hmac>` (HMAC-SHA256 over
   `path\nexp`, valid 12 h, served by atrium with HTTP Range so VLC/Infuse can seek), and
