@@ -61,6 +61,14 @@ and backups; nothing of that lives here.
   the same tests. The bundled SQLite never drops below the version that
   wrote `atrium.db` (`atriumDBSQLiteVersion`); bump it only by a pull request
   that passes the driver tests on both.
+- Go packaging: `nix/go-package.nix` builds `atrium-go-x86_64-v3`
+  (`GOAMD64=v3`, `-mavx2`) and `atrium-go-aarch64`, both musl-static cgo
+  with `sqlite_fts5`; `atrium-go` is the host's target and both are flake
+  checks (the aarch64 one cross-builds; its tests run on x86_64 only). The
+  Python `atrium` stays the default package until the module switch
+  (https://github.com/jeiang/atrium/issues/152). `atrium-static` is staged
+  into `internal/web/static` before `go build` and embedded; `vendorHash`
+  changes with `go.sum`.
 
 ## Layout
 
@@ -73,7 +81,7 @@ and backups; nothing of that lives here.
 - `tests/`: pytest, with fakes for IMAP, Anthropic, Notion and qBittorrent.
 - `flake.nix` and `flake-modules/`: flake-parts modules (outputs, checks,
   devshell), loaded by import-tree. `.ci/` holds the garret cache push helper.
-- `nix/`: package, static assets and the NixOS module.
+- `nix/`: the Python and Go packages, static assets and the NixOS module.
 - `cmd/atrium/`: the Go binary's entry point (root command).
 - `internal/cli/`: the subcommand table; usage errors exit 2, a handler's
   return value is the exit code.
@@ -90,6 +98,8 @@ and backups; nothing of that lives here.
 - `internal/db/`: the SQLite driver seam (`Open`), vec0 and FTS5 tests.
 - `internal/rx/`: Python `re` patterns on regexp2 with Python semantics and
   a 100 ms match timeout; `rxtest` runs them against the regex corpus.
+- `internal/web/`: the embedded web assets (`Static`, `AssetVersion`);
+  `internal/web/static` is staged, never committed.
 - `third_party/`: vendored sources, each its own Go module wired by
   `replace`, with upstream licence files.
 - `internal/<module>/`: one package per runtime-toggled module, each with a

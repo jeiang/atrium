@@ -41,9 +41,13 @@ func (e *Env) UsageError(format string, a ...any) int {
 	return ExitUsage
 }
 
+// App is the root command. A non-empty Version makes a root `--version`
+// print "<name> <Version>"; it stays out of the help text, which mirrors the
+// Python argparse parser.
 type App struct {
-	root  Command
-	setup func(stderr io.Writer)
+	Version string
+	root    Command
+	setup   func(stderr io.Writer)
 }
 
 func New(name string, setup func(stderr io.Writer)) *App {
@@ -65,6 +69,10 @@ func (a *App) Run(args []string, stdout, stderr io.Writer) int {
 		arg := args[0]
 		if isHelp(arg) {
 			writeGroupHelp(stdout, prog, cmd)
+			return ExitOK
+		}
+		if cmd == &a.root && arg == "--version" && a.Version != "" {
+			printf(stdout, "%s %s\n", prog, a.Version)
 			return ExitOK
 		}
 		next := cmd.find(arg)

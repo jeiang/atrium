@@ -1,0 +1,102 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "row": {
+      "message_id": 501,
+      "subject": "Your receipt <script>alert(\"xss\")</script>",
+      "from_name": "Shop <Co>",
+      "from_addr": "no-reply@shop.example",
+      "date_ts": 1759996400,
+      "account": "icloud",
+      "current": "Receipts",
+      "action": {
+        "id": 9,
+        "kind": "move",
+        "status": "applied",
+        "error": null,
+        "undoable": true
+      },
+      "dest": "Receipts",
+      "stage": "learned",
+      "agreement": "agree",
+      "corrected_to": null,
+      "key": "no-reply@shop.example",
+      "confidence": 0.93
+    },
+    "focus_row": true,
+    "correct": {
+      "context": "row",
+      "message_id": 502,
+      "account": "gmail",
+      "error": null,
+      "selected": "Travel|Flights",
+      "folders": [
+        {
+          "folder": "Receipts",
+          "count": 12
+        },
+        {
+          "folder": "Travel|Flights",
+          "count": 3
+        },
+        {
+          "folder": "Odd <folder> & co",
+          "count": 1
+        }
+      ]
+    },
+    "toast": {
+      "category": "success",
+      "title": "Saved",
+      "description": "He said \"hi\" & 'bye' <b>bold</b>"
+    }
+  }
+}

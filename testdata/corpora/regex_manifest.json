@@ -4140,13 +4140,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/money.py:1326",
+      "id": "src/atrium/money.py:1327",
       "pattern": "\\d{4}-\\d{2}",
-      "site": "src/atrium/money.py:1326",
+      "site": "src/atrium/money.py:1327",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/money.py:1326",
+          "at": "src/atrium/money.py:1327",
           "op": "fullmatch",
           "source": "re.fullmatch('\\\\d{4}-\\\\d{2}', period)"
         }
@@ -4161,13 +4161,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/money.py:1330",
+      "id": "src/atrium/money.py:1331",
       "pattern": "\\d{4}",
-      "site": "src/atrium/money.py:1330",
+      "site": "src/atrium/money.py:1331",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/money.py:1330",
+          "at": "src/atrium/money.py:1331",
           "op": "fullmatch",
           "source": "re.fullmatch('\\\\d{4}', period)"
         }
@@ -4182,13 +4182,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/money.py:1332",
+      "id": "src/atrium/money.py:1333",
       "pattern": "\\d+d",
-      "site": "src/atrium/money.py:1332",
+      "site": "src/atrium/money.py:1333",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/money.py:1332",
+          "at": "src/atrium/money.py:1333",
           "op": "fullmatch",
           "source": "re.fullmatch('\\\\d+d', period)"
         }
@@ -4203,13 +4203,13 @@
       "flags": [],
       "group_names": {},
       "groups": 2,
-      "id": "src/atrium/money.py:1334",
+      "id": "src/atrium/money.py:1335",
       "pattern": "(\\d{4}-\\d{2}-\\d{2})/(\\d{4}-\\d{2}-\\d{2})",
-      "site": "src/atrium/money.py:1334",
+      "site": "src/atrium/money.py:1335",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/money.py:1334",
+          "at": "src/atrium/money.py:1335",
           "op": "fullmatch",
           "source": "re.fullmatch('(\\\\d{4}-\\\\d{2}-\\\\d{2})/(\\\\d{4}-\\\\d{2}-\\\\d{2})', period)"
         }
@@ -7683,48 +7683,48 @@
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/money.py",
-      "line": 1326,
+      "line": 1327,
       "pattern_source": "'\\\\d{4}-\\\\d{2}'",
       "patterns": [
-        "src/atrium/money.py:1326"
+        "src/atrium/money.py:1327"
       ],
-      "site": "src/atrium/money.py:1326"
+      "site": "src/atrium/money.py:1327"
     },
     {
       "call": "fullmatch",
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/money.py",
-      "line": 1330,
+      "line": 1331,
       "pattern_source": "'\\\\d{4}'",
       "patterns": [
-        "src/atrium/money.py:1330"
+        "src/atrium/money.py:1331"
       ],
-      "site": "src/atrium/money.py:1330"
+      "site": "src/atrium/money.py:1331"
     },
     {
       "call": "fullmatch",
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/money.py",
-      "line": 1332,
+      "line": 1333,
       "pattern_source": "'\\\\d+d'",
       "patterns": [
-        "src/atrium/money.py:1332"
+        "src/atrium/money.py:1333"
       ],
-      "site": "src/atrium/money.py:1332"
+      "site": "src/atrium/money.py:1333"
     },
     {
       "call": "fullmatch",
       "col": 12,
       "dynamic": false,
       "file": "src/atrium/money.py",
-      "line": 1334,
+      "line": 1335,
       "pattern_source": "'(\\\\d{4}-\\\\d{2}-\\\\d{2})/(\\\\d{4}-\\\\d{2}-\\\\d{2})'",
       "patterns": [
-        "src/atrium/money.py:1334"
+        "src/atrium/money.py:1335"
       ],
-      "site": "src/atrium/money.py:1334"
+      "site": "src/atrium/money.py:1335"
     },
     {
       "call": "compile",
