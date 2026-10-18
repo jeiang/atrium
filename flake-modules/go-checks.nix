@@ -21,7 +21,7 @@
       pname = "atrium-go";
       version = "0";
       inherit src;
-      vendorHash = "sha256-UbXXgMxzW092+xFVCFhvEJwQPpga1gfkBcJl4UoFsi8=";
+      vendorHash = "sha256-mrl966wXrWm7vLh6aWiHTKe+XVv9PEoOGZgPbmvrhDM=";
       proxyVendor = true;
       env.CGO_ENABLED = "1";
       doCheck = false;
