@@ -40,3 +40,33 @@ func Repr(s string) string {
 	b.WriteByte(quote)
 	return b.String()
 }
+
+// ReprBytes is Python's repr of a bytes object.
+func ReprBytes(b []byte) string {
+	quote := byte('\'')
+	if strings.IndexByte(string(b), '\'') >= 0 && strings.IndexByte(string(b), '"') < 0 {
+		quote = '"'
+	}
+	var s strings.Builder
+	s.WriteByte('b')
+	s.WriteByte(quote)
+	for _, c := range b {
+		switch {
+		case c == '\\' || c == quote:
+			s.WriteByte('\\')
+			s.WriteByte(c)
+		case c == '\t':
+			s.WriteString(`\t`)
+		case c == '\n':
+			s.WriteString(`\n`)
+		case c == '\r':
+			s.WriteString(`\r`)
+		case c < 0x20 || c >= 0x7f:
+			fmt.Fprintf(&s, `\x%02x`, c)
+		default:
+			s.WriteByte(c)
+		}
+	}
+	s.WriteByte(quote)
+	return s.String()
+}

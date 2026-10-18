@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/jeiang/atrium/internal/py"
 )
 
 // Error is an imaplib exception: Kind is its class name (error, abort or readonly), Msg its text.
@@ -90,7 +92,7 @@ func line(buf []byte, pos int) ([]byte, int, bool, error) {
 	}
 	raw := buf[pos : pos+i+1]
 	if !bytes.HasSuffix(raw, []byte("\r\n")) {
-		return nil, 0, false, pyAbort("socket error: unterminated line: %s", bytesRepr(raw))
+		return nil, 0, false, pyAbort("socket error: unterminated line: %s", py.ReprBytes(raw))
 	}
 	return raw[:len(raw)-2], pos + i + 1, true, nil
 }
@@ -250,7 +252,7 @@ func readResponse(buf []byte) (response, int, error) {
 	case len(resp) >= 2 && resp[0] == '*' && resp[1] == ' ':
 		typ, dat, ok := parseUntagged(resp)
 		if !ok {
-			return r, 0, pyAbort("unexpected response: %s", bytesRepr(resp))
+			return r, 0, pyAbort("unexpected response: %s", py.ReprBytes(resp))
 		}
 		r.kind, r.typ = untagged, typ
 		depth := 0
@@ -284,7 +286,7 @@ func readResponse(buf []byte) (response, int, error) {
 	default:
 		typ, dat, ok := parseTagged(resp)
 		if !ok {
-			return r, 0, pyAbort("unexpected response: %s", bytesRepr(resp))
+			return r, 0, pyAbort("unexpected response: %s", py.ReprBytes(resp))
 		}
 		r.kind, r.typ, r.dat = tagged, typ, bytes.Clone(dat)
 	}

@@ -20,6 +20,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -429,7 +430,7 @@ func (c *conn) refreshCaps(goSent bool) error {
 		}
 	}
 	c.caps = map[string]bool{}
-	for _, name := range pySplit(strings.ToUpper(string(last.text))) {
+	for _, name := range split(strings.ToUpper(string(last.text))) {
 		c.caps[name] = true
 	}
 	return nil
@@ -885,7 +886,7 @@ func (c *conn) awaitIdleStart() error {
 			if r.typ == "NO" {
 				return pyError("idle denied: %s", listRepr([]datum{{text: r.dat}}))
 			}
-			return pyAbort("unexpected status response: %s", bytesRepr(r.line))
+			return pyAbort("unexpected status response: %s", py.ReprBytes(r.line))
 		}
 	}
 }

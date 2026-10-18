@@ -158,9 +158,14 @@ and backups; nothing of that lives here.
 - `internal/mail/features/`: `features.py` (`Extract`, `ContentDigest`,
   `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
 - `internal/pyhtml/`: `html.unescape`; tables from `tools/pyhtml/gen_entities.py`.
-- `internal/py/`: the shared CPython emulation: `Repr`, `IsSpace`/`Strip`/
+- `internal/mail/imapclient/`: `imap.py`'s client on go-imap v2; go-imap
+  drives the session and the bytes it reads are parsed again as Python
+  3.14's imaplib does, so results match what Python stored. Wire tests are
+  imapscript transcripts in its `testdata/`.
+- `internal/py/`: the shared CPython emulation: `Repr`/`ReprBytes`, `IsSpace`/`Strip`/
   `Split`/`SplitLines`/`Clip`/`Lower`, `Sum`/`SumSq` (Neumaier, as `sum()`),
-  `FromISOFormat` with `DateTime.Timestamp`/`WallToUnix`/`SplitTimestamp`.
+  `FromISOFormat` with `DateTime.Timestamp`/`WallToUnix`/`SplitTimestamp`,
+  `B64Decode` (non-strict `base64.b64decode`) and `DecodeUTF16BE`.
   Python-emulation helpers live here; never add a per-package copy (the one
   exception is `internal/mail/mime`'s own `pystr.go`). Ported float
   reductions use `py.Sum`/`py.SumSq`, never a hand-written loop. The

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
@@ -71,7 +72,7 @@ func expandUIDSet(text string) ([]uint32, error) {
 func pyInt32(s string) (uint32, error) {
 	v, err := strconv.ParseUint(s, 10, 32)
 	if err != nil {
-		return 0, fmt.Errorf("invalid literal for int() with base 10: %s", pyStrRepr(s))
+		return 0, fmt.Errorf("invalid literal for int() with base 10: %s", py.Repr(s))
 	}
 	return uint32(v), nil
 }
@@ -79,12 +80,10 @@ func pyInt32(s string) (uint32, error) {
 func pyInt64(s string) (uint64, error) {
 	v, err := strconv.ParseUint(s, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("invalid literal for int() with base 10: %s", pyStrRepr(s))
+		return 0, fmt.Errorf("invalid literal for int() with base 10: %s", py.Repr(s))
 	}
 	return v, nil
 }
-
-func pyStrRepr(s string) string { return strings.TrimPrefix(bytesRepr([]byte(s)), "b") }
 
 func joinData(data []datum, skipFalsy bool) string {
 	parts := make([]string, 0, len(data))
@@ -134,7 +133,7 @@ func parseList(lines []datum) ([]mail.MailboxInfo, error) {
 		if m == nil {
 			continue
 		}
-		name := pyStrip(m.Group(3))
+		name := py.Strip(m.Group(3))
 		if strings.HasPrefix(name, `"`) && strings.HasSuffix(name, `"`) {
 			r := []rune(name)
 			if name, err = unquote(string(r[1:max(len(r)-1, 1)])); err != nil {
@@ -154,7 +153,7 @@ func parseList(lines []datum) ([]mail.MailboxInfo, error) {
 		if err != nil {
 			return nil, err
 		}
-		found = append(found, mail.MailboxInfo{Name: decoded, IMAPName: name, Flags: pySplit(m.Group(1)), Delimiter: delim})
+		found = append(found, mail.MailboxInfo{Name: decoded, IMAPName: name, Flags: split(m.Group(1)), Delimiter: delim})
 	}
 	return found, nil
 }
@@ -316,7 +315,7 @@ func attachmentsFromStructure(structure sexp) []mail.Attachment {
 		if len(node.list) < 2 || node.list[1].isList {
 			return
 		}
-		kind := strings.ToLower(node.list[0].atom + "/" + node.list[1].atom)
+		kind := py.Lower(node.list[0].atom + "/" + node.list[1].atom)
 		var flat []string
 		for _, child := range node.list[2:] {
 			flat = flatten(child, flat)
@@ -324,7 +323,7 @@ func attachmentsFromStructure(structure sexp) []mail.Attachment {
 		name := ""
 		disposition := false
 		for i, item := range flat {
-			low := strings.ToLower(item)
+			low := py.Lower(item)
 			if (low == "filename" || low == "name") && i+1 < len(flat) {
 				name = flat[i+1]
 			}
@@ -457,7 +456,7 @@ func fetched(g *fetchGroup) (mail.Message, error) {
 	if err != nil {
 		return msg, err
 	}
-	msg.Flags = pySplit(flags)
+	msg.Flags = split(flags)
 	labels, ok, err := section(meta, labelsRE)
 	if err != nil {
 		return msg, err

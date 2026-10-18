@@ -122,3 +122,39 @@ func TestSplitTimestamp(t *testing.T) {
 		}
 	}
 }
+
+func TestReprBytes(t *testing.T) {
+	for in, want := range map[string]string{"a'b": `b"a'b"`, `a'"b`: `b'a\'"b'`, "\x00\xff\t\\": `b'\x00\xff\t\\'`, "": "b''"} {
+		if got := ReprBytes([]byte(in)); got != want {
+			t.Errorf("ReprBytes(%q) = %s, want %s", in, got, want)
+		}
+	}
+}
+
+func TestB64Decode(t *testing.T) {
+	for in, want := range map[string]string{"AOk=": "\x00\xe9", "Q Q==": "A", "": ""} {
+		if got, err := B64Decode(in); err != nil || string(got) != want {
+			t.Errorf("B64Decode(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for in, want := range map[string]string{
+		"AOk":  "Incorrect padding",
+		"QQ=Q": "Incorrect padding",
+		"A===": "Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4",
+	} {
+		if _, err := B64Decode(in); err == nil || err.Error() != want {
+			t.Errorf("B64Decode(%q) err = %v, want %q", in, err, want)
+		}
+	}
+}
+
+func TestDecodeUTF16BE(t *testing.T) {
+	if got, err := DecodeUTF16BE([]byte{0x00, 0xe9, 0xd8, 0x3d, 0xde, 0x00}); err != nil || got != "é😀" {
+		t.Errorf("got %q, %v", got, err)
+	}
+	for _, in := range [][]byte{{0x00}, {0xd8, 0x3d}, {0xd8, 0x3d, 0x00, 0x41}, {0xde, 0x00}} {
+		if got, err := DecodeUTF16BE(in); err == nil {
+			t.Errorf("DecodeUTF16BE(% x) = %q, want an error", in, got)
+		}
+	}
+}

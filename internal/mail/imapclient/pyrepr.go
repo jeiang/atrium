@@ -1,48 +1,19 @@
 package imapclient
 
 import (
-	"fmt"
 	"strings"
-	"unicode"
-)
 
-func bytesRepr(b []byte) string {
-	quote := byte('\'')
-	if strings.IndexByte(string(b), '\'') >= 0 && strings.IndexByte(string(b), '"') < 0 {
-		quote = '"'
-	}
-	var s strings.Builder
-	s.WriteString("b")
-	s.WriteByte(quote)
-	for _, c := range b {
-		switch {
-		case c == '\\' || c == quote:
-			s.WriteByte('\\')
-			s.WriteByte(c)
-		case c == '\t':
-			s.WriteString(`\t`)
-		case c == '\n':
-			s.WriteString(`\n`)
-		case c == '\r':
-			s.WriteString(`\r`)
-		case c < 0x20 || c >= 0x7f:
-			fmt.Fprintf(&s, `\x%02x`, c)
-		default:
-			s.WriteByte(c)
-		}
-	}
-	s.WriteByte(quote)
-	return s.String()
-}
+	"github.com/jeiang/atrium/internal/py"
+)
 
 func (d datum) repr() string {
 	switch {
 	case d.none:
 		return "None"
 	case d.tuple:
-		return "(" + bytesRepr(d.text) + ", " + bytesRepr(d.lit) + ")"
+		return "(" + py.ReprBytes(d.text) + ", " + py.ReprBytes(d.lit) + ")"
 	}
-	return bytesRepr(d.text)
+	return py.ReprBytes(d.text)
 }
 
 func listRepr(data []datum) string {
@@ -70,14 +41,10 @@ func (d datum) str() string {
 	return latin1(d.text)
 }
 
-func pyIsSpace(r rune) bool { return unicode.IsSpace(r) || (r >= 0x1c && r <= 0x1f) }
-
-func pySplit(s string) []string {
-	out := strings.FieldsFunc(s, pyIsSpace)
-	if out == nil {
-		out = []string{}
+// split is str.split() as a list, empty rather than nil.
+func split(s string) []string {
+	if out := py.Split(s); out != nil {
+		return out
 	}
-	return out
+	return []string{}
 }
-
-func pyStrip(s string) string { return strings.TrimFunc(s, pyIsSpace) }
