@@ -15,7 +15,7 @@ back up; `cache/` can be rebuilt.
 | `atrium.db` | SQLite index, rules, decisions, automatic-action log and proposals of the mail core |
 | `files/<thread id>/`, `files/p<project id>/` | originals of chat and project uploads and files the code sandbox produced; deleted with the thread |
 | `cache/models` | where a host may keep local model weights; not atrium's |
-| `cache/messages` | raw message store of the mail core; not backed up |
+| `cache/raw/<account>/<mailbox id>/` | raw message store (`<uidvalidity>_<uid>.eml`) of the mail core; not backed up |
 | `pause` | exists while automatic mailbox writes are paused |
 | `media-link.key` | HMAC key for public media links, created on first use when `ATRIUM_MEDIA_LINK_KEY` is unset |
 | `cache/media` | TMDB posters and ffmpeg episode thumbnails; not backed up |
