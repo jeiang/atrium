@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strconv"
 	"unicode"
+
+	"github.com/jeiang/atrium/internal/py"
 )
 
 // Error is a pattern or replacement template Python's re module rejects. Msg follows Python's wording where the
@@ -255,7 +257,7 @@ func (p *parser) checkGroupName(name string, offset int) error {
 		return p.errorf(runeLen(name)+offset, "bad character in group name %s", pyASCIIRepr(name))
 	}
 	if !isIdentifier(name) {
-		return p.errorf(runeLen(name)+offset, "bad character in group name %s", pyRepr(name))
+		return p.errorf(runeLen(name)+offset, "bad character in group name %s", py.Repr(name))
 	}
 	return nil
 }
@@ -270,7 +272,7 @@ func (p *parser) openGroup(name string, named bool) (int, error) {
 	}
 	if named {
 		if ogid, ok := p.groupNames[name]; ok {
-			return 0, &Error{Msg: fmt.Sprintf("redefinition of group name %s as group %d; was group %d", pyRepr(name), gid, ogid), Pattern: p.pattern, Pos: -1}
+			return 0, &Error{Msg: fmt.Sprintf("redefinition of group name %s as group %d; was group %d", py.Repr(name), gid, ogid), Pattern: p.pattern, Pos: -1}
 		}
 		p.groupNames[name] = gid
 	}
@@ -747,7 +749,7 @@ func (p *parser) parseGroup(seq *node, flags Flags, verbose bool, nested int, fi
 				}
 				gid, ok := p.groupNames[name]
 				if !ok {
-					return nil, p.errorf(runeLen(name)+1, "unknown group name %s", pyRepr(name))
+					return nil, p.errorf(runeLen(name)+1, "unknown group name %s", py.Repr(name))
 				}
 				if !p.checkGroup(gid) {
 					return nil, p.errorf(runeLen(name)+1, "cannot refer to an open group")
@@ -848,7 +850,7 @@ func (p *parser) parseGroup(seq *node, flags Flags, verbose bool, nested int, fi
 				}
 				gid, ok := p.groupNames[condname]
 				if !ok {
-					return nil, p.errorf(runeLen(condname)+1, "unknown group name %s", pyRepr(condname))
+					return nil, p.errorf(runeLen(condname)+1, "unknown group name %s", py.Repr(condname))
 				}
 				cond = gid
 			}

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/mail/mime"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
@@ -68,7 +69,7 @@ func unescape(value string) string {
 		}
 		return "\n"
 	}, 0)
-	return strip(out)
+	return py.Strip(out)
 }
 
 func split(value string) []string {
@@ -78,7 +79,7 @@ func split(value string) []string {
 
 // ParseDate reads YYYYMMDD, YYYY-MM-DD, --MMDD and --MM-DD; year is nil when unknown.
 func ParseDate(value string) (month, day int, year *int, ok bool) {
-	m, _ := dateRe.Match(strip(value))
+	m, _ := dateRe.Match(py.Strip(value))
 	if m == nil {
 		return 0, 0, nil, false
 	}
@@ -112,7 +113,7 @@ func dateKind(label string) string {
 	case strings.Contains(low, "birth"):
 		return Birthday
 	}
-	if s := strip(label); s != "" {
+	if s := py.Strip(label); s != "" {
 		return s
 	}
 	return "date"
@@ -123,14 +124,14 @@ func cleanLabel(text string) string {
 	if m, _ := appleLabel.Match(text); m != nil {
 		text = m.Group(1)
 	}
-	return strip(text)
+	return py.Strip(text)
 }
 
 // Parse reads every BEGIN:VCARD … END:VCARD block in text.
 func Parse(text string) []Card {
 	cards := []Card{}
 	var c *card
-	for _, line := range splitLines(unfold(text)) {
+	for _, line := range py.SplitLines(unfold(text)) {
 		head, value, ok := strings.Cut(line, ":")
 		if !ok {
 			continue
@@ -142,7 +143,7 @@ func Parse(text string) []Card {
 		}
 		name = strings.ToUpper(name)
 		switch {
-		case name == "BEGIN" && strings.ToUpper(strip(value)) == "VCARD":
+		case name == "BEGIN" && strings.ToUpper(py.Strip(value)) == "VCARD":
 			c = &card{labels: map[string]string{}}
 		case name == "END" && c != nil:
 			cards = append(cards, c.finish())
@@ -293,7 +294,7 @@ func Search(dir, query string, limit int) []Card {
 // Filter keeps the cards whose name, org, emails and phones contain every whitespace-separated term of query,
 // casefolded. A limit of 0 keeps every match.
 func Filter(cards []Card, query string, limit int) []Card {
-	terms := fields(Casefold(query))
+	terms := py.Split(Casefold(query))
 	out := []Card{}
 	for _, c := range cards {
 		haystack := Casefold(strings.Join(slices.Concat([]string{c.Name, c.Org}, c.Emails, c.Phones), " "))

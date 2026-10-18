@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -73,7 +74,7 @@ func SetPaused(pausePath string, paused bool) error {
 
 func WriteGate(ctx context.Context, env config.Env, action, target string) error {
 	if pausePath, ok := ctx.Value(automaticKey{}).(string); ok && IsPaused(pausePath) {
-		return WriteRefused(fmt.Sprintf("refusing automatic mailbox write %s: atrium is paused", config.PyRepr(action)))
+		return WriteRefused(fmt.Sprintf("refusing automatic mailbox write %s: atrium is paused", py.Repr(action)))
 	}
 	if _, ok := ApprovedProposal(ctx); ok {
 		return nil
@@ -86,7 +87,7 @@ func WriteGate(ctx context.Context, env config.Env, action, target string) error
 		return err
 	}
 	if mode != Live {
-		return WriteRefused(fmt.Sprintf("refusing mailbox write %s: ATRIUM_MODE is not %s", config.PyRepr(action), Live))
+		return WriteRefused(fmt.Sprintf("refusing mailbox write %s: ATRIUM_MODE is not %s", py.Repr(action), Live))
 	}
 	return nil
 }

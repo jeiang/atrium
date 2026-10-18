@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+
+	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -102,7 +104,7 @@ func (c Config) Credential(account string) (user, password string, ok bool) {
 		return "", "", false
 	}
 	user = c.credentials[spec.UserEnv]
-	password = strings.Join(pySplit(c.credentials[spec.PasswordEnv]), "")
+	password = strings.Join(py.Split(c.credentials[spec.PasswordEnv]), "")
 	if user == "" || password == "" {
 		return "", "", false
 	}

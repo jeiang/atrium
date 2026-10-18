@@ -163,3 +163,17 @@ func SerializeFloat32(v []float32) []byte {
 	}
 	return b
 }
+
+// Collect scans every row of rows with scan, closes rows and returns the scanned values.
+func Collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
+	defer func() { _ = rows.Close() }()
+	var out []T
+	for rows.Next() {
+		v, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
