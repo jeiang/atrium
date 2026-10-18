@@ -20,7 +20,7 @@ NOW = 1791280800.0
 ICLOUD_USER = "operator"
 GMAIL_USER = "operator@gmail.example.test"
 
-# A failure is (stage, exception type, constructor args); stages run in order: connect, starttls, login, send.
+# A failure is (stage, exception type, constructor args); stages run in order: connect, starttls, login, send, quit.
 FAILURES = [
     ("connect", "ConnectionRefusedError", [111, "Connection refused"]),
     ("connect", "TimeoutError", ["timed out"]),
@@ -43,6 +43,7 @@ FAILURES = [
     ("send", "SMTPServerDisconnected", ["Server not connected"]),
     ("send", "BrokenPipeError", [32, "Broken pipe"]),
     ("send", "ConnectionResetError", [104, "Connection reset by peer"]),
+    ("quit", "SMTPResponseException", [500, "5.5.2 Syntax error, command unrecognized"]),
 ]
 
 REFUSALS = [
@@ -89,9 +90,11 @@ class Server:
 
     def __exit__(self, *exc):
         self.calls.append({"call": "quit"})
+        self.fail("quit")
         return False
 
-    def starttls(self):
+    def starttls(self, context):
+        assert context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED
         self.calls.append({"call": "starttls"})
         self.fail("starttls")
 
@@ -274,6 +277,8 @@ def build():
     for failure in FAILURES[::4]:
         stage, kind, args = failure
         records.append({"fn": "drafts.send", "case": base["case"], "account": base["account"], "user": base["user"], "failure": {"stage": stage, "type": kind, "args": args}, "sent_mailbox": "Sent Messages", **run_draft_send(base["account"], base["user"], base, Server(failure=failure), Mailbox("Sent Messages"))})
+    quit_failure = FAILURES[-1]
+    records.append({"fn": "drafts.send", "case": base["case"], "account": base["account"], "user": base["user"], "failure": {"stage": quit_failure[0], "type": quit_failure[1], "args": quit_failure[2]}, "sent_mailbox": "Sent Messages", **run_draft_send(base["account"], base["user"], base, Server(failure=quit_failure), Mailbox("Sent Messages"))})
     records.append({"fn": "drafts.send", "case": "icloud_no_sent_mailbox", "account": base["account"], "user": base["user"], "sent_mailbox": None, **run_draft_send(base["account"], base["user"], base, Server(), Mailbox(None))})
     records.append({"fn": "drafts.send", "case": "icloud_append_fails", "account": base["account"], "user": base["user"], "sent_mailbox": "Sent Messages", "append_error": "APPEND failed", **run_draft_send(base["account"], base["user"], base, Server(), Mailbox("Sent Messages", "APPEND failed"))})
     records.append({"fn": "drafts.send", "case": "unconfigured_icloud", "account": "icloud", "user": "", **run_draft_send("icloud", "", base, Server(), Mailbox("Sent Messages"))})
@@ -289,6 +294,6 @@ if __name__ == "__main__":
             "source": ["src/atrium/smtp.py", "src/atrium/drafts.py (normalize_addresses, send, _file_sent_copy)"],
             "functions": ["sender_address", "split_addresses", "drafts.normalize_addresses", "build_message", "smtp.send", "drafts.send"],
             "now": NOW,
-            "failure_stages": ["connect", "starttls", "login", "send"],
+            "failure_stages": ["connect", "starttls", "login", "send", "quit"],
         },
     )

@@ -114,7 +114,7 @@ def load_contacts(directory):
     found = []
     for path in sorted(Path(directory).rglob("*.vcf")):
         try:
-            found.extend(c for c in parse_vcards(path.read_text(errors="replace")) if c["name"])
+            found.extend(c for c in parse_vcards(path.read_text(encoding="utf-8-sig", errors="replace")) if c["name"])
         except OSError:
             continue
     return sorted(found, key=lambda c: c["name"].casefold())

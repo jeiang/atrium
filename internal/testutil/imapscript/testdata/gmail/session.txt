@@ -1,0 +1,66 @@
+# The #73 spike's Gmail session (third_party/go-imap/imapclient/testdata/gmail/session.txt)
+# on imapscript, for TestGmailTranscript. Hand-written from
+# https://developers.google.com/workspace/gmail/imap/imap-extensions and RFC 3501;
+# not captured from a live server.
+
+S: {gmail.greeting}
+C: {t} CAPABILITY
+S: * CAPABILITY {gmail.caps}
+S: {t} OK Thats all she wrote! a1b2c3d4e5f6
+C: {t} LOGIN "atrium.test@gmail.com" "app password"
+S: {t} OK [CAPABILITY {gmail.authcaps}] atrium.test@gmail.com authenticated (Success)
+C: {t} SELECT INBOX
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen $NotPhishing $Phishing)
+S: * OK [PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen $NotPhishing $Phishing \*)] Flags permitted.
+S: * OK [UIDVALIDITY 1] UIDs valid.
+S: * 4 EXISTS
+S: * 0 RECENT
+S: * OK [UIDNEXT 105] Predicted next UID.
+S: * OK [HIGHESTMODSEQ 9123456]
+S: {t} OK [READ-WRITE] INBOX selected. (Success)
+
+# FETCH decoding: system, quoted, escaped, bracketed, modified UTF-7 and empty
+# labels; ids above 2^63; item order differs per message.
+C/ ^{t} UID FETCH 101:104 \(UID( (FLAGS|X-GM-MSGID|X-GM-THRID|X-GM-LABELS)){4}\)$
+S: * 1 FETCH (X-GM-THRID 1278455344230334865 X-GM-MSGID 1278455344230334865 UID 101 X-GM-LABELS (\Inbox \Sent Important) FLAGS (\Seen))
+S: * 2 FETCH (UID 102 FLAGS () X-GM-LABELS ("Muy Importante" "\\Inbox" "[Gmail]/Trash") X-GM-MSGID 17000000000000000001 X-GM-THRID 1266894439832287888)
+S: * 3 FETCH (X-GM-LABELS ("&AOk-t&AOk-") UID 103 X-GM-MSGID 18446744073709551615 X-GM-THRID 18446744073709551615 FLAGS (\Seen \Flagged))
+S: * 4 FETCH (UID 104 X-GM-MSGID 1 X-GM-THRID 1 FLAGS () X-GM-LABELS ())
+S: {t} OK Success
+
+# Unknown msg-att items are skipped: number, quoted, nested list, literal,
+# NIL, flags, section and partial.
+C: {t} UID FETCH 101 (UID X-GM-LABELS)
+S: * 1 FETCH (UID 101 X-GM-FUTURE (1 "two" (3 4) {3}
+S: abc NIL) FLAGS (\Seen \Flagged) X-GM-OTHER 99 X-FLAGLIKE (\Answered $Junk \*) X-SECTION[1.2]<0> "x" X-GM-LABELS ("q"))
+S: {t} OK Success
+
+# STORE X-GM-LABELS encoding.
+C: {t} UID STORE 101 -X-GM-LABELS (\Inbox)
+S: * 1 FETCH (UID 101 X-GM-LABELS (\Sent Important))
+S: {t} OK Success
+C: {t} UID STORE 101 +X-GM-LABELS ("Muy Importante" "&AOk-t&AOk-" "Back\\slash")
+S: * 1 FETCH (UID 101 X-GM-LABELS (\Sent Important "Muy Importante" "&AOk-t&AOk-" "Back\\slash"))
+S: {t} OK Success
+C: {t} UID STORE 101:102 +X-GM-LABELS.SILENT (\Starred)
+S: {t} OK Success
+C: {t} UID STORE 101 X-GM-LABELS ()
+S: * 1 FETCH (UID 101 X-GM-LABELS ())
+S: {t} OK Success
+
+# SEARCH keys.
+C: {t} UID SEARCH X-GM-RAW "has:attachment in:unread"
+S: * SEARCH 101 103
+S: {t} OK SEARCH completed (Success)
+C: {t} UID SEARCH UNSEEN X-GM-RAW "category:promotions" X-GM-MSGID 1278455344230334865 X-GM-THRID 1266894439832287888 X-GM-LABELS "Muy Importante"
+S: * SEARCH 102
+S: {t} OK SEARCH completed (Success)
+
+# Unsolicited FETCH reaches the unilateral data handler with labels intact.
+C: {t} NOOP
+S: * 2 FETCH (FLAGS (\Seen) X-GM-LABELS (foo bar))
+S: {t} OK Success
+
+C: {t} LOGOUT
+S: * BYE LOGOUT Requested
+S: {t} OK 73 good day (Success)

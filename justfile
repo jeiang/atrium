@@ -70,7 +70,6 @@ vuln:
 licenses:
   go-licenses check ./... --disallowed_types=forbidden,unknown
 
-# Diff third_party/go-imap against upstream; wired by #103
-imap-upstream:
-  @echo "third_party/go-imap does not exist yet; #103 adds it and this recipe" >&2
-  @exit 1
+# Re-apply the third_party/go-imap patch onto upstream ref (default: the pinned base) and test it; --check skips the copy-in (inside the dev shell)
+imap-upstream *args:
+  tools/imap-upstream/imap-upstream.sh {{args}}

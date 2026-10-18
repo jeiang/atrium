@@ -105,7 +105,7 @@ counts). A slice that ports patterns registers them:
 ```go
 func TestPatterns(t *testing.T) {
     rxtest.Run(t, map[string]*rx.Regexp{
-        "src/atrium/imap.py:79": quotedRE,
+        "src/atrium/imap.py:80": quotedRE,
     })
 }
 ```

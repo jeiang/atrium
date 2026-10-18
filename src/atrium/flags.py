@@ -24,7 +24,7 @@ def vcard_emails(text):
         head, sep, value = line.partition(":")
         if not sep:
             continue
-        name = head.split(".")[-1].split(";")[0].upper()
+        name = head.split(";")[0].rpartition(".")[2].upper()
         if name == "EMAIL" and "@" in value:
             found.add(value.strip().lower())
     return found
@@ -36,7 +36,7 @@ def load_contacts(directory):
     emails = set()
     for path in Path(directory).rglob("*.vcf"):
         try:
-            emails |= vcard_emails(path.read_text(errors="replace"))
+            emails |= vcard_emails(path.read_text(encoding="utf-8-sig", errors="replace"))
         except OSError:
             continue
     return emails

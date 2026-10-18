@@ -74,7 +74,7 @@ Top level: `freeze_commit`, `python`, `source`, `call_sites` (146),
 
 | Field | Meaning |
 | --- | --- |
-| `id` | The site id; dynamic sites add `[<binding>]`, e.g. `src/atrium/imap.py:284[UIDNEXT]`. |
+| `id` | The site id; dynamic sites add `[<binding>]`, e.g. `src/atrium/imap.py:285[UIDNEXT]`. |
 | `site`, `call` | The owning site and its call. |
 | `pattern` | The pattern text. Bytes patterns are decoded as Latin-1. |
 | `bytes` | Python compiled a bytes pattern (`\w`, `\d`, `\s`, `\b` are ASCII-only there). |
@@ -97,7 +97,7 @@ including invalid ones and Python-specific syntax (`(?P<name>…)`, `\Z`,
 One line per (pattern, input), in manifest pattern order then input order:
 
 ```json
-{"id": "src/atrium/imap.py:79", "input": "a\\\"b", "search": Match, "match": Match, "fullmatch": Match, "finditer": [Match], "calls": [Call]}
+{"id": "src/atrium/imap.py:80", "input": "a\\\"b", "search": Match, "match": Match, "fullmatch": Match, "finditer": [Match], "calls": [Call]}
 ```
 
 - `search`, `match`, `fullmatch`: the Python method result on the whole input, `null` for no match.
@@ -252,16 +252,19 @@ extraction differs from trafilatura's.
 
 `src/atrium/smtp.py`, `drafts.normalize_addresses` and `drafts.send`. The fake
 server records `calls` (`connect` with host, port and timeout, `starttls`,
-`login`, `send_message` with envelope sender and recipients, `quit`).
-`failure` names the stage (`connect`, `starttls`, `login`, `send`), the Python
-exception and its constructor arguments; `refused_by_server` is the server's
-per-recipient refusal map. `drafts.send` records add `row` (the draft's
-`status`, `smtp_result`, `sent_msgid` afterwards), `sent_mailbox` and
-`appended_to`. `build_message` records carry `output` (`as_string()`),
-`as_bytes` (what the iCloud Sent copy and, with CRLF, the SMTP DATA carry) and
-`as_bytes_utf8` (the SMTPUTF8 serialization), both base64; beyond the drafts
-the send records use, they cover body encodings (7bit, 8bit, quoted-printable
-with soft breaks, base64) and header folding with encoded words.
+`login`, `send_message` with envelope sender and recipients, `quit`); its
+`starttls` asserts the context verifies the certificate and hostname
+(`CERT_REQUIRED`, `check_hostname`), so a `starttls` call means a verified
+handshake. `failure` names the stage (`connect`, `starttls`, `login`, `send`,
+`quit`), the Python exception and its constructor arguments;
+`refused_by_server` is the server's per-recipient refusal map. `drafts.send`
+records add `row` (the draft's `status`, `smtp_result`, `sent_msgid`
+afterwards), `sent_mailbox` and `appended_to`. `build_message` records carry
+`output` (`as_string()`), `as_bytes` (what the iCloud Sent copy and, with CRLF,
+the SMTP DATA carry) and `as_bytes_utf8` (the SMTPUTF8 serialization), both
+base64; beyond the drafts the send records use, they cover body encodings
+(7bit, 8bit, quoted-printable with soft breaks, base64) and header folding with
+encoded words.
 `make_msgid` is pinned to `<golden.0001@<sender domain>>` and the clock to the
 manifest's `now`.
 
@@ -276,11 +279,9 @@ text exactly (multi-line replies joined with `\n`, each line stripped).
 Per-recipient refusals are returned, all refused raises
 `SMTPRecipientsRefused`, as in smtplib.
 
-- Certificates: smtplib's `starttls()` without a context does not verify the
-  server certificate (`ssl._create_stdlib_context` is the unverified context).
-  Go verifies the chain against the system roots and the SMTP host name, and a
-  failure reads as Go's `crypto/tls` text (`tls: failed to verify certificate:
-  x509: ...`), not OpenSSL's `[SSL: CERTIFICATE_VERIFY_FAILED] ...`.
+- Certificates: both verify the chain and the SMTP host name, but a failure
+  reads as Go's `crypto/tls` text (`tls: failed to verify certificate: x509:
+  ...`), not OpenSSL's `[SSL: CERTIFICATE_VERIFY_FAILED] ...`.
 - OS errors read as the Python `OSError`: `[Errno N] text` with the Linux
   number and glibc text for EPIPE, EADDRNOTAVAIL, ENETUNREACH, ECONNABORTED,
   ECONNRESET, ETIMEDOUT, ECONNREFUSED and EHOSTUNREACH; any other errno keeps

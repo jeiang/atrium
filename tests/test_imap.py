@@ -1,4 +1,26 @@
+import ssl
+
 from atrium import imap
+
+
+def test_connect_verifies_the_server_certificate(monkeypatch):
+    opened = []
+
+    class Conn:
+        capabilities = ("IMAP4REV1",)
+
+        def __init__(self, host, port, ssl_context):
+            opened.append((host, port, ssl_context))
+
+        def login(self, user, password):
+            pass
+
+    monkeypatch.setattr(imap.imaplib, "IMAP4_SSL", Conn)
+    client = imap.ImapClient("imap.example.test", "u", "p").connect()
+    [(host, port, context)] = opened
+    assert (host, port, client.capabilities) == ("imap.example.test", imap.IMAP_PORT, frozenset({"IMAP4REV1"}))
+    assert isinstance(context, ssl.SSLContext)
+    assert context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED
 
 
 def test_collapse_labels_to_deepest_leaf():

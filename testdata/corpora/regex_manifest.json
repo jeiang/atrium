@@ -908,13 +908,13 @@
         "name": 3
       },
       "groups": 3,
-      "id": "src/atrium/imap.py:12",
+      "id": "src/atrium/imap.py:13",
       "pattern": "\\((?P<flags>[^)]*)\\)\\s+(?P<delim>\"(?:[^\"\\\\]|\\\\.)*\"|NIL)\\s+(?P<name>.+)$",
-      "site": "src/atrium/imap.py:12",
+      "site": "src/atrium/imap.py:13",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:87",
+          "at": "src/atrium/imap.py:88",
           "op": "match",
           "source": "LIST_LINE.match(line)"
         }
@@ -929,13 +929,13 @@
       "flags": [],
       "group_names": {},
       "groups": 2,
-      "id": "src/atrium/imap.py:13",
+      "id": "src/atrium/imap.py:14",
       "pattern": "\\(|\\)|\"((?:[^\"\\\\]|\\\\.)*)\"|([^\\s()\"]+)",
-      "site": "src/atrium/imap.py:13",
+      "site": "src/atrium/imap.py:14",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:148",
+          "at": "src/atrium/imap.py:149",
           "op": "finditer",
           "source": "TOKEN.finditer(text)"
         }
@@ -948,13 +948,13 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:33",
+      "id": "src/atrium/imap.py:34",
       "pattern": "&([^-]*)-",
-      "site": "src/atrium/imap.py:33",
+      "site": "src/atrium/imap.py:34",
       "uses": [
         {
           "args": null,
-          "at": "src/atrium/imap.py:33",
+          "at": "src/atrium/imap.py:34",
           "op": "sub",
           "repl": "callable",
           "source": "re.sub('&([^-]*)-', decode, value)"
@@ -970,13 +970,13 @@
       "flags": [],
       "group_names": {},
       "groups": 3,
-      "id": "src/atrium/imap.py:72",
+      "id": "src/atrium/imap.py:73",
       "pattern": "COPYUID (\\d+) ([\\d:,]+) ([\\d:,]+)",
-      "site": "src/atrium/imap.py:72",
+      "site": "src/atrium/imap.py:73",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:72",
+          "at": "src/atrium/imap.py:73",
           "op": "search",
           "source": "re.search('COPYUID (\\\\d+) ([\\\\d:,]+) ([\\\\d:,]+)', text)"
         }
@@ -989,15 +989,15 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:79",
+      "id": "src/atrium/imap.py:80",
       "pattern": "\\\\(.)",
-      "site": "src/atrium/imap.py:79",
+      "site": "src/atrium/imap.py:80",
       "uses": [
         {
           "args": {
             "repl": "\\1"
           },
-          "at": "src/atrium/imap.py:79",
+          "at": "src/atrium/imap.py:80",
           "op": "sub",
           "source": "re.sub('\\\\\\\\(.)', '\\\\1', token)"
         }
@@ -1012,13 +1012,13 @@
       "flags": [],
       "group_names": {},
       "groups": 2,
-      "id": "src/atrium/imap.py:109",
+      "id": "src/atrium/imap.py:110",
       "pattern": "\"((?:[^\"\\\\]|\\\\.)*)\"|(\\S+)",
-      "site": "src/atrium/imap.py:109",
+      "site": "src/atrium/imap.py:110",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:109",
+          "at": "src/atrium/imap.py:110",
           "op": "finditer",
           "source": "re.finditer('\"((?:[^\"\\\\\\\\]|\\\\\\\\.)*)\"|(\\\\S+)', text)"
         }
@@ -1033,16 +1033,16 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/imap.py:139[FLAGS]",
+      "id": "src/atrium/imap.py:140[FLAGS]",
       "locals": {
         "key": "FLAGS"
       },
       "pattern": "\\bFLAGS \\(",
-      "site": "src/atrium/imap.py:139",
+      "site": "src/atrium/imap.py:140",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:139",
+          "at": "src/atrium/imap.py:140",
           "op": "search",
           "source": "re.search('\\\\b' + re.escape(key) + ' \\\\(', meta)"
         }
@@ -1057,16 +1057,16 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/imap.py:139[X-GM-LABELS]",
+      "id": "src/atrium/imap.py:140[X-GM-LABELS]",
       "locals": {
         "key": "X-GM-LABELS"
       },
       "pattern": "\\bX\\-GM\\-LABELS \\(",
-      "site": "src/atrium/imap.py:139",
+      "site": "src/atrium/imap.py:140",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:139",
+          "at": "src/atrium/imap.py:140",
           "op": "search",
           "source": "re.search('\\\\b' + re.escape(key) + ' \\\\(', meta)"
         }
@@ -1079,13 +1079,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/imap.py:217",
+      "id": "src/atrium/imap.py:218",
       "pattern": "BODYSTRUCTURE ",
-      "site": "src/atrium/imap.py:217",
+      "site": "src/atrium/imap.py:218",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:217",
+          "at": "src/atrium/imap.py:218",
           "op": "search",
           "source": "re.search('BODYSTRUCTURE ', meta)"
         }
@@ -1101,13 +1101,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/imap.py:236",
+      "id": "src/atrium/imap.py:237",
       "pattern": "\\s*\\d+ \\(",
-      "site": "src/atrium/imap.py:236",
+      "site": "src/atrium/imap.py:237",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:236",
+          "at": "src/atrium/imap.py:237",
           "op": "match",
           "source": "re.match('\\\\s*\\\\d+ \\\\(', prefix)"
         }
@@ -1120,13 +1120,13 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:243",
+      "id": "src/atrium/imap.py:244",
       "pattern": "BODY\\[(HEADER|TEXT)\\]",
-      "site": "src/atrium/imap.py:243",
+      "site": "src/atrium/imap.py:244",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:243",
+          "at": "src/atrium/imap.py:244",
           "op": "search",
           "source": "re.search('BODY\\\\[(HEADER|TEXT)\\\\]', prefix)"
         }
@@ -1142,13 +1142,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/imap.py:248",
+      "id": "src/atrium/imap.py:249",
       "pattern": "\\s*\\d+ \\(",
-      "site": "src/atrium/imap.py:248",
+      "site": "src/atrium/imap.py:249",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:248",
+          "at": "src/atrium/imap.py:249",
           "op": "match",
           "source": "re.match('\\\\s*\\\\d+ \\\\(', line)"
         }
@@ -1164,13 +1164,13 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:253",
+      "id": "src/atrium/imap.py:254",
       "pattern": "\\bUID (\\d+)",
-      "site": "src/atrium/imap.py:253",
+      "site": "src/atrium/imap.py:254",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:253",
+          "at": "src/atrium/imap.py:254",
           "op": "search",
           "source": "re.search('\\\\bUID (\\\\d+)', g['meta'])"
         }
@@ -1185,13 +1185,13 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:260",
+      "id": "src/atrium/imap.py:261",
       "pattern": "MODSEQ \\((\\d+)\\)",
-      "site": "src/atrium/imap.py:260",
+      "site": "src/atrium/imap.py:261",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:260",
+          "at": "src/atrium/imap.py:261",
           "op": "search",
           "source": "re.search('MODSEQ \\\\((\\\\d+)\\\\)', meta)"
         }
@@ -1206,13 +1206,13 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:261",
+      "id": "src/atrium/imap.py:262",
       "pattern": "RFC822\\.SIZE (\\d+)",
-      "site": "src/atrium/imap.py:261",
+      "site": "src/atrium/imap.py:262",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:261",
+          "at": "src/atrium/imap.py:262",
           "op": "search",
           "source": "re.search('RFC822\\\\.SIZE (\\\\d+)', meta)"
         }
@@ -1227,13 +1227,13 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:262",
+      "id": "src/atrium/imap.py:263",
       "pattern": "X-GM-MSGID (\\d+)",
-      "site": "src/atrium/imap.py:262",
+      "site": "src/atrium/imap.py:263",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:262",
+          "at": "src/atrium/imap.py:263",
           "op": "search",
           "source": "re.search('X-GM-MSGID (\\\\d+)', meta)"
         }
@@ -1248,13 +1248,13 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:263",
+      "id": "src/atrium/imap.py:264",
       "pattern": "X-GM-THRID (\\d+)",
-      "site": "src/atrium/imap.py:263",
+      "site": "src/atrium/imap.py:264",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:263",
+          "at": "src/atrium/imap.py:264",
           "op": "search",
           "source": "re.search('X-GM-THRID (\\\\d+)', meta)"
         }
@@ -1267,13 +1267,13 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:264",
+      "id": "src/atrium/imap.py:265",
       "pattern": "INTERNALDATE \"([^\"]+)\"",
-      "site": "src/atrium/imap.py:264",
+      "site": "src/atrium/imap.py:265",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:264",
+          "at": "src/atrium/imap.py:265",
           "op": "search",
           "source": "re.search('INTERNALDATE \"([^\"]+)\"', meta)"
         }
@@ -1289,13 +1289,13 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:266",
+      "id": "src/atrium/imap.py:267",
       "pattern": "\\bUID (\\d+)",
-      "site": "src/atrium/imap.py:266",
+      "site": "src/atrium/imap.py:267",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:266",
+          "at": "src/atrium/imap.py:267",
           "op": "search",
           "source": "re.search('\\\\bUID (\\\\d+)', meta)"
         }
@@ -1310,16 +1310,16 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:284[UIDVALIDITY]",
+      "id": "src/atrium/imap.py:285[UIDVALIDITY]",
       "locals": {
         "key": "UIDVALIDITY"
       },
       "pattern": "UIDVALIDITY (\\d+)",
-      "site": "src/atrium/imap.py:284",
+      "site": "src/atrium/imap.py:285",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:284",
+          "at": "src/atrium/imap.py:285",
           "op": "search",
           "source": "re.search(key + ' (\\\\d+)', text)"
         }
@@ -1334,16 +1334,16 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:284[UIDNEXT]",
+      "id": "src/atrium/imap.py:285[UIDNEXT]",
       "locals": {
         "key": "UIDNEXT"
       },
       "pattern": "UIDNEXT (\\d+)",
-      "site": "src/atrium/imap.py:284",
+      "site": "src/atrium/imap.py:285",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:284",
+          "at": "src/atrium/imap.py:285",
           "op": "search",
           "source": "re.search(key + ' (\\\\d+)', text)"
         }
@@ -1358,16 +1358,16 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:284[HIGHESTMODSEQ]",
+      "id": "src/atrium/imap.py:285[HIGHESTMODSEQ]",
       "locals": {
         "key": "HIGHESTMODSEQ"
       },
       "pattern": "HIGHESTMODSEQ (\\d+)",
-      "site": "src/atrium/imap.py:284",
+      "site": "src/atrium/imap.py:285",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:284",
+          "at": "src/atrium/imap.py:285",
           "op": "search",
           "source": "re.search(key + ' (\\\\d+)', text)"
         }
@@ -1382,16 +1382,16 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/imap.py:284[MESSAGES]",
+      "id": "src/atrium/imap.py:285[MESSAGES]",
       "locals": {
         "key": "MESSAGES"
       },
       "pattern": "MESSAGES (\\d+)",
-      "site": "src/atrium/imap.py:284",
+      "site": "src/atrium/imap.py:285",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/imap.py:284",
+          "at": "src/atrium/imap.py:285",
           "op": "search",
           "source": "re.search(key + ' (\\\\d+)', text)"
         }
@@ -6174,15 +6174,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/smtp.py:27",
+      "id": "src/atrium/smtp.py:31",
       "pattern": "[\\s,]*,[\\s,]*",
-      "site": "src/atrium/smtp.py:27",
+      "site": "src/atrium/smtp.py:31",
       "uses": [
         {
           "args": {
             "repl": ", "
           },
-          "at": "src/atrium/smtp.py:27",
+          "at": "src/atrium/smtp.py:31",
           "op": "sub",
           "source": "re.sub('[\\\\s,]*,[\\\\s,]*', ', ', text or '')"
         }
@@ -7117,87 +7117,87 @@
       "dynamic": false,
       "file": "src/atrium/imap.py",
       "flags_source": "re.S",
-      "line": 12,
+      "line": 13,
       "name": "LIST_LINE",
       "pattern_source": "b'\\\\((?P<flags>[^)]*)\\\\)\\\\s+(?P<delim>\"(?:[^\"\\\\\\\\]|\\\\\\\\.)*\"|NIL)\\\\s+(?P<name>.+)$'",
-      "patterns": [
-        "src/atrium/imap.py:12"
-      ],
-      "site": "src/atrium/imap.py:12"
-    },
-    {
-      "call": "compile",
-      "col": 8,
-      "dynamic": false,
-      "file": "src/atrium/imap.py",
-      "line": 13,
-      "name": "TOKEN",
-      "pattern_source": "'\\\\(|\\\\)|\"((?:[^\"\\\\\\\\]|\\\\\\\\.)*)\"|([^\\\\s()\"]+)'",
       "patterns": [
         "src/atrium/imap.py:13"
       ],
       "site": "src/atrium/imap.py:13"
     },
     {
+      "call": "compile",
+      "col": 8,
+      "dynamic": false,
+      "file": "src/atrium/imap.py",
+      "line": 14,
+      "name": "TOKEN",
+      "pattern_source": "'\\\\(|\\\\)|\"((?:[^\"\\\\\\\\]|\\\\\\\\.)*)\"|([^\\\\s()\"]+)'",
+      "patterns": [
+        "src/atrium/imap.py:14"
+      ],
+      "site": "src/atrium/imap.py:14"
+    },
+    {
       "call": "sub",
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/imap.py",
-      "line": 33,
+      "line": 34,
       "pattern_source": "'&([^-]*)-'",
       "patterns": [
-        "src/atrium/imap.py:33"
+        "src/atrium/imap.py:34"
       ],
-      "site": "src/atrium/imap.py:33"
+      "site": "src/atrium/imap.py:34"
     },
     {
       "call": "search",
       "col": 8,
       "dynamic": false,
       "file": "src/atrium/imap.py",
-      "line": 72,
+      "line": 73,
       "pattern_source": "'COPYUID (\\\\d+) ([\\\\d:,]+) ([\\\\d:,]+)'",
       "patterns": [
-        "src/atrium/imap.py:72"
+        "src/atrium/imap.py:73"
       ],
-      "site": "src/atrium/imap.py:72"
+      "site": "src/atrium/imap.py:73"
     },
     {
       "call": "sub",
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/imap.py",
-      "line": 79,
+      "line": 80,
       "pattern_source": "'\\\\\\\\(.)'",
       "patterns": [
-        "src/atrium/imap.py:79"
+        "src/atrium/imap.py:80"
       ],
-      "site": "src/atrium/imap.py:79"
+      "site": "src/atrium/imap.py:80"
     },
     {
       "call": "finditer",
       "col": 13,
       "dynamic": false,
       "file": "src/atrium/imap.py",
-      "line": 109,
+      "line": 110,
       "pattern_source": "'\"((?:[^\"\\\\\\\\]|\\\\\\\\.)*)\"|(\\\\S+)'",
       "patterns": [
-        "src/atrium/imap.py:109"
+        "src/atrium/imap.py:110"
       ],
-      "site": "src/atrium/imap.py:109"
+      "site": "src/atrium/imap.py:110"
     },
     {
       "call": "search",
       "col": 8,
       "dynamic": true,
       "file": "src/atrium/imap.py",
-      "line": 139,
+      "line": 140,
       "pattern_source": "'\\\\b' + re.escape(key) + ' \\\\('",
       "patterns": [
-        "src/atrium/imap.py:139[FLAGS]",
-        "src/atrium/imap.py:139[X-GM-LABELS]"
+        "src/atrium/imap.py:140[FLAGS]",
+        "src/atrium/imap.py:140[X-GM-LABELS]"
       ],
-      "site": "src/atrium/imap.py:139"
+      "site": "src/atrium/imap.py:140"
     },
     {
       "call": "escape",
@@ -7222,89 +7222,77 @@
         }
       ],
       "file": "src/atrium/imap.py",
-      "line": 139,
+      "line": 140,
       "pattern_source": "key",
-      "site": "src/atrium/imap.py:139"
+      "site": "src/atrium/imap.py:140"
     },
     {
       "call": "search",
       "col": 8,
       "dynamic": false,
       "file": "src/atrium/imap.py",
-      "line": 217,
+      "line": 218,
       "pattern_source": "'BODYSTRUCTURE '",
       "patterns": [
-        "src/atrium/imap.py:217"
+        "src/atrium/imap.py:218"
       ],
-      "site": "src/atrium/imap.py:217"
+      "site": "src/atrium/imap.py:218"
     },
     {
       "call": "match",
       "col": 15,
       "dynamic": false,
       "file": "src/atrium/imap.py",
-      "line": 236,
+      "line": 237,
       "pattern_source": "'\\\\s*\\\\d+ \\\\('",
       "patterns": [
-        "src/atrium/imap.py:236"
+        "src/atrium/imap.py:237"
       ],
-      "site": "src/atrium/imap.py:236"
+      "site": "src/atrium/imap.py:237"
     },
     {
       "call": "search",
       "col": 16,
       "dynamic": false,
       "file": "src/atrium/imap.py",
-      "line": 243,
+      "line": 244,
       "pattern_source": "'BODY\\\\[(HEADER|TEXT)\\\\]'",
       "patterns": [
-        "src/atrium/imap.py:243"
+        "src/atrium/imap.py:244"
       ],
-      "site": "src/atrium/imap.py:243"
+      "site": "src/atrium/imap.py:244"
     },
     {
       "call": "match",
       "col": 15,
       "dynamic": false,
       "file": "src/atrium/imap.py",
-      "line": 248,
+      "line": 249,
       "pattern_source": "'\\\\s*\\\\d+ \\\\('",
       "patterns": [
-        "src/atrium/imap.py:248"
+        "src/atrium/imap.py:249"
       ],
-      "site": "src/atrium/imap.py:248"
+      "site": "src/atrium/imap.py:249"
     },
     {
       "call": "search",
       "col": 43,
       "dynamic": false,
       "file": "src/atrium/imap.py",
-      "line": 253,
+      "line": 254,
       "pattern_source": "'\\\\bUID (\\\\d+)'",
       "patterns": [
-        "src/atrium/imap.py:253"
+        "src/atrium/imap.py:254"
       ],
-      "site": "src/atrium/imap.py:253"
+      "site": "src/atrium/imap.py:254"
     },
     {
       "call": "search",
       "col": 13,
       "dynamic": false,
       "file": "src/atrium/imap.py",
-      "line": 260,
-      "pattern_source": "'MODSEQ \\\\((\\\\d+)\\\\)'",
-      "patterns": [
-        "src/atrium/imap.py:260"
-      ],
-      "site": "src/atrium/imap.py:260"
-    },
-    {
-      "call": "search",
-      "col": 11,
-      "dynamic": false,
-      "file": "src/atrium/imap.py",
       "line": 261,
-      "pattern_source": "'RFC822\\\\.SIZE (\\\\d+)'",
+      "pattern_source": "'MODSEQ \\\\((\\\\d+)\\\\)'",
       "patterns": [
         "src/atrium/imap.py:261"
       ],
@@ -7312,11 +7300,11 @@
     },
     {
       "call": "search",
-      "col": 15,
+      "col": 11,
       "dynamic": false,
       "file": "src/atrium/imap.py",
       "line": 262,
-      "pattern_source": "'X-GM-MSGID (\\\\d+)'",
+      "pattern_source": "'RFC822\\\\.SIZE (\\\\d+)'",
       "patterns": [
         "src/atrium/imap.py:262"
       ],
@@ -7328,7 +7316,7 @@
       "dynamic": false,
       "file": "src/atrium/imap.py",
       "line": 263,
-      "pattern_source": "'X-GM-THRID (\\\\d+)'",
+      "pattern_source": "'X-GM-MSGID (\\\\d+)'",
       "patterns": [
         "src/atrium/imap.py:263"
       ],
@@ -7340,7 +7328,7 @@
       "dynamic": false,
       "file": "src/atrium/imap.py",
       "line": 264,
-      "pattern_source": "'INTERNALDATE \"([^\"]+)\"'",
+      "pattern_source": "'X-GM-THRID (\\\\d+)'",
       "patterns": [
         "src/atrium/imap.py:264"
       ],
@@ -7348,30 +7336,42 @@
     },
     {
       "call": "search",
+      "col": 15,
+      "dynamic": false,
+      "file": "src/atrium/imap.py",
+      "line": 265,
+      "pattern_source": "'INTERNALDATE \"([^\"]+)\"'",
+      "patterns": [
+        "src/atrium/imap.py:265"
+      ],
+      "site": "src/atrium/imap.py:265"
+    },
+    {
+      "call": "search",
       "col": 19,
       "dynamic": false,
       "file": "src/atrium/imap.py",
-      "line": 266,
+      "line": 267,
       "pattern_source": "'\\\\bUID (\\\\d+)'",
       "patterns": [
-        "src/atrium/imap.py:266"
+        "src/atrium/imap.py:267"
       ],
-      "site": "src/atrium/imap.py:266"
+      "site": "src/atrium/imap.py:267"
     },
     {
       "call": "search",
       "col": 12,
       "dynamic": true,
       "file": "src/atrium/imap.py",
-      "line": 284,
+      "line": 285,
       "pattern_source": "key + ' (\\\\d+)'",
       "patterns": [
-        "src/atrium/imap.py:284[UIDVALIDITY]",
-        "src/atrium/imap.py:284[UIDNEXT]",
-        "src/atrium/imap.py:284[HIGHESTMODSEQ]",
-        "src/atrium/imap.py:284[MESSAGES]"
+        "src/atrium/imap.py:285[UIDVALIDITY]",
+        "src/atrium/imap.py:285[UIDNEXT]",
+        "src/atrium/imap.py:285[HIGHESTMODSEQ]",
+        "src/atrium/imap.py:285[MESSAGES]"
       ],
-      "site": "src/atrium/imap.py:284"
+      "site": "src/atrium/imap.py:285"
     },
     {
       "call": "compile",
@@ -8388,12 +8388,12 @@
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/smtp.py",
-      "line": 27,
+      "line": 31,
       "pattern_source": "'[\\\\s,]*,[\\\\s,]*'",
       "patterns": [
-        "src/atrium/smtp.py:27"
+        "src/atrium/smtp.py:31"
       ],
-      "site": "src/atrium/smtp.py:27"
+      "site": "src/atrium/smtp.py:31"
     },
     {
       "call": "sub",
