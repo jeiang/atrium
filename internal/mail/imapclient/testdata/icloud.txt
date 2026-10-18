@@ -1,0 +1,79 @@
+# iCloud-style session for TestICloudSession, hand-written after RFC 3501, 4315 and 7162 with the
+# imapscript ICloud profile; not captured. It follows what atrium's Python does against iCloud: sync
+# (LIST, STATUS, EXAMINE, UID SEARCH, full UID FETCH, CHANGEDSINCE flag sync), a move as COPY + STORE
+# \Deleted + UID EXPUNGE, the Sent copy (APPEND), the watch IDLE and LOGOUT.
+
+S: {icloud.greeting}
+C: {t} LOGIN "atrium.test@icloud.com" "app-specific password"
+S: {t} OK [CAPABILITY {icloud.authcaps}] User atrium.test logged in
+
+C: {t} LIST "" "*"
+S: * LIST (\HasNoChildren) "/" INBOX
+S: * LIST (\HasNoChildren \Sent) "/" "Sent Messages"
+S: * LIST (\HasNoChildren \Trash) "/" "Deleted Messages"
+S: * LIST (\HasChildren) "/" "Caf&AOk-"
+S: * LIST (\HasNoChildren) "/" "Caf&AOk-/Re\"ceipts"
+S: {t} OK LIST completed
+
+C/ ^{t} STATUS INBOX \((UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)( (UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)){3}\)$
+S: * STATUS INBOX (MESSAGES 3 UIDNEXT 304 UIDVALIDITY 1544650101 HIGHESTMODSEQ 81250)
+S: {t} OK STATUS completed
+
+C: {t} EXAMINE INBOX
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen $NotJunk NotJunk $Junk Junk)
+S: * OK [PERMANENTFLAGS ()] No permanent flags permitted
+S: * 3 EXISTS
+S: * 0 RECENT
+S: * OK [UIDVALIDITY 1544650101] UIDs valid
+S: * OK [UIDNEXT 304] Predicted next UID
+S: * OK [HIGHESTMODSEQ 81250] Highest
+S: {t} OK [READ-ONLY] EXAMINE completed
+
+C: {t} UID SEARCH ALL
+S: * SEARCH 301 302 303
+S: {t} OK SEARCH completed
+
+# A full fetch: the INTERNALDATE keeps its space-padded day and the attachment name stays RFC 2047
+# encoded, as imap.py stores them.
+C/ ^{t} UID FETCH 303 \(UID( (FLAGS|INTERNALDATE|RFC822\.SIZE|BODYSTRUCTURE)){4} BODY\.PEEK\[HEADER\] BODY\.PEEK\[TEXT\]<0\.65536>\)$
+S: * 3 FETCH (UID 303 FLAGS (\Seen) INTERNALDATE " 5-Oct-2026 10:11:12 -0700" RFC822.SIZE 1234 BODYSTRUCTURE (("text" "plain" ("charset" "utf-8") NIL NIL "7bit" 4 1 NIL NIL NIL NIL)("application" "pdf" ("name" "=?UTF-8?B?w6kucGRm?=") NIL NIL "base64" 5000 NIL ("attachment" ("filename" "=?UTF-8?B?w6kucGRm?=")) NIL NIL) "mixed" ("boundary" "b1") NIL NIL NIL) BODY[HEADER] {13}
+S: Subject: Hi
+S:  BODY[TEXT]<0> {4}
+S: body)
+S: {t} OK FETCH completed
+
+C: {t} UID FETCH 1:* (UID FLAGS) (CHANGEDSINCE 81200)
+S: * 2 FETCH (UID 302 MODSEQ (81230) FLAGS (\Seen))
+S: * 3 FETCH (UID 303 FLAGS (\Seen \Flagged) MODSEQ (81250))
+S: {t} OK FETCH completed
+
+C: {t} SELECT INBOX
+S: * 3 EXISTS
+S: * OK [UIDVALIDITY 1544650101] UIDs valid
+S: {t} OK [READ-WRITE] SELECT completed
+C: {t} UID COPY 301:302 "Deleted Messages"
+S: {t} OK [COPYUID 1544650202 301:302 900:901] COPY completed
+C: {t} UID STORE 301:302 +FLAGS.SILENT (\Deleted)
+S: {t} OK STORE completed
+C: {t} UID EXPUNGE 301:302
+S: * 1 EXPUNGE
+S: * 1 EXPUNGE
+S: {t} OK EXPUNGE completed
+
+C/ ^{t} APPEND "Sent Messages" \(\\Seen\) "[ \d]\d-[A-Z][a-z]{2}-\d{4} \d\d:\d\d:\d\d [+-]\d{4}" \{21\+\}$
+C/ Subject: x\r\nline\r\nend
+S: {t} OK [APPENDUID 1544650303 77] APPEND completed
+
+C: {t} EXAMINE INBOX
+S: * 1 EXISTS
+S: {t} OK [READ-ONLY] EXAMINE completed
+C: {t} IDLE
+S: + idling
+S: * OK Still here
+S: * 2 EXISTS
+C: DONE
+S: {t} OK IDLE terminated
+
+C: {t} LOGOUT
+S: * BYE LOGOUT received
+S: {t} OK LOGOUT completed
