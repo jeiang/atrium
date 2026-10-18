@@ -1,0 +1,117 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {},
+  "calls": [
+    {
+      "macro": "tabs",
+      "args": [],
+      "kwargs": {
+        "id": "tabs-golden",
+        "tabsets": [
+          {
+            "tab": "One",
+            "panel": "<p>Panel one</p>",
+            "tab_attrs": {
+              "data-x": "He said \"hi\" & 'bye' <b>bold</b>"
+            },
+            "panel_attrs": {
+              "class": "p1"
+            }
+          },
+          {
+            "tab": "Two <b>",
+            "panel": "",
+            "tab_attrs": {
+              "disabled": true
+            }
+          },
+          {
+            "tab": "Three",
+            "panel": "<p>Panel three Café naïve — 東京 🎉 مرحبا</p>",
+            "tab_attrs": {
+              "aria-disabled": "true"
+            }
+          },
+          {
+            "tab": "Four",
+            "panel": "<p>Four</p>"
+          }
+        ],
+        "main_attrs": {
+          "class": "gap-0",
+          "data-m": "<m>"
+        },
+        "tablist_attrs": {
+          "aria-orientation": "vertical",
+          "data-variant": "line"
+        },
+        "default_tab_index": 3
+      }
+    },
+    {
+      "macro": "tabs",
+      "args": [],
+      "kwargs": {
+        "tabsets": [
+          {
+            "tab": "Random id",
+            "panel": "<p>x</p>"
+          }
+        ]
+      }
+    },
+    {
+      "macro": "tabs",
+      "args": [],
+      "kwargs": {}
+    }
+  ]
+}

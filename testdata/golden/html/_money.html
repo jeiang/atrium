@@ -1,0 +1,78 @@
+
+<section data-golden-call="0" data-macro="money_nav">
+<nav class="button-group" aria-label="Money pages">
+  
+  <a class="btn" data-size="sm" data-variant="outline" href="/money">Overview</a>
+  
+  <a class="btn" data-size="sm" data-variant="outline" href="/money/transactions">Transactions</a>
+  
+  <a class="btn" data-size="sm" data-variant="outline" href="/money/payees">Payees</a>
+  
+  <a class="btn" data-size="sm" data-variant="secondary" href="/money/bills" aria-current="page">Bills</a>
+  
+  <a class="btn" data-size="sm" data-variant="outline" href="/money/accounts">Accounts</a>
+  
+</nav>
+</section>
+<section data-golden-call="1" data-macro="money_nav">
+<nav class="button-group" aria-label="Money pages">
+  
+  <a class="btn" data-size="sm" data-variant="outline" href="/money">Overview</a>
+  
+  <a class="btn" data-size="sm" data-variant="outline" href="/money/transactions">Transactions</a>
+  
+  <a class="btn" data-size="sm" data-variant="outline" href="/money/payees">Payees</a>
+  
+  <a class="btn" data-size="sm" data-variant="outline" href="/money/bills">Bills</a>
+  
+  <a class="btn" data-size="sm" data-variant="outline" href="/money/accounts">Accounts</a>
+  
+</nav>
+</section>
+<section data-golden-call="2" data-macro="amount">
+<span class="tabular-nums">1.24 TTD</span>
+</section>
+<section data-golden-call="3" data-macro="amount">
+<span class="tabular-nums">0.00 BBD</span>
+</section>
+<section data-golden-call="4" data-macro="amount">
+<span class="text-muted-foreground">—</span>
+</section>
+<section data-golden-call="5" data-macro="money_amount">
+<span class="tabular-nums">123.46 TTD</span>
+</section>
+<section data-golden-call="6" data-macro="money_amount">
+<span class="tabular-nums">50.00 BBD</span> <span class="text-xs text-muted-foreground">(paid 25.00 USD, computed 51.00 BBD)</span>
+</section>
+<section data-golden-call="7" data-macro="money_amount">
+<span class="tabular-nums">99.99 USD</span> <span class="text-xs text-muted-foreground">(unresolved)</span>
+</section>
+<section data-golden-call="8" data-macro="money_amount">
+<span class="tabular-nums">-1.50 TTD</span>
+</section>
+<section data-golden-call="9" data-macro="kind_badge">
+<span class="badge" data-variant="secondary">card payment</span>
+</section>
+<section data-golden-call="10" data-macro="kind_badge">
+<span class="badge" data-variant="outline">fx adjustment</span>
+</section>
+<section data-golden-call="11" data-macro="assign_form">
+<form method="post" action="/money/transactions/2/account" class="flex min-w-0 max-w-full items-center gap-2">
+  <input type="hidden" name="csrf_token" value="csrf-golden-token">
+  <input type="hidden" name="back" value="overview">
+  <select name="account_id" class="select min-w-0" aria-label="Account for transaction 2">
+    <option value="1">FCB chequing &lt;main&gt; (TTD)</option><option value="2">Visa Café naïve — 東京 🎉 مرحبا (BBD)</option>
+  </select>
+  <button type="submit" class="btn" data-size="sm" data-variant="outline">Assign</button>
+</form>
+</section>
+<section data-golden-call="12" data-macro="assign_form">
+<form method="post" action="/money/transactions/1/account" class="flex min-w-0 max-w-full items-center gap-2">
+  <input type="hidden" name="csrf_token" value="csrf-golden-token">
+  <input type="hidden" name="back" value="transactions">
+  <select name="account_id" class="select min-w-0" aria-label="Account for transaction 1">
+    <option value="1" selected>FCB chequing &lt;main&gt; (TTD)</option><option value="2">Visa Café naïve — 東京 🎉 مرحبا (BBD)</option>
+  </select>
+  <button type="submit" class="btn" data-size="sm" data-variant="outline">Assign</button>
+</form>
+</section>

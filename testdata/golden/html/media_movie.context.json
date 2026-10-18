@@ -1,0 +1,75 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "movie": {
+      "dir": "Movie (2024)",
+      "title": "Movie \"Title\" & <co>",
+      "year": 2024,
+      "files": [
+        {
+          "name": "Movie (2024).mkv",
+          "size": 4500000000,
+          "public": "https://media.example/s/abc?sig=1&exp=2",
+          "vpn": "javascript:alert(document.cookie)"
+        },
+        {
+          "name": "Movie (2024) Café naïve — 東京 🎉 مرحبا.mp4",
+          "size": 900000000,
+          "public": null,
+          "vpn": "http://vpn.example/m.mp4"
+        }
+      ]
+    },
+    "ttl_hours": 48
+  }
+}

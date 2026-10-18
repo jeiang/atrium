@@ -1,0 +1,125 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "rules": [
+      {
+        "id": "receipts-Café naïve — 東京 🎉 مرحبا",
+        "account": "icloud",
+        "when": [
+          {
+            "field": "from_domain",
+            "op": "suffix",
+            "value": [
+              "shop.example",
+              "store.example"
+            ]
+          },
+          {
+            "field": "subject",
+            "op": "re",
+            "value": "^(Your|Order) <\\d+> & co"
+          },
+          {
+            "field": "list_id",
+            "op": "absent"
+          }
+        ],
+        "action": "file",
+        "dest": "Receipts"
+      },
+      {
+        "id": "spam & <junk>",
+        "account": null,
+        "when": [
+          {
+            "field": "category",
+            "op": "eq",
+            "value": "promotions"
+          },
+          {
+            "field": "age_days",
+            "op": "gte",
+            "value": 14
+          }
+        ],
+        "action": "delete",
+        "dest": null
+      },
+      {
+        "id": "travel",
+        "account": "gmail",
+        "when": [
+          {
+            "field": "from_addr",
+            "op": "in",
+            "value": [
+              "a@b.c",
+              "<script>alert(\"xss\")</script>"
+            ]
+          }
+        ],
+        "action": "file",
+        "dest": "Travel|Flights"
+      }
+    ],
+    "account": "icloud",
+    "moved": {
+      "id": "travel",
+      "direction": "up"
+    },
+    "focus_id": "spam & <junk>",
+    "toast": {
+      "category": "success",
+      "title": "Saved <script>alert(\"xss\")</script>",
+      "description": "He said \"hi\" & 'bye' <b>bold</b>"
+    }
+  }
+}

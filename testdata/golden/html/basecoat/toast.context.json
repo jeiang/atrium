@@ -1,0 +1,191 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {},
+  "calls": [
+    {
+      "macro": "toaster",
+      "args": [],
+      "kwargs": {}
+    },
+    {
+      "macro": "toaster",
+      "args": [],
+      "kwargs": {
+        "id": "toaster-2",
+        "toasts": [
+          {
+            "category": "error",
+            "title": "<script>alert(\"xss\")</script>",
+            "description": "He said \"hi\" & 'bye' <b>bold</b>"
+          },
+          {
+            "title": "Defaults"
+          },
+          {
+            "category": "info",
+            "title": "With action",
+            "action": {
+              "label": "Open <x>",
+              "href": "/a?b=1&c=2"
+            },
+            "cancel": {
+              "label": "Dismiss",
+              "onclick": "alert('x') && \"y\""
+            },
+            "duration": -1,
+            "icon": "<svg class=\"custom\"></svg>",
+            "attrs": {
+              "class": "t",
+              "data-t": "<t>"
+            }
+          }
+        ],
+        "attrs": {
+          "class": "c",
+          "data-a": "<b>"
+        }
+      }
+    },
+    {
+      "macro": "toaster",
+      "args": [],
+      "kwargs": {},
+      "caller": "<div>custom toast Café naïve — 東京 🎉 مرحبا</div>"
+    },
+    {
+      "macro": "toast",
+      "args": [],
+      "kwargs": {
+        "category": "success",
+        "title": "Title success",
+        "description": "Desc & <d>"
+      }
+    },
+    {
+      "macro": "toast",
+      "args": [],
+      "kwargs": {
+        "category": "error",
+        "title": "Title error",
+        "description": "Desc & <d>"
+      }
+    },
+    {
+      "macro": "toast",
+      "args": [],
+      "kwargs": {
+        "category": "info",
+        "title": "Title info",
+        "description": "Desc & <d>"
+      }
+    },
+    {
+      "macro": "toast",
+      "args": [],
+      "kwargs": {
+        "category": "warning",
+        "title": "Title warning",
+        "description": "Desc & <d>"
+      }
+    },
+    {
+      "macro": "toast",
+      "args": [],
+      "kwargs": {
+        "category": "other",
+        "title": "Title other",
+        "description": "Desc & <d>"
+      }
+    },
+    {
+      "macro": "toast",
+      "args": [],
+      "kwargs": {
+        "category": "",
+        "title": "",
+        "description": ""
+      }
+    },
+    {
+      "macro": "toast",
+      "args": [],
+      "kwargs": {
+        "category": "success",
+        "title": "Links",
+        "action": {
+          "label": "Go",
+          "url": "javascript:alert(document.cookie)"
+        },
+        "cancel": {
+          "label": "Back",
+          "url": "/back"
+        },
+        "duration": 0
+      }
+    },
+    {
+      "macro": "toast",
+      "args": [],
+      "kwargs": {
+        "category": "warning",
+        "title": "Buttons",
+        "action": {
+          "label": "Act",
+          "onclick": "doIt(\"<x>\")"
+        },
+        "cancel": {
+          "label": "Never",
+          "href": ""
+        }
+      }
+    }
+  ]
+}

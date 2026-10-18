@@ -1,0 +1,96 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "notion_page": {
+      "id": "abc-123 <x>",
+      "title": "Page <script>alert(\"xss\")</script> Café naïve — 東京 🎉 مرحبا",
+      "url": "https://www.notion.so/abc123?pvs=4&x=1",
+      "path": [
+        {
+          "id": "root-1",
+          "title": "Wiki"
+        },
+        {
+          "id": null,
+          "title": "Private <b>"
+        },
+        {
+          "id": "sub-2",
+          "title": "Café naïve — 東京 🎉 مرحبا"
+        }
+      ],
+      "private": true,
+      "in_trash": true,
+      "edited_ts": 1759913600,
+      "properties": [
+        {
+          "name": "Status",
+          "value": "Done & dusted"
+        },
+        {
+          "name": "Due",
+          "value": null
+        },
+        {
+          "name": "Tags",
+          "value": ""
+        },
+        {
+          "name": "Notes <script>alert(\"xss\")</script>",
+          "value": "This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised"
+        }
+      ],
+      "body_html": {
+        "$safe": "<h1>Heading</h1>\n<p>Some <strong>bold</strong> text with a <a href=\"https://example.com/?a=1&amp;b=2\" rel=\"noopener noreferrer\">link</a> and &lt;script&gt;alert(\"xss\")&lt;/script&gt;</p>\n<ul>\n<li><input class=\"input\" type=\"checkbox\" disabled> task</li>\n<li><input class=\"input\" type=\"checkbox\" disabled checked> done</li>\n</ul>\n<table>\n<thead>\n<tr>\n<th>a</th>\n<th>b</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>1</td>\n<td>2</td>\n</tr>\n</tbody>\n</table>\n"
+      }
+    }
+  }
+}

@@ -1,0 +1,730 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 10,
+    "paused": true,
+    "proposals": [
+      {
+        "id": 1,
+        "kind": "rebalance_split",
+        "status": "pending",
+        "account": "icloud",
+        "title": "Proposal 1 \"rebalance_split\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "folder": "INBOX",
+          "groups": [
+            {
+              "name": "Receipts|Shops",
+              "count": 5,
+              "messages": [
+                {
+                  "id": 100,
+                  "subject": "Subject 0 <b>Café naïve — 東京 🎉 مرحبا</b>",
+                  "from_name": "Shop <Co> & Sons",
+                  "from_addr": "no-reply@shop.example",
+                  "date_ts": 1760000000
+                },
+                {
+                  "id": 101,
+                  "subject": "Subject 1 <b>Café naïve — 東京 🎉 مرحبا</b>",
+                  "from_name": "Shop <Co> & Sons",
+                  "from_addr": "no-reply@shop.example",
+                  "date_ts": 1759996400
+                }
+              ],
+              "terms": [
+                "invoice",
+                "total&due",
+                "Café naïve — 東京 🎉 مرحبا"
+              ],
+              "senders": [
+                {
+                  "label": "Shop <Co>",
+                  "count": 3
+                },
+                {
+                  "label": "b@b.com",
+                  "count": 1
+                }
+              ],
+              "subjects": [
+                "Your receipt",
+                "",
+                "Order & delivery <script>alert(\"xss\")</script>"
+              ]
+            },
+            {
+              "name": "Travel Café naïve — 東京 🎉 مرحبا",
+              "count": 1,
+              "messages": [
+                {
+                  "id": 100,
+                  "subject": "Subject 0 <b>Café naïve — 東京 🎉 مرحبا</b>",
+                  "from_name": "Shop <Co> & Sons",
+                  "from_addr": "no-reply@shop.example",
+                  "date_ts": 1760000000
+                }
+              ],
+              "terms": [
+                "invoice",
+                "total&due",
+                "Café naïve — 東京 🎉 مرحبا"
+              ],
+              "senders": [
+                {
+                  "label": "Shop <Co>",
+                  "count": 3
+                },
+                {
+                  "label": "b@b.com",
+                  "count": 1
+                }
+              ],
+              "subjects": [
+                "Your receipt",
+                "",
+                "Order & delivery <script>alert(\"xss\")</script>"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": 2,
+        "kind": "inbox_backlog",
+        "status": "pending",
+        "account": "gmail",
+        "title": "Proposal 2 \"inbox_backlog\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "groups": [
+            {
+              "name": "Alerts",
+              "count": 2,
+              "messages": [
+                {
+                  "id": 100,
+                  "subject": "Subject 0 <b>Café naïve — 東京 🎉 مرحبا</b>",
+                  "from_name": "Shop <Co> & Sons",
+                  "from_addr": "no-reply@shop.example",
+                  "date_ts": 1760000000
+                },
+                {
+                  "id": 101,
+                  "subject": "Subject 1 <b>Café naïve — 東京 🎉 مرحبا</b>",
+                  "from_name": "Shop <Co> & Sons",
+                  "from_addr": "no-reply@shop.example",
+                  "date_ts": 1759996400
+                }
+              ],
+              "terms": [
+                "invoice",
+                "total&due",
+                "Café naïve — 東京 🎉 مرحبا"
+              ],
+              "senders": [
+                {
+                  "label": "Shop <Co>",
+                  "count": 3
+                },
+                {
+                  "label": "b@b.com",
+                  "count": 1
+                }
+              ],
+              "subjects": [
+                "Your receipt",
+                "",
+                "Order & delivery <script>alert(\"xss\")</script>"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "kind": "rebalance_merge",
+        "status": "pending",
+        "account": "icloud",
+        "title": "Proposal 3 \"rebalance_merge\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "sources": [
+            {
+              "folder": "A|b",
+              "count": 4
+            },
+            {
+              "folder": "C",
+              "count": 1
+            }
+          ],
+          "into": "Merged",
+          "into_exists": false,
+          "group": {
+            "name": "Merged",
+            "count": 2,
+            "messages": [
+              {
+                "id": 100,
+                "subject": "Subject 0 <b>Café naïve — 東京 🎉 مرحبا</b>",
+                "from_name": "Shop <Co> & Sons",
+                "from_addr": "no-reply@shop.example",
+                "date_ts": 1760000000
+              },
+              {
+                "id": 101,
+                "subject": "Subject 1 <b>Café naïve — 東京 🎉 مرحبا</b>",
+                "from_name": "Shop <Co> & Sons",
+                "from_addr": "no-reply@shop.example",
+                "date_ts": 1759996400
+              }
+            ],
+            "terms": [
+              "invoice",
+              "total&due",
+              "Café naïve — 東京 🎉 مرحبا"
+            ],
+            "senders": [
+              {
+                "label": "Shop <Co>",
+                "count": 3
+              },
+              {
+                "label": "b@b.com",
+                "count": 1
+              }
+            ],
+            "subjects": [
+              "Your receipt",
+              "",
+              "Order & delivery <script>alert(\"xss\")</script>"
+            ]
+          }
+        }
+      },
+      {
+        "id": 4,
+        "kind": "deletion_rule",
+        "status": "pending",
+        "account": "icloud",
+        "title": "Proposal 4 \"deletion_rule\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "rule": {
+            "account": "icloud",
+            "when": [
+              {
+                "field": "from_domain",
+                "op": "suffix",
+                "value": [
+                  "spam.com",
+                  "junk.net"
+                ]
+              },
+              {
+                "field": "subject",
+                "op": "re",
+                "value": "^Win <\\d+>"
+              },
+              {
+                "field": "list_id",
+                "op": "present"
+              },
+              {
+                "field": "age_days",
+                "op": "gte",
+                "value": 30
+              }
+            ]
+          },
+          "reason": "otp",
+          "backlog": 1,
+          "messages": [
+            {
+              "id": 101,
+              "subject": "",
+              "from_name": "Shop <Co> & Sons",
+              "from_addr": "no-reply@shop.example",
+              "date_ts": 1759996400
+            }
+          ],
+          "senders": [
+            {
+              "label": "spam.com",
+              "count": 1
+            }
+          ],
+          "subjects": [
+            "Win"
+          ]
+        }
+      },
+      {
+        "id": 5,
+        "kind": "gmail_label_merge",
+        "status": "pending",
+        "account": "gmail",
+        "title": "Proposal 5 \"gmail_label_merge\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "from": "old & busted",
+          "into": "new <label>",
+          "from_count": 2,
+          "into_count": 7,
+          "messages": [
+            {
+              "id": 101,
+              "subject": "Subject 1 <b>Café naïve — 東京 🎉 مرحبا</b>",
+              "from_name": "Shop <Co> & Sons",
+              "from_addr": "no-reply@shop.example",
+              "date_ts": 1759996400
+            },
+            {
+              "id": 102,
+              "subject": "Subject 2 <b>Café naïve — 東京 🎉 مرحبا</b>",
+              "from_name": "Shop <Co> & Sons",
+              "from_addr": "no-reply@shop.example",
+              "date_ts": 1759992800
+            }
+          ]
+        }
+      },
+      {
+        "id": 6,
+        "kind": "notion_link",
+        "status": "pending",
+        "account": "",
+        "title": "Proposal 6 \"notion_link\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "a": {
+            "id": "id1",
+            "title": "Page <A>",
+            "url": "https://notion.so/id1?x=1&y=2",
+            "path": [
+              {
+                "title": "Wiki"
+              },
+              {
+                "title": "Sub <b>"
+              }
+            ]
+          },
+          "b": {
+            "id": "id2",
+            "title": "",
+            "url": "https://notion.so/id2?x=1&y=2",
+            "path": [
+              {
+                "title": "Wiki"
+              },
+              {
+                "title": "Sub <b>"
+              }
+            ]
+          },
+          "reason": "They share a topic & more"
+        }
+      },
+      {
+        "id": 7,
+        "kind": "calendar_event",
+        "status": "pending",
+        "account": "",
+        "title": "Proposal 7 \"calendar_event\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "calendar": "google",
+          "all_day": false,
+          "start": "2025-10-10 10:00",
+          "end": "2025-10-10 11:00",
+          "location": "Café <X>",
+          "notes": "line1\nline2",
+          "source": {
+            "subject": "Invite <script>alert(\"xss\")</script>"
+          }
+        }
+      },
+      {
+        "id": 8,
+        "kind": "reminder",
+        "status": "pending",
+        "account": "",
+        "title": "Proposal 8 \"reminder\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "text": "Call mum & dad",
+          "due": "2025-10-12",
+          "remind_at": "2025-10-11 09:00",
+          "subject": "Re: birthday"
+        }
+      },
+      {
+        "id": 9,
+        "kind": "notion_edit",
+        "status": "pending",
+        "account": "",
+        "title": "Proposal 9 \"notion_edit\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "page": {
+            "id": "id3",
+            "title": "Notes",
+            "url": "https://notion.so/id3?x=1&y=2",
+            "path": [
+              {
+                "title": "Wiki"
+              },
+              {
+                "title": "Sub <b>"
+              }
+            ]
+          },
+          "instruction": "Fix <typos>",
+          "summary": "Fixed 2 typos",
+          "diff": [
+            {
+              "op": "keep",
+              "text": "same line"
+            },
+            {
+              "op": "del",
+              "text": "teh cat"
+            },
+            {
+              "op": "add",
+              "text": "the cat & dog"
+            },
+            {
+              "op": "add",
+              "text": "<script>alert(\"xss\")</script>"
+            }
+          ]
+        }
+      },
+      {
+        "id": 10,
+        "kind": "notion_wiki_plan",
+        "status": "pending",
+        "account": "",
+        "title": "Proposal 10 \"notion_wiki_plan\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "counts": {
+            "convert": 3,
+            "drop": 1,
+            "keep": 2,
+            "merge": 1
+          },
+          "hubs": [
+            {
+              "title": "Home <1>",
+              "description": "desc"
+            },
+            {
+              "title": "Hub2",
+              "description": ""
+            }
+          ],
+          "databases": [
+            {
+              "title": "DB1",
+              "mode": "table",
+              "hub": "Home",
+              "reason": "small"
+            },
+            {
+              "title": "DB2",
+              "mode": "hub",
+              "hub": "Hub2",
+              "reason": "big & wide"
+            }
+          ],
+          "items": [
+            {
+              "id": "n1",
+              "title": "Item <1>",
+              "decision": "convert",
+              "source": "db",
+              "hub": "Home",
+              "merge_into": "",
+              "reason": "why"
+            },
+            {
+              "id": "n2",
+              "title": "",
+              "decision": "drop",
+              "source": "",
+              "hub": "",
+              "merge_into": "Other",
+              "reason": "gone"
+            },
+            {
+              "id": "n3",
+              "title": "Keep me",
+              "decision": "keep",
+              "source": "page",
+              "hub": "",
+              "merge_into": "",
+              "reason": ""
+            }
+          ]
+        }
+      },
+      {
+        "id": 11,
+        "kind": "rebalance_split",
+        "status": "applied",
+        "account": "icloud",
+        "title": "Proposal 11 \"rebalance_split\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": true,
+        "result": {
+          "summary": "Moved 4 messages <ok>"
+        },
+        "preview": {
+          "folder": "INBOX",
+          "groups": [
+            {
+              "name": "Done",
+              "count": 1,
+              "messages": [
+                {
+                  "id": 100,
+                  "subject": "Subject 0 <b>Café naïve — 東京 🎉 مرحبا</b>",
+                  "from_name": "Shop <Co> & Sons",
+                  "from_addr": "no-reply@shop.example",
+                  "date_ts": 1760000000
+                }
+              ],
+              "terms": [
+                "invoice",
+                "total&due",
+                "Café naïve — 東京 🎉 مرحبا"
+              ],
+              "senders": [
+                {
+                  "label": "Shop <Co>",
+                  "count": 3
+                },
+                {
+                  "label": "b@b.com",
+                  "count": 1
+                }
+              ],
+              "subjects": [
+                "Your receipt",
+                "",
+                "Order & delivery <script>alert(\"xss\")</script>"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": 12,
+        "kind": "notion_wiki_plan",
+        "status": "failed",
+        "account": "",
+        "title": "Proposal 12 \"notion_wiki_plan\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": true,
+        "result": {
+          "error": "Notion said <no>"
+        },
+        "preview": {
+          "counts": {},
+          "hubs": [],
+          "databases": [],
+          "items": []
+        }
+      },
+      {
+        "id": 13,
+        "kind": "deletion_rule",
+        "status": "dismissed",
+        "account": "icloud",
+        "title": "Proposal 13 \"deletion_rule\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "rule": {
+            "when": [
+              {
+                "field": "category",
+                "op": "eq",
+                "value": "promo"
+              }
+            ]
+          },
+          "reason": "operator_deleted",
+          "backlog": 0,
+          "messages": [],
+          "senders": [],
+          "subjects": []
+        }
+      },
+      {
+        "id": 14,
+        "kind": "reminder",
+        "status": "suppressed",
+        "account": "",
+        "title": "Proposal 14 \"reminder\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "text": "t",
+          "due": "d",
+          "remind_at": "r"
+        }
+      },
+      {
+        "id": 15,
+        "kind": "rebalance_split",
+        "status": "approved",
+        "account": "icloud",
+        "title": "Proposal 15 \"rebalance_split\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "folder": "INBOX",
+          "groups": []
+        }
+      },
+      {
+        "id": 16,
+        "kind": "gmail_label_merge",
+        "status": "applied",
+        "account": "gmail",
+        "title": "Proposal 16 \"gmail_label_merge\" & more <i>",
+        "created_ts": 1759913600,
+        "applied_ts": 1759913700,
+        "decided_ts": 1759913800,
+        "undoable": false,
+        "result": null,
+        "preview": {
+          "from": "a",
+          "into": "b",
+          "from_count": 0,
+          "into_count": 0,
+          "messages": []
+        }
+      }
+    ],
+    "status": "all",
+    "kind": "",
+    "counts": {
+      "pending": 10,
+      "applied": 2,
+      "failed": 1
+    },
+    "toast": {
+      "category": "success",
+      "title": "Saved <script>alert(\"xss\")</script>",
+      "description": "He said \"hi\" & 'bye' <b>bold</b>"
+    }
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "job": {
+      "id": 2,
+      "name": "Morning <brief> Café naïve — 東京 🎉 مرحبا",
+      "kind": "cron",
+      "created_by": "assistant",
+      "cadence": "weekly mon 07:30",
+      "schedule": "weekly mon 07:30",
+      "prompt": "This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised",
+      "enabled": 0,
+      "next_due_text": null,
+      "last_status": "error",
+      "last_error": "Budget <exceeded> & stopped",
+      "last_started_text": "2025-10-06 07:30"
+    },
+    "values": {
+      "name": "Edited <name>",
+      "schedule": "bad cron",
+      "prompt": "<script>alert(\"xss\")</script>"
+    },
+    "error": "Unrecognised schedule <script>alert(\"xss\")</script>",
+    "tz": "America/Port_of_Spain",
+    "runs": [
+      {
+        "job_name": "Morning <brief>",
+        "status": "error",
+        "started_text": "2025-10-06 07:30",
+        "cost": 0,
+        "error": "<script>alert(\"xss\")</script>",
+        "thread_id": null
+      }
+    ]
+  }
+}

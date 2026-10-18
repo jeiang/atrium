@@ -1,0 +1,90 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "show": {
+      "dir": "Show <x> & y",
+      "title": "Show <script>alert(\"xss\")</script>",
+      "year": null,
+      "seasons": [
+        {
+          "number": 1,
+          "dir": "Season 01",
+          "episodes": [
+            {
+              "rel": "Show/Season 01/S01E01.mkv",
+              "episode": 1,
+              "name": "S01E01.mkv",
+              "size": 1200000000,
+              "public": "https://media.example/s/abc?sig=1&exp=2",
+              "vpn": "javascript:alert(document.cookie)"
+            },
+            {
+              "rel": "Show/Season 01/extra & <b>.mkv",
+              "episode": null,
+              "name": "extra & <b>.mkv",
+              "size": 50000000,
+              "public": null,
+              "vpn": null
+            }
+          ]
+        },
+        {
+          "number": null,
+          "dir": "Specials Café naïve — 東京 🎉 مرحبا",
+          "episodes": []
+        }
+      ]
+    },
+    "ttl_hours": 48
+  }
+}

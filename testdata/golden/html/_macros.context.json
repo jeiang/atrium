@@ -1,0 +1,1442 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {},
+  "calls": [
+    {
+      "macro": "mode_badge",
+      "args": [
+        "live",
+        true
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "mode_badge",
+      "args": [
+        "live",
+        false
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "mode_badge",
+      "args": [
+        "shadow",
+        false
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "mode_note",
+      "args": [
+        "live",
+        true
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "mode_note",
+      "args": [
+        "live",
+        false
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "mode_note",
+      "args": [
+        "shadow",
+        true
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "action_badge",
+      "args": [
+        {
+          "status": "applied",
+          "error": null
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "action_badge",
+      "args": [
+        {
+          "status": "skipped",
+          "error": "<script>alert(\"xss\")</script>"
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "action_badge",
+      "args": [
+        {
+          "status": "undone",
+          "error": null
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "action_badge",
+      "args": [
+        {
+          "status": "interrupted",
+          "error": null
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_label",
+      "args": [
+        "correction"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_label",
+      "args": [
+        "operator"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_label",
+      "args": [
+        "learned"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_label",
+      "args": [
+        "knn"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_label",
+      "args": [
+        "llm"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_label",
+      "args": [
+        "fallback"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_label",
+      "args": [
+        "other <x>"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_badge",
+      "args": [
+        "correction"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_badge",
+      "args": [
+        "operator"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_badge",
+      "args": [
+        "learned"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_badge",
+      "args": [
+        "knn"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_badge",
+      "args": [
+        "llm"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_badge",
+      "args": [
+        "fallback"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "stage_badge",
+      "args": [
+        "other <x>"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "pct",
+      "args": [
+        0.8765
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "pct",
+      "args": [
+        0
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "reason",
+      "args": [
+        {
+          "stage": "correction",
+          "confidence": null,
+          "ts": 1760000000,
+          "dest": "Receipts",
+          "action": "file",
+          "key": null,
+          "detail": null
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "reason",
+      "args": [
+        {
+          "stage": "operator",
+          "confidence": 1.0,
+          "ts": 1760000000,
+          "dest": null,
+          "action": "delete",
+          "key": "spam-<script>alert(\"xss\")</script>",
+          "detail": {}
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "reason",
+      "args": [
+        {
+          "stage": "learned",
+          "confidence": 0.875,
+          "ts": 1760000000,
+          "dest": "Receipts",
+          "action": "file",
+          "key": "addr+tmpl",
+          "detail": {
+            "n": 14
+          }
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "reason",
+      "args": [
+        {
+          "stage": "knn",
+          "confidence": 0.6,
+          "ts": 1760000000,
+          "dest": "Elsewhere",
+          "action": "file",
+          "key": null,
+          "detail": {}
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "reason",
+      "args": [
+        {
+          "stage": "llm",
+          "confidence": null,
+          "ts": 1760000000,
+          "dest": null,
+          "action": "none",
+          "key": null,
+          "detail": {
+            "confident": true
+          }
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "reason",
+      "args": [
+        {
+          "stage": "fallback",
+          "confidence": 0.0,
+          "ts": 1760000000,
+          "dest": "",
+          "action": "none",
+          "key": null,
+          "detail": null
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "reason",
+      "args": [
+        {
+          "stage": "llm",
+          "confidence": null,
+          "ts": 1760000000,
+          "dest": null,
+          "action": "none",
+          "key": null,
+          "detail": {
+            "confident": false
+          }
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "place",
+      "args": [
+        null
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "place",
+      "args": [
+        "INBOX"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "place",
+      "args": [
+        "A|B <c> & Café naïve — 東京 🎉 مرحبا"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "proposal",
+      "args": [
+        "delete",
+        "x"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "proposal",
+      "args": [
+        "none",
+        "x"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "proposal",
+      "args": [
+        "file",
+        ""
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "proposal",
+      "args": [
+        "file",
+        "Receipts <x>"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "agreement",
+      "args": [
+        "agree"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "agreement",
+      "args": [
+        "disagree"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "agreement",
+      "args": [
+        "pending"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "agreement",
+      "args": [
+        "gone"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "noun",
+      "args": [
+        "gmail"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "noun",
+      "args": [
+        "icloud"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "sender",
+      "args": [
+        {
+          "from_name": "<script>alert(\"xss\")</script>",
+          "from_addr": "a@b.c"
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "sender",
+      "args": [
+        {
+          "from_name": "",
+          "from_addr": "a@b.c"
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "sender",
+      "args": [
+        {
+          "from_name": null,
+          "from_addr": null
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "open_attrs",
+      "args": [
+        501
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "when",
+      "args": [
+        1760000000
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "when",
+      "args": [
+        1760000000,
+        "datetime"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "when",
+      "args": [
+        null
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "when",
+      "args": [
+        0
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "account_switch",
+      "args": [
+        "/triage",
+        ""
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "account_switch",
+      "args": [
+        "/rules",
+        "gmail"
+      ],
+      "kwargs": {
+        "label": "Account <x>"
+      }
+    },
+    {
+      "macro": "folder_options",
+      "args": [
+        [
+          {
+            "folder": "Receipts",
+            "count": 12
+          },
+          {
+            "folder": "Travel|Flights",
+            "count": 3
+          },
+          {
+            "folder": "Odd <folder> & co",
+            "count": 1
+          }
+        ],
+        "Odd <folder> & co"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "empty_state",
+      "args": [
+        "search",
+        "Title <x>"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "empty_state",
+      "args": [
+        "inbox",
+        "With caller"
+      ],
+      "kwargs": {},
+      "caller": "Body <script>alert(\"xss\")</script>"
+    },
+    {
+      "macro": "condition_text",
+      "args": [
+        {
+          "field": "from_domain",
+          "op": "suffix",
+          "value": [
+            "a.example",
+            "b <c>.example"
+          ]
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "condition_text",
+      "args": [
+        {
+          "field": "subject",
+          "op": "re",
+          "value": "^Win <\\d+> & co"
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "condition_text",
+      "args": [
+        {
+          "field": "list_id",
+          "op": "present"
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "condition_text",
+      "args": [
+        {
+          "field": "age_days",
+          "op": "gte",
+          "value": 0
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "condition_text",
+      "args": [
+        {
+          "field": "custom_field",
+          "op": "custom_op",
+          "value": ""
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "spinner",
+      "args": [
+        "spin-1"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "spinner",
+      "args": [
+        "spin-2",
+        "He said \"hi\" & 'bye' <b>bold</b>"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "status_badge",
+      "args": [
+        "pending"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "status_badge",
+      "args": [
+        "approved"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "status_badge",
+      "args": [
+        "applied"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "status_badge",
+      "args": [
+        "failed"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "status_badge",
+      "args": [
+        "dismissed"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "status_badge",
+      "args": [
+        "suppressed"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "status_badge",
+      "args": [
+        "weird <x>"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "pending_badge",
+      "args": [
+        0
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "pending_badge",
+      "args": [
+        5
+      ],
+      "kwargs": {
+        "oob": true
+      }
+    },
+    {
+      "macro": "external",
+      "args": [
+        "javascript:alert(document.cookie)"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "external",
+      "args": [
+        "https://e.com/?a=1&b=2"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "page_path",
+      "args": [
+        [
+          {
+            "title": "Wiki"
+          },
+          {
+            "title": "Sub <b>"
+          },
+          {
+            "title": "Café naïve — 東京 🎉 مرحبا"
+          }
+        ]
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "page_path",
+      "args": [
+        []
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "page_link",
+      "args": [
+        {
+          "id": "id1",
+          "title": "Page <A>",
+          "url": "https://notion.so/id1?x=1&y=2",
+          "path": [
+            {
+              "title": "Wiki"
+            },
+            {
+              "title": "Sub <b>"
+            }
+          ]
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "page_link",
+      "args": [
+        {
+          "id": "a b&c/d",
+          "title": ""
+        },
+        "truncate"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "run_badge",
+      "args": [
+        "running"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "run_badge",
+      "args": [
+        "interrupted"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "run_badge",
+      "args": [
+        "failed"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "run_badge",
+      "args": [
+        "done"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "run_badge",
+      "args": [
+        null
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "preview_attrs",
+      "args": [
+        "/drafts/1?a=<b>&c=d"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "branch_button",
+      "args": [
+        {
+          "id": 7,
+          "title": "Plan \"Q4\" & <review> Café naïve — 東京 🎉 مرحبا",
+          "kind": "chat",
+          "created_at": 1759827200,
+          "project_id": 2,
+          "parent_thread_id": 3,
+          "branched_from_seq": 4,
+          "effort": "medium",
+          "pinned": 1,
+          "archived": 0,
+          "code_sandbox": 1
+        },
+        3
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "file_icon",
+      "args": [
+        "image/png"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "file_icon",
+      "args": [
+        "text/plain",
+        "cls <x>"
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "file_chips",
+      "args": [
+        7,
+        [
+          {
+            "id": 1,
+            "name": "report <final>.pdf",
+            "media_type": "application/pdf"
+          },
+          {
+            "id": 2,
+            "name": "photo Café naïve — 東京 🎉 مرحبا.png",
+            "media_type": "image/png"
+          }
+        ]
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "file_chips",
+      "args": [
+        7,
+        []
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "attach_field",
+      "args": [],
+      "kwargs": {}
+    },
+    {
+      "macro": "attach_button",
+      "args": [],
+      "kwargs": {}
+    },
+    {
+      "macro": "activity_step",
+      "args": [
+        {
+          "kind": "thinking",
+          "text": "pondering <x>\nline2 Café naïve — 東京 🎉 مرحبا"
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "activity_step",
+      "args": [
+        {
+          "kind": "note",
+          "text": "A **note** with [link](https://example.com) and <script>alert(\"xss\")</script>"
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "activity_step",
+      "args": [
+        {
+          "kind": "tool",
+          "id": "t1",
+          "name": "research",
+          "args": "{\"q\": \"a<b\"}",
+          "state": "done",
+          "is_error": false,
+          "result": "found & done",
+          "child_thread_id": 9
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "activity_step",
+      "args": [
+        {
+          "kind": "tool",
+          "id": "t2",
+          "name": "mail_search",
+          "args": "{}",
+          "state": "started",
+          "is_error": false,
+          "result": ""
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "activity_step",
+      "args": [
+        {
+          "kind": "tool",
+          "id": "t3",
+          "name": "bad",
+          "args": "{}",
+          "state": "done",
+          "is_error": true,
+          "result": "<script>alert(\"xss\")</script>"
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "activity_step",
+      "args": [
+        {
+          "kind": "tool",
+          "id": "t4",
+          "name": "unk",
+          "args": "SupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilistic",
+          "state": "unknown",
+          "is_error": false,
+          "result": "x"
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "activity_step",
+      "args": [
+        {
+          "kind": "web_search",
+          "results": [
+            {
+              "url": "https://e.com/?a=1&b=2",
+              "title": "This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised"
+            },
+            {
+              "url": "javascript:alert(document.cookie)",
+              "title": "Short"
+            }
+          ],
+          "error": ""
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "activity_step",
+      "args": [
+        {
+          "kind": "web_search",
+          "results": [],
+          "error": "rate <limited>"
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "activity_step",
+      "args": [
+        {
+          "kind": "unknown"
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "user",
+          "seq": 1,
+          "text": "Hi <b>there</b> & \"friends\" 'ok'\nsecond line Fish &amp; chips &lt;3 &#x27; &copy;",
+          "files": [
+            {
+              "id": 1,
+              "name": "report <final>.pdf",
+              "media_type": "application/pdf"
+            },
+            {
+              "id": 2,
+              "name": "photo Café naïve — 東京 🎉 مرحبا.png",
+              "media_type": "image/png"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Plan \"Q4\" & <review> Café naïve — 東京 🎉 مرحبا",
+          "kind": "chat",
+          "created_at": 1759827200,
+          "project_id": 2,
+          "parent_thread_id": 3,
+          "branched_from_seq": 4,
+          "effort": "medium",
+          "pinned": 1,
+          "archived": 0,
+          "code_sandbox": 1
+        },
+        6,
+        false
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "assistant",
+          "seq": 2,
+          "text": "Here is **bold**, *em*, `code` and a [link](https://example.com/a?b=1&c=2).\n\n- one\n- two\n\n1. first\n2. second\n\n> quote\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```py\nprint('<hi>')\n```\n\n<script>alert(\"xss\")</script> and [bad](javascript:alert(1)) and ![img](https://example.com/x.png) done. Fish &amp; chips &lt;3 &#x27; &copy;",
+          "citations": [
+            {
+              "url": "https://example.com/x?y=1&z=2",
+              "title": "This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised"
+            },
+            {
+              "url": "",
+              "title": "Local note about something quite long indeed ok",
+              "cited": "He said \"hi\" & 'bye' <b>bold</b> This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised"
+            },
+            {
+              "url": "javascript:alert(document.cookie)",
+              "title": "<script>alert(\"xss\")</script>"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Plan \"Q4\" & <review> Café naïve — 東京 🎉 مرحبا",
+          "kind": "chat",
+          "created_at": 1759827200,
+          "project_id": 2,
+          "parent_thread_id": 3,
+          "branched_from_seq": 4,
+          "effort": "medium",
+          "pinned": 1,
+          "archived": 0,
+          "code_sandbox": 1
+        },
+        6,
+        false
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "activity",
+          "seq": 3,
+          "run_id": 1,
+          "steps": [
+            {
+              "kind": "thinking",
+              "text": "pondering <x>\nline2 Café naïve — 東京 🎉 مرحبا"
+            },
+            {
+              "kind": "note",
+              "text": "A **note** with [link](https://example.com) and <script>alert(\"xss\")</script>"
+            },
+            {
+              "kind": "tool",
+              "id": "t1",
+              "name": "research",
+              "args": "{\"q\": \"a<b\"}",
+              "state": "done",
+              "is_error": false,
+              "result": "found & done",
+              "child_thread_id": 9
+            },
+            {
+              "kind": "tool",
+              "id": "t2",
+              "name": "mail_search",
+              "args": "{}",
+              "state": "started",
+              "is_error": false,
+              "result": ""
+            },
+            {
+              "kind": "tool",
+              "id": "t3",
+              "name": "bad",
+              "args": "{}",
+              "state": "done",
+              "is_error": true,
+              "result": "<script>alert(\"xss\")</script>"
+            },
+            {
+              "kind": "tool",
+              "id": "t4",
+              "name": "unk",
+              "args": "SupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilistic",
+              "state": "unknown",
+              "is_error": false,
+              "result": "x"
+            },
+            {
+              "kind": "web_search",
+              "results": [
+                {
+                  "url": "https://e.com/?a=1&b=2",
+                  "title": "This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised"
+                },
+                {
+                  "url": "javascript:alert(document.cookie)",
+                  "title": "Short"
+                }
+              ],
+              "error": ""
+            },
+            {
+              "kind": "web_search",
+              "results": [],
+              "error": "rate <limited>"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Plan \"Q4\" & <review> Café naïve — 東京 🎉 مرحبا",
+          "kind": "chat",
+          "created_at": 1759827200,
+          "project_id": 2,
+          "parent_thread_id": 3,
+          "branched_from_seq": 4,
+          "effort": "medium",
+          "pinned": 1,
+          "archived": 0,
+          "code_sandbox": 1
+        },
+        6,
+        false
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "draft",
+          "seq": 4,
+          "draft": {
+            "id": 11,
+            "subject": "Re: lunch & dinner",
+            "to_addrs": "a@b.com, c@d.com",
+            "status": "sent"
+          }
+        },
+        {
+          "id": 7,
+          "title": "Plan \"Q4\" & <review> Café naïve — 東京 🎉 مرحبا",
+          "kind": "chat",
+          "created_at": 1759827200,
+          "project_id": 2,
+          "parent_thread_id": 3,
+          "branched_from_seq": 4,
+          "effort": "medium",
+          "pinned": 1,
+          "archived": 0,
+          "code_sandbox": 1
+        },
+        6,
+        false
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "draft",
+          "seq": 5,
+          "draft": {
+            "id": 12,
+            "subject": "",
+            "to_addrs": "x@y.com",
+            "status": "draft"
+          }
+        },
+        {
+          "id": 7,
+          "title": "Plan \"Q4\" & <review> Café naïve — 東京 🎉 مرحبا",
+          "kind": "chat",
+          "created_at": 1759827200,
+          "project_id": 2,
+          "parent_thread_id": 3,
+          "branched_from_seq": 4,
+          "effort": "medium",
+          "pinned": 1,
+          "archived": 0,
+          "code_sandbox": 1
+        },
+        6,
+        false
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "compaction",
+          "seq": 5
+        },
+        {
+          "id": 7,
+          "title": "Plan \"Q4\" & <review> Café naïve — 東京 🎉 مرحبا",
+          "kind": "chat",
+          "created_at": 1759827200,
+          "project_id": 2,
+          "parent_thread_id": 3,
+          "branched_from_seq": 4,
+          "effort": "medium",
+          "pinned": 1,
+          "archived": 0,
+          "code_sandbox": 1
+        },
+        6,
+        false
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "user",
+          "seq": 6,
+          "text": "last one",
+          "files": []
+        },
+        {
+          "id": 7,
+          "title": "Plan \"Q4\" & <review> Café naïve — 東京 🎉 مرحبا",
+          "kind": "chat",
+          "created_at": 1759827200,
+          "project_id": 2,
+          "parent_thread_id": 3,
+          "branched_from_seq": 4,
+          "effort": "medium",
+          "pinned": 1,
+          "archived": 0,
+          "code_sandbox": 1
+        },
+        6,
+        false
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "assistant",
+          "seq": 7,
+          "text": "Reply",
+          "citations": []
+        },
+        {
+          "id": 7,
+          "title": "Plan \"Q4\" & <review> Café naïve — 東京 🎉 مرحبا",
+          "kind": "chat",
+          "created_at": 1759827200,
+          "project_id": 2,
+          "parent_thread_id": 3,
+          "branched_from_seq": 4,
+          "effort": "medium",
+          "pinned": 1,
+          "archived": 0,
+          "code_sandbox": 1
+        },
+        6,
+        false
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "user",
+          "seq": 1,
+          "text": "Hi <b>there</b> & \"friends\" 'ok'\nsecond line Fish &amp; chips &lt;3 &#x27; &copy;",
+          "files": [
+            {
+              "id": 1,
+              "name": "report <final>.pdf",
+              "media_type": "application/pdf"
+            },
+            {
+              "id": 2,
+              "name": "photo Café naïve — 東京 🎉 مرحبا.png",
+              "media_type": "image/png"
+            }
+          ]
+        },
+        null,
+        null,
+        true
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "assistant",
+          "seq": 2,
+          "text": "Here is **bold**, *em*, `code` and a [link](https://example.com/a?b=1&c=2).\n\n- one\n- two\n\n1. first\n2. second\n\n> quote\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```py\nprint('<hi>')\n```\n\n<script>alert(\"xss\")</script> and [bad](javascript:alert(1)) and ![img](https://example.com/x.png) done. Fish &amp; chips &lt;3 &#x27; &copy;",
+          "citations": [
+            {
+              "url": "https://example.com/x?y=1&z=2",
+              "title": "This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised"
+            },
+            {
+              "url": "",
+              "title": "Local note about something quite long indeed ok",
+              "cited": "He said \"hi\" & 'bye' <b>bold</b> This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised"
+            },
+            {
+              "url": "javascript:alert(document.cookie)",
+              "title": "<script>alert(\"xss\")</script>"
+            }
+          ]
+        },
+        null,
+        null,
+        true
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "assistant",
+          "seq": 7,
+          "text": "Reply",
+          "citations": []
+        },
+        {
+          "id": 7,
+          "title": "Plan \"Q4\" & <review> Café naïve — 東京 🎉 مرحبا",
+          "kind": "cron",
+          "created_at": 1759827200,
+          "project_id": 2,
+          "parent_thread_id": 3,
+          "branched_from_seq": 4,
+          "effort": "medium",
+          "pinned": 1,
+          "archived": 0,
+          "code_sandbox": 1
+        },
+        6,
+        true
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "queued",
+          "id": 3,
+          "text": "<script>alert(\"xss\")</script>",
+          "files": [
+            {
+              "name": "a <b>.txt"
+            }
+          ]
+        }
+      ],
+      "kwargs": {}
+    },
+    {
+      "macro": "chat_item",
+      "args": [
+        {
+          "kind": "mystery",
+          "seq": 99
+        }
+      ],
+      "kwargs": {}
+    }
+  ]
+}

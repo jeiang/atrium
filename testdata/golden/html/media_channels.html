@@ -1,0 +1,571 @@
+
+
+
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Channels · atrium</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect%7Bfill:oklch(0.25 0.014 60)%7Dtext%7Bfill:oklch(0.985 0.003 85)%7D@media (prefers-color-scheme:dark)%7Brect%7Bfill:oklch(0.92 0.008 85)%7Dtext%7Bfill:oklch(0.2 0.012 60)%7D%7D%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='22.5' font-family='ui-monospace,monospace' font-size='19' font-weight='600' text-anchor='middle'%3Ea%3C/text%3E%3C/svg%3E">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+  <link rel="stylesheet" href="/static/app.css?v=golden">
+  <script src="/static/htmx.min.js?v=golden" defer></script>
+  <script src="/static/basecoat/all.min.js?v=golden" defer></script>
+  <script src="/static/app.js?v=golden" defer></script>
+</head>
+<body class="min-h-dvh" hx-headers='{"X-CSRF-Token": "csrf-golden-token"}'>
+  <a href="#content" class="sr-only rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50">Skip to content</a>
+  
+  
+  
+  
+
+
+
+
+<aside
+  id="sidebar"
+  class="sidebar "
+  data-side="left"
+  aria-hidden="false"
+  
+  
+>
+  <nav
+    aria-label="Primary"
+  >
+    
+    <header
+      
+    >
+      
+  <a href="/chat" class="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <span class="grid size-7 place-items-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground" aria-hidden="true">a</span>
+    <span class="text-base font-semibold tracking-tight">atrium</span>
+  </a>
+  
+    </header>
+    
+
+    <section
+      
+    >
+      
+        
+  
+    
+
+    
+    
+      
+      <div
+        role="group"
+        aria-labelledby="group-label-sidebar-content-1"
+        
+      >
+        
+          <h3 id="group-label-sidebar-content-1">Assistant</h3>
+        
+        <ul>
+          
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/chat"
+          
+          
+        >
+          <svg class="lucide lucide-messages-square " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg>
+          <span>Chat</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/scheduled"
+          
+          
+        >
+          <svg class="lucide lucide-clock " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Scheduled</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/projects"
+          
+          
+        >
+          <svg class="lucide lucide-folder " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+          <span>Projects</span>
+        </a>
+      </li>
+    
+  
+
+        </ul>
+      </div>
+    
+  
+    
+
+    
+    
+      
+      <div
+        role="group"
+        aria-labelledby="group-label-sidebar-content-2"
+        
+      >
+        
+          <h3 id="group-label-sidebar-content-2">Review</h3>
+        
+        <ul>
+          
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/proposals"
+          
+          
+            
+              class="[&amp;&gt;span:last-child]:flex-1"
+            
+          
+        >
+          <svg class="lucide lucide-list-checks " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/></svg>
+          <span><span class="flex items-center gap-2">Proposals<span id="pending-count" class="badge ms-auto empty:hidden" data-variant="secondary">12<span class="sr-only"> pending</span></span></span></span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/activity"
+          
+          
+        >
+          <svg class="lucide lucide-history " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+          <span>Activity</span>
+        </a>
+      </li>
+    
+  
+
+        </ul>
+      </div>
+    
+  
+    
+
+    
+    
+      
+      <div
+        role="group"
+        aria-labelledby="group-label-sidebar-content-3"
+        
+      >
+        
+          <h3 id="group-label-sidebar-content-3">Mail</h3>
+        
+        <ul>
+          
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/triage"
+          
+          
+        >
+          <svg class="lucide lucide-route " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>
+          <span>Decisions</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/rules"
+          
+          
+        >
+          <svg class="lucide lucide-scroll-text " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg>
+          <span>Rules</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/drafts"
+          
+          
+        >
+          <svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg>
+          <span>Drafts</span>
+        </a>
+      </li>
+    
+  
+
+        </ul>
+      </div>
+    
+  
+    
+
+    
+    
+      
+      <div
+        role="group"
+        aria-labelledby="group-label-sidebar-content-4"
+        
+      >
+        
+          <h3 id="group-label-sidebar-content-4">Life</h3>
+        
+        <ul>
+          
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/money"
+          
+          
+        >
+          <svg class="lucide lucide-wallet " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
+          <span>Money</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/loops"
+          
+          
+        >
+          <svg class="lucide lucide-list-checks " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/></svg>
+          <span>Loops</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/watches"
+          
+          
+        >
+          <svg class="lucide lucide-package " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><polyline points="3.29 7 12 12 20.71 7"/><path d="m7.5 4.27 9 5.15"/></svg>
+          <span>Watches</span>
+        </a>
+      </li>
+    
+  
+
+        </ul>
+      </div>
+    
+  
+    
+
+    
+    
+      
+      <div
+        role="group"
+        aria-labelledby="group-label-sidebar-content-5"
+        
+      >
+        
+          <h3 id="group-label-sidebar-content-5">Media</h3>
+        
+        <ul>
+          
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/media/downloads"
+          
+          
+        >
+          <svg class="lucide lucide-download " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+          <span>Downloads</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/media/channels"
+          aria-current="page"
+          
+        >
+          <svg class="lucide lucide-tv " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m17 2-5 5-5-5"/><rect width="20" height="15" x="2" y="7" rx="2"/></svg>
+          <span>Channels</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/media/library"
+          
+          
+        >
+          <svg class="lucide lucide-film " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>
+          <span>Library</span>
+        </a>
+      </li>
+    
+  
+
+        </ul>
+      </div>
+    
+  
+
+      
+    </section>
+
+    
+    <footer
+      
+    >
+      
+  <div class="flex flex-col gap-1.5 rounded-lg border bg-background p-3 text-xs">
+    <div><span class="badge" data-variant="destructive"><svg class="lucide lucide-zap " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></svg>Live</span></div>
+    <p class="text-pretty text-muted-foreground">Live mode: atrium files read mail, flags unread mail from your contacts and trashes mail your deletion rules match.</p>
+  </div>
+  
+    </footer>
+    
+  </nav>
+</aside>
+
+  <main class="flex min-w-0 flex-col">
+    <header class="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-3 md:px-6">
+      <button id="nav-toggle" type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Toggle navigation" aria-controls="sidebar" data-action="toggle-sidebar"><svg class="lucide lucide-panel-left " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+      <hr role="separator" aria-orientation="vertical" class="h-4 w-px border-0 bg-border">
+      <h1 class="truncate px-1 text-sm font-medium">Media · Channels</h1>
+      <div class="ml-auto flex items-center gap-3">
+        <a href="/settings" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"><svg class="lucide lucide-settings " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></a>
+        <span class="badge" data-variant="destructive"><svg class="lucide lucide-zap " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></svg>Live</span>
+        
+        <form method="post" action="/live/pause">
+          <input type="hidden" name="csrf_token" value="csrf-golden-token">
+          <button type="submit" class="btn" data-size="sm" data-variant="outline"><svg class="lucide lucide-lock " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Pause</button>
+        </form>
+        
+      </div>
+    </header>
+    <div id="content" tabindex="-1" class="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 outline-none md:px-8 md:py-8">
+      
+<p class="text-sm text-muted-foreground">A channel is a show plus a regex over its EZTV release titles, checked every 30 minutes. New matches are downloaded as media torrents and announced on ntfy. Adding a channel also downloads the matching releases that are already out; untick the download box below to only record them.</p>
+
+<section class="flex flex-col gap-3" aria-labelledby="channels-h">
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <h2 id="channels-h" class="text-sm font-medium">Watching (2)</h2>
+    <form method="post" action="/media/channels/poll">
+      <input type="hidden" name="csrf_token" value="csrf-golden-token">
+      <button type="submit" class="btn" data-size="sm" data-variant="outline"><svg class="lucide lucide-play " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polygon points="6 3 20 12 6 21 6 3"/></svg>Check now</button>
+    </form>
+  </div>
+  <p class="text-xs text-muted-foreground">Last check <time datetime="2025-10-09T07:53:20+00:00">2025-10-09 07:53</time>.</p>
+  <p class="text-xs text-destructive" role="alert">EZTV &lt;timeout&gt;</p><p class="text-xs text-destructive" role="alert">&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</p>
+  
+  <ul class="flex flex-col gap-3" role="list" aria-label="Channels">
+    
+    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+      <div class="flex min-w-0 grow basis-64 flex-col gap-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-sm font-medium">Lanterns &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</span>
+          <span class="badge" data-variant="outline">tt1234567</span>
+          <span class="badge" data-variant="secondary">case-sensitive</span>
+          <span class="badge" data-variant="outline">first check pending</span>
+        </div>
+        <code class="break-all font-mono text-xs">^Lanterns S\d+E\d+ 1080p &lt;x&gt;</code>
+      </div>
+      <form method="post" action="/media/channels/1/delete">
+        <input type="hidden" name="csrf_token" value="csrf-golden-token">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline"><svg class="lucide lucide-trash-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remove</button>
+      </form>
+    </li>
+    
+    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+      <div class="flex min-w-0 grow basis-64 flex-col gap-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-sm font-medium">Café naïve — 東京 🎉 مرحبا</span>
+          <span class="badge" data-variant="outline">tt7654321</span>
+          
+          
+        </div>
+        <code class="break-all font-mono text-xs">SupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilistic</code>
+      </div>
+      <form method="post" action="/media/channels/2/delete">
+        <input type="hidden" name="csrf_token" value="csrf-golden-token">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline"><svg class="lucide lucide-trash-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remove</button>
+      </form>
+    </li>
+    
+  </ul>
+  
+</section>
+
+<section class="flex flex-col gap-3" aria-labelledby="find-h">
+  <h2 id="find-h" class="text-sm font-medium">Find a show</h2>
+  
+  <form method="get" action="/media/channels" class="flex flex-wrap items-end gap-2">
+    <div role="group" class="field min-w-64 flex-1">
+      <label for="q">TMDB search</label>
+      <input id="q" name="q" type="search" value="Lant &amp; &lt;x&gt;" placeholder="Show name">
+    </div>
+    <button type="submit" class="btn" data-size="sm" data-variant="outline"><svg class="lucide lucide-search " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>Search</button>
+  </form>
+  
+  <ul class="flex flex-col divide-y rounded-lg border text-sm" role="list" aria-label="Search results">
+    
+    <li class="flex flex-wrap items-center gap-3 px-3 py-2">
+      <span class="flex-1">Lanterns &amp; &lt;co&gt; <span class="text-muted-foreground">(2025)</span></span>
+      <a class="btn" data-size="sm" href="/media/channels?tmdb_id=1&amp;name=Lanterns%20%26%20%3Cco%3E&amp;q=Lant%20%26%20%3Cx%3E#new-channel">Use</a>
+    </li>
+    
+    <li class="flex flex-wrap items-center gap-3 px-3 py-2">
+      <span class="flex-1">Café naïve — 東京 🎉 مرحبا</span>
+      <a class="btn" data-size="sm" href="/media/channels?tmdb_id=2&amp;name=Caf%C3%A9%20na%C3%AFve%20%E2%80%94%20%E6%9D%B1%E4%BA%AC%20%F0%9F%8E%89%20%D9%85%D8%B1%D8%AD%D8%A8%D8%A7&amp;q=Lant%20%26%20%3Cx%3E#new-channel">Use</a>
+    </li>
+    
+  </ul>
+  
+  
+</section>
+
+<form id="new-channel" method="post" action="/media/channels" class="flex flex-col gap-3 rounded-lg border p-4" aria-labelledby="new-h">
+  <h2 id="new-h" class="text-sm font-medium">New channel</h2>
+  <input type="hidden" name="csrf_token" value="csrf-golden-token">
+  <input type="hidden" name="tmdb_id" value="1">
+  <div class="grid gap-3 sm:grid-cols-2">
+    <div role="group" class="field">
+      <label for="name">Show</label>
+      <input id="name" name="name" type="text" value="Lanterns &amp; &lt;co&gt;" placeholder="Lanterns" required>
+    </div>
+    <div role="group" class="field">
+      <label for="imdb">IMDb id</label>
+      <input id="imdb" name="imdb" type="text" value="tt1234567" class="font-mono" placeholder="tt1234567" required>
+    </div>
+  </div>
+  <div class="grid gap-3 sm:grid-cols-[1fr_auto]">
+    <div role="group" class="field">
+      <label for="pattern">Title regex</label>
+      <input id="pattern" name="pattern" type="text" value="^Lanterns &lt;x&gt;" class="font-mono" placeholder="^Lanterns S\d+E\d+ 1080p" spellcheck="false" autocomplete="off" required>
+    </div>
+    <label class="flex h-8 items-center gap-2 self-end text-sm"><input id="case" class="input" type="checkbox" name="case_sensitive" value="1" checked>Case-sensitive</label>
+  </div>
+  <label class="flex items-start gap-2 text-sm"><input class="input mt-0.5" type="checkbox" name="backfill" value="1" checked>Download matching releases that are already out</label>
+  <div class="flex flex-wrap items-center gap-2">
+    <button type="submit" class="btn" data-size="sm"><svg class="lucide lucide-plus " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Watch</button>
+    <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/media/channels/preview" hx-include="#new-channel" hx-target="#preview" hx-indicator="#preview-spinner"><svg class="lucide lucide-search " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>Preview against EZTV</button>
+    <span id="preview-spinner" class="htmx-indicator inline-flex text-muted-foreground" role="status" aria-label="Fetching releases"><svg class="lucide lucide-loader-circle size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span>
+  </div>
+  <div id="preview" hx-post="/media/channels/preview" hx-include="#new-channel" hx-trigger="load, input changed delay:500ms from:#pattern, change from:#case, change from:#imdb" hx-indicator="#preview-spinner"></div>
+</form>
+
+    </div>
+  </main>
+
+  <dialog id="reader" class="drawer" data-side="right" aria-label="Message">
+    <article class="w-full max-w-none sm:max-w-2xl">
+      <header class="flex-row items-center justify-between border-b">
+        <h2 class="text-sm font-medium">Message</h2>
+        <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close message" data-action="close-dialog"><svg class="lucide lucide-x " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      </header>
+      <section id="reader-body" data-loading="reader-loading" class="p-4 md:p-6"></section>
+    </article>
+  </dialog>
+
+  <template id="reader-loading">
+    <div class="flex flex-col gap-3" role="status" aria-label="Loading message">
+      <div class="skeleton h-6 w-3/4 rounded-md bg-muted"></div>
+      <div class="skeleton h-4 w-1/2 rounded-md bg-muted"></div>
+      <div class="skeleton mt-4 h-40 w-full rounded-md bg-muted"></div>
+    </div>
+  </template>
+
+  
+
+<div
+  id="toaster"
+  class="toaster "
+  
+>
+
+
+</div>
+
+</body>
+</html>

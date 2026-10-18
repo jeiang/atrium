@@ -1,0 +1,2706 @@
+
+
+
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Proposals · atrium</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect%7Bfill:oklch(0.25 0.014 60)%7Dtext%7Bfill:oklch(0.985 0.003 85)%7D@media (prefers-color-scheme:dark)%7Brect%7Bfill:oklch(0.92 0.008 85)%7Dtext%7Bfill:oklch(0.2 0.012 60)%7D%7D%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='22.5' font-family='ui-monospace,monospace' font-size='19' font-weight='600' text-anchor='middle'%3Ea%3C/text%3E%3C/svg%3E">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+  <link rel="stylesheet" href="/static/app.css?v=golden">
+  <script src="/static/htmx.min.js?v=golden" defer></script>
+  <script src="/static/basecoat/all.min.js?v=golden" defer></script>
+  <script src="/static/app.js?v=golden" defer></script>
+</head>
+<body class="min-h-dvh" hx-headers='{"X-CSRF-Token": "csrf-golden-token"}'>
+  <a href="#content" class="sr-only rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50">Skip to content</a>
+  
+  
+  
+  
+
+
+
+
+<aside
+  id="sidebar"
+  class="sidebar "
+  data-side="left"
+  aria-hidden="false"
+  
+  
+>
+  <nav
+    aria-label="Primary"
+  >
+    
+    <header
+      
+    >
+      
+  <a href="/chat" class="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <span class="grid size-7 place-items-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground" aria-hidden="true">a</span>
+    <span class="text-base font-semibold tracking-tight">atrium</span>
+  </a>
+  
+    </header>
+    
+
+    <section
+      
+    >
+      
+        
+  
+    
+
+    
+    
+      
+      <div
+        role="group"
+        aria-labelledby="group-label-sidebar-content-1"
+        
+      >
+        
+          <h3 id="group-label-sidebar-content-1">Assistant</h3>
+        
+        <ul>
+          
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/chat"
+          
+          
+        >
+          <svg class="lucide lucide-messages-square " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg>
+          <span>Chat</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/scheduled"
+          
+          
+        >
+          <svg class="lucide lucide-clock " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Scheduled</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/projects"
+          
+          
+        >
+          <svg class="lucide lucide-folder " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+          <span>Projects</span>
+        </a>
+      </li>
+    
+  
+
+        </ul>
+      </div>
+    
+  
+    
+
+    
+    
+      
+      <div
+        role="group"
+        aria-labelledby="group-label-sidebar-content-2"
+        
+      >
+        
+          <h3 id="group-label-sidebar-content-2">Review</h3>
+        
+        <ul>
+          
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/proposals"
+          aria-current="page"
+          
+            
+              class="[&amp;&gt;span:last-child]:flex-1"
+            
+          
+        >
+          <svg class="lucide lucide-list-checks " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/></svg>
+          <span><span class="flex items-center gap-2">Proposals<span id="pending-count" class="badge ms-auto empty:hidden" data-variant="secondary">10<span class="sr-only"> pending</span></span></span></span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/activity"
+          
+          
+        >
+          <svg class="lucide lucide-history " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+          <span>Activity</span>
+        </a>
+      </li>
+    
+  
+
+        </ul>
+      </div>
+    
+  
+    
+
+    
+    
+      
+      <div
+        role="group"
+        aria-labelledby="group-label-sidebar-content-3"
+        
+      >
+        
+          <h3 id="group-label-sidebar-content-3">Mail</h3>
+        
+        <ul>
+          
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/triage"
+          
+          
+        >
+          <svg class="lucide lucide-route " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>
+          <span>Decisions</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/rules"
+          
+          
+        >
+          <svg class="lucide lucide-scroll-text " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg>
+          <span>Rules</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/drafts"
+          
+          
+        >
+          <svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg>
+          <span>Drafts</span>
+        </a>
+      </li>
+    
+  
+
+        </ul>
+      </div>
+    
+  
+    
+
+    
+    
+      
+      <div
+        role="group"
+        aria-labelledby="group-label-sidebar-content-4"
+        
+      >
+        
+          <h3 id="group-label-sidebar-content-4">Life</h3>
+        
+        <ul>
+          
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/money"
+          
+          
+        >
+          <svg class="lucide lucide-wallet " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
+          <span>Money</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/loops"
+          
+          
+        >
+          <svg class="lucide lucide-list-checks " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/></svg>
+          <span>Loops</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/watches"
+          
+          
+        >
+          <svg class="lucide lucide-package " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><polyline points="3.29 7 12 12 20.71 7"/><path d="m7.5 4.27 9 5.15"/></svg>
+          <span>Watches</span>
+        </a>
+      </li>
+    
+  
+
+        </ul>
+      </div>
+    
+  
+    
+
+    
+    
+      
+      <div
+        role="group"
+        aria-labelledby="group-label-sidebar-content-5"
+        
+      >
+        
+          <h3 id="group-label-sidebar-content-5">Media</h3>
+        
+        <ul>
+          
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/media/downloads"
+          
+          
+        >
+          <svg class="lucide lucide-download " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+          <span>Downloads</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/media/channels"
+          
+          
+        >
+          <svg class="lucide lucide-tv " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m17 2-5 5-5-5"/><rect width="20" height="15" x="2" y="7" rx="2"/></svg>
+          <span>Channels</span>
+        </a>
+      </li>
+    
+  
+    
+
+    
+    
+      <li>
+        <a
+          href="/media/library"
+          
+          
+        >
+          <svg class="lucide lucide-film " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>
+          <span>Library</span>
+        </a>
+      </li>
+    
+  
+
+        </ul>
+      </div>
+    
+  
+
+      
+    </section>
+
+    
+    <footer
+      
+    >
+      
+  <div class="flex flex-col gap-1.5 rounded-lg border bg-background p-3 text-xs">
+    <div><span class="badge border-warning/30 bg-warning/10 text-warning"><svg class="lucide lucide-lock " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Live, paused</span></div>
+    <p class="text-pretty text-muted-foreground">Paused: routing is recorded but no mail is changed. Resume to apply it.</p>
+  </div>
+  
+    </footer>
+    
+  </nav>
+</aside>
+
+  <main class="flex min-w-0 flex-col">
+    <header class="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-3 md:px-6">
+      <button id="nav-toggle" type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Toggle navigation" aria-controls="sidebar" data-action="toggle-sidebar"><svg class="lucide lucide-panel-left " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+      <hr role="separator" aria-orientation="vertical" class="h-4 w-px border-0 bg-border">
+      <h1 class="truncate px-1 text-sm font-medium">Proposals</h1>
+      <div class="ml-auto flex items-center gap-3">
+        <a href="/settings" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"><svg class="lucide lucide-settings " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></a>
+        <span class="badge border-warning/30 bg-warning/10 text-warning"><svg class="lucide lucide-lock " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Live, paused</span>
+        
+        <form method="post" action="/live/resume">
+          <input type="hidden" name="csrf_token" value="csrf-golden-token">
+          <button type="submit" class="btn" data-size="sm" data-variant="outline"><svg class="lucide lucide-zap " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></svg>Resume</button>
+        </form>
+        
+      </div>
+    </header>
+    <div id="content" tabindex="-1" class="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 outline-none md:px-8 md:py-8">
+      
+<div class="alert" role="note">
+  <svg class="lucide lucide-zap text-warning" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></svg>
+  <h2>Approving runs it now</h2>
+  <section>
+    <p>An approved proposal moves or relabels mail, deletes to Trash, or edits Notion as soon as you approve it. Applied proposals can be undone here.</p>
+  </section>
+</div>
+
+<form class="flex flex-wrap items-end gap-3" action="/proposals" method="get"
+      hx-get="/proposals" hx-target="#proposal-list" hx-push-url="true" hx-trigger="change" hx-sync="this:replace" hx-indicator="#proposal-list">
+  <div role="group" class="field w-auto">
+    <label for="p-status">Status</label>
+    <select id="p-status" name="status">
+      
+      <option value="pending">Pending (10)</option>
+      
+      <option value="applied">Applied (2)</option>
+      
+      <option value="failed">Failed (1)</option>
+      
+      <option value="dismissed">Dismissed</option>
+      
+      <option value="suppressed">Dismissed forever</option>
+      
+      <option value="all" selected>Any status</option>
+      
+    </select>
+  </div>
+  <div role="group" class="field w-auto">
+    <label for="p-kind">Kind</label>
+    <select id="p-kind" name="kind">
+      <option value="">All kinds</option>
+      <option value="rebalance_split">Split folder</option><option value="rebalance_merge">Merge folders</option><option value="deletion_rule">Deletion rule</option><option value="gmail_label_merge">Merge labels</option><option value="inbox_backlog">Inbox backlog</option><option value="notion_link">Notion link</option><option value="notion_edit">Notion edit</option><option value="calendar_event">Calendar event</option><option value="reminder">Reminder</option><option value="notion_wiki_plan">Wiki plan</option>
+    </select>
+  </div>
+  <noscript><button type="submit" class="btn" data-variant="outline">Apply</button></noscript>
+</form>
+
+<div id="proposal-list" class="flex flex-col gap-3 transition-opacity [&.htmx-request]:opacity-60">
+  
+
+<p class="text-xs text-muted-foreground tabular-nums" role="status">16 proposals</p>
+
+<ul class="flex flex-col gap-3" role="list">
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-1" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-1">
+    
+    <form class="flex flex-col" hx-post="/proposals/1/approve" hx-target="#proposal-1" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-1" data-selection>
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-split " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/></svg>Split folder</span>
+        <span class="badge" data-variant="outline">icloud</span>
+        <span class="badge" data-variant="outline">Pending</span>
+        <span class="ml-auto text-xs text-muted-foreground">#1 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-1" class="font-medium text-pretty">Proposal 1 &#34;rebalance_split&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+<p class="text-sm"><span class="text-muted-foreground">Split</span> <span class="font-medium">Inbox</span> <span class="text-muted-foreground">into 2 new folders. Anything not moved stays where it is.</span></p>
+<div class="flex flex-col gap-3">
+  
+<fieldset class="flex flex-col gap-3 border-t pt-4" data-group>
+  <legend class="sr-only">Receipts|Shops</legend>
+  <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
+    
+    <div role="group" class="field min-w-0 flex-1 sm:max-w-sm">
+      <label for="name-1-0">New folder</label>
+      <input id="name-1-0" name="name-0" type="text" value="Receipts|Shops" required autocomplete="off" spellcheck="false">
+    </div>
+    
+    <div role="group" class="field w-auto" data-orientation="horizontal">
+  <input id="group-1-0" type="checkbox" checked data-group-toggle>
+  <label for="group-1-0" class="font-normal"><span class="tabular-nums"><span data-picked>2</span> of 5 messages</span></label>
+</div>
+  </div>
+  
+  <ul class="flex flex-wrap gap-1.5" role="list" aria-label="Common words">
+    <li class="badge" data-variant="outline">invoice</li><li class="badge" data-variant="outline">total&amp;due</li><li class="badge" data-variant="outline">Café naïve — 東京 🎉 مرحبا</li>
+  </ul>
+  
+  <div class="grid gap-4 sm:grid-cols-2">
+    
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Top senders</h4>
+      <ul class="flex flex-col gap-1 text-sm sm:max-w-xs" role="list">
+  
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">Shop &lt;Co&gt;</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">3</span></li>
+  
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">b@b.com</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">1</span></li>
+  
+</ul>
+    </div>
+    
+    
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Sample subjects</h4>
+      <ul class="flex flex-col gap-1 text-sm" role="list">
+  <li class="truncate">Your receipt</li><li class="truncate">(no subject)</li><li class="truncate">Order &amp; delivery &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</li>
+</ul>
+    </div>
+    
+  </div>
+  <details class="group/list">
+  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <svg class="lucide lucide-chevron-down size-3.5 transition-transform group-open/list:rotate-180" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>Choose exactly which messages move
+  </summary>
+  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
+    
+    <li class="flex items-center gap-1 pe-2 hover:bg-accent/60 has-[input:focus-visible]:bg-accent/60">
+      <label class="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3">
+        <input class="input shrink-0" type="checkbox" name="msg-0" value="100" checked data-message>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate text-sm">Subject 0 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;</span>
+          <span class="truncate text-xs text-muted-foreground">Shop &lt;Co&gt; &amp; Sons · <time datetime="2025-10-09T08:53:20+00:00">2025-10-09</time></span>
+        </span>
+      </label>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/messages/100" hx-get="/messages/100" hx-target="#reader-body" hx-swap="innerHTML show:top" aria-label="Read Subject 0 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;" title="Read"><svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></a>
+    </li>
+    
+    <li class="flex items-center gap-1 pe-2 hover:bg-accent/60 has-[input:focus-visible]:bg-accent/60">
+      <label class="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3">
+        <input class="input shrink-0" type="checkbox" name="msg-0" value="101" checked data-message>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate text-sm">Subject 1 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;</span>
+          <span class="truncate text-xs text-muted-foreground">Shop &lt;Co&gt; &amp; Sons · <time datetime="2025-10-09T07:53:20+00:00">2025-10-09</time></span>
+        </span>
+      </label>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/messages/101" hx-get="/messages/101" hx-target="#reader-body" hx-swap="innerHTML show:top" aria-label="Read Subject 1 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;" title="Read"><svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></a>
+    </li>
+    
+  </ul>
+</details>
+</fieldset>
+<fieldset class="flex flex-col gap-3 border-t pt-4" data-group>
+  <legend class="sr-only">Travel Café naïve — 東京 🎉 مرحبا</legend>
+  <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
+    
+    <div role="group" class="field min-w-0 flex-1 sm:max-w-sm">
+      <label for="name-1-1">New folder</label>
+      <input id="name-1-1" name="name-1" type="text" value="Travel Café naïve — 東京 🎉 مرحبا" required autocomplete="off" spellcheck="false">
+    </div>
+    
+    <div role="group" class="field w-auto" data-orientation="horizontal">
+  <input id="group-1-1" type="checkbox" checked data-group-toggle>
+  <label for="group-1-1" class="font-normal"><span class="tabular-nums"><span data-picked>1</span> of 1 messages</span></label>
+</div>
+  </div>
+  
+  <ul class="flex flex-wrap gap-1.5" role="list" aria-label="Common words">
+    <li class="badge" data-variant="outline">invoice</li><li class="badge" data-variant="outline">total&amp;due</li><li class="badge" data-variant="outline">Café naïve — 東京 🎉 مرحبا</li>
+  </ul>
+  
+  <div class="grid gap-4 sm:grid-cols-2">
+    
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Top senders</h4>
+      <ul class="flex flex-col gap-1 text-sm sm:max-w-xs" role="list">
+  
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">Shop &lt;Co&gt;</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">3</span></li>
+  
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">b@b.com</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">1</span></li>
+  
+</ul>
+    </div>
+    
+    
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Sample subjects</h4>
+      <ul class="flex flex-col gap-1 text-sm" role="list">
+  <li class="truncate">Your receipt</li><li class="truncate">(no subject)</li><li class="truncate">Order &amp; delivery &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</li>
+</ul>
+    </div>
+    
+  </div>
+  <details class="group/list">
+  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <svg class="lucide lucide-chevron-down size-3.5 transition-transform group-open/list:rotate-180" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>Choose exactly which messages move
+  </summary>
+  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
+    
+    <li class="flex items-center gap-1 pe-2 hover:bg-accent/60 has-[input:focus-visible]:bg-accent/60">
+      <label class="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3">
+        <input class="input shrink-0" type="checkbox" name="msg-1" value="100" checked data-message>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate text-sm">Subject 0 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;</span>
+          <span class="truncate text-xs text-muted-foreground">Shop &lt;Co&gt; &amp; Sons · <time datetime="2025-10-09T08:53:20+00:00">2025-10-09</time></span>
+        </span>
+      </label>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/messages/100" hx-get="/messages/100" hx-target="#reader-body" hx-swap="innerHTML show:top" aria-label="Read Subject 0 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;" title="Read"><svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></a>
+    </li>
+    
+  </ul>
+</details>
+</fieldset>
+</div>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  
+  <button type="submit" class="btn" data-size="sm" name="all" value="1">
+    <svg class="lucide lucide-check-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>Approve all
+  </button>
+  
+  
+  <button type="submit" class="btn" data-size="sm" data-variant="outline" data-approve-picked><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg><span data-some>Approve <span class="tabular-nums" data-picked-total>3</span> selected</span></button>
+  
+  <span id="proposal-spinner-1" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><svg class="lucide lucide-loader-circle size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Applying…</span>
+  <div class="ml-auto flex gap-1">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/1/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/1/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+            title="Never propose this again">Dismiss forever</button>
+  </div>
+</div>
+
+</footer>
+    </form>
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-2" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-2">
+    
+    <form class="flex flex-col" hx-post="/proposals/2/approve" hx-target="#proposal-2" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-2" data-selection>
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-inbox " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>Inbox backlog</span>
+        <span class="badge" data-variant="outline">gmail</span>
+        <span class="badge" data-variant="outline">Pending</span>
+        <span class="ml-auto text-xs text-muted-foreground">#2 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-2" class="font-medium text-pretty">Proposal 2 &#34;inbox_backlog&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+<p class="text-sm text-muted-foreground">Read mail that was already in the inbox when atrium went live, grouped by where atrium would file it. Anything not moved stays where it is.</p>
+<div class="flex flex-col gap-3">
+  
+<fieldset class="flex flex-col gap-3 border-t pt-4" data-group>
+  <legend class="sr-only">Alerts</legend>
+  <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
+    
+    <p class="min-w-0 flex-1 text-sm"><span class="text-muted-foreground">Into</span> <span class="font-medium">Alerts</span></p>
+    
+    <div role="group" class="field w-auto" data-orientation="horizontal">
+  <input id="group-2-0" type="checkbox" checked data-group-toggle>
+  <label for="group-2-0" class="font-normal"><span class="tabular-nums"><span data-picked>2</span> of 2 messages</span></label>
+</div>
+  </div>
+  
+  <ul class="flex flex-wrap gap-1.5" role="list" aria-label="Common words">
+    <li class="badge" data-variant="outline">invoice</li><li class="badge" data-variant="outline">total&amp;due</li><li class="badge" data-variant="outline">Café naïve — 東京 🎉 مرحبا</li>
+  </ul>
+  
+  <div class="grid gap-4 sm:grid-cols-2">
+    
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Top senders</h4>
+      <ul class="flex flex-col gap-1 text-sm sm:max-w-xs" role="list">
+  
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">Shop &lt;Co&gt;</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">3</span></li>
+  
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">b@b.com</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">1</span></li>
+  
+</ul>
+    </div>
+    
+    
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Sample subjects</h4>
+      <ul class="flex flex-col gap-1 text-sm" role="list">
+  <li class="truncate">Your receipt</li><li class="truncate">(no subject)</li><li class="truncate">Order &amp; delivery &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</li>
+</ul>
+    </div>
+    
+  </div>
+  <details class="group/list">
+  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <svg class="lucide lucide-chevron-down size-3.5 transition-transform group-open/list:rotate-180" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>Choose exactly which messages move
+  </summary>
+  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
+    
+    <li class="flex items-center gap-1 pe-2 hover:bg-accent/60 has-[input:focus-visible]:bg-accent/60">
+      <label class="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3">
+        <input class="input shrink-0" type="checkbox" name="msg-0" value="100" checked data-message>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate text-sm">Subject 0 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;</span>
+          <span class="truncate text-xs text-muted-foreground">Shop &lt;Co&gt; &amp; Sons · <time datetime="2025-10-09T08:53:20+00:00">2025-10-09</time></span>
+        </span>
+      </label>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/messages/100" hx-get="/messages/100" hx-target="#reader-body" hx-swap="innerHTML show:top" aria-label="Read Subject 0 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;" title="Read"><svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></a>
+    </li>
+    
+    <li class="flex items-center gap-1 pe-2 hover:bg-accent/60 has-[input:focus-visible]:bg-accent/60">
+      <label class="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3">
+        <input class="input shrink-0" type="checkbox" name="msg-0" value="101" checked data-message>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate text-sm">Subject 1 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;</span>
+          <span class="truncate text-xs text-muted-foreground">Shop &lt;Co&gt; &amp; Sons · <time datetime="2025-10-09T07:53:20+00:00">2025-10-09</time></span>
+        </span>
+      </label>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/messages/101" hx-get="/messages/101" hx-target="#reader-body" hx-swap="innerHTML show:top" aria-label="Read Subject 1 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;" title="Read"><svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></a>
+    </li>
+    
+  </ul>
+</details>
+</fieldset>
+</div>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  
+  <button type="submit" class="btn" data-size="sm" name="all" value="1">
+    <svg class="lucide lucide-check-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>Approve all
+  </button>
+  
+  
+  <button type="submit" class="btn" data-size="sm" data-variant="outline" data-approve-picked><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg><span data-some>Approve <span class="tabular-nums" data-picked-total>2</span> selected</span></button>
+  
+  <span id="proposal-spinner-2" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><svg class="lucide lucide-loader-circle size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Applying…</span>
+  <div class="ml-auto flex gap-1">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/2/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/2/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+            title="Never propose this again">Dismiss forever</button>
+  </div>
+</div>
+
+</footer>
+    </form>
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-3" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-3">
+    
+    <form class="flex flex-col" hx-post="/proposals/3/approve" hx-target="#proposal-3" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-3" data-selection>
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-merge " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m8 6 4-4 4 4"/><path d="M12 2v10.3a4 4 0 0 1-1.172 2.872L4 22"/><path d="m20 22-5-5"/></svg>Merge folders</span>
+        <span class="badge" data-variant="outline">icloud</span>
+        <span class="badge" data-variant="outline">Pending</span>
+        <span class="ml-auto text-xs text-muted-foreground">#3 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-3" class="font-medium text-pretty">Proposal 3 &#34;rebalance_merge&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+<div class="flex flex-wrap items-center gap-2 text-sm">
+  <span class="badge" data-variant="secondary">A · b <span class="tabular-nums text-muted-foreground">4</span></span><span class="badge" data-variant="secondary">C <span class="tabular-nums text-muted-foreground">1</span></span>
+  <svg class="lucide lucide-arrow-right size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+  <span class="font-medium">Merged</span>
+  <span class="text-xs text-muted-foreground">new folder</span>
+</div>
+
+<fieldset class="flex flex-col gap-3 border-t pt-4" data-group>
+  <legend class="sr-only">Merged</legend>
+  <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
+    
+    <div role="group" class="field min-w-0 flex-1 sm:max-w-sm">
+      <label for="name-3-0">New folder</label>
+      <input id="name-3-0" name="name-0" type="text" value="Merged" required autocomplete="off" spellcheck="false">
+    </div>
+    
+    <div role="group" class="field w-auto" data-orientation="horizontal">
+  <input id="group-3-0" type="checkbox" checked data-group-toggle>
+  <label for="group-3-0" class="font-normal"><span class="tabular-nums"><span data-picked>2</span> of 2 messages</span></label>
+</div>
+  </div>
+  
+  <ul class="flex flex-wrap gap-1.5" role="list" aria-label="Common words">
+    <li class="badge" data-variant="outline">invoice</li><li class="badge" data-variant="outline">total&amp;due</li><li class="badge" data-variant="outline">Café naïve — 東京 🎉 مرحبا</li>
+  </ul>
+  
+  <div class="grid gap-4 sm:grid-cols-2">
+    
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Top senders</h4>
+      <ul class="flex flex-col gap-1 text-sm sm:max-w-xs" role="list">
+  
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">Shop &lt;Co&gt;</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">3</span></li>
+  
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">b@b.com</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">1</span></li>
+  
+</ul>
+    </div>
+    
+    
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Sample subjects</h4>
+      <ul class="flex flex-col gap-1 text-sm" role="list">
+  <li class="truncate">Your receipt</li><li class="truncate">(no subject)</li><li class="truncate">Order &amp; delivery &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</li>
+</ul>
+    </div>
+    
+  </div>
+  <details class="group/list">
+  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <svg class="lucide lucide-chevron-down size-3.5 transition-transform group-open/list:rotate-180" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>Choose exactly which messages move
+  </summary>
+  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
+    
+    <li class="flex items-center gap-1 pe-2 hover:bg-accent/60 has-[input:focus-visible]:bg-accent/60">
+      <label class="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3">
+        <input class="input shrink-0" type="checkbox" name="msg-0" value="100" checked data-message>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate text-sm">Subject 0 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;</span>
+          <span class="truncate text-xs text-muted-foreground">Shop &lt;Co&gt; &amp; Sons · <time datetime="2025-10-09T08:53:20+00:00">2025-10-09</time></span>
+        </span>
+      </label>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/messages/100" hx-get="/messages/100" hx-target="#reader-body" hx-swap="innerHTML show:top" aria-label="Read Subject 0 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;" title="Read"><svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></a>
+    </li>
+    
+    <li class="flex items-center gap-1 pe-2 hover:bg-accent/60 has-[input:focus-visible]:bg-accent/60">
+      <label class="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3">
+        <input class="input shrink-0" type="checkbox" name="msg-0" value="101" checked data-message>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate text-sm">Subject 1 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;</span>
+          <span class="truncate text-xs text-muted-foreground">Shop &lt;Co&gt; &amp; Sons · <time datetime="2025-10-09T07:53:20+00:00">2025-10-09</time></span>
+        </span>
+      </label>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/messages/101" hx-get="/messages/101" hx-target="#reader-body" hx-swap="innerHTML show:top" aria-label="Read Subject 1 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;" title="Read"><svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></a>
+    </li>
+    
+  </ul>
+</details>
+</fieldset>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  
+  <button type="submit" class="btn" data-size="sm" name="all" value="1">
+    <svg class="lucide lucide-check-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>Approve all
+  </button>
+  
+  
+  <button type="submit" class="btn" data-size="sm" data-variant="outline" data-approve-picked><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg><span data-some>Approve <span class="tabular-nums" data-picked-total>2</span> selected</span></button>
+  
+  <span id="proposal-spinner-3" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><svg class="lucide lucide-loader-circle size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Applying…</span>
+  <div class="ml-auto flex gap-1">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/3/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/3/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+            title="Never propose this again">Dismiss forever</button>
+  </div>
+</div>
+
+</footer>
+    </form>
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-4" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-4">
+    
+    <form class="flex flex-col" hx-post="/proposals/4/approve" hx-target="#proposal-4" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-4" data-selection>
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-trash-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Deletion rule</span>
+        <span class="badge" data-variant="outline">icloud</span>
+        <span class="badge" data-variant="outline">Pending</span>
+        <span class="ml-auto text-xs text-muted-foreground">#4 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-4" class="font-medium text-pretty">Proposal 4 &#34;deletion_rule&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+
+<div class="grid gap-4 md:grid-cols-2">
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Rule for icloud</h4>
+      <ul class="flex flex-col gap-1 text-sm" role="list" aria-label="Conditions, all must hold">
+        
+        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="font-medium">From domain</span>
+<span class="text-muted-foreground">is or ends in domain</span>
+<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">spam.com, junk.net</code></li>
+        
+        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="text-xs text-muted-foreground">and</span><span class="font-medium">Subject</span>
+<span class="text-muted-foreground">matches regex</span>
+<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">^Win &lt;\d+&gt;</code></li>
+        
+        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="text-xs text-muted-foreground">and</span><span class="font-medium">List-Id</span>
+<span class="text-muted-foreground">is present</span></li>
+        
+        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="text-xs text-muted-foreground">and</span><span class="font-medium">Age in days</span>
+<span class="text-muted-foreground">is at least</span>
+<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">30</code></li>
+        
+      </ul>
+      <p class="flex items-center gap-1.5 text-sm"><svg class="lucide lucide-arrow-right size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="font-medium text-destructive">Delete</span></p>
+    </div>
+    <p class="text-sm text-muted-foreground">One-time codes are useless once they expire.</p>
+    <p class="text-sm"><span class="text-2xl font-semibold tabular-nums">1</span> <span class="text-muted-foreground">existing message matches</span></p>
+  </div>
+  <div class="flex min-w-0 flex-col gap-4">
+    
+    <div class="flex flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Top senders</h4>
+      <ul class="flex flex-col gap-1 text-sm sm:max-w-xs" role="list">
+  
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">spam.com</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">1</span></li>
+  
+</ul>
+    </div>
+    
+    
+    <div class="flex flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Sample subjects</h4>
+      <ul class="flex flex-col gap-1 text-sm" role="list">
+  <li class="truncate">Win</li>
+</ul>
+    </div>
+    
+  </div>
+</div>
+
+<fieldset class="flex flex-col gap-2" data-group>
+  <legend class="sr-only">Messages</legend>
+  <div role="group" class="field w-auto" data-orientation="horizontal">
+  <input id="group-4-0" type="checkbox" checked data-group-toggle>
+  <label for="group-4-0" class="font-normal"><span class="tabular-nums"><span data-picked>1</span> of 1 messages</span></label>
+</div>
+  <details class="group/list">
+  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <svg class="lucide lucide-chevron-down size-3.5 transition-transform group-open/list:rotate-180" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>Choose exactly which messages are deleted
+  </summary>
+  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
+    
+    <li class="flex items-center gap-1 pe-2 hover:bg-accent/60 has-[input:focus-visible]:bg-accent/60">
+      <label class="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3">
+        <input class="input shrink-0" type="checkbox" name="msg-0" value="101" checked data-message>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate text-sm">(no subject)</span>
+          <span class="truncate text-xs text-muted-foreground">Shop &lt;Co&gt; &amp; Sons · <time datetime="2025-10-09T07:53:20+00:00">2025-10-09</time></span>
+        </span>
+      </label>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/messages/101" hx-get="/messages/101" hx-target="#reader-body" hx-swap="innerHTML show:top" aria-label="Read message" title="Read"><svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></a>
+    </li>
+    
+  </ul>
+</details>
+</fieldset>
+<p class="flex gap-2 text-xs text-muted-foreground">
+  <svg class="lucide lucide-trash-2 mt-0.5 size-3.5 shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+  <span>Deleting moves mail to Trash, so it can still be recovered there. The rule also deletes new matching mail from now on.</span>
+</p>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  
+  <button type="submit" class="btn" data-size="sm" name="all" value="1" data-confirm="Move all matching messages to Trash now and save the rule?">
+    <svg class="lucide lucide-check-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>Approve all
+  </button>
+  
+  
+  <button type="submit" class="btn" data-size="sm" data-variant="outline" data-approve-picked data-confirm="Move the selected messages to Trash now and save the rule?" data-confirm-none="Save the rule without moving any messages to Trash?"><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg><span data-some>Approve <span class="tabular-nums" data-picked-total>1</span> selected</span><span data-none hidden>Save rule only</span></button>
+  
+  <span id="proposal-spinner-4" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><svg class="lucide lucide-loader-circle size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Applying…</span>
+  <div class="ml-auto flex gap-1">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/4/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/4/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+            title="Never propose this again">Dismiss forever</button>
+  </div>
+</div>
+
+</footer>
+    </form>
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-5" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-5">
+    
+    <form class="flex flex-col" hx-post="/proposals/5/approve" hx-target="#proposal-5" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-5" data-selection>
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-tag " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>Merge labels</span>
+        <span class="badge" data-variant="outline">gmail</span>
+        <span class="badge" data-variant="outline">Pending</span>
+        <span class="ml-auto text-xs text-muted-foreground">#5 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-5" class="font-medium text-pretty">Proposal 5 &#34;gmail_label_merge&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+<div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+  <span class="inline-flex items-center gap-1.5"><svg class="lucide lucide-tag size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg><span class="font-medium">old &amp; busted</span><span class="text-xs text-muted-foreground tabular-nums">2</span></span>
+  <svg class="lucide lucide-arrow-right size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+  <span class="inline-flex items-center gap-1.5"><svg class="lucide lucide-tag size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg><span class="font-medium">new &lt;label&gt;</span><span class="text-xs text-muted-foreground tabular-nums">7</span></span>
+</div>
+<p class="text-xs text-muted-foreground">Adds “new &lt;label&gt;” to the messages labelled “old &amp; busted”, then removes “old &amp; busted” from them. No mail is deleted.</p>
+
+<fieldset class="flex flex-col gap-2" data-group>
+  <legend class="sr-only">Messages</legend>
+  <div role="group" class="field w-auto" data-orientation="horizontal">
+  <input id="group-5-0" type="checkbox" checked data-group-toggle>
+  <label for="group-5-0" class="font-normal"><span class="tabular-nums"><span data-picked>2</span> of 2 messages</span></label>
+</div>
+  <details class="group/list">
+  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <svg class="lucide lucide-chevron-down size-3.5 transition-transform group-open/list:rotate-180" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>Choose exactly which messages are relabelled
+  </summary>
+  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
+    
+    <li class="flex items-center gap-1 pe-2 hover:bg-accent/60 has-[input:focus-visible]:bg-accent/60">
+      <label class="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3">
+        <input class="input shrink-0" type="checkbox" name="msg-0" value="101" checked data-message>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate text-sm">Subject 1 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;</span>
+          <span class="truncate text-xs text-muted-foreground">Shop &lt;Co&gt; &amp; Sons · <time datetime="2025-10-09T07:53:20+00:00">2025-10-09</time></span>
+        </span>
+      </label>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/messages/101" hx-get="/messages/101" hx-target="#reader-body" hx-swap="innerHTML show:top" aria-label="Read Subject 1 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;" title="Read"><svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></a>
+    </li>
+    
+    <li class="flex items-center gap-1 pe-2 hover:bg-accent/60 has-[input:focus-visible]:bg-accent/60">
+      <label class="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3">
+        <input class="input shrink-0" type="checkbox" name="msg-0" value="102" checked data-message>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate text-sm">Subject 2 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;</span>
+          <span class="truncate text-xs text-muted-foreground">Shop &lt;Co&gt; &amp; Sons · <time datetime="2025-10-09T06:53:20+00:00">2025-10-09</time></span>
+        </span>
+      </label>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/messages/102" hx-get="/messages/102" hx-target="#reader-body" hx-swap="innerHTML show:top" aria-label="Read Subject 2 &lt;b&gt;Café naïve — 東京 🎉 مرحبا&lt;/b&gt;" title="Read"><svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></a>
+    </li>
+    
+  </ul>
+</details>
+</fieldset>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  
+  <button type="submit" class="btn" data-size="sm" name="all" value="1">
+    <svg class="lucide lucide-check-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>Approve all
+  </button>
+  
+  
+  <button type="submit" class="btn" data-size="sm" data-variant="outline" data-approve-picked><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg><span data-some>Approve <span class="tabular-nums" data-picked-total>2</span> selected</span></button>
+  
+  <span id="proposal-spinner-5" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><svg class="lucide lucide-loader-circle size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Applying…</span>
+  <div class="ml-auto flex gap-1">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/5/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/5/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+            title="Never propose this again">Dismiss forever</button>
+  </div>
+</div>
+
+</footer>
+    </form>
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-6" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-6">
+    
+    <form class="flex flex-col" hx-post="/proposals/6/approve" hx-target="#proposal-6" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-6">
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-link " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Notion link</span>
+        
+        <span class="badge" data-variant="outline">Pending</span>
+        <span class="ml-auto text-xs text-muted-foreground">#6 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-6" class="font-medium text-pretty">Proposal 6 &#34;notion_link&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+<div class="grid items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+  <div class="flex min-w-0 flex-col gap-0.5">
+  <span class="flex min-w-0 items-center gap-1.5"><a class="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring truncate text-sm" href="/notion/id1">Page &lt;A&gt;</a><a class="shrink-0 text-muted-foreground hover:text-foreground" href="https://notion.so/id1?x=1&amp;y=2" target="_blank" rel="noopener noreferrer" title="Open in Notion" aria-label="Open Page &lt;A&gt; in Notion"><svg class="lucide lucide-external-link size-3.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a></span>
+  <span class="truncate text-xs text-muted-foreground">Wiki / Sub &lt;b&gt;</span>
+</div>
+  <span class="flex items-center gap-2 text-muted-foreground max-sm:ps-1"><svg class="lucide lucide-link size-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span class="sr-only">linked with</span></span>
+  <div class="flex min-w-0 flex-col gap-0.5">
+  <span class="flex min-w-0 items-center gap-1.5"><a class="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring truncate text-sm" href="/notion/id2">Untitled</a><a class="shrink-0 text-muted-foreground hover:text-foreground" href="https://notion.so/id2?x=1&amp;y=2" target="_blank" rel="noopener noreferrer" title="Open in Notion" aria-label="Open Untitled in Notion"><svg class="lucide lucide-external-link size-3.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a></span>
+  <span class="truncate text-xs text-muted-foreground">Wiki / Sub &lt;b&gt;</span>
+</div>
+</div>
+<p class="text-xs text-muted-foreground">Adds a link to the page text under a “Related” heading.</p>
+<blockquote class="border-s-2 ps-3 text-sm text-muted-foreground">They share a topic &amp; more</blockquote>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  
+  <button type="submit" class="btn" data-size="sm" name="all" value="1">
+    <svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Approve
+  </button>
+  
+  <span id="proposal-spinner-6" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><svg class="lucide lucide-loader-circle size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Applying…</span>
+  <div class="ml-auto flex gap-1">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/6/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/6/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+            title="Never propose this again">Dismiss forever</button>
+  </div>
+</div>
+
+</footer>
+    </form>
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-7" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-7">
+    
+    <form class="flex flex-col" hx-post="/proposals/7/approve" hx-target="#proposal-7" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-7">
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-calendar " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>Calendar event</span>
+        
+        <span class="badge" data-variant="outline">Pending</span>
+        <span class="ml-auto text-xs text-muted-foreground">#7 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-7" class="font-medium text-pretty">Proposal 7 &#34;calendar_event&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+<dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+  <dt class="text-muted-foreground">Calendar</dt>
+  <dd>Google</dd>
+  <dt class="text-muted-foreground">When</dt>
+  <dd class="tabular-nums">2025-10-10 10:00 → 2025-10-10 11:00</dd>
+  <dt class="text-muted-foreground">Where</dt><dd>Café &lt;X&gt;</dd>
+  <dt class="text-muted-foreground">Notes</dt><dd class="whitespace-pre-wrap">line1
+line2</dd>
+  <dt class="text-muted-foreground">From mail</dt><dd>Invite &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</dd>
+</dl>
+<p class="text-xs text-muted-foreground">Nobody is invited and no notification is sent.</p>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  
+  <button type="submit" class="btn" data-size="sm" name="all" value="1">
+    <svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Approve
+  </button>
+  
+  <span id="proposal-spinner-7" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><svg class="lucide lucide-loader-circle size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Applying…</span>
+  <div class="ml-auto flex gap-1">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/7/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/7/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+            title="Never propose this again">Dismiss forever</button>
+  </div>
+</div>
+
+</footer>
+    </form>
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-8" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-8">
+    
+    <form class="flex flex-col" hx-post="/proposals/8/approve" hx-target="#proposal-8" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-8">
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-scroll-text " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg>Reminder</span>
+        
+        <span class="badge" data-variant="outline">Pending</span>
+        <span class="ml-auto text-xs text-muted-foreground">#8 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-8" class="font-medium text-pretty">Proposal 8 &#34;reminder&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+<dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+  <dt class="text-muted-foreground">Reminder</dt>
+  <dd>Call mum &amp; dad</dd>
+  <dt class="text-muted-foreground">Due</dt>
+  <dd class="tabular-nums">2025-10-12</dd>
+  <dt class="text-muted-foreground">Remind at</dt>
+  <dd class="tabular-nums">2025-10-11 09:00</dd>
+  <dt class="text-muted-foreground">From mail</dt><dd>Re: birthday</dd>
+</dl>
+<p class="text-xs text-muted-foreground">Approving creates a one-time schedule that notifies you.</p>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  
+  <button type="submit" class="btn" data-size="sm" name="all" value="1">
+    <svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Approve
+  </button>
+  
+  <span id="proposal-spinner-8" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><svg class="lucide lucide-loader-circle size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Applying…</span>
+  <div class="ml-auto flex gap-1">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/8/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/8/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+            title="Never propose this again">Dismiss forever</button>
+  </div>
+</div>
+
+</footer>
+    </form>
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-9" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-9">
+    
+    <form class="flex flex-col" hx-post="/proposals/9/approve" hx-target="#proposal-9" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-9">
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-pencil " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>Notion edit</span>
+        
+        <span class="badge" data-variant="outline">Pending</span>
+        <span class="ml-auto text-xs text-muted-foreground">#9 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-9" class="font-medium text-pretty">Proposal 9 &#34;notion_edit&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+<div class="flex min-w-0 flex-col gap-0.5">
+  <span class="flex min-w-0 items-center gap-1.5"><a class="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring truncate text-sm" href="/notion/id3">Notes</a><a class="shrink-0 text-muted-foreground hover:text-foreground" href="https://notion.so/id3?x=1&amp;y=2" target="_blank" rel="noopener noreferrer" title="Open in Notion" aria-label="Open Notes in Notion"><svg class="lucide lucide-external-link size-3.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a></span>
+  <span class="truncate text-xs text-muted-foreground">Wiki / Sub &lt;b&gt;</span>
+</div>
+<dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+  <dt class="text-muted-foreground">You asked</dt>
+  <dd>Fix &lt;typos&gt;</dd>
+  
+  <dt class="text-muted-foreground">The 9B changed</dt>
+  <dd>Fixed 2 typos</dd>
+  
+</dl>
+
+
+<div class="flex flex-col overflow-hidden rounded-md border">
+  <p class="flex items-center gap-3 border-b bg-muted/50 px-3 py-1.5 text-xs tabular-nums">
+    <span class="text-success">+2<span class="sr-only"> lines added</span></span>
+    <span class="text-destructive">−1<span class="sr-only"> lines removed</span></span>
+  </p>
+  <div class="max-h-96 overflow-auto bg-background py-1 font-mono text-xs/5" role="group" aria-label="Changes">
+    
+    
+    <div class="grid grid-cols-[--spacing(6)_minmax(0,1fr)]"><span aria-hidden="true"></span><span class="whitespace-pre-wrap break-words pe-3 text-muted-foreground">same line</span></div>
+    
+    
+    
+    <del class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] bg-destructive/10 no-underline"><span class="select-none text-center text-destructive" aria-hidden="true">−</span><span class="whitespace-pre-wrap break-words pe-3 text-muted-foreground line-through decoration-destructive/40">teh cat</span></del>
+    
+    
+    
+    <ins class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] bg-success/10 no-underline"><span class="select-none text-center text-success" aria-hidden="true">+</span><span class="whitespace-pre-wrap break-words pe-3">the cat &amp; dog</span></ins>
+    
+    
+    
+    <ins class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] bg-success/10 no-underline"><span class="select-none text-center text-success" aria-hidden="true">+</span><span class="whitespace-pre-wrap break-words pe-3">&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</span></ins>
+    
+    
+  </div>
+</div>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  
+  <button type="submit" class="btn" data-size="sm" name="all" value="1">
+    <svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Approve
+  </button>
+  
+  <span id="proposal-spinner-9" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><svg class="lucide lucide-loader-circle size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Applying…</span>
+  <div class="ml-auto flex gap-1">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/9/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/9/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+            title="Never propose this again">Dismiss forever</button>
+  </div>
+</div>
+
+</footer>
+    </form>
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-10" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-10">
+    
+    <form class="flex flex-col" hx-post="/proposals/10/approve" hx-target="#proposal-10" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-10">
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-book-open " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>Wiki plan</span>
+        
+        <span class="badge" data-variant="outline">Pending</span>
+        <span class="ml-auto text-xs text-muted-foreground">#10 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-10" class="font-medium text-pretty">Proposal 10 &#34;notion_wiki_plan&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+
+<p class="text-sm text-muted-foreground">Turns the Notion workspace into the wiki page tree under Wiki Home. Dropped rows and emptied databases are archived (never deleted); every step is undoable.</p>
+<div class="flex flex-wrap gap-1.5">
+  <span class="badge" data-variant="secondary">3 convert</span><span class="badge" data-variant="destructive">1 drop</span><span class="badge" data-variant="secondary">2 keep</span><span class="badge" data-variant="secondary">1 merge</span>
+</div>
+<div class="grid gap-4 md:grid-cols-2">
+  <div class="flex min-w-0 flex-col gap-1.5">
+    <h4 class="text-xs font-medium text-muted-foreground">Hubs under Wiki Home</h4>
+    <ul class="flex flex-col gap-1 text-sm" role="list">
+      <li><span class="font-medium">Home &lt;1&gt;</span> <span class="text-muted-foreground">desc</span></li><li><span class="font-medium">Hub2</span></li>
+    </ul>
+  </div>
+  <div class="flex min-w-0 flex-col gap-1.5">
+    <h4 class="text-xs font-medium text-muted-foreground">Databases</h4>
+    <ul class="flex flex-col gap-1 text-sm" role="list">
+      
+      <li class="flex min-w-0 flex-col"><span><span class="font-medium">DB1</span> <span class="text-muted-foreground">→ one page with a table under Home</span></span><span class="truncate text-xs text-muted-foreground">small</span></li>
+      
+      <li class="flex min-w-0 flex-col"><span><span class="font-medium">DB2</span> <span class="text-muted-foreground">→ hub with child pages under Hub2</span></span><span class="truncate text-xs text-muted-foreground">big &amp; wide</span></li>
+      
+    </ul>
+  </div>
+</div>
+<details class="group/list">
+  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <svg class="lucide lucide-chevron-down size-3.5 transition-transform group-open/list:rotate-180" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>Every row and page (3)
+  </summary>
+  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
+    
+    <li class="flex min-w-0 flex-col gap-0.5 px-3 py-2">
+      <span class="flex min-w-0 items-center gap-2">
+        <span class="badge shrink-0" data-variant="secondary">Convert</span>
+        <a class="truncate text-sm hover:underline" href="/notion/n1">Item &lt;1&gt;</a>
+        <span class="shrink-0 text-xs text-muted-foreground">db</span>
+        <span class="shrink-0 text-xs text-muted-foreground">→ Home</span>
+        
+      </span>
+      <span class="text-xs text-muted-foreground">why</span>
+    </li>
+    
+    <li class="flex min-w-0 flex-col gap-0.5 px-3 py-2">
+      <span class="flex min-w-0 items-center gap-2">
+        <span class="badge shrink-0" data-variant="destructive">Drop</span>
+        <a class="truncate text-sm hover:underline" href="/notion/n2">Untitled</a>
+        
+        
+        <span class="truncate text-xs text-muted-foreground">→ into Other</span>
+      </span>
+      <span class="text-xs text-muted-foreground">gone</span>
+    </li>
+    
+    <li class="flex min-w-0 flex-col gap-0.5 px-3 py-2">
+      <span class="flex min-w-0 items-center gap-2">
+        <span class="badge shrink-0" data-variant="outline">Keep</span>
+        <a class="truncate text-sm hover:underline" href="/notion/n3">Keep me</a>
+        <span class="shrink-0 text-xs text-muted-foreground">page</span>
+        
+        
+      </span>
+      <span class="text-xs text-muted-foreground"></span>
+    </li>
+    
+  </ul>
+</details>
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  
+  <button type="submit" class="btn" data-size="sm" name="all" value="1">
+    <svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Approve
+  </button>
+  
+  <span id="proposal-spinner-10" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><svg class="lucide lucide-loader-circle size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Applying…</span>
+  <div class="ml-auto flex gap-1">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/10/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/10/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+            title="Never propose this again">Dismiss forever</button>
+  </div>
+</div>
+
+</footer>
+    </form>
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-11" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-11">
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-split " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/></svg>Split folder</span>
+        <span class="badge" data-variant="outline">icloud</span>
+        <span class="badge border-success/30 bg-success/10 text-success"><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Applied</span>
+        <span class="ml-auto text-xs text-muted-foreground">#11 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-11" class="font-medium text-pretty">Proposal 11 &#34;rebalance_split&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+<p class="text-sm"><span class="text-muted-foreground">Split</span> <span class="font-medium">Inbox</span> <span class="text-muted-foreground">into 1 new folder. Anything not moved stays where it is.</span></p>
+<div class="flex flex-col gap-3">
+  
+<fieldset class="flex flex-col gap-3 border-t pt-4">
+  <legend class="sr-only">Done</legend>
+  <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
+    
+    <p class="min-w-0 flex-1 text-sm"><span class="text-muted-foreground">Into</span> <span class="font-medium">Done</span></p>
+    
+    <p class="text-sm text-muted-foreground tabular-nums">1 messages</p>
+  </div>
+  
+  <ul class="flex flex-wrap gap-1.5" role="list" aria-label="Common words">
+    <li class="badge" data-variant="outline">invoice</li><li class="badge" data-variant="outline">total&amp;due</li><li class="badge" data-variant="outline">Café naïve — 東京 🎉 مرحبا</li>
+  </ul>
+  
+  <div class="grid gap-4 sm:grid-cols-2">
+    
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Top senders</h4>
+      <ul class="flex flex-col gap-1 text-sm sm:max-w-xs" role="list">
+  
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">Shop &lt;Co&gt;</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">3</span></li>
+  
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">b@b.com</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">1</span></li>
+  
+</ul>
+    </div>
+    
+    
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Sample subjects</h4>
+      <ul class="flex flex-col gap-1 text-sm" role="list">
+  <li class="truncate">Your receipt</li><li class="truncate">(no subject)</li><li class="truncate">Order &amp; delivery &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</li>
+</ul>
+    </div>
+    
+  </div>
+  
+</fieldset>
+</div>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  <p class="flex min-w-0 flex-1 items-start gap-2 text-sm text-success"><svg class="lucide lucide-check mt-0.5 size-4 shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg><span>Moved 4 messages &lt;ok&gt; <span class="text-xs text-muted-foreground"><time datetime="2025-10-08T08:55:00+00:00">2025-10-08 08:55</time></span></span></p>
+  
+  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/11/undo" hx-target="#proposal-11" hx-swap="outerHTML" hx-disabled-elt="this"
+          hx-confirm="Undo this proposal and put everything back?"><svg class="lucide lucide-undo-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>Undo</button>
+  
+</div>
+
+</footer>
+    
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-12" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-12">
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-book-open " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>Wiki plan</span>
+        
+        <span class="badge" data-variant="destructive"><svg class="lucide lucide-circle-alert " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>Failed</span>
+        <span class="ml-auto text-xs text-muted-foreground">#12 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-12" class="font-medium text-pretty">Proposal 12 &#34;notion_wiki_plan&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+<div class="alert" data-variant="destructive" role="alert">
+  <svg class="lucide lucide-circle-alert " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+  <h4>It did not finish</h4>
+  <section><p>Notion said &lt;no&gt;</p></section>
+</div>
+
+
+
+
+<p class="text-sm text-muted-foreground">Turns the Notion workspace into the wiki page tree under Wiki Home. Dropped rows and emptied databases are archived (never deleted); every step is undoable.</p>
+<div class="flex flex-wrap gap-1.5">
+  
+</div>
+<div class="grid gap-4 md:grid-cols-2">
+  <div class="flex min-w-0 flex-col gap-1.5">
+    <h4 class="text-xs font-medium text-muted-foreground">Hubs under Wiki Home</h4>
+    <ul class="flex flex-col gap-1 text-sm" role="list">
+      
+    </ul>
+  </div>
+  <div class="flex min-w-0 flex-col gap-1.5">
+    <h4 class="text-xs font-medium text-muted-foreground">Databases</h4>
+    <ul class="flex flex-col gap-1 text-sm" role="list">
+      
+    </ul>
+  </div>
+</div>
+<details class="group/list">
+  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <svg class="lucide lucide-chevron-down size-3.5 transition-transform group-open/list:rotate-180" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>Every row and page (0)
+  </summary>
+  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
+    
+  </ul>
+</details>
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  <p class="flex-1 text-xs whitespace-nowrap text-muted-foreground">Tried <time datetime="2025-10-08T08:56:40+00:00">2025-10-08 08:56</time></p>
+  
+  <span id="proposal-spinner-12" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><svg class="lucide lucide-loader-circle size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Applying…</span>
+  <button type="button" class="btn" data-size="sm" hx-post="/proposals/12/approve" hx-vals='{"all": "1"}' hx-target="#proposal-12" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="#proposal-spinner-12"
+          title="Skips the steps the earlier attempt finished"><svg class="lucide lucide-play " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polygon points="6 3 20 12 6 21 6 3"/></svg>Resume</button>
+  
+  
+  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/12/undo" hx-target="#proposal-12" hx-swap="outerHTML" hx-disabled-elt="this"><svg class="lucide lucide-undo-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>Undo what it did</button>
+  
+  <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/12/dismiss" hx-target="#proposal-12" hx-swap="outerHTML">Dismiss</button>
+</div>
+
+</footer>
+    
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-13" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring opacity-80">
+  <article aria-labelledby="proposal-title-13">
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-trash-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Deletion rule</span>
+        <span class="badge" data-variant="outline">icloud</span>
+        <span class="badge" data-variant="secondary">Dismissed</span>
+        <span class="ml-auto text-xs text-muted-foreground">#13 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-13" class="font-medium text-pretty">Proposal 13 &#34;deletion_rule&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+
+<div class="grid gap-4 md:grid-cols-2">
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Rule</h4>
+      <ul class="flex flex-col gap-1 text-sm" role="list" aria-label="Conditions, all must hold">
+        
+        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="font-medium">Category</span>
+<span class="text-muted-foreground">is</span>
+<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">promo</code></li>
+        
+      </ul>
+      <p class="flex items-center gap-1.5 text-sm"><svg class="lucide lucide-arrow-right size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="font-medium text-destructive">Delete</span></p>
+    </div>
+    <p class="text-sm text-muted-foreground">You have deleted mail like this before.</p>
+    <p class="text-sm"><span class="text-2xl font-semibold tabular-nums">0</span> <span class="text-muted-foreground">existing messages match</span></p>
+  </div>
+  <div class="flex min-w-0 flex-col gap-4">
+    
+    
+  </div>
+</div>
+
+<p class="flex gap-2 text-xs text-muted-foreground">
+  <svg class="lucide lucide-trash-2 mt-0.5 size-3.5 shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+  <span>Deleting moves mail to Trash, so it can still be recovered there. The rule also deletes new matching mail from now on.</span>
+</p>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<p class="text-xs text-muted-foreground">Dismissed <time datetime="2025-10-08T08:56:40+00:00">2025-10-08 08:56</time></p>
+
+</footer>
+    
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-14" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring opacity-80">
+  <article aria-labelledby="proposal-title-14">
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-scroll-text " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg>Reminder</span>
+        
+        <span class="badge" data-variant="secondary">Dismissed forever</span>
+        <span class="ml-auto text-xs text-muted-foreground">#14 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-14" class="font-medium text-pretty">Proposal 14 &#34;reminder&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+<dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+  <dt class="text-muted-foreground">Reminder</dt>
+  <dd>t</dd>
+  <dt class="text-muted-foreground">Due</dt>
+  <dd class="tabular-nums">d</dd>
+  <dt class="text-muted-foreground">Remind at</dt>
+  <dd class="tabular-nums">r</dd>
+  
+</dl>
+<p class="text-xs text-muted-foreground">Approving creates a one-time schedule that notifies you.</p>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<p class="text-xs text-muted-foreground">Dismissed <time datetime="2025-10-08T08:56:40+00:00">2025-10-08 08:56</time>. atrium will not propose this again.</p>
+
+</footer>
+    
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-15" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-15">
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-split " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/></svg>Split folder</span>
+        <span class="badge" data-variant="outline">icloud</span>
+        <span class="badge" data-variant="outline"><svg class="lucide lucide-loader-circle animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Applying</span>
+        <span class="ml-auto text-xs text-muted-foreground">#15 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-15" class="font-medium text-pretty">Proposal 15 &#34;rebalance_split&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+<p class="text-sm"><span class="text-muted-foreground">Split</span> <span class="font-medium">Inbox</span> <span class="text-muted-foreground">into 0 new folders. Anything not moved stays where it is.</span></p>
+<div class="flex flex-col gap-3">
+  
+</div>
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<p class="text-xs text-muted-foreground">Decided <time datetime="2025-10-08T08:56:40+00:00">2025-10-08 08:56</time></p>
+
+</footer>
+    
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<li id="proposal-16" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring ">
+  <article aria-labelledby="proposal-title-16">
+    
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary"><svg class="lucide lucide-tag " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>Merge labels</span>
+        <span class="badge" data-variant="outline">gmail</span>
+        <span class="badge border-success/30 bg-success/10 text-success"><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Applied</span>
+        <span class="ml-auto text-xs text-muted-foreground">#16 · <time datetime="2025-10-08T08:53:20+00:00">2025-10-08</time></span>
+      </div>
+      <h3 id="proposal-title-16" class="font-medium text-pretty">Proposal 16 &#34;gmail_label_merge&#34; &amp; more &lt;i&gt;</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">
+
+
+
+<div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+  <span class="inline-flex items-center gap-1.5"><svg class="lucide lucide-tag size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg><span class="font-medium">a</span><span class="text-xs text-muted-foreground tabular-nums">0</span></span>
+  <svg class="lucide lucide-arrow-right size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+  <span class="inline-flex items-center gap-1.5"><svg class="lucide lucide-tag size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg><span class="font-medium">b</span><span class="text-xs text-muted-foreground tabular-nums">0</span></span>
+</div>
+<p class="text-xs text-muted-foreground">Adds “b” to the messages labelled “a”, then removes “a” from them. No mail is deleted.</p>
+
+
+
+</div>
+    <footer class="border-t px-4 py-3">
+
+<div class="flex flex-wrap items-center gap-2">
+  <p class="flex min-w-0 flex-1 items-start gap-2 text-sm text-success"><svg class="lucide lucide-check mt-0.5 size-4 shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg><span>Applied <span class="text-xs text-muted-foreground"><time datetime="2025-10-08T08:55:00+00:00">2025-10-08 08:55</time></span></span></p>
+  
+</div>
+
+</footer>
+    
+  </article>
+</li>
+
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>
+</ul>
+
+</div>
+
+    </div>
+  </main>
+
+  <dialog id="reader" class="drawer" data-side="right" aria-label="Message">
+    <article class="w-full max-w-none sm:max-w-2xl">
+      <header class="flex-row items-center justify-between border-b">
+        <h2 class="text-sm font-medium">Message</h2>
+        <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close message" data-action="close-dialog"><svg class="lucide lucide-x " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      </header>
+      <section id="reader-body" data-loading="reader-loading" class="p-4 md:p-6"></section>
+    </article>
+  </dialog>
+
+  <template id="reader-loading">
+    <div class="flex flex-col gap-3" role="status" aria-label="Loading message">
+      <div class="skeleton h-6 w-3/4 rounded-md bg-muted"></div>
+      <div class="skeleton h-4 w-1/2 rounded-md bg-muted"></div>
+      <div class="skeleton mt-4 h-40 w-full rounded-md bg-muted"></div>
+    </div>
+  </template>
+
+  
+
+<div
+  id="toaster"
+  class="toaster "
+  
+>
+
+  
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+
+
+
+</div>
+
+</body>
+</html>

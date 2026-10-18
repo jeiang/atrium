@@ -1,0 +1,97 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "packages": [
+      {
+        "id": 1,
+        "merchant": "Shop <Co>",
+        "carrier": "DHL",
+        "status": "out_for_delivery",
+        "tracking_number": "JD0123<456>",
+        "order_ref": "A&B-1",
+        "status_text": "Out for delivery <script>alert(\"xss\")</script>",
+        "updated": "2025-10-09",
+        "last_message_id": 501
+      },
+      {
+        "id": 2,
+        "merchant": null,
+        "carrier": null,
+        "status": "in_transit",
+        "tracking_number": null,
+        "order_ref": null,
+        "status_text": "Café naïve — 東京 🎉 مرحبا",
+        "updated": "2025-10-01",
+        "last_message_id": 502
+      }
+    ],
+    "birthdays": [
+      {
+        "name": "Ann <script>alert(\"xss\")</script>",
+        "label": "birthday",
+        "date": "2025-10-09",
+        "days_until": 0,
+        "turning": 40,
+        "key": "ann<1>"
+      },
+      {
+        "name": "Café naïve — 東京 🎉 مرحبا",
+        "label": "anniversary",
+        "date": "2025-11-30",
+        "days_until": 52,
+        "turning": null,
+        "key": "u-2"
+      }
+    ]
+  }
+}

@@ -1,0 +1,70 @@
+
+
+
+
+
+<section id="decision-card-501" class="group/card flex flex-col gap-3 rounded-lg border bg-card p-4" aria-labelledby="decision-title-501">
+  <header class="flex flex-wrap items-center gap-2">
+    <h3 id="decision-title-501" class="text-sm font-medium">atrium’s decision</h3>
+    <span class="badge" data-variant="outline"><span class="size-2 rounded-full bg-chart-3" aria-hidden="true"></span>Learned</span><span class="text-xs text-muted-foreground tabular-nums">88%</span>
+    <span class="ml-auto text-xs text-muted-foreground"><time datetime="2025-10-09T07:54:20+00:00">2025-10-09 07:54</time></span>
+  </header>
+  
+  
+  <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+    <span class="sr-only">Now in</span><span>Receipts · 2025</span>
+    <svg class="lucide lucide-arrow-right size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+    <span class="sr-only">proposed</span><span class="font-medium">Receipts</span>
+    <span class="text-xs"><span class="inline-flex items-center gap-1 text-success"><svg class="lucide lucide-check size-3.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Matches</span></span>
+  </div>
+  <p class="text-sm text-muted-foreground">88% of 14 filed messages with this sender domain went here.</p>
+  
+  
+  <p class="text-sm">You corrected this to <span class="font-medium">Receipts|2025</span>.</p>
+  
+  
+  <p class="flex items-start gap-2 rounded-md bg-success/10 px-3 py-2 text-sm text-success" role="status">
+    <svg class="lucide lucide-check mt-0.5 size-4 shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg><span><span class="font-medium">Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</span> He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</span>
+  </p>
+  
+  <div id="correct-slot-message-501" class="empty:hidden">
+
+
+
+<form class="flex flex-col gap-3 rounded-md border border-dashed bg-background p-3"
+      hx-post="/messages/501/correct"
+      hx-target="#decision-card-501"
+      hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="context" value="message">
+  <div role="group" class="field">
+    <label for="dest-message-501">Where should this go?</label>
+    <select id="dest-message-501" name="dest" class="w-full sm:max-w-xs" required autofocus>
+      <option value="" disabled>Choose a folder</option>
+      
+<option value="Receipts">Receipts</option>
+
+<option value="Travel|Flights" selected>Travel|Flights</option>
+
+<option value="Odd &lt;folder&gt; &amp; co">Odd &lt;folder&gt; &amp; co</option>
+
+    </select>
+    
+  </div>
+  <p class="flex gap-2 text-xs text-muted-foreground">
+    <svg class="lucide lucide-zap mt-0.5 size-3.5 shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></svg>
+    Records the correction and moves the message to this folder.
+  </p>
+  <div class="flex flex-wrap gap-2">
+    <button type="submit" class="btn" data-size="sm"><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Record correction</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost"
+            data-action="cancel-correct">Cancel</button>
+  </div>
+</form></div>
+  <div class="flex flex-wrap gap-2 group-has-[form]/card:hidden">
+    <button type="button" class="btn" data-size="sm" data-variant="outline"
+            hx-get="/messages/501/correct?context=message" hx-target="#correct-slot-message-501" hx-swap="innerHTML">
+      <svg class="lucide lucide-folder-input " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg>Correct
+    </button>
+    <a class="btn" data-size="sm" data-variant="ghost" href="/rules/new?message=501"><svg class="lucide lucide-list-plus " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 5H3"/><path d="M11 12H3"/><path d="M16 19H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></svg>Make rule</a>
+  </div>
+</section>

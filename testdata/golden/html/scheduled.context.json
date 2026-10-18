@@ -1,0 +1,134 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "jobs": [
+      {
+        "id": 1,
+        "name": "Nightly",
+        "kind": "nightly",
+        "created_by": "system",
+        "cadence": "daily 03:00",
+        "schedule": "daily 03:00",
+        "prompt": "Review the day <script>alert(\"xss\")</script>",
+        "enabled": 1,
+        "next_due_text": "2025-10-10 03:00",
+        "last_status": "ok",
+        "last_error": null,
+        "last_started_text": "2025-10-09 03:00"
+      },
+      {
+        "id": 2,
+        "name": "Morning <brief> Café naïve — 東京 🎉 مرحبا",
+        "kind": "cron",
+        "created_by": "assistant",
+        "cadence": "weekly mon 07:30",
+        "schedule": "weekly mon 07:30",
+        "prompt": "This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised",
+        "enabled": 0,
+        "next_due_text": null,
+        "last_status": "error",
+        "last_error": "Budget <exceeded> & stopped",
+        "last_started_text": "2025-10-06 07:30"
+      },
+      {
+        "id": 3,
+        "name": "One-off",
+        "kind": "once",
+        "created_by": "operator",
+        "cadence": "once 2025-10-11 09:00",
+        "schedule": "2025-10-11T09:00",
+        "prompt": "Remind me",
+        "enabled": 1,
+        "next_due_text": null,
+        "last_status": null,
+        "last_error": null,
+        "last_started_text": null
+      }
+    ],
+    "runs": [
+      {
+        "job_name": "Nightly",
+        "status": "ok",
+        "started_text": "2025-10-09 03:00",
+        "cost": 0.123,
+        "error": null,
+        "thread_id": 30
+      },
+      {
+        "job_name": "Morning <brief>",
+        "status": "error",
+        "started_text": "2025-10-06 07:30",
+        "cost": 0,
+        "error": "<script>alert(\"xss\")</script>",
+        "thread_id": null
+      },
+      {
+        "job_name": "Weekly",
+        "status": "skipped_budget",
+        "started_text": "2025-10-05 07:30",
+        "cost": null,
+        "error": "",
+        "thread_id": null
+      },
+      {
+        "job_name": "Other",
+        "status": "weird_status",
+        "started_text": "2025-10-04 07:30",
+        "cost": 1.5,
+        "error": null,
+        "thread_id": 31
+      }
+    ],
+    "tz": "America/Port_of_Spain"
+  }
+}

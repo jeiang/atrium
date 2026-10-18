@@ -1,0 +1,79 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "message": {
+      "id": 501,
+      "subject": "",
+      "in_inbox": 1,
+      "location": "Receipts|2025",
+      "account": "icloud",
+      "seen": 1,
+      "flagged": 0,
+      "from_name": "Shop <Co>",
+      "from_addr": "no-reply@shop.example",
+      "date_ts": 1759996400,
+      "headers": {},
+      "decision": null,
+      "corrected_to": null,
+      "flag_decision": null,
+      "attachments": [],
+      "body": "",
+      "body_source": "raw"
+    },
+    "back": {
+      "url": "javascript:alert(document.cookie)",
+      "label": "Chat"
+    },
+    "from_draft": null
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "entries": [
+      {
+        "source": "mail",
+        "id": 31,
+        "category": "mail",
+        "ts": 1759996400,
+        "message_id": 501,
+        "subject": "Your receipt <script>alert(\"xss\")</script>",
+        "kind": "move",
+        "from_name": "Shop <Co>",
+        "from_addr": "s@shop.example",
+        "account": "icloud",
+        "src": "INBOX",
+        "dest": "Receipts|2025",
+        "status": "applied",
+        "error": null,
+        "undoable": true
+      },
+      {
+        "source": "mail",
+        "id": 32,
+        "category": "mail",
+        "ts": 1759992800,
+        "message_id": 502,
+        "subject": "",
+        "kind": "flag",
+        "from_name": "",
+        "from_addr": "bot@example.org",
+        "account": "gmail",
+        "src": "INBOX",
+        "dest": null,
+        "status": "interrupted",
+        "error": "Connection <reset> & gave up",
+        "undoable": false
+      },
+      {
+        "source": "mail",
+        "id": 33,
+        "category": "mail",
+        "ts": 1759989200,
+        "message_id": 503,
+        "subject": "Trashed",
+        "kind": "delete",
+        "from_name": "Spam",
+        "from_addr": "spam@example.org",
+        "account": "icloud",
+        "src": "INBOX",
+        "dest": null,
+        "status": "undone",
+        "error": null,
+        "undoable": false
+      },
+      {
+        "source": "write",
+        "id": 41,
+        "category": "assistant",
+        "ts": 1759913600,
+        "tool": "notion_write",
+        "target": "page:SupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilistic",
+        "thread_id": 7,
+        "thread_kind": "chat",
+        "undone_at": null,
+        "undoable": true,
+        "before": "{\"title\": \"Old <b>\"}",
+        "after": "{\"title\": \"New & Café naïve — 東京 🎉 مرحبا\"}"
+      },
+      {
+        "source": "write",
+        "id": 42,
+        "category": "money",
+        "ts": 1759827200,
+        "tool": "money_post",
+        "target": "transaction:5",
+        "thread_id": null,
+        "thread_kind": null,
+        "undone_at": 1759913600,
+        "undoable": false,
+        "before": "",
+        "after": "<script>alert(\"xss\")</script>"
+      },
+      {
+        "source": "write",
+        "id": 43,
+        "category": "media",
+        "ts": 1759740800,
+        "tool": "media_file",
+        "target": "movie",
+        "thread_id": 9,
+        "thread_kind": "",
+        "undone_at": null,
+        "undoable": false,
+        "before": null,
+        "after": null
+      }
+    ],
+    "offset": 50,
+    "next_offset": 100,
+    "category": "mail & <x>"
+  }
+}

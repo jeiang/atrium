@@ -1,0 +1,77 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "hash": "abc123",
+    "torrent_name": "Show <x> & Café naïve — 東京 🎉 مرحبا",
+    "files": [
+      {
+        "index": 0,
+        "wanted": true,
+        "name": "a/S01E01.mkv",
+        "size_text": "1.2 GB",
+        "percent": 100
+      },
+      {
+        "index": 1,
+        "wanted": false,
+        "name": "a/sample <x>.mkv",
+        "size_text": "20 MB",
+        "percent": 0
+      }
+    ],
+    "error": null,
+    "toast": {
+      "category": "success",
+      "title": "Saved <script>alert(\"xss\")</script>",
+      "description": "He said \"hi\" & 'bye' <b>bold</b>"
+    }
+  }
+}
