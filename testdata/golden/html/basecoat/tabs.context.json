@@ -54,64 +54,29 @@
       "macro": "tabs",
       "args": [],
       "kwargs": {
-        "id": "tabs-golden",
+        "id": "rules-tabs",
         "tabsets": [
           {
-            "tab": "One",
-            "panel": "<p>Panel one</p>",
-            "tab_attrs": {
-              "data-x": "He said \"hi\" & 'bye' <b>bold</b>"
-            },
-            "panel_attrs": {
-              "class": "p1"
+            "tab": "Operator <span class=\"badge\" data-variant=\"secondary\">3</span>",
+            "panel": {
+              "$safe": "<div><p>Operator panel &amp; rules</p></div>"
             }
           },
           {
-            "tab": "Two <b>",
-            "panel": "",
-            "tab_attrs": {
-              "disabled": true
+            "tab": "Learned <span class=\"badge\" data-variant=\"secondary\">0</span>",
+            "panel": {
+              "$safe": "<div><p>Café naïve — 東京 🎉 مرحبا</p></div>"
             }
-          },
-          {
-            "tab": "Three",
-            "panel": "<p>Panel three Café naïve — 東京 🎉 مرحبا</p>",
-            "tab_attrs": {
-              "aria-disabled": "true"
-            }
-          },
-          {
-            "tab": "Four",
-            "panel": "<p>Four</p>"
           }
         ],
         "main_attrs": {
-          "class": "gap-0",
-          "data-m": "<m>"
+          "class": "gap-0"
         },
         "tablist_attrs": {
-          "aria-orientation": "vertical",
-          "data-variant": "line"
-        },
-        "default_tab_index": 3
+          "data-variant": "line",
+          "aria-label": "Rule sources"
+        }
       }
-    },
-    {
-      "macro": "tabs",
-      "args": [],
-      "kwargs": {
-        "tabsets": [
-          {
-            "tab": "Random id",
-            "panel": "<p>x</p>"
-          }
-        ]
-      }
-    },
-    {
-      "macro": "tabs",
-      "args": [],
-      "kwargs": {}
     }
   ]
 }

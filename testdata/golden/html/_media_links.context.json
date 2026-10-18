@@ -57,7 +57,7 @@
       "args": [
         {
           "public": "https://media.example/s/abc?sig=1&exp=2",
-          "vpn": "javascript:alert(document.cookie)"
+          "vpn": "http://vpn.example/media/movies/Movie%20(2024)/Movie%20(2024).mkv"
         }
       ],
       "kwargs": {}

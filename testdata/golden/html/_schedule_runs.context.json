@@ -53,7 +53,7 @@
       {
         "job_name": "Nightly",
         "status": "ok",
-        "started_text": "2025-10-09 03:00",
+        "started_text": "Thu 09 Oct 03:00",
         "cost": 0.123,
         "error": null,
         "thread_id": 30
@@ -61,23 +61,23 @@
       {
         "job_name": "Morning <brief>",
         "status": "error",
-        "started_text": "2025-10-06 07:30",
-        "cost": 0,
+        "started_text": "Mon 06 Oct 07:30",
+        "cost": 0.0,
         "error": "<script>alert(\"xss\")</script>",
         "thread_id": null
       },
       {
         "job_name": "Weekly",
         "status": "skipped_budget",
-        "started_text": "2025-10-05 07:30",
-        "cost": null,
-        "error": "",
+        "started_text": "Sun 05 Oct 07:30",
+        "cost": 0.0,
+        "error": null,
         "thread_id": null
       },
       {
         "job_name": "Other",
-        "status": "weird_status",
-        "started_text": "2025-10-04 07:30",
+        "status": "running",
+        "started_text": "Sat 04 Oct 07:30",
         "cost": 1.5,
         "error": null,
         "thread_id": 31

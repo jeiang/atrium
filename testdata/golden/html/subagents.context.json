@@ -66,11 +66,11 @@
       },
       {
         "name": "finance-Café naïve — 東京 🎉 مرحبا",
-        "description": "",
-        "effort": null,
+        "description": "Money questions & <ledgers>",
+        "effort": "high",
         "builtin": false,
         "enabled": false,
-        "prompt": "",
+        "prompt": "Answer from the ledger.",
         "tools": []
       }
     ],
@@ -98,7 +98,7 @@
     "draft": {
       "name": "",
       "description": "<script>alert(\"xss\")</script>",
-      "effort": null,
+      "effort": "xhigh",
       "prompt": "",
       "tools": [
         "web_search"

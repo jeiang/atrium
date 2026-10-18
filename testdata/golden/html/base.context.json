@@ -54,8 +54,8 @@
     "page": "chat",
     "toast": {
       "category": "error",
-      "title": "<script>alert(\"xss\")</script>",
-      "description": "He said \"hi\" & 'bye' <b>bold</b>"
+      "title": "Not saved",
+      "description": "<script>alert(\"xss\")</script>"
     }
   }
 }

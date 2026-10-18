@@ -57,7 +57,7 @@
       "url": "https://www.notion.so/abc123?pvs=4&x=1",
       "path": [
         {
-          "id": "root-1",
+          "id": null,
           "title": "Wiki"
         },
         {
@@ -65,7 +65,7 @@
           "title": "Private <b>"
         },
         {
-          "id": "sub-2",
+          "id": null,
           "title": "Café naïve — 東京 🎉 مرحبا"
         }
       ],
@@ -79,11 +79,7 @@
         },
         {
           "name": "Due",
-          "value": null
-        },
-        {
-          "name": "Tags",
-          "value": ""
+          "value": "2025-10-12 → 2025-10-14"
         },
         {
           "name": "Notes <script>alert(\"xss\")</script>",
@@ -98,21 +94,27 @@
       {
         "id": "r1",
         "title": "Related <one>",
+        "url": "https://www.notion.so/r1",
         "path": [
           {
+            "id": null,
             "title": "Wiki"
           },
           {
+            "id": null,
             "title": "Sub"
           }
         ],
-        "score": 0.8765,
+        "private": false,
+        "score": 1.0,
         "linked": true
       },
       {
         "id": "r 2&x",
         "title": "",
+        "url": "https://www.notion.so/r2",
         "path": [],
+        "private": true,
         "score": 0.42,
         "linked": false
       }

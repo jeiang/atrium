@@ -114,7 +114,7 @@
     "pending_count": 9,
     "toast": {
       "category": "success",
-      "title": "Saved <script>alert(\"xss\")</script>",
+      "title": "Saved",
       "description": "He said \"hi\" & 'bye' <b>bold</b>"
     }
   }

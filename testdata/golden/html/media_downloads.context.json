@@ -72,7 +72,7 @@
         "filed": false,
         "ignored": true,
         "label": "downloading",
-        "percent": 42.5,
+        "percent": 42,
         "size": "700 MB",
         "down": "2.1 MB/s",
         "up": "",
@@ -147,7 +147,7 @@
     ],
     "toast": {
       "category": "success",
-      "title": "Saved <script>alert(\"xss\")</script>",
+      "title": "Saved",
       "description": "He said \"hi\" & 'bye' <b>bold</b>"
     }
   }

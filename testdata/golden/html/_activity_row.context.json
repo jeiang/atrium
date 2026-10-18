@@ -60,12 +60,12 @@
       "thread_kind": "chat",
       "undone_at": null,
       "undoable": true,
-      "before": "{\"title\": \"Old <b>\"}",
-      "after": "{\"title\": \"New & Café naïve — 東京 🎉 مرحبا\"}"
+      "before": "{\n \"title\": \"Old <b>\"\n}",
+      "after": "{\n \"title\": \"New & Café naïve — 東京 🎉 مرحبا\"\n}"
     },
     "toast": {
       "category": "success",
-      "title": "Saved <script>alert(\"xss\")</script>",
+      "title": "Saved",
       "description": "He said \"hi\" & 'bye' <b>bold</b>"
     }
   }

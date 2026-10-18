@@ -57,13 +57,13 @@
         "kind": "movies",
         "dir": "Movie (2024)",
         "title": "Movie \"Title\" & co",
-        "year": 2024
+        "year": "2024"
       },
       {
         "kind": "movies",
-        "dir": "Odd/dir <x> & ?#",
+        "dir": "Odd dir <x> & ?#",
         "title": "Café naïve — 東京 🎉 مرحبا",
-        "year": null
+        "year": ""
       }
     ],
     "shows": [
@@ -71,7 +71,7 @@
         "kind": "tv",
         "dir": "Show Café naïve — 東京 🎉 مرحبا",
         "title": "Show <b>",
-        "year": 2019
+        "year": "2019"
       }
     ]
   }

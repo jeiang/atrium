@@ -86,7 +86,7 @@
       {
         "payee_id": 3,
         "payee": "Odd",
-        "cadence": "irregular",
+        "cadence": "unknown",
         "category": null,
         "override": null,
         "subscription_seen": false,

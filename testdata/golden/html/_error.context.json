@@ -53,8 +53,8 @@
     "problem": "The stage <script>alert(\"xss\")</script> is unknown.",
     "toast": {
       "category": "error",
-      "title": "Saved <script>alert(\"xss\")</script>",
-      "description": "He said \"hi\" & 'bye' <b>bold</b>"
+      "title": "Filter not understood",
+      "description": "The stage <script>alert(\"xss\")</script> is unknown."
     }
   }
 }

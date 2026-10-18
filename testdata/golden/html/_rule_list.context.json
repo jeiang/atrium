@@ -118,7 +118,7 @@
     "focus_id": "spam & <junk>",
     "toast": {
       "category": "success",
-      "title": "Saved <script>alert(\"xss\")</script>",
+      "title": "Saved",
       "description": "He said \"hi\" & 'bye' <b>bold</b>"
     }
   }

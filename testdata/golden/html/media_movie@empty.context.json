@@ -54,7 +54,7 @@
     "movie": {
       "dir": "Movie (2024)",
       "title": "Movie \"Title\" & <co>",
-      "year": null,
+      "year": "",
       "files": []
     },
     "ttl_hours": 1

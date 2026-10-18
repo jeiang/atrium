@@ -54,7 +54,7 @@
     "show": {
       "dir": "Show <x> & y",
       "title": "Show <script>alert(\"xss\")</script>",
-      "year": null,
+      "year": "",
       "seasons": [
         {
           "number": 1,
@@ -66,7 +66,7 @@
               "name": "S01E01.mkv",
               "size": 1200000000,
               "public": "https://media.example/s/abc?sig=1&exp=2",
-              "vpn": "javascript:alert(document.cookie)"
+              "vpn": "http://vpn.example/media/movies/Movie%20(2024)/Movie%20(2024).mkv"
             },
             {
               "rel": "Show/Season 01/extra & <b>.mkv",

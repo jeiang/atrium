@@ -34,8 +34,9 @@ these files.
 - `globals` are the Jinja environment globals of `build_env`. `csrf_token` is
   exposed to templates as a zero-argument function returning that string;
   `asset_version` is pinned instead of hashed from the static directory.
-  A `mode` key in `context` overrides the global for that render, as the routes
-  do.
+  Every `context` key overrides the global of the same name for that render,
+  as the routes do: `mode` on the media add page, and `accounts` (money
+  account rows, not mail account names) on the money pages.
 - `context` is passed as the render context. Object key order is significant:
   it is the Python dict insertion order the routes produce and templates
   iterate over (for example `by_stage`, `counts`, `spending`, `typical`).
@@ -46,23 +47,28 @@ these files.
   `<section data-golden-call="N" data-macro="NAME">` + the macro output +
   `</section>`, imported with context; `caller` is the escaped body of a
   `{% call %}` block.
-- Templates that draw a random id (`_condition_row.html`'s `cond-NNNNNN`,
-  `basecoat/tabs.html.jinja` without an `id`) are rendered with Python's
-  `random` seeded per scenario; those ids carry no meaning.
+- `_condition_row.html` draws a random `cond-NNNNNN` id; it is rendered with
+  Python's `random` seeded per scenario, and the id carries no meaning.
 
 ## Canonical diff
 
-A Go render matches when its canonical form equals the golden's:
+A Go render matches when its canonical form equals the golden's. The form is
+built from an HTML tokenizer, not a tree builder: no implied `html`/`body`,
+no auto-closed or reparented elements, so a malformed partial stays visible.
 
-- Parse as HTML; decode every character reference (`&amp;`, `&#34;`,
-  `&#x27;` are equal to their characters).
-- Emit one token per start tag (`<tag a="v">`, attributes in source order,
-  values with whitespace runs collapsed to one space and trimmed; a valueless
-  attribute is emitted as its bare name), end tag, and text node.
-- Self-closing and void tags are start tags; comments are dropped.
-- Text nodes collapse whitespace runs to one space, are trimmed, and empty
-  ones are dropped.
-- Random ids above are masked to a placeholder before comparing:
-  `cond-[0-9]{6}` and `tabs-[0-9]{6}`.
+- Emit one token per doctype (`<!doctype html>`, name lower-cased), start tag,
+  end tag and text node, in document order. Comments are dropped.
+- Decode every character reference in text and attribute values (`&amp;`,
+  `&#34;`, `&#x27;` equal their characters).
+- A start tag is `<tag a="v" b>`: attributes in source order, a valueless
+  attribute as its bare name, values with whitespace runs collapsed to one
+  space and trimmed. Self-closing and void tags are start tags.
+- Text is compared verbatim, without collapsing or trimming, inside `pre`,
+  `textarea` and any element whose `class` contains `whitespace-pre`
+  (`whitespace-pre-wrap`, `whitespace-pre-line`), including their
+  descendants; only the single newline right after a `<pre>` or `<textarea>`
+  start tag is dropped, as browsers do. Everywhere else text collapses
+  whitespace runs to one space, is trimmed, and empty text is dropped.
+- `cond-[0-9]{6}` ids are masked to a placeholder before comparing.
 
 Differences that remain are reviewed per page slice and documented there.

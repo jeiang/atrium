@@ -105,7 +105,7 @@
         "title": "<script>alert(\"xss\")</script>",
         "run_state": null,
         "project_name": null,
-        "updated_at": null,
+        "updated_at": 1759568000,
         "cost": 0.001,
         "pinned": 0,
         "archived": 0

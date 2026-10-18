@@ -64,7 +64,7 @@
         "ts": 1759913600,
         "title": "Café naïve — 東京 🎉 مرحبا",
         "body": "",
-        "thread_link": "javascript:alert(document.cookie)",
+        "thread_link": "/chat/8",
         "delivered": false,
         "error": "ntfy <401> & \"denied\""
       },

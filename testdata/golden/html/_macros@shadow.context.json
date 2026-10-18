@@ -62,7 +62,7 @@
           "dest": "Receipts",
           "action": "file",
           "key": null,
-          "detail": null
+          "detail": {}
         }
       ],
       "kwargs": {}

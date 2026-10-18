@@ -71,10 +71,10 @@
         "stage": "fallback",
         "confidence": 0.0,
         "ts": 1760000000,
-        "dest": "",
+        "dest": null,
         "action": "none",
         "key": null,
-        "detail": null
+        "detail": {}
       },
       "corrected_to": null,
       "flag_decision": {

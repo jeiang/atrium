@@ -50,6 +50,7 @@
   },
   "context": {
     "status": 404,
-    "problem": null
+    "problem": "Unknown message.",
+    "toast": null
   }
 }

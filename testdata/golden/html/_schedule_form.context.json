@@ -53,15 +53,15 @@
       "id": 2,
       "name": "Morning <brief> Café naïve — 東京 🎉 مرحبا",
       "kind": "cron",
-      "created_by": "assistant",
-      "cadence": "weekly mon 07:30",
+      "created_by": "agent",
+      "cadence": "Every Monday at 07:30",
       "schedule": "weekly mon 07:30",
       "prompt": "This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised",
       "enabled": 0,
       "next_due_text": null,
       "last_status": "error",
       "last_error": "Budget <exceeded> & stopped",
-      "last_started_text": "2025-10-06 07:30"
+      "last_started_text": "Mon 06 Oct 07:30"
     },
     "values": {
       "name": "Edited <name>",
@@ -74,8 +74,8 @@
       {
         "job_name": "Morning <brief>",
         "status": "error",
-        "started_text": "2025-10-06 07:30",
-        "cost": 0,
+        "started_text": "Mon 06 Oct 07:30",
+        "cost": 0.0,
         "error": "<script>alert(\"xss\")</script>",
         "thread_id": null
       }

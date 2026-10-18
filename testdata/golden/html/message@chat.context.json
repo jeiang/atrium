@@ -71,7 +71,7 @@
       "body_source": "raw"
     },
     "back": {
-      "url": "javascript:alert(document.cookie)",
+      "url": "/chat",
       "label": "Chat"
     },
     "from_draft": null

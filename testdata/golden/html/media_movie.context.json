@@ -54,13 +54,13 @@
     "movie": {
       "dir": "Movie (2024)",
       "title": "Movie \"Title\" & <co>",
-      "year": 2024,
+      "year": "2024",
       "files": [
         {
           "name": "Movie (2024).mkv",
           "size": 4500000000,
           "public": "https://media.example/s/abc?sig=1&exp=2",
-          "vpn": "javascript:alert(document.cookie)"
+          "vpn": "http://vpn.example/media/movies/Movie%20(2024)/Movie%20(2024).mkv"
         },
         {
           "name": "Movie (2024) Café naïve — 東京 🎉 مرحبا.mp4",

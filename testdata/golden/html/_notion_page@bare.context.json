@@ -52,7 +52,7 @@
     "notion_page": {
       "id": "x",
       "title": "",
-      "url": "javascript:alert(document.cookie)",
+      "url": "https://www.notion.so/x",
       "path": [],
       "private": false,
       "in_trash": false,

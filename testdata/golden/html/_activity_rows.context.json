@@ -112,8 +112,8 @@
         "thread_kind": "chat",
         "undone_at": null,
         "undoable": true,
-        "before": "{\"title\": \"Old <b>\"}",
-        "after": "{\"title\": \"New & Café naïve — 東京 🎉 مرحبا\"}"
+        "before": "{\n \"title\": \"Old <b>\"\n}",
+        "after": "{\n \"title\": \"New & Café naïve — 東京 🎉 مرحبا\"\n}"
       },
       {
         "source": "write",
@@ -127,7 +127,7 @@
         "undone_at": 1759913600,
         "undoable": false,
         "before": "",
-        "after": "<script>alert(\"xss\")</script>"
+        "after": "{\n \"payee\": \"<script>alert(\\\"xss\\\")</script>\"\n}"
       },
       {
         "source": "write",
@@ -137,11 +137,11 @@
         "tool": "media_file",
         "target": "movie",
         "thread_id": 9,
-        "thread_kind": "",
+        "thread_kind": "subagent",
         "undone_at": null,
         "undoable": false,
-        "before": null,
-        "after": null
+        "before": "",
+        "after": ""
       }
     ],
     "offset": 50,

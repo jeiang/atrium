@@ -52,7 +52,7 @@
     "pending_count": 12,
     "paused": false,
     "status": 404,
-    "problem": null,
+    "problem": "Unknown page.",
     "path": "/nowhere"
   }
 }

@@ -53,8 +53,8 @@
     "paused": false,
     "notion_page": {
       "id": "y",
-      "title": null,
-      "url": "https://notion.so/y",
+      "title": "",
+      "url": "https://www.notion.so/y",
       "path": [],
       "private": false,
       "in_trash": false,
@@ -64,8 +64,8 @@
     },
     "related": [],
     "back": {
-      "url": "javascript:alert(document.cookie)",
-      "label": "<script>alert(\"xss\")</script>"
+      "url": "/chat",
+      "label": "Chat"
     }
   }
 }

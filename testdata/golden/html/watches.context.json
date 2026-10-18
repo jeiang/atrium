@@ -65,11 +65,11 @@
       },
       {
         "id": 2,
-        "merchant": null,
-        "carrier": null,
+        "merchant": "",
+        "carrier": "",
         "status": "in_transit",
-        "tracking_number": null,
-        "order_ref": null,
+        "tracking_number": "",
+        "order_ref": "",
         "status_text": "Café naïve — 東京 🎉 مرحبا",
         "updated": "2025-10-01",
         "last_message_id": 502

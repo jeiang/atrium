@@ -90,9 +90,9 @@
         "in_reply_to_message_id": null,
         "thread_id": 8,
         "updated_at": 1759827200,
-        "unexpected": null,
+        "unexpected": [],
         "to_addrs": "z@y.example",
-        "cc_addrs": null,
+        "cc_addrs": "",
         "subject": "Sent one",
         "body": "Body",
         "smtp_result": "250 OK"
@@ -111,7 +111,7 @@
     },
     "toast": {
       "category": "success",
-      "title": "Saved <script>alert(\"xss\")</script>",
+      "title": "Saved",
       "description": "He said \"hi\" & 'bye' <b>bold</b>"
     }
   }

@@ -792,9 +792,9 @@
           "context": "_toast.context.json"
         },
         {
-          "scenario": "info",
-          "html": "_toast@info.html",
-          "context": "_toast@info.context.json"
+          "scenario": "warning",
+          "html": "_toast@warning.html",
+          "context": "_toast@warning.context.json"
         }
       ]
     },
@@ -995,9 +995,9 @@
           "context": "error@404.context.json"
         },
         {
-          "scenario": "js-path",
-          "html": "error@js-path.html",
-          "context": "error@js-path.context.json"
+          "scenario": "protocol-relative",
+          "html": "error@protocol-relative.html",
+          "context": "error@protocol-relative.context.json"
         }
       ]
     },

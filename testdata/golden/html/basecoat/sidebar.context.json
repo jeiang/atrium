@@ -55,144 +55,57 @@
       "args": [],
       "kwargs": {
         "id": "sidebar",
-        "label": "Primary <nav>",
-        "header": "<a href=\"/chat\">Brand</a>",
-        "footer": "<p>Footer &amp; co</p>",
+        "label": "Primary",
+        "header": {
+          "$safe": "<a href=\"/chat\" class=\"flex items-center gap-2\"><span>atrium</span></a>"
+        },
+        "footer": {
+          "$safe": "<div><p>Live mode &amp; co</p></div>"
+        },
         "menu": [
           {
             "type": "group",
-            "label": "Group <b>",
-            "attrs": {
-              "class": "grp",
-              "data-x": "He said \"hi\" & 'bye' <b>bold</b>"
-            },
+            "label": "Assistant",
             "items": [
               {
                 "label": "Chat",
                 "url": "/chat",
-                "icon": "<svg></svg>",
+                "icon": {
+                  "$safe": "<svg></svg>"
+                },
                 "current": true
               },
               {
-                "label": "<span>Raw label</span>",
-                "url": "javascript:alert(document.cookie)",
-                "attrs": {
-                  "class": "c",
-                  "href": "/ignored",
-                  "aria-current": "ignored",
-                  "data-y": "<z>"
-                }
-              },
-              {
-                "label": "No url"
-              }
-            ]
-          },
-          {
-            "type": "separator"
-          },
-          {
-            "type": "submenu",
-            "label": "More Café naïve — 東京 🎉 مرحبا",
-            "icon": "<svg></svg>",
-            "open": true,
-            "attrs": {
-              "open": "ignored",
-              "data-s": "1"
-            },
-            "items": [
-              {
-                "label": "Inner",
-                "url": "/inner"
+                "label": "Scheduled",
+                "url": "/scheduled",
+                "icon": {
+                  "$safe": "<svg></svg>"
+                },
+                "current": false
               }
             ]
           },
           {
             "type": "group",
-            "id": "custom-group",
-            "items": []
-          },
-          {
-            "type": "unknown"
-          },
-          {
-            "label": "Top item",
-            "url": "/top"
-          }
-        ],
-        "main_attrs": {
-          "class": "main",
-          "data-m": "He said \"hi\" & 'bye' <b>bold</b>"
-        },
-        "header_attrs": {
-          "data-h": "1"
-        },
-        "content_attrs": {
-          "data-c": "<c>"
-        },
-        "footer_attrs": {
-          "data-f": "f"
-        }
-      }
-    },
-    {
-      "macro": "sidebar",
-      "args": [],
-      "kwargs": {
-        "open": false,
-        "side": "right"
-      },
-      "caller": "<p>caller <script>alert(\"xss\")</script></p>"
-    },
-    {
-      "macro": "sidebar",
-      "args": [],
-      "kwargs": {
-        "menu": [
-          {
-            "label": "Only",
-            "url": "/only"
+            "label": "Review",
+            "items": [
+              {
+                "label": {
+                  "$safe": "<span class=\"flex items-center gap-2\">Proposals<span id=\"pending-count\">3</span></span>"
+                },
+                "url": "/proposals",
+                "icon": {
+                  "$safe": "<svg></svg>"
+                },
+                "current": false,
+                "attrs": {
+                  "class": "[&>span:last-child]:flex-1"
+                }
+              }
+            ]
           }
         ]
       }
-    },
-    {
-      "macro": "render_sidebar_content",
-      "args": [
-        [
-          {
-            "type": "group",
-            "label": "Group <b>",
-            "attrs": {
-              "class": "grp",
-              "data-x": "He said \"hi\" & 'bye' <b>bold</b>"
-            },
-            "items": [
-              {
-                "label": "Chat",
-                "url": "/chat",
-                "icon": "<svg></svg>",
-                "current": true
-              },
-              {
-                "label": "<span>Raw label</span>",
-                "url": "javascript:alert(document.cookie)",
-                "attrs": {
-                  "class": "c",
-                  "href": "/ignored",
-                  "aria-current": "ignored",
-                  "data-y": "<z>"
-                }
-              },
-              {
-                "label": "No url"
-              }
-            ]
-          }
-        ],
-        "prefix"
-      ],
-      "kwargs": {}
     }
   ]
 }

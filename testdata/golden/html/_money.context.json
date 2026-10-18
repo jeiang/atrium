@@ -53,14 +53,14 @@
     {
       "macro": "money_nav",
       "args": [
-        "/money/bills"
+        "/money"
       ],
       "kwargs": {}
     },
     {
       "macro": "money_nav",
       "args": [
-        "/elsewhere"
+        "/money/bills"
       ],
       "kwargs": {}
     },

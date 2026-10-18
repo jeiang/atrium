@@ -53,6 +53,6 @@
     "paused": false,
     "status": 422,
     "problem": "The stage <script>alert(\"xss\")</script> is unknown.",
-    "path": "/triage?q=\"><script>alert(1)</script>"
+    "path": "/triage/\"><script>alert(1)</script>"
   }
 }

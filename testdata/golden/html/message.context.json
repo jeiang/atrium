@@ -104,7 +104,7 @@
       "body_source": "index"
     },
     "back": {
-      "url": "/triage?account=icloud&q=<script>alert(\"xss\")</script>",
+      "url": "/triage?account=icloud&q=%3Cscript%3E%22",
       "label": "Decisions"
     },
     "from_draft": {

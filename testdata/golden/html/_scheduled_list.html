@@ -22,7 +22,7 @@
       
     
     <section>
-      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <h2>Saved</h2>
       <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
     </section>
     
@@ -39,7 +39,7 @@
         <header class="flex items-start gap-2">
           <div class="flex min-w-0 flex-1 flex-col gap-1">
             <h3 class="truncate text-sm font-medium" title="Nightly">Nightly</h3>
-            <p class="text-xs text-muted-foreground">daily 03:00</p>
+            <p class="text-xs text-muted-foreground">Every day at 03:00</p>
           </div>
           <label class="flex items-center gap-2 text-xs text-muted-foreground">
             <span class="sr-only">Nightly enabled</span>
@@ -49,11 +49,11 @@
         </header>
         <p class="line-clamp-2 text-xs text-muted-foreground">Review the day &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</p>
         <dl class="flex flex-col gap-1 text-xs">
-          <div class="flex gap-2"><dt class="w-16 shrink-0 text-muted-foreground">Next run</dt><dd>2025-10-10 03:00</dd></div>
+          <div class="flex gap-2"><dt class="w-16 shrink-0 text-muted-foreground">Next run</dt><dd>Fri 10 Oct 03:00</dd></div>
           <div class="flex flex-wrap items-center gap-2">
             <dt class="w-16 shrink-0 text-muted-foreground">Last run</dt>
             <dd class="flex items-center gap-2">
-              <span class="badge" data-variant="secondary">ok</span>2025-10-09 03:00
+              <span class="badge" data-variant="secondary">ok</span>Thu 09 Oct 03:00
             </dd>
           </div>
         </dl>
@@ -67,7 +67,7 @@
         <header class="flex items-start gap-2">
           <div class="flex min-w-0 flex-1 flex-col gap-1">
             <h3 class="truncate text-sm font-medium" title="Morning &lt;brief&gt; Café naïve — 東京 🎉 مرحبا">Morning &lt;brief&gt; Café naïve — 東京 🎉 مرحبا</h3>
-            <p class="text-xs text-muted-foreground">weekly mon 07:30</p>
+            <p class="text-xs text-muted-foreground">Every Monday at 07:30</p>
           </div>
           <label class="flex items-center gap-2 text-xs text-muted-foreground">
             <span class="sr-only">Morning &lt;brief&gt; Café naïve — 東京 🎉 مرحبا enabled</span>
@@ -81,12 +81,12 @@
           <div class="flex flex-wrap items-center gap-2">
             <dt class="w-16 shrink-0 text-muted-foreground">Last run</dt>
             <dd class="flex items-center gap-2">
-              <span class="badge" data-variant="destructive" title="Budget &lt;exceeded&gt; &amp; stopped">error</span>2025-10-06 07:30
+              <span class="badge" data-variant="destructive" title="Budget &lt;exceeded&gt; &amp; stopped">error</span>Mon 06 Oct 07:30
             </dd>
           </div>
         </dl>
         <footer class="mt-auto flex items-center gap-2">
-          <span class="badge" data-variant="outline">assistant</span>
+          <span class="badge" data-variant="outline">agent</span>
           <button type="button" class="btn ms-auto" data-size="sm" data-variant="outline" hx-get="/scheduled/2/edit" hx-target="#schedule-dialog" hx-swap="innerHTML"><svg class="lucide lucide-pencil " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>Edit</button>
         </footer>
       </li>
@@ -95,7 +95,7 @@
         <header class="flex items-start gap-2">
           <div class="flex min-w-0 flex-1 flex-col gap-1">
             <h3 class="truncate text-sm font-medium" title="One-off">One-off</h3>
-            <p class="text-xs text-muted-foreground">once 2025-10-11 09:00</p>
+            <p class="text-xs text-muted-foreground">Once on Sat 11 Oct 2025 at 09:00</p>
           </div>
           <label class="flex items-center gap-2 text-xs text-muted-foreground">
             <span class="sr-only">One-off enabled</span>
@@ -133,7 +133,7 @@
   <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
     <span class="font-medium">Nightly</span>
     <span class="badge" data-variant="secondary">ok</span>
-    <span class="text-xs text-muted-foreground tabular-nums">2025-10-09 03:00</span>
+    <span class="text-xs text-muted-foreground tabular-nums">Thu 09 Oct 03:00</span>
     <span class="text-xs text-muted-foreground tabular-nums">$0.123</span>
     
     <span class="ms-auto flex items-center gap-1">
@@ -144,7 +144,7 @@
   <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
     <span class="font-medium">Morning &lt;brief&gt;</span>
     <span class="badge" data-variant="destructive" title="&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;">error</span>
-    <span class="text-xs text-muted-foreground tabular-nums">2025-10-06 07:30</span>
+    <span class="text-xs text-muted-foreground tabular-nums">Mon 06 Oct 07:30</span>
     
     <span class="min-w-0 max-w-full truncate text-xs text-muted-foreground" title="&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;">&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</span>
     <span class="ms-auto flex items-center gap-1">
@@ -155,7 +155,7 @@
   <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
     <span class="font-medium">Weekly</span>
     <span class="badge" data-variant="outline">skipped_budget</span>
-    <span class="text-xs text-muted-foreground tabular-nums">2025-10-05 07:30</span>
+    <span class="text-xs text-muted-foreground tabular-nums">Sun 05 Oct 07:30</span>
     
     
     <span class="ms-auto flex items-center gap-1">
@@ -165,8 +165,8 @@
   
   <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
     <span class="font-medium">Other</span>
-    <span class="badge" data-variant="outline">weird_status</span>
-    <span class="text-xs text-muted-foreground tabular-nums">2025-10-04 07:30</span>
+    <span class="badge" data-variant="outline">running</span>
+    <span class="text-xs text-muted-foreground tabular-nums">Sat 04 Oct 07:30</span>
     <span class="text-xs text-muted-foreground tabular-nums">$1.500</span>
     
     <span class="ms-auto flex items-center gap-1">

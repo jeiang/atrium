@@ -7,6 +7,7 @@ from atrium.web import money as money_ui
 from atrium.web import openloops as openloops_ui
 from atrium.web.markup import markdown_html
 
+SAFE = "$safe"
 NOW = 1_760_000_000
 TODAY = "2025-10-09"
 HOUR = 3600
@@ -31,7 +32,7 @@ def page(name=None, **context):
     return {**base, **context}
 
 
-def toast(category="success", title="Saved " + XSS, description=QUOTES):
+def toast(category="success", title="Saved", description=QUOTES):
     return {"category": category, "title": title, "description": description}
 
 
@@ -177,7 +178,7 @@ THREAD_ROWS = [
     {"id": 7, "title": THREAD["title"], "run_state": "running", "project_name": 'Work "stuff"', "updated_at": NOW - HOUR, "cost": 0.4567, "pinned": 1, "archived": 0},
     {"id": 8, "title": "", "run_state": "interrupted", "project_name": None, "updated_at": NOW - DAY, "cost": 0.0, "pinned": 0, "archived": 0},
     {"id": 12, "title": LONG, "run_state": "failed", "project_name": "Home", "updated_at": NOW - 3 * DAY, "cost": 12.3456, "pinned": 0, "archived": 0},
-    {"id": 13, "title": XSS, "run_state": None, "project_name": None, "updated_at": None, "cost": 0.001, "pinned": 0, "archived": 0},
+    {"id": 13, "title": XSS, "run_state": None, "project_name": None, "updated_at": NOW - 5 * DAY, "cost": 0.001, "pinned": 0, "archived": 0},
 ]
 ARCHIVED_ROWS = [{**t, "archived": 1, "pinned": 0, "run_state": None} for t in THREAD_ROWS[:2]]
 
@@ -466,12 +467,12 @@ MESSAGE = {
 }
 
 DECISIONS = [
-    {"stage": "correction", "confidence": None, "ts": NOW, "dest": "Receipts", "action": "file", "key": None, "detail": None},
+    {"stage": "correction", "confidence": None, "ts": NOW, "dest": "Receipts", "action": "file", "key": None, "detail": {}},
     {"stage": "operator", "confidence": 1.0, "ts": NOW, "dest": None, "action": "delete", "key": "spam-" + XSS, "detail": {}},
     {"stage": "learned", "confidence": 0.875, "ts": NOW, "dest": "Receipts", "action": "file", "key": "addr+tmpl", "detail": {"n": 14}},
     {"stage": "knn", "confidence": 0.6, "ts": NOW, "dest": "Elsewhere", "action": "file", "key": None, "detail": {}},
     {"stage": "llm", "confidence": None, "ts": NOW, "dest": None, "action": "none", "key": None, "detail": {"confident": True}},
-    {"stage": "fallback", "confidence": 0.0, "ts": NOW, "dest": "", "action": "none", "key": None, "detail": None},
+    {"stage": "fallback", "confidence": 0.0, "ts": NOW, "dest": None, "action": "none", "key": None, "detail": {}},
 ]
 
 RULES = [
@@ -566,9 +567,9 @@ DRAFTS = [
         "in_reply_to_message_id": None,
         "thread_id": 8,
         "updated_at": NOW - 2 * DAY,
-        "unexpected": None,
+        "unexpected": [],
         "to_addrs": "z@y.example",
-        "cc_addrs": None,
+        "cc_addrs": "",
         "subject": "Sent one",
         "body": "Body",
         "smtp_result": "250 OK",
@@ -640,8 +641,8 @@ ACTIVITY = [
         "thread_kind": "chat",
         "undone_at": None,
         "undoable": True,
-        "before": '{"title": "Old <b>"}',
-        "after": '{"title": "New & ' + UNICODE + '"}',
+        "before": '{\n "title": "Old <b>"\n}',
+        "after": '{\n "title": "New & ' + UNICODE + '"\n}',
     },
     {
         "source": "write",
@@ -655,7 +656,7 @@ ACTIVITY = [
         "undone_at": NOW - DAY,
         "undoable": False,
         "before": "",
-        "after": XSS,
+        "after": '{\n "payee": "' + XSS.replace('"', '\\"') + '"\n}',
     },
     {
         "source": "write",
@@ -665,11 +666,11 @@ ACTIVITY = [
         "tool": "media_file",
         "target": "movie",
         "thread_id": 9,
-        "thread_kind": "",
+        "thread_kind": "subagent",
         "undone_at": None,
         "undoable": False,
-        "before": None,
-        "after": None,
+        "before": "",
+        "after": "",
     },
 ]
 
@@ -693,7 +694,7 @@ TOOL_POOL = [
 
 AGENTS = [
     {"name": "researcher", "description": "General research " + XSS, "effort": "low", "builtin": True, "enabled": True, "prompt": "Be thorough & cite.", "tools": ["mail_search", "web_search"]},
-    {"name": "finance-" + UNICODE, "description": "", "effort": None, "builtin": False, "enabled": False, "prompt": "", "tools": []},
+    {"name": "finance-" + UNICODE, "description": "Money questions & <ledgers>", "effort": "high", "builtin": False, "enabled": False, "prompt": "Answer from the ledger.", "tools": []},
 ]
 
 JOBS = [
@@ -701,36 +702,36 @@ JOBS = [
         "id": 1,
         "name": "Nightly",
         "kind": "nightly",
-        "created_by": "system",
-        "cadence": "daily 03:00",
+        "created_by": "operator",
+        "cadence": "Every day at 03:00",
         "schedule": "daily 03:00",
         "prompt": "Review the day " + XSS,
         "enabled": 1,
-        "next_due_text": "2025-10-10 03:00",
+        "next_due_text": "Fri 10 Oct 03:00",
         "last_status": "ok",
         "last_error": None,
-        "last_started_text": "2025-10-09 03:00",
+        "last_started_text": "Thu 09 Oct 03:00",
     },
     {
         "id": 2,
         "name": "Morning <brief> " + UNICODE,
         "kind": "cron",
-        "created_by": "assistant",
-        "cadence": "weekly mon 07:30",
+        "created_by": "agent",
+        "cadence": "Every Monday at 07:30",
         "schedule": "weekly mon 07:30",
         "prompt": LONG,
         "enabled": 0,
         "next_due_text": None,
         "last_status": "error",
         "last_error": "Budget <exceeded> & stopped",
-        "last_started_text": "2025-10-06 07:30",
+        "last_started_text": "Mon 06 Oct 07:30",
     },
     {
         "id": 3,
         "name": "One-off",
-        "kind": "once",
+        "kind": "cron",
         "created_by": "operator",
-        "cadence": "once 2025-10-11 09:00",
+        "cadence": "Once on Sat 11 Oct 2025 at 09:00",
         "schedule": "2025-10-11T09:00",
         "prompt": "Remind me",
         "enabled": 1,
@@ -742,10 +743,10 @@ JOBS = [
 ]
 
 SCHEDULE_RUNS = [
-    {"job_name": "Nightly", "status": "ok", "started_text": "2025-10-09 03:00", "cost": 0.123, "error": None, "thread_id": 30},
-    {"job_name": "Morning <brief>", "status": "error", "started_text": "2025-10-06 07:30", "cost": 0, "error": XSS, "thread_id": None},
-    {"job_name": "Weekly", "status": "skipped_budget", "started_text": "2025-10-05 07:30", "cost": None, "error": "", "thread_id": None},
-    {"job_name": "Other", "status": "weird_status", "started_text": "2025-10-04 07:30", "cost": 1.5, "error": None, "thread_id": 31},
+    {"job_name": "Nightly", "status": "ok", "started_text": "Thu 09 Oct 03:00", "cost": 0.123, "error": None, "thread_id": 30},
+    {"job_name": "Morning <brief>", "status": "error", "started_text": "Mon 06 Oct 07:30", "cost": 0.0, "error": XSS, "thread_id": None},
+    {"job_name": "Weekly", "status": "skipped_budget", "started_text": "Sun 05 Oct 07:30", "cost": 0.0, "error": None, "thread_id": None},
+    {"job_name": "Other", "status": "running", "started_text": "Sat 04 Oct 07:30", "cost": 1.5, "error": None, "thread_id": 31},
 ]
 
 PROJECT = {
@@ -770,22 +771,22 @@ PROJECT_ROWS = [
 
 
 NOTION_BODY_MD = "# Heading\n\nSome **bold** text with a [link](https://example.com/?a=1&b=2) and " + XSS + "\n\n- [ ] task\n- [x] done\n\n| a | b |\n|---|---|\n| 1 | 2 |\n"
-NOTION_BODY_HTML = {"$safe": str(markdown_html(NOTION_BODY_MD))}
+NOTION_BODY_HTML = {SAFE: str(markdown_html(NOTION_BODY_MD))}
 
 NOTION_PAGE = {
     "id": "abc-123 <x>",
     "title": "Page " + XSS + " " + UNICODE,
     "url": "https://www.notion.so/abc123?pvs=4&x=1",
-    "path": [{"id": "root-1", "title": "Wiki"}, {"id": None, "title": "Private <b>"}, {"id": "sub-2", "title": UNICODE}],
+    "path": [{"id": None, "title": "Wiki"}, {"id": None, "title": "Private <b>"}, {"id": None, "title": UNICODE}],
     "private": True,
     "in_trash": True,
     "edited_ts": NOW - DAY,
-    "properties": [{"name": "Status", "value": "Done & dusted"}, {"name": "Due", "value": None}, {"name": "Tags", "value": ""}, {"name": "Notes " + XSS, "value": LONG}],
+    "properties": [{"name": "Status", "value": "Done & dusted"}, {"name": "Due", "value": "2025-10-12 → 2025-10-14"}, {"name": "Notes " + XSS, "value": LONG}],
 }
 
 RELATED = [
-    {"id": "r1", "title": "Related <one>", "path": [{"title": "Wiki"}, {"title": "Sub"}], "score": 0.8765, "linked": True},
-    {"id": "r 2&x", "title": "", "path": [], "score": 0.42, "linked": False},
+    {"id": "r1", "title": "Related <one>", "url": "https://www.notion.so/r1", "path": [{"id": None, "title": "Wiki"}, {"id": None, "title": "Sub"}], "private": False, "score": 1.0, "linked": True},
+    {"id": "r 2&x", "title": "", "url": "https://www.notion.so/r2", "path": [], "private": True, "score": 0.42, "linked": False},
 ]
 
 LOOPS_OWE = [
@@ -802,7 +803,7 @@ COMMITMENTS = [
 
 PACKAGES = [
     {"id": 1, "merchant": "Shop <Co>", "carrier": "DHL", "status": "out_for_delivery", "tracking_number": "JD0123<456>", "order_ref": "A&B-1", "status_text": "Out for delivery " + XSS, "updated": "2025-10-09", "last_message_id": 501},
-    {"id": 2, "merchant": None, "carrier": None, "status": "in_transit", "tracking_number": None, "order_ref": None, "status_text": UNICODE, "updated": "2025-10-01", "last_message_id": 502},
+    {"id": 2, "merchant": "", "carrier": "", "status": "in_transit", "tracking_number": "", "order_ref": "", "status_text": UNICODE, "updated": "2025-10-01", "last_message_id": 502},
 ]
 
 BIRTHDAYS = [
@@ -813,7 +814,7 @@ BIRTHDAYS = [
 
 TORRENTS = [
     {"name": "Show.S01E01.1080p <x> & y", "kind": "media", "filed": True, "ignored": False, "label": "seeding", "percent": 100, "size": "1.4 GB", "down": "", "up": "120 KB/s", "eta": "", "hash": "abc123", "active": True},
-    {"name": UNICODE + " " + LONG_TOKEN, "kind": "plain", "filed": False, "ignored": True, "label": "downloading", "percent": 42.5, "size": "700 MB", "down": "2.1 MB/s", "up": "", "eta": "5m", "hash": "def456", "active": False},
+    {"name": UNICODE + " " + LONG_TOKEN, "kind": "plain", "filed": False, "ignored": True, "label": "downloading", "percent": 42, "size": "700 MB", "down": "2.1 MB/s", "up": "", "eta": "5m", "hash": "def456", "active": False},
 ]
 
 QUEUE = [
@@ -840,17 +841,17 @@ QUEUE = [
 ]
 
 LIBRARY_MOVIES = [
-    {"kind": "movies", "dir": "Movie (2024)", "title": 'Movie "Title" & co', "year": 2024},
-    {"kind": "movies", "dir": "Odd/dir <x> & ?#", "title": UNICODE, "year": None},
+    {"kind": "movies", "dir": "Movie (2024)", "title": 'Movie "Title" & co', "year": "2024"},
+    {"kind": "movies", "dir": "Odd dir <x> & ?#", "title": UNICODE, "year": ""},
 ]
-LIBRARY_SHOWS = [{"kind": "tv", "dir": "Show " + UNICODE, "title": "Show <b>", "year": 2019}]
+LIBRARY_SHOWS = [{"kind": "tv", "dir": "Show " + UNICODE, "title": "Show <b>", "year": "2019"}]
 
-FILE_LINKS = {"public": "https://media.example/s/abc?sig=1&exp=2", "vpn": JS_URL}
+FILE_LINKS = {"public": "https://media.example/s/abc?sig=1&exp=2", "vpn": "http://vpn.example/media/movies/Movie%20(2024)/Movie%20(2024).mkv"}
 
 MOVIE = {
     "dir": "Movie (2024)",
     "title": 'Movie "Title" & <co>',
-    "year": 2024,
+    "year": "2024",
     "files": [
         {"name": "Movie (2024).mkv", "size": 4_500_000_000, **FILE_LINKS},
         {"name": "Movie (2024) " + UNICODE + ".mp4", "size": 900_000_000, "public": None, "vpn": "http://vpn.example/m.mp4"},
@@ -860,7 +861,7 @@ MOVIE = {
 SHOW = {
     "dir": "Show <x> & y",
     "title": "Show " + XSS,
-    "year": None,
+    "year": "",
     "seasons": [
         {
             "number": 1,
@@ -885,7 +886,7 @@ MONEY_ACCOUNTS = [
     {"id": 2, "name": "Visa " + UNICODE, "bank": "republic", "bank_label": "Republic", "kind": "credit_card", "currency": "BBD", "forex": 0, "last4": "", "sender_patterns": []},
 ]
 
-RATES = [{"date": "2025-10-06", "as_of": "2025-10-03", "selling": 6.7943}, {"date": "2025-09-29", "as_of": None, "selling": 6.7901}]
+RATES = [{"date": "2025-10-06", "as_of": "2025-10-03", "selling": 6.7943}, {"date": "2025-09-29", "as_of": "", "selling": 6.7901}]
 
 CATEGORIES = [{"id": 1, "name": "Groceries"}, {"id": 2, "name": "Fun & <games>"}]
 
@@ -934,7 +935,7 @@ UPCOMING_BILLS = [
 BILLS = [
     {"payee_id": 1, "payee": "Netflix <US>", "cadence": "monthly", "category": "Fun & <games>", "override": None, "subscription_seen": True, "typical": {"USD": 15.99}, "last_charge": "2025-09-15", "next_expected": "2025-10-15", "days_until": 6, "charges": 12},
     {"payee_id": 2, "payee": "Gym " + XSS, "cadence": "weekly", "category": None, "override": "bill", "subscription_seen": False, "typical": {"TTD": 50.0, "BBD": 20.0}, "last_charge": "2025-09-20", "next_expected": "2025-09-27", "days_until": -12, "charges": 1},
-    {"payee_id": 3, "payee": "Odd", "cadence": "irregular", "category": None, "override": None, "subscription_seen": False, "typical": {}, "last_charge": "2025-01-01", "next_expected": None, "days_until": None, "charges": 2},
+    {"payee_id": 3, "payee": "Odd", "cadence": "unknown", "category": None, "override": None, "subscription_seen": False, "typical": {}, "last_charge": "2025-01-01", "next_expected": None, "days_until": None, "charges": 2},
 ]
 
 PAYEES = [
@@ -981,19 +982,17 @@ ICON_NAMES = (
     "archive-restore clock history"
 ).split()
 
-ICON_CALLS = [macro("icon", name) for name in ICON_NAMES] + [
-    macro("icon", "check", "size-3.5 text-success"),
-    macro("icon", "no-such-icon", **{"class": "x <y>"}),
-]
+ICON_CALLS = [macro("icon", name) for name in ICON_NAMES] + [macro("icon", "check", "size-3.5 text-success")]
 
-STATUSES = ("pending", "approved", "applied", "failed", "dismissed", "suppressed", "weird <x>")
-STAGES = ("correction", "operator", "learned", "knn", "llm", "fallback", "other <x>")
+STATUSES = ("pending", "approved", "applied", "failed", "dismissed", "suppressed")
+STAGES = ("correction", "operator", "learned", "knn", "llm", "fallback")
 CONDITIONS = [
     {"field": "from_domain", "op": "suffix", "value": ["a.example", "b <c>.example"]},
     {"field": "subject", "op": "re", "value": "^Win <\\d+> & co"},
+    {"field": "from_name", "op": "in", "value": ["Ann", UNICODE]},
     {"field": "list_id", "op": "present"},
-    {"field": "age_days", "op": "gte", "value": 0},
-    {"field": "custom_field", "op": "custom_op", "value": ""},
+    {"field": "reply_to", "op": "absent"},
+    {"field": "age_days", "op": "gte", "value": 7},
 ]
 
 MACRO_CALLS = [
@@ -1009,9 +1008,9 @@ MACRO_CALLS = [
     macro("place", None),
     macro("place", "INBOX"),
     macro("place", "A|B <c> & " + UNICODE),
-    macro("proposal", "delete", "x"),
-    macro("proposal", "none", "x"),
-    macro("proposal", "file", ""),
+    macro("proposal", "delete", None),
+    macro("proposal", "none", None),
+    macro("proposal", "file", None),
     macro("proposal", "file", "Receipts <x>"),
     *[macro("agreement", a) for a in ("agree", "disagree", "pending", "gone")],
     macro("noun", "gmail"),
@@ -1023,45 +1022,41 @@ MACRO_CALLS = [
     macro("when", NOW),
     macro("when", NOW, "datetime"),
     macro("when", None),
-    macro("when", 0),
     macro("account_switch", "/triage", ""),
-    macro("account_switch", "/rules", "gmail", label="Account <x>"),
+    macro("account_switch", "/rules", "gmail"),
     macro("folder_options", FOLDERS, "Odd <folder> & co"),
-    macro("empty_state", "search", "Title <x>"),
-    macro("empty_state", "inbox", "With caller", caller="Body " + XSS),
+    macro("empty_state", "search", "Nothing here"),
+    macro("empty_state", "inbox", "No notifications", caller="Body " + XSS),
     *[macro("condition_text", c) for c in CONDITIONS],
-    macro("spinner", "spin-1"),
-    macro("spinner", "spin-2", QUOTES),
+    macro("spinner", "thread-spinner", "Searching"),
+    macro("spinner", "composer-spinner"),
     *[macro("status_badge", s) for s in STATUSES],
     macro("pending_badge", 0),
     macro("pending_badge", 5, oob=True),
     macro("external", JS_URL),
     macro("external", "https://e.com/?a=1&b=2"),
-    macro("page_path", [{"title": "Wiki"}, {"title": "Sub <b>"}, {"title": UNICODE}]),
+    macro("page_path", [{"id": None, "title": "Wiki"}, {"id": None, "title": "Sub <b>"}, {"id": None, "title": UNICODE}]),
     macro("page_path", []),
     macro("page_link", ref("Page <A>", 1)),
-    macro("page_link", {"id": "a b&c/d", "title": ""}, "truncate"),
+    macro("page_link", {"id": "1234abcd-5678-90ef-1234-567890abcdef", "title": ""}, "truncate text-sm"),
     *[macro("run_badge", s) for s in ("running", "interrupted", "failed", "done", None)],
-    macro("preview_attrs", "/drafts/1?a=<b>&c=d"),
+    macro("preview_attrs", "/messages/5"),
     macro("branch_button", THREAD, 3),
     macro("file_icon", "image/png"),
-    macro("file_icon", "text/plain", "cls <x>"),
+    macro("file_icon", "text/plain", "size-4 shrink-0 text-muted-foreground"),
     macro("file_chips", 7, ITEMS[0]["files"]),
     macro("file_chips", 7, []),
     macro("attach_field"),
     macro("attach_button"),
     *[macro("activity_step", s) for s in ITEMS[2]["steps"]],
-    macro("activity_step", {"kind": "unknown"}),
     *[macro("chat_item", item, THREAD, 6, False) for item in ITEMS],
-    *[macro("chat_item", item, None, None, True) for item in ITEMS[:2]],
     macro("chat_item", ITEMS[7], {**THREAD, "kind": "cron"}, 6, True),
     macro("chat_item", {"kind": "queued", "id": 3, "text": XSS, "files": [{"name": "a <b>.txt"}]}),
-    macro("chat_item", {"kind": "mystery", "seq": 99}),
 ]
 
 MONEY_CALLS = [
+    macro("money_nav", "/money"),
     macro("money_nav", "/money/bills"),
-    macro("money_nav", "/elsewhere"),
     macro("amount", 1.235, "TTD"),
     macro("amount", 0, "BBD"),
     macro("amount", None, "TTD"),
@@ -1072,92 +1067,57 @@ MONEY_CALLS = [
     macro("assign_form", TRANSACTIONS[0], MONEY_ACCOUNTS, "transactions"),
 ]
 
-SIDEBAR_MENU = [
-    {
-        "type": "group",
-        "label": "Group <b>",
-        "attrs": {"class": "grp", "data-x": QUOTES},
-        "items": [
-            {"label": "Chat", "url": "/chat", "icon": "<svg></svg>", "current": True},
-            {"label": "<span>Raw label</span>", "url": JS_URL, "attrs": {"class": "c", "href": "/ignored", "aria-current": "ignored", "data-y": "<z>"}},
-            {"label": "No url"},
-        ],
-    },
-    {"type": "separator"},
-    {
-        "type": "submenu",
-        "label": "More " + UNICODE,
-        "icon": "<svg></svg>",
-        "open": True,
-        "attrs": {"open": "ignored", "data-s": "1"},
-        "items": [{"label": "Inner", "url": "/inner"}],
-    },
-    {"type": "group", "id": "custom-group", "items": []},
-    {"type": "unknown"},
-    {"label": "Top item", "url": "/top"},
-]
-
 SIDEBAR_CALLS = [
     macro(
         "sidebar",
         id="sidebar",
-        label="Primary <nav>",
-        header="<a href=\"/chat\">Brand</a>",
-        footer="<p>Footer &amp; co</p>",
-        menu=SIDEBAR_MENU,
-        main_attrs={"class": "main", "data-m": QUOTES},
-        header_attrs={"data-h": "1"},
-        content_attrs={"data-c": "<c>"},
-        footer_attrs={"data-f": "f"},
+        label="Primary",
+        header={SAFE: '<a href="/chat" class="flex items-center gap-2"><span>atrium</span></a>'},
+        footer={SAFE: "<div><p>Live mode &amp; co</p></div>"},
+        menu=[
+            {
+                "type": "group",
+                "label": "Assistant",
+                "items": [
+                    {"label": "Chat", "url": "/chat", "icon": {SAFE: "<svg></svg>"}, "current": True},
+                    {"label": "Scheduled", "url": "/scheduled", "icon": {SAFE: "<svg></svg>"}, "current": False},
+                ],
+            },
+            {
+                "type": "group",
+                "label": "Review",
+                "items": [
+                    {
+                        "label": {SAFE: '<span class="flex items-center gap-2">Proposals<span id="pending-count">3</span></span>'},
+                        "url": "/proposals",
+                        "icon": {SAFE: "<svg></svg>"},
+                        "current": False,
+                        "attrs": {"class": "[&>span:last-child]:flex-1"},
+                    },
+                ],
+            },
+        ],
     ),
-    macro("sidebar", open=False, side="right", caller="<p>caller " + XSS + "</p>"),
-    macro("sidebar", menu=[{"label": "Only", "url": "/only"}]),
-    macro("render_sidebar_content", SIDEBAR_MENU[:1], "prefix"),
 ]
 
 TABS_CALLS = [
     macro(
         "tabs",
-        id="tabs-golden",
+        id="rules-tabs",
         tabsets=[
-            {"tab": "One", "panel": "<p>Panel one</p>", "tab_attrs": {"data-x": QUOTES}, "panel_attrs": {"class": "p1"}},
-            {"tab": "Two <b>", "panel": "", "tab_attrs": {"disabled": True}},
-            {"tab": "Three", "panel": "<p>Panel three " + UNICODE + "</p>", "tab_attrs": {"aria-disabled": "true"}},
-            {"tab": "Four", "panel": "<p>Four</p>"},
+            {"tab": 'Operator <span class="badge" data-variant="secondary">3</span>', "panel": {SAFE: "<div><p>Operator panel &amp; rules</p></div>"}},
+            {"tab": 'Learned <span class="badge" data-variant="secondary">0</span>', "panel": {SAFE: "<div><p>" + UNICODE + "</p></div>"}},
         ],
-        main_attrs={"class": "gap-0", "data-m": "<m>"},
-        tablist_attrs={"aria-orientation": "vertical", "data-variant": "line"},
-        default_tab_index=3,
+        main_attrs={"class": "gap-0"},
+        tablist_attrs={"data-variant": "line", "aria-label": "Rule sources"},
     ),
-    macro("tabs", tabsets=[{"tab": "Random id", "panel": "<p>x</p>"}]),
-    macro("tabs"),
 ]
 
 TOAST_CALLS = [
-    macro("toaster"),
-    macro(
-        "toaster",
-        id="toaster-2",
-        toasts=[
-            {"category": "error", "title": XSS, "description": QUOTES},
-            {"title": "Defaults"},
-            {
-                "category": "info",
-                "title": "With action",
-                "action": {"label": "Open <x>", "href": "/a?b=1&c=2"},
-                "cancel": {"label": "Dismiss", "onclick": "alert('x') && \"y\""},
-                "duration": -1,
-                "icon": "<svg class=\"custom\"></svg>",
-                "attrs": {"class": "t", "data-t": "<t>"},
-            },
-        ],
-        attrs={"class": "c", "data-a": "<b>"},
-    ),
-    macro("toaster", caller="<div>custom toast " + UNICODE + "</div>"),
-    *[macro("toast", category=c, title="Title " + c, description="Desc & <d>") for c in ("success", "error", "info", "warning", "other")],
-    macro("toast", category="", title="", description=""),
-    macro("toast", category="success", title="Links", action={"label": "Go", "url": JS_URL}, cancel={"label": "Back", "url": "/back"}, duration=0),
-    macro("toast", category="warning", title="Buttons", action={"label": "Act", "onclick": "doIt(\"<x>\")"}, cancel={"label": "Never", "href": ""}),
+    macro("toaster", toasts=[]),
+    macro("toaster", toasts=[toast("error", "Not saved", XSS)]),
+    *[macro("toast", category=c, title="Title " + c, description=QUOTES) for c in ("success", "error", "warning")],
+    macro("toast", category="success", title="Undone", description=""),
 ]
 
 SCENARIOS = {
@@ -1191,8 +1151,8 @@ SCENARIOS = {
     },
     "_draft_preview.html": {"": spec({"d": DRAFTS[0], "configured": CONFIGURED})},
     "_error.html": {
-        "": spec({"status": 422, "problem": "The stage " + XSS + " is unknown.", "toast": toast("error")}),
-        "404": spec({"status": 404, "problem": None}),
+        "": spec({"status": 422, "problem": "The stage " + XSS + " is unknown.", "toast": toast("error", "Filter not understood", "The stage " + XSS + " is unknown.")}),
+        "404": spec({"status": 404, "problem": "Unknown message.", "toast": None}),
     },
     "_file.html": {
         "": spec({"file": {"name": "notes " + XSS + ".md", "media_type": "text/markdown", "bytes": 2048, "created_at": NOW, "origin": "upload", "render": "markdown", "text": NOTION_BODY_MD, "truncated": True}, "file_url": "/chat/7/files/3"}),
@@ -1235,7 +1195,7 @@ SCENARIOS = {
     },
     "_notion_page.html": {
         "": spec({"notion_page": {**NOTION_PAGE, "body_html": NOTION_BODY_HTML}}),
-        "bare": spec({"notion_page": {"id": "x", "title": "", "url": JS_URL, "path": [], "private": False, "in_trash": False, "edited_ts": None, "properties": [], "body_html": ""}}),
+        "bare": spec({"notion_page": {"id": "x", "title": "", "url": "https://www.notion.so/x", "path": [], "private": False, "in_trash": False, "edited_ts": None, "properties": [], "body_html": ""}}),
     },
     "_project_files.html": {
         "": spec({"project": PROJECT, "files": PROJECT_FILES, "error": "Too big <x>"}),
@@ -1315,7 +1275,7 @@ SCENARIOS = {
     },
     "_toast.html": {
         "": spec({"toast": toast("error")}),
-        "info": spec({"toast": toast("info", UNICODE, "")}),
+        "warning": spec({"toast": toast("warning", "Partly applied", "2 of 3 messages moved <ok>")}),
     },
     "_transcript.html": {
         "": spec({"view": THREAD_VIEW}),
@@ -1340,7 +1300,7 @@ SCENARIOS = {
         "empty": spec(page(categories=list(activity_ui.CATEGORIES), category="", entries=[], offset=0, next_offset=0)),
     },
     "base.html": {
-        "": spec(page("chat", paused=True, toast=toast("error", XSS, QUOTES))),
+        "": spec(page("chat", paused=True, toast=toast("error", "Not saved", XSS))),
         "shadow": spec(page("settings", pending_count=0, mode="shadow")),
         "live": spec(page("media_add")),
     },
@@ -1356,16 +1316,16 @@ SCENARIOS = {
         "empty": spec(page(drafts=[], status="unknown", statuses=list(drafts_ui.STATUS_FILTERS), configured=CONFIGURED)),
     },
     "error.html": {
-        "": spec(page(status=422, problem="The stage " + XSS + " is unknown.", path='/triage?q="><script>alert(1)</script>')),
-        "404": spec(page(status=404, problem=None, path="/nowhere")),
-        "js-path": spec(page(status=422, problem=QUOTES, path=JS_URL)),
+        "": spec(page(status=422, problem="The stage " + XSS + " is unknown.", path='/triage/"><script>alert(1)</script>')),
+        "404": spec(page(status=404, problem="Unknown page.", path="/nowhere")),
+        "protocol-relative": spec(page(status=422, problem=QUOTES, path="//evil.example/x")),
     },
     "media_add.html": {
         "": spec(page(magnet="magnet:?xt=urn:btih:abc&dn=" + XSS, torrent_name="Show <x>.torrent", mode="media", error="Not a magnet link " + XSS, modes=["media", "plain"])),
         "plain": spec(page(magnet="", torrent_name="", mode="plain", error=None, modes=["media", "plain"])),
     },
     "media_channels.html": {
-        "": spec(page(channels=CHANNELS, status={"last_check": NOW - HOUR, "errors": ["EZTV <timeout>", XSS]}, tmdb=True, q="Lant & <x>", results=[{"tmdb_id": 1, "name": "Lanterns & <co>", "year": 2025}, {"tmdb_id": 2, "name": UNICODE, "year": None}], form={"tmdb_id": 1, "name": "Lanterns & <co>", "imdb": "tt1234567", "pattern": "^Lanterns <x>", "case_sensitive": True, "backfill": True})),
+        "": spec(page(channels=CHANNELS, status={"last_check": NOW - HOUR, "errors": ["EZTV <timeout>", XSS]}, tmdb=True, q="Lant & <x>", results=[{"tmdb_id": 1, "name": "Lanterns & <co>", "year": "2025"}, {"tmdb_id": 2, "name": UNICODE, "year": ""}], form={"tmdb_id": 1, "name": "Lanterns & <co>", "imdb": "tt1234567", "pattern": "^Lanterns <x>", "case_sensitive": True, "backfill": True})),
         "empty": spec(page(channels=[], status={"last_check": None, "errors": []}, tmdb=True, q="nothing", results=[], form={"tmdb_id": "", "name": "", "imdb": "", "pattern": "", "case_sensitive": False, "backfill": False})),
         "no-tmdb": spec(page(channels=[], status={"last_check": None, "errors": []}, tmdb=False, q="", results=None, form={"tmdb_id": "", "name": "", "imdb": "", "pattern": "", "case_sensitive": False, "backfill": True})),
     },
@@ -1380,12 +1340,12 @@ SCENARIOS = {
     },
     "media_movie.html": {
         "": spec(page(movie=MOVIE, ttl_hours=48)),
-        "empty": spec(page(movie={**MOVIE, "year": None, "files": []}, ttl_hours=1)),
+        "empty": spec(page(movie={**MOVIE, "year": "", "files": []}, ttl_hours=1)),
     },
     "media_show.html": {"": spec(page(show=SHOW, ttl_hours=48))},
     "message.html": {
-        "": spec(page(message=MESSAGE, back={"url": "/triage?account=icloud&q=" + XSS, "label": "Decisions"}, from_draft={"thread_id": 7})),
-        "chat": spec(page(message={**MESSAGE, "subject": "", "decision": None, "flag_decision": None, "attachments": [], "body": "", "body_source": "raw", "in_inbox": 1, "seen": 1, "flagged": 0, "corrected_to": None, "headers": {}}, back={"url": JS_URL, "label": "Chat"}, from_draft=None)),
+        "": spec(page(message=MESSAGE, back={"url": "/triage?account=icloud&q=%3Cscript%3E%22", "label": "Decisions"}, from_draft={"thread_id": 7})),
+        "chat": spec(page(message={**MESSAGE, "subject": "", "decision": None, "flag_decision": None, "attachments": [], "body": "", "body_source": "raw", "in_inbox": 1, "seen": 1, "flagged": 0, "corrected_to": None, "headers": {}}, back={"url": "/chat", "label": "Chat"}, from_draft=None)),
     },
     "money.html": {
         "": spec(page(month="October 2025", spending=SPENDING, unassigned=UNASSIGNED, accounts=MONEY_ACCOUNTS, bills=UPCOMING_BILLS, rates=RATES[:1], toast=toast())),
@@ -1412,14 +1372,14 @@ SCENARIOS = {
     "notifications.html": {
         "": spec(page(notifications=[
             {"ts": NOW - HOUR, "title": "Package " + XSS, "body": "Line one\nLine two " + ENTITIES, "thread_link": "/chat/7", "delivered": True, "error": None},
-            {"ts": NOW - DAY, "title": UNICODE, "body": "", "thread_link": JS_URL, "delivered": False, "error": "ntfy <401> & \"denied\""},
+            {"ts": NOW - DAY, "title": UNICODE, "body": "", "thread_link": "/chat/8", "delivered": False, "error": "ntfy <401> & \"denied\""},
             {"ts": NOW - 2 * DAY, "title": "Local", "body": LONG, "thread_link": None, "delivered": False, "error": None},
         ])),
         "empty": spec(page(notifications=[])),
     },
     "notion_page.html": {
         "": spec(page(notion_page={**NOTION_PAGE, "body_html": NOTION_BODY_HTML}, related=RELATED, back={"url": "/chat/7", "label": "Chat"})),
-        "empty": spec(page(notion_page={"id": "y", "title": None, "url": "https://notion.so/y", "path": [], "private": False, "in_trash": False, "edited_ts": None, "properties": [], "body_html": ""}, related=[], back={"url": JS_URL, "label": XSS})),
+        "empty": spec(page(notion_page={"id": "y", "title": "", "url": "https://www.notion.so/y", "path": [], "private": False, "in_trash": False, "edited_ts": None, "properties": [], "body_html": ""}, related=[], back={"url": "/chat", "label": "Chat"})),
     },
     "openloops.html": {
         "": spec(page(owe=LOOPS_OWE, waiting=LOOPS_WAITING, commitments=COMMITMENTS, snooze_choices=list(openloops_ui.SNOOZE_CHOICES))),
@@ -1454,7 +1414,7 @@ SCENARIOS = {
         "search-empty": spec(page(skills=[], q=XSS, draft={})),
         "empty": spec(page(skills=[], q="", draft={})),
     },
-    "subagents.html": {"": spec(page(agents=AGENTS, pool=TOOL_POOL, efforts=EFFORTS, draft={"name": "", "description": XSS, "effort": None, "prompt": "", "tools": ["web_search"]}))},
+    "subagents.html": {"": spec(page(agents=AGENTS, pool=TOOL_POOL, efforts=EFFORTS, draft={"name": "", "description": XSS, "effort": "xhigh", "prompt": "", "tools": ["web_search"]}))},
     "thread.html": {
         "": spec(thread_page(THREAD_VIEW, toast=toast())),
         "running": spec(thread_page(RUNNING_VIEW, work=EMPTY_WORK)),

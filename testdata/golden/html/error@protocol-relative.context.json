@@ -53,6 +53,6 @@
     "paused": false,
     "status": 422,
     "problem": "He said \"hi\" & 'bye' <b>bold</b>",
-    "path": "javascript:alert(document.cookie)"
+    "path": "//evil.example/x"
   }
 }

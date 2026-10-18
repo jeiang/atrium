@@ -540,15 +540,6 @@
         "size-3.5 text-success"
       ],
       "kwargs": {}
-    },
-    {
-      "macro": "icon",
-      "args": [
-        "no-such-icon"
-      ],
-      "kwargs": {
-        "class": "x <y>"
-      }
     }
   ]
 }

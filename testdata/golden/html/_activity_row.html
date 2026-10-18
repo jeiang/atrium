@@ -21,7 +21,7 @@
       
     
     <section>
-      <h2>Saved &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</h2>
+      <h2>Saved</h2>
       <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
     </section>
     
@@ -57,8 +57,12 @@
   <details class="text-xs">
     <summary class="cursor-pointer text-muted-foreground">Before and after</summary>
     <div class="mt-2 grid gap-2 md:grid-cols-2">
-      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="Before">{&#34;title&#34;: &#34;Old &lt;b&gt;&#34;}</pre>
-      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="After">{&#34;title&#34;: &#34;New &amp; Café naïve — 東京 🎉 مرحبا&#34;}</pre>
+      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="Before">{
+ &#34;title&#34;: &#34;Old &lt;b&gt;&#34;
+}</pre>
+      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="After">{
+ &#34;title&#34;: &#34;New &amp; Café naïve — 東京 🎉 مرحبا&#34;
+}</pre>
     </div>
   </details>
   
