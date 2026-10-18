@@ -420,8 +420,9 @@ def test_chat_prefix_ttl_setting(world):
     run_turn(cfg, conn, client, "tick", kind="cron")
     chat, cron = client.calls
     assert chat["tools"][-1]["cache_control"] == {"type": "ephemeral", "ttl": "1h"} and chat["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
-    assert chat["messages"][-1]["content"][-1]["cache_control"] == {"type": "ephemeral"}
+    assert chat["messages"][-1]["content"][-1]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
     assert cron["tools"][-1]["cache_control"] == {"type": "ephemeral"} and cron["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert cron["messages"][-1]["content"][-1]["cache_control"] == {"type": "ephemeral"}
 
 
 def test_context_ops_are_not_offered_to_subagents_or_code():
