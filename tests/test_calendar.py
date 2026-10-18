@@ -274,11 +274,47 @@ SUMMARY:Early
 END:VEVENT
 END:VCALENDAR
 """.encode()
-    second_hour = calendar.datetime(2026, 11, 1, 1, 40, fold=1, tzinfo=ny)
-    first_hour = second_hour.replace(fold=0)
+    midnight = calendar.datetime(2026, 11, 1, tzinfo=ny)
+    second_hour = calendar.datetime(2026, 11, 1, 1, 20, fold=1, tzinfo=ny)
     later = calendar.timedelta(hours=2)
+    assert [e["uid"] for e in calendar.events_in_ics(ics, "Home", midnight, second_hour, ny, [])] == ["early"]
     assert calendar.events_in_ics(ics, "Home", second_hour, second_hour + later, ny, []) == []
-    assert [e["uid"] for e in calendar.events_in_ics(ics, "Home", first_hour, first_hour + later, ny, [])] == ["early"]
+
+
+@pytest.mark.parametrize(
+    ("event", "lo", "hi", "expected"),
+    [
+        (
+            "UID:p1d\nDTSTART;TZID=America/New_York:20260307T090000\nDURATION:P1D\nRRULE:FREQ=DAILY;COUNT=10",
+            "2026-03-15T08:30",
+            "2026-03-15T08:45",
+            [("p1d", "2026-03-14T09:00:00-04:00", "2026-03-15T09:00:00-04:00")],
+        ),
+        (
+            "UID:bday\nDTSTART;VALUE=DATE:20260308\nDTEND;VALUE=DATE:20260309\nRRULE:FREQ=YEARLY",
+            "2027-03-08T23:30",
+            "2027-03-09T00:00",
+            [("bday", "2027-03-08", "2027-03-09")],
+        ),
+        (
+            "UID:allday\nDTSTART;VALUE=DATE:20260308\nDTEND;VALUE=DATE:20260309\nRRULE:FREQ=WEEKLY",
+            "2026-03-08T23:30",
+            "2026-03-09T02:00",
+            [("allday", "2026-03-08", "2026-03-09")],
+        ),
+        (
+            "UID:night\nDTSTART;TZID=America/New_York:20260308T000000\nDTEND;TZID=America/New_York:20260309T000000\nRRULE:FREQ=WEEKLY",
+            "2026-03-08T23:30",
+            "2026-03-09T02:00",
+            [("night", "2026-03-08T00:00:00-05:00", "2026-03-09T00:00:00-04:00")],
+        ),
+    ],
+)
+def test_recurrence_window_keeps_instances_spanning_dst(event, lo, hi, expected):
+    ny = calendar.tz_of({"ATRIUM_TZ": "America/New_York"})
+    ics = f"BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n{event}\nSUMMARY:x\nEND:VEVENT\nEND:VCALENDAR\n".encode()
+    events = calendar.events_in_ics(ics, "Home", calendar.parse_when(lo, ny), calendar.parse_when(hi, ny), ny, [])
+    assert [(e["uid"], e["start"], e["end"]) for e in events] == expected
 
 
 @pytest.fixture

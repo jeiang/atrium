@@ -174,13 +174,22 @@ def _naive_local(value, tz):
     return as_dt(value, tz).astimezone(tz).replace(tzinfo=None)
 
 
+def _longest_span(master, start, end, tz):
+    if not isinstance(start, datetime):
+        return _naive_local(end, tz) - _naive_local(start, tz)
+    if master.get("DTEND") is None and master.get("DURATION") is not None:
+        span = master["DURATION"].dt
+        return span + timedelta(hours=2) if span.days else span
+    return _utc(as_dt(end, tz)) - _utc(as_dt(start, tz))
+
+
 def _occurrences(master, start, window_start, window_end, tz, notes):
     """Start values of the master's instances that could overlap the window."""
     from dateutil import rrule
 
     if master.get("RRULE") is None and master.get("RDATE") is None:
         return [start]
-    duration = _utc(as_dt(_end_of(master, start, tz), tz)) - _utc(as_dt(start, tz))
+    pad = _longest_span(master, start, _end_of(master, start, tz), tz)
     aware = isinstance(start, datetime) and start.tzinfo is not None
     dts = start if aware else (start if isinstance(start, datetime) else datetime.combine(start, dtime.min))
     rset = rrule.rruleset()
@@ -192,9 +201,11 @@ def _occurrences(master, start, window_start, window_end, tz, notes):
             rset.rdate(extra if aware else _naive_local(extra, tz))
         for gone in _ex_dates(master, "EXDATE"):
             rset.exdate(gone if aware else _naive_local(gone, tz))
-        lo, hi = window_start - duration, window_end
-        if not aware:
-            lo, hi = lo.replace(tzinfo=None), hi.replace(tzinfo=None)
+        if isinstance(start, datetime):
+            lo = _utc(window_start) - pad
+            lo, hi = (lo, _utc(window_end)) if aware else (_naive_local(lo, tz), _naive_local(window_end, tz))
+        else:
+            lo, hi = _naive_local(window_start, tz) - pad, _naive_local(window_end, tz)
         found = rset.between(lo, hi, inc=True)
     except (ValueError, TypeError) as e:
         notes.append(f"recurrence of {master.get('UID')} not expanded: {e}")
