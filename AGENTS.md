@@ -179,6 +179,13 @@ and backups; nothing of that lives here.
   `tools/mime/gen_tables.py`.
 - `internal/mail/features/`: `features.py` (`Extract`, `ContentDigest`,
   `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
+- `internal/mail/flags/`, `report/`, `triage/`, `search/`, `live/`: `flags.py`
+  (contacts rule; the LLM verdict is only recorded, a chat outage records
+  all-NULL fields, any other judge error propagates), `report.py`, `triage.py`,
+  `search.py` (FTS5 + vec0 KNN fused by RRF; lexical only with
+  `semantic=false` and the error text when the embedder is down) and
+  `live.StateOf`. Their golden read paths live in
+  `internal/db/readpaths/mail_test.go`.
 - `internal/pyhtml/`: `html.unescape`; tables from `tools/pyhtml/gen_entities.py`.
 - `internal/mail/imapclient/`: `imap.py`'s client on go-imap v2; go-imap
   drives the session and the bytes it reads are parsed again as Python

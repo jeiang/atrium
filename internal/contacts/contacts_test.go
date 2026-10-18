@@ -303,8 +303,8 @@ func TestPythonStrings(t *testing.T) {
 		"\ufeffa\ufeffb":            "a\ufeffb",
 		"\ufeff\ufeffa":             "\ufeffa",
 	} {
-		if got := readText([]byte(in)); got != want {
-			t.Errorf("readText(%q) = %q, want %q", in, got, want)
+		if got := ReadText([]byte(in)); got != want {
+			t.Errorf("ReadText(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

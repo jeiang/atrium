@@ -51,9 +51,9 @@ func digitValue(r rune) int {
 	return 0
 }
 
-// readText is Path.read_text(encoding="utf-8-sig", errors="replace"): UTF-8 without a leading BOM, with one
+// ReadText is Path.read_text(encoding="utf-8-sig", errors="replace"): UTF-8 without a leading BOM, with one
 // U+FFFD per maximal invalid subpart, and universal newlines.
-func readText(data []byte) string {
+func ReadText(data []byte) string {
 	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	var b strings.Builder
 	b.Grow(len(data))

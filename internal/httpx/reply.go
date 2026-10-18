@@ -1,8 +1,10 @@
 package httpx
 
 import (
+	"errors"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -102,4 +104,15 @@ func Float(v any) (float64, error) {
 		return 0, nil
 	}
 	return 0, fmt.Errorf("%w: unsupported operand type(s) for *: '%s' and '%s'", ErrType, TypeName(v), TypeName(v))
+}
+
+// Message is str(e) for an error a malformed reply produced: the text without its Python class name.
+func Message(err error) string {
+	text := err.Error()
+	for _, class := range []error{ErrValue, ErrKey, ErrIndex, ErrType} {
+		if errors.Is(err, class) {
+			return strings.TrimPrefix(text, class.Error()+": ")
+		}
+	}
+	return text
 }
