@@ -120,6 +120,17 @@ and backups; nothing of that lives here.
   `atrium-legacy.db` against the Python results in
   `testdata/golden/db/readpaths.json`. A module registers its paths in
   `init` and adds a blank import to that test.
+- `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
+  600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
+  malformed reply wraps `ErrValue`, `ErrKey`, `ErrIndex` or `ErrType`, so
+  ported `except` clauses test those with `errors.Is`.
+- `internal/llm/`: `llm.py`, chat with a strict JSON schema to the local
+  model `qwen`. Schemas are `llm.Object` values because llama.cpp
+  generates properties in the order given.
+- `internal/embed/`: `embed.py` and the `notion_vec` writes, model
+  `embeddinggemma`, 768-d vectors normalised bit-for-bit as Python.
+- `internal/testutil/golden`: the golden loaders, canonical-JSON
+  comparison and `Replay`, an `httptest` server for recorded exchanges.
 - `internal/rx/`: Python `re` patterns on regexp2 with Python semantics and
   a 100 ms match timeout; `rxtest` runs them against the regex corpus.
 - `internal/safety/`: the mailbox write gate. `ATRIUM_MODE` is read on
