@@ -89,6 +89,9 @@ type conn struct {
 	idling   bool
 	idleQ    []idleResponse
 	lastCode string
+	sentPos  int
+	// idleRestart overrides go-imap's IDLE re-issue interval; zero keeps go-imap's.
+	idleRestart time.Duration
 }
 
 var errNotConnected = errors.New("IMAP client is not connected")
@@ -101,7 +104,15 @@ func (c *conn) await(ctx context.Context, fn func() error) error {
 	t := c.tap
 	t.touch(false)
 	done := make(chan error, 1)
-	go func() { done <- fn() }()
+	go func() {
+		defer func() {
+			if v := recover(); v != nil {
+				t.kill(fmt.Errorf("panic: %v", v))
+				done <- fmt.Errorf("imapclient: panic reading the server's reply: %v", v)
+			}
+		}()
+		done <- fn()
+	}()
 	timer := time.NewTimer(c.readTimeout)
 	defer timer.Stop()
 	for {
@@ -223,9 +234,44 @@ func decodeReplace(b []byte, ascii bool) string {
 }
 
 // complete is imaplib's _command_complete: the tagged response to the command just sent.
+func wrapCommand(name string, err error) error {
+	var e *Error
+	if errors.As(err, &e) {
+		return &Error{Kind: e.Kind, Msg: fmt.Sprintf("command: %s => %s", name, e.Msg)}
+	}
+	return err
+}
+
+// awaitSent waits until go-imap has written a command named name and returns its index in the tap's sent list.
+func (c *conn) awaitSent(name string) (int, error) {
+	for {
+		if i := c.tap.target(name, c.sentPos); i >= 0 {
+			return i, nil
+		}
+		if failure := c.tap.failure(); failure != nil {
+			return -1, socketError(failure)
+		}
+		select {
+		case <-c.tap.arrived:
+		case <-c.cl.Closed():
+			if i := c.tap.target(name, c.sentPos); i >= 0 {
+				return i, nil
+			}
+			return -1, socketError(errors.New("EOF"))
+		}
+	}
+}
+
+// complete is imaplib's _command_complete: the tagged response to the command named name that was just sent.
+// Tagged replies to commands go-imap sent by itself before it (IDLE re-issues) are skipped; a tag go-imap never
+// sent is imaplib's unexpected tagged response.
 func (c *conn) complete(name string) (string, []datum, error) {
 	if err := c.checkBye(); err != nil {
 		return "", nil, err
+	}
+	target, err := c.awaitSent(name)
+	if err != nil {
+		return "", nil, wrapCommand(name, err)
 	}
 	for {
 		if err := c.checkBye(); err != nil {
@@ -233,16 +279,21 @@ func (c *conn) complete(name string) (string, []datum, error) {
 		}
 		r, err := c.read()
 		if err != nil {
-			var e *Error
-			if errors.As(err, &e) {
-				return "", nil, &Error{Kind: e.Kind, Msg: fmt.Sprintf("command: %s => %s", name, e.Msg)}
-			}
-			return "", nil, err
+			return "", nil, wrapCommand(name, err)
 		}
-		c.apply(r)
 		if r.kind != tagged {
+			c.apply(r)
 			continue
 		}
+		i := c.tap.sentIndex(r.tag, c.sentPos)
+		if i < 0 {
+			return "", nil, pyAbort("command: %s => unexpected tagged response: %s", name, py.ReprBytes(r.line))
+		}
+		if i != target {
+			continue
+		}
+		c.sentPos = i + 1
+		c.apply(r)
 		data := []datum{{text: r.dat}}
 		c.lastCode = ""
 		if r.coded {
@@ -340,8 +391,8 @@ func (c *conn) Connect(ctx context.Context) error {
 		return err
 	}
 	c.tap = newTap(nc)
-	c.cl = imapclient.New(c.tap, &imapclient.Options{})
-	c.ur, c.caps, c.state, c.readonly, c.idling, c.idleQ = store{}, nil, "LOGOUT", false, false, nil
+	c.cl = imapclient.New(c.tap, &imapclient.Options{IdleRestartInterval: c.idleRestart})
+	c.ur, c.caps, c.state, c.readonly, c.idling, c.idleQ, c.sentPos = store{}, nil, "LOGOUT", false, false, nil, 0
 	err = c.await(ctx, c.open)
 	if err != nil {
 		c.shutdown()
@@ -556,7 +607,7 @@ func (c *conn) selectBox(imapName string, readonly bool) error {
 	}
 	c.state = "SELECTED"
 	if _, ok := c.ur["READ-ONLY"]; ok && !readonly {
-		return pyReadonly("%s is not writable", quoteName(imapName))
+		return pyReadonly("%s is not writable", py.Repr(quoteName(imapName)))
 	}
 	return goErr(werr)
 }
@@ -858,6 +909,9 @@ func (c *conn) IdleChanges(ctx context.Context, duration time.Duration) (bool, e
 		idle, werr := c.cl.Idle()
 		if err := c.awaitIdleStart(); err != nil {
 			c.idling, c.idleQ = false, nil
+			if werr == nil {
+				_ = idle.Close()
+			}
 			return err
 		}
 		if werr != nil {

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,6 +56,7 @@ const (
 // response is one server response as imaplib's _get_response reads it.
 type response struct {
 	kind  kind
+	tag   string
 	line  []byte
 	typ   string
 	dat   []byte
@@ -144,7 +147,7 @@ func parseUntagged(resp []byte) (string, []byte, bool) {
 }
 
 // parseTagged matches imaplib's tagre `(?P<tag>TAGPRE\d+) (?P<type>[A-Z]+) (?P<data>.*)`, the prefix being letters.
-func parseTagged(resp []byte) (string, []byte, bool) {
+func parseTagged(resp []byte) (string, string, []byte, bool) {
 	letters := 0
 	for letters < len(resp) && resp[letters] >= 'A' && resp[letters] <= 'Z' {
 		letters++
@@ -154,7 +157,7 @@ func parseTagged(resp []byte) (string, []byte, bool) {
 		sp++
 	}
 	if letters == 0 || sp == letters || sp >= len(resp) || resp[sp] != ' ' {
-		return "", nil, false
+		return "", "", nil, false
 	}
 	rest := resp[sp+1:]
 	n := 0
@@ -162,9 +165,9 @@ func parseTagged(resp []byte) (string, []byte, bool) {
 		n++
 	}
 	if n == 0 || n >= len(rest) || rest[n] != ' ' {
-		return "", nil, false
+		return "", "", nil, false
 	}
-	return string(rest[:n]), rest[n+1:], true
+	return string(resp[:sp]), string(rest[:n]), rest[n+1:], true
 }
 
 // literalSize matches imaplib's Literal `.*{(?P<size>\d+)}$`.
@@ -183,7 +186,10 @@ func literalSize(dat []byte) (int, bool) {
 		}
 	}
 	n, err := strconv.Atoi(string(digits))
-	return n, err == nil
+	if err != nil {
+		return math.MaxInt, true
+	}
+	return n, true
 }
 
 // parenDepth is imaplib's _paren_depth: parenthesis nesting outside quoted strings.
@@ -261,7 +267,10 @@ func readResponse(buf []byte) (response, int, error) {
 			if !lit {
 				break
 			}
-			if pos+size > len(buf) {
+			if size > maxBuffered {
+				return response{}, 0, pyAbort("socket error: literal of %d bytes exceeds %d", size, maxBuffered)
+			}
+			if size > len(buf)-pos {
 				return response{}, 0, nil
 			}
 			r.frags = append(r.frags, datum{text: dat, lit: bytes.Clone(buf[pos : pos+size]), tuple: true})
@@ -284,11 +293,11 @@ func readResponse(buf []byte) (response, int, error) {
 		r.kind = continuation
 		return r, pos, nil
 	default:
-		typ, dat, ok := parseTagged(resp)
+		tag, typ, dat, ok := parseTagged(resp)
 		if !ok {
 			return r, 0, pyAbort("unexpected response: %s", py.ReprBytes(resp))
 		}
-		r.kind, r.typ, r.dat = tagged, typ, bytes.Clone(dat)
+		r.kind, r.tag, r.typ, r.dat = tagged, tag, typ, bytes.Clone(dat)
 	}
 	if r.typ == "OK" || r.typ == "NO" || r.typ == "BAD" {
 		r.code, r.data, r.coded = responseCode(r.dat)
@@ -296,27 +305,46 @@ func readResponse(buf []byte) (response, int, error) {
 	return r, pos, nil
 }
 
-// tap records every byte go-imap reads from the connection, so the responses can be parsed as imaplib does.
+// maxBuffered bounds the bytes the tap holds and the size of one literal; a server that sends more loses the
+// connection.
+const maxBuffered = 256 << 20
+
+// sentCommand is one command go-imap wrote: its tag and name (UID for every UID command).
+type sentCommand struct {
+	tag, name string
+}
+
+// tap records every byte go-imap reads from the connection, so the responses can be parsed as imaplib does,
+// and the tag of every command go-imap writes, so each reply is matched to its command.
 type tap struct {
 	net.Conn
 	arrived chan struct{}
 
-	mu     sync.Mutex
-	buf    []byte
-	err    error
-	killed error
-	last   time.Time
-	paused bool
+	mu      sync.Mutex
+	buf     []byte
+	err     error
+	killed  error
+	last    time.Time
+	paused  bool
+	writing int
+	sent    []sentCommand
+	wline   []byte
+	wskip   int
+	wcont   bool
+	limit   int
 }
 
 func newTap(c net.Conn) *tap {
-	return &tap{Conn: c, arrived: make(chan struct{}, 1), last: time.Now()}
+	return &tap{Conn: c, arrived: make(chan struct{}, 1), last: time.Now(), limit: maxBuffered}
 }
 
 func (t *tap) Read(p []byte) (int, error) {
 	n, err := t.Conn.Read(p)
 	t.mu.Lock()
-	t.buf = append(t.buf, p[:n]...)
+	full := len(t.buf)+n > t.limit
+	if !full {
+		t.buf = append(t.buf, p[:n]...)
+	}
 	if n > 0 {
 		t.last = time.Now()
 	}
@@ -324,8 +352,107 @@ func (t *tap) Read(p []byte) (int, error) {
 		t.err = err
 	}
 	t.mu.Unlock()
+	if full {
+		t.kill(fmt.Errorf("server sent more than %d unread bytes", t.limit))
+	}
 	t.signal()
 	return n, err
+}
+
+func (t *tap) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	t.record(p)
+	t.writing++
+	t.mu.Unlock()
+	t.signal()
+	n, err := t.Conn.Write(p)
+	t.mu.Lock()
+	t.writing--
+	t.last = time.Now()
+	t.mu.Unlock()
+	return n, err
+}
+
+// record follows the client byte stream: a line that starts a command adds its tag to sent, and a line ending in
+// a literal marker makes the literal's bytes and the line after them part of the same command.
+func (t *tap) record(p []byte) {
+	for len(p) > 0 {
+		if t.wskip > 0 {
+			k := min(t.wskip, len(p))
+			t.wskip -= k
+			p = p[k:]
+			continue
+		}
+		i := bytes.IndexByte(p, '\n')
+		if i < 0 {
+			t.wline = append(t.wline, p...)
+			return
+		}
+		line := bytes.TrimSuffix(append(t.wline, p[:i]...), []byte("\r"))
+		p = p[i+1:]
+		if !t.wcont {
+			if tag, name, ok := commandTag(line); ok {
+				t.sent = append(t.sent, sentCommand{tag, name})
+			}
+		}
+		t.wskip, t.wcont = clientLiteral(line)
+		t.wline = t.wline[:0]
+	}
+}
+
+// commandTag reads go-imap's `T<n> NAME` command start.
+func commandTag(line []byte) (string, string, bool) {
+	sp := bytes.IndexByte(line, ' ')
+	if sp < 2 || line[0] != 'T' {
+		return "", "", false
+	}
+	for _, c := range line[1:sp] {
+		if !isDigit(c) {
+			return "", "", false
+		}
+	}
+	name, _, _ := bytes.Cut(line[sp+1:], []byte(" "))
+	return string(line[:sp]), string(name), len(name) > 0
+}
+
+// clientLiteral reads a client line's trailing `{n}` or `{n+}`.
+func clientLiteral(line []byte) (int, bool) {
+	if !bytes.HasSuffix(line, []byte("}")) {
+		return 0, false
+	}
+	open := bytes.LastIndexByte(line, '{')
+	if open < 0 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(strings.TrimSuffix(string(line[open+1:len(line)-1]), "+"))
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+// target is the index of the last command named name sent at or after from, or -1.
+func (t *tap) target(name string, from int) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for i := len(t.sent) - 1; i >= from; i-- {
+		if t.sent[i].name == name {
+			return i
+		}
+	}
+	return -1
+}
+
+// sentIndex is the index of the command tagged tag at or after from, or -1.
+func (t *tap) sentIndex(tag string, from int) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for i := from; i < len(t.sent); i++ {
+		if t.sent[i].tag == tag {
+			return i
+		}
+	}
+	return -1
 }
 
 func (t *tap) signal() {
@@ -351,11 +478,25 @@ func (t *tap) touch(paused bool) {
 	t.mu.Unlock()
 }
 
-// idleFor reports how long the connection has been silent while a reply is due.
+// idleFor reports how long the server has been silent while a reply is due: not while IDLE waits and not while a
+// command is still being written.
 func (t *tap) idleFor() (time.Duration, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return time.Since(t.last), !t.paused
+	return time.Since(t.last), !t.paused && t.writing == 0
+}
+
+// failure is the connection's error, if it has failed.
+func (t *tap) failure() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	switch {
+	case t.killed != nil:
+		return t.killed
+	case t.err != nil && (errors.Is(t.err, io.EOF) || errors.Is(t.err, net.ErrClosed)):
+		return io.EOF
+	}
+	return t.err
 }
 
 // next parses and consumes one buffered response; ok is false when none is complete. failure is the

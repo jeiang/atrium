@@ -298,7 +298,7 @@ S: {t} NO [NONEXISTENT] Unknown
 	must(t, client.Connect(ctx))
 	_, err := client.UIDSearch(ctx, mail.SearchCriteria{})
 	wantError(t, err, "error", "command SEARCH illegal in state AUTH, only allowed in states SELECTED")
-	wantError(t, client.SelectRW(ctx, "Shared"), "readonly", `"Shared" is not writable`)
+	wantError(t, client.SelectRW(ctx, "Shared"), "readonly", `'"Shared"' is not writable`)
 	wantError(t, client.Noop(ctx), "readonly", "mailbox status changed to READ-ONLY")
 	wantError(t, client.Select(ctx, "INBOX"), "error", `IMAP command failed: NO [b'[NONEXISTENT] Unknown']`)
 	_, err = client.UIDFetch(ctx, mail.UIDs(1), mail.FetchItems{})
