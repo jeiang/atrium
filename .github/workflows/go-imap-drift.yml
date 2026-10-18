@@ -29,8 +29,7 @@ jobs:
       contents: read
       issues: write
     env:
-      GH_TOKEN: ${{ github.token }}
-      REF: ${{ github.event_name == 'pull_request' && '' || inputs.ref || 'v2' }}
+      REF: ${{ github.event_name != 'pull_request' && (inputs.ref || 'v2') || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -52,6 +51,8 @@ jobs:
 
       - name: Open an issue
         if: failure() && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           title="go-imap drift: the Gmail patch fails on upstream $REF"
           if [ -z "$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"go-imap drift\"" --json number --jq '.[].number')" ]; then
