@@ -98,14 +98,14 @@ None of these occurs in the regex corpus.
 each recorded call (`sub`, `split`, `findall`, `finditer` with
 `pos`/`endpos`, `count`) with Python's results. `TestCorpus` compiles every
 manifest pattern from its text and flags: patterns Python rejects must be
-rejected with the same message, and every record must agree (currently 276
-patterns, 12 rejected, 3448/3448 records; `go test -v` logs per-pattern
+rejected with the same message, and every record must agree (currently 277
+patterns, 12 rejected, 3456/3456 records; `go test -v` logs per-pattern
 counts). A slice that ports patterns registers them:
 
 ```go
 func TestPatterns(t *testing.T) {
     rxtest.Run(t, map[string]*rx.Regexp{
-        "src/atrium/imap.py:80": quotedRE,
+        "src/atrium/imap.py:_unquote:3d0d7e03": quotedRE,
     })
 }
 ```

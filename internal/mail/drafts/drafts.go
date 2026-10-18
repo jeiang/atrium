@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/config"
@@ -23,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/mail/smtp"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
@@ -180,10 +180,6 @@ var (
 	msgidJunkRE = rx.MustCompile(`[<>\s]`, 0)
 )
 
-func pySpace(r rune) bool { return unicode.IsSpace(r) || r >= 0x1c && r <= 0x1f }
-
-func pyStrip(s string) string { return strings.TrimFunc(s, pySpace) }
-
 func accountError() Error {
 	names := make([]string, len(config.Accounts))
 	for i, a := range config.Accounts {
@@ -202,7 +198,7 @@ func validAccount(v any) (string, bool) {
 }
 
 func cleanLine(name, value string, limit int) (string, error) {
-	value = pyStrip(value)
+	value = py.Strip(value)
 	if m, _ := lineBreakRE.Search(value); m != nil {
 		return "", Error(name + " must be a single line")
 	}
@@ -393,7 +389,7 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 	if id == "" {
 		id = headers["Message-ID"]
 	}
-	id = pyStrip(id)
+	id = py.Strip(id)
 	references := ""
 	if raw != nil {
 		v, ok, err := raw.Get("References")
@@ -401,7 +397,7 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 			return reply{}, err
 		}
 		if ok {
-			references = strings.Join(strings.FieldsFunc(v, pySpace), " ")
+			references = strings.Join(py.Split(v), " ")
 		}
 	}
 	var chain []string
@@ -452,7 +448,7 @@ func (s *Store) Create(ctx context.Context, threadID *int64, account string, to,
 		return 0, err
 	}
 	text, _ := body.(string)
-	if pyStrip(text) == "" {
+	if py.Strip(text) == "" {
 		return 0, Error("body is required")
 	}
 	if utf8.RuneCountInString(text) > MaxBody {
@@ -541,7 +537,7 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 	}
 	if v, ok := changes["body"]; ok {
 		body, isText := v.(string)
-		if !isText || pyStrip(body) == "" || utf8.RuneCountInString(body) > MaxBody {
+		if !isText || py.Strip(body) == "" || utf8.RuneCountInString(body) > MaxBody {
 			return nil, Error(fmt.Sprintf("body must be 1..%d characters", MaxBody))
 		}
 		set("body", body)

@@ -3,6 +3,8 @@ package httpx
 import (
 	"fmt"
 	"math"
+
+	"github.com/jeiang/atrium/internal/py"
 )
 
 // Key is Python's v[k] on a decoded JSON reply.
@@ -10,7 +12,7 @@ func Key(v any, k string) (any, error) {
 	if m, ok := v.(map[string]any); ok {
 		found, ok := m[k]
 		if !ok {
-			return nil, fmt.Errorf("%w: %s", ErrKey, pyRepr(k))
+			return nil, fmt.Errorf("%w: %s", ErrKey, py.Repr(k))
 		}
 		return found, nil
 	}

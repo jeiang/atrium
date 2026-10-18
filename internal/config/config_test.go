@@ -317,21 +317,3 @@ func TestNotConfiguredIsTyped(t *testing.T) {
 		t.Fatalf("err %T is not NotConfigured", err)
 	}
 }
-
-func TestPyRepr(t *testing.T) {
-	tests := map[string]string{
-		"dry":     "'dry'",
-		"it's":    `"it's"`,
-		`a'b"c`:   `'a\'b"c'`,
-		"a\\b":    `'a\\b'`,
-		"x\ny\tz": `'x\ny\tz'`,
-		"\x00":    `'\x00'`,
-		"\u00a0":  `'\xa0'`,
-		"é":       "'é'",
-	}
-	for in, want := range tests {
-		if got := PyRepr(in); got != want {
-			t.Errorf("PyRepr(%q) = %s, want %s", in, got, want)
-		}
-	}
-}

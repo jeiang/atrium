@@ -20,7 +20,7 @@ func connPragmas(foreignKeys bool) []string {
 	if foreignKeys {
 		fk = "PRAGMA foreign_keys = ON"
 	}
-	return []string{"PRAGMA busy_timeout = 30000", fk, "PRAGMA synchronous = FULL"}
+	return []string{"PRAGMA busy_timeout = 30000", fk, "PRAGMA synchronous = FULL", "PRAGMA journal_size_limit = 67108864"}
 }
 
 // DB is atrium.db: Write is the single writer connection, whose
@@ -162,4 +162,18 @@ func SerializeFloat32(v []float32) []byte {
 		binary.LittleEndian.PutUint32(b[4*i:], math.Float32bits(f))
 	}
 	return b
+}
+
+// Collect scans every row of rows with scan, closes rows and returns the scanned values.
+func Collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
+	defer func() { _ = rows.Close() }()
+	var out []T
+	for rows.Next() {
+		v, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
 }

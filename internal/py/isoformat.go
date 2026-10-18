@@ -1,14 +1,19 @@
-package scheduler
+package py
 
 import (
+	"math"
+	"math/big"
+	"slices"
+	"time"
 	"unicode/utf8"
 )
 
-type isoDateTime struct {
-	year, month, day                  int
-	hour, minute, second, microsecond int
-	aware                             bool
-	offsetSeconds, offsetMicroseconds int
+// DateTime is the result of FromISOFormat: wall-clock fields plus the UTC offset when the text carried one.
+type DateTime struct {
+	Year, Month, Day                  int
+	Hour, Minute, Second, Microsecond int
+	Aware                             bool
+	OffsetSeconds, OffsetMicroseconds int
 }
 
 type isoBuf []byte
@@ -34,9 +39,9 @@ func (b isoBuf) digits(p int, v *int, n int) (int, bool) {
 	return p, true
 }
 
-// fromISOFormat is CPython 3.14's datetime.fromisoformat (Modules/_datetimemodule.c).
-func fromISOFormat(s string) (isoDateTime, bool) {
-	var dt isoDateTime
+// FromISOFormat is CPython 3.14's datetime.fromisoformat (Modules/_datetimemodule.c).
+func FromISOFormat(s string) (DateTime, bool) {
+	var dt DateTime
 	if !utf8.ValidString(s) || utf8.RuneCountInString(s) < 7 {
 		return dt, false
 	}
@@ -64,34 +69,34 @@ func fromISOFormat(s string) (isoDateTime, bool) {
 		return dt, false
 	}
 	if rv == 1 {
-		dt.aware = true
-		total := int64(dt.offsetSeconds)*1_000_000 + int64(dt.offsetMicroseconds)
+		dt.Aware = true
+		total := int64(dt.OffsetSeconds)*1_000_000 + int64(dt.OffsetMicroseconds)
 		if total <= -86_400_000_000 || total >= 86_400_000_000 {
 			return dt, false
 		}
 	}
-	if dt.hour == 24 && dt.month >= 1 && dt.month <= 12 {
-		dim := daysInMonth(dt.year, dt.month)
-		if dt.day <= dim {
-			if dt.minute != 0 || dt.second != 0 || dt.microsecond != 0 {
+	if dt.Hour == 24 && dt.Month >= 1 && dt.Month <= 12 {
+		dim := daysInMonth(dt.Year, dt.Month)
+		if dt.Day <= dim {
+			if dt.Minute != 0 || dt.Second != 0 || dt.Microsecond != 0 {
 				return dt, false
 			}
-			dt.hour = 0
-			dt.day++
-			if dt.day > dim {
-				dt.day = 1
-				dt.month++
-				if dt.month > 12 {
-					dt.month = 1
-					dt.year++
+			dt.Hour = 0
+			dt.Day++
+			if dt.Day > dim {
+				dt.Day = 1
+				dt.Month++
+				if dt.Month > 12 {
+					dt.Month = 1
+					dt.Year++
 				}
 			}
 		}
 	}
-	if dt.year < 1 || dt.year > 9999 || dt.month < 1 || dt.month > 12 || dt.day < 1 || dt.day > daysInMonth(dt.year, dt.month) {
+	if dt.Year < 1 || dt.Year > 9999 || dt.Month < 1 || dt.Month > 12 || dt.Day < 1 || dt.Day > daysInMonth(dt.Year, dt.Month) {
 		return dt, false
 	}
-	if dt.hour > 23 || dt.minute > 59 || dt.second > 59 || dt.microsecond > 999_999 {
+	if dt.Hour > 23 || dt.Minute > 59 || dt.Second > 59 || dt.Microsecond > 999_999 {
 		return dt, false
 	}
 	return dt, true
@@ -138,8 +143,8 @@ func separatorLocation(b isoBuf) int {
 	return 8
 }
 
-func (b isoBuf) parseDate(n int, dt *isoDateTime) int {
-	p, ok := b.digits(0, &dt.year, 4)
+func (b isoBuf) parseDate(n int, dt *DateTime) int {
+	p, ok := b.digits(0, &dt.Year, 4)
 	if !ok {
 		return -1
 	}
@@ -167,14 +172,14 @@ func (b isoBuf) parseDate(n int, dt *isoDateTime) int {
 		} else {
 			day = 1
 		}
-		y, m, d, ok := isoToYMD(dt.year, week, day)
+		y, m, d, ok := isoToYMD(dt.Year, week, day)
 		if !ok {
 			return -5
 		}
-		dt.year, dt.month, dt.day = y, m, d
+		dt.Year, dt.Month, dt.Day = y, m, d
 		return 0
 	}
-	if p, ok = b.digits(p, &dt.month, 2); !ok {
+	if p, ok = b.digits(p, &dt.Month, 2); !ok {
 		return -1
 	}
 	if usesSep {
@@ -184,7 +189,7 @@ func (b isoBuf) parseDate(n int, dt *isoDateTime) int {
 			return -2
 		}
 	}
-	if _, ok = b.digits(p, &dt.day, 2); !ok {
+	if _, ok = b.digits(p, &dt.Day, 2); !ok {
 		return -1
 	}
 	return 0
@@ -242,7 +247,7 @@ func (b isoBuf) parseHMSF(p, end int, h, m, s, us *int) int {
 	return 0
 }
 
-func (b isoBuf) parseTime(p0, end int, dt *isoDateTime) int {
+func (b isoBuf) parseTime(p0, end int, dt *DateTime) int {
 	tz := p0
 	for {
 		if c := b.at(tz); c == 'Z' || c == '+' || c == '-' {
@@ -253,7 +258,7 @@ func (b isoBuf) parseTime(p0, end int, dt *isoDateTime) int {
 			break
 		}
 	}
-	rv := b.parseHMSF(p0, tz, &dt.hour, &dt.minute, &dt.second, &dt.microsecond)
+	rv := b.parseHMSF(p0, tz, &dt.Hour, &dt.Minute, &dt.Second, &dt.Microsecond)
 	if rv < 0 {
 		return rv
 	}
@@ -275,8 +280,8 @@ func (b isoBuf) parseTime(p0, end int, dt *isoDateTime) int {
 	}
 	var th, tm, ts, tus int
 	rv = b.parseHMSF(tz+1, end, &th, &tm, &ts, &tus)
-	dt.offsetSeconds = sign * (th*3600 + tm*60 + ts)
-	dt.offsetMicroseconds = sign * tus
+	dt.OffsetSeconds = sign * (th*3600 + tm*60 + ts)
+	dt.OffsetMicroseconds = sign * tus
 	if rv != 0 {
 		return -5
 	}
@@ -348,4 +353,60 @@ func isoToYMD(year, week, day int) (int, int, int, bool) {
 	}
 	y, m, d := ordToYMD(monday + (week-1)*7 + day - 1)
 	return y, m, d, true
+}
+
+const (
+	secondsPerDay      = 86400
+	microsecondsPerSec = 1_000_000
+)
+
+// Timestamp is datetime.timestamp(): a naive value is read as wall time in loc the way zoneinfo does with
+// fold=0, and the microsecond count is rounded to the nearest float64 once.
+func (d DateTime) Timestamp(loc *time.Location) float64 {
+	wall := time.Date(d.Year, time.Month(d.Month), d.Day, d.Hour, d.Minute, d.Second, 0, time.UTC).Unix()
+	var unix int64
+	if d.Aware {
+		unix = wall - int64(d.OffsetSeconds)
+	} else {
+		unix = WallToUnix(loc, wall)
+	}
+	micros := new(big.Int).SetInt64(unix)
+	micros.Mul(micros, big.NewInt(microsecondsPerSec))
+	micros.Add(micros, big.NewInt(int64(d.Microsecond)-int64(d.OffsetMicroseconds)))
+	f, _ := new(big.Rat).SetFrac(micros, big.NewInt(microsecondsPerSec)).Float64()
+	return f
+}
+
+func offsetAt(loc *time.Location, unix int64) int64 {
+	_, off := time.Unix(unix, 0).In(loc).Zone()
+	return int64(off)
+}
+
+// WallToUnix resolves a local wall time (seconds since the epoch as if it were UTC) as zoneinfo does with
+// fold=0: the earlier instant when it is ambiguous, the offset in effect before the transition when it falls
+// in a gap.
+func WallToUnix(loc *time.Location, wall int64) int64 {
+	offsets := []int64{offsetAt(loc, wall-secondsPerDay), offsetAt(loc, wall), offsetAt(loc, wall+secondsPerDay)}
+	best, found := int64(0), false
+	for _, o := range offsets {
+		if u := wall - o; offsetAt(loc, u) == o && (!found || u < best) {
+			best, found = u, true
+		}
+	}
+	if found {
+		return best
+	}
+	return wall - offsetAt(loc, wall-slices.Max(offsets))
+}
+
+// SplitTimestamp splits a float timestamp into whole seconds and microseconds, rounding half to even as
+// datetime.fromtimestamp does.
+func SplitTimestamp(ts float64) (sec, us int64) {
+	whole := math.Floor(ts)
+	frac := math.RoundToEven((ts - whole) * microsecondsPerSec)
+	if frac >= microsecondsPerSec {
+		whole++
+		frac -= microsecondsPerSec
+	}
+	return int64(whole), int64(frac)
 }

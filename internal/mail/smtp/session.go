@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/mail/mime"
+	"github.com/jeiang/atrium/internal/py"
 )
 
 // Session is the part of smtplib.SMTP smtp.send drives, after the connect the Factory made.
@@ -420,7 +421,7 @@ func (s *session) auth(mech, user, password string) error {
 		answer, _ := s.authResponse(mech, user, password, challenge, false)
 		code, resp, err = s.docmd(base64.StdEncoding.EncodeToString([]byte(answer)), "")
 		if err == nil && s.challenges > maxChallenge {
-			return &Failure{Kind: "SMTPException", Msg: fmt.Sprintf("Server AUTH mechanism infinite loop. Last response: (%d, %s)", code, pyBytesRepr(resp))}
+			return &Failure{Kind: "SMTPException", Msg: fmt.Sprintf("Server AUTH mechanism infinite loop. Last response: (%d, %s)", code, py.ReprBytes([]byte(resp)))}
 		}
 	}
 	if err != nil {

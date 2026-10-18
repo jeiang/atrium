@@ -50,7 +50,7 @@ type IdleCommand struct {
 func (cmd *IdleCommand) run(c *Client, child *idleCommand) {
 	defer close(cmd.done)
 
-	timer := time.NewTimer(idleRestartInterval)
+	timer := time.NewTimer(c.options.idleRestart())
 	defer timer.Stop()
 
 	defer func() {
@@ -64,7 +64,7 @@ func (cmd *IdleCommand) run(c *Client, child *idleCommand) {
 	for {
 		select {
 		case <-timer.C:
-			timer.Reset(idleRestartInterval)
+			timer.Reset(c.options.idleRestart())
 
 			if cmd.err = child.Close(); cmd.err != nil {
 				return

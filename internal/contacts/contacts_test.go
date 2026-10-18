@@ -13,11 +13,11 @@ import (
 
 func TestPatterns(t *testing.T) {
 	rxtest.Run(t, map[string]*rx.Regexp{
-		"src/atrium/flags.py:18":    unfoldRe,
-		"src/atrium/contacts.py:6":  escapeRe,
-		"src/atrium/contacts.py:7":  splitRe,
-		"src/atrium/contacts.py:8":  dateRe,
-		"src/atrium/contacts.py:10": appleLabel,
+		"src/atrium/flags.py:unfold:ceb3ae39": unfoldRe,
+		"src/atrium/contacts.py:ESCAPE":       escapeRe,
+		"src/atrium/contacts.py:SPLIT":        splitRe,
+		"src/atrium/contacts.py:DATE":         dateRe,
+		"src/atrium/contacts.py:APPLE_LABEL":  appleLabel,
 	})
 }
 
@@ -293,18 +293,6 @@ func TestParseDate(t *testing.T) {
 func TestPythonStrings(t *testing.T) {
 	if got := Casefold("Straße ÄRZTE ﬁ İ"); got != "strasse ärzte fi i̇" {
 		t.Errorf("Casefold = %q", got)
-	}
-	for in, want := range map[string][]string{
-		"":              nil,
-		"a\nb":          {"a", "b"},
-		"a\r\nb\rc\n":   {"a", "b", "c"},
-		"\n":            {""},
-		"a\x1cb\u2028c": {"a", "b", "c"},
-		"a\n\nb":        {"a", "", "b"},
-	} {
-		if got := splitLines(in); !reflect.DeepEqual(got, want) {
-			t.Errorf("splitLines(%q) = %q", in, got)
-		}
 	}
 	for in, want := range map[string]string{
 		"a\r\nb\rc":                 "a\nb\nc",

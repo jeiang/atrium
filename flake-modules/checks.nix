@@ -83,9 +83,12 @@
       golden-regex = pkgs.runCommand "atrium-golden-regex-check" {nativeBuildInputs = [pkgs.python314];} ''
         cd ${lib.fileset.toSource {
           root = ../.;
-          fileset = lib.fileset.unions [../src/atrium ../tools/golden/corpora ../testdata/corpora];
+          fileset = lib.fileset.unions [../src/atrium ../tools/golden/common.py ../tools/golden/corpora ../testdata/corpora];
         }}
-        PYTHONDONTWRITEBYTECODE=1 python tools/golden/corpora/gen_regex.py --check
+        # Ids and the corpus must not depend on hash order: check under two seeds, like golden-corpora.
+        for seed in 1 2; do
+          PYTHONHASHSEED=$seed PYTHONDONTWRITEBYTECODE=1 python tools/golden/corpora/gen_regex.py --check
+        done
         touch $out
       '';
     };

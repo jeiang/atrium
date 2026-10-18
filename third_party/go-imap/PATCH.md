@@ -26,6 +26,8 @@ New files:
   `X-GM-LABELS`, and skipping of unknown msg-att items.
 - `imapclient/gmail_test.go`, `imapclient/testdata/gmail/session.txt`: the
   scripted wire transcript test (`TestGmailTranscript`).
+- `imapclient/idle_restart.go`: `Options.idleRestart`, the IDLE re-issue
+  interval with upstream's 28 minutes as the default.
 
 One-line hooks in upstream files:
 
@@ -38,6 +40,9 @@ One-line hooks in upstream files:
   `unsupported msg-att name`.
 - `imapclient/search.go`: `writeSearchKey` writes the Gmail keys;
   `searchCriteriaIsASCII` checks `X-GM-RAW`.
+- `imapclient/client.go`: `Options.IdleRestartInterval`, so atrium's tests
+  can reach the IDLE re-issue; `imapclient/idle.go` reads it through
+  `idleRestart` instead of the constant.
 
 Gmail code goes only in new files; upstream files get hooks, nothing else.
 Copy, Store and UIDExpunge helpers belong in the atrium wrapper, not here.

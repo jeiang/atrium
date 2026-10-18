@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/py"
 )
 
 // SendError is smtp.SendError: every failure of a send, worded as Python's str() of what smtplib raised.
@@ -29,9 +29,9 @@ type ResponseError struct {
 
 func (e *ResponseError) Error() string {
 	if e.text {
-		return fmt.Sprintf("(%d, %s)", e.Code, config.PyRepr(e.Msg))
+		return fmt.Sprintf("(%d, %s)", e.Code, py.Repr(e.Msg))
 	}
-	return fmt.Sprintf("(%d, %s)", e.Code, pyBytesRepr(e.Msg))
+	return fmt.Sprintf("(%d, %s)", e.Code, py.ReprBytes([]byte(e.Msg)))
 }
 
 // SenderRefused is SMTPSenderRefused(code, reply, sender).
@@ -42,7 +42,7 @@ type SenderRefused struct {
 }
 
 func (e *SenderRefused) Error() string {
-	return fmt.Sprintf("(%d, %s, %s)", e.Code, pyBytesRepr(e.Msg), config.PyRepr(e.Sender))
+	return fmt.Sprintf("(%d, %s, %s)", e.Code, py.ReprBytes([]byte(e.Msg)), py.Repr(e.Sender))
 }
 
 // RecipientsRefused is SMTPRecipientsRefused: every recipient was refused, so nothing was sent.
@@ -51,7 +51,7 @@ type RecipientsRefused struct{ Refused Refusals }
 func (e *RecipientsRefused) Error() string {
 	parts := make([]string, len(e.Refused))
 	for i, r := range e.Refused {
-		parts[i] = config.PyRepr(r.Addr) + ": " + r.Reply()
+		parts[i] = py.Repr(r.Addr) + ": " + r.Reply()
 	}
 	return "{" + strings.Join(parts, ", ") + "}"
 }
@@ -89,7 +89,7 @@ type Refusal struct {
 }
 
 // Reply is str() of the refusal's (code, b'reply') tuple.
-func (r Refusal) Reply() string { return fmt.Sprintf("(%d, %s)", r.Code, pyBytesRepr(r.Msg)) }
+func (r Refusal) Reply() string { return fmt.Sprintf("(%d, %s)", r.Code, py.ReprBytes([]byte(r.Msg))) }
 
 // Refusals keeps a Python dict's order: a repeated address keeps its first position and takes the last reply.
 type Refusals []Refusal
@@ -153,36 +153,6 @@ func osError(err error) error {
 		return &OSError{Kind: "OSError", Errno: n, HasErrno: true, Strerror: text}
 	}
 	return err
-}
-
-func pyBytesRepr(s string) string {
-	quote := byte('\'')
-	if strings.IndexByte(s, '\'') >= 0 && strings.IndexByte(s, '"') < 0 {
-		quote = '"'
-	}
-	var b strings.Builder
-	b.WriteString("b")
-	b.WriteByte(quote)
-	for i := range len(s) {
-		c := s[i]
-		switch {
-		case c == '\\' || c == quote:
-			b.WriteByte('\\')
-			b.WriteByte(c)
-		case c == '\t':
-			b.WriteString(`\t`)
-		case c == '\n':
-			b.WriteString(`\n`)
-		case c == '\r':
-			b.WriteString(`\r`)
-		case c < 0x20 || c >= 0x7f:
-			fmt.Fprintf(&b, `\x%02x`, c)
-		default:
-			b.WriteByte(c)
-		}
-	}
-	b.WriteByte(quote)
-	return b.String()
 }
 
 // ASCIIEncodeError is the UnicodeEncodeError s.encode('ascii') raises, nil when s is ASCII.
