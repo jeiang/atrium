@@ -15,6 +15,8 @@ and backups; nothing of that lives here.
 - `main` requires signed commits and the `check` status. Merge with
   `gh pr merge --auto --merge`.
 - Use Conventional Commits.
+- Wayfinder tickets: claim by assigning yourself before work; post a
+  resolution comment, then close.
 - Tests: `nix build .#atrium` runs pytest in the package's checkPhase.
   For a faster loop, `just test` (`nix develop --impure -c python -m pytest`)
   runs the suite against the working tree. `.envrc` loads the devshell with
@@ -55,9 +57,25 @@ and backups; nothing of that lives here.
 - `nix/`: package, static assets and the NixOS module.
 - `docs/runbook.md`: the environment the units read and the operating
   procedures, host-neutral.
+- `docs/install.md`: using the NixOS module.
+- `docs/CONTRIBUTING.md`: dev shell, recipes, pull requests, wayfinder
+  workflow.
+- `docs/vision.md`: what atrium is for and the owner's v2 direction.
 
 ## Decisions that constrain changes
 
+- The Python app is frozen to fixes until the Go port (v2) cuts over. v2 is
+  planned on the wayfinder map
+  (https://github.com/jeiang/atrium/issues/15). Phase A ports behavior as-is
+  and keeps the host interface; new features go to Phase B tickets.
+- v2 direction (not the frozen Python app): memory precedence is profile >
+  nightly > wiki; the profile is the source of truth and the nightly run
+  updates the wiki weighted by confidence.
+- v2 direction: money currencies are settings with USD as the base; the
+  operator sets a fixed rate per currency, the rate used is stored per
+  transaction and never changes older ones, and there is no rate fetcher.
+- v2 direction: the mail model endpoint is any OpenAI-compatible endpoint,
+  local or hosted; no local model is required.
 - Mail routing and flagging run in code, never as a tool an agent chooses.
   Rules, folder data, skills, profile and agent threads live in atrium's
   SQLite database, never in this repository.
@@ -109,11 +127,12 @@ and backups; nothing of that lives here.
   `web.allowedHost` or whose `Remote-Groups` lacks `atrium_access`.
   `atrium-web-local` (`--auth local`) listens on loopback only, for emergency
   access over an SSH tunnel. Never bind either listener to another interface
-  by default. The UI carries the IMAP, SMTP, Notion, Google and Anthropic
-  credentials, and the pause switch stops only automatic writes and
-  scheduled runs. Every POST is CSRF-checked and same-origin; the CSP allows
-  only same-origin scripts and `data:` images, so nothing loads from a CDN
-  and no script is inline: assets are built into `atrium-static`.
+  by default. The web process holds the IMAP, SMTP, Notion, Google and
+  Anthropic credentials from the environment, and the pause switch stops
+  only automatic writes and scheduled runs. Every POST is CSRF-checked and
+  same-origin; the CSP allows only same-origin scripts and `data:` images,
+  so nothing loads from a CDN and no script is inline: assets are built
+  into `atrium-static`.
 - The raw message cache and media caches live under the state directory's
   `cache/`, never in the Nix store; `atrium.db` holds everything worth
   backing up. The host decides what persists and what is backed up.

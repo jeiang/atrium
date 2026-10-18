@@ -1,44 +1,54 @@
 # atrium
 
-atrium is a single-operator assistant that indexes iCloud and Gmail over
-IMAP, files and flags mail by recorded rules, mirrors Notion, calendars and
-contacts, runs a tool-using chat agent on the Anthropic API with scheduled
-jobs, and files a media library from qBittorrent. It is a Python package
-(`src/atrium`) with a FastAPI web UI, packaged and deployed through Nix.
+atrium is one person's private assistant service, run on their own host. It
+is meant as a unified agentic harness for a personal secretary, with basic
+coding tooling on top. The harness does as much as it can in code, so the
+agent does not spend tokens generating code to perform actions.
 
-## Using the module
+It keeps a local index of the operator's mail, calendar, contacts, Notion
+wiki, spending and media library. Routine work runs in plain code with no
+model in the loop: filing and flagging mail by recorded rules, trashing by
+rule, extracting receipts into a ledger, tracking packages, filing torrents
+and polling release feeds. A Claude-based agent sits on top for work that
+needs judgment: answering questions from the operator's data, drafting
+replies, keeping a wiki, weekly reviews, daily nudges and proposing actions.
 
-```nix
-{
-  inputs.atrium.url = "github:jeiang/atrium";
-  inputs.atrium.inputs.nixpkgs.follows = "nixpkgs";
-}
-```
+Limits that hold today:
 
-```nix
-{inputs, ...}: {
-  imports = [inputs.atrium.nixosModules.default];
+- The agent never sends mail. Only the operator's Send click does.
+- Mail routing is code, not an agent decision.
+- Every automatic write is logged with an undo.
+- One operator per instance. More people means more instances.
+- Others running their own instance is a v2 goal.
 
-  services.atrium = {
-    enable = true;
-    mode = "live";
-    environmentFiles = ["/run/secrets/atrium.env"];
-    web.allowedHost = "atrium.example.org";
-    publicUrl = "https://atrium.example.org";
-    chatUrl = "http://127.0.0.1:8187/v1";
-    embedUrl = "http://127.0.0.1:8188/v1";
-  };
-}
-```
+## Status
 
-The module creates the static `atrium` user, `/var/lib/atrium`, the
-`atrium-web`, `atrium-web-local`, `atrium-watch`, `atrium-agent-scheduler`,
-`atrium-codemode` and timer units, and the `atrium-run` wrapper. The model
-servers behind `chatUrl` and `embedUrl` (name their units in
-`modelServerUnits`), the reverse proxy in front of the public listener, the
-secrets in `environmentFiles` and persistence of the state directory are the
-host's. `docs/runbook.md` lists the environment the units read and the
-operating procedures.
+The Python app in `src/atrium` runs today and is frozen to fixes.
 
-`nix build .#atrium` builds the package and runs the tests; `just test` runs
-them against the working tree in the devshell.
+v2 is a planned Go rewrite, in two phases:
+
+- Phase A ports the app as-is: same behavior, same SQLite data, same host
+  interface. Then it cuts over and the Python code is deleted.
+- Phase B improves the Go code: OIDC login, settings editable in the UI and
+  pinnable by deploy-time config, runtime-toggled modules, a remote microVM
+  sandbox manager for scripts and repository work, GitHub integration, and
+  model choice per chat.
+
+The plan lives on the wayfinder map,
+[issue #15](https://github.com/jeiang/atrium/issues/15), and the
+[project board](https://github.com/users/jeiang/projects/4).
+
+## Docs
+
+- [docs/install.md](docs/install.md): add the NixOS module to a host.
+- [docs/runbook.md](docs/runbook.md): environment and operating procedures.
+- [docs/vision.md](docs/vision.md): what atrium is for and where v2 is
+  heading.
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md): dev shell, `just` recipes,
+  pull requests and the wayfinder workflow.
+- [AGENTS.md](AGENTS.md): invariants and rules for changes.
+
+## License
+
+MIT. See [LICENSE](LICENSE). Contributions need a DCO sign-off; see
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
