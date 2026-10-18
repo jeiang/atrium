@@ -340,6 +340,11 @@ func TestNoRegexpImport(t *testing.T) {
 			if path != root && (strings.HasPrefix(name, ".") || name == "testdata" || name == "node_modules") {
 				return filepath.SkipDir
 			}
+			if path != root {
+				if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+					return filepath.SkipDir
+				}
+			}
 			return nil
 		}
 		if !strings.HasSuffix(path, ".go") {
