@@ -1,0 +1,17 @@
+From: me@example.test
+Subject: Fwd: Receipt
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="f"
+
+--f
+Content-Type: text/plain
+
+See below.
+--f
+Content-Type: message/rfc822
+
+From: shop@example.test
+Subject: Receipt
+
+Receipt total $9.99
+--f--

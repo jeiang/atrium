@@ -1,0 +1,30 @@
+{
+  "corpus": "documents",
+  "fixtures": [
+    "documents/data.xlsx",
+    "documents/empty.docx",
+    "documents/garbage.bin",
+    "documents/not_office.zip",
+    "documents/plain.docx",
+    "documents/single.xlsx",
+    "documents/truncated.docx",
+    "documents/word_features.docx"
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "functions": [
+    "inspect",
+    "safe_name",
+    "media_type_of",
+    "kind_of",
+    "check_budget"
+  ],
+  "mimetypes": "built-in table only (mimetypes.init(files=[]))",
+  "process_tz": "America/Port_of_Spain",
+  "python": "3.14",
+  "records": 89,
+  "source": "src/atrium/agent/files.py",
+  "versions": {
+    "openpyxl": "3.1.5",
+    "python-docx": "1.2.0"
+  }
+}
