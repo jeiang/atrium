@@ -50,7 +50,11 @@ the web assets from `internal/web/static`, which the shell stages from
   (such as a `replace`d one under `third_party/`).
 - `just licenses`: go-licenses fails on forbidden (AGPL) or unknown
   dependency licences.
-- `just imap-upstream`: fails until `third_party/go-imap` lands (#103).
+- `just imap-upstream [--check] [ref]`: re-applies the Gmail patch in
+  `third_party/go-imap` onto upstream `ref` (default: the pinned base, a
+  no-op), runs the library suite and the wire transcript test, and copies
+  the result in; `third_party/go-imap/PATCH.md` is the procedure. The
+  `go-imap drift` workflow runs it weekly against upstream `v2`.
 
 `nix build .#atrium-go` builds the static Go binary for the host (Linux
 only) and runs the Go tests; `.#atrium-go-x86_64-v3` and
