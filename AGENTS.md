@@ -60,7 +60,21 @@ and backups; nothing of that lives here.
   Driver specifics stay in `internal/db/open_*.go`, and both drivers pass
   the same tests. The bundled SQLite never drops below the version that
   wrote `atrium.db` (`atriumDBSQLiteVersion`); bump it only by a pull request
-  that passes the driver tests on both.
+  that passes the driver tests on both. Writes go through `DB.Write` (one
+  connection, `_txlock=immediate`) and `WithTx`; `DB.Read` is `query_only`,
+  so no deferred read-then-write transaction exists; reads inside a
+  transaction go through its `tx`
+  (https://github.com/jeiang/atrium/issues/72).
+- Go schema: `db.Migrate` runs once per process start. Migration 0001 is
+  Python's `db.connect` schema pass in its order (DDL in
+  `internal/db/schema/*.sql`, copied verbatim from `src/atrium`), so it
+  creates an empty DB and migrates legacy shapes, then asserts the fresh
+  schema's tables, columns, indexes, FTS5 and vec0 tables exist. Later
+  schema changes are new additive migrations; Phase A adds only
+  `schema_migrations`, and no migration drops, renames or retypes a
+  column. Only a pending migration takes the `atrium.db.lock` flock. The
+  built-in skills, subagents and categories are seeded on every start
+  (https://github.com/jeiang/atrium/issues/102).
 - Go packaging: `nix/go-package.nix` builds `atrium-go-x86_64-v3`
   (`GOAMD64=v3`, `-mavx2`) and `atrium-go-aarch64`, both musl-static cgo
   with `sqlite_fts5`; `atrium-go` is the host's target and both are flake
@@ -95,9 +109,26 @@ and backups; nothing of that lives here.
   journal built-ins. A field whose full grouped name names a password,
   secret, token, key, cookie, credential or authorization is logged as
   `[redacted]`; token counts (`*_TOKENS`) are not.
-- `internal/db/`: the SQLite driver seam (`Open`), vec0 and FTS5 tests.
+- `internal/db/`: the SQLite driver seam (`Open`), `Connect` (writer and
+  reader pools, `WithTx`), `Exclusive` (flock on `<path>.lock`), `Migrate`
+  and the schema, vec0 and FTS5 tests, tests against the golden DBs;
+  `internal/db/dbtest` connects to a temp-file DB, with or without foreign
+  keys (Python's `connect_memory` has them off), migrated (`Schema`) or a
+  migrated copy of a DB file (`Copy`).
+- `internal/db/readpaths/`: the registry of every module's read-path
+  queries; its test runs them on migrated copies of `atrium.db` and
+  `atrium-legacy.db` against the Python results in
+  `testdata/golden/db/readpaths.json`. A module registers its paths in
+  `init` and adds a blank import to that test.
 - `internal/rx/`: Python `re` patterns on regexp2 with Python semantics and
   a 100 ms match timeout; `rxtest` runs them against the regex corpus.
+- `internal/safety/`: the mailbox write gate. `ATRIUM_MODE` is read on
+  every call; approved-proposal/undo, operator-send and automatic-write
+  scopes are `context.Context` values; the pause file is existence-only.
+- `internal/mail/`: the `Client` interface. Only `Gated` builds one, and
+  every write method calls the gate before the connection;
+  `mail/mailtest.FakeClient` runs the same gate. A move is COPY, STORE
+  `\Deleted`, UID EXPUNGE: nothing under `internal/mail` uses IMAP MOVE.
 - `internal/web/`: the embedded web assets (`Static`, `AssetVersion`);
   `internal/web/static` is staged, never committed.
 - `third_party/`: vendored sources, each its own Go module wired by

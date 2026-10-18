@@ -145,8 +145,8 @@ byte is `{"repeat_b64": ..., "count": n}`, and a fixture is `{"file":
 `process_tz`, `records`, `fixtures`, the source file and functions, and
 library versions where a library shapes the output. The generators set the
 process time zone (`TZ`) to `process_tz` (`America/Port_of_Spain`): Python
-reads a naive time, such as a `Date` header without a zone, in the process
-zone, so the Go test must run with the same local zone. Lines can be long
+reads a naive time in the process zone, so the Go test must run with the same
+local zone. Lines can be long
 (the calendar corpus has one of about 300 KB): give `bufio.Scanner` a 1 MiB
 buffer.
 
@@ -163,9 +163,10 @@ trees, RFC 2047 and RFC 2231 encoded headers, quoted-printable and base64,
 HTML-only bodies with scripts and entities, Latin-1, windows-1252, raw 8-bit
 and unknown charsets, bad, missing and obsolete dates, ESP headers, DKIM,
 group and odd addresses, folded headers, LF-only line ends, broken multipart,
-forwarded `message/rfc822`, NUL bytes and a body over `FTS_BODY_CHARS`. The
-other records are `subject_template`, `filename_pattern`, `msgid_list`,
-`normalize_msgid` and `domain_of` vectors.
+forwarded `message/rfc822`, NUL bytes and a body over `FTS_BODY_CHARS`. A
+`Date` or INTERNALDATE without a zone or with `-0000` is read as UTC
+(`email_ts`). The other records are `subject_template`, `filename_pattern`,
+`msgid_list`, `normalize_msgid` and `domain_of` vectors.
 
 ## Calendar
 
