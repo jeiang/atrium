@@ -120,6 +120,12 @@ and backups; nothing of that lives here.
   `atrium-legacy.db` against the Python results in
   `testdata/golden/db/readpaths.json`. A module registers its paths in
   `init` and adds a blank import to that test.
+- `internal/assistant/scheduler/`: the schedule grammar (`Parse`,
+  `Describe`, `Validate`, `Spec.NextAfter`/`MinGap`; wall times resolve
+  as zoneinfo's `fold=0`, one-shots through a port of CPython's
+  `datetime.fromisoformat`) and the `jobs` CRUD with the 20-active cap
+  and 1 h minimum gap (`SkipLimits` is Python's `enforce=False`). Its
+  test runs `testdata/corpora/scheduler.jsonl` with exact match.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
   600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
   malformed reply wraps `ErrValue`, `ErrKey`, `ErrIndex` or `ErrType`, so
