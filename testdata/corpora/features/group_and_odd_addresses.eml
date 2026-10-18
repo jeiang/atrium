@@ -1,0 +1,9 @@
+From: "Last, First" <First.Last@Example.TEST>
+To: Team: a@example.test, B <b@example.test>;, c@example.test
+Cc: <>
+Cc: d@example.test (comment)
+Reply-To: 
+Return-Path: <>
+Subject: groups
+
+hi
