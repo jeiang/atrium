@@ -35,6 +35,11 @@ DELETION_INTERVAL_SECONDS = 86400
 TIMEZONE = "America/Port_of_Spain"
 
 
+def tz_name(env=None):
+    env = os.environ if env is None else env
+    return (env.get("ATRIUM_TZ") or "").strip() or TIMEZONE
+
+
 @dataclass(frozen=True)
 class AccountSpec:
     name: str

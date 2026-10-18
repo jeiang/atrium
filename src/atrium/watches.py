@@ -8,8 +8,10 @@ import logging
 import re
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from . import llm
+from .config import tz_name
 from .http import ServiceUnavailable
 from .router import message_body
 
@@ -319,7 +321,7 @@ def list_packages(conn, now, active_only=True, include_dismissed=False):
         cutoff = now - STALE_PACKAGE_DAYS * DAY
         rows = [r for r in rows if r["status"] != DELIVERED and r["updated_ts"] >= cutoff]
     for r in rows:
-        r["updated"] = datetime.fromtimestamp(r["updated_ts"]).strftime("%Y-%m-%d")
+        r["updated"] = datetime.fromtimestamp(r["updated_ts"], ZoneInfo(tz_name())).strftime("%Y-%m-%d")
     return rows
 
 

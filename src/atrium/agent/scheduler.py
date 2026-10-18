@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from .. import db, safety
-from ..config import TIMEZONE
+from ..config import tz_name
 from . import budget, journal, usage
 from .tools.base import CRON, NIGHTLY
 
@@ -83,11 +83,6 @@ def init(conn):
 
 class ScheduleError(ValueError):
     pass
-
-
-def tz_name(env=None):
-    env = os.environ if env is None else env
-    return (env.get("ATRIUM_TZ") or "").strip() or TIMEZONE
 
 
 def zone(name):

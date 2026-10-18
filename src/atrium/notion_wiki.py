@@ -11,7 +11,7 @@ import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from .config import TIMEZONE
+from .config import tz_name
 from .notion_api import normalize_id
 
 ROOT_ENV = "ATRIUM_NOTION_WIKI_ROOT"
@@ -57,8 +57,7 @@ def wiki_root(environ=None):
 
 
 def local_date(ts, environ=None):
-    name = (environ if environ is not None else os.environ).get("ATRIUM_TZ", "").strip() or TIMEZONE
-    return datetime.fromtimestamp(ts, ZoneInfo(name)).strftime("%Y-%m-%d")
+    return datetime.fromtimestamp(ts, ZoneInfo(tz_name(environ))).strftime("%Y-%m-%d")
 
 
 def normalize_key(value):

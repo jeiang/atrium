@@ -117,6 +117,25 @@ def transactions(conn):
 # ---------- currency rules ----------
 
 
+def test_local_date_follows_atrium_tz(monkeypatch):
+    moment = datetime(2026, 10, 31, 20, 0, tzinfo=ZoneInfo(TZ)).timestamp()
+    monkeypatch.delenv("ATRIUM_TZ", raising=False)
+    assert money.local_date(moment) == date(2026, 10, 31)
+    monkeypatch.setenv("ATRIUM_TZ", "Asia/Tokyo")
+    assert money.local_date(moment) == date(2026, 11, 1)
+
+
+def test_tracked_list_asks_bills_for_atrium_tz_today(conn, monkeypatch):
+    moment = datetime(2026, 10, 31, 20, 0, tzinfo=ZoneInfo(TZ)).timestamp()
+    seen = []
+    monkeypatch.setenv("ATRIUM_TZ", "Asia/Tokyo")
+    monkeypatch.setattr(money.time, "time", lambda: moment)
+    monkeypatch.setattr(money, "bills", lambda conn, today, upcoming_days=None: seen.append(today) or [])
+    money.set_tracked_since(conn, "2026-09-17")
+    money.list_transactions(conn)
+    assert seen == [date(2026, 11, 1)]
+
+
 def test_usd_on_cibc_bbd_account_adds_two_percent(conn, accounts):
     amount, rate, rate_date, review = money.resolve(conn, account(conn, accounts, "cibc_bbd"), 100, "USD", "2026-10-10")
     assert (amount, rate, rate_date, review) == (204.0, 2.04, None, "")

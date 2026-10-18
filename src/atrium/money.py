@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 from . import db, llm
 from .agent import writes
-from .config import TIMEZONE
+from .config import tz_name
 from .http import ServiceUnavailable, get_text
 from .router import message_body
 
@@ -173,7 +173,7 @@ def init_schema(conn):
 
 
 def _zone():
-    return ZoneInfo(TIMEZONE)
+    return ZoneInfo(tz_name())
 
 
 def local_date(ts, tz=None):
@@ -1301,7 +1301,7 @@ def list_transactions(conn, unassigned=False, limit=100, dismissed=False, **filt
         where.append("(t.account_id IS NULL OR t.review != '')")
     since = tracked_since(conn)
     if since:
-        bill_ids = sorted({b["payee_id"] for b in bills(conn, date.today())})
+        bill_ids = sorted({b["payee_id"] for b in bills(conn, local_date(time.time()))})
         marks = ", ".join("?" * len(bill_ids))
         where.append(f"(t.date >= ? OR t.payee_id IN ({marks}))" if bill_ids else "t.date >= ?")
         params.extend([since, *bill_ids])
