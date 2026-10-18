@@ -46,11 +46,10 @@ and backups; nothing of that lives here.
   environment file.
 - Dependencies are what `pyproject.toml` lists, and `nix/package.nix` names
   the same set from `python314Packages`. Add a dependency in both.
-- Go: the module is `github.com/jeiang/atrium`; the `toolchain` line in
-  `go.mod` names the Go that `withGo1269` in `flake-modules/go-toolchain.nix`
-  builds, and Nix stays authoritative: checks run with `GOTOOLCHAIN=local`,
-  so the line only tells a plain `go` which release to fetch. Change both
-  together. Ported code never
+- Go: the module is `github.com/jeiang/atrium` and `go.mod` carries no
+  `toolchain` line: the Go release is the one `withGo1269` in
+  `flake-modules/go-toolchain.nix` builds, Nix is authoritative, and checks
+  run with `GOTOOLCHAIN=local`. Ported code never
   imports `regexp`; every pattern is the Python pattern text compiled by
   `internal/rx` (regexp2 underneath,
   https://github.com/jeiang/atrium/issues/71), `just lint` and an rx test
