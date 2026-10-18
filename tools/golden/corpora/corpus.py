@@ -4,11 +4,13 @@ import json
 import os
 import sys
 import time
+import zoneinfo
 from pathlib import Path
 
 # Python reads naive times (a Date header without a zone) in the process zone; pin it so the host does not leak in.
+# libc gets the zone file by path: the Linux build sandbox has no /usr/share/zoneinfo.
 PROCESS_TZ = "America/Port_of_Spain"
-os.environ["TZ"] = PROCESS_TZ
+os.environ["TZ"] = next((f":{p}" for p in (Path(base) / PROCESS_TZ for base in zoneinfo.TZPATH) if p.is_file()), PROCESS_TZ)
 time.tzset()
 
 
