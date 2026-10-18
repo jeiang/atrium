@@ -206,6 +206,11 @@ def test_vcard_parsing(tmp_path):
     assert contacts.search_contacts(None, "x") == []
 
 
+def test_vcard_file_with_utf8_bom(tmp_path):
+    (tmp_path / "bom.vcf").write_bytes(b"\xef\xbb\xbf" + VCF.encode())
+    assert [c["name"] for c in contacts.load_contacts(tmp_path)] == ["Ada Lovelace", "Charles Babbage"]
+
+
 RAW_ALT = (
     b"From: Ann <ann@x.test>\r\nTo: me@y.test\r\nSubject: Hi\r\nDate: Mon, 01 Jan 2024 10:00:00 +0000\r\n"
     b"Message-ID: <1@x.test>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=B\r\n\r\n"

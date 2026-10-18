@@ -5,9 +5,11 @@ go 1.26.0
 require (
 	github.com/anthropics/anthropic-sdk-go v1.82.0
 	github.com/dlclark/regexp2 v1.12.0
+	github.com/emersion/go-imap/v2 v2.0.0-beta.8
 	github.com/jeiang/atrium/third_party/sqlite-vec v0.0.0
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/systemd/slog-journal v0.1.2
+	golang.org/x/text v0.43.0
 	modernc.org/sqlite v1.60.1
 )
 
@@ -15,6 +17,8 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/emersion/go-message v0.18.2 // indirect
+	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -33,7 +37,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.33.0 // indirect
 	go.opentelemetry.io/otel/trace v1.33.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
@@ -41,3 +45,5 @@ require (
 )
 
 replace github.com/jeiang/atrium/third_party/sqlite-vec => ./third_party/sqlite-vec
+
+replace github.com/emersion/go-imap/v2 => ./third_party/go-imap
