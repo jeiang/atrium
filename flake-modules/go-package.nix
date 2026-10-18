@@ -2,6 +2,7 @@
   perSystem = {
     pkgs,
     self',
+    withGo1269,
     ...
   }: let
     inherit (pkgs.stdenv) hostPlatform;
@@ -9,7 +10,13 @@
       if hostPlatform.system == system
       then pkgs.pkgsStatic
       else pkgs.pkgsCross.${crossName}.pkgsStatic;
-    goPackage = system: crossName: (staticPkgs system crossName).callPackage ../nix/go-package.nix {inherit (self'.packages) atrium-static;};
+    goPackage = system: crossName: let
+      set = staticPkgs system crossName;
+    in
+      set.callPackage ../nix/go-package.nix {
+        inherit (self'.packages) atrium-static;
+        buildGo126Module = set.buildGo126Module.override {go = withGo1269 set.go_1_26;};
+      };
     targets = lib.optionalAttrs hostPlatform.isLinux {
       atrium-go-x86_64-v3 = goPackage "x86_64-linux" "musl64";
       atrium-go-aarch64 = goPackage "aarch64-linux" "aarch64-multiplatform-musl";
