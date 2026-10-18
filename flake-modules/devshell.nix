@@ -8,6 +8,7 @@
     pkgs,
     config,
     self',
+    go,
     ...
   }: {
     treefmt.config = {
@@ -52,7 +53,7 @@
       '';
       languages.go = {
         enable = true;
-        package = pkgs.go_1_26;
+        package = go;
       };
       languages.nix.enable = true;
       git-hooks.hooks = {

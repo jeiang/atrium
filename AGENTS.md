@@ -48,8 +48,11 @@ and backups; nothing of that lives here.
   the same set from `python314Packages`. Add a dependency in both.
 - Go: the module is `github.com/jeiang/atrium`, its toolchain line is pinned
   in `go.mod` and `flake-modules/devshell.nix` together. Ported code never
-  imports `regexp`; every pattern goes through the regexp2 package
-  (https://github.com/jeiang/atrium/issues/71), and `just lint` enforces it.
+  imports `regexp`; every pattern is the Python pattern text compiled by
+  `internal/rx` (regexp2 underneath,
+  https://github.com/jeiang/atrium/issues/71), `just lint` and an rx test
+  enforce it, and a slice that ports patterns passes them to `rxtest.Run`
+  keyed by their `regex_manifest.json` id.
   The CLI is stdlib `flag` through `internal/cli`: no CLI framework.
 - Go SQLite: the default build is cgo `mattn/go-sqlite3` (build tag
   `sqlite_fts5`, set in the devshell's `GOFLAGS`) with sqlite-vec vendored
@@ -123,6 +126,8 @@ and backups; nothing of that lives here.
   `datetime.fromisoformat`) and the `jobs` CRUD with the 20-active cap
   and 1 h minimum gap (`SkipLimits` is Python's `enforce=False`). Its
   test runs `testdata/corpora/scheduler.jsonl` with exact match.
+- `internal/rx/`: Python `re` patterns on regexp2 with Python semantics and
+  a 100 ms match timeout; `rxtest` runs them against the regex corpus.
 - `internal/safety/`: the mailbox write gate. `ATRIUM_MODE` is read on
   every call; approved-proposal/undo, operator-send and automatic-write
   scopes are `context.Context` values; the pause file is existence-only.

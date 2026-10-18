@@ -114,10 +114,10 @@ Python's Unicode `\w`, `\d`, `\s`, `\b` and `$` behaviour and code point spans.
 
 ### Loading from Go
 
-Read `regex_manifest.json` for the pattern text and flags by `id`, then stream
-`regex.jsonl` line by line (`bufio.Scanner`; the longest record is about 3 KB)
-and decode each line into a struct with the fields above. regexp2 reports rune
-indexes, which equal the code point spans recorded here.
+`internal/rx/rxtest` loads both files and checks compiled `rx` patterns
+against every record; a slice that ports patterns calls `rxtest.Run` with
+them keyed by manifest `id` (see `internal/rx/README.md`). rx and regexp2
+report rune indexes, which equal the code point spans recorded here.
 
 ### Regenerating
 
