@@ -2,6 +2,7 @@ import email.utils
 import logging
 import re
 import smtplib
+import ssl
 from email.message import EmailMessage
 
 from .config import ACCOUNTS, GMAIL, ICLOUD
@@ -60,7 +61,7 @@ def send(cfg, account, msg):
     refused = None
     try:
         with SMTP_FACTORY[0](SMTP_HOSTS[account], SMTP_PORT, timeout=SMTP_TIMEOUT) as server:
-            server.starttls()
+            server.starttls(context=ssl.create_default_context())
             server.login(user, password)
             refused = server.send_message(msg, from_addr=sender_address(account, user), to_addrs=recipients)
     except (smtplib.SMTPException, OSError) as e:

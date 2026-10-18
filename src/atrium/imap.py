@@ -1,6 +1,7 @@
 import base64
 import imaplib
 import re
+import ssl
 import time
 from dataclasses import dataclass
 
@@ -299,7 +300,7 @@ class ImapClient:
         self.capabilities = frozenset()
 
     def connect(self):
-        self._conn = imaplib.IMAP4_SSL(self.host, IMAP_PORT)
+        self._conn = imaplib.IMAP4_SSL(self.host, IMAP_PORT, ssl_context=ssl.create_default_context())
         self._conn.login(self._user, self._password)
         self.capabilities = frozenset(str(c).upper() for c in self._conn.capabilities)
         return self

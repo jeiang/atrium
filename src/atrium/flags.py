@@ -36,7 +36,7 @@ def load_contacts(directory):
     emails = set()
     for path in Path(directory).rglob("*.vcf"):
         try:
-            emails |= vcard_emails(path.read_text(errors="replace"))
+            emails |= vcard_emails(path.read_text(encoding="utf-8-sig", errors="replace"))
         except OSError:
             continue
     return emails

@@ -93,7 +93,8 @@ class Server:
         self.fail("quit")
         return False
 
-    def starttls(self):
+    def starttls(self, context):
+        assert context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED
         self.calls.append({"call": "starttls"})
         self.fail("starttls")
 
