@@ -3,6 +3,7 @@ import email.policy
 import hashlib
 import html
 import re
+from datetime import UTC
 from email.utils import getaddresses, parseaddr, parsedate_to_datetime
 
 from .config import FTS_BODY_CHARS
@@ -141,12 +142,17 @@ def content_digest(header_bytes, text_bytes):
     return h.hexdigest()
 
 
+def email_ts(value):
+    parsed = parsedate_to_datetime(value)
+    return (parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)).timestamp()
+
+
 def extract(header_bytes, text_bytes, attachments=None, fallback_ts=0.0):
     msg = email.message_from_bytes(header_bytes + text_bytes, policy=email.policy.default)
     name, addr = parseaddr(header(msg, "From"))
     addr = addr.lower()
     try:
-        date_ts = parsedate_to_datetime(header(msg, "Date")).timestamp()
+        date_ts = email_ts(header(msg, "Date"))
     except Exception:
         date_ts = fallback_ts
     subject = header(msg, "Subject")
