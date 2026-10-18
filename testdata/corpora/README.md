@@ -252,8 +252,10 @@ extraction differs from trafilatura's.
 
 `src/atrium/smtp.py` and `drafts.send`. The fake server records `calls`
 (`connect` with host, port and timeout, `starttls`, `login`, `send_message`
-with envelope sender and recipients, `quit`). `failure` names the stage
-(`connect`, `starttls`, `login`, `send`), the Python exception and its
+with envelope sender and recipients, `quit`); its `starttls` asserts the
+context verifies the certificate and hostname (`CERT_REQUIRED`,
+`check_hostname`), so a `starttls` call means a verified handshake. `failure`
+names the stage (`connect`, `starttls`, `login`, `send`), the Python exception and its
 constructor arguments; `refused_by_server` is the server's per-recipient
 refusal map. `drafts.send` records add `row` (the draft's `status`,
 `smtp_result`, `sent_msgid` afterwards), `sent_mailbox` and `appended_to`.
