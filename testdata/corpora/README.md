@@ -21,13 +21,22 @@ Corpora added later (#253) add a row here.
 
 ## Regex
 
-`regex_manifest.json` lists every `re.<call>(` site in `src/atrium` and every
-pattern those sites compile. `regex.jsonl` holds, per pattern and input, what
-Python `re` returned. The `golden-regex` flake check
-(`python tools/golden/corpora/gen_regex.py --check`) fails when `src/atrium`
-has a call site the manifest does not list (text scan and AST scan both), when
-a module imports `re` under another name, or when the committed files differ
-from a fresh generation.
+`regex_manifest.json` lists every `re.<call>(` site in `src/atrium`, every
+pattern those sites compile and every call made with each pattern (the `re`
+function call itself and the methods called on the compiled pattern).
+`regex.jsonl` holds, per pattern and input, what Python `re` returned. The
+`golden-regex` flake check (`python tools/golden/corpora/gen_regex.py --check`)
+fails when:
+
+- `src/atrium` has a `re.<call>(` site the manifest does not list (a text scan
+  and an AST scan, cross-checked);
+- a `re` function is referenced as a value (`x = re.sub`, `map(re.escape, …)`),
+  or a module imports `re` under another name or imports `regex`;
+- a `.sub`/`.subn`/`.search`/`.match`/`.fullmatch`/`.finditer`/`.findall` call
+  has a receiver that is neither a known compiled pattern nor listed in
+  `INDIRECT_USES` (patterns flowing through variables) or `NOT_PATTERN_CALLS`
+  (reviewed non-regex receivers) in `regex_inputs.py`;
+- the committed files differ from a fresh generation.
 
 ### Manifest
 
@@ -59,7 +68,7 @@ Top level: `freeze_commit`, `python`, `source`, `call_sites` (146),
 | `locals` | Dynamic sites: the runtime values bound to produce this pattern and flags. |
 | `groups`, `group_names` | Capture group count and the named-group index. |
 | `features` | Constructs from Python's own parse: `lookahead`, `negative_lookahead`, `lookbehind`, `negative_lookbehind`, `backreference`, `conditional`, `atomic_group`, `possessive`, `lazy`, `inline_flags`, `named_group`, `dollar`, `end_of_string_Z`, `start_of_string_A`, `word_boundary`, `word_class`, `digit_class`, `space_class`, `omitted_min_quantifier` (`{,n}`). |
-| `repl` | `"callable"` when the site's `sub` replacement is a function (no `call` result is recorded). |
+| `uses` | Every call made with the pattern, sorted by location: `{at, op, source, args, locals?, repl?}`. `at` is `file:line` of the call, `source` its Python source, `args` the evaluated non-default arguments (`repl`, `count`, `maxsplit`, `pos`, `endpos`), `locals` the runtime values bound for indirect or variable arguments. `repl: "callable"` with `args: null` marks a function replacement; the Go port reimplements the function, so no result is recorded. |
 | `error` | Python's `re.error` text when the pattern does not compile; such patterns have no corpus records. |
 | `warnings` | Warnings Python emitted while compiling. |
 
@@ -74,19 +83,20 @@ including invalid ones and Python-specific syntax (`(?P<name>…)`, `\Z`,
 One line per (pattern, input), in manifest pattern order then input order:
 
 ```json
-{"id": "src/atrium/imap.py:79", "input": "a\\\"b", "search": Match, "match": Match, "fullmatch": Match, "finditer": [Match], "call": Call}
+{"id": "src/atrium/imap.py:79", "input": "a\\\"b", "search": Match, "match": Match, "fullmatch": Match, "finditer": [Match], "calls": [Call]}
 ```
 
 - `search`, `match`, `fullmatch`: the Python method result on the whole input, `null` for no match.
 - `finditer`: every non-overlapping match, as Python's `finditer` yields them.
 - `Match` is `{"span": [start, end], "text": "...", "groups": [Group | null]}`; `Group` is `{"span": [start, end], "text": "..."}`, `null` when the group did not participate.
-- `call` (only for `sub`, `subn`, `split`, `findall` sites with literal arguments) is the site's own call on the input: `{"op": "sub", "repl": "<amt>", "result": "..."}` (`count` when non-zero, `n` for `subn`), `{"op": "split", "maxsplit": 0, "result": [...]}`, `{"op": "findall", "result": [...]}` (a list of lists when the pattern has several groups). `repl` keeps Python template syntax (`\1`, `\g<name>`).
+- `calls` runs every `uses` entry that adds information beyond the fields above (any `sub`, `subn`, `split` or `findall`, and any call with `pos`, `endpos` or `count`) on the input: `{"at": "...", "op": "sub", "args": {"repl": "\\1"}, "result": "..."}`. `result` is a string for `sub` (plus `n` for `subn`), a list for `split` and `findall` (a list of lists when the pattern has several groups), a list of `Match` for `finditer`, a `Match` or `null` for `search`/`match`/`fullmatch`. `repl` keeps Python template syntax (`\1`, `\g<name>`, `\\`). The entries are in `uses` order; absent when none apply.
 - Spans are Unicode code point offsets (Python `str` indexes). For bytes patterns, input and texts are Latin-1 decoded, so code points equal byte offsets.
 
 Each pattern gets its hand-picked inputs from `regex_inputs.py` plus generic
 inputs (empty string, a Unicode probe with non-ASCII letters, digits such as
-`٣` and `０`, superscripts, NBSP, line separators, and a multi-line string)
-that pin Python's Unicode `\w`, `\d`, `\s`, `\b` and `$` behaviour.
+`٣` and `０`, superscripts, NBSP, line separators, a multi-line string, and
+non-BMP text: emoji, ZWJ sequences, mathematical letters and digits) that pin
+Python's Unicode `\w`, `\d`, `\s`, `\b` and `$` behaviour and code point spans.
 
 ### Loading from Go
 
@@ -106,3 +116,5 @@ nix develop --impure -c python tools/golden/corpora/gen_regex.py --check
 
 A new pattern needs an `INPUTS` entry (and a `BINDINGS` entry if its pattern
 or flags depend on runtime values) in `tools/golden/corpora/regex_inputs.py`.
+A call whose arguments depend on runtime values needs `USE_BINDINGS`; a
+replacement function passed in as a variable needs `CALLABLE_REPL`.

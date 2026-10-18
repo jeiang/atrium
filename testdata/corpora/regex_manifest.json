@@ -41,7 +41,15 @@
       "groups": 0,
       "id": "src/atrium/agent/files.py:22",
       "pattern": "/Type\\s*/Page(?![s/\\w])",
-      "site": "src/atrium/agent/files.py:22"
+      "site": "src/atrium/agent/files.py:22",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/agent/files.py:161",
+          "op": "findall",
+          "source": "PAGE.findall(data)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -52,7 +60,17 @@
       "groups": 0,
       "id": "src/atrium/agent/files.py:98",
       "pattern": "[^A-Za-z0-9._-]+",
-      "site": "src/atrium/agent/files.py:98"
+      "site": "src/atrium/agent/files.py:98",
+      "uses": [
+        {
+          "args": {
+            "repl": "_"
+          },
+          "at": "src/atrium/agent/files.py:98",
+          "op": "sub",
+          "source": "re.sub('[^A-Za-z0-9._-]+', '_', base)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -66,7 +84,15 @@
       "groups": 2,
       "id": "src/atrium/agent/scheduler.py:99",
       "pattern": "^(\\d{1,2}):(\\d{2})$",
-      "site": "src/atrium/agent/scheduler.py:99"
+      "site": "src/atrium/agent/scheduler.py:99",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/agent/scheduler.py:103",
+          "op": "match",
+          "source": "TIME.match(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -79,7 +105,15 @@
       "groups": 0,
       "id": "src/atrium/agent/skills.py:7",
       "pattern": "^[a-z0-9][a-z0-9_-]{0,47}$",
-      "site": "src/atrium/agent/skills.py:7"
+      "site": "src/atrium/agent/skills.py:7",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/agent/skills.py:55",
+          "op": "match",
+          "source": "NAME.match(name)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -93,7 +127,15 @@
       "groups": 2,
       "id": "src/atrium/agent/skills.py:9",
       "pattern": "(?<![\\w/])/skill:([a-z0-9][a-z0-9_-]{0,47})|\\[\\[skill:([a-z0-9][a-z0-9_-]{0,47})\\]\\]",
-      "site": "src/atrium/agent/skills.py:9"
+      "site": "src/atrium/agent/skills.py:9",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/agent/skills.py:86",
+          "op": "finditer",
+          "source": "REF.finditer(text or '')"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -106,7 +148,15 @@
       "groups": 0,
       "id": "src/atrium/agent/subagents.py:13",
       "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
-      "site": "src/atrium/agent/subagents.py:13"
+      "site": "src/atrium/agent/subagents.py:13",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/agent/subagents.py:122",
+          "op": "match",
+          "source": "NAME.match(name)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -119,7 +169,15 @@
       "groups": 0,
       "id": "src/atrium/agent/threads.py:21",
       "pattern": "https?://[^\\s<>\\\"'()\\[\\]]+",
-      "site": "src/atrium/agent/threads.py:21"
+      "site": "src/atrium/agent/threads.py:21",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/agent/threads.py:135",
+          "op": "finditer",
+          "source": "URL.finditer(text or '')"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -133,7 +191,15 @@
       "groups": 0,
       "id": "src/atrium/agent/tools/notify.py:14",
       "pattern": "^/chat/\\d+$",
-      "site": "src/atrium/agent/tools/notify.py:14"
+      "site": "src/atrium/agent/tools/notify.py:14",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/agent/tools/notify.py:50",
+          "op": "match",
+          "source": "THREAD_LINK.match(raw)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -144,7 +210,17 @@
       "groups": 0,
       "id": "src/atrium/agent/tools/notify.py:15",
       "pattern": "[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]",
-      "site": "src/atrium/agent/tools/notify.py:15"
+      "site": "src/atrium/agent/tools/notify.py:15",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/agent/tools/notify.py:41",
+          "op": "sub",
+          "source": "CONTROL.sub('', (text or '').strip())"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -162,7 +238,15 @@
       "groups": 1,
       "id": "src/atrium/agent/tools/notion_write.py:17",
       "pattern": "(?<!\\\\)<(?:img|image|audio|video|file|pdf|embed|iframe)\\b[^>]*?\\bsrc=\\\"([^\\\"]*)\\\"",
-      "site": "src/atrium/agent/tools/notion_write.py:17"
+      "site": "src/atrium/agent/tools/notion_write.py:17",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/agent/tools/notion_write.py:24",
+          "op": "finditer",
+          "source": "MEDIA_SRC.finditer(markdown)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -175,7 +259,15 @@
       "groups": 0,
       "id": "src/atrium/agent/tools/notion_write.py:18",
       "pattern": "^[a-z][a-z0-9+.-]*://",
-      "site": "src/atrium/agent/tools/notion_write.py:18"
+      "site": "src/atrium/agent/tools/notion_write.py:18",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/agent/tools/notion_write.py:27",
+          "op": "match",
+          "source": "URL.match(u.strip('<>'))"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -186,7 +278,16 @@
       "groups": 1,
       "id": "src/atrium/contacts.py:6",
       "pattern": "\\\\([nN,;\\\\])",
-      "site": "src/atrium/contacts.py:6"
+      "site": "src/atrium/contacts.py:6",
+      "uses": [
+        {
+          "args": null,
+          "at": "src/atrium/contacts.py:15",
+          "op": "sub",
+          "repl": "callable",
+          "source": "ESCAPE.sub(lambda m: '\\n' if m.group(1) in 'nN' else m.group(1), value)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -199,7 +300,21 @@
       "groups": 0,
       "id": "src/atrium/contacts.py:7",
       "pattern": "(?<!\\\\);",
-      "site": "src/atrium/contacts.py:7"
+      "site": "src/atrium/contacts.py:7",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/contacts.py:69",
+          "op": "split",
+          "source": "SPLIT.split(value)"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/contacts.py:80",
+          "op": "split",
+          "source": "SPLIT.split(value)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -213,7 +328,15 @@
       "groups": 3,
       "id": "src/atrium/contacts.py:8",
       "pattern": "^(?:(\\d{4})-?|--)(\\d{2})-?(\\d{2})(?!\\d)",
-      "site": "src/atrium/contacts.py:8"
+      "site": "src/atrium/contacts.py:8",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/contacts.py:20",
+          "op": "match",
+          "source": "DATE.match(value.strip())"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -226,7 +349,15 @@
       "groups": 1,
       "id": "src/atrium/contacts.py:10",
       "pattern": "^_\\$!<(.*)>!\\$_$",
-      "site": "src/atrium/contacts.py:10"
+      "site": "src/atrium/contacts.py:10",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/contacts.py:42",
+          "op": "match",
+          "source": "APPLE_LABEL.match(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -237,7 +368,15 @@
       "groups": 0,
       "id": "src/atrium/drafts.py:65",
       "pattern": "[\\r\\n]",
-      "site": "src/atrium/drafts.py:65"
+      "site": "src/atrium/drafts.py:65",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/drafts.py:65",
+          "op": "search",
+          "source": "re.search('[\\\\r\\\\n]', value)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -250,7 +389,17 @@
       "groups": 0,
       "id": "src/atrium/drafts.py:299",
       "pattern": "[<>\\s]",
-      "site": "src/atrium/drafts.py:299"
+      "site": "src/atrium/drafts.py:299",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/drafts.py:299",
+          "op": "sub",
+          "source": "re.sub('[<>\\\\s]', '', msg['Message-ID'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -267,7 +416,15 @@
       "groups": 0,
       "id": "src/atrium/features.py:11",
       "pattern": "(?:[$€£]\\s?\\d[\\d,]*\\.\\d{2})|(?:\\b(?:usd|ttd|tt\\$|cad)\\s?\\d[\\d,]*(?:\\.\\d{2})?)|(?:\\b\\d[\\d,]*\\.\\d{2}\\s?(?:usd|ttd|cad)\\b)",
-      "site": "src/atrium/features.py:11"
+      "site": "src/atrium/features.py:11",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/features.py:184",
+          "op": "search",
+          "source": "CURRENCY.search(body[:4000])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -282,7 +439,15 @@
       "groups": 0,
       "id": "src/atrium/features.py:15",
       "pattern": "(?<![\\d.,$#-])\\d{6}(?![\\d.,-])",
-      "site": "src/atrium/features.py:15"
+      "site": "src/atrium/features.py:15",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/features.py:189",
+          "op": "search",
+          "source": "OTP.search(body[:600])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -293,7 +458,15 @@
       "groups": 0,
       "id": "src/atrium/features.py:16",
       "pattern": "verification code|security code|one[- ]time|passcode|your code|login code",
-      "site": "src/atrium/features.py:16"
+      "site": "src/atrium/features.py:16",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/features.py:188",
+          "op": "search",
+          "source": "VCODE.search(low)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -308,7 +481,17 @@
       "groups": 1,
       "id": "src/atrium/features.py:17",
       "pattern": "^\\s*(re|fwd?|fw|aw)\\s*:\\s*",
-      "site": "src/atrium/features.py:17"
+      "site": "src/atrium/features.py:17",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/features.py:47",
+          "op": "sub",
+          "source": "REPLY_PREFIX.sub('', s)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -322,7 +505,17 @@
       "groups": 0,
       "id": "src/atrium/features.py:52",
       "pattern": "(?:[$€£]|usd|ttd|tt\\$|us\\$|cad)\\s?\\d[\\d,]*(?:\\.\\d+)?|\\d[\\d,]*(?:\\.\\d+)?\\s?(?:usd|ttd|cad)",
-      "site": "src/atrium/features.py:52"
+      "site": "src/atrium/features.py:52",
+      "uses": [
+        {
+          "args": {
+            "repl": "<amt>"
+          },
+          "at": "src/atrium/features.py:52",
+          "op": "sub",
+          "source": "re.sub('(?:[$€£]|usd|ttd|tt\\\\$|us\\\\$|cad)\\\\s?\\\\d[\\\\d,]*(?:\\\\.\\\\d+)?|\\\\d[\\\\d,]*(?:\\\\.\\\\d+)?\\\\s?(?:usd|ttd|cad)', '<amt>', s)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -337,7 +530,17 @@
       "groups": 0,
       "id": "src/atrium/features.py:57",
       "pattern": "\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{2,4})?",
-      "site": "src/atrium/features.py:57"
+      "site": "src/atrium/features.py:57",
+      "uses": [
+        {
+          "args": {
+            "repl": "<date>"
+          },
+          "at": "src/atrium/features.py:57",
+          "op": "sub",
+          "source": "re.sub('\\\\b' + MONTH + '\\\\s+\\\\d{1,2}(?:st|nd|rd|th)?(?:,?\\\\s+\\\\d{2,4})?', '<date>', s)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -352,7 +555,17 @@
       "groups": 0,
       "id": "src/atrium/features.py:58",
       "pattern": "\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?(?:,?\\s+\\d{2,4})?",
-      "site": "src/atrium/features.py:58"
+      "site": "src/atrium/features.py:58",
+      "uses": [
+        {
+          "args": {
+            "repl": "<date>"
+          },
+          "at": "src/atrium/features.py:58",
+          "op": "sub",
+          "source": "re.sub('\\\\b\\\\d{1,2}(?:st|nd|rd|th)?\\\\s+' + MONTH + '(?:,?\\\\s+\\\\d{2,4})?', '<date>', s)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -366,7 +579,17 @@
       "groups": 0,
       "id": "src/atrium/features.py:59",
       "pattern": "\\b\\d{1,4}[/-]\\d{1,2}[/-]\\d{1,4}\\b",
-      "site": "src/atrium/features.py:59"
+      "site": "src/atrium/features.py:59",
+      "uses": [
+        {
+          "args": {
+            "repl": "<date>"
+          },
+          "at": "src/atrium/features.py:59",
+          "op": "sub",
+          "source": "re.sub('\\\\b\\\\d{1,4}[/-]\\\\d{1,2}[/-]\\\\d{1,4}\\\\b', '<date>', s)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -381,7 +604,17 @@
       "groups": 0,
       "id": "src/atrium/features.py:60",
       "pattern": "\\b\\w*\\d\\w*\\b",
-      "site": "src/atrium/features.py:60"
+      "site": "src/atrium/features.py:60",
+      "uses": [
+        {
+          "args": {
+            "repl": "<n>"
+          },
+          "at": "src/atrium/features.py:60",
+          "op": "sub",
+          "source": "re.sub('\\\\b\\\\w*\\\\d\\\\w*\\\\b', '<n>', s)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -394,7 +627,17 @@
       "groups": 0,
       "id": "src/atrium/features.py:61",
       "pattern": "#\\s*<n>",
-      "site": "src/atrium/features.py:61"
+      "site": "src/atrium/features.py:61",
+      "uses": [
+        {
+          "args": {
+            "repl": "<n>"
+          },
+          "at": "src/atrium/features.py:61",
+          "op": "sub",
+          "source": "re.sub('#\\\\s*<n>', '<n>', s)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -407,7 +650,17 @@
       "groups": 0,
       "id": "src/atrium/features.py:62",
       "pattern": "\\s+",
-      "site": "src/atrium/features.py:62"
+      "site": "src/atrium/features.py:62",
+      "uses": [
+        {
+          "args": {
+            "repl": " "
+          },
+          "at": "src/atrium/features.py:62",
+          "op": "sub",
+          "source": "re.sub('\\\\s+', ' ', s)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -422,7 +675,17 @@
       "groups": 1,
       "id": "src/atrium/features.py:70",
       "pattern": "(?is)<(script|style).*?</\\1>",
-      "site": "src/atrium/features.py:70"
+      "site": "src/atrium/features.py:70",
+      "uses": [
+        {
+          "args": {
+            "repl": " "
+          },
+          "at": "src/atrium/features.py:70",
+          "op": "sub",
+          "source": "re.sub('(?is)<(script|style).*?</\\\\1>', ' ', text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -433,7 +696,17 @@
       "groups": 0,
       "id": "src/atrium/features.py:71",
       "pattern": "<[^>]+>",
-      "site": "src/atrium/features.py:71"
+      "site": "src/atrium/features.py:71",
+      "uses": [
+        {
+          "args": {
+            "repl": " "
+          },
+          "at": "src/atrium/features.py:71",
+          "op": "sub",
+          "source": "re.sub('<[^>]+>', ' ', text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -446,7 +719,17 @@
       "groups": 0,
       "id": "src/atrium/features.py:72",
       "pattern": "\\s+",
-      "site": "src/atrium/features.py:72"
+      "site": "src/atrium/features.py:72",
+      "uses": [
+        {
+          "args": {
+            "repl": " "
+          },
+          "at": "src/atrium/features.py:72",
+          "op": "sub",
+          "source": "re.sub('\\\\s+', ' ', html.unescape(text))"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -459,7 +742,17 @@
       "groups": 0,
       "id": "src/atrium/features.py:95",
       "pattern": "\\d+",
-      "site": "src/atrium/features.py:95"
+      "site": "src/atrium/features.py:95",
+      "uses": [
+        {
+          "args": {
+            "repl": "#"
+          },
+          "at": "src/atrium/features.py:95",
+          "op": "sub",
+          "source": "re.sub('\\\\d+', '#', name.lower())"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -472,7 +765,17 @@
       "groups": 0,
       "id": "src/atrium/features.py:116",
       "pattern": "\\s+",
-      "site": "src/atrium/features.py:116"
+      "site": "src/atrium/features.py:116",
+      "uses": [
+        {
+          "args": {
+            "repl": " "
+          },
+          "at": "src/atrium/features.py:116",
+          "op": "sub",
+          "source": "re.sub('\\\\s+', ' ', t)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -485,7 +788,17 @@
       "groups": 0,
       "id": "src/atrium/features.py:129",
       "pattern": "[<>\\s]",
-      "site": "src/atrium/features.py:129"
+      "site": "src/atrium/features.py:129",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/features.py:129",
+          "op": "sub",
+          "source": "re.sub('[<>\\\\s]', '', value)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -498,7 +811,15 @@
       "groups": 0,
       "id": "src/atrium/features.py:133",
       "pattern": "<[^<>\\s]+>",
-      "site": "src/atrium/features.py:133"
+      "site": "src/atrium/features.py:133",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/features.py:133",
+          "op": "findall",
+          "source": "re.findall('<[^<>\\\\s]+>', value)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -512,7 +833,15 @@
       "groups": 1,
       "id": "src/atrium/features.py:159",
       "pattern": "\\bd=([^;\\s]+)",
-      "site": "src/atrium/features.py:159"
+      "site": "src/atrium/features.py:159",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/features.py:159",
+          "op": "search",
+          "source": "re.search('\\\\bd=([^;\\\\s]+)', str(v))"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -525,7 +854,21 @@
       "groups": 0,
       "id": "src/atrium/flags.py:12",
       "pattern": "no[-_.]?reply|do[-_.]?not[-_.]?reply|notifications?|mailer-daemon|postmaster|bounces?",
-      "site": "src/atrium/flags.py:12"
+      "site": "src/atrium/flags.py:12",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/flags.py:49",
+          "op": "search",
+          "source": "AUTOMATED_LOCAL.search(addr.split('@')[0])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/openloops.py:148",
+          "op": "search",
+          "source": "AUTOMATED_LOCAL.search(addr.split('@')[0])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -536,7 +879,17 @@
       "groups": 0,
       "id": "src/atrium/flags.py:18",
       "pattern": "\\r?\\n[ \\t]",
-      "site": "src/atrium/flags.py:18"
+      "site": "src/atrium/flags.py:18",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/flags.py:18",
+          "op": "sub",
+          "source": "re.sub('\\\\r?\\\\n[ \\\\t]', '', text)"
+        }
+      ]
     },
     {
       "bytes": true,
@@ -557,7 +910,15 @@
       "groups": 3,
       "id": "src/atrium/imap.py:12",
       "pattern": "\\((?P<flags>[^)]*)\\)\\s+(?P<delim>\"(?:[^\"\\\\]|\\\\.)*\"|NIL)\\s+(?P<name>.+)$",
-      "site": "src/atrium/imap.py:12"
+      "site": "src/atrium/imap.py:12",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:87",
+          "op": "match",
+          "source": "LIST_LINE.match(line)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -570,7 +931,15 @@
       "groups": 2,
       "id": "src/atrium/imap.py:13",
       "pattern": "\\(|\\)|\"((?:[^\"\\\\]|\\\\.)*)\"|([^\\s()\"]+)",
-      "site": "src/atrium/imap.py:13"
+      "site": "src/atrium/imap.py:13",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:148",
+          "op": "finditer",
+          "source": "TOKEN.finditer(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -581,8 +950,16 @@
       "groups": 1,
       "id": "src/atrium/imap.py:33",
       "pattern": "&([^-]*)-",
-      "repl": "callable",
-      "site": "src/atrium/imap.py:33"
+      "site": "src/atrium/imap.py:33",
+      "uses": [
+        {
+          "args": null,
+          "at": "src/atrium/imap.py:33",
+          "op": "sub",
+          "repl": "callable",
+          "source": "re.sub('&([^-]*)-', decode, value)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -595,7 +972,15 @@
       "groups": 3,
       "id": "src/atrium/imap.py:72",
       "pattern": "COPYUID (\\d+) ([\\d:,]+) ([\\d:,]+)",
-      "site": "src/atrium/imap.py:72"
+      "site": "src/atrium/imap.py:72",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:72",
+          "op": "search",
+          "source": "re.search('COPYUID (\\\\d+) ([\\\\d:,]+) ([\\\\d:,]+)', text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -606,7 +991,17 @@
       "groups": 1,
       "id": "src/atrium/imap.py:79",
       "pattern": "\\\\(.)",
-      "site": "src/atrium/imap.py:79"
+      "site": "src/atrium/imap.py:79",
+      "uses": [
+        {
+          "args": {
+            "repl": "\\1"
+          },
+          "at": "src/atrium/imap.py:79",
+          "op": "sub",
+          "source": "re.sub('\\\\\\\\(.)', '\\\\1', token)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -619,7 +1014,15 @@
       "groups": 2,
       "id": "src/atrium/imap.py:109",
       "pattern": "\"((?:[^\"\\\\]|\\\\.)*)\"|(\\S+)",
-      "site": "src/atrium/imap.py:109"
+      "site": "src/atrium/imap.py:109",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:109",
+          "op": "finditer",
+          "source": "re.finditer('\"((?:[^\"\\\\\\\\]|\\\\\\\\.)*)\"|(\\\\S+)', text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -635,7 +1038,15 @@
         "key": "FLAGS"
       },
       "pattern": "\\bFLAGS \\(",
-      "site": "src/atrium/imap.py:139"
+      "site": "src/atrium/imap.py:139",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:139",
+          "op": "search",
+          "source": "re.search('\\\\b' + re.escape(key) + ' \\\\(', meta)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -651,7 +1062,15 @@
         "key": "X-GM-LABELS"
       },
       "pattern": "\\bX\\-GM\\-LABELS \\(",
-      "site": "src/atrium/imap.py:139"
+      "site": "src/atrium/imap.py:139",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:139",
+          "op": "search",
+          "source": "re.search('\\\\b' + re.escape(key) + ' \\\\(', meta)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -662,7 +1081,15 @@
       "groups": 0,
       "id": "src/atrium/imap.py:217",
       "pattern": "BODYSTRUCTURE ",
-      "site": "src/atrium/imap.py:217"
+      "site": "src/atrium/imap.py:217",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:217",
+          "op": "search",
+          "source": "re.search('BODYSTRUCTURE ', meta)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -676,7 +1103,15 @@
       "groups": 0,
       "id": "src/atrium/imap.py:236",
       "pattern": "\\s*\\d+ \\(",
-      "site": "src/atrium/imap.py:236"
+      "site": "src/atrium/imap.py:236",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:236",
+          "op": "match",
+          "source": "re.match('\\\\s*\\\\d+ \\\\(', prefix)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -687,7 +1122,15 @@
       "groups": 1,
       "id": "src/atrium/imap.py:243",
       "pattern": "BODY\\[(HEADER|TEXT)\\]",
-      "site": "src/atrium/imap.py:243"
+      "site": "src/atrium/imap.py:243",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:243",
+          "op": "search",
+          "source": "re.search('BODY\\\\[(HEADER|TEXT)\\\\]', prefix)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -701,7 +1144,15 @@
       "groups": 0,
       "id": "src/atrium/imap.py:248",
       "pattern": "\\s*\\d+ \\(",
-      "site": "src/atrium/imap.py:248"
+      "site": "src/atrium/imap.py:248",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:248",
+          "op": "match",
+          "source": "re.match('\\\\s*\\\\d+ \\\\(', line)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -715,7 +1166,15 @@
       "groups": 1,
       "id": "src/atrium/imap.py:253",
       "pattern": "\\bUID (\\d+)",
-      "site": "src/atrium/imap.py:253"
+      "site": "src/atrium/imap.py:253",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:253",
+          "op": "search",
+          "source": "re.search('\\\\bUID (\\\\d+)', g['meta'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -728,7 +1187,15 @@
       "groups": 1,
       "id": "src/atrium/imap.py:260",
       "pattern": "MODSEQ \\((\\d+)\\)",
-      "site": "src/atrium/imap.py:260"
+      "site": "src/atrium/imap.py:260",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:260",
+          "op": "search",
+          "source": "re.search('MODSEQ \\\\((\\\\d+)\\\\)', meta)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -741,7 +1208,15 @@
       "groups": 1,
       "id": "src/atrium/imap.py:261",
       "pattern": "RFC822\\.SIZE (\\d+)",
-      "site": "src/atrium/imap.py:261"
+      "site": "src/atrium/imap.py:261",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:261",
+          "op": "search",
+          "source": "re.search('RFC822\\\\.SIZE (\\\\d+)', meta)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -754,7 +1229,15 @@
       "groups": 1,
       "id": "src/atrium/imap.py:262",
       "pattern": "X-GM-MSGID (\\d+)",
-      "site": "src/atrium/imap.py:262"
+      "site": "src/atrium/imap.py:262",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:262",
+          "op": "search",
+          "source": "re.search('X-GM-MSGID (\\\\d+)', meta)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -767,7 +1250,15 @@
       "groups": 1,
       "id": "src/atrium/imap.py:263",
       "pattern": "X-GM-THRID (\\d+)",
-      "site": "src/atrium/imap.py:263"
+      "site": "src/atrium/imap.py:263",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:263",
+          "op": "search",
+          "source": "re.search('X-GM-THRID (\\\\d+)', meta)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -778,7 +1269,15 @@
       "groups": 1,
       "id": "src/atrium/imap.py:264",
       "pattern": "INTERNALDATE \"([^\"]+)\"",
-      "site": "src/atrium/imap.py:264"
+      "site": "src/atrium/imap.py:264",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:264",
+          "op": "search",
+          "source": "re.search('INTERNALDATE \"([^\"]+)\"', meta)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -792,7 +1291,15 @@
       "groups": 1,
       "id": "src/atrium/imap.py:266",
       "pattern": "\\bUID (\\d+)",
-      "site": "src/atrium/imap.py:266"
+      "site": "src/atrium/imap.py:266",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:266",
+          "op": "search",
+          "source": "re.search('\\\\bUID (\\\\d+)', meta)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -808,7 +1315,15 @@
         "key": "UIDVALIDITY"
       },
       "pattern": "UIDVALIDITY (\\d+)",
-      "site": "src/atrium/imap.py:284"
+      "site": "src/atrium/imap.py:284",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:284",
+          "op": "search",
+          "source": "re.search(key + ' (\\\\d+)', text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -824,7 +1339,15 @@
         "key": "UIDNEXT"
       },
       "pattern": "UIDNEXT (\\d+)",
-      "site": "src/atrium/imap.py:284"
+      "site": "src/atrium/imap.py:284",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:284",
+          "op": "search",
+          "source": "re.search(key + ' (\\\\d+)', text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -840,7 +1363,15 @@
         "key": "HIGHESTMODSEQ"
       },
       "pattern": "HIGHESTMODSEQ (\\d+)",
-      "site": "src/atrium/imap.py:284"
+      "site": "src/atrium/imap.py:284",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:284",
+          "op": "search",
+          "source": "re.search(key + ' (\\\\d+)', text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -856,7 +1387,15 @@
         "key": "MESSAGES"
       },
       "pattern": "MESSAGES (\\d+)",
-      "site": "src/atrium/imap.py:284"
+      "site": "src/atrium/imap.py:284",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/imap.py:284",
+          "op": "search",
+          "source": "re.search(key + ' (\\\\d+)', text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -873,7 +1412,21 @@
         "pattern": "^lanterns s01e01"
       },
       "pattern": "^lanterns s01e01",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -888,7 +1441,21 @@
         "pattern": "^lanterns s01e01"
       },
       "pattern": "^lanterns s01e01",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -905,7 +1472,21 @@
         "pattern": "1080p"
       },
       "pattern": "1080p",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -920,7 +1501,21 @@
         "pattern": "1080p"
       },
       "pattern": "1080p",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -937,7 +1532,21 @@
         "pattern": "720p"
       },
       "pattern": "720p",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -952,7 +1561,21 @@
         "pattern": "720p"
       },
       "pattern": "720p",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -971,7 +1594,21 @@
         "pattern": "^claude\\b"
       },
       "pattern": "^claude\\b",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -988,7 +1625,21 @@
         "pattern": "^claude\\b"
       },
       "pattern": "^claude\\b",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1007,7 +1658,21 @@
         "pattern": "\\balert\\b"
       },
       "pattern": "\\balert\\b",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1024,7 +1689,21 @@
         "pattern": "\\balert\\b"
       },
       "pattern": "\\balert\\b",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1041,7 +1720,21 @@
         "pattern": "^alert"
       },
       "pattern": "^alert",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1056,7 +1749,21 @@
         "pattern": "^alert"
       },
       "pattern": "^alert",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1073,7 +1780,21 @@
         "pattern": "bill"
       },
       "pattern": "bill",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1088,7 +1809,21 @@
         "pattern": "bill"
       },
       "pattern": "bill",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1103,7 +1838,21 @@
         "pattern": "("
       },
       "pattern": "(",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1116,7 +1865,21 @@
         "pattern": "("
       },
       "pattern": "(",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1133,7 +1896,21 @@
         "pattern": ""
       },
       "pattern": "",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1148,7 +1925,21 @@
         "pattern": ""
       },
       "pattern": "",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1170,7 +1961,21 @@
         "pattern": "(?P<ep>s\\d{2}e\\d{2})"
       },
       "pattern": "(?P<ep>s\\d{2}e\\d{2})",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1190,7 +1995,21 @@
         "pattern": "(?P<ep>s\\d{2}e\\d{2})"
       },
       "pattern": "(?P<ep>s\\d{2}e\\d{2})",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1207,7 +2026,21 @@
         "pattern": "x26[45]|hevc"
       },
       "pattern": "x26[45]|hevc",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1222,7 +2055,21 @@
         "pattern": "x26[45]|hevc"
       },
       "pattern": "x26[45]|hevc",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1242,7 +2089,21 @@
         "pattern": "\\d{4}$"
       },
       "pattern": "\\d{4}$",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1260,7 +2121,21 @@
         "pattern": "\\d{4}$"
       },
       "pattern": "\\d{4}$",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1277,7 +2152,21 @@
         "pattern": "café"
       },
       "pattern": "café",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1292,7 +2181,21 @@
         "pattern": "café"
       },
       "pattern": "café",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1312,7 +2215,21 @@
         "pattern": "(?<=s)\\d+"
       },
       "pattern": "(?<=s)\\d+",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1330,7 +2247,21 @@
         "pattern": "(?<=s)\\d+"
       },
       "pattern": "(?<=s)\\d+",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1349,7 +2280,21 @@
         "pattern": "a{,3}b"
       },
       "pattern": "a{,3}b",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1366,7 +2311,21 @@
         "pattern": "a{,3}b"
       },
       "pattern": "a{,3}b",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1386,7 +2345,21 @@
         "pattern": "\\bnow\\Z"
       },
       "pattern": "\\bnow\\Z",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1404,7 +2377,21 @@
         "pattern": "\\bnow\\Z"
       },
       "pattern": "\\bnow\\Z",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1421,7 +2408,21 @@
         "pattern": "(?i)Amazon"
       },
       "pattern": "(?i)Amazon",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1438,7 +2439,21 @@
         "pattern": "(?i)Amazon"
       },
       "pattern": "(?i)Amazon",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1456,6 +2471,20 @@
       },
       "pattern": "[[:alpha:]]+",
       "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ],
       "warnings": [
         "FutureWarning: Possible nested set at position 1"
       ]
@@ -1474,6 +2503,20 @@
       },
       "pattern": "[[:alpha:]]+",
       "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ],
       "warnings": [
         "FutureWarning: Possible nested set at position 1"
       ]
@@ -1496,7 +2539,21 @@
         "pattern": "(\\w)\\1"
       },
       "pattern": "(\\w)\\1",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1514,7 +2571,21 @@
         "pattern": "(\\w)\\1"
       },
       "pattern": "(\\w)\\1",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1529,7 +2600,21 @@
         "pattern": "\\p{L}"
       },
       "pattern": "\\p{L}",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1542,7 +2627,21 @@
         "pattern": "\\p{L}"
       },
       "pattern": "\\p{L}",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1562,7 +2661,21 @@
         "pattern": "(?<!un)paid\\b"
       },
       "pattern": "(?<!un)paid\\b",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1580,7 +2693,21 @@
         "pattern": "(?<!un)paid\\b"
       },
       "pattern": "(?<!un)paid\\b",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1599,7 +2726,21 @@
         "pattern": "^(?:AMZN|AMAZON)\\s+MKTP"
       },
       "pattern": "^(?:AMZN|AMAZON)\\s+MKTP",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1616,7 +2757,21 @@
         "pattern": "^(?:AMZN|AMAZON)\\s+MKTP"
       },
       "pattern": "^(?:AMZN|AMAZON)\\s+MKTP",
-      "site": "src/atrium/media/channels.py:61"
+      "site": "src/atrium/media/channels.py:61",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:116",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/channels.py:159",
+          "op": "search",
+          "source": "regex.search(t['title'])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1630,7 +2785,15 @@
       "groups": 1,
       "id": "src/atrium/media/eztv.py:8",
       "pattern": "^(?:tt)?(\\d{7,9})$",
-      "site": "src/atrium/media/eztv.py:8"
+      "site": "src/atrium/media/eztv.py:8",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/eztv.py:19",
+          "op": "match",
+          "source": "IMDB_RE.match((value or '').strip())"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1644,7 +2807,15 @@
       "groups": 1,
       "id": "src/atrium/media/library.py:9",
       "pattern": "^Season (\\d{1,3})$",
-      "site": "src/atrium/media/library.py:9"
+      "site": "src/atrium/media/library.py:9",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/library.py:84",
+          "op": "match",
+          "source": "SEASON_DIR.match(d)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1658,7 +2829,15 @@
       "groups": 2,
       "id": "src/atrium/media/library.py:10",
       "pattern": " - S(\\d{2})E(\\d{2,3})$",
-      "site": "src/atrium/media/library.py:10"
+      "site": "src/atrium/media/library.py:10",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/library.py:74",
+          "op": "search",
+          "source": "EPISODE_MARK.search(name[:len(name) - len(parse.ext(name))])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1675,7 +2854,15 @@
       "groups": 2,
       "id": "src/atrium/media/parse.py:9",
       "pattern": "\\bS(\\d{1,2}) ?E(\\d{1,3})",
-      "site": "src/atrium/media/parse.py:9"
+      "site": "src/atrium/media/parse.py:9",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/parse.py:55",
+          "op": "search",
+          "source": "EPISODE_RE.search(name)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1691,7 +2878,59 @@
       "groups": 1,
       "id": "src/atrium/media/parse.py:10",
       "pattern": "\\b(19\\d{2}|20\\d{2})\\b",
-      "site": "src/atrium/media/parse.py:10"
+      "site": "src/atrium/media/parse.py:10",
+      "uses": [
+        {
+          "args": {
+            "endpos": 0
+          },
+          "at": "src/atrium/media/parse.py:62",
+          "locals": {
+            "cut": 0
+          },
+          "op": "finditer",
+          "source": "YEAR_RE.finditer(name, 0, cut)"
+        },
+        {
+          "args": {
+            "endpos": 1000
+          },
+          "at": "src/atrium/media/parse.py:62",
+          "locals": {
+            "cut": 1000
+          },
+          "op": "finditer",
+          "source": "YEAR_RE.finditer(name, 0, cut)"
+        },
+        {
+          "args": {
+            "endpos": 12
+          },
+          "at": "src/atrium/media/parse.py:62",
+          "locals": {
+            "cut": 12
+          },
+          "op": "finditer",
+          "source": "YEAR_RE.finditer(name, 0, cut)"
+        },
+        {
+          "args": {
+            "endpos": 6
+          },
+          "at": "src/atrium/media/parse.py:62",
+          "locals": {
+            "cut": 6
+          },
+          "op": "finditer",
+          "source": "YEAR_RE.finditer(name, 0, cut)"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/media/parse.py:82",
+          "op": "search",
+          "source": "YEAR_RE.search(year)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1706,7 +2945,18 @@
       "groups": 0,
       "id": "src/atrium/media/parse.py:11",
       "pattern": "^\\s*\\[[^\\]]*\\]\\s*",
-      "site": "src/atrium/media/parse.py:11"
+      "site": "src/atrium/media/parse.py:11",
+      "uses": [
+        {
+          "args": {
+            "count": 1,
+            "repl": ""
+          },
+          "at": "src/atrium/media/parse.py:51",
+          "op": "sub",
+          "source": "LEAD_TAG_RE.sub('', name, count=1)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1722,7 +2972,15 @@
       "groups": 0,
       "id": "src/atrium/media/parse.py:12",
       "pattern": "\\bsample\\b",
-      "site": "src/atrium/media/parse.py:12"
+      "site": "src/atrium/media/parse.py:12",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/parse.py:40",
+          "op": "search",
+          "source": "SAMPLE_RE.search(name)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1735,7 +2993,15 @@
       "groups": 1,
       "id": "src/atrium/media/qbit.py:49",
       "pattern": "^urn:btih:([0-9a-fA-F]{40}|[A-Za-z2-7]{32})$",
-      "site": "src/atrium/media/qbit.py:49"
+      "site": "src/atrium/media/qbit.py:49",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/media/qbit.py:67",
+          "op": "match",
+          "source": "BTIH.match(xt)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1748,7 +3014,15 @@
       "groups": 0,
       "id": "src/atrium/money.py:295",
       "pattern": "[,\\s]+",
-      "site": "src/atrium/money.py:295"
+      "site": "src/atrium/money.py:295",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:295",
+          "op": "split",
+          "source": "re.split('[,\\\\s]+', value)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1761,7 +3035,17 @@
       "groups": 0,
       "id": "src/atrium/money.py:309",
       "pattern": "\\D",
-      "site": "src/atrium/money.py:309"
+      "site": "src/atrium/money.py:309",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/money.py:309",
+          "op": "sub",
+          "source": "re.sub('\\\\D', '', last4 or '')"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1774,7 +3058,17 @@
       "groups": 0,
       "id": "src/atrium/money.py:326",
       "pattern": "\\D",
-      "site": "src/atrium/money.py:326"
+      "site": "src/atrium/money.py:326",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/money.py:326",
+          "op": "sub",
+          "source": "re.sub('\\\\D', '', last4)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1787,7 +3081,15 @@
       "groups": 0,
       "id": "src/atrium/money.py:418",
       "pattern": "\\d{4}-\\d{2}-\\d{2}",
-      "site": "src/atrium/money.py:418"
+      "site": "src/atrium/money.py:418",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:418",
+          "op": "fullmatch",
+          "source": "re.fullmatch('\\\\d{4}-\\\\d{2}-\\\\d{2}', as_of)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1802,7 +3104,17 @@
       "groups": 0,
       "id": "src/atrium/money.py:485",
       "pattern": "#\\s*\\d+|\\b\\d{3,}\\b",
-      "site": "src/atrium/money.py:485"
+      "site": "src/atrium/money.py:485",
+      "uses": [
+        {
+          "args": {
+            "repl": " "
+          },
+          "at": "src/atrium/money.py:490",
+          "op": "sub",
+          "source": "STORE_NUMBER.sub(' ', (raw or '').upper().replace('*', ' '))"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1813,7 +3125,17 @@
       "groups": 0,
       "id": "src/atrium/money.py:491",
       "pattern": "[^A-Z0-9&'.\\- ]+",
-      "site": "src/atrium/money.py:491"
+      "site": "src/atrium/money.py:491",
+      "uses": [
+        {
+          "args": {
+            "repl": " "
+          },
+          "at": "src/atrium/money.py:491",
+          "op": "sub",
+          "source": "re.sub(\"[^A-Z0-9&'.\\\\- ]+\", ' ', text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1831,7 +3153,15 @@
         }
       },
       "pattern": "^lanterns s01e01",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1849,7 +3179,15 @@
         }
       },
       "pattern": "1080p",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1867,7 +3205,15 @@
         }
       },
       "pattern": "720p",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1887,7 +3233,15 @@
         }
       },
       "pattern": "^claude\\b",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1907,7 +3261,15 @@
         }
       },
       "pattern": "\\balert\\b",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1925,7 +3287,15 @@
         }
       },
       "pattern": "^alert",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1943,7 +3313,15 @@
         }
       },
       "pattern": "bill",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1959,7 +3337,15 @@
         }
       },
       "pattern": "(",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -1977,7 +3363,15 @@
         }
       },
       "pattern": "",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2000,7 +3394,15 @@
         }
       },
       "pattern": "(?P<ep>s\\d{2}e\\d{2})",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2018,7 +3420,15 @@
         }
       },
       "pattern": "x26[45]|hevc",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2039,7 +3449,15 @@
         }
       },
       "pattern": "\\d{4}$",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2057,7 +3475,15 @@
         }
       },
       "pattern": "café",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2078,7 +3504,15 @@
         }
       },
       "pattern": "(?<=s)\\d+",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2098,7 +3532,15 @@
         }
       },
       "pattern": "a{,3}b",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2119,7 +3561,15 @@
         }
       },
       "pattern": "\\bnow\\Z",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2137,7 +3587,15 @@
         }
       },
       "pattern": "(?i)Amazon",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2155,7 +3613,15 @@
         }
       },
       "pattern": "[[:alpha:]]+",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2176,7 +3642,15 @@
         }
       },
       "pattern": "(\\w)\\1",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2192,7 +3666,15 @@
         }
       },
       "pattern": "\\p{L}",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2213,7 +3695,15 @@
         }
       },
       "pattern": "(?<!un)paid\\b",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2233,7 +3723,15 @@
         }
       },
       "pattern": "^(?:AMZN|AMAZON)\\s+MKTP",
-      "site": "src/atrium/money.py:512"
+      "site": "src/atrium/money.py:512",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:512",
+          "op": "search",
+          "source": "re.search(r['pattern'], normalized, re.IGNORECASE)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2247,7 +3745,8 @@
         "pattern": "^lanterns s01e01"
       },
       "pattern": "^lanterns s01e01",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2261,7 +3760,8 @@
         "pattern": "1080p"
       },
       "pattern": "1080p",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2275,7 +3775,8 @@
         "pattern": "720p"
       },
       "pattern": "720p",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2291,7 +3792,8 @@
         "pattern": "^claude\\b"
       },
       "pattern": "^claude\\b",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2307,7 +3809,8 @@
         "pattern": "\\balert\\b"
       },
       "pattern": "\\balert\\b",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2321,7 +3824,8 @@
         "pattern": "^alert"
       },
       "pattern": "^alert",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2335,7 +3839,8 @@
         "pattern": "bill"
       },
       "pattern": "bill",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2347,7 +3852,8 @@
         "pattern": "("
       },
       "pattern": "(",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2361,7 +3867,8 @@
         "pattern": ""
       },
       "pattern": "",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2380,7 +3887,8 @@
         "pattern": "(?P<ep>s\\d{2}e\\d{2})"
       },
       "pattern": "(?P<ep>s\\d{2}e\\d{2})",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2394,7 +3902,8 @@
         "pattern": "x26[45]|hevc"
       },
       "pattern": "x26[45]|hevc",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2411,7 +3920,8 @@
         "pattern": "\\d{4}$"
       },
       "pattern": "\\d{4}$",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2425,7 +3935,8 @@
         "pattern": "café"
       },
       "pattern": "café",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2442,7 +3953,8 @@
         "pattern": "(?<=s)\\d+"
       },
       "pattern": "(?<=s)\\d+",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2458,7 +3970,8 @@
         "pattern": "a{,3}b"
       },
       "pattern": "a{,3}b",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2475,7 +3988,8 @@
         "pattern": "\\bnow\\Z"
       },
       "pattern": "\\bnow\\Z",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2491,7 +4005,8 @@
         "pattern": "(?i)Amazon"
       },
       "pattern": "(?i)Amazon",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2505,7 +4020,8 @@
         "pattern": "[[:alpha:]]+"
       },
       "pattern": "[[:alpha:]]+",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2522,7 +4038,8 @@
         "pattern": "(\\w)\\1"
       },
       "pattern": "(\\w)\\1",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2534,7 +4051,8 @@
         "pattern": "\\p{L}"
       },
       "pattern": "\\p{L}",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2551,7 +4069,8 @@
         "pattern": "(?<!un)paid\\b"
       },
       "pattern": "(?<!un)paid\\b",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2567,7 +4086,8 @@
         "pattern": "^(?:AMZN|AMAZON)\\s+MKTP"
       },
       "pattern": "^(?:AMZN|AMAZON)\\s+MKTP",
-      "site": "src/atrium/money.py:575"
+      "site": "src/atrium/money.py:575",
+      "uses": []
     },
     {
       "bytes": false,
@@ -2578,7 +4098,15 @@
       "groups": 0,
       "id": "src/atrium/money.py:690",
       "pattern": "[A-Z]{3}",
-      "site": "src/atrium/money.py:690"
+      "site": "src/atrium/money.py:690",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:690",
+          "op": "fullmatch",
+          "source": "re.fullmatch('[A-Z]{3}', value)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2591,7 +4119,17 @@
       "groups": 0,
       "id": "src/atrium/money.py:721",
       "pattern": "\\D",
-      "site": "src/atrium/money.py:721"
+      "site": "src/atrium/money.py:721",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/money.py:721",
+          "op": "sub",
+          "source": "re.sub('\\\\D', '', str(answer.get('account_last4') or ''))"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2604,7 +4142,15 @@
       "groups": 0,
       "id": "src/atrium/money.py:1326",
       "pattern": "\\d{4}-\\d{2}",
-      "site": "src/atrium/money.py:1326"
+      "site": "src/atrium/money.py:1326",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:1326",
+          "op": "fullmatch",
+          "source": "re.fullmatch('\\\\d{4}-\\\\d{2}', period)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2617,7 +4163,15 @@
       "groups": 0,
       "id": "src/atrium/money.py:1330",
       "pattern": "\\d{4}",
-      "site": "src/atrium/money.py:1330"
+      "site": "src/atrium/money.py:1330",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:1330",
+          "op": "fullmatch",
+          "source": "re.fullmatch('\\\\d{4}', period)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2630,7 +4184,15 @@
       "groups": 0,
       "id": "src/atrium/money.py:1332",
       "pattern": "\\d+d",
-      "site": "src/atrium/money.py:1332"
+      "site": "src/atrium/money.py:1332",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:1332",
+          "op": "fullmatch",
+          "source": "re.fullmatch('\\\\d+d', period)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2643,7 +4205,15 @@
       "groups": 2,
       "id": "src/atrium/money.py:1334",
       "pattern": "(\\d{4}-\\d{2}-\\d{2})/(\\d{4}-\\d{2}-\\d{2})",
-      "site": "src/atrium/money.py:1334"
+      "site": "src/atrium/money.py:1334",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/money.py:1334",
+          "op": "fullmatch",
+          "source": "re.fullmatch('(\\\\d{4}-\\\\d{2}-\\\\d{2})/(\\\\d{4}-\\\\d{2}-\\\\d{2})', period)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2654,7 +4224,15 @@
       "groups": 0,
       "id": "src/atrium/notion_api.py:23",
       "pattern": "[0-9a-fA-F]{32}",
-      "site": "src/atrium/notion_api.py:23"
+      "site": "src/atrium/notion_api.py:23",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_api.py:51",
+          "op": "fullmatch",
+          "source": "UUID_HEX.fullmatch(compact)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2665,7 +4243,15 @@
       "groups": 0,
       "id": "src/atrium/notion_api.py:24",
       "pattern": "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
-      "site": "src/atrium/notion_api.py:24"
+      "site": "src/atrium/notion_api.py:24",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_api.py:48",
+          "op": "fullmatch",
+          "source": "DASHED.fullmatch(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2676,7 +4262,15 @@
       "groups": 0,
       "id": "src/atrium/notion_api.py:59",
       "pattern": "[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}",
-      "site": "src/atrium/notion_api.py:59"
+      "site": "src/atrium/notion_api.py:59",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_api.py:59",
+          "op": "finditer",
+          "source": "re.finditer('[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}', text or '')"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2693,7 +4287,15 @@
       "groups": 1,
       "id": "src/atrium/notion_markdown.py:6",
       "pattern": "(^[ \\t]*```[^\\n]*\\n.*?^[ \\t]*```[ \\t]*$|`[^`\\n]+`)",
-      "site": "src/atrium/notion_markdown.py:6"
+      "site": "src/atrium/notion_markdown.py:6",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_markdown.py:102",
+          "op": "split",
+          "source": "CODE.split(text or '')"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2706,7 +4308,15 @@
       "groups": 2,
       "id": "src/atrium/notion_markdown.py:7",
       "pattern": "([\\w-]+)=\"([^\"]*)\"",
-      "site": "src/atrium/notion_markdown.py:7"
+      "site": "src/atrium/notion_markdown.py:7",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_markdown.py:39",
+          "op": "findall",
+          "source": "ATTR.findall(text or '')"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2724,7 +4334,16 @@
       "groups": 3,
       "id": "src/atrium/notion_markdown.py:8",
       "pattern": "(?<!\\\\)<(page|database|mention-page|mention-database|mention-data-source)\\b([^>]*?)(?:/>|>(.*?)</\\1>)",
-      "site": "src/atrium/notion_markdown.py:8"
+      "site": "src/atrium/notion_markdown.py:8",
+      "uses": [
+        {
+          "args": null,
+          "at": "src/atrium/notion_markdown.py:92",
+          "op": "sub",
+          "repl": "callable",
+          "source": "REF.sub(lambda m: ref_link(m, titles), chunk)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2742,7 +4361,22 @@
       "groups": 3,
       "id": "src/atrium/notion_markdown.py:11",
       "pattern": "(?<!\\\\)<(audio|video|file|pdf|embed)\\b([^>]*?)(?:/>|>(.*?)</\\1>)",
-      "site": "src/atrium/notion_markdown.py:11"
+      "site": "src/atrium/notion_markdown.py:11",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/agent/tools/notion_write.py:25",
+          "op": "finditer",
+          "source": "notion_markdown.MEDIA.finditer(markdown)"
+        },
+        {
+          "args": null,
+          "at": "src/atrium/notion_markdown.py:93",
+          "op": "sub",
+          "repl": "callable",
+          "source": "MEDIA.sub(lambda m: media_link(m.group(3), attrs(m.group(2)).get('src')), chunk)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2757,7 +4391,16 @@
       "groups": 1,
       "id": "src/atrium/notion_markdown.py:12",
       "pattern": "(?<!\\\\)<mention-date\\b([^>]*?)/>",
-      "site": "src/atrium/notion_markdown.py:12"
+      "site": "src/atrium/notion_markdown.py:12",
+      "uses": [
+        {
+          "args": null,
+          "at": "src/atrium/notion_markdown.py:95",
+          "op": "sub",
+          "repl": "callable",
+          "source": "DATE.sub(date_text, chunk)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2774,7 +4417,16 @@
       "groups": 2,
       "id": "src/atrium/notion_markdown.py:13",
       "pattern": "(?<!\\\\)<table\\b([^>]*)>(.*?)</table>",
-      "site": "src/atrium/notion_markdown.py:13"
+      "site": "src/atrium/notion_markdown.py:13",
+      "uses": [
+        {
+          "args": null,
+          "at": "src/atrium/notion_markdown.py:91",
+          "op": "sub",
+          "repl": "callable",
+          "source": "TABLE.sub(table, chunk)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2790,7 +4442,15 @@
       "groups": 1,
       "id": "src/atrium/notion_markdown.py:14",
       "pattern": "<tr\\b[^>]*>(.*?)</tr>",
-      "site": "src/atrium/notion_markdown.py:14"
+      "site": "src/atrium/notion_markdown.py:14",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_markdown.py:67",
+          "op": "findall",
+          "source": "ROW.findall(found.group(2))"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2806,7 +4466,15 @@
       "groups": 1,
       "id": "src/atrium/notion_markdown.py:15",
       "pattern": "<t[dh]\\b[^>]*>(.*?)</t[dh]>",
-      "site": "src/atrium/notion_markdown.py:15"
+      "site": "src/atrium/notion_markdown.py:15",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_markdown.py:67",
+          "op": "findall",
+          "source": "CELL.findall(r)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2822,7 +4490,17 @@
       "groups": 0,
       "id": "src/atrium/notion_markdown.py:16",
       "pattern": "^[ \\t]*<empty-block\\s*/>[ \\t]*$",
-      "site": "src/atrium/notion_markdown.py:16"
+      "site": "src/atrium/notion_markdown.py:16",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/notion_markdown.py:97",
+          "op": "sub",
+          "source": "EMPTY.sub('', chunk)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2836,7 +4514,25 @@
       "groups": 0,
       "id": "src/atrium/notion_markdown.py:17",
       "pattern": "(?<!\\\\)<br\\s*/?>",
-      "site": "src/atrium/notion_markdown.py:17"
+      "site": "src/atrium/notion_markdown.py:17",
+      "uses": [
+        {
+          "args": {
+            "repl": " "
+          },
+          "at": "src/atrium/notion_markdown.py:73",
+          "op": "sub",
+          "source": "BREAK.sub(' ', raw)"
+        },
+        {
+          "args": {
+            "repl": "\n"
+          },
+          "at": "src/atrium/notion_markdown.py:99",
+          "op": "sub",
+          "source": "BREAK.sub('\\n', chunk)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2852,7 +4548,16 @@
       "groups": 1,
       "id": "src/atrium/notion_markdown.py:18",
       "pattern": "(?<!\\\\)<summary>(.*?)</summary>",
-      "site": "src/atrium/notion_markdown.py:18"
+      "site": "src/atrium/notion_markdown.py:18",
+      "uses": [
+        {
+          "args": null,
+          "at": "src/atrium/notion_markdown.py:96",
+          "op": "sub",
+          "repl": "callable",
+          "source": "SUMMARY.sub(lambda m: f'**{m.group(1).strip()}**', chunk)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2866,7 +4571,17 @@
       "groups": 0,
       "id": "src/atrium/notion_markdown.py:19",
       "pattern": "(?<!\\\\)</?(?:details|callout|columns|column|span|synced_block|synced_block_reference|mention-user|mention-agent|table_of_contents|custom-block|colgroup|col)\\b[^>]*>",
-      "site": "src/atrium/notion_markdown.py:19"
+      "site": "src/atrium/notion_markdown.py:19",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/notion_markdown.py:98",
+          "op": "sub",
+          "source": "WRAPPER.sub('', chunk)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2882,7 +4597,17 @@
       "groups": 0,
       "id": "src/atrium/notion_markdown.py:23",
       "pattern": "[ \\t]*\\{(?:[\\w-]+=\"[^\"]*\"[ \\t]*)+\\}[ \\t]*$",
-      "site": "src/atrium/notion_markdown.py:23"
+      "site": "src/atrium/notion_markdown.py:23",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/notion_markdown.py:100",
+          "op": "sub",
+          "source": "BLOCK_ATTRS.sub('', chunk)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2895,7 +4620,22 @@
       "groups": 2,
       "id": "src/atrium/notion_markdown.py:24",
       "pattern": "!\\[([^\\]]*)\\]\\(([^)\\s]+)\\)",
-      "site": "src/atrium/notion_markdown.py:24"
+      "site": "src/atrium/notion_markdown.py:24",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/agent/tools/notion_write.py:23",
+          "op": "finditer",
+          "source": "notion_markdown.IMAGE.finditer(markdown)"
+        },
+        {
+          "args": null,
+          "at": "src/atrium/notion_markdown.py:94",
+          "op": "sub",
+          "repl": "callable",
+          "source": "IMAGE.sub(lambda m: media_link(m.group(1), m.group(2)), chunk)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2908,7 +4648,17 @@
       "groups": 0,
       "id": "src/atrium/notion_markdown.py:25",
       "pattern": "(?<!\\\\)\\|",
-      "site": "src/atrium/notion_markdown.py:25"
+      "site": "src/atrium/notion_markdown.py:25",
+      "uses": [
+        {
+          "args": {
+            "repl": "\\\\|"
+          },
+          "at": "src/atrium/notion_markdown.py:73",
+          "op": "sub",
+          "source": "UNESCAPED_PIPE.sub('\\\\\\\\|', ' '.join(BREAK.sub(' ', raw).split()))"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2919,7 +4669,20 @@
       "groups": 1,
       "id": "src/atrium/notion_markdown.py:27",
       "pattern": "\\[([^\\]]*)\\]\\([^)]*\\)",
-      "site": "src/atrium/notion_markdown.py:27"
+      "site": "src/atrium/notion_markdown.py:27",
+      "uses": [
+        {
+          "args": {
+            "repl": "\\1"
+          },
+          "at": "src/atrium/notion_markdown.py:123",
+          "locals": {
+            "replacement": "\\1"
+          },
+          "op": "sub",
+          "source": "pattern.sub(replacement, readable)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2932,7 +4695,20 @@
       "groups": 0,
       "id": "src/atrium/notion_markdown.py:28",
       "pattern": "^[ \\t]*#{1,6}[ \\t]+",
-      "site": "src/atrium/notion_markdown.py:28"
+      "site": "src/atrium/notion_markdown.py:28",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/notion_markdown.py:123",
+          "locals": {
+            "replacement": ""
+          },
+          "op": "sub",
+          "source": "pattern.sub(replacement, readable)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2947,7 +4723,20 @@
       "groups": 0,
       "id": "src/atrium/notion_markdown.py:29",
       "pattern": "^[ \\t]*(?:[-*+]|\\d+\\.)[ \\t]+(?:\\[[ xX]\\][ \\t]+)?",
-      "site": "src/atrium/notion_markdown.py:29"
+      "site": "src/atrium/notion_markdown.py:29",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/notion_markdown.py:123",
+          "locals": {
+            "replacement": ""
+          },
+          "op": "sub",
+          "source": "pattern.sub(replacement, readable)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2960,7 +4749,20 @@
       "groups": 0,
       "id": "src/atrium/notion_markdown.py:30",
       "pattern": "^[ \\t]*>[ \\t]?",
-      "site": "src/atrium/notion_markdown.py:30"
+      "site": "src/atrium/notion_markdown.py:30",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/notion_markdown.py:123",
+          "locals": {
+            "replacement": ""
+          },
+          "op": "sub",
+          "source": "pattern.sub(replacement, readable)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2975,7 +4777,20 @@
       "groups": 0,
       "id": "src/atrium/notion_markdown.py:31",
       "pattern": "^[ \\t]*(?:-{3,}|\\*{3,})[ \\t]*$",
-      "site": "src/atrium/notion_markdown.py:31"
+      "site": "src/atrium/notion_markdown.py:31",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/notion_markdown.py:123",
+          "locals": {
+            "replacement": ""
+          },
+          "op": "sub",
+          "source": "pattern.sub(replacement, readable)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -2986,7 +4801,20 @@
       "groups": 0,
       "id": "src/atrium/notion_markdown.py:32",
       "pattern": "\\*\\*|__|~~|`",
-      "site": "src/atrium/notion_markdown.py:32"
+      "site": "src/atrium/notion_markdown.py:32",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/notion_markdown.py:123",
+          "locals": {
+            "replacement": ""
+          },
+          "op": "sub",
+          "source": "pattern.sub(replacement, readable)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3001,7 +4829,20 @@
       "groups": 0,
       "id": "src/atrium/notion_markdown.py:33",
       "pattern": "(?<!\\\\)</?[a-z][\\w-]*\\b[^<>]*>",
-      "site": "src/atrium/notion_markdown.py:33"
+      "site": "src/atrium/notion_markdown.py:33",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/notion_markdown.py:123",
+          "locals": {
+            "replacement": ""
+          },
+          "op": "sub",
+          "source": "pattern.sub(replacement, readable)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3015,7 +4856,20 @@
       "groups": 0,
       "id": "src/atrium/notion_markdown.py:34",
       "pattern": "(?<!\\\\)<[a-z/][^<>]*$",
-      "site": "src/atrium/notion_markdown.py:34"
+      "site": "src/atrium/notion_markdown.py:34",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/notion_markdown.py:123",
+          "locals": {
+            "replacement": ""
+          },
+          "op": "sub",
+          "source": "pattern.sub(replacement, readable)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3026,7 +4880,20 @@
       "groups": 1,
       "id": "src/atrium/notion_markdown.py:35",
       "pattern": "\\\\([\\\\`*_{}\\[\\]()#+\\-.!|~<>$^])",
-      "site": "src/atrium/notion_markdown.py:35"
+      "site": "src/atrium/notion_markdown.py:35",
+      "uses": [
+        {
+          "args": {
+            "repl": "\\1"
+          },
+          "at": "src/atrium/notion_markdown.py:123",
+          "locals": {
+            "replacement": "\\1"
+          },
+          "op": "sub",
+          "source": "pattern.sub(replacement, readable)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3041,7 +4908,21 @@
       "groups": 1,
       "id": "src/atrium/notion_proposals.py:21",
       "pattern": "^#{1,6}\\s+(.*?)\\s*#*\\s*$",
-      "site": "src/atrium/notion_proposals.py:21"
+      "site": "src/atrium/notion_proposals.py:21",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_proposals.py:255",
+          "op": "match",
+          "source": "HEADING.match(line)"
+        },
+        {
+          "args": {},
+          "at": "src/atrium/notion_proposals.py:295",
+          "op": "match",
+          "source": "HEADING.match(line)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3055,7 +4936,15 @@
       "groups": 0,
       "id": "src/atrium/notion_proposals.py:22",
       "pattern": "^\\s*(?:[-*+]|\\d+\\.)\\s",
-      "site": "src/atrium/notion_proposals.py:22"
+      "site": "src/atrium/notion_proposals.py:22",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_proposals.py:266",
+          "op": "match",
+          "source": "LIST_ITEM.match(lines[i])"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3070,7 +4959,15 @@
       "groups": 2,
       "id": "src/atrium/notion_wiki.py:21",
       "pattern": "^Last reviewed (\\d{4}-\\d{2}-\\d{2})(?: · sources: (.*))?\\s*$",
-      "site": "src/atrium/notion_wiki.py:21"
+      "site": "src/atrium/notion_wiki.py:21",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_wiki.py:232",
+          "op": "match",
+          "source": "FOOTER.match(lines[-1].strip())"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3083,7 +4980,23 @@
       "groups": 2,
       "id": "src/atrium/notion_wiki.py:22",
       "pattern": "\\[([^\\]]*)\\]\\(([^)\\s]+)\\)",
-      "site": "src/atrium/notion_wiki.py:22"
+      "site": "src/atrium/notion_wiki.py:22",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_wiki.py:222",
+          "op": "finditer",
+          "source": "LINK.finditer(rest)"
+        },
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/notion_wiki.py:224",
+          "op": "sub",
+          "source": "LINK.sub('', rest)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3098,7 +5011,15 @@
       "groups": 2,
       "id": "src/atrium/notion_wiki.py:23",
       "pattern": "^(#{1,6})\\s+(.*?)\\s*#*\\s*$",
-      "site": "src/atrium/notion_wiki.py:23"
+      "site": "src/atrium/notion_wiki.py:23",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_wiki.py:262",
+          "op": "match",
+          "source": "HEADING.match(line)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3111,7 +5032,15 @@
       "groups": 0,
       "id": "src/atrium/notion_wiki.py:24",
       "pattern": "^[a-z][a-z0-9+.-]*://",
-      "site": "src/atrium/notion_wiki.py:24"
+      "site": "src/atrium/notion_wiki.py:24",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_wiki.py:213",
+          "op": "match",
+          "source": "URL.match(value)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3122,7 +5051,15 @@
       "groups": 0,
       "id": "src/atrium/notion_wiki.py:25",
       "pattern": "[,;\\n]",
-      "site": "src/atrium/notion_wiki.py:25"
+      "site": "src/atrium/notion_wiki.py:25",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/notion_wiki.py:70",
+          "op": "split",
+          "source": "ALIAS_SPLIT.split(values)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3135,7 +5072,17 @@
       "groups": 1,
       "id": "src/atrium/notion_wiki.py:208",
       "pattern": "^[a-z][a-z0-9+.-]*://(www\\.)?",
-      "site": "src/atrium/notion_wiki.py:208"
+      "site": "src/atrium/notion_wiki.py:208",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/notion_wiki.py:208",
+          "op": "sub",
+          "source": "re.sub('^[a-z][a-z0-9+.-]*://(www\\\\.)?', '', url, flags=re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3148,7 +5095,17 @@
       "groups": 1,
       "id": "src/atrium/openloops.py:127",
       "pattern": "^\\s*(re|fwd?|aw|sv)\\s*:\\s*",
-      "site": "src/atrium/openloops.py:127"
+      "site": "src/atrium/openloops.py:127",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/openloops.py:127",
+          "op": "sub",
+          "source": "re.sub('^\\\\s*(re|fwd?|aw|sv)\\\\s*:\\\\s*', '', text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3161,7 +5118,17 @@
       "groups": 0,
       "id": "src/atrium/openloops.py:131",
       "pattern": "\\s+",
-      "site": "src/atrium/openloops.py:131"
+      "site": "src/atrium/openloops.py:131",
+      "uses": [
+        {
+          "args": {
+            "repl": " "
+          },
+          "at": "src/atrium/openloops.py:131",
+          "op": "sub",
+          "source": "re.sub('\\\\s+', ' ', text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3172,7 +5139,15 @@
       "groups": 0,
       "id": "src/atrium/rebalance.py:246",
       "pattern": "[a-z]{3,}",
-      "site": "src/atrium/rebalance.py:246"
+      "site": "src/atrium/rebalance.py:246",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rebalance.py:246",
+          "op": "findall",
+          "source": "re.findall('[a-z]{3,}', r['subject_tmpl'] or '')"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3183,7 +5158,17 @@
       "groups": 0,
       "id": "src/atrium/rebalance.py:253",
       "pattern": "[/|\\\\\\x00-\\x1f]+",
-      "site": "src/atrium/rebalance.py:253"
+      "site": "src/atrium/rebalance.py:253",
+      "uses": [
+        {
+          "args": {
+            "repl": " "
+          },
+          "at": "src/atrium/rebalance.py:253",
+          "op": "sub",
+          "source": "re.sub('[/|\\\\\\\\\\\\x00-\\\\x1f]+', ' ', value or '')"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3196,7 +5181,17 @@
       "groups": 0,
       "id": "src/atrium/rebalance.py:254",
       "pattern": "\\s+",
-      "site": "src/atrium/rebalance.py:254"
+      "site": "src/atrium/rebalance.py:254",
+      "uses": [
+        {
+          "args": {
+            "repl": " "
+          },
+          "at": "src/atrium/rebalance.py:254",
+          "op": "sub",
+          "source": "re.sub('\\\\s+', ' ', name)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3210,7 +5205,15 @@
       "groups": 2,
       "id": "src/atrium/report.py:8",
       "pattern": "^(\\d+)([hd])$",
-      "site": "src/atrium/report.py:8"
+      "site": "src/atrium/report.py:8",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/report.py:31",
+          "op": "match",
+          "source": "SINCE.match(value)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3226,7 +5229,15 @@
         "value": "^lanterns s01e01"
       },
       "pattern": "^lanterns s01e01",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3242,7 +5253,15 @@
         "value": "1080p"
       },
       "pattern": "1080p",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3258,7 +5277,15 @@
         "value": "720p"
       },
       "pattern": "720p",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3276,7 +5303,15 @@
         "value": "^claude\\b"
       },
       "pattern": "^claude\\b",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3294,7 +5329,15 @@
         "value": "\\balert\\b"
       },
       "pattern": "\\balert\\b",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3310,7 +5353,15 @@
         "value": "^alert"
       },
       "pattern": "^alert",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3326,7 +5377,15 @@
         "value": "bill"
       },
       "pattern": "bill",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3340,7 +5399,15 @@
         "value": "("
       },
       "pattern": "(",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3356,7 +5423,15 @@
         "value": ""
       },
       "pattern": "",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3377,7 +5452,15 @@
         "value": "(?P<ep>s\\d{2}e\\d{2})"
       },
       "pattern": "(?P<ep>s\\d{2}e\\d{2})",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3393,7 +5476,15 @@
         "value": "x26[45]|hevc"
       },
       "pattern": "x26[45]|hevc",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3412,7 +5503,15 @@
         "value": "\\d{4}$"
       },
       "pattern": "\\d{4}$",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3428,7 +5527,15 @@
         "value": "café"
       },
       "pattern": "café",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3447,7 +5554,15 @@
         "value": "(?<=s)\\d+"
       },
       "pattern": "(?<=s)\\d+",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3465,7 +5580,15 @@
         "value": "a{,3}b"
       },
       "pattern": "a{,3}b",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3484,7 +5607,15 @@
         "value": "\\bnow\\Z"
       },
       "pattern": "\\bnow\\Z",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3500,7 +5631,15 @@
         "value": "(?i)Amazon"
       },
       "pattern": "(?i)Amazon",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3516,7 +5655,15 @@
         "value": "[[:alpha:]]+"
       },
       "pattern": "[[:alpha:]]+",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3535,7 +5682,15 @@
         "value": "(\\w)\\1"
       },
       "pattern": "(\\w)\\1",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3549,7 +5704,15 @@
         "value": "\\p{L}"
       },
       "pattern": "\\p{L}",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3568,7 +5731,15 @@
         "value": "(?<!un)paid\\b"
       },
       "pattern": "(?<!un)paid\\b",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3586,7 +5757,15 @@
         "value": "^(?:AMZN|AMAZON)\\s+MKTP"
       },
       "pattern": "^(?:AMZN|AMAZON)\\s+MKTP",
-      "site": "src/atrium/rules.py:93"
+      "site": "src/atrium/rules.py:93",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/rules.py:93",
+          "op": "search",
+          "source": "re.search(value, v, re.I)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3600,7 +5779,8 @@
         "value": "^lanterns s01e01"
       },
       "pattern": "^lanterns s01e01",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3614,7 +5794,8 @@
         "value": "1080p"
       },
       "pattern": "1080p",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3628,7 +5809,8 @@
         "value": "720p"
       },
       "pattern": "720p",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3644,7 +5826,8 @@
         "value": "^claude\\b"
       },
       "pattern": "^claude\\b",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3660,7 +5843,8 @@
         "value": "\\balert\\b"
       },
       "pattern": "\\balert\\b",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3674,7 +5858,8 @@
         "value": "^alert"
       },
       "pattern": "^alert",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3688,7 +5873,8 @@
         "value": "bill"
       },
       "pattern": "bill",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3700,7 +5886,8 @@
         "value": "("
       },
       "pattern": "(",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3714,7 +5901,8 @@
         "value": ""
       },
       "pattern": "",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3733,7 +5921,8 @@
         "value": "(?P<ep>s\\d{2}e\\d{2})"
       },
       "pattern": "(?P<ep>s\\d{2}e\\d{2})",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3747,7 +5936,8 @@
         "value": "x26[45]|hevc"
       },
       "pattern": "x26[45]|hevc",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3764,7 +5954,8 @@
         "value": "\\d{4}$"
       },
       "pattern": "\\d{4}$",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3778,7 +5969,8 @@
         "value": "café"
       },
       "pattern": "café",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3795,7 +5987,8 @@
         "value": "(?<=s)\\d+"
       },
       "pattern": "(?<=s)\\d+",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3811,7 +6004,8 @@
         "value": "a{,3}b"
       },
       "pattern": "a{,3}b",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3828,7 +6022,8 @@
         "value": "\\bnow\\Z"
       },
       "pattern": "\\bnow\\Z",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3844,7 +6039,8 @@
         "value": "(?i)Amazon"
       },
       "pattern": "(?i)Amazon",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3858,7 +6054,8 @@
         "value": "[[:alpha:]]+"
       },
       "pattern": "[[:alpha:]]+",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3875,7 +6072,8 @@
         "value": "(\\w)\\1"
       },
       "pattern": "(\\w)\\1",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3887,7 +6085,8 @@
         "value": "\\p{L}"
       },
       "pattern": "\\p{L}",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3904,7 +6103,8 @@
         "value": "(?<!un)paid\\b"
       },
       "pattern": "(?<!un)paid\\b",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3920,7 +6120,8 @@
         "value": "^(?:AMZN|AMAZON)\\s+MKTP"
       },
       "pattern": "^(?:AMZN|AMAZON)\\s+MKTP",
-      "site": "src/atrium/rules.py:139"
+      "site": "src/atrium/rules.py:139",
+      "uses": []
     },
     {
       "bytes": false,
@@ -3933,7 +6134,15 @@
       "groups": 2,
       "id": "src/atrium/search.py:14",
       "pattern": "\"([^\"]*)\"|([^\\W_]+)",
-      "site": "src/atrium/search.py:14"
+      "site": "src/atrium/search.py:14",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/search.py:27",
+          "op": "finditer",
+          "source": "TOKEN.finditer(text or '')"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3946,7 +6155,15 @@
       "groups": 0,
       "id": "src/atrium/search.py:15",
       "pattern": "[^\\W_]+",
-      "site": "src/atrium/search.py:15"
+      "site": "src/atrium/search.py:15",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/search.py:32",
+          "op": "findall",
+          "source": "WORD.findall(phrase)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3957,7 +6174,17 @@
       "groups": 0,
       "id": "src/atrium/watches.py:77",
       "pattern": "[^a-z0-9]+",
-      "site": "src/atrium/watches.py:77"
+      "site": "src/atrium/watches.py:77",
+      "uses": [
+        {
+          "args": {
+            "repl": " "
+          },
+          "at": "src/atrium/watches.py:77",
+          "op": "sub",
+          "source": "re.sub('[^a-z0-9]+', ' ', (name or '').casefold())"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3970,7 +6197,15 @@
       "groups": 1,
       "id": "src/atrium/watches.py:107",
       "pattern": "\\b(1Z[0-9A-Z]{16})\\b",
-      "site": "src/atrium/watches.py:107"
+      "site": "src/atrium/watches.py:107",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:159",
+          "op": "finditer",
+          "source": "pattern.finditer(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3984,7 +6219,15 @@
       "groups": 1,
       "id": "src/atrium/watches.py:108",
       "pattern": "\\b([A-Z]{2}\\d{9}US)\\b",
-      "site": "src/atrium/watches.py:108"
+      "site": "src/atrium/watches.py:108",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:159",
+          "op": "finditer",
+          "source": "pattern.finditer(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -3998,7 +6241,15 @@
       "groups": 1,
       "id": "src/atrium/watches.py:109",
       "pattern": "\\b(9[2-5]\\d{18,24})\\b",
-      "site": "src/atrium/watches.py:109"
+      "site": "src/atrium/watches.py:109",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:159",
+          "op": "finditer",
+          "source": "pattern.finditer(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4012,7 +6263,15 @@
       "groups": 1,
       "id": "src/atrium/watches.py:110",
       "pattern": "\\b(JD\\d{18})\\b",
-      "site": "src/atrium/watches.py:110"
+      "site": "src/atrium/watches.py:110",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:159",
+          "op": "finditer",
+          "source": "pattern.finditer(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4026,7 +6285,15 @@
       "groups": 1,
       "id": "src/atrium/watches.py:111",
       "pattern": "\\b(\\d{12}|\\d{15})\\b",
-      "site": "src/atrium/watches.py:111"
+      "site": "src/atrium/watches.py:111",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:159",
+          "op": "finditer",
+          "source": "pattern.finditer(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4040,7 +6307,15 @@
       "groups": 1,
       "id": "src/atrium/watches.py:112",
       "pattern": "\\b(\\d{10,11})\\b",
-      "site": "src/atrium/watches.py:112"
+      "site": "src/atrium/watches.py:112",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:159",
+          "op": "finditer",
+          "source": "pattern.finditer(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4056,7 +6331,15 @@
       "groups": 1,
       "id": "src/atrium/watches.py:114",
       "pattern": "\\border\\s*(?:number|no\\.?|#|id|ref(?:erence)?)?\\s*[:#]?\\s*#?\\s*([A-Z0-9][A-Z0-9-]{4,24})",
-      "site": "src/atrium/watches.py:114"
+      "site": "src/atrium/watches.py:114",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:181",
+          "op": "finditer",
+          "source": "ORDER_RE.finditer(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4069,7 +6352,15 @@
       "groups": 0,
       "id": "src/atrium/watches.py:119",
       "pattern": "out for delivery",
-      "site": "src/atrium/watches.py:119"
+      "site": "src/atrium/watches.py:119",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:191",
+          "op": "search",
+          "source": "pattern.search(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4085,7 +6376,15 @@
       "groups": 0,
       "id": "src/atrium/watches.py:120",
       "pattern": "(?<!will be )(?<!to be )(?<!be )\\bdelivered\\b",
-      "site": "src/atrium/watches.py:120"
+      "site": "src/atrium/watches.py:120",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:191",
+          "op": "search",
+          "source": "pattern.search(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4098,7 +6397,15 @@
       "groups": 0,
       "id": "src/atrium/watches.py:121",
       "pattern": "unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception",
-      "site": "src/atrium/watches.py:121"
+      "site": "src/atrium/watches.py:121",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:191",
+          "op": "search",
+          "source": "pattern.search(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4113,7 +6420,15 @@
       "groups": 0,
       "id": "src/atrium/watches.py:122",
       "pattern": "\\bdelay(?:ed)?\\b|running late",
-      "site": "src/atrium/watches.py:122"
+      "site": "src/atrium/watches.py:122",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:191",
+          "op": "search",
+          "source": "pattern.search(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4126,7 +6441,15 @@
       "groups": 0,
       "id": "src/atrium/watches.py:123",
       "pattern": "in transit|on its way|on the way|arriving|arrives",
-      "site": "src/atrium/watches.py:123"
+      "site": "src/atrium/watches.py:123",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:191",
+          "op": "search",
+          "source": "pattern.search(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4141,7 +6464,15 @@
       "groups": 0,
       "id": "src/atrium/watches.py:124",
       "pattern": "\\bshipped\\b|has shipped|shipment|label created|picked up",
-      "site": "src/atrium/watches.py:124"
+      "site": "src/atrium/watches.py:124",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:191",
+          "op": "search",
+          "source": "pattern.search(text)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4154,7 +6485,17 @@
       "groups": 0,
       "id": "src/atrium/watches.py:222",
       "pattern": "\\s+",
-      "site": "src/atrium/watches.py:222"
+      "site": "src/atrium/watches.py:222",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/watches.py:222",
+          "op": "sub",
+          "source": "re.sub('\\\\s+', '', str(answer.get('tracking_number') or ''))"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4165,7 +6506,15 @@
       "groups": 0,
       "id": "src/atrium/watches.py:223",
       "pattern": "[A-Za-z0-9-]{6,40}",
-      "site": "src/atrium/watches.py:223"
+      "site": "src/atrium/watches.py:223",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:223",
+          "op": "fullmatch",
+          "source": "re.fullmatch('[A-Za-z0-9-]{6,40}', tracking)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4178,7 +6527,18 @@
       "groups": 0,
       "id": "src/atrium/web/app.py:92",
       "pattern": "^[^:\\s]+: ",
-      "site": "src/atrium/web/app.py:92"
+      "site": "src/atrium/web/app.py:92",
+      "uses": [
+        {
+          "args": {
+            "count": 1,
+            "repl": ""
+          },
+          "at": "src/atrium/web/app.py:96",
+          "op": "sub",
+          "source": "RULE_ID_PREFIX.sub('', str(error), count=1)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4191,7 +6551,17 @@
       "groups": 0,
       "id": "src/atrium/web/markup.py:49",
       "pattern": "<thead>\\s*<tr>\\s*(?:<th>\\s*</th>\\s*)+</tr>\\s*</thead>\\s*",
-      "site": "src/atrium/web/markup.py:49"
+      "site": "src/atrium/web/markup.py:49",
+      "uses": [
+        {
+          "args": {
+            "repl": ""
+          },
+          "at": "src/atrium/web/markup.py:78",
+          "op": "sub",
+          "source": "EMPTY_HEAD.sub('', cleaned)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4204,7 +6574,16 @@
       "groups": 2,
       "id": "src/atrium/web/markup.py:50",
       "pattern": "(<li>(?:\\s*<p>)?)\\[([ xX])\\] ",
-      "site": "src/atrium/web/markup.py:50"
+      "site": "src/atrium/web/markup.py:50",
+      "uses": [
+        {
+          "args": null,
+          "at": "src/atrium/web/markup.py:79",
+          "op": "sub",
+          "repl": "callable",
+          "source": "TASK.sub(task_box, cleaned)"
+        }
+      ]
     },
     {
       "bytes": false,
@@ -4215,7 +6594,16 @@
       "groups": 1,
       "id": "src/atrium/web/markup.py:51",
       "pattern": "href=\"([^\"]*)\"",
-      "site": "src/atrium/web/markup.py:51"
+      "site": "src/atrium/web/markup.py:51",
+      "uses": [
+        {
+          "args": null,
+          "at": "src/atrium/web/markup.py:80",
+          "op": "sub",
+          "repl": "callable",
+          "source": "HREF.sub(lambda m: internal_href(m, pages), cleaned)"
+        }
+      ]
     }
   ],
   "python": "3.14",

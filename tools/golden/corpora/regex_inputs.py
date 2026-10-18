@@ -2,6 +2,7 @@ GENERIC_INPUTS = [
     "",
     "Ünïcödé café naïve ß ÉCOLE İstanbul ǅ x_y-z 中文 ٣٤٥ ０９ ²³ ① \u00a0nbsp\u2003em\u2028sep",
     "line one\nline two\r\nline three\n",
+    "emoji 😀 x\U0001f600y 👍🏽 👨\u200d👩\u200d👧 𝒜𝓁𝓅𝒽𝒶 𐐷 𝟘𝟙 2026 😀\n😀",
 ]
 
 GENERIC_BYTES_INPUTS = [
@@ -47,6 +48,7 @@ USER_INPUTS = [
     "AMAZON MKTPLACE PMTS",
     "AMZN MKTP US*2K4",
     "Café Ünïcödé 2026",
+    "Lanterns 😀 S01E01 1080p 𝒜lert",
     "aab aaaab b",
     "unpaid invoice, paid in full",
     "Season ends now\n",
@@ -96,7 +98,7 @@ INPUTS = {
         b"/Type /Page/Contents 4 0 R /Type  /PageLabel /Type\n/Page>>",
         b"/Type /Page_1 /Type /Page\xe9",
     ],
-    "src/atrium/agent/files.py:98": ["report final (v2).pdf", "Résumé 2026 ✓.docx", "../../etc/passwd", "a__b..c--d"],
+    "src/atrium/agent/files.py:98": ["report final (v2).pdf", "Résumé 2026 ✓.docx", "../../up two levels.txt", "a__b..c--d", "party 🎉 notes 😀.md"],
     "src/atrium/agent/scheduler.py:99": ["07:30", "7:05", "123:00", "07:3", "07:30\n", "٠٧:٣٠"],
     "src/atrium/agent/skills.py:7": ["notion-wiki", "a", "Bad", "x" * 48, "x" * 49, "-lead", "ok_name\n", "naïve"],
     "src/atrium/agent/skills.py:9": [
@@ -146,7 +148,7 @@ INPUTS = {
     "src/atrium/features.py:57": ["meeting on jan 5th, 2026", "september 30 2025 and sept. 1", "may 12 maybe", "decimal 3"],
     "src/atrium/features.py:58": ["on 5th jan, 2026", "30 september 2025", "1 sept. 26", "12 mayday"],
     "src/atrium/features.py:59": ["due 2026/10/18 or 18-10-2026", "1/2/3 and 12345/1/1", "v1.2/3"],
-    "src/atrium/features.py:60": ["order a1b2 and 123 and abc", "x_9 é3 ٣", "<amt> stays"],
+    "src/atrium/features.py:60": ["order a1b2 and 123 and abc", "x_9 é3 ٣", "<amt> stays", "😀 a1😀 𝒜1 𝟘x"],
     "src/atrium/features.py:61": ["invoice # <n> and #<n>", "#  <n>x"],
     "src/atrium/features.py:62": ["a  b\t\tc\n\nd", " lead and trail ", "nb\u00a0sp"],
     "src/atrium/features.py:70": [
@@ -280,7 +282,7 @@ INPUTS = {
     "src/atrium/rebalance.py:254": ["a   b\t c"],
     "src/atrium/report.py:8": ["24h", "7d", "1w", "h", "07d", "٧d"],
     "src/atrium/search.py:14": ['find "exact phrase" and words_with-dash', 'unterminated "quote', "café ٣٤ 中文"],
-    "src/atrium/search.py:15": ["hello_world foo-bar", "Ünïcödé ٣", "___"],
+    "src/atrium/search.py:15": ["hello_world foo-bar", "Ünïcödé ٣", "___", "😀hi𝒜b😀 𐐷"],
     "src/atrium/watches.py:77": ["Amazon.com, Inc.", "Café Ünï", ""],
     "src/atrium/watches.py:107": ["Tracking 1Z999AA10123456784 now", "1Z999AA1012345678", "x1Z999AA10123456784"],
     "src/atrium/watches.py:108": ["Parcel RA123456789US arrives", "ra123456789us", "RA123456789USA"],
@@ -322,3 +324,26 @@ USER_SITES = (
     "src/atrium/rules.py:139",
 )
 INPUTS.update({site: USER_INPUTS for site in USER_SITES})
+
+NOT_PATTERN_CALLS = {
+    "src/atrium/notion_sync.py:329",
+    "src/atrium/notion_sync.py:334",
+}
+
+CALLABLE_REPL = {"src/atrium/imap.py:33", "src/atrium/notion_markdown.py:91"}
+
+USE_BINDINGS = {
+    "src/atrium/media/parse.py:62": [{"cut": 0}, {"cut": 6}, {"cut": 12}, {"cut": 1000}],
+}
+
+INDIRECT_USES = {
+    "src/atrium/media/channels.py:116": [{"patterns": ["src/atrium/media/channels.py:61"]}],
+    "src/atrium/media/channels.py:159": [{"patterns": ["src/atrium/media/channels.py:61"]}],
+    "src/atrium/notion_markdown.py:123": [
+        {"patterns": ["src/atrium/notion_markdown.py:27"], "locals": {"replacement": r"\1"}},
+        {"patterns": [f"src/atrium/notion_markdown.py:{line}" for line in range(28, 35)], "locals": {"replacement": ""}},
+        {"patterns": ["src/atrium/notion_markdown.py:35"], "locals": {"replacement": r"\1"}},
+    ],
+    "src/atrium/watches.py:159": [{"patterns": [f"src/atrium/watches.py:{line}" for line in range(107, 113)]}],
+    "src/atrium/watches.py:191": [{"patterns": [f"src/atrium/watches.py:{line}" for line in range(119, 125)]}],
+}
