@@ -1,0 +1,5 @@
+From: a@b.example.test
+Subject: odd html
+Content-Type: text/html
+
+<p>one<p>two<br>three &lt;not a tag&gt; <a href='x'>link</a> 5 > 3 < 4 <unclosed
