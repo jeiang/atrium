@@ -25,6 +25,22 @@ golden:
   set -euo pipefail
   nix develop --impure -c bash -c 'for script in tools/golden/gen_*.py tools/golden/make_db.py tools/golden/render_pages.py; do if [ -e "$script" ]; then echo "$script" >&2; python "$script"; fi; done'
 
+# Stage the built web assets into internal/web/static, which go build and go test embed (inside the dev shell)
+assets:
+  rm -rf internal/web/static
+  cp -R "${ATRIUM_STATIC_ASSETS:?set by the dev shell}" internal/web/static
+  chmod -R u+w internal/web/static
+
+# Rebuild internal/web/static/app.css with Tailwind on every template change (inside the dev shell)
+css:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  [ -e internal/web/static/app.js ] || just assets
+  mkdir -p src/atrium/web/node_modules/basecoat-css
+  tar -xzf "${ATRIUM_BASECOAT:?set by the dev shell}" --strip-components=1 -C src/atrium/web/node_modules/basecoat-css
+  cd src/atrium/web
+  exec tailwindcss --input static/input.css --output ../../../internal/web/static/app.css --watch
+
 # Run the Go tests with the race detector (inside the dev shell)
 go-test *args="./...":
   go test -race {{args}}

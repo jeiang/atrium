@@ -92,3 +92,24 @@ func TestRun(t *testing.T) {
 		})
 	}
 }
+
+func TestVersion(t *testing.T) {
+	var setupCalls int
+	app := fakeApp(&setupCalls)
+	var stdout, stderr bytes.Buffer
+	if code := app.Run([]string{"--version"}, &stdout, &stderr); code != ExitUsage {
+		t.Errorf("without Version: exit code = %d, want %d", code, ExitUsage)
+	}
+	app.Version = "1.2.3"
+	stdout.Reset()
+	if code := app.Run([]string{"--version"}, &stdout, &stderr); code != ExitOK || stdout.String() != "atrium 1.2.3\n" {
+		t.Errorf("exit code = %d, stdout = %q, want %d, %q", code, stdout.String(), ExitOK, "atrium 1.2.3\n")
+	}
+	stdout.Reset()
+	if code := app.Run([]string{"group", "--version"}, &stdout, &stderr); code != ExitUsage {
+		t.Errorf("group --version: exit code = %d, want %d", code, ExitUsage)
+	}
+	if setupCalls != 0 {
+		t.Errorf("setup ran %d times", setupCalls)
+	}
+}
