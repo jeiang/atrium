@@ -97,6 +97,10 @@ and backups; nothing of that lives here.
   `internal/web/static` is staged, never committed.
 - `third_party/`: vendored sources, each its own Go module wired by
   `replace`, with upstream licence files.
+- `third_party/go-imap/`: go-imap v2 plus atrium's Gmail patch (new files
+  and one-line hooks only); `PATCH.md` holds the patch list, the update
+  procedure (`just imap-upstream`, `tools/imap-upstream/`) and the rule for
+  dropping it for an own client.
 - `internal/<module>/`: one package per runtime-toggled module, each with a
   `Register` func that adds its subcommands, routes, jobs and tools.
 - `docs/runbook.md`: the environment the units read and the operating

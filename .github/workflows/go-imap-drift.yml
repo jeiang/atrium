@@ -1,0 +1,60 @@
+name: go-imap drift
+
+# Not part of `check`: upstream moves on its own schedule. Pull requests re-derive the patch against the pinned base.
+on:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Upstream go-imap tag, branch or commit to re-apply the patch onto
+        default: v2
+  pull_request:
+    paths:
+      - third_party/go-imap/**
+      - tools/imap-upstream/**
+      - .github/workflows/go-imap-drift.yml
+
+concurrency:
+  group: go-imap-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REF: ${{ github.event_name == 'pull_request' && '' || inputs.ref || 'v2' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        with:
+          extra_nix_config: |
+            extra-substituters = https://cache.jeiang.dev
+            extra-trusted-public-keys = cache.jeiang.dev-1:owXJK5/UX9NSf1lhmDDT3QTxMtbVk9YfHhjvOXyPhpA=
+
+      - name: Re-apply the patch and run the suites
+        run: nix shell --inputs-from . nixpkgs#go_1_26 nixpkgs#gcc -c tools/imap-upstream/imap-upstream.sh --check ${REF:+"$REF"}
+
+      - name: Advisories against the pinned base
+        run: nix shell --inputs-from . nixpkgs#go_1_26 nixpkgs#govulncheck nixpkgs#jq -c tools/imap-upstream/advisories.sh
+
+      - name: Open an issue
+        if: failure() && github.event_name != 'pull_request'
+        run: |
+          title="go-imap drift: the Gmail patch fails on upstream $REF"
+          if [ -z "$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"go-imap drift\"" --json number --jq '.[].number')" ]; then
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --label build \
+              --body "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID failed. Follow third_party/go-imap/PATCH.md (Updating, Fallback)."
+          fi
