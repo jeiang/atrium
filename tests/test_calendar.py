@@ -185,6 +185,14 @@ def test_list_recurrence_window_exdate_and_override(mirror, providers):
     ]
 
 
+def test_cancelled_override_hides_its_instance():
+    ics = WEEKLY.replace("SUMMARY:Standup (moved)", "SUMMARY:Standup (moved)\nSTATUS:CANCELLED")
+    tz = calendar.tz_of({"ATRIUM_TZ": TZ})
+    lo, hi = calendar.as_dt(calendar.date(2026, 10, 18), tz), calendar.as_dt(calendar.date(2026, 10, 27), tz)
+    events = calendar.events_in_ics(ics.encode(), "Work", lo, hi, tz, [])
+    assert [(e["title"], e["start"]) for e in events] == [("Standup", "2026-10-26T09:00:00-04:00")]
+
+
 def test_list_google_unconfigured_still_returns_mirror(mirror, monkeypatch):
     out = calendar.list_events(env_for(mirror), "2026-10-16", "2026-10-17", None)
     assert [e["title"] for e in out["events"]] == ["Dentist"]

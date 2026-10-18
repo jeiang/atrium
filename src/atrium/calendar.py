@@ -202,11 +202,9 @@ def events_in_ics(data, calendar, window_start, window_end, tz, notes):
     masters, overrides = {}, {}
     for comp in cal.walk("VEVENT"):
         uid = str(comp.get("UID") or "")
-        if str(comp.get("STATUS") or "").upper() == "CANCELLED":
-            continue
         if comp.get("RECURRENCE-ID") is not None:
             overrides.setdefault(uid, []).append(comp)
-        else:
+        elif str(comp.get("STATUS") or "").upper() != "CANCELLED":
             masters[uid] = comp
     out = []
     for uid, comp in masters.items():
@@ -225,7 +223,7 @@ def events_in_ics(data, calendar, window_start, window_end, tz, notes):
                 out.append(_event_row(uid, calendar, occ, occ_end, comp, tz))
     for uid, group in overrides.items():
         for comp in group:
-            if comp.get("DTSTART") is None:
+            if comp.get("DTSTART") is None or str(comp.get("STATUS") or "").upper() == "CANCELLED":
                 continue
             start = comp["DTSTART"].dt
             end = _end_of(comp, start)
