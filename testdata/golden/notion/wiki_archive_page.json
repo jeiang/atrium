@@ -1,0 +1,327 @@
+{
+  "description": "notion_archive_page trashes the page and logs it; undo untrashes.",
+  "exchanges": [
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "GET",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000001",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000001"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "in_trash": false,
+          "last_edited_time": "2026-01-01T00:00:03.000Z",
+          "object": "page",
+          "parent": {
+            "page_id": "00000000-0000-0000-0000-000000000002",
+            "type": "page_id"
+          },
+          "properties": {
+            "Name": {
+              "id": "title",
+              "title": [
+                {
+                  "plain_text": "Alpha",
+                  "text": {
+                    "content": "Alpha"
+                  },
+                  "type": "text"
+                }
+              ],
+              "type": "title"
+            }
+          },
+          "url": "https://notion.invalid/00000000-0000-0000-0000-000000000001"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "GET",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000001/markdown",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000001/markdown"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "markdown": "alpha body\n\n## Status\n\nstarted\n\n## Notes\n\nnone",
+          "object": "page_markdown",
+          "truncated": false
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "in_trash": true
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "PATCH",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000001",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000001"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "in_trash": true,
+          "last_edited_time": "2026-01-01T00:00:05.000Z",
+          "object": "page",
+          "parent": {
+            "page_id": "00000000-0000-0000-0000-000000000002",
+            "type": "page_id"
+          },
+          "properties": {
+            "Name": {
+              "id": "title",
+              "title": [
+                {
+                  "plain_text": "Alpha",
+                  "text": {
+                    "content": "Alpha"
+                  },
+                  "type": "text"
+                }
+              ],
+              "type": "title"
+            }
+          },
+          "url": "https://notion.invalid/00000000-0000-0000-0000-000000000001"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "GET",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000001",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000001"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "in_trash": true,
+          "last_edited_time": "2026-01-01T00:00:05.000Z",
+          "object": "page",
+          "parent": {
+            "page_id": "00000000-0000-0000-0000-000000000002",
+            "type": "page_id"
+          },
+          "properties": {
+            "Name": {
+              "id": "title",
+              "title": [
+                {
+                  "plain_text": "Alpha",
+                  "text": {
+                    "content": "Alpha"
+                  },
+                  "type": "text"
+                }
+              ],
+              "type": "title"
+            }
+          },
+          "url": "https://notion.invalid/00000000-0000-0000-0000-000000000001"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "GET",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000009/markdown",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000009/markdown"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000009",
+          "markdown": "- 2026-05-01 · created [Alpha](https://notion.invalid/alpha)",
+          "object": "page_markdown",
+          "truncated": false
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "replace_content": {
+            "new_str": "- 2026-05-28 · archived [Alpha](https://notion.invalid/00000000-0000-0000-0000-000000000001)\n- 2026-05-01 · created [Alpha](https://notion.invalid/alpha)"
+          },
+          "type": "replace_content"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "PATCH",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000009/markdown",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000009/markdown"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000009",
+          "markdown": "- 2026-05-28 · archived [Alpha](https://notion.invalid/00000000-0000-0000-0000-000000000001)\n- 2026-05-01 · created [Alpha](https://notion.invalid/alpha)",
+          "object": "page_markdown",
+          "truncated": false
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "GET",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000001",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000001"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "in_trash": true,
+          "last_edited_time": "2026-01-01T00:00:05.000Z",
+          "object": "page",
+          "parent": {
+            "page_id": "00000000-0000-0000-0000-000000000002",
+            "type": "page_id"
+          },
+          "properties": {
+            "Name": {
+              "id": "title",
+              "title": [
+                {
+                  "plain_text": "Alpha",
+                  "text": {
+                    "content": "Alpha"
+                  },
+                  "type": "text"
+                }
+              ],
+              "type": "title"
+            }
+          },
+          "url": "https://notion.invalid/00000000-0000-0000-0000-000000000001"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "in_trash": false
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "PATCH",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000001",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000001"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "in_trash": false,
+          "last_edited_time": "2026-01-01T00:00:07.000Z",
+          "object": "page",
+          "parent": {
+            "page_id": "00000000-0000-0000-0000-000000000002",
+            "type": "page_id"
+          },
+          "properties": {
+            "Name": {
+              "id": "title",
+              "title": [
+                {
+                  "plain_text": "Alpha",
+                  "text": {
+                    "content": "Alpha"
+                  },
+                  "type": "text"
+                }
+              ],
+              "type": "title"
+            }
+          },
+          "url": "https://notion.invalid/00000000-0000-0000-0000-000000000001"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "wiki_archive_page",
+  "source_tests": [
+    "tests/test_agent_writes.py::test_archive_and_undo"
+  ]
+}

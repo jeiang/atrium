@@ -1,0 +1,39 @@
+{
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "generator": "tools/golden/gen_ntfy.py",
+  "notes": [
+    "The publish is a JSON POST to the server root (`NTFY_URL`), not to `/<topic>`; the topic travels in the body."
+  ],
+  "scenarios": [
+    {
+      "description": "notify tool: JSON publish to NTFY_URL with topic, title and message (body plus \"Thread: /chat/<id>\"), Bearer NTFY_TOKEN; control characters stripped; default link is the current thread.",
+      "file": "notify_tool.json",
+      "name": "notify_tool",
+      "requests": 3,
+      "source_tests": [
+        "tests/test_agent_scheduler.py::test_notify_posts_to_ntfy_and_records",
+        "tests/test_agent_scheduler.py::test_notify_cap_and_link_validation"
+      ]
+    },
+    {
+      "description": "A 500 from ntfy is recorded as \"ntfy 500\", not raised.",
+      "file": "notify_failure.json",
+      "name": "notify_failure",
+      "requests": 1,
+      "source_tests": [
+        "tests/test_agent_scheduler.py::test_notify_failure_is_recorded_not_raised"
+      ]
+    },
+    {
+      "description": "scheduler.notify_skipped after a budget skip: no NTFY_TOKEN, so no Authorization header and no thread link.",
+      "file": "budget_skip.json",
+      "name": "budget_skip",
+      "requests": 1,
+      "source_tests": [
+        "tests/test_agent_scheduler.py::test_budget_skip_notifies_once"
+      ]
+    }
+  ],
+  "slice": "ntfy",
+  "timezone": "America/Port_of_Spain"
+}

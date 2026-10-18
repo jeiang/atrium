@@ -1,0 +1,83 @@
+{
+  "description": "notion_proposals.propose_link: LINK_SCHEMA at max_tokens 160 with both pages' title, location and opening text.",
+  "exchanges": [
+    {
+      "request": {
+        "body": {
+          "cache_prompt": true,
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          },
+          "max_tokens": 160,
+          "messages": [
+            {
+              "content": "You maintain cross-links between pages of the owner's personal notes workspace. You get page A and page B (title, location, opening text). Answer link=true only when the pages are clearly about the same subject, project, person or task so that a reader of A would want to open B. Similar vocabulary alone is not enough. reason is one short sentence naming what connects them.",
+              "role": "system"
+            },
+            {
+              "content": "Page A:\nTitle: Alpha plan\nLocation: \nText:\nalpha roadmap and milestones\n\nPage B:\nTitle: Beta notes\nLocation: Alpha plan\nText:\nbeta retrospective about the alpha launch",
+              "role": "user"
+            }
+          ],
+          "model": "qwen",
+          "response_format": {
+            "json_schema": {
+              "name": "answer",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "link": {
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "link",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "strict": true
+            },
+            "type": "json_schema"
+          },
+          "temperature": 0
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "query": "",
+        "url": "http://chat.invalid/v1/chat/completions"
+      },
+      "response": {
+        "body": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "{\"link\": true, \"reason\": \"Both are about the alpha launch.\"}",
+                "role": "assistant"
+              }
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "notion_link",
+  "source_tests": [
+    "tests/test_notion.py::test_propose_link_is_always_a_mention_in_page_text"
+  ]
+}
