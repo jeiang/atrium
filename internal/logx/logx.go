@@ -76,7 +76,7 @@ func IsSecret(field string) bool {
 		}
 	}
 	for seg := range strings.SplitSeq(k, "_") {
-		if seg == "KEY" || strings.HasSuffix(seg, "APIKEY") || strings.HasSuffix(seg, "TOKEN") {
+		if seg == "KEY" || strings.HasSuffix(seg, "APIKEY") || (strings.Contains(seg, "TOKEN") && !strings.HasSuffix(seg, "TOKENS")) {
 			return true
 		}
 	}
