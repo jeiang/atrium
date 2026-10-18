@@ -1,4 +1,6 @@
 import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -216,6 +218,15 @@ def test_budget_thresholds(world):
     budget.set_setting(conn, budget.BUDGET_KEY, 200)
     budget.check(conn, NOW, unattended=True)
     assert budget.status(conn, NOW)["remaining_usd"] == 125.0
+
+
+def test_budget_month_and_run_stamp_follow_atrium_tz(monkeypatch):
+    moment = datetime(2026, 10, 31, 20, 0, tzinfo=ZoneInfo("America/Port_of_Spain")).timestamp()
+    monkeypatch.delenv("ATRIUM_TZ", raising=False)
+    assert usage.month_start(moment) == datetime(2026, 10, 1, tzinfo=ZoneInfo("America/Port_of_Spain")).timestamp()
+    monkeypatch.setenv("ATRIUM_TZ", "Asia/Tokyo")
+    assert usage.month_start(moment) == datetime(2026, 11, 1, tzinfo=ZoneInfo("Asia/Tokyo")).timestamp()
+    assert loop.time_stamp(moment) == "Current date and time: Sunday 2026-11-01 09:00 JST"
 
 
 def test_budget_refuses_runs_before_calling_the_model(world):

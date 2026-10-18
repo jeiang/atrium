@@ -1,7 +1,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from ..config import TIMEZONE
+from ..config import tz_name
 from . import pricing
 
 TOKEN_KEYS = ("input", "cache_write_5m", "cache_write_1h", "cache_read", "output")
@@ -67,7 +67,7 @@ def record(conn, ts, thread_id, run_id, kind, model, effort, usage, clear_edits=
 
 
 def month_start(now):
-    moment = datetime.fromtimestamp(now, ZoneInfo(TIMEZONE))
+    moment = datetime.fromtimestamp(now, ZoneInfo(tz_name()))
     return moment.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp()
 
 

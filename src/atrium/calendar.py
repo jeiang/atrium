@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from icalendar import Calendar, Event
 from icalendar.prop import vDDDLists
 
-from .config import TIMEZONE
+from .config import tz_name
 
 ICLOUD = "icloud"
 GOOGLE = "google"
@@ -54,7 +54,7 @@ def init_schema(conn):
 
 
 def tz_of(env):
-    return ZoneInfo(env.get("ATRIUM_TZ") or TIMEZONE)
+    return ZoneInfo(tz_name(env))
 
 
 def _require(env, *names):

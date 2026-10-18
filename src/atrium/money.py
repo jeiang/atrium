@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 from . import db, llm
 from .agent import writes
-from .config import TIMEZONE
+from .config import tz_name
 from .http import ServiceUnavailable, get_text
 from .router import message_body
 
@@ -173,7 +173,7 @@ def init_schema(conn):
 
 
 def _zone():
-    return ZoneInfo(TIMEZONE)
+    return ZoneInfo(tz_name())
 
 
 def local_date(ts, tz=None):

@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from ..config import TIMEZONE
+from ..config import tz_name
 from . import budget, context, files, journal, pricing, progress, projects, registry, threads, usage
 from .prompts import SYSTEM
 from .tools.base import CHAT, CRON, NIGHTLY, READ, ToolContext, ToolError
@@ -115,7 +115,7 @@ def request_params(tools, kind, effort, system, limits, prefix_cc=CACHE_CONTROL,
 
 
 def time_stamp(started_at):
-    moment = datetime.fromtimestamp(started_at, ZoneInfo(TIMEZONE))
+    moment = datetime.fromtimestamp(started_at, ZoneInfo(tz_name()))
     return f"Current date and time: {moment.strftime('%A %Y-%m-%d %H:%M %Z')}"
 
 

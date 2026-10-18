@@ -15,7 +15,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from . import db, llm, message, proposals
-from .config import LLM_BODY_CHARS
+from .config import LLM_BODY_CHARS, tz_name
 from .db import now as clock
 from .flags import AUTOMATED_LOCAL
 from .http import ServiceUnavailable
@@ -507,7 +507,7 @@ def refresh(conn, cfg, now=None, judge=judge_commitments, env=None):
         ("backfilled", lambda: backfill_headers(conn, cfg, now)),
         ("loops", lambda: compute(conn, now)),
         ("commitments", lambda: scan_commitments(conn, cfg, now, judge)),
-        ("reminders", lambda: propose_reminders(conn, now, (env.get("ATRIUM_TZ") or "").strip() or None)),
+        ("reminders", lambda: propose_reminders(conn, now, tz_name(env))),
     )
     for name, step in steps:
         try:
