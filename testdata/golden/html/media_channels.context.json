@@ -1,0 +1,102 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "channels": [
+      {
+        "id": 1,
+        "name": "Lanterns <script>alert(\"xss\")</script>",
+        "imdb": "1234567",
+        "case_sensitive": 1,
+        "primed": 0,
+        "pattern": "^Lanterns S\\d+E\\d+ 1080p <x>"
+      },
+      {
+        "id": 2,
+        "name": "Café naïve — 東京 🎉 مرحبا",
+        "imdb": "7654321",
+        "case_sensitive": 0,
+        "primed": 1,
+        "pattern": "SupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilistic"
+      }
+    ],
+    "status": {
+      "last_check": 1759996400,
+      "errors": [
+        "EZTV <timeout>",
+        "<script>alert(\"xss\")</script>"
+      ]
+    },
+    "tmdb": true,
+    "q": "Lant & <x>",
+    "results": [
+      {
+        "tmdb_id": 1,
+        "name": "Lanterns & <co>",
+        "year": "2025"
+      },
+      {
+        "tmdb_id": 2,
+        "name": "Café naïve — 東京 🎉 مرحبا",
+        "year": ""
+      }
+    ],
+    "form": {
+      "tmdb_id": 1,
+      "name": "Lanterns & <co>",
+      "imdb": "tt1234567",
+      "pattern": "^Lanterns <x>",
+      "case_sensitive": true,
+      "backfill": true
+    }
+  }
+}

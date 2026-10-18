@@ -330,6 +330,21 @@ def test_gmail_invite_targets_google(tmp_path, providers, monkeypatch):
     assert google.inserted[0]["sendUpdates"] == "none" and "attendees" not in google.inserted[0]["body"]
 
 
+def test_calendar_proposal_does_not_run_mail_sync(tmp_path, providers, monkeypatch):
+    synced = []
+    monkeypatch.setitem(proposals.hooks, "sync", lambda conn, cfg, account: synced.append(account) or {}[account])
+    cfg = make_config(tmp_path)
+    conn = memory_db()
+    calendar_proposals.register()
+    add_message(conn, 1, subject="Invitation", seen=0, in_inbox=1, raw_path=raw_mail(tmp_path, "1.eml", INVITE))
+    event_candidates.scan_account(conn, cfg, "icloud", never, env=env_for())
+    (p,) = proposals.list(conn, "pending")
+    done = proposals.approve_and_apply(conn, cfg, p["id"])
+    assert done["status"] == "applied" and "sync_error" not in done["result"]
+    assert proposals.undo(conn, cfg, p["id"])["sync_error"] is None
+    assert synced == []
+
+
 def test_local_flag_queues_and_agent_drafts_proposal(tmp_path, providers):
     cfg = make_config(tmp_path)
     conn = memory_db()

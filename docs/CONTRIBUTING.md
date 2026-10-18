@@ -30,7 +30,13 @@ Run `just` to list them.
 
 ## Go
 
-The Go recipes run inside the dev shell:
+The Go recipes run inside the dev shell. `go build` and `go test` embed
+the web assets from `internal/web/static`, which the shell stages from
+`atrium-static` on first entry:
+
+- `just assets`: restages `internal/web/static` from `atrium-static`.
+- `just css`: Tailwind watch that rebuilds `internal/web/static/app.css`
+  from the templates.
 
 - `just go-test`: `go test -race ./...` (cgo SQLite with FTS5 through the
   dev shell's `GOFLAGS=-tags=sqlite_fts5`).
@@ -46,15 +52,19 @@ The Go recipes run inside the dev shell:
   dependency licences.
 - `just imap-upstream`: fails until `third_party/go-imap` lands (#103).
 
+`nix build .#atrium-go` builds the static Go binary for the host (Linux
+only) and runs the Go tests; `.#atrium-go-x86_64-v3` and
+`.#atrium-go-aarch64` are the release targets.
+
 CI runs the same gates as Nix checks from `flake-modules/go-checks.nix`:
 `go-vet`, `go-lint`, `go-test` (race detector), `gofmt`, `go-licenses` and
 `govulncheck`. Each one that compiles code runs once per SQLite driver (build
 tags `sqlite_fts5` and `modernc`).
 
 - Dependencies: the checks build offline from one Go module set. After
-  changing `go.sum`, set `vendorHash` in `flake-modules/go-checks.nix`. Put
-  `lib.fakeHash` there, run `nix build .#checks.<system>.go-vet` and copy
-  the `got:` hash.
+  changing `go.sum`, set `vendorHash` in `flake-modules/go-checks.nix` and
+  `nix/go-package.nix`. Put `lib.fakeHash` there, run
+  `nix build .#checks.<system>.go-vet` and copy the `got:` hash.
 - Sources: the checks see `go.mod`, `go.sum`, `cmd/`, `internal/`,
   `third_party/`, `testdata/`, `LICENSE` and `.golangci.yml`. Add any new
   top-level directory that Go code reads to that fileset.

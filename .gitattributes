@@ -1,1 +1,2 @@
 testdata/corpora/*/** -text
+testdata/golden/html/** linguist-generated=true
