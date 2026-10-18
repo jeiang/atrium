@@ -1,0 +1,118 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "drafts": [
+      {
+        "id": 21,
+        "status": "draft",
+        "account": "gmail",
+        "in_reply_to_message_id": 501,
+        "thread_id": 7,
+        "updated_at": 1759996400,
+        "unexpected": [
+          "stranger@evil.example",
+          "<script>alert(\"xss\")</script>"
+        ],
+        "to_addrs": "Ann <ann@example.org>, \"Bob & Co\" <bob@example.org>",
+        "cc_addrs": "",
+        "subject": "Re: lunch & dinner Café naïve — 東京 🎉 مرحبا",
+        "body": "Hi Ann,\n\n<script>alert(\"xss\")</script>\nFish &amp; chips &lt;3 &#x27; &copy;\n\nThanks",
+        "smtp_result": null
+      },
+      {
+        "id": 22,
+        "status": "unknown",
+        "account": "icloud",
+        "in_reply_to_message_id": null,
+        "thread_id": null,
+        "updated_at": 1759913600,
+        "unexpected": [],
+        "to_addrs": "x@y.example",
+        "cc_addrs": "cc@y.example",
+        "subject": "",
+        "body": "This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised",
+        "smtp_result": "421 <timeout> & retry"
+      },
+      {
+        "id": 23,
+        "status": "sent",
+        "account": "icloud",
+        "in_reply_to_message_id": null,
+        "thread_id": 8,
+        "updated_at": 1759827200,
+        "unexpected": [],
+        "to_addrs": "z@y.example",
+        "cc_addrs": "",
+        "subject": "Sent one",
+        "body": "Body",
+        "smtp_result": "250 OK"
+      }
+    ],
+    "status": "draft",
+    "statuses": [
+      "draft",
+      "unknown",
+      "sent",
+      "discarded"
+    ],
+    "configured": {
+      "icloud": true,
+      "gmail": false
+    },
+    "toast": {
+      "category": "success",
+      "title": "Saved",
+      "description": "He said \"hi\" & 'bye' <b>bold</b>"
+    }
+  }
+}

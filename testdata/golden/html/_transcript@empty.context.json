@@ -1,0 +1,81 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "view": {
+      "thread": {
+        "id": 9,
+        "title": "",
+        "kind": "chat",
+        "created_at": 1759827200,
+        "project_id": null,
+        "parent_thread_id": 3,
+        "branched_from_seq": null,
+        "effort": "medium",
+        "pinned": 1,
+        "archived": 1,
+        "code_sandbox": 1
+      },
+      "active": null,
+      "branched_from": null,
+      "meter": {
+        "limit": 200000,
+        "compact_at": 150000,
+        "tokens": 123456,
+        "share": 0.823
+      },
+      "cost": 0.4567,
+      "last_operator_seq": null,
+      "items": [],
+      "runs": [],
+      "queued": []
+    }
+  }
+}

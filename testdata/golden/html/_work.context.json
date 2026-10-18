@@ -1,0 +1,193 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "work": {
+      "plan": {
+        "items": [
+          {
+            "text": "Gather mail <script>alert(\"xss\")</script>",
+            "done": true
+          },
+          {
+            "text": "Draft <reply>",
+            "done": false
+          }
+        ]
+      },
+      "sources": [
+        {
+          "kind": "mail",
+          "url": "/messages/5",
+          "title": "Invoice #5 & more",
+          "via": "mail_search"
+        },
+        {
+          "kind": "notion",
+          "url": "/notion/abc",
+          "title": "Page Café naïve — 東京 🎉 مرحبا",
+          "via": ""
+        },
+        {
+          "kind": "web",
+          "url": "https://e.com/?a=1&b=2",
+          "title": "Web & more",
+          "via": "web_search"
+        },
+        {
+          "kind": "web",
+          "url": "javascript:alert(document.cookie)",
+          "title": "<script>alert(\"xss\")</script>",
+          "via": ""
+        }
+      ],
+      "subagents": [
+        {
+          "thread_id": 9,
+          "role": "researcher",
+          "kind": "subagent",
+          "effort": "low",
+          "status": "running",
+          "current": "web_search",
+          "title": "",
+          "cost": 0.01234,
+          "elapsed": 12.6,
+          "error": ""
+        },
+        {
+          "thread_id": 10,
+          "role": "",
+          "kind": "subagent",
+          "effort": "high",
+          "status": "error",
+          "current": "",
+          "title": "Dig <deep>",
+          "cost": 1.5,
+          "elapsed": null,
+          "error": "This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised"
+        },
+        {
+          "thread_id": 11,
+          "role": "finance",
+          "kind": "subagent",
+          "effort": "medium",
+          "status": "interrupted",
+          "current": "",
+          "title": "Café naïve — 東京 🎉 مرحبا",
+          "cost": 0.0,
+          "elapsed": 0.4,
+          "error": ""
+        }
+      ],
+      "files": [
+        {
+          "id": 1,
+          "thread_id": 7,
+          "name": "report.pdf",
+          "media_type": "application/pdf",
+          "origin": "upload",
+          "bytes": 1
+        },
+        {
+          "id": 2,
+          "thread_id": 7,
+          "name": "out.png",
+          "media_type": "image/png",
+          "origin": "generated",
+          "bytes": 5242880
+        },
+        {
+          "id": 3,
+          "thread_id": 7,
+          "name": "<odd>.txt",
+          "media_type": "text/plain",
+          "origin": "upload",
+          "bytes": 999
+        },
+        {
+          "id": 4,
+          "thread_id": 7,
+          "name": "big Café naïve — 東京 🎉 مرحبا.csv",
+          "media_type": "text/csv",
+          "origin": "upload",
+          "bytes": 12345678901
+        }
+      ],
+      "drafts": [
+        {
+          "id": 11,
+          "subject": "Re: lunch <script>alert(\"xss\")</script>",
+          "status": "sent"
+        },
+        {
+          "id": 12,
+          "subject": "",
+          "status": "draft"
+        }
+      ],
+      "code": [
+        {
+          "tool": "run_code",
+          "started_at": 1759996400,
+          "state": "error",
+          "script": "print('<x>')",
+          "result": "Traceback & stuff <script>alert(\"xss\")</script>"
+        },
+        {
+          "tool": "sandbox",
+          "started_at": 1759996460,
+          "state": "ok",
+          "script": "1+1",
+          "result": ""
+        }
+      ]
+    }
+  }
+}

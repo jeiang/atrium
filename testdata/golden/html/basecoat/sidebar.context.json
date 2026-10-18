@@ -1,0 +1,111 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {},
+  "calls": [
+    {
+      "macro": "sidebar",
+      "args": [],
+      "kwargs": {
+        "id": "sidebar",
+        "label": "Primary",
+        "header": {
+          "$safe": "<a href=\"/chat\" class=\"flex items-center gap-2\"><span>atrium</span></a>"
+        },
+        "footer": {
+          "$safe": "<div><p>Live mode &amp; co</p></div>"
+        },
+        "menu": [
+          {
+            "type": "group",
+            "label": "Assistant",
+            "items": [
+              {
+                "label": "Chat",
+                "url": "/chat",
+                "icon": {
+                  "$safe": "<svg></svg>"
+                },
+                "current": true
+              },
+              {
+                "label": "Scheduled",
+                "url": "/scheduled",
+                "icon": {
+                  "$safe": "<svg></svg>"
+                },
+                "current": false
+              }
+            ]
+          },
+          {
+            "type": "group",
+            "label": "Review",
+            "items": [
+              {
+                "label": {
+                  "$safe": "<span class=\"flex items-center gap-2\">Proposals<span id=\"pending-count\">3</span></span>"
+                },
+                "url": "/proposals",
+                "icon": {
+                  "$safe": "<svg></svg>"
+                },
+                "current": false,
+                "attrs": {
+                  "class": "[&>span:last-child]:flex-1"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

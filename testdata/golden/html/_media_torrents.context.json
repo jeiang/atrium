@@ -1,0 +1,86 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "torrents": [
+      {
+        "name": "Show.S01E01.1080p <x> & y",
+        "kind": "media",
+        "filed": true,
+        "ignored": false,
+        "label": "seeding",
+        "percent": 100,
+        "size": "1.4 GB",
+        "down": "",
+        "up": "120 KB/s",
+        "eta": "",
+        "hash": "abc123",
+        "active": true
+      },
+      {
+        "name": "Café naïve — 東京 🎉 مرحبا SupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilisticSupercalifragilistic",
+        "kind": "plain",
+        "filed": false,
+        "ignored": true,
+        "label": "downloading",
+        "percent": 42,
+        "size": "700 MB",
+        "down": "2.1 MB/s",
+        "up": "",
+        "eta": "5m",
+        "hash": "def456",
+        "active": false
+      }
+    ],
+    "error": "Partial <failure>",
+    "active": true,
+    "poll": 5
+  }
+}
