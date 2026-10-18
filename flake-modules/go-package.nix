@@ -15,7 +15,7 @@
     in
       set.callPackage ../nix/go-package.nix {
         inherit (self'.packages) atrium-static;
-        buildGo126Module = set.buildGo126Module.override {go = withGo1269 set.go_1_26;};
+        buildGo126Module = set.buildGo126Module.override {go = withGo1269 set.buildPackages.go_1_26;};
       };
     targets = lib.optionalAttrs hostPlatform.isLinux {
       atrium-go-x86_64-v3 = goPackage "x86_64-linux" "musl64";
