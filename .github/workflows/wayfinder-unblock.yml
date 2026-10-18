@@ -1,0 +1,79 @@
+name: Wayfinder unblock
+
+# GitHub has no workflow event for dependency edits, so the schedule catches those.
+on:
+  issues:
+    types:
+      - closed
+      - reopened
+      - labeled
+      - opened
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: wayfinder-unblock
+  cancel-in-progress: false
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      EVENT: ${{ github.event_name }}
+      ACTION: ${{ github.event.action }}
+      ISSUE: ${{ github.event.issue.number }}
+    steps:
+      # Labels the open ticket `wayfinder:blocked` iff it has an open native blocker.
+      - name: Sync wayfinder:blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sync_issue() {
+            local n=$1 issue
+            issue=$(gh api "repos/$REPO/issues/$n")
+            jq -r '
+              if .state != "open" or has("pull_request") then "skip"
+              elif ([.labels[].name | select(test("^wayfinder:(research|grilling|prototype|task)$"))] | length) == 0 then "skip"
+              else
+                (.labels | map(.name) | index("wayfinder:blocked") != null) as $has
+                | (.issue_dependencies_summary.blocked_by > 0) as $want
+                | if $want and ($has | not) then "add"
+                  elif ($want | not) and $has then "remove"
+                  else "keep" end
+              end' <<<"$issue" | {
+              read -r action
+              case $action in
+                add)
+                  gh api -X POST "repos/$REPO/issues/$n/labels" -f 'labels[]=wayfinder:blocked' >/dev/null
+                  echo "#$n: +wayfinder:blocked" ;;
+                remove)
+                  gh api -X DELETE "repos/$REPO/issues/$n/labels/wayfinder:blocked" >/dev/null
+                  echo "#$n: -wayfinder:blocked" ;;
+              esac
+            }
+          }
+
+          if [[ $EVENT == issues ]]; then
+            targets=$(
+              {
+                echo "$ISSUE"
+                gh api --paginate "repos/$REPO/issues/$ISSUE/dependencies/blocking?per_page=100" --jq '.[].number'
+              } | sort -un
+            )
+          else
+            targets=$(
+              for l in research grilling prototype task; do
+                gh api --paginate "repos/$REPO/issues?state=open&labels=wayfinder:$l&per_page=100" --jq '.[].number'
+              done | sort -un
+            )
+          fi
+
+          for n in $targets; do sync_issue "$n"; done
