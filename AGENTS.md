@@ -15,6 +15,8 @@ and backups; nothing of that lives here.
 - `main` requires signed commits and the `check` status. Merge with
   `gh pr merge --auto --merge`.
 - Use Conventional Commits.
+- Wayfinder tickets: claim by assigning yourself before work; post a
+  resolution comment, then close.
 - Tests: `nix build .#atrium` runs pytest in the package's checkPhase.
   For a faster loop, `just test` (`nix develop --impure -c python -m pytest`)
   runs the suite against the working tree. `.envrc` loads the devshell with
@@ -55,9 +57,16 @@ and backups; nothing of that lives here.
 - `nix/`: package, static assets and the NixOS module.
 - `docs/runbook.md`: the environment the units read and the operating
   procedures, host-neutral.
+- `docs/install.md`: using the NixOS module.
+- `docs/CONTRIBUTING.md`: dev shell, recipes, pull requests, wayfinder
+  workflow.
 
 ## Decisions that constrain changes
 
+- The Python app is frozen to fixes until the Go port (v2) cuts over. v2 is
+  planned on the wayfinder map
+  (https://github.com/jeiang/atrium/issues/15). Phase A ports behavior as-is
+  and keeps the host interface; new features go to Phase B tickets.
 - Mail routing and flagging run in code, never as a tool an agent chooses.
   Rules, folder data, skills, profile and agent threads live in atrium's
   SQLite database, never in this repository.
