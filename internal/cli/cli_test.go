@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -76,7 +78,7 @@ func TestRun(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			setup := 0
 			var stdout, stderr bytes.Buffer
-			code := fakeApp(&setup).Run(tt.args, &stdout, &stderr)
+			code := fakeApp(&setup).Run(context.Background(), tt.args, &stdout, &stderr)
 			if code != tt.code {
 				t.Errorf("exit code = %d, want %d (stderr %q)", code, tt.code, stderr.String())
 			}
@@ -97,19 +99,37 @@ func TestVersion(t *testing.T) {
 	var setupCalls int
 	app := fakeApp(&setupCalls)
 	var stdout, stderr bytes.Buffer
-	if code := app.Run([]string{"--version"}, &stdout, &stderr); code != ExitUsage {
+	if code := app.Run(context.Background(), []string{"--version"}, &stdout, &stderr); code != ExitUsage {
 		t.Errorf("without Version: exit code = %d, want %d", code, ExitUsage)
 	}
 	app.Version = "1.2.3"
 	stdout.Reset()
-	if code := app.Run([]string{"--version"}, &stdout, &stderr); code != ExitOK || stdout.String() != "atrium 1.2.3\n" {
+	if code := app.Run(context.Background(), []string{"--version"}, &stdout, &stderr); code != ExitOK || stdout.String() != "atrium 1.2.3\n" {
 		t.Errorf("exit code = %d, stdout = %q, want %d, %q", code, stdout.String(), ExitOK, "atrium 1.2.3\n")
 	}
 	stdout.Reset()
-	if code := app.Run([]string{"group", "--version"}, &stdout, &stderr); code != ExitUsage {
+	if code := app.Run(context.Background(), []string{"group", "--version"}, &stdout, &stderr); code != ExitUsage {
 		t.Errorf("group --version: exit code = %d, want %d", code, ExitUsage)
 	}
 	if setupCalls != 0 {
 		t.Errorf("setup ran %d times", setupCalls)
+	}
+}
+
+func TestHandlerSeesCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	app := New("atrium", nil)
+	app.Add(&Command{Name: "wait", Setup: func(*flag.FlagSet) Handler {
+		return func(env *Env) int {
+			cancel()
+			<-env.Ctx.Done()
+			if !errors.Is(env.Ctx.Err(), context.Canceled) {
+				return ExitUsage
+			}
+			return 7
+		}
+	}})
+	if code := app.Run(ctx, []string{"wait"}, io.Discard, io.Discard); code != 7 {
+		t.Fatalf("exit code = %d, want 7", code)
 	}
 }

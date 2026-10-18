@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
@@ -9,7 +10,7 @@ import (
 
 func TestNoSubcommandIsUsageError(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	if code := newApp().Run(nil, &stdout, &stderr); code != cli.ExitUsage {
+	if code := newApp().Run(context.Background(), nil, &stdout, &stderr); code != cli.ExitUsage {
 		t.Fatalf("exit code = %d, want %d", code, cli.ExitUsage)
 	}
 	if stdout.Len() != 0 {
@@ -19,7 +20,7 @@ func TestNoSubcommandIsUsageError(t *testing.T) {
 
 func TestHelpExitsZero(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	if code := newApp().Run([]string{"--help"}, &stdout, &stderr); code != cli.ExitOK {
+	if code := newApp().Run(context.Background(), []string{"--help"}, &stdout, &stderr); code != cli.ExitOK {
 		t.Fatalf("exit code = %d, want %d", code, cli.ExitOK)
 	}
 	if !bytes.HasPrefix(stdout.Bytes(), []byte("usage: atrium [-h]")) {

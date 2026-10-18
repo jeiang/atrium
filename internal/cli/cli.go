@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -28,6 +29,7 @@ func (c *Command) Add(cmds ...*Command) {
 }
 
 type Env struct {
+	Ctx    context.Context
 	Args   []string
 	Stdout io.Writer
 	Stderr io.Writer
@@ -58,7 +60,7 @@ func (a *App) Add(cmds ...*Command) {
 	a.root.Add(cmds...)
 }
 
-func (a *App) Run(args []string, stdout, stderr io.Writer) int {
+func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	cmd, prog := &a.root, a.root.Name
 	for cmd.Setup == nil {
 		if len(args) == 0 {
@@ -103,7 +105,7 @@ func (a *App) Run(args []string, stdout, stderr io.Writer) int {
 	if a.setup != nil {
 		a.setup(stderr)
 	}
-	return handler(&Env{Args: positional, Stdout: stdout, Stderr: stderr, prog: prog, fs: fs})
+	return handler(&Env{Ctx: ctx, Args: positional, Stdout: stdout, Stderr: stderr, prog: prog, fs: fs})
 }
 
 func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {

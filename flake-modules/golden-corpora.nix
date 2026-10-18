@@ -9,6 +9,7 @@
       inherit root;
       fileset = lib.fileset.unions [
         (root + "/src")
+        (root + "/tools/golden/common.py")
         (root + "/tools/golden/corpora")
         (root + "/testdata/corpora")
       ];

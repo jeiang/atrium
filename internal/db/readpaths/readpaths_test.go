@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	_ "github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/db/readpaths"
 	"github.com/jeiang/atrium/internal/testutil/golden"

@@ -16,7 +16,8 @@ time.tzset()
 
 ROOT = Path(__file__).resolve().parents[3]
 OUT = ROOT / "testdata" / "corpora"
-FREEZE_COMMIT = "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40"
+sys.path.insert(0, str(ROOT / "tools" / "golden"))
+from common import FREEZE_COMMIT  # noqa: E402
 
 
 def use_source_tree():
