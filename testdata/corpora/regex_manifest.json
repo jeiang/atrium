@@ -1,5 +1,5 @@
 {
-  "call_sites": 146,
+  "call_sites": 147,
   "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
   "lookaround_or_backreference_sites": [
     "src/atrium/agent/files.py:22",
@@ -26,7 +26,7 @@
     "src/atrium/rules.py:93",
     "src/atrium/watches.py:120"
   ],
-  "pattern_count": 276,
+  "pattern_count": 277,
   "patterns": [
     {
       "bytes": true,
@@ -6168,6 +6168,29 @@
     {
       "bytes": false,
       "call": "sub",
+      "features": [
+        "space_class"
+      ],
+      "flags": [],
+      "group_names": {},
+      "groups": 0,
+      "id": "src/atrium/smtp.py:27",
+      "pattern": "[\\s,]*,[\\s,]*",
+      "site": "src/atrium/smtp.py:27",
+      "uses": [
+        {
+          "args": {
+            "repl": ", "
+          },
+          "at": "src/atrium/smtp.py:27",
+          "op": "sub",
+          "source": "re.sub('[\\\\s,]*,[\\\\s,]*', ', ', text or '')"
+        }
+      ]
+    },
+    {
+      "bytes": false,
+      "call": "sub",
       "features": [],
       "flags": [],
       "group_names": {},
@@ -8359,6 +8382,18 @@
         "src/atrium/search.py:15"
       ],
       "site": "src/atrium/search.py:15"
+    },
+    {
+      "call": "sub",
+      "col": 11,
+      "dynamic": false,
+      "file": "src/atrium/smtp.py",
+      "line": 27,
+      "pattern_source": "'[\\\\s,]*,[\\\\s,]*'",
+      "patterns": [
+        "src/atrium/smtp.py:27"
+      ],
+      "site": "src/atrium/smtp.py:27"
     },
     {
       "call": "sub",

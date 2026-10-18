@@ -283,6 +283,7 @@ INPUTS = {
     "src/atrium/report.py:8": ["24h", "7d", "1w", "h", "07d", "٧d"],
     "src/atrium/search.py:14": ['find "exact phrase" and words_with-dash', 'unterminated "quote', "café ٣٤ 中文"],
     "src/atrium/search.py:15": ["hello_world foo-bar", "Ünïcödé ٣", "___", "😀hi𝒜b😀 𐐷"],
+    "src/atrium/smtp.py:27": ["a@example.test,, ,b@example.test", " , a@example.test ,\r\n ", '"B, c" <b@x.test>,a@x.test', "plain", ""],
     "src/atrium/watches.py:77": ["Amazon.com, Inc.", "Café Ünï", ""],
     "src/atrium/watches.py:107": ["Tracking 1Z999AA10123456784 now", "1Z999AA1012345678", "x1Z999AA10123456784"],
     "src/atrium/watches.py:108": ["Parcel RA123456789US arrives", "ra123456789us", "RA123456789USA"],
