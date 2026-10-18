@@ -35,10 +35,16 @@ def searches_of(usage):
     return field(field(usage, "server_tool_use"), "web_search_requests", 0)
 
 
+def billed_entries(usage):
+    return [tokens_of(entry) for entry in field(usage, "iterations", [])] or [tokens_of(usage)]
+
+
 def record(conn, ts, thread_id, run_id, kind, model, effort, usage, clear_edits=0, cleared_tokens=0, compaction=0):
-    tokens = tokens_of(usage)
+    entries = billed_entries(usage)
+    tokens = {k: sum(entry[k] for entry in entries) for k in TOKEN_KEYS}
     searches = searches_of(usage)
-    cost = pricing.cost_usd(tokens, searches)
+    cost = sum(pricing.cost_usd(entry) for entry in entries) + searches * pricing.SEARCH_USD
+    tier = pricing.TIER_HIGH if any(pricing.tier_of(entry) == pricing.TIER_HIGH for entry in entries) else pricing.TIER_LOW
     conn.execute(
         "INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, "
         "cache_read, output_tokens, searches, tier, cost_usd, clear_edits, cleared_tokens, compaction) "
@@ -56,7 +62,7 @@ def record(conn, ts, thread_id, run_id, kind, model, effort, usage, clear_edits=
             tokens["cache_read"],
             tokens["output"],
             searches,
-            pricing.tier_of(tokens),
+            tier,
             cost,
             clear_edits,
             cleared_tokens,
