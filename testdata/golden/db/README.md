@@ -108,8 +108,3 @@ command, run in-process through `atrium.cli.main` against a copy of
 `notion search alpha` and `media poll`. `--status all` is not a valid choice
 in the frozen CLI, so that entry records argparse's exit 2 and usage error;
 `proposals list` without a filter is the listing of every status.
-
-## Known Python behaviour visible in these files
-
-- Approving a `calendar_event` proposal runs the post-apply mail sync for
-  account `calendar`, so its `result.sync_error` is `KeyError: 'calendar'`.

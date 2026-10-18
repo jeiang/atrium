@@ -34,6 +34,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # The substituters go straight into nix.conf so evaluation-time
       # IFD sources substitute from the cache too.
@@ -68,6 +70,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # Nothing pushes with git; keeping the token out of .git/config keeps it from code under test.
+        with:
+          persist-credentials: false
 
       # Before Nix is installed, because nix.conf names the hook.
       - name: Write garret's post-build hook
