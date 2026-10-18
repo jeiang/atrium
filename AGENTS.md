@@ -175,8 +175,8 @@ and backups; nothing of that lives here.
 - `internal/mail/mime/`: CPython 3.14.7's `email` package as `policy.default`
   applies it to bytes (feedparser, header registry and value parser,
   `parseaddr`/`getaddresses`, `parsedate_to_datetime`, codecs, transfer
-  decoding), including where Python raises; tables come from
-  `tools/mime/gen_tables.py`.
+  decoding), including where Python raises, and the header refolding it
+  writes with (`FoldHeader`); tables come from `tools/mime/gen_tables.py`.
 - `internal/mail/features/`: `features.py` (`Extract`, `ContentDigest`,
   `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
 - `internal/mail/flags/`, `report/`, `triage/`, `search/`, `live/`: `flags.py`
@@ -186,6 +186,26 @@ and backups; nothing of that lives here.
   `semantic=false` and the error text when the embedder is down) and
   `live.StateOf`. Their golden read paths live in
   `internal/db/readpaths/mail_test.go`.
+- `internal/mail/rules/`, `ruleedit/`, `corrections/`, `router/`: the routing
+  pipeline (`rules.py`, `ruleedit.py`, `corrections.py`, `router.py`).
+  Stages are correction, operator rule, learned rule, nearest neighbours,
+  the local model, fallback; a decision is appended to `decisions` and no
+  mailbox is written. A `ServiceUnavailable` from the model sets
+  `LLMContext.Down` for the rest of the account's pass, logs
+  `chat unavailable, deferring <account>`, and leaves the message undecided;
+  any other model error ends the pass. Rule `re` conditions compile through
+  `rules.Pattern`/`rules.CheckPattern` (`internal/rx`), rule JSON is read with
+  `py.JSONLoads` and written with Python's `json.dumps` spacing, and
+  `RuleError`/`corrections.Error` texts are shown to the operator.
+  `mail/rulestest` seeds the routing tests' databases.
+- `internal/mail/smtp/`: the operator's send. It speaks SMTP command for
+  command as smtplib does and keeps its error wording (`SendError`);
+  `BuildMessage` serializes as `EmailMessage` does. `smtptest` is the
+  scripted session factory and the `smtp.jsonl` corpus loader; the
+  divergences from smtplib are listed in `testdata/corpora/README.md`.
+- `internal/mail/drafts/`: the draft lifecycle. `Send` is the only path that
+  sends mail; it files the iCloud copy with APPEND `\Seen` under
+  `safety.OperatorSend` to the mailbox `mail.MailboxRole` names `sent`.
 - `internal/pyhtml/`: `html.unescape`; tables from `tools/pyhtml/gen_entities.py`.
 - `internal/mail/imapclient/`: `imap.py`'s client on go-imap v2; go-imap
   drives the session and the bytes it reads are parsed again as Python
