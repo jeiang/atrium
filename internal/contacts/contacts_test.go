@@ -312,6 +312,8 @@ func TestPythonStrings(t *testing.T) {
 		"\xed\xa0\x80":              "\ufffd\ufffd\ufffd",
 		"\xc0\xaf":                  "\ufffd\ufffd",
 		"é😀":                        "é😀",
+		"\ufeffa\ufeffb":            "a\ufeffb",
+		"\ufeff\ufeffa":             "\ufeffa",
 	} {
 		if got := readText([]byte(in)); got != want {
 			t.Errorf("readText(%q) = %q, want %q", in, got, want)
