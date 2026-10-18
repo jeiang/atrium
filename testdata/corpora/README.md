@@ -250,20 +250,59 @@ extraction differs from trafilatura's.
 
 ## SMTP
 
-`src/atrium/smtp.py` and `drafts.send`. The fake server records `calls`
-(`connect` with host, port and timeout, `starttls`, `login`, `send_message`
-with envelope sender and recipients, `quit`). `failure` names the stage
-(`connect`, `starttls`, `login`, `send`), the Python exception and its
-constructor arguments; `refused_by_server` is the server's per-recipient
-refusal map. `drafts.send` records add `row` (the draft's `status`,
-`smtp_result`, `sent_msgid` afterwards), `sent_mailbox` and `appended_to`.
+`src/atrium/smtp.py`, `drafts.normalize_addresses` and `drafts.send`. The fake
+server records `calls` (`connect` with host, port and timeout, `starttls`,
+`login`, `send_message` with envelope sender and recipients, `quit`).
+`failure` names the stage (`connect`, `starttls`, `login`, `send`), the Python
+exception and its constructor arguments; `refused_by_server` is the server's
+per-recipient refusal map. `drafts.send` records add `row` (the draft's
+`status`, `smtp_result`, `sent_msgid` afterwards), `sent_mailbox` and
+`appended_to`. `build_message` records carry `output` (`as_string()`),
+`as_bytes` (what the iCloud Sent copy and, with CRLF, the SMTP DATA carry) and
+`as_bytes_utf8` (the SMTPUTF8 serialization), both base64; beyond the drafts
+the send records use, they cover body encodings (7bit, 8bit, quoted-printable
+with soft breaks, base64) and header folding with encoded words.
 `make_msgid` is pinned to `<golden.0001@<sender domain>>` and the clock to the
 manifest's `now`.
 
 ### SMTP divergences
 
-None recorded yet. The Go SMTP slice lists here how it renders server and OS
-errors and how its message serialization differs.
+`internal/mail/smtp` speaks SMTP itself, command for command as smtplib
+(lower-case `ehlo`, `mail from:`, `rcpt to:`, `data`; `STARTTLS`, `AUTH`,
+`QUIT`), instead of go-smtp: go-smtp v0.25 keeps STARTTLS unexported and strips
+the enhanced status code from reply text, so neither the per-stage errors nor
+the `(535, b'5.7.8 ...')` wording could be kept. Server replies keep smtplib's
+text exactly (multi-line replies joined with `\n`, each line stripped).
+Per-recipient refusals are returned, all refused raises
+`SMTPRecipientsRefused`, as in smtplib.
+
+- Certificates: smtplib's `starttls()` without a context does not verify the
+  server certificate (`ssl._create_stdlib_context` is the unverified context).
+  Go verifies the chain against the system roots and the SMTP host name, and a
+  failure reads as Go's `crypto/tls` text (`tls: failed to verify certificate:
+  x509: ...`), not OpenSSL's `[SSL: CERTIFICATE_VERIFY_FAILED] ...`.
+- OS errors read as the Python `OSError`: `[Errno N] text` with the Linux
+  number and glibc text for EPIPE, EADDRNOTAVAIL, ENETUNREACH, ECONNABORTED,
+  ECONNRESET, ETIMEDOUT, ECONNREFUSED and EHOSTUNREACH; any other errno keeps
+  the host's number and Go's text with a capital first letter. A name that does
+  not resolve is `[Errno -2] Name or service not known`, any other resolver
+  failure `[Errno -3] Temporary failure in name resolution`; timeouts are
+  `timed out`.
+- The EHLO name is the host name, or the first dotted name its address
+  reverses to, else `[<IPv4 address>]`; Python's `socket.getfqdn()` asks the
+  resolver through `gethostbyaddr`, which can pick another alias.
+- Failures smtplib does not turn into `SMTPException` or `OSError` (a
+  `ValueError` for a newline in a command, a `UnicodeEncodeError` for a
+  non-ASCII command without SMTPUTF8, a `binascii.Error` for a malformed AUTH
+  challenge) are a `SendError` with Python's text, so the draft returns to
+  draft; in Python they escape `smtp.send` and leave the draft `sending`.
+  Non-ASCII credentials are sent as UTF-8 where Python raises
+  `UnicodeEncodeError`.
+- The internal `RSET` after a refusal ignores its reply; smtplib ignores only a
+  disconnect there.
+- Go serializes a message only as bytes (`as_bytes`); `as_string()` differs
+  from it only for an `8bit` body, which the string generator re-encodes as
+  base64.
 
 ## Media
 
