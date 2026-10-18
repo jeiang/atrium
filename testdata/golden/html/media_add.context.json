@@ -53,7 +53,7 @@
     "paused": false,
     "magnet": "magnet:?xt=urn:btih:abc&dn=<script>alert(\"xss\")</script>",
     "torrent_name": "Show <x>.torrent",
-    "mode": "media",
+    "add_mode": "media",
     "error": "Not a magnet link <script>alert(\"xss\")</script>",
     "modes": [
       "media",
