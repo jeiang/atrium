@@ -20,7 +20,21 @@ func (e *Error) Error() string {
 	if e.Pos < 0 {
 		return e.Msg
 	}
-	return fmt.Sprintf("%s at position %d", e.Msg, e.Pos)
+	msg := fmt.Sprintf("%s at position %d", e.Msg, e.Pos)
+	src := []rune(e.Pattern)
+	if !slices.Contains(src, '\n') {
+		return msg
+	}
+	before := src[:min(e.Pos, len(src))]
+	line := 1
+	col := e.Pos + 1
+	for i, r := range before {
+		if r == '\n' {
+			line++
+			col = e.Pos - i
+		}
+	}
+	return fmt.Sprintf("%s (line %d, column %d)", msg, line, col)
 }
 
 const (

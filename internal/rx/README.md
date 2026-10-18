@@ -12,9 +12,12 @@ same path, so Python syntax keeps working after the cutover.
 - Compiled patterns are cached by pattern text and flags (LRU, 512 entries),
   never by call site.
 - Each match attempt is bounded by `MatchTimeout` (100 ms,
-  [#99](https://github.com/jeiang/atrium/issues/99)). A timeout is logged
-  (pattern text only, never the input) and the call returns no match with
-  `ErrTimeout`: `Sub` returns the input unchanged, `Split` returns it whole.
+  [#99](https://github.com/jeiang/atrium/issues/99); regexp2 checks its
+  clock in 100 ms steps, so an attempt can run up to about twice that). A
+  timeout is logged (pattern text only, never the input) and the call returns
+  no match with `ErrTimeout`: `Sub` returns the input unchanged, `Split`
+  returns it whole. `FindIter`, `FindAll`, `Sub` and `Split` bound each
+  match attempt, not the whole call.
 - Offsets are code point indexes, like Python `str` indexes. `Bytes` compiles
   a bytes pattern; its inputs are bytes decoded as Latin-1.
 
@@ -53,10 +56,12 @@ Each rule has a case in `rx_test.go` with CPython's result.
 | `(?P<name>…)`, `(?P=name)` | unnamed `(…)`, `\N` | .NET numbers named groups after unnamed ones; rx keeps Python's numbering and resolves names itself. |
 | `(?(1)yes)` | `(?(1)yes\|)` | regexp2 skips a match at a leading conditional without a "no" branch. |
 | `x*+`, `x++`, `x?+`, `x{m,n}+` | `(?>(?:x)*)` | .NET has no possessive quantifiers. |
-| `(?i)` etc. at the start, `(?i:…)`, `(?-i:…)` | flags applied per node; regexp2 `(?i:…)`/`(?-i:…)` where case folding changes | Global flags elsewhere are an error, as in Python 3.11+. |
+| `(?i)` etc. at the start, `(?i:…)`, `(?-i:…)` | flags applied per node | Global flags elsewhere are an error, as in Python 3.11+. |
 | `VERBOSE` | whitespace and comments dropped by the parser | |
-| `IGNORECASE` (Unicode) | regexp2 case folding plus `re._casefix` equivalents (`s`/`ſ`, `i`/`ı`, `µ`/`μ`, …) | |
-| `IGNORECASE` with `ASCII` or `Bytes` | `[kK]`-style sets, no regexp2 folding | Only ASCII letters fold. |
+| `IGNORECASE` (Unicode) literals and sets | explicit sets of every code point CPython matches (`LITERAL_UNI_IGNORE`, `IN_UNI_IGNORE`, `RANGE_UNI_IGNORE`, `re._casefix`); regexp2 never folds | regexp2 folds ranges with stale .NET tables (`(?i)[Ș-Ț]` misses U+021A). `casetable.go` is generated from CPython by `tools/rx/gen_casetable.py`. |
+| `IGNORECASE` backreference | `(?i:\N)` | |
+| `IGNORECASE` with `ASCII` or `Bytes` | `[kK]`-style sets | Only ASCII letters fold. |
+| `[^c]` with `c` ≥ U+FFFF | `(?!c)[\s\S]` | regexp2's first-character filter for `[^c]` drops every character above `c`. |
 | `\p{L}`, `\q`, … | error `bad escape \p at position 0` | Python rejects unknown letter escapes. |
 | replacement `\1`, `\g<name>`, `\g<0>`, `\n`, `\\` | parsed as `re._parser.parse_template` | Unmatched groups expand to `""`; other non-letter escapes stay as written. |
 
@@ -78,7 +83,13 @@ None of these occurs in the regex corpus.
 - A backreference under `ASCII|IGNORECASE` folds with Unicode rules
   (`(k)\1` matches the Kelvin sign).
 - `LOCALE` is not supported.
-- Character classes use Go's Unicode tables; Python 3.14 uses Unicode 16.0.
+- `\w`, `\d` and `\b` use Go's Unicode tables (`unicode.Version`); Python
+  3.14 uses Unicode 16.0, so letters and digits added since differ. Case
+  folding uses CPython's own tables (`casetable.go`) and has no such gap.
+- A backreference under Unicode `IGNORECASE` compares Go's simple lowercase
+  forms (regexp2), not CPython's table.
+- `SearchRange`/`MatchRange`/`FullMatchRange` with `pos > endpos` return no
+  match; CPython can return an empty match at `pos`.
 
 ## Corpus runner
 

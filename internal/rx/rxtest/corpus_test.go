@@ -39,4 +39,7 @@ func TestCorpus(t *testing.T) {
 		})
 	}
 	t.Logf("%d patterns (%d rejected as in Python), %d/%d records pass", len(c.Patterns), compileErrors, pass, total)
+	if total != c.Lines {
+		t.Errorf("checked %d records, the corpus holds %d", total, c.Lines)
+	}
 }

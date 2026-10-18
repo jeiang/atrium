@@ -109,6 +109,24 @@ var pyCases = []pyCase{
 	{`(?(2)x)b*(\w+)(?P<n>\w)`, 0, "search", "ab", nil, `[[0,2],[0,1],[1,2]]`},
 	{`(?a:\w)`, 0, "search", "é", nil, `null`},
 	{`(?u:é)`, ASCII | IgnoreCase, "search", "É", nil, `[[0,1]]`},
+	{`[^😀]`, 0, "search", "😁", nil, `[[0,1]]`},
+	{`[^😀]`, 0, "finditer", "a😁", nil, `[[0,1],[1,2]]`},
+	{`[^😀]`, 0, "sub", "😁", []any{"-"}, `"-"`},
+	{`[^😀]`, 0, "split", "😁", nil, `["",""]`},
+	{`[^😀]`, 0, "search", "x😁", []any{1, 1 << 30}, `[[1,2]]`},
+	{`[^😀]?b`, 0, "search", "😁b", nil, `[[0,2]]`},
+	{`(?:x|[^😀])`, 0, "search", "😁", nil, `[[0,1]]`},
+	{`[^\uffff]`, 0, "search", "\U00010000", nil, `[[0,1]]`},
+	{`(?i)[^𐐀]`, 0, "search", "𐐁", nil, `[[0,1]]`},
+	{`(?i)[Ș-Ț]`, 0, "finditer", "ȘȚșț", nil, `[[0,1],[1,2],[2,3],[3,4]]`},
+	{`(?i)[Ꭰ-Ᏼ]+`, 0, "finditer", "ꭰᏼ", nil, `[[0,2]]`},
+	{`(?i)[\u01a5-\u01a6]`, 0, "finditer", "\u01a5\u01a6\u01a4\u0280", nil, `[[0,1],[1,2],[2,3],[3,4]]`},
+	{`(?i)[^\u0100-\u024f]`, 0, "finditer", "\u01a6\u023a\u0280a", nil, `[[3,4]]`},
+	{`(?i)[\u012f-\u0130]`, 0, "finditer", "ı", nil, `[[0,1]]`},
+	{`(?i)[İ]`, 0, "finditer", "ıiI", nil, `[[0,1],[1,2],[2,3]]`},
+	{`(?i)[^İ]`, 0, "finditer", "ıxi", nil, `[[1,2]]`},
+	{`a`, 0, "sub", "aaa", []any{"b", -1}, `"aaa"`},
+	{`,`, 0, "split", "a,b", []any{-1}, `["a,b"]`},
 }
 
 func spans(m *Match) [][2]int {
@@ -208,6 +226,8 @@ func TestCompileErrors(t *testing.T) {
 		{`(?<=(a)\1)b`, 0, `cannot refer to group defined in the same lookbehind subpattern at position 9`},
 		{`\u0041`, Bytes, `bad escape \u at position 0`},
 		{`\N{EM DASH}`, 0, `named Unicode escape \N{EM DASH} is not supported at position 0`},
+		{"a\n(", 0, `missing ), unterminated subpattern at position 2 (line 2, column 1)`},
+		{"ab\ncd\n[", 0, `unterminated character set at position 6 (line 3, column 1)`},
 	} {
 		_, err := Compile(c.pattern, c.flags)
 		var e *Error
@@ -284,7 +304,12 @@ func TestMustCompilePanics(t *testing.T) {
 }
 
 func TestNamedGroups(t *testing.T) {
-	m, err := MustCompile(`(?P<x>a)(b)?(?P<y>c)`, 0).Search("ac")
+	re := MustCompile(`(?P<x>a)(b)?(?P<y>c)`, 0)
+	re.GroupIndex()["x"] = 9
+	if re.GroupIndex()["x"] != 1 {
+		t.Error("GroupIndex exposes the cached map")
+	}
+	m, err := re.Search("ac")
 	if err != nil || m == nil {
 		t.Fatalf("Search = %v, %v", m, err)
 	}

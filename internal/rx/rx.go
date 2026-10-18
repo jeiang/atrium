@@ -9,6 +9,7 @@ import (
 	"container/list"
 	"errors"
 	"log/slog"
+	"maps"
 	"math"
 	"strings"
 	"sync"
@@ -123,12 +124,8 @@ func compile(pattern string, flags Flags) (*Regexp, error) {
 	if p.flags&Bytes == 0 && p.flags&ASCII != 0 && p.flags&unicodeFlag != 0 {
 		return nil, &Error{Msg: "ASCII and UNICODE flags are incompatible", Pattern: pattern, Pos: -1}
 	}
-	ci := p.flags&IgnoreCase != 0 && !asciiMode(p.flags)
-	body := emitPattern(p.root, ci)
+	body := emitPattern(p.root)
 	opts := regexp2.RegexOptions(regexp2.None)
-	if ci {
-		opts = regexp2.IgnoreCase
-	}
 	re := &Regexp{pattern: pattern, flags: flags, groups: p.groups, names: p.names}
 	for _, v := range []struct {
 		dst  **regexp2.Regexp
@@ -158,8 +155,8 @@ func (re *Regexp) Flags() Flags { return re.flags }
 // Groups returns the number of capture groups.
 func (re *Regexp) Groups() int { return re.groups }
 
-// GroupIndex maps group names to group numbers.
-func (re *Regexp) GroupIndex() map[string]int { return re.names }
+// GroupIndex returns a copy of the map from group names to group numbers.
+func (re *Regexp) GroupIndex() map[string]int { return maps.Clone(re.names) }
 
 // Match is one match. Offsets are code point indexes into the searched string.
 type Match struct {
@@ -366,10 +363,13 @@ func (re *Regexp) SubFunc(s string, fn func(*Match) string, count int) (string, 
 }
 
 func (re *Regexp) subFunc(s string, fn func(*Match) string, count int) (string, int, error) {
+	if count < 0 {
+		return s, 0, nil
+	}
 	text := []rune(s)
 	var b strings.Builder
 	last, n := 0, 0
-	err := re.each(text, 0, math.MaxInt, max(count, 0), func(m *Match) {
+	err := re.each(text, 0, math.MaxInt, count, func(m *Match) {
 		b.WriteString(string(text[last:m.Start()]))
 		b.WriteString(fn(m))
 		last = m.End()
@@ -389,9 +389,12 @@ func (re *Regexp) subFunc(s string, fn func(*Match) string, count int) (string, 
 // participate yields "" where Python yields None.
 func (re *Regexp) Split(s string, maxsplit int) ([]string, error) {
 	text := []rune(s)
+	if maxsplit < 0 {
+		return []string{s}, nil
+	}
 	var out []string
 	last := 0
-	err := re.each(text, 0, math.MaxInt, max(maxsplit, 0), func(m *Match) {
+	err := re.each(text, 0, math.MaxInt, maxsplit, func(m *Match) {
 		out = append(out, string(text[last:m.Start()]))
 		for i := 1; i <= re.groups; i++ {
 			out = append(out, m.Group(i))

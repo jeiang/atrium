@@ -2,9 +2,7 @@ package rx
 
 import (
 	"fmt"
-	"slices"
 	"strings"
-	"unicode"
 )
 
 // Python's \w, \d and \s for str patterns; \w and \d are exactly these Unicode categories in Python 3.14.
@@ -18,14 +16,6 @@ const (
 	asciiSpace = `\u0009-\u000d\u0020`
 )
 
-type ciWant uint8
-
-const (
-	ciAny ciWant = iota
-	ciOn
-	ciOff
-)
-
 func asciiMode(f Flags) bool { return f&(ASCII|Bytes) != 0 }
 
 func wordClass(f Flags) string {
@@ -35,72 +25,23 @@ func wordClass(f Flags) string {
 	return "[" + uniWord + "]"
 }
 
-func want(n *node) (ciWant, bool) {
-	switch n.kind {
-	case nLiteral, nClass:
-		if n.flags&IgnoreCase != 0 && !asciiMode(n.flags) {
-			return ciOn, true
-		}
-		return ciOff, true
-	case nBackref:
-		if n.flags&IgnoreCase != 0 {
-			return ciOn, true
-		}
-		return ciOff, true
-	case nCategory, nAt, nAny:
-		if asciiMode(n.flags) {
-			return ciOff, true
-		}
-		return ciAny, true
-	case nFail:
-		return ciAny, true
-	}
-	return ciAny, false
-}
-
 type emitter struct {
 	b strings.Builder
 }
 
-func emitPattern(root *node, ci bool) string {
+// emitPattern writes the regexp2 program. IGNORECASE is resolved here into explicit sets, so regexp2's own case
+// folding (stale .NET tables for ranges) is only used for backreferences.
+func emitPattern(root *node) string {
 	e := &emitter{}
-	e.emit(root, ci)
+	e.emit(root)
 	return e.b.String()
 }
 
-func (e *emitter) emit(n *node, ci bool) {
-	if w, leaf := want(n); leaf {
-		if w == ciAny || (w == ciOn) == ci {
-			e.leaf(n)
-			return
-		}
-		e.wrapCI(w == ciOn, func() { e.leaf(n) })
-		return
-	}
+func (e *emitter) emit(n *node) {
 	switch n.kind {
 	case nConcat:
-		for i := 0; i < len(n.subs); {
-			w, leaf := want(n.subs[i])
-			if !leaf || w == ciAny || (w == ciOn) == ci {
-				e.emit(n.subs[i], ci)
-				i++
-				continue
-			}
-			j := i
-			for j < len(n.subs) {
-				wj, lj := want(n.subs[j])
-				if !lj || (wj != w && wj != ciAny) {
-					break
-				}
-				j++
-			}
-			run := n.subs[i:j]
-			e.wrapCI(w == ciOn, func() {
-				for _, s := range run {
-					e.leaf(s)
-				}
-			})
-			i = j
+		for _, s := range n.subs {
+			e.emit(s)
 		}
 	case nAlt:
 		e.b.WriteString("(?:")
@@ -108,7 +49,7 @@ func (e *emitter) emit(n *node, ci bool) {
 			if i > 0 {
 				e.b.WriteByte('|')
 			}
-			e.emit(s, ci)
+			e.emit(s)
 		}
 		e.b.WriteByte(')')
 	case nGroup:
@@ -117,11 +58,11 @@ func (e *emitter) emit(n *node, ci bool) {
 		} else {
 			e.b.WriteString("(?:")
 		}
-		e.emit(n.subs[0], ci)
+		e.emit(n.subs[0])
 		e.b.WriteByte(')')
 	case nAtomic:
 		e.b.WriteString("(?>")
-		e.emit(n.subs[0], ci)
+		e.emit(n.subs[0])
 		e.b.WriteByte(')')
 	case nLook:
 		e.b.WriteString("(?")
@@ -133,15 +74,15 @@ func (e *emitter) emit(n *node, ci bool) {
 		} else {
 			e.b.WriteByte('=')
 		}
-		e.emit(n.subs[0], ci)
+		e.emit(n.subs[0])
 		e.b.WriteByte(')')
 	case nCond:
 		fmt.Fprintf(&e.b, "(?(%d)", n.group)
-		e.emit(n.subs[0], ci)
+		e.emit(n.subs[0])
 		// regexp2 skips a match when a leading (?(N)yes) has no "no" branch and group N did not participate.
 		e.b.WriteByte('|')
 		if n.hasNo {
-			e.emit(n.no, ci)
+			e.emit(n.no)
 		}
 		e.b.WriteByte(')')
 	case nRepeat:
@@ -149,7 +90,7 @@ func (e *emitter) emit(n *node, ci bool) {
 			e.b.WriteString("(?>")
 		}
 		e.b.WriteString("(?:")
-		e.emit(n.subs[0], ci)
+		e.emit(n.subs[0])
 		e.b.WriteByte(')')
 		switch {
 		case n.min == 0 && n.max == maxRepeat:
@@ -171,21 +112,6 @@ func (e *emitter) emit(n *node, ci bool) {
 		if n.repeat == possessive {
 			e.b.WriteByte(')')
 		}
-	}
-}
-
-func (e *emitter) wrapCI(on bool, body func()) {
-	if on {
-		e.b.WriteString("(?i:")
-	} else {
-		e.b.WriteString("(?-i:")
-	}
-	body()
-	e.b.WriteByte(')')
-}
-
-func (e *emitter) leaf(n *node) {
-	switch n.kind {
 	case nLiteral:
 		e.literal(n)
 	case nClass:
@@ -201,7 +127,11 @@ func (e *emitter) leaf(n *node) {
 	case nAt:
 		e.at(n)
 	case nBackref:
-		fmt.Fprintf(&e.b, `(?:\%d)`, n.group)
+		if n.flags&IgnoreCase != 0 {
+			fmt.Fprintf(&e.b, `(?i:\%d)`, n.group)
+		} else {
+			fmt.Fprintf(&e.b, `(?:\%d)`, n.group)
+		}
 	case nFail:
 		e.b.WriteString("(?!)")
 	}
@@ -248,15 +178,16 @@ func (e *emitter) literal(n *node) {
 		e.b.WriteString(escapeRune(r))
 		return
 	}
-	if fixes, ok := caseFixes[unicode.ToLower(r)]; ok {
-		e.b.WriteString("[" + escapeRune(unicode.ToLower(r)))
-		for _, f := range fixes {
-			e.b.WriteString(escapeRune(f))
-		}
-		e.b.WriteString("]")
+	set := foldLiteral(r)
+	if len(set) == 1 {
+		e.b.WriteString(escapeRune(set[0]))
 		return
 	}
-	e.b.WriteString(escapeRune(r))
+	e.b.WriteByte('[')
+	for _, c := range set {
+		e.b.WriteString(escapeRune(c))
+	}
+	e.b.WriteByte(']')
 }
 
 func asciiOtherCase(r rune) (rune, bool) {
@@ -301,8 +232,14 @@ func (e *emitter) class(items []classItem, negate bool, flags Flags) {
 		if ascii {
 			ranges = addASCIICase(ranges)
 		} else {
-			ranges = addCaseFixes(ranges)
+			ranges = foldSet(ranges)
 		}
+	}
+	ranges = normalize(ranges)
+	if negate && len(complements) == 0 && body.Len() == 0 && len(ranges) == 1 && ranges[0][0] == ranges[0][1] && ranges[0][0] >= 0xffff {
+		// regexp2's first-character filter for [^c] (Notone) drops every character above c when c >= U+FFFF.
+		e.b.WriteString(`(?!` + escapeRune(ranges[0][0]) + `)[\s\S]`)
+		return
 	}
 	for _, r := range ranges {
 		body.WriteString(escapeRune(r[0]))
@@ -359,48 +296,13 @@ func pick(ascii bool, a, u string) string {
 }
 
 func addASCIICase(ranges [][2]rune) [][2]rune {
-	out := slices.Clone(ranges)
+	out := ranges
 	for _, r := range ranges {
 		if lo, hi := max(r[0], 'A'), min(r[1], 'Z'); lo <= hi {
 			out = append(out, [2]rune{lo + 32, hi + 32})
 		}
 		if lo, hi := max(r[0], 'a'), min(r[1], 'z'); lo <= hi {
 			out = append(out, [2]rune{lo - 32, hi - 32})
-		}
-	}
-	return out
-}
-
-func inRanges(ranges [][2]rune, c rune) bool {
-	for _, r := range ranges {
-		if c >= r[0] && c <= r[1] {
-			return true
-		}
-	}
-	return false
-}
-
-// addCaseFixes adds the characters Python's re treats as case-equivalent beyond simple lowercasing (re._casefix).
-func addCaseFixes(ranges [][2]rune) [][2]rune {
-	out := ranges
-	for _, k := range caseFixKeys {
-		fixes := caseFixes[k]
-		hit := false
-		for c := k; ; {
-			if inRanges(ranges, c) {
-				hit = true
-				break
-			}
-			if c = unicode.SimpleFold(c); c == k {
-				break
-			}
-		}
-		if !hit {
-			continue
-		}
-		out = append(out, [2]rune{k, k})
-		for _, f := range fixes {
-			out = append(out, [2]rune{f, f})
 		}
 	}
 	return out

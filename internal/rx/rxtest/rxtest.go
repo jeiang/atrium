@@ -111,6 +111,8 @@ type Corpus struct {
 	Patterns []Pattern
 	byID     map[string]int
 	Records  map[string][]Record
+	// Lines is the number of records read from every regex*.jsonl.
+	Lines int
 }
 
 // Pattern returns the manifest pattern with id.
@@ -190,6 +192,7 @@ func (c *Corpus) loadRecords(name string) error {
 			return fmt.Errorf("%s:%d: id %q is not in the manifest", filepath.Base(name), line, r.ID)
 		}
 		c.Records[r.ID] = append(c.Records[r.ID], r)
+		c.Lines++
 	}
 	return sc.Err()
 }
