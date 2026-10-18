@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
 func connPragmas(foreignKeys bool) []string {
@@ -47,7 +48,7 @@ func connect(path string, foreignKeys bool) (*DB, error) {
 	pragmas := connPragmas(foreignKeys)
 	w := Open(path+"?_txlock=immediate", pragmas...)
 	w.SetMaxOpenConns(1)
-	if _, err := w.Exec("PRAGMA journal_mode = WAL"); err != nil {
+	if err := setWAL(w); err != nil {
 		_ = w.Close()
 		return nil, fmt.Errorf("db: %s: %w", path, err)
 	}
@@ -57,6 +58,20 @@ func connect(path string, foreignKeys bool) (*DB, error) {
 
 func (d *DB) Close() error {
 	return errors.Join(d.Read.Close(), d.Write.Close())
+}
+
+// SQLite skips the busy handler when switching a new file to WAL, so
+// concurrent first connects get SQLITE_BUSY at once; retry for the
+// busy_timeout instead.
+func setWAL(w *sql.DB) error {
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		_, err := w.Exec("PRAGMA journal_mode = WAL")
+		if err == nil || !isBusy(err) || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // WithTx runs fn in an IMMEDIATE transaction on the writer, committing when
