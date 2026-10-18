@@ -2,7 +2,7 @@ package py
 
 import "time"
 
-func number(s string) int {
+func dateNumber(s string) int {
 	n := 0
 	for _, c := range []byte(s) {
 		n = n*10 + int(c-'0')
@@ -28,17 +28,17 @@ func monthTexts(s string) []string {
 func dayText(s string) (int, bool) {
 	switch len(s) {
 	case 1:
-		return number(s), s[0] >= '1' && s[0] <= '9'
+		return dateNumber(s), s[0] >= '1' && s[0] <= '9'
 	case 2:
 		switch {
 		case s[0] == '3':
-			return number(s), s[1] == '0' || s[1] == '1'
+			return dateNumber(s), s[1] == '0' || s[1] == '1'
 		case s[0] == '1' || s[0] == '2':
-			return number(s), isDigit(s[1])
+			return dateNumber(s), isDigit(s[1])
 		case s[0] == '0':
-			return number(s[1:]), s[1] >= '1' && s[1] <= '9'
+			return dateNumber(s[1:]), s[1] >= '1' && s[1] <= '9'
 		case s[0] == ' ':
-			return number(s[1:]), s[1] >= '1' && s[1] <= '9'
+			return dateNumber(s[1:]), s[1] >= '1' && s[1] <= '9'
 		}
 	}
 	return 0, false
@@ -55,7 +55,7 @@ func StrptimeDate(value string) (DateTime, bool) {
 			return DateTime{}, false
 		}
 	}
-	year := number(value[:4])
+	year := dateNumber(value[:4])
 	for _, mtext := range monthTexts(value[5:]) {
 		rest := value[5+len(mtext):]
 		if rest == "" || rest[0] != '-' {
@@ -65,7 +65,7 @@ func StrptimeDate(value string) (DateTime, bool) {
 		if !ok {
 			continue
 		}
-		month := number(mtext)
+		month := dateNumber(mtext)
 		if year < 1 || time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC).Day() != day {
 			return DateTime{}, false
 		}
