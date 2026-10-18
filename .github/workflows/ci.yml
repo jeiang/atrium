@@ -9,21 +9,119 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a main-branch run: it populates the authoritative cache state.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
 
+env:
+  # Pulls are anonymous, so only pushes need credentials; those are minted
+  # per-job from GitHub OIDC (only listed repositories' main refs are granted push server-side).
+  GARRET_SUBSTITUTER: https://cache.jeiang.dev
+  GARRET_PUBLIC_KEY: "cache.jeiang.dev-1:owXJK5/UX9NSf1lhmDDT3QTxMtbVk9YfHhjvOXyPhpA="
+
+  # High: a warm-cache leg is substituter round-trips, not CPU.
+  MAX_SUBSTITUTION_JOBS: "32"
+  HTTP_CONNECTIONS: "64"
+
 jobs:
-  check:
+  # Splitting checks into a matrix gives each one its own runner, memory and time budget.
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      checks: ${{ steps.discover.outputs.checks }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The substituters go straight into nix.conf so evaluation-time
+      # IFD sources substitute from the cache too.
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        with:
+          extra_nix_config: |
+            extra-substituters = ${{ env.GARRET_SUBSTITUTER }}
+            extra-trusted-public-keys = ${{ env.GARRET_PUBLIC_KEY }}
+            max-substitution-jobs = ${{ env.MAX_SUBSTITUTION_JOBS }}
+            http-connections = ${{ env.HTTP_CONNECTIONS }}
+
+      - name: Discover checks
+        id: discover
+        run: |
+          checks=$(nix eval --json '.#checks.x86_64-linux' --apply builtins.attrNames)
+          echo "checks=$checks" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: discover
+    permissions:
+      contents: read
+      # Exchanged for a short-lived push token; the server only grants push to listed repositories' main refs.
+      id-token: write
+    strategy:
+      fail-fast: false
+      # Bounds cache-server load, not build capacity: legs mostly substitute from a warm cache.
+      max-parallel: 10
+      matrix:
+        check: ${{ fromJson(needs.discover.outputs.checks) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Before Nix is installed, because nix.conf names the hook.
+      - name: Write garret's post-build hook
+        run: ./.ci/garret.sh hook
+
+      # Baking the substituter into nix.conf here needs no client, login, or secrets: pulls are anonymous.
       - name: Install Nix
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        with:
+          extra_nix_config: |
+            extra-substituters = ${{ env.GARRET_SUBSTITUTER }}
+            extra-trusted-public-keys = ${{ env.GARRET_PUBLIC_KEY }}
+            max-substitution-jobs = ${{ env.MAX_SUBSTITUTION_JOBS }}
+            http-connections = ${{ env.HTTP_CONNECTIONS }}
+            post-build-hook = ${{ runner.temp }}/garret-hook
 
-      # Builds the package (pytest runs in its checkPhase), the static assets and the module check.
-      - name: Flake check
-        run: nix flake check --keep-going --show-trace -L
+      # Main pushes only, best-effort (continue-on-error) since a cache outage
+      # must never turn main red; statix/treefmt have nothing worth pushing.
+      - name: Start pushing to garret as paths are built
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.check != 'statix' && matrix.check != 'treefmt'
+        continue-on-error: true
+        run: ./.ci/garret.sh watch
+
+      - name: Build check
+        env:
+          CHECKS: ${{ matrix.check }}
+          SYSTEM: x86_64-linux
+        run: |
+          installables=()
+          for attr in $CHECKS; do installables+=(".#checks.${SYSTEM}.${attr}"); done
+          nix build --keep-going --show-trace --no-link --print-out-paths "${installables[@]}" >"$RUNNER_TEMP/garret-outputs"
+
+      # Also after a failed build, so the next run substitutes what this one built.
+      - name: Push to garret what the watcher has not
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.check != 'statix' && matrix.check != 'treefmt'
+        continue-on-error: true
+        timeout-minutes: 30
+        run: ./.ci/garret.sh drain
+
+  # Single stable required status context: `build` fans out into one context
+  # per matrix leg, which branch protection can't require directly. Named
+  # `check` because main's branch protection requires that context.
+  check:
+    needs: [discover, build]
+    # Runs even when a leg fails: a skipped required check blocks merges just like a failing one.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify discovery and all matrix checks passed
+        run: |
+          echo "discover: ${{ needs.discover.result }}"
+          echo "build:    ${{ needs.build.result }}"
+          if [[ "${{ needs.discover.result }}" != "success" || "${{ needs.build.result }}" != "success" ]]; then
+            echo "::error::One or more required checks did not succeed."
+            exit 1
+          fi
+          echo "All checks passed."
