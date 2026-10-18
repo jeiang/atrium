@@ -17,7 +17,7 @@ time.tzset()
 ROOT = Path(__file__).resolve().parents[3]
 OUT = ROOT / "testdata" / "corpora"
 sys.path.insert(0, str(ROOT / "tools" / "golden"))
-from common import FREEZE_COMMIT, GENERATED_FROM  # noqa: E402
+from common import FREEZE_COMMIT  # noqa: E402
 
 
 def use_source_tree():
@@ -49,7 +49,6 @@ def emit(name, records, manifest, fixtures=None):
     manifest = {
         "corpus": name,
         "freeze_commit": FREEZE_COMMIT,
-        "generated_from": GENERATED_FROM,
         "python": f"{sys.version_info.major}.{sys.version_info.minor}",
         "process_tz": PROCESS_TZ,
         "records": len(records),

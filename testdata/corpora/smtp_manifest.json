@@ -16,7 +16,6 @@
     "smtp.send",
     "drafts.send"
   ],
-  "generated_from": "688c33e4f2fb5a09b4d5fdbb3ff4d23e2d92d609",
   "now": 1791280800.0,
   "process_tz": "America/Port_of_Spain",
   "python": "3.14",

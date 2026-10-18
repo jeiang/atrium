@@ -15,7 +15,7 @@ sys.path.insert(0, str(HERE))
 from markupsafe import Markup  # noqa: E402
 
 import page_contexts  # noqa: E402
-from common import FREEZE_COMMIT, GENERATED_FROM  # noqa: E402
+from common import FREEZE_COMMIT  # noqa: E402
 from atrium.web.app import TEMPLATES, build_env  # noqa: E402
 
 OUT = ROOT / "testdata" / "golden" / "html"
@@ -104,6 +104,7 @@ the frozen Python app. The Go page slices canonical-diff their output against
 these files.
 
 - Freeze commit: `{index["freeze_commit"]}`
+- Regenerated from main after each post-freeze Python fix; the provenance is the git history of testdata.
 - Constant now: `{index["now"]}` ({index["now_iso"]}); every timestamp in the
   contexts is derived from it and the `ts` filter renders in UTC.
 - Generator: `tools/golden/render_pages.py` with the fixed contexts in
@@ -201,7 +202,6 @@ def build(env, out):
         entries.append({"template": template, "kind": kind_of(env, template, scenarios[""]), "scenarios": listed})
     index = {
         "freeze_commit": FREEZE_COMMIT,
-        "generated_from": GENERATED_FROM,
         "now": page_contexts.NOW,
         "now_iso": datetime.fromtimestamp(page_contexts.NOW, UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "templates": entries,

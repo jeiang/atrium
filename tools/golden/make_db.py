@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tests"), str(Path(__file__).resolve().parent)]
 
 import make_db_mail as mail
-from common import FREEZE_COMMIT, GENERATED_FROM
+from common import FREEZE_COMMIT
 
 STATE = Path("state")
 CLI_STATE = Path("cli")
@@ -399,7 +399,6 @@ def write_pipeline(world, exchanges):
     })
     write_json(PIPELINE_OUT / "scenario.json", {
         "freeze_commit": FREEZE_COMMIT,
-        "generated_from": GENERATED_FROM,
         "clocks": mail.CLOCKS,
         "timestamp_policy": {
             "policy": "same_clock",
@@ -806,7 +805,6 @@ def make_legacy(golden_db, legacy_path):
 def manifest(read_index, cli_index):
     return {
         "freeze_commit": FREEZE_COMMIT,
-        "generated_from": GENERATED_FROM,
         "generator": "tools/golden/make_db.py",
         "clock": {"policy": "every scenario step sets a constant clock; time.time, datetime.now and date.today return it until the next step", "t0": mail.T0, "steps": mail.CLOCKS},
         "state_dir": str(STATE),

@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common import FREEZE_COMMIT, GENERATED_FROM  # noqa: E402
+from common import FREEZE_COMMIT  # noqa: E402
 
 from regex_inputs import (  # noqa: E402
     BINDINGS,
@@ -519,7 +519,6 @@ def build():
     lookaround = sorted({p["site_id"] for p in patterns_out if {"lookahead", "negative_lookahead", "lookbehind", "negative_lookbehind", "backreference"} & set(p.get("features", ()))})
     manifest = {
         "freeze_commit": FREEZE_COMMIT,
-        "generated_from": GENERATED_FROM,
         "python": f"{PYTHON[0]}.{PYTHON[1]}",
         "source": "src/atrium",
         "call_sites": len(sites_out),

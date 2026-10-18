@@ -59,9 +59,9 @@ and backups; nothing of that lives here.
   The CLI is stdlib `flag` through `internal/cli`: no CLI framework. A
   handler gets `Env.Ctx`, cancelled on SIGINT and SIGTERM.
 - Golden provenance: `FREEZE_COMMIT` lives only in `tools/golden/common.py`
-  and every generator imports it. Manifests also record `generated_from`, the
-  git tree id of `src/atrium` that produced them, which a check recomputes
-  without git.
+  and every generator imports it. After each post-freeze Python fix the
+  goldens are regenerated from main; their provenance is the git history of
+  `testdata`.
 - Go errors: an error that is only a message is `type X string` with an
   `Error` method and is returned by value; an error that carries fields is a
   struct returned as `*X`. A built-in failure class is a `httpx.Err*` value

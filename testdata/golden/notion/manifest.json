@@ -1,6 +1,5 @@
 {
   "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
-  "generated_from": "688c33e4f2fb5a09b4d5fdbb3ff4d23e2d92d609",
   "generator": "tools/golden/gen_notion.py",
   "notes": [
     "No database query request: the 2026-03-11 client reads data sources through `POST /v1/search` with the `data_source` filter; `notion_migrate` (not ported in Phase A) is the only caller of database trash, which `client_requests` covers.",
