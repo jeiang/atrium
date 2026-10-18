@@ -135,11 +135,11 @@ def stamp_messages(conn, thread_id, active):
     return out
 
 
-def build_messages(messages):
+def build_messages(messages, history_cc=CACHE_CONTROL):
     out = [{"role": m["role"], "content": list(m["content"])} for m in messages]
     if out and out[-1]["role"] == journal.USER:
         content = out[-1]["content"]
-        content[-1] = {**content[-1], "cache_control": CACHE_CONTROL}
+        content[-1] = {**content[-1], "cache_control": history_cc}
     return out
 
 
@@ -376,7 +376,7 @@ def run(conn, cfg, env, client, run_id, *, embed=None, now=time.time, max_steps=
                 size = estimate(params, files.with_project_files(conn, thread, active), anchor)
             if size > limits["hard"]:
                 raise RunLimit(f"next request would be about {size} tokens, over the {limits['hard']} limit")
-            messages = files.expand(conn, build_messages(files.with_project_files(conn, thread, active)), sandbox)
+            messages = files.expand(conn, build_messages(files.with_project_files(conn, thread, active), prefix_cc), sandbox)
             response = stream_in_container(conn, thread, client, params, messages, writer) if sandbox else stream_response(client, params, messages, writer)
             journal.bump_steps(conn, run_id)
             blocks = [block_dict(b) for b in field(response, "content", [])]
