@@ -61,26 +61,5 @@
     "rate_date": null,
     "review": "",
     "transfer_id": null
-  },
-  {
-    "account_id": 1,
-    "amount": 45.5,
-    "category_id": null,
-    "computed_amount": null,
-    "created_ts": 1792094400.0,
-    "currency": "TTD",
-    "date": "2026-10-15",
-    "description": "Receipt 2002",
-    "dismissed": "",
-    "id": 4,
-    "kind": "purchase",
-    "original_amount": 45.5,
-    "original_currency": "TTD",
-    "payee_id": 1,
-    "payee_raw": "SHOP A PORT OF SPAIN",
-    "rate": null,
-    "rate_date": null,
-    "review": "",
-    "transfer_id": null
   }
 ]

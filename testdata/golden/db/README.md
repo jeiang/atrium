@@ -113,6 +113,3 @@ in the frozen CLI, so that entry records argparse's exit 2 and usage error;
 
 - Approving a `calendar_event` proposal runs the post-apply mail sync for
   account `calendar`, so its `result.sync_error` is `KeyError: 'calendar'`.
-- A money mail that moves after it was scanned (here `shopa-2002`, filed by
-  the live pass and then corrected) is indexed as a new message and scanned
-  again, so `transactions` 3 and 4 are the same receipt.
