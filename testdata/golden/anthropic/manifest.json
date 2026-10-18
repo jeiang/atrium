@@ -24,6 +24,7 @@
     ]
   },
   "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "generated_from": "688c33e4f2fb5a09b4d5fdbb3ff4d23e2d92d609",
   "generator": "tools/golden/gen_anthropic.py",
   "prompt_stability": "prompt_stability.json",
   "scenarios": [

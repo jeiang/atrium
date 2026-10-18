@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from common import FREEZE_COMMIT, ROOT, dumps, out_dir, use_source_tree, write_json  # noqa: E402
+from common import FREEZE_COMMIT, GENERATED_FROM, ROOT, dumps, out_dir, use_source_tree, write_json  # noqa: E402
 
 TZ = "America/Port_of_Spain"
 os.environ["ATRIUM_TZ"] = TZ
@@ -662,6 +662,7 @@ def main():
         {
             "slice": SLICE,
             "freeze_commit": FREEZE_COMMIT,
+            "generated_from": GENERATED_FROM,
             "generator": str(Path(__file__).resolve().relative_to(ROOT)),
             "sdk": f"anthropic-python {anthropic.__version__}",
             "timezone": TZ,

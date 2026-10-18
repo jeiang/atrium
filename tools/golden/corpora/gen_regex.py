@@ -10,6 +10,9 @@ import warnings
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from common import FREEZE_COMMIT, GENERATED_FROM  # noqa: E402
 
 from regex_inputs import (  # noqa: E402
     BINDINGS,
@@ -27,7 +30,6 @@ SRC = ROOT / "src" / "atrium"
 OUT = ROOT / "testdata" / "corpora"
 MANIFEST = OUT / "regex_manifest.json"
 CORPUS = OUT / "regex.jsonl"
-FREEZE_COMMIT = "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40"
 PYTHON = (3, 14)
 CALLS = ("compile", "escape", "findall", "finditer", "fullmatch", "match", "search", "split", "sub", "subn")
 GREP = re.compile(r"\bre\.(" + "|".join(CALLS) + r")\b(\s*\()?")
@@ -460,6 +462,7 @@ def build():
     lookaround = sorted({p["site"] for p in patterns_out if {"lookahead", "negative_lookahead", "lookbehind", "negative_lookbehind", "backreference"} & set(p.get("features", ()))})
     manifest = {
         "freeze_commit": FREEZE_COMMIT,
+        "generated_from": GENERATED_FROM,
         "python": f"{PYTHON[0]}.{PYTHON[1]}",
         "source": "src/atrium",
         "call_sites": len(sites_out),

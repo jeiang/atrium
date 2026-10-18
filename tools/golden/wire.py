@@ -24,7 +24,7 @@ from urllib.parse import parse_qsl, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from common import FREEZE_COMMIT, ROOT, out_dir, use_source_tree, write_json  # noqa: E402
+from common import FREEZE_COMMIT, GENERATED_FROM, ROOT, out_dir, use_source_tree, write_json  # noqa: E402
 
 TZ = "America/Port_of_Spain"
 os.environ["ATRIUM_TZ"] = TZ
@@ -258,7 +258,7 @@ def write_slice(slice_name, title, generator, scenarios, credentials, notes=()):
     generator_path = str(Path(generator).resolve().relative_to(ROOT))
     write_json(
         target / "manifest.json",
-        {"slice": slice_name, "freeze_commit": FREEZE_COMMIT, "generator": generator_path, "timezone": TZ, "notes": list(notes), "scenarios": manifest},
+        {"slice": slice_name, "freeze_commit": FREEZE_COMMIT, "generated_from": GENERATED_FROM, "generator": generator_path, "timezone": TZ, "notes": list(notes), "scenarios": manifest},
     )
     rows = "\n".join(f"| `{m['name']}` | {m['requests']} | {', '.join(f'`{s}`' for s in m['source_tests'])} |" for m in manifest)
     note_text = "".join(f"\n- {n}" for n in notes)

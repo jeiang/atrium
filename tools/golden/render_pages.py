@@ -15,9 +15,9 @@ sys.path.insert(0, str(HERE))
 from markupsafe import Markup  # noqa: E402
 
 import page_contexts  # noqa: E402
+from common import FREEZE_COMMIT, GENERATED_FROM  # noqa: E402
 from atrium.web.app import TEMPLATES, build_env  # noqa: E402
 
-FREEZE_COMMIT = "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40"
 OUT = ROOT / "testdata" / "golden" / "html"
 INDEX = "index.json"
 README = "README.md"
@@ -201,6 +201,7 @@ def build(env, out):
         entries.append({"template": template, "kind": kind_of(env, template, scenarios[""]), "scenarios": listed})
     index = {
         "freeze_commit": FREEZE_COMMIT,
+        "generated_from": GENERATED_FROM,
         "now": page_contexts.NOW,
         "now_iso": datetime.fromtimestamp(page_contexts.NOW, UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "templates": entries,
