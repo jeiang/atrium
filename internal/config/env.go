@@ -53,7 +53,7 @@ func Mode(env Env) (string, error) {
 			return value, nil
 		}
 	}
-	return "", fmt.Errorf("ATRIUM_MODE must be one of (%s, %s), got %s", pyRepr(Shadow), pyRepr(Live), pyRepr(value))
+	return "", fmt.Errorf("ATRIUM_MODE must be one of (%s, %s), got %s", PyRepr(Shadow), PyRepr(Live), PyRepr(value))
 }
 
 func TZName(env Env) string {
@@ -69,7 +69,7 @@ func Zone(name string) (*time.Location, error) {
 			return loc, nil
 		}
 	}
-	return nil, fmt.Errorf("unknown timezone %s", pyRepr(name))
+	return nil, fmt.Errorf("unknown timezone %s", PyRepr(name))
 }
 
 func Location(env Env) (*time.Location, error) { return Zone(TZName(env)) }
@@ -208,7 +208,7 @@ func pyStrip(s string) string { return strings.TrimFunc(s, pyIsSpace) }
 
 func pySplit(s string) []string { return strings.FieldsFunc(s, pyIsSpace) }
 
-func pyRepr(s string) string {
+func PyRepr(s string) string {
 	quote := byte('\'')
 	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
 		quote = '"'
