@@ -331,7 +331,8 @@ def judge_commitments(url, row, body):
 def scannable(conn, now, limit):
     rows = conn.execute(
         "SELECT m.* FROM messages m WHERE m.gone_at IS NULL AND m.date_ts >= ? "
-        "AND NOT EXISTS (SELECT 1 FROM commitment_scans s WHERE s.message_id = m.id) ORDER BY m.date_ts DESC LIMIT ?",
+        "AND NOT EXISTS (SELECT 1 FROM messages o JOIN commitment_scans s ON s.message_id = o.id "
+        "WHERE o.account = m.account AND o.digest = m.digest) ORDER BY m.date_ts DESC LIMIT ?",
         (now - COMMITMENT_WINDOW_DAYS * DAY, limit * 4),
     ).fetchall()
     return [r for r in rows if not is_draft(r) and (r["sent"] or human_sender(r))][:limit]

@@ -1,0 +1,21 @@
+From: "Store" <orders@store.example.test>
+To: me@example.test
+Subject: Order 1001 shipped
+X-SES-Outgoing: 2026.10.06-1.2.3.4
+X-Mailgun-Sid: abc
+X-SG-EID: def
+X-Mandrill-User: md_1
+X-PM-Message-Id: 1-2-3
+X-SparkPost-Id: x
+X-MSYS-API: {}
+X-Shopify-Shop: s
+X-ShopId: 99
+X-Campaign: c
+X-CampaignID: c
+X-MC-User: u
+X-GitHub-Reason: mention
+X-Unrelated: nothing
+Feedback-ID: 1.us-east-1.abc:AmazonSES
+Content-Type: text/plain; charset=utf-8
+
+Your order has shipped. Order total TT$1,250.00

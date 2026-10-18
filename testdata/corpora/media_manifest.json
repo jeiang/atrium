@@ -1,0 +1,19 @@
+{
+  "corpus": "media",
+  "fixtures": [],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "functions": [
+    "parse_release",
+    "ext",
+    "is_video",
+    "is_subtitle",
+    "clean_component",
+    "named",
+    "movie_path",
+    "episode_path"
+  ],
+  "process_tz": "America/Port_of_Spain",
+  "python": "3.14",
+  "records": 180,
+  "source": "src/atrium/media/parse.py"
+}
