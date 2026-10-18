@@ -19,6 +19,12 @@ fast-check extraArgs="":
 test *args:
   nix develop --impure -c python -m pytest {{args}}
 
+# Regenerate testdata/golden from the frozen Python app
+golden:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  nix develop --impure -c bash -c 'for script in tools/golden/gen_*.py tools/golden/make_db.py tools/golden/render_pages.py; do if [ -e "$script" ]; then echo "$script" >&2; python "$script"; fi; done'
+
 # Run the Go tests (inside the dev shell)
 go-test *args="./...":
   go test {{args}}
