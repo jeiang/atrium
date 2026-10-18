@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -37,14 +38,14 @@ func DocumentText(subject, name, addr, body string) string {
 	if subject == "" {
 		subject = "none"
 	}
-	return "title: " + subject + " | text: From: " + name + " <" + addr + ">\n\n" + clip(body, config.EmbedBodyChars)
+	return "title: " + subject + " | text: From: " + name + " <" + addr + ">\n\n" + py.Clip(body, config.EmbedBodyChars)
 }
 
 func NotionDocumentText(title, path, markdown string) string {
 	if title == "" {
 		title = "none"
 	}
-	return "title: " + title + " | text: " + path + "\n\n" + clip(markdown, config.EmbedBodyChars)
+	return "title: " + title + " | text: " + path + "\n\n" + py.Clip(markdown, config.EmbedBodyChars)
 }
 
 func QueryText(query string) string {
@@ -146,21 +147,7 @@ func pyLen(v any) (int, error) {
 // Normalize scales vector to unit length; the norm is summed as CPython's
 // sum() does (Neumaier compensation) so stored vectors match Python's bits.
 func Normalize(vector []float64) []float64 {
-	var sum, c float64
-	for _, x := range vector {
-		sq := float64(x * x) // the conversion stops arm64 fusing x*x+sum into an FMA
-		t := sum + sq
-		if math.Abs(sum) >= math.Abs(sq) {
-			c += (sum - t) + sq
-		} else {
-			c += (sq - t) + sum
-		}
-		sum = t
-	}
-	if c != 0 && !math.IsInf(c, 0) && !math.IsNaN(c) {
-		sum += c
-	}
-	norm := math.Sqrt(sum)
+	norm := math.Sqrt(py.SumSq(vector))
 	if norm == 0 {
 		norm = 1
 	}
@@ -365,14 +352,4 @@ func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error
 		out = append(out, v)
 	}
 	return out, rows.Err()
-}
-
-func clip(s string, n int) string {
-	for i := range s {
-		if n == 0 {
-			return s[:i]
-		}
-		n--
-	}
-	return s
 }

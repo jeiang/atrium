@@ -2,8 +2,6 @@ package scheduler
 
 import (
 	"fmt"
-	"math"
-	"math/big"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
@@ -64,10 +63,6 @@ type Spec struct {
 
 func (s Spec) Recurring() bool { return s.Kind != KindOnce }
 
-func pyIsSpace(r rune) bool { return unicode.IsSpace(r) || (r >= 0x1c && r <= 0x1f) }
-
-func pyLower(s string) string { return strings.ToLower(strings.ReplaceAll(s, "\u0130", "i\u0307")) }
-
 func isDecimal(s string) bool {
 	if s == "" {
 		return false
@@ -118,15 +113,15 @@ func clock(text string) (int, int, error) {
 			return h, mi, nil
 		}
 	}
-	return 0, 0, Error(fmt.Sprintf("bad time %s; use HH:MM (24-hour)", config.PyRepr(text)))
+	return 0, 0, Error(fmt.Sprintf("bad time %s; use HH:MM (24-hour)", py.Repr(text)))
 }
 
 func cronValue(token string, index int) (int, error) {
-	if v, ok := cronNames[index][pyLower(token)]; ok {
+	if v, ok := cronNames[index][py.Lower(token)]; ok {
 		return v, nil
 	}
 	if !isDecimal(token) {
-		return 0, Error("bad cron value " + config.PyRepr(token))
+		return 0, Error("bad cron value " + py.Repr(token))
 	}
 	return pyInt(token), nil
 }
@@ -137,14 +132,14 @@ func cronField(text string, index int) ([]int, error) {
 	for part := range strings.SplitSeq(text, ",") {
 		body, stepText, _ := strings.Cut(part, "/")
 		if stepText != "" && !isDecimal(stepText) {
-			return nil, Error("bad cron step " + config.PyRepr(part))
+			return nil, Error("bad cron step " + py.Repr(part))
 		}
 		step := 1
 		if stepText != "" {
 			step = pyInt(stepText)
 		}
 		if step < 1 {
-			return nil, Error("bad cron step " + config.PyRepr(part))
+			return nil, Error("bad cron step " + py.Repr(part))
 		}
 		var start, end int
 		var err error
@@ -172,7 +167,7 @@ func cronField(text string, index int) ([]int, error) {
 			}
 		}
 		if start < low || end > high || start > end {
-			return nil, Error("cron value out of range in " + config.PyRepr(part))
+			return nil, Error("cron value out of range in " + py.Repr(part))
 		}
 		for v := start; v <= end; v += step {
 			if index == dowBound {
@@ -202,7 +197,7 @@ func newSpec(kind, tz string, loc *time.Location, minutes, hours, dom, months, d
 }
 
 func Parse(text, tz string) (Spec, error) {
-	text = strings.TrimFunc(text, pyIsSpace)
+	text = py.Strip(text)
 	if text == "" {
 		return Spec{}, Error("schedule is empty")
 	}
@@ -210,8 +205,8 @@ func Parse(text, tz string) (Spec, error) {
 	if err != nil {
 		return Spec{}, err
 	}
-	words := strings.FieldsFunc(text, pyIsSpace)
-	switch pyLower(words[0]) {
+	words := py.Split(text)
+	switch py.Lower(words[0]) {
 	case KindDaily:
 		if len(words) != 2 {
 			return Spec{}, Error("daily schedules look like 'daily 07:30'")
@@ -225,7 +220,7 @@ func Parse(text, tz string) (Spec, error) {
 		var day int
 		var ok bool
 		if len(words) == 3 {
-			day, ok = days[pyLower(firstRunes(words[1], 3))]
+			day, ok = days[py.Lower(py.Clip(words[1], 3))]
 		}
 		if !ok {
 			return Spec{}, Error("weekly schedules look like 'weekly mon 07:30'")
@@ -251,73 +246,18 @@ func Parse(text, tz string) (Spec, error) {
 		}
 		return newSpec(KindCron, tz, loc, fields[0], fields[1], restricted(2), restricted(3), restricted(4)), nil
 	}
-	moment, ok := fromISOFormat(text)
+	moment, ok := py.FromISOFormat(text)
 	if !ok {
 		return Spec{}, Error(errUnrecognised)
 	}
-	wall := civilSeconds(moment.year, moment.month, moment.day, moment.hour, moment.minute, moment.second)
-	var unix int64
-	if moment.aware {
-		unix = wall - int64(moment.offsetSeconds)
-	} else {
-		unix = wallToUnix(loc, wall)
-	}
-	micros := new(big.Int).SetInt64(unix)
-	micros.Mul(micros, big.NewInt(microsecondsPerSec))
-	micros.Add(micros, big.NewInt(int64(moment.microsecond)-int64(moment.offsetMicroseconds)))
-	onceAt, _ := new(big.Rat).SetFrac(micros, big.NewInt(microsecondsPerSec)).Float64()
+	onceAt := moment.Timestamp(loc)
 	s := newSpec(KindOnce, tz, loc, []int{}, []int{}, nil, nil, nil)
 	s.OnceAt = onceAt
 	return s, nil
 }
 
-func firstRunes(s string, n int) string {
-	for i := range s {
-		if n == 0 {
-			return s[:i]
-		}
-		n--
-	}
-	return s
-}
-
-func civilSeconds(y, mo, d, h, mi, s int) int64 {
-	return time.Date(y, time.Month(mo), d, h, mi, s, 0, time.UTC).Unix()
-}
-
-func offsetAt(loc *time.Location, unix int64) int64 {
-	_, off := time.Unix(unix, 0).In(loc).Zone()
-	return int64(off)
-}
-
-// wallToUnix resolves a local wall time as zoneinfo does with fold=0: the earlier instant when it is
-// ambiguous, the offset in effect before the transition when it falls in a gap.
-func wallToUnix(loc *time.Location, wall int64) int64 {
-	offsets := []int64{offsetAt(loc, wall-secondsPerDay), offsetAt(loc, wall), offsetAt(loc, wall+secondsPerDay)}
-	best, found := int64(0), false
-	for _, o := range offsets {
-		if u := wall - o; offsetAt(loc, u) == o && (!found || u < best) {
-			best, found = u, true
-		}
-	}
-	if found {
-		return best
-	}
-	return wall - offsetAt(loc, wall-slices.Max(offsets))
-}
-
-func pyTimestamp(ts float64) (int64, int64) {
-	sec := math.Floor(ts)
-	us := math.RoundToEven((ts - sec) * microsecondsPerSec)
-	if us >= microsecondsPerSec {
-		sec++
-		us -= microsecondsPerSec
-	}
-	return int64(sec), int64(us)
-}
-
 func localTime(ts float64, loc *time.Location) time.Time {
-	sec, us := pyTimestamp(ts)
+	sec, us := py.SplitTimestamp(ts)
 	return time.Unix(sec, us*1000).In(loc)
 }
 
@@ -342,7 +282,7 @@ func (s Spec) NextAfter(after float64) (float64, bool) {
 	for range searchDays {
 		if s.dayMatches(day) {
 			for _, t := range s.times {
-				stamp := float64(wallToUnix(s.Loc, day.Unix()+int64(t[0])*3600+int64(t[1])*60))
+				stamp := float64(py.WallToUnix(s.Loc, day.Unix()+int64(t[0])*3600+int64(t[1])*60))
 				if stamp > after {
 					return stamp, true
 				}

@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -173,7 +174,7 @@ func TestEveryWriteMethodCallsTheGateFirst(t *testing.T) {
 			if !ok {
 				t.Fatalf("%s has no expected gate action in writeActions", m.Name)
 			}
-			if msg := "refusing mailbox write " + config.PyRepr(want) + ": ATRIUM_MODE is not live"; err.Error() != msg {
+			if msg := "refusing mailbox write " + py.Repr(want) + ": ATRIUM_MODE is not live"; err.Error() != msg {
 				t.Fatalf("%s refusal = %q, want %q", m.Name, err, msg)
 			}
 		})
@@ -203,7 +204,7 @@ func TestGateRefusesAutomaticWritesWhilePaused(t *testing.T) {
 		}
 		rec := &recorder{}
 		err := call(ctx, Gated(rec, env), m)
-		msg := "refusing automatic mailbox write " + config.PyRepr(writeActions[m.Name]) + ": atrium is paused"
+		msg := "refusing automatic mailbox write " + py.Repr(writeActions[m.Name]) + ": atrium is paused"
 		if err == nil || err.Error() != msg || len(rec.calls) != 0 {
 			t.Errorf("%s while paused: err %v, calls %v; want %q and no calls", m.Name, err, rec.calls, msg)
 		}

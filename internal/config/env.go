@@ -3,13 +3,12 @@ package config
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	_ "time/tzdata"
+
+	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -39,7 +38,7 @@ func get(env Env, name string) string {
 	return v
 }
 
-func stripped(env Env, name string) string { return pyStrip(get(env, name)) }
+func stripped(env Env, name string) string { return py.Strip(get(env, name)) }
 
 func cleanURL(env Env, name string) string { return strings.TrimRight(stripped(env, name), "/") }
 
@@ -53,7 +52,7 @@ func Mode(env Env) (string, error) {
 			return value, nil
 		}
 	}
-	return "", fmt.Errorf("ATRIUM_MODE must be one of (%s, %s), got %s", PyRepr(Shadow), PyRepr(Live), PyRepr(value))
+	return "", fmt.Errorf("ATRIUM_MODE must be one of (%s, %s), got %s", py.Repr(Shadow), py.Repr(Live), py.Repr(value))
 }
 
 func TZName(env Env) string {
@@ -69,7 +68,7 @@ func Zone(name string) (*time.Location, error) {
 			return loc, nil
 		}
 	}
-	return nil, fmt.Errorf("unknown timezone %s", PyRepr(name))
+	return nil, fmt.Errorf("unknown timezone %s", py.Repr(name))
 }
 
 func Location(env Env) (*time.Location, error) { return Zone(TZName(env)) }
@@ -198,44 +197,4 @@ func (m MediaSettings) NeedQbit() (string, error) {
 		return "", NotConfigured("QBITTORRENT_URL is not set")
 	}
 	return m.QbitURL, nil
-}
-
-func pyIsSpace(r rune) bool {
-	return unicode.IsSpace(r) || (r >= 0x1c && r <= 0x1f)
-}
-
-func pyStrip(s string) string { return strings.TrimFunc(s, pyIsSpace) }
-
-func pySplit(s string) []string { return strings.FieldsFunc(s, pyIsSpace) }
-
-func PyRepr(s string) string {
-	quote := byte('\'')
-	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
-		quote = '"'
-	}
-	var b strings.Builder
-	b.WriteByte(quote)
-	for _, r := range s {
-		switch {
-		case r == '\\' || r == rune(quote):
-			b.WriteByte('\\')
-			b.WriteRune(r)
-		case r == '\n':
-			b.WriteString(`\n`)
-		case r == '\r':
-			b.WriteString(`\r`)
-		case r == '\t':
-			b.WriteString(`\t`)
-		case r == utf8.RuneError || strconv.IsPrint(r):
-			b.WriteRune(r)
-		case r < 0x100:
-			fmt.Fprintf(&b, `\x%02x`, r)
-		case r < 0x10000:
-			fmt.Fprintf(&b, `\u%04x`, r)
-		default:
-			fmt.Fprintf(&b, `\U%08x`, r)
-		}
-	}
-	b.WriteByte(quote)
-	return b.String()
 }
