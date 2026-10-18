@@ -36,7 +36,14 @@
         pkgs.pkg-config
         pkgs.sqlite.dev
       ];
-      env.CGO_ENABLED = "1";
+      env =
+        {
+          CGO_ENABLED = "1";
+          GOFLAGS = "-tags=sqlite_fts5";
+        }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+          ATRIUM_MUSL_CC = "${pkgs.pkgsStatic.stdenv.cc}/bin/${pkgs.pkgsStatic.stdenv.cc.targetPrefix}cc";
+        };
       languages.go = {
         enable = true;
         package = pkgs.go_1_26;
