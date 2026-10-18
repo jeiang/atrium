@@ -1,0 +1,52 @@
+{{define "content"}}
+{{$t := .Thread}}{{$m := $t.CurModel}}
+<div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+  <div class="flex min-h-[calc(100dvh-12rem)] min-w-0 flex-col gap-4">
+    <div class="flex flex-wrap items-center gap-1.5">
+      <span class="badge" data-variant="secondary">{{$m.Name}}</span>
+      <span class="badge" data-variant="outline">effort {{$t.Effort}}</span>
+      <span class="badge" data-variant="outline">{{fmtK $t.Ctx}} ctx</span>
+      <span class="badge" data-variant="outline">{{icon "folder" "size-3"}}{{$t.Project}}</span>
+      <span class="badge" data-variant="outline">{{icon "git-branch" "size-3"}}{{$t.Repo}} · {{$t.WorkBranch}}</span>
+      {{if $t.Warm}}<span class="badge border-success/30 bg-success/10 text-success">{{icon "zap" "size-3"}}cache warm · {{$t.WarmMin}} min left</span>{{else}}<span class="badge" data-variant="outline">{{icon "clock" "size-3"}}cache cold</span>{{end}}
+      <span class="badge" data-variant="outline">$3.48 of $15 cap</span>
+    </div>
+
+    <ol class="flex flex-col gap-4" role="list">
+      <li class="ms-auto max-w-[85%] rounded-lg bg-secondary px-4 py-3 text-sm">The scheduler test <code class="rounded-sm bg-muted px-1 font-mono text-xs">TestNightlyPause</code> fails about one run in ten on CI. Find out why and fix it.</li>
+      <li class="flex gap-3">
+        <span class="grid size-7 shrink-0 place-items-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground">a</span>
+        <div class="markdown">
+          <p>I read the test and ran it 200 times in the sandbox: it fails when the fake clock and the ticker race on the same second boundary.</p>
+          <ul class="flex flex-wrap gap-1.5 text-xs">
+            <li class="badge" data-variant="outline">{{icon "wrench" "size-3"}}git_checkout atrium/fix-flaky-scheduler-test</li>
+            <li class="badge" data-variant="outline">{{icon "play" "size-3"}}run go test -count=200 ./internal/sched</li>
+            <li class="badge" data-variant="outline">{{icon "pencil" "size-3"}}edit scheduler_test.go</li>
+          </ul>
+          <p>The fix makes the ticker injectable. Pushed to <code>atrium/fix-flaky-scheduler-test</code>; draft PR is open.</p>
+        </div>
+      </li>
+      <li class="mx-auto flex items-center gap-2 rounded-full border bg-muted px-3 py-1 text-xs text-muted-foreground">{{icon "user" "size-3"}}Profile updated: timezone=America/Port_of_Spain</li>
+      {{if .Thread.MsgEffort}}<li class="mx-auto text-xs text-muted-foreground">Next message will use effort <b>{{.Thread.MsgEffort}}</b> (thread base stays {{.Thread.Effort}}).</li>{{end}}
+    </ol>
+
+    <form class="sticky bottom-14 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" onsubmit="return false">
+      <label for="reply" class="sr-only">Reply</label>
+      <textarea id="reply" class="textarea w-full" rows="2" placeholder="Reply…"></textarea>
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="button" class="btn" data-variant="ghost" data-size="sm">{{icon "paperclip"}}Attach</button>
+        <div class="flex items-center gap-2" id="msg-effort">
+          <label for="effort-msg" class="text-xs text-muted-foreground">Effort for this message</label>
+          <select id="effort-msg" class="select h-8 w-auto text-xs" data-base="{{$t.Effort}}">
+            {{range .Efforts}}<option value="{{.}}" {{selAttr (eq2 . $t.ShownEffort)}}>{{.}}{{if eq . $t.Effort}} (thread base){{end}}</option>{{end}}
+          </select>
+          <span id="effort-note" class="text-xs text-muted-foreground" {{if not $t.MsgEffort}}hidden{{end}}>this message only · no cache cost</span>
+        </div>
+        <button type="submit" class="btn ms-auto">{{icon "send"}}Send</button>
+      </div>
+    </form>
+  </div>
+
+  {{template "side" .}}
+</div>
+{{end}}

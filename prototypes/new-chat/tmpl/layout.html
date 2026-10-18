@@ -1,0 +1,67 @@
+{{define "layout.html"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{{.Title}} · atrium (PROTOTYPE)</title>
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+  <link rel="stylesheet" href="static/app.css">
+  <script src="static/htmx.min.js" defer></script>
+  <script src="static/basecoat/all.min.js" defer></script>
+  <script>window.MODELS = {{json .Models}}; window.CTX = {{json .CtxSizes}};</script>
+  <script src="static/proto.js" defer></script>
+</head>
+<body class="min-h-dvh pb-16">
+  <aside id="sidebar" class="sidebar" data-side="left" aria-hidden="false">
+    <nav aria-label="Primary">
+      <header>
+        <a href="index.html" class="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span class="grid size-7 place-items-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground" aria-hidden="true">a</span>
+          <span class="text-base font-semibold tracking-tight">atrium</span>
+        </a>
+      </header>
+      <section>
+        <div role="group" aria-labelledby="g1"><h3 id="g1">Assistant</h3><ul>
+          <li><a href="new-fresh.html" aria-current="page">{{icon "messages-square"}}<span>Chat</span></a></li>
+          <li><a href="#">{{icon "clock"}}<span>Scheduled</span></a></li>
+          <li><a href="#">{{icon "folder"}}<span>Projects</span></a></li>
+        </ul></div>
+        <div role="group" aria-labelledby="g2"><h3 id="g2">Review</h3><ul>
+          <li><a href="#">{{icon "list-checks"}}<span>Proposals</span></a></li>
+          <li><a href="#">{{icon "history"}}<span>Activity</span></a></li>
+        </ul></div>
+        <div role="group" aria-labelledby="g3"><h3 id="g3">Mail</h3><ul>
+          <li><a href="#">{{icon "route"}}<span>Decisions</span></a></li>
+          <li><a href="#">{{icon "scroll-text"}}<span>Rules</span></a></li>
+          <li><a href="#">{{icon "mail"}}<span>Drafts</span></a></li>
+        </ul></div>
+      </section>
+      <footer>
+        <div class="flex flex-col gap-1.5 rounded-lg border bg-background p-3 text-xs">
+          <div><span class="badge border-warning/30 bg-warning/10 text-warning">{{icon "eye-off"}}Shadow</span></div>
+          <p class="text-pretty text-muted-foreground">Shadow mode: nothing is changed automatically.</p>
+        </div>
+      </footer>
+    </nav>
+  </aside>
+  <main class="flex min-w-0 flex-col">
+    <header class="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-3 md:px-6">
+      <button id="nav-toggle" type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Toggle navigation" aria-controls="sidebar" onclick="document.getElementById('sidebar').toggle()">{{icon "panel-left"}}</button>
+      <hr role="separator" aria-orientation="vertical" class="h-4 w-px border-0 bg-border">
+      <h1 class="truncate px-1 text-sm font-medium">{{.Heading}}</h1>
+      <div class="ml-auto flex items-center gap-3">
+        <span class="badge border-warning/30 bg-warning/10 text-warning">PROTOTYPE · fake data</span>
+        <a href="#" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings">{{icon "settings"}}</a>
+      </div>
+    </header>
+    <div id="content" tabindex="-1" class="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 outline-none md:px-8 md:py-8">
+      {{template "content" .}}
+    </div>
+  </main>
+  <nav class="fixed inset-x-0 bottom-0 z-40 flex md:ps-72 flex-wrap items-center justify-center gap-1 border-t bg-card/95 px-3 py-2 text-xs shadow-lg backdrop-blur" aria-label="Prototype states">
+    {{$cur := .Current}}
+    {{range .States}}{{if ne .File "index.html"}}<a class="btn" data-size="sm" data-variant="{{if eq .File $cur}}secondary{{else}}ghost{{end}}" href="{{.File}}" title="{{.Desc}}">{{.Name}}</a>{{end}}{{end}}
+  </nav>
+</body>
+</html>{{end}}

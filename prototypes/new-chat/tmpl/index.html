@@ -1,0 +1,10 @@
+{{define "content"}}
+<div class="flex max-w-2xl flex-col gap-4">
+  <p class="text-sm text-muted-foreground">Throwaway prototype for <a class="underline underline-offset-4" href="https://github.com/jeiang/atrium/issues/44">#44</a>. Every number (prices, token counts, spend) is fake. Questions the owner should react to are on the ticket.</p>
+  <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
+    {{range .States}}{{if ne .File "index.html"}}
+    <li><a class="flex flex-col gap-1 px-4 py-3 hover:bg-accent" href="{{.File}}"><span class="text-sm font-medium">{{.Name}}</span><span class="text-xs text-muted-foreground">{{.Desc}}</span></a></li>
+    {{end}}{{end}}
+  </ul>
+</div>
+{{end}}

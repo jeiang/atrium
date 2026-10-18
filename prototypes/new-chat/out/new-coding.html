@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>New chat · coding · atrium (PROTOTYPE)</title>
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+  <link rel="stylesheet" href="static/app.css">
+  <script src="static/htmx.min.js" defer></script>
+  <script src="static/basecoat/all.min.js" defer></script>
+  <script>window.MODELS = [{"ID":"haiku","Name":"Haiku 5.5","In":1,"Read":0.1,"W1h":2,"DefaultEffort":"medium","DefaultCtx":90000,"Efforts":["low","medium","high","max"],"Thinking":[{"ID":"adaptive","Label":"Adaptive","Note":"","MaxEffort":""},{"ID":"disabled","Label":"Off","Note":"only at effort high or below","MaxEffort":"high"}],"TierCliff":100000,"TierMult":2},{"ID":"sonnet","Name":"Sonnet 5.5","In":3,"Read":0.3,"W1h":6,"DefaultEffort":"medium","DefaultCtx":200000,"Efforts":["low","medium","high","max"],"Thinking":[{"ID":"adaptive","Label":"Adaptive","Note":"","MaxEffort":""},{"ID":"between_tools","Label":"Between tools","Note":"only at effort low, medium or high","MaxEffort":"high"}],"TierCliff":0,"TierMult":0},{"ID":"opus","Name":"Opus 5.5","In":5,"Read":0.5,"W1h":10,"DefaultEffort":"high","DefaultCtx":200000,"Efforts":["low","medium","high","max"],"Thinking":[{"ID":"adaptive","Label":"Adaptive","Note":"always on for Opus","MaxEffort":""}],"TierCliff":0,"TierMult":0}]; window.CTX = [90000,200000,500000,1000000];</script>
+  <script src="static/proto.js" defer></script>
+</head>
+<body class="min-h-dvh pb-16">
+  <aside id="sidebar" class="sidebar" data-side="left" aria-hidden="false">
+    <nav aria-label="Primary">
+      <header>
+        <a href="index.html" class="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span class="grid size-7 place-items-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground" aria-hidden="true">a</span>
+          <span class="text-base font-semibold tracking-tight">atrium</span>
+        </a>
+      </header>
+      <section>
+        <div role="group" aria-labelledby="g1"><h3 id="g1">Assistant</h3><ul>
+          <li><a href="new-fresh.html" aria-current="page"><svg class="lucide lucide-messages-square " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg><span>Chat</span></a></li>
+          <li><a href="#"><svg class="lucide lucide-clock " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Scheduled</span></a></li>
+          <li><a href="#"><svg class="lucide lucide-folder " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>Projects</span></a></li>
+        </ul></div>
+        <div role="group" aria-labelledby="g2"><h3 id="g2">Review</h3><ul>
+          <li><a href="#"><svg class="lucide lucide-list-checks " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/></svg><span>Proposals</span></a></li>
+          <li><a href="#"><svg class="lucide lucide-history " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg><span>Activity</span></a></li>
+        </ul></div>
+        <div role="group" aria-labelledby="g3"><h3 id="g3">Mail</h3><ul>
+          <li><a href="#"><svg class="lucide lucide-route " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg><span>Decisions</span></a></li>
+          <li><a href="#"><svg class="lucide lucide-scroll-text " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></svg><span>Rules</span></a></li>
+          <li><a href="#"><svg class="lucide lucide-mail " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg><span>Drafts</span></a></li>
+        </ul></div>
+      </section>
+      <footer>
+        <div class="flex flex-col gap-1.5 rounded-lg border bg-background p-3 text-xs">
+          <div><span class="badge border-warning/30 bg-warning/10 text-warning"><svg class="lucide lucide-eye-off " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>Shadow</span></div>
+          <p class="text-pretty text-muted-foreground">Shadow mode: nothing is changed automatically.</p>
+        </div>
+      </footer>
+    </nav>
+  </aside>
+  <main class="flex min-w-0 flex-col">
+    <header class="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-3 md:px-6">
+      <button id="nav-toggle" type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Toggle navigation" aria-controls="sidebar" onclick="document.getElementById('sidebar').toggle()"><svg class="lucide lucide-panel-left " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+      <hr role="separator" aria-orientation="vertical" class="h-4 w-px border-0 bg-border">
+      <h1 class="truncate px-1 text-sm font-medium">New chat</h1>
+      <div class="ml-auto flex items-center gap-3">
+        <span class="badge border-warning/30 bg-warning/10 text-warning">PROTOTYPE · fake data</span>
+        <a href="#" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings"><svg class="lucide lucide-settings " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></a>
+      </div>
+    </header>
+    <div id="content" tabindex="-1" class="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 outline-none md:px-8 md:py-8">
+      
+
+<form class="mx-auto flex w-full max-w-3xl flex-col gap-5" id="new-chat" onsubmit="return false" data-model="sonnet">
+  <div class="flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm">
+    <label for="new-text" class="sr-only">New thread</label>
+    <textarea id="new-text" class="textarea w-full" rows="4" placeholder="Describe the change you want made in the repo…"></textarea>
+    <div class="flex items-center justify-between gap-3">
+      <button type="button" class="btn" data-variant="ghost" data-size="sm"><svg class="lucide lucide-paperclip " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg>Attach</button>
+      <p class="hidden text-xs text-muted-foreground sm:block">Mail, web, Notion and attached file content is treated as untrusted data. The assistant never sends mail; it only drafts.</p>
+      <button type="submit" class="btn ms-auto"><svg class="lucide lucide-send " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>Start</button>
+    </div>
+  </div>
+
+  <section class="flex flex-col gap-4 rounded-lg border bg-card p-4" aria-label="Thread settings">
+    <div class="flex items-center justify-between gap-3">
+      <h2 class="text-sm font-medium">Thread type</h2>
+      <div class="button-group" role="group" aria-label="Thread type">
+        <button type="button" class="btn" data-size="sm" data-variant="outline" data-mode="assistant" aria-pressed="false"><svg class="lucide lucide-messages-square size-3.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg>Assistant</button>
+        <button type="button" class="btn" data-size="sm" data-variant="secondary" data-mode="coding" aria-pressed="true"><svg class="lucide lucide-code size-3.5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Coding</button>
+      </div>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div class="field">
+        <label class="label" for="model">Model</label>
+        <select id="model" class="select w-full">
+          <option value="haiku" >Haiku 5.5</option><option value="sonnet" selected>Sonnet 5.5 (default)</option><option value="opus" >Opus 5.5</option>
+        </select>
+        <p class="text-xs text-muted-foreground">Cron, nightly and sub-agent runs always use Haiku 5.5.</p>
+      </div>
+      <div class="field">
+        <label class="label" for="effort">Effort</label>
+        <select id="effort" class="select w-full">
+          <option value="low" >low</option><option value="medium" selected>medium (default for Sonnet 5.5)</option><option value="high" >high</option><option value="max" >max</option>
+        </select>
+        <p class="text-xs text-muted-foreground">Can change on every message, no cache cost.</p>
+      </div>
+      <div class="field sm:col-span-2">
+        <label class="label" for="ctx">Context size</label>
+        <select id="ctx" class="select w-full">
+          <option value="90000" >90K tokens · ≈$0.027 per step when full</option><option value="200000" selected>200K tokens · ≈$0.060 per step when full</option><option value="500000" >500K tokens · ≈$0.15 per step when full</option><option value="1000000" >1M tokens · ≈$0.30 per step when full</option>
+        </select>
+        <p id="ctx-cost" class="text-xs text-muted-foreground">A full cold start writes ≈$1.20 to the cache; later steps read it at ≈$0.060. Editable later; applies at the next cold boundary.</p>
+        <div id="cliff" class="alert mt-1 border-warning/40 bg-warning/10 text-warning" hidden>
+          <svg class="lucide lucide-circle-alert " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+          <h3>Haiku 5.5 price cliff at 100K</h3>
+          <p class="text-xs">Past 100K tokens Haiku bills the whole request at the long-context tier (≈2× per token). 90K stays under it; at 200K each step costs ≈$0.060 instead of ≈$0.027 at 90K.</p>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="project">Project</label>
+        <select id="project" class="select w-full">
+          <option >None</option><option selected>atrium v2</option><option>Household money</option>
+        </select>
+        <p class="text-xs text-muted-foreground">Fixed once the thread starts.</p>
+      </div>
+    </div>
+
+    <fieldset id="coding" class="flex flex-col gap-4 rounded-md border border-dashed p-4" >
+      <legend class="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Coding sandbox</legend>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div class="field sm:col-span-2">
+          <label class="label" for="env">Environment</label>
+          <select id="env" class="select w-full">
+            <option value="go-web" selected>go-web: go, bun · 4 vCPU / 8 GB · egress: github.com, proxy.golang.org (+2)</option>
+            <option value="py-data">py-data: python · 2 vCPU / 4 GB · egress: pypi.org</option>
+            <option value="none">No repo (scratch sandbox): python</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label" for="repo">Repository</label>
+          <select id="repo" class="select w-full">
+            <option selected>jeiang/atrium</option><option>jeiang/cornn-flaek</option><option>jeiang/notes</option>
+          </select>
+          <p class="text-xs text-muted-foreground">From the GitHub App installation.</p>
+        </div>
+        <div class="field">
+          <label class="label" for="branch">Base branch</label>
+          <select id="branch" class="select w-full"><option>main</option><option>develop</option></select>
+          <p class="text-xs text-muted-foreground">Work happens on <code class="rounded-sm bg-muted px-1 font-mono">atrium/&lt;slug&gt;</code>, pushed without a click; the PR stays a draft.</p>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label" id="agent-l">Coding agent</span>
+        <div class="grid gap-2 sm:grid-cols-4" role="radiogroup" aria-labelledby="agent-l">
+          <label class="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent"><input type="radio" name="agent" class="input mt-0.5" checked><span>atrium<span class="block text-xs text-muted-foreground">Its own agent</span></span></label>
+          <label class="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent"><input type="radio" name="agent" class="input mt-0.5"><span>Claude Code<span class="block text-xs text-muted-foreground">Delegated</span></span></label>
+          <label class="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent"><input type="radio" name="agent" class="input mt-0.5"><span>pi<span class="block text-xs text-muted-foreground">Delegated</span></span></label>
+          <label class="flex items-start gap-2 rounded-md border p-2.5 text-sm opacity-50"><input type="radio" name="agent" class="input mt-0.5" disabled><span>Codex<span class="block text-xs text-muted-foreground">Later</span></span></label>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label" id="auth-l">Agent billing</span>
+        <div class="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-labelledby="auth-l">
+          <label class="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent"><input type="radio" name="auth" class="input mt-0.5" checked><span>API key via gateway<span class="block text-xs text-muted-foreground">Metered. Counts toward the $150 monthly budget.</span></span></label>
+          <label class="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent"><input type="radio" name="auth" class="input mt-0.5"><span>Plan login<span class="block text-xs text-muted-foreground">Plan usage, unmetered. Not counted in the budget.</span></span></label>
+        </div>
+        <p class="text-xs text-muted-foreground">Delegated runs are capped at $5 each and $15 per thread (instance defaults).</p>
+      </div>
+    </fieldset>
+  </section>
+
+  <details class="rounded-lg border bg-card" open>
+    <summary class="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium"><svg class="lucide lucide-chevron-down size-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>Advanced <span class="text-xs font-normal text-muted-foreground">thinking mode, web search, cost cap</span></summary>
+    <div class="grid gap-4 border-t p-4 sm:grid-cols-2">
+      <div class="field">
+        <label class="label" for="think">Thinking mode</label>
+        <select id="think" class="select w-full">
+          <option value="adaptive" selected >Adaptive</option><option value="between_tools"  >Between tools (only at effort low, medium or high)</option>
+        </select>
+        <p id="think-help" class="text-xs text-muted-foreground">Only combinations the model accepts are enabled. Fixed once the thread starts.</p>
+      </div>
+      <div class="field">
+        <label class="label" for="cap">Thread cost cap</label>
+        <div class="input-group"><span class="px-2 text-sm text-muted-foreground">$</span><input id="cap" class="input" type="number" placeholder="no cap" value=""></div>
+        <p class="text-xs text-muted-foreground">The thread stops asking the API at the cap. Optional, set now only.</p>
+      </div>
+      <label class="flex items-center gap-3 text-sm sm:col-span-2"><input type="checkbox" role="switch" class="input" checked><span>Web search<span class="block text-xs text-muted-foreground">Constant for the life of the thread.</span></span></label>
+    </div>
+  </details>
+
+  <p id="start-line" class="text-xs text-muted-foreground">Starting a chat costs nothing until you send. First message writes ≈$0.072 of prompt prefix to the cache (1 h TTL); every later message in the hour reads it at ≈$0.004.</p>
+</form>
+
+    </div>
+  </main>
+  <nav class="fixed inset-x-0 bottom-0 z-40 flex md:ps-72 flex-wrap items-center justify-center gap-1 border-t bg-card/95 px-3 py-2 text-xs shadow-lg backdrop-blur" aria-label="Prototype states">
+    
+    <a class="btn" data-size="sm" data-variant="ghost" href="new-fresh.html" title="Assistant chat, default controls (Sonnet 5.5, medium).">1 Fresh chat</a><a class="btn" data-size="sm" data-variant="secondary" href="new-coding.html" title="Environment, repo, branch and coding-agent pickers.">2 Coding thread</a><a class="btn" data-size="sm" data-variant="ghost" href="new-haiku-cliff.html" title="Haiku selected with 200K context: tier cliff note beside the control.">3 Haiku cliff</a><a class="btn" data-size="sm" data-variant="ghost" href="thread-switch-warm.html" title="Cache warm: switching rewrites the cache, cost line shown.">4 Switch model, warm</a><a class="btn" data-size="sm" data-variant="ghost" href="thread-switch-cold.html" title="Cache cold: switching is free; down-switch drops thinking.">5 Switch model, cold</a><a class="btn" data-size="sm" data-variant="ghost" href="thread-effort.html" title="Composer effort chip changed for one message.">6 Per-message effort</a><a class="btn" data-size="sm" data-variant="ghost" href="thread-fixed.html" title="Existing thread: creation-time fields read-only.">7 Fixed fields</a><a class="btn" data-size="sm" data-variant="ghost" href="thread-cost.html" title="Thread cost, cache hit share, savings, warm timer.">8 Cost / cache panel</a>
+  </nav>
+</body>
+</html>

@@ -1,0 +1,91 @@
+{{define "side"}}
+{{$t := .Thread}}{{$m := $t.CurModel}}{{$cur := .Current | stem}}
+<aside id="side" class="flex flex-col gap-3" aria-label="Thread details" data-warm="{{$t.WarmMin}}" data-cached="{{$t.Cached}}" data-model="{{$t.Model}}">
+  <div class="button-group w-full" role="tablist">
+    <button type="button" role="tab" class="btn flex-1" data-size="sm" data-variant="{{if eq $t.Panel "settings"}}secondary{{else}}outline{{end}}" hx-get="frag/{{$cur}}-settings.html" hx-target="#side" hx-swap="outerHTML">{{icon "settings" "size-3.5"}}Settings</button>
+    <button type="button" role="tab" class="btn flex-1" data-size="sm" data-variant="{{if eq $t.Panel "cost"}}secondary{{else}}outline{{end}}" hx-get="frag/{{$cur}}-cost.html" hx-target="#side" hx-swap="outerHTML">{{icon "chart-column" "size-3.5"}}Cost &amp; cache</button>
+  </div>
+
+{{if eq $t.Panel "settings"}}
+  <section class="flex flex-col gap-4 rounded-lg border bg-card p-4" aria-labelledby="adj">
+    <h2 id="adj" class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Change any time</h2>
+    <div class="field">
+      <label class="label" for="t-model">Model</label>
+      <select id="t-model" class="select w-full">
+        {{range $.Models}}<option value="{{.ID}}" {{selAttr (eq2 .ID $t.Target.ID)}}>{{.Name}}{{if eq .ID $t.Model}} (current){{end}}</option>{{end}}
+      </select>
+      <div id="switch-line" class="flex flex-col gap-2 text-xs" {{if not $t.Switching}}hidden{{end}}>
+      {{if $t.Switching}}
+        {{if $t.Warm}}
+        <div class="alert border-warning/40 bg-warning/10 text-warning">{{icon "circle-alert"}}<h3>Switching now costs ≈{{money $t.Rewrite}}</h3>
+          <p>{{$t.Target.Name}} can't reuse {{$m.Name}}'s cache, so the {{fmtK $t.Cached}}-token prefix is rewritten once (≈{{money $t.Rewrite}}), then ≈{{money $t.NewStep}} per step (now ≈{{money $t.CurStep}}). The cache is warm for {{$t.WarmMin}} more min; if you wait until it goes cold the switch is free.</p></div>
+        {{else}}
+        <div class="alert">{{icon "check"}}<h3>Switching is free right now</h3>
+          <p>The cache is cold, so the next message rewrites it whichever model runs it (≈{{money $t.Rewrite}} at {{$t.Target.Name}} rates).{{if $t.Down}} Switching down drops {{$m.Name}}'s thinking blocks from the history: {{$t.Target.Name}} can't read them.{{end}}</p></div>
+        {{end}}
+        <div class="flex gap-2"><button type="button" class="btn" data-size="sm">Switch to {{$t.Target.Name}}</button><button type="button" class="btn" data-size="sm" data-variant="ghost">Cancel</button></div>
+      {{end}}
+      </div>
+    </div>
+    <div class="field">
+      <label class="label" for="t-effort">Base effort</label>
+      <select id="t-effort" class="select w-full">{{range $.Efforts}}<option {{selAttr (eq2 . $t.Effort)}}>{{.}}</option>{{end}}</select>
+      <p class="text-xs text-muted-foreground">Free. Applies from the next message; the cache is untouched.</p>
+    </div>
+    <div class="field">
+      <label class="label" for="t-ctx">Context size</label>
+      <select id="t-ctx" class="select w-full">{{range $.CtxSizes}}<option {{selAttr (eq . $t.Ctx)}}>{{fmtK .}} · ≈{{money (readCost $m .)}}/step full</option>{{end}}</select>
+      <p class="text-xs text-muted-foreground">Applies at the next cold boundary, not mid-warm.</p>
+    </div>
+    <div class="field">
+      <label class="label" for="t-branch">Base branch</label>
+      <select id="t-branch" class="select w-full"><option>main</option><option>develop</option></select>
+      <p class="text-xs text-muted-foreground">Runs a sandbox git action and adds a "Branch changed" message to the thread. Working branch stays <code class="rounded-sm bg-muted px-1 font-mono">{{$t.WorkBranch}}</code>.</p>
+    </div>
+  </section>
+
+  <section class="flex flex-col gap-3 rounded-lg border bg-muted/40 p-4" aria-labelledby="fixed">
+    <h2 id="fixed" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "lock" "size-3"}}Fixed at creation</h2>
+    <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+      <dt class="text-muted-foreground">Thinking</dt><dd>{{$t.ThinkLabel}}</dd>
+      <dt class="text-muted-foreground">Project</dt><dd class="flex flex-col items-start gap-1">{{$t.Project}}<button type="button" class="btn h-auto whitespace-normal p-0 text-left" data-variant="link" data-size="sm">Move to project…</button><span class="text-xs text-muted-foreground">branches this thread into the new project</span></dd>
+      <dt class="text-muted-foreground">Environment</dt><dd>{{$t.Env}}</dd>
+      <dt class="text-muted-foreground">Repository</dt><dd class="break-words">{{$t.Repo}}</dd>
+      <dt class="text-muted-foreground">Coding agent</dt><dd>{{$t.Agent}}</dd>
+      <dt class="text-muted-foreground">Web search</dt><dd>On</dd>
+      <dt class="text-muted-foreground">Cost cap</dt><dd>$15.00</dd>
+    </dl>
+    <p class="text-xs text-muted-foreground">Changing these would change the frozen prompt prefix or the sandbox, so they are set when the thread starts. To use a different one, start a new thread or branch this one.</p>
+  </section>
+{{else}}
+  <section class="flex flex-col gap-4 rounded-lg border bg-card p-4" aria-labelledby="c1">
+    <h2 id="c1" class="text-xs font-medium uppercase tracking-wide text-muted-foreground">This thread</h2>
+    <div class="flex items-baseline justify-between"><span class="text-3xl font-semibold tabular-nums">$3.48</span><span class="text-xs text-muted-foreground">of $15.00 cap</span></div>
+    <div class="h-2 overflow-hidden rounded-full bg-secondary" role="img" aria-label="23% of the cap used"><div class="h-full w-[23%] bg-primary"></div></div>
+    <dl class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 text-sm tabular-nums">
+      <dt class="text-muted-foreground">Cache reads</dt><dd>$0.91</dd>
+      <dt class="text-muted-foreground">Cache writes</dt><dd>$1.36</dd>
+      <dt class="text-muted-foreground">Uncached input</dt><dd>$0.12</dd>
+      <dt class="text-muted-foreground">Output (incl. thinking)</dt><dd>$1.09</dd>
+    </dl>
+  </section>
+  <section class="flex flex-col gap-3 rounded-lg border bg-card p-4" aria-labelledby="c2">
+    <h2 id="c2" class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cache</h2>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <div><p class="text-2xl font-semibold tabular-nums">87%</p><p class="text-xs text-muted-foreground">of input tokens read from cache</p></div>
+      <div><p class="text-2xl font-semibold tabular-nums text-success">$9.14</p><p class="text-xs text-muted-foreground">saved vs. no caching</p></div>
+    </div>
+    <div class="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm">{{if $t.Warm}}{{icon "zap" "size-4 text-success"}}<span>Warm for <b>{{$t.WarmMin}} min</b> <span class="text-xs text-muted-foreground">(1 h TTL)</span></span>{{else}}{{icon "clock" "size-4"}}<span>Cold <span class="text-xs text-muted-foreground">next message rewrites the cache</span></span>{{end}}</div>
+    {{if $t.Warm}}<p class="text-xs text-muted-foreground">Switching to Opus 5.5 now would cost ≈{{money (writeCost (model "opus") $t.Cached)}} once. Free once cold.</p>{{end}}
+  </section>
+  <section class="flex flex-col gap-3 rounded-lg border bg-card p-4" aria-labelledby="c3">
+    <h2 id="c3" class="text-xs font-medium uppercase tracking-wide text-muted-foreground">By source</h2>
+    <ul class="flex flex-col divide-y text-sm" role="list">
+      <li class="flex items-center justify-between py-2"><span>atrium agent <span class="text-xs text-muted-foreground">Sonnet 5.5</span></span><span class="tabular-nums">$2.28</span></li>
+      <li class="flex items-center justify-between py-2"><span>pi via gateway <span class="text-xs text-muted-foreground">1 run · cap $5</span></span><span class="tabular-nums">$1.20</span></li>
+      <li class="flex items-center justify-between py-2"><span>Claude Code <span class="badge" data-variant="outline">plan usage, unmetered</span><span class="block text-xs text-muted-foreground">3 delegations, not in the dollar total</span></span><span class="text-muted-foreground">—</span></li>
+    </ul>
+  </section>
+{{end}}
+</aside>
+{{end}}

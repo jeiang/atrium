@@ -1,0 +1,124 @@
+{{define "content"}}
+{{$f := .Form}}{{$m := model $f.Model}}
+<form class="mx-auto flex w-full max-w-3xl flex-col gap-5" id="new-chat" onsubmit="return false" data-model="{{$f.Model}}">
+  <div class="flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm">
+    <label for="new-text" class="sr-only">New thread</label>
+    <textarea id="new-text" class="textarea w-full" rows="4" placeholder="{{if $f.Coding}}Describe the change you want made in the repo…{{else}}Ask about your mail, contacts, Notion, calendar or the web… (⌘⏎ to send, drop files to attach){{end}}">{{$f.Prompt}}</textarea>
+    <div class="flex items-center justify-between gap-3">
+      <button type="button" class="btn" data-variant="ghost" data-size="sm">{{icon "paperclip"}}Attach</button>
+      <p class="hidden text-xs text-muted-foreground sm:block">Mail, web, Notion and attached file content is treated as untrusted data. The assistant never sends mail; it only drafts.</p>
+      <button type="submit" class="btn ms-auto">{{icon "send"}}Start</button>
+    </div>
+  </div>
+
+  <section class="flex flex-col gap-4 rounded-lg border bg-card p-4" aria-label="Thread settings">
+    <div class="flex items-center justify-between gap-3">
+      <h2 class="text-sm font-medium">Thread type</h2>
+      <div class="button-group" role="group" aria-label="Thread type">
+        <button type="button" class="btn" data-size="sm" data-variant="{{if $f.Coding}}outline{{else}}secondary{{end}}" data-mode="assistant" aria-pressed="{{not $f.Coding}}">{{icon "messages-square" "size-3.5"}}Assistant</button>
+        <button type="button" class="btn" data-size="sm" data-variant="{{if $f.Coding}}secondary{{else}}outline{{end}}" data-mode="coding" aria-pressed="{{$f.Coding}}">{{icon "code" "size-3.5"}}Coding</button>
+      </div>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div class="field">
+        <label class="label" for="model">Model</label>
+        <select id="model" class="select w-full">
+          {{range .Models}}<option value="{{.ID}}" {{selAttr (eq2 .ID $f.Model)}}>{{.Name}}{{if eq .ID "sonnet"}} (default){{end}}</option>{{end}}
+        </select>
+        <p class="text-xs text-muted-foreground">Cron, nightly and sub-agent runs always use Haiku 5.5.</p>
+      </div>
+      <div class="field">
+        <label class="label" for="effort">Effort</label>
+        <select id="effort" class="select w-full">
+          {{range .Efforts}}<option value="{{.}}" {{selAttr (eq2 . $f.Effort)}}>{{.}}{{if eq . $m.DefaultEffort}} (default for {{$m.Name}}){{end}}</option>{{end}}
+        </select>
+        <p class="text-xs text-muted-foreground">Can change on every message, no cache cost.</p>
+      </div>
+      <div class="field sm:col-span-2">
+        <label class="label" for="ctx">Context size</label>
+        <select id="ctx" class="select w-full">
+          {{range .CtxSizes}}<option value="{{.}}" {{selAttr (eq .  $f.Ctx)}}>{{fmtK .}} tokens · ≈{{money (readCost $m .)}} per step when full</option>{{end}}
+        </select>
+        <p id="ctx-cost" class="text-xs text-muted-foreground">A full cold start writes ≈{{money (writeCost $m $f.Ctx)}} to the cache; later steps read it at ≈{{money (readCost $m $f.Ctx)}}. Editable later; applies at the next cold boundary.</p>
+        <div id="cliff" class="alert mt-1 border-warning/40 bg-warning/10 text-warning" {{if not (and (eq $f.Model "haiku") (gt $f.Ctx 100000))}}hidden{{end}}>
+          {{icon "circle-alert"}}
+          <h3>Haiku 5.5 price cliff at 100K</h3>
+          <p class="text-xs">Past 100K tokens Haiku bills the whole request at the long-context tier (≈2× per token). 90K stays under it; at {{fmtK $f.Ctx}} each step costs ≈{{money (readCost $m $f.Ctx)}} instead of ≈{{money (readCost $m 90000)}} at 90K.</p>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="project">Project</label>
+        <select id="project" class="select w-full">
+          <option {{selAttr (eq2 $f.Project "None")}}>None</option><option {{selAttr (eq2 $f.Project "atrium v2")}}>atrium v2</option><option>Household money</option>
+        </select>
+        <p class="text-xs text-muted-foreground">Fixed once the thread starts.</p>
+      </div>
+    </div>
+
+    <fieldset id="coding" class="flex flex-col gap-4 rounded-md border border-dashed p-4" {{if not $f.Coding}}hidden{{end}}>
+      <legend class="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Coding sandbox</legend>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div class="field sm:col-span-2">
+          <label class="label" for="env">Environment</label>
+          <select id="env" class="select w-full">
+            <option value="go-web" {{selAttr (eq2 $f.Env "go-web")}}>go-web: go, bun · 4 vCPU / 8 GB · egress: github.com, proxy.golang.org (+2)</option>
+            <option value="py-data">py-data: python · 2 vCPU / 4 GB · egress: pypi.org</option>
+            <option value="none">No repo (scratch sandbox): python</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label" for="repo">Repository</label>
+          <select id="repo" class="select w-full">
+            <option {{selAttr (eq2 $f.Repo "jeiang/atrium")}}>jeiang/atrium</option><option>jeiang/cornn-flaek</option><option>jeiang/notes</option>
+          </select>
+          <p class="text-xs text-muted-foreground">From the GitHub App installation.</p>
+        </div>
+        <div class="field">
+          <label class="label" for="branch">Base branch</label>
+          <select id="branch" class="select w-full"><option>main</option><option>develop</option></select>
+          <p class="text-xs text-muted-foreground">Work happens on <code class="rounded-sm bg-muted px-1 font-mono">atrium/&lt;slug&gt;</code>, pushed without a click; the PR stays a draft.</p>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label" id="agent-l">Coding agent</span>
+        <div class="grid gap-2 sm:grid-cols-4" role="radiogroup" aria-labelledby="agent-l">
+          <label class="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent"><input type="radio" name="agent" class="input mt-0.5" {{chkAttr (eq2 $f.Agent "atrium")}}><span>atrium<span class="block text-xs text-muted-foreground">Its own agent</span></span></label>
+          <label class="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent"><input type="radio" name="agent" class="input mt-0.5"><span>Claude Code<span class="block text-xs text-muted-foreground">Delegated</span></span></label>
+          <label class="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent"><input type="radio" name="agent" class="input mt-0.5"><span>pi<span class="block text-xs text-muted-foreground">Delegated</span></span></label>
+          <label class="flex items-start gap-2 rounded-md border p-2.5 text-sm opacity-50"><input type="radio" name="agent" class="input mt-0.5" disabled><span>Codex<span class="block text-xs text-muted-foreground">Later</span></span></label>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label" id="auth-l">Agent billing</span>
+        <div class="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-labelledby="auth-l">
+          <label class="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent"><input type="radio" name="auth" class="input mt-0.5" checked><span>API key via gateway<span class="block text-xs text-muted-foreground">Metered. Counts toward the $150 monthly budget.</span></span></label>
+          <label class="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent"><input type="radio" name="auth" class="input mt-0.5"><span>Plan login<span class="block text-xs text-muted-foreground">Plan usage, unmetered. Not counted in the budget.</span></span></label>
+        </div>
+        <p class="text-xs text-muted-foreground">Delegated runs are capped at $5 each and $15 per thread (instance defaults).</p>
+      </div>
+    </fieldset>
+  </section>
+
+  <details class="rounded-lg border bg-card" {{if $f.AdvancedOpen}}open{{end}}>
+    <summary class="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium">{{icon "chevron-down" "size-4"}}Advanced <span class="text-xs font-normal text-muted-foreground">thinking mode, web search, cost cap</span></summary>
+    <div class="grid gap-4 border-t p-4 sm:grid-cols-2">
+      <div class="field">
+        <label class="label" for="think">Thinking mode</label>
+        <select id="think" class="select w-full">
+          {{range $m.Thinking}}{{$ok := valid $m .ID $f.Effort}}<option value="{{.ID}}" {{selAttr (eq2 .ID $f.Think)}} {{if not $ok}}disabled{{end}}>{{.Label}}{{if .Note}} ({{.Note}}){{end}}</option>{{end}}
+        </select>
+        <p id="think-help" class="text-xs text-muted-foreground">Only combinations the model accepts are enabled. Fixed once the thread starts.</p>
+      </div>
+      <div class="field">
+        <label class="label" for="cap">Thread cost cap</label>
+        <div class="input-group"><span class="px-2 text-sm text-muted-foreground">$</span><input id="cap" class="input" type="number" placeholder="no cap" value="{{.Form.CostCap}}"></div>
+        <p class="text-xs text-muted-foreground">The thread stops asking the API at the cap. Optional, set now only.</p>
+      </div>
+      <label class="flex items-center gap-3 text-sm sm:col-span-2"><input type="checkbox" role="switch" class="input" checked><span>Web search<span class="block text-xs text-muted-foreground">Constant for the life of the thread.</span></span></label>
+    </div>
+  </details>
+
+  <p id="start-line" class="text-xs text-muted-foreground">Starting a chat costs nothing until you send. First message writes ≈{{money (writeCost $m 12000)}} of prompt prefix to the cache (1 h TTL); every later message in the hour reads it at ≈{{money (readCost $m 12000)}}.</p>
+</form>
+{{end}}
