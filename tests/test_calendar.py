@@ -204,6 +204,64 @@ def test_normalize_spec_drops_attendees_and_validates():
         calendar.normalize_spec({"title": "x", "start": "2026-10-16T12:00", "end": "2026-10-16T11:00"}, tz)
 
 
+DST = """BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:gap
+DTSTART;TZID=America/New_York:20260308T023000
+DURATION:PT30M
+SUMMARY:Gap
+END:VEVENT
+BEGIN:VEVENT
+UID:fall
+DTSTART;TZID=Europe/London:20261018T011500
+DTEND;TZID=Europe/London:20261018T020000
+RRULE:FREQ=WEEKLY;COUNT=3
+SUMMARY:Fall
+END:VEVENT
+BEGIN:VEVENT
+UID:daily
+DTSTART;TZID=Europe/London:20261024T090000
+DURATION:P1DT1H
+SUMMARY:Daily
+END:VEVENT
+END:VCALENDAR
+"""
+
+
+@pytest.mark.parametrize(
+    ("zone", "lo", "hi", "expected"),
+    [
+        ("America/New_York", "2026-03-07", "2026-03-09", [("gap", "2026-03-08T03:30:00-04:00", "2026-03-08T04:00:00-04:00")]),
+        (
+            "Europe/London",
+            "2026-10-17",
+            "2026-11-02",
+            [
+                ("fall", "2026-10-18T01:15:00+01:00", "2026-10-18T02:00:00+01:00"),
+                ("daily", "2026-10-24T09:00:00+01:00", "2026-10-25T10:00:00+00:00"),
+                ("fall", "2026-10-25T01:15:00+01:00", "2026-10-25T01:00:00+00:00"),
+                ("fall", "2026-11-01T01:15:00+00:00", "2026-11-01T02:00:00+00:00"),
+            ],
+        ),
+    ],
+)
+def test_durations_are_exact_across_dst(zone, lo, hi, expected):
+    tz = calendar.tz_of({"ATRIUM_TZ": zone})
+    window = calendar.parse_when(lo, tz), calendar.parse_when(hi, tz)
+    events = calendar.events_in_ics(DST.encode(), "Home", *window, tz, [])
+    rows = sorted(((e["uid"], e["start"], e["end"]) for e in events), key=lambda r: r[1])
+    assert rows == expected
+
+
+def test_normalize_spec_default_end_is_exact_across_dst():
+    ny = calendar.tz_of({"ATRIUM_TZ": "America/New_York"})
+    gap = calendar.normalize_spec({"title": "x", "start": "2026-03-08T02:30"}, ny)
+    assert (gap["start"], gap["end"]) == ("2026-03-08T03:30:00-04:00", "2026-03-08T04:30:00-04:00")
+    fall = calendar.normalize_spec({"title": "x", "start": "2026-11-01T01:30"}, ny)
+    assert (fall["start"], fall["end"]) == ("2026-11-01T01:30:00-04:00", "2026-11-01T01:30:00-05:00")
+
+
 @pytest.fixture
 def chat_world(tmp_path, providers):
     cfg = make_config(tmp_path)

@@ -66,6 +66,10 @@ def _require(env, *names):
 # ---------- time handling ----------
 
 
+def _wall(value, tz):
+    return value.replace(tzinfo=tz).astimezone(UTC).astimezone(tz)
+
+
 def parse_when(value, tz, all_day=False):
     """ISO date/datetime string -> date (all day) or aware datetime (naive input is read in tz)."""
     if not isinstance(value, str) or not value.strip():
@@ -78,8 +82,8 @@ def parse_when(value, tz, all_day=False):
     except ValueError as e:
         raise CalendarError(f"bad date/time {value!r}: {e}") from e
     if "T" not in text and " " not in text:
-        return datetime.combine(parsed.date(), dtime.min, tz)
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=tz)
+        return _wall(datetime.combine(parsed.date(), dtime.min), tz)
+    return parsed if parsed.tzinfo else _wall(parsed, tz)
 
 
 def as_dt(value, tz):
@@ -89,9 +93,19 @@ def as_dt(value, tz):
     return datetime.combine(value, dtime.min, tz)
 
 
+def _utc(value):
+    return value.astimezone(UTC) if isinstance(value, datetime) else value
+
+
+def _after(start, exact, tz, days=0):
+    if not isinstance(start, datetime):
+        return start + timedelta(days=days) + exact
+    return _utc(as_dt(start, tz) + timedelta(days=days)) + exact
+
+
 def fmt(value, tz):
     if isinstance(value, datetime):
-        return as_dt(value, tz).astimezone(tz).isoformat(timespec="seconds")
+        return _utc(as_dt(value, tz)).astimezone(tz).isoformat(timespec="seconds")
     return value.isoformat()
 
 
@@ -104,9 +118,11 @@ def normalize_spec(raw, tz, uid=None):
     start = parse_when(raw.get("start"), tz, all_day)
     if raw.get("end"):
         end = parse_when(raw["end"], tz, all_day)
+    elif all_day:
+        end = start + timedelta(days=1)
     else:
-        end = start + (timedelta(days=1) if all_day else timedelta(minutes=DEFAULT_MINUTES))
-    if end <= start:
+        end = _after(start, timedelta(minutes=DEFAULT_MINUTES), tz).astimezone(start.tzinfo)
+    if _utc(end) <= _utc(start):
         raise CalendarError("end must be after start")
     return {
         "uid": uid or raw.get("uid") or uuid.uuid4().hex,
@@ -126,12 +142,21 @@ def _bounds(spec, tz):
 # ---------- mirror (read) ----------
 
 
-def _end_of(comp, start):
+def _end_of(comp, start, tz):
     if comp.get("DTEND") is not None:
         return comp["DTEND"].dt
     if comp.get("DURATION") is not None:
-        return start + comp["DURATION"].dt
+        span = comp["DURATION"].dt
+        return _after(start, span - timedelta(days=span.days), tz, span.days)
     return start + timedelta(days=1) if not isinstance(start, datetime) else start
+
+
+def _occurrence_end(comp, start, end, occ, tz):
+    if comp.get("DTEND") is None:
+        return _end_of(comp, occ, tz)
+    if not isinstance(occ, datetime):
+        return occ + (end - start)
+    return _after(occ, _utc(as_dt(end, tz)) - _utc(as_dt(start, tz)), tz)
 
 
 def _ex_dates(comp, name):
@@ -155,7 +180,7 @@ def _occurrences(master, start, window_start, window_end, tz, notes):
 
     if master.get("RRULE") is None and master.get("RDATE") is None:
         return [start]
-    duration = as_dt(_end_of(master, start), tz) - as_dt(start, tz)
+    duration = _utc(as_dt(_end_of(master, start, tz), tz)) - _utc(as_dt(start, tz))
     aware = isinstance(start, datetime) and start.tzinfo is not None
     dts = start if aware else (start if isinstance(start, datetime) else datetime.combine(start, dtime.min))
     rset = rrule.rruleset()
@@ -213,22 +238,20 @@ def events_in_ics(data, calendar, window_start, window_end, tz, notes):
         if comp.get("DTSTART") is None:
             continue
         start = comp["DTSTART"].dt
-        end = _end_of(comp, start)
+        end = _end_of(comp, start, tz)
         skip = {as_dt(o["RECURRENCE-ID"].dt, tz).astimezone(UTC) for o in overrides.get(uid, [])}
-        span = as_dt(end, tz) - as_dt(start, tz)
         for occ in _occurrences(comp, start, window_start, window_end, tz, notes):
             if as_dt(occ, tz).astimezone(UTC) in skip:
                 continue
-            occ_end = occ + (end - start)
-            s = as_dt(occ, tz)
-            if _overlaps(s, s + span, window_start, window_end):
+            occ_end = _occurrence_end(comp, start, end, occ, tz)
+            if _overlaps(as_dt(occ, tz), as_dt(occ_end, tz), window_start, window_end):
                 out.append(_event_row(uid, calendar, occ, occ_end, comp, tz))
     for uid, group in overrides.items():
         for comp in group:
             if comp.get("DTSTART") is None:
                 continue
             start = comp["DTSTART"].dt
-            end = _end_of(comp, start)
+            end = _end_of(comp, start, tz)
             if _overlaps(as_dt(start, tz), as_dt(end, tz), window_start, window_end):
                 out.append(_event_row(uid, calendar, start, end, comp, tz))
     return out
