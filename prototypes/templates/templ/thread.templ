@@ -1,0 +1,413 @@
+package main
+
+// thread.html: `{% extends "base.html" %}` + blocks => Layout(base, Slots{...}) { content }.
+templ ThreadPage(d ThreadPageData) {
+	{{ t := d.View.Thread }}
+	@Layout(Base{Page: "chat", PendingCount: d.PendingCount, Paused: d.Paused, Mode: d.Mode, Toast: d.Toast},
+		Slots{Title: or(t.Title, "Thread"), Heading: or(t.Title, "Thread"), ContentClass: "max-w-[96rem]"}) {
+		<div id="workspace" class="flex min-h-[calc(100dvh-6.5rem)] flex-col gap-6 md:grid md:min-h-[calc(100dvh-7.5rem)] md:grid-cols-[minmax(0,1fr)_auto_var(--panel-w)] md:items-start" style="--panel-w: 24rem" data-thread={ itoa(t.ID) }>
+			<div id="thread" class="flex min-h-full min-w-0 flex-col gap-6">
+				@ThreadBody(d)
+			</div>
+			<div id="panel-handle" class="hidden h-full w-1.5 cursor-col-resize rounded-full bg-border transition-colors hover:bg-ring md:block" role="separator" aria-orientation="vertical" aria-label="Resize panel" tabindex="0"></div>
+			<div id="panel-backdrop" class="fixed inset-0 z-30 hidden bg-black/40 md:hidden" data-action="toggle-panel"></div>
+			<aside id="panel" class="tabs flex-col gap-3 rounded-lg border bg-card p-3 max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-40 max-md:w-[88vw] max-md:max-w-sm max-md:overflow-y-auto max-md:rounded-none max-md:shadow-xl max-md:hidden max-md:data-open:flex md:sticky md:top-20 md:flex md:max-h-[calc(100dvh-6rem)] md:overflow-y-auto" aria-label="Thread workspace">
+				<nav role="tablist" aria-orientation="horizontal" class="w-full">
+					<button type="button" role="tab" id="panel-tab-work" aria-controls="panel-work" aria-selected="true" tabindex="0">
+						@Icon("list-checks", "size-3.5")
+						Work
+					</button>
+					<button type="button" role="tab" id="panel-tab-preview" aria-controls="panel-preview" aria-selected="false" tabindex="-1">
+						@Icon("eye", "size-3.5")
+						Preview
+					</button>
+					<button type="button" class="btn ms-auto md:hidden" data-variant="ghost" data-size="icon-sm" aria-label="Close panel" data-action="toggle-panel">@Icon("x")</button>
+				</nav>
+				<div role="tabpanel" id="panel-work" aria-labelledby="panel-tab-work" tabindex="-1" aria-selected="true" class="flex flex-col gap-4" hx-get={ "/chat/" + itoa(t.ID) + "/work" } hx-trigger="work-changed" hx-swap="innerHTML">
+					@WorkPanel(d.Work)
+				</div>
+				<div role="tabpanel" id="panel-preview" aria-labelledby="panel-tab-preview" tabindex="-1" aria-selected="false" hidden>
+					<div id="preview-body" data-loading="reader-loading" class="flex flex-col gap-4">
+						<p class="text-sm text-muted-foreground">Open an email, a draft, a Notion page or a file from the conversation or the Work tab to read it here.</p>
+					</div>
+				</div>
+			</aside>
+		</div>
+	}
+}
+
+// _meter.html
+templ MeterBar(v View, oob bool) {
+	{{ m := v.Meter }}
+	<span
+		id="meter"
+		class="flex items-center gap-2 tabular-nums"
+		title={ "Prompt tokens of the last request against the point where the context is compacted (" + itoa(m.CompactAt) + " of the " + itoa(m.Limit) + " limit)" }
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
+		<span class="badge" data-variant="outline">effort { v.Thread.Effort }</span>
+		<span class="flex items-center gap-1.5" aria-label="Context used">
+			<span class="h-1.5 w-16 overflow-hidden rounded-full bg-muted" aria-hidden="true"><span class={ "block h-full rounded-full", cond(m.Share >= 0.8, "bg-warning", "bg-chart-3") } style={ "width: " + itoa(roundInt(m.Share*100)) + "%" }></span></span>
+			<span>{ f1(float64(m.Tokens)/1000) }K / { itoa(roundInt(float64(m.CompactAt)/1000)) }K</span>
+		</span>
+		<span data-cost>${ f3(v.Cost) }</span>
+	</span>
+}
+
+// _sandbox.html
+templ SandboxNote(v View) {
+	<p
+		id="sandbox"
+		class="flex items-center gap-1 text-xs text-warning"
+		role="status"
+		if v.Thread.CodeSandbox == 0 {
+			hidden
+		}
+	>
+		@Icon("circle-alert", "size-3.5 shrink-0")
+		Code sandbox on: attached files are uploaded to Anthropic's Files API and run in its container (not zero data retention; containers keep data up to 30 days).
+	</p>
+}
+
+// _transcript.html
+templ Transcript(v View) {
+	{{ t := v.Thread }}
+	{{ busy := v.Busy() }}
+	for _, item := range v.Items {
+		@ChatItem(item, &t, v.LastOperatorSeq, busy)
+	}
+	for _, r := range v.Runs {
+		if r.State == "failed" && !r.Superseded {
+			<li class="ps-10" data-run={ itoa(r.ID) }>
+				<div class="alert" data-variant="destructive" role="alert">
+					@Icon("circle-alert")
+					<p>Run { itoa(r.ID) } stopped: { r.Error }</p>
+					if t.Kind == "chat" && r.ID == v.LastRunID() && v.LastOperatorSeq != 0 && !busy {
+						<button type="button" class="btn" data-size="sm" data-variant="outline" hx-post={ "/chat/" + itoa(t.ID) + "/regenerate" } hx-target="#transcript" hx-swap="innerHTML" hx-disabled-elt="this">
+							@Icon("refresh-cw", "size-3.5")
+							Try again
+						</button>
+					}
+				</div>
+			</li>
+		}
+	}
+	if len(v.Items) == 0 {
+		<li>
+			@EmptyState("messages-square", "Say something") {
+				The assistant can search your mail, contacts, Notion and the web, and read what it finds.
+			}
+		</li>
+	}
+	if busy {
+		// {% with thread_id=..., run_id=..., after=... %}{% include "_run_live.html" %}: not reached with the fake data, not ported.
+		@runLive(t.ID, v.Active.ID, v.AfterSeq())
+	} else if v.Active != nil && v.Active.State == "interrupted" {
+		<li class="ps-10" id={ "run-" + itoa(v.Active.ID) }>
+			<div class="alert" role="alert">
+				@Icon("circle-alert")
+				<p>This run was interrupted while a write was in flight. Resume to let the assistant check what happened and continue.</p>
+				<button type="button" class="btn" data-size="sm" hx-post={ "/chat/" + itoa(t.ID) + "/runs/" + itoa(v.Active.ID) + "/resume" } hx-target={ "#run-" + itoa(v.Active.ID) } hx-swap="outerHTML" hx-disabled-elt="this">
+					@Icon("play")
+					Resume
+				</button>
+			</div>
+		</li>
+	}
+	for _, q := range v.Queued {
+		@ChatItem(Item{Kind: "queued", ID: q.ID, Text: q.Text, Files: q.Files}, nil, 0, false)
+	}
+}
+
+templ runLive(threadID, runID, after int) {
+}
+
+// _thread.html
+templ ThreadBody(d ThreadPageData) {
+	{{ v := d.View }}
+	{{ t := v.Thread }}
+	{{ busy := v.Busy() }}
+	<header class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+		<a href="/chat" class="btn" data-size="sm" data-variant="ghost">
+			@Icon("arrow-left")
+			Threads
+		</a>
+		<span class="badge" data-variant="outline">{ t.Kind }</span>
+		<span class="tabular-nums">started @When(t.CreatedAt, "datetime")</span>
+		@MeterBar(v, false)
+		if t.ProjectID != 0 {
+			<a href={ "/projects/" + itoa(t.ProjectID) } class="btn" data-size="sm" data-variant="ghost">
+				@Icon("folder")
+				{ projName(d.Project) }
+			</a>
+		}
+		if t.ParentThreadID != 0 {
+			<a href={ "/chat/" + itoa(t.ParentThreadID) } class="btn" data-size="sm" data-variant="ghost">
+				@Icon("arrow-left")
+				Parent thread
+			</a>
+		}
+		if v.BranchedFrom != nil {
+			<a href={ "/chat/" + itoa(v.BranchedFrom.ID) } class="btn" data-size="sm" data-variant="ghost" title={ "Branched from message " + itoa(t.BranchedFromSeq) }>
+				@Icon("git-branch")
+				Branched from “{ trunc(or(v.BranchedFrom.Title, "Untitled thread"), 40) }”
+			</a>
+		}
+		<span class="ms-auto flex flex-wrap items-center gap-1">
+			if t.Kind == "chat" {
+				if len(d.Projects) > 0 || t.ProjectID != 0 {
+					<form method="post" action={ "/chat/" + itoa(t.ID) + "/project" } class="flex items-center gap-1">
+						<input type="hidden" name="csrf_token" value={ csrf(ctx) }/>
+						<label for="move-project" class="sr-only">Project</label>
+						<select id="move-project" name="project_id" class="select h-8 max-w-40 py-0 text-xs">
+							<option value="0">No project</option>
+							for _, p := range d.Projects {
+								<option value={ itoa(p.ID) } selected?={ p.ID == t.ProjectID }>{ p.Name }</option>
+							}
+						</select>
+						<button type="submit" class="btn" data-size="sm" data-variant="ghost">
+							@Icon("folder-input")
+							Move
+						</button>
+					</form>
+				}
+				if t.Archived == 0 {
+					<form method="post" action={ "/chat/" + itoa(t.ID) + "/pin" }>
+						<input type="hidden" name="csrf_token" value={ csrf(ctx) }/>
+						<input type="hidden" name="pinned" value={ cond(t.Pinned != 0, "0", "1") }/>
+						<button type="submit" class="btn" data-size="sm" data-variant="ghost">
+							@Icon(cond(t.Pinned != 0, "pin-off", "pin"))
+							@Text(cond(t.Pinned != 0, "Unpin", "Pin"))
+						</button>
+					</form>
+				}
+				<form method="post" action={ "/chat/" + itoa(t.ID) + "/archive" }>
+					<input type="hidden" name="csrf_token" value={ csrf(ctx) }/>
+					<input type="hidden" name="archived" value={ cond(t.Archived != 0, "0", "1") }/>
+					<button type="submit" class="btn" data-size="sm" data-variant="ghost">
+						@Icon(cond(t.Archived != 0, "archive-restore", "archive"))
+						@Text(cond(t.Archived != 0, "Unarchive", "Archive"))
+					</button>
+				</form>
+				<form method="post" action={ "/chat/" + itoa(t.ID) + "/delete" } data-confirm-submit="Delete this thread, its subagent transcripts and its files? This cannot be undone.">
+					<input type="hidden" name="csrf_token" value={ csrf(ctx) }/>
+					<button type="submit" class="btn" data-size="sm" data-variant="ghost">
+						@Icon("trash-2")
+						Delete
+					</button>
+				</form>
+			}
+			<button type="button" class="btn md:hidden" data-size="sm" data-variant="outline" data-action="toggle-panel" aria-controls="panel" aria-expanded="false">
+				@Icon("panel-right")
+				Panel
+			</button>
+		</span>
+	</header>
+	<ol id="transcript" class="flex flex-col gap-4" aria-live="polite" aria-label="Conversation" data-thread={ itoa(t.ID) }>
+		@Transcript(v)
+	</ol>
+	if t.Kind != "subagent" {
+		<form id="composer" class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" method="post" action={ "/chat/" + itoa(t.ID) + "/messages" } enctype="multipart/form-data" hx-post={ "/chat/" + itoa(t.ID) + "/messages" } hx-encoding="multipart/form-data" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset data-attach>
+			<input type="hidden" name="csrf_token" value={ csrf(ctx) }/>
+			<input type="hidden" name="edit" value=""/>
+			<p id="composer-editing" class="flex items-center gap-2 text-xs text-muted-foreground" hidden>
+				@Icon("pencil", "size-3.5")
+				Editing your last message: sending replaces it and the reply.<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="cancel-edit">Cancel</button>
+			</p>
+			<label for="composer-text" class="sr-only">Message</label>
+			<textarea id="composer-text" name="text" rows="2" class="textarea w-full" placeholder="Message the assistant… (⌘⏎ to send, drop files to attach)" data-submit-on-enter required autofocus></textarea>
+			@AttachField()
+			<div class="flex flex-wrap items-center gap-2 text-xs">
+				@AttachButton()
+				if t.Kind == "chat" {
+					<label class="flex items-center gap-1 text-muted-foreground">
+						Effort
+						<select name="effort" class="select h-7 py-0 text-xs" data-option hx-post={ "/chat/" + itoa(t.ID) + "/options" } hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML">
+							for _, e := range d.Efforts {
+								<option value={ e } selected?={ e == t.Effort }>{ e }</option>
+							}
+						</select>
+					</label>
+					<label class="flex items-center gap-1 text-muted-foreground">
+						Context
+						<select name="context_limit" class="select h-7 py-0 text-xs" data-option hx-post={ "/chat/" + itoa(t.ID) + "/options" } hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML">
+							for _, n := range d.ContextLimits {
+								<option value={ itoa(n) } selected?={ n == v.Meter.Limit }>
+									{ itoa(n / 1000) }K
+									if n > 100000 {
+										(5× price over 100K)
+									}
+								</option>
+							}
+						</select>
+					</label>
+					<span class="hidden text-muted-foreground lg:inline">Above 100K input tokens Haiku 5.5 bills input at 5×.</span>
+					<label class="flex items-center gap-1 text-muted-foreground" title="Let the assistant run code in Anthropic's sandbox and produce files">
+						<input type="checkbox" name="code_sandbox" class="size-3.5 accent-primary" hx-post={ "/chat/" + itoa(t.ID) + "/sandbox" } hx-trigger="change" hx-params="code_sandbox" hx-target="#sandbox" hx-swap="outerHTML" checked?={ t.CodeSandbox != 0 }/>
+						Code sandbox
+					</label>
+				}
+				@Spinner("composer-spinner", "Sending")
+				<span class="ms-auto flex items-center gap-1">
+					<button type="button" class="btn" data-size="sm" data-variant="outline" hx-post={ "/chat/" + itoa(t.ID) + "/stop" } hx-swap="none" data-stop hidden?={ !busy }>
+						@Icon("square", "size-3.5")
+						Stop
+					</button>
+					<button type="submit" class="btn" data-size="sm">@Icon("send")<span data-send hidden?={ busy }>Send</span><span data-queue hidden?={ !busy }>Queue</span></button>
+				</span>
+			</div>
+			if t.Kind == "chat" {
+				@SandboxNote(v)
+			}
+		</form>
+	}
+}
+
+// _work.html (the Jinja `{% set w = work %}` alias is just the parameter)
+templ WorkPanel(w Work) {
+	<section class="flex flex-col gap-2" aria-labelledby="work-plan">
+		<h2 id="work-plan" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+			@Icon("list-checks", "size-3.5")
+			Plan
+		</h2>
+		if w.Plan != nil && len(w.Plan.Items) > 0 {
+			<ol class="flex flex-col gap-1 text-sm" data-plan>
+				for _, step := range w.Plan.Items {
+					<li class="flex items-start gap-2">@Icon(cond(step.Done, "check", "circle-dot"), "mt-0.5 size-3.5 shrink-0 "+cond(step.Done, "text-success", "text-muted-foreground"))<span class={ templ.KV("text-muted-foreground line-through", step.Done) }>{ step.Text }</span></li>
+				}
+			</ol>
+		} else {
+			<p class="text-xs text-muted-foreground">The assistant posts a checklist here for longer tasks.</p>
+		}
+	</section>
+	<section class="flex flex-col gap-2" aria-labelledby="work-sources">
+		<h2 id="work-sources" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+			@Icon("globe", "size-3.5")
+			Sources
+		</h2>
+		if len(w.Sources) > 0 {
+			<ul class="flex flex-col gap-1 text-sm" data-sources>
+				for _, s := range w.Sources {
+					<li class="flex min-w-0 items-center gap-2">
+						@Icon(sourceIcon(s.Kind), "size-3.5 shrink-0 text-muted-foreground")
+						if s.Kind == "web" {
+							@ExtLink(s.URL, "truncate underline-offset-4 hover:underline", nil) {
+								{ s.Title }
+							}
+						} else {
+							@PreviewLink(s.URL, "truncate underline-offset-4 hover:underline", nil) {
+								{ s.Title }
+							}
+						}
+						if s.Via != "" {
+							<span class="badge shrink-0" data-variant="outline">{ s.Via }</span>
+						}
+					</li>
+				}
+			</ul>
+		} else {
+			<p class="text-xs text-muted-foreground">Pages, mail and Notion pages the assistant reads show up here.</p>
+		}
+	</section>
+	<section class="flex flex-col gap-2" aria-labelledby="work-subagents">
+		<h2 id="work-subagents" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+			@Icon("users", "size-3.5")
+			Subagents
+		</h2>
+		if len(w.Subagents) > 0 {
+			<ul class="flex flex-col gap-2" data-subagents>
+				for _, c := range w.Subagents {
+					<li class="flex flex-col gap-1 rounded-md border px-3 py-2 text-xs" data-child={ itoa(c.ThreadID) } data-status={ c.Status }>
+						<span class="flex flex-wrap items-center gap-1.5">
+							<span class="badge" data-variant="secondary">{ or(c.Role, c.Kind) }</span>
+							<span class="badge" data-variant="outline">effort { c.Effort }</span>
+							<span class="badge" data-variant={ cond(c.Status == "error" || c.Status == "interrupted", "destructive", "outline") }>
+								if c.Status == "running" {
+									@Icon("loader-circle", "animate-spin")
+								}
+								{ c.Status }
+							</span>
+							if c.Current != "" {
+								<code class="font-mono">{ c.Current }</code>
+							}
+						</span>
+						<a class="truncate underline-offset-4 hover:underline" href={ "/chat/" + itoa(c.ThreadID) }>{ or(c.Title, "Untitled") }</a>
+						<span class="flex gap-2 text-muted-foreground tabular-nums">
+							<span>${ f4(c.Cost) }</span>
+							if c.Elapsed != nil {
+								<span>{ f0(*c.Elapsed) }s</span>
+							}
+							if c.Error != "" {
+								<span class="truncate text-destructive" title={ c.Error }>{ trunc(c.Error, 80) }</span>
+							}
+						</span>
+					</li>
+				}
+			</ul>
+		} else {
+			<p class="text-xs text-muted-foreground">Research the assistant delegates appears here; each transcript opens from its card.</p>
+		}
+	</section>
+	<section class="flex flex-col gap-2" aria-labelledby="work-files">
+		<h2 id="work-files" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+			@Icon("file-text", "size-3.5")
+			Files
+		</h2>
+		if len(w.Files) > 0 || len(w.Drafts) > 0 {
+			<ul class="flex flex-col gap-1 text-sm" data-files>
+				for _, f := range w.Files {
+					<li class="flex items-center gap-1 rounded-md border px-3 py-2 hover:bg-accent" data-file={ itoa(f.ID) }>
+						@PreviewLink("/chat/"+itoa(f.ThreadID)+"/files/"+itoa(f.ID), "flex min-w-0 flex-1 items-center gap-2", nil) {
+							@FileIcon(f.MediaType, "size-3.5 shrink-0 text-muted-foreground")
+							<span class="truncate">{ f.Name }</span>
+							<span class="badge shrink-0" data-variant={ cond(f.Origin == "generated", "secondary", "outline") }>{ f.Origin }</span>
+							<span class="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">{ fileSize(f.Bytes) }</span>
+						}
+						<a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href={ "/chat/" + itoa(f.ThreadID) + "/files/" + itoa(f.ID) + "/download" } download aria-label={ "Download " + f.Name }>@Icon("download", "size-3.5")</a>
+					</li>
+				}
+				for _, d := range w.Drafts {
+					<li>
+						@PreviewLink("/drafts/"+itoa(d.ID), "flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent", nil) {
+							@Icon("mail", "size-3.5 shrink-0 text-muted-foreground")
+							<span class="truncate">{ or(d.Subject, "(no subject)") }</span>
+							<span class="badge ms-auto shrink-0" data-variant={ cond(d.Status == "sent", "secondary", "outline") }>{ d.Status }</span>
+						}
+					</li>
+				}
+			</ul>
+		} else {
+			<p class="text-xs text-muted-foreground">Files you attach, files the sandbox produces and drafts made in this thread are listed here.</p>
+		}
+	</section>
+	<section class="flex flex-col gap-2" aria-labelledby="work-code">
+		<h2 id="work-code" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+			@Icon("code", "size-3.5")
+			Code sessions
+		</h2>
+		if len(w.Code) > 0 {
+			<ul class="flex flex-col gap-1 text-xs" data-code>
+				for _, c := range w.Code {
+					<li>
+						<details class="rounded-md border">
+							<summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">
+								@Icon("code", "size-3.5")
+								{ c.Tool }
+								<span class="tabular-nums">@When(c.StartedAt, "datetime")</span>
+								if c.State == "error" {
+									<span class="badge ms-auto" data-variant="destructive">error</span>
+								}
+							</summary>
+							<pre class="overflow-x-auto border-t bg-muted px-3 py-2 font-mono whitespace-pre-wrap break-words">{ c.Script }</pre>
+							<pre class="overflow-x-auto border-t px-3 py-2 font-mono whitespace-pre-wrap break-words">{ or(c.Result, "(no result)") }</pre>
+						</details>
+					</li>
+				}
+			</ul>
+		} else {
+			<p class="text-xs text-muted-foreground">Scripts the assistant runs with run_code or in the code sandbox appear here with their output.</p>
+		}
+	</section>
+}

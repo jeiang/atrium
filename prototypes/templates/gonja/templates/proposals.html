@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Proposals{% endblock %}
+{% block heading %}Proposals{% endblock %}
+{% block content %}
+{% from "_icons.html" import icon %}
+<div class="alert" role="note">
+  {{ icon("zap", "text-warning") }}
+  <h2>Approving runs it now</h2>
+  <section>
+    <p>An approved proposal moves or relabels mail, deletes to Trash, or edits Notion as soon as you approve it{% if mode != "live" %}, even though nothing is applied automatically in shadow mode{% endif %}. Applied proposals can be undone here.</p>
+  </section>
+</div>
+
+<form class="flex flex-wrap items-end gap-3" action="/proposals" method="get"
+      hx-get="/proposals" hx-target="#proposal-list" hx-push-url="true" hx-trigger="change" hx-sync="this:replace" hx-indicator="#proposal-list">
+  <div role="group" class="field w-auto">
+    <label for="p-status">Status</label>
+    <select id="p-status" name="status">
+      {% for value in ["pending", "applied", "failed", "dismissed", "suppressed", "all"] %}
+      <option value="{{ value }}"{% if status == value %} selected{% endif %}>{{ STATUS_LABELS.get(value, "Any status") }}{% if counts.get(value) %} ({{ counts[value] }}){% endif %}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div role="group" class="field w-auto">
+    <label for="p-kind">Kind</label>
+    <select id="p-kind" name="kind">
+      <option value="">All kinds</option>
+      {% for value in KIND_ORDER %}<option value="{{ value }}"{% if kind == value %} selected{% endif %}>{{ KIND_LABELS[value] }}</option>{% endfor %}
+    </select>
+  </div>
+  <noscript><button type="submit" class="btn" data-variant="outline">Apply</button></noscript>
+</form>
+
+<div id="proposal-list" class="flex flex-col gap-3 transition-opacity [&.htmx-request]:opacity-60">
+  {% include "_proposal_list.html" %}
+</div>
+{% endblock %}

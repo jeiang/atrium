@@ -1,0 +1,102 @@
+package main
+
+templ Toaster(id string, toasts []Toast, attrs templ.Attributes) {
+	<div id={ id } class={ "toaster", classOf(attrs) } { without(attrs, "class")... }>
+		for _, t := range toasts {
+			@ToastC(t)
+		}
+		{ children... }
+	</div>
+}
+
+func toastHref(b *Button) string {
+	if b == nil {
+		return ""
+	}
+	return or(b.Href, b.URL)
+}
+
+templ ToastC(t Toast) {
+	<div
+		class={ "toast", classOf(t.Attrs) }
+		role={ cond(t.Category == "error", "alert", "status") }
+		aria-atomic="true"
+		aria-hidden="false"
+		if t.Category != "" {
+			data-category={ t.Category }
+		}
+		if t.Duration != nil {
+			data-duration={ itoa(*t.Duration) }
+		}
+		{ without(t.Attrs, "class")... }
+	>
+		<div class="toast-content">
+			if t.Icon != nil {
+				@t.Icon
+			} else {
+				switch t.Category {
+					case "success":
+						<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
+					case "error":
+						<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m15 9-6 6"></path><path d="m9 9 6 6"></path></svg>
+					case "info":
+						<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+					case "warning":
+						<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>
+				}
+			}
+			<section>
+				if t.Title != "" {
+					<h2>{ t.Title }</h2>
+				}
+				if t.Description != "" {
+					<p>{ t.Description }</p>
+				}
+			</section>
+			if t.Action != nil || t.Cancel != nil {
+				<footer>
+					if t.Action != nil {
+						@toastButton(t.Action, "btn", "", "data-toast-action")
+					}
+					if t.Cancel != nil {
+						@toastButton(t.Cancel, "btn", "outline", "data-toast-cancel")
+					}
+				</footer>
+			}
+		</div>
+	</div>
+}
+
+// toastButton merges the two near-identical action/cancel branches of toast.html.jinja.
+templ toastButton(b *Button, class, variant, marker string) {
+	if toastHref(b) != "" {
+		<a
+			href={ toastHref(b) }
+			class={ class }
+			if variant != "" {
+				data-variant={ variant }
+			}
+			data-size="sm"
+			{ toastMarker(marker)... }
+		>{ b.Label }</a>
+	} else {
+		<button
+			type="button"
+			class={ class }
+			if variant != "" {
+				data-variant={ variant }
+			}
+			data-size="sm"
+			{ toastMarker(marker)... }
+			if b.Onclick != "" {
+				{ onclickAttr(b.Onclick)... }
+			}
+		>{ b.Label }</button>
+	}
+}
+
+func toastMarker(m string) templ.Attributes { return templ.Attributes{m: true} }
+
+// Spread attributes escape the string as a normal attribute value; a typed `onclick={ ... }` would need a
+// templ.ComponentScript (whose Call is emitted UNescaped), so this keeps Jinja's escaped-string behaviour.
+func onclickAttr(js string) templ.Attributes { return templ.Attributes{"onclick": js} }

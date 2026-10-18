@@ -1,0 +1,145 @@
+package main
+
+// Slots are the Jinja `{% block %}`s of base.html. Scalar blocks are strings; `content` is the
+// component's children (`@Layout(...) { ...page body... }`). body_attrs is an attribute map.
+type Slots struct {
+	Title        string
+	Heading      string
+	ContentClass string
+	BodyAttrs    templ.Attributes
+}
+
+templ Brand() {
+	<a href="/chat" class="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+		<span class="grid size-7 place-items-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground" aria-hidden="true">a</span>
+		<span class="text-base font-semibold tracking-tight">atrium</span>
+	</a>
+}
+
+templ SidebarFooter(b Base) {
+	<div class="flex flex-col gap-1.5 rounded-lg border bg-background p-3 text-xs">
+		<div>@ModeBadge(b.Mode, b.Paused)</div>
+		<p class="text-pretty text-muted-foreground">{ modeNote(b.Mode, b.Paused) }</p>
+	</div>
+}
+
+templ ProposalsLabel(count int) {
+	<span class="flex items-center gap-2">
+		Proposals
+		@PendingBadge(count, false)
+	</span>
+}
+
+// navMenu is the dict-literal menu from base.html. `icon(...)` values are passed as components
+// (templ.Component), not pre-rendered strings, so nothing needs `| safe`.
+func navMenu(b Base) []MenuItem {
+	it := func(label, url, icon string, current bool) MenuItem {
+		return MenuItem{Type: "item", Label: Txt(label), URL: url, Icon: Icon(icon), Current: current}
+	}
+	return []MenuItem{
+		{Type: "group", Title: "Assistant", Items: []MenuItem{
+			it("Chat", "/chat", "messages-square", b.Page == "chat"),
+			it("Scheduled", "/scheduled", "clock", b.Page == "scheduled"),
+			it("Projects", "/projects", "folder", b.Page == "projects"),
+		}},
+		{Type: "group", Title: "Review", Items: []MenuItem{
+			{Type: "item", Label: ProposalsLabel(b.PendingCount), URL: "/proposals", Icon: Icon("list-checks"), Current: b.Page == "proposals",
+				Attrs: templ.Attributes{"class": "[&>span:last-child]:flex-1"}},
+			it("Activity", "/activity", "history", b.Page == "activity"),
+		}},
+		{Type: "group", Title: "Mail", Items: []MenuItem{
+			it("Decisions", "/triage", "route", b.Page == "triage"),
+			it("Rules", "/rules", "scroll-text", b.Page == "rules"),
+			it("Drafts", "/drafts", "mail", b.Page == "drafts"),
+		}},
+		{Type: "group", Title: "Life", Items: []MenuItem{
+			it("Money", "/money", "wallet", b.Page == "money"),
+			it("Loops", "/loops", "list-checks", b.Page == "loops"),
+			it("Watches", "/watches", "package", b.Page == "watches"),
+		}},
+		{Type: "group", Title: "Media", Items: []MenuItem{
+			it("Downloads", "/media/downloads", "download", b.Page == "media_downloads" || b.Page == "media_add"),
+			it("Channels", "/media/channels", "tv", b.Page == "media_channels"),
+			it("Library", "/media/library", "film", b.Page == "media_library"),
+		}},
+	}
+}
+
+func toasts(b Base) []Toast {
+	if b.Toast != nil {
+		return []Toast{*b.Toast}
+	}
+	return nil
+}
+
+templ Layout(b Base, s Slots) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="color-scheme" content="light dark"/>
+			<title>{ s.Title } · atrium</title>
+			<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect%7Bfill:oklch(0.25 0.014 60)%7Dtext%7Bfill:oklch(0.985 0.003 85)%7D@media (prefers-color-scheme:dark)%7Brect%7Bfill:oklch(0.92 0.008 85)%7Dtext%7Bfill:oklch(0.2 0.012 60)%7D%7D%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='22.5' font-family='ui-monospace,monospace' font-size='19' font-weight='600' text-anchor='middle'%3Ea%3C/text%3E%3C/svg%3E"/>
+			<meta name="htmx-config" content='{"includeIndicatorStyles": false}'/>
+			<link rel="stylesheet" href={ "/static/app.css?v=" + assetVersion }/>
+			<script src={ "/static/htmx.min.js?v=" + assetVersion } defer></script>
+			<script src={ "/static/basecoat/all.min.js?v=" + assetVersion } defer></script>
+			<script src={ "/static/app.js?v=" + assetVersion } defer></script>
+		</head>
+		<body class="min-h-dvh" hx-headers={ hxHeaders(csrf(ctx)) } { s.BodyAttrs... }>
+			<a href="#content" class="sr-only rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50">Skip to content</a>
+			@Sidebar(SidebarProps{ID: "sidebar", Label: "Primary", Open: true, Header: Brand(), Footer: SidebarFooter(b), Menu: navMenu(b)})
+			<main class="flex min-w-0 flex-col">
+				<header class="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-3 md:px-6">
+					<button id="nav-toggle" type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Toggle navigation" aria-controls="sidebar" data-action="toggle-sidebar">@Icon("panel-left")</button>
+					<hr role="separator" aria-orientation="vertical" class="h-4 w-px border-0 bg-border"/>
+					<h1 class="truncate px-1 text-sm font-medium">{ s.Heading }</h1>
+					<div class="ml-auto flex items-center gap-3">
+						<a
+							href="/settings"
+							class="btn"
+							data-variant="ghost"
+							data-size="icon-sm"
+							aria-label="Settings"
+							title="Settings"
+							if b.Page == "settings" {
+								aria-current="page"
+							}
+						>@Icon("settings")</a>
+						@ModeBadge(b.Mode, b.Paused)
+						if b.Mode == "live" {
+							<form method="post" action={ "/live/" + cond(b.Paused, "resume", "pause") }>
+								<input type="hidden" name="csrf_token" value={ csrf(ctx) }/>
+								<button type="submit" class="btn" data-size="sm" data-variant="outline">
+									@Icon(cond(b.Paused, "zap", "lock"))
+									@Text(cond(b.Paused, "Resume", "Pause"))
+								</button>
+							</form>
+						}
+					</div>
+				</header>
+				<div id="content" tabindex="-1" class={ "mx-auto flex w-full", or(s.ContentClass, "max-w-6xl"), "flex-col gap-6 px-4 py-6 outline-none md:px-8 md:py-8" }>
+					{ children... }
+				</div>
+			</main>
+			<dialog id="reader" class="drawer" data-side="right" aria-label="Message">
+				<article class="w-full max-w-none sm:max-w-2xl">
+					<header class="flex-row items-center justify-between border-b">
+						<h2 class="text-sm font-medium">Message</h2>
+						<button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close message" data-action="close-dialog">@Icon("x")</button>
+					</header>
+					<section id="reader-body" data-loading="reader-loading" class="p-4 md:p-6"></section>
+				</article>
+			</dialog>
+			<template id="reader-loading">
+				<div class="flex flex-col gap-3" role="status" aria-label="Loading message">
+					<div class="skeleton h-6 w-3/4 rounded-md bg-muted"></div>
+					<div class="skeleton h-4 w-1/2 rounded-md bg-muted"></div>
+					<div class="skeleton mt-4 h-40 w-full rounded-md bg-muted"></div>
+				</div>
+			</template>
+			@Toaster("toaster", toasts(b), nil)
+		</body>
+	</html>
+}

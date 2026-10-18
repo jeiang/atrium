@@ -1,0 +1,117 @@
+{{/* basecoat/sidebar.html.jinja. Params (dict): id label open side header footer menu main_attrs header_attrs content_attrs footer_attrs.
+     header/footer must be template.HTML (Jinja: `| safe` on whatever string was passed). */}}
+{{define "sidebar" -}}
+{{$open := true}}{{if haskey . "open"}}{{$open = .open}}{{end}}
+{{$ma := or .main_attrs (dict)}}{{$ha := or .header_attrs (dict)}}{{$ca := or .content_attrs (dict)}}{{$fa := or .footer_attrs (dict)}}
+<aside
+  {{if .id}}id="{{.id}}"{{end}}
+  class="sidebar {{$ma.class}}"
+  data-side="{{or .side "left"}}"
+  aria-hidden="{{if $open}}false{{else}}true{{end}}"
+  {{if not $open}}inert{{end}}
+  {{range $key, $value := $ma}}
+    {{if ne $key "class"}}{{$key}}="{{$value}}"{{end}}
+  {{end}}
+>
+  <nav
+    aria-label="{{or .label "Sidebar navigation"}}"
+  >
+    {{if .header}}
+    <header
+      {{range $key, $value := $ha}}
+        {{$key}}="{{$value}}"
+      {{end}}
+    >
+      {{.header}}
+    </header>
+    {{end}}
+
+    <section
+      {{range $key, $value := $ca}}
+        {{$key}}="{{$value}}"
+      {{end}}
+    >
+      {{if .menu}}
+        {{template "render_sidebar_content" (dict "items" .menu "prefix" (ternary .id (printf "%s-content" .id) "content"))}}
+      {{else}}
+        {{.caller}}
+      {{end}}
+    </section>
+
+    {{if .footer}}
+    <footer
+      {{range $key, $value := $fa}}
+        {{$key}}="{{$value}}"
+      {{end}}
+    >
+      {{.footer}}
+    </footer>
+    {{end}}
+  </nav>
+</aside>
+{{- end}}
+
+{{/* Recursive. Item = map (dict). Missing keys read as nil, which is falsy, so `is defined` checks collapse into `if`. */}}
+{{define "render_sidebar_content" -}}
+  {{$prefix := or .prefix "content"}}
+  {{range $i, $item := .items}}
+    {{$item_id := printf "%s-%d" $prefix (add $i 1)}}
+    {{$type := or $item.type "item"}}
+    {{if eq $type "group"}}
+      {{$gid := or $item.id (printf "group-label-%s" $item_id)}}
+      <div
+        role="group"
+        {{if $item.label}}aria-labelledby="{{$gid}}"{{end}}
+        {{if $item.attrs}}
+          {{range $key, $value := $item.attrs}}
+            {{$key}}="{{$value}}"
+          {{end}}
+        {{end}}
+      >
+        {{if $item.label}}
+          <h3 id="{{$gid}}">{{$item.label}}</h3>
+        {{end}}
+        <ul>
+          {{if $item.items}}{{template "render_sidebar_content" (dict "items" $item.items "prefix" $item_id)}}{{end}}
+        </ul>
+      </div>
+    {{else if eq $type "separator"}}
+      <hr role="separator"/>
+    {{else if eq $type "submenu"}}
+      <li>
+        <details
+          id="submenu-{{$item_id}}"
+          {{if $item.open}}open{{end}}
+          {{if $item.attrs}}
+            {{range $key, $value := $item.attrs}}
+              {{if ne $key "open"}}{{$key}}="{{$value}}"{{end}}
+            {{end}}
+          {{end}}
+        >
+          <summary aria-controls="submenu-{{$item_id}}-content">
+            {{if $item.icon}}{{$item.icon}}{{end}}
+            <span>{{$item.label}}</span>
+          </summary>
+          <ul id="submenu-{{$item_id}}-content">
+            {{if $item.items}}{{template "render_sidebar_content" (dict "items" $item.items "prefix" $item_id)}}{{end}}
+          </ul>
+        </details>
+      </li>
+    {{else if eq $type "item"}}
+      <li>
+        <a
+          href="{{or $item.url "#"}}"
+          {{if $item.current}}aria-current="page"{{end}}
+          {{if $item.attrs}}
+            {{range $key, $value := $item.attrs}}
+              {{if and (ne $key "href") (ne $key "aria-current")}}{{$key}}="{{$value}}"{{end}}
+            {{end}}
+          {{end}}
+        >
+          {{if $item.icon}}{{$item.icon}}{{end}}
+          <span>{{$item.label}}</span>
+        </a>
+      </li>
+    {{end}}
+  {{end}}
+{{- end}}

@@ -1,0 +1,401 @@
+{% from "_icons.html" import icon %}
+{% set STAGE_LABELS = {
+  "correction": "Correction",
+  "operator": "Rule",
+  "learned": "Learned",
+  "knn": "kNN",
+  "llm": "9B",
+  "fallback": "Fallback"
+} %}
+{% set STAGE_DOTS = {
+  "correction": "bg-chart-5",
+  "operator": "bg-chart-4",
+  "learned": "bg-chart-3",
+  "knn": "bg-chart-2",
+  "llm": "bg-chart-1",
+  "fallback": "bg-chart-6"
+} %}
+{% set LEVEL_LABELS = {
+  "addr": "sender address",
+  "addr+tmpl": "sender and subject template",
+  "domain": "sender domain"
+} %}
+{% set FIELD_LABELS = {
+  "from_addr": "From address",
+  "from_domain": "From domain",
+  "from_name": "From name",
+  "reply_to": "Reply-To",
+  "rpath_domain": "Return-Path domain",
+  "list_id": "List-Id",
+  "subject": "Subject",
+  "subject_tmpl": "Subject template",
+  "msgid_domain": "Message-ID domain",
+  "precedence": "Precedence",
+  "category": "Category",
+  "to": "To",
+  "dkim_d": "DKIM domain",
+  "esp": "Sending service",
+  "att_type": "Attachment type",
+  "att_name": "Attachment name",
+  "age_days": "Age in days"
+} %}
+{% set OP_LABELS = {
+  "eq": "is",
+  "in": "is one of",
+  "suffix": "is or ends in domain",
+  "re": "matches regex",
+  "present": "is present",
+  "absent": "is absent",
+  "gte": "is at least"
+} %}
+{% set OP_HINTS = {
+  "eq": "Exact value, case-insensitive",
+  "in": "Values separated by commas",
+  "suffix": "Domains separated by commas",
+  "re": "Python regular expression, case-insensitive",
+  "gte": "Whole number of days"
+} %}
+
+{% macro mode_badge(mode, paused=false) -%}
+{% if mode == "live" and paused -%}
+<span class="badge border-warning/30 bg-warning/10 text-warning">{{ icon("lock") }}Live, paused</span>
+{%- elif mode == "live" -%}
+<span class="badge" data-variant="destructive">{{ icon("zap") }}Live</span>
+{%- else -%}
+<span class="badge border-warning/30 bg-warning/10 text-warning">{{ icon("eye-off") }}Shadow</span>
+{%- endif %}
+{%- endmacro %}
+
+{% macro mode_note(mode, paused=false) -%}
+{% if mode == "live" and paused -%}
+Paused: routing is recorded but no mail is changed. Resume to apply it.
+{%- elif mode == "live" -%}
+Live mode: atrium files read mail, flags unread mail from your contacts and trashes mail your deletion rules match.
+{%- else -%}
+Shadow mode: nothing is changed automatically. Proposals you approve still run.
+{%- endif %}
+{%- endmacro %}
+
+{% set ACTION_BADGES = {
+  "applied": ("secondary", "Applied"),
+  "skipped": ("outline", "Skipped"),
+  "undone": ("ghost", "Undone"),
+  "interrupted": ("outline", "Interrupted")
+} %}
+
+{% macro action_badge(action) -%}
+{% set pair = ACTION_BADGES[action.status] %}{% set variant = pair[0] %}{% set label = pair[1] %}
+<span class="badge" data-variant="{{ variant }}"{% if action.error %} title="{{ action.error }}"{% endif %}>{{ label }}</span>
+{%- endmacro %}
+
+{% macro stage_label(stage) -%}{{ STAGE_LABELS.get(stage, stage) }}{%- endmacro %}
+
+{% macro stage_badge(stage) -%}
+<span class="badge" data-variant="outline"><span class="size-2 rounded-full {{ STAGE_DOTS.get(stage, 'bg-chart-6') }}" aria-hidden="true"></span>{{ stage_label(stage) }}</span>
+{%- endmacro %}
+
+{% macro pct(value) -%}{{ "%.0f%%" | format(value * 100) }}{%- endmacro %}
+
+{% macro reason(d) -%}
+{%- set detail = d.detail or {} -%}
+{%- if d.stage == "correction" -%}Recorded by you as a correction.{{ " Shadow mode leaves the message where it is." if mode != "live" }}
+{%- elif d.stage == "operator" -%}Rule <code class="font-mono">{{ d.key }}</code> matched first.
+{%- elif d.stage == "learned" -%}{{ pct(d.confidence) }} of {{ detail.n }} filed messages with this {{ LEVEL_LABELS.get(d.key, d.key) }} went here.
+{%- elif d.stage == "knn" -%}The most similar filed messages vote {{ pct(d.confidence) }} for this destination.
+{%- elif d.stage == "llm" -%}The 9B chose this {{ "and was confident" if detail.confident else "but was not confident" }}.
+{%- else -%}No stage was sure, so the fallback applies.
+{%- endif -%}
+{%- endmacro %}
+
+{% macro place(location) -%}
+{%- if location is none -%}Gone
+{%- elif location == "INBOX" -%}Inbox
+{%- else -%}{{ location | replace("|", " · ") }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro proposal(action, dest) -%}
+{%- if action == "delete" -%}Delete
+{%- elif action == "none" or not dest -%}Leave in inbox
+{%- else -%}{{ dest }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro agreement(value) -%}
+{% if value == "agree" -%}
+<span class="inline-flex items-center gap-1 text-success">{{ icon("check", "size-3.5") }}Matches</span>
+{%- elif value == "disagree" -%}
+<span class="inline-flex items-center gap-1 text-warning">{{ icon("equal-not", "size-3.5") }}Differs</span>
+{%- elif value == "pending" -%}
+<span class="inline-flex items-center gap-1 text-muted-foreground">{{ icon("inbox", "size-3.5") }}In inbox</span>
+{%- else -%}
+<span class="inline-flex items-center gap-1 text-muted-foreground">{{ icon("x", "size-3.5") }}Gone</span>
+{%- endif %}
+{%- endmacro %}
+
+{% macro noun(account) -%}{{ "label" if account == "gmail" else "folder" }}{%- endmacro %}
+
+{% macro sender(item) -%}{{ item.from_name or item.from_addr or "Unknown sender" }}{%- endmacro %}
+
+{% macro open_attrs(message_id) -%}
+href="/messages/{{ message_id }}" hx-get="/messages/{{ message_id }}" hx-target="#reader-body" hx-swap="innerHTML show:top"
+{%- endmacro %}
+
+{% macro when(epoch, style="date") -%}
+{%- if epoch -%}<time datetime="{{ epoch | ts('iso') }}">{{ epoch | ts(style) }}</time>{%- endif -%}
+{%- endmacro %}
+
+{% macro account_switch(path, current, label="Account") -%}
+<nav class="button-group" aria-label="{{ label }}">
+  <a class="btn" data-size="sm" data-variant="{{ 'secondary' if not current else 'outline' }}" href="{{ path }}"{% if not current %} aria-current="page"{% endif %}>All accounts</a>
+  {% for name in accounts %}
+  <a class="btn" data-size="sm" data-variant="{{ 'secondary' if current == name else 'outline' }}" href="{{ path }}?account={{ name | urlencode }}"{% if current == name %} aria-current="page"{% endif %}>{{ name }}</a>
+  {% endfor %}
+</nav>
+{%- endmacro %}
+
+{% macro folder_options(folders, selected=None) -%}
+{% for f in folders %}
+<option value="{{ f.folder }}"{% if f.folder == selected %} selected{% endif %}>{{ f.folder }}</option>
+{% endfor %}
+{%- endmacro %}
+
+{% macro empty_state(icon_name, title) -%}
+<div class="empty border">
+  <header>
+    <figure>{{ icon(icon_name) }}</figure>
+    <h3>{{ title }}</h3>
+    {% if caller is defined %}<p>{{ caller() }}</p>{% endif %}
+  </header>
+</div>
+{%- endmacro %}
+
+{% macro condition_text(c) -%}
+{%- set value = c.get("value") -%}
+<span class="font-medium">{{ FIELD_LABELS.get(c.field, c.field) }}</span>
+<span class="text-muted-foreground">{{ OP_LABELS.get(c.op, c.op) }}</span>
+{%- if value is not none and value != "" %}
+<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">{{ value | join(", ") if value is iterable and value is not string else value }}</code>
+{%- endif %}
+{%- endmacro %}
+
+{% macro spinner(id, label="Loading") -%}
+<span id="{{ id }}" class="htmx-indicator inline-flex text-muted-foreground" role="status" aria-label="{{ label }}">{{ icon("loader-circle", "size-4 animate-spin") }}</span>
+{%- endmacro %}
+
+{% set KIND_LABELS = {
+  "rebalance_split": "Split folder",
+  "rebalance_merge": "Merge folders",
+  "deletion_rule": "Deletion rule",
+  "gmail_label_merge": "Merge labels",
+  "inbox_backlog": "Inbox backlog",
+  "notion_link": "Notion link",
+  "notion_edit": "Notion edit",
+  "calendar_event": "Calendar event",
+  "reminder": "Reminder",
+  "notion_wiki_plan": "Wiki plan"
+} %}
+{# gonja: dict iteration is key-sorted, so the display order is kept in an explicit list #}
+{% set KIND_ORDER = ["rebalance_split", "rebalance_merge", "deletion_rule", "gmail_label_merge", "inbox_backlog", "notion_link", "notion_edit", "calendar_event", "reminder", "notion_wiki_plan"] %}
+{% set KIND_ICONS = {
+  "rebalance_split": "split",
+  "rebalance_merge": "merge",
+  "deletion_rule": "trash-2",
+  "gmail_label_merge": "tag",
+  "inbox_backlog": "inbox",
+  "notion_link": "link",
+  "notion_edit": "pencil",
+  "calendar_event": "calendar",
+  "reminder": "scroll-text",
+  "notion_wiki_plan": "book-open"
+} %}
+{% set STATUS_LABELS = {
+  "pending": "Pending",
+  "approved": "Applying",
+  "applied": "Applied",
+  "failed": "Failed",
+  "dismissed": "Dismissed",
+  "suppressed": "Dismissed forever"
+} %}
+
+{% macro status_badge(status) -%}
+{% if status == "applied" -%}
+<span class="badge border-success/30 bg-success/10 text-success">{{ icon("check") }}{{ STATUS_LABELS[status] }}</span>
+{%- elif status == "failed" -%}
+<span class="badge" data-variant="destructive">{{ icon("circle-alert") }}{{ STATUS_LABELS[status] }}</span>
+{%- elif status == "approved" -%}
+<span class="badge" data-variant="outline">{{ icon("loader-circle", "animate-spin") }}{{ STATUS_LABELS[status] }}</span>
+{%- elif status == "pending" -%}
+<span class="badge" data-variant="outline">{{ STATUS_LABELS[status] }}</span>
+{%- else -%}
+<span class="badge" data-variant="secondary">{{ STATUS_LABELS.get(status, status) }}</span>
+{%- endif %}
+{%- endmacro %}
+
+{% macro pending_badge(count, oob=False) -%}
+<span id="pending-count" class="badge ms-auto empty:hidden" data-variant="secondary"{% if oob %} hx-swap-oob="true"{% endif %}>{% if count %}{{ count }}<span class="sr-only"> pending</span>{% endif %}</span>
+{%- endmacro %}
+
+{% macro external(url) -%}
+href="{{ url }}" target="_blank" rel="noopener noreferrer"
+{%- endmacro %}
+
+{% macro page_path(path) -%}
+{%- for crumb in path -%}{{ crumb.title }}{{ " / " if not loop.last }}{%- endfor -%}
+{%- endmacro %}
+
+{% macro page_link(ref, class="") -%}
+<a class="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring {{ class }}" href="/notion/{{ ref.id | urlencode }}">{{ ref.title or "Untitled" }}</a>
+{%- endmacro %}
+
+{% set RUN_BADGES = {
+  "running": ("outline", "Working"),
+  "interrupted": ("destructive", "Interrupted"),
+  "failed": ("destructive", "Failed")
+} %}
+
+{% macro run_badge(state) -%}
+{% if state in RUN_BADGES %}{% set pair = RUN_BADGES[state] %}{% set variant = pair[0] %}{% set label = pair[1] %}<span class="badge" data-variant="{{ variant }}">{% if state == "running" %}{{ icon("loader-circle", "animate-spin") }}{% endif %}{{ label }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro preview_attrs(url) -%}
+href="{{ url }}" hx-get="{{ url }}" hx-target="#preview-body" hx-swap="innerHTML show:top"
+{%- endmacro %}
+
+{% macro branch_button(thread, seq) -%}
+<form method="post" action="/chat/{{ thread.id }}/branch" class="inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="seq" value="{{ seq }}">
+  <button type="submit" class="btn" data-size="sm" data-variant="ghost" title="Start a new thread with the conversation up to here">{{ icon("git-branch", "size-3.5") }}Branch</button>
+</form>
+{%- endmacro %}
+
+{% macro file_icon(media_type, class="size-3.5 shrink-0 text-muted-foreground") -%}
+{% set kind_icon = "image" if media_type.startswith("image/") else "file-text" %}{{ icon(kind_icon, class) }}
+{%- endmacro %}
+
+{% macro file_chips(thread_id, files) -%}
+{% if files %}
+<ul class="flex flex-wrap gap-1" aria-label="Attached files" data-attachments>
+  {% for f in files %}<li><a class="badge max-w-64" data-variant="outline" {{ preview_attrs("/chat/" ~ thread_id ~ "/files/" ~ f.id) }}>{{ file_icon(f.media_type, "size-3") }}<span class="truncate">{{ f.name }}</span></a></li>{% endfor %}
+</ul>
+{% endif %}
+{%- endmacro %}
+
+{% macro attach_field() -%}
+<input type="file" name="upload" multiple class="sr-only" tabindex="-1" data-upload>
+<ul class="flex flex-wrap gap-1 empty:hidden" aria-label="Files to send" data-chips></ul>
+{%- endmacro %}
+
+{% macro attach_button() -%}
+<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="pick-files" title="Attach files: PDF, images, text, CSV, docx, xlsx">{{ icon("paperclip", "size-3.5") }}Attach</button>
+{%- endmacro %}
+
+{% macro activity_step(step) -%}
+{% if step.kind == "thinking" %}
+<li class="flex gap-2" data-step="thinking">{{ icon("brain", "mt-0.5 size-3.5 shrink-0") }}<div class="min-w-0 whitespace-pre-wrap break-words text-muted-foreground">{{ step.text }}</div></li>
+{% elif step.kind == "note" %}
+<li class="flex gap-2" data-step="note">{{ icon("bot", "mt-0.5 size-3.5 shrink-0") }}<div class="markdown min-w-0">{{ step.text | markdown }}</div></li>
+{% elif step.kind == "tool" %}
+<li data-step="tool" data-tool-id="{{ step.id }}">
+  <details class="rounded-md border bg-card">
+    <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">
+      {% set step_icon = "users" if step.name == "research" else "wrench" %}{{ icon(step_icon, "size-3.5 shrink-0") }}<code class="font-mono text-foreground">{{ step.name }}</code>
+      <span class="truncate font-mono">{{ step.args }}</span>
+      {% if step.state == "unknown" %}<span class="badge ms-auto" data-variant="destructive">unverified</span>
+      {% elif step.is_error %}<span class="badge ms-auto" data-variant="destructive">error</span>
+      {% elif step.state == "started" %}<span class="badge ms-auto" data-variant="outline">{{ icon("loader-circle", "animate-spin") }}running</span>{% endif %}
+    </summary>
+    <div class="border-t px-3 py-2 font-mono whitespace-pre-wrap break-words">{{ step.result or "(no result yet)" }}</div>
+    {% if step.child_thread_id %}<a class="block border-t px-3 py-1.5 underline underline-offset-4" href="/chat/{{ step.child_thread_id }}">Subagent transcript</a>{% endif %}
+  </details>
+</li>
+{% elif step.kind == "web_search" %}
+<li data-step="web_search">
+  <details class="rounded-md border bg-card">
+    <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">{{ icon("globe", "size-3.5") }}web search: {{ step.results | length }} results{% if step.error %} <span class="badge ms-auto" data-variant="destructive">{{ step.error }}</span>{% endif %}</summary>
+    <ul class="flex flex-col gap-1 border-t px-3 py-2">
+      {% for r in step.results %}<li><a class="underline underline-offset-4" {{ external(r.url) }}>{{ r.title | truncate(80) }}</a></li>{% endfor %}
+    </ul>
+  </details>
+</li>
+{% endif %}
+{%- endmacro %}
+
+{% macro chat_item(item, thread=None, last_seq=None, busy=False) -%}
+{% if item.kind == "user" %}
+<li class="group flex gap-3" data-seq="{{ item.seq }}">
+  <span class="mt-1 grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-secondary-foreground" aria-hidden="true">{{ icon("user", "size-4") }}</span>
+  <div class="flex min-w-0 flex-1 flex-col gap-1">
+    <div class="rounded-lg bg-secondary/60 px-4 py-3 text-sm whitespace-pre-wrap break-words" data-text>{{ item.text }}</div>
+    {% if thread %}{{ file_chips(thread.id, item.files) }}{% endif %}
+    {% if thread and thread.kind == "chat" %}
+    <div class="flex items-center gap-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+      {% if item.seq == last_seq and not busy %}<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="edit-message">{{ icon("pencil", "size-3.5") }}Edit</button>{% endif %}
+      {{ branch_button(thread, item.seq) }}
+    </div>
+    {% endif %}
+  </div>
+</li>
+{% elif item.kind == "assistant" %}
+<li class="group flex gap-3" data-seq="{{ item.seq }}">
+  <span class="mt-1 grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground" aria-hidden="true">{{ icon("bot", "size-4") }}</span>
+  <div class="min-w-0 flex-1 flex flex-col gap-2 px-1 py-2">
+    <div class="markdown">{{ item.text | markdown }}</div>
+    {% if item.citations %}
+    <ol class="flex flex-wrap gap-2 text-xs" aria-label="Sources">
+      {% for c in item.citations %}
+      {% if c.url %}
+      <li><a class="badge" data-variant="secondary" {{ external(c.url) }}>[{{ loop.index }}] {{ icon("external-link", "size-3") }}{{ c.title | truncate(60) }}</a></li>
+      {% else %}
+      <li><span class="badge" data-variant="secondary" title="{{ c.cited }}">[{{ loop.index }}] {{ icon("file-text", "size-3") }}{{ c.title | truncate(40) }}: “{{ c.cited | truncate(60) }}”</span></li>
+      {% endif %}
+      {% endfor %}
+    </ol>
+    {% endif %}
+    {% if thread and thread.kind == "chat" %}
+    <div class="flex items-center gap-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+      {% if last_seq and item.seq > last_seq and not busy %}
+      <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/chat/{{ thread.id }}/regenerate" hx-target="#transcript" hx-swap="innerHTML" hx-disabled-elt="this">{{ icon("refresh-cw", "size-3.5") }}Regenerate</button>
+      {% endif %}
+      {{ branch_button(thread, item.seq) }}
+    </div>
+    {% endif %}
+  </div>
+</li>
+{% elif item.kind == "activity" %}
+<li class="ps-10" data-seq="{{ item.seq }}" data-run="{{ item.run_id }}">
+  <details class="activity text-xs">
+    <summary class="flex cursor-pointer items-center gap-2 text-muted-foreground">{{ icon("chevron-down", "size-3.5") }}{{ item.steps | length }} step{{ "" if item.steps | length == 1 else "s" }}</summary>
+    <ol class="mt-2 flex flex-col gap-1.5 border-s ps-3">
+      {% for step in item.steps %}{{ activity_step(step) }}{% endfor %}
+    </ol>
+  </details>
+</li>
+{% elif item.kind == "draft" %}
+{% set d = item.draft %}
+<li class="ps-10" data-seq="{{ item.seq }}" data-draft="{{ d.id }}">
+  <a class="flex items-center gap-3 rounded-lg border bg-card px-3 py-2 text-sm hover:bg-accent" {{ preview_attrs("/drafts/" ~ d.id) }}>
+    {{ icon("mail", "size-4 shrink-0 text-muted-foreground") }}
+    <span class="flex min-w-0 flex-1 flex-col">
+      <span class="truncate font-medium">{{ d.subject or "(no subject)" }}</span>
+      <span class="truncate text-xs text-muted-foreground">to {{ d.to_addrs }}</span>
+    </span>
+    <span class="badge" data-variant="{{ 'secondary' if d.status == 'sent' else 'outline' }}">{{ d.status }}</span>
+  </a>
+</li>
+{% elif item.kind == "queued" %}
+<li class="flex gap-3" data-queued="{{ item.id }}">
+  <span class="mt-1 grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-secondary-foreground" aria-hidden="true">{{ icon("user", "size-4") }}</span>
+  <div class="flex min-w-0 flex-1 flex-col gap-1">
+    <div class="rounded-lg border border-dashed px-4 py-3 text-sm whitespace-pre-wrap break-words">{{ item.text }}</div>
+    {% if item.files %}<span class="text-xs text-muted-foreground">{{ icon("paperclip", "size-3") }} {{ item.files | map(attribute="name") | join(", ") }}</span>{% endif %}
+    <span class="text-xs text-muted-foreground">{{ icon("clock", "size-3") }} Queued: joins the conversation at the assistant's next step</span>
+  </div>
+</li>
+{% elif item.kind == "compaction" %}
+<li class="flex items-center gap-3 text-xs text-muted-foreground" data-seq="{{ item.seq }}" role="separator">
+  <span class="h-px flex-1 bg-border"></span>Context compacted<span class="h-px flex-1 bg-border"></span>
+</li>
+{% endif %}
+{%- endmacro %}

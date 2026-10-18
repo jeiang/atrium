@@ -1,0 +1,361 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import condition_text, external, noun, open_attrs, page_link, page_path, pending_badge, place, sender, status_badge, when %}
+{% set p = proposal %}
+{% set v = p.preview %}
+{% set pending = p.status == "pending" %}
+{% set PICKS = {
+  "rebalance_split": v.groups,
+  "inbox_backlog": v.groups,
+  "rebalance_merge": [v.group],
+  "deletion_rule": [{"messages": v.messages, "count": v.backlog}],
+  "gmail_label_merge": [{"messages": v.messages, "count": v.from_count}]
+} %}
+{% set picks = PICKS.get(p.kind, []) | selectattr("messages") | list %}
+{% set picker = pending and picks | length > 0 %}
+
+{% macro counted(items) -%}
+<ul class="flex flex-col gap-1 text-sm sm:max-w-xs" role="list">
+  {% for s in items %}
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">{{ s.label }}</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{ s.count }}</span></li>
+  {% endfor %}
+</ul>
+{%- endmacro %}
+
+{% macro subjects(items) -%}
+<ul class="flex flex-col gap-1 text-sm" role="list">
+  {% for s in items %}<li class="truncate">{{ s or "(no subject)" }}</li>{% endfor %}
+</ul>
+{%- endmacro %}
+
+{% macro toggle(uid, g) -%}
+<div role="group" class="field w-auto" data-orientation="horizontal">
+  <input id="group-{{ uid }}" type="checkbox" checked data-group-toggle>
+  <label for="group-{{ uid }}" class="font-normal"><span class="tabular-nums"><span data-picked>{{ g.messages | length }}</span> of {{ g.count }} messages</span></label>
+</div>
+{%- endmacro %}
+
+{% macro message_list(i, messages, verb) -%}
+<details class="group/list">
+  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    {{ icon("chevron-down", "size-3.5 transition-transform group-open/list:rotate-180") }}Choose exactly which messages {{ verb }}
+  </summary>
+  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
+    {% for m in messages %}
+    <li class="flex items-center gap-1 pe-2 hover:bg-accent/60 has-[input:focus-visible]:bg-accent/60">
+      <label class="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3">
+        <input class="input shrink-0" type="checkbox" name="msg-{{ i }}" value="{{ m.id }}" checked data-message>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="truncate text-sm">{{ m.subject or "(no subject)" }}</span>
+          <span class="truncate text-xs text-muted-foreground">{{ sender(m) }} · {{ when(m.date_ts) }}</span>
+        </span>
+      </label>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" {{ open_attrs(m.id) }} aria-label="Read {{ m.subject or 'message' }}" title="Read">{{ icon("mail") }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{%- endmacro %}
+
+{% macro group_picker(i, g, editable) -%}
+{% set uid = p.id ~ "-" ~ i %}
+<fieldset class="flex flex-col gap-3 border-t pt-4"{% if picker %} data-group{% endif %}>
+  <legend class="sr-only">{{ g.name }}</legend>
+  <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
+    {% if editable and pending %}
+    <div role="group" class="field min-w-0 flex-1 sm:max-w-sm">
+      <label for="name-{{ uid }}">New {{ noun(p.account) }}</label>
+      <input id="name-{{ uid }}" name="name-{{ i }}" type="text" value="{{ g.name }}" required autocomplete="off" spellcheck="false">
+    </div>
+    {% else %}
+    <p class="min-w-0 flex-1 text-sm"><span class="text-muted-foreground">Into</span> <span class="font-medium">{{ place(g.name) }}</span></p>
+    {% endif %}
+    {% if picker and g.messages %}{{ toggle(uid, g) }}{% else %}<p class="text-sm text-muted-foreground tabular-nums">{{ g.count }} messages</p>{% endif %}
+  </div>
+  {% if g.terms %}
+  <ul class="flex flex-wrap gap-1.5" role="list" aria-label="Common words">
+    {% for t in g.terms %}<li class="badge" data-variant="outline">{{ t }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <div class="grid gap-4 sm:grid-cols-2">
+    {% if g.senders %}
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Top senders</h4>
+      {{ counted(g.senders) }}
+    </div>
+    {% endif %}
+    {% if g.subjects %}
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Sample subjects</h4>
+      {{ subjects(g.subjects) }}
+    </div>
+    {% endif %}
+  </div>
+  {% if picker and g.messages %}{{ message_list(i, g.messages, "move") }}{% endif %}
+</fieldset>
+{%- endmacro %}
+
+{% macro plain_picker(verb) -%}
+{% set g = picks[0] %}
+<fieldset class="flex flex-col gap-2" data-group>
+  <legend class="sr-only">Messages</legend>
+  {{ toggle(p.id ~ "-0", g) }}
+  {{ message_list(0, g.messages, verb) }}
+</fieldset>
+{%- endmacro %}
+
+{% macro page_ref(ref) -%}
+<div class="flex min-w-0 flex-col gap-0.5">
+  <span class="flex min-w-0 items-center gap-1.5">{{ page_link(ref, "truncate text-sm") }}<a class="shrink-0 text-muted-foreground hover:text-foreground" {{ external(ref.url) }} title="Open in Notion" aria-label="Open {{ ref.title or 'Untitled' }} in Notion">{{ icon("external-link", "size-3.5") }}</a></span>
+  {% if ref.path %}<span class="truncate text-xs text-muted-foreground">{{ page_path(ref.path) }}</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{% set body %}
+{% if p.status == "failed" and p.result and p.result.error %}
+<div class="alert" data-variant="destructive" role="alert">
+  {{ icon("circle-alert") }}
+  <h4>It did not finish</h4>
+  <section><p>{{ p.result.error }}</p></section>
+</div>
+{% endif %}
+
+{% if p.kind == "rebalance_split" %}
+<p class="text-sm"><span class="text-muted-foreground">Split</span> <span class="font-medium">{{ place(v.folder) }}</span> <span class="text-muted-foreground">into {{ v.groups | length }} new {{ noun(p.account) }}{{ "s" if v.groups | length != 1 }}. Anything not moved stays where it is.</span></p>
+<div class="flex flex-col gap-3">
+  {% for g in v.groups %}{{ group_picker(loop.index0, g, true) }}{% endfor %}
+</div>
+
+{% elif p.kind == "inbox_backlog" %}
+<p class="text-sm text-muted-foreground">Read mail that was already in the inbox when atrium went live, grouped by where atrium would file it. Anything not moved stays where it is.</p>
+<div class="flex flex-col gap-3">
+  {% for g in v.groups %}{{ group_picker(loop.index0, g, false) }}{% endfor %}
+</div>
+
+{% elif p.kind == "rebalance_merge" %}
+<div class="flex flex-wrap items-center gap-2 text-sm">
+  {% for s in v.sources %}<span class="badge" data-variant="secondary">{{ place(s.folder) }} <span class="tabular-nums text-muted-foreground">{{ s.count }}</span></span>{% endfor %}
+  {{ icon("arrow-right", "size-3.5 text-muted-foreground") }}
+  <span class="font-medium">{{ place(v.into) }}</span>
+  <span class="text-xs text-muted-foreground">{{ "existing " ~ noun(p.account) if v.into_exists else "new " ~ noun(p.account) }}</span>
+</div>
+{{ group_picker(0, v.group, not v.into_exists) }}
+
+{% elif p.kind == "deletion_rule" %}
+{% set reasons = {"operator_deleted": "You have deleted mail like this before.", "otp": "One-time codes are useless once they expire."} %}
+<div class="grid gap-4 md:grid-cols-2">
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Rule{{ " for " ~ v.rule.account if v.rule.account }}</h4>
+      <ul class="flex flex-col gap-1 text-sm" role="list" aria-label="Conditions, all must hold">
+        {% for c in v.rule.when %}
+        <li class="flex flex-wrap items-baseline gap-x-1.5">{% if not loop.first %}<span class="text-xs text-muted-foreground">and</span>{% endif %}{{ condition_text(c) }}</li>
+        {% endfor %}
+      </ul>
+      <p class="flex items-center gap-1.5 text-sm">{{ icon("arrow-right", "size-3.5 text-muted-foreground") }}<span class="font-medium text-destructive">Delete</span></p>
+    </div>
+    {% if v.reason in reasons %}<p class="text-sm text-muted-foreground">{{ reasons[v.reason] }}</p>{% endif %}
+    <p class="text-sm"><span class="text-2xl font-semibold tabular-nums">{{ v.backlog }}</span> <span class="text-muted-foreground">existing {{ "message matches" if v.backlog == 1 else "messages match" }}</span></p>
+  </div>
+  <div class="flex min-w-0 flex-col gap-4">
+    {% if v.senders %}
+    <div class="flex flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Top senders</h4>
+      {{ counted(v.senders) }}
+    </div>
+    {% endif %}
+    {% if v.subjects %}
+    <div class="flex flex-col gap-1.5">
+      <h4 class="text-xs font-medium text-muted-foreground">Sample subjects</h4>
+      {{ subjects(v.subjects) }}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% if picker %}{{ plain_picker("are deleted") }}{% endif %}
+<p class="flex gap-2 text-xs text-muted-foreground">
+  {{ icon("trash-2", "mt-0.5 size-3.5 shrink-0") }}
+  <span>Deleting moves mail to Trash, so it can still be recovered there. {% if mode == "live" %}The rule also deletes new matching mail from now on.{% else %}The rule deletes new matching mail only once routing is live.{% endif %}</span>
+</p>
+
+{% elif p.kind == "gmail_label_merge" %}
+<div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+  <span class="inline-flex items-center gap-1.5">{{ icon("tag", "size-3.5 text-muted-foreground") }}<span class="font-medium">{{ v.from }}</span><span class="text-xs text-muted-foreground tabular-nums">{{ v.from_count }}</span></span>
+  {{ icon("arrow-right", "size-3.5 text-muted-foreground") }}
+  <span class="inline-flex items-center gap-1.5">{{ icon("tag", "size-3.5 text-muted-foreground") }}<span class="font-medium">{{ v.into }}</span><span class="text-xs text-muted-foreground tabular-nums">{{ v.into_count }}</span></span>
+</div>
+<p class="text-xs text-muted-foreground">Adds “{{ v.into }}” to the messages labelled “{{ v.from }}”, then removes “{{ v.from }}” from them. No mail is deleted.</p>
+{% if picker %}{{ plain_picker("are relabelled") }}{% endif %}
+
+{% elif p.kind == "notion_link" %}
+<div class="grid items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+  {{ page_ref(v.a) }}
+  <span class="flex items-center gap-2 text-muted-foreground max-sm:ps-1">{{ icon("link", "size-4") }}<span class="sr-only">linked with</span></span>
+  {{ page_ref(v.b) }}
+</div>
+<p class="text-xs text-muted-foreground">Adds a link to the page text under a “Related” heading.</p>
+{% if v.reason %}<blockquote class="border-s-2 ps-3 text-sm text-muted-foreground">{{ v.reason }}</blockquote>{% endif %}
+
+{% elif p.kind == "calendar_event" %}
+<dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+  <dt class="text-muted-foreground">Calendar</dt>
+  <dd>{{ "Google" if v.calendar == "google" else "iCloud" }}</dd>
+  <dt class="text-muted-foreground">{{ "Date" if v.all_day else "When" }}</dt>
+  <dd class="tabular-nums">{{ v.start }} → {{ v.end }}</dd>
+  {% if v.location %}<dt class="text-muted-foreground">Where</dt><dd>{{ v.location }}</dd>{% endif %}
+  {% if v.notes %}<dt class="text-muted-foreground">Notes</dt><dd class="whitespace-pre-wrap">{{ v.notes }}</dd>{% endif %}
+  {% if v.source and v.source.subject %}<dt class="text-muted-foreground">From mail</dt><dd>{{ v.source.subject }}</dd>{% endif %}
+</dl>
+<p class="text-xs text-muted-foreground">Nobody is invited and no notification is sent.</p>
+
+{% elif p.kind == "reminder" %}
+<dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+  <dt class="text-muted-foreground">Reminder</dt>
+  <dd>{{ v.text }}</dd>
+  <dt class="text-muted-foreground">Due</dt>
+  <dd class="tabular-nums">{{ v.due }}</dd>
+  <dt class="text-muted-foreground">Remind at</dt>
+  <dd class="tabular-nums">{{ v.remind_at }}</dd>
+  {% if v.subject %}<dt class="text-muted-foreground">From mail</dt><dd>{{ v.subject }}</dd>{% endif %}
+</dl>
+<p class="text-xs text-muted-foreground">Approving creates a one-time schedule that notifies you.</p>
+
+{% elif p.kind == "notion_edit" %}
+{{ page_ref(v.page) }}
+<dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+  <dt class="text-muted-foreground">You asked</dt>
+  <dd>{{ v.instruction }}</dd>
+  {% if v.summary %}
+  <dt class="text-muted-foreground">The 9B changed</dt>
+  <dd>{{ v.summary }}</dd>
+  {% endif %}
+</dl>
+{% set added = v.diff | selectattr("op", "equalto", "add") | list | length %}
+{% set removed = v.diff | selectattr("op", "equalto", "del") | list | length %}
+<div class="flex flex-col overflow-hidden rounded-md border">
+  <p class="flex items-center gap-3 border-b bg-muted/50 px-3 py-1.5 text-xs tabular-nums">
+    <span class="text-success">+{{ added }}<span class="sr-only"> lines added</span></span>
+    <span class="text-destructive">−{{ removed }}<span class="sr-only"> lines removed</span></span>
+  </p>
+  <div class="max-h-96 overflow-auto bg-background py-1 font-mono text-xs/5" role="group" aria-label="Changes">
+    {% for line in v.diff %}
+    {% if line.op == "add" %}
+    <ins class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] bg-success/10 no-underline"><span class="select-none text-center text-success" aria-hidden="true">+</span><span class="whitespace-pre-wrap break-words pe-3">{{ line.text }}</span></ins>
+    {% elif line.op == "del" %}
+    <del class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] bg-destructive/10 no-underline"><span class="select-none text-center text-destructive" aria-hidden="true">−</span><span class="whitespace-pre-wrap break-words pe-3 text-muted-foreground line-through decoration-destructive/40">{{ line.text }}</span></del>
+    {% else %}
+    <div class="grid grid-cols-[--spacing(6)_minmax(0,1fr)]"><span aria-hidden="true"></span><span class="whitespace-pre-wrap break-words pe-3 text-muted-foreground">{{ line.text }}</span></div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+{% elif p.kind == "notion_wiki_plan" %}
+{% set DECISION_LABELS = {"convert": "Convert", "merge": "Merge", "drop": "Drop", "keep": "Keep"} %}
+<p class="text-sm text-muted-foreground">Turns the Notion workspace into the wiki page tree under Wiki Home. Dropped rows and emptied databases are archived (never deleted); every step is undoable.</p>
+<div class="flex flex-wrap gap-1.5">
+  {% for d, n in v.counts.items() %}<span class="badge" data-variant="{{ 'destructive' if d == 'drop' else 'secondary' }}">{{ n }} {{ DECISION_LABELS.get(d, d) | lower }}</span>{% endfor %}
+</div>
+<div class="grid gap-4 md:grid-cols-2">
+  <div class="flex min-w-0 flex-col gap-1.5">
+    <h4 class="text-xs font-medium text-muted-foreground">Hubs under Wiki Home</h4>
+    <ul class="flex flex-col gap-1 text-sm" role="list">
+      {% for h in v.hubs %}<li><span class="font-medium">{{ h.title }}</span>{% if h.description %} <span class="text-muted-foreground">{{ h.description }}</span>{% endif %}</li>{% endfor %}
+    </ul>
+  </div>
+  <div class="flex min-w-0 flex-col gap-1.5">
+    <h4 class="text-xs font-medium text-muted-foreground">Databases</h4>
+    <ul class="flex flex-col gap-1 text-sm" role="list">
+      {% for d in v.databases %}
+      <li class="flex min-w-0 flex-col"><span><span class="font-medium">{{ d.title }}</span> <span class="text-muted-foreground">→ {{ "one page with a table" if d.mode == "table" else "hub with child pages" }} under {{ d.hub }}</span></span><span class="truncate text-xs text-muted-foreground">{{ d.reason }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+<details class="group/list">
+  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    {{ icon("chevron-down", "size-3.5 transition-transform group-open/list:rotate-180") }}Every row and page ({{ v["items"] | length }})
+  </summary>
+  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
+    {% for i in v["items"] %}
+    <li class="flex min-w-0 flex-col gap-0.5 px-3 py-2">
+      <span class="flex min-w-0 items-center gap-2">
+        <span class="badge shrink-0" data-variant="{% if i.decision == 'drop' %}destructive{% elif i.decision == 'keep' %}outline{% else %}secondary{% endif %}">{{ DECISION_LABELS.get(i.decision, i.decision) }}</span>
+        <a class="truncate text-sm hover:underline" href="/notion/{{ i.id }}">{{ i.title or "Untitled" }}</a>
+        {% if i.source %}<span class="shrink-0 text-xs text-muted-foreground">{{ i.source }}</span>{% endif %}
+        {% if i.hub %}<span class="shrink-0 text-xs text-muted-foreground">→ {{ i.hub }}</span>{% endif %}
+        {% if i.merge_into %}<span class="truncate text-xs text-muted-foreground">→ into {{ i.merge_into }}</span>{% endif %}
+      </span>
+      <span class="text-xs text-muted-foreground">{{ i.reason }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+{% endset %}
+
+{% set footer %}
+{% if pending %}
+<div class="flex flex-wrap items-center gap-2">
+  {% set deletes = p.kind == "deletion_rule" %}
+  <button type="submit" class="btn" data-size="sm" name="all" value="1"{% if deletes %} data-confirm="{{ 'Move all matching messages to Trash now and save the rule?' if picker else 'Save the rule? Nothing moves to Trash now.' }}"{% endif %}>
+    {% set approve_icon = "check-check" if picker else "check" %}{{ icon(approve_icon) }}{{ "Approve all" if picker else "Approve" }}
+  </button>
+  {% if picker %}
+  {% set picked = picks | map(attribute="messages") | map("length") | sum %}
+  <button type="submit" class="btn" data-size="sm" data-variant="outline" data-approve-picked{% if deletes %} data-confirm="Move the selected messages to Trash now and save the rule?" data-confirm-none="Save the rule without moving any messages to Trash?"{% endif %}>{{ icon("check") }}<span data-some>Approve <span class="tabular-nums" data-picked-total>{{ picked }}</span> selected</span>{% if deletes %}<span data-none hidden>Save rule only</span>{% endif %}</button>
+  {% endif %}
+  <span id="proposal-spinner-{{ p.id }}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{ icon("loader-circle", "size-4 animate-spin") }}Applying…</span>
+  <div class="ml-auto flex gap-1">
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{ p.id }}/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{ p.id }}/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+            title="Never propose this again">Dismiss forever</button>
+  </div>
+</div>
+{% elif p.status == "applied" %}
+<div class="flex flex-wrap items-center gap-2">
+  <p class="flex min-w-0 flex-1 items-start gap-2 text-sm text-success">{{ icon("check", "mt-0.5 size-4 shrink-0") }}<span>{{ p.result.summary if p.result and p.result.summary else "Applied" }} <span class="text-xs text-muted-foreground">{{ when(p.applied_ts, "datetime") }}</span></span></p>
+  {% if p.undoable %}
+  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{ p.id }}/undo" hx-target="#proposal-{{ p.id }}" hx-swap="outerHTML" hx-disabled-elt="this"
+          hx-confirm="Undo this proposal and put everything back?">{{ icon("undo-2") }}Undo</button>
+  {% endif %}
+</div>
+{% elif p.status == "failed" %}
+<div class="flex flex-wrap items-center gap-2">
+  <p class="flex-1 text-xs whitespace-nowrap text-muted-foreground">Tried {{ when(p.decided_ts, "datetime") }}</p>
+  {% if p.kind == "notion_wiki_plan" %}
+  <span id="proposal-spinner-{{ p.id }}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{ icon("loader-circle", "size-4 animate-spin") }}Applying…</span>
+  <button type="button" class="btn" data-size="sm" hx-post="/proposals/{{ p.id }}/approve" hx-vals='{"all": "1"}' hx-target="#proposal-{{ p.id }}" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="#proposal-spinner-{{ p.id }}"
+          title="Skips the steps the earlier attempt finished">{{ icon("play") }}Resume</button>
+  {% endif %}
+  {% if p.undoable %}
+  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{ p.id }}/undo" hx-target="#proposal-{{ p.id }}" hx-swap="outerHTML" hx-disabled-elt="this">{{ icon("undo-2") }}Undo what it did</button>
+  {% endif %}
+  <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{ p.id }}/dismiss" hx-target="#proposal-{{ p.id }}" hx-swap="outerHTML">Dismiss</button>
+</div>
+{% else %}
+<p class="text-xs text-muted-foreground">{{ "Dismissed" if p.status in ("dismissed", "suppressed") else "Decided" }} {{ when(p.decided_ts, "datetime") }}{{ ". atrium will not propose this again." if p.status == "suppressed" }}</p>
+{% endif %}
+{% endset %}
+
+<li id="proposal-{{ p.id }}" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring {{ 'opacity-80' if p.status in ('dismissed', 'suppressed') }}">
+  <article aria-labelledby="proposal-title-{{ p.id }}">
+    {% if pending %}
+    <form class="flex flex-col" hx-post="/proposals/{{ p.id }}/approve" hx-target="#proposal-{{ p.id }}" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-{{ p.id }}"{% if picker %} data-selection{% endif %}>
+    {% endif %}
+    <header class="flex flex-col gap-2 p-4 pb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge" data-variant="secondary">{{ icon(KIND_ICONS.get(p.kind, "list-checks")) }}{{ KIND_LABELS.get(p.kind, p.kind) }}</span>
+        {% if p.account %}<span class="badge" data-variant="outline">{{ p.account }}</span>{% endif %}
+        {{ status_badge(p.status) }}
+        <span class="ml-auto text-xs text-muted-foreground">#{{ p.id }} · {{ when(p.created_ts) }}</span>
+      </div>
+      <h3 id="proposal-title-{{ p.id }}" class="font-medium text-pretty">{{ p.title }}</h3>
+    </header>
+    <div class="flex flex-col gap-4 px-4 pb-4">{{ body | safe }}</div>
+    <footer class="border-t px-4 py-3">{{ footer | safe }}</footer>
+    {% if pending %}</form>{% endif %}
+  </article>
+</li>
+{% if pending_oob is defined and pending_oob %}{{ pending_badge(pending_count, oob=True) }}{% endif %}
+{% if toast is defined and toast %}{% include "_toast.html" %}{% endif %}

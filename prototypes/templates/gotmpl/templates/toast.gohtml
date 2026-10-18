@@ -1,0 +1,98 @@
+{{/* basecoat/toast.html.jinja. toaster(id, toasts, attrs, caller) and toast(category, title, description, action, cancel, duration, icon, attrs). */}}
+{{define "toaster" -}}
+{{$attrs := or .attrs (dict)}}
+<div
+  id="{{or .id "toaster"}}"
+  class="toaster {{$attrs.class}}"
+  {{range $key, $value := $attrs}}
+    {{if ne $key "class"}}{{$key}}="{{$value}}"{{end}}
+  {{end}}
+>
+{{range .toasts}}
+  {{template "toast" (dict
+    "category" (or .category "success")
+    "title" (or .title "")
+    "description" (or .description "")
+    "action" .action
+    "cancel" .cancel
+    "duration" .duration
+    "icon" .icon
+    "attrs" (or .attrs (dict)))}}
+{{end}}
+{{.caller}}
+</div>
+{{- end}}
+
+{{define "toast" -}}
+{{$attrs := or .attrs (dict)}}
+{{$category := or .category "success"}}
+{{$action := .action}}{{$cancel := .cancel}}
+{{$action_href := ""}}{{if $action}}{{$action_href = or $action.href $action.url}}{{end}}
+{{$cancel_href := ""}}{{if $cancel}}{{$cancel_href = or $cancel.href $cancel.url}}{{end}}
+<div
+  class="toast {{$attrs.class}}"
+  role="{{if eq $category "error"}}alert{{else}}status{{end}}"
+  aria-atomic="true"
+  aria-hidden="false"
+  {{if $category}}data-category="{{$category}}"{{end}}
+  {{if not (isnil .duration)}}data-duration="{{.duration}}"{{end}}
+  {{range $key, $value := $attrs}}
+    {{if ne $key "class"}}{{$key}}="{{$value}}"{{end}}
+  {{end}}
+>
+  <div class="toast-content">
+    {{if .icon}}
+      {{.icon}}
+    {{else if eq $category "success"}}
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+    {{else if eq $category "error"}}
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+    {{else if eq $category "info"}}
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+    {{else if eq $category "warning"}}
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+    {{end}}
+    <section>
+      {{if .title}}<h2>{{.title}}</h2>{{end}}
+      {{if .description}}<p>{{.description}}</p>{{end}}
+    </section>
+    {{if or $action $cancel}}
+      <footer>
+        {{if $action}}
+          {{if $action_href}}
+            <a
+              href="{{$action_href}}"
+              class="btn" data-size="sm"
+              data-toast-action
+            >{{$action.label}}</a>
+          {{else}}
+            <button
+              type="button"
+              class="btn"
+              data-size="sm"
+              data-toast-action
+              {{if $action.onclick}}onclick="{{$action.onclick}}"{{end}}
+            >{{$action.label}}</button>
+          {{end}}
+        {{end}}
+        {{if $cancel}}
+          {{if $cancel_href}}
+            <a
+              href="{{$cancel_href}}"
+              class="btn" data-variant="outline" data-size="sm"
+              data-toast-cancel
+            >{{$cancel.label}}</a>
+          {{else}}
+            <button
+              type="button"
+              class="btn" data-variant="outline" data-size="sm"
+              data-toast-cancel
+              {{if $cancel.onclick}}onclick="{{$cancel.onclick}}"{{end}}
+            >{{$cancel.label}}</button>
+          {{end}}
+        {{end}}
+      </footer>
+    {{end}}
+  </div>
+</div>
+{{- end}}

@@ -1,0 +1,91 @@
+{{$w := .work}}
+<section class="flex flex-col gap-2" aria-labelledby="work-plan">
+  <h2 id="work-plan" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "list-checks" "size-3.5"}}Plan</h2>
+  {{if $w.plan}}
+  <ol class="flex flex-col gap-1 text-sm" data-plan>
+    {{range $w.plan.items}}
+    <li class="flex items-start gap-2">{{icon (ternary .done "check" "circle-dot") (printf "mt-0.5 size-3.5 shrink-0 %s" (ternary .done "text-success" "text-muted-foreground"))}}<span class="{{if .done}}text-muted-foreground line-through{{end}}">{{.text}}</span></li>
+    {{end}}
+  </ol>
+  {{else}}
+  <p class="text-xs text-muted-foreground">The assistant posts a checklist here for longer tasks.</p>
+  {{end}}
+</section>
+
+<section class="flex flex-col gap-2" aria-labelledby="work-sources">
+  <h2 id="work-sources" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "globe" "size-3.5"}}Sources</h2>
+  {{if $w.sources}}
+  <ul class="flex flex-col gap-1 text-sm" data-sources>
+    {{range $w.sources}}
+    <li class="flex min-w-0 items-center gap-2">
+      {{icon (ternary (eq .kind "mail") "mail" (ternary (eq .kind "notion") "book-user" "globe")) "size-3.5 shrink-0 text-muted-foreground"}}
+      {{if eq .kind "web"}}<a class="truncate underline-offset-4 hover:underline" {{template "external" .url}}>{{.title}}</a>
+      {{else}}<a class="truncate underline-offset-4 hover:underline" {{template "preview_attrs" .url}}>{{.title}}</a>{{end}}
+      {{if .via}}<span class="badge shrink-0" data-variant="outline">{{.via}}</span>{{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="text-xs text-muted-foreground">Pages, mail and Notion pages the assistant reads show up here.</p>
+  {{end}}
+</section>
+
+<section class="flex flex-col gap-2" aria-labelledby="work-subagents">
+  <h2 id="work-subagents" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "users" "size-3.5"}}Subagents</h2>
+  {{if $w.subagents}}
+  <ul class="flex flex-col gap-2" data-subagents>
+    {{range $w.subagents}}
+    <li class="flex flex-col gap-1 rounded-md border px-3 py-2 text-xs" data-child="{{.thread_id}}" data-status="{{.status}}">
+      <span class="flex flex-wrap items-center gap-1.5">
+        <span class="badge" data-variant="secondary">{{or .role .kind}}</span>
+        <span class="badge" data-variant="outline">effort {{.effort}}</span>
+        <span class="badge" data-variant="{{if or (eq .status "error") (eq .status "interrupted")}}destructive{{else}}outline{{end}}">{{if eq .status "running"}}{{icon "loader-circle" "animate-spin"}}{{end}}{{.status}}</span>
+        {{if .current}}<code class="font-mono">{{.current}}</code>{{end}}
+      </span>
+      <a class="truncate underline-offset-4 hover:underline" href="/chat/{{.thread_id}}">{{or .title "Untitled"}}</a>
+      <span class="flex gap-2 text-muted-foreground tabular-nums"><span>${{printf "%.4f" .cost}}</span>{{if not (isnil .elapsed)}}<span>{{printf "%.0f" .elapsed}}s</span>{{end}}{{if .error}}<span class="truncate text-destructive" title="{{.error}}">{{.error | truncate 80}}</span>{{end}}</span>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="text-xs text-muted-foreground">Research the assistant delegates appears here; each transcript opens from its card.</p>
+  {{end}}
+</section>
+
+<section class="flex flex-col gap-2" aria-labelledby="work-files">
+  <h2 id="work-files" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "file-text" "size-3.5"}}Files</h2>
+  {{if or $w.files $w.drafts}}
+  <ul class="flex flex-col gap-1 text-sm" data-files>
+    {{range $w.files}}
+    <li class="flex items-center gap-1 rounded-md border px-3 py-2 hover:bg-accent" data-file="{{.id}}">
+      <a class="flex min-w-0 flex-1 items-center gap-2" {{template "preview_attrs" (printf "/chat/%v/files/%v" .thread_id .id)}}>{{template "file_icon" (dict "media_type" .media_type)}}<span class="truncate">{{.name}}</span><span class="badge shrink-0" data-variant="{{if eq .origin "generated"}}secondary{{else}}outline{{end}}">{{.origin}}</span><span class="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{filesize .bytes}}</span></a>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/chat/{{.thread_id}}/files/{{.id}}/download" download aria-label="Download {{.name}}">{{icon "download" "size-3.5"}}</a>
+    </li>
+    {{end}}
+    {{range $w.drafts}}
+    <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{template "preview_attrs" (printf "/drafts/%v" .id)}}>{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}<span class="truncate">{{or .subject "(no subject)"}}</span><span class="badge ms-auto shrink-0" data-variant="{{if eq .status "sent"}}secondary{{else}}outline{{end}}">{{.status}}</span></a></li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="text-xs text-muted-foreground">Files you attach, files the sandbox produces and drafts made in this thread are listed here.</p>
+  {{end}}
+</section>
+
+<section class="flex flex-col gap-2" aria-labelledby="work-code">
+  <h2 id="work-code" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "code" "size-3.5"}}Code sessions</h2>
+  {{if $w.code}}
+  <ul class="flex flex-col gap-1 text-xs" data-code>
+    {{range $w.code}}
+    <li>
+      <details class="rounded-md border">
+        <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">{{icon "code" "size-3.5"}}{{.tool}}<span class="tabular-nums">{{template "when" (dict "epoch" .started_at "style" "datetime")}}</span>{{if eq .state "error"}}<span class="badge ms-auto" data-variant="destructive">error</span>{{end}}</summary>
+        <pre class="overflow-x-auto border-t bg-muted px-3 py-2 font-mono whitespace-pre-wrap break-words">{{.script}}</pre>
+        <pre class="overflow-x-auto border-t px-3 py-2 font-mono whitespace-pre-wrap break-words">{{or .result "(no result)"}}</pre>
+      </details>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="text-xs text-muted-foreground">Scripts the assistant runs with run_code or in the code sandbox appear here with their output.</p>
+  {{end}}
+</section>

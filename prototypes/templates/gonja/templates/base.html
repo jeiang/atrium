@@ -1,0 +1,106 @@
+{% from "basecoat/sidebar.html.jinja" import sidebar %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import mode_badge, mode_note, pending_badge %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}{% endblock %} · atrium</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect%7Bfill:oklch(0.25 0.014 60)%7Dtext%7Bfill:oklch(0.985 0.003 85)%7D@media (prefers-color-scheme:dark)%7Brect%7Bfill:oklch(0.92 0.008 85)%7Dtext%7Bfill:oklch(0.2 0.012 60)%7D%7D%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='22.5' font-family='ui-monospace,monospace' font-size='19' font-weight='600' text-anchor='middle'%3Ea%3C/text%3E%3C/svg%3E">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_version }}">
+  <script src="/static/htmx.min.js?v={{ asset_version }}" defer></script>
+  <script src="/static/basecoat/all.min.js?v={{ asset_version }}" defer></script>
+  <script src="/static/app.js?v={{ asset_version }}" defer></script>
+</head>
+<body class="min-h-dvh" hx-headers='{{ {"X-CSRF-Token": csrf_token()} | tojson }}'{% block body_attrs %}{% endblock %}>
+  <a href="#content" class="sr-only rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50">Skip to content</a>
+  {% set brand %}
+  <a href="/chat" class="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <span class="grid size-7 place-items-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground" aria-hidden="true">a</span>
+    <span class="text-base font-semibold tracking-tight">atrium</span>
+  </a>
+  {% endset %}
+  {% set footer %}
+  <div class="flex flex-col gap-1.5 rounded-lg border bg-background p-3 text-xs">
+    <div>{{ mode_badge(mode, paused) }}</div>
+    <p class="text-pretty text-muted-foreground">{{ mode_note(mode, paused) }}</p>
+  </div>
+  {% endset %}
+  {% set proposals_label %}<span class="flex items-center gap-2">Proposals{{ pending_badge(pending_count) }}</span>{% endset %}
+  {{ sidebar(
+    id="sidebar",
+    label="Primary",
+    header=brand,
+    footer=footer,
+    menu=[
+      {"type": "group", "label": "Assistant", "items": [
+        {"label": "Chat", "url": "/chat", "icon": icon("messages-square"), "current": page == "chat"},
+        {"label": "Scheduled", "url": "/scheduled", "icon": icon("clock"), "current": page == "scheduled"},
+        {"label": "Projects", "url": "/projects", "icon": icon("folder"), "current": page == "projects"},
+      ]},
+      {"type": "group", "label": "Review", "items": [
+        {"label": proposals_label, "url": "/proposals", "icon": icon("list-checks"), "current": page == "proposals", "attrs": {"class": "[&>span:last-child]:flex-1"}},
+        {"label": "Activity", "url": "/activity", "icon": icon("history"), "current": page == "activity"},
+      ]},
+      {"type": "group", "label": "Mail", "items": [
+        {"label": "Decisions", "url": "/triage", "icon": icon("route"), "current": page == "triage"},
+        {"label": "Rules", "url": "/rules", "icon": icon("scroll-text"), "current": page == "rules"},
+        {"label": "Drafts", "url": "/drafts", "icon": icon("mail"), "current": page == "drafts"},
+      ]},
+      {"type": "group", "label": "Life", "items": [
+        {"label": "Money", "url": "/money", "icon": icon("wallet"), "current": page == "money"},
+        {"label": "Loops", "url": "/loops", "icon": icon("list-checks"), "current": page == "loops"},
+        {"label": "Watches", "url": "/watches", "icon": icon("package"), "current": page == "watches"},
+      ]},
+      {"type": "group", "label": "Media", "items": [
+        {"label": "Downloads", "url": "/media/downloads", "icon": icon("download"), "current": page in ("media_downloads", "media_add")},
+        {"label": "Channels", "url": "/media/channels", "icon": icon("tv"), "current": page == "media_channels"},
+        {"label": "Library", "url": "/media/library", "icon": icon("film"), "current": page == "media_library"},
+      ]},
+    ]
+  ) }}
+  <main class="flex min-w-0 flex-col">
+    <header class="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-3 md:px-6">
+      <button id="nav-toggle" type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Toggle navigation" aria-controls="sidebar" data-action="toggle-sidebar">{{ icon("panel-left") }}</button>
+      <hr role="separator" aria-orientation="vertical" class="h-4 w-px border-0 bg-border">
+      <h1 class="truncate px-1 text-sm font-medium">{% block heading %}{% endblock %}</h1>
+      <div class="ml-auto flex items-center gap-3">
+        <a href="/settings" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{% if page == "settings" %} aria-current="page"{% endif %}>{{ icon("settings") }}</a>
+        {{ mode_badge(mode, paused) }}
+        {% if mode == "live" %}
+        <form method="post" action="/live/{{ 'resume' if paused else 'pause' }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn" data-size="sm" data-variant="outline">{% set pause_icon = "zap" if paused else "lock" %}{{ icon(pause_icon) }}{{ "Resume" if paused else "Pause" }}</button>
+        </form>
+        {% endif %}
+      </div>
+    </header>
+    <div id="content" tabindex="-1" class="mx-auto flex w-full {% block content_class %}max-w-6xl{% endblock %} flex-col gap-6 px-4 py-6 outline-none md:px-8 md:py-8">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <dialog id="reader" class="drawer" data-side="right" aria-label="Message">
+    <article class="w-full max-w-none sm:max-w-2xl">
+      <header class="flex-row items-center justify-between border-b">
+        <h2 class="text-sm font-medium">Message</h2>
+        <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close message" data-action="close-dialog">{{ icon("x") }}</button>
+      </header>
+      <section id="reader-body" data-loading="reader-loading" class="p-4 md:p-6"></section>
+    </article>
+  </dialog>
+
+  <template id="reader-loading">
+    <div class="flex flex-col gap-3" role="status" aria-label="Loading message">
+      <div class="skeleton h-6 w-3/4 rounded-md bg-muted"></div>
+      <div class="skeleton h-4 w-1/2 rounded-md bg-muted"></div>
+      <div class="skeleton mt-4 h-40 w-full rounded-md bg-muted"></div>
+    </div>
+  </template>
+
+  {% set initial_toasts = [toast] if toast is defined and toast else [] %}{{ toaster(toasts=initial_toasts) }}
+</body>
+</html>

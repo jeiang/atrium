@@ -1,0 +1,154 @@
+package main
+
+// MenuItem mirrors the dict items consumed by basecoat/sidebar.html.jinja.
+// Group `label` is escaped in the Jinja ({{ item.label }}) but item/submenu labels, icons, header and
+// footer are `| safe`: here that is encoded in the TYPE (string = escaped, templ.Component = trusted).
+type MenuItem struct {
+	Type    string // "group" | "separator" | "submenu" | "item"
+	ID      string
+	Title   string          // group heading (escaped text)
+	Label   templ.Component // item/submenu label (rendered raw: component, not string)
+	URL     string
+	Icon    templ.Component
+	Current bool
+	Open    bool
+	Attrs   templ.Attributes
+	Items   []MenuItem
+}
+
+type SidebarProps struct {
+	ID, Label, Side                  string
+	Open                             bool
+	Header, Footer                   templ.Component
+	Menu                             []MenuItem
+	Main, HeaderA, ContentA, FooterA templ.Attributes
+}
+
+func without(a templ.Attributes, keys ...string) templ.Attributes {
+	out := templ.Attributes{}
+	for k, v := range a {
+		skip := false
+		for _, x := range keys {
+			if k == x {
+				skip = true
+			}
+		}
+		if !skip {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+func classOf(a templ.Attributes) string {
+	s, _ := a["class"].(string)
+	return s
+}
+
+templ Sidebar(p SidebarProps) {
+	<aside
+		if p.ID != "" {
+			id={ p.ID }
+		}
+		class={ "sidebar", classOf(p.Main) }
+		data-side={ or(p.Side, "left") }
+		aria-hidden={ cond(p.Open, "false", "true") }
+		if !p.Open {
+			inert
+		}
+		{ without(p.Main, "class")... }
+	>
+		<nav aria-label={ p.Label }>
+			if p.Header != nil {
+				<header { p.HeaderA... }>
+					@p.Header
+				</header>
+			}
+			<section { p.ContentA... }>
+				if len(p.Menu) > 0 {
+					@sidebarContent(p.Menu, cond(p.ID != "", p.ID+"-content", "content"))
+				} else {
+					{ children... }
+				}
+			</section>
+			if p.Footer != nil {
+				<footer { p.FooterA... }>
+					@p.Footer
+				</footer>
+			}
+		</nav>
+	</aside>
+}
+
+templ sidebarContent(items []MenuItem, prefix string) {
+	for i, item := range items {
+		{{ itemID := prefix + "-" + itoa(i+1) }}
+		switch or(item.Type, "item") {
+			case "group":
+				{{ groupLabelID := or(item.ID, "group-label-"+itemID) }}
+				<div
+					role="group"
+					if item.Title != "" {
+						aria-labelledby={ groupLabelID }
+					}
+					{ item.Attrs... }
+				>
+					if item.Title != "" {
+						<h3 id={ groupLabelID }>{ item.Title }</h3>
+					}
+					<ul>
+						if len(item.Items) > 0 {
+							@sidebarContent(item.Items, itemID)
+						}
+					</ul>
+				</div>
+			case "separator":
+				<hr role="separator"/>
+			case "submenu":
+				<li>
+					<details
+						id={ "submenu-" + itemID }
+						if item.Open {
+							open
+						}
+						{ without(item.Attrs, "open")... }
+					>
+						<summary aria-controls={ "submenu-" + itemID + "-content" }>
+							if item.Icon != nil {
+								@item.Icon
+							}
+							<span>
+								if item.Label != nil {
+									@item.Label
+								}
+							</span>
+						</summary>
+						<ul id={ "submenu-" + itemID + "-content" }>
+							if len(item.Items) > 0 {
+								@sidebarContent(item.Items, itemID)
+							}
+						</ul>
+					</details>
+				</li>
+			case "item":
+				<li>
+					<a
+						href={ or(item.URL, "#") }
+						if item.Current {
+							aria-current="page"
+						}
+						{ without(item.Attrs, "href", "aria-current")... }
+					>
+						if item.Icon != nil {
+							@item.Icon
+						}
+						<span>
+							if item.Label != nil {
+								@item.Label
+							}
+						</span>
+					</a>
+				</li>
+		}
+	}
+}
