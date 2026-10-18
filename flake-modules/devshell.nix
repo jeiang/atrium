@@ -35,15 +35,21 @@
         pkgs.go-licenses
         pkgs.pkg-config
         pkgs.sqlite.dev
+        pkgs.tailwindcss_4
       ];
       env =
         {
           CGO_ENABLED = "1";
           GOFLAGS = "-tags=sqlite_fts5";
+          ATRIUM_STATIC_ASSETS = "${self'.packages.atrium-static}";
+          ATRIUM_BASECOAT = "${self'.packages.atrium-static.basecoat}";
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           ATRIUM_MUSL_CC = "${pkgs.pkgsStatic.stdenv.cc}/bin/${pkgs.pkgsStatic.stdenv.cc.targetPrefix}cc";
         };
+      enterShell = ''
+        [ -e "$DEVENV_ROOT/internal/web/static/app.css" ] || just --justfile "$DEVENV_ROOT/justfile" assets
+      '';
       languages.go = {
         enable = true;
         package = pkgs.go_1_26;
