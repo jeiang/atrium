@@ -177,10 +177,18 @@ and backups; nothing of that lives here.
 - `internal/mail/mime/`: CPython 3.14.7's `email` package as `policy.default`
   applies it to bytes (feedparser, header registry and value parser,
   `parseaddr`/`getaddresses`, `parsedate_to_datetime`, codecs, transfer
-  decoding), including where Python raises; tables come from
-  `tools/mime/gen_tables.py`.
+  decoding), including where Python raises, and the header refolding it
+  writes with (`FoldHeader`); tables come from `tools/mime/gen_tables.py`.
 - `internal/mail/features/`: `features.py` (`Extract`, `ContentDigest`,
   `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
+- `internal/mail/smtp/`: the operator's send. It speaks SMTP command for
+  command as smtplib does and keeps its error wording (`SendError`);
+  `BuildMessage` serializes as `EmailMessage` does. `smtptest` is the
+  scripted session factory and the `smtp.jsonl` corpus loader; the
+  divergences from smtplib are listed in `testdata/corpora/README.md`.
+- `internal/mail/drafts/`: the draft lifecycle. `Send` is the only path that
+  sends mail; it files the iCloud copy with APPEND `\Seen` under
+  `safety.OperatorSend` to the mailbox `mail.MailboxRole` names `sent`.
 - `internal/pyhtml/`: `html.unescape`; tables from `tools/pyhtml/gen_entities.py`.
 - `internal/mail/sync/`: `sync.py`'s read path. `Syncer.Account` discovers
   mailboxes (`mail.MailboxRole`), handles UIDVALIDITY, fetches new mail in

@@ -9,6 +9,8 @@ import (
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/db/readpaths"
 	"github.com/jeiang/atrium/internal/testutil/golden"
+
+	_ "github.com/jeiang/atrium/internal/mail/drafts"
 )
 
 func TestGoldenReadPaths(t *testing.T) {
