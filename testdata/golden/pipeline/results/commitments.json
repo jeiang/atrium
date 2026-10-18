@@ -1,0 +1,42 @@
+[
+  {
+    "created_ts": 1792080000.0,
+    "due": null,
+    "id": 1,
+    "message_id": 90,
+    "owner": "me",
+    "proposal_id": null,
+    "status": "open",
+    "text": "Reply about dinner"
+  },
+  {
+    "created_ts": 1792080000.0,
+    "due": "2026-10-16",
+    "id": 2,
+    "message_id": 89,
+    "owner": "me",
+    "proposal_id": 2,
+    "status": "open",
+    "text": "Send the itinerary to Friend"
+  },
+  {
+    "created_ts": 1792080000.0,
+    "due": "2026-10-22",
+    "id": 3,
+    "message_id": 85,
+    "owner": "them",
+    "proposal_id": null,
+    "status": "open",
+    "text": "Meet Pal for lunch"
+  },
+  {
+    "created_ts": 1792080000.0,
+    "due": null,
+    "id": 4,
+    "message_id": 99,
+    "owner": "them",
+    "proposal_id": null,
+    "status": "open",
+    "text": "Send the kickoff agenda"
+  }
+]

@@ -1,0 +1,9 @@
+From: Power Co <billing@power.example>
+To: operator@icloud.example
+Subject: Power bill 4
+Message-ID: <power-4@golden.example>
+Date: Fri, 31 Jul 2026 16:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Your power bill 4 is ready.

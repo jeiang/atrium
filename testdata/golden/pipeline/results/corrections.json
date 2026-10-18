@@ -1,0 +1,16 @@
+[
+  {
+    "account": "icloud",
+    "folder": "Bills",
+    "message_id": 93,
+    "source": "operator",
+    "ts": 1792081800.0
+  },
+  {
+    "account": "icloud",
+    "folder": "Bills",
+    "message_id": 148,
+    "source": "operator",
+    "ts": 1792092600.0
+  }
+]

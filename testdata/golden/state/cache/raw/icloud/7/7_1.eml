@@ -1,0 +1,11 @@
+From: Operator <operator@icloud.example>
+To: pal@people.example
+Subject: Re: Lunch next week
+Message-ID: <sent-lunch@golden.example>
+Date: Sat, 10 Oct 2026 16:00:00 +0000
+MIME-Version: 1.0
+In-Reply-To: <lunch@golden.example>
+References: <lunch@golden.example>
+Content-Type: text/plain; charset=utf-8
+
+Lunch on Thursday works, see you then.

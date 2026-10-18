@@ -1,0 +1,188 @@
+{
+  "cli": [
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "status"
+      ],
+      "exit_code": 0,
+      "name": "live-status",
+      "stderr": "live-status.stderr",
+      "stdout": "live-status.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "list",
+        "--status",
+        "all"
+      ],
+      "exit_code": 2,
+      "name": "proposals-list-status-all",
+      "stderr": "proposals-list-status-all.stderr",
+      "stdout": "proposals-list-status-all.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "list"
+      ],
+      "exit_code": 0,
+      "name": "proposals-list",
+      "stderr": "proposals-list.stderr",
+      "stdout": "proposals-list.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "actions"
+      ],
+      "exit_code": 0,
+      "name": "live-actions",
+      "stderr": "live-actions.stderr",
+      "stdout": "live-actions.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "shadow-report",
+        "--since",
+        "365d"
+      ],
+      "exit_code": 0,
+      "name": "shadow-report-365d",
+      "stderr": "shadow-report-365d.stderr",
+      "stdout": "shadow-report-365d.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "rules",
+        "export"
+      ],
+      "exit_code": 0,
+      "name": "rules-export",
+      "stderr": "rules-export.stderr",
+      "stdout": "rules-export.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "notion",
+        "search",
+        "alpha"
+      ],
+      "exit_code": 0,
+      "name": "notion-search-alpha",
+      "stderr": "notion-search-alpha.stderr",
+      "stdout": "notion-search-alpha.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "media",
+        "poll"
+      ],
+      "exit_code": 0,
+      "name": "media-poll",
+      "stderr": "media-poll.stderr",
+      "stdout": "media-poll.stdout"
+    }
+  ],
+  "clock": {
+    "policy": "every scenario step sets a constant clock; time.time, datetime.now and date.today return it until the next step",
+    "steps": {
+      "approve": 1792095600.0,
+      "arrive": 1792090800.0,
+      "backlog": 1792087500.0,
+      "correct1": 1792081800.0,
+      "correct2": 1792092600.0,
+      "golive": 1792087200.0,
+      "scan1": 1792096200.0,
+      "scan2": 1793392200.0,
+      "sync1": 1792080000.0,
+      "sync2": 1792083600.0,
+      "sync4": 1792094400.0,
+      "undo": 1792095000.0
+    },
+    "t0": 1792080000.0
+  },
+  "databases": {
+    "atrium-legacy.db": {
+      "description": "pre-migration shapes; db.connect migrates it",
+      "files": "db/legacy/"
+    },
+    "atrium.db": {
+      "description": "fresh install written by the frozen Python code paths",
+      "files": "db/"
+    }
+  },
+  "empty_tables": [],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "generator": "tools/golden/make_db.py",
+  "read_paths": [
+    "birthdays.upcoming_for",
+    "budget.status",
+    "channels.list_channels",
+    "channels.status",
+    "context.status",
+    "corrections.list_corrections",
+    "drafts.list_drafts",
+    "event_candidates.queued",
+    "live.list_actions",
+    "live.status",
+    "message.get_message dentist",
+    "message.get_message trip",
+    "money.bills",
+    "money.categories",
+    "money.list_accounts",
+    "money.list_payees",
+    "money.list_rates",
+    "money.list_transactions",
+    "money.list_transactions dismissed",
+    "money.spending month",
+    "money.tracked_since",
+    "notify.recent",
+    "notion_search.get_page",
+    "notion_search.related",
+    "notion_search.search alpha",
+    "notion_search.search alpha private",
+    "notion_sync.counts",
+    "notion_wiki.get",
+    "openloops.list_commitments",
+    "openloops.list_loops",
+    "projects.list_projects",
+    "proposals.counts_by_status",
+    "proposals.list",
+    "report.build 365d",
+    "ruleedit.learned_rules_summary icloud",
+    "rules.export_rules",
+    "scheduler.list_jobs",
+    "scheduler.list_runs",
+    "search.search folder Receipts",
+    "search.search power bill",
+    "search.search receipt gmail",
+    "service.list_threads",
+    "service.list_threads archived",
+    "service.run_view",
+    "service.thread_view",
+    "service.thread_view compacting",
+    "skills.list_skills",
+    "subagents.list_agents",
+    "triage.flag_judgments",
+    "triage.folders icloud",
+    "triage.summaries",
+    "triage.triage",
+    "triage.triage icloud llm",
+    "usage.by_kind",
+    "usage.summary",
+    "watches.list_packages",
+    "workspace.view",
+    "writes.get profile"
+  ],
+  "state_dir": "state"
+}

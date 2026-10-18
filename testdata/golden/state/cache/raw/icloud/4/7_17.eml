@@ -1,0 +1,9 @@
+From: Power Co <billing@power.example>
+To: operator@icloud.example
+Subject: Power bill October
+Message-ID: <power-oct@golden.example>
+Date: Wed, 14 Oct 2026 16:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Your October power bill is TTD 350.00, due 2026-10-30.

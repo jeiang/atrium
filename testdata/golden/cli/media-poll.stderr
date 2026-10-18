@@ -1,0 +1,7 @@
+2026-10-18 16:00:00,000 httpx INFO HTTP Request: GET https://eztvx.to/api/get-torrents?imdb_id=1234567&limit=100 "HTTP/1.1 200 OK"
+2026-10-18 16:00:00,000 httpx INFO HTTP Request: POST http://qbit.test/api/v2/torrents/add "HTTP/1.1 200 OK"
+2026-10-18 16:00:00,000 httpx INFO HTTP Request: GET https://eztvx.to/api/get-torrents?imdb_id=7654321&limit=100 "HTTP/1.1 200 OK"
+2026-10-18 16:00:00,000 httpx INFO HTTP Request: POST https://ntfy.test "HTTP/1.1 200 OK"
+2026-10-18 16:00:00,000 httpx INFO HTTP Request: GET http://qbit.test/api/v2/torrents/info?tag=media "HTTP/1.1 200 OK"
+2026-10-18 16:00:00,000 httpx INFO HTTP Request: GET http://qbit.test/api/v2/torrents/files?hash=cccccccccccccccccccccccccccccccccccccccc "HTTP/1.1 200 OK"
+2026-10-18 16:00:00,000 httpx INFO HTTP Request: GET http://qbit.test/api/v2/torrents/files?hash=dddddddddddddddddddddddddddddddddddddddd "HTTP/1.1 200 OK"

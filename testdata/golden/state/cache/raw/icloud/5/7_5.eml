@@ -1,0 +1,10 @@
+From: News Weekly <digest@news.example>
+To: operator@icloud.example
+Subject: Weekly digest #5
+Message-ID: <digest-5@golden.example>
+Date: Sun, 06 Sep 2026 16:00:00 +0000
+MIME-Version: 1.0
+List-Id: <weekly.news.example>
+Content-Type: text/plain; charset=utf-8
+
+This week in news, issue 5.
