@@ -96,7 +96,8 @@ def _scanned(conn, watch, message_id, found):
 def _unscanned(conn, watch, where, window_days, limit, now):
     return conn.execute(
         "SELECT m.* FROM messages m WHERE m.gone_at IS NULL AND m.sent = 0 AND m.date_ts >= ? AND "
-        f"({where}) AND NOT EXISTS (SELECT 1 FROM watch_scans s WHERE s.watch = ? AND s.message_id = m.id) "
+        f"({where}) AND NOT EXISTS (SELECT 1 FROM messages o JOIN watch_scans s ON s.message_id = o.id "
+        "WHERE s.watch = ? AND o.account = m.account AND o.digest = m.digest) "
         "ORDER BY m.date_ts DESC LIMIT ?",
         (now - window_days * DAY, watch, limit),
     ).fetchall()
