@@ -1,0 +1,67 @@
+# Gmail-style session for TestGmailSession, hand-written from Google's IMAP extension docs and RFC 3501
+# with the imapscript Gmail profile; not captured. It follows what atrium's Python does against Gmail:
+# capabilities asked after a greeting without them, labels fetched with every message, X-GM-RAW category
+# searches, label stores, label folders created and deleted, and a COPY without COPYUID.
+
+S: {gmail.greeting}
+C: {t} CAPABILITY
+S: * CAPABILITY {gmail.caps}
+S: {t} OK Thats all she wrote! a1b2c3d4e5f6
+C: {t} LOGIN "atrium.test@gmail.com" "app password"
+S: {t} OK [CAPABILITY {gmail.authcaps}] atrium.test@gmail.com authenticated (Success)
+
+C/ ^{t} STATUS "\[Gmail\]/All Mail" \((UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)( (UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)){3}\)$
+S: * STATUS "[Gmail]/All Mail" (MESSAGES 4 UIDNEXT 105 UIDVALIDITY 1 HIGHESTMODSEQ 9123456)
+S: {t} OK Success
+
+C: {t} EXAMINE "[Gmail]/All Mail"
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen $NotPhishing $Phishing)
+S: * OK [UIDVALIDITY 1] UIDs valid.
+S: * 4 EXISTS
+S: * 0 RECENT
+S: * OK [UIDNEXT 105] Predicted next UID.
+S: * OK [HIGHESTMODSEQ 9123456]
+S: {t} OK [READ-ONLY] [Gmail]/All Mail selected. (Success)
+
+C/ ^{t} UID FETCH 101 \(UID( (FLAGS|INTERNALDATE|RFC822\.SIZE|BODYSTRUCTURE)){4} BODY\.PEEK\[HEADER\] BODY\.PEEK\[TEXT\]<0\.65536> X-GM-MSGID X-GM-THRID X-GM-LABELS\)$
+S: * 1 FETCH (X-GM-THRID 1278455344230334865 X-GM-MSGID 18446744073709551615 UID 101 X-GM-LABELS (\Inbox "\\Important" "Caf&AOk-" "Muy Importante") FLAGS (\Seen) INTERNALDATE "17-Jul-2026 02:44:25 +0000" RFC822.SIZE 4286 BODYSTRUCTURE ("TEXT" "PLAIN" ("CHARSET" "UTF-8") NIL NIL "QUOTED-PRINTABLE" 8 1 NIL NIL NIL NIL) BODY[HEADER] {14}
+S: From: a@b.cc
+S:  BODY[TEXT]<0> {8}
+S: Hi there)
+S: {t} OK Success
+
+C: {t} UID FETCH 101:102 (UID FLAGS X-GM-LABELS)
+S: * 1 FETCH (UID 101 X-GM-LABELS (\Inbox) FLAGS (\Seen))
+S: * 2 FETCH (UID 102 X-GM-LABELS () FLAGS ())
+S: {t} OK Success
+
+C: {t} UID SEARCH X-GM-RAW "category:promotions"
+S: * SEARCH 102
+S: {t} OK SEARCH completed (Success)
+C: {t} UID SEARCH X-GM-RAW "category:social"
+S: * SEARCH
+S: {t} OK SEARCH completed (Success)
+
+C: {t} SELECT "[Gmail]/All Mail"
+S: * 4 EXISTS
+S: {t} OK [READ-WRITE] [Gmail]/All Mail selected. (Success)
+C: {t} UID STORE 101:102 +X-GM-LABELS ("Caf&AOk-/Re\"ceipts" \Important)
+S: * 1 FETCH (UID 101 X-GM-LABELS (\Inbox \Important "Caf&AOk-/Re\"ceipts"))
+S: * 2 FETCH (UID 102 X-GM-LABELS (\Important "Caf&AOk-/Re\"ceipts"))
+S: {t} OK Success
+C: {t} UID STORE 101 -X-GM-LABELS (\Inbox)
+S: * 1 FETCH (UID 101 X-GM-LABELS (\Important "Caf&AOk-/Re\"ceipts"))
+S: {t} OK Success
+C: {t} UID COPY 101 "[Gmail]/Trash"
+S: {t} OK Success
+
+C: {t} CREATE "Caf&AOk-/2026"
+S: {t} OK Success
+C: {t} SUBSCRIBE "Caf&AOk-/2026"
+S: {t} OK Success
+C: {t} DELETE "Caf&AOk-/2026"
+S: {t} OK Success
+
+C: {t} LOGOUT
+S: * BYE LOGOUT Requested
+S: {t} OK 73 good day (Success)

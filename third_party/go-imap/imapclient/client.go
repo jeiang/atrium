@@ -78,6 +78,8 @@ type Options struct {
 	// Dialer to use when establishing connections with the Dial* functions.
 	// If nil, a default dialer with a 30 second timeout is used.
 	Dialer *net.Dialer
+	// IDLE re-issue interval (atrium patch); zero means 28 minutes.
+	IdleRestartInterval time.Duration
 }
 
 func (options *Options) wrapReadWriter(rw io.ReadWriter) io.ReadWriter {

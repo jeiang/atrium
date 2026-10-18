@@ -2,6 +2,7 @@
 /internal/safety/ @jeiang
 /internal/mail/client* @jeiang
 /internal/mail/mailtest/ @jeiang
+/internal/mail/imapclient/ @jeiang
 /internal/mail/**/applier* @jeiang
 /internal/mail/**/live* @jeiang
 /internal/mail/**/mailops* @jeiang
