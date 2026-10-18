@@ -1,4 +1,16 @@
 {
+  "divergences": [
+    {
+      "owner": "the Go prompt slice (https://github.com/jeiang/atrium/issues/125) decides how to handle the text; until it does, a Go body may differ from these goldens at system[0].text only by the run_code sentence",
+      "what": "tells the model to call run_code for several read-only lookups; run_code is not ported in Phase A and is absent from every tools list here",
+      "where": "prompts.SYSTEM (system[0].text of every request here)"
+    },
+    {
+      "owner": "the Go prompt slice (https://github.com/jeiang/atrium/issues/125)",
+      "what": "names run_code as a separate interpreter; the code sandbox and run_code are both not ported in Phase A",
+      "where": "files.SANDBOX_PROMPT (sent only with the thread code sandbox on, so in no golden here)"
+    }
+  ],
   "excluded": {
     "paths": [
       "code_execution tool and container (thread code sandbox)",
@@ -147,6 +159,26 @@
       "source_tests": [
         "tests/test_projects.py::test_instructions_reach_the_system_prompt_only_for_project_threads",
         "tests/test_projects.py::test_hub_instructions_name_the_page_and_the_capture_skill"
+      ]
+    },
+    {
+      "description": "Chat attachments without the code sandbox: PDF as a base64 document, PNG as a base64 image, Markdown, .docx and .xlsx as extracted-text documents (title, untrusted context, citations), ahead of the operator text; a second turn rebuilds them from storage.",
+      "file": "chat_attachments.json",
+      "name": "chat_attachments",
+      "requests": 2,
+      "source_tests": [
+        "tests/test_files.py::test_each_type_becomes_the_right_content_block",
+        "tests/test_files.py::test_attachments_persist_across_turns_and_are_rebuilt_each_request",
+        "tests/test_files.py::test_sandbox_off_sends_no_code_execution_tool_and_touches_no_files_api"
+      ]
+    },
+    {
+      "description": "A project file joins the first user turn of every request in the project's threads, ahead of a 'Project files' note and the operator text.",
+      "file": "project_files.json",
+      "name": "project_files",
+      "requests": 2,
+      "source_tests": [
+        "tests/test_files.py::test_project_files_are_attached_to_every_request_of_its_threads"
       ]
     },
     {

@@ -4,6 +4,8 @@ The loop runs against tests/fake_anthropic.py for its responses; each call is al
 anthropic SDK onto a transport that records the HTTP request and fails it, so the recorded body is the one the
 SDK serializes. Output: testdata/golden/anthropic/ (or argv[1])."""
 
+import base64
+import io
 import json
 import os
 import shutil
@@ -25,10 +27,12 @@ for key in ("ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
 use_source_tree()
 
 import anthropic  # noqa: E402
+import docx  # noqa: E402
 import httpx2  # noqa: E402
+import openpyxl  # noqa: E402
 
 from atrium import db  # noqa: E402
-from atrium.agent import budget, loop, projects, registry, scheduler, service, skills, subagents, threads  # noqa: E402
+from atrium.agent import budget, files, loop, projects, registry, scheduler, service, skills, subagents, threads  # noqa: E402
 from atrium.agent.nightly import NIGHTLY_PROMPT  # noqa: E402
 from atrium.agent.tools import all_tools, run_code  # noqa: E402
 from atrium.agent.tools.base import CHAT, CRON, NIGHTLY, SUB  # noqa: E402
@@ -49,6 +53,20 @@ EXCLUDED = {
     "paths": ["code_execution tool and container (thread code sandbox)", "container_upload blocks", "Files API upload and delete", "notion_migrate json_schema output_config.format"],
     "reason": "not ported in Phase A (https://github.com/jeiang/atrium/issues/19, https://github.com/jeiang/atrium/issues/96 review fixes S7)",
 }
+DIVERGENCES = [
+    {
+        "where": "prompts.SYSTEM (system[0].text of every request here)",
+        "what": "tells the model to call run_code for several read-only lookups; run_code is not ported in Phase A and is absent from every tools list here",
+        "owner": "the Go prompt slice (https://github.com/jeiang/atrium/issues/125) decides how to handle the text; until it does, a Go body may differ from these goldens at system[0].text only by the run_code sentence",
+    },
+    {
+        "where": "files.SANDBOX_PROMPT (sent only with the thread code sandbox on, so in no golden here)",
+        "what": "names run_code as a separate interpreter; the code sandbox and run_code are both not ported in Phase A",
+        "owner": "the Go prompt slice (https://github.com/jeiang/atrium/issues/125)",
+    },
+]
+PDF = b"%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >> endobj\n3 0 obj << /Type /Page >> endobj\n4 0 obj << /Type /Page >> endobj\n%%EOF"
+PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
 
 
 class Captured(Exception):
@@ -149,6 +167,17 @@ class World:
         if thread_id is None:
             thread_id = service.create_thread(self.conn, kind, now=now, **thread)
         service.run_once(self.cfg, self.conn, thread_id, message, kind=kind, client=client, env={}, now=now, operator=kind == CHAT)
+        return thread_id
+
+    def chat_with_files(self, client, message, uploads, thread_id=None, now=None, **thread):
+        """What the web chat form does: ingest the uploads, journal them ahead of the text, run."""
+        now = now or clock(NOW)
+        if thread_id is None:
+            thread_id = service.create_thread(self.conn, CHAT, now=now, **thread)
+        found = threads.get(self.conn, thread_id)
+        blocks = files.ingest_uploads(self.cfg, self.conn, uploads, now(), thread_id=thread_id, context_limit=threads.context_limit_of(found))
+        run_id = service.prepare(self.conn, thread_id, message, CHAT, now(), operator=True, files=blocks)
+        service.execute(self.cfg, self.conn, run_id, client, {}, now)
         return thread_id
 
     def job(self, client, kind, due_at):
@@ -390,6 +419,66 @@ def project_thread(world):
     return client
 
 
+def docx_bytes():
+    document = docx.Document()
+    for paragraph in ("Hello from Word", "Second paragraph"):
+        document.add_paragraph(paragraph)
+    table = document.add_table(rows=1, cols=2)
+    table.rows[0].cells[0].text, table.rows[0].cells[1].text = "qty", "7"
+    out = io.BytesIO()
+    document.save(out)
+    return out.getvalue()
+
+
+def xlsx_bytes():
+    book = openpyxl.Workbook()
+    sheet = book.active
+    sheet.title = "Sales"
+    sheet.append(["month", "total"])
+    sheet.append(["Jan", 120])
+    book.create_sheet("Notes").append(["remember, commas"])
+    out = io.BytesIO()
+    book.save(out)
+    return out.getvalue()
+
+
+@scenario(
+    "chat_attachments",
+    "Chat attachments without the code sandbox: PDF as a base64 document, PNG as a base64 image, Markdown, .docx and .xlsx as extracted-text documents (title, untrusted context, citations), ahead of the operator text; a second turn rebuilds them from storage.",
+    [
+        "tests/test_files.py::test_each_type_becomes_the_right_content_block",
+        "tests/test_files.py::test_attachments_persist_across_turns_and_are_rebuilt_each_request",
+        "tests/test_files.py::test_sandbox_off_sends_no_code_execution_tool_and_touches_no_files_api",
+    ],
+)
+def chat_attachments(world):
+    uploads = [
+        ("report.pdf", PDF, "application/pdf"),
+        ("pic.png", PNG, "image/png"),
+        ("notes.md", b"# hi\nsee https://evil.test/x", "text/markdown"),
+        ("brief.docx", docx_bytes(), "application/octet-stream"),
+        ("sales.xlsx", xlsx_bytes(), "application/octet-stream"),
+    ]
+    client = Recorder([response([text("Read them.")]), response([text("Still there.")])])
+    thread_id = world.chat_with_files(client, "summarize", uploads)
+    world.chat_with_files(client, "and again", [("later.txt", b"one more line", "text/plain")], thread_id=thread_id, now=clock(LATER))
+    return client
+
+
+@scenario(
+    "project_files",
+    "A project file joins the first user turn of every request in the project's threads, ahead of a 'Project files' note and the operator text.",
+    ["tests/test_files.py::test_project_files_are_attached_to_every_request_of_its_threads"],
+)
+def project_files(world):
+    project_id = projects.create(world.conn, NOW, name="Taxes", instructions="", effort=threads.MEDIUM, context_limit=90_000)
+    files.ingest_uploads(world.cfg, world.conn, [("rules.md", b"# Rules\nfile early", "text/markdown")], NOW, project_id=project_id)
+    client = Recorder([response([text("Sure.")]), response([text("More.")])])
+    thread_id = world.chat(client, "what should I do?", project_id=project_id)
+    world.chat(client, "next", thread_id=thread_id, now=clock(LATER))
+    return client
+
+
 @scenario(
     "cron_run",
     "A scheduled job run by the scheduler: kind cron, effort high, operator-written prompt, 5m TTL, web_search offered.",
@@ -542,6 +631,9 @@ prefix (system through its last breakpoint, plus all tools) is identical and fre
 
 Excluded (not ported in Phase A): {excluded}.
 
+Known divergences for the Go port (also in `manifest.json` under `divergences`):
+{divergences}
+
 `manifest.json` lists every scenario with its description and the Python tests it mirrors.
 
 | Scenario | Requests | Mirrors |
@@ -574,13 +666,15 @@ def main():
             "sdk": f"anthropic-python {anthropic.__version__}",
             "timezone": TZ,
             "excluded": EXCLUDED,
+            "divergences": DIVERGENCES,
             "scenarios": manifest,
             "prompt_stability": "prompt_stability.json",
         },
     )
     rows = "\n".join(f"| `{m['name']}` | {m['requests']} | {', '.join(f'`{s}`' for s in m['source_tests'])} |" for m in manifest)
     excluded = "; ".join([*(f"tool `{t}`" for t in EXCLUDED["tools"]), *EXCLUDED["paths"]])
-    (target / "README.md").write_text(README.format(commit=FREEZE_COMMIT, sdk=anthropic.__version__, excluded=excluded, rows=rows), encoding="utf-8")
+    divergences = "\n".join(f"- {d['where']}: {d['what']}; {d['owner']}." for d in DIVERGENCES)
+    (target / "README.md").write_text(README.format(commit=FREEZE_COMMIT, sdk=anthropic.__version__, excluded=excluded, divergences=divergences, rows=rows), encoding="utf-8")
 
 
 if __name__ == "__main__":

@@ -17,6 +17,10 @@ prefix (system through its last breakpoint, plus all tools) is identical and fre
 
 Excluded (not ported in Phase A): tool `run_code`; code_execution tool and container (thread code sandbox); container_upload blocks; Files API upload and delete; notion_migrate json_schema output_config.format.
 
+Known divergences for the Go port (also in `manifest.json` under `divergences`):
+- prompts.SYSTEM (system[0].text of every request here): tells the model to call run_code for several read-only lookups; run_code is not ported in Phase A and is absent from every tools list here; the Go prompt slice (https://github.com/jeiang/atrium/issues/125) decides how to handle the text; until it does, a Go body may differ from these goldens at system[0].text only by the run_code sentence.
+- files.SANDBOX_PROMPT (sent only with the thread code sandbox on, so in no golden here): names run_code as a separate interpreter; the code sandbox and run_code are both not ported in Phase A; the Go prompt slice (https://github.com/jeiang/atrium/issues/125).
+
 `manifest.json` lists every scenario with its description and the Python tests it mirrors.
 
 | Scenario | Requests | Mirrors |
@@ -35,5 +39,7 @@ Excluded (not ported in Phase A): tool `run_code`; code_execution tool and conta
 | `effort_max` | 1 | `tests/test_agent_loop.py::test_request_shape_pins_effort_caching_and_stamp` |
 | `subagent_research` | 3 | `tests/test_agent_subagents.py::test_research_creates_child_thread_and_returns_digest`, `tests/test_agent_subagents.py::test_observability_and_web_search_allowlist` |
 | `project_thread` | 1 | `tests/test_projects.py::test_instructions_reach_the_system_prompt_only_for_project_threads`, `tests/test_projects.py::test_hub_instructions_name_the_page_and_the_capture_skill` |
+| `chat_attachments` | 2 | `tests/test_files.py::test_each_type_becomes_the_right_content_block`, `tests/test_files.py::test_attachments_persist_across_turns_and_are_rebuilt_each_request`, `tests/test_files.py::test_sandbox_off_sends_no_code_execution_tool_and_touches_no_files_api` |
+| `project_files` | 2 | `tests/test_files.py::test_project_files_are_attached_to_every_request_of_its_threads` |
 | `cron_run` | 1 | `tests/test_agent_scheduler.py::test_on_time_run_is_ok_and_uses_cron_thread`, `tests/test_agent_loop.py::test_cron_runs_at_high_effort_without_web_search_for_nightly` |
 | `nightly_run` | 1 | `tests/test_agent_scheduler.py::test_nightly_is_seeded_and_runs_as_nightly`, `tests/test_agent_scheduler.py::test_nightly_tool_set_is_exact` |
