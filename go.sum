@@ -1,0 +1,4 @@
+github.com/systemd/slog-journal v0.1.2 h1:oU30ghDjjSsQGBGQLzunPeURHe7fyh0Z99Ap5QeiMFY=
+github.com/systemd/slog-journal v0.1.2/go.mod h1:3ekGgwBlzs82itNN6iG6c3R1iEhkbrvBCpQHxine2L8=
+golang.org/x/sys v0.39.0 h1:CvCKL8MeisomCi6qNZ+wbb0DN9E5AATixKsvNtMoMFk=
+golang.org/x/sys v0.39.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
