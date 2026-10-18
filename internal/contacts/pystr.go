@@ -28,45 +28,6 @@ func Casefold(s string) string {
 	return b.String()
 }
 
-func isSpace(r rune) bool {
-	if r < utf8.RuneSelf {
-		return r >= '\t' && r <= '\r' || r >= 0x1C && r <= ' '
-	}
-	return pySpace[r]
-}
-
-func strip(s string) string { return strings.TrimFunc(s, isSpace) }
-
-func fields(s string) []string { return strings.FieldsFunc(s, isSpace) }
-
-func isLineBreak(r rune) bool {
-	switch r {
-	case '\n', '\r', '\v', '\f', 0x1C, 0x1D, 0x1E, 0x85, 0x2028, 0x2029:
-		return true
-	}
-	return false
-}
-
-// splitLines is Python's str.splitlines().
-func splitLines(s string) []string {
-	var out []string
-	start := 0
-	for i, r := range s {
-		if i < start || !isLineBreak(r) {
-			continue
-		}
-		out = append(out, s[start:i])
-		start = i + utf8.RuneLen(r)
-		if r == '\r' && start < len(s) && s[start] == '\n' {
-			start++
-		}
-	}
-	if start < len(s) {
-		out = append(out, s[start:])
-	}
-	return out
-}
-
 // decimal is int() of a string of \d characters.
 func decimal(s string) int {
 	n := 0

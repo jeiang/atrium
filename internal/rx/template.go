@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/jeiang/atrium/internal/py"
 )
 
 type template struct {
@@ -80,7 +82,7 @@ func parseTemplate(repl string, re *Regexp) (*template, error) {
 				}
 				gid, ok := re.names[name]
 				if !ok {
-					return nil, &Error{Msg: "unknown group name " + pyRepr(name), Pattern: repl, Pos: -1}
+					return nil, &Error{Msg: "unknown group name " + py.Repr(name), Pattern: repl, Pos: -1}
 				}
 				index = gid
 			}
@@ -196,36 +198,9 @@ func isIdentifier(s string) bool {
 	return true
 }
 
-func pyRepr(s string) string {
-	q := "'"
-	if strings.Contains(s, "'") && !strings.Contains(s, `"`) {
-		q = `"`
-	}
-	var b strings.Builder
-	b.WriteString(q)
-	for _, r := range s {
-		switch {
-		case r == '\\' || string(r) == q:
-			b.WriteString(`\` + string(r))
-		case r == '\n':
-			b.WriteString(`\n`)
-		case r == '\r':
-			b.WriteString(`\r`)
-		case r == '\t':
-			b.WriteString(`\t`)
-		case r < 0x20 || r == 0x7f:
-			fmt.Fprintf(&b, `\x%02x`, r)
-		default:
-			b.WriteRune(r)
-		}
-	}
-	b.WriteString(q)
-	return b.String()
-}
-
 func pyASCIIRepr(s string) string {
 	var b strings.Builder
-	for _, r := range pyRepr(s) {
+	for _, r := range py.Repr(s) {
 		switch {
 		case r < 0x80:
 			b.WriteRune(r)
