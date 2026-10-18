@@ -48,8 +48,11 @@ and backups; nothing of that lives here.
   the same set from `python314Packages`. Add a dependency in both.
 - Go: the module is `github.com/jeiang/atrium`, its toolchain line is pinned
   in `go.mod` and `flake-modules/devshell.nix` together. Ported code never
-  imports `regexp`; every pattern goes through the regexp2 package
-  (https://github.com/jeiang/atrium/issues/71), and `just lint` enforces it.
+  imports `regexp`; every pattern is the Python pattern text compiled by
+  `internal/rx` (regexp2 underneath,
+  https://github.com/jeiang/atrium/issues/71), `just lint` and an rx test
+  enforce it, and a slice that ports patterns passes them to `rxtest.Run`
+  keyed by their `regex_manifest.json` id.
   The CLI is stdlib `flag` through `internal/cli`: no CLI framework.
 - Go SQLite: the default build is cgo `mattn/go-sqlite3` (build tag
   `sqlite_fts5`, set in the devshell's `GOFLAGS`) with sqlite-vec vendored
@@ -124,6 +127,16 @@ and backups; nothing of that lives here.
   every write method calls the gate before the connection;
   `mail/mailtest.FakeClient` runs the same gate. A move is COPY, STORE
   `\Deleted`, UID EXPUNGE: nothing under `internal/mail` uses IMAP MOVE.
+- `internal/mail/mime/`: CPython 3.14.7's `email` package as `policy.default`
+  applies it to bytes (feedparser, header registry and value parser,
+  `parseaddr`/`getaddresses`, `parsedate_to_datetime`, codecs, transfer
+  decoding), including where Python raises; tables come from
+  `tools/mime/gen_tables.py`.
+- `internal/mail/features/`: `features.py` (`Extract`, `ContentDigest`,
+  `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
+- `internal/pyhtml/`: `html.unescape`; tables from `tools/pyhtml/gen_entities.py`.
+- `internal/rx/`: Python `re` patterns on regexp2 with Python semantics and
+  a 100 ms match timeout; `rxtest` runs them against the regex corpus.
 - `internal/web/`: the embedded web assets (`Static`, `AssetVersion`);
   `internal/web/static` is staged, never committed.
 - `third_party/`: vendored sources, each its own Go module wired by
