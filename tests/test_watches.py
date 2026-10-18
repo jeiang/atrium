@@ -211,6 +211,18 @@ def test_llm_fallback_for_orders_without_carrier_numbers(conn, cfg):
     assert len(rows) == 1 and rows[0]["tracking_number"] == "123456789012" and rows[0]["status"] == "shipped"
 
 
+def test_moved_mail_is_not_scanned_for_packages_again(conn, cfg):
+    first = mail(conn, 1, 2, "Thanks! Your order number: 88-1234 is confirmed.", subject="Order confirmation", from_name="Bookery", k_order=1)
+    answer = {"is_order": True, "carrier": "", "tracking_number": "", "merchant": "Bookery", "order_ref": "88-1234",
+              "status": "ordered", "status_text": "Order confirmed"}
+    watches.scan_packages(conn, cfg, fake_chat(answer), now=NOW)
+    conn.execute("UPDATE messages SET gone_at = ? WHERE id = ?", (NOW, first))
+    mail(conn, 7, 2, "Thanks! Your order number: 88-1234 is confirmed.", subject="Order confirmation", from_name="Bookery", k_order=1, mailbox_id=2, digest="d1")
+    calls = []
+    watches.scan_packages(conn, cfg, fake_chat(answer, calls), now=NOW)
+    assert calls == [] and conn.execute("SELECT COUNT(*) FROM watch_scans").fetchone()[0] == 1
+
+
 def test_llm_answer_with_invented_numbers_is_rejected(conn, cfg):
     mail(conn, 1, 2, "Your order is confirmed.", subject="Order confirmation", k_order=1)
     answer = {"is_order": True, "carrier": "UPS", "tracking_number": "1Z000000000000000", "merchant": "X",

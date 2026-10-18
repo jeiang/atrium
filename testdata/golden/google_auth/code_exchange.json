@@ -1,0 +1,62 @@
+{
+  "description": "google_auth.authorize (`atrium calendar google-auth --port 8765`): after the loopback redirect, the authorization_code grant with the PKCE verifier and the loopback redirect_uri.",
+  "exchanges": [
+    {
+      "request": {
+        "body": [
+          [
+            "client_id",
+            "golden-google-client-id"
+          ],
+          [
+            "client_secret",
+            "golden-google-client-secret"
+          ],
+          [
+            "code",
+            "golden-google-code"
+          ],
+          [
+            "code_verifier",
+            "golden-token-urlsafe-64"
+          ],
+          [
+            "grant_type",
+            "authorization_code"
+          ],
+          [
+            "redirect_uri",
+            "http://127.0.0.1:8765"
+          ]
+        ],
+        "body_encoding": "form",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "method": "POST",
+        "path": "/token",
+        "query": "",
+        "url": "https://oauth2.googleapis.com/token"
+      },
+      "response": {
+        "body": {
+          "access_token": "golden-google-access-token",
+          "expires_in": 3599,
+          "refresh_token": "golden-google-refresh-token",
+          "scope": "https://www.googleapis.com/auth/calendar.events",
+          "token_type": "Bearer"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "code_exchange",
+  "source_tests": [
+    "tests/test_calendar.py::test_google_auth_loopback_exchange"
+  ]
+}
