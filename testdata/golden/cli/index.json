@@ -1,0 +1,94 @@
+[
+  {
+    "argv": [
+      "atrium",
+      "live",
+      "status"
+    ],
+    "exit_code": 0,
+    "name": "live-status",
+    "stderr": "live-status.stderr",
+    "stdout": "live-status.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "list",
+      "--status",
+      "all"
+    ],
+    "exit_code": 2,
+    "name": "proposals-list-status-all",
+    "stderr": "proposals-list-status-all.stderr",
+    "stdout": "proposals-list-status-all.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "list"
+    ],
+    "exit_code": 0,
+    "name": "proposals-list",
+    "stderr": "proposals-list.stderr",
+    "stdout": "proposals-list.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "live",
+      "actions"
+    ],
+    "exit_code": 0,
+    "name": "live-actions",
+    "stderr": "live-actions.stderr",
+    "stdout": "live-actions.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "shadow-report",
+      "--since",
+      "365d"
+    ],
+    "exit_code": 0,
+    "name": "shadow-report-365d",
+    "stderr": "shadow-report-365d.stderr",
+    "stdout": "shadow-report-365d.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "rules",
+      "export"
+    ],
+    "exit_code": 0,
+    "name": "rules-export",
+    "stderr": "rules-export.stderr",
+    "stdout": "rules-export.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "notion",
+      "search",
+      "alpha"
+    ],
+    "exit_code": 0,
+    "name": "notion-search-alpha",
+    "stderr": "notion-search-alpha.stderr",
+    "stdout": "notion-search-alpha.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "media",
+      "poll"
+    ],
+    "exit_code": 0,
+    "name": "media-poll",
+    "stderr": "media-poll.stderr",
+    "stdout": "media-poll.stdout"
+  }
+]

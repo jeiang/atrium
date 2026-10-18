@@ -41,9 +41,9 @@ css:
   cd src/atrium/web
   exec tailwindcss --input static/input.css --output ../../../internal/web/static/app.css --watch
 
-# Run the Go tests (inside the dev shell)
+# Run the Go tests with the race detector (inside the dev shell)
 go-test *args="./...":
-  go test {{args}}
+  go test -race {{args}}
 
 # Run the SQLite driver tests on the pure-Go modernc fallback (inside the dev shell)
 go-test-modernc *args:
@@ -57,9 +57,14 @@ go-test-musl *args:
 lint *args="./...":
   golangci-lint run {{args}}
 
-# Check the Go code and its dependencies for known vulnerabilities (inside the dev shell)
-vuln *args="./...":
-  govulncheck {{args}}
+# Check every Go module (the root one and each nested in third_party) for known vulnerabilities (inside the dev shell)
+vuln:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  find . \( -name .devenv -o -name .direnv -o -name .worktrees -o -name vendor -o -name testdata \) -prune -o -name go.mod -print | sort | while read -r mod; do
+    echo "govulncheck: ${mod%/go.mod}"
+    (cd "${mod%/go.mod}" && govulncheck ./...)
+  done
 
 # Fail on Go dependencies under a forbidden (AGPL) or unknown license (inside the dev shell)
 licenses:

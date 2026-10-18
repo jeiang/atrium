@@ -1,0 +1,9 @@
+From: Shop B <ship@shopb.example>
+To: operator@icloud.example
+Subject: Your order has shipped
+Message-ID: <shipped@golden.example>
+Date: Tue, 13 Oct 2026 16:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Your package is on its way with UPS tracking 1Z999AA10123456784.

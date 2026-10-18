@@ -1,0 +1,21 @@
+{
+  "mode": "live",
+  "paused": false,
+  "golive_ts": "1792087200.0",
+  "baseline": 12,
+  "actions": {
+    "correct": {
+      "applied": 1
+    },
+    "file": {
+      "applied": 4,
+      "undone": 1
+    },
+    "flag": {
+      "applied": 3
+    },
+    "trash": {
+      "applied": 1
+    }
+  }
+}

@@ -1,0 +1,32 @@
+[
+  {
+    "carrier": "UPS",
+    "dismissed": 0,
+    "first_seen": 1792080000.0,
+    "id": 1,
+    "last_message_id": 92,
+    "merchant": "Shop B",
+    "merchant_key": "shop b",
+    "order_ref": "",
+    "source_message_id": 92,
+    "status": "shipped",
+    "status_text": "Your order has shipped",
+    "tracking_number": "1Z999AA10123456784",
+    "updated_ts": 1791907200.0
+  },
+  {
+    "carrier": "",
+    "dismissed": 0,
+    "first_seen": 1792080000.0,
+    "id": 2,
+    "last_message_id": 93,
+    "merchant": "Gadgets",
+    "merchant_key": "gadgets",
+    "order_ref": "GX-55123",
+    "source_message_id": 93,
+    "status": "ordered",
+    "status_text": "Order confirmed",
+    "tracking_number": "",
+    "updated_ts": 1791907200.0
+  }
+]

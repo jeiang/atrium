@@ -1,0 +1,9 @@
+From: Shop A <orders@shopa.example>
+To: operator@icloud.example
+Subject: Your Shop A receipt #2002
+Message-ID: <shopa-2002@golden.example>
+Date: Thu, 15 Oct 2026 14:48:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Total TTD 45.50 paid with card ending 1234 at SHOP A PORT OF SPAIN on 2026-10-15.

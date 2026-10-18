@@ -1,0 +1,45 @@
+{
+  "rules": [
+    {
+      "id": "club-news",
+      "action": "file",
+      "dest": "Newsletters",
+      "when": [
+        {
+          "field": "from_domain",
+          "op": "suffix",
+          "value": "club.example"
+        }
+      ]
+    },
+    {
+      "id": "promo-spam",
+      "account": "icloud",
+      "action": "delete",
+      "when": [
+        {
+          "field": "from_addr",
+          "op": "eq",
+          "value": "spam@promo.example"
+        }
+      ]
+    },
+    {
+      "id": "old-flash",
+      "account": "gmail",
+      "action": "delete",
+      "when": [
+        {
+          "field": "subject_tmpl",
+          "op": "re",
+          "value": "^flash sale"
+        },
+        {
+          "field": "age_days",
+          "op": "gte",
+          "value": 30
+        }
+      ]
+    }
+  ]
+}

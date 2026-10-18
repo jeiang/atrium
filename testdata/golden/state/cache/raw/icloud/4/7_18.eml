@@ -1,0 +1,9 @@
+From: Gadgets <orders@gadgets.example>
+To: operator@icloud.example
+Subject: Order confirmation 55123
+Message-ID: <gadget@golden.example>
+Date: Tue, 13 Oct 2026 16:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Thank you for your order GX-55123. We will email you when it ships.
