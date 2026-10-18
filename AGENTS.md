@@ -51,6 +51,13 @@ and backups; nothing of that lives here.
   imports `regexp`; every pattern goes through the regexp2 package
   (https://github.com/jeiang/atrium/issues/71), and `just lint` enforces it.
   The CLI is stdlib `flag` through `internal/cli`: no CLI framework.
+- Go SQLite: the default build is cgo `mattn/go-sqlite3` (build tag
+  `sqlite_fts5`, set in the devshell's `GOFLAGS`) with sqlite-vec vendored
+  in `third_party/sqlite-vec`; `-tags modernc` selects the pure-Go fallback.
+  Driver specifics stay in `internal/db/open_*.go`, and both drivers pass
+  the same tests. The bundled SQLite never drops below the version that
+  wrote `atrium.db` (`atriumDBSQLiteVersion`); bump it only by a pull request
+  that passes the driver tests on both.
 
 ## Layout
 
@@ -67,6 +74,9 @@ and backups; nothing of that lives here.
 - `cmd/atrium/`: the Go binary's entry point (root command, logging setup).
 - `internal/cli/`: the subcommand table; usage errors exit 2, a handler's
   return value is the exit code.
+- `internal/db/`: the SQLite driver seam (`Open`), vec0 and FTS5 tests.
+- `third_party/`: vendored sources, each its own Go module wired by
+  `replace`, with upstream licence files.
 - `internal/<module>/`: one package per runtime-toggled module, each with a
   `Register` func that adds its subcommands, routes, jobs and tools.
 - `docs/runbook.md`: the environment the units read and the operating
