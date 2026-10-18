@@ -24,7 +24,7 @@ def vcard_emails(text):
         head, sep, value = line.partition(":")
         if not sep:
             continue
-        name = head.split(".")[-1].split(";")[0].upper()
+        name = head.split(";")[0].rpartition(".")[2].upper()
         if name == "EMAIL" and "@" in value:
             found.add(value.strip().lower())
     return found
