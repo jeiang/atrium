@@ -1,0 +1,55 @@
+# X-GM-RAW wire encoding, for TestGmailRawSearch. Gmail advertises LITERAL-
+# after LOGIN, so a non-ASCII query up to 4096 bytes is a non-sync literal.
+
+S: {gmail.greeting}
+C: {t} CAPABILITY
+S: * CAPABILITY {gmail.caps}
+S: {t} OK Thats all she wrote! a1b2c3d4e5f6
+C: {t} LOGIN "atrium.test@gmail.com" "app password"
+S: {t} OK [CAPABILITY {gmail.authcaps}] atrium.test@gmail.com authenticated (Success)
+C: {t} SELECT INBOX
+S: * 4 EXISTS
+S: * OK [UIDVALIDITY 1] UIDs valid.
+S: * OK [UIDNEXT 105] Predicted next UID.
+S: {t} OK [READ-WRITE] INBOX selected. (Success)
+
+# ASCII: one quoted string, quote and backslash escaped, no CHARSET.
+C: {t} UID SEARCH X-GM-RAW "from:\"Jane Doe\" subject:(a\\b) in:anywhere"
+S: * SEARCH 101
+S: {t} OK SEARCH completed (Success)
+
+# Empty query.
+C: {t} UID SEARCH X-GM-RAW ""
+S: * SEARCH
+S: {t} OK SEARCH completed (Success)
+
+# Non-ASCII: CHARSET UTF-8 and a literal of the UTF-8 bytes.
+C: {t} UID SEARCH CHARSET UTF-8 X-GM-RAW {13+}
+C: subject:été
+S: * SEARCH 103
+S: {t} OK SEARCH completed (Success)
+
+# Non-ASCII with quotes: the literal carries them unescaped.
+C: {t} UID SEARCH CHARSET UTF-8 X-GM-RAW {38+}
+C: from:"José Ñúñez" 東京 -in:chats
+S: * SEARCH 102 103
+S: {t} OK SEARCH completed (Success)
+
+# One non-ASCII query switches the whole command to CHARSET UTF-8; the ASCII
+# ones stay quoted, the rest of the command follows the literal.
+C: {t} UID SEARCH CHARSET UTF-8 X-GM-RAW "has:attachment" X-GM-RAW {11+}
+C: label:Été X-GM-RAW "older_than:1y"
+S: * SEARCH
+S: {t} OK SEARCH completed (Success)
+
+# With UTF8=ACCEPT enabled the query is quoted UTF-8 and CHARSET is invalid.
+C: {t} ENABLE UTF8=ACCEPT
+S: * ENABLED UTF8=ACCEPT
+S: {t} OK Success
+C: {t} UID SEARCH X-GM-RAW "from:\"José Ñúñez\" 東京"
+S: * SEARCH 102
+S: {t} OK SEARCH completed (Success)
+
+C: {t} LOGOUT
+S: * BYE LOGOUT Requested
+S: {t} OK 73 good day (Success)
