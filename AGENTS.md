@@ -117,6 +117,12 @@ and backups; nothing of that lives here.
   `atrium-legacy.db` against the Python results in
   `testdata/golden/db/readpaths.json`. A module registers its paths in
   `init` and adds a blank import to that test.
+- `internal/assistant/scheduler/`: the schedule grammar (`Parse`,
+  `Describe`, `Validate`, `Spec.NextAfter`/`MinGap`; wall times resolve
+  as zoneinfo's `fold=0`, one-shots through a port of CPython's
+  `datetime.fromisoformat`) and the `jobs` CRUD with the 20-active cap
+  and 1 h minimum gap (`SkipLimits` is Python's `enforce=False`). Its
+  test runs `testdata/corpora/scheduler.jsonl` with exact match.
 - `internal/safety/`: the mailbox write gate. `ATRIUM_MODE` is read on
   every call; approved-proposal/undo, operator-send and automatic-write
   scopes are `context.Context` values; the pause file is existence-only.
