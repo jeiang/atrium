@@ -86,7 +86,7 @@
       go-licenses = goCheck "licenses" [pkgs.go-licenses] ''
         ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" go-licenses check ./... --disallowed_types=forbidden,unknown''}
         mkdir -p $out
-        GOFLAGS="$GOFLAGS -tags=sqlite_fts5" go-licenses report ./... --ignore github.com/jeiang/atrium --template ${notices} >$out/THIRD_PARTY_NOTICES
+        GOFLAGS="$GOFLAGS -tags=sqlite_fts5" go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --template ${notices} >$out/THIRD_PARTY_NOTICES
       '';
 
       # The vulnerability database changes daily, so this is a fixed-output derivation: it may reach
