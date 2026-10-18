@@ -20,10 +20,11 @@ Status: **numbers not collected.** The live DB is not readable by the research a
 On artemis, as a user that can read the DB (read-only open, `query_only`, nothing written; it selects no message, thread, file or mail content; job names are the schedule titles):
 
 ```
-sudo -u atrium nix shell nixpkgs#python3 -c python3 usage_baseline.py /var/lib/atrium/atrium.db > /tmp/baseline.md
+curl -fsSLO https://raw.githubusercontent.com/jeiang/atrium/research/usage-baseline/research/usage_baseline.py
+sudo -u atrium python3 usage_baseline.py /var/lib/atrium/atrium.db > /tmp/baseline.md
 ```
 
-(or `sudo -u atrium python3 ...` with any python3). Paste `/tmp/baseline.md` into the ticket, then `rm /tmp/baseline.md usage_baseline.py`. Output sections: by run kind, by job name (cron/nightly/builtin) or kind, by kind+model, and by month+model; each for 30 and 90 days (months: all time), with runs, calls, input/cache-write/cache-read/output tokens, searches, cache hit share (`cache_read / (input+cache_write+cache_read)`), cost, per-run p50/p95 of cost, calls and tokens, wall seconds p50/p95; plus tool-call counts by name (90 days) and the settings table columns. The script was exercised only against a synthetic DB with the repo schema (one row), not the live data.
+(or `sudo -u atrium python3 ...` with any python3). Paste `/tmp/baseline.md` into the ticket, then `rm /tmp/baseline.md usage_baseline.py`. Output sections: by run kind, by job name (cron/nightly/builtin) or kind, by kind+model, and by month+model; each for 30 and 90 days (months: all time), with runs, calls, input/cache-write/cache-read/output tokens, searches, cache hit share (`cache_read / (input+cache_write+cache_read)`), cost, per-run p50/p95 of cost, calls and tokens, wall seconds p50/p95; plus gaps between consecutive runs per thread kind (buckets <5m, 5-15m, 15-60m, 1-3h, >3h), request history size (input+cache read+cache write) p50/p90/p99/max and share over 100K/150K/200K per kind and model, compaction events per thread, plus tool-call counts by name (90 days) and the settings table columns. The script was exercised only against a synthetic DB with the repo schema (one row), not the live data.
 
 ```python
 #!/usr/bin/env python3
@@ -92,6 +93,50 @@ print("\n### settings keys present (names only)\n")
 for (t,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%setting%'"):
     cols = [c[1] for c in conn.execute(f"PRAGMA table_info({t})")]
     print(f"- table {t}: columns {cols}")
+
+def pctl(xs, q):
+    xs = sorted(xs)
+    return xs[min(len(xs) - 1, int(round(q * (len(xs) - 1))))] if xs else 0
+
+def has_col(table, col):
+    return any(c[1] == col for c in conn.execute(f"PRAGMA table_info({table})"))
+
+for days in (30, 90):
+    cutoff = now - days * 86400
+    print(f"\n### gaps between consecutive runs (human turns) in the same thread, by thread kind (last {days} days)\n")
+    print("| kind | gaps | <5m | 5-15m | 15-60m | 1-3h | >3h |")
+    print("|---|---|---|---|---|---|---|")
+    by = defaultdict(lambda: defaultdict(list))
+    for kind, tid, st in conn.execute("SELECT t.kind, r.thread_id, r.started_at FROM runs r JOIN threads t ON t.id = r.thread_id WHERE r.parent_run_id IS NULL AND r.started_at >= ? ORDER BY r.thread_id, r.started_at", (cutoff,)):
+        by[kind][tid].append(st)
+    for kind in sorted(by):
+        b = [0] * 5
+        for sts in by[kind].values():
+            for a, c in zip(sts, sts[1:]):
+                g = c - a
+                b[0 if g < 300 else 1 if g < 900 else 2 if g < 3600 else 3 if g < 10800 else 4] += 1
+        print(f"| {kind} | {sum(b)} | " + " | ".join(map(str, b)) + " |")
+
+    print(f"\n### request history size = input + cache read + cache write tokens, per request (last {days} days)\n")
+    print("| kind / model | requests | p50 | p90 | p99 | max | >100K | >150K | >200K |")
+    print("|---|---|---|---|---|---|---|---|---|")
+    sz = defaultdict(list)
+    for kind, model, i, w5, w1, cr in conn.execute("SELECT kind, model, input_tokens, cache_write_5m, cache_write_1h, cache_read FROM usage WHERE ts >= ?", (cutoff,)):
+        sz[f"{kind} / {model}"].append(i + w5 + w1 + cr)
+    for k in sorted(sz):
+        xs = sz[k]
+        n = len(xs)
+        print(f"| {k} | {n} | {pctl(xs,.5)} | {pctl(xs,.9)} | {pctl(xs,.99)} | {max(xs)} | " + " | ".join(f"{sum(x > t for x in xs) / n:.1%}" for t in (100000, 150000, 200000)) + " |")
+
+if has_col("usage", "compaction"):
+    print("\n### compaction events per thread (all time; counts only)\n")
+    rows_c = conn.execute("SELECT n, COUNT(*) FROM (SELECT thread_id, SUM(compaction) AS n FROM usage GROUP BY thread_id) GROUP BY n ORDER BY n").fetchall()
+    print("| compactions in thread | threads |\n|---|---|")
+    for n, c in rows_c:
+        print(f"| {n} | {c} |")
+    print(f"\ncompaction summary calls total: {conn.execute('SELECT COALESCE(SUM(compaction),0) FROM usage').fetchone()[0]}")
+else:
+    print("\n(no usage.compaction column; compaction events not recorded)")
 ```
 
 ## Not covered by this script (still open under #82)
