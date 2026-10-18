@@ -1,0 +1,960 @@
+{
+  "corpus": "webfetch",
+  "dns": {
+    "cgnat.example.test": [
+      "100.64.0.1"
+    ],
+    "dual.example.test": [
+      "93.184.216.34",
+      "2606:2800:220:1:248:1893:25c8:1946"
+    ],
+    "empty.example.test": [],
+    "example.test": [
+      "93.184.216.34"
+    ],
+    "innocent.example.test": [
+      "10.1.2.3"
+    ],
+    "linklocal.example.test": [
+      "fe80::1%eth0"
+    ],
+    "localhost": [
+      "127.0.0.1",
+      "::1"
+    ],
+    "mapped.example.test": [
+      "::ffff:10.0.0.1"
+    ],
+    "metadata.example.test": [
+      "169.254.169.254"
+    ],
+    "other.test": [
+      "8.8.4.4"
+    ],
+    "rebind.example.test": [
+      "93.184.216.34",
+      "127.0.0.1"
+    ],
+    "v6.example.test": [
+      "2606:2800:220:1:248:1893:25c8:1946"
+    ],
+    "www.example.test": [
+      "93.184.216.34"
+    ]
+  },
+  "fixtures": [],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "functions": [
+    "default_allowed",
+    "normalize_url",
+    "fetch_page",
+    "plain_text",
+    "extract_text",
+    "web_fetch"
+  ],
+  "process_tz": "America/Port_of_Spain",
+  "python": "3.14",
+  "records": 215,
+  "responses": [
+    {
+      "body": {
+        "b64": "PGh0bWw+PGhlYWQ+PHRpdGxlPkFscGhhIEd1aWRlPC90aXRsZT48L2hlYWQ+PGJvZHk+PG5hdj5tZW51PC9uYXY+PHA+VGhlIHdpZGdldCBjYWxpYnJhdGlvbiBwcm9jZWR1cmUgdGFrZXMgdGhyZWUgc3RlcHMuPC9wPjxzY3JpcHQ+eCgpPC9zY3JpcHQ+PC9ib2R5PjwvaHRtbD4="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "158"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/ok"
+    },
+    {
+      "body": {
+        "b64": "PGh0bWw+PGhlYWQ+PHRpdGxlPkFscGhhIEd1aWRlPC90aXRsZT48L2hlYWQ+PGJvZHk+PG5hdj5tZW51PC9uYXY+PHA+VGhlIHdpZGdldCBjYWxpYnJhdGlvbiBwcm9jZWR1cmUgdGFrZXMgdGhyZWUgc3RlcHMuPC9wPjxzY3JpcHQ+eCgpPC9zY3JpcHQ+PC9ib2R5PjwvaHRtbD4="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "158"
+        ]
+      ],
+      "host": "example.test",
+      "port": 443,
+      "scheme": "https",
+      "status": 200,
+      "target": "/ok"
+    },
+    {
+      "body": {
+        "b64": "PHA+Y2Fm6TwvcD4="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=ISO-8859-1"
+        ],
+        [
+          "Content-Length",
+          "11"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/latin1"
+    },
+    {
+      "body": {
+        "b64": "PHA+dW50eXBlZDwvcD4="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Length",
+          "14"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/no-type"
+    },
+    {
+      "body": {
+        "b64": "cGxhaW4gYm9keQ=="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/plain"
+        ],
+        [
+          "Content-Length",
+          "10"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/plain"
+    },
+    {
+      "body": {
+        "b64": "PHA+eDwvcD4="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "application/xhtml+xml"
+        ],
+        [
+          "Content-Length",
+          "8"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/xhtml"
+    },
+    {
+      "body": {
+        "b64": "PHA+dXBwZXI8L3A+"
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "TEXT/HTML; Charset=\"UTF-8\""
+        ],
+        [
+          "Content-Length",
+          "12"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/upper"
+    },
+    {
+      "body": {
+        "b64": "e30="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "application/json"
+        ],
+        [
+          "Content-Length",
+          "2"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/json"
+    },
+    {
+      "body": {
+        "b64": "AAE="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "application/octet-stream"
+        ],
+        [
+          "Content-Length",
+          "2"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/binary"
+    },
+    {
+      "body": {
+        "b64": "bm9wZQ=="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "4"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 404,
+      "target": "/missing"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 500,
+      "target": "/error"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "/ok"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/hop"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "ok?x=1#frag"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 301,
+      "target": "/hop-query?a=1&b=two"
+    },
+    {
+      "body": {
+        "b64": "PHA+cXVlcnkga2VwdDwvcD4="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "17"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/ok?x=1"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "https://example.test/ok"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 308,
+      "target": "/to-https"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "https://www.example.test:8443/ok"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 307,
+      "target": "/to-other-port"
+    },
+    {
+      "body": {
+        "b64": "PHA+cG9ydCA4NDQzPC9wPg=="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "16"
+        ]
+      ],
+      "host": "www.example.test",
+      "port": 8443,
+      "scheme": "https",
+      "status": 200,
+      "target": "/ok"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/no-location"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "/ok"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 304,
+      "target": "/not-redirect"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "/loop"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/loop"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "/chain2"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/chain1"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "/chain3"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/chain2"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "/chain4"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/chain3"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "/chain5"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/chain4"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "/ok"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/chain5"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "/chain1"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/chain0"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "http://192.168.1.1/secret"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/to-private"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "http://169.254.169.254/latest"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/to-metadata"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "http://metadata.example.test/latest"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/to-metadata-host"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "file:///etc/passwd"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/to-file"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "ftp://example.test/x"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 301,
+      "target": "/to-ftp"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Location",
+          "//other.test/ok"
+        ],
+        [
+          "Content-Length",
+          "0"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 302,
+      "target": "/to-scheme-relative"
+    },
+    {
+      "body": {
+        "b64": "PHA+b3RoZXI8L3A+"
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "12"
+        ]
+      ],
+      "host": "other.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/ok"
+    },
+    {
+      "body": {
+        "b64": ""
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/plain"
+        ],
+        [
+          "Content-Length",
+          "2097153"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/declared-big"
+    },
+    {
+      "body": {
+        "b64": "dHdlbHZlIGJ5dGVz"
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/plain"
+        ],
+        [
+          "Content-Length",
+          "twelve"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/declared-odd"
+    },
+    {
+      "body": {
+        "count": 2097152,
+        "repeat": "a"
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/plain"
+        ],
+        [
+          "Content-Length",
+          "2097152"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/exact-max"
+    },
+    {
+      "body": {
+        "b64": "aGVsbG8gd29ybGQ="
+      },
+      "chunk": 5,
+      "headers": [
+        [
+          "Content-Type",
+          "text/plain"
+        ],
+        [
+          "Transfer-Encoding",
+          "chunked"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/chunked"
+    },
+    {
+      "body": {
+        "count": 2162688,
+        "repeat": "a"
+      },
+      "chunk": 65536,
+      "headers": [
+        [
+          "Content-Type",
+          "text/plain"
+        ],
+        [
+          "Transfer-Encoding",
+          "chunked"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/chunked-big"
+    },
+    {
+      "body": {
+        "b64": "PHA+eDwvcD4="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=x-unknown-42"
+        ],
+        [
+          "Content-Length",
+          "8"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/bad-charset"
+    },
+    {
+      "body": {
+        "b64": "PCFkb2N0eXBlIGh0bWw+PGh0bWw+PGhlYWQ+PHRpdGxlPiAgQWxwaGEKIEd1aWRlIDwvdGl0bGU+PG1ldGEgcHJvcGVydHk9J29nOnRpdGxlJyBjb250ZW50PSdBbHBoYSBHdWlkZSAoT0cpJz48L2hlYWQ+PGJvZHk+PGhlYWRlcj5TaXRlIGhlYWRlcjwvaGVhZGVyPjxuYXY+PGEgaHJlZj0nLyc+SG9tZTwvYT4gfCA8YSBocmVmPScvYic+QmxvZzwvYT48L25hdj48YXJ0aWNsZT48aDE+Q2FsaWJyYXRpbmcgdGhlIHdpZGdldDwvaDE+PHA+U3RlcCAxOiB0aGUgd2lkZ2V0IGNhbGlicmF0aW9uIHByb2NlZHVyZSBuZWVkcyBhIHRvcnF1ZSB3cmVuY2ggc2V0IHRvIDExIG5ld3RvbiBtZXRyZXMsIGFuZCB0aGUgb3BlcmF0b3IgcmVjb3JkcyBlYWNoIHJlYWRpbmcgaW4gdGhlIGxvZyBiZWZvcmUgbW92aW5nIHRvIHRoZSBuZXh0IGJvbHQuPC9wPjxwPlN0ZXAgMjogdGhlIHdpZGdldCBjYWxpYnJhdGlvbiBwcm9jZWR1cmUgbmVlZHMgYSB0b3JxdWUgd3JlbmNoIHNldCB0byAxMiBuZXd0b24gbWV0cmVzLCBhbmQgdGhlIG9wZXJhdG9yIHJlY29yZHMgZWFjaCByZWFkaW5nIGluIHRoZSBsb2cgYmVmb3JlIG1vdmluZyB0byB0aGUgbmV4dCBib2x0LjwvcD48cD5TdGVwIDM6IHRoZSB3aWRnZXQgY2FsaWJyYXRpb24gcHJvY2VkdXJlIG5lZWRzIGEgdG9ycXVlIHdyZW5jaCBzZXQgdG8gMTMgbmV3dG9uIG1ldHJlcywgYW5kIHRoZSBvcGVyYXRvciByZWNvcmRzIGVhY2ggcmVhZGluZyBpbiB0aGUgbG9nIGJlZm9yZSBtb3ZpbmcgdG8gdGhlIG5leHQgYm9sdC48L3A+PHA+U3RlcCA0OiB0aGUgd2lkZ2V0IGNhbGlicmF0aW9uIHByb2NlZHVyZSBuZWVkcyBhIHRvcnF1ZSB3cmVuY2ggc2V0IHRvIDE0IG5ld3RvbiBtZXRyZXMsIGFuZCB0aGUgb3BlcmF0b3IgcmVjb3JkcyBlYWNoIHJlYWRpbmcgaW4gdGhlIGxvZyBiZWZvcmUgbW92aW5nIHRvIHRoZSBuZXh0IGJvbHQuPC9wPjxwPlN0ZXAgNTogdGhlIHdpZGdldCBjYWxpYnJhdGlvbiBwcm9jZWR1cmUgbmVlZHMgYSB0b3JxdWUgd3JlbmNoIHNldCB0byAxNSBuZXd0b24gbWV0cmVzLCBhbmQgdGhlIG9wZXJhdG9yIHJlY29yZHMgZWFjaCByZWFkaW5nIGluIHRoZSBsb2cgYmVmb3JlIG1vdmluZyB0byB0aGUgbmV4dCBib2x0LjwvcD48cD5TdGVwIDY6IHRoZSB3aWRnZXQgY2FsaWJyYXRpb24gcHJvY2VkdXJlIG5lZWRzIGEgdG9ycXVlIHdyZW5jaCBzZXQgdG8gMTYgbmV3dG9uIG1ldHJlcywgYW5kIHRoZSBvcGVyYXRvciByZWNvcmRzIGVhY2ggcmVhZGluZyBpbiB0aGUgbG9nIGJlZm9yZSBtb3ZpbmcgdG8gdGhlIG5leHQgYm9sdC48L3A+PHByZT5jb2RlICBibG9jawogIGluZGVudGVkPC9wcmU+PHRhYmxlPjx0cj48dGQ+Y2VsbCAxPC90ZD48dGQ+Y2VsbCAyPC90ZD48L3RyPjwvdGFibGU+PHVsPjxsaT5maXJzdCBpdGVtPC9saT48bGk+c2Vjb25kICZhbXA7IGxhc3Q8L2xpPjwvdWw+PC9hcnRpY2xlPjxhc2lkZT5SZWxhdGVkIGxpbmtzPC9hc2lkZT48Zm9ybT48aW5wdXQgdmFsdWU9J3gnPlNlYXJjaDwvZm9ybT48Zm9vdGVyPsKpIDIwMjYgRXhhbXBsZTwvZm9vdGVyPjxzY3JpcHQ+dmFyIHggPSAnPHA+bm90IHRleHQ8L3A+Jzs8L3NjcmlwdD48bm9zY3JpcHQ+RW5hYmxlIEpTPC9ub3NjcmlwdD48L2JvZHk+PC9odG1sPg=="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "1630"
+        ]
+      ],
+      "host": "example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/article"
+    },
+    {
+      "body": {
+        "b64": "PHA+djY8L3A+"
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "9"
+        ]
+      ],
+      "host": "v6.example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/ok"
+    },
+    {
+      "body": {
+        "b64": "PHA+ZHVhbDwvcD4="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "11"
+        ]
+      ],
+      "host": "dual.example.test",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/ok"
+    },
+    {
+      "body": {
+        "b64": "PHA+bGl0ZXJhbDwvcD4="
+      },
+      "chunk": null,
+      "headers": [
+        [
+          "Content-Type",
+          "text/html; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "14"
+        ]
+      ],
+      "host": "93.184.216.34",
+      "port": 80,
+      "scheme": "http",
+      "status": 200,
+      "target": "/ok"
+    }
+  ],
+  "source": [
+    "src/atrium/webfetch.py",
+    "src/atrium/agent/tools/web_fetch.py"
+  ],
+  "versions": {
+    "trafilatura": "2.2.0"
+  }
+}

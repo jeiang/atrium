@@ -7,17 +7,31 @@ nothing here is live data.
 
 Generators live in `tools/golden/corpora/gen_<name>.py` and write
 `testdata/corpora/<name>.jsonl` (one JSON object per line, keys sorted, UTF-8,
-no ASCII escaping). `python tools/golden/gen_corpora.py` runs every generator
-from the repo root inside `nix develop --impure`; regeneration is
-byte-identical. They are deleted with the Python app; their output stays.
+no ASCII escaping) plus `<name>_manifest.json`. Corpora whose inputs are
+files (mail, calendars, Office documents) also write them under
+`testdata/corpora/<name>/`; those bytes are generated too, never edited by
+hand. `python tools/golden/gen_corpora.py` runs every generator from the repo
+root inside `nix develop --impure`; regeneration is byte-identical, and
+`gen_<name>.py --check` compares a fresh generation with the committed files.
+They are deleted with the Python app; their output stays.
+
+The `golden-regex` flake check covers the regex corpus; the `golden-corpora`
+check runs every other generator with `--check` under two `PYTHONHASHSEED`
+values in the package's Python environment, so a corpus that depends on set
+order, the clock, the network or the host fails it.
 
 ## Tolerance per corpus
 
 | Corpus | File | Tolerance |
 | --- | --- | --- |
 | Regex | `regex.jsonl`, `regex_manifest.json` | Exact: `search`, `match`, `fullmatch`, `finditer` and `call` must equal Python's. Documented divergence: the text of a compile `error` (only "compiles or not" must agree) and `warnings` (informational). |
-
-Corpora added later (#253) add a row here.
+| Mail features | `features.jsonl`, `features/*.eml` | Exact: every field of `extract`, `content_digest` and the helper outputs. |
+| Calendar | `calendar.jsonl`, `calendar/*.ics` | Exact: `events_in_ics` events (fields and order), `parse_when`, `normalize_spec`, `google_body`, error types. Documented divergence: the text after `recurrence of <uid> not expanded: ` in notes and the `error.message` of unparseable files (dateutil and icalendar wording); `build_ics` is compared as the set of unfolded content lines (line folding and property order may differ). |
+| Scheduler | `scheduler.jsonl` | Exact: `parse`, `describe`, `next_after`, `min_gap`, `validate`, including every error message. |
+| Documents | `documents.jsonl`, `documents/*` | Exact: `kind`, `media_type`, PDF, image and plain-text results, `safe_name`, `media_type_of`, `kind_of`, `check_budget`, every error message up to `could not read the Word file: ` / `Excel file: `. Documented divergence: the exception name after that prefix, and the `text` (with its `tokens`) of `.docx`/`.xlsx` inputs, listed under [Documents divergences](#documents-divergences). |
+| Web fetch | `webfetch.jsonl` | Exact: `default_allowed`, `normalize_url`, `fetch_page` (outcome, error type and message, final URL, charset, body, connections), `plain_text`, `web_fetch` except its `text` and `title`. Documented divergence: the resolver's text after `dns: `, the `ValueError` message of an out-of-range or non-numeric port (only "fails before connecting" must agree), and `extract_text` plus `web_fetch` `text`/`title` (trafilatura), listed under [Web fetch divergences](#web-fetch-divergences). |
+| SMTP | `smtp.jsonl` | Exact: `sender_address`, `split_addresses`, the SMTP `calls`, atrium's own messages (`no recipients`, `... is not configured...`, `sent`, `refused:`, `send failed: `, the Sent-copy outcomes) and draft rows. Documented divergence: a message text Python takes from `str(exception)` (`(535, b'5.7.8 ...')`, `[Errno 111] Connection refused`, the refused-recipient replies), and `build_message` output compared as parsed headers plus decoded body (folding and transfer encoding may differ), listed under [SMTP divergences](#smtp-divergences). |
+| Media | `media.jsonl` | Exact: every function. |
 
 ## Regex
 
@@ -118,3 +132,128 @@ A new pattern needs an `INPUTS` entry (and a `BINDINGS` entry if its pattern
 or flags depend on runtime values) in `tools/golden/corpora/regex_inputs.py`.
 A call whose arguments depend on runtime values needs `USE_BINDINGS`; a
 replacement function passed in as a variable needs `CALLABLE_REPL`.
+
+## Common record shape
+
+Every corpus but regex uses `{"fn": "<function>", "input": [<positional args>], "output": <value>}`
+or, when the call raises, `"error": {"type": "<Python exception class>", "message": "<str(e)>"}`
+instead of `output`. A record may add `case` (a fixture or scenario name) and
+the extra context listed per corpus. Bytes are base64 (`b64`), a run of one
+byte is `{"repeat_b64": ..., "count": n}`, and a fixture is `{"file":
+"<name>/<path>"}` relative to this directory. Timestamps are POSIX seconds
+(floats compare numerically). Each manifest holds `freeze_commit`, `python`,
+`process_tz`, `records`, `fixtures`, the source file and functions, and
+library versions where a library shapes the output. The generators set the
+process time zone (`TZ`) to `process_tz` (`America/Port_of_Spain`): Python
+reads a naive time, such as a `Date` header without a zone, in the process
+zone, so the Go test must run with the same local zone. Lines can be long
+(the calendar corpus has one of about 300 KB): give `bufio.Scanner` a 1 MiB
+buffer.
+
+## Mail features
+
+`src/atrium/features.py`. `extract` records carry `file` (the `.eml`),
+`header_len` (the message is `header_bytes = file[:header_len]`, `text_bytes =
+file[header_len:]`, as sync passes BODY[HEADER] and BODY[TEXT]),
+`attachments` (`null`: parsed from the MIME tree; a list of `[type, name]`:
+passed in as sync does from BODYSTRUCTURE), `fallback_ts`, `output` (the
+features dict) and `digest` (`content_digest`). The 31 messages cover the
+`tests/test_features.py` vectors, multipart/alternative and mixed/related
+trees, RFC 2047 and RFC 2231 encoded headers, quoted-printable and base64,
+HTML-only bodies with scripts and entities, Latin-1, windows-1252, raw 8-bit
+and unknown charsets, bad, missing and obsolete dates, ESP headers, DKIM,
+group and odd addresses, folded headers, LF-only line ends, broken multipart,
+forwarded `message/rfc822`, NUL bytes and a body over `FTS_BODY_CHARS`. The
+other records are `subject_template`, `filename_pattern`, `msgid_list`,
+`normalize_msgid` and `domain_of` vectors.
+
+## Calendar
+
+`src/atrium/calendar.py`. `events_in_ics` records name the `file`, `tz` (the
+display zone), `window_start`/`window_end` (aware ISO times), `calendar`, and
+`output: {events, notes}`. The fixtures (CRLF line ends) cover RRULE with
+EXDATE and RECURRENCE-ID overrides (moved in, moved out, cancelled, orphan,
+UTC-valued), all-day single, multi-day and yearly events, EXDATE on dates,
+weekly and daily series across the 2026 DST changes in `America/New_York` and
+`Europe/London` (nonexistent 02:30 and ambiguous 01:30 starts), UTC and
+floating starts, BYMONTHDAY=-1, BYSETPOS, INTERVAL with UNTIL, RDATE,
+DURATION, a Windows TZID with VTIMEZONE, an invalid FREQ, the 2000-occurrence
+cap and unparseable input. Each file is evaluated over the windows in the
+manifest (in `America/Port_of_Spain`, `America/New_York` and
+`Europe/London`). `parse_when`, `normalize_spec` (records with `uid` pass it
+as the generated uid), `google_body` and `build_ics` (with `DTSTAMP` pinned to
+`dtstamp`) run in two zones. `parse_when` outputs `{type: date|datetime, iso,
+tz}`.
+
+## Scheduler
+
+`src/atrium/agent/scheduler.py`. Every schedule in the generator (daily,
+weekly, 5-field cron with names, lists, ranges and steps, ISO one-shots, and
+invalid forms) is parsed in `America/Port_of_Spain`, `America/New_York` and
+`Europe/London`. `parse` outputs the spec with sorted field sets (`null` for a
+cron `*` day, month or weekday). For each valid spec and each `after` in the
+manifest (before, inside and after both 2026 DST changes of both DST zones,
+year and leap-day boundaries), `next_after` holds the next six firing times
+chained (`ts` and the `local` ISO time), `min_gap` the minimum gap over 64
+occurrences, and `validate` the due time or error with `enforce_min` true and
+false.
+
+## Documents
+
+`src/atrium/agent/files.py`. `inspect` records carry `name`, `supplied_type`
+and `data`, and output `{kind, media_type, text, tokens}`. The `.docx` and
+`.xlsx` fixtures are built with python-docx and openpyxl and repacked as
+stored zips with fixed timestamps; `word_features.docx` has a handwritten
+`word/document.xml` with tabs, breaks, hyperlinks, fields, content controls,
+tracked changes, merged and nested table cells. `media_type_of` falls back to
+Python's built-in `mimetypes` table only (the generator ignores the host's
+`mime.types`).
+
+### Documents divergences
+
+None recorded yet. The Go documents slice lists here each `.docx`/`.xlsx`
+case whose text differs, with the reason.
+
+## Web fetch
+
+`src/atrium/webfetch.py` and `src/atrium/agent/tools/web_fetch.py`. No
+network is used: the manifest's `dns` table answers `getaddrinfo` (an IP
+literal resolves to itself, and a host `inet_aton` accepts such as
+`2130706433`, `0x7f.1` or `127.1` resolves to that IPv4 address, as glibc
+does; anything else fails), and `responses` lists the scripted HTTP reply
+per `scheme`, `host`, `port` and request `target` (`status`, `headers`,
+`body`, `chunk`: chunked framing size). A request with no scripted reply fails
+with `connection refused`. `fetch_page` records output `{body_b64 (null over
+4 KB), body_len, charset, url}` and `connections`: each pinned connection
+(`address`, `host`, `port`, `target`, request headers) in order.
+`default_allowed` covers IPv4 and IPv6 special-purpose ranges. `plain_text`
+and `extract_text` run over the pages in the generator; `web_fetch` records
+add `allowed_urls`.
+
+### Web fetch divergences
+
+None recorded yet. The Go web fetch slice lists here how its readable-text
+extraction differs from trafilatura's.
+
+## SMTP
+
+`src/atrium/smtp.py` and `drafts.send`. The fake server records `calls`
+(`connect` with host, port and timeout, `starttls`, `login`, `send_message`
+with envelope sender and recipients, `quit`). `failure` names the stage
+(`connect`, `starttls`, `login`, `send`), the Python exception and its
+constructor arguments; `refused_by_server` is the server's per-recipient
+refusal map. `drafts.send` records add `row` (the draft's `status`,
+`smtp_result`, `sent_msgid` afterwards), `sent_mailbox` and `appended_to`.
+`make_msgid` is pinned to `<golden.0001@<sender domain>>` and the clock to the
+manifest's `now`.
+
+### SMTP divergences
+
+None recorded yet. The Go SMTP slice lists here how it renders server and OS
+errors and how its message serialization differs.
+
+## Media
+
+`src/atrium/media/parse.py`: `parse_release` (output `{title, year, season,
+episode}`), `ext`, `is_video`, `is_subtitle`, `clean_component`, `named`,
+`movie_path`, `episode_path`.
