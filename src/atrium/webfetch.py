@@ -19,6 +19,12 @@ SKIP_TAGS = frozenset({"script", "style", "noscript", "svg", "nav", "header", "f
 BLOCK_TAGS = frozenset(
     {"p", "div", "br", "li", "ul", "ol", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "section", "article", "pre", "table"}
 )
+EMBEDDED_IPV4_NETWORKS = (
+    ipaddress.ip_network("64:ff9b::/96"),
+    ipaddress.ip_network("::/96"),
+    ipaddress.ip_network("::ffff:0:0:0/96"),
+)
+IPV4_MASK = 0xFFFFFFFF
 
 
 class Blocked(ValueError):
@@ -30,8 +36,13 @@ class FetchError(RuntimeError):
 
 
 def default_allowed(ip):
-    if ip.version == 6 and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
+    if ip.version == 6:
+        if ip.is_site_local:
+            return False
+        if ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        elif any(ip in network for network in EMBEDDED_IPV4_NETWORKS):
+            ip = ipaddress.IPv4Address(int(ip) & IPV4_MASK)
     return ip.is_global and not ip.is_multicast
 
 

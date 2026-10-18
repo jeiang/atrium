@@ -241,6 +241,50 @@
 
 
 
+
+
+
+<li id="decision-507" class="group/row grid gap-x-4 gap-y-2 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_--spacing(64)_--spacing(48)_auto] lg:items-center">
+  <div class="flex min-w-0 flex-col gap-0.5">
+    <a class="truncate text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm" href="/messages/507" hx-get="/messages/507" hx-target="#reader-body" hx-swap="innerHTML show:top">Promo blast</a>
+    <p class="truncate text-xs text-muted-foreground">Deals · <time datetime="2025-10-04T08:53:20+00:00">2025-10-04</time> · icloud</p>
+  </div>
+  <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+    <span class="sr-only">Now in</span>
+    <span class="max-w-full truncate text-muted-foreground">Gone</span>
+    <svg class="lucide lucide-arrow-right size-3.5 shrink-0 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+    <span class="sr-only">proposed</span>
+    <span class="max-w-full truncate font-medium">Delete</span>
+    
+<span class="badge" data-variant="secondary">Applied</span>
+    
+  </div>
+  <div class="flex min-w-0 flex-wrap items-center gap-2">
+    <span class="badge" data-variant="outline"><span class="size-2 rounded-full bg-chart-4" aria-hidden="true"></span>Rule</span>
+    <code class="truncate font-mono text-xs text-muted-foreground">spam-promo</code>
+    <span class="text-xs text-muted-foreground tabular-nums"><span class="sr-only">confidence </span>100%</span>
+  </div>
+  <div class="flex gap-1 group-has-[form]/row:invisible max-lg:group-has-[form]/row:hidden lg:w-18 lg:justify-end">
+    
+    <button type="button" class="btn transition-colors" data-size="sm" data-variant="ghost" title="Undo"
+            hx-post="/live/actions/13/undo" hx-target="#decision-507" hx-swap="outerHTML" hx-disabled-elt="this"
+            hx-confirm="Undo this and put the message back?">
+      <svg class="lucide lucide-undo-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg><span class="lg:sr-only">Undo</span>
+    </button>
+    
+    <button type="button" class="btn transition-colors" data-size="sm" data-variant="ghost" title="Correct"
+            hx-get="/messages/507/correct?context=row" hx-target="#correct-slot-row-507" hx-swap="innerHTML">
+      <svg class="lucide lucide-folder-input " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg><span class="lg:sr-only">Correct</span>
+    </button>
+    <a class="btn transition-colors" data-size="sm" data-variant="ghost" title="Make rule" href="/rules/new?message=507">
+      <svg class="lucide lucide-list-plus " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 5H3"/><path d="M11 12H3"/><path d="M16 19H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></svg><span class="lg:sr-only">Make rule</span>
+    </a>
+  </div>
+  <div id="correct-slot-row-507" class="empty:hidden lg:col-span-4"></div>
+</li>
+
+
+
 <li id="load-more" class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
   <span class="text-xs text-muted-foreground tabular-nums">Showing 50 of 1</span>
   <button type="button" class="btn" data-size="sm" data-variant="outline"

@@ -1,0 +1,99 @@
+{
+  "description": "notion_proposals.propose_edit: EDIT_SCHEMA at max_tokens 1500 with the instruction and page markdown.",
+  "exchanges": [
+    {
+      "request": {
+        "body": {
+          "cache_prompt": true,
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          },
+          "max_tokens": 1500,
+          "messages": [
+            {
+              "content": "You draft a small, targeted edit to one page of the owner's notes, written in Markdown. You get the page Markdown and an instruction. Return the minimal list of replacements: each old_str must be copied verbatim from the page and occur exactly once in it; new_str is its replacement. Change only what the instruction asks for. summary is one short sentence describing the edit. If the instruction cannot be applied as a replacement of existing text, return an empty updates list.",
+              "role": "system"
+            },
+            {
+              "content": "Instruction: move the launch to july\n\nPage title: Alpha plan\nPage Markdown:\nLaunch in June.\n\nOwner: Sam",
+              "role": "user"
+            }
+          ],
+          "model": "qwen",
+          "response_format": {
+            "json_schema": {
+              "name": "answer",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "summary": {
+                    "type": "string"
+                  },
+                  "updates": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "new_str": {
+                          "type": "string"
+                        },
+                        "old_str": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "old_str",
+                        "new_str"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "updates",
+                  "summary"
+                ],
+                "type": "object"
+              },
+              "strict": true
+            },
+            "type": "json_schema"
+          },
+          "temperature": 0
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "query": "",
+        "url": "http://chat.invalid/v1/chat/completions"
+      },
+      "response": {
+        "body": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "{\"updates\": [{\"old_str\": \"Launch in June.\", \"new_str\": \"Launch in July.\"}], \"summary\": \"Moves the launch to July.\"}",
+                "role": "assistant"
+              }
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "notion_edit",
+  "source_tests": [
+    "tests/test_notion.py::test_edit_proposal_preview_execution_and_undo"
+  ]
+}
