@@ -1,5 +1,9 @@
 {lib, ...}: {
-  perSystem = {pkgs, ...}: let
+  perSystem = {
+    pkgs,
+    self',
+    ...
+  }: let
     go = pkgs.go_1_26;
     root = ../.;
     src = lib.fileset.toSource {
@@ -15,6 +19,7 @@
         (root + "/.golangci.yml")
       ];
     };
+    stageAssets = "cp -r --no-preserve=mode ${self'.packages.atrium-static} internal/web/static";
     # Every check reuses this one module set; update vendorHash whenever go.sum changes. proxyVendor,
     # because go-licenses cannot resolve a directory `replace` under -mod=vendor.
     base = pkgs.buildGo126Module {
@@ -25,6 +30,7 @@
       proxyVendor = true;
       env.CGO_ENABLED = "1";
       doCheck = false;
+      preBuild = stageAssets;
     };
     goCheck = name: tools: script:
       base.overrideAttrs (old: {
@@ -98,6 +104,7 @@
         script = ''
           runHook preBuild
           export HOME=$TMPDIR GOPATH=$TMPDIR/go GOCACHE=$TMPDIR/go-cache
+          ${stageAssets}
           mapfile -t modDirs < <(find . -name vendor -prune -o -name testdata -prune -o -name go.mod -printf '%h\n' | sort)
           for dir in "''${modDirs[@]}"; do
             ${eachDriver ''echo "govulncheck: $dir" && (cd "$dir" && govulncheck -tags "$tags" ./...)''}
