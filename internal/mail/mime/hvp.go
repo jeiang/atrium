@@ -568,7 +568,7 @@ func decodeEW(tok []rune) ([]rune, bool, error) {
 	}
 	f, err := lookupCodec(string(charset))
 	if errors.Is(err, errNul) {
-		panic(fatal{})
+		return nil, false, errInvalidEW
 	}
 	if err != nil {
 		out, _ := decodeASCII(raw, errSurrogateEscape)

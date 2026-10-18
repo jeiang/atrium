@@ -200,3 +200,10 @@ func mustExtract(t *testing.T, header, text []byte, atts []Attachment, fallback 
 	}
 	return f
 }
+
+func TestNulEncodedWordStaysLiteral(t *testing.T) {
+	f := mustExtract(t, []byte("From: =?utf-\x008?q?N?= <a@x.test>\r\n\r\n"), nil, nil, 0)
+	if f.FromAddr != "a@x.test" || f.FromName != "=?utf-\x008?q?N?=" {
+		t.Errorf("from = %q, %q", f.FromAddr, f.FromName)
+	}
+}

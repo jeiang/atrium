@@ -35,6 +35,10 @@ func TestHeaderValue(t *testing.T) {
 		{"MIME-Version", "1.0 (c\xc3\xa9)", "1.0 (cé)", false},
 		{"Date", "6 Oct 26 10:00 EST", "Tue, 06 Oct 2026 10:00:00 -0500", false},
 		{"Date", "not a date \xc3\xa9", "not a date é", false},
+		{"From", "=?utf-\x008?q?N?= <a@x.test>", "=?utf-\x008?q?N?= <a@x.test>", false},
+		{"Subject", "=?utf-\x008?q?N?= x", "=?utf-\x008?q?N?= x", false},
+		{"To", "=?\x00?q?N?= <b@x.test>", "=?\x00?q?N?= <b@x.test>", false},
+		{"Subject", "=?utf-8\x00?q?N?=", "=?utf-8\x00?q?N?=", false},
 	} {
 		msg, err := Parse([]byte(c.name + ": " + c.raw + "\r\n\r\n"))
 		if err != nil {
