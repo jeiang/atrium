@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from corpus import emit, error, use_source_tree  # noqa: E402
+from corpus import b64, emit, error, use_source_tree  # noqa: E402
 
 use_source_tree()
 
@@ -124,6 +124,65 @@ DRAFTS = [
     {"case": "gmail_group_syntax", "account": "gmail", "user": GMAIL_USER, "to_addrs": "Team: a@example.test, b@example.test;", "cc_addrs": "", "subject": "Group", "body": "x", "in_reply_to": "", "refs": ""},
 ]
 
+# Messages only build_message sees: body encodings, header folding and encoded words.
+MESSAGES = [
+    {"case": "eightbit_body", "subject": "Short lines", "body": "Ünïcödé body\nshort lines only\n"},
+    {"case": "base64_body", "subject": "Mostly accents", "body": "é" * 100 + "\n" + "ü" * 30 + "\n"},
+    {"case": "qp_many_lines", "subject": "Many lines", "body": "".join(f"line {i} with a trailing space \n" for i in range(11)) + "ñ " + "y" * 90 + " \n" + "z" * 76 + " \n"},
+    {"case": "qp_soft_breaks", "subject": "Breaks", "body": "é" + "=" * 80 + "\n" + "a" * 75 + "é\n" + "b" * 77 + "\t\n"},
+    {"case": "crlf_body", "subject": "Line ends", "body": "one\r\ntwo\rthree\n\nfive"},
+    {"case": "unicode_display_names", "subject": "Names", "body": "x", "to": ["Jöhn Doe <j@example.test>", "\"Doe, J\" <d@example.test>", "\"Ann (Ops)\" <ann@example.test>"], "cc": ["Zoë <z@example.test>", "plain@example.test"]},
+    {"case": "long_to_list", "subject": "Everyone", "body": "x", "to": [f"Person Number {i} <person{i}@example.test>" for i in range(12)]},
+    {"case": "long_quoted_name", "subject": "Quoted", "body": "x", "to": ["\"" + "Very Long, Display Name " * 5 + "\" <long@example.test>"]},
+    {"case": "long_references", "subject": "Re: thread", "body": "x", "in_reply_to": "<last.message.id.with.some.length@mail.example.test>", "refs": " ".join(f"<message.{i}.with.a.long.local.part@mail.example.test>" for i in range(6))},
+    {"case": "long_subject_no_spaces", "subject": "x" * 120, "body": "x"},
+    {"case": "subject_specials", "subject": 'Re: [ticket #12] "quoted" (paren) a@b; c, d: e.f', "body": "x"},
+    {"case": "subject_many_unicode", "subject": "Ünïcödé wörds " * 9, "body": "x"},
+    {"case": "subject_mixed", "subject": "Fwd: résumé for the position of senior engineer at Ëxample Corporation, attached", "body": "x"},
+    {"case": "subject_emoji_cjk", "subject": "Lunch 🍜 at 東京 tomorrow? " + "長い件名" * 10, "body": "x"},
+]
+
+
+def message_row(spec):
+    return {
+        "to_addrs": drafts.normalize_addresses("to", spec.get("to", ["a@example.test"])),
+        "cc_addrs": drafts.normalize_addresses("cc", spec.get("cc")),
+        "subject": spec["subject"],
+        "body": spec["body"],
+        "in_reply_to": spec.get("in_reply_to", ""),
+        "refs": spec.get("refs", ""),
+    }
+
+
+NORMALIZE = [
+    None,
+    "",
+    [],
+    "a@example.test",
+    "  a@example.test , B <b@example.test>  ",
+    ["Jöhn Doe <j@example.test>", "Doe, J <d@example.test>", "Back\\slash <s@example.test>"],
+    ["x@example.test", 5],
+    7,
+    ["a@x.test\r\nBcc: z@x.test"],
+    ["not an address"],
+    ["a@example.test,"],
+    ["Jöhn <j@ü.example.test>"],
+    ["k" * 1990 + "@example.test"],
+    "\"Quoted, Name\" <q@example.test>, plain@example.test",
+    "Jose Ramírez <j@example.test>",
+    "\"Doe, Jöhn\" <dj@example.test>",
+    ["Zoë <z@example.test>", "Ünïcödé Ñame <u@example.test>", "東京 <t@example.test>", "José María Ramírez de la Peña <p@example.test>"],
+]
+
+
+def run_normalize(value):
+    try:
+        return {"output": drafts.normalize_addresses("to", value)}
+    except drafts.DraftError as e:
+        return {"error": error(e)}
+    except UnicodeEncodeError as e:
+        return {"error": error(e)}
+
 
 def draft_row(spec):
     return {k: spec[k] for k in ("to_addrs", "cc_addrs", "subject", "body", "in_reply_to", "refs")}
@@ -187,10 +246,21 @@ def build():
         records.append({"fn": "sender_address", "input": [account, user], "output": smtp.sender_address(account, user)})
     for text in ("", None, "a@example.test", "A <a@example.test>, b@example.test", "Team: a@example.test, b@example.test;", "\"Last, First\" <f@example.test>", "not an address", "a@example.test,, ,b@example.test", "<>"):
         records.append({"fn": "split_addresses", "input": [text], "output": smtp.split_addresses(text)})
-    for draft in DRAFTS:
-        sender = smtp.sender_address(draft["account"], draft["user"])
-        msg = smtp.build_message(sender, draft_row(draft), NOW)
-        records.append({"fn": "build_message", "case": draft["case"], "input": [sender, draft_row(draft), NOW], "msgid": "make_msgid(domain=<sender domain>) pinned to <golden.0001@domain>", "output": msg.as_string()})
+    for value in NORMALIZE:
+        records.append({"fn": "drafts.normalize_addresses", "input": ["to", value], **run_normalize(value)})
+    built = [(d["case"], smtp.sender_address(d["account"], d["user"]), draft_row(d)) for d in DRAFTS]
+    built += [(m["case"], "operator@icloud.com", message_row(m)) for m in MESSAGES]
+    for case, sender, row in built:
+        msg = smtp.build_message(sender, row, NOW)
+        records.append({
+            "fn": "build_message",
+            "case": case,
+            "input": [sender, row, NOW],
+            "msgid": "make_msgid(domain=<sender domain>) pinned to <golden.0001@domain>",
+            "output": msg.as_string(),
+            "as_bytes": b64(msg.as_bytes()),
+            "as_bytes_utf8": b64(msg.as_bytes(policy=msg.policy.clone(utf8=True))),
+        })
     for draft in DRAFTS:
         for refused in REFUSALS:
             records.append({"fn": "send", "case": draft["case"], "account": draft["account"], "user": draft["user"], "refused_by_server": refused, **run_send(draft["account"], draft["user"], draft, Server(refused=refused))})
@@ -221,8 +291,8 @@ if __name__ == "__main__":
         "smtp",
         build(),
         {
-            "source": ["src/atrium/smtp.py", "src/atrium/drafts.py (send, _file_sent_copy)"],
-            "functions": ["sender_address", "split_addresses", "build_message", "smtp.send", "drafts.send"],
+            "source": ["src/atrium/smtp.py", "src/atrium/drafts.py (normalize_addresses, send, _file_sent_copy)"],
+            "functions": ["sender_address", "split_addresses", "drafts.normalize_addresses", "build_message", "smtp.send", "drafts.send"],
             "now": NOW,
             "failure_stages": ["connect", "starttls", "login", "send", "quit"],
         },
