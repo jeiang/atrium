@@ -50,23 +50,21 @@ fails when:
   has a receiver that is neither a known compiled pattern nor listed in
   `INDIRECT_USES` (patterns flowing through variables) or `NOT_PATTERN_CALLS`
   (reviewed non-regex receivers) in `regex_inputs.py`;
-- the committed files differ from a fresh generation (ignoring `site`, `line`,
-  `col`, `where`, which only record where the code is).
+- the committed files differ from a fresh generation.
 
 ### Manifest
 
-Top level: `freeze_commit`, `python`, `source`, `call_sites` (147),
+Top level: `freeze_commit`, `python`, `source`, `call_sites` (146),
 `pattern_count`, `lookaround_or_backreference_sites`, `sites`, `patterns`.
 
-`sites[]`, sorted by file then id:
+`sites[]`, sorted by file, line, column:
 
 | Field | Meaning |
 | --- | --- |
-| `id` | The stable site id (see [Ids](#ids)); the id of the site's patterns. |
-| `site` | `src/atrium/<file>.py:<line>`. Informational only. |
-| `file`, `line`, `col` | Location of the `re.<call>(` expression. Informational only. |
+| `site` | `src/atrium/<file>.py:<line>`; the id of the site's patterns. |
+| `file`, `line`, `col` | Location of the `re.<call>(` expression. |
 | `call` | `compile`, `escape`, `findall`, `finditer`, `fullmatch`, `match`, `search`, `split`, `sub`, `subn`. |
-| `name` | Module-level name the call is assigned to, if any; it is the id. |
+| `name` | Module-level name the call is assigned to, if any. |
 | `pattern_source`, `flags_source` | The pattern and flags arguments as Python source. |
 | `dynamic` | The pattern depends on runtime values (an IMAP key, a user-supplied pattern). |
 | `patterns` | Ids of the patterns this site compiles. |
@@ -76,53 +74,30 @@ Top level: `freeze_commit`, `python`, `source`, `call_sites` (147),
 
 | Field | Meaning |
 | --- | --- |
-| `id` | The site id; dynamic sites add `[<binding>]`, e.g. `src/atrium/imap.py:parse_status:b6ef0e5c[UIDNEXT]`. |
-| `site_id`, `call` | The owning site's id and its call. |
-| `site` | `file:line` of the owning site. Informational only. |
+| `id` | The site id; dynamic sites add `[<binding>]`, e.g. `src/atrium/imap.py:285[UIDNEXT]`. |
+| `site`, `call` | The owning site and its call. |
 | `pattern` | The pattern text. Bytes patterns are decoded as Latin-1. |
 | `bytes` | Python compiled a bytes pattern (`\w`, `\d`, `\s`, `\b` are ASCII-only there). |
 | `flags` | Flags the call passes (`ASCII`, `IGNORECASE`, `MULTILINE`, `DOTALL`, `VERBOSE`); inline flags stay in `pattern`. |
 | `locals` | Dynamic sites: the runtime values bound to produce this pattern and flags. |
 | `groups`, `group_names` | Capture group count and the named-group index. |
 | `features` | Constructs from Python's own parse: `lookahead`, `negative_lookahead`, `lookbehind`, `negative_lookbehind`, `backreference`, `conditional`, `atomic_group`, `possessive`, `lazy`, `inline_flags`, `named_group`, `dollar`, `end_of_string_Z`, `start_of_string_A`, `word_boundary`, `word_class`, `digit_class`, `space_class`, `omitted_min_quantifier` (`{,n}`). |
-| `uses` | Every call made with the pattern, sorted by `at`: `{at, where, op, source, args, locals?, repl?}`. `at` is the call's stable id (the site id for a `re.<call>(` site, `<file>:<enclosing def>:<sha1 of the call's source>[:8]` for a method call, `#2`, `#3` for repeats), `where` its `file:line` (informational only), `source` its Python source, `args` the evaluated non-default arguments (`repl`, `count`, `maxsplit`, `pos`, `endpos`), `locals` the runtime values bound for indirect or variable arguments. `repl: "callable"` with `args: null` marks a function replacement; the Go port reimplements the function, so no result is recorded. |
+| `uses` | Every call made with the pattern, sorted by location: `{at, op, source, args, locals?, repl?}`. `at` is `file:line` of the call, `source` its Python source, `args` the evaluated non-default arguments (`repl`, `count`, `maxsplit`, `pos`, `endpos`), `locals` the runtime values bound for indirect or variable arguments. `repl: "callable"` with `args: null` marks a function replacement; the Go port reimplements the function, so no result is recorded. |
 | `error` | Python's `re.error` text when the pattern does not compile; such patterns have no corpus records. |
 | `warnings` | Warnings Python emitted while compiling. |
 
-User-supplied pattern sites (`USER_SITES` and the dynamic entries of `BINDINGS`
-in `tools/golden/corpora/regex_inputs.py`: media channels, two in money, two in rules) are instantiated with a fixed
+User-supplied pattern sites (`media/channels.py:61`, `money.py:512`,
+`money.py:575`, `rules.py:93`, `rules.py:139`) are instantiated with a fixed
 sample of user patterns (`USER_PATTERNS` in `tools/golden/corpora/regex_inputs.py`),
 including invalid ones and Python-specific syntax (`(?P<name>…)`, `\Z`,
 `{,n}`, `[[`, `\p{L}`).
-
-### Ids
-
-Ids never contain a line number, so a Python fix that adds or removes lines
-does not re-key anything:
-
-- `<file>:<NAME>`: a pattern assigned to a module-level name
-  (`src/atrium/contacts.py:SPLIT`); the manifest records `name`.
-- `<file>:<enclosing def>:<hash>`: any other site. The enclosing def is the
-  dotted chain of defs and classes around the call (`<module>` at top level),
-  the hash is the first 8 hex digits of `sha1(pattern + NUL + flag names)`
-  (for a dynamic site, of the pattern and flags source text). Equal ids in one
-  file (the same pattern twice in one def) get `#2`, `#3` in source order.
-- Dynamic sites append `[<binding>]` to the id, as above.
-
-Changing a pattern's text or flags changes the hash of an inline site (a
-real change: update the Go map and the `regex_inputs.py` keys). Renaming the
-enclosing def does too.
-
-`site`, `line`, `col` and `where` are informational: `--check` compares the
-manifest without them, so moving code never fails it, and the corpus carries
-no line numbers.
 
 ### Records
 
 One line per (pattern, input), in manifest pattern order then input order:
 
 ```json
-{"id": "src/atrium/imap.py:_unquote:3d0d7e03", "input": "a\\\"b", "search": Match, "match": Match, "fullmatch": Match, "finditer": [Match], "calls": [Call]}
+{"id": "src/atrium/imap.py:80", "input": "a\\\"b", "search": Match, "match": Match, "fullmatch": Match, "finditer": [Match], "calls": [Call]}
 ```
 
 - `search`, `match`, `fullmatch`: the Python method result on the whole input, `null` for no match.
@@ -153,9 +128,7 @@ nix develop --impure -c python tools/golden/corpora/gen_regex.py
 nix develop --impure -c python tools/golden/corpora/gen_regex.py --check
 ```
 
-Keys in `regex_inputs.py` (`INPUTS`, `BINDINGS`, `USE_BINDINGS`, `INDIRECT_USES`,
-`NOT_PATTERN_CALLS`, `CALLABLE_REPL`) are these ids; a stale or unknown key
-fails generation and the error names it. A new pattern needs an `INPUTS` entry (and a `BINDINGS` entry if its pattern
+A new pattern needs an `INPUTS` entry (and a `BINDINGS` entry if its pattern
 or flags depend on runtime values) in `tools/golden/corpora/regex_inputs.py`.
 A call whose arguments depend on runtime values needs `USE_BINDINGS`; a
 replacement function passed in as a variable needs `CALLABLE_REPL`.
@@ -277,20 +250,60 @@ extraction differs from trafilatura's.
 
 ## SMTP
 
-`src/atrium/smtp.py` and `drafts.send`. The fake server records `calls`
-(`connect` with host, port and timeout, `starttls`, `login`, `send_message`
-with envelope sender and recipients, `quit`). `failure` names the stage
-(`connect`, `starttls`, `login`, `send`), the Python exception and its
-constructor arguments; `refused_by_server` is the server's per-recipient
-refusal map. `drafts.send` records add `row` (the draft's `status`,
-`smtp_result`, `sent_msgid` afterwards), `sent_mailbox` and `appended_to`.
+`src/atrium/smtp.py`, `drafts.normalize_addresses` and `drafts.send`. The fake
+server records `calls` (`connect` with host, port and timeout, `starttls`,
+`login`, `send_message` with envelope sender and recipients, `quit`); its
+`starttls` asserts the context verifies the certificate and hostname
+(`CERT_REQUIRED`, `check_hostname`), so a `starttls` call means a verified
+handshake. `failure` names the stage (`connect`, `starttls`, `login`, `send`,
+`quit`), the Python exception and its constructor arguments;
+`refused_by_server` is the server's per-recipient refusal map. `drafts.send`
+records add `row` (the draft's `status`, `smtp_result`, `sent_msgid`
+afterwards), `sent_mailbox` and `appended_to`. `build_message` records carry
+`output` (`as_string()`), `as_bytes` (what the iCloud Sent copy and, with CRLF,
+the SMTP DATA carry) and `as_bytes_utf8` (the SMTPUTF8 serialization), both
+base64; beyond the drafts the send records use, they cover body encodings
+(7bit, 8bit, quoted-printable with soft breaks, base64) and header folding with
+encoded words.
 `make_msgid` is pinned to `<golden.0001@<sender domain>>` and the clock to the
 manifest's `now`.
 
 ### SMTP divergences
 
-None recorded yet. The Go SMTP slice lists here how it renders server and OS
-errors and how its message serialization differs.
+`internal/mail/smtp` speaks SMTP itself, command for command as smtplib
+(lower-case `ehlo`, `mail from:`, `rcpt to:`, `data`; `STARTTLS`, `AUTH`,
+`QUIT`), instead of go-smtp: go-smtp v0.25 keeps STARTTLS unexported and strips
+the enhanced status code from reply text, so neither the per-stage errors nor
+the `(535, b'5.7.8 ...')` wording could be kept. Server replies keep smtplib's
+text exactly (multi-line replies joined with `\n`, each line stripped).
+Per-recipient refusals are returned, all refused raises
+`SMTPRecipientsRefused`, as in smtplib.
+
+- Certificates: both verify the chain and the SMTP host name, but a failure
+  reads as Go's `crypto/tls` text (`tls: failed to verify certificate: x509:
+  ...`), not OpenSSL's `[SSL: CERTIFICATE_VERIFY_FAILED] ...`.
+- OS errors read as the Python `OSError`: `[Errno N] text` with the Linux
+  number and glibc text for EPIPE, EADDRNOTAVAIL, ENETUNREACH, ECONNABORTED,
+  ECONNRESET, ETIMEDOUT, ECONNREFUSED and EHOSTUNREACH; any other errno keeps
+  the host's number and Go's text with a capital first letter. A name that does
+  not resolve is `[Errno -2] Name or service not known`, any other resolver
+  failure `[Errno -3] Temporary failure in name resolution`; timeouts are
+  `timed out`.
+- The EHLO name is the host name, or the first dotted name its address
+  reverses to, else `[<IPv4 address>]`; Python's `socket.getfqdn()` asks the
+  resolver through `gethostbyaddr`, which can pick another alias.
+- Failures smtplib does not turn into `SMTPException` or `OSError` (a
+  `ValueError` for a newline in a command, a `UnicodeEncodeError` for a
+  non-ASCII command without SMTPUTF8, a `binascii.Error` for a malformed AUTH
+  challenge) are a `SendError` with Python's text, so the draft returns to
+  draft; in Python they escape `smtp.send` and leave the draft `sending`.
+  Non-ASCII credentials are sent as UTF-8 where Python raises
+  `UnicodeEncodeError`.
+- The internal `RSET` after a refusal ignores its reply; smtplib ignores only a
+  disconnect there.
+- Go serializes a message only as bytes (`as_bytes`); `as_string()` differs
+  from it only for an `8bit` body, which the string generator re-encodes as
+  base64.
 
 ## Media
 

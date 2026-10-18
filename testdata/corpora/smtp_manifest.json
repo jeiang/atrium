@@ -12,6 +12,7 @@
   "functions": [
     "sender_address",
     "split_addresses",
+    "drafts.normalize_addresses",
     "build_message",
     "smtp.send",
     "drafts.send"
@@ -19,9 +20,9 @@
   "now": 1791280800.0,
   "process_tz": "America/Port_of_Spain",
   "python": "3.14",
-  "records": 79,
+  "records": 110,
   "source": [
     "src/atrium/smtp.py",
-    "src/atrium/drafts.py (send, _file_sent_copy)"
+    "src/atrium/drafts.py (normalize_addresses, send, _file_sent_copy)"
   ]
 }
