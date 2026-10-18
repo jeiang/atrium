@@ -2830,7 +2830,6 @@
       "result": {
         "calendar": "icloud",
         "summary": "Added to the icloud calendar",
-        "sync_error": "KeyError: 'calendar'",
         "uid": "dentist-20261020@clinic.example"
       },
       "status": "applied",
