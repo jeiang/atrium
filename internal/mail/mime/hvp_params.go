@@ -149,8 +149,11 @@ func getValue(v []rune) (*token, []rune, error) {
 func (t *token) strippedValue() []rune {
 	switch t.class {
 	case cValue:
-		k := t.kids[0]
+		k := firstKid(t)
 		if k.typ == "cfws" {
+			if len(t.kids) < 2 {
+				panic(fatal{})
+			}
 			k = t.kids[1]
 		}
 		switch k.typ {
@@ -508,6 +511,9 @@ func decodeExtended(v []rune, charset []rune) []rune {
 		return out
 	}
 	f, err := lookupCodec(string(charset))
+	if errors.Is(err, errNul) {
+		panic(fatal{})
+	}
 	if err != nil {
 		out, _ := decodeASCII(raw, errSurrogateEscape)
 		return out
@@ -698,7 +704,7 @@ func parseMimeVersion(v []rune) (*token, error) {
 	}
 	digits := func(stopDot bool) ([]rune, error) {
 		n := 0
-		for n < len(v) && !(stopDot && v[n] == '.') && !inSet(cfwsLeader, v[n]) {
+		for n < len(v) && (!stopDot || v[n] != '.') && !inSet(cfwsLeader, v[n]) {
 			n++
 		}
 		d := v[:n]

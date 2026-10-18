@@ -45,22 +45,23 @@ func headerKind(name []rune) string {
 	return "unstructured"
 }
 
-func headerValue(name, raw []rune) (s string, err error) {
+func headerValue(name, raw []rune, level int, all bool) (s string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			if _, ok := r.(fatal); !ok {
-				panic(r)
-			}
 			s, err = "", errHeader
+			if _, ok := r.(fatal); !ok {
+				err = unexpected(r)
+			}
 		}
 	}()
 	v := unfold(raw)
 	var tree *token
-	switch headerKind(name) {
+	kind := headerKind(name)
+	switch kind {
 	case "date":
 		return dateHeader(v), nil
 	case "address":
-		return addressHeader(v)
+		return addressHeader(v, commentLimit(kind, level, all))
 	case "mime-version":
 		tree, err = parseMimeVersion(v)
 	case "content-type":
@@ -76,7 +77,7 @@ func headerValue(name, raw []rune) (s string, err error) {
 	default:
 		tree = getUnstructured(v)
 	}
-	if err != nil {
+	if err != nil || maxComment(tree) > commentLimit(kind, level, all) {
 		return "", errHeader
 	}
 	return sanitize(tree.str()), nil
@@ -102,9 +103,9 @@ type pyGroup struct {
 	addresses []pyAddress
 }
 
-func addressHeader(v []rune) (string, error) {
+func addressHeader(v []rune, limit int) (string, error) {
 	al, err := getAddressList(v)
-	if err != nil {
+	if err != nil || maxComment(al) > limit {
 		return "", errHeader
 	}
 	var out []rune
@@ -203,7 +204,10 @@ func (g pyGroup) str() []rune {
 	return append(out, ';')
 }
 
-func contentDisposition(raw []rune) (string, bool, error) {
+func contentDisposition(raw []rune, level int) (string, bool, error) {
+	if _, err := headerValue([]rune("content-disposition"), raw, level, false); err != nil {
+		return "", false, err
+	}
 	tree, err := parseContentDisposition(unfold(raw))
 	if err != nil {
 		return "", false, errHeader

@@ -22,6 +22,7 @@ const (
 
 var (
 	errLookup = errors.New("unknown encoding")
+	errNul    = errors.New("embedded null character")
 	errDecode = errors.New("undecodable bytes")
 )
 
@@ -307,7 +308,7 @@ func normalizeEncoding(name string) string {
 
 func lookupCodec(name string) (decodeFunc, error) {
 	if strings.IndexByte(name, 0) >= 0 {
-		return nil, errLookup
+		return nil, errNul
 	}
 	norm := normalizeEncoding(name)
 	var candidates []string

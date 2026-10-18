@@ -1,6 +1,7 @@
 package mime
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -116,7 +117,7 @@ func rfc2231Continuation(name string) (string, int, bool, bool) {
 	for j < len(rest) && rest[j] >= '0' && rest[j] <= '9' {
 		j++
 	}
-	if j == 0 || !(j == len(rest) || j == len(rest)-1 && rest[j] == '*') {
+	if j == 0 || j != len(rest) && (j != len(rest)-1 || rest[j] != '*') {
 		return "", 0, false, false
 	}
 	num := 0
@@ -228,6 +229,9 @@ func (v paramValue) collapse() string {
 		}
 	}
 	out, err := decodeBytes(raw, charset, errReplace)
+	if errors.Is(err, errNul) {
+		panic(fatal{})
+	}
 	if err != nil {
 		return unquote(v.text)
 	}

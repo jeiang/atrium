@@ -1,6 +1,9 @@
 package mime
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
 
 // Addr is one (realname, email address) pair from email.utils.parseaddr or getaddresses.
 type Addr struct {
@@ -234,7 +237,7 @@ func (p *addrParser) getdelimited(begin rune, ends string, comments bool) string
 func (p *addrParser) getquote() string { return p.getdelimited('"', "\"\r", false) }
 
 func (p *addrParser) getcomment() string {
-	if p.depth >= maxCommentDepth {
+	if p.depth >= addrCommentLimit {
 		p.recursedOut = true
 		p.pos = len(p.field)
 		return ""
@@ -272,12 +275,22 @@ func (p *addrParser) getphraselist() []string {
 	return plist
 }
 
-func addressList(field string) []Addr {
+// addrCommentLimit is the comment nesting email.utils.getaddresses parses before RecursionError when
+// features.extract runs four frames below a module.
+const addrCommentLimit = 494
+
+var errAddrTooDeep = errors.New("address comment nesting exceeds Python's recursion limit")
+
+func addressList(field string) ([]Addr, error) {
 	if field == "" {
-		return nil
+		return nil, nil
 	}
 	p := &addrParser{field: []rune(field)}
-	return p.getaddrlist()
+	out := p.getaddrlist()
+	if p.recursedOut {
+		return nil, errAddrTooDeep
+	}
+	return out, nil
 }
 
 func escapedChars(s []rune, yield func(pos int, ch string)) {
@@ -352,20 +365,25 @@ func postParse(addrs []Addr) []Addr {
 	return addrs
 }
 
-// ParseAddr is email.utils.parseaddr(addr) with Python 3.14's strict parsing.
-func ParseAddr(addr string) Addr {
+// ParseAddr is email.utils.parseaddr(addr) with Python 3.14's strict parsing; err is Python's RecursionError.
+func ParseAddr(addr string) (Addr, error) {
 	if !checkParenthesis(addr) {
 		addr = "('', '')"
 	}
-	addrs := postParse(addressList(addr))
-	if len(addrs) != 1 {
-		return Addr{}
+	addrs, err := addressList(addr)
+	if err != nil {
+		return Addr{}, err
 	}
-	return addrs[0]
+	addrs = postParse(addrs)
+	if len(addrs) != 1 {
+		return Addr{}, nil
+	}
+	return addrs[0], nil
 }
 
-// GetAddresses is email.utils.getaddresses(values) with Python 3.14's strict parsing.
-func GetAddresses(values []string) []Addr {
+// GetAddresses is email.utils.getaddresses(values) with Python 3.14's strict parsing; err is Python's
+// RecursionError.
+func GetAddresses(values []string) ([]Addr, error) {
 	checked := make([]string, len(values))
 	for i, v := range values {
 		if !checkParenthesis(v) {
@@ -373,13 +391,17 @@ func GetAddresses(values []string) []Addr {
 		}
 		checked[i] = v
 	}
-	result := postParse(addressList(strings.Join(checked, ", ")))
+	result, err := addressList(strings.Join(checked, ", "))
+	if err != nil {
+		return nil, err
+	}
+	result = postParse(result)
 	n := 0
 	for _, v := range checked {
 		n += 1 + strings.Count(stripQuotedRealnames(v), ",")
 	}
 	if len(result) != n {
-		return []Addr{{}}
+		return []Addr{{}}, nil
 	}
-	return result
+	return result, nil
 }

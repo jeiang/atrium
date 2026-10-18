@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -60,11 +61,11 @@ func TestAddresses(t *testing.T) {
 		{"Team: a@b, c@d;", Addr{}, []Addr{{"", "a@b"}, {"", "c@d"}}},
 		{`"q\"x" <a@b>`, Addr{`q"x`, "a@b"}, []Addr{{`q"x`, "a@b"}}},
 	} {
-		if got := ParseAddr(c.in); got != c.one {
-			t.Errorf("ParseAddr(%q) = %+v, want %+v", c.in, got, c.one)
+		if got, err := ParseAddr(c.in); err != nil || got != c.one {
+			t.Errorf("ParseAddr(%q) = %+v, %v, want %+v", c.in, got, err, c.one)
 		}
-		if got := GetAddresses([]string{c.in}); !reflect.DeepEqual(got, c.lists) {
-			t.Errorf("GetAddresses(%q) = %+v, want %+v", c.in, got, c.lists)
+		if got, err := GetAddresses([]string{c.in}); err != nil || !reflect.DeepEqual(got, c.lists) {
+			t.Errorf("GetAddresses(%q) = %+v, %v, want %+v", c.in, got, err, c.lists)
 		}
 	}
 }
@@ -165,21 +166,63 @@ func TestRelatedWithTextPayloadRaises(t *testing.T) {
 	}
 }
 
-func TestDepthBound(t *testing.T) {
+func nestedMultipart(depth int, leafType string) []byte {
 	var b bytes.Buffer
-	for i := range MaxDepth + 10 {
-		b.WriteString("Content-Type: multipart/mixed; boundary=b" + strings.Repeat("x", i) + "\r\n\r\n--b" + strings.Repeat("x", i) + "\r\n")
+	for i := range depth {
+		fmt.Fprintf(&b, "Content-Type: multipart/mixed; boundary=b%d\r\n\r\n--b%d\r\n", i, i)
 	}
-	b.WriteString("Content-Type: text/plain\r\n\r\ndeep\r\n")
-	msg, err := Parse(b.Bytes())
+	b.WriteString("Content-Type: " + leafType + "\r\n\r\ndeep $5.00\r\n")
+	return b.Bytes()
+}
+
+func nest(n int) string { return strings.Repeat("(", n) + "x" + strings.Repeat(")", n) }
+
+func TestMIMEDepthLimit(t *testing.T) {
+	for depth, ok := range map[int]bool{MaxDepth: true, MaxDepth + 1: false} {
+		if _, err := Parse(nestedMultipart(depth, "text/plain")); (err == nil) != ok {
+			t.Errorf("depth %d: err = %v, want ok %v", depth, err, ok)
+		}
+	}
+}
+
+func TestCommentLimits(t *testing.T) {
+	for _, c := range []struct {
+		name, value string
+		level, max  int
+		all         bool
+	}{
+		{"Content-Type", "text/plain; charset=utf-8 %s", 0, 484, false},
+		{"Content-Type", "text/plain; charset=utf-8 %s", 10, 479, false},
+		{"Content-Type", "text/plain; charset=utf-8 %s", 100, 434, false},
+		{"From", "N %s <a@b.test>", 0, 487, false},
+		{"To", "<a@z.test> %s", 0, 488, true},
+		{"Message-ID", "<a@z.test> %s", 0, 491, false},
+		{"Content-Disposition", "inline %s", 0, 489, false},
+		{"Content-Disposition", "attachment; filename=a.pdf %s", 1, 486, false},
+	} {
+		for n, ok := range map[int]bool{c.max: true, c.max + 1: false} {
+			v := escapeBytes([]byte(fmt.Sprintf(c.value, nest(n))))
+			if _, err := headerValue([]rune(c.name), v, c.level, c.all); (err == nil) != ok {
+				t.Errorf("%s level %d depth %d: err = %v, want ok %v", c.name, c.level, n, err, ok)
+			}
+		}
+	}
+	for n, ok := range map[int]bool{addrCommentLimit: true, addrCommentLimit + 1: false} {
+		if _, err := GetAddresses([]string{"<a@z.test> " + nest(n)}); (err == nil) != ok {
+			t.Errorf("getaddresses depth %d: err = %v, want ok %v", n, err, ok)
+		}
+	}
+}
+
+func TestNulCharsetRaises(t *testing.T) {
+	if _, err := Parse([]byte("Content-Type: text/plain; charset*=utf-\x008''utf-8\r\n\r\nx")); err == nil {
+		t.Error("Parse accepted a NUL in an RFC 2231 charset")
+	}
+	msg, err := Parse([]byte("Content-Disposition: inline; filename*=utf-8\x00''a.txt\r\n\r\nbody"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	depth := 0
-	for m := msg; len(m.parts) > 0; m = m.parts[0] {
-		depth++
-	}
-	if depth != MaxDepth {
-		t.Errorf("nesting depth %d, want %d", depth, MaxDepth)
+	if _, err := msg.Body("plain"); err == nil {
+		t.Error("Body accepted a NUL in an RFC 2231 charset")
 	}
 }

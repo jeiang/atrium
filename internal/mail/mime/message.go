@@ -7,12 +7,17 @@ package mime
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"log/slog"
 	"strings"
 )
 
-// MaxDepth bounds message nesting (multipart and message/* containers); a deeper part keeps its content as an
-// opaque payload. CPython raises RecursionError long before inputs this deep finish parsing.
-const MaxDepth = 64
+// MaxDepth is the deepest message nesting (multipart and message/* containers) CPython 3.14.7 parses before
+// RecursionError, measured with features.extract called four frames below a module; Parse fails deeper, as
+// Python raises.
+const MaxDepth = 970
+
+var errTooDeep = errors.New("message nesting exceeds Python's recursion limit")
 
 // Message is one parsed message or MIME part.
 type Message struct {
@@ -21,6 +26,7 @@ type Message struct {
 	parts       []*Message
 	multipart   bool
 	defaultType string
+	level       int
 }
 
 type lineReader struct {
@@ -132,15 +138,31 @@ func trimEOL(b []byte) []byte {
 	return b
 }
 
+func unexpected(r any) error {
+	slog.Error("mime: recovered from a parser panic", "ERR", fmt.Sprint(r))
+	return fmt.Errorf("mime: internal error: %v", r)
+}
+
+func guard(err *error) {
+	if r := recover(); r != nil {
+		if _, ok := r.(fatal); ok {
+			*err = errHeader
+		} else {
+			*err = unexpected(r)
+		}
+	}
+}
+
 // Parse is email.message_from_bytes(data, policy=email.policy.default). err is set where Python raises: a
 // Content-Type or multipart Content-Transfer-Encoding value whose parse raises.
-func Parse(data []byte) (*Message, error) {
+func Parse(data []byte) (msg *Message, err error) {
+	defer guard(&err)
 	r := &lineReader{lines: splitLines(data)}
 	return parseMessage(r, "text/plain", 0)
 }
 
 func parseMessage(r *lineReader, defaultType string, depth int) (*Message, error) {
-	m := &Message{defaultType: defaultType}
+	m := &Message{defaultType: defaultType, level: depth}
 	var headers [][]byte
 	for {
 		line, ok := r.readline()
@@ -156,9 +178,8 @@ func parseMessage(r *lineReader, defaultType string, depth int) (*Message, error
 		headers = append(headers, line)
 	}
 	m.parseHeaders(headers, r)
-	if depth >= MaxDepth {
-		m.payload = readRest(r)
-		return m, nil
+	if depth > MaxDepth {
+		return nil, errTooDeep
 	}
 	ctype, err := m.contentType()
 	if err != nil {
@@ -380,7 +401,7 @@ func (m *Message) Get(name string) (string, bool, error) {
 	if !ok {
 		return "", false, nil
 	}
-	s, err := headerValue(f.name, f.value)
+	s, err := headerValue(f.name, f.value, m.level, false)
 	return s, true, err
 }
 
@@ -392,7 +413,7 @@ func (m *Message) GetAll(name string) ([]string, error) {
 		if f.key != want {
 			continue
 		}
-		s, err := headerValue(f.name, f.value)
+		s, err := headerValue(f.name, f.value, m.level, true)
 		if err != nil {
 			return nil, err
 		}
@@ -470,14 +491,15 @@ func (m *Message) rawParam(name, header string) (paramValue, bool, error) {
 }
 
 // Filename is get_filename(): Content-Disposition filename, else Content-Type name.
-func (m *Message) Filename() (string, bool, error) {
-	v, ok, err := m.rawParam("filename", "content-disposition")
+func (m *Message) Filename() (name string, found bool, err error) {
+	defer guard(&err)
+	v, found, err := m.rawParam("filename", "content-disposition")
 	if err != nil {
 		return "", false, err
 	}
-	if !ok {
-		v, ok, err = m.rawParam("name", "content-type")
-		if err != nil || !ok {
+	if !found {
+		v, found, err = m.rawParam("name", "content-type")
+		if err != nil || !found {
 			return "", false, err
 		}
 	}
@@ -490,7 +512,7 @@ func (m *Message) IsAttachment() (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	d, has, err := contentDisposition(f.value)
+	d, has, err := contentDisposition(f.value, m.level)
 	if err != nil {
 		return false, err
 	}
@@ -663,10 +685,14 @@ func containsString(list []string, s string) bool {
 }
 
 // Payload is get_payload(decode=True) for a non-multipart message.
-func (m *Message) Payload() ([]byte, error) {
+func (m *Message) Payload() (out []byte, err error) {
+	defer guard(&err)
 	f, ok := m.find("content-transfer-encoding")
 	cte := ""
 	if ok {
+		if _, err := headerValue(f.name, f.value, m.level, false); err != nil {
+			return nil, err
+		}
 		tree, err := parseCTE(unfold(f.value))
 		if err != nil {
 			return nil, err
@@ -691,7 +717,8 @@ func (m *Message) Payload() ([]byte, error) {
 
 // Content is get_content() for a text part: the decoded payload in its charset parameter (default ASCII) with
 // errors replaced. err is set where Python raises (unknown charset, unparseable header, non-text part).
-func (m *Message) Content() (string, error) {
+func (m *Message) Content() (s string, err error) {
+	defer guard(&err)
 	ctype, err := m.contentType()
 	if err != nil {
 		return "", err

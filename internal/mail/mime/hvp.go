@@ -48,7 +48,40 @@ var errHeaderParse = errors.New("header parse error")
 
 var errInvalidEW = errors.New("invalid encoded word")
 
-const maxCommentDepth = 200
+// hardCommentDepth bounds comment recursion for stack safety; it lies beyond every limit in commentLimit.
+const hardCommentDepth = 1000
+
+// commentLimit is the deepest comment nesting CPython 3.14.7 parses before RecursionError, measured with
+// features.extract called four frames below a module: each comment level costs two Python frames and each MIME
+// level one. Positions in the grammar shift these by a frame or two; the values are those of the probed paths.
+func commentLimit(kind string, level int, all bool) int {
+	switch kind {
+	case "address":
+		if all {
+			return 488
+		}
+		return 487
+	case "message-id", "references":
+		return 491
+	case "content-disposition":
+		return max(0, 489-3*level)
+	}
+	return max(0, 484-level/2)
+}
+
+func maxComment(t *token) int {
+	if t == nil {
+		return 0
+	}
+	if t.class == cComment {
+		return t.number
+	}
+	n := 0
+	for _, k := range t.kids {
+		n = max(n, maxComment(k))
+	}
+	return n
+}
 
 func list(c class, typ string, kids ...*token) *token { return &token{class: c, typ: typ, kids: kids} }
 
@@ -529,14 +562,14 @@ func decodeEW(tok []rune) ([]rune, bool, error) {
 	default:
 		return nil, false, errInvalidEW
 	}
-	if indexRune(charset, 0) >= 0 {
-		return nil, false, errInvalidEW
-	}
 	if hasSurrogates(charset) {
 		out, _ := decodeASCII(raw, errSurrogateEscape)
 		return out, true, nil
 	}
 	f, err := lookupCodec(string(charset))
+	if errors.Is(err, errNul) {
+		panic(fatal{})
+	}
 	if err != nil {
 		out, _ := decodeASCII(raw, errSurrogateEscape)
 		return out, true, nil
@@ -711,10 +744,11 @@ func getComment(v []rune, depth int) (*token, []rune, error) {
 	if len(v) > 0 && v[0] != '(' {
 		return nil, v, errHeaderParse
 	}
-	if depth > maxCommentDepth {
+	if depth > hardCommentDepth {
 		return nil, v, errFatal
 	}
 	c := list(cComment, "comment")
+	c.number = 1
 	v = v[1:]
 	for len(v) > 0 && v[0] != ')' {
 		var t *token
@@ -727,6 +761,7 @@ func getComment(v []rune, depth int) (*token, []rune, error) {
 			if err != nil {
 				return nil, v, err
 			}
+			c.number = max(c.number, t.number+1)
 		default:
 			t, v = getQPCtext(v)
 		}

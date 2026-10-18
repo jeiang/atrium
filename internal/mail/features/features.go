@@ -5,6 +5,8 @@ package features
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -197,20 +199,24 @@ func Header(msg *mime.Message, name string) string {
 	return v
 }
 
-func addresses(msg *mime.Message, names ...string) []string {
+func addresses(msg *mime.Message, names ...string) ([]string, error) {
 	var out []string
 	for _, name := range names {
 		values, err := msg.GetAll(name)
 		if err != nil {
 			values = nil
 		}
-		for _, a := range mime.GetAddresses(values) {
+		addrs, err := mime.GetAddresses(values)
+		if err != nil {
+			return nil, err
+		}
+		for _, a := range addrs {
 			if a.Address != "" {
 				out = append(out, mime.Lower(a.Address))
 			}
 		}
 	}
-	return out
+	return out, nil
 }
 
 func espOf(msg *mime.Message) []string {
@@ -285,12 +291,21 @@ func mimeAttachments(msg *mime.Message) []Attachment {
 // Extract is features.extract over the BODY[HEADER] and BODY[TEXT] bytes. attachments nil parses them from the
 // MIME tree; fallbackTS is used when the Date header is missing or unparseable. err is set where Python's
 // extract raises (a Content-Type value its header parser cannot handle).
-func Extract(header, text []byte, attachments []Attachment, fallbackTS float64) (Features, error) {
+func Extract(header, text []byte, attachments []Attachment, fallbackTS float64) (f Features, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("features: recovered from a panic in extract", "ERR", fmt.Sprint(r))
+			f, err = Features{}, fmt.Errorf("features: internal error: %v", r)
+		}
+	}()
 	msg, err := mime.Parse(append(slices.Clip(header), text...))
 	if err != nil {
 		return Features{}, err
 	}
-	from := mime.ParseAddr(Header(msg, "From"))
+	from, err := mime.ParseAddr(Header(msg, "From"))
+	if err != nil {
+		return Features{}, err
+	}
 	addr := mime.Lower(from.Address)
 	dateTS, ok := EmailTS(Header(msg, "Date"))
 	if !ok {
@@ -300,8 +315,14 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64) 
 	body := bodyText(msg)
 	head := prefix(body, 4000)
 	low := mime.Lower(head)
-	replyTo := addresses(msg, "Reply-To")
-	rpath := addresses(msg, "Return-Path")
+	replyTo, err := addresses(msg, "Reply-To")
+	if err != nil {
+		return Features{}, err
+	}
+	rpath, err := addresses(msg, "Return-Path")
+	if err != nil {
+		return Features{}, err
+	}
 	dkim := map[string]bool{}
 	values, _ := msg.GetAll("DKIM-Signature")
 	for _, v := range values {
@@ -324,11 +345,15 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64) 
 		attNames = attNames[:3]
 	}
 	to := map[string]bool{}
-	for _, a := range addresses(msg, "To", "Delivered-To", "X-Original-To", "Cc") {
+	tos, err := addresses(msg, "To", "Delivered-To", "X-Original-To", "Cc")
+	if err != nil {
+		return Features{}, err
+	}
+	for _, a := range tos {
 		to[a] = true
 	}
 	msgid := NormalizeMsgID(Header(msg, "Message-ID"))
-	f := Features{
+	f = Features{
 		MsgID:       msgid,
 		MsgIDDomain: DomainOf(msgid),
 		InReplyTo:   strings.Join(MsgIDList(Header(msg, "In-Reply-To")), " "),
