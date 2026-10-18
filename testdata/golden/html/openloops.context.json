@@ -1,0 +1,107 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "owe": [
+      {
+        "id": 1,
+        "account": "icloud",
+        "days": 1,
+        "counterpart": "Ann <ann@example.org>",
+        "last_message_id": 501,
+        "subject": "Can you <script>alert(\"xss\")</script>"
+      },
+      {
+        "id": 2,
+        "account": "gmail",
+        "days": 12,
+        "counterpart": "Café naïve — 東京 🎉 مرحبا",
+        "last_message_id": 502,
+        "subject": ""
+      }
+    ],
+    "waiting": [
+      {
+        "id": 3,
+        "account": "gmail",
+        "days": 4,
+        "counterpart": "bob@example.org",
+        "last_message_id": 503,
+        "subject": "Following up & more"
+      }
+    ],
+    "commitments": [
+      {
+        "id": 1,
+        "owner": "me",
+        "due": "2025-10-12",
+        "subject": "Re: report <script>alert(\"xss\")</script>",
+        "message_id": 501,
+        "text": "Send the <report> by Friday"
+      },
+      {
+        "id": 2,
+        "owner": "them",
+        "due": null,
+        "subject": "",
+        "message_id": 502,
+        "text": "This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised"
+      }
+    ],
+    "snooze_choices": [
+      1,
+      3,
+      7,
+      14
+    ]
+  }
+}

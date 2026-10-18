@@ -1,0 +1,76 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "proposal": {
+      "id": 7,
+      "kind": "calendar_event",
+      "status": "pending",
+      "account": "",
+      "title": "Proposal 7 \"calendar_event\" & more <i>",
+      "created_ts": 1759913600,
+      "applied_ts": 1759913700,
+      "decided_ts": 1759913800,
+      "undoable": false,
+      "result": null,
+      "preview": {
+        "calendar": "google",
+        "all_day": false,
+        "start": "2025-10-10 10:00",
+        "end": "2025-10-10 11:00",
+        "location": "Café <X>",
+        "notes": "line1\nline2",
+        "source": {
+          "subject": "Invite <script>alert(\"xss\")</script>"
+        }
+      }
+    }
+  }
+}

@@ -1,8 +1,10 @@
 import re
 import time
 from collections import Counter
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
-from .config import ACCOUNTS, INBOX
+from .config import ACCOUNTS, INBOX, tz_name
 from .router import STAGES
 
 SINCE = re.compile(r"^(\d+)([hd])$")
@@ -31,7 +33,7 @@ def parse_since(value, at=None):
     m = SINCE.match(value)
     if m:
         return at - int(m.group(1)) * (3600 if m.group(2) == "h" else 86400)
-    return time.mktime(time.strptime(value, "%Y-%m-%d"))
+    return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=ZoneInfo(tz_name())).timestamp()
 
 
 def outcome(row):

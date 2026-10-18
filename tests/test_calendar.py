@@ -185,6 +185,14 @@ def test_list_recurrence_window_exdate_and_override(mirror, providers):
     ]
 
 
+def test_cancelled_override_hides_its_instance():
+    ics = WEEKLY.replace("SUMMARY:Standup (moved)", "SUMMARY:Standup (moved)\nSTATUS:CANCELLED")
+    tz = calendar.tz_of({"ATRIUM_TZ": TZ})
+    lo, hi = calendar.as_dt(calendar.date(2026, 10, 18), tz), calendar.as_dt(calendar.date(2026, 10, 27), tz)
+    events = calendar.events_in_ics(ics.encode(), "Work", lo, hi, tz, [])
+    assert [(e["title"], e["start"]) for e in events] == [("Standup", "2026-10-26T09:00:00-04:00")]
+
+
 def test_list_google_unconfigured_still_returns_mirror(mirror, monkeypatch):
     out = calendar.list_events(env_for(mirror), "2026-10-16", "2026-10-17", None)
     assert [e["title"] for e in out["events"]] == ["Dentist"]
@@ -202,6 +210,119 @@ def test_normalize_spec_drops_attendees_and_validates():
     assert spec["start"].endswith("-04:00") and spec["end"].startswith("2026-10-16T13:00")
     with pytest.raises(calendar.CalendarError):
         calendar.normalize_spec({"title": "x", "start": "2026-10-16T12:00", "end": "2026-10-16T11:00"}, tz)
+
+
+DST = """BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:gap
+DTSTART;TZID=America/New_York:20260308T023000
+DURATION:PT30M
+SUMMARY:Gap
+END:VEVENT
+BEGIN:VEVENT
+UID:fall
+DTSTART;TZID=Europe/London:20261018T011500
+DTEND;TZID=Europe/London:20261018T020000
+RRULE:FREQ=WEEKLY;COUNT=3
+SUMMARY:Fall
+END:VEVENT
+BEGIN:VEVENT
+UID:daily
+DTSTART;TZID=Europe/London:20261024T090000
+DURATION:P1DT1H
+SUMMARY:Daily
+END:VEVENT
+END:VCALENDAR
+"""
+
+
+@pytest.mark.parametrize(
+    ("zone", "lo", "hi", "expected"),
+    [
+        ("America/New_York", "2026-03-07", "2026-03-09", [("gap", "2026-03-08T03:30:00-04:00", "2026-03-08T04:00:00-04:00")]),
+        (
+            "Europe/London",
+            "2026-10-17",
+            "2026-11-02",
+            [
+                ("fall", "2026-10-18T01:15:00+01:00", "2026-10-18T02:00:00+01:00"),
+                ("daily", "2026-10-24T09:00:00+01:00", "2026-10-25T10:00:00+00:00"),
+                ("fall", "2026-10-25T01:15:00+01:00", "2026-10-25T01:00:00+00:00"),
+                ("fall", "2026-11-01T01:15:00+00:00", "2026-11-01T02:00:00+00:00"),
+            ],
+        ),
+    ],
+)
+def test_durations_are_exact_across_dst(zone, lo, hi, expected):
+    tz = calendar.tz_of({"ATRIUM_TZ": zone})
+    window = calendar.parse_when(lo, tz), calendar.parse_when(hi, tz)
+    events = calendar.events_in_ics(DST.encode(), "Home", *window, tz, [])
+    rows = sorted(((e["uid"], e["start"], e["end"]) for e in events), key=lambda r: r[1])
+    assert rows == expected
+
+
+def test_normalize_spec_default_end_is_exact_across_dst():
+    ny = calendar.tz_of({"ATRIUM_TZ": "America/New_York"})
+    gap = calendar.normalize_spec({"title": "x", "start": "2026-03-08T02:30"}, ny)
+    assert (gap["start"], gap["end"]) == ("2026-03-08T03:30:00-04:00", "2026-03-08T04:30:00-04:00")
+    fall = calendar.normalize_spec({"title": "x", "start": "2026-11-01T01:30"}, ny)
+    assert (fall["start"], fall["end"]) == ("2026-11-01T01:30:00-04:00", "2026-11-01T01:30:00-05:00")
+
+
+def test_overlap_compares_instants_in_the_fall_back_hour():
+    ny = calendar.tz_of({"ATRIUM_TZ": "America/New_York"})
+    ics = """BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:early
+DTSTART;TZID=America/New_York:20261101T013000
+DTEND;TZID=America/New_York:20261101T015000
+SUMMARY:Early
+END:VEVENT
+END:VCALENDAR
+""".encode()
+    midnight = calendar.datetime(2026, 11, 1, tzinfo=ny)
+    second_hour = calendar.datetime(2026, 11, 1, 1, 20, fold=1, tzinfo=ny)
+    later = calendar.timedelta(hours=2)
+    assert [e["uid"] for e in calendar.events_in_ics(ics, "Home", midnight, second_hour, ny, [])] == ["early"]
+    assert calendar.events_in_ics(ics, "Home", second_hour, second_hour + later, ny, []) == []
+
+
+@pytest.mark.parametrize(
+    ("event", "lo", "hi", "expected"),
+    [
+        (
+            "UID:p1d\nDTSTART;TZID=America/New_York:20260307T090000\nDURATION:P1D\nRRULE:FREQ=DAILY;COUNT=10",
+            "2026-03-15T08:30",
+            "2026-03-15T08:45",
+            [("p1d", "2026-03-14T09:00:00-04:00", "2026-03-15T09:00:00-04:00")],
+        ),
+        (
+            "UID:bday\nDTSTART;VALUE=DATE:20260308\nDTEND;VALUE=DATE:20260309\nRRULE:FREQ=YEARLY",
+            "2027-03-08T23:30",
+            "2027-03-09T00:00",
+            [("bday", "2027-03-08", "2027-03-09")],
+        ),
+        (
+            "UID:allday\nDTSTART;VALUE=DATE:20260308\nDTEND;VALUE=DATE:20260309\nRRULE:FREQ=WEEKLY",
+            "2026-03-08T23:30",
+            "2026-03-09T02:00",
+            [("allday", "2026-03-08", "2026-03-09")],
+        ),
+        (
+            "UID:night\nDTSTART;TZID=America/New_York:20260308T000000\nDTEND;TZID=America/New_York:20260309T000000\nRRULE:FREQ=WEEKLY",
+            "2026-03-08T23:30",
+            "2026-03-09T02:00",
+            [("night", "2026-03-08T00:00:00-05:00", "2026-03-09T00:00:00-04:00")],
+        ),
+    ],
+)
+def test_recurrence_window_keeps_instances_spanning_dst(event, lo, hi, expected):
+    ny = calendar.tz_of({"ATRIUM_TZ": "America/New_York"})
+    ics = f"BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\n{event}\nSUMMARY:x\nEND:VEVENT\nEND:VCALENDAR\n".encode()
+    events = calendar.events_in_ics(ics, "Home", calendar.parse_when(lo, ny), calendar.parse_when(hi, ny), ny, [])
+    assert [(e["uid"], e["start"], e["end"]) for e in events] == expected
 
 
 @pytest.fixture
@@ -328,6 +449,21 @@ def test_gmail_invite_targets_google(tmp_path, providers, monkeypatch):
     (p,) = proposals.list(conn, "pending")
     proposals.approve_and_apply(conn, cfg, p["id"])
     assert google.inserted[0]["sendUpdates"] == "none" and "attendees" not in google.inserted[0]["body"]
+
+
+def test_calendar_proposal_does_not_run_mail_sync(tmp_path, providers, monkeypatch):
+    synced = []
+    monkeypatch.setitem(proposals.hooks, "sync", lambda conn, cfg, account: synced.append(account) or {}[account])
+    cfg = make_config(tmp_path)
+    conn = memory_db()
+    calendar_proposals.register()
+    add_message(conn, 1, subject="Invitation", seen=0, in_inbox=1, raw_path=raw_mail(tmp_path, "1.eml", INVITE))
+    event_candidates.scan_account(conn, cfg, "icloud", never, env=env_for())
+    (p,) = proposals.list(conn, "pending")
+    done = proposals.approve_and_apply(conn, cfg, p["id"])
+    assert done["status"] == "applied" and "sync_error" not in done["result"]
+    assert proposals.undo(conn, cfg, p["id"])["sync_error"] is None
+    assert synced == []
 
 
 def test_local_flag_queues_and_agent_drafts_proposal(tmp_path, providers):

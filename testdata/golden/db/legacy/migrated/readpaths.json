@@ -673,7 +673,7 @@
       "name": "Shop A Port Of Spain",
       "recurring_override": null,
       "subscription_seen": 0,
-      "transactions": 3
+      "transactions": 2
     },
     {
       "aliases": [
@@ -715,34 +715,6 @@
     }
   ],
   "money.list_transactions": [
-    {
-      "account": "FCB Visa",
-      "account_id": 1,
-      "amount": 45.5,
-      "category": "Other",
-      "category_id": null,
-      "computed_amount": null,
-      "created_ts": 1792094400.0,
-      "currency": "TTD",
-      "date": "2026-10-15",
-      "description": "Receipt 2002",
-      "dismissed": "",
-      "display_payee": "Shop A Port Of Spain",
-      "id": 4,
-      "is_transfer": false,
-      "kind": "purchase",
-      "message_id": 149,
-      "original_amount": 45.5,
-      "original_currency": "TTD",
-      "payee": "Shop A Port Of Spain",
-      "payee_id": 1,
-      "payee_raw": "SHOP A PORT OF SPAIN",
-      "rate": null,
-      "rate_date": null,
-      "review": "",
-      "source_count": 1,
-      "transfer_id": null
-    },
     {
       "account": "FCB Visa",
       "account_id": 1,
@@ -833,12 +805,12 @@
     "TTD": {
       "groups": [
         {
-          "count": 3,
+          "count": 2,
           "name": "Other",
-          "total": 211.0
+          "total": 165.5
         }
       ],
-      "total": 211.0
+      "total": 165.5
     }
   },
   "money.tracked_since": "2026-07-01",
@@ -2830,7 +2802,6 @@
       "result": {
         "calendar": "icloud",
         "summary": "Added to the icloud calendar",
-        "sync_error": "KeyError: 'calendar'",
         "uid": "dentist-20261020@clinic.example"
       },
       "status": "applied",
@@ -4633,7 +4604,7 @@
             "is_error": false,
             "kind": "tool",
             "name": "profile_set",
-            "result": "{\"key\": \"preferred_airline\", \"value\": \"Island Air\", \"previous\": null, \"write_id\": 8}",
+            "result": "{\"key\": \"preferred_airline\", \"value\": \"Island Air\", \"previous\": null, \"write_id\": 7}",
             "state": "done"
           },
           {
@@ -5234,13 +5205,7 @@
     "rows": [
       {
         "account": "icloud",
-        "action": {
-          "error": null,
-          "id": 10,
-          "kind": "correct",
-          "status": "applied",
-          "undoable": true
-        },
+        "action": "file",
         "action_error": null,
         "action_has_undo": 1,
         "action_id": 10,
@@ -5250,6 +5215,13 @@
         "actual": "Bills",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": {
+          "error": null,
+          "id": 10,
+          "kind": "correct",
+          "status": "applied",
+          "undoable": true
+        },
         "confidence": 1.0,
         "corrected_to": "Bills",
         "current": "Bills",
@@ -5269,13 +5241,7 @@
       },
       {
         "account": "gmail",
-        "action": {
-          "error": null,
-          "id": 9,
-          "kind": "file",
-          "status": "applied",
-          "undoable": true
-        },
+        "action": "file",
         "action_error": null,
         "action_has_undo": 1,
         "action_id": 9,
@@ -5285,6 +5251,13 @@
         "actual": "Family",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": {
+          "error": null,
+          "id": 9,
+          "kind": "file",
+          "status": "applied",
+          "undoable": true
+        },
         "confidence": 1.0,
         "corrected_to": null,
         "current": "Family",
@@ -5304,13 +5277,7 @@
       },
       {
         "account": "gmail",
-        "action": {
-          "error": null,
-          "id": 8,
-          "kind": "file",
-          "status": "applied",
-          "undoable": true
-        },
+        "action": "file",
         "action_error": null,
         "action_has_undo": 1,
         "action_id": 8,
@@ -5320,6 +5287,13 @@
         "actual": "Work",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": {
+          "error": null,
+          "id": 8,
+          "kind": "file",
+          "status": "applied",
+          "undoable": true
+        },
         "confidence": 1.0,
         "corrected_to": null,
         "current": "Work",
@@ -5339,13 +5313,7 @@
       },
       {
         "account": "icloud",
-        "action": {
-          "error": null,
-          "id": 7,
-          "kind": "file",
-          "status": "applied",
-          "undoable": true
-        },
+        "action": "file",
         "action_error": null,
         "action_has_undo": 1,
         "action_id": 7,
@@ -5355,6 +5323,13 @@
         "actual": "Bills",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": {
+          "error": null,
+          "id": 7,
+          "kind": "file",
+          "status": "applied",
+          "undoable": true
+        },
         "confidence": 1.0,
         "corrected_to": null,
         "current": "Bills",
@@ -5374,13 +5349,7 @@
       },
       {
         "account": "icloud",
-        "action": {
-          "error": null,
-          "id": 6,
-          "kind": "file",
-          "status": "applied",
-          "undoable": true
-        },
+        "action": "file",
         "action_error": null,
         "action_has_undo": 1,
         "action_id": 6,
@@ -5390,6 +5359,13 @@
         "actual": "Bills",
         "actual_inbox": 0,
         "agreement": "disagree",
+        "applied": {
+          "error": null,
+          "id": 6,
+          "kind": "file",
+          "status": "applied",
+          "undoable": true
+        },
         "confidence": 1.0,
         "corrected_to": null,
         "current": "Bills",
@@ -5409,13 +5385,7 @@
       },
       {
         "account": "icloud",
-        "action": {
-          "error": null,
-          "id": 5,
-          "kind": "file",
-          "status": "undone",
-          "undoable": false
-        },
+        "action": "file",
         "action_error": null,
         "action_has_undo": 1,
         "action_id": 5,
@@ -5425,6 +5395,13 @@
         "actual": "INBOX",
         "actual_inbox": 1,
         "agreement": "pending",
+        "applied": {
+          "error": null,
+          "id": 5,
+          "kind": "file",
+          "status": "undone",
+          "undoable": false
+        },
         "confidence": 1.0,
         "corrected_to": null,
         "current": "INBOX",
@@ -5444,7 +5421,7 @@
       },
       {
         "account": "icloud",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5454,6 +5431,7 @@
         "actual": "Bills",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": null,
         "confidence": 1.0,
         "corrected_to": "Bills",
         "current": "Bills",
@@ -5473,7 +5451,7 @@
       },
       {
         "account": "gmail",
-        "action": null,
+        "action": "none",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5483,6 +5461,7 @@
         "actual": "Receipts",
         "actual_inbox": 1,
         "agreement": "pending",
+        "applied": null,
         "confidence": null,
         "corrected_to": null,
         "current": "INBOX",
@@ -5502,7 +5481,7 @@
       },
       {
         "account": "gmail",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5512,6 +5491,7 @@
         "actual": "INBOX",
         "actual_inbox": 1,
         "agreement": "pending",
+        "applied": null,
         "confidence": 1.0,
         "corrected_to": null,
         "current": "INBOX",
@@ -5531,7 +5511,7 @@
       },
       {
         "account": "gmail",
-        "action": null,
+        "action": "none",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5541,6 +5521,7 @@
         "actual": "INBOX",
         "actual_inbox": 1,
         "agreement": "pending",
+        "applied": null,
         "confidence": null,
         "corrected_to": null,
         "current": "INBOX",
@@ -5560,7 +5541,7 @@
       },
       {
         "account": "gmail",
-        "action": null,
+        "action": "none",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5570,6 +5551,7 @@
         "actual": null,
         "actual_inbox": null,
         "agreement": "gone",
+        "applied": null,
         "confidence": null,
         "corrected_to": null,
         "current": null,
@@ -5589,7 +5571,7 @@
       },
       {
         "account": "gmail",
-        "action": null,
+        "action": "none",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5599,6 +5581,7 @@
         "actual": null,
         "actual_inbox": null,
         "agreement": "gone",
+        "applied": null,
         "confidence": null,
         "corrected_to": null,
         "current": null,
@@ -5618,7 +5601,7 @@
       },
       {
         "account": "gmail",
-        "action": null,
+        "action": "none",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5628,6 +5611,7 @@
         "actual": null,
         "actual_inbox": null,
         "agreement": "gone",
+        "applied": null,
         "confidence": null,
         "corrected_to": null,
         "current": null,
@@ -5647,7 +5631,7 @@
       },
       {
         "account": "gmail",
-        "action": null,
+        "action": "none",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5657,6 +5641,7 @@
         "actual": null,
         "actual_inbox": null,
         "agreement": "gone",
+        "applied": null,
         "confidence": null,
         "corrected_to": null,
         "current": null,
@@ -5676,7 +5661,7 @@
       },
       {
         "account": "gmail",
-        "action": null,
+        "action": "none",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5686,6 +5671,7 @@
         "actual": null,
         "actual_inbox": null,
         "agreement": "gone",
+        "applied": null,
         "confidence": null,
         "corrected_to": null,
         "current": null,
@@ -5705,7 +5691,7 @@
       },
       {
         "account": "icloud",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5715,6 +5701,7 @@
         "actual": "Travel",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": null,
         "confidence": null,
         "corrected_to": null,
         "current": "Travel",
@@ -5734,13 +5721,7 @@
       },
       {
         "account": "icloud",
-        "action": {
-          "error": null,
-          "id": 3,
-          "kind": "trash",
-          "status": "applied",
-          "undoable": true
-        },
+        "action": "delete",
         "action_error": null,
         "action_has_undo": 1,
         "action_id": 3,
@@ -5750,6 +5731,13 @@
         "actual": null,
         "actual_inbox": null,
         "agreement": "gone",
+        "applied": {
+          "error": null,
+          "id": 3,
+          "kind": "trash",
+          "status": "applied",
+          "undoable": true
+        },
         "confidence": null,
         "corrected_to": null,
         "current": null,
@@ -5769,7 +5757,7 @@
       },
       {
         "account": "icloud",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5779,6 +5767,7 @@
         "actual": "Newsletters",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": null,
         "confidence": null,
         "corrected_to": null,
         "current": "Newsletters",
@@ -5798,7 +5787,7 @@
       },
       {
         "account": "icloud",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5808,6 +5797,7 @@
         "actual": "INBOX",
         "actual_inbox": 1,
         "agreement": "pending",
+        "applied": null,
         "confidence": 1.0,
         "corrected_to": null,
         "current": "INBOX",
@@ -5827,7 +5817,7 @@
       },
       {
         "account": "icloud",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5837,6 +5827,7 @@
         "actual": "Bills",
         "actual_inbox": 0,
         "agreement": "disagree",
+        "applied": null,
         "confidence": null,
         "corrected_to": null,
         "current": "Bills",
@@ -5856,7 +5847,7 @@
       },
       {
         "account": "icloud",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5866,6 +5857,7 @@
         "actual": null,
         "actual_inbox": null,
         "agreement": "gone",
+        "applied": null,
         "confidence": 1.0,
         "corrected_to": null,
         "current": null,
@@ -5885,7 +5877,7 @@
       },
       {
         "account": "icloud",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5895,6 +5887,7 @@
         "actual": "Receipts",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": null,
         "confidence": 1.0,
         "corrected_to": null,
         "current": "Receipts",
@@ -5914,7 +5907,7 @@
       },
       {
         "account": "icloud",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5924,6 +5917,7 @@
         "actual": "Receipts",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": null,
         "confidence": 1.0,
         "corrected_to": null,
         "current": "Receipts",
@@ -5943,7 +5937,7 @@
       },
       {
         "account": "icloud",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5953,6 +5947,7 @@
         "actual": "Receipts",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": null,
         "confidence": 1.0,
         "corrected_to": null,
         "current": "Receipts",
@@ -5972,7 +5967,7 @@
       },
       {
         "account": "icloud",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -5982,6 +5977,7 @@
         "actual": "Bills",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": null,
         "confidence": 1.0,
         "corrected_to": null,
         "current": "Bills",
@@ -6001,7 +5997,7 @@
       },
       {
         "account": "icloud",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -6011,6 +6007,7 @@
         "actual": "Newsletters",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": null,
         "confidence": 1.0,
         "corrected_to": null,
         "current": "Newsletters",
@@ -6035,7 +6032,7 @@
     "rows": [
       {
         "account": "icloud",
-        "action": null,
+        "action": "file",
         "action_error": null,
         "action_has_undo": 0,
         "action_id": null,
@@ -6045,6 +6042,7 @@
         "actual": "Travel",
         "actual_inbox": 0,
         "agreement": "agree",
+        "applied": null,
         "confidence": null,
         "corrected_to": null,
         "current": "Travel",
@@ -6218,7 +6216,7 @@
   "writes.get profile": {
     "after_json": "{\"value\": \"Island Air\"}",
     "before_json": "{\"value\": null}",
-    "id": 8,
+    "id": 7,
     "run_id": 2,
     "target": "profile:preferred_airline",
     "thread_id": 2,

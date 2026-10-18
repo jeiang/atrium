@@ -12,7 +12,7 @@
     {{ icon("arrow-right", "size-3.5 shrink-0 text-muted-foreground") }}
     <span class="sr-only">proposed</span>
     <span class="max-w-full truncate font-medium">{{ proposal(r.action, r.dest) }}</span>
-    {% if r.action %}{{ action_badge(r.action) }}{% elif r.stage != "correction" %}<span class="text-xs">{{ agreement(r.agreement) }}</span>{% endif %}
+    {% if r.applied %}{{ action_badge(r.applied) }}{% elif r.stage != "correction" %}<span class="text-xs">{{ agreement(r.agreement) }}</span>{% endif %}
     {% if r.corrected_to and r.stage != "correction" %}
     <span class="badge" data-variant="secondary">Corrected to {{ r.corrected_to }}</span>
     {% endif %}
@@ -23,9 +23,9 @@
     {% if r.confidence is not none and r.stage != "correction" %}<span class="text-xs text-muted-foreground tabular-nums"><span class="sr-only">confidence </span>{{ pct(r.confidence) }}</span>{% endif %}
   </div>
   <div class="flex gap-1 group-has-[form]/row:invisible max-lg:group-has-[form]/row:hidden lg:w-18 lg:justify-end">
-    {% if r.action and r.action.undoable %}
+    {% if r.applied and r.applied.undoable %}
     <button type="button" class="btn transition-colors" data-size="sm" data-variant="ghost" title="Undo"
-            hx-post="/live/actions/{{ r.action.id }}/undo" hx-target="#decision-{{ r.message_id }}" hx-swap="outerHTML" hx-disabled-elt="this"
+            hx-post="/live/actions/{{ r.applied.id }}/undo" hx-target="#decision-{{ r.message_id }}" hx-swap="outerHTML" hx-disabled-elt="this"
             hx-confirm="Undo this and put the message back?">
       {{ icon("undo-2") }}<span class="lg:sr-only">Undo</span>
     </button>

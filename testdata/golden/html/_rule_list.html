@@ -1,0 +1,143 @@
+
+
+<ol id="rule-list" class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list" aria-label="Operator rules, first match wins">
+  
+  <li id="rule-receipts-Café naïve — 東京 🎉 مرحبا" class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-[--spacing(6)_minmax(0,1fr)_auto] sm:items-start">
+    <span class="pt-0.5 text-right font-mono text-xs text-muted-foreground tabular-nums" aria-hidden="true">1</span>
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <div class="flex flex-wrap items-center gap-2">
+        <h3 class="font-mono text-sm font-medium break-all"><span class="sr-only">Rule 1: </span>receipts-Café naïve — 東京 🎉 مرحبا</h3>
+        <span class="badge" data-variant="outline">icloud</span>
+      </div>
+      <ul class="flex flex-col gap-1 text-sm" role="list" aria-label="Conditions, all must hold">
+        
+        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="font-medium">From domain</span>
+<span class="text-muted-foreground">is or ends in domain</span>
+<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">shop.example, store.example</code></li>
+        
+        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="text-xs text-muted-foreground">and</span><span class="font-medium">Subject</span>
+<span class="text-muted-foreground">matches regex</span>
+<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">^(Your|Order) &lt;\d+&gt; &amp; co</code></li>
+        
+        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="text-xs text-muted-foreground">and</span><span class="font-medium">List-Id</span>
+<span class="text-muted-foreground">is absent</span></li>
+        
+      </ul>
+      <p class="flex flex-wrap items-center gap-1.5 text-sm">
+        <svg class="lucide lucide-arrow-right size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        <span class="text-muted-foreground">File into</span> <span class="font-medium">Receipts</span>
+      </p>
+    </div>
+    
+    <div class="col-start-2 flex flex-wrap gap-1 sm:col-start-3">
+      <div class="button-group" role="group" aria-label="Move receipts-Café naïve — 東京 🎉 مرحبا">
+        <button type="button" class="btn" data-size="icon-sm" data-variant="outline" aria-label="Move receipts-Café naïve — 東京 🎉 مرحبا up" disabled
+                hx-post="/rules/receipts-Caf%C3%A9%20na%C3%AFve%20%E2%80%94%20%E6%9D%B1%E4%BA%AC%20%F0%9F%8E%89%20%D9%85%D8%B1%D8%AD%D8%A8%D8%A7/move" hx-vals='{"account": "icloud", "direction": "up"}' hx-target="#rule-list" hx-swap="outerHTML"><svg class="lucide lucide-chevron-up " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m18 15-6-6-6 6"/></svg></button>
+        <button type="button" class="btn" data-size="icon-sm" data-variant="outline" aria-label="Move receipts-Café naïve — 東京 🎉 مرحبا down"
+                hx-post="/rules/receipts-Caf%C3%A9%20na%C3%AFve%20%E2%80%94%20%E6%9D%B1%E4%BA%AC%20%F0%9F%8E%89%20%D9%85%D8%B1%D8%AD%D8%A8%D8%A7/move" hx-vals='{"account": "icloud", "direction": "down"}' hx-target="#rule-list" hx-swap="outerHTML"><svg class="lucide lucide-chevron-down " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg></button>
+      </div>
+      <a class="btn" data-size="sm" data-variant="ghost" href="/rules/receipts-Caf%C3%A9%20na%C3%AFve%20%E2%80%94%20%E6%9D%B1%E4%BA%AC%20%F0%9F%8E%89%20%D9%85%D8%B1%D8%AD%D8%A8%D8%A7/edit"><svg class="lucide lucide-pencil " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>Edit</a>
+      <button type="button" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Delete receipts-Café naïve — 東京 🎉 مرحبا"
+              hx-delete="/rules/receipts-Caf%C3%A9%20na%C3%AFve%20%E2%80%94%20%E6%9D%B1%E4%BA%AC%20%F0%9F%8E%89%20%D9%85%D8%B1%D8%AD%D8%A8%D8%A7?account=icloud" hx-confirm="Delete rule receipts-Café naïve — 東京 🎉 مرحبا?" hx-target="#rule-list" hx-swap="outerHTML"><svg class="lucide lucide-trash-2 text-destructive" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+    </div>
+  </li>
+  
+  <li id="rule-spam &amp; &lt;junk&gt;" class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-[--spacing(6)_minmax(0,1fr)_auto] sm:items-start">
+    <span class="pt-0.5 text-right font-mono text-xs text-muted-foreground tabular-nums" aria-hidden="true">2</span>
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <div class="flex flex-wrap items-center gap-2">
+        <h3 class="font-mono text-sm font-medium break-all"><span class="sr-only">Rule 2: </span>spam &amp; &lt;junk&gt;</h3>
+        <span class="badge" data-variant="outline">All accounts</span>
+      </div>
+      <ul class="flex flex-col gap-1 text-sm" role="list" aria-label="Conditions, all must hold">
+        
+        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="font-medium">Category</span>
+<span class="text-muted-foreground">is</span>
+<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">promotions</code></li>
+        
+        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="text-xs text-muted-foreground">and</span><span class="font-medium">Age in days</span>
+<span class="text-muted-foreground">is at least</span>
+<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">14</code></li>
+        
+      </ul>
+      <p class="flex flex-wrap items-center gap-1.5 text-sm">
+        <svg class="lucide lucide-arrow-right size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        <span class="font-medium text-destructive">Delete</span>
+      </p>
+    </div>
+    
+    <div class="col-start-2 flex flex-wrap gap-1 sm:col-start-3">
+      <div class="button-group" role="group" aria-label="Move spam &amp; &lt;junk&gt;">
+        <button type="button" class="btn" data-size="icon-sm" data-variant="outline" aria-label="Move spam &amp; &lt;junk&gt; up"
+                hx-post="/rules/spam%20%26%20%3Cjunk%3E/move" hx-vals='{"account": "icloud", "direction": "up"}' hx-target="#rule-list" hx-swap="outerHTML"><svg class="lucide lucide-chevron-up " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m18 15-6-6-6 6"/></svg></button>
+        <button type="button" class="btn" data-size="icon-sm" data-variant="outline" aria-label="Move spam &amp; &lt;junk&gt; down"
+                hx-post="/rules/spam%20%26%20%3Cjunk%3E/move" hx-vals='{"account": "icloud", "direction": "down"}' hx-target="#rule-list" hx-swap="outerHTML"><svg class="lucide lucide-chevron-down " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg></button>
+      </div>
+      <a class="btn" data-size="sm" data-variant="ghost" href="/rules/spam%20%26%20%3Cjunk%3E/edit" autofocus><svg class="lucide lucide-pencil " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>Edit</a>
+      <button type="button" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Delete spam &amp; &lt;junk&gt;"
+              hx-delete="/rules/spam%20%26%20%3Cjunk%3E?account=icloud" hx-confirm="Delete rule spam &amp; &lt;junk&gt;?" hx-target="#rule-list" hx-swap="outerHTML"><svg class="lucide lucide-trash-2 text-destructive" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+    </div>
+  </li>
+  
+  <li id="rule-travel" class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-[--spacing(6)_minmax(0,1fr)_auto] sm:items-start">
+    <span class="pt-0.5 text-right font-mono text-xs text-muted-foreground tabular-nums" aria-hidden="true">3</span>
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <div class="flex flex-wrap items-center gap-2">
+        <h3 class="font-mono text-sm font-medium break-all"><span class="sr-only">Rule 3: </span>travel</h3>
+        <span class="badge" data-variant="outline">gmail</span>
+      </div>
+      <ul class="flex flex-col gap-1 text-sm" role="list" aria-label="Conditions, all must hold">
+        
+        <li class="flex flex-wrap items-baseline gap-x-1.5"><span class="font-medium">From address</span>
+<span class="text-muted-foreground">is one of</span>
+<code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">a@b.c, &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</code></li>
+        
+      </ul>
+      <p class="flex flex-wrap items-center gap-1.5 text-sm">
+        <svg class="lucide lucide-arrow-right size-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        <span class="text-muted-foreground">File into</span> <span class="font-medium">Travel|Flights</span>
+      </p>
+    </div>
+    
+    <div class="col-start-2 flex flex-wrap gap-1 sm:col-start-3">
+      <div class="button-group" role="group" aria-label="Move travel">
+        <button type="button" class="btn" data-size="icon-sm" data-variant="outline" aria-label="Move travel up"
+                hx-post="/rules/travel/move" hx-vals='{"account": "icloud", "direction": "up"}' autofocus hx-target="#rule-list" hx-swap="outerHTML"><svg class="lucide lucide-chevron-up " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m18 15-6-6-6 6"/></svg></button>
+        <button type="button" class="btn" data-size="icon-sm" data-variant="outline" aria-label="Move travel down" disabled
+                hx-post="/rules/travel/move" hx-vals='{"account": "icloud", "direction": "down"}' hx-target="#rule-list" hx-swap="outerHTML"><svg class="lucide lucide-chevron-down " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg></button>
+      </div>
+      <a class="btn" data-size="sm" data-variant="ghost" href="/rules/travel/edit"><svg class="lucide lucide-pencil " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>Edit</a>
+      <button type="button" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Delete travel"
+              hx-delete="/rules/travel?account=icloud" hx-confirm="Delete rule travel?" hx-target="#rule-list" hx-swap="outerHTML"><svg class="lucide lucide-trash-2 text-destructive" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+    </div>
+  </li>
+  
+</ol>
+
+<div id="toaster" hx-swap-oob="beforeend">
+
+
+
+<div
+  class="toast "
+  role="status"
+  aria-atomic="true"
+  aria-hidden="false"
+  data-category="success"
+  
+  
+>
+  <div class="toast-content">
+    
+      
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      
+    
+    <section>
+      <h2>Saved</h2>
+      <p>He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt;</p>
+    </section>
+    
+  </div>
+</div>
+</div>

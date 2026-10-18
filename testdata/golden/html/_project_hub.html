@@ -1,0 +1,13 @@
+
+<div id="project-hub" class="flex flex-col gap-2">
+  <div role="group" class="field">
+    <label for="project-hub-id">Wiki hub page (Notion id or URL)</label>
+    <input id="project-hub-id" name="wiki_hub_id" type="text" value="" class="font-mono" spellcheck="false" autocomplete="off" placeholder="none">
+    <p>The assistant keeps this page updated with durable project knowledge.</p>
+  </div>
+  <p class="text-sm text-destructive" role="alert">Notion said &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</p>
+  <p class="text-sm text-muted-foreground" role="status">Created &lt;hub&gt; Café naïve — 東京 🎉 مرحبا</p>
+  
+  <button type="button" class="btn self-start" data-size="sm" data-variant="outline" hx-post="/projects/2/wiki-hub" hx-target="#project-hub" hx-swap="outerHTML" hx-disabled-elt="this"><svg class="lucide lucide-book-open " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>Create wiki hub</button>
+  
+</div>

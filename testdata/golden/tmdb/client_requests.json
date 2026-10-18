@@ -1,0 +1,226 @@
+{
+  "description": "Every Tmdb request with api_key in the query: search/tv (channel search, artwork with limit 5), search/movie with and without year, tv/{id}/external_ids, find/tt{imdb} with external_source, tv/{id}, tv/{id}/season/{n}, and the w342 poster image.",
+  "exchanges": [
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {},
+        "method": "GET",
+        "path": "/3/search/tv",
+        "query": "api_key=k&query=lanterns",
+        "url": "https://api.themoviedb.org/3/search/tv"
+      },
+      "response": {
+        "body": {
+          "results": [
+            {
+              "first_air_date": "2024-04-01",
+              "id": 1399,
+              "name": "Lanterns",
+              "poster_path": "/lanterns.jpg"
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {},
+        "method": "GET",
+        "path": "/3/search/tv",
+        "query": "api_key=k&query=Lanterns+%26+Co",
+        "url": "https://api.themoviedb.org/3/search/tv"
+      },
+      "response": {
+        "body": {
+          "results": []
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {},
+        "method": "GET",
+        "path": "/3/search/movie",
+        "query": "api_key=k&query=Night+Train&year=2019",
+        "url": "https://api.themoviedb.org/3/search/movie"
+      },
+      "response": {
+        "body": {
+          "results": [
+            {
+              "poster_path": "/train.jpg",
+              "release_date": "2019-06-01",
+              "title": "Night Train"
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {},
+        "method": "GET",
+        "path": "/3/search/movie",
+        "query": "api_key=k&query=Night+Train",
+        "url": "https://api.themoviedb.org/3/search/movie"
+      },
+      "response": {
+        "body": {
+          "results": [
+            {
+              "poster_path": "/train.jpg",
+              "release_date": "2019-06-01",
+              "title": "Night Train"
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {},
+        "method": "GET",
+        "path": "/3/tv/1399/external_ids",
+        "query": "api_key=k",
+        "url": "https://api.themoviedb.org/3/tv/1399/external_ids"
+      },
+      "response": {
+        "body": {
+          "imdb_id": "tt1234567"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {},
+        "method": "GET",
+        "path": "/3/find/tt1234567",
+        "query": "api_key=k&external_source=imdb_id",
+        "url": "https://api.themoviedb.org/3/find/tt1234567"
+      },
+      "response": {
+        "body": {
+          "tv_results": [
+            {
+              "first_air_date": "2024-04-01",
+              "id": 1399,
+              "name": "Lanterns"
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {},
+        "method": "GET",
+        "path": "/3/tv/1399",
+        "query": "api_key=k",
+        "url": "https://api.themoviedb.org/3/tv/1399"
+      },
+      "response": {
+        "body": {
+          "id": 1399,
+          "name": "Lanterns",
+          "poster_path": "/lanterns.jpg"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {},
+        "method": "GET",
+        "path": "/3/tv/1399/season/1",
+        "query": "api_key=k",
+        "url": "https://api.themoviedb.org/3/tv/1399/season/1"
+      },
+      "response": {
+        "body": {
+          "poster_path": "/lanterns-s1.jpg"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {},
+        "method": "GET",
+        "path": "/t/p/w342/lanterns-s1.jpg",
+        "query": "",
+        "url": "https://image.tmdb.org/t/p/w342/lanterns-s1.jpg"
+      },
+      "response": {
+        "body": "/9j/2wAAAAAAAAAAAAAAAAAAAAD/2Q==",
+        "body_encoding": "base64",
+        "headers": {
+          "content-type": "image/jpeg"
+        },
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "client_requests",
+  "source_tests": [
+    "tests/test_media.py::test_channels_page_search_preview_add_remove_poll",
+    "tests/test_media.py::test_library_pages_posters_and_thumbnails",
+    "src/atrium/media/tmdb.py::Tmdb (every method)"
+  ]
+}

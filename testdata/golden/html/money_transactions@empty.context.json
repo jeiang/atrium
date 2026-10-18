@@ -1,0 +1,108 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "transactions": [],
+    "accounts": [
+      {
+        "id": 1,
+        "name": "FCB chequing <main>",
+        "bank": "first_citizens",
+        "bank_label": "First Citizens",
+        "kind": "bank_account",
+        "currency": "TTD",
+        "forex": 1,
+        "last4": "1234",
+        "sender_patterns": [
+          "firstcitizenstt.com",
+          "alerts@fc.example"
+        ]
+      },
+      {
+        "id": 2,
+        "name": "Visa Café naïve — 東京 🎉 مرحبا",
+        "bank": "republic",
+        "bank_label": "Republic",
+        "kind": "credit_card",
+        "currency": "BBD",
+        "forex": 0,
+        "last4": "",
+        "sender_patterns": []
+      }
+    ],
+    "categories": [],
+    "kinds": [
+      "purchase",
+      "atm_withdrawal",
+      "refund",
+      "transfer",
+      "card_payment",
+      "fx_adjustment"
+    ],
+    "currencies": [
+      "TTD",
+      "BBD",
+      "USD"
+    ],
+    "filters": {
+      "start": "",
+      "end": "",
+      "account_id": null,
+      "payee": "",
+      "category": "",
+      "kind": "",
+      "currency": "",
+      "unassigned": false,
+      "dismissed": false
+    }
+  }
+}

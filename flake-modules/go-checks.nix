@@ -1,6 +1,10 @@
 {lib, ...}: {
-  perSystem = {pkgs, ...}: let
-    go = pkgs.go_1_26;
+  perSystem = {
+    pkgs,
+    self',
+    go,
+    ...
+  }: let
     root = ../.;
     src = lib.fileset.toSource {
       inherit root;
@@ -15,16 +19,18 @@
         (root + "/.golangci.yml")
       ];
     };
+    stageAssets = "cp -r --no-preserve=mode ${self'.packages.atrium-static} internal/web/static";
     # Every check reuses this one module set; update vendorHash whenever go.sum changes. proxyVendor,
     # because go-licenses cannot resolve a directory `replace` under -mod=vendor.
-    base = pkgs.buildGo126Module {
+    base = pkgs.buildGo126Module.override {inherit go;} {
       pname = "atrium-go";
       version = "0";
       inherit src;
-      vendorHash = "sha256-mrl966wXrWm7vLh6aWiHTKe+XVv9PEoOGZgPbmvrhDM=";
+      vendorHash = "sha256-yon+9bb77ABN6q2ITorTD9NtYx9qonEWQ6lMGLZ67oU=";
       proxyVendor = true;
       env.CGO_ENABLED = "1";
       doCheck = false;
+      preBuild = stageAssets;
     };
     goCheck = name: tools: script:
       base.overrideAttrs (old: {
@@ -98,6 +104,7 @@
         script = ''
           runHook preBuild
           export HOME=$TMPDIR GOPATH=$TMPDIR/go GOCACHE=$TMPDIR/go-cache
+          ${stageAssets}
           mapfile -t modDirs < <(find . -name vendor -prune -o -name testdata -prune -o -name go.mod -printf '%h\n' | sort)
           for dir in "''${modDirs[@]}"; do
             ${eachDriver ''echo "govulncheck: $dir" && (cd "$dir" && govulncheck -tags "$tags" ./...)''}

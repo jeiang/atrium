@@ -1,6 +1,7 @@
 import json
 import logging
 
+from .config import ACCOUNTS
 from .db import now
 from .safety import approved_writes
 
@@ -209,7 +210,7 @@ def _claim(conn, proposal_id, status):
 
 
 def _sync(conn, cfg, proposal):
-    if hooks["sync"] is None or proposal["account"] is None:
+    if hooks["sync"] is None or proposal["account"] not in ACCOUNTS:
         return None
     try:
         hooks["sync"](conn, cfg, proposal["account"])

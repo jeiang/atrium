@@ -1,0 +1,45 @@
+
+
+
+<form method="post" action="/scheduled/1" class="w-full sm:max-w-2xl"
+      hx-post="/scheduled/1" hx-target="#schedule-dialog" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="csrf_token" value="csrf-golden-token">
+  <header class="flex-row items-center gap-2">
+    <h2 class="min-w-0 flex-1 truncate">Edit Nightly</h2>
+    <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close" data-action="close-dialog"><svg class="lucide lucide-x " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+  </header>
+  <section class="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
+    
+    <div class="grid gap-3 sm:grid-cols-2">
+      <div role="group" class="field">
+        <label for="sched-name">Name</label>
+        <input id="sched-name" name="name" type="text" value="Nightly" readonly>
+      </div>
+      <div role="group" class="field">
+        <label for="sched-schedule">Schedule</label>
+        <input id="sched-schedule" name="schedule" type="text" value="daily 03:00" class="font-mono" spellcheck="false" autocomplete="off" placeholder="daily 08:00" required>
+      </div>
+    </div>
+    <p class="-mt-2 text-xs text-muted-foreground">Times are UTC. Formats: an ISO datetime, <code class="font-mono">daily 07:30</code>, <code class="font-mono">weekly mon 07:30</code> or a 5-field cron expression.</p>
+    <div role="group" class="field">
+      <label for="sched-prompt">Prompt</label>
+      <textarea id="sched-prompt" name="prompt" rows="5" class="w-full" readonly>Review the day &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</textarea>
+      <p>The nightly prompt is fixed in code.</p>
+    </div>
+    
+    <div class="flex flex-col gap-2">
+      <h3 class="text-sm font-medium">Recent runs</h3>
+      
+
+
+<p class="rounded-lg border px-4 py-6 text-center text-sm text-muted-foreground">No runs yet.</p>
+
+    </div>
+    
+  </section>
+  <footer class="flex-wrap">
+    
+    <button type="button" class="btn" data-variant="outline" data-action="close-dialog">Cancel</button>
+    <button type="submit" class="btn"><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Save</button>
+  </footer>
+</form>

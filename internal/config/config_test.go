@@ -330,8 +330,8 @@ func TestPyRepr(t *testing.T) {
 		"é":       "'é'",
 	}
 	for in, want := range tests {
-		if got := pyRepr(in); got != want {
-			t.Errorf("pyRepr(%q) = %s, want %s", in, got, want)
+		if got := PyRepr(in); got != want {
+			t.Errorf("PyRepr(%q) = %s, want %s", in, got, want)
 		}
 	}
 }

@@ -1,0 +1,119 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "proposal": {
+      "id": 3,
+      "kind": "rebalance_merge",
+      "status": "pending",
+      "account": "icloud",
+      "title": "Proposal 3 \"rebalance_merge\" & more <i>",
+      "created_ts": 1759913600,
+      "applied_ts": 1759913700,
+      "decided_ts": 1759913800,
+      "undoable": false,
+      "result": null,
+      "preview": {
+        "sources": [
+          {
+            "folder": "A|b",
+            "count": 4
+          },
+          {
+            "folder": "C",
+            "count": 1
+          }
+        ],
+        "into": "Merged",
+        "into_exists": false,
+        "group": {
+          "name": "Merged",
+          "count": 2,
+          "messages": [
+            {
+              "id": 100,
+              "subject": "Subject 0 <b>Café naïve — 東京 🎉 مرحبا</b>",
+              "from_name": "Shop <Co> & Sons",
+              "from_addr": "no-reply@shop.example",
+              "date_ts": 1760000000
+            },
+            {
+              "id": 101,
+              "subject": "Subject 1 <b>Café naïve — 東京 🎉 مرحبا</b>",
+              "from_name": "Shop <Co> & Sons",
+              "from_addr": "no-reply@shop.example",
+              "date_ts": 1759996400
+            }
+          ],
+          "terms": [
+            "invoice",
+            "total&due",
+            "Café naïve — 東京 🎉 مرحبا"
+          ],
+          "senders": [
+            {
+              "label": "Shop <Co>",
+              "count": 3
+            },
+            {
+              "label": "b@b.com",
+              "count": 1
+            }
+          ],
+          "subjects": [
+            "Your receipt",
+            "",
+            "Order & delivery <script>alert(\"xss\")</script>"
+          ]
+        }
+      }
+    }
+  }
+}

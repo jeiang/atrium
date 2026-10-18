@@ -1,0 +1,54 @@
+
+
+
+<form method="post" action="/projects/2" class="w-full sm:max-w-2xl" hx-post="/projects/2" hx-target="#project-dialog" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="csrf_token" value="csrf-golden-token">
+  <header class="flex-row items-center gap-2">
+    <h2 class="min-w-0 flex-1 truncate">Edit Work &#34;stuff&#34; &amp; &lt;things&gt;</h2>
+    <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close" data-action="close-dialog"><svg class="lucide lucide-x " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+  </header>
+  <section class="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
+    <p class="text-sm text-destructive" role="alert">Name taken &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</p>
+    <div role="group" class="field">
+      <label for="project-name">Name</label>
+      <input id="project-name" name="name" type="text" value="Work &#34;stuff&#34; &amp; &lt;things&gt;" required>
+    </div>
+    <div role="group" class="field">
+      <label for="project-instructions">Instructions</label>
+      <textarea id="project-instructions" name="instructions" rows="6" class="w-full" placeholder="Markdown. Added to the assistant's system prompt in every chat of this project.">Use **markdown** &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;
+This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised</textarea>
+    </div>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <div role="group" class="field">
+        <label for="project-effort">Default effort</label>
+        <select id="project-effort" name="effort" class="select">
+          <option value="low">low</option><option value="medium">medium</option><option value="high" selected>high</option><option value="xhigh">xhigh</option><option value="max">max</option>
+        </select>
+      </div>
+      <div role="group" class="field">
+        <label for="project-context">Default context limit</label>
+        <select id="project-context" name="context_limit" class="select">
+          <option value="90000">90K</option><option value="200000" selected>200K (5× price over 100K)</option><option value="500000">500K (5× price over 100K)</option><option value="1000000">1000K (5× price over 100K)</option>
+        </select>
+      </div>
+    </div>
+    
+<div id="project-hub" class="flex flex-col gap-2">
+  <div role="group" class="field">
+    <label for="project-hub-id">Wiki hub page (Notion id or URL)</label>
+    <input id="project-hub-id" name="wiki_hub_id" type="text" value="1234abcd-5678-90ef-1234-567890abcdef" class="font-mono" spellcheck="false" autocomplete="off" placeholder="none">
+    <p>The assistant keeps this page updated with durable project knowledge.</p>
+  </div>
+  
+  
+  
+</div>
+  </section>
+  <footer class="flex-wrap">
+    
+    <button type="button" class="btn me-auto" data-size="sm" data-variant="destructive" hx-post="/projects/2/archive" hx-confirm="Archive this project? Its threads stay in the chat list."><svg class="lucide lucide-archive " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>Archive</button>
+    
+    <button type="button" class="btn" data-variant="outline" data-action="close-dialog">Cancel</button>
+    <button type="submit" class="btn"><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Save</button>
+  </footer>
+</form>

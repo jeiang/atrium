@@ -20,8 +20,8 @@
   </div>
   <fieldset class="flex flex-col gap-2">
     <legend class="text-sm font-medium">What is it?</legend>
-    <label class="flex items-start gap-2 text-sm"><input type="radio" name="mode" value="media"{% if mode == "media" %} checked{% endif %}><span><strong>Media</strong> (file into library): tagged <code class="font-mono">media</code>, selected and filed from Downloads.</span></label>
-    <label class="flex items-start gap-2 text-sm"><input type="radio" name="mode" value="plain"{% if mode == "plain" %} checked{% endif %}><span><strong>Plain torrent</strong>: normal flow, served from downloads/ on the VPN.</span></label>
+    <label class="flex items-start gap-2 text-sm"><input type="radio" name="mode" value="media"{% if add_mode == "media" %} checked{% endif %}><span><strong>Media</strong> (file into library): tagged <code class="font-mono">media</code>, selected and filed from Downloads.</span></label>
+    <label class="flex items-start gap-2 text-sm"><input type="radio" name="mode" value="plain"{% if add_mode == "plain" %} checked{% endif %}><span><strong>Plain torrent</strong>: normal flow, served from downloads/ on the VPN.</span></label>
   </fieldset>
   {% if error %}<p class="text-sm text-destructive" role="alert">{{ error }}</p>{% endif %}
   <div><button type="submit" class="btn">{{ icon("plus") }}Add</button></div>
