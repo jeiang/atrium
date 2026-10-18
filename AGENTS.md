@@ -118,11 +118,12 @@ and backups; nothing of that lives here.
   `web.allowedHost` or whose `Remote-Groups` lacks `atrium_access`.
   `atrium-web-local` (`--auth local`) listens on loopback only, for emergency
   access over an SSH tunnel. Never bind either listener to another interface
-  by default. The UI carries the IMAP, SMTP, Notion, Google and Anthropic
-  credentials, and the pause switch stops only automatic writes and
-  scheduled runs. Every POST is CSRF-checked and same-origin; the CSP allows
-  only same-origin scripts and `data:` images, so nothing loads from a CDN
-  and no script is inline: assets are built into `atrium-static`.
+  by default. The web process holds the IMAP, SMTP, Notion, Google and
+  Anthropic credentials from the environment, and the pause switch stops
+  only automatic writes and scheduled runs. Every POST is CSRF-checked and
+  same-origin; the CSP allows only same-origin scripts and `data:` images,
+  so nothing loads from a CDN and no script is inline: assets are built
+  into `atrium-static`.
 - The raw message cache and media caches live under the state directory's
   `cache/`, never in the Nix store; `atrium.db` holds everything worth
   backing up. The host decides what persists and what is backed up.
