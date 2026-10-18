@@ -26,7 +26,13 @@ Run `just` to list them.
   only after a Python fix and commit the result; the `golden-*` flake checks
   regenerate twice and fail on any difference.
 
-The Go recipes run inside the dev shell:
+The Go recipes run inside the dev shell. `go build` and `go test` embed
+the web assets from `internal/web/static`, which the shell stages from
+`atrium-static` on first entry:
+
+- `just assets`: restages `internal/web/static` from `atrium-static`.
+- `just css`: Tailwind watch that rebuilds `internal/web/static/app.css`
+  from the templates.
 
 - `just go-test`: `go test ./...` (cgo SQLite with FTS5 through the dev
   shell's `GOFLAGS=-tags=sqlite_fts5`).
@@ -42,6 +48,9 @@ The Go recipes run inside the dev shell:
 - `just imap-upstream`: fails until `third_party/go-imap` lands (#103).
 
 `nix build .#atrium` builds the package and runs the tests.
+`nix build .#atrium-go` builds the static Go binary for the host (Linux
+only) and runs the Go tests; `.#atrium-go-x86_64-v3` and
+`.#atrium-go-aarch64` are the release targets.
 
 ## Branches and pull requests
 
