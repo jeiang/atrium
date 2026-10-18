@@ -44,3 +44,8 @@ The plan lives on the wayfinder map,
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md): dev shell, `just` recipes,
   pull requests and the wayfinder workflow.
 - [AGENTS.md](AGENTS.md): invariants and rules for changes.
+
+## License
+
+MIT. See [LICENSE](LICENSE). Contributions need a DCO sign-off; see
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).

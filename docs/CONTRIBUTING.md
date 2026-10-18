@@ -7,7 +7,9 @@ nix develop --impure
 ```
 
 `.envrc` loads the same shell with direnv (`direnv allow`). The shell
-installs git hooks for editorconfig-checker, statix and treefmt.
+installs git hooks for editorconfig-checker, statix and treefmt. The hooks
+point at the `.pre-commit-config.yaml` of the checkout that last entered the
+shell, so enter it once in the main checkout, not only in a worktree.
 
 ## Recipes
 
@@ -26,6 +28,9 @@ Run `just` to list them.
 
 - Never commit to `main`. Use a branch and a pull request.
 - Commits are signed. `main` requires signed commits.
+- Sign off every commit (`git commit -s`) to certify the
+  [Developer Certificate of Origin](https://developercertificate.org/).
+  Contributions are accepted under the MIT license in [LICENSE](../LICENSE).
 - Use Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`).
 - CI builds every `checks.x86_64-linux` attribute as a matrix. The `check`
   job aggregates them and `main` requires it.
