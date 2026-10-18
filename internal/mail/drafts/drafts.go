@@ -277,7 +277,7 @@ func formatAddr(name, address string) (string, error) {
 		return "", err
 	}
 	if smtp.ASCIIEncodeError(name) != nil {
-		return "=?utf-8?b?" + base64.StdEncoding.EncodeToString([]byte(name)) + "?= <" + address + ">", nil
+		return headerEncode([]byte(name)) + " <" + address + ">", nil
 	}
 	quote := ""
 	if strings.ContainsAny(name, `][\()<>@,:;".`) {
@@ -285,6 +285,29 @@ func formatAddr(name, address string) (string, error) {
 	}
 	name = strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(name)
 	return quote + name + quote + " <" + address + ">", nil
+}
+
+func qpHeaderByte(c byte) string {
+	switch {
+	case c == ' ':
+		return "_"
+	case c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte("-!*+/", c) >= 0:
+		return string(c)
+	}
+	return fmt.Sprintf("=%02X", c)
+}
+
+// headerEncode is Charset('utf-8').header_encode: base64 when it is strictly shorter than the header Q encoding,
+// Q otherwise.
+func headerEncode(b []byte) string {
+	var q strings.Builder
+	for _, c := range b {
+		q.WriteString(qpHeaderByte(c))
+	}
+	if base64.StdEncoding.EncodedLen(len(b)) < q.Len() {
+		return "=?utf-8?b?" + base64.StdEncoding.EncodeToString(b) + "?="
+	}
+	return "=?utf-8?q?" + q.String() + "?="
 }
 
 type reply struct {

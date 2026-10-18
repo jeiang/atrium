@@ -322,7 +322,6 @@ func TestSessionErrorsAreWordedAsSmtplib(t *testing.T) {
 		{"DATA refused", script{replies: map[string]string{"DATA": "554 5.5.1 Error: no valid recipients"}}, "(554, b'5.5.1 Error: no valid recipients')"},
 		{"message refused", script{replies: map[string]string{"DATA.": "554 5.7.0 Message rejected as spam"}}, "(554, b'5.7.0 Message rejected as spam')"},
 		{"hang-up", script{hangup: "MAIL"}, "Connection unexpectedly closed"},
-		{"QUIT refused", script{replies: map[string]string{"QUIT": "500 5.5.2 what"}}, "(500, b'5.5.2 what')"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			s := serve(t, c.sc)
@@ -332,6 +331,26 @@ func TestSessionErrorsAreWordedAsSmtplib(t *testing.T) {
 				t.Fatalf("got %v (%T), want %q", err, err, c.want)
 			}
 		})
+	}
+}
+
+func TestSessionQuitRefusedAfterTheMailWasAccepted(t *testing.T) {
+	s := serve(t, script{replies: map[string]string{"QUIT": "500 5.5.2 what"}})
+	refused, err := sendVia(t, s, message("a@x.test", ""))
+	if err != nil || len(refused) != 0 {
+		t.Fatalf("refused %v err %v", refused, err)
+	}
+	if s.transcript()[len(s.transcript())-1] != "QUIT" {
+		t.Fatal("no QUIT")
+	}
+}
+
+func TestSessionQuitRefusedAfterAFailure(t *testing.T) {
+	s := serve(t, script{replies: map[string]string{"MAIL": "553 5.7.1 no", "QUIT": "500 5.5.2 what"}})
+	_, err := sendVia(t, s, message("a@x.test", ""))
+	var serr smtp.SendError
+	if !errors.As(err, &serr) || serr.Error() != "(500, b'5.5.2 what')" {
+		t.Fatalf("got %v", err)
 	}
 }
 

@@ -29,7 +29,7 @@ type Sent struct {
 	To   []string
 }
 
-// Server records every session it makes. Fail returns the error for a stage (connect, starttls, login, send) or
+// Server records every session it makes. Fail returns the error for a stage (connect, starttls, login, send, quit) or
 // nil; Refused is what send_message returns.
 type Server struct {
 	Fail    func(stage string) error
@@ -80,5 +80,5 @@ func (c *session) SendMessage(msg *smtp.Message, from string, to []string) (smtp
 
 func (c *session) Quit() error {
 	c.s.Calls = append(c.s.Calls, Call{Call: "quit"})
-	return nil
+	return c.s.fail("quit")
 }

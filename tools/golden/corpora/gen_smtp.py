@@ -166,6 +166,9 @@ NORMALIZE = [
     ["Jöhn <j@ü.example.test>"],
     ["k" * 1990 + "@example.test"],
     "\"Quoted, Name\" <q@example.test>, plain@example.test",
+    "Jose Ramírez <j@example.test>",
+    "\"Doe, Jöhn\" <dj@example.test>",
+    ["Zoë <z@example.test>", "Ünïcödé Ñame <u@example.test>", "東京 <t@example.test>", "José María Ramírez de la Peña <p@example.test>"],
 ]
 
 

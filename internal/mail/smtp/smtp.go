@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/rx"
 )
@@ -21,6 +22,8 @@ const (
 
 // Hosts is SMTP_HOSTS.
 var Hosts = map[string]string{config.ICloud: "smtp.mail.me.com", config.Gmail: "smtp.gmail.com"}
+
+var log = logx.Logger("atrium.smtp")
 
 // Credentials is what smtp.send reads from the config: the IMAP login of an account.
 type Credentials interface {
@@ -88,8 +91,14 @@ func send(ctx context.Context, factory Factory, account, user, password string, 
 	if err != nil {
 		return nil, err
 	}
+	accepted := false
 	defer func() {
-		if qerr := server.Quit(); qerr != nil {
+		qerr := server.Quit()
+		switch {
+		case qerr == nil:
+		case accepted:
+			log.Warn(fmt.Sprintf("%s SMTP session not closed cleanly after the mail was accepted: %s", account, qerr))
+		default:
 			refused, err = nil, qerr
 		}
 	}()
@@ -99,5 +108,7 @@ func send(ctx context.Context, factory Factory, account, user, password string, 
 	if err := server.Login(user, password); err != nil {
 		return nil, err
 	}
-	return server.SendMessage(msg, SenderAddress(account, user), recipients)
+	refused, err = server.SendMessage(msg, SenderAddress(account, user), recipients)
+	accepted = err == nil
+	return refused, err
 }
