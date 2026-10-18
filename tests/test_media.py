@@ -476,6 +476,14 @@ def test_add_page_prefill_and_submit(world):
     assert client.post("/media/add", data={"magnet": magnet, "mode": "media"}).status_code == 502
 
 
+def test_add_page_keeps_the_global_mode(world, tmp_path):
+    cfg = make_config(tmp_path, static_dir=static_dir(tmp_path), mode="live")
+    client = web_client(cfg, env=world["env"])
+    for page in (client.get("/media/add").text, client.post("/media/add", data={"magnet": "http://x", "mode": "plain"}).text):
+        assert 'action="/live/pause"' in page and "Shadow" not in page
+    assert 'value="plain" checked' in client.post("/media/add", data={"magnet": "http://x", "mode": "plain"}).text
+
+
 def test_downloads_page_lists_torrents_queue_and_files(world):
     w = world
     fake = w["qb"]
