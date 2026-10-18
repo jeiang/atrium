@@ -19,8 +19,11 @@ SKIP_TAGS = frozenset({"script", "style", "noscript", "svg", "nav", "header", "f
 BLOCK_TAGS = frozenset(
     {"p", "div", "br", "li", "ul", "ol", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "section", "article", "pre", "table"}
 )
-NAT64_WELL_KNOWN = ipaddress.ip_network("64:ff9b::/96")
-IPV4_COMPATIBLE = ipaddress.ip_network("::/96")
+EMBEDDED_IPV4_NETWORKS = (
+    ipaddress.ip_network("64:ff9b::/96"),
+    ipaddress.ip_network("::/96"),
+    ipaddress.ip_network("::ffff:0:0:0/96"),
+)
 IPV4_MASK = 0xFFFFFFFF
 
 
@@ -38,7 +41,7 @@ def default_allowed(ip):
             return False
         if ip.ipv4_mapped is not None:
             ip = ip.ipv4_mapped
-        elif ip in NAT64_WELL_KNOWN or ip in IPV4_COMPATIBLE:
+        elif any(ip in network for network in EMBEDDED_IPV4_NETWORKS):
             ip = ipaddress.IPv4Address(int(ip) & IPV4_MASK)
     return ip.is_global and not ip.is_multicast
 

@@ -142,6 +142,8 @@ def test_public_address_is_allowed_by_default():
         "::1",
         "::ffff:7f00:1",
         "::ffff:a9fe:a9fe",
+        "::ffff:0:7f00:1",
+        "::ffff:0:a9fe:a9fe",
         "fec0::1",
         "feff:ffff::1",
         "fe80::1",
@@ -154,7 +156,9 @@ def test_non_global_ipv6_and_embedded_private_ipv4_are_blocked(address):
     assert not webfetch.default_allowed(ipaddress.ip_address(address))
 
 
-@pytest.mark.parametrize("address", ["64:ff9b::5db8:d822", "::5db8:d822", "::ffff:5db8:d822", "2606:4700::1111"])
+@pytest.mark.parametrize(
+    "address", ["64:ff9b::5db8:d822", "::5db8:d822", "::ffff:5db8:d822", "::ffff:0:5db8:d822", "2606:4700::1111"]
+)
 def test_embedded_public_ipv4_and_global_ipv6_are_allowed(address):
     assert webfetch.default_allowed(ipaddress.ip_address(address))
 
