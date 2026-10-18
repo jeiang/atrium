@@ -60,6 +60,7 @@ and backups; nothing of that lives here.
 - `docs/install.md`: using the NixOS module.
 - `docs/CONTRIBUTING.md`: dev shell, recipes, pull requests, wayfinder
   workflow.
+- `docs/vision.md`: what atrium is for and the owner's v2 direction.
 
 ## Decisions that constrain changes
 
@@ -67,6 +68,14 @@ and backups; nothing of that lives here.
   planned on the wayfinder map
   (https://github.com/jeiang/atrium/issues/15). Phase A ports behavior as-is
   and keeps the host interface; new features go to Phase B tickets.
+- v2 direction (not the frozen Python app): memory precedence is profile >
+  nightly > wiki; the profile is the source of truth and the nightly run
+  updates the wiki weighted by confidence.
+- v2 direction: money currencies are settings with USD as the base; the
+  operator sets a fixed rate per currency, the rate used is stored per
+  transaction and never changes older ones, and there is no rate fetcher.
+- v2 direction: the mail model endpoint is any OpenAI-compatible endpoint,
+  local or hosted; no local model is required.
 - Mail routing and flagging run in code, never as a tool an agent chooses.
   Rules, folder data, skills, profile and agent threads live in atrium's
   SQLite database, never in this repository.

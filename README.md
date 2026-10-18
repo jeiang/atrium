@@ -19,6 +19,7 @@ Limits that hold today:
 - Mail routing is code, not an agent decision.
 - Every automatic write is logged with an undo.
 - One operator per instance. More people means more instances.
+- Others running their own instance is a v2 goal.
 
 ## Status
 
@@ -41,6 +42,8 @@ The plan lives on the wayfinder map,
 
 - [docs/install.md](docs/install.md): add the NixOS module to a host.
 - [docs/runbook.md](docs/runbook.md): environment and operating procedures.
+- [docs/vision.md](docs/vision.md): what atrium is for and where v2 is
+  heading.
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md): dev shell, `just` recipes,
   pull requests and the wayfinder workflow.
 - [AGENTS.md](AGENTS.md): invariants and rules for changes.
