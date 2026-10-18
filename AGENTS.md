@@ -23,9 +23,13 @@ and backups; nothing of that lives here.
   direnv.
 - `nix flake check` also builds `atrium-static` and the `module` check, which
   renders every unit of an example host and greps the wiring it expects.
-- `nix fmt` (treefmt: alejandra, deadnix) formats Nix; `just fmt` also runs
-  `statix fix`. The devshell installs git hooks for editorconfig-checker,
-  statix and treefmt. Python has no formatter in the flake.
+- `nix fmt` (treefmt: alejandra, deadnix, gofmt, goimports) formats Nix and
+  Go; `just fmt` also runs `statix fix`. The devshell installs git hooks for
+  editorconfig-checker, statix and treefmt. Python has no formatter in the
+  flake.
+- Go (the v2 port): inside the devshell, `just go-test` runs `go test`,
+  `just lint` golangci-lint (`.golangci.yml`), `just vuln` govulncheck and
+  `just licenses` the dependency licence gate.
 - After a change lands on `main`, bump the `atrium` input in cornn-flaek
   (`nix flake update atrium`) and open a pull request there; `just
   artemis-kernel` is not needed for an atrium bump.
@@ -42,6 +46,11 @@ and backups; nothing of that lives here.
   environment file.
 - Dependencies are what `pyproject.toml` lists, and `nix/package.nix` names
   the same set from `python314Packages`. Add a dependency in both.
+- Go: the module is `github.com/jeiang/atrium`, its toolchain line is pinned
+  in `go.mod` and `flake-modules/devshell.nix` together. Ported code never
+  imports `regexp`; every pattern goes through the regexp2 package
+  (https://github.com/jeiang/atrium/issues/71), and `just lint` enforces it.
+  The CLI is stdlib `flag` through `internal/cli`: no CLI framework.
 
 ## Layout
 
@@ -55,6 +64,11 @@ and backups; nothing of that lives here.
 - `flake.nix` and `flake-modules/`: flake-parts modules (outputs, checks,
   devshell), loaded by import-tree. `.ci/` holds the garret cache push helper.
 - `nix/`: package, static assets and the NixOS module.
+- `cmd/atrium/`: the Go binary's entry point (root command, logging setup).
+- `internal/cli/`: the subcommand table; usage errors exit 2, a handler's
+  return value is the exit code.
+- `internal/<module>/`: one package per runtime-toggled module, each with a
+  `Register` func that adds its subcommands, routes, jobs and tools.
 - `docs/runbook.md`: the environment the units read and the operating
   procedures, host-neutral.
 - `docs/install.md`: using the NixOS module.

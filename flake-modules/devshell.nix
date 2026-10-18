@@ -15,6 +15,8 @@
       programs = {
         alejandra.enable = true;
         deadnix.enable = true;
+        gofmt.enable = true;
+        goimports.enable = true;
       };
       flakeCheck = true;
     };
@@ -28,7 +30,17 @@
         (pkgs.python314.withPackages (ps:
           self'.packages.atrium.propagatedBuildInputs
           ++ [ps.pytest ps.respx]))
+        pkgs.golangci-lint
+        pkgs.govulncheck
+        pkgs.go-licenses
+        pkgs.pkg-config
+        pkgs.sqlite.dev
       ];
+      env.CGO_ENABLED = "1";
+      languages.go = {
+        enable = true;
+        package = pkgs.go_1_26;
+      };
       languages.nix.enable = true;
       git-hooks.hooks = {
         editorconfig-checker.enable = true;

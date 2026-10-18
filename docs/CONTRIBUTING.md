@@ -15,12 +15,22 @@ shell, so enter it once in the main checkout, not only in a worktree.
 
 Run `just` to list them.
 
-- `just fmt`: `nix fmt` (treefmt: alejandra, deadnix), then `statix fix`
-  and `statix check`.
+- `just fmt`: `nix fmt` (treefmt: alejandra, deadnix, gofmt, goimports),
+  then `statix fix` and `statix check`.
 - `just check`: `nix flake check --impure --keep-going`.
 - `just fast-check`: the same checks built in parallel with nix-fast-build,
   skipping what the substituters already have.
 - `just test`: the pytest suite against the working tree.
+
+The Go recipes run inside the dev shell:
+
+- `just go-test`: `go test ./...`.
+- `just lint`: golangci-lint with `.golangci.yml` (govet, staticcheck,
+  errcheck, and depguard banning `regexp` in favour of regexp2).
+- `just vuln`: govulncheck.
+- `just licenses`: go-licenses fails on forbidden (AGPL) or unknown
+  dependency licences.
+- `just imap-upstream`: fails until `third_party/go-imap` lands (#103).
 
 `nix build .#atrium` builds the package and runs the tests.
 

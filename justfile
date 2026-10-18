@@ -18,3 +18,24 @@ fast-check extraArgs="":
 # Run the pytest suite against the working tree
 test *args:
   nix develop --impure -c python -m pytest {{args}}
+
+# Run the Go tests (inside the dev shell)
+go-test *args="./...":
+  go test {{args}}
+
+# Lint the Go code with golangci-lint (inside the dev shell)
+lint *args="./...":
+  golangci-lint run {{args}}
+
+# Check the Go code and its dependencies for known vulnerabilities (inside the dev shell)
+vuln *args="./...":
+  govulncheck {{args}}
+
+# Fail on Go dependencies under a forbidden (AGPL) or unknown license (inside the dev shell)
+licenses:
+  go-licenses check ./... --disallowed_types=forbidden,unknown
+
+# Diff third_party/go-imap against upstream; wired by #103
+imap-upstream:
+  @echo "third_party/go-imap does not exist yet; #103 adds it and this recipe" >&2
+  @exit 1
