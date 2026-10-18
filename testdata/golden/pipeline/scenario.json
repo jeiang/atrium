@@ -1,0 +1,303 @@
+{
+  "cbtt_html": "<html><body><div class=\"table_date\">2026-10-14</div><table class=\"rate_table\"><tr><th>Currency</th><th>Buying</th><th>Selling</th></tr><tr><td>United States Dollar</td><td>6.7200</td><td>6.7900</td></tr></table></body></html>",
+  "chat": "replies come from llm_script.json: the system prompt picks the feature, the user prompt's first 'Subject: ' line picks a by_subject override merged onto defaults; payee replies are keyed by the 'Normalized: ' line; llm_exchanges.json lists every request and reply in order",
+  "clocks": {
+    "approve": 1792095600.0,
+    "arrive": 1792090800.0,
+    "backlog": 1792087500.0,
+    "correct1": 1792081800.0,
+    "correct2": 1792092600.0,
+    "golive": 1792087200.0,
+    "scan1": 1792096200.0,
+    "scan2": 1793392200.0,
+    "sync1": 1792080000.0,
+    "sync2": 1792083600.0,
+    "sync4": 1792094400.0,
+    "undo": 1792095000.0
+  },
+  "embedding": {
+    "algorithm": "lowercase the input, take every [a-z0-9]+ token, bucket = first 4 bytes of sha256(token) as big-endian uint32 mod 768, value = token count in that bucket; the reply carries the dense vector (llm_exchanges.json records it sparse as [bucket, count] pairs)",
+    "dimension": 768
+  },
+  "environment": {
+    "ATRIUM_CACHE_DIR": "state/cache",
+    "ATRIUM_CHAT_URL": "http://llm.invalid/v1",
+    "ATRIUM_CONTACTS_DIR": "state/contacts",
+    "ATRIUM_DB": "state/atrium.db",
+    "ATRIUM_EMBED_URL": "http://embed.invalid/v1",
+    "ATRIUM_MEDIA_LINK_KEY": "golden-link-key",
+    "ATRIUM_MEDIA_MOVIES_URL": "http://movies.test",
+    "ATRIUM_MEDIA_ROOT": "state/media",
+    "ATRIUM_MEDIA_TV_URL": "http://tv.test",
+    "ATRIUM_MODE": "live",
+    "ATRIUM_NOTION_WIKI_ROOT": "00000000-0000-0000-0000-000000000900",
+    "ATRIUM_PUBLIC_URL": "https://atrium.test",
+    "ATRIUM_TZ": "America/Port_of_Spain",
+    "GMAIL_ADDRESS": "operator@gmail.example",
+    "GMAIL_APP_PASSWORD": "golden-app-password",
+    "ICLOUD_APPLE_ID": "operator@icloud.example",
+    "ICLOUD_APP_PASSWORD": "golden-app-password",
+    "ICLOUD_MAIL_USERNAME": "operator@icloud.example",
+    "NOTION_TOKEN": "golden-notion-token",
+    "NTFY_MEDIA_TOPIC": "media-releases",
+    "NTFY_TOKEN": "golden-ntfy-token",
+    "NTFY_TOPIC": "atrium-golden",
+    "NTFY_URL": "https://ntfy.test",
+    "PYTHONHASHSEED": "0",
+    "QBITTORRENT_URL": "http://qbit.test",
+    "TMDB_API_KEY": "k",
+    "TZ": "UTC"
+  },
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "money_accounts": [
+    {
+      "bank": "first_citizens",
+      "currency": "TTD",
+      "kind": "credit_card",
+      "last4": "1234",
+      "name": "FCB Visa",
+      "sender_patterns": [
+        "fcb.example"
+      ]
+    },
+    {
+      "bank": "republic",
+      "currency": "TTD",
+      "forex": true,
+      "kind": "credit_card",
+      "last4": "9876",
+      "name": "Republic Mastercard",
+      "sender_patterns": [
+        "republic.example"
+      ]
+    },
+    {
+      "bank": "cibc",
+      "currency": "BBD",
+      "forex": true,
+      "kind": "bank",
+      "last4": "5555",
+      "name": "CIBC Chequing",
+      "sender_patterns": [
+        "cibc.example"
+      ]
+    }
+  ],
+  "rules": {
+    "rules": [
+      {
+        "action": "file",
+        "dest": "Newsletters",
+        "id": "club-news",
+        "when": [
+          {
+            "field": "from_domain",
+            "op": "suffix",
+            "value": "club.example"
+          }
+        ]
+      },
+      {
+        "account": "icloud",
+        "action": "delete",
+        "id": "promo-spam",
+        "when": [
+          {
+            "field": "from_addr",
+            "op": "eq",
+            "value": "spam@promo.example"
+          }
+        ]
+      },
+      {
+        "account": "gmail",
+        "action": "delete",
+        "id": "old-flash",
+        "when": [
+          {
+            "field": "subject_tmpl",
+            "op": "re",
+            "value": "^flash sale"
+          },
+          {
+            "field": "age_days",
+            "op": "gte",
+            "value": 30
+          }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "at": "sync1",
+      "op": "clock"
+    },
+    {
+      "document": "rules",
+      "op": "rules_import"
+    },
+    {
+      "op": "money_accounts"
+    },
+    {
+      "mode": "shadow",
+      "op": "run_sync"
+    },
+    {
+      "at": "correct1",
+      "op": "clock"
+    },
+    {
+      "account": "icloud",
+      "dest": "Bills",
+      "key": "mystery",
+      "op": "server_move",
+      "src": "INBOX"
+    },
+    {
+      "account": "icloud",
+      "box": "INBOX",
+      "key": "digest-11",
+      "op": "server_delete"
+    },
+    {
+      "account": "icloud",
+      "box": "INBOX",
+      "flags": [
+        "\\Seen",
+        "\\Flagged"
+      ],
+      "key": "itin-13",
+      "op": "server_flags"
+    },
+    {
+      "account": "gmail",
+      "box": "[Gmail]/All Mail",
+      "keys": [
+        "flash-1",
+        "flash-2",
+        "flash-3",
+        "flash-4",
+        "flash-5"
+      ],
+      "op": "server_delete"
+    },
+    {
+      "account": "gmail",
+      "box": "[Gmail]/All Mail",
+      "key": "gift",
+      "labels": [
+        "\\Inbox",
+        "Receipts"
+      ],
+      "op": "server_labels"
+    },
+    {
+      "folder": "Bills",
+      "key": "gadget",
+      "op": "correction"
+    },
+    {
+      "at": "sync2",
+      "op": "clock"
+    },
+    {
+      "mode": "shadow",
+      "op": "run_sync"
+    },
+    {
+      "at": "golive",
+      "op": "clock"
+    },
+    {
+      "mode": "live",
+      "op": "run_sync"
+    },
+    {
+      "at": "backlog",
+      "op": "clock"
+    },
+    {
+      "op": "backlog"
+    },
+    {
+      "at": "arrive",
+      "op": "clock"
+    },
+    {
+      "op": "arrive"
+    },
+    {
+      "mode": "live",
+      "op": "run_sync"
+    },
+    {
+      "at": "correct2",
+      "op": "clock"
+    },
+    {
+      "folder": "Bills",
+      "key": "shopa-2002",
+      "op": "correction"
+    },
+    {
+      "at": "sync4",
+      "op": "clock"
+    },
+    {
+      "mode": "live",
+      "op": "run_sync"
+    },
+    {
+      "at": "undo",
+      "op": "clock"
+    },
+    {
+      "key": "power-reminder",
+      "kind": "file",
+      "op": "live_undo"
+    },
+    {
+      "at": "approve",
+      "op": "clock"
+    },
+    {
+      "account": "icloud",
+      "kind": "inbox_backlog",
+      "op": "approve"
+    },
+    {
+      "account": "gmail",
+      "forever": false,
+      "kind": "inbox_backlog",
+      "op": "dismiss"
+    },
+    {
+      "at": "scan1",
+      "op": "clock"
+    },
+    {
+      "op": "scan_all",
+      "ts": "scan1"
+    },
+    {
+      "at": "scan2",
+      "op": "clock"
+    },
+    {
+      "op": "scan_all",
+      "ts": "scan2"
+    },
+    {
+      "account": "gmail",
+      "forever": true,
+      "kind": "deletion_rule",
+      "op": "dismiss"
+    }
+  ],
+  "timestamp_policy": {
+    "detail": "each clock step fixes time.time, datetime.now and date.today until the next clock step; replay every step at its recorded clock and compare timestamp columns (ts, first_seen, created_ts, updated_ts, decided_ts, applied_ts, undone_ts) exactly",
+    "policy": "same_clock"
+  }
+}

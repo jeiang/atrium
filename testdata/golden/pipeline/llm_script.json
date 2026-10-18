@@ -1,0 +1,217 @@
+{
+  "by_subject": {
+    "Call me this weekend": {
+      "event": {
+        "has_event": false
+      },
+      "flag": {
+        "deadline_or_payment_due": false,
+        "flag": true,
+        "person_asking": true,
+        "security_event": false
+      }
+    },
+    "Card alert: purchase at SHOP A": {
+      "money": {
+        "account_last4": "1234",
+        "amount": 120.0,
+        "bank": "first_citizens",
+        "currency": "TTD",
+        "date": "2026-10-14",
+        "description": "Card purchase",
+        "kind": "purchase",
+        "payee_raw": "SHOP A PORT OF SPAIN"
+      }
+    },
+    "Dinner on Saturday": {
+      "commitments": {
+        "commitments": [
+          {
+            "due": null,
+            "owner": "me",
+            "text": "Reply about dinner"
+          }
+        ]
+      },
+      "event": {
+        "has_event": true
+      },
+      "flag": {
+        "deadline_or_payment_due": false,
+        "flag": true,
+        "person_asking": true,
+        "security_event": false
+      }
+    },
+    "Gift card balance": {
+      "money": {
+        "account_last4": "",
+        "amount": 25.0,
+        "bank": "",
+        "cadence": "monthly",
+        "currency": "USD",
+        "date": "",
+        "description": "Gift card",
+        "kind": "purchase",
+        "payee_raw": "STORE.EXAMPLE GIFT",
+        "subscription": true
+      }
+    },
+    "Lunch next week": {
+      "commitments": {
+        "commitments": [
+          {
+            "due": "2026-10-22",
+            "owner": "them",
+            "text": "Meet Pal for lunch"
+          }
+        ]
+      }
+    },
+    "Mystery message": {
+      "folder": {
+        "confident": false,
+        "folder": "uncertain"
+      }
+    },
+    "Order confirmation 55123": {
+      "folder": {
+        "confident": true,
+        "folder": "Receipts"
+      },
+      "money": {
+        "kind": "none"
+      },
+      "package": {
+        "carrier": "",
+        "is_order": true,
+        "merchant": "Gadgets",
+        "order_ref": "GX-55123",
+        "status": "ordered",
+        "status_text": "Order confirmed",
+        "tracking_number": ""
+      }
+    },
+    "Power bill October": {
+      "money": {
+        "kind": "none"
+      }
+    },
+    "Question about the trip": {
+      "commitments": {
+        "commitments": [
+          {
+            "due": "2026-10-16",
+            "owner": "me",
+            "text": "Send the itinerary to Friend"
+          }
+        ]
+      },
+      "flag": {
+        "deadline_or_payment_due": true,
+        "flag": true,
+        "person_asking": true,
+        "security_event": false
+      }
+    },
+    "Re: Project kickoff": {
+      "commitments": {
+        "commitments": [
+          {
+            "due": null,
+            "owner": "them",
+            "text": "Send the kickoff agenda"
+          }
+        ]
+      },
+      "folder": {
+        "confident": false,
+        "folder": "Travel"
+      }
+    },
+    "Your Shop A receipt #2001": {
+      "money": {
+        "account_last4": "1234",
+        "amount": 120.0,
+        "bank": "",
+        "currency": "TTD",
+        "date": "2026-10-14",
+        "description": "Receipt 2001",
+        "kind": "purchase",
+        "payee_raw": "SHOP A PORT OF SPAIN"
+      }
+    },
+    "Your Shop A receipt #2002": {
+      "money": {
+        "account_last4": "1234",
+        "amount": 45.5,
+        "bank": "",
+        "currency": "TTD",
+        "date": "2026-10-15",
+        "description": "Receipt 2002",
+        "kind": "purchase",
+        "payee_raw": "SHOP A PORT OF SPAIN"
+      }
+    },
+    "Your order has shipped": {
+      "money": {
+        "kind": "none"
+      }
+    }
+  },
+  "defaults": {
+    "commitments": {
+      "commitments": []
+    },
+    "event": {
+      "has_event": false
+    },
+    "flag": {
+      "deadline_or_payment_due": false,
+      "flag": false,
+      "person_asking": false,
+      "security_event": false
+    },
+    "folder": {
+      "confident": false,
+      "folder": "uncertain"
+    },
+    "folder_name": {
+      "name": "Shop B"
+    },
+    "money": {
+      "account_amount": null,
+      "account_currency": "",
+      "account_last4": "",
+      "amount": null,
+      "bank": "",
+      "cadence": "unknown",
+      "currency": "",
+      "date": "",
+      "description": "",
+      "kind": "none",
+      "payee_raw": "",
+      "statement_total": null,
+      "subscription": false
+    },
+    "package": {
+      "carrier": "",
+      "is_order": false,
+      "merchant": "",
+      "order_ref": "",
+      "status": "ordered",
+      "status_text": "",
+      "tracking_number": ""
+    }
+  },
+  "payees": {
+    "shop a": {
+      "category": "Groceries",
+      "name": "Shop A"
+    },
+    "store example gift": {
+      "category": "Shopping",
+      "name": "Store"
+    }
+  }
+}

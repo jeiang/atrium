@@ -78,6 +78,16 @@
         grep -q -- '--setenv=ATRIUM_MODE=live' ${pkgs.writeText "atrium-run" (builtins.unsafeDiscardStringContext atriumRun.text)}
         ln -s "$units" $out
       '';
+
+      # Fails when src/atrium gains a `re` call site the regex manifest lacks, or the committed corpus is stale.
+      golden-regex = pkgs.runCommand "atrium-golden-regex-check" {nativeBuildInputs = [pkgs.python314];} ''
+        cd ${lib.fileset.toSource {
+          root = ../.;
+          fileset = lib.fileset.unions [../src/atrium ../tools/golden/corpora ../testdata/corpora];
+        }}
+        PYTHONDONTWRITEBYTECODE=1 python tools/golden/corpora/gen_regex.py --check
+        touch $out
+      '';
     };
   };
 }

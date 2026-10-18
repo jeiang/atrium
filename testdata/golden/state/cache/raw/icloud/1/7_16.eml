@@ -1,0 +1,9 @@
+From: Power Co <billing@power.example>
+To: operator@icloud.example
+Subject: Power bill reminder
+Message-ID: <power-reminder@golden.example>
+Date: Thu, 15 Oct 2026 13:36:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+A reminder that your power bill is due.
