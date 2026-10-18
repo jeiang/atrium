@@ -14,7 +14,6 @@ import (
 type recorder struct {
 	testing.TB
 	errors []string
-	fatal  string
 }
 
 func (r *recorder) Helper() {}
@@ -23,25 +22,14 @@ func (r *recorder) Errorf(format string, args ...any) {
 	r.errors = append(r.errors, strings.TrimSpace(sprintf(format, args...)))
 }
 
-func (r *recorder) Fatalf(format string, args ...any) {
-	r.fatal = sprintf(format, args...)
-	panic(r)
-}
-
 func sprintf(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
 }
 
-func replayRequest(t *testing.T, want Request, req *http.Request) (rec *recorder) {
+func replayRequest(t *testing.T, want Request, req *http.Request) (*recorder, bool) {
 	t.Helper()
-	rec = &recorder{TB: t}
-	defer func() {
-		if p := recover(); p != nil && p != rec {
-			panic(p)
-		}
-	}()
-	checkReplayed(rec, 0, want, req)
-	return rec
+	rec := &recorder{TB: t}
+	return rec, checkReplayed(rec, 0, want, req)
 }
 
 func request(t *testing.T, contentType, body string) *http.Request {
@@ -117,12 +105,9 @@ func TestReplayBodyEncodings(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			rec := replayRequest(t, withPath(c.want), request(t, c.contentType, c.body))
-			if rec.fatal != "" {
-				t.Fatalf("unexpected fatal: %s", rec.fatal)
-			}
-			if failed := len(rec.errors) > 0; failed != c.fail {
-				t.Fatalf("errors = %q, want failure %v", rec.errors, c.fail)
+			rec, ok := replayRequest(t, withPath(c.want), request(t, c.contentType, c.body))
+			if failed := len(rec.errors) > 0; failed != c.fail || ok == c.fail {
+				t.Fatalf("errors = %q, ok = %v, want failure %v", rec.errors, ok, c.fail)
 			}
 		})
 	}
@@ -133,10 +118,10 @@ func withPath(r Request) Request {
 	return r
 }
 
-func TestReplayUnknownEncodingIsFatal(t *testing.T) {
-	rec := replayRequest(t, withPath(Request{BodyEncoding: "yaml"}), request(t, "", ""))
-	if !strings.Contains(rec.fatal, "unknown body_encoding") {
-		t.Fatalf("fatal = %q", rec.fatal)
+func TestReplayUnknownEncodingIsRejected(t *testing.T) {
+	rec, ok := replayRequest(t, withPath(Request{BodyEncoding: "yaml"}), request(t, "", ""))
+	if ok || len(rec.errors) != 1 || !strings.Contains(rec.errors[0], "unknown body_encoding") {
+		t.Fatalf("ok = %v, errors = %q", ok, rec.errors)
 	}
 }
 
@@ -151,5 +136,19 @@ func TestReplayServerCatchesBodyMismatch(t *testing.T) {
 	_ = res.Body.Close()
 	if res.StatusCode != 200 {
 		t.Fatalf("status %d", res.StatusCode)
+	}
+}
+
+func TestReplayServerAnswers500OnBodyMismatch(t *testing.T) {
+	rec := &recorder{TB: t}
+	want := Request{Method: "POST", Path: "/p", BodyEncoding: "text", Body: raw(t, "hello")}
+	srv := Replay(rec, []Exchange{{Request: want, Response: raw(t, Response{Status: 200, BodyEncoding: "none"})}})
+	res, err := http.Post(srv.URL+"/p", "text/plain", strings.NewReader("other"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusInternalServerError || len(rec.errors) != 1 {
+		t.Fatalf("status %d, errors %q", res.StatusCode, rec.errors)
 	}
 }

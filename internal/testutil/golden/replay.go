@@ -29,7 +29,7 @@ type Response struct {
 // Replay serves exchanges in order: each request must match the recorded
 // method, path, query, recorded headers and body (json canonically, form as
 // ordered pairs, multipart as decoded parts, text and base64 as bytes, none as
-// empty; any other encoding fails), and gets the recorded response. Requests beyond the recording
+// empty; any other encoding is an error), and gets the recorded response. Requests beyond the recording
 // get 599; t fails at cleanup unless every exchange was served.
 func Replay(t testing.TB, exchanges []Exchange) *httptest.Server {
 	t.Helper()
@@ -45,7 +45,10 @@ func Replay(t testing.TB, exchanges []Exchange) *httptest.Server {
 			w.WriteHeader(599)
 			return
 		}
-		checkReplayed(t, i, exchanges[i].Request, r)
+		if !checkReplayed(t, i, exchanges[i].Request, r) {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		var resp Response
 		if err := json.Unmarshal(exchanges[i].Response, &resp); err != nil {
 			t.Errorf("golden replay: response %d: %v", i, err)
@@ -75,11 +78,12 @@ func Replay(t testing.TB, exchanges []Exchange) *httptest.Server {
 	return srv
 }
 
-func checkReplayed(t testing.TB, i int, want Request, r *http.Request) {
+func checkReplayed(t testing.TB, i int, want Request, r *http.Request) bool {
 	switch want.BodyEncoding {
 	case "json", "form", "multipart", "text", "base64", "none":
 	default:
-		t.Fatalf("golden replay: request %d: unknown body_encoding %q", i, want.BodyEncoding)
+		t.Errorf("golden replay: request %d: unknown body_encoding %q", i, want.BodyEncoding)
+		return false
 	}
 	if r.Method != want.Method || r.URL.Path != want.Path || r.URL.RawQuery != want.Query {
 		t.Errorf("golden replay: request %d: %s %s?%s, want %s %s?%s", i, r.Method, r.URL.Path, r.URL.RawQuery, want.Method, want.Path, want.Query)
@@ -92,11 +96,13 @@ func checkReplayed(t testing.TB, i int, want Request, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		t.Errorf("golden replay: request %d: %v", i, err)
-		return
+		return false
 	}
 	if msg := compareBody(want, r.Header.Get("Content-Type"), body); msg != "" {
 		t.Errorf("golden replay: request %d body differs from the golden:\n%s", i, msg)
+		return false
 	}
+	return true
 }
 
 type multipartPart struct {
