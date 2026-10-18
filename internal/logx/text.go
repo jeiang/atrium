@@ -35,9 +35,7 @@ func (h *textHandler) Enabled(_ context.Context, l slog.Level) bool {
 func (h *textHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	n := *h
 	n.pre = slices.Clip(h.pre)
-	for _, a := range attrs {
-		n.pre = n.appendAttr(n.pre, n.prefix, a, &n.component)
-	}
+	n.pre = appendFields(n.pre, flattenAll(h.prefix, attrs), &n.component)
 	return &n
 }
 
@@ -46,17 +44,18 @@ func (h *textHandler) WithGroup(name string) slog.Handler {
 		return h
 	}
 	n := *h
-	n.prefix += Key(name) + "_"
+	n.prefix += sanitize(name) + "_"
 	return &n
 }
 
 func (h *textHandler) Handle(_ context.Context, r slog.Record) error {
 	name := h.component
-	var attrs []byte
+	flat := make([]slog.Attr, 0, r.NumAttrs())
 	r.Attrs(func(a slog.Attr) bool {
-		attrs = h.appendAttr(attrs, h.prefix, a, &name)
+		flat = flatten(flat, h.prefix, a)
 		return true
 	})
+	attrs := appendFields(nil, flat, &name)
 	t := r.Time.In(h.loc)
 	buf := make([]byte, 0, 128+len(r.Message)+len(h.pre)+len(attrs))
 	buf = t.AppendFormat(buf, "2006-01-02 15:04:05,")
@@ -76,34 +75,23 @@ func (h *textHandler) Handle(_ context.Context, r slog.Record) error {
 	return err
 }
 
-func (h *textHandler) appendAttr(b []byte, prefix string, a slog.Attr, component *string) []byte {
-	a.Value = a.Value.Resolve()
-	if a.Equal(slog.Attr{}) {
-		return b
-	}
-	if a.Value.Kind() == slog.KindGroup {
-		if a.Key != "" {
-			prefix += Key(a.Key) + "_"
+func appendFields(b []byte, attrs []slog.Attr, component *string) []byte {
+	for _, a := range attrs {
+		v := a.Value.String()
+		if a.Key == Component {
+			*component = v
+			continue
 		}
-		for _, g := range a.Value.Group() {
-			b = h.appendAttr(b, prefix, g, component)
+		b = append(b, ' ')
+		b = append(b, a.Key...)
+		b = append(b, '=')
+		if needsQuoting(v) {
+			b = strconv.AppendQuote(b, v)
+		} else {
+			b = append(b, v...)
 		}
-		return b
 	}
-	a = replaceAttr(nil, a)
-	if prefix == "" && a.Key == Component {
-		*component = a.Value.String()
-		return b
-	}
-	b = append(b, ' ')
-	b = append(b, prefix...)
-	b = append(b, a.Key...)
-	b = append(b, '=')
-	v := a.Value.String()
-	if needsQuoting(v) {
-		return strconv.AppendQuote(b, v)
-	}
-	return append(b, v...)
+	return b
 }
 
 func needsQuoting(s string) bool {

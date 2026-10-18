@@ -27,13 +27,8 @@ func Setup(stderr io.Writer) {
 
 func NewHandler(stderr io.Writer) slog.Handler {
 	if isJournalStream(stderr) {
-		h, err := slogjournal.NewHandler(&slogjournal.Options{
-			Level:        slog.LevelInfo,
-			ReplaceAttr:  replaceAttr,
-			ReplaceGroup: Key,
-		})
-		if err == nil {
-			return h
+		if h, err := slogjournal.NewHandler(&slogjournal.Options{Level: slog.LevelInfo}); err == nil {
+			return &flatHandler{inner: h}
 		}
 	}
 	return newTextHandler(stderr, slog.LevelInfo)
@@ -43,31 +38,116 @@ func Logger(component string) *slog.Logger {
 	return slog.New(deferred{}.WithAttrs([]slog.Attr{slog.String(Component, component)}))
 }
 
-func Key(name string) string {
+func sanitize(name string) string {
 	b := []byte(strings.ToUpper(name))
 	for i, c := range b {
 		if (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '_' {
 			b[i] = '_'
 		}
 	}
-	if len(b) == 0 || (b[0] >= '0' && b[0] <= '9') {
-		return "_" + string(b)
-	}
 	return string(b)
 }
 
-func IsSecret(key string) bool {
-	k := Key(key)
-	return strings.Contains(k, "PASSWORD") || strings.Contains(k, "SECRET") || strings.Contains(k, "TOKEN") ||
-		k == "KEY" || strings.HasSuffix(k, "_KEY") || strings.HasSuffix(k, "APIKEY")
+var journalFields = [...]string{"MESSAGE", "MESSAGE_ID", "PRIORITY", "ERRNO", "TID", "INVOCATION_ID", "USER_INVOCATION_ID", "DOCUMENTATION"}
+
+func Key(name string) string {
+	k := sanitize(name)
+	switch {
+	case k == "":
+		return "F_"
+	case k[0] == '_':
+		return "F" + k
+	case k[0] >= '0' && k[0] <= '9',
+		slices.Contains(journalFields[:], k),
+		strings.HasPrefix(k, "CODE_"),
+		strings.HasPrefix(k, "SYSLOG_"):
+		return "F_" + k
+	}
+	return k
 }
 
-func replaceAttr(_ []string, a slog.Attr) slog.Attr {
-	a.Key = Key(a.Key)
-	if IsSecret(a.Key) {
-		a.Value = slog.StringValue(Redacted)
+var secretWords = [...]string{"PASSWORD", "PASSWD", "SECRET", "PRIVATEKEY", "AUTHORIZATION", "COOKIE", "CREDENTIAL"}
+
+func IsSecret(field string) bool {
+	k := sanitize(field)
+	for _, w := range secretWords {
+		if strings.Contains(k, w) {
+			return true
+		}
 	}
-	return a
+	for seg := range strings.SplitSeq(k, "_") {
+		if seg == "KEY" || strings.HasSuffix(seg, "APIKEY") || strings.HasSuffix(seg, "TOKEN") {
+			return true
+		}
+	}
+	return false
+}
+
+func flatten(dst []slog.Attr, prefix string, a slog.Attr) []slog.Attr {
+	a.Value = a.Value.Resolve()
+	if a.Equal(slog.Attr{}) {
+		return dst
+	}
+	if a.Value.Kind() != slog.KindGroup {
+		key := Key(prefix + a.Key)
+		if IsSecret(key) {
+			a.Value = slog.StringValue(Redacted)
+		}
+		return append(dst, slog.Attr{Key: key, Value: a.Value})
+	}
+	attrs := a.Value.Group()
+	if len(attrs) == 0 {
+		return dst
+	}
+	if a.Key != "" {
+		if IsSecret(prefix + a.Key) {
+			return append(dst, slog.String(Key(prefix+a.Key), Redacted))
+		}
+		prefix += sanitize(a.Key) + "_"
+	}
+	for _, g := range attrs {
+		dst = flatten(dst, prefix, g)
+	}
+	return dst
+}
+
+func flattenAll(prefix string, attrs []slog.Attr) []slog.Attr {
+	out := make([]slog.Attr, 0, len(attrs))
+	for _, a := range attrs {
+		out = flatten(out, prefix, a)
+	}
+	return out
+}
+
+type flatHandler struct {
+	inner  slog.Handler
+	prefix string
+}
+
+func (h *flatHandler) Enabled(ctx context.Context, l slog.Level) bool {
+	return h.inner.Enabled(ctx, l)
+}
+
+func (h *flatHandler) Handle(ctx context.Context, r slog.Record) error {
+	out := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	attrs := make([]slog.Attr, 0, r.NumAttrs())
+	r.Attrs(func(a slog.Attr) bool {
+		attrs = flatten(attrs, h.prefix, a)
+		return true
+	})
+	out.AddAttrs(attrs...)
+	return h.inner.Handle(ctx, out)
+}
+
+func (h *flatHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &flatHandler{inner: h.inner.WithAttrs(flattenAll(h.prefix, attrs)), prefix: h.prefix}
+}
+
+func (h *flatHandler) WithGroup(name string) slog.Handler {
+	if name == "" {
+		return h
+	}
+	return &flatHandler{inner: h.inner, prefix: h.prefix + sanitize(name) + "_"}
 }
 
 type deferred struct {

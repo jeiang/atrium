@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -139,32 +140,159 @@ func TestRootAndLevels(t *testing.T) {
 func TestAttributesAndRedaction(t *testing.T) {
 	buf := capture(t)
 	Logger("atrium.agent").With(RunID, 12).WithGroup("tool").Info("call",
-		ThreadID, 7, Job, "nightly", "password", "hunter2", "NOTION_TOKEN", "secret_x",
-		"api_key", "sk", "link-key", "k", "client_secret", "s", "monkey", "ok", "bytes", 30)
+		ThreadID, 7, Job, "nightly", "password", "fake-value", "NOTION_TOKEN", "fake-value",
+		"api_key", "fake-value", "link-key", "fake-value", "client_secret", "fake-value",
+		"input_tokens", 1200, "monkey", "ok", "bytes", 30)
 	want := "2025-10-18 13:00:05,123 atrium.agent INFO call RUN_ID=12 TOOL_THREAD_ID=7 TOOL_JOB=nightly " +
 		"TOOL_PASSWORD=[redacted] TOOL_NOTION_TOKEN=[redacted] TOOL_API_KEY=[redacted] TOOL_LINK_KEY=[redacted] " +
-		"TOOL_CLIENT_SECRET=[redacted] TOOL_MONKEY=ok TOOL_BYTES=30\n"
+		"TOOL_CLIENT_SECRET=[redacted] TOOL_INPUT_TOKENS=1200 TOOL_MONKEY=ok TOOL_BYTES=30\n"
 	if buf.String() != want {
 		t.Errorf("got  %q\nwant %q", buf.String(), want)
 	}
 }
 
-func TestReplaceAttrForJournal(t *testing.T) {
-	tests := []struct {
-		in, key, value string
-	}{
-		{"account", "ACCOUNT", "icloud"},
-		{"run.id", "RUN_ID", "icloud"},
-		{"9lives", "_9LIVES", "icloud"},
-		{"GMAIL_APP_PASSWORD", "GMAIL_APP_PASSWORD", Redacted},
-		{"bearerToken", "BEARERTOKEN", Redacted},
-		{"TMDB_API_KEY", "TMDB_API_KEY", Redacted},
+func TestIsSecret(t *testing.T) {
+	tests := map[string]bool{
+		"password":           true,
+		"GMAIL_APP_PASSWORD": true,
+		"passwd":             true,
+		"client_secret":      true,
+		"NOTION_TOKEN":       true,
+		"token":              true,
+		"token_value":        true,
+		"bearerToken":        true,
+		"refresh-token":      true,
+		"api_key":            true,
+		"apikey":             true,
+		"TMDB_API_KEY":       true,
+		"key":                true,
+		"private_key":        true,
+		"privateKey":         true,
+		"authorization":      true,
+		"cookie":             true,
+		"set_cookies":        true,
+		"credential":         true,
+		"credentials":        true,
+		"input_tokens":       false,
+		"output_tokens":      false,
+		"cache_read_tokens":  false,
+		"tokens_used":        false,
+		"TOKENS":             false,
+		"monkey":             false,
+		"keys":               false,
+		"ACCOUNT":            false,
+		"RUN_ID":             false,
+		"bytes":              false,
+		"message_count":      false,
+		"COMPONENT":          false,
 	}
-	for _, tt := range tests {
-		got := replaceAttr(nil, slog.String(tt.in, "icloud"))
-		if got.Key != tt.key || got.Value.String() != tt.value {
-			t.Errorf("replaceAttr(%q) = %s=%s, want %s=%s", tt.in, got.Key, got.Value, tt.key, tt.value)
+	for name, want := range tests {
+		if got := IsSecret(name); got != want {
+			t.Errorf("IsSecret(%q) = %v, want %v", name, got, want)
 		}
+	}
+}
+
+func TestKey(t *testing.T) {
+	tests := map[string]string{
+		"account":           "ACCOUNT",
+		"run.id":            "RUN_ID",
+		"9lives":            "F_9LIVES",
+		"_hidden":           "F_HIDDEN",
+		"-x":                "F_X",
+		"":                  "F_",
+		"message":           "F_MESSAGE",
+		"MESSAGE_ID":        "F_MESSAGE_ID",
+		"priority":          "F_PRIORITY",
+		"code_file":         "F_CODE_FILE",
+		"syslog_identifier": "F_SYSLOG_IDENTIFIER",
+		"errno":             "F_ERRNO",
+		"message_count":     "MESSAGE_COUNT",
+		"COMPONENT":         "COMPONENT",
+	}
+	for in, want := range tests {
+		if got := Key(in); got != want {
+			t.Errorf("Key(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+type groupValuer struct{}
+
+func (groupValuer) LogValue() slog.Value {
+	return slog.GroupValue(slog.String("value", "S1-fake"), slog.Int("len", 7))
+}
+
+var bypasses = []struct {
+	name string
+	emit func(l *slog.Logger)
+	want []string
+}{
+	{"group named token", func(l *slog.Logger) { l.Info("m", slog.Group("token", "value", "S1-fake")) }, []string{"TOKEN=[redacted]"}},
+	{"WithGroup password", func(l *slog.Logger) { l.WithGroup("password").Info("m", "value", "S1-fake", "len", 7) }, []string{"PASSWORD_VALUE=[redacted]", "PASSWORD_LEN=[redacted]"}},
+	{"LogValuer group under token", func(l *slog.Logger) { l.Info("m", "token", groupValuer{}) }, []string{"TOKEN=[redacted]"}},
+	{"nested group under secret group", func(l *slog.Logger) {
+		l.Info("m", slog.Group("auth", slog.Group("cookie", "session", "S1-fake")))
+	}, []string{"AUTH_COOKIE=[redacted]"}},
+	{"With group named credentials", func(l *slog.Logger) { l.With(slog.Group("credentials", "user", "S1-fake")).Info("m") }, []string{"CREDENTIALS=[redacted]"}},
+	{"message collision", func(l *slog.Logger) { l.Info("m", "message", "body-size", "priority", 3) }, []string{"F_MESSAGE=body-size", "F_PRIORITY=3"}},
+}
+
+func TestTextRedactsGroups(t *testing.T) {
+	for _, tt := range bypasses {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := capture(t)
+			tt.emit(slog.Default())
+			got := buf.String()
+			if strings.Contains(got, "S1-fake") {
+				t.Errorf("secret leaked: %q", got)
+			}
+			if want := "2025-10-18 13:00:05,123 root INFO m " + strings.Join(tt.want, " ") + "\n"; got != want {
+				t.Errorf("got  %q\nwant %q", got, want)
+			}
+		})
+	}
+}
+
+type recorder struct {
+	pre []slog.Attr
+	out *[]string
+}
+
+func (r *recorder) Enabled(context.Context, slog.Level) bool { return true }
+
+func (r *recorder) Handle(_ context.Context, rec slog.Record) error {
+	attrs := slices.Clone(r.pre)
+	rec.Attrs(func(a slog.Attr) bool {
+		attrs = append(attrs, a)
+		return true
+	})
+	for _, a := range attrs {
+		if a.Value.Kind() == slog.KindGroup {
+			return fmt.Errorf("group %q reached the journal handler", a.Key)
+		}
+		*r.out = append(*r.out, a.Key+"="+a.Value.String())
+	}
+	return nil
+}
+
+func (r *recorder) WithAttrs(as []slog.Attr) slog.Handler {
+	return &recorder{pre: append(slices.Clip(r.pre), as...), out: r.out}
+}
+
+func (r *recorder) WithGroup(string) slog.Handler {
+	panic("flatHandler forwarded a group to the journal handler")
+}
+
+func TestJournalRedactsGroups(t *testing.T) {
+	for _, tt := range bypasses {
+		t.Run(tt.name, func(t *testing.T) {
+			var got []string
+			tt.emit(slog.New(&flatHandler{inner: &recorder{out: &got}}))
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("fields = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

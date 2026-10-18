@@ -84,34 +84,34 @@ func TestEnvReaders(t *testing.T) {
 		{"ATRIUM_EMBED_URL", map[string]string{"ATRIUM_EMBED_URL": "http://embed/v1/"}, load(func(c Config) any { return c.EmbedURL }), "", "http://embed/v1"},
 		{"ATRIUM_CONTACTS_DIR", map[string]string{"ATRIUM_CONTACTS_DIR": "/s/vdirsyncer/contacts"}, load(func(c Config) any { return c.ContactsDir }), "", "/s/vdirsyncer/contacts"},
 		{"ATRIUM_STATIC_DIR", map[string]string{"ATRIUM_STATIC_DIR": "/nix/store/x-static"}, load(func(c Config) any { return c.StaticDir }), "", "/nix/store/x-static"},
-		{"ICLOUD_MAIL_USERNAME", map[string]string{"ICLOUD_MAIL_USERNAME": "me", "ICLOUD_APP_PASSWORD": "abcd-efgh"}, load(cred(ICloud)), nil, [2]string{"me", "abcd-efgh"}},
-		{"ICLOUD_APP_PASSWORD", map[string]string{"ICLOUD_MAIL_USERNAME": "me", "ICLOUD_APP_PASSWORD": " ab cd\tef\ngh "}, load(cred(ICloud)), nil, [2]string{"me", "abcdefgh"}},
-		{"GMAIL_ADDRESS", map[string]string{"GMAIL_ADDRESS": "a@gmail.com", "GMAIL_APP_PASSWORD": "pw"}, load(cred(Gmail)), nil, [2]string{"a@gmail.com", "pw"}},
-		{"GMAIL_APP_PASSWORD", map[string]string{"GMAIL_ADDRESS": "a@gmail.com", "GMAIL_APP_PASSWORD": "wxyz abcd"}, load(cred(Gmail)), nil, [2]string{"a@gmail.com", "wxyzabcd"}},
+		{"ICLOUD_MAIL_USERNAME", map[string]string{"ICLOUD_MAIL_USERNAME": "me", "ICLOUD_APP_PASSWORD": "fake-icloud-pass"}, load(cred(ICloud)), nil, [2]string{"me", "fake-icloud-pass"}},
+		{"ICLOUD_APP_PASSWORD", map[string]string{"ICLOUD_MAIL_USERNAME": "me", "ICLOUD_APP_PASSWORD": " fake icloud\tpass\nword "}, load(cred(ICloud)), nil, [2]string{"me", "fakeicloudpassword"}},
+		{"GMAIL_ADDRESS", map[string]string{"GMAIL_ADDRESS": "a@gmail.com", "GMAIL_APP_PASSWORD": "fake-pass"}, load(cred(Gmail)), nil, [2]string{"a@gmail.com", "fake-pass"}},
+		{"GMAIL_APP_PASSWORD", map[string]string{"GMAIL_ADDRESS": "a@gmail.com", "GMAIL_APP_PASSWORD": "fake gmail pass"}, load(cred(Gmail)), nil, [2]string{"a@gmail.com", "fakegmailpass"}},
 		{"ATRIUM_TZ", map[string]string{"ATRIUM_TZ": " Asia/Tokyo "}, func(e Env) any { return TZName(e) }, "America/Port_of_Spain", "Asia/Tokyo"},
 		{"ATRIUM_PUBLIC_HOST", map[string]string{"ATRIUM_PUBLIC_HOST": " atrium.example "}, func(e Env) any { return PublicHost(e) }, "", "atrium.example"},
 		{"ATRIUM_PUBLIC_URL", map[string]string{"ATRIUM_PUBLIC_URL": " https://a.example/ "}, func(e Env) any { return Media(e).PublicURL }, "", "https://a.example"},
 		{"ATRIUM_CALENDAR_DIR", map[string]string{"ATRIUM_CALENDAR_DIR": "/s/vdirsyncer/calendars"}, func(e Env) any { return CalendarDir(e) }, "", "/s/vdirsyncer/calendars"},
 		{"ATRIUM_ICLOUD_CALENDAR", map[string]string{"ATRIUM_ICLOUD_CALENDAR": " Home "}, func(e Env) any { return ICloudCalendar(e) }, "", "home"},
-		{"ICLOUD_APPLE_ID", map[string]string{"ICLOUD_APPLE_ID": "me@icloud.com", "ICLOUD_APP_PASSWORD": "pw"}, func(e Env) any { return val(ICloudCalDAV(e)) }, "ICLOUD_APPLE_ID, ICLOUD_APP_PASSWORD not set", CalDAVLogin{"me@icloud.com", "pw"}},
-		{"GOOGLE_OAUTH_CLIENT_ID", map[string]string{"GOOGLE_OAUTH_CLIENT_ID": "id", "GOOGLE_OAUTH_CLIENT_SECRET": "sec"}, func(e Env) any { return GoogleOAuthClient(e) }, GoogleClient{}, GoogleClient{"id", "sec"}},
-		{"GOOGLE_OAUTH_CLIENT_SECRET", map[string]string{"GOOGLE_OAUTH_CLIENT_ID": "id", "GOOGLE_OAUTH_CLIENT_SECRET": "sec", "GOOGLE_REFRESH_TOKEN": "rt"}, func(e Env) any { return val(Google(e)) }, "GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN not set", GoogleCredentials{GoogleClient{"id", "sec"}, "rt"}},
-		{"GOOGLE_REFRESH_TOKEN", map[string]string{"GOOGLE_OAUTH_CLIENT_ID": "id", "GOOGLE_OAUTH_CLIENT_SECRET": "sec"}, func(e Env) any { return val(Google(e)) }, "GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN not set", "GOOGLE_REFRESH_TOKEN not set"},
-		{"NOTION_TOKEN", map[string]string{"NOTION_TOKEN": " secret_x "}, func(e Env) any { return val(NotionToken(e)) }, "NOTION_TOKEN is not set", "secret_x"},
+		{"ICLOUD_APPLE_ID", map[string]string{"ICLOUD_APPLE_ID": "me@icloud.com", "ICLOUD_APP_PASSWORD": "fake-pass"}, func(e Env) any { return val(ICloudCalDAV(e)) }, "ICLOUD_APPLE_ID, ICLOUD_APP_PASSWORD not set", CalDAVLogin{"me@icloud.com", "fake-pass"}},
+		{"GOOGLE_OAUTH_CLIENT_ID", map[string]string{"GOOGLE_OAUTH_CLIENT_ID": "id", "GOOGLE_OAUTH_CLIENT_SECRET": "fake-client-value"}, func(e Env) any { return GoogleOAuthClient(e) }, GoogleClient{}, GoogleClient{"id", "fake-client-value"}},
+		{"GOOGLE_OAUTH_CLIENT_SECRET", map[string]string{"GOOGLE_OAUTH_CLIENT_ID": "id", "GOOGLE_OAUTH_CLIENT_SECRET": "fake-client-value", "GOOGLE_REFRESH_TOKEN": "fake-refresh-value"}, func(e Env) any { return val(Google(e)) }, "GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN not set", GoogleCredentials{GoogleClient{"id", "fake-client-value"}, "fake-refresh-value"}},
+		{"GOOGLE_REFRESH_TOKEN", map[string]string{"GOOGLE_OAUTH_CLIENT_ID": "id", "GOOGLE_OAUTH_CLIENT_SECRET": "fake-client-value"}, func(e Env) any { return val(Google(e)) }, "GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN not set", "GOOGLE_REFRESH_TOKEN not set"},
+		{"NOTION_TOKEN", map[string]string{"NOTION_TOKEN": " fake-notion-value "}, func(e Env) any { return val(NotionToken(e)) }, "NOTION_TOKEN is not set", "fake-notion-value"},
 		{"ATRIUM_NOTION_WIKI_ROOT", map[string]string{"ATRIUM_NOTION_WIKI_ROOT": " 0123456789abcdef0123456789abcdef "}, func(e Env) any { return val(NotionWikiRoot(e)) }, "ATRIUM_NOTION_WIKI_ROOT is not set", "0123456789abcdef0123456789abcdef"},
-		{"ANTHROPIC_API_KEY", map[string]string{"ANTHROPIC_API_KEY": " sk-ant "}, func(e Env) any { return val(AnthropicKey(e)) }, "ANTHROPIC_API_KEY is not set", "sk-ant"},
-		{"GRAFANA_URL", map[string]string{"GRAFANA_URL": " https://g.example/ ", "GRAFANA_VIEWER_TOKEN": "t"}, func(e Env) any { return val(Grafana(e)) }, "GRAFANA_URL and GRAFANA_VIEWER_TOKEN must be set", GrafanaAccess{"https://g.example", "t"}},
+		{"ANTHROPIC_API_KEY", map[string]string{"ANTHROPIC_API_KEY": " fake-anthropic-value "}, func(e Env) any { return val(AnthropicKey(e)) }, "ANTHROPIC_API_KEY is not set", "fake-anthropic-value"},
+		{"GRAFANA_URL", map[string]string{"GRAFANA_URL": " https://g.example/ ", "GRAFANA_VIEWER_TOKEN": "fake-grafana-value"}, func(e Env) any { return val(Grafana(e)) }, "GRAFANA_URL and GRAFANA_VIEWER_TOKEN must be set", GrafanaAccess{"https://g.example", "fake-grafana-value"}},
 		{"GRAFANA_VIEWER_TOKEN", map[string]string{"GRAFANA_URL": "https://g.example"}, func(e Env) any { return val(Grafana(e)) }, "GRAFANA_URL and GRAFANA_VIEWER_TOKEN must be set", "GRAFANA_URL and GRAFANA_VIEWER_TOKEN must be set"},
 		{"NTFY_URL", map[string]string{"NTFY_URL": " https://ntfy.example/ "}, func(e Env) any { return Ntfy(e).URL }, "", "https://ntfy.example/"},
 		{"NTFY_TOPIC", map[string]string{"NTFY_TOPIC": " atrium "}, func(e Env) any { return Ntfy(e).Topic }, "", "atrium"},
-		{"NTFY_TOKEN", map[string]string{"NTFY_TOKEN": " tk_x "}, func(e Env) any { return Ntfy(e).Token }, "", "tk_x"},
+		{"NTFY_TOKEN", map[string]string{"NTFY_TOKEN": " fake-ntfy-value "}, func(e Env) any { return Ntfy(e).Token }, "", "fake-ntfy-value"},
 		{"NTFY_MEDIA_TOPIC", map[string]string{"NTFY_MEDIA_TOPIC": " media "}, func(e Env) any { return Media(e).NtfyTopic }, "", "media"},
 		{"ATRIUM_MEDIA_ROOT", map[string]string{"ATRIUM_MEDIA_ROOT": " /srv/media/ "}, func(e Env) any { return val(Media(e).NeedRoot()) }, "ATRIUM_MEDIA_ROOT is not set", "/srv/media"},
 		{"QBITTORRENT_URL", map[string]string{"QBITTORRENT_URL": "http://qbit:8080/"}, func(e Env) any { return val(Media(e).NeedQbit()) }, "QBITTORRENT_URL is not set", "http://qbit:8080"},
 		{"ATRIUM_MEDIA_MOVIES_URL", map[string]string{"ATRIUM_MEDIA_MOVIES_URL": "https://m.example//"}, func(e Env) any { return Media(e).MoviesURL }, "", "https://m.example"},
 		{"ATRIUM_MEDIA_TV_URL", map[string]string{"ATRIUM_MEDIA_TV_URL": " https://tv.example/ "}, func(e Env) any { return Media(e).TVURL }, "", "https://tv.example"},
-		{"TMDB_API_KEY", map[string]string{"TMDB_API_KEY": " k "}, func(e Env) any { return Media(e).TMDBKey }, "", "k"},
-		{"ATRIUM_MEDIA_LINK_KEY", map[string]string{"ATRIUM_MEDIA_LINK_KEY": " hmac "}, func(e Env) any { return Media(e).LinkKey }, "", "hmac"},
+		{"TMDB_API_KEY", map[string]string{"TMDB_API_KEY": " fake-tmdb-value "}, func(e Env) any { return Media(e).TMDBKey }, "", "fake-tmdb-value"},
+		{"ATRIUM_MEDIA_LINK_KEY", map[string]string{"ATRIUM_MEDIA_LINK_KEY": " fake-link-value "}, func(e Env) any { return Media(e).LinkKey }, "", "fake-link-value"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -279,7 +279,7 @@ func TestCredentialAbsent(t *testing.T) {
 		{},
 		{"ICLOUD_MAIL_USERNAME": "me"},
 		{"ICLOUD_MAIL_USERNAME": "me", "ICLOUD_APP_PASSWORD": " \t "},
-		{"ICLOUD_MAIL_USERNAME": "", "ICLOUD_APP_PASSWORD": "pw"},
+		{"ICLOUD_MAIL_USERNAME": "", "ICLOUD_APP_PASSWORD": "fake-pass"},
 	}
 	for _, env := range tests {
 		if _, _, ok := mustLoad(t, base(env)).Credential(ICloud); ok {
@@ -302,9 +302,9 @@ func TestAccounts(t *testing.T) {
 }
 
 func TestConfigHidesCredentials(t *testing.T) {
-	cfg := mustLoad(t, base(map[string]string{"ICLOUD_APP_PASSWORD": "hunter2"}))
+	cfg := mustLoad(t, base(map[string]string{"ICLOUD_APP_PASSWORD": "fake-hidden-value"}))
 	for _, s := range []string{cfg.String(), cfg.LogValue().String()} {
-		if strings.Contains(s, "hunter2") {
+		if strings.Contains(s, "fake-hidden-value") {
 			t.Errorf("credential leaked: %s", s)
 		}
 	}
