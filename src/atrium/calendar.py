@@ -208,6 +208,7 @@ def _occurrences(master, start, window_start, window_end, tz, notes):
 
 
 def _overlaps(s, e, window_start, window_end):
+    s, e, window_start, window_end = (_utc(v) for v in (s, e, window_start, window_end))
     return s < window_end and (e > window_start or s >= window_start)
 
 

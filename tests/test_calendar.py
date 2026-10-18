@@ -262,6 +262,25 @@ def test_normalize_spec_default_end_is_exact_across_dst():
     assert (fall["start"], fall["end"]) == ("2026-11-01T01:30:00-04:00", "2026-11-01T01:30:00-05:00")
 
 
+def test_overlap_compares_instants_in_the_fall_back_hour():
+    ny = calendar.tz_of({"ATRIUM_TZ": "America/New_York"})
+    ics = """BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:early
+DTSTART;TZID=America/New_York:20261101T013000
+DTEND;TZID=America/New_York:20261101T015000
+SUMMARY:Early
+END:VEVENT
+END:VCALENDAR
+""".encode()
+    second_hour = calendar.datetime(2026, 11, 1, 1, 40, fold=1, tzinfo=ny)
+    first_hour = second_hour.replace(fold=0)
+    later = calendar.timedelta(hours=2)
+    assert calendar.events_in_ics(ics, "Home", second_hour, second_hour + later, ny, []) == []
+    assert [e["uid"] for e in calendar.events_in_ics(ics, "Home", first_hour, first_hour + later, ny, [])] == ["early"]
+
+
 @pytest.fixture
 def chat_world(tmp_path, providers):
     cfg = make_config(tmp_path)
