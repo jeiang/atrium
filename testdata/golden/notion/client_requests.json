@@ -1,0 +1,851 @@
+{
+  "description": "One request of every NotionClient method: search (page, data_source, in_trash), get_page, page markdown GET and PATCH (replace_content, update_content), properties PATCH, move, create, trash and untrash, append_children, block children, property items (id percent-encoded), database trash.",
+  "exchanges": [
+    {
+      "request": {
+        "body": {
+          "filter": {
+            "property": "object",
+            "value": "page"
+          },
+          "page_size": 100
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "POST",
+        "path": "/v1/search",
+        "query": "",
+        "url": "https://api.notion.com/v1/search"
+      },
+      "response": {
+        "body": {
+          "has_more": false,
+          "next_cursor": null,
+          "object": "list",
+          "results": [
+            {
+              "id": "00000000-0000-0000-0000-000000000001",
+              "in_trash": false,
+              "last_edited_time": "2026-01-01T00:00:01.000Z",
+              "object": "page",
+              "parent": {
+                "type": "workspace",
+                "workspace": true
+              },
+              "properties": {
+                "Name": {
+                  "id": "title",
+                  "title": [
+                    {
+                      "plain_text": "Alpha plan",
+                      "text": {
+                        "content": "Alpha plan"
+                      },
+                      "type": "text"
+                    }
+                  ],
+                  "type": "title"
+                }
+              },
+              "url": "https://notion.invalid/00000000-0000-0000-0000-000000000001"
+            },
+            {
+              "id": "00000000-0000-0000-0000-000000000004",
+              "in_trash": false,
+              "last_edited_time": "2026-01-01T00:00:02.000Z",
+              "object": "page",
+              "parent": {
+                "page_id": "00000000-0000-0000-0000-000000000001",
+                "type": "page_id"
+              },
+              "properties": {
+                "Name": {
+                  "id": "title",
+                  "title": [
+                    {
+                      "plain_text": "Beta notes",
+                      "text": {
+                        "content": "Beta notes"
+                      },
+                      "type": "text"
+                    }
+                  ],
+                  "type": "title"
+                }
+              },
+              "url": "https://notion.invalid/00000000-0000-0000-0000-000000000004"
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "filter": {
+            "property": "object",
+            "value": "data_source"
+          },
+          "page_size": 100
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "POST",
+        "path": "/v1/search",
+        "query": "",
+        "url": "https://api.notion.com/v1/search"
+      },
+      "response": {
+        "body": {
+          "has_more": false,
+          "next_cursor": null,
+          "object": "list",
+          "results": [
+            {
+              "database_parent": {
+                "type": "workspace",
+                "workspace": true
+              },
+              "id": "00000000-0000-0000-0000-000000000101",
+              "in_trash": false,
+              "last_edited_time": "2026-01-01T00:00:04.000Z",
+              "object": "data_source",
+              "parent": {
+                "database_id": "00000000-0000-0000-0000-000000000201",
+                "type": "database_id"
+              },
+              "properties": {},
+              "title": [
+                {
+                  "plain_text": "Tasks",
+                  "text": {
+                    "content": "Tasks"
+                  },
+                  "type": "text"
+                }
+              ],
+              "url": "https://notion.invalid/00000000-0000-0000-0000-000000000101"
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "filter": {
+            "in_trash": true,
+            "property": "object",
+            "value": "page"
+          },
+          "page_size": 100
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "POST",
+        "path": "/v1/search",
+        "query": "",
+        "url": "https://api.notion.com/v1/search"
+      },
+      "response": {
+        "body": {
+          "has_more": false,
+          "next_cursor": null,
+          "object": "list",
+          "results": [
+            {
+              "id": "00000000-0000-0000-0000-000000000005",
+              "in_trash": true,
+              "last_edited_time": "2026-01-01T00:00:03.000Z",
+              "object": "page",
+              "parent": {
+                "type": "workspace",
+                "workspace": true
+              },
+              "properties": {
+                "Name": {
+                  "id": "title",
+                  "title": [
+                    {
+                      "plain_text": "Old",
+                      "text": {
+                        "content": "Old"
+                      },
+                      "type": "text"
+                    }
+                  ],
+                  "type": "title"
+                }
+              },
+              "url": "https://notion.invalid/00000000-0000-0000-0000-000000000005"
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "GET",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000001",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000001"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "in_trash": false,
+          "last_edited_time": "2026-01-01T00:00:01.000Z",
+          "object": "page",
+          "parent": {
+            "type": "workspace",
+            "workspace": true
+          },
+          "properties": {
+            "Name": {
+              "id": "title",
+              "title": [
+                {
+                  "plain_text": "Alpha plan",
+                  "text": {
+                    "content": "Alpha plan"
+                  },
+                  "type": "text"
+                }
+              ],
+              "type": "title"
+            }
+          },
+          "url": "https://notion.invalid/00000000-0000-0000-0000-000000000001"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "GET",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000001/markdown",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000001/markdown"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "markdown": "alpha roadmap",
+          "object": "page_markdown",
+          "truncated": false
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "replace_content": {
+            "new_str": "alpha roadmap v2"
+          },
+          "type": "replace_content"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "PATCH",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000001/markdown",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000001/markdown"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "markdown": "alpha roadmap v2",
+          "object": "page_markdown",
+          "truncated": false
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "type": "update_content",
+          "update_content": {
+            "content_updates": [
+              {
+                "new_str": "v3",
+                "old_str": "v2"
+              }
+            ]
+          }
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "PATCH",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000001/markdown",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000001/markdown"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "markdown": "alpha roadmap v3",
+          "object": "page_markdown",
+          "truncated": false
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "properties": {
+            "Type": {
+              "id": "sel",
+              "select": {
+                "name": "Project"
+              },
+              "type": "select"
+            }
+          }
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "PATCH",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000001",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000001"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "in_trash": false,
+          "last_edited_time": "2026-01-01T00:00:07.000Z",
+          "object": "page",
+          "parent": {
+            "type": "workspace",
+            "workspace": true
+          },
+          "properties": {
+            "Name": {
+              "id": "title",
+              "title": [
+                {
+                  "plain_text": "Alpha plan",
+                  "text": {
+                    "content": "Alpha plan"
+                  },
+                  "type": "text"
+                }
+              ],
+              "type": "title"
+            },
+            "Type": {
+              "id": "sel",
+              "select": {
+                "name": "Project"
+              },
+              "type": "select"
+            }
+          },
+          "url": "https://notion.invalid/00000000-0000-0000-0000-000000000001"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "parent": {
+            "page_id": "00000000-0000-0000-0000-000000000001",
+            "type": "page_id"
+          }
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "POST",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000004/move",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000004/move"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000004",
+          "in_trash": false,
+          "last_edited_time": "2026-01-01T00:00:08.000Z",
+          "object": "page",
+          "parent": {
+            "page_id": "00000000-0000-0000-0000-000000000001",
+            "type": "page_id"
+          },
+          "properties": {
+            "Name": {
+              "id": "title",
+              "title": [
+                {
+                  "plain_text": "Beta notes",
+                  "text": {
+                    "content": "Beta notes"
+                  },
+                  "type": "text"
+                }
+              ],
+              "type": "title"
+            }
+          },
+          "url": "https://notion.invalid/00000000-0000-0000-0000-000000000004"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "markdown": "# Child\n\nbody",
+          "parent": {
+            "page_id": "00000000-0000-0000-0000-000000000001"
+          },
+          "properties": {
+            "title": {
+              "title": [
+                {
+                  "text": {
+                    "content": "Child"
+                  },
+                  "type": "text"
+                }
+              ]
+            }
+          }
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "POST",
+        "path": "/v1/pages",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000101",
+          "in_trash": false,
+          "last_edited_time": "2026-01-01T00:00:09.000Z",
+          "object": "page",
+          "parent": {
+            "page_id": "00000000-0000-0000-0000-000000000001",
+            "type": "page_id"
+          },
+          "properties": {
+            "Name": {
+              "id": "title",
+              "title": [
+                {
+                  "plain_text": "Child",
+                  "text": {
+                    "content": "Child"
+                  },
+                  "type": "text"
+                }
+              ],
+              "type": "title"
+            }
+          },
+          "url": "https://notion.invalid/00000000-0000-0000-0000-000000000101"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "in_trash": true
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "PATCH",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000004",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000004"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000004",
+          "in_trash": true,
+          "last_edited_time": "2026-01-01T00:00:10.000Z",
+          "object": "page",
+          "parent": {
+            "page_id": "00000000-0000-0000-0000-000000000001",
+            "type": "page_id"
+          },
+          "properties": {
+            "Name": {
+              "id": "title",
+              "title": [
+                {
+                  "plain_text": "Beta notes",
+                  "text": {
+                    "content": "Beta notes"
+                  },
+                  "type": "text"
+                }
+              ],
+              "type": "title"
+            }
+          },
+          "url": "https://notion.invalid/00000000-0000-0000-0000-000000000004"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "in_trash": false
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "PATCH",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000004",
+        "query": "",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000004"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000004",
+          "in_trash": false,
+          "last_edited_time": "2026-01-01T00:00:11.000Z",
+          "object": "page",
+          "parent": {
+            "page_id": "00000000-0000-0000-0000-000000000001",
+            "type": "page_id"
+          },
+          "properties": {
+            "Name": {
+              "id": "title",
+              "title": [
+                {
+                  "plain_text": "Beta notes",
+                  "text": {
+                    "content": "Beta notes"
+                  },
+                  "type": "text"
+                }
+              ],
+              "type": "title"
+            }
+          },
+          "url": "https://notion.invalid/00000000-0000-0000-0000-000000000004"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "children": [
+            {
+              "heading_2": {
+                "rich_text": [
+                  {
+                    "text": {
+                      "content": "Related"
+                    },
+                    "type": "text"
+                  }
+                ]
+              },
+              "type": "heading_2"
+            },
+            {
+              "bulleted_list_item": {
+                "rich_text": [
+                  {
+                    "text": {
+                      "content": "Beta notes",
+                      "link": {
+                        "url": "https://notion.invalid/00000000-0000-0000-0000-000000000004"
+                      }
+                    },
+                    "type": "text"
+                  }
+                ]
+              },
+              "type": "bulleted_list_item"
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "PATCH",
+        "path": "/v1/blocks/00000000-0000-0000-0000-000000000001/children",
+        "query": "",
+        "url": "https://api.notion.com/v1/blocks/00000000-0000-0000-0000-000000000001/children"
+      },
+      "response": {
+        "body": {
+          "object": "list",
+          "results": []
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "GET",
+        "path": "/v1/blocks/00000000-0000-0000-0000-000000000001/children",
+        "query": "page_size=100",
+        "url": "https://api.notion.com/v1/blocks/00000000-0000-0000-0000-000000000001/children"
+      },
+      "response": {
+        "body": {
+          "has_more": false,
+          "next_cursor": null,
+          "object": "list",
+          "results": [
+            {
+              "has_children": false,
+              "heading_2": {
+                "rich_text": [
+                  {
+                    "plain_text": "Plan",
+                    "text": {
+                      "content": "Plan"
+                    },
+                    "type": "text"
+                  }
+                ]
+              },
+              "id": "00000000-0000-0000-0000-000000000011",
+              "object": "block",
+              "type": "heading_2"
+            },
+            {
+              "has_children": false,
+              "id": "00000000-0000-0000-0000-000000000012",
+              "object": "block",
+              "to_do": {
+                "checked": true,
+                "rich_text": [
+                  {
+                    "plain_text": "ship",
+                    "text": {
+                      "content": "ship"
+                    },
+                    "type": "text"
+                  }
+                ]
+              },
+              "type": "to_do"
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "GET",
+        "path": "/v1/pages/00000000-0000-0000-0000-000000000001/properties/a%3Db%2Fc",
+        "query": "page_size=100",
+        "url": "https://api.notion.com/v1/pages/00000000-0000-0000-0000-000000000001/properties/a%3Db%2Fc"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "in_trash": false,
+          "last_edited_time": "2026-01-01T00:00:12.000Z",
+          "object": "page",
+          "parent": {
+            "type": "workspace",
+            "workspace": true
+          },
+          "properties": {
+            "Name": {
+              "id": "title",
+              "title": [
+                {
+                  "plain_text": "Alpha plan",
+                  "text": {
+                    "content": "Alpha plan"
+                  },
+                  "type": "text"
+                }
+              ],
+              "type": "title"
+            },
+            "Type": {
+              "id": "sel",
+              "select": {
+                "name": "Project"
+              },
+              "type": "select"
+            }
+          },
+          "url": "https://notion.invalid/00000000-0000-0000-0000-000000000001"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "in_trash": true
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "PATCH",
+        "path": "/v1/databases/00000000-0000-0000-0000-000000000201",
+        "query": "",
+        "url": "https://api.notion.com/v1/databases/00000000-0000-0000-0000-000000000201"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000201",
+          "in_trash": true,
+          "object": "database"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "in_trash": false
+        },
+        "body_encoding": "json",
+        "headers": {
+          "authorization": "Bearer golden-notion-token",
+          "content-type": "application/json",
+          "notion-version": "2026-03-11"
+        },
+        "method": "PATCH",
+        "path": "/v1/databases/00000000-0000-0000-0000-000000000201",
+        "query": "",
+        "url": "https://api.notion.com/v1/databases/00000000-0000-0000-0000-000000000201"
+      },
+      "response": {
+        "body": {
+          "id": "00000000-0000-0000-0000-000000000201",
+          "in_trash": false,
+          "object": "database"
+        },
+        "body_encoding": "json",
+        "headers": {},
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "client_requests",
+  "source_tests": [
+    "tests/test_notion.py::test_client_headers_retry_and_pacing",
+    "src/atrium/notion_api.py::NotionClient (every method)"
+  ]
+}

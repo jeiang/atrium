@@ -1,0 +1,48 @@
+{
+  "description": "A non-200 status and a non-JSON body both raise EztvError.",
+  "exchanges": [
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {},
+        "method": "GET",
+        "path": "/api/get-torrents",
+        "query": "imdb_id=1234567&limit=100",
+        "url": "https://eztvx.to/api/get-torrents"
+      },
+      "response": {
+        "body": "busy",
+        "body_encoding": "text",
+        "headers": {
+          "content-type": "text/plain; charset=utf-8"
+        },
+        "status": 503
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {},
+        "method": "GET",
+        "path": "/api/get-torrents",
+        "query": "imdb_id=1234567&limit=100",
+        "url": "https://eztvx.to/api/get-torrents"
+      },
+      "response": {
+        "body": "<html>not json</html>",
+        "body_encoding": "text",
+        "headers": {
+          "content-type": "text/plain; charset=utf-8"
+        },
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "errors",
+  "source_tests": [
+    "tests/test_media.py::test_poll_primes_then_adds_tagged_and_notifies"
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "description": "flags.flag_account: judge_flag with FLAG_SCHEMA for an unread inbox message.",
+  "exchanges": [
+    {
+      "request": {
+        "body": {
+          "cache_prompt": true,
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          },
+          "max_tokens": 80,
+          "messages": [
+            {
+              "content": "You triage the mailbox owner's email and decide whether to flag it. Flag when a person (not an automated sender) asks the owner something or needs their action, or there is a concrete deadline or payment due, or a real fraud / sign-in / account-security event. Never flag statements, receipts, newsletters, promotions, or routine notifications. Answer the JSON fields: person_asking (a human, not an automated sender, asks the owner something or needs their action), deadline_or_payment_due (concrete deadline or payment due), security_event (real fraud, sign-in or account-security event), and flag (final decision per the policy).",
+              "role": "system"
+            },
+            {
+              "content": "From: Pal <pal@friends.test>\nSubject: Can you send the form by Friday?\nBody:\nHi, could you send me the signed form by Friday? Thanks",
+              "role": "user"
+            }
+          ],
+          "model": "qwen",
+          "response_format": {
+            "json_schema": {
+              "name": "answer",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "deadline_or_payment_due": {
+                    "type": "boolean"
+                  },
+                  "flag": {
+                    "type": "boolean"
+                  },
+                  "person_asking": {
+                    "type": "boolean"
+                  },
+                  "security_event": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "person_asking",
+                  "deadline_or_payment_due",
+                  "security_event",
+                  "flag"
+                ],
+                "type": "object"
+              },
+              "strict": true
+            },
+            "type": "json_schema"
+          },
+          "temperature": 0
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "query": "",
+        "url": "http://chat.invalid/v1/chat/completions"
+      },
+      "response": {
+        "body": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "{\"person_asking\": true, \"deadline_or_payment_due\": true, \"security_event\": false, \"flag\": true}",
+                "role": "assistant"
+              }
+            }
+          ]
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "flag_judgment",
+  "source_tests": [
+    "tests/test_flags_report.py::test_flag_account_records_both_signals_and_defers_llm"
+  ]
+}

@@ -24,7 +24,7 @@
     "src/atrium/notion_markdown.py:8",
     "src/atrium/rules.py:139",
     "src/atrium/rules.py:93",
-    "src/atrium/watches.py:120"
+    "src/atrium/watches.py:121"
   ],
   "pattern_count": 276,
   "patterns": [
@@ -6195,35 +6195,13 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/watches.py:107",
-      "pattern": "\\b(1Z[0-9A-Z]{16})\\b",
-      "site": "src/atrium/watches.py:107",
-      "uses": [
-        {
-          "args": {},
-          "at": "src/atrium/watches.py:159",
-          "op": "finditer",
-          "source": "pattern.finditer(text)"
-        }
-      ]
-    },
-    {
-      "bytes": false,
-      "call": "compile",
-      "features": [
-        "digit_class",
-        "word_boundary"
-      ],
-      "flags": [],
-      "group_names": {},
-      "groups": 1,
       "id": "src/atrium/watches.py:108",
-      "pattern": "\\b([A-Z]{2}\\d{9}US)\\b",
+      "pattern": "\\b(1Z[0-9A-Z]{16})\\b",
       "site": "src/atrium/watches.py:108",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:159",
+          "at": "src/atrium/watches.py:160",
           "op": "finditer",
           "source": "pattern.finditer(text)"
         }
@@ -6240,12 +6218,12 @@
       "group_names": {},
       "groups": 1,
       "id": "src/atrium/watches.py:109",
-      "pattern": "\\b(9[2-5]\\d{18,24})\\b",
+      "pattern": "\\b([A-Z]{2}\\d{9}US)\\b",
       "site": "src/atrium/watches.py:109",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:159",
+          "at": "src/atrium/watches.py:160",
           "op": "finditer",
           "source": "pattern.finditer(text)"
         }
@@ -6262,12 +6240,12 @@
       "group_names": {},
       "groups": 1,
       "id": "src/atrium/watches.py:110",
-      "pattern": "\\b(JD\\d{18})\\b",
+      "pattern": "\\b(9[2-5]\\d{18,24})\\b",
       "site": "src/atrium/watches.py:110",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:159",
+          "at": "src/atrium/watches.py:160",
           "op": "finditer",
           "source": "pattern.finditer(text)"
         }
@@ -6284,12 +6262,12 @@
       "group_names": {},
       "groups": 1,
       "id": "src/atrium/watches.py:111",
-      "pattern": "\\b(\\d{12}|\\d{15})\\b",
+      "pattern": "\\b(JD\\d{18})\\b",
       "site": "src/atrium/watches.py:111",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:159",
+          "at": "src/atrium/watches.py:160",
           "op": "finditer",
           "source": "pattern.finditer(text)"
         }
@@ -6306,12 +6284,34 @@
       "group_names": {},
       "groups": 1,
       "id": "src/atrium/watches.py:112",
-      "pattern": "\\b(\\d{10,11})\\b",
+      "pattern": "\\b(\\d{12}|\\d{15})\\b",
       "site": "src/atrium/watches.py:112",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:159",
+          "at": "src/atrium/watches.py:160",
+          "op": "finditer",
+          "source": "pattern.finditer(text)"
+        }
+      ]
+    },
+    {
+      "bytes": false,
+      "call": "compile",
+      "features": [
+        "digit_class",
+        "word_boundary"
+      ],
+      "flags": [],
+      "group_names": {},
+      "groups": 1,
+      "id": "src/atrium/watches.py:113",
+      "pattern": "\\b(\\d{10,11})\\b",
+      "site": "src/atrium/watches.py:113",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:160",
           "op": "finditer",
           "source": "pattern.finditer(text)"
         }
@@ -6329,13 +6329,13 @@
       ],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/watches.py:114",
+      "id": "src/atrium/watches.py:115",
       "pattern": "\\border\\s*(?:number|no\\.?|#|id|ref(?:erence)?)?\\s*[:#]?\\s*#?\\s*([A-Z0-9][A-Z0-9-]{4,24})",
-      "site": "src/atrium/watches.py:114",
+      "site": "src/atrium/watches.py:115",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:181",
+          "at": "src/atrium/watches.py:182",
           "op": "finditer",
           "source": "ORDER_RE.finditer(text)"
         }
@@ -6350,13 +6350,13 @@
       ],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/watches.py:119",
+      "id": "src/atrium/watches.py:120",
       "pattern": "out for delivery",
-      "site": "src/atrium/watches.py:119",
+      "site": "src/atrium/watches.py:120",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:191",
+          "at": "src/atrium/watches.py:192",
           "op": "search",
           "source": "pattern.search(text)"
         }
@@ -6374,13 +6374,13 @@
       ],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/watches.py:120",
+      "id": "src/atrium/watches.py:121",
       "pattern": "(?<!will be )(?<!to be )(?<!be )\\bdelivered\\b",
-      "site": "src/atrium/watches.py:120",
+      "site": "src/atrium/watches.py:121",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:191",
+          "at": "src/atrium/watches.py:192",
           "op": "search",
           "source": "pattern.search(text)"
         }
@@ -6390,62 +6390,18 @@
       "bytes": false,
       "call": "compile",
       "features": [],
-      "flags": [
-        "IGNORECASE"
-      ],
-      "group_names": {},
-      "groups": 0,
-      "id": "src/atrium/watches.py:121",
-      "pattern": "unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception",
-      "site": "src/atrium/watches.py:121",
-      "uses": [
-        {
-          "args": {},
-          "at": "src/atrium/watches.py:191",
-          "op": "search",
-          "source": "pattern.search(text)"
-        }
-      ]
-    },
-    {
-      "bytes": false,
-      "call": "compile",
-      "features": [
-        "word_boundary"
-      ],
       "flags": [
         "IGNORECASE"
       ],
       "group_names": {},
       "groups": 0,
       "id": "src/atrium/watches.py:122",
-      "pattern": "\\bdelay(?:ed)?\\b|running late",
+      "pattern": "unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception",
       "site": "src/atrium/watches.py:122",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:191",
-          "op": "search",
-          "source": "pattern.search(text)"
-        }
-      ]
-    },
-    {
-      "bytes": false,
-      "call": "compile",
-      "features": [],
-      "flags": [
-        "IGNORECASE"
-      ],
-      "group_names": {},
-      "groups": 0,
-      "id": "src/atrium/watches.py:123",
-      "pattern": "in transit|on its way|on the way|arriving|arrives",
-      "site": "src/atrium/watches.py:123",
-      "uses": [
-        {
-          "args": {},
-          "at": "src/atrium/watches.py:191",
+          "at": "src/atrium/watches.py:192",
           "op": "search",
           "source": "pattern.search(text)"
         }
@@ -6462,13 +6418,57 @@
       ],
       "group_names": {},
       "groups": 0,
+      "id": "src/atrium/watches.py:123",
+      "pattern": "\\bdelay(?:ed)?\\b|running late",
+      "site": "src/atrium/watches.py:123",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:192",
+          "op": "search",
+          "source": "pattern.search(text)"
+        }
+      ]
+    },
+    {
+      "bytes": false,
+      "call": "compile",
+      "features": [],
+      "flags": [
+        "IGNORECASE"
+      ],
+      "group_names": {},
+      "groups": 0,
       "id": "src/atrium/watches.py:124",
-      "pattern": "\\bshipped\\b|has shipped|shipment|label created|picked up",
+      "pattern": "in transit|on its way|on the way|arriving|arrives",
       "site": "src/atrium/watches.py:124",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:191",
+          "at": "src/atrium/watches.py:192",
+          "op": "search",
+          "source": "pattern.search(text)"
+        }
+      ]
+    },
+    {
+      "bytes": false,
+      "call": "compile",
+      "features": [
+        "word_boundary"
+      ],
+      "flags": [
+        "IGNORECASE"
+      ],
+      "group_names": {},
+      "groups": 0,
+      "id": "src/atrium/watches.py:125",
+      "pattern": "\\bshipped\\b|has shipped|shipment|label created|picked up",
+      "site": "src/atrium/watches.py:125",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:192",
           "op": "search",
           "source": "pattern.search(text)"
         }
@@ -6483,15 +6483,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/watches.py:222",
+      "id": "src/atrium/watches.py:223",
       "pattern": "\\s+",
-      "site": "src/atrium/watches.py:222",
+      "site": "src/atrium/watches.py:223",
       "uses": [
         {
           "args": {
             "repl": ""
           },
-          "at": "src/atrium/watches.py:222",
+          "at": "src/atrium/watches.py:223",
           "op": "sub",
           "source": "re.sub('\\\\s+', '', str(answer.get('tracking_number') or ''))"
         }
@@ -6504,13 +6504,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/watches.py:223",
+      "id": "src/atrium/watches.py:224",
       "pattern": "[A-Za-z0-9-]{6,40}",
-      "site": "src/atrium/watches.py:223",
+      "site": "src/atrium/watches.py:224",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:223",
+          "at": "src/atrium/watches.py:224",
           "op": "fullmatch",
           "source": "re.fullmatch('[A-Za-z0-9-]{6,40}', tracking)"
         }
@@ -8377,22 +8377,9 @@
       "col": 9,
       "dynamic": false,
       "file": "src/atrium/watches.py",
-      "line": 107,
+      "line": 108,
       "name": "UPS_RE",
       "pattern_source": "'\\\\b(1Z[0-9A-Z]{16})\\\\b'",
-      "patterns": [
-        "src/atrium/watches.py:107"
-      ],
-      "site": "src/atrium/watches.py:107"
-    },
-    {
-      "call": "compile",
-      "col": 9,
-      "dynamic": false,
-      "file": "src/atrium/watches.py",
-      "line": 108,
-      "name": "S10_RE",
-      "pattern_source": "'\\\\b([A-Z]{2}\\\\d{9}US)\\\\b'",
       "patterns": [
         "src/atrium/watches.py:108"
       ],
@@ -8400,12 +8387,12 @@
     },
     {
       "call": "compile",
-      "col": 10,
+      "col": 9,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "line": 109,
-      "name": "USPS_RE",
-      "pattern_source": "'\\\\b(9[2-5]\\\\d{18,24})\\\\b'",
+      "name": "S10_RE",
+      "pattern_source": "'\\\\b([A-Z]{2}\\\\d{9}US)\\\\b'",
       "patterns": [
         "src/atrium/watches.py:109"
       ],
@@ -8413,12 +8400,12 @@
     },
     {
       "call": "compile",
-      "col": 12,
+      "col": 10,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "line": 110,
-      "name": "DHL_JD_RE",
-      "pattern_source": "'\\\\b(JD\\\\d{18})\\\\b'",
+      "name": "USPS_RE",
+      "pattern_source": "'\\\\b(9[2-5]\\\\d{18,24})\\\\b'",
       "patterns": [
         "src/atrium/watches.py:110"
       ],
@@ -8426,12 +8413,12 @@
     },
     {
       "call": "compile",
-      "col": 11,
+      "col": 12,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "line": 111,
-      "name": "FEDEX_RE",
-      "pattern_source": "'\\\\b(\\\\d{12}|\\\\d{15})\\\\b'",
+      "name": "DHL_JD_RE",
+      "pattern_source": "'\\\\b(JD\\\\d{18})\\\\b'",
       "patterns": [
         "src/atrium/watches.py:111"
       ],
@@ -8439,12 +8426,12 @@
     },
     {
       "call": "compile",
-      "col": 9,
+      "col": 11,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "line": 112,
-      "name": "DHL_RE",
-      "pattern_source": "'\\\\b(\\\\d{10,11})\\\\b'",
+      "name": "FEDEX_RE",
+      "pattern_source": "'\\\\b(\\\\d{12}|\\\\d{15})\\\\b'",
       "patterns": [
         "src/atrium/watches.py:112"
       ],
@@ -8452,17 +8439,30 @@
     },
     {
       "call": "compile",
+      "col": 9,
+      "dynamic": false,
+      "file": "src/atrium/watches.py",
+      "line": 113,
+      "name": "DHL_RE",
+      "pattern_source": "'\\\\b(\\\\d{10,11})\\\\b'",
+      "patterns": [
+        "src/atrium/watches.py:113"
+      ],
+      "site": "src/atrium/watches.py:113"
+    },
+    {
+      "call": "compile",
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "flags_source": "re.IGNORECASE",
-      "line": 114,
+      "line": 115,
       "name": "ORDER_RE",
       "pattern_source": "'\\\\border\\\\s*(?:number|no\\\\.?|#|id|ref(?:erence)?)?\\\\s*[:#]?\\\\s*#?\\\\s*([A-Z0-9][A-Z0-9-]{4,24})'",
       "patterns": [
-        "src/atrium/watches.py:114"
+        "src/atrium/watches.py:115"
       ],
-      "site": "src/atrium/watches.py:114"
+      "site": "src/atrium/watches.py:115"
     },
     {
       "call": "compile",
@@ -8470,21 +8470,8 @@
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "flags_source": "re.I",
-      "line": 119,
-      "pattern_source": "'out for delivery'",
-      "patterns": [
-        "src/atrium/watches.py:119"
-      ],
-      "site": "src/atrium/watches.py:119"
-    },
-    {
-      "call": "compile",
-      "col": 16,
-      "dynamic": false,
-      "file": "src/atrium/watches.py",
-      "flags_source": "re.I",
       "line": 120,
-      "pattern_source": "'(?<!will be )(?<!to be )(?<!be )\\\\bdelivered\\\\b'",
+      "pattern_source": "'out for delivery'",
       "patterns": [
         "src/atrium/watches.py:120"
       ],
@@ -8497,7 +8484,7 @@
       "file": "src/atrium/watches.py",
       "flags_source": "re.I",
       "line": 121,
-      "pattern_source": "'unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception'",
+      "pattern_source": "'(?<!will be )(?<!to be )(?<!be )\\\\bdelivered\\\\b'",
       "patterns": [
         "src/atrium/watches.py:121"
       ],
@@ -8505,12 +8492,12 @@
     },
     {
       "call": "compile",
-      "col": 14,
+      "col": 16,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "flags_source": "re.I",
       "line": 122,
-      "pattern_source": "'\\\\bdelay(?:ed)?\\\\b|running late'",
+      "pattern_source": "'unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception'",
       "patterns": [
         "src/atrium/watches.py:122"
       ],
@@ -8518,12 +8505,12 @@
     },
     {
       "call": "compile",
-      "col": 17,
+      "col": 14,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "flags_source": "re.I",
       "line": 123,
-      "pattern_source": "'in transit|on its way|on the way|arriving|arrives'",
+      "pattern_source": "'\\\\bdelay(?:ed)?\\\\b|running late'",
       "patterns": [
         "src/atrium/watches.py:123"
       ],
@@ -8531,40 +8518,53 @@
     },
     {
       "call": "compile",
-      "col": 14,
+      "col": 17,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "flags_source": "re.I",
       "line": 124,
-      "pattern_source": "'\\\\bshipped\\\\b|has shipped|shipment|label created|picked up'",
+      "pattern_source": "'in transit|on its way|on the way|arriving|arrives'",
       "patterns": [
         "src/atrium/watches.py:124"
       ],
       "site": "src/atrium/watches.py:124"
     },
     {
+      "call": "compile",
+      "col": 14,
+      "dynamic": false,
+      "file": "src/atrium/watches.py",
+      "flags_source": "re.I",
+      "line": 125,
+      "pattern_source": "'\\\\bshipped\\\\b|has shipped|shipment|label created|picked up'",
+      "patterns": [
+        "src/atrium/watches.py:125"
+      ],
+      "site": "src/atrium/watches.py:125"
+    },
+    {
       "call": "sub",
       "col": 15,
       "dynamic": false,
       "file": "src/atrium/watches.py",
-      "line": 222,
+      "line": 223,
       "pattern_source": "'\\\\s+'",
       "patterns": [
-        "src/atrium/watches.py:222"
+        "src/atrium/watches.py:223"
       ],
-      "site": "src/atrium/watches.py:222"
+      "site": "src/atrium/watches.py:223"
     },
     {
       "call": "fullmatch",
       "col": 25,
       "dynamic": false,
       "file": "src/atrium/watches.py",
-      "line": 223,
+      "line": 224,
       "pattern_source": "'[A-Za-z0-9-]{6,40}'",
       "patterns": [
-        "src/atrium/watches.py:223"
+        "src/atrium/watches.py:224"
       ],
-      "site": "src/atrium/watches.py:223"
+      "site": "src/atrium/watches.py:224"
     },
     {
       "call": "compile",
