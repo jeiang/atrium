@@ -1,9 +1,12 @@
 import email.utils
+import logging
 import re
 import smtplib
 from email.message import EmailMessage
 
 from .config import ACCOUNTS, GMAIL, ICLOUD
+
+log = logging.getLogger("atrium.smtp")
 
 SMTP_PORT = 587
 SMTP_TIMEOUT = 60
@@ -54,11 +57,14 @@ def send(cfg, account, msg):
     recipients = [a for h in ("To", "Cc") for a in split_addresses(msg.get(h, ""))]
     if not recipients:
         raise SendError("no recipients")
+    refused = None
     try:
         with SMTP_FACTORY[0](SMTP_HOSTS[account], SMTP_PORT, timeout=SMTP_TIMEOUT) as server:
             server.starttls()
             server.login(user, password)
             refused = server.send_message(msg, from_addr=sender_address(account, user), to_addrs=recipients)
     except (smtplib.SMTPException, OSError) as e:
-        raise SendError(str(e)) from e
+        if refused is None:
+            raise SendError(str(e)) from e
+        log.warning("%s SMTP session not closed cleanly after the mail was accepted: %s", account, e)
     return {addr: str(reply) for addr, reply in (refused or {}).items()}
