@@ -88,7 +88,8 @@ def money_extraction(wire, tmp):
         "bank": "", "account_last4": "", "account_amount": None, "account_currency": "", "statement_total": None,
         "description": "USB-C cable", "subscription": False, "cadence": "unknown",
     }
-    queue = serve(wire, extraction, {"name": "Amazon", "category": "Shopping"}, {"kind": "none", **{k: v for k, v in extraction.items() if k != "kind"}})
+    nothing = {**extraction, "kind": "none", "payee_raw": "", "amount": None, "currency": "", "date": "", "description": ""}
+    queue = serve(wire, nothing, extraction, {"name": "Amazon", "category": "Shopping"})
     cfg = make_config(tmp)
     conn = prepare(db.connect(cfg.db_path))
     add_message(conn, 1, body="Order total: USD 42.50\nUSB-C cable", subject="Your Amazon.com order", from_name="Amazon.com", from_addr="auto-confirm@amazon.test", from_domain="amazon.test", date_ts=NOW - DAY, has_money=1, k_receipt=1)
