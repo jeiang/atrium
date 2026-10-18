@@ -1,5 +1,5 @@
 {
-  "call_sites": 146,
+  "call_sites": 147,
   "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
   "lookaround_or_backreference_sites": [
     "src/atrium/agent/files.py:22",
@@ -7,8 +7,8 @@
     "src/atrium/agent/tools/notion_write.py:17",
     "src/atrium/contacts.py:7",
     "src/atrium/contacts.py:8",
-    "src/atrium/features.py:15",
-    "src/atrium/features.py:70",
+    "src/atrium/features.py:16",
+    "src/atrium/features.py:71",
     "src/atrium/media/channels.py:61",
     "src/atrium/money.py:512",
     "src/atrium/money.py:575",
@@ -24,9 +24,9 @@
     "src/atrium/notion_markdown.py:8",
     "src/atrium/rules.py:139",
     "src/atrium/rules.py:93",
-    "src/atrium/watches.py:120"
+    "src/atrium/watches.py:121"
   ],
-  "pattern_count": 276,
+  "pattern_count": 277,
   "patterns": [
     {
       "bytes": true,
@@ -414,13 +414,13 @@
       ],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:11",
+      "id": "src/atrium/features.py:12",
       "pattern": "(?:[$€£]\\s?\\d[\\d,]*\\.\\d{2})|(?:\\b(?:usd|ttd|tt\\$|cad)\\s?\\d[\\d,]*(?:\\.\\d{2})?)|(?:\\b\\d[\\d,]*\\.\\d{2}\\s?(?:usd|ttd|cad)\\b)",
-      "site": "src/atrium/features.py:11",
+      "site": "src/atrium/features.py:12",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/features.py:184",
+          "at": "src/atrium/features.py:190",
           "op": "search",
           "source": "CURRENCY.search(body[:4000])"
         }
@@ -437,13 +437,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:15",
+      "id": "src/atrium/features.py:16",
       "pattern": "(?<![\\d.,$#-])\\d{6}(?![\\d.,-])",
-      "site": "src/atrium/features.py:15",
+      "site": "src/atrium/features.py:16",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/features.py:189",
+          "at": "src/atrium/features.py:195",
           "op": "search",
           "source": "OTP.search(body[:600])"
         }
@@ -456,13 +456,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:16",
+      "id": "src/atrium/features.py:17",
       "pattern": "verification code|security code|one[- ]time|passcode|your code|login code",
-      "site": "src/atrium/features.py:16",
+      "site": "src/atrium/features.py:17",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/features.py:188",
+          "at": "src/atrium/features.py:194",
           "op": "search",
           "source": "VCODE.search(low)"
         }
@@ -479,15 +479,15 @@
       ],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/features.py:17",
+      "id": "src/atrium/features.py:18",
       "pattern": "^\\s*(re|fwd?|fw|aw)\\s*:\\s*",
-      "site": "src/atrium/features.py:17",
+      "site": "src/atrium/features.py:18",
       "uses": [
         {
           "args": {
             "repl": ""
           },
-          "at": "src/atrium/features.py:47",
+          "at": "src/atrium/features.py:48",
           "op": "sub",
           "source": "REPLY_PREFIX.sub('', s)"
         }
@@ -503,15 +503,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:52",
+      "id": "src/atrium/features.py:53",
       "pattern": "(?:[$€£]|usd|ttd|tt\\$|us\\$|cad)\\s?\\d[\\d,]*(?:\\.\\d+)?|\\d[\\d,]*(?:\\.\\d+)?\\s?(?:usd|ttd|cad)",
-      "site": "src/atrium/features.py:52",
+      "site": "src/atrium/features.py:53",
       "uses": [
         {
           "args": {
             "repl": "<amt>"
           },
-          "at": "src/atrium/features.py:52",
+          "at": "src/atrium/features.py:53",
           "op": "sub",
           "source": "re.sub('(?:[$€£]|usd|ttd|tt\\\\$|us\\\\$|cad)\\\\s?\\\\d[\\\\d,]*(?:\\\\.\\\\d+)?|\\\\d[\\\\d,]*(?:\\\\.\\\\d+)?\\\\s?(?:usd|ttd|cad)', '<amt>', s)"
         }
@@ -528,15 +528,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:57",
+      "id": "src/atrium/features.py:58",
       "pattern": "\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{2,4})?",
-      "site": "src/atrium/features.py:57",
+      "site": "src/atrium/features.py:58",
       "uses": [
         {
           "args": {
             "repl": "<date>"
           },
-          "at": "src/atrium/features.py:57",
+          "at": "src/atrium/features.py:58",
           "op": "sub",
           "source": "re.sub('\\\\b' + MONTH + '\\\\s+\\\\d{1,2}(?:st|nd|rd|th)?(?:,?\\\\s+\\\\d{2,4})?', '<date>', s)"
         }
@@ -553,15 +553,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:58",
+      "id": "src/atrium/features.py:59",
       "pattern": "\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?(?:,?\\s+\\d{2,4})?",
-      "site": "src/atrium/features.py:58",
+      "site": "src/atrium/features.py:59",
       "uses": [
         {
           "args": {
             "repl": "<date>"
           },
-          "at": "src/atrium/features.py:58",
+          "at": "src/atrium/features.py:59",
           "op": "sub",
           "source": "re.sub('\\\\b\\\\d{1,2}(?:st|nd|rd|th)?\\\\s+' + MONTH + '(?:,?\\\\s+\\\\d{2,4})?', '<date>', s)"
         }
@@ -577,15 +577,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:59",
+      "id": "src/atrium/features.py:60",
       "pattern": "\\b\\d{1,4}[/-]\\d{1,2}[/-]\\d{1,4}\\b",
-      "site": "src/atrium/features.py:59",
+      "site": "src/atrium/features.py:60",
       "uses": [
         {
           "args": {
             "repl": "<date>"
           },
-          "at": "src/atrium/features.py:59",
+          "at": "src/atrium/features.py:60",
           "op": "sub",
           "source": "re.sub('\\\\b\\\\d{1,4}[/-]\\\\d{1,2}[/-]\\\\d{1,4}\\\\b', '<date>', s)"
         }
@@ -602,15 +602,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:60",
+      "id": "src/atrium/features.py:61",
       "pattern": "\\b\\w*\\d\\w*\\b",
-      "site": "src/atrium/features.py:60",
+      "site": "src/atrium/features.py:61",
       "uses": [
         {
           "args": {
             "repl": "<n>"
           },
-          "at": "src/atrium/features.py:60",
+          "at": "src/atrium/features.py:61",
           "op": "sub",
           "source": "re.sub('\\\\b\\\\w*\\\\d\\\\w*\\\\b', '<n>', s)"
         }
@@ -625,15 +625,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:61",
+      "id": "src/atrium/features.py:62",
       "pattern": "#\\s*<n>",
-      "site": "src/atrium/features.py:61",
+      "site": "src/atrium/features.py:62",
       "uses": [
         {
           "args": {
             "repl": "<n>"
           },
-          "at": "src/atrium/features.py:61",
+          "at": "src/atrium/features.py:62",
           "op": "sub",
           "source": "re.sub('#\\\\s*<n>', '<n>', s)"
         }
@@ -648,15 +648,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:62",
+      "id": "src/atrium/features.py:63",
       "pattern": "\\s+",
-      "site": "src/atrium/features.py:62",
+      "site": "src/atrium/features.py:63",
       "uses": [
         {
           "args": {
             "repl": " "
           },
-          "at": "src/atrium/features.py:62",
+          "at": "src/atrium/features.py:63",
           "op": "sub",
           "source": "re.sub('\\\\s+', ' ', s)"
         }
@@ -673,15 +673,15 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/features.py:70",
+      "id": "src/atrium/features.py:71",
       "pattern": "(?is)<(script|style).*?</\\1>",
-      "site": "src/atrium/features.py:70",
+      "site": "src/atrium/features.py:71",
       "uses": [
         {
           "args": {
             "repl": " "
           },
-          "at": "src/atrium/features.py:70",
+          "at": "src/atrium/features.py:71",
           "op": "sub",
           "source": "re.sub('(?is)<(script|style).*?</\\\\1>', ' ', text)"
         }
@@ -694,15 +694,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:71",
+      "id": "src/atrium/features.py:72",
       "pattern": "<[^>]+>",
-      "site": "src/atrium/features.py:71",
+      "site": "src/atrium/features.py:72",
       "uses": [
         {
           "args": {
             "repl": " "
           },
-          "at": "src/atrium/features.py:71",
+          "at": "src/atrium/features.py:72",
           "op": "sub",
           "source": "re.sub('<[^>]+>', ' ', text)"
         }
@@ -717,15 +717,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:72",
+      "id": "src/atrium/features.py:73",
       "pattern": "\\s+",
-      "site": "src/atrium/features.py:72",
+      "site": "src/atrium/features.py:73",
       "uses": [
         {
           "args": {
             "repl": " "
           },
-          "at": "src/atrium/features.py:72",
+          "at": "src/atrium/features.py:73",
           "op": "sub",
           "source": "re.sub('\\\\s+', ' ', html.unescape(text))"
         }
@@ -740,15 +740,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:95",
+      "id": "src/atrium/features.py:96",
       "pattern": "\\d+",
-      "site": "src/atrium/features.py:95",
+      "site": "src/atrium/features.py:96",
       "uses": [
         {
           "args": {
             "repl": "#"
           },
-          "at": "src/atrium/features.py:95",
+          "at": "src/atrium/features.py:96",
           "op": "sub",
           "source": "re.sub('\\\\d+', '#', name.lower())"
         }
@@ -763,15 +763,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:116",
+      "id": "src/atrium/features.py:117",
       "pattern": "\\s+",
-      "site": "src/atrium/features.py:116",
+      "site": "src/atrium/features.py:117",
       "uses": [
         {
           "args": {
             "repl": " "
           },
-          "at": "src/atrium/features.py:116",
+          "at": "src/atrium/features.py:117",
           "op": "sub",
           "source": "re.sub('\\\\s+', ' ', t)"
         }
@@ -786,15 +786,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:129",
+      "id": "src/atrium/features.py:130",
       "pattern": "[<>\\s]",
-      "site": "src/atrium/features.py:129",
+      "site": "src/atrium/features.py:130",
       "uses": [
         {
           "args": {
             "repl": ""
           },
-          "at": "src/atrium/features.py:129",
+          "at": "src/atrium/features.py:130",
           "op": "sub",
           "source": "re.sub('[<>\\\\s]', '', value)"
         }
@@ -809,13 +809,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/features.py:133",
+      "id": "src/atrium/features.py:134",
       "pattern": "<[^<>\\s]+>",
-      "site": "src/atrium/features.py:133",
+      "site": "src/atrium/features.py:134",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/features.py:133",
+          "at": "src/atrium/features.py:134",
           "op": "findall",
           "source": "re.findall('<[^<>\\\\s]+>', value)"
         }
@@ -831,13 +831,13 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/features.py:159",
+      "id": "src/atrium/features.py:165",
       "pattern": "\\bd=([^;\\s]+)",
-      "site": "src/atrium/features.py:159",
+      "site": "src/atrium/features.py:165",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/features.py:159",
+          "at": "src/atrium/features.py:165",
           "op": "search",
           "source": "re.search('\\\\bd=([^;\\\\s]+)', str(v))"
         }
@@ -4140,13 +4140,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/money.py:1326",
+      "id": "src/atrium/money.py:1327",
       "pattern": "\\d{4}-\\d{2}",
-      "site": "src/atrium/money.py:1326",
+      "site": "src/atrium/money.py:1327",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/money.py:1326",
+          "at": "src/atrium/money.py:1327",
           "op": "fullmatch",
           "source": "re.fullmatch('\\\\d{4}-\\\\d{2}', period)"
         }
@@ -4161,13 +4161,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/money.py:1330",
+      "id": "src/atrium/money.py:1331",
       "pattern": "\\d{4}",
-      "site": "src/atrium/money.py:1330",
+      "site": "src/atrium/money.py:1331",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/money.py:1330",
+          "at": "src/atrium/money.py:1331",
           "op": "fullmatch",
           "source": "re.fullmatch('\\\\d{4}', period)"
         }
@@ -4182,13 +4182,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/money.py:1332",
+      "id": "src/atrium/money.py:1333",
       "pattern": "\\d+d",
-      "site": "src/atrium/money.py:1332",
+      "site": "src/atrium/money.py:1333",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/money.py:1332",
+          "at": "src/atrium/money.py:1333",
           "op": "fullmatch",
           "source": "re.fullmatch('\\\\d+d', period)"
         }
@@ -4203,13 +4203,13 @@
       "flags": [],
       "group_names": {},
       "groups": 2,
-      "id": "src/atrium/money.py:1334",
+      "id": "src/atrium/money.py:1335",
       "pattern": "(\\d{4}-\\d{2}-\\d{2})/(\\d{4}-\\d{2}-\\d{2})",
-      "site": "src/atrium/money.py:1334",
+      "site": "src/atrium/money.py:1335",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/money.py:1334",
+          "at": "src/atrium/money.py:1335",
           "op": "fullmatch",
           "source": "re.fullmatch('(\\\\d{4}-\\\\d{2}-\\\\d{2})/(\\\\d{4}-\\\\d{2}-\\\\d{2})', period)"
         }
@@ -5203,13 +5203,13 @@
       "flags": [],
       "group_names": {},
       "groups": 2,
-      "id": "src/atrium/report.py:8",
+      "id": "src/atrium/report.py:10",
       "pattern": "^(\\d+)([hd])$",
-      "site": "src/atrium/report.py:8",
+      "site": "src/atrium/report.py:10",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/report.py:31",
+          "at": "src/atrium/report.py:33",
           "op": "match",
           "source": "SINCE.match(value)"
         }
@@ -6168,6 +6168,29 @@
     {
       "bytes": false,
       "call": "sub",
+      "features": [
+        "space_class"
+      ],
+      "flags": [],
+      "group_names": {},
+      "groups": 0,
+      "id": "src/atrium/smtp.py:27",
+      "pattern": "[\\s,]*,[\\s,]*",
+      "site": "src/atrium/smtp.py:27",
+      "uses": [
+        {
+          "args": {
+            "repl": ", "
+          },
+          "at": "src/atrium/smtp.py:27",
+          "op": "sub",
+          "source": "re.sub('[\\\\s,]*,[\\\\s,]*', ', ', text or '')"
+        }
+      ]
+    },
+    {
+      "bytes": false,
+      "call": "sub",
       "features": [],
       "flags": [],
       "group_names": {},
@@ -6195,35 +6218,13 @@
       "flags": [],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/watches.py:107",
-      "pattern": "\\b(1Z[0-9A-Z]{16})\\b",
-      "site": "src/atrium/watches.py:107",
-      "uses": [
-        {
-          "args": {},
-          "at": "src/atrium/watches.py:159",
-          "op": "finditer",
-          "source": "pattern.finditer(text)"
-        }
-      ]
-    },
-    {
-      "bytes": false,
-      "call": "compile",
-      "features": [
-        "digit_class",
-        "word_boundary"
-      ],
-      "flags": [],
-      "group_names": {},
-      "groups": 1,
       "id": "src/atrium/watches.py:108",
-      "pattern": "\\b([A-Z]{2}\\d{9}US)\\b",
+      "pattern": "\\b(1Z[0-9A-Z]{16})\\b",
       "site": "src/atrium/watches.py:108",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:159",
+          "at": "src/atrium/watches.py:160",
           "op": "finditer",
           "source": "pattern.finditer(text)"
         }
@@ -6240,12 +6241,12 @@
       "group_names": {},
       "groups": 1,
       "id": "src/atrium/watches.py:109",
-      "pattern": "\\b(9[2-5]\\d{18,24})\\b",
+      "pattern": "\\b([A-Z]{2}\\d{9}US)\\b",
       "site": "src/atrium/watches.py:109",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:159",
+          "at": "src/atrium/watches.py:160",
           "op": "finditer",
           "source": "pattern.finditer(text)"
         }
@@ -6262,12 +6263,12 @@
       "group_names": {},
       "groups": 1,
       "id": "src/atrium/watches.py:110",
-      "pattern": "\\b(JD\\d{18})\\b",
+      "pattern": "\\b(9[2-5]\\d{18,24})\\b",
       "site": "src/atrium/watches.py:110",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:159",
+          "at": "src/atrium/watches.py:160",
           "op": "finditer",
           "source": "pattern.finditer(text)"
         }
@@ -6284,12 +6285,12 @@
       "group_names": {},
       "groups": 1,
       "id": "src/atrium/watches.py:111",
-      "pattern": "\\b(\\d{12}|\\d{15})\\b",
+      "pattern": "\\b(JD\\d{18})\\b",
       "site": "src/atrium/watches.py:111",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:159",
+          "at": "src/atrium/watches.py:160",
           "op": "finditer",
           "source": "pattern.finditer(text)"
         }
@@ -6306,12 +6307,34 @@
       "group_names": {},
       "groups": 1,
       "id": "src/atrium/watches.py:112",
-      "pattern": "\\b(\\d{10,11})\\b",
+      "pattern": "\\b(\\d{12}|\\d{15})\\b",
       "site": "src/atrium/watches.py:112",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:159",
+          "at": "src/atrium/watches.py:160",
+          "op": "finditer",
+          "source": "pattern.finditer(text)"
+        }
+      ]
+    },
+    {
+      "bytes": false,
+      "call": "compile",
+      "features": [
+        "digit_class",
+        "word_boundary"
+      ],
+      "flags": [],
+      "group_names": {},
+      "groups": 1,
+      "id": "src/atrium/watches.py:113",
+      "pattern": "\\b(\\d{10,11})\\b",
+      "site": "src/atrium/watches.py:113",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:160",
           "op": "finditer",
           "source": "pattern.finditer(text)"
         }
@@ -6329,13 +6352,13 @@
       ],
       "group_names": {},
       "groups": 1,
-      "id": "src/atrium/watches.py:114",
+      "id": "src/atrium/watches.py:115",
       "pattern": "\\border\\s*(?:number|no\\.?|#|id|ref(?:erence)?)?\\s*[:#]?\\s*#?\\s*([A-Z0-9][A-Z0-9-]{4,24})",
-      "site": "src/atrium/watches.py:114",
+      "site": "src/atrium/watches.py:115",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:181",
+          "at": "src/atrium/watches.py:182",
           "op": "finditer",
           "source": "ORDER_RE.finditer(text)"
         }
@@ -6350,13 +6373,13 @@
       ],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/watches.py:119",
+      "id": "src/atrium/watches.py:120",
       "pattern": "out for delivery",
-      "site": "src/atrium/watches.py:119",
+      "site": "src/atrium/watches.py:120",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:191",
+          "at": "src/atrium/watches.py:192",
           "op": "search",
           "source": "pattern.search(text)"
         }
@@ -6374,13 +6397,13 @@
       ],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/watches.py:120",
+      "id": "src/atrium/watches.py:121",
       "pattern": "(?<!will be )(?<!to be )(?<!be )\\bdelivered\\b",
-      "site": "src/atrium/watches.py:120",
+      "site": "src/atrium/watches.py:121",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:191",
+          "at": "src/atrium/watches.py:192",
           "op": "search",
           "source": "pattern.search(text)"
         }
@@ -6390,62 +6413,18 @@
       "bytes": false,
       "call": "compile",
       "features": [],
-      "flags": [
-        "IGNORECASE"
-      ],
-      "group_names": {},
-      "groups": 0,
-      "id": "src/atrium/watches.py:121",
-      "pattern": "unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception",
-      "site": "src/atrium/watches.py:121",
-      "uses": [
-        {
-          "args": {},
-          "at": "src/atrium/watches.py:191",
-          "op": "search",
-          "source": "pattern.search(text)"
-        }
-      ]
-    },
-    {
-      "bytes": false,
-      "call": "compile",
-      "features": [
-        "word_boundary"
-      ],
       "flags": [
         "IGNORECASE"
       ],
       "group_names": {},
       "groups": 0,
       "id": "src/atrium/watches.py:122",
-      "pattern": "\\bdelay(?:ed)?\\b|running late",
+      "pattern": "unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception",
       "site": "src/atrium/watches.py:122",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:191",
-          "op": "search",
-          "source": "pattern.search(text)"
-        }
-      ]
-    },
-    {
-      "bytes": false,
-      "call": "compile",
-      "features": [],
-      "flags": [
-        "IGNORECASE"
-      ],
-      "group_names": {},
-      "groups": 0,
-      "id": "src/atrium/watches.py:123",
-      "pattern": "in transit|on its way|on the way|arriving|arrives",
-      "site": "src/atrium/watches.py:123",
-      "uses": [
-        {
-          "args": {},
-          "at": "src/atrium/watches.py:191",
+          "at": "src/atrium/watches.py:192",
           "op": "search",
           "source": "pattern.search(text)"
         }
@@ -6462,13 +6441,57 @@
       ],
       "group_names": {},
       "groups": 0,
+      "id": "src/atrium/watches.py:123",
+      "pattern": "\\bdelay(?:ed)?\\b|running late",
+      "site": "src/atrium/watches.py:123",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:192",
+          "op": "search",
+          "source": "pattern.search(text)"
+        }
+      ]
+    },
+    {
+      "bytes": false,
+      "call": "compile",
+      "features": [],
+      "flags": [
+        "IGNORECASE"
+      ],
+      "group_names": {},
+      "groups": 0,
       "id": "src/atrium/watches.py:124",
-      "pattern": "\\bshipped\\b|has shipped|shipment|label created|picked up",
+      "pattern": "in transit|on its way|on the way|arriving|arrives",
       "site": "src/atrium/watches.py:124",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:191",
+          "at": "src/atrium/watches.py:192",
+          "op": "search",
+          "source": "pattern.search(text)"
+        }
+      ]
+    },
+    {
+      "bytes": false,
+      "call": "compile",
+      "features": [
+        "word_boundary"
+      ],
+      "flags": [
+        "IGNORECASE"
+      ],
+      "group_names": {},
+      "groups": 0,
+      "id": "src/atrium/watches.py:125",
+      "pattern": "\\bshipped\\b|has shipped|shipment|label created|picked up",
+      "site": "src/atrium/watches.py:125",
+      "uses": [
+        {
+          "args": {},
+          "at": "src/atrium/watches.py:192",
           "op": "search",
           "source": "pattern.search(text)"
         }
@@ -6483,15 +6506,15 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/watches.py:222",
+      "id": "src/atrium/watches.py:223",
       "pattern": "\\s+",
-      "site": "src/atrium/watches.py:222",
+      "site": "src/atrium/watches.py:223",
       "uses": [
         {
           "args": {
             "repl": ""
           },
-          "at": "src/atrium/watches.py:222",
+          "at": "src/atrium/watches.py:223",
           "op": "sub",
           "source": "re.sub('\\\\s+', '', str(answer.get('tracking_number') or ''))"
         }
@@ -6504,13 +6527,13 @@
       "flags": [],
       "group_names": {},
       "groups": 0,
-      "id": "src/atrium/watches.py:223",
+      "id": "src/atrium/watches.py:224",
       "pattern": "[A-Za-z0-9-]{6,40}",
-      "site": "src/atrium/watches.py:223",
+      "site": "src/atrium/watches.py:224",
       "uses": [
         {
           "args": {},
-          "at": "src/atrium/watches.py:223",
+          "at": "src/atrium/watches.py:224",
           "op": "fullmatch",
           "source": "re.fullmatch('[A-Za-z0-9-]{6,40}', tracking)"
         }
@@ -6834,35 +6857,22 @@
       "dynamic": false,
       "file": "src/atrium/features.py",
       "flags_source": "re.I",
-      "line": 11,
+      "line": 12,
       "name": "CURRENCY",
       "pattern_source": "'(?:[$€£]\\\\s?\\\\d[\\\\d,]*\\\\.\\\\d{2})|(?:\\\\b(?:usd|ttd|tt\\\\$|cad)\\\\s?\\\\d[\\\\d,]*(?:\\\\.\\\\d{2})?)|(?:\\\\b\\\\d[\\\\d,]*\\\\.\\\\d{2}\\\\s?(?:usd|ttd|cad)\\\\b)'",
       "patterns": [
-        "src/atrium/features.py:11"
+        "src/atrium/features.py:12"
       ],
-      "site": "src/atrium/features.py:11"
+      "site": "src/atrium/features.py:12"
     },
     {
       "call": "compile",
       "col": 6,
       "dynamic": false,
       "file": "src/atrium/features.py",
-      "line": 15,
+      "line": 16,
       "name": "OTP",
       "pattern_source": "'(?<![\\\\d.,$#-])\\\\d{6}(?![\\\\d.,-])'",
-      "patterns": [
-        "src/atrium/features.py:15"
-      ],
-      "site": "src/atrium/features.py:15"
-    },
-    {
-      "call": "compile",
-      "col": 8,
-      "dynamic": false,
-      "file": "src/atrium/features.py",
-      "line": 16,
-      "name": "VCODE",
-      "pattern_source": "'verification code|security code|one[- ]time|passcode|your code|login code'",
       "patterns": [
         "src/atrium/features.py:16"
       ],
@@ -6870,41 +6880,42 @@
     },
     {
       "call": "compile",
-      "col": 15,
+      "col": 8,
       "dynamic": false,
       "file": "src/atrium/features.py",
-      "flags_source": "re.I",
       "line": 17,
-      "name": "REPLY_PREFIX",
-      "pattern_source": "'^\\\\s*(re|fwd?|fw|aw)\\\\s*:\\\\s*'",
+      "name": "VCODE",
+      "pattern_source": "'verification code|security code|one[- ]time|passcode|your code|login code'",
       "patterns": [
         "src/atrium/features.py:17"
       ],
       "site": "src/atrium/features.py:17"
     },
     {
-      "call": "sub",
-      "col": 8,
+      "call": "compile",
+      "col": 15,
       "dynamic": false,
       "file": "src/atrium/features.py",
-      "line": 52,
-      "pattern_source": "'(?:[$€£]|usd|ttd|tt\\\\$|us\\\\$|cad)\\\\s?\\\\d[\\\\d,]*(?:\\\\.\\\\d+)?|\\\\d[\\\\d,]*(?:\\\\.\\\\d+)?\\\\s?(?:usd|ttd|cad)'",
+      "flags_source": "re.I",
+      "line": 18,
+      "name": "REPLY_PREFIX",
+      "pattern_source": "'^\\\\s*(re|fwd?|fw|aw)\\\\s*:\\\\s*'",
       "patterns": [
-        "src/atrium/features.py:52"
+        "src/atrium/features.py:18"
       ],
-      "site": "src/atrium/features.py:52"
+      "site": "src/atrium/features.py:18"
     },
     {
       "call": "sub",
       "col": 8,
       "dynamic": false,
       "file": "src/atrium/features.py",
-      "line": 57,
-      "pattern_source": "'\\\\b' + MONTH + '\\\\s+\\\\d{1,2}(?:st|nd|rd|th)?(?:,?\\\\s+\\\\d{2,4})?'",
+      "line": 53,
+      "pattern_source": "'(?:[$€£]|usd|ttd|tt\\\\$|us\\\\$|cad)\\\\s?\\\\d[\\\\d,]*(?:\\\\.\\\\d+)?|\\\\d[\\\\d,]*(?:\\\\.\\\\d+)?\\\\s?(?:usd|ttd|cad)'",
       "patterns": [
-        "src/atrium/features.py:57"
+        "src/atrium/features.py:53"
       ],
-      "site": "src/atrium/features.py:57"
+      "site": "src/atrium/features.py:53"
     },
     {
       "call": "sub",
@@ -6912,7 +6923,7 @@
       "dynamic": false,
       "file": "src/atrium/features.py",
       "line": 58,
-      "pattern_source": "'\\\\b\\\\d{1,2}(?:st|nd|rd|th)?\\\\s+' + MONTH + '(?:,?\\\\s+\\\\d{2,4})?'",
+      "pattern_source": "'\\\\b' + MONTH + '\\\\s+\\\\d{1,2}(?:st|nd|rd|th)?(?:,?\\\\s+\\\\d{2,4})?'",
       "patterns": [
         "src/atrium/features.py:58"
       ],
@@ -6924,7 +6935,7 @@
       "dynamic": false,
       "file": "src/atrium/features.py",
       "line": 59,
-      "pattern_source": "'\\\\b\\\\d{1,4}[/-]\\\\d{1,2}[/-]\\\\d{1,4}\\\\b'",
+      "pattern_source": "'\\\\b\\\\d{1,2}(?:st|nd|rd|th)?\\\\s+' + MONTH + '(?:,?\\\\s+\\\\d{2,4})?'",
       "patterns": [
         "src/atrium/features.py:59"
       ],
@@ -6936,7 +6947,7 @@
       "dynamic": false,
       "file": "src/atrium/features.py",
       "line": 60,
-      "pattern_source": "'\\\\b\\\\w*\\\\d\\\\w*\\\\b'",
+      "pattern_source": "'\\\\b\\\\d{1,4}[/-]\\\\d{1,2}[/-]\\\\d{1,4}\\\\b'",
       "patterns": [
         "src/atrium/features.py:60"
       ],
@@ -6948,7 +6959,7 @@
       "dynamic": false,
       "file": "src/atrium/features.py",
       "line": 61,
-      "pattern_source": "'#\\\\s*<n>'",
+      "pattern_source": "'\\\\b\\\\w*\\\\d\\\\w*\\\\b'",
       "patterns": [
         "src/atrium/features.py:61"
       ],
@@ -6956,11 +6967,11 @@
     },
     {
       "call": "sub",
-      "col": 11,
+      "col": 8,
       "dynamic": false,
       "file": "src/atrium/features.py",
       "line": 62,
-      "pattern_source": "'\\\\s+'",
+      "pattern_source": "'#\\\\s*<n>'",
       "patterns": [
         "src/atrium/features.py:62"
       ],
@@ -6971,12 +6982,12 @@
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/features.py",
-      "line": 70,
-      "pattern_source": "'(?is)<(script|style).*?</\\\\1>'",
+      "line": 63,
+      "pattern_source": "'\\\\s+'",
       "patterns": [
-        "src/atrium/features.py:70"
+        "src/atrium/features.py:63"
       ],
-      "site": "src/atrium/features.py:70"
+      "site": "src/atrium/features.py:63"
     },
     {
       "call": "sub",
@@ -6984,7 +6995,7 @@
       "dynamic": false,
       "file": "src/atrium/features.py",
       "line": 71,
-      "pattern_source": "'<[^>]+>'",
+      "pattern_source": "'(?is)<(script|style).*?</\\\\1>'",
       "patterns": [
         "src/atrium/features.py:71"
       ],
@@ -6996,7 +7007,7 @@
       "dynamic": false,
       "file": "src/atrium/features.py",
       "line": 72,
-      "pattern_source": "'\\\\s+'",
+      "pattern_source": "'<[^>]+>'",
       "patterns": [
         "src/atrium/features.py:72"
       ],
@@ -7007,60 +7018,72 @@
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/features.py",
-      "line": 95,
-      "pattern_source": "'\\\\d+'",
-      "patterns": [
-        "src/atrium/features.py:95"
-      ],
-      "site": "src/atrium/features.py:95"
-    },
-    {
-      "call": "sub",
-      "col": 46,
-      "dynamic": false,
-      "file": "src/atrium/features.py",
-      "line": 116,
+      "line": 73,
       "pattern_source": "'\\\\s+'",
       "patterns": [
-        "src/atrium/features.py:116"
+        "src/atrium/features.py:73"
       ],
-      "site": "src/atrium/features.py:116"
+      "site": "src/atrium/features.py:73"
     },
     {
       "call": "sub",
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/features.py",
-      "line": 129,
+      "line": 96,
+      "pattern_source": "'\\\\d+'",
+      "patterns": [
+        "src/atrium/features.py:96"
+      ],
+      "site": "src/atrium/features.py:96"
+    },
+    {
+      "call": "sub",
+      "col": 46,
+      "dynamic": false,
+      "file": "src/atrium/features.py",
+      "line": 117,
+      "pattern_source": "'\\\\s+'",
+      "patterns": [
+        "src/atrium/features.py:117"
+      ],
+      "site": "src/atrium/features.py:117"
+    },
+    {
+      "call": "sub",
+      "col": 11,
+      "dynamic": false,
+      "file": "src/atrium/features.py",
+      "line": 130,
       "pattern_source": "'[<>\\\\s]'",
       "patterns": [
-        "src/atrium/features.py:129"
+        "src/atrium/features.py:130"
       ],
-      "site": "src/atrium/features.py:129"
+      "site": "src/atrium/features.py:130"
     },
     {
       "call": "findall",
       "col": 40,
       "dynamic": false,
       "file": "src/atrium/features.py",
-      "line": 133,
+      "line": 134,
       "pattern_source": "'<[^<>\\\\s]+>'",
       "patterns": [
-        "src/atrium/features.py:133"
+        "src/atrium/features.py:134"
       ],
-      "site": "src/atrium/features.py:133"
+      "site": "src/atrium/features.py:134"
     },
     {
       "call": "search",
       "col": 12,
       "dynamic": false,
       "file": "src/atrium/features.py",
-      "line": 159,
+      "line": 165,
       "pattern_source": "'\\\\bd=([^;\\\\s]+)'",
       "patterns": [
-        "src/atrium/features.py:159"
+        "src/atrium/features.py:165"
       ],
-      "site": "src/atrium/features.py:159"
+      "site": "src/atrium/features.py:165"
     },
     {
       "call": "compile",
@@ -7683,48 +7706,48 @@
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/money.py",
-      "line": 1326,
+      "line": 1327,
       "pattern_source": "'\\\\d{4}-\\\\d{2}'",
       "patterns": [
-        "src/atrium/money.py:1326"
+        "src/atrium/money.py:1327"
       ],
-      "site": "src/atrium/money.py:1326"
+      "site": "src/atrium/money.py:1327"
     },
     {
       "call": "fullmatch",
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/money.py",
-      "line": 1330,
+      "line": 1331,
       "pattern_source": "'\\\\d{4}'",
       "patterns": [
-        "src/atrium/money.py:1330"
+        "src/atrium/money.py:1331"
       ],
-      "site": "src/atrium/money.py:1330"
+      "site": "src/atrium/money.py:1331"
     },
     {
       "call": "fullmatch",
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/money.py",
-      "line": 1332,
+      "line": 1333,
       "pattern_source": "'\\\\d+d'",
       "patterns": [
-        "src/atrium/money.py:1332"
+        "src/atrium/money.py:1333"
       ],
-      "site": "src/atrium/money.py:1332"
+      "site": "src/atrium/money.py:1333"
     },
     {
       "call": "fullmatch",
       "col": 12,
       "dynamic": false,
       "file": "src/atrium/money.py",
-      "line": 1334,
+      "line": 1335,
       "pattern_source": "'(\\\\d{4}-\\\\d{2}-\\\\d{2})/(\\\\d{4}-\\\\d{2}-\\\\d{2})'",
       "patterns": [
-        "src/atrium/money.py:1334"
+        "src/atrium/money.py:1335"
       ],
-      "site": "src/atrium/money.py:1334"
+      "site": "src/atrium/money.py:1335"
     },
     {
       "call": "compile",
@@ -8259,13 +8282,13 @@
       "col": 8,
       "dynamic": false,
       "file": "src/atrium/report.py",
-      "line": 8,
+      "line": 10,
       "name": "SINCE",
       "pattern_source": "'^(\\\\d+)([hd])$'",
       "patterns": [
-        "src/atrium/report.py:8"
+        "src/atrium/report.py:10"
       ],
-      "site": "src/atrium/report.py:8"
+      "site": "src/atrium/report.py:10"
     },
     {
       "call": "search",
@@ -8362,6 +8385,18 @@
     },
     {
       "call": "sub",
+      "col": 11,
+      "dynamic": false,
+      "file": "src/atrium/smtp.py",
+      "line": 27,
+      "pattern_source": "'[\\\\s,]*,[\\\\s,]*'",
+      "patterns": [
+        "src/atrium/smtp.py:27"
+      ],
+      "site": "src/atrium/smtp.py:27"
+    },
+    {
+      "call": "sub",
       "col": 20,
       "dynamic": false,
       "file": "src/atrium/watches.py",
@@ -8377,22 +8412,9 @@
       "col": 9,
       "dynamic": false,
       "file": "src/atrium/watches.py",
-      "line": 107,
+      "line": 108,
       "name": "UPS_RE",
       "pattern_source": "'\\\\b(1Z[0-9A-Z]{16})\\\\b'",
-      "patterns": [
-        "src/atrium/watches.py:107"
-      ],
-      "site": "src/atrium/watches.py:107"
-    },
-    {
-      "call": "compile",
-      "col": 9,
-      "dynamic": false,
-      "file": "src/atrium/watches.py",
-      "line": 108,
-      "name": "S10_RE",
-      "pattern_source": "'\\\\b([A-Z]{2}\\\\d{9}US)\\\\b'",
       "patterns": [
         "src/atrium/watches.py:108"
       ],
@@ -8400,12 +8422,12 @@
     },
     {
       "call": "compile",
-      "col": 10,
+      "col": 9,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "line": 109,
-      "name": "USPS_RE",
-      "pattern_source": "'\\\\b(9[2-5]\\\\d{18,24})\\\\b'",
+      "name": "S10_RE",
+      "pattern_source": "'\\\\b([A-Z]{2}\\\\d{9}US)\\\\b'",
       "patterns": [
         "src/atrium/watches.py:109"
       ],
@@ -8413,12 +8435,12 @@
     },
     {
       "call": "compile",
-      "col": 12,
+      "col": 10,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "line": 110,
-      "name": "DHL_JD_RE",
-      "pattern_source": "'\\\\b(JD\\\\d{18})\\\\b'",
+      "name": "USPS_RE",
+      "pattern_source": "'\\\\b(9[2-5]\\\\d{18,24})\\\\b'",
       "patterns": [
         "src/atrium/watches.py:110"
       ],
@@ -8426,12 +8448,12 @@
     },
     {
       "call": "compile",
-      "col": 11,
+      "col": 12,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "line": 111,
-      "name": "FEDEX_RE",
-      "pattern_source": "'\\\\b(\\\\d{12}|\\\\d{15})\\\\b'",
+      "name": "DHL_JD_RE",
+      "pattern_source": "'\\\\b(JD\\\\d{18})\\\\b'",
       "patterns": [
         "src/atrium/watches.py:111"
       ],
@@ -8439,12 +8461,12 @@
     },
     {
       "call": "compile",
-      "col": 9,
+      "col": 11,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "line": 112,
-      "name": "DHL_RE",
-      "pattern_source": "'\\\\b(\\\\d{10,11})\\\\b'",
+      "name": "FEDEX_RE",
+      "pattern_source": "'\\\\b(\\\\d{12}|\\\\d{15})\\\\b'",
       "patterns": [
         "src/atrium/watches.py:112"
       ],
@@ -8452,17 +8474,30 @@
     },
     {
       "call": "compile",
+      "col": 9,
+      "dynamic": false,
+      "file": "src/atrium/watches.py",
+      "line": 113,
+      "name": "DHL_RE",
+      "pattern_source": "'\\\\b(\\\\d{10,11})\\\\b'",
+      "patterns": [
+        "src/atrium/watches.py:113"
+      ],
+      "site": "src/atrium/watches.py:113"
+    },
+    {
+      "call": "compile",
       "col": 11,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "flags_source": "re.IGNORECASE",
-      "line": 114,
+      "line": 115,
       "name": "ORDER_RE",
       "pattern_source": "'\\\\border\\\\s*(?:number|no\\\\.?|#|id|ref(?:erence)?)?\\\\s*[:#]?\\\\s*#?\\\\s*([A-Z0-9][A-Z0-9-]{4,24})'",
       "patterns": [
-        "src/atrium/watches.py:114"
+        "src/atrium/watches.py:115"
       ],
-      "site": "src/atrium/watches.py:114"
+      "site": "src/atrium/watches.py:115"
     },
     {
       "call": "compile",
@@ -8470,21 +8505,8 @@
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "flags_source": "re.I",
-      "line": 119,
-      "pattern_source": "'out for delivery'",
-      "patterns": [
-        "src/atrium/watches.py:119"
-      ],
-      "site": "src/atrium/watches.py:119"
-    },
-    {
-      "call": "compile",
-      "col": 16,
-      "dynamic": false,
-      "file": "src/atrium/watches.py",
-      "flags_source": "re.I",
       "line": 120,
-      "pattern_source": "'(?<!will be )(?<!to be )(?<!be )\\\\bdelivered\\\\b'",
+      "pattern_source": "'out for delivery'",
       "patterns": [
         "src/atrium/watches.py:120"
       ],
@@ -8497,7 +8519,7 @@
       "file": "src/atrium/watches.py",
       "flags_source": "re.I",
       "line": 121,
-      "pattern_source": "'unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception'",
+      "pattern_source": "'(?<!will be )(?<!to be )(?<!be )\\\\bdelivered\\\\b'",
       "patterns": [
         "src/atrium/watches.py:121"
       ],
@@ -8505,12 +8527,12 @@
     },
     {
       "call": "compile",
-      "col": 14,
+      "col": 16,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "flags_source": "re.I",
       "line": 122,
-      "pattern_source": "'\\\\bdelay(?:ed)?\\\\b|running late'",
+      "pattern_source": "'unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception'",
       "patterns": [
         "src/atrium/watches.py:122"
       ],
@@ -8518,12 +8540,12 @@
     },
     {
       "call": "compile",
-      "col": 17,
+      "col": 14,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "flags_source": "re.I",
       "line": 123,
-      "pattern_source": "'in transit|on its way|on the way|arriving|arrives'",
+      "pattern_source": "'\\\\bdelay(?:ed)?\\\\b|running late'",
       "patterns": [
         "src/atrium/watches.py:123"
       ],
@@ -8531,40 +8553,53 @@
     },
     {
       "call": "compile",
-      "col": 14,
+      "col": 17,
       "dynamic": false,
       "file": "src/atrium/watches.py",
       "flags_source": "re.I",
       "line": 124,
-      "pattern_source": "'\\\\bshipped\\\\b|has shipped|shipment|label created|picked up'",
+      "pattern_source": "'in transit|on its way|on the way|arriving|arrives'",
       "patterns": [
         "src/atrium/watches.py:124"
       ],
       "site": "src/atrium/watches.py:124"
     },
     {
+      "call": "compile",
+      "col": 14,
+      "dynamic": false,
+      "file": "src/atrium/watches.py",
+      "flags_source": "re.I",
+      "line": 125,
+      "pattern_source": "'\\\\bshipped\\\\b|has shipped|shipment|label created|picked up'",
+      "patterns": [
+        "src/atrium/watches.py:125"
+      ],
+      "site": "src/atrium/watches.py:125"
+    },
+    {
       "call": "sub",
       "col": 15,
       "dynamic": false,
       "file": "src/atrium/watches.py",
-      "line": 222,
+      "line": 223,
       "pattern_source": "'\\\\s+'",
       "patterns": [
-        "src/atrium/watches.py:222"
+        "src/atrium/watches.py:223"
       ],
-      "site": "src/atrium/watches.py:222"
+      "site": "src/atrium/watches.py:223"
     },
     {
       "call": "fullmatch",
       "col": 25,
       "dynamic": false,
       "file": "src/atrium/watches.py",
-      "line": 223,
+      "line": 224,
       "pattern_source": "'[A-Za-z0-9-]{6,40}'",
       "patterns": [
-        "src/atrium/watches.py:223"
+        "src/atrium/watches.py:224"
       ],
-      "site": "src/atrium/watches.py:223"
+      "site": "src/atrium/watches.py:224"
     },
     {
       "call": "compile",

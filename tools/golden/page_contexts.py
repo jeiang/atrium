@@ -1344,8 +1344,8 @@ SCENARIOS = {
         "protocol-relative": spec(page(status=422, problem=QUOTES, path="//evil.example/x")),
     },
     "media_add.html": {
-        "": spec(page(magnet="magnet:?xt=urn:btih:abc&dn=" + XSS, torrent_name="Show <x>.torrent", mode="media", error="Not a magnet link " + XSS, modes=["media", "plain"])),
-        "plain": spec(page(magnet="", torrent_name="", mode="plain", error=None, modes=["media", "plain"])),
+        "": spec(page(magnet="magnet:?xt=urn:btih:abc&dn=" + XSS, torrent_name="Show <x>.torrent", add_mode="media", error="Not a magnet link " + XSS, modes=["media", "plain"])),
+        "plain": spec(page(magnet="", torrent_name="", add_mode="plain", error=None, modes=["media", "plain"])),
     },
     "media_channels.html": {
         "": spec(page(channels=CHANNELS, status={"last_check": NOW - HOUR, "errors": ["EZTV <timeout>", XSS]}, tmdb=True, q="Lant & <x>", results=[{"tmdb_id": 1, "name": "Lanterns & <co>", "year": "2025"}, {"tmdb_id": 2, "name": UNICODE, "year": ""}], form={"tmdb_id": 1, "name": "Lanterns & <co>", "imdb": "tt1234567", "pattern": "^Lanterns <x>", "case_sensitive": True, "backfill": True})),

@@ -984,7 +984,8 @@ def unscanned(conn, now, window_days=BACKFILL_DAYS, limit=SCAN_LIMIT):
     return conn.execute(
         "SELECT m.* FROM messages m WHERE m.gone_at IS NULL AND m.sent = 0 AND m.date_ts >= ? AND "
         "(m.has_money = 1 OR m.k_statement = 1 OR m.k_receipt = 1 OR m.k_order = 1) AND "
-        "NOT EXISTS (SELECT 1 FROM money_scans s WHERE s.message_id = m.id) ORDER BY m.date_ts ASC LIMIT ?",
+        "NOT EXISTS (SELECT 1 FROM messages o JOIN money_scans s ON s.message_id = o.id "
+        "WHERE o.account = m.account AND o.digest = m.digest) ORDER BY m.date_ts ASC LIMIT ?",
         (now - window_days * DAY, limit),
     ).fetchall()
 

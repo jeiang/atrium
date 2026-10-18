@@ -1,0 +1,32 @@
+{
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "generator": "tools/golden/gen_grafana.py",
+  "notes": [
+    "Only GET requests and POST /api/ds/query are allowed (tests/test_agent_tools_grafana.py::test_only_read_requests_allowed)."
+  ],
+  "scenarios": [
+    {
+      "description": "grafana_datasources, grafana_query (prometheus default and with range/step/limit, logs with maxLines), grafana_alerts and grafana_search_dashboards (with and without a query); Bearer viewer token and Accept: application/json on every request.",
+      "file": "tools.json",
+      "name": "tools",
+      "requests": 7,
+      "source_tests": [
+        "tests/test_agent_tools_grafana.py::test_datasources_and_auth_header",
+        "tests/test_agent_tools_grafana.py::test_query_compacts_frames",
+        "tests/test_agent_tools_grafana.py::test_logs_query_limits_and_truncates",
+        "tests/test_agent_tools_grafana.py::test_alerts_and_dashboards"
+      ]
+    },
+    {
+      "description": "A 400 from /api/ds/query raises a ToolError carrying the status and body.",
+      "file": "query_error.json",
+      "name": "query_error",
+      "requests": 1,
+      "source_tests": [
+        "tests/test_agent_tools_grafana.py::test_query_errors_and_validation"
+      ]
+    }
+  ],
+  "slice": "grafana",
+  "timezone": "America/Port_of_Spain"
+}

@@ -53,7 +53,7 @@
     "paused": false,
     "magnet": "",
     "torrent_name": "",
-    "mode": "plain",
+    "add_mode": "plain",
     "error": null,
     "modes": [
       "media",

@@ -16,6 +16,7 @@ in
     src = ../src/atrium/web;
     nativeBuildInputs = [tailwindcss_4];
     dontConfigure = true;
+    passthru = {inherit basecoat;};
     buildPhase = ''
       runHook preBuild
       mkdir -p node_modules/basecoat-css

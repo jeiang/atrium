@@ -1,0 +1,26 @@
+{
+  "corpus": "smtp",
+  "failure_stages": [
+    "connect",
+    "starttls",
+    "login",
+    "send"
+  ],
+  "fixtures": [],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "functions": [
+    "sender_address",
+    "split_addresses",
+    "build_message",
+    "smtp.send",
+    "drafts.send"
+  ],
+  "now": 1791280800.0,
+  "process_tz": "America/Port_of_Spain",
+  "python": "3.14",
+  "records": 77,
+  "source": [
+    "src/atrium/smtp.py",
+    "src/atrium/drafts.py (send, _file_sent_copy)"
+  ]
+}

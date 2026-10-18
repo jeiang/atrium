@@ -205,6 +205,17 @@ def test_commitment_extraction_stores_valid_items_once(conn, cfg):
     assert openloops.scan_commitments(conn, cfg, NOW, fake_judge(answers, seen)) == 0 and len(seen) == 2
 
 
+def test_moved_mail_is_not_scanned_for_commitments_again(conn, cfg):
+    first = mail(conn, 1, 1, subject="Report")
+    answer = [{"text": "They will send the report", "owner": "them", "due": "2026-10-20"}]
+    assert openloops.scan_commitments(conn, cfg, NOW, fake_judge({first: answer})) == 1
+    conn.execute("UPDATE messages SET gone_at = ? WHERE id = ?", (NOW, first))
+    mail(conn, 7, 1, subject="Report", mailbox_id=2, digest="d1")
+    seen = []
+    assert openloops.scan_commitments(conn, cfg, NOW, fake_judge({}, seen)) == 0 and seen == []
+    assert len(openloops.list_commitments(conn)) == 1
+
+
 def test_commitment_scan_defers_when_model_down(conn, cfg):
     mail(conn, 1, 1)
 
