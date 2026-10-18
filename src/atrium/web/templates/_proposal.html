@@ -322,6 +322,11 @@
 {% elif p.status == "failed" %}
 <div class="flex flex-wrap items-center gap-2">
   <p class="flex-1 text-xs whitespace-nowrap text-muted-foreground">Tried {{ when(p.decided_ts, "datetime") }}</p>
+  {% if p.kind == "notion_wiki_plan" %}
+  <span id="proposal-spinner-{{ p.id }}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{ icon("loader-circle", "size-4 animate-spin") }}Applying…</span>
+  <button type="button" class="btn" data-size="sm" hx-post="/proposals/{{ p.id }}/approve" hx-vals='{"all": "1"}' hx-target="#proposal-{{ p.id }}" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="#proposal-spinner-{{ p.id }}"
+          title="Skips the steps the earlier attempt finished">{{ icon("play") }}Resume</button>
+  {% endif %}
   {% if p.undoable %}
   <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{ p.id }}/undo" hx-target="#proposal-{{ p.id }}" hx-swap="outerHTML" hx-disabled-elt="this">{{ icon("undo-2") }}Undo what it did</button>
   {% endif %}
