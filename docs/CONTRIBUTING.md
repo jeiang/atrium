@@ -24,7 +24,12 @@ Run `just` to list them.
 
 The Go recipes run inside the dev shell:
 
-- `just go-test`: `go test ./...`.
+- `just go-test`: `go test ./...` (cgo SQLite with FTS5 through the dev
+  shell's `GOFLAGS=-tags=sqlite_fts5`).
+- `just go-test-modernc`: the `internal/db` tests on the pure-Go
+  `modernc.org/sqlite` fallback.
+- `just go-test-musl`: the `internal/db` tests as a static musl cgo binary
+  (Linux dev shell only).
 - `just lint`: golangci-lint with `.golangci.yml` (govet, staticcheck,
   errcheck, and depguard banning `regexp` in favour of regexp2).
 - `just vuln`: govulncheck.
