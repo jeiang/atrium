@@ -244,3 +244,15 @@ def test_proposal_page_renders_the_plan(world):
     page = web_client(cfg).get("/proposals").text
     assert "Wiki plan" in page and "Reference" in page and "past one-off event" in page and "Kitchen renovation" in page
     assert f'hx-post="/proposals/{pid}/approve"' in page and "one page with a table" in page
+
+
+def test_a_failed_plan_offers_resume_on_the_proposals_page(world):
+    fake, conn, cfg = world
+    pid = notion_migrate.run_cli(cfg, conn, model(STRUCTURE, ITEMS), {"ATRIUM_NOTION_WIKI_ROOT": ROOT})["proposal_id"]
+    note = fake.pages.pop(NOTE1)
+    assert proposals.approve_and_apply(conn, cfg, pid)["status"] == "failed"
+    fake.pages[NOTE1] = note
+    client = web_client(cfg)
+    assert "Resume" in client.get("/proposals?status=failed").text
+    assert client.post(f"/proposals/{pid}/approve", data={"all": "1"}).status_code == 200
+    assert proposals.get(conn, pid)["status"] == "applied" and len(titled(fake, "Home")) == 1
