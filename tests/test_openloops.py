@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -227,6 +227,19 @@ def test_judge_commitments_uses_local_model(conn, monkeypatch):
     out = openloops.judge_commitments("http://llm", conn.execute("SELECT * FROM messages WHERE id = ?", (row,)).fetchone(), "body text")
     assert out[0]["text"] == "x" and captured["url"] == "http://llm" and "body text" in captured["user"]
     assert captured["schema"] is openloops.COMMITMENT_SCHEMA
+
+
+def test_commitment_date_and_loop_since_follow_atrium_tz(conn, cfg, monkeypatch):
+    moment = datetime(2026, 10, 31, 20, 0, tzinfo=UTC).timestamp()
+    monkeypatch.setenv("ATRIUM_TZ", "Asia/Tokyo")
+    captured = {}
+    monkeypatch.setattr(openloops.llm, "chat_json", lambda url, system, user, schema, max_tokens=80: captured.update(user=user) or {"commitments": []})
+    row = mail(conn, 1, 0, date_ts=moment)
+    openloops.judge_commitments("http://llm", conn.execute("SELECT * FROM messages WHERE id = ?", (row,)).fetchone(), "")
+    assert "on 2026-11-01." in captured["user"]
+    openloops.compute(conn, moment + DAY)
+    ctx = make_ctx(conn, cfg, env={"ATRIUM_TZ": "Asia/Tokyo"}, now=lambda: moment + DAY)
+    assert loop_tools.open_loops(ctx, {})["loops"][0]["since"] == "2026-11-01T05:00"
 
 
 # ---------- reminders ----------

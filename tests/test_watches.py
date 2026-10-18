@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 from agent_tool_helpers import make_ctx
@@ -178,6 +178,15 @@ def test_regex_package_then_status_from_later_carrier_mail(conn, cfg):
     assert (rows[0]["status"], rows[0]["merchant"], rows[0]["last_message_id"], rows[0]["source_message_id"]) == ("delivered", "Shoply", delivered, shipped)
     assert watches.list_packages(conn, NOW, active_only=True) == []
     assert len(watches.list_packages(conn, NOW, active_only=False)) == 1
+
+
+def test_package_updated_date_follows_atrium_tz(conn, cfg, monkeypatch):
+    moment = datetime(2026, 10, 31, 20, 0, tzinfo=UTC).timestamp()
+    mail(conn, 1, 0, "Shipped: 1Z999AA10123456784", subject="Shipped", k_order=1)
+    watches.scan_packages(conn, cfg, fake_chat({}), now=NOW)
+    conn.execute("UPDATE packages SET updated_ts = ?", (moment,))
+    monkeypatch.setenv("ATRIUM_TZ", "Asia/Tokyo")
+    assert watches.list_packages(conn, moment, active_only=False)[0]["updated"] == "2026-11-01"
 
 
 def test_older_mail_does_not_regress_status(conn, cfg):

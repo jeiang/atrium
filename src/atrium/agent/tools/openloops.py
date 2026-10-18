@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from ... import openloops
+from .. import scheduler
 from ._args import bounded_int, clip, text_arg
 from .base import CHAT, CODE, CRON, READ, SUB, Tool, ToolContext, ToolError
 
@@ -14,6 +15,7 @@ def open_loops(ctx: ToolContext, args: dict):
         raise ToolError(f"state must be one of {', '.join(openloops.STATES)}")
     limit = bounded_int(args, "limit", 20, MAX_LIMIT)
     now = ctx.now()
+    zone = scheduler.zone(scheduler.tz_name(ctx.env))
     items = openloops.list_loops(ctx.conn, now, state, limit)
     return {
         "loops": [
@@ -23,7 +25,7 @@ def open_loops(ctx: ToolContext, args: dict):
                 "counterpart": i["counterpart"],
                 "subject": clip(i["subject"], 200),
                 "days_open": i["days"],
-                "since": datetime.fromtimestamp(i["since"]).isoformat(timespec="minutes"),
+                "since": datetime.fromtimestamp(i["since"], zone).strftime("%Y-%m-%dT%H:%M"),
                 "account": i["account"],
             }
             for i in items
