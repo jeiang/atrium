@@ -9,7 +9,7 @@ import (
 )
 
 func TestUTF7Patterns(t *testing.T) {
-	rxtest.Run(t, map[string]*rx.Regexp{"src/atrium/imap.py:34": utf7ShiftRE})
+	rxtest.Run(t, map[string]*rx.Regexp{"src/atrium/imap.py:utf7_decode:967eaba6": utf7ShiftRE})
 }
 
 func TestCollapseLabelsToDeepestLeaf(t *testing.T) {
