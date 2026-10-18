@@ -1,9 +1,10 @@
-"""Wire capture for the integration goldens (Notion, llama.cpp, qBittorrent, ntfy, EZTV, TMDB, CBTT, Grafana).
+"""Wire capture for the integration goldens (Notion, llama.cpp, qBittorrent, ntfy, EZTV, TMDB, CBTT, Grafana,
+Google OAuth and Calendar).
 
 Every outgoing request of the frozen Python app is intercepted where it leaves the process: urllib.request.urlopen
-for the urllib clients (notion_api, http.post_json, http.get_text) and an httpx.MockTransport installed on the
-httpx clients (qbit, eztv, tmdb, grafana, notify). Handlers registered per host answer the requests; nothing
-touches the network."""
+for the urllib clients (notion_api, http.post_json, http.get_text), an httpx.MockTransport installed on the httpx
+clients (qbit, eztv, tmdb, grafana, notify) and httplib2.Http.request for google-auth and googleapiclient.
+Handlers registered per host answer the requests; nothing touches the network."""
 
 import base64
 import email.parser
@@ -31,6 +32,7 @@ for key in ("NOTION_TOKEN", "GRAFANA_URL", "GRAFANA_VIEWER_TOKEN", "NTFY_URL", "
     os.environ.pop(key, None)
 use_source_tree()
 
+import httplib2  # noqa: E402
 import httpx  # noqa: E402
 
 from atrium import notion_api  # noqa: E402
@@ -42,6 +44,7 @@ EMBED_URL = "http://embed.invalid/v1"
 LIBRARY_HEADERS = {"host", "accept-encoding", "connection", "content-length"}
 KEPT_RESPONSE_HEADERS = ("content-type", "retry-after")
 HTTPX_MODULES = (qbit, eztv, tmdb, grafana, notify)
+URLLIB, HTTPX, HTTPLIB2 = "urllib", "httpx", "httplib2"
 
 
 def _decode(content_type, content):
@@ -71,14 +74,24 @@ def _decode(content_type, content):
         return "base64", base64.b64encode(content).decode()
 
 
-def _headers(pairs, library):
-    """Lower-cased request headers the app sets; transport-generated ones (host, length, the httpx defaults) are dropped."""
+def _library_default(origin, name, value):
+    """Headers the HTTP library adds on its own: the httpx and httplib2 user agents, googleapiclient's
+    x-goog-api-client version tag and a wildcard accept."""
+    if origin == URLLIB:
+        return False
+    if name == "accept" and value == "*/*":
+        return True
+    if origin == HTTPX:
+        return name == "user-agent" and value.startswith("python-httpx/")
+    return name == "x-goog-api-client" or (name == "user-agent" and value == "(gzip)")
+
+
+def _headers(pairs, origin):
+    """Lower-cased request headers the app sets; transport-generated ones and library defaults are dropped."""
     out = {}
     for name, value in pairs:
         name = name.lower()
-        if name in LIBRARY_HEADERS:
-            continue
-        if library and ((name == "user-agent" and value.startswith("python-httpx/")) or (name == "accept" and value == "*/*")):
+        if name in LIBRARY_HEADERS or _library_default(origin, name, value):
             continue
         if name == "content-type" and value.startswith("multipart/form-data"):
             value = "multipart/form-data"
@@ -86,7 +99,7 @@ def _headers(pairs, library):
     return dict(sorted(out.items()))
 
 
-def request_record(method, url, pairs, content, library):
+def request_record(method, url, pairs, content, origin):
     parts = urlsplit(url)
     content_type = next((v for k, v in pairs if k.lower() == "content-type"), "")
     encoding, body = _decode(content_type, content)
@@ -95,7 +108,7 @@ def request_record(method, url, pairs, content, library):
         "url": f"{parts.scheme}://{parts.netloc}{parts.path or '/'}",
         "path": parts.path or "/",
         "query": parts.query,
-        "headers": _headers(pairs, library),
+        "headers": _headers(pairs, origin),
         "body_encoding": encoding,
         "body": body,
     }
@@ -154,33 +167,39 @@ class Wire:
         """handler(method, url, headers dict, body bytes) -> (status, headers, body bytes); see reply()."""
         self.hosts[urlsplit(base).netloc] = handler
 
-    def _dispatch(self, method, url, pairs, content, library):
+    def _dispatch(self, method, url, pairs, content, origin):
         netloc = urlsplit(url).netloc
         if netloc not in self.hosts:
             raise AssertionError(f"unexpected request to {method} {url}")
-        request = request_record(method, url, pairs, content, library)
+        request = request_record(method, url, pairs, content, origin)
         status, headers, body = self.hosts[netloc](method, url, dict(pairs), content)
         self.exchanges.append({"request": request, "response": response_record(status, headers, body)})
         return status, headers, body
 
     def urlopen(self, request, timeout=None):
-        status, headers, body = self._dispatch(request.get_method(), request.full_url, request.header_items(), request.data, False)
+        status, headers, body = self._dispatch(request.get_method(), request.full_url, request.header_items(), request.data, URLLIB)
         if status >= 400:
             raise urllib.error.HTTPError(request.full_url, status, "golden", _Response(status, headers, b"").headers, io.BytesIO(body))
         return _Response(status, headers, body)
 
     def httpx_handler(self, request):
-        status, headers, body = self._dispatch(request.method, str(request.url), request.headers.multi_items(), request.read(), True)
+        status, headers, body = self._dispatch(request.method, str(request.url), request.headers.multi_items(), request.read(), HTTPX)
         return httpx.Response(status, headers=headers, content=body)
+
+    def httplib2_request(self, uri, method="GET", body=None, headers=None, redirections=None, connection_type=None):
+        content = body.encode() if isinstance(body, str) else body
+        status, reply_headers, reply_body = self._dispatch(method, uri, list((headers or {}).items()), content, HTTPLIB2)
+        return httplib2.Response({"status": str(status), **{k.lower(): v for k, v in reply_headers.items()}}), reply_body
 
     @contextmanager
     def installed(self):
-        transport = httpx.MockTransport(self.httpx_handler)
-        saved = urllib.request.urlopen, [m.transport for m in HTTPX_MODULES], notion_api.NotionClient.__init__.__defaults__
+        self.transport = httpx.MockTransport(self.httpx_handler)
+        saved = urllib.request.urlopen, [m.transport for m in HTTPX_MODULES], notion_api.NotionClient.__init__.__defaults__, httplib2.Http.request
         urllib.request.urlopen = self.urlopen
         for module in HTTPX_MODULES:
-            module.transport = transport
+            module.transport = self.transport
         notion_api.NotionClient.__init__.__defaults__ = (notion_api.urllib_transport, notion_api.BASE_URL, lambda s: None, lambda: 0.0)
+        httplib2.Http.request = self.httplib2_request
         try:
             yield self
         finally:
@@ -188,6 +207,7 @@ class Wire:
             for module, value in zip(HTTPX_MODULES, saved[1], strict=True):
                 module.transport = value
             notion_api.NotionClient.__init__.__defaults__ = saved[2]
+            httplib2.Http.request = saved[3]
 
 
 README = """# {title} request goldens
@@ -196,12 +216,14 @@ Generated by `{generator}` (`just golden`) from the frozen Python app at commit
 `{commit}`. Do not edit by hand; regenerate only when the Python source gets a fix, and commit the result.
 
 Each `<scenario>.json` holds `exchanges`: every HTTP request the Python code sent, intercepted where it leaves the
-process (`urllib.request.urlopen` for the urllib clients, an `httpx.MockTransport` for the httpx clients), and the
-scripted response it received. A request has `method`, `url` (scheme, host and path), `path`, `query` (as sent),
-`headers` (lower-cased, only those the app sets: transport-generated `host`, `content-length`, `connection`,
-`accept-encoding` and the httpx default `user-agent`/`accept` are dropped; a multipart `content-type` loses its
-random boundary), `body_encoding` and `body`: `json` (parsed), `form` (ordered `[name, value]` pairs), `multipart`
-(parts with `name`, `filename`, `content_type` and `text` or `base64`), `text`, `base64` or `none`. Responses
+process (`urllib.request.urlopen` for the urllib clients, an `httpx.MockTransport` for the httpx clients,
+`httplib2.Http.request` for the Google API client), and the scripted response it received. A request has `method`,
+`url` (scheme, host and path), `path`, `query` (as sent), `headers` (lower-cased, only those the app sets:
+transport-generated `host`, `content-length`, `connection`, `accept-encoding`, the httpx and httplib2 default
+`user-agent`, a wildcard `accept` and googleapiclient's `x-goog-api-client` version tag are dropped; a multipart
+`content-type` loses its random boundary), `body_encoding` and `body`: `json` (parsed), `form` (ordered
+`[name, value]` pairs), `multipart` (parts with `name`, `filename`, `content_type` and `text` or `base64`), `text`,
+`base64` or `none`. Responses
 carry `status`, the `content-type`/`retry-after` headers and the body in the same encodings. Compare JSON bodies
 with canonical-JSON equality (`internal/testutil/golden`), never byte equality.
 

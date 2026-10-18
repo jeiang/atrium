@@ -5,7 +5,7 @@
     ...
   }: let
     root = ../.;
-    slices = ["cbtt" "eztv" "grafana" "llm" "notion" "ntfy" "qbittorrent" "tmdb"];
+    slices = ["cbtt" "eztv" "google_auth" "grafana" "llm" "notion" "ntfy" "qbittorrent" "tmdb"];
     src = lib.fileset.toSource {
       inherit root;
       fileset = lib.fileset.unions ([

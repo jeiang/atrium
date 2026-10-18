@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-var integrationSlices = []string{"cbtt", "eztv", "grafana", "llm", "notion", "ntfy", "qbittorrent", "tmdb"}
+var integrationSlices = []string{"cbtt", "eztv", "google_auth", "grafana", "llm", "notion", "ntfy", "qbittorrent", "tmdb"}
 
 var encodings = []string{"json", "form", "multipart", "text", "base64", "none"}
 
