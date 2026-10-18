@@ -23,7 +23,7 @@ in
       ];
     };
     # Update whenever go.sum changes.
-    vendorHash = "sha256-6nI69Ro0mdVJeinq4OsvSXrl3BQE0cxrfycJolDesEU=";
+    vendorHash = "sha256-oR8D3u/KCf1MpynJz4drs8T+bgU4iShfldFGHXA/dlA=";
     proxyVendor = true;
     excludedPackages = ["third_party"];
 
