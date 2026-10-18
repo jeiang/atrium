@@ -27,8 +27,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tests"), str(Path(__file__).resolve().parent)]
 
 import make_db_mail as mail
+from common import FREEZE_COMMIT
 
-FREEZE_COMMIT = "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40"
 STATE = Path("state")
 CLI_STATE = Path("cli")
 OUT = ROOT / "testdata" / "golden"

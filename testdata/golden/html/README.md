@@ -5,6 +5,7 @@ the frozen Python app. The Go page slices canonical-diff their output against
 these files.
 
 - Freeze commit: `cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40`
+- Regenerated from main after each post-freeze Python fix; the provenance is the git history of testdata.
 - Constant now: `1760000000` (2025-10-09T08:53:20Z); every timestamp in the
   contexts is derived from it and the `ts` filter renders in UTC.
 - Generator: `tools/golden/render_pages.py` with the fixed contexts in

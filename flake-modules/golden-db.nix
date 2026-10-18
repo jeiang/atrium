@@ -11,6 +11,7 @@
       fileset = lib.fileset.unions ([
           (root + "/src")
           (root + "/tests")
+          (root + "/tools/golden/common.py")
           (root + "/tools/golden/make_db.py")
           (root + "/tools/golden/make_db_mail.py")
         ]

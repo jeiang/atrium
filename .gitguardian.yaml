@@ -1,0 +1,6 @@
+version: 2
+secret:
+  ignored_paths:
+    - "third_party/**/*_test.go"
+    - "testdata/**"
+    - "**/testdata/**"
