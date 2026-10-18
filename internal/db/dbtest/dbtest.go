@@ -10,30 +10,19 @@ import (
 // File connects to atrium.db in a fresh temp directory.
 func File(t testing.TB) *db.DB {
 	t.Helper()
-	d, err := db.Connect(filepath.Join(t.TempDir(), "atrium.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	return d
+	return open(t, db.Connect)
 }
 
-// Memory opens an in-memory database with foreign keys enforced.
-func Memory(t testing.TB) *db.DB {
+// FileNoForeignKeys is File without foreign key enforcement, standing in
+// for Python's db.connect_memory.
+func FileNoForeignKeys(t testing.TB) *db.DB {
 	t.Helper()
-	return memory(t, true)
+	return open(t, db.ConnectNoForeignKeys)
 }
 
-// MemoryNoForeignKeys opens an in-memory database without foreign key
-// enforcement, as Python's db.connect_memory.
-func MemoryNoForeignKeys(t testing.TB) *db.DB {
+func open(t testing.TB, connect func(string) (*db.DB, error)) *db.DB {
 	t.Helper()
-	return memory(t, false)
-}
-
-func memory(t testing.TB, foreignKeys bool) *db.DB {
-	t.Helper()
-	d, err := db.Memory(foreignKeys)
+	d, err := connect(filepath.Join(t.TempDir(), "atrium.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

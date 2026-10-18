@@ -14,10 +14,12 @@ import (
 	"syscall"
 )
 
-var connPragmas = []string{
-	"PRAGMA busy_timeout = 30000",
-	"PRAGMA foreign_keys = ON",
-	"PRAGMA synchronous = FULL",
+func connPragmas(foreignKeys bool) []string {
+	fk := "PRAGMA foreign_keys = OFF"
+	if foreignKeys {
+		fk = "PRAGMA foreign_keys = ON"
+	}
+	return []string{"PRAGMA busy_timeout = 30000", fk, "PRAGMA synchronous = FULL"}
 }
 
 // DB is atrium.db: Write is the single writer connection, whose
@@ -29,44 +31,31 @@ type DB struct {
 
 // Connect opens the SQLite file at path, creating its directory, and sets
 // WAL once.
-func Connect(path string) (*DB, error) {
+func Connect(path string) (*DB, error) { return connect(path, true) }
+
+// ConnectNoForeignKeys is Connect without foreign key enforcement, as
+// Python's db.connect_memory; only tests that need that use it.
+func ConnectNoForeignKeys(path string) (*DB, error) { return connect(path, false) }
+
+func connect(path string, foreignKeys bool) (*DB, error) {
 	if strings.ContainsRune(path, '?') {
 		return nil, fmt.Errorf("db: path %q contains '?'", path)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		return nil, err
 	}
-	w := Open(path+"?_txlock=immediate", connPragmas...)
+	pragmas := connPragmas(foreignKeys)
+	w := Open(path+"?_txlock=immediate", pragmas...)
 	w.SetMaxOpenConns(1)
 	if _, err := w.Exec("PRAGMA journal_mode = WAL"); err != nil {
 		_ = w.Close()
 		return nil, fmt.Errorf("db: %s: %w", path, err)
 	}
-	r := Open(path, append(connPragmas, "PRAGMA query_only = ON")...)
+	r := Open(path, append(pragmas, "PRAGMA query_only = ON")...)
 	return &DB{Write: w, Read: r}, nil
 }
 
-// Memory opens a private in-memory database on one connection that serves
-// as both pools. foreignKeys=false reproduces Python's db.connect_memory.
-func Memory(foreignKeys bool) (*DB, error) {
-	fk := "PRAGMA foreign_keys = OFF"
-	if foreignKeys {
-		fk = "PRAGMA foreign_keys = ON"
-	}
-	d := Open(":memory:?_txlock=immediate", fk)
-	d.SetMaxOpenConns(1)
-	d.SetMaxIdleConns(1)
-	if err := d.Ping(); err != nil {
-		_ = d.Close()
-		return nil, err
-	}
-	return &DB{Write: d, Read: d}, nil
-}
-
 func (d *DB) Close() error {
-	if d.Read == d.Write {
-		return d.Write.Close()
-	}
 	return errors.Join(d.Read.Close(), d.Write.Close())
 }
 

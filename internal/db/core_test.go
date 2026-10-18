@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -343,28 +342,78 @@ func TestExclusiveCloseReleases(t *testing.T) {
 	}
 }
 
-func TestMemory(t *testing.T) {
+func TestHelpers(t *testing.T) {
 	for _, c := range []struct {
-		d  *db.DB
-		fk int
-	}{{dbtest.Memory(t), 1}, {dbtest.MemoryNoForeignKeys(t), 0}} {
-		var fk int
-		if err := c.d.Read.QueryRow("PRAGMA foreign_keys").Scan(&fk); err != nil {
-			t.Fatal(err)
-		}
-		if fk != c.fk {
-			t.Errorf("foreign_keys = %d, want %d", fk, c.fk)
-		}
-		if err := c.d.WithTx(t.Context(), func(tx *sql.Tx) error {
-			_, err := tx.Exec("CREATE TABLE t (x); INSERT INTO t VALUES (" + strconv.Itoa(c.fk) + ")")
-			return err
-		}); err != nil {
-			t.Fatal(err)
-		}
-		var x int
-		if err := c.d.Read.QueryRow("SELECT x FROM t").Scan(&x); err != nil || x != c.fk {
-			t.Errorf("read after write: x=%d err=%v", x, err)
-		}
+		name string
+		open func(testing.TB) *db.DB
+		fk   bool
+	}{{"File", dbtest.File, true}, {"FileNoForeignKeys", dbtest.FileNoForeignKeys, false}} {
+		t.Run(c.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			d := c.open(t)
+			for name, pool := range map[string]*sql.DB{"write": d.Write, "read": d.Read} {
+				var fk bool
+				if err := pool.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&fk); err != nil {
+					t.Fatal(err)
+				}
+				if fk != c.fk {
+					t.Errorf("%s: foreign_keys = %v, want %v", name, fk, c.fk)
+				}
+			}
+			if _, err := d.Write.ExecContext(ctx, `CREATE TABLE p (id INTEGER PRIMARY KEY);
+				CREATE TABLE c (p INTEGER REFERENCES p(id));
+				INSERT INTO p VALUES (1), (2), (3)`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := d.Read.ExecContext(ctx, "INSERT INTO p VALUES (4)"); err == nil {
+				t.Error("reader pool accepted a write")
+			}
+			_, err := d.Write.ExecContext(ctx, "INSERT INTO c VALUES (99)")
+			if (err != nil) != c.fk {
+				t.Errorf("orphan insert: err=%v, foreign keys %v", err, c.fk)
+			}
+
+			rows, err := d.Read.QueryContext(ctx, "SELECT id FROM p ORDER BY id")
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen := 0
+			for rows.Next() {
+				var id int
+				if err := rows.Scan(&id); err != nil {
+					t.Fatal(err)
+				}
+				if err := d.WithTx(ctx, func(tx *sql.Tx) error {
+					_, err := tx.ExecContext(ctx, "INSERT INTO p VALUES (?)", id+100)
+					return err
+				}); err != nil {
+					t.Fatalf("write while reader rows open: %v", err)
+				}
+				seen++
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
+			_ = rows.Close()
+			if seen != 3 {
+				t.Errorf("reader saw %d rows, want its snapshot of 3", seen)
+			}
+
+			if err := d.WithTx(ctx, func(tx *sql.Tx) error {
+				var n int
+				if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM p").Scan(&n); err != nil {
+					return err
+				}
+				if n != 6 {
+					return fmt.Errorf("reader inside WithTx saw %d rows, want 6", n)
+				}
+				_, err := tx.ExecContext(ctx, "DELETE FROM p WHERE id > 100")
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

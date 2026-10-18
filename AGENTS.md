@@ -59,7 +59,8 @@ and backups; nothing of that lives here.
   wrote `atrium.db` (`atriumDBSQLiteVersion`); bump it only by a pull request
   that passes the driver tests on both. Writes go through `DB.Write` (one
   connection, `_txlock=immediate`) and `WithTx`; `DB.Read` is `query_only`,
-  so no deferred read-then-write transaction exists
+  so no deferred read-then-write transaction exists; reads inside a
+  transaction go through its `tx`
   (https://github.com/jeiang/atrium/issues/72).
 - Go packaging: `nix/go-package.nix` builds `atrium-go-x86_64-v3`
   (`GOAMD64=v3`, `-mavx2`) and `atrium-go-aarch64`, both musl-static cgo
@@ -97,7 +98,8 @@ and backups; nothing of that lives here.
   `[redacted]`; token counts (`*_TOKENS`) are not.
 - `internal/db/`: the SQLite driver seam (`Open`), `Connect` (writer and
   reader pools, `WithTx`), `Exclusive` (flock on `<path>.lock`), vec0 and
-  FTS5 tests; `internal/db/dbtest` opens temp-file and in-memory DBs.
+  FTS5 tests; `internal/db/dbtest` connects to a temp-file DB, with or
+  without foreign keys (Python's `connect_memory` has them off).
 - `internal/web/`: the embedded web assets (`Static`, `AssetVersion`);
   `internal/web/static` is staged, never committed.
 - `third_party/`: vendored sources, each its own Go module wired by
