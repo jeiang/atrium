@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -24,6 +25,16 @@ func fakeApp(setupCalls *int) *App {
 	group.Add(&Command{Name: "leaf", Help: "succeed", Setup: func(*flag.FlagSet) Handler {
 		return func(env *Env) int { return ExitOK }
 	}})
+	dismiss := &Command{Name: "dismiss", Help: "echo flags and positionals"}
+	dismiss.Setup = func(fs *flag.FlagSet) Handler {
+		forever := fs.Bool("forever", false, "dismiss for good")
+		note := fs.String("note", "", "a note")
+		return func(env *Env) int {
+			_, _ = fmt.Fprintf(env.Stdout, "forever=%t note=%q args=%q\n", *forever, *note, env.Args)
+			return ExitOK
+		}
+	}
+	group.Add(dismiss)
 	app.Add(fake, group)
 	return app
 }
@@ -49,8 +60,17 @@ func TestRun(t *testing.T) {
 		{name: "unknown leaf flag", args: []string{"fake", "--bogus"}, code: ExitUsage, stderr: "usage: atrium fake [-h] [--code]"},
 		{name: "handler usage error", args: []string{"fake", "extra"}, code: ExitUsage, setup: 1, stderr: "atrium fake: error: unrecognized arguments: extra"},
 		{name: "leaf help", args: []string{"fake", "--help"}, code: ExitOK, stdout: "exit code to return"},
-		{name: "group without subcommand", args: []string{"group"}, code: ExitUsage, stderr: "usage: atrium group [-h] {leaf} ..."},
+		{name: "group without subcommand", args: []string{"group"}, code: ExitUsage, stderr: "usage: atrium group [-h] {leaf,dismiss} ..."},
 		{name: "nested leaf", args: []string{"group", "leaf"}, code: ExitOK, setup: 1},
+		{name: "flag after positional", args: []string{"group", "dismiss", "5", "--forever"}, code: ExitOK, setup: 1, stdout: "forever=true note=\"\" args=[\"5\"]\n"},
+		{name: "flag before positional", args: []string{"group", "dismiss", "--forever", "5"}, code: ExitOK, setup: 1, stdout: "forever=true note=\"\" args=[\"5\"]\n"},
+		{name: "flags between positionals", args: []string{"group", "dismiss", "5", "--note", "x", "6", "--forever", "7"}, code: ExitOK, setup: 1, stdout: "forever=true note=\"x\" args=[\"5\" \"6\" \"7\"]\n"},
+		{name: "help after positional", args: []string{"group", "dismiss", "5", "-h"}, code: ExitOK, stdout: "usage: atrium group dismiss [-h] [--forever] [--note]"},
+		{name: "bad flag after positional", args: []string{"group", "dismiss", "5", "--bogus"}, code: ExitUsage, stderr: "atrium group dismiss: error: flag provided but not defined: -bogus"},
+		{name: "terminator ends flags", args: []string{"group", "dismiss", "--", "--forever", "5"}, code: ExitOK, setup: 1, stdout: "forever=false note=\"\" args=[\"--forever\" \"5\"]\n"},
+		{name: "terminator after positional", args: []string{"group", "dismiss", "5", "--", "-h", "--"}, code: ExitOK, setup: 1, stdout: "forever=false note=\"\" args=[\"5\" \"-h\" \"--\"]\n"},
+		{name: "terminator after bool flag", args: []string{"group", "dismiss", "--forever", "--", "--note"}, code: ExitOK, setup: 1, stdout: "forever=true note=\"\" args=[\"--note\"]\n"},
+		{name: "double dash as flag value", args: []string{"group", "dismiss", "--note", "--", "5", "--forever"}, code: ExitOK, setup: 1, stdout: "forever=true note=\"--\" args=[\"5\"]\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

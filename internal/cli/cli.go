@@ -82,7 +82,8 @@ func (a *App) Run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet(prog, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	handler := cmd.Setup(fs)
-	if err := fs.Parse(args); err != nil {
+	positional, err := parseInterspersed(fs, args)
+	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			writeLeafHelp(stdout, prog, cmd, fs)
 			return ExitOK
@@ -94,7 +95,45 @@ func (a *App) Run(args []string, stdout, stderr io.Writer) int {
 	if a.setup != nil {
 		a.setup(stderr)
 	}
-	return handler(&Env{Args: fs.Args(), Stdout: stdout, Stderr: stderr, prog: prog, fs: fs})
+	return handler(&Env{Args: positional, Stdout: stdout, Stderr: stderr, prog: prog, fs: fs})
+}
+
+func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
+	var positional []string
+	for {
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		rest := fs.Args()
+		if endedByTerminator(fs, args[:len(args)-len(rest)]) {
+			return append(positional, rest...), nil
+		}
+		if len(rest) == 0 {
+			return positional, nil
+		}
+		positional = append(positional, rest[0])
+		args = rest[1:]
+	}
+}
+
+func endedByTerminator(fs *flag.FlagSet, consumed []string) bool {
+	n := len(consumed)
+	if n == 0 || consumed[n-1] != "--" {
+		return false
+	}
+	if n == 1 {
+		return true
+	}
+	name, isFlag := strings.CutPrefix(consumed[n-2], "-")
+	if !isFlag || strings.Contains(name, "=") {
+		return true
+	}
+	f := fs.Lookup(strings.TrimPrefix(name, "-"))
+	if f == nil {
+		return true
+	}
+	b, isBool := f.Value.(interface{ IsBoolFlag() bool })
+	return isBool && b.IsBoolFlag()
 }
 
 func (c *Command) find(name string) *Command {
