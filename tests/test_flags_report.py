@@ -1,3 +1,4 @@
+import time
 
 from atrium import flags, llm, report
 from helpers import add_message, inbox, make_config, memory_db
@@ -64,6 +65,17 @@ def test_parse_since():
     assert report.parse_since(None) == 0.0
     assert report.parse_since("2d", at=200000) == 200000 - 2 * 86400
     assert report.parse_since("3h", at=100000) == 100000 - 3 * 3600
+
+
+def test_parse_since_date_is_midnight_in_atrium_tz(monkeypatch):
+    monkeypatch.setenv("ATRIUM_TZ", "America/Port_of_Spain")
+    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    time.tzset()
+    try:
+        assert report.parse_since("2026-10-06") == 1_791_259_200.0
+    finally:
+        monkeypatch.undo()
+        time.tzset()
 
 
 def seed_decision(conn, uid, dest, actual_location, msgid, domain="shop.test", actual_inbox=0, stage="learned"):
