@@ -1,0 +1,137 @@
+package contacts
+
+import (
+	"strings"
+	"unicode"
+	"unicode/utf8"
+)
+
+// Casefold is Python's str.casefold.
+func Casefold(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r + 'a' - 'A')
+		case r < utf8.RuneSelf:
+			b.WriteRune(r)
+		default:
+			if f, ok := pyFold[r]; ok {
+				b.WriteString(f)
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+	return b.String()
+}
+
+func isSpace(r rune) bool {
+	if r < utf8.RuneSelf {
+		return r >= '\t' && r <= '\r' || r >= 0x1C && r <= ' '
+	}
+	return pySpace[r]
+}
+
+func strip(s string) string { return strings.TrimFunc(s, isSpace) }
+
+func fields(s string) []string { return strings.FieldsFunc(s, isSpace) }
+
+func isLineBreak(r rune) bool {
+	switch r {
+	case '\n', '\r', '\v', '\f', 0x1C, 0x1D, 0x1E, 0x85, 0x2028, 0x2029:
+		return true
+	}
+	return false
+}
+
+// splitLines is Python's str.splitlines().
+func splitLines(s string) []string {
+	var out []string
+	start := 0
+	for i, r := range s {
+		if i < start || !isLineBreak(r) {
+			continue
+		}
+		out = append(out, s[start:i])
+		start = i + utf8.RuneLen(r)
+		if r == '\r' && start < len(s) && s[start] == '\n' {
+			start++
+		}
+	}
+	if start < len(s) {
+		out = append(out, s[start:])
+	}
+	return out
+}
+
+// decimal is int() of a string of \d characters.
+func decimal(s string) int {
+	n := 0
+	for _, r := range s {
+		n = n*10 + digitValue(r)
+	}
+	return n
+}
+
+func digitValue(r rune) int {
+	for _, rg := range unicode.Nd.R16 {
+		if lo, hi := rune(rg.Lo), rune(rg.Hi); r >= lo && r <= hi {
+			return int(r-lo) % 10
+		}
+	}
+	for _, rg := range unicode.Nd.R32 {
+		if lo, hi := rune(rg.Lo), rune(rg.Hi); r >= lo && r <= hi {
+			return int(r-lo) % 10
+		}
+	}
+	return 0
+}
+
+// readText is Path.read_text(errors="replace"): UTF-8 with one U+FFFD per maximal invalid subpart, and
+// universal newlines.
+func readText(data []byte) string {
+	var b strings.Builder
+	b.Grow(len(data))
+	for i := 0; i < len(data); {
+		c := data[i]
+		if c < utf8.RuneSelf {
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		n, lo, hi := 0, byte(0x80), byte(0xBF)
+		switch {
+		case c >= 0xC2 && c <= 0xDF:
+			n = 1
+		case c == 0xE0:
+			n, lo = 2, 0xA0
+		case c == 0xED:
+			n, hi = 2, 0x9F
+		case c >= 0xE1 && c <= 0xEF:
+			n = 2
+		case c == 0xF0:
+			n, lo = 3, 0x90
+		case c == 0xF4:
+			n, hi = 3, 0x8F
+		case c >= 0xF1 && c <= 0xF3:
+			n = 3
+		}
+		j := i + 1
+		for k := 0; k < n && j < len(data); k++ {
+			if k == 0 && (data[j] < lo || data[j] > hi) || k > 0 && (data[j] < 0x80 || data[j] > 0xBF) {
+				break
+			}
+			j++
+		}
+		if n == 0 || j-i <= n {
+			b.WriteRune(utf8.RuneError)
+		} else {
+			b.Write(data[i:j])
+		}
+		i = j
+	}
+	s := strings.ReplaceAll(b.String(), "\r\n", "\n")
+	return strings.ReplaceAll(s, "\r", "\n")
+}
