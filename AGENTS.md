@@ -57,7 +57,11 @@ and backups; nothing of that lives here.
   Driver specifics stay in `internal/db/open_*.go`, and both drivers pass
   the same tests. The bundled SQLite never drops below the version that
   wrote `atrium.db` (`atriumDBSQLiteVersion`); bump it only by a pull request
-  that passes the driver tests on both.
+  that passes the driver tests on both. Writes go through `DB.Write` (one
+  connection, `_txlock=immediate`) and `WithTx`; `DB.Read` is `query_only`,
+  so no deferred read-then-write transaction exists; reads inside a
+  transaction go through its `tx`
+  (https://github.com/jeiang/atrium/issues/72).
 - Go packaging: `nix/go-package.nix` builds `atrium-go-x86_64-v3`
   (`GOAMD64=v3`, `-mavx2`) and `atrium-go-aarch64`, both musl-static cgo
   with `sqlite_fts5`; `atrium-go` is the host's target and both are flake
@@ -92,7 +96,10 @@ and backups; nothing of that lives here.
   journal built-ins. A field whose full grouped name names a password,
   secret, token, key, cookie, credential or authorization is logged as
   `[redacted]`; token counts (`*_TOKENS`) are not.
-- `internal/db/`: the SQLite driver seam (`Open`), vec0 and FTS5 tests.
+- `internal/db/`: the SQLite driver seam (`Open`), `Connect` (writer and
+  reader pools, `WithTx`), `Exclusive` (flock on `<path>.lock`), vec0 and
+  FTS5 tests; `internal/db/dbtest` connects to a temp-file DB, with or
+  without foreign keys (Python's `connect_memory` has them off).
 - `internal/safety/`: the mailbox write gate. `ATRIUM_MODE` is read on
   every call; approved-proposal/undo, operator-send and automatic-write
   scopes are `context.Context` values; the pause file is existence-only.
