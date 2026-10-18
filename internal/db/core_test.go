@@ -31,6 +31,8 @@ func TestMain(m *testing.M) {
 		os.Exit(writerProcess(os.Getenv(pathEnv)))
 	case "locker":
 		os.Exit(lockerProcess(os.Getenv(pathEnv)))
+	case "migrator":
+		os.Exit(migratorProcess(os.Getenv(pathEnv)))
 	default:
 		os.Exit(3)
 	}
