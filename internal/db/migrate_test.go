@@ -317,11 +317,6 @@ func migratorProcess(path string) int {
 
 func TestConcurrentStartProcesses(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "atrium.db")
-	d, err := db.Connect(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = d.Close() }()
 	cmds := make([]*exec.Cmd, 4)
 	for i := range cmds {
 		cmds[i] = child(t, "migrator", path)
@@ -334,6 +329,11 @@ func TestConcurrentStartProcesses(t *testing.T) {
 			t.Errorf("migrator %d: %v", i, err)
 		}
 	}
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
 	var n int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&n); err != nil {
 		t.Fatal(err)

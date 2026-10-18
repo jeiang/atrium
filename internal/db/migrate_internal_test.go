@@ -43,13 +43,6 @@ func TestConcurrentStartAppliesOnce(t *testing.T) {
 	}}}
 	t.Cleanup(func() { migrations = saved })
 	path := filepath.Join(t.TempDir(), "atrium.db")
-	first, err := Connect(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := first.Close(); err != nil {
-		t.Fatal(err)
-	}
 	var wg sync.WaitGroup
 	errs := make(chan error, 6)
 	for range cap(errs) {
