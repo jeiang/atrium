@@ -71,9 +71,19 @@ and backups; nothing of that lives here.
 - `flake.nix` and `flake-modules/`: flake-parts modules (outputs, checks,
   devshell), loaded by import-tree. `.ci/` holds the garret cache push helper.
 - `nix/`: package, static assets and the NixOS module.
-- `cmd/atrium/`: the Go binary's entry point (root command, logging setup).
+- `cmd/atrium/`: the Go binary's entry point (root command).
 - `internal/cli/`: the subcommand table; usage errors exit 2, a handler's
   return value is the exit code.
+- `internal/config/`: every environment variable with the Python names,
+  defaults and errors; paths beside `ATRIUM_DB`; `ATRIUM_MODE` is read live
+  on every call; `ATRIUM_TZ` has one accessor.
+- `internal/logx/`: `log/slog` to the journal when stderr is the journal
+  stream, the Python `asctime name level message` text format otherwise.
+  Logger names become `COMPONENT`; attribute keys are upper-case
+  (`RUN_ID`, `THREAD_ID`, `JOB`, `ACCOUNT`, `ERR`) and never collide with
+  journal built-ins. A field whose full grouped name names a password,
+  secret, token, key, cookie, credential or authorization is logged as
+  `[redacted]`; token counts (`*_TOKENS`) are not.
 - `internal/db/`: the SQLite driver seam (`Open`), vec0 and FTS5 tests.
 - `third_party/`: vendored sources, each its own Go module wired by
   `replace`, with upstream licence files.
