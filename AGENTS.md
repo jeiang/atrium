@@ -100,6 +100,13 @@ and backups; nothing of that lives here.
   reader pools, `WithTx`), `Exclusive` (flock on `<path>.lock`), vec0 and
   FTS5 tests; `internal/db/dbtest` connects to a temp-file DB, with or
   without foreign keys (Python's `connect_memory` has them off).
+- `internal/safety/`: the mailbox write gate. `ATRIUM_MODE` is read on
+  every call; approved-proposal/undo, operator-send and automatic-write
+  scopes are `context.Context` values; the pause file is existence-only.
+- `internal/mail/`: the `Client` interface. Only `Gated` builds one, and
+  every write method calls the gate before the connection;
+  `mail/mailtest.FakeClient` runs the same gate. A move is COPY, STORE
+  `\Deleted`, UID EXPUNGE: nothing under `internal/mail` uses IMAP MOVE.
 - `internal/web/`: the embedded web assets (`Static`, `AssetVersion`);
   `internal/web/static` is staged, never committed.
 - `third_party/`: vendored sources, each its own Go module wired by

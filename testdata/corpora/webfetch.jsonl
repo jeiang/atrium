@@ -36,8 +36,8 @@
 {"fn":"default_allowed","input":["::ffff:127.0.0.1"],"output":false}
 {"fn":"default_allowed","input":["::ffff:10.0.0.1"],"output":false}
 {"fn":"default_allowed","input":["::ffff:93.184.216.34"],"output":true}
-{"fn":"default_allowed","input":["::127.0.0.1"],"output":true}
-{"fn":"default_allowed","input":["64:ff9b::7f00:1"],"output":true}
+{"fn":"default_allowed","input":["::127.0.0.1"],"output":false}
+{"fn":"default_allowed","input":["64:ff9b::7f00:1"],"output":false}
 {"fn":"default_allowed","input":["64:ff9b:1::1"],"output":false}
 {"fn":"default_allowed","input":["100::1"],"output":false}
 {"fn":"default_allowed","input":["2001::1"],"output":false}
@@ -53,13 +53,18 @@
 {"fn":"default_allowed","input":["fc00::1"],"output":false}
 {"fn":"default_allowed","input":["fd12:3456::1"],"output":false}
 {"fn":"default_allowed","input":["fe80::1"],"output":false}
-{"fn":"default_allowed","input":["fec0::1"],"output":true}
+{"fn":"default_allowed","input":["fec0::1"],"output":false}
 {"fn":"default_allowed","input":["ff02::1"],"output":false}
 {"fn":"default_allowed","input":["ff0e::1"],"output":false}
 {"fn":"default_allowed","input":["2606:2800:220:1:248:1893:25c8:1946"],"output":true}
 {"fn":"default_allowed","input":["2a00:1450:4001:80b::200e"],"output":true}
 {"fn":"default_allowed","input":["3fff::1"],"output":false}
 {"fn":"default_allowed","input":["5f00::1"],"output":true}
+{"fn":"default_allowed","input":["::ffff:0:7f00:1"],"output":false}
+{"fn":"default_allowed","input":["::ffff:0:a9fe:a9fe"],"output":false}
+{"fn":"default_allowed","input":["::ffff:0:5db8:d822"],"output":true}
+{"fn":"default_allowed","input":["64:ff9b::5db8:d822"],"output":true}
+{"fn":"default_allowed","input":["::5db8:d822"],"output":true}
 {"fn":"normalize_url","input":["https://Example.test:443/guide?a=1#frag"],"output":"https://example.test/guide?a=1"}
 {"fn":"normalize_url","input":["http://example.test"],"output":"http://example.test/"}
 {"fn":"normalize_url","input":["http://example.test:80"],"output":"http://example.test/"}
@@ -137,9 +142,9 @@
 {"connections":[],"error":{"message":"0x7f000001 resolves to a non-public address","type":"Blocked"},"fn":"fetch_page","input":["http://0x7f000001/"],"lookups":[{"answers":["127.0.0.1"],"host":"0x7f000001","port":80}]}
 {"connections":[],"error":{"message":"0 resolves to a non-public address","type":"Blocked"},"fn":"fetch_page","input":["http://0/"],"lookups":[{"answers":["0.0.0.0"],"host":"0","port":80}]}
 {"connections":[],"error":{"message":"fe80::1%25eth0 resolves to a non-public address","type":"Blocked"},"fn":"fetch_page","input":["http://[fe80::1%25eth0]/"],"lookups":[{"answers":["fe80::1%25eth0"],"host":"fe80::1%25eth0","port":80}]}
-{"connections":[{"address":"64:ff9b::7f00:1","headers":{"accept":"text/html, application/xhtml+xml, text/plain","accept-encoding":"identity","user-agent":"atrium-webfetch/1"},"host":"64:ff9b::7f00:1","method":"GET","port":80,"scheme":"http","target":"/"}],"error":{"message":"connection refused","type":"FetchError"},"fn":"fetch_page","input":["http://[64:ff9b::7f00:1]/"],"lookups":[{"answers":["64:ff9b::7f00:1"],"host":"64:ff9b::7f00:1","port":80}]}
-{"connections":[{"address":"::7f00:1","headers":{"accept":"text/html, application/xhtml+xml, text/plain","accept-encoding":"identity","user-agent":"atrium-webfetch/1"},"host":"::127.0.0.1","method":"GET","port":80,"scheme":"http","target":"/"}],"error":{"message":"connection refused","type":"FetchError"},"fn":"fetch_page","input":["http://[::127.0.0.1]/"],"lookups":[{"answers":["::7f00:1"],"host":"::127.0.0.1","port":80}]}
-{"connections":[{"address":"fec0::1","headers":{"accept":"text/html, application/xhtml+xml, text/plain","accept-encoding":"identity","user-agent":"atrium-webfetch/1"},"host":"fec0::1","method":"GET","port":80,"scheme":"http","target":"/"}],"error":{"message":"connection refused","type":"FetchError"},"fn":"fetch_page","input":["http://[fec0::1]/"],"lookups":[{"answers":["fec0::1"],"host":"fec0::1","port":80}]}
+{"connections":[],"error":{"message":"64:ff9b::7f00:1 resolves to a non-public address","type":"Blocked"},"fn":"fetch_page","input":["http://[64:ff9b::7f00:1]/"],"lookups":[{"answers":["64:ff9b::7f00:1"],"host":"64:ff9b::7f00:1","port":80}]}
+{"connections":[],"error":{"message":"::127.0.0.1 resolves to a non-public address","type":"Blocked"},"fn":"fetch_page","input":["http://[::127.0.0.1]/"],"lookups":[{"answers":["::7f00:1"],"host":"::127.0.0.1","port":80}]}
+{"connections":[],"error":{"message":"fec0::1 resolves to a non-public address","type":"Blocked"},"fn":"fetch_page","input":["http://[fec0::1]/"],"lookups":[{"answers":["fec0::1"],"host":"fec0::1","port":80}]}
 {"connections":[],"error":{"message":"127.0.0.1 resolves to a non-public address","type":"Blocked"},"fn":"fetch_page","input":["http://127.0.0.1/"],"lookups":[{"answers":["127.0.0.1"],"host":"127.0.0.1","port":80}]}
 {"connections":[],"error":{"message":"10.0.0.5 resolves to a non-public address","type":"Blocked"},"fn":"fetch_page","input":["http://10.0.0.5/"],"lookups":[{"answers":["10.0.0.5"],"host":"10.0.0.5","port":80}]}
 {"connections":[],"error":{"message":"192.168.1.1 resolves to a non-public address","type":"Blocked"},"fn":"fetch_page","input":["http://192.168.1.1/"],"lookups":[{"answers":["192.168.1.1"],"host":"192.168.1.1","port":80}]}
