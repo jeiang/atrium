@@ -2,7 +2,7 @@ from .tools import all_tools, research, run_code
 from .tools.base import CHAT, CRON, READ, SUB
 
 WEB_SEARCH_KINDS = frozenset({CHAT, CRON})
-WEB_SEARCH = {"type": "web_search_20260318", "name": "web_search", "max_uses": 5}
+WEB_SEARCH = {"type": "web_search_20260318", "name": "web_search", "max_uses": 5, "allowed_callers": ["direct"]}
 WEB_SEARCH_NAME = WEB_SEARCH["name"]
 
 

@@ -134,6 +134,15 @@ def test_cron_runs_at_high_effort_without_web_search_for_nightly(world):
     assert all(t.get("type") != "web_search_20260318" for t in client.calls[1]["tools"])
 
 
+def test_web_search_is_direct_only_in_request_body(world):
+    cfg, conn = world
+    for kind in ("chat", "cron"):
+        client = FakeClient([response([text("ok")])])
+        run_chat(cfg, conn, client, kind=kind)
+        searches = [t for t in client.calls[0]["tools"] if t["name"] == "web_search"]
+        assert len(searches) == 1 and searches[0]["allowed_callers"] == ["direct"], kind
+
+
 def test_web_search_urls_become_allowed(world):
     cfg, conn = world
     client = FakeClient(
