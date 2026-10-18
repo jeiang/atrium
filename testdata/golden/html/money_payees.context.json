@@ -1,0 +1,117 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "payees": [
+      {
+        "id": 1,
+        "name": "Netflix <US>",
+        "category": "Fun & <games>",
+        "category_id": 2,
+        "recurring_override": null,
+        "subscription_seen": true,
+        "transactions": 12,
+        "last_date": "2025-09-15",
+        "aliases": [
+          {
+            "id": 1,
+            "kind": "exact",
+            "pattern": "NETFLIX.COM"
+          },
+          {
+            "id": 2,
+            "kind": "regex",
+            "pattern": "^NFLX\\s+<\\d+>"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "name": "Café naïve — 東京 🎉 مرحبا <script>alert(\"xss\")</script>",
+        "category": null,
+        "category_id": null,
+        "recurring_override": "not_bill",
+        "subscription_seen": false,
+        "transactions": 1,
+        "last_date": null,
+        "aliases": []
+      },
+      {
+        "id": 3,
+        "name": "Gym",
+        "category": "Groceries",
+        "category_id": 1,
+        "recurring_override": "bill",
+        "subscription_seen": false,
+        "transactions": 4,
+        "last_date": "2025-09-20",
+        "aliases": []
+      }
+    ],
+    "categories": [
+      {
+        "id": 1,
+        "name": "Groceries"
+      },
+      {
+        "id": 2,
+        "name": "Fun & <games>"
+      }
+    ],
+    "query": "net & <x>",
+    "alias_kinds": [
+      "exact",
+      "prefix",
+      "regex"
+    ]
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "summary": {
+      "calls": 1234,
+      "cache_read_share": 0.8123,
+      "cache_read": 9000000,
+      "cache_write": 120000,
+      "input_tokens": 45000,
+      "high_tier": 3,
+      "output_tokens": 77000,
+      "searches": 12
+    },
+    "budget": {
+      "spent_usd": 81.235,
+      "remaining_usd": 68.765,
+      "share": 0.5416,
+      "budget_usd": 150.0
+    },
+    "by_kind": [
+      {
+        "kind": "chat",
+        "calls": 1000,
+        "searches": 10,
+        "cost": 70.1234
+      },
+      {
+        "kind": "nightly <x>",
+        "calls": 234,
+        "searches": 2,
+        "cost": 11.1
+      }
+    ],
+    "by_thread": [
+      {
+        "thread_id": 7,
+        "title": "Plan \"Q4\" & <review> Café naïve — 東京 🎉 مرحبا",
+        "kind": "chat",
+        "calls": 40,
+        "prompt_tokens": 3000000,
+        "max_prompt_tokens": 150000,
+        "output_tokens": 9000,
+        "cost": 4.5678
+      },
+      {
+        "thread_id": 9,
+        "title": "",
+        "kind": "subagent",
+        "calls": 1,
+        "prompt_tokens": 100,
+        "max_prompt_tokens": 100,
+        "output_tokens": 5,
+        "cost": 0.0001
+      }
+    ]
+  }
+}

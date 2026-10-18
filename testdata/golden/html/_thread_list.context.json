@@ -1,0 +1,78 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "threads": [
+      {
+        "id": 7,
+        "title": "Plan \"Q4\" & <review> Café naïve — 東京 🎉 مرحبا",
+        "run_state": null,
+        "project_name": "Work \"stuff\"",
+        "updated_at": 1759996400,
+        "cost": 0.4567,
+        "pinned": 0,
+        "archived": 1
+      },
+      {
+        "id": 8,
+        "title": "",
+        "run_state": null,
+        "project_name": null,
+        "updated_at": 1759913600,
+        "cost": 0.0,
+        "pinned": 0,
+        "archived": 1
+      }
+    ],
+    "view": "archived",
+    "q": "",
+    "project_id": 2
+  }
+}

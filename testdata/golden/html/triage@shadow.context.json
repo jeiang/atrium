@@ -1,0 +1,104 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "summaries": [
+      {
+        "account": "icloud",
+        "decisions": 1,
+        "by_stage": {
+          "correction": 0,
+          "operator": 0,
+          "learned": 0,
+          "knn": 0,
+          "llm": 0,
+          "fallback": 0
+        },
+        "proposed_moves": 8,
+        "proposed_deletes": 2,
+        "no_label": 2,
+        "top_destinations": [
+          [
+            "Receipts",
+            5
+          ],
+          [
+            "Travel",
+            3
+          ]
+        ],
+        "still_in_inbox": 3,
+        "gone": 1,
+        "moved": 0,
+        "agreed": 0,
+        "agreement_pct": null,
+        "flags": {
+          "llm": 2,
+          "judged": 9,
+          "contacts": 4,
+          "both": 1
+        }
+      }
+    ],
+    "flags": [],
+    "flags_capped": false,
+    "mode": "shadow",
+    "rows": [],
+    "total": 0,
+    "offset": 0,
+    "next_offset": 0,
+    "account": "icloud",
+    "stage": "",
+    "agreement": "",
+    "q": ""
+  }
+}

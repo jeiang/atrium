@@ -1,0 +1,87 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "proposal": {
+      "id": 5,
+      "kind": "gmail_label_merge",
+      "status": "pending",
+      "account": "gmail",
+      "title": "Proposal 5 \"gmail_label_merge\" & more <i>",
+      "created_ts": 1759913600,
+      "applied_ts": 1759913700,
+      "decided_ts": 1759913800,
+      "undoable": false,
+      "result": null,
+      "preview": {
+        "from": "old & busted",
+        "into": "new <label>",
+        "from_count": 2,
+        "into_count": 7,
+        "messages": [
+          {
+            "id": 101,
+            "subject": "Subject 1 <b>Café naïve — 東京 🎉 مرحبا</b>",
+            "from_name": "Shop <Co> & Sons",
+            "from_addr": "no-reply@shop.example",
+            "date_ts": 1759996400
+          },
+          {
+            "id": 102,
+            "subject": "Subject 2 <b>Café naïve — 東京 🎉 مرحبا</b>",
+            "from_name": "Shop <Co> & Sons",
+            "from_addr": "no-reply@shop.example",
+            "date_ts": 1759992800
+          }
+        ]
+      }
+    }
+  }
+}

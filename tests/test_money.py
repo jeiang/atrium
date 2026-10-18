@@ -353,6 +353,16 @@ def test_dedupes_by_message_and_skips_none(conn, cfg, accounts):
     assert conn.execute("SELECT COUNT(*) FROM money_scans").fetchone()[0] == 2
 
 
+def test_moved_mail_is_not_scanned_again(conn, cfg, accounts):
+    first = alert(conn, 1)
+    scan(conn, cfg, extraction(account_last4="1234"))
+    conn.execute("UPDATE messages SET gone_at = ? WHERE id = ?", (NOW, first))
+    alert(conn, 7, mailbox_id=2, digest="d1")
+    again, chat = scan(conn, cfg, extraction(account_last4="1234"))
+    assert again == {"scanned": 0, "posted": 0} and chat.calls == []
+    assert len(transactions(conn)) == 1
+
+
 def test_scan_defers_when_model_down(conn, cfg, accounts):
     alert(conn, 1)
     out, _ = scan(conn, cfg, ServiceUnavailable("down"))

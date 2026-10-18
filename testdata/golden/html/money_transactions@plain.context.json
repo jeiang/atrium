@@ -1,0 +1,114 @@
+{
+  "globals": {
+    "asset_version": "golden",
+    "csrf_token": "csrf-golden-token",
+    "mode": "live",
+    "accounts": [
+      "icloud",
+      "gmail"
+    ],
+    "stages": [
+      "correction",
+      "operator",
+      "learned",
+      "knn",
+      "llm",
+      "fallback"
+    ],
+    "rule_fields": [
+      "from_addr",
+      "from_domain",
+      "from_name",
+      "reply_to",
+      "rpath_domain",
+      "list_id",
+      "subject",
+      "subject_tmpl",
+      "msgid_domain",
+      "precedence",
+      "category",
+      "to",
+      "dkim_d",
+      "esp",
+      "att_type",
+      "att_name",
+      "age_days"
+    ],
+    "rule_ops": [
+      "eq",
+      "in",
+      "suffix",
+      "re",
+      "present",
+      "absent",
+      "gte"
+    ],
+    "valueless_ops": [
+      "present",
+      "absent"
+    ]
+  },
+  "context": {
+    "pending_count": 12,
+    "paused": false,
+    "transactions": [
+      {
+        "id": 1,
+        "date": "2025-10-02",
+        "display_payee": "Payee <1> & co",
+        "kind": "purchase",
+        "review": null,
+        "amount": 123.456,
+        "currency": "TTD",
+        "original_amount": 123.456,
+        "original_currency": "TTD",
+        "computed_amount": null,
+        "account": "FCB chequing",
+        "account_id": 1,
+        "description": "POS Café naïve — 東京 🎉 مرحبا",
+        "message_id": 501,
+        "category": "Groceries",
+        "category_id": 1,
+        "source_count": 1,
+        "transfer_id": null,
+        "dismissed": null,
+        "is_transfer": false
+      }
+    ],
+    "accounts": [],
+    "categories": [
+      {
+        "id": 1,
+        "name": "Groceries"
+      },
+      {
+        "id": 2,
+        "name": "Fun & <games>"
+      }
+    ],
+    "kinds": [
+      "purchase",
+      "atm_withdrawal",
+      "refund",
+      "transfer",
+      "card_payment",
+      "fx_adjustment"
+    ],
+    "currencies": [
+      "TTD",
+      "BBD",
+      "USD"
+    ],
+    "filters": {
+      "start": "",
+      "end": "",
+      "account_id": null,
+      "payee": "",
+      "category": "",
+      "kind": "",
+      "currency": "",
+      "unassigned": false,
+      "dismissed": true
+    }
+  }
+}

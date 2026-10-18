@@ -1,0 +1,27 @@
+
+
+
+
+
+<section id="decision-card-501" class="group/card flex flex-col gap-3 rounded-lg border bg-card p-4" aria-labelledby="decision-title-501">
+  <header class="flex flex-wrap items-center gap-2">
+    <h3 id="decision-title-501" class="text-sm font-medium">atrium’s decision</h3>
+    
+    
+  </header>
+  
+  <p class="text-sm text-muted-foreground">No decision yet. atrium decides once a message has been read and is still in the inbox.</p>
+  
+  
+  <p class="text-sm">You corrected this to <span class="font-medium">Receipts|2025</span>.</p>
+  
+  
+  <div id="correct-slot-message-501" class="empty:hidden"></div>
+  <div class="flex flex-wrap gap-2 group-has-[form]/card:hidden">
+    <button type="button" class="btn" data-size="sm" data-variant="outline"
+            hx-get="/messages/501/correct?context=message" hx-target="#correct-slot-message-501" hx-swap="innerHTML">
+      <svg class="lucide lucide-folder-input " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></svg>Correct
+    </button>
+    <a class="btn" data-size="sm" data-variant="ghost" href="/rules/new?message=501"><svg class="lucide lucide-list-plus " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 5H3"/><path d="M11 12H3"/><path d="M16 19H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></svg>Make rule</a>
+  </div>
+</section>
