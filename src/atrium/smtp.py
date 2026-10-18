@@ -25,7 +25,7 @@ def sender_address(account, user):
 
 def split_addresses(text):
     text = re.sub(r"[\s,]*,[\s,]*", ", ", text or "").strip().strip(",")
-    return [addr for _, addr in email.utils.getaddresses([text]) if addr]
+    return [addr for _, addr in email.utils.getaddresses([text]) if "@" in addr and " " not in addr]
 
 
 def build_message(sender, draft, now=None):
