@@ -1,0 +1,38 @@
+{
+  "description": "scheduler.notify_skipped after a budget skip: no NTFY_TOKEN, so no Authorization header and no thread link.",
+  "exchanges": [
+    {
+      "request": {
+        "body": {
+          "message": "Monthly budget is above 80%, so this scheduled run did not start.",
+          "title": "Skipped: brief",
+          "topic": "atrium"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "method": "POST",
+        "path": "/",
+        "query": "",
+        "url": "https://ntfy.test/"
+      },
+      "response": {
+        "body": {
+          "event": "message",
+          "id": "golden"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "budget_skip",
+  "source_tests": [
+    "tests/test_agent_scheduler.py::test_budget_skip_notifies_once"
+  ]
+}

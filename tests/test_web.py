@@ -158,6 +158,19 @@ def test_triage_search_filters_decisions(client):
     assert "No decisions match" in c.get("/triage", params={"q": "zzz-nothing"}, headers=HX).text
 
 
+def test_triage_row_shows_delete_proposal(client):
+    c, cfg, ids = client
+    conn = db.connect(cfg.db_path)
+    conn.execute(
+        "INSERT INTO decisions (message_id, account, ts, stage, key, action, dest, confidence, detail) "
+        "VALUES (?, 'icloud', 2.0, 'operator', 'r-del', 'delete', NULL, 1.0, '{}')",
+        (ids["other"],),
+    )
+    conn.close()
+    page = c.get("/triage", params={"q": "list.test"}, headers=HX).text
+    assert 'font-medium">Delete</span>' in page and "Leave in inbox" not in page
+
+
 def test_rules_lifecycle(client):
     c, cfg, ids = client
     assert c.get("/rules").status_code == 200

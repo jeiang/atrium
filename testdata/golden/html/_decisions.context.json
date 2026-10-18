@@ -58,7 +58,8 @@
         "date_ts": 1759996400,
         "account": "icloud",
         "current": "Receipts",
-        "action": {
+        "action": "file",
+        "applied": {
           "id": 9,
           "kind": "move",
           "status": "applied",
@@ -80,7 +81,8 @@
         "date_ts": 1759992800,
         "account": "gmail",
         "current": "INBOX",
-        "action": null,
+        "action": "none",
+        "applied": null,
         "dest": null,
         "stage": "llm",
         "agreement": "pending",
@@ -96,7 +98,8 @@
         "date_ts": 1759913600,
         "account": "icloud",
         "current": null,
-        "action": null,
+        "action": "file",
+        "applied": null,
         "dest": "Odd <folder> & co",
         "stage": "operator",
         "agreement": "gone",
@@ -112,7 +115,8 @@
         "date_ts": 1759827200,
         "account": "gmail",
         "current": "Travel|Flights",
-        "action": {
+        "action": "file",
+        "applied": {
           "id": 10,
           "kind": "move",
           "status": "skipped",
@@ -134,7 +138,8 @@
         "date_ts": 1759740800,
         "account": "icloud",
         "current": "Elsewhere",
-        "action": {
+        "action": "file",
+        "applied": {
           "id": 11,
           "kind": "move",
           "status": "undone",
@@ -156,7 +161,8 @@
         "date_ts": 1759654400,
         "account": "icloud",
         "current": "INBOX",
-        "action": {
+        "action": "none",
+        "applied": {
           "id": 12,
           "kind": "move",
           "status": "interrupted",
@@ -169,6 +175,29 @@
         "corrected_to": null,
         "key": "",
         "confidence": null
+      },
+      {
+        "message_id": 507,
+        "subject": "Promo blast",
+        "from_name": "Deals",
+        "from_addr": "deals@promo.example",
+        "date_ts": 1759568000,
+        "account": "icloud",
+        "current": null,
+        "action": "delete",
+        "applied": {
+          "id": 13,
+          "kind": "trash",
+          "status": "applied",
+          "error": null,
+          "undoable": true
+        },
+        "dest": null,
+        "stage": "operator",
+        "agreement": "gone",
+        "corrected_to": null,
+        "key": "spam-promo",
+        "confidence": 1.0
       }
     ],
     "total": 1,

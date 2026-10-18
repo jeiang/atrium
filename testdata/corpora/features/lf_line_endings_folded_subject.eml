@@ -1,0 +1,9 @@
+From: Folks <folks@example.test>
+Subject: A very long subject line that
+ is folded over two lines #9
+To: undisclosed-recipients:;
+Message-ID: no-brackets@example.test
+
+Body with
+
+several   spaces	and tabs

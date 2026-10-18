@@ -3,6 +3,7 @@ module github.com/jeiang/atrium
 go 1.26.0
 
 require (
+	github.com/dlclark/regexp2 v1.12.0
 	github.com/jeiang/atrium/third_party/sqlite-vec v0.0.0
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/systemd/slog-journal v0.1.2

@@ -1,0 +1,6 @@
+From: cal@example.test
+Subject: Invitation
+Content-Type: text/calendar; method=REQUEST
+
+BEGIN:VCALENDAR
+END:VCALENDAR

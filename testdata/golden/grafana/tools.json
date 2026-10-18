@@ -1,0 +1,375 @@
+{
+  "description": "grafana_datasources, grafana_query (prometheus default and with range/step/limit, logs with maxLines), grafana_alerts and grafana_search_dashboards (with and without a query); Bearer viewer token and Accept: application/json on every request.",
+  "exchanges": [
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer golden-grafana-token"
+        },
+        "method": "GET",
+        "path": "/api/datasources",
+        "query": "",
+        "url": "http://grafana.test:3000/api/datasources"
+      },
+      "response": {
+        "body": [
+          {
+            "name": "Prom",
+            "type": "prometheus",
+            "uid": "p1",
+            "url": "http://prometheus.invalid"
+          },
+          {
+            "name": "Loki",
+            "type": "loki",
+            "uid": "l1"
+          }
+        ],
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "from": "now-1h",
+          "queries": [
+            {
+              "datasource": {
+                "uid": "p1"
+              },
+              "expr": "up",
+              "instant": false,
+              "maxDataPoints": 50,
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "to": "now"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer golden-grafana-token",
+          "content-type": "application/json"
+        },
+        "method": "POST",
+        "path": "/api/ds/query",
+        "query": "",
+        "url": "http://grafana.test:3000/api/ds/query"
+      },
+      "response": {
+        "body": {
+          "results": {
+            "A": {
+              "frames": [
+                {
+                  "data": {
+                    "values": [
+                      [
+                        1700000000000,
+                        1700000060000
+                      ],
+                      [
+                        1,
+                        0.5
+                      ]
+                    ]
+                  },
+                  "schema": {
+                    "fields": [
+                      {
+                        "name": "Time",
+                        "type": "time"
+                      },
+                      {
+                        "labels": {
+                          "instance": "a"
+                        },
+                        "name": "Value",
+                        "type": "number"
+                      }
+                    ],
+                    "name": "up"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "from": "now-6h",
+          "queries": [
+            {
+              "datasource": {
+                "uid": "p1"
+              },
+              "expr": "rate(http_requests_total{job=\"api\"}[5m])",
+              "instant": false,
+              "interval": "60s",
+              "maxDataPoints": 50,
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "to": "now-1h"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer golden-grafana-token",
+          "content-type": "application/json"
+        },
+        "method": "POST",
+        "path": "/api/ds/query",
+        "query": "",
+        "url": "http://grafana.test:3000/api/ds/query"
+      },
+      "response": {
+        "body": {
+          "results": {
+            "A": {
+              "frames": [
+                {
+                  "data": {
+                    "values": [
+                      [
+                        1700000000000,
+                        1700000060000
+                      ],
+                      [
+                        1,
+                        0.5
+                      ]
+                    ]
+                  },
+                  "schema": {
+                    "fields": [
+                      {
+                        "name": "Time",
+                        "type": "time"
+                      },
+                      {
+                        "labels": {
+                          "instance": "a"
+                        },
+                        "name": "Value",
+                        "type": "number"
+                      }
+                    ],
+                    "name": "up"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "from": "now-1h",
+          "queries": [
+            {
+              "datasource": {
+                "uid": "l1"
+              },
+              "expr": "{unit=\"atrium-web.service\"} |= \"error\"",
+              "maxDataPoints": 50,
+              "maxLines": 150,
+              "queryType": "range",
+              "refId": "A"
+            }
+          ],
+          "to": "now"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer golden-grafana-token",
+          "content-type": "application/json"
+        },
+        "method": "POST",
+        "path": "/api/ds/query",
+        "query": "",
+        "url": "http://grafana.test:3000/api/ds/query"
+      },
+      "response": {
+        "body": {
+          "results": {
+            "A": {
+              "frames": [
+                {
+                  "data": {
+                    "values": [
+                      [
+                        1700000000000,
+                        1700000060000
+                      ],
+                      [
+                        1,
+                        0.5
+                      ]
+                    ]
+                  },
+                  "schema": {
+                    "fields": [
+                      {
+                        "name": "Time",
+                        "type": "time"
+                      },
+                      {
+                        "labels": {
+                          "instance": "a"
+                        },
+                        "name": "Value",
+                        "type": "number"
+                      }
+                    ],
+                    "name": "up"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer golden-grafana-token"
+        },
+        "method": "GET",
+        "path": "/api/prometheus/grafana/api/v1/alerts",
+        "query": "",
+        "url": "http://grafana.test:3000/api/prometheus/grafana/api/v1/alerts"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "alerts": [
+              {
+                "activeAt": "2026-10-15T12:00:00Z",
+                "annotations": {
+                  "summary": "host down"
+                },
+                "labels": {
+                  "alertname": "Down"
+                },
+                "state": "Alerting",
+                "value": "0"
+              }
+            ]
+          }
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer golden-grafana-token"
+        },
+        "method": "GET",
+        "path": "/api/search",
+        "query": "query=node&type=dash-db&limit=20",
+        "url": "http://grafana.test:3000/api/search"
+      },
+      "response": {
+        "body": [
+          {
+            "folderTitle": "Infra",
+            "tags": [
+              "linux"
+            ],
+            "title": "Node",
+            "uid": "n1",
+            "url": "/d/n1/node"
+          }
+        ],
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": null,
+        "body_encoding": "none",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer golden-grafana-token"
+        },
+        "method": "GET",
+        "path": "/api/search",
+        "query": "query=&type=dash-db&limit=20",
+        "url": "http://grafana.test:3000/api/search"
+      },
+      "response": {
+        "body": [
+          {
+            "folderTitle": "Infra",
+            "tags": [
+              "linux"
+            ],
+            "title": "Node",
+            "uid": "n1",
+            "url": "/d/n1/node"
+          }
+        ],
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "tools",
+  "source_tests": [
+    "tests/test_agent_tools_grafana.py::test_datasources_and_auth_header",
+    "tests/test_agent_tools_grafana.py::test_query_compacts_frames",
+    "tests/test_agent_tools_grafana.py::test_logs_query_limits_and_truncates",
+    "tests/test_agent_tools_grafana.py::test_alerts_and_dashboards"
+  ]
+}

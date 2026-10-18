@@ -3,7 +3,6 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 from . import features
@@ -94,7 +93,7 @@ def message_state(account, role, mailbox_name, flags, labels):
 
 def internal_ts(value):
     try:
-        return parsedate_to_datetime(value).timestamp()
+        return features.email_ts(value)
     except (TypeError, ValueError):
         return 0.0
 

@@ -1,0 +1,179 @@
+{
+  "description": "calendar.create_event on Google, timed (location and notes) and all-day: each call builds a fresh service, so google-auth first sends the refresh_token grant, then events.insert with the client-chosen id and sendUpdates=none.",
+  "exchanges": [
+    {
+      "request": {
+        "body": [
+          [
+            "grant_type",
+            "refresh_token"
+          ],
+          [
+            "client_id",
+            "golden-google-client-id"
+          ],
+          [
+            "client_secret",
+            "golden-google-client-secret"
+          ],
+          [
+            "refresh_token",
+            "golden-google-refresh-token"
+          ],
+          [
+            "scope",
+            "https://www.googleapis.com/auth/calendar.events"
+          ]
+        ],
+        "body_encoding": "form",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "method": "POST",
+        "path": "/token",
+        "query": "",
+        "url": "https://oauth2.googleapis.com/token"
+      },
+      "response": {
+        "body": {
+          "access_token": "golden-google-access-token",
+          "expires_in": 3599,
+          "scope": "https://www.googleapis.com/auth/calendar.events",
+          "token_type": "Bearer"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "description": "bring card",
+          "end": {
+            "dateTime": "2026-10-20T14:00:00-04:00",
+            "timeZone": "America/Port_of_Spain"
+          },
+          "id": "dentist1",
+          "location": "Main St",
+          "start": {
+            "dateTime": "2026-10-20T13:00:00-04:00",
+            "timeZone": "America/Port_of_Spain"
+          },
+          "summary": "Dentist"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer golden-google-access-token",
+          "content-type": "application/json"
+        },
+        "method": "POST",
+        "path": "/calendar/v3/calendars/primary/events",
+        "query": "sendUpdates=none&alt=json",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+      },
+      "response": {
+        "body": {
+          "id": "dentist1",
+          "status": "confirmed"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": [
+          [
+            "grant_type",
+            "refresh_token"
+          ],
+          [
+            "client_id",
+            "golden-google-client-id"
+          ],
+          [
+            "client_secret",
+            "golden-google-client-secret"
+          ],
+          [
+            "refresh_token",
+            "golden-google-refresh-token"
+          ],
+          [
+            "scope",
+            "https://www.googleapis.com/auth/calendar.events"
+          ]
+        ],
+        "body_encoding": "form",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "method": "POST",
+        "path": "/token",
+        "query": "",
+        "url": "https://oauth2.googleapis.com/token"
+      },
+      "response": {
+        "body": {
+          "access_token": "golden-google-access-token",
+          "expires_in": 3599,
+          "scope": "https://www.googleapis.com/auth/calendar.events",
+          "token_type": "Bearer"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "request": {
+        "body": {
+          "end": {
+            "date": "2026-10-31"
+          },
+          "id": "holiday1",
+          "start": {
+            "date": "2026-10-30"
+          },
+          "summary": "Holiday"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer golden-google-access-token",
+          "content-type": "application/json"
+        },
+        "method": "POST",
+        "path": "/calendar/v3/calendars/primary/events",
+        "query": "sendUpdates=none&alt=json",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+      },
+      "response": {
+        "body": {
+          "id": "holiday1",
+          "status": "confirmed"
+        },
+        "body_encoding": "json",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "status": 200
+      }
+    }
+  ],
+  "freeze_commit": "cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40",
+  "scenario": "event_create",
+  "source_tests": [
+    "tests/test_calendar.py::test_create_google_sends_no_updates_no_attendees_and_logs_undo",
+    "tests/test_calendar.py::test_gmail_invite_targets_google"
+  ]
+}
