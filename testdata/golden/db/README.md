@@ -108,9 +108,3 @@ command, run in-process through `atrium.cli.main` against a copy of
 `notion search alpha` and `media poll`. `--status all` is not a valid choice
 in the frozen CLI, so that entry records argparse's exit 2 and usage error;
 `proposals list` without a filter is the listing of every status.
-
-## Known Python behaviour visible in these files
-
-- A money mail that moves after it was scanned (here `shopa-2002`, filed by
-  the live pass and then corrected) is indexed as a new message and scanned
-  again, so `transactions` 3 and 4 are the same receipt.
