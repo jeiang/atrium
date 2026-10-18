@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import ast
 import collections
+import hashlib
 import json
 import re
 import re._constants as sre_constants
@@ -85,7 +86,31 @@ def is_re_call(node):
 
 
 def where(path, node):
+    """file:line, informational only; ids never contain a line number."""
     return f"{rel(path)}:{node.lineno}"
+
+
+def digest(*parts):
+    return hashlib.sha1("\0".join(parts).encode("utf-8", "surrogatepass")).hexdigest()[:8]
+
+
+def enclosing(tree):
+    """id(Call node) -> dotted names of the defs and classes around it ("<module>" at top level)."""
+    out = {}
+
+    def visit(node, names):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.Call):
+                out[id(child)] = ".".join(names) or "<module>"
+            visit(child, [*names, child.name] if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else names)
+
+    visit(tree, [])
+    return out
+
+
+def dedupe(seen, base):
+    seen[base] = seen.get(base, 0) + 1
+    return base if seen[base] == 1 else f"{base}#{seen[base]}"
 
 
 class Module:
@@ -95,6 +120,8 @@ class Module:
         self.tree = ast.parse(path.read_text(), str(path))
         self.env = module_env(self.tree)
         self.functions = {s.name for s in self.tree.body if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        self.enclosing = enclosing(self.tree)
+        self.keys = self.call_keys()
         self.assigned = {id(s.value): s.targets[0].id for s in self.tree.body if isinstance(s, ast.Assign) and len(s.targets) == 1 and isinstance(s.targets[0], ast.Name)}
         self.modules, self.imported = {}, {}
         for node in ast.walk(self.tree):
@@ -108,6 +135,13 @@ class Module:
                         self.modules[a.asname or a.name] = sub
                     else:
                         self.imported[a.asname or a.name] = (resolve_module(path, node.level, node.module), a.name)
+
+
+    def call_keys(self):
+        """Stable id of every call: <file>:<enclosing def>:<sha1 of its source>, #2.. for repeats in line order."""
+        calls = sorted((n for n in ast.walk(self.tree) if isinstance(n, ast.Call)), key=lambda n: (n.lineno, n.col_offset))
+        seen = {}
+        return {id(n): dedupe(seen, f"{self.file}:{self.enclosing[id(n)]}:{digest(ast.unparse(n))}") for n in calls}
 
 
 def resolve_module(path, level, dotted):
@@ -127,13 +161,36 @@ def resolve_module(path, level, dotted):
 
 
 def ast_sites(modules):
+    """Every re call, with its stable id: <file>:<NAME> for a module-level assignment, otherwise
+    <file>:<enclosing def>:<sha1(pattern + flags)[:8]> (#2.. for repeats in line order). Sorted by id."""
     sites = []
     for mod in modules.values():
-        for node in ast.walk(mod.tree):
-            if is_re_call(node):
-                sites.append({"mod": mod, "line": node.lineno, "col": node.col_offset, "call": node.func.attr, "node": node, "name": mod.assigned.get(id(node))})
-    sites.sort(key=lambda s: (s["mod"].file, s["line"], s["col"]))
+        found = [n for n in ast.walk(mod.tree) if is_re_call(n)]
+        found.sort(key=lambda n: (n.lineno, n.col_offset))
+        seen = {}
+        for node in found:
+            site = {"mod": mod, "line": node.lineno, "col": node.col_offset, "call": node.func.attr, "node": node, "name": mod.assigned.get(id(node))}
+            if site["name"]:
+                site["id"] = dedupe(seen, f"{mod.file}:{site['name']}")
+                if seen[site["id"]] > 1:
+                    raise SystemExit(f"{site['id']}: module-level name assigned from several re calls")
+            else:
+                site["id"] = dedupe(seen, f"{mod.file}:{mod.enclosing[id(node)]}:{pattern_digest(site)}")
+            mod.keys[id(node)] = site["id"]
+            sites.append(site)
+    sites.sort(key=lambda s: (s["mod"].file, s["id"]))
     return sites
+
+
+def pattern_digest(site):
+    node, env = site["node"], site["mod"].env
+    flags_node = flags_arg(site) if site["call"] != "escape" else None
+    try:
+        pattern = evaluate(node.args[0], env)
+        flags = evaluate(flags_node, env) if flags_node is not None else 0
+        return digest(text(pattern), ",".join(flag_names(flags)))
+    except Unbound:
+        return digest(ast.unparse(node.args[0]), ast.unparse(flags_node) if flags_node is not None else "")
 
 
 def receiver(mod, node, compiled):
@@ -160,7 +217,7 @@ def method_calls(modules, compiled):
             recv = node.func.value
             if isinstance(recv, ast.Name) and recv.id == "re":
                 continue
-            at = where(mod.path, node)
+            at = mod.keys[id(node)]
             key = receiver(mod, recv, compiled)
             if key:
                 direct.append((key, mod, node))
@@ -289,7 +346,7 @@ def call_args(mod, node, params, scope):
         if value is None:
             continue
         function_name = isinstance(value, ast.Name) and value.id in mod.functions and value.id not in scope
-        if name == "repl" and (isinstance(value, ast.Lambda) or function_name or where(mod.path, node) in CALLABLE_REPL):
+        if name == "repl" and (isinstance(value, ast.Lambda) or function_name or mod.keys[id(node)] in CALLABLE_REPL):
             return None
         try:
             out[name] = evaluate(value, {**mod.env, **scope})
@@ -324,7 +381,7 @@ def json_args(args):
 
 def instantiate(site):
     node, env = site["node"], site["mod"].env
-    key = f"{site['mod'].file}:{site['line']}"
+    key = site["id"]
     try:
         evaluate(node.args[0], env)
         if site["call"] != "escape":
@@ -352,7 +409,7 @@ def build():
     for site in ast_sites(modules):
         mod, node, call = site["mod"], site["node"], site["call"]
         key, bindings, dynamic = instantiate(site)
-        entry = {"site": key, "file": mod.file, "line": site["line"], "col": site["col"], "call": call, "pattern_source": ast.unparse(node.args[0]), "dynamic": dynamic}
+        entry = {"id": key, "site": where(mod.path, node), "file": mod.file, "line": site["line"], "col": site["col"], "call": call, "pattern_source": ast.unparse(node.args[0]), "dynamic": dynamic}
         if site["name"]:
             entry["name"] = site["name"]
             compiled_names[(mod.file, site["name"])] = key
@@ -373,7 +430,7 @@ def build():
             pattern = evaluate(node.args[0], scope)
             flags = evaluate(flags_node, scope) if flags_node is not None else 0
             entry["patterns"].append(pid)
-            spec = {"id": pid, "site": key, "call": call, "pattern": text(pattern), "bytes": isinstance(pattern, bytes), "flags": flag_names(flags), "uses": []}
+            spec = {"id": pid, "site": where(mod.path, node), "site_id": key, "call": call, "pattern": text(pattern), "bytes": isinstance(pattern, bytes), "flags": flag_names(flags), "uses": []}
             if local:
                 spec["locals"] = local
             with warnings.catch_warnings(record=True) as caught:
@@ -401,32 +458,32 @@ def build():
     if stale:
         raise SystemExit(f"NOT_PATTERN_CALLS lists call sites that are not unresolved pattern method calls: {stale}")
     for key, mod, node in direct:
-        for pid in [p for p in specs if specs[p]["site"] == key]:
-            for local in USE_BINDINGS.get(where(mod.path, node), [{}]):
+        for pid in [p for p in specs if specs[p]["site_id"] == key]:
+            for local in USE_BINDINGS.get(mod.keys[id(node)], [{}]):
                 specs[pid]["uses"].append(use_entry(mod, node, node.func.attr, METHOD_PARAMS[node.func.attr], local, None))
     for at, mod, node in indirect:
         for flow in INDIRECT_USES[at]:
-            pids = [p for p in specs if p in flow["patterns"] or specs[p]["site"] in flow["patterns"]]
+            pids = [p for p in specs if p in flow["patterns"] or specs[p]["site_id"] in flow["patterns"]]
             if not pids:
                 raise SystemExit(f"INDIRECT_USES[{at}]: {flow['patterns']} matches no pattern id")
             for pid in pids:
                 specs[pid]["uses"].append(use_entry(mod, node, node.func.attr, METHOD_PARAMS[node.func.attr], flow.get("locals", {}), None))
-    stale = sorted(set(USE_BINDINGS) - {where(m.path, n) for _, m, n in direct}) + sorted(set(INDIRECT_USES) - {at for at, _, _ in indirect})
-    stale += sorted(CALLABLE_REPL - {where(m.path, n) for _, m, n in [*direct, *indirect]} - {s["site"] for s in sites_out})
+    stale = sorted(set(USE_BINDINGS) - {m.keys[id(n)] for _, m, n in direct}) + sorted(set(INDIRECT_USES) - {at for at, _, _ in indirect})
+    stale += sorted(CALLABLE_REPL - {m.keys[id(n)] for _, m, n in [*direct, *indirect]} - {s["id"] for s in sites_out})
     if stale:
         raise SystemExit(f"regex_inputs.py has use bindings for unknown call sites: {stale}")
     for spec in specs.values():
-        spec["uses"].sort(key=lambda u: (u["at"].rsplit(":", 1)[0], int(u["at"].rsplit(":", 1)[1]), u["op"], json.dumps(u.get("locals", {}), sort_keys=True)))
+        spec["uses"].sort(key=lambda u: (u["at"], u["op"], json.dumps(u.get("locals", {}), sort_keys=True)))
 
     records, used_inputs = [], set()
     for pid, spec in specs.items():
         if pid not in compiled_by_id:
             continue
         compiled = compiled_by_id[pid]
-        inputs = INPUTS.get(pid, INPUTS.get(spec["site"]))
+        inputs = INPUTS.get(pid, INPUTS.get(spec["site_id"]))
         if not inputs:
             raise SystemExit(f"{pid}: no corpus inputs in regex_inputs.py")
-        used_inputs.add(pid if pid in INPUTS else spec["site"])
+        used_inputs.add(pid if pid in INPUTS else spec["site_id"])
         recorded = [u for u in spec["uses"] if u.get("args") is not None and (u["op"] in SHAPING_OPS or u["args"])]
         seen = set()
         for subject in [*inputs, *(GENERIC_BYTES_INPUTS if spec["bytes"] else GENERIC_INPUTS)]:
@@ -453,11 +510,11 @@ def build():
     stale = sorted(set(INPUTS) - used_inputs)
     if stale:
         raise SystemExit(f"regex_inputs.py has inputs for unknown pattern ids: {stale}")
-    stale = sorted(set(BINDINGS) - {s["site"] for s in sites_out if s["dynamic"]})
+    stale = sorted(set(BINDINGS) - {s["id"] for s in sites_out if s["dynamic"]})
     if stale:
         raise SystemExit(f"regex_inputs.py has bindings for static or unknown sites: {stale}")
     patterns_out = list(specs.values())
-    lookaround = sorted({p["site"] for p in patterns_out if {"lookahead", "negative_lookahead", "lookbehind", "negative_lookbehind", "backreference"} & set(p.get("features", ()))})
+    lookaround = sorted({p["site_id"] for p in patterns_out if {"lookahead", "negative_lookahead", "lookbehind", "negative_lookbehind", "backreference"} & set(p.get("features", ()))})
     manifest = {
         "freeze_commit": FREEZE_COMMIT,
         "python": f"{PYTHON[0]}.{PYTHON[1]}",
@@ -475,7 +532,7 @@ def build():
 
 def use_entry(mod, node, op, params, local, site):
     args = call_args(mod, node, params, local)
-    entry = {"at": site or where(mod.path, node), "op": op, "source": ast.unparse(node)}
+    entry = {"at": site or mod.keys[id(node)], "where": where(mod.path, node), "op": op, "source": ast.unparse(node)}
     if local and site is None:
         entry["locals"] = local
     if args is None:
@@ -490,10 +547,11 @@ def use_entry(mod, node, op, params, local, site):
 def coverage_errors(manifest, modules):
     errors = []
     found, values, hidden = grep_sites()
-    listed = collections.Counter((s["file"], s["line"], s["call"]) for s in manifest["sites"])
+    found = collections.Counter({k: sum(v for (f, _, c), v in found.items() if (f, c) == k) for k in {(f, c) for f, _, c in found}})
+    listed = collections.Counter((s["file"], s["call"]) for s in manifest["sites"])
     for key in sorted(set(found) | set(listed)):
         if found[key] != listed[key]:
-            errors.append(f"{key[0]}:{key[1]} re.{key[2]}: {found[key]} in source, {listed[key]} in manifest")
+            errors.append(f"{key[0]} re.{key[1]}: {found[key]} in source, {listed[key]} in manifest")
     ast_count = len(ast_sites(modules))
     if ast_count != sum(found.values()):
         errors.append(f"AST finds {ast_count} re calls, text scan finds {sum(found.values())}")
@@ -502,11 +560,23 @@ def coverage_errors(manifest, modules):
     return errors
 
 
+INFORMATIONAL = {"site", "line", "col", "where"}
+
+
+def informational_free(value):
+    """The manifest without file:line fields, so a Python edit that only moves code does not fail --check."""
+    if isinstance(value, dict):
+        return {k: informational_free(v) for k, v in value.items() if k not in INFORMATIONAL}
+    if isinstance(value, list):
+        return [informational_free(v) for v in value]
+    return value
+
+
 def main():
     manifest_text, corpus_text, modules = build()
     if sys.argv[1:] == ["--check"]:
         errors = coverage_errors(json.loads(MANIFEST.read_text()), modules)
-        if MANIFEST.read_text() != manifest_text:
+        if informational_free(json.loads(MANIFEST.read_text())) != informational_free(json.loads(manifest_text)):
             errors.append(f"{rel(MANIFEST)} differs from a fresh generation")
         if CORPUS.read_text() != corpus_text:
             errors.append(f"{rel(CORPUS)} differs from a fresh generation")
