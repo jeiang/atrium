@@ -15,6 +15,12 @@ def test_template_amounts_and_dates():
     assert template("Due 2026-03-05") == "due <date>"
 
 
+def test_template_month_year():
+    assert template("Your statement for September 2026") == "your statement for <date>"
+    assert template("Statement for Sept. 5th 2026") == "statement for <date>"
+    assert template("Invoice March 123") == "invoice march <n>"
+
+
 def test_template_token_with_digit():
     assert template("Your code ab12cd is ready") == "your code <n> is ready"
 

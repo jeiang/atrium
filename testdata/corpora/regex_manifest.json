@@ -529,7 +529,7 @@
       "group_names": {},
       "groups": 0,
       "id": "src/atrium/features.py:57",
-      "pattern": "\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{2,4})?",
+      "pattern": "\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?\\s+(?:\\d{1,2}(?:st|nd|rd|th)?\\b(?:,?\\s+\\d{2,4})?|\\d{4}\\b)",
       "site": "src/atrium/features.py:57",
       "uses": [
         {
@@ -538,7 +538,7 @@
           },
           "at": "src/atrium/features.py:57",
           "op": "sub",
-          "source": "re.sub('\\\\b' + MONTH + '\\\\s+\\\\d{1,2}(?:st|nd|rd|th)?(?:,?\\\\s+\\\\d{2,4})?', '<date>', s)"
+          "source": "re.sub('\\\\b' + MONTH + '\\\\s+(?:\\\\d{1,2}(?:st|nd|rd|th)?\\\\b(?:,?\\\\s+\\\\d{2,4})?|\\\\d{4}\\\\b)', '<date>', s)"
         }
       ]
     },
@@ -6900,7 +6900,7 @@
       "dynamic": false,
       "file": "src/atrium/features.py",
       "line": 57,
-      "pattern_source": "'\\\\b' + MONTH + '\\\\s+\\\\d{1,2}(?:st|nd|rd|th)?(?:,?\\\\s+\\\\d{2,4})?'",
+      "pattern_source": "'\\\\b' + MONTH + '\\\\s+(?:\\\\d{1,2}(?:st|nd|rd|th)?\\\\b(?:,?\\\\s+\\\\d{2,4})?|\\\\d{4}\\\\b)'",
       "patterns": [
         "src/atrium/features.py:57"
       ],

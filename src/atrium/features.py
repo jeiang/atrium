@@ -54,7 +54,7 @@ def subject_template(subject):
         "<amt>",
         s,
     )
-    s = re.sub(r"\b" + MONTH + r"\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{2,4})?", "<date>", s)
+    s = re.sub(r"\b" + MONTH + r"\s+(?:\d{1,2}(?:st|nd|rd|th)?\b(?:,?\s+\d{2,4})?|\d{4}\b)", "<date>", s)
     s = re.sub(r"\b\d{1,2}(?:st|nd|rd|th)?\s+" + MONTH + r"(?:,?\s+\d{2,4})?", "<date>", s)
     s = re.sub(r"\b\d{1,4}[/-]\d{1,2}[/-]\d{1,4}\b", "<date>", s)
     s = re.sub(r"\b\w*\d\w*\b", "<n>", s)
