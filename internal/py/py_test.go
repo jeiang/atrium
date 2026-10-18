@@ -57,6 +57,12 @@ func TestStr(t *testing.T) {
 	}
 }
 
+func TestLower(t *testing.T) {
+	if got := Lower("DAILY \u0130"); got != "daily i\u0307" {
+		t.Errorf("Lower = %q", got)
+	}
+}
+
 func TestSum(t *testing.T) {
 	tenths := make([]float64, 10)
 	for i := range tenths {

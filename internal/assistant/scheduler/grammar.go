@@ -63,8 +63,6 @@ type Spec struct {
 
 func (s Spec) Recurring() bool { return s.Kind != KindOnce }
 
-func pyLower(s string) string { return strings.ToLower(strings.ReplaceAll(s, "\u0130", "i\u0307")) }
-
 func isDecimal(s string) bool {
 	if s == "" {
 		return false
@@ -119,7 +117,7 @@ func clock(text string) (int, int, error) {
 }
 
 func cronValue(token string, index int) (int, error) {
-	if v, ok := cronNames[index][pyLower(token)]; ok {
+	if v, ok := cronNames[index][py.Lower(token)]; ok {
 		return v, nil
 	}
 	if !isDecimal(token) {
@@ -208,7 +206,7 @@ func Parse(text, tz string) (Spec, error) {
 		return Spec{}, err
 	}
 	words := py.Split(text)
-	switch pyLower(words[0]) {
+	switch py.Lower(words[0]) {
 	case KindDaily:
 		if len(words) != 2 {
 			return Spec{}, Error("daily schedules look like 'daily 07:30'")
@@ -222,7 +220,7 @@ func Parse(text, tz string) (Spec, error) {
 		var day int
 		var ok bool
 		if len(words) == 3 {
-			day, ok = days[pyLower(py.Clip(words[1], 3))]
+			day, ok = days[py.Lower(py.Clip(words[1], 3))]
 		}
 		if !ok {
 			return Spec{}, Error("weekly schedules look like 'weekly mon 07:30'")

@@ -159,7 +159,7 @@ and backups; nothing of that lives here.
   `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
 - `internal/pyhtml/`: `html.unescape`; tables from `tools/pyhtml/gen_entities.py`.
 - `internal/py/`: the shared CPython emulation: `Repr`, `IsSpace`/`Strip`/
-  `Split`/`SplitLines`/`Clip`, `Sum`/`SumSq` (Neumaier, as `sum()`),
+  `Split`/`SplitLines`/`Clip`/`Lower`, `Sum`/`SumSq` (Neumaier, as `sum()`),
   `FromISOFormat` with `DateTime.Timestamp`/`WallToUnix`/`SplitTimestamp`.
   Python-emulation helpers live here; never add a per-package copy (the one
   exception is `internal/mail/mime`'s own `pystr.go`). Ported float

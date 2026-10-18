@@ -57,3 +57,6 @@ func Clip(s string, n int) string {
 	}
 	return s
 }
+
+// Lower is str.lower() up to final-sigma context: U+0130 expands to "i" plus a combining dot as in CPython.
+func Lower(s string) string { return strings.ToLower(strings.ReplaceAll(s, "\u0130", "i\u0307")) }
