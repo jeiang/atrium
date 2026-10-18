@@ -40,4 +40,5 @@ secrets in `environmentFiles` and persistence of the state directory are the
 host's. `docs/runbook.md` lists the environment the units read and the
 operating procedures.
 
-`nix build .#atrium` builds the package and runs the tests.
+`nix build .#atrium` builds the package and runs the tests; `just test` runs
+them against the working tree in the devshell.
