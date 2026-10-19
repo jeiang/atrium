@@ -15,15 +15,15 @@ func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var offset int
 	if values, given := q["offset"]; given {
-		n, ok := py.LaxInt64(lastValue(values, ""))
+		n, ok := py.LaxInt64(web.LastValue(values, ""))
 		if !ok {
-			web.Unprocessable(w, web.BadInt("query", "offset", lastValue(values, "")))
+			web.Unprocessable(w, web.BadInt("query", "offset", web.LastValue(values, "")))
 			return
 		}
 		offset = int(max(n, 0))
 	}
-	account, stage, agreement := queryValue(q, "account"), queryValue(q, "stage"), queryValue(q, "agreement")
-	text := py.Strip(queryValue(q, "q"))
+	account, stage, agreement := web.QueryValue(q, "account"), web.QueryValue(q, "stage"), web.QueryValue(q, "agreement")
+	text := py.Strip(web.QueryValue(q, "q"))
 	ctx := r.Context()
 	found, err := triage.Triage(ctx, s.deps.DB.Read, triage.Filter{
 		Account: account, Stage: stage, Agreement: agreement, Limit: pageSize, Offset: offset, Q: text,

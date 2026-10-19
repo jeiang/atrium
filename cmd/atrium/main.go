@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/pages"
+	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/web"
@@ -33,6 +34,7 @@ func newApp() *cli.App {
 	app.Add(web.ServeCommand(
 		web.Page{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
 		web.Page{Module: notify.Module, Templates: notify.Templates()},
+		web.Page{Module: reviewpages.Module(reviewpages.Options{}), Templates: reviewpages.Templates()},
 	))
 	return app
 }

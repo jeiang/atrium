@@ -1,0 +1,16 @@
+{{define "activity_rows"}}{{range .entries}}
+{{template "activity_row" (dict "e" . "toast" $.toast)}}
+{{else}}
+{{if not .offset}}
+<li class="px-4 py-10 text-center text-sm text-muted-foreground">Nothing{{if .category}} in {{.category}}{{end}} has been changed yet.</li>
+{{end}}
+{{end}}
+{{if .next_offset}}
+<li id="load-more" class="flex justify-center px-4 py-3">
+  <button type="button" class="btn" data-size="sm" data-variant="outline"
+          hx-get="/activity?{{urlencode (odict "category" .category "offset" .next_offset)}}"
+          hx-target="closest li" hx-swap="outerHTML" hx-push-url="false">Show older</button>
+</li>
+{{end}}{{end}}
+
+{{template "activity_rows" (dict "entries" .Data.entries "category" .Data.category "offset" .Data.offset "next_offset" .Data.next_offset "toast" .Toast)}}

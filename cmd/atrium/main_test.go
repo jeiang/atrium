@@ -156,3 +156,12 @@ func TestServeRendersMailPages(t *testing.T) {
 		t.Errorf("POST /live/pause = %d %q", status, header.Get("Location"))
 	}
 }
+
+func TestServeRendersReviewPages(t *testing.T) {
+	base := startServe(t)
+	for _, path := range []string{"/proposals", "/activity", "/drafts", "/loops", "/watches"} {
+		if status, _, _ := fetch(t, http.DefaultClient, "GET", base+path, nil); status != http.StatusOK {
+			t.Errorf("GET %s = %d", path, status)
+		}
+	}
+}
