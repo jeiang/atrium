@@ -150,6 +150,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	if err != nil {
 		return err
 	}
+	defer srv.Close()
 	listener, err := net.Listen("tcp", net.JoinHostPort(a.host, strconv.Itoa(a.port)))
 	if err != nil {
 		return err
@@ -157,8 +158,9 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	return listenAndShutdown(ctx, listener, srv)
 }
 
-func listenAndShutdown(ctx context.Context, listener net.Listener, handler http.Handler) error {
-	httpServer := &http.Server{Handler: handler, ReadHeaderTimeout: 30 * time.Second}
+func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server) error {
+	httpServer := &http.Server{Handler: srv, ReadHeaderTimeout: 30 * time.Second}
+	httpServer.RegisterOnShutdown(srv.StopStreams)
 	failed := make(chan error, 1)
 	go func() { failed <- httpServer.Serve(listener) }()
 	log.Info("listening", "addr", listener.Addr().String())

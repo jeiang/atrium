@@ -1,0 +1,1 @@
+{{range .Data.queued}}{{template "chat_item" (dict "item" (dict "kind" "queued" "id" .id "text" .text "files" .files))}}{{end}}

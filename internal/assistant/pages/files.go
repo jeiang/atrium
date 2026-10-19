@@ -1,0 +1,334 @@
+package pages
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"mime"
+	"net/http"
+	"net/url"
+	"os"
+	"slices"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant/files"
+	"github.com/jeiang/atrium/internal/assistant/projects"
+	"github.com/jeiang/atrium/internal/assistant/threads"
+	mailmime "github.com/jeiang/atrium/internal/mail/mime"
+	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/web/tpl"
+)
+
+const (
+	previewBytes = 200_000
+	uploadSlack  = 1 << 20
+	sniffBytes   = 4096
+
+	badBodyDetail = "There was an error parsing the body"
+)
+
+var (
+	errBadBody     = errors.New("unparseable multipart body")
+	markdownTypes  = []string{"text/markdown", "text/x-markdown"}
+	tableTypes     = []string{"text/csv", "application/csv", files.XLSXType}
+	oversizeUpload = files.FileError(fmt.Sprintf("files in one message must total under %d MB", files.MessageCapBytes>>20))
+)
+
+func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values, []files.UploadedFile, error) {
+	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || !strings.HasPrefix(media, "multipart/") {
+		return web.FormValues(r), nil, nil
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, files.MessageCapBytes+uploadSlack)
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
+		if errors.As(err, new(*http.MaxBytesError)) {
+			return url.Values{}, nil, oversizeUpload
+		}
+		return url.Values{}, nil, errBadBody
+	}
+	defer func() { _ = r.MultipartForm.RemoveAll() }()
+	var uploads []files.UploadedFile
+	for _, header := range r.MultipartForm.File["upload"] {
+		if header.Filename == "" {
+			continue
+		}
+		f, err := header.Open()
+		check(err)
+		data, err := io.ReadAll(f)
+		_ = f.Close()
+		check(err)
+		if len(data) > 0 {
+			uploads = append(uploads, files.UploadedFile{Name: header.Filename, Data: data, Type: header.Header.Get("Content-Type")})
+		}
+	}
+	return r.MultipartForm.Value, uploads, nil
+}
+
+func (p *pages) readUploads(w http.ResponseWriter, r *http.Request) (url.Values, []files.UploadedFile, bool) {
+	form, uploads, err := p.parseUploads(w, r)
+	switch {
+	case errors.Is(err, errBadBody):
+		p.fail(w, r, http.StatusBadRequest, badBodyDetail)
+		return nil, nil, false
+	case err != nil:
+		p.failure(w, r, "Not attached", err.Error())
+		return nil, nil, false
+	}
+	return form, uploads, true
+}
+
+func (p *pages) remote() files.RemoteDeleter {
+	if p.svc.Client != nil {
+		return p.svc.Client
+	}
+	if client, err := anthropic.New(p.deps.Env); err == nil {
+		return client
+	}
+	return nil
+}
+
+func (p *pages) threadFile(w http.ResponseWriter, r *http.Request) (*files.Row, string, bool) {
+	threadID, errs := pathInt(r, "thread_id")
+	fileID, more := pathInt(r, "file_id")
+	if errs = append(errs, more...); len(errs) > 0 {
+		web.Unprocessable(w, errs...)
+		return nil, "", false
+	}
+	thread, err := threads.Get(r.Context(), p.deps.DB.Read, threadID)
+	check(err)
+	if thread == nil {
+		p.fail(w, r, http.StatusNotFound, "unknown thread")
+		return nil, "", false
+	}
+	found, err := files.Get(r.Context(), p.deps.DB.Read, fileID)
+	check(err)
+	if found == nil || found.ThreadID == nil || *found.ThreadID != threadID {
+		p.fail(w, r, http.StatusNotFound, "unknown file")
+		return nil, "", false
+	}
+	return found, fmt.Sprintf("/chat/%d/files/%d", threadID, fileID), true
+}
+
+func (p *pages) chatFile(w http.ResponseWriter, r *http.Request) {
+	found, fileURL, ok := p.threadFile(w, r)
+	if !ok {
+		return
+	}
+	preview, err := filePreview(*found)
+	check(err)
+	p.fragment(w, r, http.StatusOK, "_file.gohtml", map[string]any{"file": preview, "file_url": fileURL})
+}
+
+func (p *pages) chatFileDownload(w http.ResponseWriter, r *http.Request) {
+	if found, _, ok := p.threadFile(w, r); ok {
+		p.download(w, r, *found)
+	}
+}
+
+func (p *pages) chatFileRaw(w http.ResponseWriter, r *http.Request) {
+	found, _, ok := p.threadFile(w, r)
+	if !ok {
+		return
+	}
+	if !files.IsImageType(found.MediaType) {
+		p.fail(w, r, http.StatusNotFound, "not an image")
+		return
+	}
+	f, err := os.Open(found.Path)
+	check(err)
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	check(err)
+	w.Header().Set("Content-Type", found.MediaType)
+	http.ServeContent(w, r, "", info.ModTime(), f)
+}
+
+func contentType(media string) string {
+	if strings.HasPrefix(media, "text/") && !strings.Contains(py.Lower(media), "charset=") {
+		return media + "; charset=utf-8"
+	}
+	return media
+}
+
+func disposition(name string) string {
+	if quoted := py.URLQuote(name); quoted != name {
+		return "attachment; filename*=utf-8''" + quoted
+	}
+	return `attachment; filename="` + name + `"`
+}
+
+func (p *pages) download(w http.ResponseWriter, r *http.Request, found files.Row) {
+	f, err := os.Open(found.Path)
+	if err != nil {
+		p.fail(w, r, http.StatusNotFound, "file is missing from storage")
+		return
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		p.fail(w, r, http.StatusNotFound, "file is missing from storage")
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", contentType(found.MediaType))
+	h.Set("Content-Disposition", disposition(found.Name))
+	http.ServeContent(w, r, "", info.ModTime(), f)
+}
+
+func (p *pages) loadProject(w http.ResponseWriter, r *http.Request, projectID int64) (*projects.Project, bool) {
+	found, err := projects.Get(r.Context(), p.deps.DB.Read, projectID)
+	check(err)
+	if found == nil {
+		p.fail(w, r, http.StatusNotFound, "unknown project")
+		return nil, false
+	}
+	return found, true
+}
+
+func (p *pages) projectFiles(w http.ResponseWriter, r *http.Request, projectID int64, status int, problem *string) {
+	project, ok := p.loadProject(w, r, projectID)
+	if !ok {
+		return
+	}
+	rows, err := files.OfProject(r.Context(), p.deps.DB.Read, projectID)
+	check(err)
+	if rows == nil {
+		rows = []files.Row{}
+	}
+	p.fragment(w, r, status, "_project_files.gohtml", map[string]any{"project": project, "files": rows, "error": problem})
+}
+
+func (p *pages) projectFilesList(w http.ResponseWriter, r *http.Request) {
+	if projectID, ok := pathID(w, r, "project_id"); ok {
+		p.projectFiles(w, r, projectID, http.StatusOK, nil)
+	}
+}
+
+func (p *pages) projectFilesUpload(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := pathID(w, r, "project_id")
+	if !ok {
+		return
+	}
+	_, uploads, err := p.parseUploads(w, r)
+	if errors.Is(err, errBadBody) {
+		p.fail(w, r, http.StatusBadRequest, badBodyDetail)
+		return
+	}
+	project, ok := p.loadProject(w, r, projectID)
+	if !ok {
+		return
+	}
+	if err == nil && len(uploads) == 0 {
+		err = files.FileError("Choose at least one file.")
+	}
+	if err == nil {
+		limit := project.ContextLimit
+		_, err = files.IngestUploads(detached(r), p.deps.DB.Write, p.deps.Cfg.FilesDir(), uploads, p.now(), files.Owner{ProjectID: projectID}, &limit)
+	}
+	var refused files.FileError
+	if errors.As(err, &refused) {
+		if web.IsPartial(r) {
+			problem := err.Error()
+			p.projectFiles(w, r, projectID, http.StatusUnprocessableEntity, &problem)
+			return
+		}
+		p.fail(w, r, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	check(err)
+	p.projectFiles(w, r, projectID, http.StatusOK, nil)
+}
+
+func (p *pages) projectFile(w http.ResponseWriter, r *http.Request) (int64, *files.Row, bool) {
+	projectID, errs := pathInt(r, "project_id")
+	fileID, more := pathInt(r, "file_id")
+	if errs = append(errs, more...); len(errs) > 0 {
+		web.Unprocessable(w, errs...)
+		return 0, nil, false
+	}
+	found, err := files.Get(r.Context(), p.deps.DB.Read, fileID)
+	check(err)
+	if found == nil || found.ProjectID == nil || *found.ProjectID != projectID {
+		p.fail(w, r, http.StatusNotFound, "unknown file")
+		return 0, nil, false
+	}
+	return projectID, found, true
+}
+
+func (p *pages) projectFileDownload(w http.ResponseWriter, r *http.Request) {
+	if _, found, ok := p.projectFile(w, r); ok {
+		p.download(w, r, *found)
+	}
+}
+
+func (p *pages) projectFileDelete(w http.ResponseWriter, r *http.Request) {
+	projectID, found, ok := p.projectFile(w, r)
+	if !ok {
+		return
+	}
+	_, err := files.DeleteOne(detached(r), p.deps.DB.Write, p.remote(), found.ID)
+	check(err)
+	p.projectFiles(w, r, projectID, http.StatusOK, nil)
+}
+
+func filePreview(found files.Row) (map[string]any, error) {
+	out := tpl.View(found).(map[string]any)
+	render, text, rows, truncated, err := previewOf(found)
+	if err != nil {
+		return nil, err
+	}
+	out["render"], out["text"], out["rows"], out["truncated"] = render, text, rows, truncated
+	return out, nil
+}
+
+func previewOf(found files.Row) (render any, text string, rows [][]string, truncated bool, err error) {
+	rows = [][]string{}
+	media := found.MediaType
+	if files.IsImageType(media) {
+		return "image", "", rows, false, nil
+	}
+	if media == files.PDFType {
+		return nil, "", rows, false, nil
+	}
+	var body *string
+	if found.Text == nil {
+		info, statErr := os.Stat(found.Path)
+		if statErr != nil || !info.Mode().IsRegular() {
+			return nil, "", rows, false, nil
+		}
+		raw, readErr := os.ReadFile(found.Path)
+		if readErr != nil {
+			return nil, "", nil, false, readErr
+		}
+		truncated = len(raw) > previewBytes
+		head := raw[:min(len(raw), sniffBytes)]
+		if strings.HasPrefix(media, "text/") || media == "application/json" || media == "application/xml" || bytes.IndexByte(head, 0) < 0 {
+			decoded, decodeErr := mailmime.DecodeReplace(raw[:min(len(raw), previewBytes)], "utf-8")
+			if decodeErr != nil {
+				return nil, "", nil, false, decodeErr
+			}
+			body = &decoded
+		}
+	} else if utf8.RuneCountInString(*found.Text) > previewBytes {
+		cut := string([]rune(*found.Text)[:previewBytes])
+		body, truncated = &cut, true
+	} else {
+		body = found.Text
+	}
+	if body == nil {
+		return nil, "", rows, false, nil
+	}
+	suffix := py.Lower(py.PathSuffix(py.PathName(found.Path)))
+	switch {
+	case slices.Contains(markdownTypes, media) || suffix == ".md" || suffix == ".markdown":
+		return "markdown", *body, rows, truncated, nil
+	case slices.Contains(tableTypes, media) || suffix == ".csv":
+		parsed, csvErr := pyCSV(*body)
+		return "table", "", parsed, truncated, csvErr
+	}
+	return "text", *body, rows, truncated, nil
+}

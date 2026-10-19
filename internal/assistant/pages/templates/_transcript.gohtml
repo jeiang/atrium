@@ -1,0 +1,35 @@
+{{template "chat_transcript" (dict "view" .Data.view "csrf" .CSRF)}}
+
+{{define "chat_transcript"}}{{$v := .view}}{{$csrf := .csrf}}{{$t := $v.thread}}{{$active := $v.active}}{{$busy := and $active (eq $active.state "running")}}
+{{range $v.items}}{{template "chat_item" (dict "item" . "thread" $t "last_seq" $v.last_operator_seq "busy" $busy "csrf" $csrf)}}{{end}}
+{{range $v.runs}}{{if and (eq .state "failed") (not .superseded)}}
+<li class="ps-10" data-run="{{.id}}">
+  <div class="alert" data-variant="destructive" role="alert">
+    {{icon "circle-alert"}}
+    <p>Run {{.id}} stopped: {{.error}}</p>
+    {{if and (eq $t.kind "chat") (eq .id (last $v.runs).id) $v.last_operator_seq (not $busy)}}
+    <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/chat/{{$t.id}}/regenerate" hx-target="#transcript" hx-swap="innerHTML" hx-disabled-elt="this">{{icon "refresh-cw" "size-3.5"}}Try again</button>
+    {{end}}
+  </div>
+</li>
+{{end}}{{end}}
+{{if not $v.items}}
+<li>{{template "empty_state" (dict "icon_name" "messages-square" "title" "Say something" "body" "The assistant can search your mail, contacts, Notion and the web, and read what it finds.")}}</li>
+{{end}}
+{{if $busy}}
+{{template "chat_run_live" (dict "thread_id" $t.id "run_id" $active.id "after" (ternary $v.items (opt (last $v.items) "seq" 0) 0))}}
+{{else if and $active (eq $active.state "interrupted")}}
+{{template "chat_interrupted" (dict "thread_id" $t.id "run_id" $active.id)}}
+{{end}}
+{{range $v.queued}}{{template "chat_item" (dict "item" (dict "kind" "queued" "id" .id "text" .text "files" .files))}}{{end}}
+{{- end}}
+
+{{define "chat_interrupted"}}
+<li class="ps-10" id="run-{{.run_id}}">
+  <div class="alert" role="alert">
+    {{icon "circle-alert"}}
+    <p>This run was interrupted while a write was in flight. Resume to let the assistant check what happened and continue.</p>
+    <button type="button" class="btn" data-size="sm" hx-post="/chat/{{.thread_id}}/runs/{{.run_id}}/resume" hx-target="#run-{{.run_id}}" hx-swap="outerHTML" hx-disabled-elt="this">{{icon "play"}}Resume</button>
+  </div>
+</li>
+{{- end}}

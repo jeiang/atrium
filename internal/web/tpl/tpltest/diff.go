@@ -12,6 +12,7 @@ type Rewrite struct {
 	To   string
 	Why  string
 	Only func(token string) bool
+	Drop bool
 }
 
 // Diff is the line diff of two canonical forms, empty when they are equal.
@@ -62,10 +63,10 @@ func Diff(want, got []string) string {
 // Jinja side.
 func Compare(t testing.TB, want, got string, documented ...Rewrite) {
 	t.Helper()
-	wantTokens := Canonical(want)
+	wantTokens := drop(Canonical(want), documented)
 	for i, token := range wantTokens {
 		for _, r := range documented {
-			if r.Only == nil || r.Only(token) {
+			if !r.Drop && (r.Only == nil || r.Only(token)) {
 				token = strings.ReplaceAll(token, r.From, r.To)
 			}
 		}
@@ -74,4 +75,51 @@ func Compare(t testing.TB, want, got string, documented ...Rewrite) {
 	if diff := Diff(wantTokens, Canonical(got)); diff != "" {
 		t.Errorf("canonical diff (- Jinja, + Go):\n%s", diff)
 	}
+}
+
+func drop(tokens []string, documented []Rewrite) []string {
+	out := tokens[:0:0]
+	for i := 0; i < len(tokens); i++ {
+		if !dropped(tokens[i], documented) {
+			out = append(out, tokens[i])
+			continue
+		}
+		name := tagName(tokens[i])
+		if void[name] {
+			continue
+		}
+		for depth := 1; depth > 0 && i+1 < len(tokens); {
+			i++
+			switch tokens[i] {
+			case "</" + name + ">":
+				depth--
+			default:
+				if isStart(tokens[i]) && tagName(tokens[i]) == name {
+					depth++
+				}
+			}
+		}
+	}
+	return out
+}
+
+func isStart(token string) bool {
+	return strings.HasPrefix(token, "<") && !strings.HasPrefix(token, "</") && !strings.HasPrefix(token, "<!")
+}
+
+func tagName(token string) string {
+	name, _, _ := strings.Cut(strings.TrimSuffix(token[1:], ">"), " ")
+	return name
+}
+
+func dropped(token string, documented []Rewrite) bool {
+	if !isStart(token) {
+		return false
+	}
+	for _, r := range documented {
+		if r.Drop && r.Only != nil && r.Only(token) {
+			return true
+		}
+	}
+	return false
 }

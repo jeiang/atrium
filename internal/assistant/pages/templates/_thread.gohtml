@@ -1,0 +1,80 @@
+{{template "chat_thread" (dict "d" .Data "csrf" .CSRF)}}
+
+{{define "chat_thread"}}{{$d := .d}}{{$csrf := .csrf}}{{$v := $d.view}}{{$t := $v.thread}}{{$active := $v.active}}{{$busy := and $active (eq $active.state "running")}}
+<header class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+  <a href="/chat" class="btn" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Threads</a>
+  <span class="badge" data-variant="outline">{{$t.kind}}</span>
+  <span class="tabular-nums">started {{template "when" (dict "epoch" $t.created_at "style" "datetime")}}</span>
+  {{template "chat_meter" (dict "view" $v)}}
+  {{if $t.project_id}}<a href="/projects/{{$t.project_id}}" class="btn" data-size="sm" data-variant="ghost">{{icon "folder"}}{{if $d.project}}{{$d.project.name}}{{else}}Project{{end}}</a>{{end}}
+  {{if $t.parent_thread_id}}<a href="/chat/{{$t.parent_thread_id}}" class="btn" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Parent thread</a>{{end}}
+  {{with $v.branched_from}}<a href="/chat/{{.id}}" class="btn" data-size="sm" data-variant="ghost" title="Branched from message {{$t.branched_from_seq}}">{{icon "git-branch"}}Branched from “{{truncate 40 (or .title "Untitled thread")}}”</a>{{end}}
+  <span class="ms-auto flex flex-wrap items-center gap-1">
+    {{if eq $t.kind "chat"}}
+    {{if or $d.projects $t.project_id}}
+    <form method="post" action="/chat/{{$t.id}}/project" class="flex items-center gap-1">
+      <input type="hidden" name="csrf_token" value="{{$csrf}}">
+      <label for="move-project" class="sr-only">Project</label>
+      <select id="move-project" name="project_id" class="select h-8 max-w-40 py-0 text-xs">
+        <option value="0">No project</option>
+        {{range $d.projects}}<option value="{{.id}}"{{if eq .id $t.project_id}} selected{{end}}>{{.name}}</option>{{end}}
+      </select>
+      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{icon "folder-input"}}Move</button>
+    </form>
+    {{end}}
+    {{if not $t.archived}}
+    <form method="post" action="/chat/{{$t.id}}/pin">
+      <input type="hidden" name="csrf_token" value="{{$csrf}}">
+      <input type="hidden" name="pinned" value="{{if $t.pinned}}0{{else}}1{{end}}">
+      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{icon (ternary $t.pinned "pin-off" "pin")}}{{if $t.pinned}}Unpin{{else}}Pin{{end}}</button>
+    </form>
+    {{end}}
+    <form method="post" action="/chat/{{$t.id}}/archive">
+      <input type="hidden" name="csrf_token" value="{{$csrf}}">
+      <input type="hidden" name="archived" value="{{if $t.archived}}0{{else}}1{{end}}">
+      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{icon (ternary $t.archived "archive-restore" "archive")}}{{if $t.archived}}Unarchive{{else}}Archive{{end}}</button>
+    </form>
+    <form method="post" action="/chat/{{$t.id}}/delete" data-confirm-submit="Delete this thread, its subagent transcripts and its files? This cannot be undone.">
+      <input type="hidden" name="csrf_token" value="{{$csrf}}">
+      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{icon "trash-2"}}Delete</button>
+    </form>
+    {{end}}
+    <button type="button" class="btn md:hidden" data-size="sm" data-variant="outline" data-action="toggle-panel" aria-controls="panel" aria-expanded="false">{{icon "panel-right"}}Panel</button>
+  </span>
+</header>
+<ol id="transcript" class="flex flex-col gap-4" aria-live="polite" aria-label="Conversation" data-thread="{{$t.id}}">
+  {{template "chat_transcript" (dict "view" $v "csrf" $csrf)}}
+</ol>
+{{if ne $t.kind "subagent"}}
+<form id="composer" class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" method="post" action="/chat/{{$t.id}}/messages" enctype="multipart/form-data"
+      hx-post="/chat/{{$t.id}}/messages" hx-encoding="multipart/form-data" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset data-attach>
+  <input type="hidden" name="csrf_token" value="{{$csrf}}">
+  <input type="hidden" name="edit" value="">
+  <p id="composer-editing" class="flex items-center gap-2 text-xs text-muted-foreground" hidden>{{icon "pencil" "size-3.5"}}Editing your last message: sending replaces it and the reply.<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="cancel-edit">Cancel</button></p>
+  <label for="composer-text" class="sr-only">Message</label>
+  <textarea id="composer-text" name="text" rows="2" class="textarea w-full" placeholder="Message the assistant… (⌘⏎ to send, drop files to attach)" data-submit-on-enter required autofocus></textarea>
+  {{template "attach_field"}}
+  <div class="flex flex-wrap items-center gap-2 text-xs">
+    {{template "attach_button"}}
+    {{if eq $t.kind "chat"}}
+    <label class="flex items-center gap-1 text-muted-foreground">Effort
+      <select name="effort" class="select h-7 py-0 text-xs" data-option hx-post="/chat/{{$t.id}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML">
+        {{range $d.efforts}}<option value="{{.}}"{{if eq . $t.effort}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+    <label class="flex items-center gap-1 text-muted-foreground">Context
+      <select name="context_limit" class="select h-7 py-0 text-xs" data-option hx-post="/chat/{{$t.id}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML">
+        {{range $d.context_limits}}<option value="{{.}}"{{if eq . $v.meter.limit}} selected{{end}}>{{int (fdiv . 1000)}}K{{if gt . 100000}} (5× price over 100K){{end}}</option>{{end}}
+      </select>
+    </label>
+    <span class="hidden text-muted-foreground lg:inline">Above 100K input tokens Haiku 5.5 bills input at 5×.</span>
+    {{end}}
+    {{template "spinner" (dict "id" "composer-spinner" "label" "Sending")}}
+    <span class="ms-auto flex items-center gap-1">
+      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/chat/{{$t.id}}/stop" hx-swap="none" data-stop{{if not $busy}} hidden{{end}}>{{icon "square" "size-3.5"}}Stop</button>
+      <button type="submit" class="btn" data-size="sm">{{icon "send"}}<span data-send{{if $busy}} hidden{{end}}>Send</span><span data-queue{{if not $busy}} hidden{{end}}>Queue</span></button>
+    </span>
+  </div>
+</form>
+{{end}}
+{{- end}}
