@@ -114,6 +114,16 @@ func ruleDict(r rules.Rule) RuleDict {
 // ListRules is list_rules: the operator rules in effect for account.
 func ListRules(ctx context.Context, q rules.Querier, account string) ([]RuleDict, error) {
 	loaded, err := rules.LoadRules(ctx, q, account)
+	return ruleDicts(loaded, err)
+}
+
+// ListAllRules is list_rules(conn, None): every operator rule.
+func ListAllRules(ctx context.Context, q rules.Querier) ([]RuleDict, error) {
+	loaded, err := rules.LoadAllRules(ctx, q)
+	return ruleDicts(loaded, err)
+}
+
+func ruleDicts(loaded []rules.Rule, err error) ([]RuleDict, error) {
 	if err != nil {
 		return nil, err
 	}
