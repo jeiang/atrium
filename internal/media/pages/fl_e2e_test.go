@@ -157,6 +157,7 @@ func TestFlSignedFileChecklist(t *testing.T) {
 			"unsigned":           media.FilePrefix + py.URLQuote(w.movieRel),
 			"wrong path":         strings.Replace(good, "Dune%20%282021%29.mkv", "Dune%20%282021%29.mkvx", 1),
 			"non-numeric expiry": media.FilePrefix + py.URLQuote(w.movieRel) + "?exp=soon&sig=00",
+			"huge expiry":        media.FilePrefix + py.URLQuote(w.movieRel) + "?exp=" + strings.Repeat("9", 5000) + "&sig=00",
 			"empty signature":    media.FilePrefix + py.URLQuote(w.movieRel) + "?exp=4000000000&sig=",
 		}
 		for name, target := range cases {
