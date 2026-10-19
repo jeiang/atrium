@@ -7,7 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/mail/birthdays"
 	"github.com/jeiang/atrium/internal/mail/drafts"
+	"github.com/jeiang/atrium/internal/mail/openloops"
+	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -296,3 +299,77 @@ var proposalCardGoldens = []string{
 var pageRewrites = map[string][]tpltest.Rewrite{}
 
 var fragmentRewrites = map[string][]tpltest.Rewrite{}
+
+func goldenMaps(v any) []map[string]any {
+	list, _ := v.([]any)
+	out := make([]map[string]any, len(list))
+	for i, e := range list {
+		out[i], _ = e.(map[string]any)
+	}
+	return out
+}
+
+func goldenLoops(v any) []openloops.Loop {
+	var out []openloops.Loop
+	for _, m := range goldenMaps(v) {
+		out = append(out, openloops.Loop{
+			ID: inum(m, "id"), Account: str(m, "account"), Days: inum(m, "days"), Counterpart: str(m, "counterpart"),
+			LastMessageID: inum(m, "last_message_id"), Subject: str(m, "subject"),
+		})
+	}
+	return out
+}
+
+func loopsData(_ testing.TB, c tpltest.Case) any {
+	var commitments []openloops.Commitment
+	for _, m := range goldenMaps(c.Context["commitments"]) {
+		commitments = append(commitments, openloops.Commitment{
+			ID: inum(m, "id"), MessageID: inum(m, "message_id"), Text: str(m, "text"), Owner: str(m, "owner"), Due: optStr(m, "due"),
+			Subject: optStr(m, "subject"),
+		})
+	}
+	var choices []int
+	for _, n := range c.Context["snooze_choices"].([]any) {
+		choices = append(choices, int(n.(int64)))
+	}
+	return loopsPage{Owe: goldenLoops(c.Context["owe"]), Waiting: goldenLoops(c.Context["waiting"]), Commitments: commitments, SnoozeChoices: choices}
+}
+
+func watchesData(_ testing.TB, c tpltest.Case) any {
+	var packages []watches.Package
+	for _, m := range goldenMaps(c.Context["packages"]) {
+		packages = append(packages, watches.Package{
+			ID: inum(m, "id"), Merchant: str(m, "merchant"), Carrier: str(m, "carrier"), Status: str(m, "status"),
+			TrackingNumber: str(m, "tracking_number"), OrderRef: str(m, "order_ref"), StatusText: str(m, "status_text"),
+			Updated: str(m, "updated"), LastMessageID: inum(m, "last_message_id"),
+		})
+	}
+	page := watchesPage{Packages: packages}
+	if c.Context["birthdays"] != nil {
+		items := []birthdays.Item{}
+		for _, m := range goldenMaps(c.Context["birthdays"]) {
+			item := birthdays.Item{Name: str(m, "name"), Label: str(m, "label"), Date: str(m, "date"), DaysUntil: int(inum(m, "days_until")), Key: str(m, "key")}
+			if n := optInt(m, "turning"); n != nil {
+				turning := int(*n)
+				item.Turning = &turning
+			}
+			items = append(items, item)
+		}
+		page.Birthdays = &items
+	}
+	return page
+}
+
+func init() {
+	pageGoldens["openloops"] = struct {
+		page string
+		data func(testing.TB, tpltest.Case) any
+	}{"loops", loopsData}
+	pageGoldens["openloops@empty"] = pageGoldens["openloops"]
+	pageGoldens["watches"] = struct {
+		page string
+		data func(testing.TB, tpltest.Case) any
+	}{"watches", watchesData}
+	pageGoldens["watches@empty"] = pageGoldens["watches"]
+	pageGoldens["watches@no-contacts"] = pageGoldens["watches"]
+}

@@ -67,6 +67,17 @@ func TestServeRendersNotificationsPage(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "No notifications") {
 		t.Errorf("GET /settings/notifications = %d: %s", resp.StatusCode, body)
 	}
+	for _, path := range []string{"/proposals", "/activity", "/drafts", "/loops", "/watches"} {
+		resp, err := http.Get("http://127.0.0.1:" + port + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("GET %s = %d", path, resp.StatusCode)
+		}
+	}
 	cancel()
 	select {
 	case code := <-done:
