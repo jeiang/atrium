@@ -97,7 +97,8 @@ func pyInt(s string) int {
 	return n
 }
 
-func zone(name string) (*time.Location, error) {
+// Zone is zone: the named zone, or a schedule Error for an unknown name.
+func Zone(name string) (*time.Location, error) {
 	loc, err := config.Zone(name)
 	if err != nil {
 		return nil, Error(err.Error())
@@ -201,7 +202,7 @@ func Parse(text, tz string) (Spec, error) {
 	if text == "" {
 		return Spec{}, Error("schedule is empty")
 	}
-	loc, err := zone(tz)
+	loc, err := Zone(tz)
 	if err != nil {
 		return Spec{}, err
 	}

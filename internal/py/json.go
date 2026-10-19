@@ -22,11 +22,26 @@ func (d Dict) MarshalJSON() ([]byte, error) { return []byte(JSONDumps(d)), nil }
 
 // JSONOpts selects json.dumps arguments. The zero value is the defaults: ", " and ": " separators, non-ASCII
 // escaped, keys in insertion order. NoEnsureASCII is ensure_ascii=False, Compact is separators=(",", ":"),
-// SortKeys is sort_keys=True.
+// SortKeys is sort_keys=True and Indent > 0 is indent=Indent (items on their own lines, "," and ": " separators,
+// empty containers as "[]" and "{}").
 type JSONOpts struct {
 	NoEnsureASCII bool
 	Compact       bool
 	SortKeys      bool
+	Indent        int
+	level         int
+}
+
+func (o JSONOpts) nested() JSONOpts {
+	o.level++
+	return o
+}
+
+func (o JSONOpts) newline(b *strings.Builder) {
+	if o.Indent > 0 {
+		b.WriteByte('\n')
+		b.WriteString(strings.Repeat(" ", o.Indent*o.level))
+	}
 }
 
 // JSONDumps is json.dumps(v, ...), the one JSON encoder: v is nil, a bool, an integer, a float64, a *big.Int, a
@@ -56,6 +71,19 @@ func dump(b *strings.Builder, v any, o JSONOpts) {
 	itemSep, keySep := ", ", ": "
 	if o.Compact {
 		itemSep, keySep = ",", ":"
+	}
+	if o.Indent > 0 {
+		itemSep, keySep = ",", ": "
+		switch list := v.(type) {
+		case []string:
+			v = toAny(list)
+		case []int:
+			v = toAny(list)
+		case []int64:
+			v = toAny(list)
+		case []uint32:
+			v = toAny(list)
+		}
 	}
 	switch v := v.(type) {
 	case nil:
@@ -104,11 +132,16 @@ func dump(b *strings.Builder, v any, o JSONOpts) {
 		dumpInts(b, v, itemSep)
 	case []any:
 		b.WriteByte('[')
+		inner := o.nested()
 		for i, e := range v {
 			if i > 0 {
 				b.WriteString(itemSep)
 			}
-			dump(b, e, o)
+			inner.newline(b)
+			dump(b, e, inner)
+		}
+		if len(v) > 0 {
+			o.newline(b)
 		}
 		b.WriteByte(']')
 	case map[string]any:
@@ -124,13 +157,18 @@ func dump(b *strings.Builder, v any, o JSONOpts) {
 			slices.SortStableFunc(v, func(a, c Pair) int { return strings.Compare(a.Key, c.Key) })
 		}
 		b.WriteByte('{')
+		inner := o.nested()
 		for i, p := range v {
 			if i > 0 {
 				b.WriteString(itemSep)
 			}
+			inner.newline(b)
 			dumpString(b, p.Key, o)
 			b.WriteString(keySep)
-			dump(b, p.Value, o)
+			dump(b, p.Value, inner)
+		}
+		if len(v) > 0 {
+			o.newline(b)
 		}
 		b.WriteByte('}')
 	default:

@@ -102,3 +102,21 @@ func ParseInt(s string) (int64, bool) {
 	}
 	return n.Int64(), true
 }
+
+// FloorDiv is a // b for floats: floor of the quotient computed from fmod as CPython's float_floor_div does, so
+// the result can differ from math.Floor(a/b) where a/b rounds up to an integer. b must not be zero.
+func FloorDiv(a, b float64) float64 {
+	mod := math.Mod(a, b)
+	div := (a - mod) / b
+	if mod != 0 && (b < 0) != (mod < 0) {
+		div--
+	}
+	if div == 0 {
+		return math.Copysign(0, a/b)
+	}
+	floored := math.Floor(div)
+	if div-floored > 0.5 {
+		floored++
+	}
+	return floored
+}
