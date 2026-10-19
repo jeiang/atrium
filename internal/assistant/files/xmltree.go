@@ -14,11 +14,12 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// readError carries the name of the Python exception the same failure raises in the frozen app; the operator sees
-// it after "could not read the Word file: ".
 // maxTextBytes is the most text any attachment can carry into a request: the compaction budget of the largest
 // context at four bytes a character.
 var maxTextBytes = int(4 * actx.CharsPerToken * actx.LimitsFor(actx.ModelContext).Compact)
+
+// readError carries the name of the Python exception the same failure raises in the frozen app; the operator sees
+// it after "could not read the Word file: ".
 
 type readError string
 
