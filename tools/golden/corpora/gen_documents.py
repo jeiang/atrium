@@ -18,8 +18,8 @@ import openpyxl  # noqa: E402
 
 from atrium.agent import files  # noqa: E402
 
-# Python's mimetypes also reads the host's mime.types files; the corpus pins the built-in table only.
-mimetypes.init(files=[])
+# mimetypes.init(files=[]) still reads the host's knownfiles; the corpus pins the built-in table only.
+mimetypes._db = mimetypes.MimeTypes()
 
 ZIP_TIME = (2026, 1, 1, 0, 0, 0)
 CORE_DATE = re.compile(rb"(<dcterms:(?:created|modified)[^>]*>)[^<]*")
@@ -269,7 +269,7 @@ if __name__ == "__main__":
             "source": "src/atrium/agent/files.py",
             "functions": ["inspect", "safe_name", "media_type_of", "kind_of", "check_budget"],
             "versions": versions("python-docx", "openpyxl"),
-            "mimetypes": "built-in table only (mimetypes.init(files=[]))",
+            "mimetypes": "built-in table only (a mimetypes.MimeTypes() instance)",
         },
         made,
     )
