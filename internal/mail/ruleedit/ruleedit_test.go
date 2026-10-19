@@ -197,3 +197,20 @@ func TestLearnedSummaryAndFeatures(t *testing.T) {
 	_, err = ruleedit.MessageFeatures(ctx, d.Read, 999)
 	wantRuleError(t, err, "unknown message 999")
 }
+
+func TestListAllRulesIgnoresTheAccountScope(t *testing.T) {
+	d := rulestest.DB(t)
+	ctx := t.Context()
+	for _, account := range []string{"icloud", "gmail"} {
+		if _, err := ruleedit.CreateRule(ctx, d, raw("id", account, "account", account, "dest", "A", "when", []any{when("from_addr", "present")})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	all, err := ruleedit.ListAllRules(ctx, d.Read)
+	if err != nil || len(all) != 2 {
+		t.Fatalf("ListAllRules = %v, %v", all, err)
+	}
+	if got := ids(t, d, ""); len(got) != 0 {
+		t.Errorf("ListRules for the empty account = %v: only unscoped rules apply", got)
+	}
+}

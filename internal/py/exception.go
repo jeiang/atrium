@@ -8,13 +8,17 @@ type Classed interface {
 	PyClass() string
 }
 
-// ExceptionText is f"{type(e).__name__}: {e}". An error with no Classed in its chain is a RuntimeError, the
-// class the Python app raised for its own failures.
-func ExceptionText(err error) string {
-	class := "RuntimeError"
+// ExceptionClass is type(e).__name__: the class of the first Classed in the chain, RuntimeError (the class the
+// Python app raised for its own failures) for an error with none.
+func ExceptionClass(err error) string {
 	var c Classed
 	if errors.As(err, &c) {
-		class = c.PyClass()
+		return c.PyClass()
 	}
-	return class + ": " + err.Error()
+	return "RuntimeError"
+}
+
+// ExceptionText is f"{type(e).__name__}: {e}".
+func ExceptionText(err error) string {
+	return ExceptionClass(err) + ": " + err.Error()
 }
