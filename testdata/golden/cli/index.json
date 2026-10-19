@@ -744,6 +744,31 @@
   },
   {
     "argv": [
+      "atrium",
+      "agent",
+      "run",
+      "--text",
+      "hello"
+    ],
+    "exit_code": 0,
+    "name": "agent-run-not-configured",
+    "stderr": "agent-run-not-configured.stderr",
+    "stdout": "agent-run-not-configured.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "serve",
+      "--port",
+      "1"
+    ],
+    "exit_code": 1,
+    "name": "serve-proxy-without-host",
+    "stderr": "serve-proxy-without-host.stderr",
+    "stdout": "serve-proxy-without-host.stdout"
+  },
+  {
+    "argv": [
       "atrium"
     ],
     "exit_code": 2,
@@ -1112,5 +1137,756 @@
     "name": "argparse-notion-help",
     "stderr": "argparse-notion-help.stderr",
     "stdout": "argparse-notion-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "sync",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-sync-help",
+    "stderr": "argparse-sync-help.stderr",
+    "stdout": "argparse-sync-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "watch",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-watch-help",
+    "stderr": "argparse-watch-help.stderr",
+    "stdout": "argparse-watch-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "watch",
+      "--account",
+      "bogus"
+    ],
+    "exit_code": 2,
+    "name": "argparse-watch-bad-account",
+    "stderr": "argparse-watch-bad-account.stderr",
+    "stdout": "argparse-watch-bad-account.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "watch",
+      "--account"
+    ],
+    "exit_code": 2,
+    "name": "argparse-watch-expected-one",
+    "stderr": "argparse-watch-expected-one.stderr",
+    "stdout": "argparse-watch-expected-one.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "watch",
+      "extra"
+    ],
+    "exit_code": 2,
+    "name": "argparse-watch-extra",
+    "stderr": "argparse-watch-extra.stderr",
+    "stdout": "argparse-watch-extra.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "rules"
+    ],
+    "exit_code": 2,
+    "name": "argparse-rules-empty",
+    "stderr": "argparse-rules-empty.stderr",
+    "stdout": "argparse-rules-empty.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "rules",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-rules-help",
+    "stderr": "argparse-rules-help.stderr",
+    "stdout": "argparse-rules-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "rules",
+      "bogus"
+    ],
+    "exit_code": 2,
+    "name": "argparse-rules-bogus",
+    "stderr": "argparse-rules-bogus.stderr",
+    "stdout": "argparse-rules-bogus.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "rules",
+      "import",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-rules-import-help",
+    "stderr": "argparse-rules-import-help.stderr",
+    "stdout": "argparse-rules-import-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "rules",
+      "export",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-rules-export-help",
+    "stderr": "argparse-rules-export-help.stderr",
+    "stdout": "argparse-rules-export-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "rules",
+      "export",
+      "extra"
+    ],
+    "exit_code": 2,
+    "name": "argparse-rules-export-extra",
+    "stderr": "argparse-rules-export-extra.stderr",
+    "stdout": "argparse-rules-export-extra.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "shadow-report",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-shadow-report-help",
+    "stderr": "argparse-shadow-report-help.stderr",
+    "stdout": "argparse-shadow-report-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "shadow-report",
+      "extra"
+    ],
+    "exit_code": 2,
+    "name": "argparse-shadow-report-extra",
+    "stderr": "argparse-shadow-report-extra.stderr",
+    "stdout": "argparse-shadow-report-extra.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "reindex",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-reindex-help",
+    "stderr": "argparse-reindex-help.stderr",
+    "stdout": "argparse-reindex-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "reindex",
+      "extra"
+    ],
+    "exit_code": 2,
+    "name": "argparse-reindex-extra",
+    "stderr": "argparse-reindex-extra.stderr",
+    "stdout": "argparse-reindex-extra.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "rebalance"
+    ],
+    "exit_code": 2,
+    "name": "argparse-rebalance-empty",
+    "stderr": "argparse-rebalance-empty.stderr",
+    "stdout": "argparse-rebalance-empty.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "rebalance",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-rebalance-help",
+    "stderr": "argparse-rebalance-help.stderr",
+    "stdout": "argparse-rebalance-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "rebalance",
+      "bogus"
+    ],
+    "exit_code": 2,
+    "name": "argparse-rebalance-bogus",
+    "stderr": "argparse-rebalance-bogus.stderr",
+    "stdout": "argparse-rebalance-bogus.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "rebalance",
+      "scan",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-rebalance-scan-help",
+    "stderr": "argparse-rebalance-scan-help.stderr",
+    "stdout": "argparse-rebalance-scan-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "rebalance",
+      "scan",
+      "extra"
+    ],
+    "exit_code": 2,
+    "name": "argparse-rebalance-scan-extra",
+    "stderr": "argparse-rebalance-scan-extra.stderr",
+    "stdout": "argparse-rebalance-scan-extra.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "deletions"
+    ],
+    "exit_code": 2,
+    "name": "argparse-deletions-empty",
+    "stderr": "argparse-deletions-empty.stderr",
+    "stdout": "argparse-deletions-empty.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "deletions",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-deletions-help",
+    "stderr": "argparse-deletions-help.stderr",
+    "stdout": "argparse-deletions-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "deletions",
+      "scan",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-deletions-scan-help",
+    "stderr": "argparse-deletions-scan-help.stderr",
+    "stdout": "argparse-deletions-scan-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "gmail-labels"
+    ],
+    "exit_code": 2,
+    "name": "argparse-gmail-labels-empty",
+    "stderr": "argparse-gmail-labels-empty.stderr",
+    "stdout": "argparse-gmail-labels-empty.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "gmail-labels",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-gmail-labels-help",
+    "stderr": "argparse-gmail-labels-help.stderr",
+    "stdout": "argparse-gmail-labels-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "gmail-labels",
+      "scan",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-gmail-labels-scan-help",
+    "stderr": "argparse-gmail-labels-scan-help.stderr",
+    "stdout": "argparse-gmail-labels-scan-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "live",
+      "undo",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-live-undo-help",
+    "stderr": "argparse-live-undo-help.stderr",
+    "stdout": "argparse-live-undo-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "live",
+      "status",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-live-status-help",
+    "stderr": "argparse-live-status-help.stderr",
+    "stdout": "argparse-live-status-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "live",
+      "actions",
+      "--kind"
+    ],
+    "exit_code": 2,
+    "name": "argparse-live-actions-expected-one",
+    "stderr": "argparse-live-actions-expected-one.stderr",
+    "stdout": "argparse-live-actions-expected-one.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals"
+    ],
+    "exit_code": 2,
+    "name": "argparse-proposals-empty",
+    "stderr": "argparse-proposals-empty.stderr",
+    "stdout": "argparse-proposals-empty.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-proposals-help",
+    "stderr": "argparse-proposals-help.stderr",
+    "stdout": "argparse-proposals-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "bogus"
+    ],
+    "exit_code": 2,
+    "name": "argparse-proposals-bogus",
+    "stderr": "argparse-proposals-bogus.stderr",
+    "stdout": "argparse-proposals-bogus.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "scan-all",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-proposals-scan-all-help",
+    "stderr": "argparse-proposals-scan-all-help.stderr",
+    "stdout": "argparse-proposals-scan-all-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "scan-all",
+      "extra"
+    ],
+    "exit_code": 2,
+    "name": "argparse-proposals-scan-all-extra",
+    "stderr": "argparse-proposals-scan-all-extra.stderr",
+    "stdout": "argparse-proposals-scan-all-extra.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "list",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-proposals-list-help",
+    "stderr": "argparse-proposals-list-help.stderr",
+    "stdout": "argparse-proposals-list-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "list",
+      "--kind"
+    ],
+    "exit_code": 2,
+    "name": "argparse-proposals-list-expected-one",
+    "stderr": "argparse-proposals-list-expected-one.stderr",
+    "stdout": "argparse-proposals-list-expected-one.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "approve",
+      "x"
+    ],
+    "exit_code": 2,
+    "name": "argparse-proposals-approve-bad-id",
+    "stderr": "argparse-proposals-approve-bad-id.stderr",
+    "stdout": "argparse-proposals-approve-bad-id.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "approve",
+      "9",
+      "--selection"
+    ],
+    "exit_code": 2,
+    "name": "argparse-proposals-approve-selection-expected-one",
+    "stderr": "argparse-proposals-approve-selection-expected-one.stderr",
+    "stdout": "argparse-proposals-approve-selection-expected-one.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "dismiss",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-proposals-dismiss-help",
+    "stderr": "argparse-proposals-dismiss-help.stderr",
+    "stdout": "argparse-proposals-dismiss-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "dismiss"
+    ],
+    "exit_code": 2,
+    "name": "argparse-proposals-dismiss-missing",
+    "stderr": "argparse-proposals-dismiss-missing.stderr",
+    "stdout": "argparse-proposals-dismiss-missing.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "undo",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-proposals-undo-help",
+    "stderr": "argparse-proposals-undo-help.stderr",
+    "stdout": "argparse-proposals-undo-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "undo"
+    ],
+    "exit_code": 2,
+    "name": "argparse-proposals-undo-missing",
+    "stderr": "argparse-proposals-undo-missing.stderr",
+    "stdout": "argparse-proposals-undo-missing.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "proposals",
+      "undo",
+      "3",
+      "--forever"
+    ],
+    "exit_code": 2,
+    "name": "argparse-proposals-undo-forever",
+    "stderr": "argparse-proposals-undo-forever.stderr",
+    "stdout": "argparse-proposals-undo-forever.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "agent"
+    ],
+    "exit_code": 2,
+    "name": "argparse-agent-empty",
+    "stderr": "argparse-agent-empty.stderr",
+    "stdout": "argparse-agent-empty.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "agent",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-agent-help",
+    "stderr": "argparse-agent-help.stderr",
+    "stdout": "argparse-agent-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "agent",
+      "bogus"
+    ],
+    "exit_code": 2,
+    "name": "argparse-agent-bogus",
+    "stderr": "argparse-agent-bogus.stderr",
+    "stdout": "argparse-agent-bogus.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "agent",
+      "run",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-agent-run-help",
+    "stderr": "argparse-agent-run-help.stderr",
+    "stdout": "argparse-agent-run-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "agent",
+      "run"
+    ],
+    "exit_code": 2,
+    "name": "argparse-agent-run-missing-text",
+    "stderr": "argparse-agent-run-missing-text.stderr",
+    "stdout": "argparse-agent-run-missing-text.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "agent",
+      "run",
+      "--text",
+      "x",
+      "--kind",
+      "bogus"
+    ],
+    "exit_code": 2,
+    "name": "argparse-agent-run-bad-kind",
+    "stderr": "argparse-agent-run-bad-kind.stderr",
+    "stdout": "argparse-agent-run-bad-kind.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "agent",
+      "run",
+      "--text",
+      "x",
+      "--thread",
+      "x"
+    ],
+    "exit_code": 2,
+    "name": "argparse-agent-run-bad-thread",
+    "stderr": "argparse-agent-run-bad-thread.stderr",
+    "stdout": "argparse-agent-run-bad-thread.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "agent",
+      "run",
+      "--text"
+    ],
+    "exit_code": 2,
+    "name": "argparse-agent-run-text-expected-one",
+    "stderr": "argparse-agent-run-text-expected-one.stderr",
+    "stdout": "argparse-agent-run-text-expected-one.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "agent",
+      "scheduler",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-agent-scheduler-help",
+    "stderr": "argparse-agent-scheduler-help.stderr",
+    "stdout": "argparse-agent-scheduler-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "agent",
+      "scheduler",
+      "x"
+    ],
+    "exit_code": 2,
+    "name": "argparse-agent-scheduler-extra",
+    "stderr": "argparse-agent-scheduler-extra.stderr",
+    "stdout": "argparse-agent-scheduler-extra.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "loops"
+    ],
+    "exit_code": 2,
+    "name": "argparse-loops-empty",
+    "stderr": "argparse-loops-empty.stderr",
+    "stdout": "argparse-loops-empty.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "loops",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-loops-help",
+    "stderr": "argparse-loops-help.stderr",
+    "stdout": "argparse-loops-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "loops",
+      "bogus"
+    ],
+    "exit_code": 2,
+    "name": "argparse-loops-bogus",
+    "stderr": "argparse-loops-bogus.stderr",
+    "stdout": "argparse-loops-bogus.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "loops",
+      "refresh",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-loops-refresh-help",
+    "stderr": "argparse-loops-refresh-help.stderr",
+    "stdout": "argparse-loops-refresh-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "loops",
+      "refresh",
+      "extra"
+    ],
+    "exit_code": 2,
+    "name": "argparse-loops-refresh-extra",
+    "stderr": "argparse-loops-refresh-extra.stderr",
+    "stdout": "argparse-loops-refresh-extra.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "watches"
+    ],
+    "exit_code": 2,
+    "name": "argparse-watches-empty",
+    "stderr": "argparse-watches-empty.stderr",
+    "stdout": "argparse-watches-empty.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "watches",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-watches-help",
+    "stderr": "argparse-watches-help.stderr",
+    "stdout": "argparse-watches-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "watches",
+      "refresh",
+      "-h"
+    ],
+    "exit_code": 0,
+    "name": "argparse-watches-refresh-help",
+    "stderr": "argparse-watches-refresh-help.stderr",
+    "stdout": "argparse-watches-refresh-help.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "watches",
+      "refresh",
+      "extra"
+    ],
+    "exit_code": 2,
+    "name": "argparse-watches-refresh-extra",
+    "stderr": "argparse-watches-refresh-extra.stderr",
+    "stdout": "argparse-watches-refresh-extra.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "serve",
+      "--port",
+      "1",
+      "--host"
+    ],
+    "exit_code": 2,
+    "name": "argparse-serve-expected-one-host",
+    "stderr": "argparse-serve-expected-one-host.stderr",
+    "stdout": "argparse-serve-expected-one-host.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "serve",
+      "--port",
+      "1",
+      "--allowed-host"
+    ],
+    "exit_code": 2,
+    "name": "argparse-serve-allowed-host-expected-one",
+    "stderr": "argparse-serve-allowed-host-expected-one.stderr",
+    "stdout": "argparse-serve-allowed-host-expected-one.stdout"
+  },
+  {
+    "argv": [
+      "atrium",
+      "serve",
+      "--port",
+      "1",
+      "extra"
+    ],
+    "exit_code": 2,
+    "name": "argparse-serve-extra",
+    "stderr": "argparse-serve-extra.stderr",
+    "stdout": "argparse-serve-extra.stdout"
   }
 ]

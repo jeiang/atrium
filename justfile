@@ -23,7 +23,7 @@ test *args:
 golden:
   #!/usr/bin/env bash
   set -euo pipefail
-  nix develop --impure -c bash -c 'for script in tools/golden/gen_*.py tools/golden/make_db.py tools/golden/render_pages.py; do if [ -e "$script" ]; then echo "$script" >&2; python "$script"; fi; done'
+  nix develop --impure -c bash -c 'for script in tools/golden/gen_*.py tools/golden/make_db.py tools/golden/render_cli_parity.py tools/golden/render_pages.py; do if [ -e "$script" ]; then echo "$script" >&2; python "$script"; fi; done'
 
 # Stage the built web assets into internal/web/static, which go build and go test embed (inside the dev shell)
 assets:

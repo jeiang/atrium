@@ -1,0 +1,2 @@
+usage: atrium watch [-h] [--account {gmail,icloud}]
+atrium watch: error: argument --account: invalid choice: 'bogus' (choose from 'gmail', 'icloud')

@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
@@ -231,8 +233,45 @@ var unported = map[string]string{
 	"proposals-approve-list-selection-calendar": "the calendar_event executor is not ported yet",
 }
 
-// ported is what cmd/atrium registers today and so what the goldens can check.
-var ported = []string{"rules", "shadow-report", "reindex", "rebalance", "deletions", "gmail-labels", "live", "proposals", "loops", "watches"}
+type parityCase struct {
+	Name     string  `json:"name"`
+	GoStdout *string `json:"go_stdout"`
+	GoStderr *string `json:"go_stderr"`
+}
+
+type parityRow struct {
+	Command string       `json:"command"`
+	Path    []string     `json:"path"`
+	Status  string       `json:"status"`
+	Cases   []parityCase `json:"cases"`
+}
+
+func loadParity(t *testing.T) []parityRow {
+	t.Helper()
+	var table struct {
+		Commands []parityRow `json:"commands"`
+	}
+	if err := json.Unmarshal(golden.ReadFile(t, "cli", "parity.json"), &table); err != nil {
+		t.Fatal(err)
+	}
+	return table.Commands
+}
+
+func portedCommands(rows []parityRow) map[string]bool {
+	out := map[string]bool{}
+	for _, row := range rows {
+		if row.Status == "ported" && len(row.Path) > 0 {
+			out[row.Path[0]] = true
+		}
+	}
+	return out
+}
+
+var volatileRunFields = regexp.MustCompile(`"(started_at|ended_at|lease_until|owner)": [^\n]*`)
+
+func normalizeRun(s string) string {
+	return volatileRunFields.ReplaceAllString(s, `"$1": <volatile>`)
+}
 
 func lastLine(s string) string {
 	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
@@ -308,10 +347,18 @@ func TestCLIGoldens(t *testing.T) {
 		t.Fatal(err)
 	}
 	data := loadGoldenData(t)
+	rows := loadParity(t)
+	ported := portedCommands(rows)
+	overrides := map[string]parityCase{}
+	for _, row := range rows {
+		for _, c := range row.Cases {
+			overrides[c.Name] = c
+		}
+	}
 	ran := 0
 	for _, g := range index {
 		parser := strings.HasPrefix(g.Name, "argparse-")
-		if !parser && !slices.Contains(ported, g.Argv[1]) {
+		if !parser && !ported[g.Argv[1]] {
 			continue
 		}
 		ran++
@@ -333,16 +380,30 @@ func TestCLIGoldens(t *testing.T) {
 			for i, arg := range g.Argv[1:] {
 				argv[i] = strings.ReplaceAll(arg, "{tmp}", tmp)
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			limit := 60 * time.Second
+			if len(argv) > 0 && argv[0] == "watch" {
+				limit = 5 * time.Second
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), limit)
 			defer cancel()
 			code, stdout, stderr := r.run(ctx, argv...)
 			if code != g.ExitCode {
 				t.Errorf("exit code = %d, want %d (stderr %q)", code, g.ExitCode, stderr)
 			}
-			if want := string(golden.ReadFile(t, "cli", g.Stdout)); stdout != want {
+			want := string(golden.ReadFile(t, "cli", g.Stdout))
+			wantErr := string(golden.ReadFile(t, "cli", g.Stderr))
+			if o := overrides[g.Name]; o.GoStdout != nil {
+				want = *o.GoStdout
+			}
+			if o := overrides[g.Name]; o.GoStderr != nil {
+				wantErr = *o.GoStderr
+			}
+			if !parser && g.Argv[1] == "agent" {
+				stdout, want = normalizeRun(stdout), normalizeRun(want)
+			}
+			if stdout != want {
 				t.Errorf("stdout = %q, want %q", stdout, want)
 			}
-			wantErr := string(golden.ReadFile(t, "cli", g.Stderr))
 			switch {
 			case parser && (g.ExitCode != 0 || wantErr == "") && stderr != wantErr:
 				t.Errorf("stderr = %q, want %q", stderr, wantErr)
@@ -401,4 +462,93 @@ func copyGoldenFile(t *testing.T, from, to string) {
 	if err := os.WriteFile(to, data, 0o666); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestCLIParity checks the generated parity table (parity.json) against the production binary's command set:
+// every ported row answers -h, every excluded row is refused as the production parser refuses an unknown command,
+// every table case is a recorded golden, and the Go-only rows work.
+func TestCLIParity(t *testing.T) {
+	rows := loadParity(t)
+	var index []cliGolden
+	if err := json.Unmarshal(golden.ReadFile(t, "cli", "index.json"), &index); err != nil {
+		t.Fatal(err)
+	}
+	recorded := map[string]bool{}
+	for _, g := range index {
+		recorded[g.Name] = true
+	}
+	ported := portedCommands(rows)
+	registered := map[string]bool{}
+	for _, c := range commands(imapclient.Opener, nil) {
+		registered[c.Name] = true
+	}
+	for _, row := range rows {
+		for _, c := range row.Cases {
+			if !recorded[c.Name] {
+				t.Errorf("%s: case %q is not in index.json", row.Command, c.Name)
+			}
+		}
+		if len(row.Path) == 0 || row.Status == "go-only" {
+			continue
+		}
+		if row.Status == "ported" && !registered[row.Path[0]] {
+			t.Errorf("%s: ported but the binary has no %q command", row.Command, row.Path[0])
+		}
+		if row.Status == "excluded-until-ported" && row.Path[0] != "codemode-worker" && registered[row.Path[0]] {
+			t.Errorf("%s: excluded but the binary registers %q", row.Command, row.Path[0])
+		}
+	}
+	for name := range registered {
+		if !ported[name] && name != "codemode-worker" {
+			t.Errorf("binary command %q has no ported parity row", name)
+		}
+	}
+	data := loadGoldenData(t)
+	r := newRig(t, data, nil, "")
+	for _, row := range rows {
+		if row.Status != "ported" || len(row.Path) == 0 {
+			continue
+		}
+		t.Run("help "+row.Command, func(t *testing.T) {
+			code, stdout, stderr := r.run(context.Background(), append(slices.Clone(row.Path), "-h")...)
+			if want := "usage: atrium " + row.Command; code != cli.ExitOK || !strings.HasPrefix(stdout, want) {
+				t.Errorf("exit %d, stdout %q, stderr %q; want exit 0 and prefix %q", code, stdout, stderr, want)
+			}
+		})
+	}
+	for _, row := range rows {
+		if row.Status != "excluded-until-ported" || len(row.Path) == 0 {
+			continue
+		}
+		t.Run("excluded "+row.Command, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := newApp().Run(context.Background(), row.Path, &stdout, &stderr)
+			if row.Path[0] == "codemode-worker" {
+				if code != cli.ExitError || !strings.Contains(stderr.String(), "removed in v2") {
+					t.Errorf("exit %d, stderr %q; want exit 1 and the removed-in-v2 message", code, stderr.String())
+				}
+				return
+			}
+			if want := "invalid choice: '" + row.Path[0] + "'"; code != cli.ExitUsage || !strings.Contains(stderr.String(), want) {
+				t.Errorf("exit %d, stderr %q; want exit 2 and %q", code, stderr.String(), want)
+			}
+		})
+	}
+	t.Run("go-only --version", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		code := newApp().Run(context.Background(), []string{"--version"}, &stdout, &stderr)
+		if want := "atrium " + version + "\n"; code != cli.ExitOK || stdout.String() != want {
+			t.Errorf("exit %d, stdout %q; want exit 0 and %q", code, stdout.String(), want)
+		}
+	})
+	t.Run("go-only /healthz", func(t *testing.T) {
+		resp, err := http.Get(startServe(t) + "/healthz")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("status %d", resp.StatusCode)
+		}
+	})
 }

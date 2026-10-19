@@ -1,0 +1,7 @@
+usage: atrium deletions [-h] {scan} ...
+
+positional arguments:
+  {scan}
+
+options:
+  -h, --help  show this help message and exit

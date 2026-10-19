@@ -1,0 +1,4 @@
+usage: atrium agent scheduler [-h]
+
+options:
+  -h, --help  show this help message and exit

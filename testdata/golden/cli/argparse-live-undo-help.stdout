@@ -1,0 +1,7 @@
+usage: atrium live undo [-h] id
+
+positional arguments:
+  id
+
+options:
+  -h, --help  show this help message and exit

@@ -1,0 +1,3 @@
+usage: atrium agent run [-h] [--thread THREAD] --text TEXT
+                        [--kind {chat,cron,nightly,sub,code}]
+atrium agent run: error: the following arguments are required: --text
