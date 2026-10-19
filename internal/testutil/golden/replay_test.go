@@ -29,7 +29,7 @@ func sprintf(format string, args ...any) string {
 func replayRequest(t *testing.T, want Request, req *http.Request) (*recorder, bool) {
 	t.Helper()
 	rec := &recorder{TB: t}
-	return rec, checkReplayed(rec, 0, want, req)
+	return rec, checkReplayed(rec, 0, want, req, nil)
 }
 
 func request(t *testing.T, contentType, body string) *http.Request {

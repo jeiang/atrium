@@ -33,6 +33,13 @@ type Response struct {
 // get 599; t fails at cleanup unless every exchange was served.
 func Replay(t testing.TB, exchanges []Exchange) *httptest.Server {
 	t.Helper()
+	return ReplayWith(t, exchanges, nil)
+}
+
+// ReplayWith is Replay for a client that spells a query differently from the recorded one: query, when not nil,
+// normalizes the recorded and the received raw query before they are compared.
+func ReplayWith(t testing.TB, exchanges []Exchange, query func(string) string) *httptest.Server {
+	t.Helper()
 	var mu sync.Mutex
 	next := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +52,7 @@ func Replay(t testing.TB, exchanges []Exchange) *httptest.Server {
 			w.WriteHeader(599)
 			return
 		}
-		if !checkReplayed(t, i, exchanges[i].Request, r) {
+		if !checkReplayed(t, i, exchanges[i].Request, r, query) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -78,15 +85,19 @@ func Replay(t testing.TB, exchanges []Exchange) *httptest.Server {
 	return srv
 }
 
-func checkReplayed(t testing.TB, i int, want Request, r *http.Request) bool {
+func checkReplayed(t testing.TB, i int, want Request, r *http.Request, query func(string) string) bool {
 	switch want.BodyEncoding {
 	case "json", "form", "multipart", "text", "base64", "none":
 	default:
 		t.Errorf("golden replay: request %d: unknown body_encoding %q", i, want.BodyEncoding)
 		return false
 	}
-	if r.Method != want.Method || r.URL.EscapedPath() != want.Path || r.URL.RawQuery != want.Query {
-		t.Errorf("golden replay: request %d: %s %s?%s, want %s %s?%s", i, r.Method, r.URL.EscapedPath(), r.URL.RawQuery, want.Method, want.Path, want.Query)
+	gotQuery, wantQuery := r.URL.RawQuery, want.Query
+	if query != nil {
+		gotQuery, wantQuery = query(gotQuery), query(wantQuery)
+	}
+	if r.Method != want.Method || r.URL.EscapedPath() != want.Path || gotQuery != wantQuery {
+		t.Errorf("golden replay: request %d: %s %s?%s, want %s %s?%s", i, r.Method, r.URL.EscapedPath(), gotQuery, want.Method, want.Path, wantQuery)
 	}
 	for k, v := range want.Headers {
 		if got := r.Header.Get(k); got != v && (!strings.HasPrefix(v, "multipart/") || !strings.HasPrefix(got, v)) {

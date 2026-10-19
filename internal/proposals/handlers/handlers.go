@@ -1,9 +1,10 @@
 // Package handlers is handlers.py: the registration of every proposal kind's executor and undoers, in the order
-// Python registers them. The Notion and calendar kinds join here from their slices; the wiki-plan
+// Python registers them. The Notion kinds join here from their slice; the wiki-plan
 // kind is not registered.
 package handlers
 
 import (
+	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/mailops"
@@ -27,7 +28,7 @@ type Deps struct {
 	NewNotion func(token string) *notion.Client
 }
 
-// Register is register: executors, then (as their slices land) notion_proposals, calendar_proposals, then
+// Register is register: executors, then (as their slices land) notion_proposals, then calendar_proposals and
 // openloops (the reminder kind). notion_migrate (wiki-plan) is not registered.
 func Register(r *proposals.Registry, deps Deps) {
 	env := deps.Env
@@ -35,6 +36,7 @@ func Register(r *proposals.Registry, deps Deps) {
 		env = config.OS
 	}
 	executors.Register(r, &executors.Executors{DB: deps.DB, Open: deps.Open, Now: deps.Now}, deps.Syncer)
+	calendar.Register(r, &calendar.Proposals{DB: deps.DB, Now: deps.Now, Env: env})
 	(&notion.Applier{DB: deps.DB, Env: env, NewClient: deps.NewNotion, Now: deps.Now}).Register(r)
 	openloops.Register(r, &openloops.Reminders{DB: deps.DB, Now: deps.Now})
 }

@@ -1690,18 +1690,18 @@
       ],
       "cases": [],
       "command": "calendar",
-      "note": "calendar module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "calendar"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium calendar [-h] {candidates,google-auth} ..."
     },
     {
       "args": [],
       "cases": [],
       "command": "calendar candidates",
-      "note": "calendar module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "lands with the event candidates slice (#136); the binary prints `atrium calendar candidates is not ported in v2` and exits 1",
       "path": [
         "calendar",
         "candidates"
@@ -1720,12 +1720,12 @@
       ],
       "cases": [],
       "command": "calendar google-auth",
-      "note": "calendar module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "exit 1 with `error: ...` on a CalendarError; prints the consent URL, then GOOGLE_REFRESH_TOKEN=...",
       "path": [
         "calendar",
         "google-auth"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium calendar google-auth [-h] [--port PORT]"
     },
     {

@@ -433,6 +433,26 @@ and backups; nothing of that lives here.
   imports and calls enforces it), `open_loops`, `commitments`, `packages`, `upcoming_birthdays` and `contacts_lookup`.
   None logs to `agent_writes`, as in Python, so this slice registers no undoer; the production registry composition
   (`toolset`) adds `Tools()`. A handler's non-`ToolError` failures are `tool.Raised` with the Python class.
+- `internal/calendar/`: `calendar.py`, `google_auth.py` and `calendar_proposals.py`. `ListEvents` merges the
+  vdirsyncer mirror (`ATRIUM_CALENDAR_DIR`, read through go-ical's decoder, never its values) with the primary Google
+  calendar; icalendar's value rules are ported (`Value` is a date, a naive or an aware datetime; a TZID resolves
+  to IANA, then the Windows table `windowstz_table.go` from `tools/calendar/gen_windows_tz.py`, then the file's
+  VTIMEZONE, else floating) and recurrences expand on rrule-go in UTC-labelled wall time resolved with
+  zoneinfo's `fold=0` (`py.WallToUnix`), with dateutil's rule parser and rruleset semantics (an RDATE-only event
+  omits DTSTART, `COUNT=0` is empty, a naive/aware mix between DTSTART and its RDATE or EXDATE is a note).
+  `internal/py`'s `ISOFormatError` and `DateISOFormatError` give the `ValueError` texts of `parse_when`. Google
+  runs on `google.golang.org/api` with a refresh-token source that posts google-auth's exact body (the golden
+  checks it); iCloud runs on go-webdav, except that discovery reads `calendar-home-set` itself because go-webdav
+  drops the host iCloud load-balances to. `UseEndpoints` and `UseTokens` are the test seams for the service URLs
+  and the PKCE randomness. `Proposals` is the `calendar_event` kind (`Propose`, `Execute`, `Undo`, registered
+  by `proposals/handlers`); `event_candidates.py` and `calendar candidates` belong to #136. Its tests are the
+  calendar corpus (`testdata/corpora/calendar.jsonl`, exact), the `google_auth` goldens and an end-to-end run over
+  `calendar/caldavtest`, an iCloud CalDAV stand-in.
+- `internal/calendar/calendarcmd/`: `atrium calendar google-auth` (no configuration load; `error: ...` and exit
+  1 on a `calendar.Error`). `internal/assistant/tools/calendar/` (package `calendartools`): `calendar_list`,
+  `calendar_create`, `calendar_delete`, `event_propose` and the undoers `calendar_delete`/`calendar_recreate`
+  (`RegisterUndoers`, read from `config.OS` as Python reads `os.environ`); `event_propose` marks its source
+  message `drafted` in `event_candidates` itself until #136 owns that module.
 - `internal/mail/rules/`, `ruleedit/`, `corrections/`, `router/`: the routing
   pipeline (`rules.py`, `ruleedit.py`, `corrections.py`, `router.py`).
   Stages are correction, operator rule, learned rule, nearest neighbours,

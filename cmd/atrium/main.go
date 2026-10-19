@@ -7,6 +7,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
+	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/logx"
@@ -63,6 +64,7 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 		watches.Command(now),
 		money.Command(now),
 		agentcmd.Command(),
+		calendarcmd.Command(),
 		mediacmd.Command(now),
 		web.ServeCommand(
 			web.Page{Module: chatpages.Module(chatpages.Options{}), Templates: chatpages.Templates()},
