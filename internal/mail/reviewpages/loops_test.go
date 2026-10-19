@@ -173,3 +173,11 @@ func TestWatchesWithAnEmptyAddressBook(t *testing.T) {
 	s := newSite(t, func(env map[string]string) { env["ATRIUM_CONTACTS_DIR"] = cards })
 	mustContain(t, status(t, s.get("/watches"), http.StatusOK), "Nothing coming up", "(0)")
 }
+
+func TestEmptyFormFieldsAreAbsent(t *testing.T) {
+	s := newSite(t)
+	s.loop("a", "owe_reply", 2, "Dinner?", "pat@person.test", 1)
+	target := fmt.Sprintf("/loops/%d/snooze", s.loopID("a"))
+	mustContain(t, status(t, s.post(target, form("days", "")), http.StatusOK), fmt.Sprintf("Hidden for %d days.", openloops.SnoozeDefaultDays))
+	status(t, s.post("/loops/dismiss-all", form("state", "")), http.StatusUnprocessableEntity)
+}

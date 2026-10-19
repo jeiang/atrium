@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/mail/drafts"
@@ -94,14 +93,14 @@ func (s *service) draftUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form := formValues(r)
-	account, found := formLast(form, "account")
+	account, found := web.FormField(form, "account")
 	if !found {
 		web.Unprocessable(w, web.Missing("body", "account"))
 		return
 	}
 	changes := map[string]any{"account": account}
 	for _, name := range []string{"to", "cc", "subject", "body"} {
-		value, _ := formLast(form, name)
+		value, _ := web.FormField(form, name)
 		changes[name] = value
 	}
 	_, err := s.drafts.Update(detached(r), id, changes)
@@ -129,50 +128,15 @@ func (s *service) draftDiscard(w http.ResponseWriter, r *http.Request) {
 	s.reply(w, r, id, drafts.Draft, http.StatusOK, toast("success", "Discarded", "Draft discarded."))
 }
 
-// reviewedAt is float(updated_at); ok is false where Python's float() raises ValueError. Underscores are accepted
-// between digits only.
-func reviewedAt(text string) (float64, bool) {
-	text = py.Strip(text)
-	if strings.ContainsAny(text, "xXpP") {
-		return 0, false
-	}
-	if strings.Contains(text, "_") {
-		var b strings.Builder
-		for i := range len(text) {
-			switch {
-			case text[i] != '_':
-				b.WriteByte(text[i])
-			case i == 0 || i == len(text)-1 || !isDigit(text[i-1]) || !isDigit(text[i+1]):
-				return 0, false
-			}
-		}
-		text = b.String()
-	}
-	if text == "" {
-		return 0, false
-	}
-	v, err := strconv.ParseFloat(text, 64)
-	if err != nil {
-		var numErr *strconv.NumError
-		if errors.As(err, &numErr) && numErr.Err == strconv.ErrRange {
-			return v, true
-		}
-		return 0, false
-	}
-	return v, true
-}
-
-func isDigit(c byte) bool { return c >= '0' && c <= '9' }
-
 func (s *service) draftSend(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "draft_id")
 	if !ok {
 		return
 	}
-	updated, _ := formLast(formValues(r), "updated_at")
+	updated, _ := web.FormField(formValues(r), "updated_at")
 	var result drafts.Result
 	var err error
-	if at, valid := reviewedAt(updated); valid {
+	if at, perr := py.ParseFloat(updated); perr == nil {
 		result, err = s.drafts.Send(detached(r), id, at)
 	} else {
 		err = drafts.Error("draft changed, review again")
@@ -200,7 +164,7 @@ func (s *service) draftResolve(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	outcome, _ := formLast(formValues(r), "outcome")
+	outcome, _ := web.FormField(formValues(r), "outcome")
 	var verdict string
 	switch outcome {
 	case "sent":

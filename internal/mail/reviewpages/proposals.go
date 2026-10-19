@@ -189,7 +189,7 @@ func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	forever, _ := formLast(formValues(r), "forever")
+	forever, _ := web.FormField(formValues(r), "forever")
 	err := proposals.Dismiss(detached(r), s.deps.DB.Write, id, forever != "", s.now())
 	var refused proposals.ProposalError
 	if errors.As(err, &refused) {

@@ -141,7 +141,7 @@ func (s *service) activityPage(w http.ResponseWriter, r *http.Request) {
 	offset := int64(0)
 	if r.URL.Query().Has("offset") {
 		raw := queryLast(r, "offset")
-		n, ok := web.ParseInt(raw)
+		n, ok := py.LaxInt64(raw)
 		if !ok {
 			web.Unprocessable(w, web.BadInt("query", "offset", raw))
 			return

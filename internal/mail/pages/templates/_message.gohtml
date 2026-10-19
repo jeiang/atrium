@@ -1,0 +1,71 @@
+{{define "mail_message"}}{{$m := .m}}{{$h := $m.headers}}{{$mode := .mode -}}
+<article id="message-{{$m.id}}" class="flex flex-col gap-5" aria-labelledby="message-subject-{{$m.id}}">
+  <header class="flex flex-col gap-3">
+    <h2 id="message-subject-{{$m.id}}" class="text-xl font-semibold tracking-tight text-balance">{{or $m.subject "(no subject)"}}</h2>
+    <div class="flex flex-wrap items-center gap-1.5">
+      <span class="badge" data-variant="secondary">{{if $m.in_inbox}}{{place "INBOX"}}{{else}}{{place $m.location}}{{end}}</span>
+      <span class="badge" data-variant="outline">{{$m.account}}</span>
+      {{if not $m.seen}}<span class="badge border-warning/30 bg-warning/10 text-warning">Unread</span>{{end}}
+      {{if $m.flagged}}<span class="badge border-warning/30 bg-warning/10 text-warning">{{icon "flag"}}Flagged</span>{{end}}
+    </div>
+    <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+      <dt class="text-muted-foreground">From</dt>
+      <dd class="break-words">{{or (get $h "From") (sender $m)}}</dd>
+      {{range $name := list "To" "Cc" "Reply-To" "List-Id"}}
+      {{if get $h $name}}
+      <dt class="text-muted-foreground">{{$name}}</dt>
+      <dd class="break-words">{{get $h $name}}</dd>
+      {{end}}
+      {{end}}
+      <dt class="text-muted-foreground">Date</dt>
+      <dd>{{template "when" (dict "epoch" $m.date_ts "style" "datetime")}}</dd>
+    </dl>
+  </header>
+
+  {{template "mail_decision_card" (dict "m" $m "mode" $mode "toast" (opt . "toast" nil) "correct" (opt . "correct" nil))}}
+
+  {{$f := $m.flag_decision}}
+  {{if $f}}
+  <section class="flex flex-col gap-2 rounded-lg border p-4" aria-labelledby="flag-title-{{$m.id}}">
+    <h3 id="flag-title-{{$m.id}}" class="text-sm font-medium">Flag judgment</h3>
+    <ul class="flex flex-wrap gap-1.5 text-xs" role="list">
+      {{range $row := list (list "contacts_match" "Sender is a contact") (list "person_asking" "A person is asking") (list "deadline_or_payment_due" "Deadline or payment") (list "security_event" "Security event") (list "llm_flag" "9B would flag")}}
+      {{$v := get $f (index $row 0)}}{{$label := index $row 1}}
+      <li class="badge" data-variant="{{if $v}}secondary{{else}}outline{{end}}">
+        {{- if isnil $v}}{{icon "circle-dot"}}<span class="text-muted-foreground">{{$label}}: not judged</span>
+        {{- else if $v}}{{icon "check"}}{{$label}}
+        {{- else}}<span class="text-muted-foreground line-through decoration-muted-foreground/50">{{$label}}</span><span class="sr-only">: no</span>
+        {{- end}}
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  {{if $m.attachments}}
+  <section aria-labelledby="attachments-title-{{$m.id}}" class="flex flex-col gap-2">
+    <h3 id="attachments-title-{{$m.id}}" class="text-sm font-medium">Attachments</h3>
+    <ul class="flex flex-wrap gap-2" role="list">
+      {{range $m.attachments}}
+      <li class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs">
+        {{icon "paperclip" "size-3.5 text-muted-foreground"}}<span class="max-w-60 truncate">{{or .filename .content_type}}</span>
+        <span class="text-muted-foreground tabular-nums">{{filesizeformat .size}}</span>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  <section aria-label="Message body" class="flex flex-col gap-2 border-t pt-5">
+    {{if $m.body}}
+    <div class="max-w-prose whitespace-pre-wrap break-words text-sm/relaxed">{{$m.body}}</div>
+    {{else}}
+    <p class="text-sm text-muted-foreground">This message has no plain-text body.</p>
+    {{end}}
+    {{if eq $m.body_source "index"}}
+    <p class="text-xs text-muted-foreground">Showing the indexed text; the raw message is not in the cache.</p>
+    {{end}}
+  </section>
+</article>
+{{end}}
+{{template "mail_message" (dict "m" .Data.message "mode" .Mode "toast" .Toast)}}

@@ -242,19 +242,3 @@ func TestAnAccountWithoutCredentialsIsMarkedNotConfigured(t *testing.T) {
 	mustContain(t, page, ">gmail (not configured)</option>")
 	mustNotContain(t, page, ">icloud (not configured)</option>")
 }
-
-func TestReviewedAtParsesLikePythonFloat(t *testing.T) {
-	for _, c := range []struct {
-		in   string
-		want float64
-		ok   bool
-	}{
-		{"1000001.0", 1000001, true}, {" 5 ", 5, true}, {"1_000.5", 1000.5, true}, {"1e3", 1000, true}, {"", 0, false}, {"x", 0, false},
-		{"0x10", 0, false}, {"1__0", 0, false}, {"_1", 0, false}, {"1_", 0, false}, {"1_.5", 0, false},
-	} {
-		got, ok := reviewedAt(c.in)
-		if ok != c.ok || (ok && got != c.want) {
-			t.Errorf("reviewedAt(%q) = %v, %v, want %v, %v", c.in, got, ok, c.want, c.ok)
-		}
-	}
-}

@@ -24,6 +24,7 @@ import (
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/handlers"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -171,7 +172,7 @@ func detached(r *http.Request) context.Context { return context.WithoutCancel(r.
 // segment is not an integer.
 func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 	raw := web.PathParam(r, name)
-	id, ok := web.ParseInt(raw)
+	id, ok := py.LaxInt64(raw)
 	if !ok {
 		web.Unprocessable(w, web.BadInt("path", name, raw))
 	}

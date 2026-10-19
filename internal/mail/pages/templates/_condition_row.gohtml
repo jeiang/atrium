@@ -1,0 +1,27 @@
+{{define "mail_condition_row"}}{{$c := .c}}{{$focus := opt . "focus" ""}}{{$uid := condid}}{{$valueless := false}}{{range global "valueless_ops"}}{{if eq . $c.op}}{{$valueless = true}}{{end}}{{end -}}
+<li class="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md border p-2 sm:grid-cols-[--spacing(44)_--spacing(44)_minmax(0,1fr)_auto] sm:items-end sm:border-0 sm:p-0">
+  <div role="group" class="field col-start-1 sm:col-start-auto">
+    <label for="{{$uid}}-field" class="sm:sr-only">Field</label>
+    <select id="{{$uid}}-field" name="field" class="w-full"{{if eq $focus "field"}} autofocus{{end}}>
+      {{range global "rule_fields"}}<option value="{{.}}"{{if eq . $c.field}} selected{{end}}>{{lbl "field" .}}</option>{{end}}
+    </select>
+  </div>
+  <div role="group" class="field col-start-1 sm:col-start-auto">
+    <label for="{{$uid}}-op" class="sm:sr-only">Operator</label>
+    <select id="{{$uid}}-op" name="op" class="w-full" hx-get="/rules/condition" hx-include="closest li" hx-vals='{"focus": "op"}' hx-target="closest li" hx-swap="outerHTML" hx-trigger="change"{{if eq $focus "op"}} autofocus{{end}}>
+      {{range global "rule_ops"}}<option value="{{.}}"{{if eq . $c.op}} selected{{end}}>{{lbl "op" .}}</option>{{end}}
+    </select>
+  </div>
+  <div role="group" class="field col-start-1 sm:col-start-auto">
+    <label for="{{$uid}}-value" class="sm:sr-only">Value</label>
+    {{if $valueless}}
+    <input id="{{$uid}}-value" name="value" type="text" value="" readonly aria-disabled="true" placeholder="No value needed" class="cursor-not-allowed opacity-50">
+    {{else}}
+    <input id="{{$uid}}-value" name="value" type="text" value="{{or $c.value ""}}" placeholder="{{lbl "op_hint" $c.op ""}}" autocomplete="off" spellcheck="false" class="font-mono">
+    {{end}}
+  </div>
+  <button type="button" class="btn col-start-2 row-start-1 sm:col-start-auto sm:row-start-auto" data-size="icon" data-variant="ghost" aria-label="Remove condition"
+          data-action="remove-condition">{{icon "x"}}</button>
+</li>
+{{end}}
+{{template "mail_condition_row" (dict "c" .Data.c "focus" (opt .Data "focus" ""))}}

@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/mail/openloops"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -54,8 +55,8 @@ func (s *service) loopSnooze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	days := int64(openloops.SnoozeDefaultDays)
-	if raw, given := formLast(formValues(r), "days"); given {
-		n, valid := web.ParseInt(raw)
+	if raw, given := web.FormField(formValues(r), "days"); given {
+		n, valid := py.LaxInt64(raw)
 		if !valid {
 			web.Unprocessable(w, web.BadInt("body", "days", raw))
 			return
@@ -85,7 +86,7 @@ func (s *service) loopDismiss(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) loopDismissAll(w http.ResponseWriter, r *http.Request) {
-	state, given := formLast(formValues(r), "state")
+	state, given := web.FormField(formValues(r), "state")
 	if !given {
 		web.Unprocessable(w, web.Missing("body", "state"))
 		return

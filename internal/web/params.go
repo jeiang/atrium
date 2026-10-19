@@ -3,10 +3,8 @@ package web
 import (
 	"bytes"
 	"encoding/json"
-	"math"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -24,17 +22,22 @@ func PathParam(r *http.Request, name string) string {
 	return v
 }
 
-// ParseInt is how FastAPI reads an integer parameter: surrounding whitespace is ignored and an integral float
-// text such as "5.0" is accepted.
-func ParseInt(s string) (int64, bool) {
-	s = strings.TrimSpace(s)
-	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
-		return n, true
+// FormField is the value FastAPI binds to a scalar Form() parameter: the last value sent, where an empty string
+// counts as not sent (ok is false), so the parameter takes its default or is missing.
+func FormField(form url.Values, name string) (value string, ok bool) {
+	values := form[name]
+	if len(values) == 0 || values[len(values)-1] == "" {
+		return "", false
 	}
-	if f, err := strconv.ParseFloat(s, 64); err == nil && !math.IsInf(f, 0) && f == math.Trunc(f) && math.Abs(f) < 1<<63 {
-		return int64(f), true
+	return values[len(values)-1], true
+}
+
+// FormString is FormField with a default for a parameter that has one.
+func FormString(form url.Values, name, def string) string {
+	if value, ok := FormField(form, name); ok {
+		return value
 	}
-	return 0, false
+	return def
 }
 
 // FieldError is one entry of FastAPI's request validation response.

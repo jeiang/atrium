@@ -1,0 +1,1200 @@
+{"events": [], "input": "", "scripting": false}
+{"events": [], "input": "", "scripting": true}
+{"events": [["data", "\t"]], "input": "\t", "scripting": false}
+{"events": [["data", "\t"]], "input": "\t", "scripting": true}
+{"events": [["data", "\t&unknown;&unknown;"], ["unknown_decl", "CDATA['<title>日a/p"]], "input": "\t&unknown;&unknown;<![CDATA['<title>日a/p", "scripting": false}
+{"events": [["data", "\t&unknown;&unknown;"], ["unknown_decl", "CDATA['<title>日a/p"]], "input": "\t&unknown;&unknown;<![CDATA['<title>日a/p", "scripting": true}
+{"events": [["data", "\t/>"]], "input": "\t/>", "scripting": false}
+{"events": [["data", "\t/>"]], "input": "\t/>", "scripting": true}
+{"events": [["data", "\t"], ["comment", "[if x]"], ["data", "a"], ["pi", ""]], "input": "\t<![if x]>a<?", "scripting": false}
+{"events": [["data", "\t"], ["comment", "[if x]"], ["data", "a"], ["pi", ""]], "input": "\t<![if x]>a<?", "scripting": true}
+{"events": [["data", "\t"], ["comment", "3"], ["data", "textarea"], ["start", "title", []], ["data", "textarea"]], "input": "\t</3>textarea<title>textarea", "scripting": false}
+{"events": [["data", "\t"], ["comment", "3"], ["data", "textarea"], ["start", "title", []], ["data", "textarea"]], "input": "\t</3>textarea<title>textarea", "scripting": true}
+{"events": [["data", "\t"], ["end", "title"], ["start", "a", [["href", "x&y"]]], ["data", "/>br"], ["comment", "\n<!--textarea"]], "input": "\t</title><a href=\"x&amp;y\">/>br<!\n<!--textarea", "scripting": false}
+{"events": [["data", "\t"], ["end", "title"], ["start", "a", [["href", "x&y"]]], ["data", "/>br"], ["comment", "\n<!--textarea"]], "input": "\t</title><a href=\"x&amp;y\">/>br<!\n<!--textarea", "scripting": true}
+{"events": [["data", "\t"], ["pi", "--!"], ["end", "title"], ["data", "'"], ["end", "title"], ["data", "&#x"]], "input": "\t<?--!></title>'</title>&#x", "scripting": false}
+{"events": [["data", "\t"], ["pi", "--!"], ["end", "title"], ["data", "'"], ["end", "title"], ["data", "&#x"]], "input": "\t<?--!></title>'</title>&#x", "scripting": true}
+{"events": [["data", "\t"], ["start", "title", []], ["data", "<a/b>class=\"c\" id=x<3A'<a/b>"]], "input": "\t<TITLE><a/b>class=\"c\" id=x<3&#65;'<a/b>", "scripting": false}
+{"events": [["data", "\t"], ["start", "title", []], ["data", "<a/b>class=\"c\" id=x<3A'<a/b>"]], "input": "\t<TITLE><a/b>class=\"c\" id=x<3&#65;'<a/b>", "scripting": true}
+{"events": [["data", "\t"], ["start", "a", [["=x", null]]], ["comment", "[if x]"], ["data", "]]>"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "\f"], ["start", "a", [["href", "Q"]]], ["pi", "<br /"]], "input": "\t<a =x><![if x]>]]><img src=x onerror=y>\f<A HREF=Q><?<br />", "scripting": false}
+{"events": [["data", "\t"], ["start", "a", [["=x", null]]], ["comment", "[if x]"], ["data", "]]>"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "\f"], ["start", "a", [["href", "Q"]]], ["pi", "<br /"]], "input": "\t<a =x><![if x]>]]><img src=x onerror=y>\f<A HREF=Q><?<br />", "scripting": true}
+{"events": [["data", "\tplaintext"], ["unknown_decl", "CDATA[\f"]], "input": "\tplaintext<![CDATA[\f", "scripting": false}
+{"events": [["data", "\tplaintext"], ["unknown_decl", "CDATA[\f"]], "input": "\tplaintext<![CDATA[\f", "scripting": true}
+{"events": [["data", "\té"], ["data", "<"], ["data", "3"]], "input": "\té<3", "scripting": false}
+{"events": [["data", "\té"], ["data", "<"], ["data", "3"]], "input": "\té<3", "scripting": true}
+{"events": [["data", "\n"]], "input": "\n", "scripting": false}
+{"events": [["data", "\n"]], "input": "\n", "scripting": true}
+{"events": [["data", "\n\"&# "], ["end", "title"]], "input": "\n\"&# </title>", "scripting": false}
+{"events": [["data", "\n\"&# "], ["end", "title"]], "input": "\n\"&# </title>", "scripting": true}
+{"events": [["data", "\n"], ["startend", "br", []], ["comment", "3"], ["data", "é"], ["end", "script"], ["data", "&unknown;"], ["start", "a", [["href", "x&y"]]]], "input": "\n<br/></3>é</script >&unknown;<a href=\"x&amp;y\">", "scripting": false}
+{"events": [["data", "\n"], ["startend", "br", []], ["comment", "3"], ["data", "é"], ["end", "script"], ["data", "&unknown;"], ["start", "a", [["href", "x&y"]]]], "input": "\n<br/></3>é</script >&unknown;<a href=\"x&amp;y\">", "scripting": true}
+{"events": [["data", "\nstyle"]], "input": "\nstyle", "scripting": false}
+{"events": [["data", "\nstyle"]], "input": "\nstyle", "scripting": true}
+{"events": [["data", "\n "]], "input": "\n ", "scripting": false}
+{"events": [["data", "\n "]], "input": "\n ", "scripting": true}
+{"events": [["data", "\f--!>?>"], ["end", "title"], ["data", "--!>"], ["start", "script", []], ["data", "</>class=\"c\" id=x-->"]], "input": "\f--!>?></title>--!><script></>class=\"c\" id=x-->", "scripting": false}
+{"events": [["data", "\f--!>?>"], ["end", "title"], ["data", "--!>"], ["start", "script", []], ["data", "</>class=\"c\" id=x-->"]], "input": "\f--!>?></title>--!><script></>class=\"c\" id=x-->", "scripting": true}
+{"events": [["data", "\f"], ["end", "script"], ["data", "/>"], ["pi", "<!doctypetextarea<![if x]"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["startend", "br", []]], "input": "\f</SCRIPT/>/><?<!doctypetextarea<![if x]><img src=x onerror=y><br/>", "scripting": false}
+{"events": [["data", "\f"], ["end", "script"], ["data", "/>"], ["pi", "<!doctypetextarea<![if x]"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["startend", "br", []]], "input": "\f</SCRIPT/>/><?<!doctypetextarea<![if x]><img src=x onerror=y><br/>", "scripting": true}
+{"events": [["data", "\f"], ["start", "a", [["href", "&copy=1"]]], ["start", "script", []], ["data", "&class=\"c\" id=x"], ["end", "script"]], "input": "\f<a href='&copy=1'><script>&class=\"c\" id=x</script >", "scripting": false}
+{"events": [["data", "\f"], ["start", "a", [["href", "&copy=1"]]], ["start", "script", []], ["data", "&class=\"c\" id=x"], ["end", "script"]], "input": "\f<a href='&copy=1'><script>&class=\"c\" id=x</script >", "scripting": true}
+{"events": [["data", "\fiframe"], ["end", "title"], ["data", "class=\"c\" id=x"]], "input": "\fiframe</title>class=\"c\" id=x", "scripting": false}
+{"events": [["data", "\fiframe"], ["end", "title"], ["data", "class=\"c\" id=x"]], "input": "\fiframe</title>class=\"c\" id=x", "scripting": true}
+{"events": [["data", "\fp"]], "input": "\fp", "scripting": false}
+{"events": [["data", "\fp"]], "input": "\fp", "scripting": true}
+{"events": [["data", "\r\t"]], "input": "\r\t", "scripting": false}
+{"events": [["data", "\r\t"]], "input": "\r\t", "scripting": true}
+{"events": [["data", "\r>"], ["data", "</"]], "input": "\r></", "scripting": false}
+{"events": [["data", "\r>"], ["data", "</"]], "input": "\r></", "scripting": true}
+{"events": [["data", "\ra=b"], ["data", "<"], ["data", "3&A"], ["comment", "3"], ["comment", "</script"], ["data", "a/"]], "input": "\ra=b<3&&#65;</3><!</script>a/", "scripting": false}
+{"events": [["data", "\ra=b"], ["data", "<"], ["data", "3&A"], ["comment", "3"], ["comment", "</script"], ["data", "a/"]], "input": "\ra=b<3&&#65;</3><!</script>a/", "scripting": true}
+{"events": [["data", "\rascript&>"], ["start", "title", []], ["data", "<![if x]><![if x]>"]], "input": "\rascript&><title><![if x]><![if x]>", "scripting": false}
+{"events": [["data", "\rascript&>"], ["start", "title", []], ["data", "<![if x]><![if x]>"]], "input": "\rascript&><title><![if x]><![if x]>", "scripting": true}
+{"events": [["data", "\rxmp"], ["data", "<"], ["data", "3\""], ["comment", "<img src=x onerror=y"]], "input": "\rxmp<3\"</<img src=x onerror=y>", "scripting": false}
+{"events": [["data", "\rxmp"], ["data", "<"], ["data", "3\""], ["comment", "<img src=x onerror=y"]], "input": "\rxmp<3\"</<img src=x onerror=y>", "scripting": true}
+{"events": [["data", "\r😀\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "p", [["<p", null]]], ["start", "a", [["href", "Q"]]], ["start", "a", [["b", ""], ["'c", null]]]], "input": "\r😀\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<p <p><A HREF=Q><a b= 'c>", "scripting": false}
+{"events": [["data", "\r😀\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "p", [["<p", null]]], ["start", "a", [["href", "Q"]]], ["start", "a", [["b", ""], ["'c", null]]]], "input": "\r😀\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<p <p><A HREF=Q><a b= 'c>", "scripting": true}
+{"events": [["data", " "]], "input": " ", "scripting": false}
+{"events": [["data", " "]], "input": " ", "scripting": true}
+{"events": [["data", " \n "], ["startend", "br", []], ["data", "p"]], "input": " \n <br/>p", "scripting": false}
+{"events": [["data", " \n "], ["startend", "br", []], ["data", "p"]], "input": " \n <br/>p", "scripting": true}
+{"events": [["data", " &#\t"], ["comment", "</title"], ["comment", "日/a=b"]], "input": " &#\t<!</title><!日/a=b", "scripting": false}
+{"events": [["data", " &#\t"], ["comment", "</title"], ["comment", "日/a=b"]], "input": " &#\t<!</title><!日/a=b", "scripting": true}
+{"events": [["data", " &#x"]], "input": " &#x</class=\"c\" id=x&#&#x41", "scripting": false}
+{"events": [["data", " &#x"]], "input": " &#x</class=\"c\" id=x&#&#x41", "scripting": true}
+{"events": [["data", " ©&unknown;"], ["start", "p", []]], "input": " &copy&unknown;<p>", "scripting": false}
+{"events": [["data", " ©&unknown;"], ["start", "p", []]], "input": " &copy&unknown;<p>", "scripting": true}
+{"events": [["data", " "], ["start", "title", []], ["data", "<a href=\"x&y\">日 \ra<![if x]><!doctype<a/b>"]], "input": " <TITLE><a href=\"x&amp;y\">日 \ra<![if x]><!doctype<a/b>", "scripting": false}
+{"events": [["data", " "], ["start", "title", []], ["data", "<a href=\"x&y\">日 \ra<![if x]><!doctype<a/b>"]], "input": " <TITLE><a href=\"x&amp;y\">日 \ra<![if x]><!doctype<a/b>", "scripting": true}
+{"events": [["data", " "], ["start", "a", [["b", null], ["c", "d"]]], ["start", "p", [["<p", null]]], ["start", "a", [["b", null], ["c", "d"]]], ["decl", "doctype]]"]], "input": " <a  b   c=d  ><p <p><a  b   c=d  ><!doctype]]>", "scripting": false}
+{"events": [["data", " "], ["start", "a", [["b", null], ["c", "d"]]], ["start", "p", [["<p", null]]], ["start", "a", [["b", null], ["c", "d"]]], ["decl", "doctype]]"]], "input": " <a  b   c=d  ><p <p><a  b   c=d  ><!doctype]]>", "scripting": true}
+{"events": [["data", " div"], ["comment", " p"], ["data", "a='x'br"], ["startend", "br", []], ["start", "title", []], ["data", "div\ftextarea"]], "input": " div</ p>a='x'br<br/><TITLE>div\ftextarea", "scripting": false}
+{"events": [["data", " div"], ["comment", " p"], ["data", "a='x'br"], ["startend", "br", []], ["start", "title", []], ["data", "div\ftextarea"]], "input": " div</ p>a='x'br<br/><TITLE>div\ftextarea", "scripting": true}
+{"events": [["data", " noscriptdiv"], ["pi", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": " noscriptdiv<?xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": false}
+{"events": [["data", " noscriptdiv"], ["pi", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": " noscriptdiv<?xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": true}
+{"events": [["data", " é'"]], "input": " é'", "scripting": false}
+{"events": [["data", " é'"]], "input": " é'", "scripting": true}
+{"events": [["data", " 日'br-->b"]], "input": " 日'br-->b", "scripting": false}
+{"events": [["data", " 日'br-->b"]], "input": " 日'br-->b", "scripting": true}
+{"events": [["data", "\"&#xéb"], ["comment", "3"], ["data", " "]], "input": "\"&#xéb</3> ", "scripting": false}
+{"events": [["data", "\"&#xéb"], ["comment", "3"], ["data", " "]], "input": "\"&#xéb</3> ", "scripting": true}
+{"events": [["data", "\"&iframe&unknown;xmp"]], "input": "\"&iframe&unknown;xmp", "scripting": false}
+{"events": [["data", "\"&iframe&unknown;xmp"]], "input": "\"&iframe&unknown;xmp", "scripting": true}
+{"events": [["data", "\""], ["start", "p", [["<p", null]]], ["data", "&unknown;a='x'div"], ["comment", "3"], ["start", "a", [["href", "Q"]]], ["data", "<"], ["data", "-iframexmp"]], "input": "\"<p <p>&unknown;a='x'div</3><A HREF=Q><-iframexmp", "scripting": false}
+{"events": [["data", "\""], ["start", "p", [["<p", null]]], ["data", "&unknown;a='x'div"], ["comment", "3"], ["start", "a", [["href", "Q"]]], ["data", "<"], ["data", "-iframexmp"]], "input": "\"<p <p>&unknown;a='x'div</3><A HREF=Q><-iframexmp", "scripting": true}
+{"events": [["data", "\"a"], ["start", "title", []], ["data", "div<?iframe"]], "input": "\"a<title>div<?iframe", "scripting": false}
+{"events": [["data", "\"a"], ["start", "title", []], ["data", "div<?iframe"]], "input": "\"a<title>div<?iframe", "scripting": true}
+{"events": [["data", "\"b"], ["comment", "3"], ["end", "script"], ["data", "a='x'\t"], ["end", "title"]], "input": "\"b</3></script >a='x'\t</title>", "scripting": false}
+{"events": [["data", "\"b"], ["comment", "3"], ["end", "script"], ["data", "a='x'\t"], ["end", "title"]], "input": "\"b</3></script >a='x'\t</title>", "scripting": true}
+{"events": [["data", "&"]], "input": "&", "scripting": false}
+{"events": [["data", "&"]], "input": "&", "scripting": true}
+{"events": [["data", "&\f"]], "input": "&\f", "scripting": false}
+{"events": [["data", "&\f"]], "input": "&\f", "scripting": true}
+{"events": [["data", "&\""], ["comment", "[if x]"], ["data", "&"], ["end", "script"], ["data", "iframe"]], "input": "&\"<![if x]>&amp</SCRIPT/>iframe", "scripting": false}
+{"events": [["data", "&\""], ["comment", "[if x]"], ["data", "&"], ["end", "script"], ["data", "iframe"]], "input": "&\"<![if x]>&amp</SCRIPT/>iframe", "scripting": true}
+{"events": [["data", "&#"]], "input": "&#", "scripting": false}
+{"events": [["data", "&#"]], "input": "&#", "scripting": true}
+{"events": [["data", "&#\fb\n"], ["start", "a", [["href", "&copy=1"]]], ["comment", " p"], ["end", "script"], ["data", "class=\"c\" id=x"]], "input": "&#\fb\n<a href='&copy=1'></ p></script>class=\"c\" id=x", "scripting": false}
+{"events": [["data", "&#\fb\n"], ["start", "a", [["href", "&copy=1"]]], ["comment", " p"], ["end", "script"], ["data", "class=\"c\" id=x"]], "input": "&#\fb\n<a href='&copy=1'></ p></script>class=\"c\" id=x", "scripting": true}
+{"events": [["data", "&# -->"], ["unknown_decl", "CDATA["]], "input": "&# --><![CDATA[", "scripting": false}
+{"events": [["data", "&# -->"], ["unknown_decl", "CDATA["]], "input": "&# --><![CDATA[", "scripting": true}
+{"events": [["data", "&#&#x=Anoscript"], ["data", "</"]], "input": "&#&#x=&#65;noscript</", "scripting": false}
+{"events": [["data", "&#&#x=Anoscript"], ["data", "</"]], "input": "&#&#x=&#65;noscript</", "scripting": true}
+{"events": [["data", "&#©\fxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&\n"], ["start", "a", [["b", ""], ["'c", null]]], ["comment", "[if x]"], ["decl", "doctypeaé"]], "input": "&#&copy\fxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&\n<a b= 'c><![if x]><!doctypeaé", "scripting": false}
+{"events": [["data", "&#©\fxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&\n"], ["start", "a", [["b", ""], ["'c", null]]], ["comment", "[if x]"], ["decl", "doctypeaé"]], "input": "&#&copy\fxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&\n<a b= 'c><![if x]><!doctypeaé", "scripting": true}
+{"events": [["data", "A"]], "input": "&#65;", "scripting": false}
+{"events": [["data", "A"]], "input": "&#65;", "scripting": true}
+{"events": [["data", "A-->&#/>plaintext&unknown;"], ["comment", "\n"]], "input": "&#65;-->&#/>plaintext&unknown;</\n", "scripting": false}
+{"events": [["data", "A-->&#/>plaintext&unknown;"], ["comment", "\n"]], "input": "&#65;-->&#/>plaintext&unknown;</\n", "scripting": true}
+{"events": [["data", "A"], ["comment", ""], ["data", "<"], ["data", "3"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["pi", ""]], "input": "&#65;<!--><3<img src=x onerror=y><?", "scripting": false}
+{"events": [["data", "A"], ["comment", ""], ["data", "<"], ["data", "3"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["pi", ""]], "input": "&#65;<!--><3<img src=x onerror=y><?", "scripting": true}
+{"events": [["data", "A"], ["decl", "doctype"]], "input": "&#65;<!doctype", "scripting": false}
+{"events": [["data", "A"], ["decl", "doctype"]], "input": "&#65;<!doctype", "scripting": true}
+{"events": [["data", "A"], ["start", "a", [["b", ""], ["'c", null]]]], "input": "&#65;<a b= 'c>", "scripting": false}
+{"events": [["data", "A"], ["start", "a", [["b", ""], ["'c", null]]]], "input": "&#65;<a b= 'c>", "scripting": true}
+{"events": [["data", "A=div->"], ["comment", "div"]], "input": "&#65;=div-><!div", "scripting": false}
+{"events": [["data", "A=div->"], ["comment", "div"]], "input": "&#65;=div-><!div", "scripting": true}
+{"events": [["data", "A>a=\"y\"a'"], ["comment", "class=\"c\" id=x<title"], ["data", "--!>"]], "input": "&#65;>a=\"y\"a'<!class=\"c\" id=x<title>--!>", "scripting": false}
+{"events": [["data", "A>a=\"y\"a'"], ["comment", "class=\"c\" id=x<title"], ["data", "--!>"]], "input": "&#65;>a=\"y\"a'<!class=\"c\" id=x<title>--!>", "scripting": true}
+{"events": [["data", "Aa=\"y\""], ["start", "script", []], ["data", "<!\"<br/>\t<![if x]>title"]], "input": "&#65;a=\"y\"<script><!\"<br/>\t<![if x]>title", "scripting": false}
+{"events": [["data", "Aa=\"y\""], ["start", "script", []], ["data", "<!\"<br/>\t<![if x]>title"]], "input": "&#65;a=\"y\"<script><!\"<br/>\t<![if x]>title", "scripting": true}
+{"events": [["data", "Axxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["startend", "br", []]], "input": "&#65;xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<br />", "scripting": false}
+{"events": [["data", "Axxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["startend", "br", []]], "input": "&#65;xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<br />", "scripting": true}
+{"events": [["data", "&#"], ["comment", "/>"]], "input": "&#<!--/>", "scripting": false}
+{"events": [["data", "&#"], ["comment", "/>"]], "input": "&#<!--/>", "scripting": true}
+{"events": [["data", "&#"], ["pi", "</title"], ["data", "brxmp>"], ["comment", "<title"], ["data", " /"]], "input": "&#<?</title>brxmp><!<title> /", "scripting": false}
+{"events": [["data", "&#"], ["pi", "</title"], ["data", "brxmp>"], ["comment", "<title"], ["data", " /"]], "input": "&#<?</title>brxmp><!<title> /", "scripting": true}
+{"events": [["data", "&#"], ["start", "a", [["b", ""]]], ["comment", "[if x]"], ["data", " divplaintextiframe"], ["decl", "doctypexmp"]], "input": "&#<a b=><![if x]> divplaintextiframe<!doctypexmp", "scripting": false}
+{"events": [["data", "&#"], ["start", "a", [["b", ""]]], ["comment", "[if x]"], ["data", " divplaintextiframe"], ["decl", "doctypexmp"]], "input": "&#<a b=><![if x]> divplaintextiframe<!doctypexmp", "scripting": true}
+{"events": [["data", "&#x"]], "input": "&#x", "scripting": false}
+{"events": [["data", "&#x"]], "input": "&#x", "scripting": true}
+{"events": [["data", "&#x&#a "], ["comment", "</p"], ["data", "script"]], "input": "&#x&#a </</p>script", "scripting": false}
+{"events": [["data", "&#x&#a "], ["comment", "</p"], ["data", "script"]], "input": "&#x&#a </</p>script", "scripting": true}
+{"events": [["data", "&#x&"], ["end", "p"], ["data", "iframe"], ["comment", "😀</"]], "input": "&#x&amp;</p>iframe</😀</>", "scripting": false}
+{"events": [["data", "&#x&"], ["end", "p"], ["data", "iframe"], ["comment", "😀</"]], "input": "&#x&amp;</p>iframe</😀</>", "scripting": true}
+{"events": [["data", "&#x-->"]], "input": "&#x-->", "scripting": false}
+{"events": [["data", "&#x-->"]], "input": "&#x-->", "scripting": true}
+{"events": [["data", "A"]], "input": "&#x41", "scripting": false}
+{"events": [["data", "A"]], "input": "&#x41", "scripting": true}
+{"events": [["data", "A"], ["start", "a", [["b", "c><a b= "], ["c", null]]], ["data", "<noscript"]], "input": "&#x41<a b= 'c><a b= 'c>&ltnoscript", "scripting": false}
+{"events": [["data", "A"], ["start", "a", [["b", "c><a b= "], ["c", null]]], ["data", "<noscript"]], "input": "&#x41<a b= 'c><a b= 'c>&ltnoscript", "scripting": true}
+{"events": [["data", "A"], ["start", "a", [["href", "&copy=1"]]], ["data", "<"], ["data", "-> "], ["start", "a", [["href", "x&y"]]], ["comment", "3"]], "input": "&#x41<a href='&copy=1'><-> <a href=\"x&amp;y\"></3>", "scripting": false}
+{"events": [["data", "A"], ["start", "a", [["href", "&copy=1"]]], ["data", "<"], ["data", "-> "], ["start", "a", [["href", "x&y"]]], ["comment", "3"]], "input": "&#x41<a href='&copy=1'><-> <a href=\"x&amp;y\"></3>", "scripting": true}
+{"events": [["data", "A"], ["start", "title", []], ["data", "<A HREF=Q>-->->é->\r<!DOCTYPE html>😀"]], "input": "&#x41<title><A HREF=Q>-->->é->\r<!DOCTYPE html>😀", "scripting": false}
+{"events": [["data", "A"], ["start", "title", []], ["data", "<A HREF=Q>-->->é->\r<!DOCTYPE html>😀"]], "input": "&#x41<title><A HREF=Q>-->->é->\r<!DOCTYPE html>😀", "scripting": true}
+{"events": [["data", "A?>"]], "input": "&#x41?>", "scripting": false}
+{"events": [["data", "A?>"]], "input": "&#x41?>", "scripting": true}
+{"events": [["data", "Лr&#x> &&#x"]], "input": "&#x41br&#x> &amp&#x", "scripting": false}
+{"events": [["data", "Лr&#x> &&#x"]], "input": "&#x41br&#x> &amp&#x", "scripting": true}
+{"events": [["data", "&#x"], ["decl", "DOCTYPE html"], ["data", "xmp"], ["end", "script"], ["start", "a", [["href", "x&y"]]], ["comment", "3"], ["data", "A"], ["start", "img", [["src", "x"], ["onerror", "y"]]]], "input": "&#x<!DOCTYPE html>xmp</script><a href=\"x&amp;y\"></3>&#x41<img src=x onerror=y>", "scripting": false}
+{"events": [["data", "&#x"], ["decl", "DOCTYPE html"], ["data", "xmp"], ["end", "script"], ["start", "a", [["href", "x&y"]]], ["comment", "3"], ["data", "A"], ["start", "img", [["src", "x"], ["onerror", "y"]]]], "input": "&#x<!DOCTYPE html>xmp</script><a href=\"x&amp;y\"></3>&#x41<img src=x onerror=y>", "scripting": true}
+{"events": [["data", "&#x"], ["end", "script"], ["end", "title"], ["data", "plaintext&"], ["end", "script"], ["data", "\f"], ["comment", " p"], ["data", "--!>textarea"]], "input": "&#x</script ></title>plaintext&amp;</script>\f</ p>--!>textarea", "scripting": false}
+{"events": [["data", "&#x"], ["end", "script"], ["end", "title"], ["data", "plaintext&"], ["end", "script"], ["data", "\f"], ["comment", " p"], ["data", "--!>textarea"]], "input": "&#x</script ></title>plaintext&amp;</script>\f</ p>--!>textarea", "scripting": true}
+{"events": [["data", "&#x?>"], ["startend", "br", []], ["data", "p<"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", ">"]], "input": "&#x?><br />p&lt<img src=x onerror=y>>", "scripting": false}
+{"events": [["data", "&#x?>"], ["startend", "br", []], ["data", "p<"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", ">"]], "input": "&#x?><br />p&lt<img src=x onerror=y>>", "scripting": true}
+{"events": [["data", "->\r "]], "input": "&#xb->\r ", "scripting": false}
+{"events": [["data", "->\r "]], "input": "&#xb->\r ", "scripting": true}
+{"events": [["data", "&#xstyle日"], ["start", "a", [["b", ""]]]], "input": "&#xstyle日<a b=>", "scripting": false}
+{"events": [["data", "&#xstyle日"], ["start", "a", [["b", ""]]]], "input": "&#xstyle日<a b=>", "scripting": true}
+{"events": [["data", "&--!>日"]], "input": "&--!>日", "scripting": false}
+{"events": [["data", "&--!>日"]], "input": "&--!>日", "scripting": true}
+{"events": [["data", "&"], ["end", "script"], ["data", ">©"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "?>"], ["comment", "\f&lt"]], "input": "&</SCRIPT/>>&copy<a b= 'c>?><!--\f&lt", "scripting": false}
+{"events": [["data", "&"], ["end", "script"], ["data", ">©"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "?>"], ["comment", "\f&lt"]], "input": "&</SCRIPT/>>&copy<a b= 'c>?><!--\f&lt", "scripting": true}
+{"events": [["data", "&"], ["end", "p"], ["data", "?> noscript"]], "input": "&</p>?> noscript", "scripting": false}
+{"events": [["data", "&"], ["end", "p"], ["data", "?> noscript"]], "input": "&</p>?> noscript", "scripting": true}
+{"events": [["data", "&"], ["data", "<"], ["data", "3"]], "input": "&<3", "scripting": false}
+{"events": [["data", "&"], ["data", "<"], ["data", "3"]], "input": "&<3", "scripting": true}
+{"events": [["data", "&"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "pascript"], ["end", "title"], ["data", "😀"]], "input": "&<a  b   c=d  >pascript</title>😀", "scripting": false}
+{"events": [["data", "&"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "pascript"], ["end", "title"], ["data", "😀"]], "input": "&<a  b   c=d  >pascript</title>😀", "scripting": true}
+{"events": [["data", "&"]], "input": "&amp", "scripting": false}
+{"events": [["data", "&"]], "input": "&amp", "scripting": true}
+{"events": [["data", "&&"]], "input": "&amp&amp", "scripting": false}
+{"events": [["data", "&&"]], "input": "&amp&amp", "scripting": true}
+{"events": [["data", "&"]], "input": "&amp;", "scripting": false}
+{"events": [["data", "&"]], "input": "&amp;", "scripting": true}
+{"events": [["data", "&\tdiv]]>"], ["data", "<"], ["data", "---!>é日"]], "input": "&amp;\tdiv]]><---!>é日", "scripting": false}
+{"events": [["data", "&\tdiv]]>"], ["data", "<"], ["data", "---!>é日"]], "input": "&amp;\tdiv]]><---!>é日", "scripting": true}
+{"events": [["data", "&\"\t"], ["start", "title", []], ["data", "'<a  b   c=d  ><a href='©=1'><script><A HREF=Q></script>"]], "input": "&amp;\"\t<TITLE>'<a  b   c=d  ><a href='&copy=1'><script><A HREF=Q></script>", "scripting": false}
+{"events": [["data", "&\"\t"], ["start", "title", []], ["data", "'<a  b   c=d  ><a href='©=1'><script><A HREF=Q></script>"]], "input": "&amp;\"\t<TITLE>'<a  b   c=d  ><a href='&copy=1'><script><A HREF=Q></script>", "scripting": true}
+{"events": [["data", "&"], ["comment", "&#</script"], ["data", "</"]], "input": "&amp;</&#</script></", "scripting": false}
+{"events": [["data", "&"], ["comment", "&#</script"], ["data", "</"]], "input": "&amp;</&#</script></", "scripting": true}
+{"events": [["data", "&"], ["start", "a", [["=x", null]]], ["data", "textarea"], ["comment", "b</p"], ["data", " "], ["start", "p", [["<p", null]]]], "input": "&amp;<a =x>textarea<!b</p> <p <p>", "scripting": false}
+{"events": [["data", "&"], ["start", "a", [["=x", null]]], ["data", "textarea"], ["comment", "b</p"], ["data", " "], ["start", "p", [["<p", null]]]], "input": "&amp;<a =x>textarea<!b</p> <p <p>", "scripting": true}
+{"events": [["data", "&"], ["startend", "br", []], ["data", "iframe\n\""]], "input": "&amp;<br />iframe\n\"</>", "scripting": false}
+{"events": [["data", "&"], ["startend", "br", []], ["data", "iframe\n\""]], "input": "&amp;<br />iframe\n\"</>", "scripting": true}
+{"events": [["data", "&"], ["start", "title", []], ["data", "\"<a/b><!doctype</3><a =x></p>&"]], "input": "&amp;<title>\"<a/b><!doctype</3><a =x></p>&amp", "scripting": false}
+{"events": [["data", "&"], ["start", "title", []], ["data", "\"<a/b><!doctype</3><a =x></p>&"]], "input": "&amp;<title>\"<a/b><!doctype</3><a =x></p>&amp", "scripting": true}
+{"events": [["data", "&="], ["end", "script"], ["end", "script"], ["comment", "3"]], "input": "&amp;=</script></script></3>", "scripting": false}
+{"events": [["data", "&="], ["end", "script"], ["end", "script"], ["comment", "3"]], "input": "&amp;=</script></script></3>", "scripting": true}
+{"events": [["data", "&b"], ["start", "script", []]], "input": "&amp;b<script>", "scripting": false}
+{"events": [["data", "&b"], ["start", "script", []]], "input": "&amp;b<script>", "scripting": true}
+{"events": [["data", "&"], ["startend", "br", []], ["start", "a", [["href", "Q"]]], ["data", "-->a='x'\t&?>"]], "input": "&amp<br/><A HREF=Q>-->a='x'\t&amp?>", "scripting": false}
+{"events": [["data", "&"], ["startend", "br", []], ["start", "a", [["href", "Q"]]], ["data", "-->a='x'\t&?>"]], "input": "&amp<br/><A HREF=Q>-->a='x'\t&amp?>", "scripting": true}
+{"events": [["data", "&a='x'"], ["end", "script"], ["data", "a='x'"], ["start", "a", [["href", "Q"]]], ["data", "iframe\t"], ["start", "a", [["href", "&copy=1"]]], ["comment", "<script>"]], "input": "&ampa='x'</script >a='x'<A HREF=Q>iframe\t<a href='&copy=1'><!--<script>", "scripting": false}
+{"events": [["data", "&a='x'"], ["end", "script"], ["data", "a='x'"], ["start", "a", [["href", "Q"]]], ["data", "iframe\t"], ["start", "a", [["href", "&copy=1"]]], ["comment", "<script>"]], "input": "&ampa='x'</script >a='x'<A HREF=Q>iframe\t<a href='&copy=1'><!--<script>", "scripting": true}
+{"events": [["data", "&div&#noscript"], ["start", "a", [["=x", null]]], ["data", "title"]], "input": "&ampdiv&#noscript<a =x>title", "scripting": false}
+{"events": [["data", "&div&#noscript"], ["start", "a", [["=x", null]]], ["data", "title"]], "input": "&ampdiv&#noscript<a =x>title", "scripting": true}
+{"events": [["data", "&noscript\r->"], ["start", "a", [["href", "&copy=1"]]], ["data", "--!>"]], "input": "&ampnoscript\r-><a href='&copy=1'></>--!>", "scripting": false}
+{"events": [["data", "&noscript\r->"], ["start", "a", [["href", "&copy=1"]]], ["data", "--!>"]], "input": "&ampnoscript\r-><a href='&copy=1'></>--!>", "scripting": true}
+{"events": [["data", "&textareaa😀&"]], "input": "&amptextareaa😀&amp", "scripting": false}
+{"events": [["data", "&textareaa😀&"]], "input": "&amptextareaa😀&amp", "scripting": true}
+{"events": [["data", "&xmptextarea©"], ["decl", "DOCTYPE html"], ["data", "scriptdiv\"©"]], "input": "&ampxmptextarea&copy<!DOCTYPE html>scriptdiv\"&copy", "scripting": false}
+{"events": [["data", "&xmptextarea©"], ["decl", "DOCTYPE html"], ["data", "scriptdiv\"©"]], "input": "&ampxmptextarea&copy<!DOCTYPE html>scriptdiv\"&copy", "scripting": true}
+{"events": [["data", "©&#brp-->/>"]], "input": "&copy&#brp-->/>", "scripting": false}
+{"events": [["data", "©&#brp-->/>"]], "input": "&copy&#brp-->/>", "scripting": true}
+{"events": [["data", "©<&unknown;p"], ["start", "a", [["href", "&copy=1"]]], ["start", "a", [["href", "x&y"]]], ["start", "a", [["b", null], ["c", "d"]]]], "input": "&copy&lt&unknown;p<a href='&copy=1'><a href=\"x&amp;y\"><a  b   c=d  >", "scripting": false}
+{"events": [["data", "©<&unknown;p"], ["start", "a", [["href", "&copy=1"]]], ["start", "a", [["href", "x&y"]]], ["start", "a", [["b", null], ["c", "d"]]]], "input": "&copy&lt&unknown;p<a href='&copy=1'><a href=\"x&amp;y\"><a  b   c=d  >", "scripting": true}
+{"events": [["data", "©"], ["startend", "a=b<![cdata[日<br", []], ["start", "img", [["src", "x"], ["onerror", "y"]]]], "input": "&copy<a=b<![CDATA[日<br/><img src=x onerror=y>", "scripting": false}
+{"events": [["data", "©"], ["startend", "a=b<![cdata[日<br", []], ["start", "img", [["src", "x"], ["onerror", "y"]]]], "input": "&copy<a=b<![CDATA[日<br/><img src=x onerror=y>", "scripting": true}
+{"events": [["data", "©"], ["startend", "br", []], ["start", "a", [["=x", null]]], ["start", "a", [["b", ""], ["'c", null]]], ["data", "&#"]], "input": "&copy<br/><a =x><a b= 'c>&#", "scripting": false}
+{"events": [["data", "©"], ["startend", "br", []], ["start", "a", [["=x", null]]], ["start", "a", [["b", ""], ["'c", null]]], ["data", "&#"]], "input": "&copy<br/><a =x><a b= 'c>&#", "scripting": true}
+{"events": [["data", "©"], ["start", "p", [["<p", null]]], ["data", "a=\"y\""], ["start", "p", [["<p", null]]], ["data", "->br"], ["startend", "br", []]], "input": "&copy<p <p>a=\"y\"<p <p>->br<br />", "scripting": false}
+{"events": [["data", "©"], ["start", "p", [["<p", null]]], ["data", "a=\"y\""], ["start", "p", [["<p", null]]], ["data", "->br"], ["startend", "br", []]], "input": "&copy<p <p>a=\"y\"<p <p>->br<br />", "scripting": true}
+{"events": [["data", "©"], ["start", "script", []], ["data", "<a =x>"]], "input": "&copy<script><a =x>", "scripting": false}
+{"events": [["data", "©"], ["start", "script", []], ["data", "<a =x>"]], "input": "&copy<script><a =x>", "scripting": true}
+{"events": [["data", "©astyleplaintext"], ["data", "title\"&'"], ["decl", "DOCTYPE html"]], "input": "&copyastyleplaintext</>title\"&'<!DOCTYPE html>", "scripting": false}
+{"events": [["data", "©astyleplaintext"], ["data", "title\"&'"], ["decl", "DOCTYPE html"]], "input": "&copyastyleplaintext</>title\"&'<!DOCTYPE html>", "scripting": true}
+{"events": [["data", "©éxmp"], ["start", "a", [["b", null], ["c", "d"]]], ["comment", "\nnoscript<a href=\"x&amp;y\""], ["end", "title"]], "input": "&copyéxmp<a  b   c=d  ></\nnoscript<a href=\"x&amp;y\"></title>", "scripting": false}
+{"events": [["data", "©éxmp"], ["start", "a", [["b", null], ["c", "d"]]], ["comment", "\nnoscript<a href=\"x&amp;y\""], ["end", "title"]], "input": "&copyéxmp<a  b   c=d  ></\nnoscript<a href=\"x&amp;y\"></title>", "scripting": true}
+{"events": [["data", "&div"], ["end", "script"]], "input": "&div</SCRIPT/>", "scripting": false}
+{"events": [["data", "&div"], ["end", "script"]], "input": "&div</SCRIPT/>", "scripting": true}
+{"events": [["data", "<"]], "input": "&lt", "scripting": false}
+{"events": [["data", "<"]], "input": "&lt", "scripting": true}
+{"events": [["data", "<\n"]], "input": "&lt\n", "scripting": false}
+{"events": [["data", "<\n"]], "input": "&lt\n", "scripting": true}
+{"events": [["data", "<"], ["start", "a", [["=x", null]]], ["data", "b"]], "input": "&lt<a =x>b", "scripting": false}
+{"events": [["data", "<"], ["start", "a", [["=x", null]]], ["data", "b"]], "input": "&lt<a =x>b", "scripting": true}
+{"events": [["data", "<brclass=\"c\" id=x"], ["comment", "[if x]"], ["data", "iframe"]], "input": "&ltbrclass=\"c\" id=x<![if x]>iframe", "scripting": false}
+{"events": [["data", "<brclass=\"c\" id=x"], ["comment", "[if x]"], ["data", "iframe"]], "input": "&ltbrclass=\"c\" id=x<![if x]>iframe", "scripting": true}
+{"events": [["data", "&textarea"], ["start", "a", [["b", ""]]], ["data", "b"], ["comment", "<!"]], "input": "&textarea<a b=>b<!<!", "scripting": false}
+{"events": [["data", "&textarea"], ["start", "a", [["b", ""]]], ["data", "b"], ["comment", "<!"]], "input": "&textarea<a b=>b<!<!", "scripting": true}
+{"events": [["data", "&unknown;"]], "input": "&unknown;", "scripting": false}
+{"events": [["data", "&unknown;"]], "input": "&unknown;", "scripting": true}
+{"events": [["data", "&unknown;\f\t"]], "input": "&unknown;\f\t", "scripting": false}
+{"events": [["data", "&unknown;\f\t"]], "input": "&unknown;\f\t", "scripting": true}
+{"events": [["data", "&unknown;&#x"], ["start", "a", [["href", "x&y"]]]], "input": "&unknown;&#x<a href=\"x&amp;y\">", "scripting": false}
+{"events": [["data", "&unknown;&#x"], ["start", "a", [["href", "x&y"]]]], "input": "&unknown;&#x<a href=\"x&amp;y\">", "scripting": true}
+{"events": [["data", "&unknown;&"]], "input": "&unknown;&amp", "scripting": false}
+{"events": [["data", "&unknown;&"]], "input": "&unknown;&amp", "scripting": true}
+{"events": [["data", "&unknown;"], ["comment", "&#x41scriptscript"]], "input": "&unknown;<!--&#x41scriptscript", "scripting": false}
+{"events": [["data", "&unknown;"], ["comment", "&#x41scriptscript"]], "input": "&unknown;<!--&#x41scriptscript", "scripting": true}
+{"events": [["data", "&unknown;"], ["data", "<"], ["data", "3div"]], "input": "&unknown;<3div", "scripting": false}
+{"events": [["data", "&unknown;"], ["data", "<"], ["data", "3div"]], "input": "&unknown;<3div", "scripting": true}
+{"events": [["data", "&unknown;"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "\""]], "input": "&unknown;<a  b   c=d  >\"", "scripting": false}
+{"events": [["data", "&unknown;"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "\""]], "input": "&unknown;<a  b   c=d  >\"", "scripting": true}
+{"events": [["data", "&unknown;"], ["start", "a", [["=x", null]]], ["data", "p"], ["comment", "3"], ["comment", ""], ["data", "😀"]], "input": "&unknown;<a =x></>p</3><!-->😀", "scripting": false}
+{"events": [["data", "&unknown;"], ["start", "a", [["=x", null]]], ["data", "p"], ["comment", "3"], ["comment", ""], ["data", "😀"]], "input": "&unknown;<a =x></>p</3><!-->😀", "scripting": true}
+{"events": [["data", "&unknown;iframe"], ["start", "script", []], ["data", "&#"]], "input": "&unknown;iframe<script>&#", "scripting": false}
+{"events": [["data", "&unknown;iframe"], ["start", "script", []], ["data", "&#"]], "input": "&unknown;iframe<script>&#", "scripting": true}
+{"events": [["data", "&unknown;p😀script"], ["start", "a", [["=x", null]]], ["start", "a", [["=x", null]]], ["data", "\f"], ["start", "a", [["href", "&copy=1"]]]], "input": "&unknown;p😀script<a =x><a =x>\f<a href='&copy=1'></>", "scripting": false}
+{"events": [["data", "&unknown;p😀script"], ["start", "a", [["=x", null]]], ["start", "a", [["=x", null]]], ["data", "\f"], ["start", "a", [["href", "&copy=1"]]]], "input": "&unknown;p😀script<a =x><a =x>\f<a href='&copy=1'></>", "scripting": true}
+{"events": [["data", "& "], ["comment", "<a =x>&amp;<a b= 'c>"]], "input": "& <!--<a =x>&amp;<a b= 'c>", "scripting": false}
+{"events": [["data", "& "], ["comment", "<a =x>&amp;<a b= 'c>"]], "input": "& <!--<a =x>&amp;<a b= 'c>", "scripting": true}
+{"events": [["data", "'"]], "input": "'", "scripting": false}
+{"events": [["data", "'"]], "input": "'", "scripting": true}
+{"events": [["data", "'\rxmp/"]], "input": "'\rxmp/", "scripting": false}
+{"events": [["data", "'\rxmp/"]], "input": "'\rxmp/", "scripting": true}
+{"events": [["data", "'--!>©"]], "input": "'--!>&copy", "scripting": false}
+{"events": [["data", "'--!>©"]], "input": "'--!>&copy", "scripting": true}
+{"events": [["data", "'"], ["data", "<"], ["data", "3\"&"]], "input": "'<3\"&amp", "scripting": false}
+{"events": [["data", "'"], ["data", "<"], ["data", "3\"&"]], "input": "'<3\"&amp", "scripting": true}
+{"events": [["data", "'"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "<"], ["data", "-"]], "input": "'<a b= 'c><-", "scripting": false}
+{"events": [["data", "'"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "<"], ["data", "-"]], "input": "'<a b= 'c><-", "scripting": true}
+{"events": [["data", "--!>"], ["unknown_decl", "CDATA[br</script ></3><title>"]], "input": "--!><![CDATA[br</script ></3><title>", "scripting": false}
+{"events": [["data", "--!>"], ["unknown_decl", "CDATA[br</script ></3><title>"]], "input": "--!><![CDATA[br</script ></3><title>", "scripting": true}
+{"events": [["data", "--!>aA&iframe"]], "input": "--!>a&#65;&iframe</>", "scripting": false}
+{"events": [["data", "--!>aA&iframe"]], "input": "--!>a&#65;&iframe</>", "scripting": true}
+{"events": [["data", "--!>brpa='x'"], ["start", "a", [["b", null]]], ["start", "a", [["=x", null]]], ["end", "title"]], "input": "--!>brpa='x'<a/b><a =x></title>", "scripting": false}
+{"events": [["data", "--!>brpa='x'"], ["start", "a", [["b", null]]], ["start", "a", [["=x", null]]], ["end", "title"]], "input": "--!>brpa='x'<a/b><a =x></title>", "scripting": true}
+{"events": [["data", "-->"]], "input": "-->", "scripting": false}
+{"events": [["data", "-->"]], "input": "-->", "scripting": true}
+{"events": [["data", "--><"], ["end", "script"], ["data", "&#x"], ["start", "p", [["<p", null]]]], "input": "-->&lt</SCRIPT/>&#x<p <p>", "scripting": false}
+{"events": [["data", "--><"], ["end", "script"], ["data", "&#x"], ["start", "p", [["<p", null]]]], "input": "-->&lt</SCRIPT/>&#x<p <p>", "scripting": true}
+{"events": [["data", "-->"], ["comment", "</title"], ["data", "title"], ["decl", "doctype/"]], "input": "--><!</title>title<!doctype/", "scripting": false}
+{"events": [["data", "-->"], ["comment", "</title"], ["data", "title"], ["decl", "doctype/"]], "input": "--><!</title>title<!doctype/", "scripting": true}
+{"events": [["data", "-->"], ["data", "<"], ["data", "3--!>&script"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "日&unknown;"], ["end", "script"], ["data", "&#x"]], "input": "--><3--!>&script<a  b   c=d  >日&unknown;</script >&#x", "scripting": false}
+{"events": [["data", "-->"], ["data", "<"], ["data", "3--!>&script"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "日&unknown;"], ["end", "script"], ["data", "&#x"]], "input": "--><3--!>&script<a  b   c=d  >日&unknown;</script >&#x", "scripting": true}
+{"events": [["data", "-->>"], ["start", "a", [["b", ""]]], ["data", "<"]], "input": "-->><a b=>&lt", "scripting": false}
+{"events": [["data", "-->>"], ["start", "a", [["b", ""]]], ["data", "<"]], "input": "-->><a b=>&lt", "scripting": true}
+{"events": [["data", "-->a='x'stylea='x'😀title"], ["start", "a", [["href", "&copy=1"]]], ["startend", "br", []], ["data", "&#"], ["data", "<"], ["data", "3"]], "input": "-->a='x'stylea='x'😀title<a href='&copy=1'><br/>&#<3", "scripting": false}
+{"events": [["data", "-->a='x'stylea='x'😀title"], ["start", "a", [["href", "&copy=1"]]], ["startend", "br", []], ["data", "&#"], ["data", "<"], ["data", "3"]], "input": "-->a='x'stylea='x'😀title<a href='&copy=1'><br/>&#<3", "scripting": true}
+{"events": [["data", "-->b<=?>😀"]], "input": "-->b&lt=?>😀", "scripting": false}
+{"events": [["data", "-->b<=?>😀"]], "input": "-->b&lt=?>😀", "scripting": true}
+{"events": [["data", "-->styleclass=\"c\" id=x"]], "input": "-->styleclass=\"c\" id=x</>", "scripting": false}
+{"events": [["data", "-->styleclass=\"c\" id=x"]], "input": "-->styleclass=\"c\" id=x</>", "scripting": true}
+{"events": [["data", "->-->textarea"], ["start", "title", []]], "input": "->-->textarea<TITLE>", "scripting": false}
+{"events": [["data", "->-->textarea"], ["start", "title", []]], "input": "->-->textarea<TITLE>", "scripting": true}
+{"events": [["data", "->"], ["comment", ""]], "input": "-><!", "scripting": false}
+{"events": [["data", "->"], ["comment", ""]], "input": "-><!", "scripting": true}
+{"events": [["data", "->"], ["data", "textarea"], ["comment", "日</script"], ["start", "a", [["href", "&copy=1"]]], ["data", "br/"], ["startend", "br", []]], "input": "-></>textarea<!日</script><a href='&copy=1'>br/<br/>", "scripting": false}
+{"events": [["data", "->"], ["data", "textarea"], ["comment", "日</script"], ["start", "a", [["href", "&copy=1"]]], ["data", "br/"], ["startend", "br", []]], "input": "-></>textarea<!日</script><a href='&copy=1'>br/<br/>", "scripting": true}
+{"events": [["data", "->p日"], ["pi", "]]"], ["data", "&a=\"y\"日\n"], ["start", "a", [["b", ""]]]], "input": "->p日<?]]>&a=\"y\"日\n<a b=>", "scripting": false}
+{"events": [["data", "->p日"], ["pi", "]]"], ["data", "&a=\"y\"日\n"], ["start", "a", [["b", ""]]]], "input": "->p日<?]]>&a=\"y\"日\n<a b=>", "scripting": true}
+{"events": [["data", "->style"], ["start", "a", [["b", null]]], ["data", "a=b"], ["startend", "br", []], ["data", "&class=\"c\" id=x"], ["start", "p", []], ["data", "]]>"]], "input": "->style<a/b>a=b<br />&class=\"c\" id=x<p>]]>", "scripting": false}
+{"events": [["data", "->style"], ["start", "a", [["b", null]]], ["data", "a=b"], ["startend", "br", []], ["data", "&class=\"c\" id=x"], ["start", "p", []], ["data", "]]>"]], "input": "->style<a/b>a=b<br />&class=\"c\" id=x<p>]]>", "scripting": true}
+{"events": [["data", "/\ra\fA"], ["pi", "<!doctype"]], "input": "/\ra\f&#x41<?<!doctype", "scripting": false}
+{"events": [["data", "/\ra\fA"], ["pi", "<!doctype"]], "input": "/\ra\f&#x41<?<!doctype", "scripting": true}
+{"events": [["data", "/\"©br"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["start", "a", [["b", ""], ["'c", null]]], ["start", "title", []], ["data", "<![if x]>"]], "input": "/\"&copybr<img src=x onerror=y><a b= 'c><title><![if x]>", "scripting": false}
+{"events": [["data", "/\"©br"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["start", "a", [["b", ""], ["'c", null]]], ["start", "title", []], ["data", "<![if x]>"]], "input": "/\"&copybr<img src=x onerror=y><a b= 'c><title><![if x]>", "scripting": true}
+{"events": [["data", "/&"], ["pi", "<!--</title"], ["data", "<"], ["data", "--->"], ["end", "title"], ["comment", " p"], ["data", "="]], "input": "/&<?<!--</title><---></title></ p>=", "scripting": false}
+{"events": [["data", "/&"], ["pi", "<!--</title"], ["data", "<"], ["data", "--->"], ["end", "title"], ["comment", " p"], ["data", "="]], "input": "/&<?<!--</title><---></title></ p>=", "scripting": true}
+{"events": [["data", "/&b"], ["end", "script"]], "input": "/&ampb</script>", "scripting": false}
+{"events": [["data", "/&b"], ["end", "script"]], "input": "/&ampb</script>", "scripting": true}
+{"events": [["data", "/"], ["end", "script"], ["data", "\t"], ["data", "<"], ["data", "-style\t"]], "input": "/</script>\t<-style\t", "scripting": false}
+{"events": [["data", "/"], ["end", "script"], ["data", "\t"], ["data", "<"], ["data", "-style\t"]], "input": "/</script>\t<-style\t", "scripting": true}
+{"events": [["data", "/"], ["start", "a", [["b", null]]], ["data", "a=\"y\"div="], ["end", "p"], ["data", "-->"]], "input": "/<a/b>a=\"y\"div=</></p>-->", "scripting": false}
+{"events": [["data", "/"], ["start", "a", [["b", null]]], ["data", "a=\"y\"div="], ["end", "p"], ["data", "-->"]], "input": "/<a/b>a=\"y\"div=</></p>-->", "scripting": true}
+{"events": [["data", "/>\f"], ["comment", "[if x]"], ["start", "title", []], ["data", "<-<a b= 'c>"]], "input": "/>\f<![if x]><TITLE><-<a b= 'c>", "scripting": false}
+{"events": [["data", "/>\f"], ["comment", "[if x]"], ["start", "title", []], ["data", "<-<a b= 'c>"]], "input": "/>\f<![if x]><TITLE><-<a b= 'c>", "scripting": true}
+{"events": [["data", "/>&#日"], ["start", "a", [["href", "x&y"]]], ["pi", "<![CDATA[xmp"]], "input": "/>&#日<a href=\"x&amp;y\"><?<![CDATA[xmp", "scripting": false}
+{"events": [["data", "/>&#日"], ["start", "a", [["href", "x&y"]]], ["pi", "<![CDATA[xmp"]], "input": "/>&#日<a href=\"x&amp;y\"><?<![CDATA[xmp", "scripting": true}
+{"events": [["data", "/>&&unknown;br&#x'&<br😀"]], "input": "/>&amp;&unknown;br&#x'&&ltbr😀", "scripting": false}
+{"events": [["data", "/>&&unknown;br&#x'&<br😀"]], "input": "/>&amp;&unknown;br&#x'&&ltbr😀", "scripting": true}
+{"events": [["data", "/>"], ["comment", "</ p"], ["data", "div"], ["end", "p"], ["data", "&a='x'\""], ["start", "a", [["b", ""], ["'c", null]]], ["end", "title"]], "input": "/></</ p>div</p>&a='x'\"<a b= 'c></title>", "scripting": false}
+{"events": [["data", "/>"], ["comment", "</ p"], ["data", "div"], ["end", "p"], ["data", "&a='x'\""], ["start", "a", [["b", ""], ["'c", null]]], ["end", "title"]], "input": "/></</ p>div</p>&a='x'\"<a b= 'c></title>", "scripting": true}
+{"events": [["data", "/>"], ["start", "title", []], ["end", "title"], ["start", "a", [["b", ""]]], ["data", "script"]], "input": "/><TITLE></title><a b=>script", "scripting": false}
+{"events": [["data", "/>"], ["start", "title", []], ["end", "title"], ["start", "a", [["b", ""]]], ["data", "script"]], "input": "/><TITLE></title><a b=>script", "scripting": true}
+{"events": [["data", "/>"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "-->"], ["start", "a", [["=x", null]]], ["data", "class=\"c\" id=x"], ["startend", "br", []], ["comment", "[if x]"]], "input": "/><a  b   c=d  >--><a =x>class=\"c\" id=x<br/><![if x]>", "scripting": false}
+{"events": [["data", "/>"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "-->"], ["start", "a", [["=x", null]]], ["data", "class=\"c\" id=x"], ["startend", "br", []], ["comment", "[if x]"]], "input": "/><a  b   c=d  >--><a =x>class=\"c\" id=x<br/><![if x]>", "scripting": true}
+{"events": [["data", "/>"], ["startend", "br", []], ["data", "\"a=\"y\"class=\"c\" id=xscriptAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#"]], "input": "/><br/>\"a=\"y\"class=\"c\" id=xscript&#65;xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#", "scripting": false}
+{"events": [["data", "/>"], ["startend", "br", []], ["data", "\"a=\"y\"class=\"c\" id=xscriptAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#"]], "input": "/><br/>\"a=\"y\"class=\"c\" id=xscript&#65;xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#", "scripting": true}
+{"events": [["data", "/>]]>&-->"], ["comment", "3"], ["data", "="], ["start", "a", [["href", "x&y"]]], ["data", "<"], ["data", "3"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "a='x'"]], "input": "/>]]>&--></3>=<a href=\"x&amp;y\"><3<a  b   c=d  >a='x'", "scripting": false}
+{"events": [["data", "/>]]>&-->"], ["comment", "3"], ["data", "="], ["start", "a", [["href", "x&y"]]], ["data", "<"], ["data", "3"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "a='x'"]], "input": "/>]]>&--></3>=<a href=\"x&amp;y\"><3<a  b   c=d  >a='x'", "scripting": true}
+{"events": [["data", "/>éAA&"]], "input": "/>é&#x41&#65;&", "scripting": false}
+{"events": [["data", "/>éAA&"]], "input": "/>é&#x41&#65;&", "scripting": true}
+{"events": [["data", "/?>a=b&"], ["end", "script"], ["start", "a", [["=x", null]]], ["data", "->"]], "input": "/?>a=b&</script ><a =x>->", "scripting": false}
+{"events": [["data", "/?>a=b&"], ["end", "script"], ["start", "a", [["=x", null]]], ["data", "->"]], "input": "/?>a=b&</script ><a =x>->", "scripting": true}
+{"events": [["comment", ""]], "input": "<!", "scripting": false}
+{"events": [["comment", ""]], "input": "<!", "scripting": true}
+{"events": [["comment", "&#65;&#x41p<?<?/<br/"]], "input": "<!&#65;&#x41p<?<?/<br/>", "scripting": false}
+{"events": [["comment", "&#65;&#x41p<?<?/<br/"]], "input": "<!&#65;&#x41p<?<?/<br/>", "scripting": true}
+{"events": [["comment", "'<?p<!DOCTYPE html"], ["data", "a=\"y\"日a"]], "input": "<!'<?p<!DOCTYPE html>a=\"y\"日a", "scripting": false}
+{"events": [["comment", "'<?p<!DOCTYPE html"], ["data", "a=\"y\"日a"]], "input": "<!'<?p<!DOCTYPE html>a=\"y\"日a", "scripting": true}
+{"events": [["comment", ""]], "input": "<!--", "scripting": false}
+{"events": [["comment", ""]], "input": "<!--", "scripting": true}
+{"events": [["comment", "\ra=bnoscript<a href='&copy=1'><a href='&copy=1'>\r"]], "input": "<!--\ra=bnoscript<a href='&copy=1'><a href='&copy=1'>\r", "scripting": false}
+{"events": [["comment", "\ra=bnoscript<a href='&copy=1'><a href='&copy=1'>\r"]], "input": "<!--\ra=bnoscript<a href='&copy=1'><a href='&copy=1'>\r", "scripting": true}
+{"events": [["comment", "&#x41' </p><a =x>"]], "input": "<!--&#x41' </p><a =x>", "scripting": false}
+{"events": [["comment", "&#x41' </p><a =x>"]], "input": "<!--&#x41' </p><a =x>", "scripting": true}
+{"events": [["comment", "&#x41<!DOCTYPE html>noscriptiframe=br</3>"]], "input": "<!--&#x41<!DOCTYPE html>noscriptiframe=br</3>", "scripting": false}
+{"events": [["comment", "&#x41<!DOCTYPE html>noscriptiframe=br</3>"]], "input": "<!--&#x41<!DOCTYPE html>noscriptiframe=br</3>", "scripting": true}
+{"events": [["comment", "</script><br/><![CDATA["]], "input": "<!--</script><br/><![CDATA[", "scripting": false}
+{"events": [["comment", "</script><br/><![CDATA["]], "input": "<!--</script><br/><![CDATA[", "scripting": true}
+{"events": [["comment", "<br/> <a/b>"]], "input": "<!--<br/> <a/b>", "scripting": false}
+{"events": [["comment", "<br/> <a/b>"]], "input": "<!--<br/> <a/b>", "scripting": true}
+{"events": [["comment", "bplaintexta='x'日<p>\r&#xa=b"]], "input": "<!--bplaintexta='x'日<p>\r&#xa=b", "scripting": false}
+{"events": [["comment", "bplaintexta='x'日<p>\r&#xa=b"]], "input": "<!--bplaintexta='x'日<p>\r&#xa=b", "scripting": true}
+{"events": [["comment", "noscript<3"], ["comment", " p"]], "input": "<!--noscript<3--!></ p>", "scripting": false}
+{"events": [["comment", "noscript<3"], ["comment", " p"]], "input": "<!--noscript<3--!></ p>", "scripting": true}
+{"events": [["comment", "p<a b= 'c><title>&#65;<a href='&copy=1'>'"]], "input": "<!--p<a b= 'c><title>&#65;<a href='&copy=1'>'", "scripting": false}
+{"events": [["comment", "p<a b= 'c><title>&#65;<a href='&copy=1'>'"]], "input": "<!--p<a b= 'c><title>&#65;<a href='&copy=1'>'", "scripting": true}
+{"events": [["comment", "-"], ["comment", "plaintext<script><3/>日&"]], "input": "<!-><!--plaintext<script><3/>日&", "scripting": false}
+{"events": [["comment", "-"], ["comment", "plaintext<script><3/>日&"]], "input": "<!-><!--plaintext<script><3/>日&", "scripting": true}
+{"events": [["comment", "</3"], ["decl", "DOCTYPE html"], ["data", "&\r"]], "input": "<!</3><!DOCTYPE html></>&\r", "scripting": false}
+{"events": [["comment", "</3"], ["decl", "DOCTYPE html"], ["data", "&\r"]], "input": "<!</3><!DOCTYPE html></>&\r", "scripting": true}
+{"events": [["comment", "<a  b   c=d  "], ["data", "é"]], "input": "<!<a  b   c=d  >é", "scripting": false}
+{"events": [["comment", "<a  b   c=d  "], ["data", "é"]], "input": "<!<a  b   c=d  >é", "scripting": true}
+{"events": [["decl", "DOCTYPE html"], ["data", "\t"]], "input": "<!DOCTYPE html>\t", "scripting": false}
+{"events": [["decl", "DOCTYPE html"], ["data", "\t"]], "input": "<!DOCTYPE html>\t", "scripting": true}
+{"events": [["decl", "DOCTYPE html"], ["data", "A"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "script"], ["comment", "=<![if x]>style<br /><a href=\"x&amp;y\">"]], "input": "<!DOCTYPE html>&#65;<a b= 'c>script<!--=<![if x]>style<br /><a href=\"x&amp;y\">", "scripting": false}
+{"events": [["decl", "DOCTYPE html"], ["data", "A"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "script"], ["comment", "=<![if x]>style<br /><a href=\"x&amp;y\">"]], "input": "<!DOCTYPE html>&#65;<a b= 'c>script<!--=<![if x]>style<br /><a href=\"x&amp;y\">", "scripting": true}
+{"events": [["decl", "DOCTYPE html"], ["data", "& "], ["data", "<"], ["data", "3é©"], ["data", "<"], ["data", "-"], ["start", "a", [["href", "x&y"]]], ["data", "日"], ["comment", ""]], "input": "<!DOCTYPE html>&amp; <3é&copy<-<a href=\"x&amp;y\">日<!--", "scripting": false}
+{"events": [["decl", "DOCTYPE html"], ["data", "& "], ["data", "<"], ["data", "3é©"], ["data", "<"], ["data", "-"], ["start", "a", [["href", "x&y"]]], ["data", "日"], ["comment", ""]], "input": "<!DOCTYPE html>&amp; <3é&copy<-<a href=\"x&amp;y\">日<!--", "scripting": true}
+{"events": [["decl", "DOCTYPE html"], ["data", "&unknown;&unknown;--!>/>"]], "input": "<!DOCTYPE html>&unknown;&unknown;--!>/>", "scripting": false}
+{"events": [["decl", "DOCTYPE html"], ["data", "&unknown;&unknown;--!>/>"]], "input": "<!DOCTYPE html>&unknown;&unknown;--!>/>", "scripting": true}
+{"events": [["decl", "DOCTYPE html"], ["comment", "3"], ["decl", "DOCTYPE html"], ["startend", "br", []], ["data", "]]>é"]], "input": "<!DOCTYPE html></3><!DOCTYPE html><br/>]]>é", "scripting": false}
+{"events": [["decl", "DOCTYPE html"], ["comment", "3"], ["decl", "DOCTYPE html"], ["startend", "br", []], ["data", "]]>é"]], "input": "<!DOCTYPE html></3><!DOCTYPE html><br/>]]>é", "scripting": true}
+{"events": [["decl", "DOCTYPE html"], ["start", "script", []], ["end", "script"], ["data", "\fclass=\"c\" id=x"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "--!>noscript"], ["start", "a", [["href", "Q"]]], ["data", "a=b"]], "input": "<!DOCTYPE html><script></script >\fclass=\"c\" id=x<a b= 'c>--!>noscript<A HREF=Q>a=b", "scripting": false}
+{"events": [["decl", "DOCTYPE html"], ["start", "script", []], ["end", "script"], ["data", "\fclass=\"c\" id=x"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "--!>noscript"], ["start", "a", [["href", "Q"]]], ["data", "a=b"]], "input": "<!DOCTYPE html><script></script >\fclass=\"c\" id=x<a b= 'c>--!>noscript<A HREF=Q>a=b", "scripting": true}
+{"events": [["decl", "DOCTYPE html"], ["data", "class=\"c\" id=x"], ["decl", "DOCTYPE html"], ["data", "&a='x'"], ["comment", ""]], "input": "<!DOCTYPE html>class=\"c\" id=x<!DOCTYPE html>&amp;a='x'<!><brxmp", "scripting": false}
+{"events": [["decl", "DOCTYPE html"], ["data", "class=\"c\" id=x"], ["decl", "DOCTYPE html"], ["data", "&a='x'"], ["comment", ""]], "input": "<!DOCTYPE html>class=\"c\" id=x<!DOCTYPE html>&amp;a='x'<!><brxmp", "scripting": true}
+{"events": [["decl", "DOCTYPE html"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "a", [["b", null], ["c", "d"]]], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "\""], ["pi", "noscriptnoscript"]], "input": "<!DOCTYPE html>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<a  b   c=d  ><img src=x onerror=y>\"<?noscriptnoscript", "scripting": false}
+{"events": [["decl", "DOCTYPE html"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "a", [["b", null], ["c", "d"]]], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "\""], ["pi", "noscriptnoscript"]], "input": "<!DOCTYPE html>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<a  b   c=d  ><img src=x onerror=y>\"<?noscriptnoscript", "scripting": true}
+{"events": [["unknown_decl", "CDATA["]], "input": "<![CDATA[", "scripting": false}
+{"events": [["unknown_decl", "CDATA["]], "input": "<![CDATA[", "scripting": true}
+{"events": [["unknown_decl", "CDATA[&#65;&unknown;</ a"]], "input": "<![CDATA[&#65;&unknown;</ a", "scripting": false}
+{"events": [["unknown_decl", "CDATA[&#65;&unknown;</ a"]], "input": "<![CDATA[&#65;&unknown;</ a", "scripting": true}
+{"events": [["unknown_decl", "CDATA['>\""]], "input": "<![CDATA['>\"", "scripting": false}
+{"events": [["unknown_decl", "CDATA['>\""]], "input": "<![CDATA['>\"", "scripting": true}
+{"events": [["unknown_decl", "CDATA["], ["end", "p"], ["comment", "stylea\r <?&lt"]], "input": "<![CDATA[]]></p><!--stylea\r <?&lt", "scripting": false}
+{"events": [["unknown_decl", "CDATA["], ["end", "p"], ["comment", "stylea\r <?&lt"]], "input": "<![CDATA[]]></p><!--stylea\r <?&lt", "scripting": true}
+{"events": [["unknown_decl", "CDATA[ ></p><!doctype<a href='&copy=1'>&#<a href=\"x&amp;y\"></script ></"]], "input": "<![CDATA[ ></p><!doctype<a href='&copy=1'>&#<a href=\"x&amp;y\"></script ></", "scripting": false}
+{"events": [["unknown_decl", "CDATA[ ></p><!doctype<a href='&copy=1'>&#<a href=\"x&amp;y\"></script ></"]], "input": "<![CDATA[ ></p><!doctype<a href='&copy=1'>&#<a href=\"x&amp;y\"></script ></", "scripting": true}
+{"events": [["comment", "[if x]"], ["comment", "[if x]"], ["start", "a", [["href", "x&y"]]], ["data", "日&"], ["comment", "<?"]], "input": "<![if x]><![if x]><a href=\"x&amp;y\">日&amp</<?", "scripting": false}
+{"events": [["comment", "[if x]"], ["comment", "[if x]"], ["start", "a", [["href", "x&y"]]], ["data", "日&"], ["comment", "<?"]], "input": "<![if x]><![if x]><a href=\"x&amp;y\">日&amp</<?", "scripting": true}
+{"events": [["comment", "[if x]"], ["comment", "&amp<!br<p <p"], ["data", "=a"]], "input": "<![if x]></&amp<!br<p <p>=a", "scripting": false}
+{"events": [["comment", "[if x]"], ["comment", "&amp<!br<p <p"], ["data", "=a"]], "input": "<![if x]></&amp<!br<p <p>=a", "scripting": true}
+{"events": [["comment", "[if x]"], ["comment", "3"], ["data", "plaintext"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["end", "title"], ["start", "script", []], ["data", "plaintext"], ["end", "script"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "noscript"]], "input": "<![if x]></3>plaintext<img src=x onerror=y></title><script>plaintext</script><a b= 'c>noscript", "scripting": false}
+{"events": [["comment", "[if x]"], ["comment", "3"], ["data", "plaintext"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["end", "title"], ["start", "script", []], ["data", "plaintext"], ["end", "script"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "noscript"]], "input": "<![if x]></3>plaintext<img src=x onerror=y></title><script>plaintext</script><a b= 'c>noscript", "scripting": true}
+{"events": [["comment", "[if x]"], ["start", "a", [["b", null]]], ["data", "textarea"]], "input": "<![if x]><a/b>textarea", "scripting": false}
+{"events": [["comment", "[if x]"], ["start", "a", [["b", null]]], ["data", "textarea"]], "input": "<![if x]><a/b>textarea", "scripting": true}
+{"events": [["comment", "[if x]"], ["startend", "br", []], ["startend", "br", []], ["start", "p", [["<p", null]]]], "input": "<![if x]><br/><br/><p <p>", "scripting": false}
+{"events": [["comment", "[if x]"], ["startend", "br", []], ["startend", "br", []], ["start", "p", [["<p", null]]]], "input": "<![if x]><br/><br/><p <p>", "scripting": true}
+{"events": [["comment", "[if x]"], ["data", ">"], ["start", "a", [["href", "Q"]]], ["data", "pclass=\"c\" id=x"]], "input": "<![if x]>><A HREF=Q>pclass=\"c\" id=x", "scripting": false}
+{"events": [["comment", "[if x]"], ["data", ">"], ["start", "a", [["href", "Q"]]], ["data", "pclass=\"c\" id=x"]], "input": "<![if x]>><A HREF=Q>pclass=\"c\" id=x", "scripting": true}
+{"events": [["comment", "[if x]"], ["data", "class=\"c\" id=x"]], "input": "<![if x]>class=\"c\" id=x", "scripting": false}
+{"events": [["comment", "[if x]"], ["data", "class=\"c\" id=x"]], "input": "<![if x]>class=\"c\" id=x", "scripting": true}
+{"events": [["decl", "doctype"]], "input": "<!doctype", "scripting": false}
+{"events": [["decl", "doctype"]], "input": "<!doctype", "scripting": true}
+{"events": [["decl", "doctype&amp<A HREF=Q"], ["data", "scripttextarea"]], "input": "<!doctype&amp<A HREF=Q>scripttextarea", "scripting": false}
+{"events": [["decl", "doctype&amp<A HREF=Q"], ["data", "scripttextarea"]], "input": "<!doctype&amp<A HREF=Q>scripttextarea", "scripting": true}
+{"events": [["decl", "doctype--!"], ["data", "&#x\téaxmp--!>="], ["start", "a", [["b", null]]]], "input": "<!doctype--!>&#x\téaxmp--!>=<a/b>", "scripting": false}
+{"events": [["decl", "doctype--!"], ["data", "&#x\téaxmp--!>="], ["start", "a", [["b", null]]]], "input": "<!doctype--!>&#x\téaxmp--!>=<a/b>", "scripting": true}
+{"events": [["decl", "doctype</p"], ["data", "iframediv"], ["decl", "doctype<!DOCTYPE html"], ["start", "a", [["b", ""]]], ["end", "script"]], "input": "<!doctype</p>iframediv<!doctype<!DOCTYPE html><a b=></script >", "scripting": false}
+{"events": [["decl", "doctype</p"], ["data", "iframediv"], ["decl", "doctype<!DOCTYPE html"], ["start", "a", [["b", ""]]], ["end", "script"]], "input": "<!doctype</p>iframediv<!doctype<!DOCTYPE html><a b=></script >", "scripting": true}
+{"events": [["decl", "doctype<a b= 'c"], ["data", "A"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "&#x="], ["end", "title"], ["start", "title", []]], "input": "<!doctype<a b= 'c>&#65;<a b= 'c>&#x=</title><title>", "scripting": false}
+{"events": [["decl", "doctype<a b= 'c"], ["data", "A"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "&#x="], ["end", "title"], ["start", "title", []]], "input": "<!doctype<a b= 'c>&#65;<a b= 'c>&#x=</title><title>", "scripting": true}
+{"events": [["decl", "doctype<a b= 'c"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "<"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "plaintext"]], "input": "<!doctype<a b= 'c><img src=x onerror=y>&lt<a b= 'c>plaintext", "scripting": false}
+{"events": [["decl", "doctype<a b= 'c"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "<"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "plaintext"]], "input": "<!doctype<a b= 'c><img src=x onerror=y>&lt<a b= 'c>plaintext", "scripting": true}
+{"events": [["decl", "doctype<p <p"], ["data", "a\t'"]], "input": "<!doctype<p <p>a\t'", "scripting": false}
+{"events": [["decl", "doctype<p <p"], ["data", "a\t'"]], "input": "<!doctype<p <p>a\t'", "scripting": true}
+{"events": [["decl", "doctypea=\"y\"\tbr<<title"], ["comment", "3"]], "input": "<!doctypea=\"y\"\tbr<<title></3>", "scripting": false}
+{"events": [["decl", "doctypea=\"y\"\tbr<<title"], ["comment", "3"]], "input": "<!doctypea=\"y\"\tbr<<title></3>", "scripting": true}
+{"events": [["comment", "iframe<!--&lt</script "]], "input": "<!iframe<!--&lt</script >", "scripting": false}
+{"events": [["comment", "iframe<!--&lt</script "]], "input": "<!iframe<!--&lt</script >", "scripting": true}
+{"events": [["comment", "xmpstyle"]], "input": "<!xmpstyle", "scripting": false}
+{"events": [["comment", "xmpstyle"]], "input": "<!xmpstyle", "scripting": true}
+{"events": [["data", "<"], ["data", "\""]], "input": "<\"", "scripting": false}
+{"events": [["data", "<"], ["data", "\""]], "input": "<\"", "scripting": true}
+{"events": [["data", "<"], ["data", "&"], ["end", "script"], ["data", "&/>&textarea"], ["comment", ""]], "input": "<&amp;</script>&amp/>&textarea<!", "scripting": false}
+{"events": [["data", "<"], ["data", "&"], ["end", "script"], ["data", "&/>&textarea"], ["comment", ""]], "input": "<&amp;</script>&amp/>&textarea<!", "scripting": true}
+{"events": [["data", "<"], ["data", "-"]], "input": "<-", "scripting": false}
+{"events": [["data", "<"], ["data", "-"]], "input": "<-", "scripting": true}
+{"events": [["data", "<"], ["data", "-<"], ["data", "<"], ["decl", "doctype<<xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&unknown;<A HREF=Q"]], "input": "<-&lt<<!doctype<<xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&unknown;<A HREF=Q>", "scripting": false}
+{"events": [["data", "<"], ["data", "-<"], ["data", "<"], ["decl", "doctype<<xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&unknown;<A HREF=Q"]], "input": "<-&lt<<!doctype<<xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&unknown;<A HREF=Q>", "scripting": true}
+{"events": [["data", "<"], ["data", "-->"], ["start", "p", []], ["data", ">a=\"y\"\r"], ["end", "p"], ["startend", "br", []]], "input": "<--><p>>a=\"y\"\r</p><br/>", "scripting": false}
+{"events": [["data", "<"], ["data", "-->"], ["start", "p", []], ["data", ">a=\"y\"\r"], ["end", "p"], ["startend", "br", []]], "input": "<--><p>>a=\"y\"\r</p><br/>", "scripting": true}
+{"events": [["data", "<"], ["data", "-"], ["comment", "</3><!doctype</p><TITLE>"]], "input": "<-<!--</3><!doctype</p><TITLE>", "scripting": false}
+{"events": [["data", "<"], ["data", "-"], ["comment", "</3><!doctype</p><TITLE>"]], "input": "<-<!--</3><!doctype</p><TITLE>", "scripting": true}
+{"events": [["data", "<"], ["data", "-"], ["comment", " p"], ["comment", " p"], ["end", "title"], ["end", "p"], ["data", " "], ["start", "title", []], ["data", "</ p>div</SCRIPT/>"]], "input": "<-</ p></ p></title></p> <title></ p>div</SCRIPT/>", "scripting": false}
+{"events": [["data", "<"], ["data", "-"], ["comment", " p"], ["comment", " p"], ["end", "title"], ["end", "p"], ["data", " "], ["start", "title", []], ["data", "</ p>div</SCRIPT/>"]], "input": "<-</ p></ p></title></p> <title></ p>div</SCRIPT/>", "scripting": true}
+{"events": [["data", "<"], ["data", "-"], ["comment", "3"], ["data", "->A"]], "input": "<-</3>->&#x41", "scripting": false}
+{"events": [["data", "<"], ["data", "-"], ["comment", "3"], ["data", "->A"]], "input": "<-</3>->&#x41", "scripting": true}
+{"events": [["data", "<"], ["data", "-"], ["end", "script"], ["decl", "doctype</script"], ["data", "="]], "input": "<-</SCRIPT/><!doctype</script>=", "scripting": false}
+{"events": [["data", "<"], ["data", "-"], ["end", "script"], ["decl", "doctype</script"], ["data", "="]], "input": "<-</SCRIPT/><!doctype</script>=", "scripting": true}
+{"events": [["data", "<"], ["data", "-"], ["pi", "</script"], ["data", "A"]], "input": "<-<?</script>&#65;", "scripting": false}
+{"events": [["data", "<"], ["data", "-"], ["pi", "</script"], ["data", "A"]], "input": "<-<?</script>&#65;", "scripting": true}
+{"events": [["data", "<"], ["data", "-"], ["start", "a", [["=x", null]]]], "input": "<-<a =x></>", "scripting": false}
+{"events": [["data", "<"], ["data", "-"], ["start", "a", [["=x", null]]]], "input": "<-<a =x></>", "scripting": true}
+{"events": [["data", "<"], ["data", "-"], ["start", "a", [["b", null]]], ["data", ">"], ["end", "script"]], "input": "<-<a/b>></SCRIPT/>", "scripting": false}
+{"events": [["data", "<"], ["data", "-"], ["start", "a", [["b", null]]], ["data", ">"], ["end", "script"]], "input": "<-<a/b>></SCRIPT/>", "scripting": true}
+{"events": [["data", "<"], ["data", "-xmpxmpiframeb"]], "input": "<-xmpxmpiframeb", "scripting": false}
+{"events": [["data", "<"], ["data", "-xmpxmpiframeb"]], "input": "<-xmpxmpiframeb", "scripting": true}
+{"events": [["data", "</"]], "input": "</", "scripting": false}
+{"events": [["data", "</"]], "input": "</", "scripting": true}
+{"events": [["comment", " p"], ["data", " class=\"c\" id=xplaintext"], ["end", "script"], ["comment", "<![CDATA[<title>/"]], "input": "</ p> class=\"c\" id=xplaintext</script ><!--<![CDATA[<title>/", "scripting": false}
+{"events": [["comment", " p"], ["data", " class=\"c\" id=xplaintext"], ["end", "script"], ["comment", "<![CDATA[<title>/"]], "input": "</ p> class=\"c\" id=xplaintext</script ><!--<![CDATA[<title>/", "scripting": true}
+{"events": [["comment", " p"], ["data", "-->"], ["start", "a", [["b", ""]]], ["comment", "<a/b>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&//<TITLE>"]], "input": "</ p>--><a b=><!--<a/b>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&//<TITLE>", "scripting": false}
+{"events": [["comment", " p"], ["data", "-->"], ["start", "a", [["b", ""]]], ["comment", "<a/b>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&//<TITLE>"]], "input": "</ p>--><a b=><!--<a/b>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&//<TITLE>", "scripting": true}
+{"events": [["comment", " p"], ["comment", "&#xa=ba=b</"], ["comment", "<-"]], "input": "</ p></&#xa=ba=b</></<-", "scripting": false}
+{"events": [["comment", " p"], ["comment", "&#xa=ba=b</"], ["comment", "<-"]], "input": "</ p></&#xa=ba=b</></<-", "scripting": true}
+{"events": [["comment", " p"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#>"], ["comment", "<p"]], "input": "</ p>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#></<p>", "scripting": false}
+{"events": [["comment", " p"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#>"], ["comment", "<p"]], "input": "</ p>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#></<p>", "scripting": true}
+{"events": [["comment", "&copystyle&copy"]], "input": "</&copystyle&copy", "scripting": false}
+{"events": [["comment", "&copystyle&copy"]], "input": "</&copystyle&copy", "scripting": true}
+{"events": [["comment", "3"]], "input": "</3>", "scripting": false}
+{"events": [["comment", "3"]], "input": "</3>", "scripting": true}
+{"events": [["comment", "3"], ["start", "a", [["=x", null]]], ["data", "a='x'/"], ["comment", " p"], ["comment", "3"], ["data", "日"]], "input": "</3><a =x>a='x'/</ p></3>日", "scripting": false}
+{"events": [["comment", "3"], ["start", "a", [["=x", null]]], ["data", "a='x'/"], ["comment", " p"], ["comment", "3"], ["data", "日"]], "input": "</3><a =x>a='x'/</ p></3>日", "scripting": true}
+{"events": [["comment", "3"], ["start", "a", [["href", "&copy=1"]]], ["unknown_decl", "CDATA[<a b=>title"]], "input": "</3><a href='&copy=1'><![CDATA[<a b=>title", "scripting": false}
+{"events": [["comment", "3"], ["start", "a", [["href", "&copy=1"]]], ["unknown_decl", "CDATA[<a b=>title"]], "input": "</3><a href='&copy=1'><![CDATA[<a b=>title", "scripting": true}
+{"events": [["comment", "3"], ["startend", "br", []], ["data", "\t"], ["comment", "<a/b"]], "input": "</3><br/>\t</<a/b>", "scripting": false}
+{"events": [["comment", "3"], ["startend", "br", []], ["data", "\t"], ["comment", "<a/b"]], "input": "</3><br/>\t</<a/b>", "scripting": true}
+{"events": [["comment", "3"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["end", "script"], ["data", "A--!>\n'"], ["startend", "br", []], ["end", "p"]], "input": "</3><img src=x onerror=y></SCRIPT/>&#65;--!>\n'<br/></p>", "scripting": false}
+{"events": [["comment", "3"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["end", "script"], ["data", "A--!>\n'"], ["startend", "br", []], ["end", "p"]], "input": "</3><img src=x onerror=y></SCRIPT/>&#65;--!>\n'<br/></p>", "scripting": true}
+{"events": [["comment", "3"], ["data", "noscript"], ["start", "a", [["=x", null]]], ["end", "p"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "&"], ["start", "a", [["href", "&copy=1"]]], ["data", "<"]], "input": "</3>noscript<a =x></p><img src=x onerror=y>&amp;<a href='&copy=1'><", "scripting": false}
+{"events": [["comment", "3"], ["data", "noscript"], ["start", "a", [["=x", null]]], ["end", "p"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "&"], ["start", "a", [["href", "&copy=1"]]], ["data", "<"]], "input": "</3>noscript<a =x></p><img src=x onerror=y>&amp;<a href='&copy=1'><", "scripting": true}
+{"events": [["comment", "3"], ["data", "textarea日a=\"y\"bra=ba=b--!>br\t"]], "input": "</3>textarea日a=\"y\"bra=ba=b--!>br\t", "scripting": false}
+{"events": [["comment", "3"], ["data", "textarea日a=\"y\"bra=ba=b--!>br\t"]], "input": "</3>textarea日a=\"y\"bra=ba=b--!>br\t", "scripting": true}
+{"events": [["comment", "<!doctype\t\tdiv</script"]], "input": "</<!doctype\t\tdiv</script>", "scripting": false}
+{"events": [["comment", "<!doctype\t\tdiv</script"]], "input": "</<!doctype\t\tdiv</script>", "scripting": true}
+{"events": [["comment", "<a href='&copy=1'"], ["start", "a", [["href", "Q"]]], ["comment", "[if x]"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "script", []], ["data", "/plaintext<a href=\"x&amp;y\">"]], "input": "</<a href='&copy=1'><A HREF=Q><![if x]>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<script>/plaintext<a href=\"x&amp;y\">", "scripting": false}
+{"events": [["comment", "<a href='&copy=1'"], ["start", "a", [["href", "Q"]]], ["comment", "[if x]"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "script", []], ["data", "/plaintext<a href=\"x&amp;y\">"]], "input": "</<a href='&copy=1'><A HREF=Q><![if x]>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<script>/plaintext<a href=\"x&amp;y\">", "scripting": true}
+{"events": [], "input": "</>", "scripting": false}
+{"events": [], "input": "</>", "scripting": true}
+{"events": [["data", "-->"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "style"]], "input": "</>--><img src=x onerror=y>style", "scripting": false}
+{"events": [["data", "-->"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "style"]], "input": "</>--><img src=x onerror=y>style", "scripting": true}
+{"events": [["data", "&#"]], "input": "</></>&#", "scripting": false}
+{"events": [["data", "&#"]], "input": "</></>&#", "scripting": true}
+{"events": [["data", "a"], ["start", "title", []], ["data", "a<TITLE>?><A HREF=Q>é"]], "input": "</>a<TITLE>a<TITLE>?><A HREF=Q>é", "scripting": false}
+{"events": [["data", "a"], ["start", "title", []], ["data", "a<TITLE>?><A HREF=Q>é"]], "input": "</>a<TITLE>a<TITLE>?><A HREF=Q>é", "scripting": true}
+{"events": [["data", "div a=\"y\"&"], ["unknown_decl", "CDATA["]], "input": "</>div a=\"y\"&<![CDATA[", "scripting": false}
+{"events": [["data", "div a=\"y\"&"], ["unknown_decl", "CDATA["]], "input": "</>div a=\"y\"&<![CDATA[", "scripting": true}
+{"events": [["data", " "], ["end", "script"], ["end", "script"], ["start", "p", [["<p", null]]], ["data", " "]], "input": "</> </script ></script ><p <p> ", "scripting": false}
+{"events": [["data", " "], ["end", "script"], ["end", "script"], ["start", "p", [["<p", null]]], ["data", " "]], "input": "</> </script ></script ><p <p> ", "scripting": true}
+{"events": [["data", "日-->"]], "input": "</>日-->", "scripting": false}
+{"events": [["data", "日-->"]], "input": "</>日-->", "scripting": true}
+{"events": [["end", "script"]], "input": "</SCRIPT/>", "scripting": false}
+{"events": [["end", "script"]], "input": "</SCRIPT/>", "scripting": true}
+{"events": [["end", "script"], ["data", "\n/>&#x"], ["comment", ""]], "input": "</SCRIPT/>\n/>&#x<!--", "scripting": false}
+{"events": [["end", "script"], ["data", "\n/>&#x"], ["comment", ""]], "input": "</SCRIPT/>\n/>&#x<!--", "scripting": true}
+{"events": [["end", "script"], ["data", "&unknown;"]], "input": "</SCRIPT/>&unknown;", "scripting": false}
+{"events": [["end", "script"], ["data", "&unknown;"]], "input": "</SCRIPT/>&unknown;", "scripting": true}
+{"events": [["end", "script"], ["start", "a", [["b", null], ["c", "d"]]], ["decl", "doctype\t"]], "input": "</SCRIPT/><a  b   c=d  ><!doctype\t", "scripting": false}
+{"events": [["end", "script"], ["start", "a", [["b", null], ["c", "d"]]], ["decl", "doctype\t"]], "input": "</SCRIPT/><a  b   c=d  ><!doctype\t", "scripting": true}
+{"events": [["end", "script"], ["start", "a", [["b", ""]]], ["data", "a=\"y\""]], "input": "</SCRIPT/><a b=>a=\"y\"", "scripting": false}
+{"events": [["end", "script"], ["start", "a", [["b", ""]]], ["data", "a=\"y\""]], "input": "</SCRIPT/><a b=>a=\"y\"", "scripting": true}
+{"events": [["end", "script"], ["data", ">"], ["start", "a", [["href", "x&y"]]], ["data", "->"]], "input": "</SCRIPT/>><a href=\"x&amp;y\">->", "scripting": false}
+{"events": [["end", "script"], ["data", ">"], ["start", "a", [["href", "x&y"]]], ["data", "->"]], "input": "</SCRIPT/>><a href=\"x&amp;y\">->", "scripting": true}
+{"events": [["end", "script"], ["data", "a='x'"]], "input": "</SCRIPT/>a='x'", "scripting": false}
+{"events": [["end", "script"], ["data", "a='x'"]], "input": "</SCRIPT/>a='x'", "scripting": true}
+{"events": [["end", "script"], ["data", "iframeA"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["decl", "doctype&#"]], "input": "</SCRIPT/>iframe&#x41<img src=x onerror=y><!doctype&#", "scripting": false}
+{"events": [["end", "script"], ["data", "iframeA"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["decl", "doctype&#"]], "input": "</SCRIPT/>iframe&#x41<img src=x onerror=y><!doctype&#", "scripting": true}
+{"events": [["end", "a=b😀<script"], ["data", "&"], ["comment", "[if x]"], ["decl", "doctypeé"]], "input": "</a=b😀<script>&amp;<![if x]><!doctypeé", "scripting": false}
+{"events": [["end", "a=b😀<script"], ["data", "&"], ["comment", "[if x]"], ["decl", "doctypeé"]], "input": "</a=b😀<script>&amp;<![if x]><!doctypeé", "scripting": true}
+{"events": [["end", "p"], ["data", "<xmpa=b"], ["start", "title", []], ["data", "<p <p></3>"]], "input": "</p>&ltxmpa=b<TITLE><p <p></3>", "scripting": false}
+{"events": [["end", "p"], ["data", "<xmpa=b"], ["start", "title", []], ["data", "<p <p></3>"]], "input": "</p>&ltxmpa=b<TITLE><p <p></3>", "scripting": true}
+{"events": [["end", "p"], ["comment", "&amp<a b="], ["data", "&unknown;"]], "input": "</p><!&amp<a b=>&unknown;", "scripting": false}
+{"events": [["end", "p"], ["comment", "&amp<a b="], ["data", "&unknown;"]], "input": "</p><!&amp<a b=>&unknown;", "scripting": true}
+{"events": [["end", "p"], ["comment", "<TITLE"]], "input": "</p></<TITLE>", "scripting": false}
+{"events": [["end", "p"], ["comment", "<TITLE"]], "input": "</p></<TITLE>", "scripting": true}
+{"events": [["end", "p"], ["pi", "<br /"], ["decl", "doctype</ p"], ["pi", ""]], "input": "</p><?<br /><!doctype</ p><?", "scripting": false}
+{"events": [["end", "p"], ["pi", "<br /"], ["decl", "doctype</ p"], ["pi", ""]], "input": "</p><?<br /><!doctype</ p><?", "scripting": true}
+{"events": [["end", "p"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["end", "script"], ["data", "© "], ["comment", " p"], ["data", "-->"], ["end", "script"]], "input": "</p>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&</SCRIPT/>&copy </ p>--></script >", "scripting": false}
+{"events": [["end", "p"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["end", "script"], ["data", "© "], ["comment", " p"], ["data", "-->"], ["end", "script"]], "input": "</p>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&</SCRIPT/>&copy </ p>--></script >", "scripting": true}
+{"events": [["end", "p"], ["data", " textarea日😀\t"], ["start", "title", []]], "input": "</p> textarea日😀\t<title>", "scripting": false}
+{"events": [["end", "p"], ["data", " textarea日😀\t"], ["start", "title", []]], "input": "</p> textarea日😀\t<title>", "scripting": true}
+{"events": [["end", "script"], ["data", "\t"]], "input": "</script >\t", "scripting": false}
+{"events": [["end", "script"], ["data", "\t"]], "input": "</script >\t", "scripting": true}
+{"events": [["end", "script"], ["data", "\n"], ["comment", "[if x]"], ["unknown_decl", "CDATA[title<TITLE>plaintext</script>textarea"]], "input": "</script >\n<![if x]><![CDATA[title<TITLE>plaintext</script>textarea", "scripting": false}
+{"events": [["end", "script"], ["data", "\n"], ["comment", "[if x]"], ["unknown_decl", "CDATA[title<TITLE>plaintext</script>textarea"]], "input": "</script >\n<![if x]><![CDATA[title<TITLE>plaintext</script>textarea", "scripting": true}
+{"events": [["end", "script"], ["data", "&"], ["start", "title", []], ["data", "</script ><p <p>b</SCRIPT/><a href=\"x&y\"><?"]], "input": "</script >&amp;<TITLE></script ><p <p>b</SCRIPT/><a href=\"x&amp;y\"><?", "scripting": false}
+{"events": [["end", "script"], ["data", "&"], ["start", "title", []], ["data", "</script ><p <p>b</SCRIPT/><a href=\"x&y\"><?"]], "input": "</script >&amp;<TITLE></script ><p <p>b</SCRIPT/><a href=\"x&amp;y\"><?", "scripting": true}
+{"events": [["end", "script"], ["data", "->"], ["startend", "br", []], ["pi", ""]], "input": "</script >-><br /><?", "scripting": false}
+{"events": [["end", "script"], ["data", "->"], ["startend", "br", []], ["pi", ""]], "input": "</script >-><br /><?", "scripting": true}
+{"events": [["end", "script"], ["end", "script"], ["startend", "br", []], ["data", "é\""], ["decl", "doctype-"], ["start", "a", [["href", "Q"]]]], "input": "</script ></script ><br />é\"<!doctype-><A HREF=Q>", "scripting": false}
+{"events": [["end", "script"], ["end", "script"], ["startend", "br", []], ["data", "é\""], ["decl", "doctype-"], ["start", "a", [["href", "Q"]]]], "input": "</script ></script ><br />é\"<!doctype-><A HREF=Q>", "scripting": true}
+{"events": [["end", "script"], ["end", "script"], ["data", "-->"], ["start", "a", [["=x", null]]], ["data", "]]>日div"], ["end", "script"]], "input": "</script ></script>--><a =x>]]>日div</script>", "scripting": false}
+{"events": [["end", "script"], ["end", "script"], ["data", "-->"], ["start", "a", [["=x", null]]], ["data", "]]>日div"], ["end", "script"]], "input": "</script ></script>--><a =x>]]>日div</script>", "scripting": true}
+{"events": [["end", "script"], ["end", "script"], ["data", "style"], ["start", "a", [["href", "&copy=1"]]], ["data", "<"], ["data", "3é->"]], "input": "</script ></script>style<a href='&copy=1'><3é->", "scripting": false}
+{"events": [["end", "script"], ["end", "script"], ["data", "style"], ["start", "a", [["href", "&copy=1"]]], ["data", "<"], ["data", "3é->"]], "input": "</script ></script>style<a href='&copy=1'><3é->", "scripting": true}
+{"events": [["end", "script"], ["end", "title"], ["data", "<"], ["startend", "br", []], ["startend", "br", []]], "input": "</script ></title>&lt<br /><br/>", "scripting": false}
+{"events": [["end", "script"], ["end", "title"], ["data", "<"], ["startend", "br", []], ["startend", "br", []]], "input": "</script ></title>&lt<br /><br/>", "scripting": true}
+{"events": [["end", "script"], ["start", "script", []], ["end", "script"], ["start", "a", [["href", "x&y"]]], ["startend", "br", []], ["start", "p", []], ["data", "<"], ["data", "-"], ["start", "a", [["href", "&copy=1"]]]], "input": "</script ><script></SCRIPT/><a href=\"x&amp;y\"><br/><p></><-<a href='&copy=1'>", "scripting": false}
+{"events": [["end", "script"], ["start", "script", []], ["end", "script"], ["start", "a", [["href", "x&y"]]], ["startend", "br", []], ["start", "p", []], ["data", "<"], ["data", "-"], ["start", "a", [["href", "&copy=1"]]]], "input": "</script ><script></SCRIPT/><a href=\"x&amp;y\"><br/><p></><-<a href='&copy=1'>", "scripting": true}
+{"events": [["end", "script"], ["data", "a=\"y\""], ["start", "a", [["b", ""], ["'c", null]]], ["data", "a=\"y\""], ["end", "script"], ["start", "img", [["src", "x"], ["onerror", "y"]]]], "input": "</script >a=\"y\"<a b= 'c>a=\"y\"</script ><img src=x onerror=y>", "scripting": false}
+{"events": [["end", "script"], ["data", "a=\"y\""], ["start", "a", [["b", ""], ["'c", null]]], ["data", "a=\"y\""], ["end", "script"], ["start", "img", [["src", "x"], ["onerror", "y"]]]], "input": "</script >a=\"y\"<a b= 'c>a=\"y\"</script ><img src=x onerror=y>", "scripting": true}
+{"events": [["end", "script"], ["data", "a=b"]], "input": "</script >a=b", "scripting": false}
+{"events": [["end", "script"], ["data", "a=b"]], "input": "</script >a=b", "scripting": true}
+{"events": [["end", "script"], ["data", "textarea"], ["comment", "😀<a  b   c=d  "], ["comment", "textarea<p>"]], "input": "</script >textarea</😀<a  b   c=d  ><!--textarea<p>", "scripting": false}
+{"events": [["end", "script"], ["data", "textarea"], ["comment", "😀<a  b   c=d  "], ["comment", "textarea<p>"]], "input": "</script >textarea</😀<a  b   c=d  ><!--textarea<p>", "scripting": true}
+{"events": [["end", "script"], ["comment", "[if x]"], ["data", "&unknown;--!>"], ["start", "a", [["href", "Q"]]]], "input": "</script><![if x]>&unknown;--!><A HREF=Q>", "scripting": false}
+{"events": [["end", "script"], ["comment", "[if x]"], ["data", "&unknown;--!>"], ["start", "a", [["href", "Q"]]]], "input": "</script><![if x]>&unknown;--!><A HREF=Q>", "scripting": true}
+{"events": [["end", "script"], ["data", "]]>"], ["data", "</"]], "input": "</script>]]></", "scripting": false}
+{"events": [["end", "script"], ["data", "]]>"], ["data", "</"]], "input": "</script>]]></", "scripting": true}
+{"events": [["end", "script"], ["data", "a='x'"], ["unknown_decl", "CDATA[&#65;"]], "input": "</script>a='x'<![CDATA[&#65;", "scripting": false}
+{"events": [["end", "script"], ["data", "a='x'"], ["unknown_decl", "CDATA[&#65;"]], "input": "</script>a='x'<![CDATA[&#65;", "scripting": true}
+{"events": [["end", "script"], ["data", "iframe"], ["startend", "br", []], ["data", "style xmp"]], "input": "</script>iframe<br />style xmp", "scripting": false}
+{"events": [["end", "script"], ["data", "iframe"], ["startend", "br", []], ["data", "style xmp"]], "input": "</script>iframe<br />style xmp", "scripting": true}
+{"events": [["end", "title"]], "input": "</title>", "scripting": false}
+{"events": [["end", "title"]], "input": "</title>", "scripting": true}
+{"events": [["end", "title"], ["comment", "[if x]"], ["data", "😀"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "&unknown;"]], "input": "</title><![if x]>😀<img src=x onerror=y>&unknown;", "scripting": false}
+{"events": [["end", "title"], ["comment", "[if x]"], ["data", "😀"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "&unknown;"]], "input": "</title><![if x]>😀<img src=x onerror=y>&unknown;", "scripting": true}
+{"events": [["end", "title"], ["decl", "doctype</SCRIPT/"]], "input": "</title><!doctype</SCRIPT/>", "scripting": false}
+{"events": [["end", "title"], ["decl", "doctype</SCRIPT/"]], "input": "</title><!doctype</SCRIPT/>", "scripting": true}
+{"events": [["end", "title"], ["start", "a", [["b", null]]]], "input": "</title><a/b>", "scripting": false}
+{"events": [["end", "title"], ["start", "a", [["b", null]]]], "input": "</title><a/b>", "scripting": true}
+{"events": [["end", "title"], ["start", "title", []], ["data", "noscript?><!</script >iframe<script>a=b&"]], "input": "</title><title>noscript?><!</script >iframe<script>a=b&amp;", "scripting": false}
+{"events": [["end", "title"], ["start", "title", []], ["data", "noscript?><!</script >iframe<script>a=b&"]], "input": "</title><title>noscript?><!</script >iframe<script>a=b&amp;", "scripting": true}
+{"events": [["end", "title"], ["data", "br"]], "input": "</title>br", "scripting": false}
+{"events": [["end", "title"], ["data", "br"]], "input": "</title>br", "scripting": true}
+{"events": [["end", "title"], ["data", "br a=bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "a", [["=x", null]]], ["start", "a", [["href", "&copy=1"]]], ["data", "A"]], "input": "</title>br a=bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<a =x><a href='&copy=1'>&#x41", "scripting": false}
+{"events": [["end", "title"], ["data", "br a=bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "a", [["=x", null]]], ["start", "a", [["href", "&copy=1"]]], ["data", "A"]], "input": "</title>br a=bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<a =x><a href='&copy=1'>&#x41", "scripting": true}
+{"events": [["end", "title"], ["data", "xmp&"], ["data", "<"], ["data", "-a='x'plaintext"], ["start", "title", []], ["data", "//></SCRIPT/>"]], "input": "</title>xmp&<-a='x'plaintext<title>//></SCRIPT/>", "scripting": false}
+{"events": [["end", "title"], ["data", "xmp&"], ["data", "<"], ["data", "-a='x'plaintext"], ["start", "title", []], ["data", "//></SCRIPT/>"]], "input": "</title>xmp&<-a='x'plaintext<title>//></SCRIPT/>", "scripting": true}
+{"events": [["end", "title"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&class=\"c\" id=x"]], "input": "</title>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&class=\"c\" id=x", "scripting": false}
+{"events": [["end", "title"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&class=\"c\" id=x"]], "input": "</title>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&class=\"c\" id=x", "scripting": true}
+{"events": [["end", "xmp<!'<"], ["end", "script"], ["end", "script"]], "input": "</xmp<!'</<a/b></SCRIPT/></script>", "scripting": false}
+{"events": [["end", "xmp<!'<"], ["end", "script"], ["end", "script"]], "input": "</xmp<!'</<a/b></SCRIPT/></script>", "scripting": true}
+{"events": [["data", "<"], ["data", "3"]], "input": "<3", "scripting": false}
+{"events": [["data", "<"], ["data", "3"]], "input": "<3", "scripting": true}
+{"events": [["data", "<"], ["data", "3"], ["end", "title"], ["data", "\f"], ["start", "a", [["b", null]]], ["data", "AéA"], ["start", "p", []], ["data", "class=\"c\" id=x"], ["start", "a", [["=x", null]]]], "input": "<3</title>\f<a/b>&#65;é&#x41<p>class=\"c\" id=x<a =x>", "scripting": false}
+{"events": [["data", "<"], ["data", "3"], ["end", "title"], ["data", "\f"], ["start", "a", [["b", null]]], ["data", "AéA"], ["start", "p", []], ["data", "class=\"c\" id=x"], ["start", "a", [["=x", null]]]], "input": "<3</title>\f<a/b>&#65;é&#x41<p>class=\"c\" id=x<a =x>", "scripting": true}
+{"events": [["data", "<"], ["data", "3"], ["start", "a", [["=x", null]]], ["comment", " p"], ["end", "script"], ["comment", " p"]], "input": "<3<a =x></ p></script ></ p>", "scripting": false}
+{"events": [["data", "<"], ["data", "3"], ["start", "a", [["=x", null]]], ["comment", " p"], ["end", "script"], ["comment", " p"]], "input": "<3<a =x></ p></script ></ p>", "scripting": true}
+{"events": [["data", "<"], ["data", "3pdivé"], ["start", "a", [["=x", null]]], ["data", "-->"], ["data", "<"], ["start", "script", []]], "input": "<3pdivé<a =x>--><<script>", "scripting": false}
+{"events": [["data", "<"], ["data", "3pdivé"], ["start", "a", [["=x", null]]], ["data", "-->"], ["data", "<"], ["start", "script", []]], "input": "<3pdivé<a =x>--><<script>", "scripting": true}
+{"events": [["data", "<"], ["data", "3plaintext"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "<"], ["end", "script"], ["end", "title"], ["decl", "doctypestyleclass=\"c\" id=x"]], "input": "<3plaintext<a b= 'c></>&lt</SCRIPT/></title><!doctypestyleclass=\"c\" id=x", "scripting": false}
+{"events": [["data", "<"], ["data", "3plaintext"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "<"], ["end", "script"], ["end", "title"], ["decl", "doctypestyleclass=\"c\" id=x"]], "input": "<3plaintext<a b= 'c></>&lt</SCRIPT/></title><!doctypestyleclass=\"c\" id=x", "scripting": true}
+{"events": [["data", "<"], ["data", "3😀"], ["data", "<"], ["data", "3"], ["start", "a", [["b", ""]]]], "input": "<3😀<3<a b=>", "scripting": false}
+{"events": [["data", "<"], ["data", "3😀"], ["data", "<"], ["data", "3"], ["start", "a", [["b", ""]]]], "input": "<3😀<3<a b=>", "scripting": true}
+{"events": [["data", "<"], ["decl", "DOCTYPE html"], ["comment", "[if x]"], ["data", "aplaintext"]], "input": "<<!DOCTYPE html><![if x]>aplaintext", "scripting": false}
+{"events": [["data", "<"], ["decl", "DOCTYPE html"], ["comment", "[if x]"], ["data", "aplaintext"]], "input": "<<!DOCTYPE html><![if x]>aplaintext", "scripting": true}
+{"events": [["data", "<"], ["comment", "[if x]"], ["end", "script"], ["start", "a", [["href", "&copy=1"]]], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["start", "a", [["href", "x&y"]]], ["start", "p", []]], "input": "<<![if x]></SCRIPT/><a href='&copy=1'><img src=x onerror=y><a href=\"x&amp;y\"><p>", "scripting": false}
+{"events": [["data", "<"], ["comment", "[if x]"], ["end", "script"], ["start", "a", [["href", "&copy=1"]]], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["start", "a", [["href", "x&y"]]], ["start", "p", []]], "input": "<<![if x]></SCRIPT/><a href='&copy=1'><img src=x onerror=y><a href=\"x&amp;y\"><p>", "scripting": true}
+{"events": [["data", "<"], ["end", "script"], ["data", "&&"], ["end", "script"], ["data", "</"]], "input": "<</script>&amp;&amp</SCRIPT/></", "scripting": false}
+{"events": [["data", "<"], ["end", "script"], ["data", "&&"], ["end", "script"], ["data", "</"]], "input": "<</script>&amp;&amp</SCRIPT/></", "scripting": true}
+{"events": [["data", "<"], ["start", "title", []]], "input": "<<TITLE>", "scripting": false}
+{"events": [["data", "<"], ["start", "title", []]], "input": "<<TITLE>", "scripting": true}
+{"events": [["pi", ""]], "input": "<?", "scripting": false}
+{"events": [["pi", ""]], "input": "<?", "scripting": true}
+{"events": [["pi", "<!--&#</p"], ["data", "&"], ["end", "script"], ["data", "a"]], "input": "<?<!--&#</p>&amp;</script >a", "scripting": false}
+{"events": [["pi", "<!--&#</p"], ["data", "&"], ["end", "script"], ["data", "a"]], "input": "<?<!--&#</p>&amp;</script >a", "scripting": true}
+{"events": [["pi", "<!DOCTYPE html"], ["start", "p", [["<p", null]]], ["data", "\f"]], "input": "<?<!DOCTYPE html><p <p>\f", "scripting": false}
+{"events": [["pi", "<!DOCTYPE html"], ["start", "p", [["<p", null]]], ["data", "\f"]], "input": "<?<!DOCTYPE html><p <p>\f", "scripting": true}
+{"events": [["pi", "<![CDATA[style<br /"], ["start", "script", []]], "input": "<?<![CDATA[style<br /><script>", "scripting": false}
+{"events": [["pi", "<![CDATA[style<br /"], ["start", "script", []]], "input": "<?<![CDATA[style<br /><script>", "scripting": true}
+{"events": [["pi", "<?<![CDATA[xmp</"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["end", "script"]], "input": "<?<?<![CDATA[xmp</><img src=x onerror=y></script>", "scripting": false}
+{"events": [["pi", "<?<![CDATA[xmp</"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["end", "script"]], "input": "<?<?<![CDATA[xmp</><img src=x onerror=y></script>", "scripting": true}
+{"events": [["pi", "a='x'<a b="], ["start", "a", [["href", "&copy=1"]]], ["start", "a", [["href", "Q"]]], ["data", "braa=\"y\""], ["comment", " p"]], "input": "<?a='x'<a b=><a href='&copy=1'><A HREF=Q>braa=\"y\"</ p>", "scripting": false}
+{"events": [["pi", "a='x'<a b="], ["start", "a", [["href", "&copy=1"]]], ["start", "a", [["href", "Q"]]], ["data", "braa=\"y\""], ["comment", " p"]], "input": "<?a='x'<a b=><a href='&copy=1'><A HREF=Q>braa=\"y\"</ p>", "scripting": true}
+{"events": [["pi", "é<!--class=\"c\" id=xiframep&#65;a=b&#"]], "input": "<?é<!--class=\"c\" id=xiframep&#65;a=b&#", "scripting": false}
+{"events": [["pi", "é<!--class=\"c\" id=xiframep&#65;a=b&#"]], "input": "<?é<!--class=\"c\" id=xiframep&#65;a=b&#", "scripting": true}
+{"events": [["start", "a", [["href", "Q"]]], ["data", "\"class=\"c\" id=x"], ["unknown_decl", "CDATA[<TITLE></ p>"]], "input": "<A HREF=Q>\"class=\"c\" id=x<![CDATA[<TITLE></ p>]]>", "scripting": false}
+{"events": [["start", "a", [["href", "Q"]]], ["data", "\"class=\"c\" id=x"], ["unknown_decl", "CDATA[<TITLE></ p>"]], "input": "<A HREF=Q>\"class=\"c\" id=x<![CDATA[<TITLE></ p>]]>", "scripting": true}
+{"events": [["start", "a", [["href", "Q"]]], ["data", "&#class=\"c\" id=x"], ["start", "a", [["href", "Q"]]], ["comment", "style<!doctype</SCRIPT/"]], "input": "<A HREF=Q>&#class=\"c\" id=x<A HREF=Q><!style<!doctype</SCRIPT/>", "scripting": false}
+{"events": [["start", "a", [["href", "Q"]]], ["data", "&#class=\"c\" id=x"], ["start", "a", [["href", "Q"]]], ["comment", "style<!doctype</SCRIPT/"]], "input": "<A HREF=Q>&#class=\"c\" id=x<A HREF=Q><!style<!doctype</SCRIPT/>", "scripting": true}
+{"events": [["start", "a", [["href", "Q"]]], ["data", "<\f"]], "input": "<A HREF=Q>&lt\f", "scripting": false}
+{"events": [["start", "a", [["href", "Q"]]], ["data", "<\f"]], "input": "<A HREF=Q>&lt\f", "scripting": true}
+{"events": [["start", "a", [["href", "Q"]]], ["start", "title", []], ["data", "-><a href=\"x&y\">--!>"]], "input": "<A HREF=Q><TITLE>-><a href=\"x&amp;y\">--!>", "scripting": false}
+{"events": [["start", "a", [["href", "Q"]]], ["start", "title", []], ["data", "-><a href=\"x&y\">--!>"]], "input": "<A HREF=Q><TITLE>-><a href=\"x&amp;y\">--!>", "scripting": true}
+{"events": [["start", "a", [["href", "Q"]]], ["data", "a"]], "input": "<A HREF=Q>a", "scripting": false}
+{"events": [["start", "a", [["href", "Q"]]], ["data", "a"]], "input": "<A HREF=Q>a", "scripting": true}
+{"events": [["start", "a", [["href", "Q"]]], ["data", "a=bdiv"], ["unknown_decl", "CDATA["]], "input": "<A HREF=Q>a=bdiv<![CDATA[", "scripting": false}
+{"events": [["start", "a", [["href", "Q"]]], ["data", "a=bdiv"], ["unknown_decl", "CDATA["]], "input": "<A HREF=Q>a=bdiv<![CDATA[", "scripting": true}
+{"events": [["start", "title", []], ["data", "&&</script>]]>"]], "input": "<TITLE>&amp&amp;</script>]]>", "scripting": false}
+{"events": [["start", "title", []], ["data", "&&</script>]]>"]], "input": "<TITLE>&amp&amp;</script>]]>", "scripting": true}
+{"events": [["start", "title", []], ["data", "><p><a =x>-><br/>style<![if x]>"]], "input": "<TITLE>><p><a =x>-><br/>style<![if x]>", "scripting": false}
+{"events": [["start", "title", []], ["data", "><p><a =x>-><br/>style<![if x]>"]], "input": "<TITLE>><p><a =x>-><br/>style<![if x]>", "scripting": true}
+{"events": [["start", "title", []], ["data", "div<p>=&'"]], "input": "<TITLE>div<p>=&'", "scripting": false}
+{"events": [["start", "title", []], ["data", "div<p>=&'"]], "input": "<TITLE>div<p>=&'", "scripting": true}
+{"events": [["start", "title", []], ["data", "titleA<script><p <p></>class=\"c\" id=xstyle<"]], "input": "<TITLE>title&#x41<script><p <p></>class=\"c\" id=xstyle&lt", "scripting": false}
+{"events": [["start", "title", []], ["data", "titleA<script><p <p></>class=\"c\" id=xstyle<"]], "input": "<TITLE>title&#x41<script><p <p></>class=\"c\" id=xstyle&lt", "scripting": true}
+{"events": [["start", "a", [["b", null], ["c", "d"]]], ["data", "&"], ["startend", "br", []], ["end", "p"], ["data", "="]], "input": "<a  b   c=d  >&amp<br /></p>=", "scripting": false}
+{"events": [["start", "a", [["b", null], ["c", "d"]]], ["data", "&"], ["startend", "br", []], ["end", "p"], ["data", "="]], "input": "<a  b   c=d  >&amp<br /></p>=", "scripting": true}
+{"events": [["start", "a", [["b", null], ["c", "d"]]], ["data", "&unknown;"], ["startend", "br", []], ["data", "\n"]], "input": "<a  b   c=d  >&unknown;<br/>\n", "scripting": false}
+{"events": [["start", "a", [["b", null], ["c", "d"]]], ["data", "&unknown;"], ["startend", "br", []], ["data", "\n"]], "input": "<a  b   c=d  >&unknown;<br/>\n", "scripting": true}
+{"events": [["start", "a", [["b", null], ["c", "d"]]], ["comment", " p"]], "input": "<a  b   c=d  ></ p>", "scripting": false}
+{"events": [["start", "a", [["b", null], ["c", "d"]]], ["comment", " p"]], "input": "<a  b   c=d  ></ p>", "scripting": true}
+{"events": [["start", "a", [["b", null], ["c", "d"]]], ["data", "&#x&日"]], "input": "<a  b   c=d  ></>&#x&amp日", "scripting": false}
+{"events": [["start", "a", [["b", null], ["c", "d"]]], ["data", "&#x&日"]], "input": "<a  b   c=d  ></>&#x&amp日", "scripting": true}
+{"events": [["start", "a", [["b", null], ["c", "d"]]], ["start", "p", []], ["start", "title", []], ["data", ">&&a=\"y\"<!--<A HREF=Q>-->"]], "input": "<a  b   c=d  ><p><TITLE>>&amp;&ampa=\"y\"<!--<A HREF=Q>-->", "scripting": false}
+{"events": [["start", "a", [["b", null], ["c", "d"]]], ["start", "p", []], ["start", "title", []], ["data", ">&&a=\"y\"<!--<A HREF=Q>-->"]], "input": "<a  b   c=d  ><p><TITLE>>&amp;&ampa=\"y\"<!--<A HREF=Q>-->", "scripting": true}
+{"events": [["start", "a", [["b", null], ["c", "d"]]], ["data", "textarea"], ["data", "<"], ["data", "3title"], ["decl", "doctype<-\r<script"], ["data", "\f"]], "input": "<a  b   c=d  >textarea<3title<!doctype<-\r<script>\f", "scripting": false}
+{"events": [["start", "a", [["b", null], ["c", "d"]]], ["data", "textarea"], ["data", "<"], ["data", "3title"], ["decl", "doctype<-\r<script"], ["data", "\f"]], "input": "<a  b   c=d  >textarea<3title<!doctype<-\r<script>\f", "scripting": true}
+{"events": [["start", "a", [["=x", null]]]], "input": "<a =x>", "scripting": false}
+{"events": [["start", "a", [["=x", null]]]], "input": "<a =x>", "scripting": true}
+{"events": [["start", "a", [["=x", null]]], ["data", "<"], ["startend", "br", []], ["data", "a=\"y\""]], "input": "<a =x><<br/>a=\"y\"", "scripting": false}
+{"events": [["start", "a", [["=x", null]]], ["data", "<"], ["startend", "br", []], ["data", "a=\"y\""]], "input": "<a =x><<br/>a=\"y\"", "scripting": true}
+{"events": [["start", "a", [["=x", null]]], ["start", "a", [["b", ""]]]], "input": "<a =x><a b=>", "scripting": false}
+{"events": [["start", "a", [["=x", null]]], ["start", "a", [["b", ""]]]], "input": "<a =x><a b=>", "scripting": true}
+{"events": [["start", "a", [["=x", null]]], ["data", "b"]], "input": "<a =x>b", "scripting": false}
+{"events": [["start", "a", [["=x", null]]], ["data", "b"]], "input": "<a =x>b", "scripting": true}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["data", "--!>class=\"c\" id=x]]>&"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "xmp"]], "input": "<a b= 'c>--!>class=\"c\" id=x]]>&<a  b   c=d  >xmp", "scripting": false}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["data", "--!>class=\"c\" id=x]]>&"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "xmp"]], "input": "<a b= 'c>--!>class=\"c\" id=x]]>&<a  b   c=d  >xmp", "scripting": true}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["comment", "[if x]"], ["data", "a"], ["comment", "<![if x]"]], "input": "<a b= 'c><![if x]>a<!<![if x]>", "scripting": false}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["comment", "[if x]"], ["data", "a"], ["comment", "<![if x]"]], "input": "<a b= 'c><![if x]>a<!<![if x]>", "scripting": true}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["end", "script"]], "input": "<a b= 'c></script>", "scripting": false}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["end", "script"]], "input": "<a b= 'c></script>", "scripting": true}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["start", "a", [["b", ""]]], ["data", "div"], ["comment", " p"], ["data", "noscript"], ["start", "a", [["=x", null]]], ["data", "noscript"], ["comment", "[if x]"], ["data", "/>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": "<a b= 'c><a b=>div</ p>noscript<a =x>noscript<![if x]>/>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": false}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["start", "a", [["b", ""]]], ["data", "div"], ["comment", " p"], ["data", "noscript"], ["start", "a", [["=x", null]]], ["data", "noscript"], ["comment", "[if x]"], ["data", "/>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": "<a b= 'c><a b=>div</ p>noscript<a =x>noscript<![if x]>/>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": true}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["startend", "br", []], ["end", "p"], ["data", "plaintext"], ["pi", "<!doctype"]], "input": "<a b= 'c><br /></p></>plaintext<?<!doctype", "scripting": false}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["startend", "br", []], ["end", "p"], ["data", "plaintext"], ["pi", "<!doctype"]], "input": "<a b= 'c><br /></p></>plaintext<?<!doctype", "scripting": true}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["data", "a=\"y\"--!>😀"]], "input": "<a b= 'c>a=\"y\"--!>😀", "scripting": false}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["data", "a=\"y\"--!>😀"]], "input": "<a b= 'c>a=\"y\"--!>😀", "scripting": true}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["data", "script"]], "input": "<a b= 'c>script", "scripting": false}
+{"events": [["start", "a", [["b", ""], ["'c", null]]], ["data", "script"]], "input": "<a b= 'c>script", "scripting": true}
+{"events": [["start", "a", [["b", ""]]]], "input": "<a b=>", "scripting": false}
+{"events": [["start", "a", [["b", ""]]]], "input": "<a b=>", "scripting": true}
+{"events": [["start", "a", [["b", ""]]], ["data", "p"], ["start", "a", [["href", "Q"]]], ["data", "xmpdiva='x' "]], "input": "<a b=>p<A HREF=Q>xmpdiva='x' ", "scripting": false}
+{"events": [["start", "a", [["b", ""]]], ["data", "p"], ["start", "a", [["href", "Q"]]], ["data", "xmpdiva='x' "]], "input": "<a b=>p<A HREF=Q>xmpdiva='x' ", "scripting": true}
+{"events": [["start", "a", [["b", ""]]], ["data", "plaintextA"], ["startend", "br", []], ["data", "&#x\f"], ["start", "a", [["b", ""], ["'c", null]]], ["end", "script"]], "input": "<a b=>plaintext&#65;<br/>&#x\f<a b= 'c></script>", "scripting": false}
+{"events": [["start", "a", [["b", ""]]], ["data", "plaintextA"], ["startend", "br", []], ["data", "&#x\f"], ["start", "a", [["b", ""], ["'c", null]]], ["end", "script"]], "input": "<a b=>plaintext&#65;<br/>&#x\f<a b= 'c></script>", "scripting": true}
+{"events": [["start", "a", [["b", ""]]], ["data", " -->style&#x  --!>"]], "input": "<a b=> -->style&#x  --!>", "scripting": false}
+{"events": [["start", "a", [["b", ""]]], ["data", " -->style&#x  --!>"]], "input": "<a b=> -->style&#x  --!>", "scripting": true}
+{"events": [["start", "a", [["b", ""]]], ["data", " "], ["decl", "DOCTYPE html"], ["startend", "br", []], ["data", "title"], ["data", "&"]], "input": "<a b=> <!DOCTYPE html><br />title</>&", "scripting": false}
+{"events": [["start", "a", [["b", ""]]], ["data", " "], ["decl", "DOCTYPE html"], ["startend", "br", []], ["data", "title"], ["data", "&"]], "input": "<a b=> <!DOCTYPE html><br />title</>&", "scripting": true}
+{"events": [["start", "a", [["href", "x&y"]]], ["comment", "<!--]]"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "--!>😀"], ["start", "a", [["b", null]]], ["end", "script"]], "input": "<a href=\"x&amp;y\"><!<!--]]><a  b   c=d  >--!>😀<a/b></script>", "scripting": false}
+{"events": [["start", "a", [["href", "x&y"]]], ["comment", "<!--]]"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "--!>😀"], ["start", "a", [["b", null]]], ["end", "script"]], "input": "<a href=\"x&amp;y\"><!<!--]]><a  b   c=d  >--!>😀<a/b></script>", "scripting": true}
+{"events": [["start", "a", [["href", "x&y"]]], ["unknown_decl", "CDATA["]], "input": "<a href=\"x&amp;y\"><![CDATA[", "scripting": false}
+{"events": [["start", "a", [["href", "x&y"]]], ["unknown_decl", "CDATA["]], "input": "<a href=\"x&amp;y\"><![CDATA[", "scripting": true}
+{"events": [["start", "a", [["href", "x&y"]]], ["comment", "\" </3"], ["decl", "DOCTYPE html"], ["data", "<"], ["comment", "3"], ["data", "="]], "input": "<a href=\"x&amp;y\"></\" </3><!DOCTYPE html><</3>=", "scripting": false}
+{"events": [["start", "a", [["href", "x&y"]]], ["comment", "\" </3"], ["decl", "DOCTYPE html"], ["data", "<"], ["comment", "3"], ["data", "="]], "input": "<a href=\"x&amp;y\"></\" </3><!DOCTYPE html><</3>=", "scripting": true}
+{"events": [["start", "a", [["href", "x&y"]]], ["start", "a", [["=x", null]]], ["data", "<é"]], "input": "<a href=\"x&amp;y\"><a =x>&lté", "scripting": false}
+{"events": [["start", "a", [["href", "x&y"]]], ["start", "a", [["=x", null]]], ["data", "<é"]], "input": "<a href=\"x&amp;y\"><a =x>&lté", "scripting": true}
+{"events": [["start", "a", [["href", "x&y"]]], ["data", "script/=&]]>"]], "input": "<a href=\"x&amp;y\">script/=&amp]]>", "scripting": false}
+{"events": [["start", "a", [["href", "x&y"]]], ["data", "script/=&]]>"]], "input": "<a href=\"x&amp;y\">script/=&amp]]>", "scripting": true}
+{"events": [["start", "a", [["href", "x&y"]]], ["data", "xmp"], ["startend", "br", []]], "input": "<a href=\"x&amp;y\">xmp<br/>", "scripting": false}
+{"events": [["start", "a", [["href", "x&y"]]], ["data", "xmp"], ["startend", "br", []]], "input": "<a href=\"x&amp;y\">xmp<br/>", "scripting": true}
+{"events": [["start", "a", [["href", "x&y"]]], ["data", "xmp"], ["start", "p", [["<p", null]]], ["data", "p"], ["comment", "[if x]"], ["start", "a", [["b", ""], ["'c", null]]]], "input": "<a href=\"x&amp;y\">xmp<p <p>p<![if x]><a b= 'c>", "scripting": false}
+{"events": [["start", "a", [["href", "x&y"]]], ["data", "xmp"], ["start", "p", [["<p", null]]], ["data", "p"], ["comment", "[if x]"], ["start", "a", [["b", ""], ["'c", null]]]], "input": "<a href=\"x&amp;y\">xmp<p <p>p<![if x]><a b= 'c>", "scripting": true}
+{"events": [["start", "a", [["href", "&copy=1"]]]], "input": "<a href='&copy=1'>", "scripting": false}
+{"events": [["start", "a", [["href", "&copy=1"]]]], "input": "<a href='&copy=1'>", "scripting": true}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "&#"], ["comment", "日/"], ["data", "iframe<"]], "input": "<a href='&copy=1'>&#<!日/>iframe&lt", "scripting": false}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "&#"], ["comment", "日/"], ["data", "iframe<"]], "input": "<a href='&copy=1'>&#<!日/>iframe&lt", "scripting": true}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "--!>"], ["comment", "<br/"]], "input": "<a href='&copy=1'>--!><!<br/>", "scripting": false}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "--!>"], ["comment", "<br/"]], "input": "<a href='&copy=1'>--!><!<br/>", "scripting": true}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "->"], ["start", "a", [["href", "x&y"]]], ["data", "a='x'&unknown;"], ["start", "title", []], ["data", "<a href='©=1'>"]], "input": "<a href='&copy=1'>-><a href=\"x&amp;y\">a='x'&unknown;<TITLE><a href='&copy=1'>", "scripting": false}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "->"], ["start", "a", [["href", "x&y"]]], ["data", "a='x'&unknown;"], ["start", "title", []], ["data", "<a href='©=1'>"]], "input": "<a href='&copy=1'>-><a href=\"x&amp;y\">a='x'&unknown;<TITLE><a href='&copy=1'>", "scripting": true}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["comment", "[if x]"], ["unknown_decl", "CDATA[b->\rxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": "<a href='&copy=1'><![if x]><![CDATA[b->\rxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": false}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["comment", "[if x]"], ["unknown_decl", "CDATA[b->\rxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": "<a href='&copy=1'><![if x]><![CDATA[b->\rxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": true}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["comment", " p"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["comment", "[if x]"], ["data", "日"]], "input": "<a href='&copy=1'></ p>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<![if x]>日", "scripting": false}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["comment", " p"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["comment", "[if x]"], ["data", "日"]], "input": "<a href='&copy=1'></ p>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<![if x]>日", "scripting": true}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "&😀&"], ["end", "script"], ["pi", ""]], "input": "<a href='&copy=1'></>&amp😀&</script ><?", "scripting": false}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "&😀&"], ["end", "script"], ["pi", ""]], "input": "<a href='&copy=1'></>&amp😀&</script ><?", "scripting": true}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "<"], ["data", "3"], ["decl", "DOCTYPE html"], ["data", "😀© &#x"]], "input": "<a href='&copy=1'><3<!DOCTYPE html>😀&copy &#x", "scripting": false}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "<"], ["data", "3"], ["decl", "DOCTYPE html"], ["data", "😀© &#x"]], "input": "<a href='&copy=1'><3<!DOCTYPE html>😀&copy &#x", "scripting": true}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["startend", "br", []], ["data", "?>&#x"], ["start", "p", [["<p", null]]], ["data", "&unknown;"], ["end", "script"], ["data", "©"], ["decl", "DOCTYPE html"]], "input": "<a href='&copy=1'><br />?>&#x<p <p>&unknown;</SCRIPT/>&copy<!DOCTYPE html>", "scripting": false}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["startend", "br", []], ["data", "?>&#x"], ["start", "p", [["<p", null]]], ["data", "&unknown;"], ["end", "script"], ["data", "©"], ["decl", "DOCTYPE html"]], "input": "<a href='&copy=1'><br />?>&#x<p <p>&unknown;</SCRIPT/>&copy<!DOCTYPE html>", "scripting": true}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", " ->"], ["start", "a", [["href", "Q"]]], ["data", "div"]], "input": "<a href='&copy=1'><img src=x onerror=y> -><A HREF=Q>div", "scripting": false}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", " ->"], ["start", "a", [["href", "Q"]]], ["data", "div"]], "input": "<a href='&copy=1'><img src=x onerror=y> -><A HREF=Q>div", "scripting": true}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "a"], ["start", "a", [["=x", null]]]], "input": "<a href='&copy=1'>a<a =x>", "scripting": false}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "a"], ["start", "a", [["=x", null]]]], "input": "<a href='&copy=1'>a<a =x>", "scripting": true}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "noscript"], ["decl", "DOCTYPE html"], ["data", "\tp"], ["start", "a", [["href", "x&y"]]], ["data", "plaintext?>"], ["start", "a", [["href", "x&y"]]], ["data", "/>"]], "input": "<a href='&copy=1'>noscript<!DOCTYPE html>\tp<a href=\"x&amp;y\">plaintext?><a href=\"x&amp;y\">/>", "scripting": false}
+{"events": [["start", "a", [["href", "&copy=1"]]], ["data", "noscript"], ["decl", "DOCTYPE html"], ["data", "\tp"], ["start", "a", [["href", "x&y"]]], ["data", "plaintext?>"], ["start", "a", [["href", "x&y"]]], ["data", "/>"]], "input": "<a href='&copy=1'>noscript<!DOCTYPE html>\tp<a href=\"x&amp;y\">plaintext?><a href=\"x&amp;y\">/>", "scripting": true}
+{"events": [["start", "a", [["b", null]]]], "input": "<a/b>", "scripting": false}
+{"events": [["start", "a", [["b", null]]]], "input": "<a/b>", "scripting": true}
+{"events": [["start", "a", [["b", null]]], ["data", "&#style"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "xmpxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "a", [["b", null], ["c", "d"]]]], "input": "<a/b>&#style<a  b   c=d  >xmpxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<a  b   c=d  >", "scripting": false}
+{"events": [["start", "a", [["b", null]]], ["data", "&#style"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "xmpxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "a", [["b", null], ["c", "d"]]]], "input": "<a/b>&#style<a  b   c=d  >xmpxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<a  b   c=d  >", "scripting": true}
+{"events": [["start", "a", [["b", null]]], ["data", "&#x/>class=\"c\" id=x"], ["decl", "doctype"]], "input": "<a/b>&#x/>class=\"c\" id=x<!doctype", "scripting": false}
+{"events": [["start", "a", [["b", null]]], ["data", "&#x/>class=\"c\" id=x"], ["decl", "doctype"]], "input": "<a/b>&#x/>class=\"c\" id=x<!doctype", "scripting": true}
+{"events": [["start", "a", [["b", null]]], ["data", "&unknown;"], ["start", "a", [["=x", null]]], ["data", "=é"], ["start", "script", []]], "input": "<a/b>&unknown;<a =x>=é<script>", "scripting": false}
+{"events": [["start", "a", [["b", null]]], ["data", "&unknown;"], ["start", "a", [["=x", null]]], ["data", "=é"], ["start", "script", []]], "input": "<a/b>&unknown;<a =x>=é<script>", "scripting": true}
+{"events": [["start", "a", [["b", null]]], ["comment", " p"], ["data", "b"], ["unknown_decl", "CDATA['p"]], "input": "<a/b></ p>b<![CDATA['p", "scripting": false}
+{"events": [["start", "a", [["b", null]]], ["comment", " p"], ["data", "b"], ["unknown_decl", "CDATA['p"]], "input": "<a/b></ p>b<![CDATA['p", "scripting": true}
+{"events": [["start", "a", [["b", null]]], ["pi", "<a/b"], ["data", "-->"], ["data", "<"], ["data", "<"], ["data", "3"], ["comment", "3"], ["start", "title", []]], "input": "<a/b><?<a/b>--><<3</3><TITLE>", "scripting": false}
+{"events": [["start", "a", [["b", null]]], ["pi", "<a/b"], ["data", "-->"], ["data", "<"], ["data", "<"], ["data", "3"], ["comment", "3"], ["start", "title", []]], "input": "<a/b><?<a/b>--><<3</3><TITLE>", "scripting": true}
+{"events": [["start", "a", [["b", null]]], ["start", "a", [["=x", null]]], ["data", "\r\t/>&"]], "input": "<a/b><a =x>\r\t/>&", "scripting": false}
+{"events": [["start", "a", [["b", null]]], ["start", "a", [["=x", null]]], ["data", "\r\t/>&"]], "input": "<a/b><a =x>\r\t/>&", "scripting": true}
+{"events": [["start", "a", [["b", null]]], ["start", "a", [["href", "&copy=1"]]], ["data", "&titlexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "a", [["href", "&copy=1"]]]], "input": "<a/b><a href='&copy=1'>&titlexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<a href='&copy=1'>", "scripting": false}
+{"events": [["start", "a", [["b", null]]], ["start", "a", [["href", "&copy=1"]]], ["data", "&titlexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "a", [["href", "&copy=1"]]]], "input": "<a/b><a href='&copy=1'>&titlexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<a href='&copy=1'>", "scripting": true}
+{"events": [["start", "a", [["b", null]]], ["start", "script", []]], "input": "<a/b><script>", "scripting": false}
+{"events": [["start", "a", [["b", null]]], ["start", "script", []]], "input": "<a/b><script>", "scripting": true}
+{"events": [["start", "a", [["b", null]]], ["start", "title", []], ["data", "</ p><a href='©=1'>noscript <a  b   c=d  ><!doctype<a b= 'c>"]], "input": "<a/b><title></ p><a href='&copy=1'>noscript <a  b   c=d  ><!doctype<a b= 'c>", "scripting": false}
+{"events": [["start", "a", [["b", null]]], ["start", "title", []], ["data", "</ p><a href='©=1'>noscript <a  b   c=d  ><!doctype<a b= 'c>"]], "input": "<a/b><title></ p><a href='&copy=1'>noscript <a  b   c=d  ><!doctype<a b= 'c>", "scripting": true}
+{"events": [["start", "a", [["b", null]]], ["data", "]]> 日?>"], ["comment", "3"], ["startend", "br", []], ["start", "a", [["b", ""], ["'c", null]]], ["data", "&>"]], "input": "<a/b>]]> 日?></3><br/><a b= 'c>&amp>", "scripting": false}
+{"events": [["start", "a", [["b", null]]], ["data", "]]> 日?>"], ["comment", "3"], ["startend", "br", []], ["start", "a", [["b", ""], ["'c", null]]], ["data", "&>"]], "input": "<a/b>]]> 日?></3><br/><a b= 'c>&amp>", "scripting": true}
+{"events": [["start", "a", [["b", null]]], ["data", "br"], ["startend", "br", []], ["data", "&#"]], "input": "<a/b>br<br/>&#", "scripting": false}
+{"events": [["start", "a", [["b", null]]], ["data", "br"], ["startend", "br", []], ["data", "&#"]], "input": "<a/b>br<br/>&#", "scripting": true}
+{"events": [["start", "a", [["b", null]]], ["data", "div"], ["unknown_decl", "CDATA[a=\"y\"<p <p>&amp😀"]], "input": "<a/b>div<![CDATA[a=\"y\"<p <p>&amp😀", "scripting": false}
+{"events": [["start", "a", [["b", null]]], ["data", "div"], ["unknown_decl", "CDATA[a=\"y\"<p <p>&amp😀"]], "input": "<a/b>div<![CDATA[a=\"y\"<p <p>&amp😀", "scripting": true}
+{"events": [["startend", "br", []], ["data", "/>iframescript"], ["comment", ""]], "input": "<br />/>iframescript<!--", "scripting": false}
+{"events": [["startend", "br", []], ["data", "/>iframescript"], ["comment", ""]], "input": "<br />/>iframescript<!--", "scripting": true}
+{"events": [["startend", "br", []], ["comment", "[if x]"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "<日&xmp"]], "input": "<br /><![if x]><a b= 'c>&lt日&xmp", "scripting": false}
+{"events": [["startend", "br", []], ["comment", "[if x]"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "<日&xmp"]], "input": "<br /><![if x]><a b= 'c>&lt日&xmp", "scripting": true}
+{"events": [["startend", "br", []], ["decl", "doctypeaa=\"y\"&#65;<p <p"]], "input": "<br /><!doctypeaa=\"y\"&#65;<p <p>", "scripting": false}
+{"events": [["startend", "br", []], ["decl", "doctypeaa=\"y\"&#65;<p <p"]], "input": "<br /><!doctypeaa=\"y\"&#65;<p <p>", "scripting": true}
+{"events": [["startend", "br", []], ["end", "script"], ["data", "A/a=bdivxmp"], ["end", "title"], ["start", "a", [["b", null], ["c", "d"]]]], "input": "<br /></SCRIPT/>&#x41/a=bdivxmp</title><a  b   c=d  >", "scripting": false}
+{"events": [["startend", "br", []], ["end", "script"], ["data", "A/a=bdivxmp"], ["end", "title"], ["start", "a", [["b", null], ["c", "d"]]]], "input": "<br /></SCRIPT/>&#x41/a=bdivxmp</title><a  b   c=d  >", "scripting": true}
+{"events": [["startend", "br", []], ["end", "script"], ["start", "p", [["<p", null]]], ["data", "--!>script"], ["comment", ""]], "input": "<br /></SCRIPT/><p <p>--!>script<!", "scripting": false}
+{"events": [["startend", "br", []], ["end", "script"], ["start", "p", [["<p", null]]], ["data", "--!>script"], ["comment", ""]], "input": "<br /></SCRIPT/><p <p>--!>script<!", "scripting": true}
+{"events": [["startend", "br", []], ["start", "title", []], ["data", "-->"]], "input": "<br /><title>-->", "scripting": false}
+{"events": [["startend", "br", []], ["start", "title", []], ["data", "-->"]], "input": "<br /><title>-->", "scripting": true}
+{"events": [["startend", "br", []], ["data", "?>"], ["end", "script"], ["data", "A"], ["end", "p"], ["start", "a", [["b", ""]]], ["start", "title", []]], "input": "<br />?></script >&#x41</p><a b=><TITLE>", "scripting": false}
+{"events": [["startend", "br", []], ["data", "?>"], ["end", "script"], ["data", "A"], ["end", "p"], ["start", "a", [["b", ""]]], ["start", "title", []]], "input": "<br />?></script >&#x41</p><a b=><TITLE>", "scripting": true}
+{"events": [["startend", "br", []]], "input": "<br/>", "scripting": false}
+{"events": [["startend", "br", []]], "input": "<br/>", "scripting": true}
+{"events": [["startend", "br", []], ["comment", "[if x]"], ["data", "\f"], ["start", "a", [["b", null]]], ["end", "script"], ["unknown_decl", "CDATA[?><p>>"]], "input": "<br/><![if x]>\f<a/b></SCRIPT/><![CDATA[?><p>>", "scripting": false}
+{"events": [["startend", "br", []], ["comment", "[if x]"], ["data", "\f"], ["start", "a", [["b", null]]], ["end", "script"], ["unknown_decl", "CDATA[?><p>>"]], "input": "<br/><![if x]>\f<a/b></SCRIPT/><![CDATA[?><p>>", "scripting": true}
+{"events": [["startend", "br", []], ["end", "script"], ["data", "noscripta=b"]], "input": "<br/></SCRIPT/>noscripta=b", "scripting": false}
+{"events": [["startend", "br", []], ["end", "script"], ["data", "noscripta=b"]], "input": "<br/></SCRIPT/>noscripta=b", "scripting": true}
+{"events": [["startend", "br", []], ["data", "?>"]], "input": "<br/>?>", "scripting": false}
+{"events": [["startend", "br", []], ["data", "?>"]], "input": "<br/>?>", "scripting": true}
+{"events": [["startend", "br", []], ["data", "?>&unknown;?>"], ["end", "title"]], "input": "<br/>?>&unknown;?></title>", "scripting": false}
+{"events": [["startend", "br", []], ["data", "?>&unknown;?>"], ["end", "title"]], "input": "<br/>?>&unknown;?></title>", "scripting": true}
+{"events": [["startend", "br", []], ["data", "script"], ["comment", "3"], ["comment", "[if x]"], ["data", "textareatextarea"], ["unknown_decl", "CDATA["]], "input": "<br/>script</3><![if x]>textareatextarea<![CDATA[", "scripting": false}
+{"events": [["startend", "br", []], ["data", "script"], ["comment", "3"], ["comment", "[if x]"], ["data", "textareatextarea"], ["unknown_decl", "CDATA["]], "input": "<br/>script</3><![if x]>textareatextarea<![CDATA[", "scripting": true}
+{"events": [["start", "div", []], ["data", "keep"], ["start", "nav", []], ["data", "drop"], ["start", "nav", []], ["data", "deeper"], ["end", "nav"], ["data", "still dropped"], ["end", "nav"], ["data", "back"], ["end", "div"], ["start", "svg", []], ["start", "text", []], ["data", "vector"], ["end", "text"], ["end", "svg"], ["start", "template", []], ["start", "p", []], ["data", "tpl"], ["end", "p"], ["end", "template"], ["data", "after"]], "input": "<div>keep<nav>drop<nav>deeper</nav>still dropped</nav>back</div><svg><text>vector</text></svg><template><p>tpl</p></template>after", "scripting": false}
+{"events": [["start", "div", []], ["data", "keep"], ["start", "nav", []], ["data", "drop"], ["start", "nav", []], ["data", "deeper"], ["end", "nav"], ["data", "still dropped"], ["end", "nav"], ["data", "back"], ["end", "div"], ["start", "svg", []], ["start", "text", []], ["data", "vector"], ["end", "text"], ["end", "svg"], ["start", "template", []], ["start", "p", []], ["data", "tpl"], ["end", "p"], ["end", "template"], ["data", "after"]], "input": "<div>keep<nav>drop<nav>deeper</nav>still dropped</nav>back</div><svg><text>vector</text></svg><template><p>tpl</p></template>after", "scripting": true}
+{"events": [], "input": "<iframe", "scripting": false}
+{"events": [], "input": "<iframe", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]]], "input": "<img src=x onerror=y>", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]]], "input": "<img src=x onerror=y>", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "\rnoscriptbr"]], "input": "<img src=x onerror=y>\rnoscriptbr", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "\rnoscriptbr"]], "input": "<img src=x onerror=y>\rnoscriptbr", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "-->"], ["data", "<"], ["data", "3a=\"y\"/&#style&#x"], ["data", "</"]], "input": "<img src=x onerror=y>--><3a=\"y\"/&#style&#x</", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "-->"], ["data", "<"], ["data", "3a=\"y\"/&#style&#x"], ["data", "</"]], "input": "<img src=x onerror=y>--><3a=\"y\"/&#style&#x</", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "/>"]], "input": "<img src=x onerror=y>/>", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "/>"]], "input": "<img src=x onerror=y>/>", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "/>style😀"]], "input": "<img src=x onerror=y>/>style😀", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "/>style😀"]], "input": "<img src=x onerror=y>/>style😀", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["decl", "doctype/<p <p"], ["data", "\r"], ["comment", "3"], ["startend", "br", []]], "input": "<img src=x onerror=y><!doctype/<p <p>\r</3><br/>", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["decl", "doctype/<p <p"], ["data", "\r"], ["comment", "3"], ["startend", "br", []]], "input": "<img src=x onerror=y><!doctype/<p <p>\r</3><br/>", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "\t'"], ["start", "a", [["b", null]]]], "input": "<img src=x onerror=y></>\t'<a/b>", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "\t'"], ["start", "a", [["b", null]]]], "input": "<img src=x onerror=y></>\t'<a/b>", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["start", "a", [["b", null], ["c", "d"]]], ["data", "\tbr "], ["start", "script", []], ["data", "😀?>a"]], "input": "<img src=x onerror=y><a  b   c=d  >\tbr <script>😀?>a", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["start", "a", [["b", null], ["c", "d"]]], ["data", "\tbr "], ["start", "script", []], ["data", "😀?>a"]], "input": "<img src=x onerror=y><a  b   c=d  >\tbr <script>😀?>a", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", ">stylenoscript 日"], ["comment", "div<a/b>a='x'"]], "input": "<img src=x onerror=y>>stylenoscript 日<!--div<a/b>a='x'", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", ">stylenoscript 日"], ["comment", "div<a/b>a='x'"]], "input": "<img src=x onerror=y>>stylenoscript 日<!--div<a/b>a='x'", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "]]>"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "<"], ["data", "©"]], "input": "<img src=x onerror=y>]]><img src=x onerror=y><&copy", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "]]>"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "<"], ["data", "©"]], "input": "<img src=x onerror=y>]]><img src=x onerror=y><&copy", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "a=b"], ["start", "a", [["href", "Q"]]]], "input": "<img src=x onerror=y>a=b<A HREF=Q>", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "a=b"], ["start", "a", [["href", "Q"]]]], "input": "<img src=x onerror=y>a=b<A HREF=Q>", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "a=btitle"]], "input": "<img src=x onerror=y>a=btitle", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "a=btitle"]], "input": "<img src=x onerror=y>a=btitle", "scripting": true}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": "<img src=x onerror=y>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": false}
+{"events": [["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": "<img src=x onerror=y>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": true}
+{"events": [["start", "p", [["<p", null]]], ["data", "\f"], ["comment", "[if x]"], ["data", ">&=\r--!>"], ["pi", ""]], "input": "<p <p>\f<![if x]>>&amp;=\r--!><?", "scripting": false}
+{"events": [["start", "p", [["<p", null]]], ["data", "\f"], ["comment", "[if x]"], ["data", ">&=\r--!>"], ["pi", ""]], "input": "<p <p>\f<![if x]>>&amp;=\r--!><?", "scripting": true}
+{"events": [["start", "p", [["<p", null]]], ["data", "A"], ["comment", "&amp;<a =x>=<?<a  b   c=d  ><!doctype"]], "input": "<p <p>&#65;<!--&amp;<a =x>=<?<a  b   c=d  ><!doctype", "scripting": false}
+{"events": [["start", "p", [["<p", null]]], ["data", "A"], ["comment", "&amp;<a =x>=<?<a  b   c=d  ><!doctype"]], "input": "<p <p>&#65;<!--&amp;<a =x>=<?<a  b   c=d  ><!doctype", "scripting": true}
+{"events": [["start", "p", [["<p", null]]], ["data", "&"], ["start", "p", [["<p", null]]], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "title"], ["start", "a", [["=x", null]]], ["start", "a", [["b", ""]]], ["start", "p", [["<p", null]]], ["end", "script"]], "input": "<p <p>&amp;<p <p><img src=x onerror=y>title<a =x><a b=><p <p></script >", "scripting": false}
+{"events": [["start", "p", [["<p", null]]], ["data", "&"], ["start", "p", [["<p", null]]], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "title"], ["start", "a", [["=x", null]]], ["start", "a", [["b", ""]]], ["start", "p", [["<p", null]]], ["end", "script"]], "input": "<p <p>&amp;<p <p><img src=x onerror=y>title<a =x><a b=><p <p></script >", "scripting": true}
+{"events": [["start", "p", [["<p", null]]], ["data", "->"], ["pi", "<a href=\"x&amp;y\""], ["data", " script"]], "input": "<p <p>-><?<a href=\"x&amp;y\"> script", "scripting": false}
+{"events": [["start", "p", [["<p", null]]], ["data", "->"], ["pi", "<a href=\"x&amp;y\""], ["data", " script"]], "input": "<p <p>-><?<a href=\"x&amp;y\"> script", "scripting": true}
+{"events": [["start", "p", [["<p", null]]], ["unknown_decl", "CDATA[p&amp</script >&unknown;<p><title>script"]], "input": "<p <p><![CDATA[p&amp</script >&unknown;<p><title>script", "scripting": false}
+{"events": [["start", "p", [["<p", null]]], ["unknown_decl", "CDATA[p&amp</script >&unknown;<p><title>script"]], "input": "<p <p><![CDATA[p&amp</script >&unknown;<p><title>script", "scripting": true}
+{"events": [["start", "p", [["<p", null]]], ["decl", "doctype<a href='&copy=1'"], ["start", "a", [["b", ""]]], ["data", "a=b"], ["data", "<"], ["start", "a", [["href", "&copy=1"]]], ["data", "class=\"c\" id=x"]], "input": "<p <p><!doctype<a href='&copy=1'><a b=>a=b<<a href='&copy=1'>class=\"c\" id=x", "scripting": false}
+{"events": [["start", "p", [["<p", null]]], ["decl", "doctype<a href='&copy=1'"], ["start", "a", [["b", ""]]], ["data", "a=b"], ["data", "<"], ["start", "a", [["href", "&copy=1"]]], ["data", "class=\"c\" id=x"]], "input": "<p <p><!doctype<a href='&copy=1'><a b=>a=b<<a href='&copy=1'>class=\"c\" id=x", "scripting": true}
+{"events": [["start", "p", [["<p", null]]], ["end", "script"]], "input": "<p <p></SCRIPT/>", "scripting": false}
+{"events": [["start", "p", [["<p", null]]], ["end", "script"]], "input": "<p <p></SCRIPT/>", "scripting": true}
+{"events": [["start", "p", [["<p", null]]], ["end", "script"]], "input": "<p <p></script >", "scripting": false}
+{"events": [["start", "p", [["<p", null]]], ["end", "script"]], "input": "<p <p></script >", "scripting": true}
+{"events": [["start", "p", [["<p", null]]], ["data", "a=\"y\""], ["start", "script", []], ["data", "&#x41日<a  b   c=d  >"]], "input": "<p <p>a=\"y\"<script>&#x41日<a  b   c=d  >", "scripting": false}
+{"events": [["start", "p", [["<p", null]]], ["data", "a=\"y\""], ["start", "script", []], ["data", "&#x41日<a  b   c=d  >"]], "input": "<p <p>a=\"y\"<script>&#x41日<a  b   c=d  >", "scripting": true}
+{"events": [["start", "p", [["<p", null]]], ["data", "日/"], ["start", "a", [["b", ""]]], ["comment", "3"], ["data", "plaintextiframe"], ["start", "a", [["b", ""]]]], "input": "<p <p>日/<a b=></3>plaintextiframe<a b=>", "scripting": false}
+{"events": [["start", "p", [["<p", null]]], ["data", "日/"], ["start", "a", [["b", ""]]], ["comment", "3"], ["data", "plaintextiframe"], ["start", "a", [["b", ""]]]], "input": "<p <p>日/<a b=></3>plaintextiframe<a b=>", "scripting": true}
+{"events": [["start", "p", []]], "input": "<p>", "scripting": false}
+{"events": [["start", "p", []]], "input": "<p>", "scripting": true}
+{"events": [["start", "p", []], ["data", "\n"]], "input": "<p>\n", "scripting": false}
+{"events": [["start", "p", []], ["data", "\n"]], "input": "<p>\n", "scripting": true}
+{"events": [["start", "p", []], ["data", "\f"]], "input": "<p>\f", "scripting": false}
+{"events": [["start", "p", []], ["data", "\f"]], "input": "<p>\f", "scripting": true}
+{"events": [["start", "p", []], ["data", "A<ppdivA-->"]], "input": "<p>&#x41&ltppdiv&#x41-->", "scripting": false}
+{"events": [["start", "p", []], ["data", "A<ppdivA-->"]], "input": "<p>&#x41&ltppdiv&#x41-->", "scripting": true}
+{"events": [["start", "p", []], ["data", "/"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["comment", "'\t&unknown;<TITLE"], ["data", "\f"]], "input": "<p>/<img src=x onerror=y><!'\t&unknown;<TITLE></>\f", "scripting": false}
+{"events": [["start", "p", []], ["data", "/"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["comment", "'\t&unknown;<TITLE"], ["data", "\f"]], "input": "<p>/<img src=x onerror=y><!'\t&unknown;<TITLE></>\f", "scripting": true}
+{"events": [["start", "p", []], ["data", "Axmppp"], ["start", "a", [["href", "&copy=1"]]]], "input": "<p></>&#x41xmppp<a href='&copy=1'>", "scripting": false}
+{"events": [["start", "p", []], ["data", "Axmppp"], ["start", "a", [["href", "&copy=1"]]]], "input": "<p></>&#x41xmppp<a href='&copy=1'>", "scripting": true}
+{"events": [["start", "p", []], ["end", "title"], ["data", "b"]], "input": "<p></title>b", "scripting": false}
+{"events": [["start", "p", []], ["end", "title"], ["data", "b"]], "input": "<p></title>b", "scripting": true}
+{"events": [["start", "p", []], ["start", "title", []], ["data", "a\tiframe&#"]], "input": "<p><TITLE>a\tiframe&#", "scripting": false}
+{"events": [["start", "p", []], ["start", "title", []], ["data", "a\tiframe&#"]], "input": "<p><TITLE>a\tiframe&#", "scripting": true}
+{"events": [["start", "p", []], ["start", "a", [["href", "&copy=1"]]], ["data", " textarea"], ["start", "title", []], ["data", "<!a='x'&"]], "input": "<p><a href='&copy=1'> textarea<title><!a='x'&", "scripting": false}
+{"events": [["start", "p", []], ["start", "a", [["href", "&copy=1"]]], ["data", " textarea"], ["start", "title", []], ["data", "<!a='x'&"]], "input": "<p><a href='&copy=1'> textarea<title><!a='x'&", "scripting": true}
+{"events": [["start", "p", []], ["startend", "br", []], ["start", "p", []], ["data", "<"], ["data", "-&#xA"]], "input": "<p><br /><p><-&#x&#x41", "scripting": false}
+{"events": [["start", "p", []], ["startend", "br", []], ["start", "p", []], ["data", "<"], ["data", "-&#xA"]], "input": "<p><br /><p><-&#x&#x41", "scripting": true}
+{"events": [["start", "p", []], ["startend", "br", []]], "input": "<p><br/>", "scripting": false}
+{"events": [["start", "p", []], ["startend", "br", []]], "input": "<p><br/>", "scripting": true}
+{"events": [["start", "p", []], ["start", "p", [["<p", null]]], ["data", ">="], ["end", "script"]], "input": "<p><p <p>>=</script>", "scripting": false}
+{"events": [["start", "p", []], ["start", "p", [["<p", null]]], ["data", ">="], ["end", "script"]], "input": "<p><p <p>>=</script>", "scripting": true}
+{"events": [["start", "p", []], ["data", "before"], ["comment", " hidden <p>comment</p> "], ["data", "after"], ["end", "p"], ["unknown_decl", "CDATA[cdata text"], ["pi", "pi x?"]], "input": "<p>before<!-- hidden <p>comment</p> -->after</p><![CDATA[cdata text]]><?pi x?>", "scripting": false}
+{"events": [["start", "p", []], ["data", "before"], ["comment", " hidden <p>comment</p> "], ["data", "after"], ["end", "p"], ["unknown_decl", "CDATA[cdata text"], ["pi", "pi x?"]], "input": "<p>before<!-- hidden <p>comment</p> -->after</p><![CDATA[cdata text]]><?pi x?>", "scripting": true}
+{"events": [["start", "p", []], ["data", "styleclass=\"c\" id=xnoscript😀"]], "input": "<p>styleclass=\"c\" id=xnoscript😀", "scripting": false}
+{"events": [["start", "p", []], ["data", "styleclass=\"c\" id=xnoscript😀"]], "input": "<p>styleclass=\"c\" id=xnoscript😀", "scripting": true}
+{"events": [["start", "p", []], ["data", "unclosed "], ["start", "b", []], ["data", "bold "], ["start", "i", []], ["data", "italic"], ["end", "p"], ["start", "div", [["attr", "x>y"]]], ["data", "quoted gt"], ["end", "div"], ["start", "p", [["<p", null]]], ["data", "broken"], ["end", "p"]], "input": "<p>unclosed <b>bold <i>italic</p><div attr='x>y'>quoted gt</div><p <p>broken</p>", "scripting": false}
+{"events": [["start", "p", []], ["data", "unclosed "], ["start", "b", []], ["data", "bold "], ["start", "i", []], ["data", "italic"], ["end", "p"], ["start", "div", [["attr", "x>y"]]], ["data", "quoted gt"], ["end", "div"], ["start", "p", [["<p", null]]], ["data", "broken"], ["end", "p"]], "input": "<p>unclosed <b>bold <i>italic</p><div attr='x>y'>quoted gt</div><p <p>broken</p>", "scripting": true}
+{"events": [["start", "script", []]], "input": "<script>", "scripting": false}
+{"events": [["start", "script", []]], "input": "<script>", "scripting": true}
+{"events": [["start", "script", []], ["data", "\t日<![CDATA[</p>'&#65;&lt&#"]], "input": "<script>\t日<![CDATA[</p>'&#65;&lt&#", "scripting": false}
+{"events": [["start", "script", []], ["data", "\t日<![CDATA[</p>'&#65;&lt&#"]], "input": "<script>\t日<![CDATA[</p>'&#65;&lt&#", "scripting": true}
+{"events": [["start", "script", []], ["data", "&#xdiv--!>&#65;\n-->&#x41&#x<a/b>"]], "input": "<script>&#xdiv--!>&#65;\n-->&#x41&#x<a/b>", "scripting": false}
+{"events": [["start", "script", []], ["data", "&#xdiv--!>&#65;\n-->&#x41&#x<a/b>"]], "input": "<script>&#xdiv--!>&#65;\n-->&#x41&#x<a/b>", "scripting": true}
+{"events": [["start", "script", []], ["data", "</ p>'titleiframe<3"]], "input": "<script></ p>'titleiframe<3", "scripting": false}
+{"events": [["start", "script", []], ["data", "</ p>'titleiframe<3"]], "input": "<script></ p>'titleiframe<3", "scripting": true}
+{"events": [["start", "script", []], ["data", "<?<a href='&copy=1'>-><br /><!script'"]], "input": "<script><?<a href='&copy=1'>-><br /><!script'", "scripting": false}
+{"events": [["start", "script", []], ["data", "<?<a href='&copy=1'>-><br /><!script'"]], "input": "<script><?<a href='&copy=1'>-><br /><!script'", "scripting": true}
+{"events": [["start", "script", []], ["data", "a=\"y\""], ["end", "script"], ["data", "\t"], ["data", "<"], ["data", "3"]], "input": "<script>a=\"y\"</script >\t<3", "scripting": false}
+{"events": [["start", "script", []], ["data", "a=\"y\""], ["end", "script"], ["data", "\t"], ["data", "<"], ["data", "3"]], "input": "<script>a=\"y\"</script >\t<3", "scripting": true}
+{"events": [["start", "script", []], ["data", "p<script>é"]], "input": "<script>p<script>é", "scripting": false}
+{"events": [["start", "script", []], ["data", "p<script>é"]], "input": "<script>p<script>é", "scripting": true}
+{"events": [["start", "script", []], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["end", "script"], ["unknown_decl", "CDATA[\na"]], "input": "<script>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&</SCRIPT/><![CDATA[\na", "scripting": false}
+{"events": [["start", "script", []], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["end", "script"], ["unknown_decl", "CDATA[\na"]], "input": "<script>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&</SCRIPT/><![CDATA[\na", "scripting": true}
+{"events": [["start", "title", []]], "input": "<title>", "scripting": false}
+{"events": [["start", "title", []]], "input": "<title>", "scripting": true}
+{"events": [["start", "title", []], ["data", "<3</SCRIPT/><p>\""]], "input": "<title><3</SCRIPT/><p>\"", "scripting": false}
+{"events": [["start", "title", []], ["data", "<3</SCRIPT/><p>\""]], "input": "<title><3</SCRIPT/><p>\"", "scripting": true}
+{"events": [["start", "title", []], ["data", "<title>\t"]], "input": "<title><title>\t", "scripting": false}
+{"events": [["start", "title", []], ["data", "<title>\t"]], "input": "<title><title>\t", "scripting": true}
+{"events": [["start", "title", []], ["data", "Café & Crème 🎉"], ["end", "title"], ["start", "p", []], ["data", "5 < 6 > 4   nbsp © &unknown; &"], ["end", "p"]], "input": "<title>Caf&eacute; &amp; Cr&#232;me &#x1F389;</title><p>5 &lt; 6 &gt; 4 &nbsp;&nbsp;nbsp &copy; &unknown; &amp</p>", "scripting": false}
+{"events": [["start", "title", []], ["data", "Café & Crème 🎉"], ["end", "title"], ["start", "p", []], ["data", "5 < 6 > 4   nbsp © &unknown; &"], ["end", "p"]], "input": "<title>Caf&eacute; &amp; Cr&#232;me &#x1F389;</title><p>5 &lt; 6 &gt; 4 &nbsp;&nbsp;nbsp &copy; &unknown; &amp</p>", "scripting": true}
+{"events": [], "input": "<xmpscript", "scripting": false}
+{"events": [], "input": "<xmpscript", "scripting": true}
+{"events": [["data", "=\r&unknown;/"], ["decl", "doctype--!"], ["data", "A"]], "input": "=\r&unknown;/<!doctype--!>&#65;", "scripting": false}
+{"events": [["data", "=\r&unknown;/"], ["decl", "doctype--!"], ["data", "A"]], "input": "=\r&unknown;/<!doctype--!>&#65;", "scripting": true}
+{"events": [["data", "=-->>style"], ["start", "a", [["href", "&copy=1"]]], ["end", "p"], ["end", "p"]], "input": "=-->>style<a href='&copy=1'></p></p>", "scripting": false}
+{"events": [["data", "=-->>style"], ["start", "a", [["href", "&copy=1"]]], ["end", "p"], ["end", "p"]], "input": "=-->>style<a href='&copy=1'></p></p>", "scripting": true}
+{"events": [["data", "="], ["end", "script"], ["data", "&#x"], ["start", "a", [["href", "&copy=1"]]], ["decl", "DOCTYPE html"], ["start", "a", [["href", "&copy=1"]]]], "input": "=</script>&#x<a href='&copy=1'><!DOCTYPE html><a href='&copy=1'>", "scripting": false}
+{"events": [["data", "="], ["end", "script"], ["data", "&#x"], ["start", "a", [["href", "&copy=1"]]], ["decl", "DOCTYPE html"], ["start", "a", [["href", "&copy=1"]]]], "input": "=</script>&#x<a href='&copy=1'><!DOCTYPE html><a href='&copy=1'>", "scripting": true}
+{"events": [["data", "="], ["start", "a", [["b", null], ["c", "d"]]], ["data", "aclass=\"c\" id=x&unknown;"]], "input": "=<a  b   c=d  >aclass=\"c\" id=x&unknown;", "scripting": false}
+{"events": [["data", "="], ["start", "a", [["b", null], ["c", "d"]]], ["data", "aclass=\"c\" id=x&unknown;"]], "input": "=<a  b   c=d  >aclass=\"c\" id=x&unknown;", "scripting": true}
+{"events": [["data", "="], ["start", "a", [["b", null]]], ["data", "</"]], "input": "=<a/b></", "scripting": false}
+{"events": [["data", "="], ["start", "a", [["b", null]]], ["data", "</"]], "input": "=<a/b></", "scripting": true}
+{"events": [["data", ">\n"], ["comment", "</"], ["startend", "br", []]], "input": ">\n<!</><br/>", "scripting": false}
+{"events": [["data", ">\n"], ["comment", "</"], ["startend", "br", []]], "input": ">\n<!</><br/>", "scripting": true}
+{"events": [["data", ">"], ["comment", "plaintext"]], "input": "><!--plaintext", "scripting": false}
+{"events": [["data", ">"], ["comment", "plaintext"]], "input": "><!--plaintext", "scripting": true}
+{"events": [["data", ">"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "script😀"], ["pi", "'"]], "input": "><img src=x onerror=y>script😀<?'", "scripting": false}
+{"events": [["data", ">"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "script😀"], ["pi", "'"]], "input": "><img src=x onerror=y>script😀<?'", "scripting": true}
+{"events": [["data", ">script"], ["data", "<"], ["data", "-plaintext"], ["start", "title", []], ["data", "</p></SCRIPT/><p>"]], "input": ">script<-plaintext<title></p></SCRIPT/><p>", "scripting": false}
+{"events": [["data", ">script"], ["data", "<"], ["data", "-plaintext"], ["start", "title", []], ["data", "</p></SCRIPT/><p>"]], "input": ">script<-plaintext<title></p></SCRIPT/><p>", "scripting": true}
+{"events": [["data", ">xmpiframea=\"y\""], ["data", "<"], ["data", "-"]], "input": ">xmpiframea=\"y\"<-", "scripting": false}
+{"events": [["data", ">xmpiframea=\"y\""], ["data", "<"], ["data", "-"]], "input": ">xmpiframea=\"y\"<-", "scripting": true}
+{"events": [["data", "?>''/>"]], "input": "?>''/>", "scripting": false}
+{"events": [["data", "?>''/>"]], "input": "?>''/>", "scripting": true}
+{"events": [["data", "?>"], ["unknown_decl", "CDATA["]], "input": "?><![CDATA[", "scripting": false}
+{"events": [["data", "?>"], ["unknown_decl", "CDATA["]], "input": "?><![CDATA[", "scripting": true}
+{"events": [["data", "?>="], ["start", "title", []]], "input": "?>=<title>", "scripting": false}
+{"events": [["data", "?>="], ["start", "title", []]], "input": "?>=<title>", "scripting": true}
+{"events": [["data", "?>p"], ["end", "script"], ["data", " "]], "input": "?>p</script> ", "scripting": false}
+{"events": [["data", "?>p"], ["end", "script"], ["data", " "]], "input": "?>p</script> ", "scripting": true}
+{"events": [["data", "]]>"]], "input": "]]>", "scripting": false}
+{"events": [["data", "]]>"]], "input": "]]>", "scripting": true}
+{"events": [["data", "]]>\n"], ["end", "script"]], "input": "]]>\n</script>", "scripting": false}
+{"events": [["data", "]]>\n"], ["end", "script"]], "input": "]]>\n</script>", "scripting": true}
+{"events": [["data", "]]>&unknown;"], ["comment", ""]], "input": "]]>&unknown;<!--", "scripting": false}
+{"events": [["data", "]]>&unknown;"], ["comment", ""]], "input": "]]>&unknown;<!--", "scripting": true}
+{"events": [["data", "]]>-->divbr\f"], ["end", "script"], ["comment", "&#&unknown;&amp;"]], "input": "]]>-->divbr\f</SCRIPT/></&#&unknown;&amp;", "scripting": false}
+{"events": [["data", "]]>-->divbr\f"], ["end", "script"], ["comment", "&#&unknown;&amp;"]], "input": "]]>-->divbr\f</SCRIPT/></&#&unknown;&amp;", "scripting": true}
+{"events": [["data", "]]>/>"], ["comment", "3"], ["data", "style"]], "input": "]]>/></3>style", "scripting": false}
+{"events": [["data", "]]>/>"], ["comment", "3"], ["data", "style"]], "input": "]]>/></3>style", "scripting": true}
+{"events": [["data", "]]>"], ["comment", "=<img src=x onerror=y"], ["data", "&#x--!>"], ["end", "p"], ["start", "title", []]], "input": "]]></=<img src=x onerror=y>&#x--!></p><title>", "scripting": false}
+{"events": [["data", "]]>"], ["comment", "=<img src=x onerror=y"], ["data", "&#x--!>"], ["end", "p"], ["start", "title", []]], "input": "]]></=<img src=x onerror=y>&#x--!></p><title>", "scripting": true}
+{"events": [["data", "]]>p"], ["start", "script", []], ["data", "b"]], "input": "]]>p<script>b", "scripting": false}
+{"events": [["data", "]]>p"], ["start", "script", []], ["data", "b"]], "input": "]]>p<script>b", "scripting": true}
+{"events": [["data", "a'\f"]], "input": "a'\f", "scripting": false}
+{"events": [["data", "a'\f"]], "input": "a'\f", "scripting": true}
+{"events": [["data", "a-->plaintext"]], "input": "a-->plaintext", "scripting": false}
+{"events": [["data", "a-->plaintext"]], "input": "a-->plaintext", "scripting": true}
+{"events": [["data", "a"], ["pi", "<title"], ["data", "=/>"], ["start", "p", [["<p", null]]], ["data", "A"], ["comment", "<a b="]], "input": "a<?<title>=/><p <p>&#65;<!<a b=>", "scripting": false}
+{"events": [["data", "a"], ["pi", "<title"], ["data", "=/>"], ["start", "p", [["<p", null]]], ["data", "A"], ["comment", "<a b="]], "input": "a<?<title>=/><p <p>&#65;<!<a b=>", "scripting": true}
+{"events": [["data", "a"], ["start", "a", [["b", ""]]], ["data", "&#x"], ["end", "script"], ["data", "noscript"], ["start", "a", [["b", null]]], ["data", "\r>a=b"], ["start", "img", [["src", "x"], ["onerror", "y"]]]], "input": "a<a b=>&#x</script >noscript<a/b>\r>a=b<img src=x onerror=y>", "scripting": false}
+{"events": [["data", "a"], ["start", "a", [["b", ""]]], ["data", "&#x"], ["end", "script"], ["data", "noscript"], ["start", "a", [["b", null]]], ["data", "\r>a=b"], ["start", "img", [["src", "x"], ["onerror", "y"]]]], "input": "a<a b=>&#x</script >noscript<a/b>\r>a=b<img src=x onerror=y>", "scripting": true}
+{"events": [["data", "a"], ["start", "a", [["b", null]]], ["end", "script"], ["data", "--!>"], ["decl", "doctype/"], ["data", "'"]], "input": "a<a/b></script >--!><!doctype/>'", "scripting": false}
+{"events": [["data", "a"], ["start", "a", [["b", null]]], ["end", "script"], ["data", "--!>"], ["decl", "doctype/"], ["data", "'"]], "input": "a<a/b></script >--!><!doctype/>'", "scripting": true}
+{"events": [["data", "a=\"y\"\t"], ["pi", "<![if x]"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&noscript"], ["start", "title", []]], "input": "a=\"y\"\t<?<![if x]>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&noscript<title>", "scripting": false}
+{"events": [["data", "a=\"y\"\t"], ["pi", "<![if x]"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&noscript"], ["start", "title", []]], "input": "a=\"y\"\t<?<![if x]>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&noscript<title>", "scripting": true}
+{"events": [["data", "a=\"y\"&"], ["startend", "br", []], ["start", "title", []], ["data", "bstylea='x'\"<!DOCTYPE html>-->"]], "input": "a=\"y\"&amp;<br/><TITLE>bstylea='x'\"<!DOCTYPE html>-->", "scripting": false}
+{"events": [["data", "a=\"y\"&"], ["startend", "br", []], ["start", "title", []], ["data", "bstylea='x'\"<!DOCTYPE html>-->"]], "input": "a=\"y\"&amp;<br/><TITLE>bstylea='x'\"<!DOCTYPE html>-->", "scripting": true}
+{"events": [["data", "a=\"y\""], ["comment", "&lt--!"], ["data", "=&"]], "input": "a=\"y\"<!&lt--!>=&amp;", "scripting": false}
+{"events": [["data", "a=\"y\""], ["comment", "&lt--!"], ["data", "=&"]], "input": "a=\"y\"<!&lt--!>=&amp;", "scripting": true}
+{"events": [["data", "a=\"y\""], ["comment", "</3"], ["data", "<"]], "input": "a=\"y\"<!</3>&lt", "scripting": false}
+{"events": [["data", "a=\"y\""], ["comment", "</3"], ["data", "<"]], "input": "a=\"y\"<!</3>&lt", "scripting": true}
+{"events": [["data", "a=\"y\""], ["data", "<"], ["data", "-"], ["start", "script", []], ["data", "<a href=\"x&amp;y\">-->"]], "input": "a=\"y\"<-<script><a href=\"x&amp;y\">-->", "scripting": false}
+{"events": [["data", "a=\"y\""], ["data", "<"], ["data", "-"], ["start", "script", []], ["data", "<a href=\"x&amp;y\">-->"]], "input": "a=\"y\"<-<script><a href=\"x&amp;y\">-->", "scripting": true}
+{"events": [["data", "a=\"y\""], ["comment", "<script"], ["end", "script"], ["data", "--!>"]], "input": "a=\"y\"</<script></SCRIPT/>--!></>", "scripting": false}
+{"events": [["data", "a=\"y\""], ["comment", "<script"], ["end", "script"], ["data", "--!>"]], "input": "a=\"y\"</<script></SCRIPT/>--!></>", "scripting": true}
+{"events": [["data", "a=\"y\""], ["data", "a='x'plaintext"], ["comment", "[if x]"], ["data", "\""]], "input": "a=\"y\"</>a='x'plaintext<![if x]>\"", "scripting": false}
+{"events": [["data", "a=\"y\""], ["data", "a='x'plaintext"], ["comment", "[if x]"], ["data", "\""]], "input": "a=\"y\"</>a='x'plaintext<![if x]>\"", "scripting": true}
+{"events": [["data", "a=\"y\""], ["start", "p", []]], "input": "a=\"y\"<p>", "scripting": false}
+{"events": [["data", "a=\"y\""], ["start", "p", []]], "input": "a=\"y\"<p>", "scripting": true}
+{"events": [["data", "a=\"y\""], ["start", "p", []], ["unknown_decl", "CDATA["]], "input": "a=\"y\"<p><![CDATA[", "scripting": false}
+{"events": [["data", "a=\"y\""], ["start", "p", []], ["unknown_decl", "CDATA["]], "input": "a=\"y\"<p><![CDATA[", "scripting": true}
+{"events": [["data", "a=\"y\">\t©\n"], ["end", "script"], ["unknown_decl", "CDATA[&#a=b<p>"]], "input": "a=\"y\">\t&copy\n</SCRIPT/><![CDATA[&#a=b<p>", "scripting": false}
+{"events": [["data", "a=\"y\">\t©\n"], ["end", "script"], ["unknown_decl", "CDATA[&#a=b<p>"]], "input": "a=\"y\">\t&copy\n</SCRIPT/><![CDATA[&#a=b<p>", "scripting": true}
+{"events": [["data", "a=\"y\"]]>?>"], ["start", "title&#x<", [["script", null]]], ["data", "😀a"]], "input": "a=\"y\"]]>?><title&#x</script >😀a", "scripting": false}
+{"events": [["data", "a=\"y\"]]>?>"], ["start", "title&#x<", [["script", null]]], ["data", "😀a"]], "input": "a=\"y\"]]>?><title&#x</script >😀a", "scripting": true}
+{"events": [["data", "a=\"y\"styleplaintextstyle"]], "input": "a=\"y\"styleplaintextstyle", "scripting": false}
+{"events": [["data", "a=\"y\"styleplaintextstyle"]], "input": "a=\"y\"styleplaintextstyle", "scripting": true}
+{"events": [["data", "a=\"y\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": "a=\"y\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": false}
+{"events": [["data", "a=\"y\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": "a=\"y\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": true}
+{"events": [["data", "a='x'&#<'/>"], ["comment", " p"], ["data", "br"], ["pi", ""]], "input": "a='x'&#&lt'/></ p>br<?", "scripting": false}
+{"events": [["data", "a='x'&#<'/>"], ["comment", " p"], ["data", "br"], ["pi", ""]], "input": "a='x'&#&lt'/></ p>br<?", "scripting": true}
+{"events": [["data", "a='x'A"], ["end", "script"], ["data", "iframe&#"]], "input": "a='x'&#65;</script >iframe&#", "scripting": false}
+{"events": [["data", "a='x'A"], ["end", "script"], ["data", "iframe&#"]], "input": "a='x'&#65;</script >iframe&#", "scripting": true}
+{"events": [["data", "a='x''"], ["start", "a", [["b", ""], ["'c", null]]], ["end", "script"], ["data", "日\f"], ["start", "a", [["b", null]]]], "input": "a='x''<a b= 'c></SCRIPT/>日\f<a/b>", "scripting": false}
+{"events": [["data", "a='x''"], ["start", "a", [["b", ""], ["'c", null]]], ["end", "script"], ["data", "日\f"], ["start", "a", [["b", null]]]], "input": "a='x''<a b= 'c></SCRIPT/>日\f<a/b>", "scripting": true}
+{"events": [["data", "a='x'--!>К=\"y\"--!>"], ["data", "A"]], "input": "a='x'--!>&#x41a=\"y\"--!></>&#x41", "scripting": false}
+{"events": [["data", "a='x'--!>К=\"y\"--!>"], ["data", "A"]], "input": "a='x'--!>&#x41a=\"y\"--!></>&#x41", "scripting": true}
+{"events": [["data", "a='x'"], ["data", "é\f日"], ["startend", "br", []]], "input": "a='x'</>é\f日<br/>", "scripting": false}
+{"events": [["data", "a='x'"], ["data", "é\f日"], ["startend", "br", []]], "input": "a='x'</>é\f日<br/>", "scripting": true}
+{"events": [["data", "a='x'b/énoscriptxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["data", "<"]], "input": "a='x'b/énoscriptxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<", "scripting": false}
+{"events": [["data", "a='x'b/énoscriptxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["data", "<"]], "input": "a='x'b/énoscriptxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<", "scripting": true}
+{"events": [["data", "a='x'p"]], "input": "a='x'p", "scripting": false}
+{"events": [["data", "a='x'p"]], "input": "a='x'p", "scripting": true}
+{"events": [["data", "a='x'script\"script"], ["data", "<"], ["data", "3"]], "input": "a='x'script\"script<3", "scripting": false}
+{"events": [["data", "a='x'script\"script"], ["data", "<"], ["data", "3"]], "input": "a='x'script\"script<3", "scripting": true}
+{"events": [["data", "a=b"]], "input": "a=b", "scripting": false}
+{"events": [["data", "a=b"]], "input": "a=b", "scripting": true}
+{"events": [["data", "a=b scripta=b"], ["comment", "[if x]"], ["start", "a", [["b", ""]]], ["data", "]]>a='x'"], ["data", "<"]], "input": "a=b scripta=b<![if x]><a b=>]]>a='x'<", "scripting": false}
+{"events": [["data", "a=b scripta=b"], ["comment", "[if x]"], ["start", "a", [["b", ""]]], ["data", "]]>a='x'"], ["data", "<"]], "input": "a=b scripta=b<![if x]><a b=>]]>a='x'<", "scripting": true}
+{"events": [["data", "a=b&#xmp&div"]], "input": "a=b&#xmp&ampdiv", "scripting": false}
+{"events": [["data", "a=b&#xmp&div"]], "input": "a=b&#xmp&ampdiv", "scripting": true}
+{"events": [["data", "a=b"], ["unknown_decl", "CDATA[<!DOCTYPE html>div&#x"], ["data", "bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": "a=b<![CDATA[<!DOCTYPE html>div&#x]]>bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": false}
+{"events": [["data", "a=b"], ["unknown_decl", "CDATA[<!DOCTYPE html>div&#x"], ["data", "bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": "a=b<![CDATA[<!DOCTYPE html>div&#x]]>bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": true}
+{"events": [["data", "a=bstyle"]], "input": "a=bstyle", "scripting": false}
+{"events": [["data", "a=bstyle"]], "input": "a=bstyle", "scripting": true}
+{"events": [["data", "anoscript"], ["start", "title", []], ["data", "iframe<script>"]], "input": "anoscript<title>iframe<script>", "scripting": false}
+{"events": [["data", "anoscript"], ["start", "title", []], ["data", "iframe<script>"]], "input": "anoscript<title>iframe<script>", "scripting": true}
+{"events": [["data", "ascript"], ["start", "a", [["=x", null]]], ["data", "\rA日"], ["start", "title", []], ["data", "iframe/><A HREF=Q>"]], "input": "ascript<a =x>\r&#x41日<title>iframe/><A HREF=Q>", "scripting": false}
+{"events": [["data", "ascript"], ["start", "a", [["=x", null]]], ["data", "\rA日"], ["start", "title", []], ["data", "iframe/><A HREF=Q>"]], "input": "ascript<a =x>\r&#x41日<title>iframe/><A HREF=Q>", "scripting": true}
+{"events": [["data", "b"], ["unknown_decl", "CDATA[<a b=><a b=>"]], "input": "b<![CDATA[<a b=><a b=>", "scripting": false}
+{"events": [["data", "b"], ["unknown_decl", "CDATA[<a b=><a b=>"]], "input": "b<![CDATA[<a b=><a b=>", "scripting": true}
+{"events": [["data", "b"], ["comment", "[if x]"], ["data", "\t"], ["start", "a", [["href", "Q"]]], ["data", "b&#x"], ["start", "title", []], ["data", "stylebnoscript"]], "input": "b<![if x]>\t<A HREF=Q>b&#x<title>stylebnoscript", "scripting": false}
+{"events": [["data", "b"], ["comment", "[if x]"], ["data", "\t"], ["start", "a", [["href", "Q"]]], ["data", "b&#x"], ["start", "title", []], ["data", "stylebnoscript"]], "input": "b<![if x]>\t<A HREF=Q>b&#x<title>stylebnoscript", "scripting": true}
+{"events": [["data", "b"], ["end", "script"], ["data", "->"], ["comment", " p"], ["data", "😀class=\"c\" id=x>a='x'"], ["pi", "a=\"y\""]], "input": "b</script>-></ p>😀class=\"c\" id=x>a='x'<?a=\"y\"", "scripting": false}
+{"events": [["data", "b"], ["end", "script"], ["data", "->"], ["comment", " p"], ["data", "😀class=\"c\" id=x>a='x'"], ["pi", "a=\"y\""]], "input": "b</script>-></ p>😀class=\"c\" id=x>a='x'<?a=\"y\"", "scripting": true}
+{"events": [["data", "b"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "&#x"], ["start", "title", []], ["data", "<a =x><a  b   c=d  >--!>script</ p>"]], "input": "b<img src=x onerror=y>&#x<title><a =x><a  b   c=d  >--!>script</ p>", "scripting": false}
+{"events": [["data", "b"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "&#x"], ["start", "title", []], ["data", "<a =x><a  b   c=d  >--!>script</ p>"]], "input": "b<img src=x onerror=y>&#x<title><a =x><a  b   c=d  >--!>script</ p>", "scripting": true}
+{"events": [["data", "bnoscriptclass=\"c\" id=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&>]]>noscript"], ["comment", "[if x]"], ["data", "="]], "input": "bnoscriptclass=\"c\" id=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&>]]>noscript<![if x]>=", "scripting": false}
+{"events": [["data", "bnoscriptclass=\"c\" id=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&>]]>noscript"], ["comment", "[if x]"], ["data", "="]], "input": "bnoscriptclass=\"c\" id=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&>]]>noscript<![if x]>=", "scripting": true}
+{"events": [["data", "br"]], "input": "br", "scripting": false}
+{"events": [["data", "br"]], "input": "br", "scripting": true}
+{"events": [["data", "br\r&#x"], ["comment", ""]], "input": "br\r&#x<!", "scripting": false}
+{"events": [["data", "br\r&#x"], ["comment", ""]], "input": "br\r&#x<!", "scripting": true}
+{"events": [["data", "brA"], ["start", "p", []], ["data", " '->"]], "input": "br&#x41<p> '->", "scripting": false}
+{"events": [["data", "brA"], ["start", "p", []], ["data", " '->"]], "input": "br&#x41<p> '->", "scripting": true}
+{"events": [["data", "br-->\t"], ["start", "p", [["<p", null]]], ["data", "p\"="], ["comment", ""]], "input": "br-->\t<p <p>p\"=<!", "scripting": false}
+{"events": [["data", "br-->\t"], ["start", "p", [["<p", null]]], ["data", "p\"="], ["comment", ""]], "input": "br-->\t<p <p>p\"=<!", "scripting": true}
+{"events": [["data", "br"], ["data", "<"], ["data", "-?>&"], ["start", "a", [["href", "&copy=1"]]]], "input": "br<-?>&amp<a href='&copy=1'>", "scripting": false}
+{"events": [["data", "br"], ["data", "<"], ["data", "-?>&"], ["start", "a", [["href", "&copy=1"]]]], "input": "br<-?>&amp<a href='&copy=1'>", "scripting": true}
+{"events": [["data", "br"], ["startend", "br", []], ["data", "<"], ["data", " \t&unknown;xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["pi", "textarea"]], "input": "br</><br/>< \t&unknown;xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<?textarea", "scripting": false}
+{"events": [["data", "br"], ["startend", "br", []], ["data", "<"], ["data", " \t&unknown;xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["pi", "textarea"]], "input": "br</><br/>< \t&unknown;xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<?textarea", "scripting": true}
+{"events": [["data", "br"], ["data", "<"], ["data", "3日A😀/"], ["start", "a", [["href", "x&y"]]]], "input": "br<3日&#65;😀/<a href=\"x&amp;y\">", "scripting": false}
+{"events": [["data", "br"], ["data", "<"], ["data", "3日A😀/"], ["start", "a", [["href", "x&y"]]]], "input": "br<3日&#65;😀/<a href=\"x&amp;y\">", "scripting": true}
+{"events": [["data", "br"], ["start", "title", []], ["data", "<!DOCTYPE html>'->script'p<script>a"]], "input": "br<title><!DOCTYPE html>'->script'p<script>a", "scripting": false}
+{"events": [["data", "br"], ["start", "title", []], ["data", "<!DOCTYPE html>'->script'p<script>a"]], "input": "br<title><!DOCTYPE html>'->script'p<script>a", "scripting": true}
+{"events": [["data", "br]]>"]], "input": "br]]>", "scripting": false}
+{"events": [["data", "br]]>"]], "input": "br]]>", "scripting": true}
+{"events": [["data", "bra=\"y\""]], "input": "bra=\"y\"", "scripting": false}
+{"events": [["data", "bra=\"y\""]], "input": "bra=\"y\"", "scripting": true}
+{"events": [["data", "class=\"c\" id=xA"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "]]> class=\"c\" id=x "], ["end", "script"]], "input": "class=\"c\" id=x&#65;<a  b   c=d  >]]> class=\"c\" id=x </script >", "scripting": false}
+{"events": [["data", "class=\"c\" id=xA"], ["start", "a", [["b", null], ["c", "d"]]], ["data", "]]> class=\"c\" id=x "], ["end", "script"]], "input": "class=\"c\" id=x&#65;<a  b   c=d  >]]> class=\"c\" id=x </script >", "scripting": true}
+{"events": [["data", "class=\"c\" id=x"], ["startend", "br", []], ["data", "--!>"], ["start", "title", []], ["data", "style-->textareaclass=\"c\" id=xbr>"]], "input": "class=\"c\" id=x<br/>--!><TITLE>style-->textareaclass=\"c\" id=xbr>", "scripting": false}
+{"events": [["data", "class=\"c\" id=x"], ["startend", "br", []], ["data", "--!>"], ["start", "title", []], ["data", "style-->textareaclass=\"c\" id=xbr>"]], "input": "class=\"c\" id=x<br/>--!><TITLE>style-->textareaclass=\"c\" id=xbr>", "scripting": true}
+{"events": [["data", "class=\"c\" id=x"], ["start", "title", []], ["data", "</script>😀<a href='©=1'>b<"]], "input": "class=\"c\" id=x<title></script>😀<a href='&copy=1'>b&lt", "scripting": false}
+{"events": [["data", "class=\"c\" id=x"], ["start", "title", []], ["data", "</script>😀<a href='©=1'>b<"]], "input": "class=\"c\" id=x<title></script>😀<a href='&copy=1'>b&lt", "scripting": true}
+{"events": [["data", "class=\"c\" id=xbr"], ["start", "a", [["=x", null]]], ["data", "xmp"], ["start", "a", [["href", "&copy=1"]]], ["data", "\"div"]], "input": "class=\"c\" id=xbr<a =x></>xmp<a href='&copy=1'>\"div", "scripting": false}
+{"events": [["data", "class=\"c\" id=xbr"], ["start", "a", [["=x", null]]], ["data", "xmp"], ["start", "a", [["href", "&copy=1"]]], ["data", "\"div"]], "input": "class=\"c\" id=xbr<a =x></>xmp<a href='&copy=1'>\"div", "scripting": true}
+{"events": [["data", "class=\"c\" id=xpa='x'"], ["start", "a", [["=x", null]]], ["data", "="], ["start", "p", []], ["decl", "DOCTYPE html"], ["data", "&"]], "input": "class=\"c\" id=xpa='x'<a =x>=<p><!DOCTYPE html>&amp;", "scripting": false}
+{"events": [["data", "class=\"c\" id=xpa='x'"], ["start", "a", [["=x", null]]], ["data", "="], ["start", "p", []], ["decl", "DOCTYPE html"], ["data", "&"]], "input": "class=\"c\" id=xpa='x'<a =x>=<p><!DOCTYPE html>&amp;", "scripting": true}
+{"events": [["data", "class=\"c\" id=xplaintext"], ["data", "<"], ["data", "-title]]>"], ["start", "a", [["b", ""]]]], "input": "class=\"c\" id=xplaintext<-title]]><a b=>", "scripting": false}
+{"events": [["data", "class=\"c\" id=xplaintext"], ["data", "<"], ["data", "-title]]>"], ["start", "a", [["b", ""]]]], "input": "class=\"c\" id=xplaintext<-title]]><a b=>", "scripting": true}
+{"events": [["data", "div"]], "input": "div", "scripting": false}
+{"events": [["data", "div"]], "input": "div", "scripting": true}
+{"events": [["data", "div"], ["end", "title"]], "input": "div</title>", "scripting": false}
+{"events": [["data", "div"], ["end", "title"]], "input": "div</title>", "scripting": true}
+{"events": [["data", "div"], ["start", "a", [["=x", null]]], ["startend", "br", []], ["pi", "\r<a/b"], ["data", "iframe"], ["unknown_decl", "CDATA[<a/b>="]], "input": "div<a =x><br/><?\r<a/b>iframe<![CDATA[<a/b>=", "scripting": false}
+{"events": [["data", "div"], ["start", "a", [["=x", null]]], ["startend", "br", []], ["pi", "\r<a/b"], ["data", "iframe"], ["unknown_decl", "CDATA[<a/b>="]], "input": "div<a =x><br/><?\r<a/b>iframe<![CDATA[<a/b>=", "scripting": true}
+{"events": [["data", "div😀/>\f"]], "input": "div😀/>\f", "scripting": false}
+{"events": [["data", "div😀/>\f"]], "input": "div😀/>\f", "scripting": true}
+{"events": [["data", "div😀xmpnoscript&->noscriptA"]], "input": "div😀xmpnoscript&amp;->noscript&#x41", "scripting": false}
+{"events": [["data", "div😀xmpnoscript&->noscriptA"]], "input": "div😀xmpnoscript&amp;->noscript&#x41", "scripting": true}
+{"events": [["data", "iframe"]], "input": "iframe", "scripting": false}
+{"events": [["data", "iframe"]], "input": "iframe", "scripting": true}
+{"events": [["data", "iframe "], ["start", "a", [["b", null]]], ["data", "éa='x'"], ["start", "a", [["href", "x&y"]]], ["data", "a"], ["end", "p"], ["data", "iframe"]], "input": "iframe <a/b>éa='x'<a href=\"x&amp;y\">a</p>iframe", "scripting": false}
+{"events": [["data", "iframe "], ["start", "a", [["b", null]]], ["data", "éa='x'"], ["start", "a", [["href", "x&y"]]], ["data", "a"], ["end", "p"], ["data", "iframe"]], "input": "iframe <a/b>éa='x'<a href=\"x&amp;y\">a</p>iframe", "scripting": true}
+{"events": [["data", "iframe&script"], ["data", "<"], ["data", "->"], ["data", "<"], ["data", "-"], ["start", "a", [["href", "&copy=1"]]], ["data", "\r"]], "input": "iframe&script<-><-<a href='&copy=1'>\r", "scripting": false}
+{"events": [["data", "iframe&script"], ["data", "<"], ["data", "->"], ["data", "<"], ["data", "-"], ["start", "a", [["href", "&copy=1"]]], ["data", "\r"]], "input": "iframe&script<-><-<a href='&copy=1'>\r", "scripting": true}
+{"events": [["data", "iframe"], ["startend", "br", []], ["start", "title", []]], "input": "iframe<br /><title>", "scripting": false}
+{"events": [["data", "iframe"], ["startend", "br", []], ["start", "title", []]], "input": "iframe<br /><title>", "scripting": true}
+{"events": [["data", "iframebr--!>b"]], "input": "iframebr--!>b", "scripting": false}
+{"events": [["data", "iframebr--!>b"]], "input": "iframebr--!>b", "scripting": true}
+{"events": [["data", "iframeclass=\"c\" id=xxmpiframe"], ["pi", "&lt&amp"]], "input": "iframeclass=\"c\" id=xxmpiframe<?&lt&amp", "scripting": false}
+{"events": [["data", "iframeclass=\"c\" id=xxmpiframe"], ["pi", "&lt&amp"]], "input": "iframeclass=\"c\" id=xxmpiframe<?&lt&amp", "scripting": true}
+{"events": [["data", "iframeplaintextclass=\"c\" id=x"]], "input": "iframeplaintextclass=\"c\" id=x", "scripting": false}
+{"events": [["data", "iframeplaintextclass=\"c\" id=x"]], "input": "iframeplaintextclass=\"c\" id=x", "scripting": true}
+{"events": [["data", "noscript"]], "input": "noscript", "scripting": false}
+{"events": [["data", "noscript"]], "input": "noscript", "scripting": true}
+{"events": [["data", "noscript"], ["data", "'"], ["start", "script", []], ["data", "\r"]], "input": "noscript</>'<script>\r", "scripting": false}
+{"events": [["data", "noscript"], ["data", "'"], ["start", "script", []], ["data", "\r"]], "input": "noscript</>'<script>\r", "scripting": true}
+{"events": [["data", "noscript"], ["pi", "<img src=x onerror=y"], ["start", "a", [["=x", null]]], ["data", "title"], ["pi", "title"]], "input": "noscript<?<img src=x onerror=y><a =x>title<?title", "scripting": false}
+{"events": [["data", "noscript"], ["pi", "<img src=x onerror=y"], ["start", "a", [["=x", null]]], ["data", "title"], ["pi", "title"]], "input": "noscript<?<img src=x onerror=y><a =x>title<?title", "scripting": true}
+{"events": [["data", "p"]], "input": "p", "scripting": false}
+{"events": [["data", "p"]], "input": "p", "scripting": true}
+{"events": [["data", "p"], ["end", "p"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&©iframeA"], ["data", "<"], ["data", "-Aplaintextbr"]], "input": "p</p>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&copyiframe&#x41<-&#x41plaintextbr", "scripting": false}
+{"events": [["data", "p"], ["end", "p"], ["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&©iframeA"], ["data", "<"], ["data", "-Aplaintextbr"]], "input": "p</p>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&copyiframe&#x41<-&#x41plaintextbr", "scripting": true}
+{"events": [["data", "p"], ["pi", "a/&#xbr\f\n"]], "input": "p<?a/&#xbr\f\n", "scripting": false}
+{"events": [["data", "p"], ["pi", "a/&#xbr\f\n"]], "input": "p<?a/&#xbr\f\n", "scripting": true}
+{"events": [["data", "p"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "a]]>©"], ["start", "a", [["b", ""]]], ["data", "\t"], ["start", "script", []]], "input": "p<a b= 'c>a]]>&copy<a b=>\t<script>", "scripting": false}
+{"events": [["data", "p"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "a]]>©"], ["start", "a", [["b", ""]]], ["data", "\t"], ["start", "script", []]], "input": "p<a b= 'c>a]]>&copy<a b=>\t<script>", "scripting": true}
+{"events": [["data", "pa='x'iframexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&scriptA"], ["end", "p"], ["data", "&#"], ["end", "script"], ["data", "plaintext"]], "input": "pa='x'iframexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&script&#65;</p>&#</script>plaintext", "scripting": false}
+{"events": [["data", "pa='x'iframexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&scriptA"], ["end", "p"], ["data", "&#"], ["end", "script"], ["data", "plaintext"]], "input": "pa='x'iframexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&script&#65;</p>&#</script>plaintext", "scripting": true}
+{"events": [["data", "plaintext<A\f"], ["decl", "DOCTYPE html"], ["start", "p", [["<p", null]]]], "input": "plaintext&lt&#65;\f<!DOCTYPE html><p <p>", "scripting": false}
+{"events": [["data", "plaintext<A\f"], ["decl", "DOCTYPE html"], ["start", "p", [["<p", null]]]], "input": "plaintext&lt&#65;\f<!DOCTYPE html><p <p>", "scripting": true}
+{"events": [["data", "plaintext/"], ["decl", "doctype"]], "input": "plaintext/<!doctype", "scripting": false}
+{"events": [["data", "plaintext/"], ["decl", "doctype"]], "input": "plaintext/<!doctype", "scripting": true}
+{"events": [["data", "plaintext/>"], ["start", "title", []], ["data", "<script>div--!>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<!doctype"]], "input": "plaintext/><title><script>div--!>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<!doctype", "scripting": false}
+{"events": [["data", "plaintext/>"], ["start", "title", []], ["data", "<script>div--!>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<!doctype"]], "input": "plaintext/><title><script>div--!>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<!doctype", "scripting": true}
+{"events": [["data", "plaintext"], ["comment", " p"], ["data", "="], ["start", "a", [["href", "Q"]]], ["data", "->\"]]>"], ["comment", "p"]], "input": "plaintext</ p>=<A HREF=Q>->\"]]><!--p", "scripting": false}
+{"events": [["data", "plaintext"], ["comment", " p"], ["data", "="], ["start", "a", [["href", "Q"]]], ["data", "->\"]]>"], ["comment", "p"]], "input": "plaintext</ p>=<A HREF=Q>->\"]]><!--p", "scripting": true}
+{"events": [["data", "plaintext"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["start", "a", [["b", ""], ["'c", null]]], ["decl", "DOCTYPE html"], ["data", "\n"]], "input": "plaintext<img src=x onerror=y><a b= 'c><!DOCTYPE html>\n", "scripting": false}
+{"events": [["data", "plaintext"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["start", "a", [["b", ""], ["'c", null]]], ["decl", "DOCTYPE html"], ["data", "\n"]], "input": "plaintext<img src=x onerror=y><a b= 'c><!DOCTYPE html>\n", "scripting": true}
+{"events": [["data", "plaintext"], ["start", "p", []], ["data", "title->©"]], "input": "plaintext<p>title->&copy", "scripting": false}
+{"events": [["data", "plaintext"], ["start", "p", []], ["data", "title->©"]], "input": "plaintext<p>title->&copy", "scripting": true}
+{"events": [["data", "plaintextiframe"]], "input": "plaintextiframe", "scripting": false}
+{"events": [["data", "plaintextiframe"]], "input": "plaintextiframe", "scripting": true}
+{"events": [["data", "plaintextnoscripta=b"], ["decl", "doctype&unknown;"]], "input": "plaintextnoscripta=b<!doctype&unknown;", "scripting": false}
+{"events": [["data", "plaintextnoscripta=b"], ["decl", "doctype&unknown;"]], "input": "plaintextnoscripta=b<!doctype&unknown;", "scripting": true}
+{"events": [["data", "plaintext😀"], ["startend", "br", []], ["data", "class=\"c\" id=x--!>b"]], "input": "plaintext😀<br />class=\"c\" id=x--!>b", "scripting": false}
+{"events": [["data", "plaintext😀"], ["startend", "br", []], ["data", "class=\"c\" id=x--!>b"]], "input": "plaintext😀<br />class=\"c\" id=x--!>b", "scripting": true}
+{"events": [["data", "script"]], "input": "script", "scripting": false}
+{"events": [["data", "script"]], "input": "script", "scripting": true}
+{"events": [["data", "script\n>"], ["data", "<"], ["data", "-"], ["start", "a", [["href", "x&y"]]], ["comment", "3"], ["comment", " p"], ["data", "&#&#"]], "input": "script\n><-<a href=\"x&amp;y\"></3></ p>&#&#", "scripting": false}
+{"events": [["data", "script\n>"], ["data", "<"], ["data", "-"], ["start", "a", [["href", "x&y"]]], ["comment", "3"], ["comment", " p"], ["data", "&#&#"]], "input": "script\n><-<a href=\"x&amp;y\"></3></ p>&#&#", "scripting": true}
+{"events": [["data", "script&xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&a=b"], ["startend", "br", []], ["data", "&<a=\"y\""], ["start", "p", [["<p", null]]], ["unknown_decl", "CDATA["]], "input": "script&amp;xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&a=b<br/>&amp&lta=\"y\"<p <p><![CDATA[", "scripting": false}
+{"events": [["data", "script&xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&a=b"], ["startend", "br", []], ["data", "&<a=\"y\""], ["start", "p", [["<p", null]]], ["unknown_decl", "CDATA["]], "input": "script&amp;xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&a=b<br/>&amp&lta=\"y\"<p <p><![CDATA[", "scripting": true}
+{"events": [["data", "script"], ["start", "a", [["b", ""]]], ["data", "<"], ["data", "3b"]], "input": "script<a b=><3b", "scripting": false}
+{"events": [["data", "script"], ["start", "a", [["b", ""]]], ["data", "<"], ["data", "3b"]], "input": "script<a b=><3b", "scripting": true}
+{"events": [["data", "scriptbrnoscript"], ["start", "a", [["b", null], ["c", "d"]]]], "input": "scriptbrnoscript<a  b   c=d  >", "scripting": false}
+{"events": [["data", "scriptbrnoscript"], ["start", "a", [["b", null], ["c", "d"]]]], "input": "scriptbrnoscript<a  b   c=d  >", "scripting": true}
+{"events": [["data", "scriptnoscriptb&#"], ["data", "<"], ["data", "3style"], ["comment", "\t iframe"]], "input": "scriptnoscriptb&#<3style<!--\t iframe", "scripting": false}
+{"events": [["data", "scriptnoscriptb&#"], ["data", "<"], ["data", "3style"], ["comment", "\t iframe"]], "input": "scriptnoscriptb&#<3style<!--\t iframe", "scripting": true}
+{"events": [["data", "styleAAAclass=\"c\" id=x"], ["pi", "<p <p"], ["data", "A"]], "input": "style&#65;&#x41&#65;class=\"c\" id=x<?<p <p>&#65;", "scripting": false}
+{"events": [["data", "styleAAAclass=\"c\" id=x"], ["pi", "<p <p"], ["data", "A"]], "input": "style&#65;&#x41&#65;class=\"c\" id=x<?<p <p>&#65;", "scripting": true}
+{"events": [["data", "style&unknown;"], ["start", "img", [["src", "x"], ["onerror", "y"]]]], "input": "style&unknown;<img src=x onerror=y>", "scripting": false}
+{"events": [["data", "style&unknown;"], ["start", "img", [["src", "x"], ["onerror", "y"]]]], "input": "style&unknown;<img src=x onerror=y>", "scripting": true}
+{"events": [["data", "style/>p"], ["data", "&"], ["start", "a", [["b", ""]]], ["data", ">"], ["end", "title"], ["comment", "[if x]"]], "input": "style/>p</>&<a b=>></title><![if x]>", "scripting": false}
+{"events": [["data", "style/>p"], ["data", "&"], ["start", "a", [["b", ""]]], ["data", ">"], ["end", "title"], ["comment", "[if x]"]], "input": "style/>p</>&<a b=>></title><![if x]>", "scripting": true}
+{"events": [["data", "style"], ["start", "title", []], ["data", "]]>"]], "input": "style<TITLE>]]>", "scripting": false}
+{"events": [["data", "style"], ["start", "title", []], ["data", "]]>"]], "input": "style<TITLE>]]>", "scripting": true}
+{"events": [["data", "style"], ["startend", "br", []], ["data", "b&#"], ["unknown_decl", "CDATA[<br/>style"]], "input": "style<br/>b&#<![CDATA[<br/>style", "scripting": false}
+{"events": [["data", "style"], ["startend", "br", []], ["data", "b&#"], ["unknown_decl", "CDATA[<br/>style"]], "input": "style<br/>b&#<![CDATA[<br/>style", "scripting": true}
+{"events": [["data", "style]]>"]], "input": "style]]>", "scripting": false}
+{"events": [["data", "style]]>"]], "input": "style]]>", "scripting": true}
+{"events": [["data", "textarea"]], "input": "textarea", "scripting": false}
+{"events": [["data", "textarea"]], "input": "textarea", "scripting": true}
+{"events": [["data", "textarea"], ["start", "p", [["<p", null]]], ["start", "a", [["=x", null]]], ["data", "]]>"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "iframe"]], "input": "textarea<p <p><a =x>]]><img src=x onerror=y>iframe", "scripting": false}
+{"events": [["data", "textarea"], ["start", "p", [["<p", null]]], ["start", "a", [["=x", null]]], ["data", "]]>"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "iframe"]], "input": "textarea<p <p><a =x>]]><img src=x onerror=y>iframe", "scripting": true}
+{"events": [["data", "textarea"], ["start", "p", [["<p", null]]], ["data", "plaintext/"], ["start", "a", [["b", ""]]], ["data", "plaintextb\t"]], "input": "textarea<p <p>plaintext/<a b=>plaintextb\t", "scripting": false}
+{"events": [["data", "textarea"], ["start", "p", [["<p", null]]], ["data", "plaintext/"], ["start", "a", [["b", ""]]], ["data", "plaintextb\t"]], "input": "textarea<p <p>plaintext/<a b=>plaintextb\t", "scripting": true}
+{"events": [["data", "textareaiframe"], ["comment", "3"], ["data", "title😀="], ["data", "<"], ["data", "-"]], "input": "textareaiframe</3>title😀=<-", "scripting": false}
+{"events": [["data", "textareaiframe"], ["comment", "3"], ["data", "title😀="], ["data", "<"], ["data", "-"]], "input": "textareaiframe</3>title😀=<-", "scripting": true}
+{"events": [["data", "textareanoscriptscriptbr"], ["end", "script"], ["data", "/ "]], "input": "textareanoscriptscriptbr</script >/ ", "scripting": false}
+{"events": [["data", "textareanoscriptscriptbr"], ["end", "script"], ["data", "/ "]], "input": "textareanoscriptscriptbr</script >/ ", "scripting": true}
+{"events": [["data", "title"]], "input": "title", "scripting": false}
+{"events": [["data", "title"]], "input": "title", "scripting": true}
+{"events": [["data", "title\""], ["comment", "&#65;\f<TITLE"], ["start", "p", []], ["data", "a=\"y\""]], "input": "title\"<!&#65;\f<TITLE><p>a=\"y\"", "scripting": false}
+{"events": [["data", "title\""], ["comment", "&#65;\f<TITLE"], ["start", "p", []], ["data", "a=\"y\""]], "input": "title\"<!&#65;\f<TITLE><p>a=\"y\"", "scripting": true}
+{"events": [["data", "title'bra=b"], ["end", "title"], ["data", "div="], ["start", "a", [["b", null], ["c", "d"]]]], "input": "title'bra=b</title>div=</><a  b   c=d  >", "scripting": false}
+{"events": [["data", "title'bra=b"], ["end", "title"], ["data", "div="], ["start", "a", [["b", null], ["c", "d"]]]], "input": "title'bra=b</title>div=</><a  b   c=d  >", "scripting": true}
+{"events": [["data", "title"], ["unknown_decl", "CDATA[<a =x>style<!--<!DOCTYPE html>"]], "input": "title<![CDATA[<a =x>style<!--<!DOCTYPE html>", "scripting": false}
+{"events": [["data", "title"], ["unknown_decl", "CDATA[<a =x>style<!--<!DOCTYPE html>"]], "input": "title<![CDATA[<a =x>style<!--<!DOCTYPE html>", "scripting": true}
+{"events": [["data", "title"], ["start", "p", []]], "input": "title<p>", "scripting": false}
+{"events": [["data", "title"], ["start", "p", []]], "input": "title<p>", "scripting": true}
+{"events": [["data", "xmp"]], "input": "xmp", "scripting": false}
+{"events": [["data", "xmp"]], "input": "xmp", "scripting": true}
+{"events": [["data", "xmp'"]], "input": "xmp'", "scripting": false}
+{"events": [["data", "xmp'"]], "input": "xmp'", "scripting": true}
+{"events": [["data", "xmp"], ["start", "a", [["b", ""]]], ["data", "&unknown;&"], ["decl", "DOCTYPE html"], ["data", "&#style"]], "input": "xmp<a b=>&unknown;&amp;<!DOCTYPE html>&#style", "scripting": false}
+{"events": [["data", "xmp"], ["start", "a", [["b", ""]]], ["data", "&unknown;&"], ["decl", "DOCTYPE html"], ["data", "&#style"]], "input": "xmp<a b=>&unknown;&amp;<!DOCTYPE html>&#style", "scripting": true}
+{"events": [["data", "xmpa='x'\n"], ["start", "a", [["b", null]]], ["data", "&"], ["end", "title"]], "input": "xmpa='x'\n<a/b>&amp;</title>", "scripting": false}
+{"events": [["data", "xmpa='x'\n"], ["start", "a", [["b", null]]], ["data", "&"], ["end", "title"]], "input": "xmpa='x'\n<a/b>&amp;</title>", "scripting": true}
+{"events": [["data", "xmptextarea/>a"]], "input": "xmptextarea/>a", "scripting": false}
+{"events": [["data", "xmptextarea/>a"]], "input": "xmptextarea/>a", "scripting": true}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": false}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&", "scripting": true}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#iframe]]>/&div"], ["unknown_decl", "CDATA["]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#iframe]]>/&ampdiv<![CDATA[", "scripting": false}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#iframe]]>/&div"], ["unknown_decl", "CDATA["]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#iframe]]>/&ampdiv<![CDATA[", "scripting": true}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&Anoscript"], ["start", "p", [["<p", null]]], ["data", "\ra=b"], ["comment", "&lt&#x41"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#x41noscript<p <p>\ra=b</&lt&#x41", "scripting": false}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&Anoscript"], ["start", "p", [["<p", null]]], ["data", "\ra=b"], ["comment", "&lt&#x41"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&&#x41noscript<p <p>\ra=b</&lt&#x41", "scripting": true}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["startend", "br", []], ["data", "noscript"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<br />noscript", "scripting": false}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["startend", "br", []], ["data", "noscript"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<br />noscript", "scripting": true}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "/=A"], ["end", "title"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<img src=x onerror=y>/=&#65;</title>", "scripting": false}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "/=A"], ["end", "title"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<img src=x onerror=y>/=&#65;</title>", "scripting": true}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "script", []], ["data", "plaintext--!><!DOCTYPE html>&#65;&#x41</title>\t"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<script>plaintext--!><!DOCTYPE html>&#65;&#x41</title>\t", "scripting": false}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&"], ["start", "script", []], ["data", "plaintext--!><!DOCTYPE html>&#65;&#x41</title>\t"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&<script>plaintext--!><!DOCTYPE html>&#65;&#x41</title>\t", "scripting": true}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&a=\"y\"<"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&a=\"y\"&lt", "scripting": false}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&a=\"y\"<"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&a=\"y\"&lt", "scripting": true}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&a=\"y\"a='x'p--!>"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&a=\"y\"a='x'p--!>", "scripting": false}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&a=\"y\"a='x'p--!>"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&a=\"y\"a='x'p--!>", "scripting": true}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&class=\"c\" id=x"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&class=\"c\" id=x", "scripting": false}
+{"events": [["data", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&class=\"c\" id=x"]], "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&class=\"c\" id=x", "scripting": true}
+{"events": [["data", " "], ["decl", "DOCTYPE html"]], "input": " <!DOCTYPE html>", "scripting": false}
+{"events": [["data", " "], ["decl", "DOCTYPE html"]], "input": " <!DOCTYPE html>", "scripting": true}
+{"events": [["data", " "], ["data", "<"], ["data", "-?>\t--!>"], ["decl", "DOCTYPE html"], ["decl", "DOCTYPE html"]], "input": " <-?>\t--!><!DOCTYPE html><!DOCTYPE html>", "scripting": false}
+{"events": [["data", " "], ["data", "<"], ["data", "-?>\t--!>"], ["decl", "DOCTYPE html"], ["decl", "DOCTYPE html"]], "input": " <-?>\t--!><!DOCTYPE html><!DOCTYPE html>", "scripting": true}
+{"events": [["data", " "], ["end", "script"]], "input": " </></script >", "scripting": false}
+{"events": [["data", " "], ["end", "script"]], "input": " </></script >", "scripting": true}
+{"events": [["data", " "], ["end", "script"], ["start", "a", [["href", "x&y"]]], ["data", "class=\"c\" id=x<"], ["startend", "br", []], ["unknown_decl", "CDATA[ <p>"]], "input": " </SCRIPT/><a href=\"x&amp;y\">class=\"c\" id=x&lt<br /><![CDATA[ <p>", "scripting": false}
+{"events": [["data", " "], ["end", "script"], ["start", "a", [["href", "x&y"]]], ["data", "class=\"c\" id=x<"], ["startend", "br", []], ["unknown_decl", "CDATA[ <p>"]], "input": " </SCRIPT/><a href=\"x&amp;y\">class=\"c\" id=x&lt<br /><![CDATA[ <p>", "scripting": true}
+{"events": [["data", " "], ["start", "title", []], ["data", "<p <p><TITLE>&"]], "input": " <title><p <p><TITLE>&amp;", "scripting": false}
+{"events": [["data", " "], ["start", "title", []], ["data", "<p <p><TITLE>&"]], "input": " <title><p <p><TITLE>&amp;", "scripting": true}
+{"events": [["data", " a='x'noscript "]], "input": " a='x'noscript ", "scripting": false}
+{"events": [["data", " a='x'noscript "]], "input": " a='x'noscript ", "scripting": true}
+{"events": [["data", " pnoscript  "], ["comment", ""]], "input": " pnoscript  <!--", "scripting": false}
+{"events": [["data", " pnoscript  "], ["comment", ""]], "input": " pnoscript  <!--", "scripting": true}
+{"events": [["data", "  =xmp<<"]], "input": "  =xmp&lt&lt", "scripting": false}
+{"events": [["data", "  =xmp<<"]], "input": "  =xmp&lt&lt", "scripting": true}
+{"events": [["data", "é"]], "input": "é", "scripting": false}
+{"events": [["data", "é"]], "input": "é", "scripting": true}
+{"events": [["data", "é\rbr&"], ["start", "p", []], ["data", "<"], ["data", "3?>"], ["startend", "br", []], ["comment", "3"], ["data", "<"]], "input": "é\rbr&amp<p><3?><br/></3>&lt", "scripting": false}
+{"events": [["data", "é\rbr&"], ["start", "p", []], ["data", "<"], ["data", "3?>"], ["startend", "br", []], ["comment", "3"], ["data", "<"]], "input": "é\rbr&amp<p><3?><br/></3>&lt", "scripting": true}
+{"events": [["data", "é"], ["end", "title"]], "input": "é</title>", "scripting": false}
+{"events": [["data", "é"], ["end", "title"]], "input": "é</title>", "scripting": true}
+{"events": [["data", "é"], ["start", "title", []], ["data", "<a =x>plaintext\"<p <p>日\"é<![CDATA["]], "input": "é<TITLE><a =x>plaintext\"<p <p>日\"é<![CDATA[", "scripting": false}
+{"events": [["data", "é"], ["start", "title", []], ["data", "<a =x>plaintext\"<p <p>日\"é<![CDATA["]], "input": "é<TITLE><a =x>plaintext\"<p <p>日\"é<![CDATA[", "scripting": true}
+{"events": [["data", "éa=b"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "class=\"c\" id=x"], ["pi", "</p"], ["data", "&"], ["end", "p"], ["data", "<"], ["data", "-"]], "input": "éa=b<a b= 'c>class=\"c\" id=x<?</p>&amp;</p><-", "scripting": false}
+{"events": [["data", "éa=b"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "class=\"c\" id=x"], ["pi", "</p"], ["data", "&"], ["end", "p"], ["data", "<"], ["data", "-"]], "input": "éa=b<a b= 'c>class=\"c\" id=x<?</p>&amp;</p><-", "scripting": true}
+{"events": [["data", "ép"]], "input": "ép", "scripting": false}
+{"events": [["data", "ép"]], "input": "ép", "scripting": true}
+{"events": [["data", "é😀"]], "input": "é😀", "scripting": false}
+{"events": [["data", "é😀"]], "input": "é😀", "scripting": true}
+{"events": [["data", "日"]], "input": "日", "scripting": false}
+{"events": [["data", "日"]], "input": "日", "scripting": true}
+{"events": [["data", "日\ta='x'"], ["start", "a", [["b", ""], ["'c", null]]], ["end", "p"], ["data", "a=b"], ["data", "<"], ["data", "3"]], "input": "日\ta='x'<a b= 'c></p>a=b<3", "scripting": false}
+{"events": [["data", "日\ta='x'"], ["start", "a", [["b", ""], ["'c", null]]], ["end", "p"], ["data", "a=b"], ["data", "<"], ["data", "3"]], "input": "日\ta='x'<a b= 'c></p>a=b<3", "scripting": true}
+{"events": [["data", "日&"]], "input": "日&", "scripting": false}
+{"events": [["data", "日&"]], "input": "日&", "scripting": true}
+{"events": [["data", "日--!>br"], ["comment", "3"], ["data", "/title"], ["start", "p", [["<p", null]]]], "input": "日--!>br</3>/title<p <p>", "scripting": false}
+{"events": [["data", "日--!>br"], ["comment", "3"], ["data", "/title"], ["start", "p", [["<p", null]]]], "input": "日--!>br</3>/title<p <p>", "scripting": true}
+{"events": [["data", "日"], ["data", "a='x'"], ["data", "<"], ["start", "a", [["href", "&copy=1"]]], ["data", "->iframe"], ["comment", "<p <p"], ["start", "a", [["href", "Q"]]]], "input": "日</>a='x'<<a href='&copy=1'>->iframe<!<p <p><A HREF=Q>", "scripting": false}
+{"events": [["data", "日"], ["data", "a='x'"], ["data", "<"], ["start", "a", [["href", "&copy=1"]]], ["data", "->iframe"], ["comment", "<p <p"], ["start", "a", [["href", "Q"]]]], "input": "日</>a='x'<<a href='&copy=1'>->iframe<!<p <p><A HREF=Q>", "scripting": true}
+{"events": [["data", "日"], ["pi", ""]], "input": "日<?", "scripting": false}
+{"events": [["data", "日"], ["pi", ""]], "input": "日<?", "scripting": true}
+{"events": [["data", "日"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "A"]], "input": "日<a b= 'c>&#x41", "scripting": false}
+{"events": [["data", "日"], ["start", "a", [["b", ""], ["'c", null]]], ["data", "A"]], "input": "日<a b= 'c>&#x41", "scripting": true}
+{"events": [["data", "日script>\"'/>"], ["decl", "DOCTYPE html"]], "input": "日script>\"'/><!DOCTYPE html>", "scripting": false}
+{"events": [["data", "日script>\"'/>"], ["decl", "DOCTYPE html"]], "input": "日script>\"'/><!DOCTYPE html>", "scripting": true}
+{"events": [["data", "😀"]], "input": "😀", "scripting": false}
+{"events": [["data", "😀"]], "input": "😀", "scripting": true}
+{"events": [["data", "😀"], ["data", "</"]], "input": "😀</", "scripting": false}
+{"events": [["data", "😀"], ["data", "</"]], "input": "😀</", "scripting": true}
+{"events": [["data", "😀"], ["end", "script"], ["data", "&#xAtitle="]], "input": "😀</script >&#x&#x41title=", "scripting": false}
+{"events": [["data", "😀"], ["end", "script"], ["data", "&#xAtitle="]], "input": "😀</script >&#x&#x41title=", "scripting": true}
+{"events": [["data", "😀"], ["start", "a", [["b", ""], ["'c", null]]], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "/>"], ["comment", ""]], "input": "😀<a b= 'c><img src=x onerror=y>/><!", "scripting": false}
+{"events": [["data", "😀"], ["start", "a", [["b", ""], ["'c", null]]], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["data", "/>"], ["comment", ""]], "input": "😀<a b= 'c><img src=x onerror=y>/><!", "scripting": true}
+{"events": [["data", "😀"], ["start", "a", [["b", null]]], ["data", "A"], ["decl", "DOCTYPE html"], ["data", "plaintext\t&#x"]], "input": "😀<a/b>&#x41<!DOCTYPE html>plaintext\t&#x", "scripting": false}
+{"events": [["data", "😀"], ["start", "a", [["b", null]]], ["data", "A"], ["decl", "DOCTYPE html"], ["data", "plaintext\t&#x"]], "input": "😀<a/b>&#x41<!DOCTYPE html>plaintext\t&#x", "scripting": true}
+{"events": [["data", "😀>textarea"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["start", "p", [["<p", null]]], ["data", "noscript"]], "input": "😀>textarea<img src=x onerror=y><p <p>noscript", "scripting": false}
+{"events": [["data", "😀>textarea"], ["start", "img", [["src", "x"], ["onerror", "y"]]], ["start", "p", [["<p", null]]], ["data", "noscript"]], "input": "😀>textarea<img src=x onerror=y><p <p>noscript", "scripting": true}

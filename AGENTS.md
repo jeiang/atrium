@@ -228,8 +228,8 @@ and backups; nothing of that lives here.
   `NTFY_URL` raises. Scheduler budget notices and media channel notices (topic, click) call `Send`; the
   `notify` tool (`Tools()`) is registered by the loop's registry composition (#126); the
   `/settings/notifications` page (`Module`, `Templates()`) is registered in `cmd/atrium` as a `web.Page`.
-  Every page slice registers its own `web.Page` (module plus template files) in `cmd/atrium`'s
-  `web.ServeCommand` call; `tpl.Config.Modules` carries their templates into the engine. `settings_tabs` in `tpl/templates/_settings.gohtml` is the settings tab
+  Every page slice registers its own `web.Page` (module, template files and the template globals its
+  templates read through `global`) in `cmd/atrium`'s `web.ServeCommand` call; `tpl.Config.Modules` carries their templates into the engine. `settings_tabs` in `tpl/templates/_settings.gohtml` is the settings tab
   bar every settings page includes.
 - `internal/testutil/golden`: the golden loaders, canonical-JSON
   comparison and `Replay`, an `httptest` server for recorded exchanges.
@@ -281,6 +281,15 @@ and backups; nothing of that lives here.
   undo plan and stops at `Cap` (`config.WriteCap`) intents per pass. A
   group that fails unexpectedly leaves its rows held, and a ledger failure
   that cannot be recorded aborts the pass with the row held, as a crash does.
+- `internal/mail/pages/`: the mail web pages as one `web.Page` (`Module(Options)`, `Templates()`, `Globals()`):
+  `/messages/{id}` and its correction form, `/live/pause|resume|actions/{id}/undo`, `/triage` and `/rules` with
+  the rule editor. A correction in live mode moves the message through `applier.ApplyCorrections` under
+  `db.Exclusive`, detached from request cancellation like undo and every rule write; its failure is a toast
+  suffix, never a failed request. Template defines carry a `mail_` prefix and take one dict (pass `mode` and
+  `csrf` in, never read the frame inside a define). A request that fails validation answers FastAPI's 422 JSON
+  (`web.Unprocessable`), an unknown id the 404 page; `web.PathParam` decodes ids chi leaves escaped. Tailwind
+  scans only `src/atrium/web/templates`: before Python is deleted `nix/static.nix` must scan the Go templates
+  too (`internal/**/templates/*.gohtml`, `labels.go`, `icons.go`).
 - `internal/mail/backlog/`: `backlog.py`, one `inbox_backlog` proposal per
   account from the go-live baseline; `BacklogError` before go-live.
 - `internal/proposals/`: `proposals.py`. `Registry` holds the executor of
@@ -327,7 +336,18 @@ and backups; nothing of that lives here.
 - `internal/mail/drafts/`: the draft lifecycle. `Send` is the only path that
   sends mail; it files the iCloud copy with APPEND `\Seen` under
   `safety.OperatorSend` to the mailbox `mail.MailboxRole` names `sent`.
-- `internal/pyhtml/`: `html.unescape`; tables from `tools/pyhtml/gen_entities.py`.
+- `internal/pyhtml/`: `html.unescape` (tables from `tools/pyhtml/gen_entities.py`)
+  and `Parser`, `html.parser.HTMLParser` with `convert_charrefs=True`, checked
+  against `tools/pyhtml/gen_parser_cases.py`.
+- `internal/assistant/webfetch/`: `webfetch.py` and `tools/web_fetch.py`, the
+  only fetch of an arbitrary URL. Every hop resolves once, vets every answer
+  (`DefaultAllowed`: NAT64, IPv4-compatible, SIIT, fec0 and the special-purpose
+  ranges), connects to the vetted address and re-checks it at connect, and
+  vets each redirect again. The tool fetches only URLs in the run's allowed
+  set (operator-typed or web_search results; files, mail and pages never add
+  to it). The HTTP reader is a port of `http.client`
+  (`tools/webfetch/gen_wire_cases.py`); readable text is go-trafilatura, with
+  its divergences in `testdata/corpora/README.md`.
 - `internal/mail/sync/`: `sync.py`'s read path. `Syncer.Account` discovers
   mailboxes (`mail.MailboxRole`), handles UIDVALIDITY, fetches new mail in
   batches of `config.FetchBatch`, refreshes flags with CHANGEDSINCE when
@@ -355,7 +375,9 @@ and backups; nothing of that lives here.
   `FloatRepr`/`FormatFixed`/`FormatPercent`/`ParseFloat`
   (`repr`, `format`, `float()` of a str), `Int`/`IntString` (`int()`, Unicode
   digits included; `ParseInt` is its int64 view), `Iter` (`list()`),
-  `TypeName`, `Exception` (a built-in exception an emulated builtin raises), `Truthy`, and
+  `TypeName`, `Exception` (a built-in exception an emulated builtin raises), `Truthy`,
+  `URLSplit`/`URLJoin`/`URLUnsplit` (`urllib.parse`), `OSError`/`OSErrorOf`/`OSErrorText`
+  (a Go network error as Python's `OSError`) and `ASCIIEncode`/`ASCIIEncodeError`, and
   `JSONRedump` (JSON text respelled as Python would, keys in their original order).
   Python-emulation helpers live here; never add a per-package copy (the one
   exception is `internal/mail/mime`'s own `pystr.go`). Ported float

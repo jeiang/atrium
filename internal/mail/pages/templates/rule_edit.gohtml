@@ -1,0 +1,28 @@
+{{define "page"}}rules{{end}}
+{{define "title"}}{{if .Data.is_new}}New rule{{else}}Edit {{.Data.rule.id}}{{end}}{{end}}
+{{define "heading"}}{{if .Data.is_new}}New rule{{else}}Edit rule{{end}}{{end}}
+{{define "content"}}
+<a href="/rules{{if .Data.rule.account}}?account={{queryval .Data.rule.account}}{{end}}" class="btn self-start" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Rules</a>
+{{if .Data.source_message}}
+<p class="text-sm text-muted-foreground">
+  Prefilled from <a class="font-medium text-foreground underline underline-offset-4" {{template "open_attrs" .Data.source_message.id}}>{{or .Data.source_message.subject "(no subject)"}}</a>
+  · {{.Data.source_message.from_addr}}
+</p>
+{{end}}
+<div class="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_--spacing(96)]">
+  {{template "mail_rule_form" (dict "rule" .Data.rule "is_new" .Data.is_new "folders" .Data.folders "suggestions" (opt .Data "suggestions" nil) "errors" (opt .Data "errors" nil) "csrf" .CSRF)}}
+  <section class="flex flex-col gap-3 lg:sticky lg:top-20" aria-labelledby="preview-title">
+    <header class="flex items-center gap-2">
+      <h2 id="preview-title" class="text-sm font-medium">Preview</h2>
+      {{template "spinner" (dict "id" "preview-spinner" "label" "Updating preview")}}
+      <button type="button" class="btn ml-auto" data-size="sm" data-variant="ghost"
+              hx-post="/rules/preview" hx-include="#rule-form" hx-target="#preview" hx-indicator="#preview-spinner">Refresh</button>
+    </header>
+    <div id="preview" class="flex flex-col gap-3" aria-live="polite"
+      hx-post="/rules/preview" hx-include="#rule-form" hx-sync="this:replace" hx-indicator="#preview-spinner"
+      hx-trigger="load, change from:#rule-form delay:300ms, input from:#rule-form delay:600ms">
+      <p class="text-sm text-muted-foreground">Counting matching messages…</p>
+    </div>
+  </section>
+</div>
+{{end}}

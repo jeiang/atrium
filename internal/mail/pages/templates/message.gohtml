@@ -1,0 +1,12 @@
+{{define "page"}}{{if eq .Data.back.label "Decisions"}}triage{{else}}chat{{end}}{{end}}
+{{define "title"}}{{or .Data.message.subject "Message"}}{{end}}
+{{define "heading"}}Message{{end}}
+{{define "content"}}
+<div class="flex flex-wrap items-center gap-2">
+  <a href="{{safeurl .Data.back.url}}" class="btn" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}{{.Data.back.label}}</a>
+  {{if .Data.from_draft}}<a href="/chat/{{.Data.from_draft.thread_id}}" class="btn" data-size="sm" data-variant="outline">{{icon "messages-square"}}From thread</a>{{end}}
+</div>
+<div class="w-full max-w-3xl">
+  {{template "mail_message" (dict "m" .Data.message "mode" .Mode "toast" .Toast "correct" (opt .Data "correct" nil))}}
+</div>
+{{end}}

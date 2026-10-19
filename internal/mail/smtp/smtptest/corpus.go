@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/mail/smtp"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
@@ -155,9 +156,9 @@ func Exception(t testing.TB, f *Failure) error {
 	}
 	switch f.Type {
 	case "ConnectionRefusedError", "gaierror", "BrokenPipeError", "ConnectionResetError":
-		return &smtp.OSError{Kind: f.Type, Errno: num(0), HasErrno: true, Strerror: str(1)}
+		return &py.OSError{Kind: f.Type, Errno: num(0), HasErrno: true, Strerror: str(1)}
 	case "TimeoutError":
-		return &smtp.OSError{Kind: f.Type, Strerror: str(0)}
+		return &py.OSError{Kind: f.Type, Strerror: str(0)}
 	case "SSLCertVerificationError":
 		return errors.New(str(1))
 	case "SMTPConnectError", "SMTPResponseException", "SMTPAuthenticationError", "SMTPHeloError", "SMTPDataError":

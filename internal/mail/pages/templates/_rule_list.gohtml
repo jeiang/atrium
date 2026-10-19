@@ -1,0 +1,45 @@
+{{define "mail_rule_list"}}{{$rules := .rules}}{{$account := .account}}{{$moved := opt . "moved" nil}}{{$focus := opt . "focus_id" nil -}}
+<ol id="rule-list" class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list" aria-label="Operator rules, first match wins">
+  {{range $i, $rule := $rules}}
+  {{$first := eq $i 0}}{{$last := eq (inc $i) (len $rules)}}
+  {{$mv := ""}}{{if and $moved (eq $moved.id $rule.id)}}{{$mv = $moved.direction}}{{end}}
+  <li id="rule-{{$rule.id}}" class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-[--spacing(6)_minmax(0,1fr)_auto] sm:items-start">
+    <span class="pt-0.5 text-right font-mono text-xs text-muted-foreground tabular-nums" aria-hidden="true">{{inc $i}}</span>
+    <div class="flex min-w-0 flex-col gap-1.5">
+      <div class="flex flex-wrap items-center gap-2">
+        <h3 class="font-mono text-sm font-medium break-all"><span class="sr-only">Rule {{inc $i}}: </span>{{$rule.id}}</h3>
+        <span class="badge" data-variant="outline">{{or $rule.account "All accounts"}}</span>
+      </div>
+      <ul class="flex flex-col gap-1 text-sm" role="list" aria-label="Conditions, all must hold">
+        {{range $j, $c := $rule.when}}
+        <li class="flex flex-wrap items-baseline gap-x-1.5">{{if $j}}<span class="text-xs text-muted-foreground">and</span>{{end}}{{template "condition_text" $c}}</li>
+        {{end}}
+      </ul>
+      <p class="flex flex-wrap items-center gap-1.5 text-sm">
+        {{icon "arrow-right" "size-3.5 text-muted-foreground"}}
+        {{if eq $rule.action "delete"}}<span class="font-medium text-destructive">Delete</span>{{else}}<span class="text-muted-foreground">File into</span> <span class="font-medium">{{$rule.dest}}</span>{{end}}
+      </p>
+    </div>
+    <div class="col-start-2 flex flex-wrap gap-1 sm:col-start-3">
+      <div class="button-group" role="group" aria-label="Move {{$rule.id}}">
+        <button type="button" class="btn" data-size="icon-sm" data-variant="outline" aria-label="Move {{$rule.id}} up"{{if $first}} disabled{{end}}
+                hx-post="/rules/{{urlencode $rule.id}}/move" hx-vals='{{tojson (dict "direction" "up" "account" $account)}}'{{if or (and (eq $mv "up") (not $first)) (and (eq $mv "down") $last)}} autofocus{{end}} hx-target="#rule-list" hx-swap="outerHTML">{{icon "chevron-up"}}</button>
+        <button type="button" class="btn" data-size="icon-sm" data-variant="outline" aria-label="Move {{$rule.id}} down"{{if $last}} disabled{{end}}
+                hx-post="/rules/{{urlencode $rule.id}}/move" hx-vals='{{tojson (dict "direction" "down" "account" $account)}}'{{if or (and (eq $mv "down") (not $last)) (and (eq $mv "up") $first)}} autofocus{{end}} hx-target="#rule-list" hx-swap="outerHTML">{{icon "chevron-down"}}</button>
+      </div>
+      <a class="btn" data-size="sm" data-variant="ghost" href="/rules/{{urlencode $rule.id}}/edit"{{if and $focus (eq $focus $rule.id)}} autofocus{{end}}>{{icon "pencil"}}Edit</a>
+      <button type="button" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Delete {{$rule.id}}"
+              hx-delete="/rules/{{urlencode $rule.id}}?account={{urlencode $account}}" hx-confirm="Delete rule {{$rule.id}}?" hx-target="#rule-list" hx-swap="outerHTML">{{icon "trash-2" "text-destructive"}}</button>
+    </div>
+  </li>
+  {{else}}
+  <li class="flex flex-col items-center gap-2 px-4 py-10 text-center">
+    <span class="grid size-8 place-items-center rounded-lg bg-muted">{{icon "scroll-text"}}</span>
+    <p class="text-sm font-medium">No operator rules{{if $account}} for {{$account}}{{end}}</p>
+    <p class="max-w-sm text-sm text-muted-foreground">Rules run before anything learned. Start from a message in Decisions with “Make rule”, or write one from scratch.</p>
+  </li>
+  {{end}}
+</ol>
+{{end}}
+{{template "mail_rule_list" (dict "rules" .Data.rules "account" .Data.account "moved" (opt .Data "moved" nil) "focus_id" (opt .Data "focus_id" nil))}}
+{{if .Toast}}{{template "_toast.gohtml" .}}{{end}}
