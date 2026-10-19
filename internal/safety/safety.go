@@ -31,6 +31,8 @@ func (e WriteRefused) Error() string { return string(e) }
 
 func (WriteRefused) PyClass() string { return "WriteRefused" }
 
+func (WriteRefused) PyModule() string { return "atrium.safety" }
+
 func ApprovedWrites(ctx context.Context, proposalID string) context.Context {
 	return context.WithValue(ctx, approvedKey{}, proposalID)
 }

@@ -73,7 +73,7 @@ func newWorld(t *testing.T, mode string, creds map[string]string) *world {
 	gmail.AddBox(config.GmailAllMail, mailtest.NewBox(1))
 	gmail.AddBox("[Gmail]/Trash", mailtest.NewBox(5), `\Trash`)
 	w := &world{t: t, env: env, cfg: cfg, db: d, fakes: map[string]*mailtest.FakeClient{config.ICloud: icloud, config.Gmail: gmail}}
-	w.pass = New(d, cfg, w.open)
+	w.pass = New(d, cfg, w.open, nil)
 	return w
 }
 
@@ -101,7 +101,7 @@ func (w *world) open(_ context.Context, account string) (mail.Client, error) {
 // watcher is a Watcher whose cycles build the world's pass, configuration and hooks over their own connection.
 func (w *world) watcher(sleep func(context.Context, time.Duration)) *Watcher {
 	return &Watcher{Cfg: w.pass.Cfg, Open: w.open, Sleep: sleep, Pass: func(d *db.DB) *Pass {
-		p := New(d, w.pass.Cfg, w.open)
+		p := New(d, w.pass.Cfg, w.open, nil)
 		p.Events = w.pass.Events
 		return p
 	}}

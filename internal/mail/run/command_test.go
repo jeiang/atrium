@@ -3,7 +3,9 @@ package run
 import (
 	"bytes"
 	"context"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -23,7 +25,7 @@ func runCLI(t *testing.T, ctx context.Context, w *world, vars map[string]string,
 	t.Helper()
 	t.Setenv("ATRIUM_DB", w.cfg.DBPath)
 	t.Setenv("ATRIUM_CACHE_DIR", w.cfg.CacheDir)
-	t.Setenv("ATRIUM_MODE", "shadow")
+	t.Setenv("ATRIUM_MODE", w.cfg.Mode)
 	for _, k := range []string{"ICLOUD_MAIL_USERNAME", "ICLOUD_APP_PASSWORD", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
 		t.Setenv(k, vars[k])
 	}
@@ -82,5 +84,31 @@ func TestWatchCommandExitsZeroOnShutdown(t *testing.T) {
 	code, _, _ = runCLI(t, context.Background(), w, nil, "watch")
 	if code != cli.ExitOK {
 		t.Fatalf("watch with no account = %d", code)
+	}
+}
+
+func TestSyncInterruptedBySignalEndsLikePython(t *testing.T) {
+	for _, c := range []struct {
+		sig    syscall.Signal
+		code   int
+		stderr string
+	}{
+		{syscall.SIGINT, cli.ExitInterrupt, "KeyboardInterrupt\n"},
+		{syscall.SIGTERM, cli.ExitTerminated, ""},
+	} {
+		w := newWorld(t, config.Shadow, nil)
+		ctx, stop := cli.SignalContext(context.Background())
+		w.Fail = func(string, int) error {
+			if err := syscall.Kill(os.Getpid(), c.sig); err != nil {
+				t.Error(err)
+			}
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		code, stdout, stderr := runCLI(t, ctx, w, credentials, "sync")
+		stop()
+		if code != c.code || stdout != "" || stderr != c.stderr {
+			t.Errorf("sync after %v = %d, %q, %q; want %d, \"\", %q", c.sig, code, stdout, stderr, c.code, c.stderr)
+		}
 	}
 }

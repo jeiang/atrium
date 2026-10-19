@@ -127,6 +127,29 @@ def test_events_stream_settles_a_run_that_finished_before_the_page_connected(cfg
     assert "Smoke test passed." in finished and "data-live-run" not in finished
 
 
+def test_events_stream_waits_for_run_done_written_after_the_state_flip(cfg, conn):
+    thread_id = service.create_thread(conn, "chat")
+    run_id = journal.start_run(conn, thread_id, "chat", "m", "medium", NOW)
+    progress.emit(conn, run_id, progress.RUN_START, {}, NOW)
+    journal.finish_run(conn, run_id, journal.DONE, NOW)
+
+    def late_run_done():
+        other = db.connect(cfg.db_path)
+        try:
+            time.sleep(0.5)
+            progress.emit(other, run_id, progress.RUN_DONE, {"state": "done", "error": None}, NOW)
+        finally:
+            other.close()
+
+    thread = threading.Thread(target=late_run_done)
+    thread.start()
+    with web_client(cfg).stream("GET", f"/chat/{thread_id}/events", params={"run": run_id}) as reply:
+        body = "".join(reply.iter_text())
+    thread.join()
+    kinds = [line.split(": ", 1)[1] for line in body.splitlines() if line.startswith("event: ")]
+    assert kinds == ["run_start", "run_done", "done"]
+
+
 def test_progress_rows_are_written_as_the_stream_arrives(cfg, conn):
     seen = []
 

@@ -160,10 +160,13 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form := web.FormValues(r)
-	var selection py.Dict
+	var selection any
 	var done *proposals.Proposal
 	if all, _ := web.FormLast(form, "all"); all == "" {
-		selection, err = selectionOf(found, form)
+		var picked py.Dict
+		if picked, err = selectionOf(found, form); picked != nil {
+			selection = picked
+		}
 	}
 	if err == nil {
 		done, err = s.pipeline.ApproveAndApply(ctx, id, selection)

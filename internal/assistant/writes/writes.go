@@ -22,9 +22,9 @@ type UndoError string
 
 func (e UndoError) Error() string { return string(e) }
 
-// Undoer reverses one kind of write. info is the undo description recorded with the write; an UndoError
-// means the target changed since or cannot be restored.
-type Undoer func(ctx context.Context, info map[string]any) (any, error)
+// Undoer reverses one kind of write in the caller's transaction q. info is the undo description recorded with
+// the write; an UndoError means the target changed since or cannot be restored.
+type Undoer func(ctx context.Context, q db.Querier, info map[string]any) (any, error)
 
 // Registry maps an undo op to its undoer.
 type Registry struct {
@@ -153,7 +153,7 @@ func (r *Registry) Undo(ctx context.Context, q db.Querier, writeID int64, now fu
 		}
 		return nil, UndoError("unknown undo kind " + shown)
 	}
-	result, err := fn(ctx, desc)
+	result, err := fn(ctx, q, desc)
 	if err != nil {
 		return nil, err
 	}

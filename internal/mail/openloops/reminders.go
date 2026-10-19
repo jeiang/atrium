@@ -159,7 +159,7 @@ func payloadString(d py.Dict, key string) (string, error) {
 
 // Execute is execute_reminder: on approval, the one-shot schedule job that delivers the reminder, logged with its
 // reminder_cancel undo plan.
-func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ py.Dict) (py.Dict, error) {
+func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
 	decoded, err := py.JSONLoads(p.Payload)
 	if err != nil {
 		return nil, err

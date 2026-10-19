@@ -2,21 +2,15 @@ package run
 
 import (
 	"context"
-	"flag"
-	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/py"
 )
 
-// accountFlag is `--account`, one of the configured accounts.
-type accountFlag string
-
+// accountChoices is sorted(ACCOUNTS), the choices of `--account`.
 func accountChoices() []string {
 	names := make([]string, len(config.Accounts))
 	for i, spec := range config.Accounts {
@@ -24,21 +18,6 @@ func accountChoices() []string {
 	}
 	slices.Sort(names)
 	return names
-}
-
-func (a *accountFlag) String() string { return string(*a) }
-
-func (a *accountFlag) Set(v string) error {
-	choices := accountChoices()
-	if !slices.Contains(choices, v) {
-		quoted := make([]string, len(choices))
-		for i, c := range choices {
-			quoted[i] = py.Repr(c)
-		}
-		return fmt.Errorf("argument --account: invalid choice: %s (choose from %s)", py.Repr(v), strings.Join(quoted, ", "))
-	}
-	*a = accountFlag(v)
-	return nil
 }
 
 type runner func(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) error
@@ -62,14 +41,10 @@ func WatchCommand(clients Clients) *cli.Command {
 func command(name string, clients Clients, run runner) *cli.Command {
 	return &cli.Command{
 		Name: name,
-		Setup: func(fs *flag.FlagSet) cli.Handler {
-			var account accountFlag
-			fs.Var(&account, "account", "{"+strings.Join(accountChoices(), ",")+"}")
+		Setup: func(a *cli.Args) cli.Handler {
+			account := a.String("account", "", cli.Opt{Choices: accountChoices()})
 			return func(env *cli.Env) int {
-				if len(env.Args) > 0 {
-					return env.Unrecognized(env.Args)
-				}
-				return execute(env, string(account), run, clients)
+				return execute(env, *account, run, clients)
 			}
 		},
 	}
@@ -83,8 +58,7 @@ func execute(env *cli.Env, requested string, run runner, clients Clients) int {
 		err = run(env.Ctx, cfg, requested, clients(cfg, config.OS))
 	}
 	if err != nil {
-		_, _ = fmt.Fprintln(env.Stderr, py.ExceptionText(err))
-		return cli.ExitError
+		return cli.Fail(env, err)
 	}
 	return cli.ExitOK
 }
