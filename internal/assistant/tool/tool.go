@@ -12,7 +12,7 @@ import (
 )
 
 // Handler runs one tool call. args is the decoded input object (py.JSONLoads). The result is a string, sent as
-// is, or any value py.JSONDumps encodes. A *Error or NotConfigured is shown to the model as the call's error;
+// is, or any value py.JSONDumps encodes. An Error or NotConfigured is shown to the model as the call's error;
 // any other error is reported as "<name> failed: <class>" (see Raised).
 type Handler func(ctx context.Context, tc *Context, args py.Dict) (any, error)
 

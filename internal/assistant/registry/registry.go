@@ -95,6 +95,9 @@ func (r *Registry) Run(ctx context.Context, kind tool.Kind, allow []string, q db
 			if !keep {
 				continue
 			}
+			if bound.Name != t.Name || bound.Effect != t.Effect || !slices.Equal(bound.Contexts, t.Contexts) {
+				return nil, InvalidError(fmt.Sprintf("binder for %s changed its name, effect or run kinds", t.Name))
+			}
 			t = bound
 		}
 		out = append(out, t)

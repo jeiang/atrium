@@ -279,3 +279,25 @@ func TestRequestToolsMarksTheLastTool(t *testing.T) {
 		t.Errorf("HTML is escaped: %s", params[0])
 	}
 }
+
+func TestBinderCannotChangePolicy(t *testing.T) {
+	for name, mutate := range map[string]func(*tool.Tool){
+		"name":     func(t *tool.Tool) { t.Name = "x" },
+		"effect":   func(t *tool.Tool) { t.Effect = tool.Write },
+		"contexts": func(t *tool.Tool) { t.Contexts = tool.Kinds{tool.Chat, tool.Nightly} },
+	} {
+		reg := registry.New()
+		if err := reg.Add(simple("research", tool.Read, tool.Chat)); err != nil {
+			t.Fatal(err)
+		}
+		reg.Bind("research", func(_ context.Context, _ db.Querier, t tool.Tool) (tool.Tool, bool, error) {
+			mutate(&t)
+			return t, true, nil
+		})
+		var invalid registry.InvalidError
+		_, err := reg.Run(context.Background(), tool.Chat, nil, struct{ db.Querier }{})
+		if !errors.As(err, &invalid) {
+			t.Errorf("%s: Run = %v, want InvalidError", name, err)
+		}
+	}
+}
