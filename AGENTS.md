@@ -285,6 +285,14 @@ and backups; nothing of that lives here.
   (`%a %d %b %H:%M`) use the page zone (`ATRIUM_TZ`), a job's cadence its own `tz`. `Options.Registry` is the
   registry behind the subagent tool pool and `subagents.Save`; nil is `toolset.Registry()`. `scheduler.ListRuns` is
   `list_runs` and its read path `scheduler.list_runs`.
+- `internal/money/`: the ledger core of `money.py` (ingestion `scan`/`post_item` and the tools and pages come in later
+  slices). Functions take a `db.Querier` (a `*sql.Tx` wherever they write or `SAVEPOINT`), dates are `time.Time` civil
+  days from `LocalDate(ts, loc)` with `loc` from `config.Location`, never the process zone. A manual edit returns a
+  `*Change`; `Change.Record` writes the `agent_writes` snapshot and `RegisterUndoer` (added in
+  `toolset.Undoers`) restores it, refusing when a snapshotted row changed. `Item` is one stored source
+  (`transaction_sources.extracted`), re-dumped with `py.JSONDumps` sorted keys. `LedgerError` is a `ValueError`.
+  Its test replays `testdata/corpora/money.jsonl` (`tools/golden/corpora/gen_money.py`) and the CBTT goldens; read
+  paths are in `internal/db/readpaths/money_test.go`.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
   600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
