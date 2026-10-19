@@ -185,6 +185,16 @@ and backups; nothing of that lives here.
   (breakpoints after `System` and after the last stable block; the
   project block follows uncached), `PrefixCacheControl` (1 h only for chat
   when the setting asks) and `Signature`.
+- `internal/assistant/context/`: `context.py` (package `context`; import
+  it aliased, e.g. `actx`). `Ingest` stubs results over 2000 estimated
+  tokens into `tool_results`; `LimitsFor`, `ContextManagement` and
+  `Betas` build the request's server edits; `ClearsOf` and `HistoryTokens`
+  meter responses. `ActiveMessages` is the projection (head + journal tail
+  with committed pins, drops and folds; the journal is never rewritten);
+  `Pin`/`Drop`/`Fold`/`Status` back the `context_*` tools and return the
+  tool payload as a `py.Dict`; `Commit`, `ServerCompacted` and
+  `ClientCompact` (summary request `SummaryParams`) rebuild it. Its tests
+  replay the `server_compaction` and `client_compaction` goldens.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
   600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
