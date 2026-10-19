@@ -4,14 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/safety"
 )
+
+var log = logx.Logger("atrium.agent.scheduler")
 
 const (
 	TickSeconds         = 30
@@ -76,7 +80,12 @@ func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Locati
 			dueAt := *job.NextDue
 			spec, err := Parse(job.Schedule, job.TZ)
 			if err != nil {
-				return err
+				var bad Error
+				if !errors.As(err, &bad) {
+					return err
+				}
+				log.Error(fmt.Sprintf("job %d has an unparsable schedule, skipped: %s", job.ID, err), logx.Job, job.ID)
+				continue
 			}
 			var following *float64
 			if spec.Recurring() {

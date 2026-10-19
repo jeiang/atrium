@@ -612,3 +612,19 @@ func TestRunStopsOnCancelAndWaits(t *testing.T) {
 		t.Errorf("nightly jobs = %v", got)
 	}
 }
+
+func TestUnparsableScheduleIsSkippedNotPoisoning(t *testing.T) {
+	w := newWorld(t, nil, nil)
+	bad := w.job(scheduler.NewJob{Name: "bad"})
+	good := w.job(scheduler.NewJob{Name: "good"})
+	if _, err := w.d.Write.ExecContext(t.Context(), "UPDATE jobs SET schedule = 'nonsense' WHERE id = ?", bad); err != nil {
+		t.Fatal(err)
+	}
+	claims, _ := w.claim(now, "w1")
+	if len(claims) != 1 || claims[0].Job.ID != good {
+		t.Fatalf("claims = %+v", claims)
+	}
+	if j := w.getJob(bad); j.LeaseOwner != nil || j.LastRunID != nil || *j.NextDue != local(2026, 10, 12, 7, 0) || !j.Enabled {
+		t.Errorf("the unparsable job was touched: %+v", j)
+	}
+}
