@@ -95,7 +95,7 @@ func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
 	if w.Pass != nil {
 		return w.Pass(d), func() { _ = d.Close() }, nil
 	}
-	return New(d, w.Cfg, w.Open), func() { _ = d.Close() }, nil
+	return New(d, w.Cfg, w.Open, nil), func() { _ = d.Close() }, nil
 }
 
 func (w *Watcher) sleep(ctx context.Context, d time.Duration) {
