@@ -2,6 +2,8 @@ package py
 
 import (
 	"fmt"
+	"math"
+	"math/big"
 	"strconv"
 	"strings"
 )
@@ -15,7 +17,7 @@ type Pair struct {
 type Dict []Pair
 
 // JSONDumps is json.dumps(v) with its defaults: ", " and ": " separators and every non-ASCII character
-// escaped. v is nil, a bool, an integer, a string, a []string, a []any or a Dict.
+// escaped. v is nil, a bool, an integer, a float64, a *big.Int, a string, a []string, a []any or a Dict.
 func JSONDumps(v any) string {
 	var b strings.Builder
 	dump(&b, v)
@@ -38,6 +40,19 @@ func dump(b *strings.Builder, v any) {
 		b.WriteString(strconv.FormatInt(v, 10))
 	case uint32:
 		b.WriteString(strconv.FormatUint(uint64(v), 10))
+	case float64:
+		switch {
+		case math.IsNaN(v):
+			b.WriteString("NaN")
+		case math.IsInf(v, 1):
+			b.WriteString("Infinity")
+		case math.IsInf(v, -1):
+			b.WriteString("-Infinity")
+		default:
+			b.WriteString(FloatRepr(v))
+		}
+	case *big.Int:
+		b.WriteString(v.String())
 	case string:
 		dumpString(b, v)
 	case []string:

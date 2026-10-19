@@ -57,7 +57,8 @@ type card struct {
 	labels         map[string]string
 }
 
-func unfold(text string) string {
+// Unfold is flags.py unfold and contacts.py unfold: it joins folded vCard lines.
+func Unfold(text string) string {
 	out, _ := unfoldRe.Sub("", text, 0)
 	return out
 }
@@ -83,12 +84,12 @@ func ParseDate(value string) (month, day int, year *int, ok bool) {
 	if m == nil {
 		return 0, 0, nil, false
 	}
-	month, day = decimal(m.Group(2)), decimal(m.Group(3))
+	month, day = py.DecimalValue(m.Group(2)), py.DecimalValue(m.Group(3))
 	if month < 1 || month > 12 || day < 1 || day > monthDays(month) {
 		return 0, 0, nil, false
 	}
 	if g, found := m.GroupOK(1); found {
-		if y := decimal(g); y != 0 && !unknownYears[y] {
+		if y := py.DecimalValue(g); y != 0 && !unknownYears[y] {
 			year = new(y)
 		}
 	}
@@ -131,7 +132,7 @@ func cleanLabel(text string) string {
 func Parse(text string) []Card {
 	cards := []Card{}
 	var c *card
-	for _, line := range py.SplitLines(unfold(text)) {
+	for _, line := range py.SplitLines(Unfold(text)) {
 		head, value, ok := strings.Cut(line, ":")
 		if !ok {
 			continue
@@ -252,12 +253,12 @@ func Load(dir string) []Card {
 	if info, err := os.Stat(dir); dir == "" || err != nil || !info.IsDir() {
 		return found
 	}
-	for _, path := range vcfPaths(dir) {
+	for _, path := range VCFPaths(dir) {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
-		for _, c := range Parse(readText(data)) {
+		for _, c := range Parse(ReadText(data)) {
 			if c.Name != "" {
 				found = append(found, c)
 			}
@@ -271,7 +272,8 @@ func Load(dir string) []Card {
 	return found
 }
 
-func vcfPaths(dir string) []string {
+// VCFPaths lists the paths under dir that Path.rglob("*.vcf") yields, directories included.
+func VCFPaths(dir string) []string {
 	entries, _ := os.ReadDir(dir)
 	var out []string
 	for _, e := range entries {
@@ -280,7 +282,7 @@ func vcfPaths(dir string) []string {
 			out = append(out, path)
 		}
 		if e.IsDir() {
-			out = append(out, vcfPaths(path)...)
+			out = append(out, VCFPaths(path)...)
 		}
 	}
 	return out
