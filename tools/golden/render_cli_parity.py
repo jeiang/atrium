@@ -17,7 +17,6 @@ from atrium import cli  # noqa: E402
 
 CLI_GOLDEN = GOLDEN / "cli"
 EXCLUDED_TOP = {
-    "money": "money module lands after cutover; the production binary answers invalid choice (exit 2)",
     "codemode-worker": "code mode is gone; the production binary keeps the command only as an inert unit target that exits 1 with a removed-in-v2 message",
 }
 EXCLUDED_PATHS = {

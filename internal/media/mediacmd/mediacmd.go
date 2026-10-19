@@ -76,10 +76,25 @@ func callable(run job) worker.Callable {
 	}
 }
 
+func thumbnails(cfg config.Config) job {
+	return skippable(func(ctx context.Context, _ *db.DB, env config.Env, _ func() float64) (py.Dict, error) {
+		root, err := config.Media(env).NeedRoot()
+		if err != nil {
+			return nil, err
+		}
+		generated, remaining := media.NewArtwork(cfg.MediaCacheDir(), nil).ThumbnailPass(ctx, root, media.ThumbnailPassLimit)
+		return py.Dict{{Key: "generated", Value: int64(generated)}, {Key: "remaining", Value: int64(remaining)}}, nil
+	})
+}
+
 func Callables() map[string]worker.Callable {
 	return map[string]worker.Callable{
 		scheduler.MediaChannelsName: callable(channels),
 		scheduler.MediaSweepName:    callable(sweep),
+		scheduler.MediaThumbnailsName: func(ctx context.Context, e worker.Env) (worker.Result, error) {
+			_, err := thumbnails(e.Cfg)(ctx, e.DB, e.Env, e.Now)
+			return worker.Result{}, err
+		},
 	}
 }
 

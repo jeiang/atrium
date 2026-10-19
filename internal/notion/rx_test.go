@@ -19,3 +19,15 @@ func TestPatterns(t *testing.T) {
 		file + "ESCAPE": escapeRe,
 	})
 }
+
+func TestWikiPatterns(t *testing.T) {
+	const wiki = "src/atrium/notion_wiki.py:"
+	const write = "src/atrium/agent/tools/notion_write.py:"
+	const proposals = "src/atrium/notion_proposals.py:"
+	rxtest.Run(t, map[string]*rx.Regexp{
+		wiki + "FOOTER": footerRe, wiki + "LINK": wikiLinkRe, wiki + "HEADING": wikiHeadRe, wiki + "URL": wikiURLRe,
+		wiki + "ALIAS_SPLIT": aliasSplit, wiki + "link_label:7c506ee0": labelSchema,
+		write + "MEDIA_SRC": mediaSrcRe, write + "URL": wikiURLRe,
+		proposals + "HEADING": propHeadRe, proposals + "LIST_ITEM": listItemRe,
+	})
+}

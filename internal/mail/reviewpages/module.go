@@ -86,7 +86,7 @@ func Module(o Options) web.Module {
 		if registry == nil {
 			registry = proposals.NewRegistry()
 			syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
-			handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now})
+			handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now, Env: d.Env})
 		}
 		undo := o.Writes
 		if undo == nil {

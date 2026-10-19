@@ -1,0 +1,29 @@
+{{define "title"}}Library{{end}}
+{{define "heading"}}Media · Library{{end}}
+{{define "media_grid"}}
+<ul class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5" role="list" aria-label="{{.label}}">
+  {{range .items}}
+  <li>
+    <a class="group flex flex-col gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/media/library/{{if eq .kind "movies"}}movie{{else}}tv{{end}}/{{urlencode .dir}}">
+      <img class="aspect-[2/3] w-full rounded-lg border bg-muted object-cover" src="/media/art/{{if eq .kind "movies"}}movie{{else}}show{{end}}/{{urlencode .dir}}" alt="" loading="lazy">
+      <span class="text-sm font-medium leading-tight group-hover:underline">{{.title}}</span>
+      {{if .year}}<span class="text-xs text-muted-foreground">{{.year}}</span>{{end}}
+    </a>
+  </li>
+  {{end}}
+</ul>
+{{end}}
+{{define "content"}}
+{{if .Data.error}}
+{{template "empty_state" (dict "icon_name" "film" "title" "Library not configured" "body" .Data.error)}}
+{{else}}
+<section class="flex flex-col gap-3" aria-labelledby="movies-h">
+  <h2 id="movies-h" class="text-sm font-medium">Movies ({{len .Data.movies}})</h2>
+  {{if .Data.movies}}{{template "media_grid" (dict "items" .Data.movies "label" "Movies")}}{{else}}{{template "empty_state" (dict "icon_name" "film" "title" "No movies yet" "body" "Filed movies appear here.")}}{{end}}
+</section>
+<section class="flex flex-col gap-3" aria-labelledby="tv-h">
+  <h2 id="tv-h" class="text-sm font-medium">TV ({{len .Data.shows}})</h2>
+  {{if .Data.shows}}{{template "media_grid" (dict "items" .Data.shows "label" "Shows")}}{{else}}{{template "empty_state" (dict "icon_name" "tv" "title" "No shows yet" "body" "Filed episodes appear here by show.")}}{{end}}
+</section>
+{{end}}
+{{end}}

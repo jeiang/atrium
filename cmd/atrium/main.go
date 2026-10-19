@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
@@ -18,9 +19,12 @@ import (
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
+	mediapages "github.com/jeiang/atrium/internal/media/pages"
+	"github.com/jeiang/atrium/internal/money"
 	moneypages "github.com/jeiang/atrium/internal/money/pages"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/notion"
+	notionpages "github.com/jeiang/atrium/internal/notion/pages"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -58,14 +62,17 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 		notion.Command(notion.Options{}),
 		openloops.Command(now),
 		watches.Command(now),
+		money.Command(now),
 		agentcmd.Command(),
 		calendarcmd.Command(),
 		mediacmd.Command(now),
 		web.ServeCommand(
 			web.Page{Module: chatpages.Module(chatpages.Options{}), Templates: chatpages.Templates()},
 			web.Page{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
+			web.Page{Module: mediapages.Module(mediapages.Options{}), Templates: mediapages.Templates(), Public: mediapages.PublicCheck},
 			web.Page{Module: notify.Module, Templates: notify.Templates()},
-			web.Page{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers()}), Templates: reviewpages.Templates()},
+			web.Page{Module: notionpages.Module(notionpages.Options{}), Templates: notionpages.Templates()},
+			web.Page{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(config.OS)}), Templates: reviewpages.Templates()},
 			web.Page{Module: moneypages.Module(moneypages.Options{}), Templates: moneypages.Templates()},
 		),
 		codemodeWorkerCommand(),

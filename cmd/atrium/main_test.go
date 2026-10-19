@@ -166,6 +166,34 @@ func TestServeRendersReviewPages(t *testing.T) {
 	}
 }
 
+func TestServeRendersNotionPages(t *testing.T) {
+	base := startServe(t)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, body, _ := fetch(t, client, "GET", base+"/notion/missing", nil); status != http.StatusNotFound || !strings.Contains(body, "Nothing here") {
+		t.Errorf("GET /notion/missing = %d: %.300s", status, body)
+	}
+	for _, tc := range []struct {
+		path   string
+		form   url.Values
+		status int
+		want   string
+	}{
+		{"/notion/missing/link", url.Values{}, http.StatusUnprocessableEntity, `"target"`},
+		{"/notion/missing/link", url.Values{"target": {"other"}}, http.StatusOK, "unknown page missing"},
+		{"/notion/missing/edit", url.Values{"instruction": {"shorten"}}, http.StatusOK, "unknown page missing"},
+		{"/projects/abc/wiki-hub", url.Values{}, http.StatusUnprocessableEntity, `"project_id"`},
+		{"/projects/1/wiki-hub", url.Values{}, http.StatusNotFound, "Nothing here"},
+	} {
+		if status, body, _ := fetch(t, client, "POST", base+tc.path, tc.form); status != tc.status || !strings.Contains(body, tc.want) {
+			t.Errorf("POST %s = %d, want %d with %q: %.300s", tc.path, status, tc.status, tc.want, body)
+		}
+	}
+}
+
 func TestServeRendersAssistantPages(t *testing.T) {
 	base := startServe(t)
 	jar, err := cookiejar.New(nil)

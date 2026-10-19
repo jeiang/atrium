@@ -71,9 +71,11 @@ type Torrent struct {
 }
 
 type TorrentFile struct {
-	Index    int    `json:"index"`
-	Name     string `json:"name"`
-	Priority int    `json:"priority"`
+	Index    int     `json:"index"`
+	Name     string  `json:"name"`
+	Priority int     `json:"priority"`
+	Size     *int64  `json:"size"`
+	Progress float64 `json:"progress"`
 }
 
 func (t Torrent) HasTag(tag string) bool {
