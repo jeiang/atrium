@@ -1,5 +1,5 @@
-// Package proposals is proposals.py: the human-approved change pipeline. This file holds the undo registry
-// shared with live mode and the proposal rows a scanner creates.
+// Package proposals is proposals.py: the human-approved change pipeline, its executor and undo registry shared
+// with live mode, and the proposal rows the scanners create.
 package proposals
 
 import (
@@ -27,16 +27,21 @@ type Undoer func(ctx context.Context, plan json.RawMessage) (py.Dict, error)
 // SyncHook is hooks["sync"]: the resync of an account after an applied proposal or an undo.
 type SyncHook func(ctx context.Context, account string) error
 
-// Registry is UNDOERS and hooks: the undo handler for each plan op and the post-write sync.
+// Registry is EXECUTORS, UNDOERS and hooks: the executor of each proposal kind, the undo handler for each plan op
+// and the post-write sync.
 type Registry struct {
-	Undoers map[string]Undoer
-	Sync    SyncHook
+	Executors map[string]Executor
+	Undoers   map[string]Undoer
+	Sync      SyncHook
 }
 
-func NewRegistry() *Registry { return &Registry{Undoers: map[string]Undoer{}} }
+func NewRegistry() *Registry {
+	return &Registry{Executors: map[string]Executor{}, Undoers: map[string]Undoer{}}
+}
 
 // Querier is the read side of *sql.DB and *sql.Tx.
 type Querier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
