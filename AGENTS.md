@@ -229,7 +229,9 @@ and backups; nothing of that lives here.
   run exists (`UnknownThread`, `RunActive`, `budget.BudgetExceeded`);
   `Service` prepares and executes runs in the caller (`RunOnce`) or in the
   background (`StartRun`, `Send`, `EditLast`, `Regenerate`, `StartResume`;
-  `Wait` joins them), branches, deletes and resumes; without
+  a request's cancellation never stops a start, a panic is logged and the
+  run left to its lease; `Wait` joins them, `Close` stops accepting and
+  joins them at shutdown), branches, deletes and resumes; without
   `ANTHROPIC_API_KEY` a run fails with `NotConfigured`'s text. `View`,
   `Items` and `ViewRun` are `thread_view`, `items_of` and `run_view`. Its
   tests replay every `testdata/golden/anthropic` scenario with the frozen

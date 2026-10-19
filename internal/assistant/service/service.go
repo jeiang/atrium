@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"time"
@@ -56,7 +57,8 @@ func (e NotInterrupted) Error() string { return fmt.Sprintf("run %d is not inter
 func (NotInterrupted) PyClass() string { return "ValueError" }
 
 // Service runs assistant turns against one database. Client nil makes a client from Env for each run
-// (make_client); Now nil is the wall clock. Background runs use the context New was given.
+// (make_client); Now nil is the wall clock. Background runs use the context New was given. A request's
+// cancellation never splits a start: the run row and the goroutine that executes it come together.
 type Service struct {
 	DB     *db.DB
 	Cfg    config.Config
@@ -65,17 +67,34 @@ type Service struct {
 	Client *anthropic.Client
 	Now    func() float64
 
-	base context.Context
-	wg   *sync.WaitGroup
+	base   context.Context
+	mu     *sync.Mutex
+	wg     *sync.WaitGroup
+	closed bool
 }
+
+// ErrClosed refuses a background run after Close.
+var ErrClosed = errors.New("service: closed")
 
 // New is a Service whose background runs live until ctx is cancelled.
 func New(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, runner *loop.Runner) *Service {
-	return &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: ctx, wg: &sync.WaitGroup{}}
+	return &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: ctx, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}}
 }
 
-// Wait blocks until every background run this Service started has returned.
-func (s *Service) Wait() { s.wg.Wait() }
+// Wait blocks until every background run started so far has returned; a run started meanwhile waits for it.
+func (s *Service) Wait() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.wg.Wait()
+}
+
+// Close stops accepting background runs (they fail with ErrClosed) and waits for the running ones.
+func (s *Service) Close() {
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
+	s.wg.Wait()
+}
 
 func (s *Service) now() float64 {
 	if s.Now != nil {
@@ -267,22 +286,35 @@ func (s *Service) RunOnce(ctx context.Context, threadID int64, text string, o St
 	return runID, nil
 }
 
-func (s *Service) inBackground(runID int64) {
+// inBackground is in_background: a run that fails or panics outside the loop's own handling is logged and
+// left to the lease, as Python's crashed thread was.
+func (s *Service) inBackground(runID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return ErrClosed
+	}
 	s.wg.Go(func() {
+		defer func() {
+			if p := recover(); p != nil {
+				log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, fmt.Sprintf("panic: %v\n%s", p, debug.Stack()))
+			}
+		}()
 		if _, err := s.Execute(s.base, runID, journal.Limits{}); err != nil {
 			log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, err)
 		}
 	})
+	return nil
 }
 
 // StartRun is start_run: prepare here, execute in the background.
 func (s *Service) StartRun(ctx context.Context, threadID int64, text string, o Start) (int64, error) {
+	ctx = context.WithoutCancel(ctx)
 	runID, err := s.Prepare(ctx, threadID, text, s.now(), o)
 	if err != nil {
 		return 0, err
 	}
-	s.inBackground(runID)
-	return runID, nil
+	return runID, s.inBackground(runID)
 }
 
 // Sent is send's result: the queue row when a run was going, else the new run.
@@ -294,6 +326,7 @@ type Sent struct {
 // Send is send: operator text (with attachments) for a chat thread, queued for the running run to take at
 // its next step, else a new run.
 func (s *Service) Send(ctx context.Context, threadID int64, text string, attachments []json.RawMessage) (Sent, error) {
+	ctx = context.WithoutCancel(ctx)
 	thread, err := threads.Get(ctx, s.DB.Read, threadID)
 	if err != nil {
 		return Sent{}, err
@@ -329,6 +362,7 @@ func (s *Service) lastOperator(ctx context.Context, threadID int64, refusal stri
 // EditLast is edit_last: the last operator message is replaced and answered again; the old tail stays
 // journaled as superseded.
 func (s *Service) EditLast(ctx context.Context, threadID int64, text string, attachments []json.RawMessage) (int64, error) {
+	ctx = context.WithoutCancel(ctx)
 	last, err := s.lastOperator(ctx, threadID, "no operator message to edit")
 	if err != nil {
 		return 0, err
@@ -341,6 +375,7 @@ func (s *Service) EditLast(ctx context.Context, threadID int64, text string, att
 
 // Regenerate is regenerate: the last operator message is answered again; everything after it is superseded.
 func (s *Service) Regenerate(ctx context.Context, threadID int64) (int64, error) {
+	ctx = context.WithoutCancel(ctx)
 	last, err := s.lastOperator(ctx, threadID, "no operator message to answer again")
 	if err != nil {
 		return 0, err
@@ -352,8 +387,7 @@ func (s *Service) Regenerate(ctx context.Context, threadID int64) (int64, error)
 	if err != nil {
 		return 0, err
 	}
-	s.inBackground(runID)
-	return runID, nil
+	return runID, s.inBackground(runID)
 }
 
 // StopRun is stop_run: true when the thread's running run was asked to stop.
@@ -394,6 +428,10 @@ func (s *Service) DeleteThread(ctx context.Context, threadID int64) error {
 	var remote files.RemoteDeleter
 	if s.Client != nil {
 		remote = s.Client
+	} else if made, err := anthropic.New(s.Env); err == nil {
+		remote = made
+	} else if !errors.As(err, new(config.NotConfigured)) {
+		return err
 	}
 	for _, row := range append(children, *thread) {
 		if _, err := files.DeleteOwned(ctx, s.DB.Write, s.Cfg.FilesDir(), remote, files.Owner{ThreadID: row.ID}); err != nil {
@@ -449,11 +487,10 @@ func (s *Service) ResumeRun(ctx context.Context, runID int64) (*journal.Run, err
 
 // StartResume is start_resume: claim here, continue in the background.
 func (s *Service) StartResume(ctx context.Context, runID int64) error {
-	if err := s.claim(ctx, runID); err != nil {
+	if err := s.claim(context.WithoutCancel(ctx), runID); err != nil {
 		return err
 	}
-	s.inBackground(runID)
-	return nil
+	return s.inBackground(runID)
 }
 
 // Resumed is one entry of resume_interrupted's outcome.
@@ -496,7 +533,9 @@ func (s *Service) ResumeInterrupted(ctx context.Context, background bool) ([]Res
 			continue
 		}
 		if background {
-			s.inBackground(run.ID)
+			if err := s.inBackground(run.ID); err != nil {
+				return nil, err
+			}
 		} else if _, err := s.Execute(ctx, run.ID, journal.Limits{}); err != nil {
 			return nil, err
 		}

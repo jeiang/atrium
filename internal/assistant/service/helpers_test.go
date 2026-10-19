@@ -68,7 +68,7 @@ func newWorld(t *testing.T, tools ...tool.Tool) *world {
 	ctx, cancel := context.WithCancel(context.Background())
 	svc := service.New(ctx, d, cfg, env, runner)
 	t.Cleanup(func() {
-		svc.Wait()
+		svc.Close()
 		cancel()
 	})
 	svc.Client = srv.Client()
