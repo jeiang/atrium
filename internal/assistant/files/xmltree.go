@@ -10,11 +10,16 @@ import (
 	"strconv"
 	"strings"
 
+	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/py"
 )
 
 // readError carries the name of the Python exception the same failure raises in the frozen app; the operator sees
 // it after "could not read the Word file: ".
+// maxTextBytes is the most text any attachment can carry into a request: the compaction budget of the largest
+// context at four bytes a character.
+var maxTextBytes = int(4 * actx.CharsPerToken * actx.LimitsFor(actx.ModelContext).Compact)
+
 type readError string
 
 func (e readError) Error() string { return string(e) }
@@ -38,11 +43,7 @@ const (
 	streamPartCap = FileCapBytes
 	archiveCap    = 128 << 20
 	tableCellCap  = 1 << 20
-	// maxTextBytes is the most text any attachment can carry into a request: the compaction budget of the
-	// largest context (modelContext, 7/8 of it) at four characters a token, four bytes a character.
-	maxTextBytes = 4 * charsPerToken * modelContext * compactShareNum / compactShareDiv
-
-	errTooLarge = limitError("the document is too large to read")
+	errTooLarge   = limitError("the document is too large to read")
 )
 
 const (
