@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/mail/smtp"
 	"github.com/jeiang/atrium/internal/mail/smtp/smtptest"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
@@ -28,6 +29,7 @@ func errorType(err error) string {
 	var derr drafts.Error
 	var serr smtp.SendError
 	var failure *smtp.Failure
+	var classed py.Classed
 	switch {
 	case errors.As(err, &derr):
 		return "DraftError"
@@ -35,6 +37,8 @@ func errorType(err error) string {
 		return "SendError"
 	case errors.As(err, &failure):
 		return failure.Kind
+	case errors.As(err, &classed):
+		return classed.PyClass()
 	}
 	return fmt.Sprintf("%T", err)
 }
