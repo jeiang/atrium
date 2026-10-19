@@ -1,0 +1,15 @@
+{{define "proposal_list"}}{{if .partial}}<title>Proposals · atrium</title>{{end}}
+<p class="text-xs text-muted-foreground tabular-nums" role="status">
+  {{- len .proposals}} {{if ne .status "all"}}{{lower (lbl "status" .status "")}} {{end}}{{if eq (len .proposals) 1}}proposal{{else}}proposals{{end}}{{with .kind}} · {{lbl "kind" .}}{{end -}}
+</p>
+{{if .proposals}}
+<ul class="flex flex-col gap-3" role="list">
+  {{range .proposals}}{{template "proposal_card" (dict "p" . "mode" $.mode "toast" $.toast "pending_oob" false "pending_count" 0)}}{{end}}
+</ul>
+{{else if eq .status "pending"}}
+{{template "empty_state" (dict "icon_name" "list-checks" "title" "Nothing to review" "body" "Folder rebalancing is proposed monthly. Notion links and edits appear here when you propose them from a Notion page.")}}
+{{else}}
+{{template "empty_state" (dict "icon_name" "list-checks" "title" "No proposals match" "body" "Choose another status or kind.")}}
+{{end}}{{end}}
+
+{{template "proposal_list" (dict "proposals" .Data.proposals "status" .Data.status "kind" .Data.kind "partial" .Data.partial "mode" .Mode "toast" .Toast)}}

@@ -1,0 +1,35 @@
+{{define "title"}}Proposals{{end}}
+{{define "heading"}}Proposals{{end}}
+{{define "content"}}{{$d := .Data}}
+<div class="alert" role="note">
+  {{icon "zap" "text-warning"}}
+  <h2>Approving runs it now</h2>
+  <section>
+    <p>An approved proposal moves or relabels mail, deletes to Trash, or edits Notion as soon as you approve it{{if ne .Mode "live"}}, even though nothing is applied automatically in shadow mode{{end}}. Applied proposals can be undone here.</p>
+  </section>
+</div>
+
+<form class="flex flex-wrap items-end gap-3" action="/proposals" method="get"
+      hx-get="/proposals" hx-target="#proposal-list" hx-push-url="true" hx-trigger="change" hx-sync="this:replace" hx-indicator="#proposal-list">
+  <div role="group" class="field w-auto">
+    <label for="p-status">Status</label>
+    <select id="p-status" name="status">
+      {{range $value := list "pending" "applied" "failed" "dismissed" "suppressed" "all"}}
+      <option value="{{$value}}"{{if eq $d.status $value}} selected{{end}}>{{lbl "status" $value "Any status"}}{{with get $d.counts $value}} ({{.}}){{end}}</option>
+      {{end}}
+    </select>
+  </div>
+  <div role="group" class="field w-auto">
+    <label for="p-kind">Kind</label>
+    <select id="p-kind" name="kind">
+      <option value="">All kinds</option>
+      {{range labels "kind"}}<option value="{{.Key}}"{{if eq $d.kind .Key}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+  </div>
+  <noscript><button type="submit" class="btn" data-variant="outline">Apply</button></noscript>
+</form>
+
+<div id="proposal-list" class="flex flex-col gap-3 transition-opacity [&.htmx-request]:opacity-60">
+  {{template "proposal_list" (dict "proposals" $d.proposals "status" $d.status "kind" $d.kind "partial" false "mode" .Mode "toast" .Toast)}}
+</div>
+{{end}}

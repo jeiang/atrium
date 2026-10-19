@@ -39,6 +39,14 @@ func TestJSONDumpsOptions(t *testing.T) {
 	}
 }
 
+func TestJSONDumpsIndent(t *testing.T) {
+	value := Dict{{"a", []any{int64(1), Dict{}, []any{}}}, {"b", Dict{{"c", "é"}}}, {"d", []string{"x"}}}
+	want := "{\n \"a\": [\n  1,\n  {},\n  []\n ],\n \"b\": {\n  \"c\": \"é\"\n },\n \"d\": [\n  \"x\"\n ]\n}"
+	if got := JSONDumps(value, JSONOpts{Indent: 1, NoEnsureASCII: true}); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestJSONRedump(t *testing.T) {
 	for _, c := range []struct{ in, compact, spaced string }{
 		{`{ "z" : "\u00e9", "a" : [ 1 , 1.0, 1e2, -0, 12345678901234567890 ] }`, `{"z":"é","a":[1,1.0,100.0,0,12345678901234567890]}`, `{"z": "\u00e9", "a": [1, 1.0, 100.0, 0, 12345678901234567890]}`},

@@ -1,0 +1,89 @@
+{{define "title"}}Open loops{{end}}
+{{define "heading"}}Open loops{{end}}
+{{define "loops_dismiss_all"}}{{if .items}}
+<form method="post" action="/loops/dismiss-all" data-confirm-submit="Dismiss all {{len .items}}? Each comes back only if its thread gets new mail.">
+  <input type="hidden" name="csrf_token" value="{{.csrf}}">
+  <input type="hidden" name="state" value="{{.state}}">
+  <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "x"}}Dismiss all</button>
+</form>
+{{end}}{{end}}
+{{define "loops_list"}}{{$csrf := .csrf}}{{$choices := .snooze_choices}}
+{{if .items}}
+<ul class="flex flex-col gap-3" role="list" aria-label="{{.label}}">
+  {{range .items}}
+  <li class="flex flex-col gap-2 rounded-lg border bg-card p-4">
+    <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <span class="badge" data-variant="outline">{{.account}}</span>
+      <span class="tabular-nums">{{.days}} day{{if ne .days 1}}s{{end}}</span>
+      <span>{{.counterpart}}</span>
+    </div>
+    <a class="text-sm font-medium underline-offset-4 hover:underline" href="/messages/{{.last_message_id}}">{{or .subject "(no subject)"}}</a>
+    <div class="flex flex-wrap items-center gap-2">
+      <form method="post" action="/chat">
+        <input type="hidden" name="csrf_token" value="{{$csrf}}">
+        <input type="hidden" name="text" value="Draft a reply to mail {{.last_message_id}}">
+        <button type="submit" class="btn" data-size="sm">{{icon "pencil"}}Draft reply</button>
+      </form>
+      <form method="post" action="/loops/{{.id}}/snooze" class="flex items-center gap-2">
+        <input type="hidden" name="csrf_token" value="{{$csrf}}">
+        <select name="days" aria-label="Snooze for" class="select">
+          {{range $choices}}<option value="{{.}}"{{if eq . 3}} selected{{end}}>{{.}} day{{if ne . 1}}s{{end}}</option>{{end}}
+        </select>
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">Snooze</button>
+      </form>
+      <form method="post" action="/loops/{{.id}}/dismiss">
+        <input type="hidden" name="csrf_token" value="{{$csrf}}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "x"}}Dismiss</button>
+      </form>
+    </div>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+{{template "empty_state" (dict "icon_name" "check" "title" "Nothing here" "body" .empty)}}
+{{end}}{{end}}
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
+<section class="flex flex-col gap-3" aria-labelledby="owe-h">
+  <div class="flex items-center justify-between gap-2">
+    <h2 id="owe-h" class="text-sm font-medium">You owe a reply ({{len $d.owe}})</h2>
+    {{template "loops_dismiss_all" (dict "state" "owe_reply" "items" $d.owe "csrf" $csrf)}}
+  </div>
+  {{template "loops_list" (dict "items" $d.owe "label" "Owe a reply" "empty" "No one is waiting on you." "csrf" $csrf "snooze_choices" $d.snooze_choices)}}
+</section>
+<section class="flex flex-col gap-3" aria-labelledby="waiting-h">
+  <div class="flex items-center justify-between gap-2">
+    <h2 id="waiting-h" class="text-sm font-medium">Waiting on them ({{len $d.waiting}})</h2>
+    {{template "loops_dismiss_all" (dict "state" "waiting_on_them" "items" $d.waiting "csrf" $csrf)}}
+  </div>
+  {{template "loops_list" (dict "items" $d.waiting "label" "Waiting on them" "empty" "No sent mail is waiting for an answer." "csrf" $csrf "snooze_choices" $d.snooze_choices)}}
+</section>
+<section class="flex flex-col gap-3" aria-labelledby="commit-h">
+  <h2 id="commit-h" class="text-sm font-medium">Commitments ({{len $d.commitments}})</h2>
+  {{if $d.commitments}}
+  <ul class="flex flex-col gap-3" role="list" aria-label="Commitments">
+    {{range $d.commitments}}
+    <li class="flex flex-col gap-2 rounded-lg border bg-card p-4">
+      <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span class="badge" data-variant="{{if eq .owner "me"}}secondary{{else}}outline{{end}}">{{if eq .owner "me"}}You{{else}}Them{{end}}</span>
+        <span class="tabular-nums">{{if .due}}Due {{.due}}{{else}}No date{{end}}</span>
+        {{if .subject}}<a class="underline" href="/messages/{{.message_id}}">{{.subject}}</a>{{end}}
+      </div>
+      <p class="text-sm">{{.text}}</p>
+      <div class="flex flex-wrap gap-2">
+        <form method="post" action="/loops/commitments/{{.id}}/done">
+          <input type="hidden" name="csrf_token" value="{{$csrf}}">
+          <button type="submit" class="btn" data-size="sm">{{icon "check"}}Done</button>
+        </form>
+        <form method="post" action="/loops/commitments/{{.id}}/dismiss">
+          <input type="hidden" name="csrf_token" value="{{$csrf}}">
+          <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "x"}}Dismiss</button>
+        </form>
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  {{template "empty_state" (dict "icon_name" "check" "title" "No open commitments" "body" "Commitments are extracted from new mail by the local model.")}}
+  {{end}}
+</section>
+{{end}}

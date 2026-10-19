@@ -1,0 +1,19 @@
+{{define "title"}}Drafts{{end}}
+{{define "heading"}}Drafts{{end}}
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
+<div class="alert" role="note">
+  {{icon "send" "text-warning"}}
+  <h2>Sending is your decision</h2>
+  <section><p>The assistant can only save drafts. Pressing Send delivers the mail immediately through your own account; check the recipients first.</p></section>
+</div>
+<nav class="button-group" aria-label="Status">
+  {{range $d.statuses}}<a class="btn" data-size="sm" data-variant="{{if eq $d.status .}}secondary{{else}}outline{{end}}" href="/drafts?status={{.}}">{{capitalize .}}</a>{{end}}
+</nav>
+{{if $d.drafts}}
+<ul class="flex flex-col gap-4" role="list" aria-label="Drafts">
+  {{range $d.drafts}}{{template "draft_card" (dict "d" . "configured" $d.configured "csrf" $csrf "partial" false "toast" nil)}}{{end}}
+</ul>
+{{else}}
+{{template "empty_state" (dict "icon_name" "mail" "title" (printf "No %s drafts" $d.status) "body" "Ask the assistant in chat to draft a reply.")}}
+{{end}}
+{{end}}

@@ -22,11 +22,12 @@ func (d Dict) MarshalJSON() ([]byte, error) { return []byte(JSONDumps(d)), nil }
 
 // JSONOpts selects json.dumps arguments. The zero value is the defaults: ", " and ": " separators, non-ASCII
 // escaped, keys in insertion order. NoEnsureASCII is ensure_ascii=False, Compact is separators=(",", ":"),
-// SortKeys is sort_keys=True.
+// SortKeys is sort_keys=True, Indent is indent=N (items on their own lines, separated by "," alone).
 type JSONOpts struct {
 	NoEnsureASCII bool
 	Compact       bool
 	SortKeys      bool
+	Indent        int
 }
 
 // JSONDumps is json.dumps(v, ...), the one JSON encoder: v is nil, a bool, an integer, a float64, a *big.Int, a
@@ -52,10 +53,56 @@ func JSONRedump(raw []byte, opts ...JSONOpts) (string, error) {
 	return JSONDumps(v, opts...), nil
 }
 
-func dump(b *strings.Builder, v any, o JSONOpts) {
-	itemSep, keySep := ", ", ": "
+func dump(b *strings.Builder, v any, o JSONOpts) { dumpAt(b, v, o, 0) }
+
+// container writes the n elements of an array or object, each through each(i), as json.dumps lays them out.
+func container(b *strings.Builder, open, closer byte, n int, o JSONOpts, level int, each func(i int)) {
+	itemSep := ", "
+	if o.Compact || o.Indent > 0 {
+		itemSep = ","
+	}
+	b.WriteByte(open)
+	for i := range n {
+		if i > 0 {
+			b.WriteString(itemSep)
+		}
+		if o.Indent > 0 {
+			b.WriteByte('\n')
+			b.WriteString(strings.Repeat(" ", o.Indent*(level+1)))
+		}
+		each(i)
+	}
+	if n > 0 && o.Indent > 0 {
+		b.WriteByte('\n')
+		b.WriteString(strings.Repeat(" ", o.Indent*level))
+	}
+	b.WriteByte(closer)
+}
+
+func anySlice[T any](v []T) []any {
+	out := make([]any, len(v))
+	for i, e := range v {
+		out[i] = e
+	}
+	return out
+}
+
+func dumpAt(b *strings.Builder, v any, o JSONOpts, level int) {
+	keySep, itemSep := ": ", ", "
 	if o.Compact {
-		itemSep, keySep = ",", ":"
+		keySep, itemSep = ":", ","
+	}
+	if o.Indent > 0 {
+		switch s := v.(type) {
+		case []string:
+			v = anySlice(s)
+		case []int:
+			v = anySlice(s)
+		case []int64:
+			v = anySlice(s)
+		case []uint32:
+			v = anySlice(s)
+		}
 	}
 	switch v := v.(type) {
 	case nil:
@@ -88,14 +135,7 @@ func dump(b *strings.Builder, v any, o JSONOpts) {
 	case string:
 		dumpString(b, v, o)
 	case []string:
-		b.WriteByte('[')
-		for i, s := range v {
-			if i > 0 {
-				b.WriteString(itemSep)
-			}
-			dumpString(b, s, o)
-		}
-		b.WriteByte(']')
+		container(b, '[', ']', len(v), o, level, func(i int) { dumpString(b, v[i], o) })
 	case []int:
 		dumpInts(b, v, itemSep)
 	case []int64:
@@ -103,36 +143,24 @@ func dump(b *strings.Builder, v any, o JSONOpts) {
 	case []uint32:
 		dumpInts(b, v, itemSep)
 	case []any:
-		b.WriteByte('[')
-		for i, e := range v {
-			if i > 0 {
-				b.WriteString(itemSep)
-			}
-			dump(b, e, o)
-		}
-		b.WriteByte(']')
+		container(b, '[', ']', len(v), o, level, func(i int) { dumpAt(b, v[i], o, level+1) })
 	case map[string]any:
 		pairs := make(Dict, 0, len(v))
 		for k, e := range v {
 			pairs = append(pairs, Pair{k, e})
 		}
 		slices.SortFunc(pairs, func(a, c Pair) int { return strings.Compare(a.Key, c.Key) })
-		dump(b, pairs, o)
+		dumpAt(b, pairs, o, level)
 	case Dict:
 		if o.SortKeys {
 			v = slices.Clone(v)
 			slices.SortStableFunc(v, func(a, c Pair) int { return strings.Compare(a.Key, c.Key) })
 		}
-		b.WriteByte('{')
-		for i, p := range v {
-			if i > 0 {
-				b.WriteString(itemSep)
-			}
-			dumpString(b, p.Key, o)
+		container(b, '{', '}', len(v), o, level, func(i int) {
+			dumpString(b, v[i].Key, o)
 			b.WriteString(keySep)
-			dump(b, p.Value, o)
-		}
-		b.WriteByte('}')
+			dumpAt(b, v[i].Value, o, level+1)
+		})
 	default:
 		panic(fmt.Sprintf("py: JSONDumps of %T", v))
 	}

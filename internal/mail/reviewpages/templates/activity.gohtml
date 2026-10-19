@@ -1,0 +1,16 @@
+{{define "title"}}Activity{{end}}
+{{define "heading"}}Activity{{end}}
+{{define "content"}}{{$d := .Data}}
+<div class="alert" role="note">
+  {{icon "history" "text-muted-foreground"}}
+  <h2>Everything atrium changed on its own</h2>
+  <section><p>Mailbox filing, flags and deletions, and the assistant's direct writes to Notion, the profile, the spending ledger, the calendar and media, newest first. Undo restores the previous state, and refuses when the target changed since.</p></section>
+</div>
+<nav class="button-group self-start" aria-label="Category">
+  <a class="btn" data-size="sm" data-variant="{{if $d.category}}outline{{else}}secondary{{end}}" href="/activity">All</a>
+  {{range $d.categories}}<a class="btn" data-size="sm" data-variant="{{if eq $d.category .}}secondary{{else}}outline{{end}}" href="/activity?category={{.}}">{{capitalize .}}</a>{{end}}
+</nav>
+<ul id="activity" class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list" aria-label="Activity">
+  {{template "activity_rows" (dict "entries" $d.entries "category" $d.category "offset" $d.offset "next_offset" $d.next_offset "toast" .Toast)}}
+</ul>
+{{end}}
