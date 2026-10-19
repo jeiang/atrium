@@ -120,8 +120,8 @@ switched.
     `media-channels`, `calendar-candidates`, `fx-rates`, `media-thumbnails`)
     each log `built-in job X has no function in this build; not run` once and
     write no job run (the #157 acceptance replaces "a media poll succeeds"
-    with exactly this). `/scheduled` is not served until its page
-    lands; use `sqlite3 $STATE/atrium.db "SELECT id, name, next_run FROM jobs ORDER BY id"`.
+    with exactly this). `/scheduled` lists the jobs; from the shell use
+    `sqlite3 $STATE/atrium.db "SELECT id, name, next_due FROM jobs ORDER BY id"`.
 8. Units: `systemctl --failed 'atrium-*'` is empty.
 
 ## 5. Unpause
