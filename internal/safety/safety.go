@@ -29,6 +29,8 @@ type WriteRefused string
 
 func (e WriteRefused) Error() string { return string(e) }
 
+func (WriteRefused) PyClass() string { return "WriteRefused" }
+
 func ApprovedWrites(ctx context.Context, proposalID string) context.Context {
 	return context.WithValue(ctx, approvedKey{}, proposalID)
 }

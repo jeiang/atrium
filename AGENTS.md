@@ -179,15 +179,34 @@ and backups; nothing of that lives here.
   `parseaddr`/`getaddresses`, `parsedate_to_datetime`, codecs, transfer
   decoding), including where Python raises, and the header refolding it
   writes with (`FoldHeader`); tables come from `tools/mime/gen_tables.py`.
+  `Compat32Header` is the one `policy.compat32` read (`mailops.server_msgid`).
 - `internal/mail/features/`: `features.py` (`Extract`, `ContentDigest`,
   `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
-- `internal/mail/flags/`, `report/`, `triage/`, `search/`, `live/`: `flags.py`
+- `internal/mail/flags/`, `report/`, `triage/`, `search/`: `flags.py`
   (contacts rule; the LLM verdict is only recorded, a chat outage records
-  all-NULL fields, any other judge error propagates), `report.py`, `triage.py`,
-  `search.py` (FTS5 + vec0 KNN fused by RRF; lexical only with
-  `semantic=false` and the error text when the embedder is down) and
-  `live.StateOf`. Their golden read paths live in
-  `internal/db/readpaths/mail_test.go`.
+  all-NULL fields, any other judge error propagates), `report.py`, `triage.py`
+  and `search.py` (FTS5 + vec0 KNN fused by RRF; lexical only with
+  `semantic=false` and the error text when the embedder is down). Their
+  golden read paths live in `internal/db/readpaths/mail_test.go`.
+- `internal/mail/mailops/`: `mailops.py`, the write helpers every proposal,
+  automatic action and undo shares. `Verify` checks snapshots against the
+  database, then the live mailbox (header-only fetch), before any write;
+  `MoveUIDs` refuses a server without UIDPLUS and returns `*PartialMove`
+  for a batch copied but not expunged. Errors carry their Python class
+  (`py.Classed`) so `py.ExceptionText` gives the stored `Class: message`.
+- `internal/mail/live/`: `live.py`. `TakeBaseline`/`EnsureGolive`/
+  `Rebaseline`, the `auto_actions` ledger (`Begin` refuses a held or applied
+  twin; `Recover` flags crashed rows `interrupted`, which are never retried),
+  `Undo` as the approved write `undo-<id>` through `proposals.Registry`, the
+  pause switch and `Status`; `QueryParams` gives `golive` +Inf before
+  go-live. `RegisterUndoers` adds the auto-action undoers (`move_back`,
+  `gmail_labels`, `gmail_untrash`, `unflag`, the only flag clear).
+  `livetest` is `test_live.py`'s world; read paths in
+  `internal/db/readpaths/live_test.go`.
+- `internal/mail/backlog/`: `backlog.py`, one `inbox_backlog` proposal per
+  account from the go-live baseline; `BacklogError` before go-live.
+- `internal/proposals/`: `proposals.py`'s `Registry` (undoers and the sync
+  hook), `Known` and `Create`; `scanutil` is `scanutil.py`.
 - `internal/mail/rules/`, `ruleedit/`, `corrections/`, `router/`: the routing
   pipeline (`rules.py`, `ruleedit.py`, `corrections.py`, `router.py`).
   Stages are correction, operator rule, learned rule, nearest neighbours,
