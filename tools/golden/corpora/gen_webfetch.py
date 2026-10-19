@@ -347,6 +347,8 @@ TOOL_CALLS = [
     ({"url": "https://example.test/ok"}, ["https://EXAMPLE.test:443/ok#x"]),
     ({"url": "https://example.test/ok"}, ["https://other.test/"]),
     ({"url": "https://example.test/ok"}, []),
+    ({"url": "https://example.test/ok"}, ["http://x:99999", "ftp://example.test/ok", "https://example.test/ok"]),
+    ({"url": "https://example.test/ok"}, ["http://x:99999"]),
     ({"url": "http://example.test/article", "max_chars": 40}, ["http://example.test/article"]),
     ({"url": "http://example.test/article", "max_chars": 0}, ["http://example.test/article"]),
     ({"url": "http://example.test/article", "max_chars": 99999}, ["http://example.test/article"]),
