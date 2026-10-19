@@ -1,0 +1,45 @@
+{{template "notion_article" .Data.notion_page}}
+
+{{define "notion_article"}}{{$p := .}}
+<article class="flex min-w-0 flex-col gap-6" aria-labelledby="page-title">
+  <header class="flex flex-col gap-3">
+    {{if $p.path}}
+    <nav class="breadcrumb" aria-label="Location in Notion">
+      <ol class="flex flex-wrap items-center">
+        {{range $p.path}}
+        <li class="inline-flex items-center">{{if .id}}<a href="/notion/{{urlencode .id}}">{{.title}}</a>{{else}}<span>{{.title}}</span>{{end}}</li>
+        <li aria-hidden="true" class="inline-flex items-center"><span>/</span></li>
+        {{end}}
+        <li class="inline-flex items-center"><span aria-current="page" class="text-foreground">{{or $p.title "Untitled"}}</span></li>
+      </ol>
+    </nav>
+    {{end}}
+    <h2 id="page-title" class="text-2xl font-semibold tracking-tight text-balance">{{or $p.title "Untitled"}}</h2>
+    <div class="flex flex-wrap items-center gap-2">
+      {{if $p.private}}<span class="badge" data-variant="outline">{{icon "lock"}}Private</span>{{end}}
+      {{if $p.in_trash}}<span class="badge" data-variant="destructive">{{icon "trash-2"}}In Notion’s trash</span>{{end}}
+      {{if $p.edited_ts}}<span class="text-xs text-muted-foreground">Edited {{template "when" (dict "epoch" $p.edited_ts "style" "datetime")}}</span>{{end}}
+      <a class="btn ml-auto" data-size="sm" data-variant="outline" {{template "external" $p.url}}>{{icon "external-link"}}Open in Notion</a>
+    </div>
+  </header>
+
+  {{if $p.properties}}
+  <section aria-label="Properties" class="rounded-lg border bg-card">
+    <dl class="grid grid-cols-[minmax(0,--spacing(40))_minmax(0,1fr)] text-sm">
+      {{range $i, $prop := $p.properties}}
+      <dt class="px-4 py-2 text-muted-foreground {{if $i}}border-t{{end}}">{{$prop.name}}</dt>
+      <dd class="px-4 py-2 break-words {{if $i}}border-t{{end}}">{{if $prop.value}}{{$prop.value}}{{else}}—{{end}}</dd>
+      {{end}}
+    </dl>
+  </section>
+  {{end}}
+
+  <section aria-label="Page content" class="border-t pt-6">
+    {{if $p.body_html}}
+    <div class="markdown">{{$p.body_html}}</div>
+    {{else}}
+    <p class="text-sm text-muted-foreground">This page has no text.</p>
+    {{end}}
+  </section>
+</article>
+{{- end}}

@@ -19,7 +19,8 @@ func TestEveryRegisteredToolIsThePythonTool(t *testing.T) {
 	for _, name := range []string{"notify", "web_fetch", "commitments", "contacts_lookup", "draft_email_create", "draft_email_update",
 		"mail_read", "mail_search", "open_loops", "packages", "upcoming_birthdays", "threads_today",
 		"context_status", "context_pin", "context_drop", "context_fold", "recall", "plan", "profile_get", "profile_set", "propose",
-		"schedule_create", "schedule_update", "schedule_cancel", "schedule_list", "load_skill"} {
+		"schedule_create", "schedule_update", "schedule_cancel", "schedule_list", "load_skill",
+		"search_knowledge", "fetch_knowledge", "notion_create_page", "notion_update_page", "notion_move_page", "notion_archive_page", "notion_add_alias"} {
 		found := false
 		for _, tl := range tools {
 			found = found || tl.Name == name

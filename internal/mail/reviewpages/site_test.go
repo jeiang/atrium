@@ -72,7 +72,7 @@ func newSite(t *testing.T, options ...siteOption) *site {
 		t.Fatal(err)
 	}
 	s := &site{
-		t: t, db: d, cfg: cfg, env: env, registry: proposals.NewRegistry(), writes: toolset.Undoers(), smtp: &smtptest.Server{},
+		t: t, db: d, cfg: cfg, env: env, registry: proposals.NewRegistry(), writes: toolset.Undoers(env), smtp: &smtptest.Server{},
 		imap: mailtest.NewFakeClient(env), clock: 1_000_000,
 	}
 	s.imap.AddBox("INBOX", mailtest.NewBox(1))

@@ -282,6 +282,15 @@ and backups; nothing of that lives here.
   registry behind the subagent tool pool and `subagents.Save`; nil is `toolset.Registry()`. `scheduler.ListRuns` is
   `list_runs` and its read path `scheduler.list_runs`.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
+- `internal/notion/pages/`: the Notion web pages as one `web.Module` (`Module(Options)`, `Templates()`): `GET /notion/{page_id}`
+  (the article alone for an htmx request), `POST /notion/{page_id}/link` and `/edit` (a model-drafted proposal; every
+  outcome, an error included, is a 200 `_notion_action` alert, and the draft runs on `context.WithoutCancel`) and
+  `POST /projects/{project_id}/wiki-hub` (`notiontools.CreatePage` as the chat kind with no thread, then
+  `projects.SetHub`; a refusal is a 422 `_project_hub` fragment and leaves the project untouched). The body is
+  `tpl.MarkdownWith(markdown, notion.PageTitles)`: `notion.Commonmark`, goldmark, the bluemonday policy (links get
+  `rel="noopener noreferrer"`), then the empty-header, task-box and internal-href steps of `markup.markdown_html`
+  (`testdata/corpora/markup.jsonl`); `tpl.Markdown` is the same with no mirrored pages, so chat text takes the Notion
+  passes too. Defines carry a `notion_` prefix; the hub fragment is `_project_hub.gohtml` of `internal/assistant/pages`.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
   600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
   malformed reply wraps `ErrValue`, `ErrKey`, `ErrIndex` or `ErrType`, so
