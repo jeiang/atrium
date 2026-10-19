@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 const (
@@ -120,7 +121,11 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil {
 		return err
 	}
-	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, AllowedHosts: hosts, Modules: a.modules})
+	render, err := NewRenderer(cfg, d, tpl.Config{})
+	if err != nil {
+		return err
+	}
+	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, AllowedHosts: hosts, Render: render, Modules: a.modules})
 	if err != nil {
 		return err
 	}
