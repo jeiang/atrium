@@ -73,3 +73,11 @@ func TestJSONDumpsIntegerSlices(t *testing.T) {
 		}
 	}
 }
+
+func TestJSONDumpsIndent(t *testing.T) {
+	v := Dict{{Key: "a", Value: []any{int64(1), Dict{{Key: "b", Value: nil}}, []any{}}}, {Key: "c", Value: Dict{}}, {Key: "d", Value: []string{"é"}}}
+	want := "{\n  \"a\": [\n    1,\n    {\n      \"b\": null\n    },\n    []\n  ],\n  \"c\": {},\n  \"d\": [\n    \"\\u00e9\"\n  ]\n}"
+	if got := JSONDumps(v, JSONOpts{Indent: 2}); got != want {
+		t.Errorf("indent = %q, want %q", got, want)
+	}
+}

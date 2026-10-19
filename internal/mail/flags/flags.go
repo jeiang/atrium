@@ -84,8 +84,15 @@ func ContactsFlag(row Row, contacts Contacts) (bool, error) {
 		return false, nil
 	}
 	local, _, _ := strings.Cut(row.FromAddr, "@")
+	automated, err := AutomatedLocal(local)
+	return !automated && err == nil, err
+}
+
+// AutomatedLocal is AUTOMATED_LOCAL.search(local) is not None: whether the part of an address before "@" names an
+// automated sender.
+func AutomatedLocal(local string) (bool, error) {
 	m, err := automatedLocal.Search(local)
-	return m == nil && err == nil, err
+	return m != nil, err
 }
 
 // Judge is llm.JudgeFlag's shape.

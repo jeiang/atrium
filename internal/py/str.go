@@ -2,6 +2,7 @@ package py
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -77,6 +78,20 @@ func Casefold(s string) string {
 			} else {
 				b.WriteRune(r)
 			}
+		}
+	}
+	return b.String()
+}
+
+// Upper is str.upper: simple uppercase mappings plus the SpecialCasing expansions ("ß" becomes "SS").
+func Upper(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if special, ok := upperSpecial[r]; ok {
+			b.WriteString(special)
+		} else {
+			b.WriteRune(unicode.ToUpper(r))
 		}
 	}
 	return b.String()

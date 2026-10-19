@@ -1,6 +1,7 @@
 package py
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 	"slices"
@@ -409,4 +410,37 @@ func SplitTimestamp(ts float64) (sec, us int64) {
 		frac -= microsecondsPerSec
 	}
 	return int64(whole), int64(frac)
+}
+
+// ISOFormat is datetime.isoformat(timespec=timespec) of an aware datetime: "minutes" or "seconds", then the UTC
+// offset as +HH:MM, with :SS when the offset is not a whole minute. Any other timespec panics.
+func ISOFormat(t time.Time, timespec string) string {
+	var clock string
+	switch timespec {
+	case "minutes":
+		clock = t.Format("15:04")
+	case "seconds":
+		clock = t.Format("15:04:05")
+	default:
+		panic("py.ISOFormat: unsupported timespec " + timespec)
+	}
+	_, off := t.Zone()
+	sign := byte('+')
+	if off < 0 {
+		sign, off = '-', -off
+	}
+	zone := fmt.Sprintf("%c%02d:%02d", sign, off/3600, off%3600/60)
+	if s := off % 60; s != 0 {
+		zone += fmt.Sprintf(":%02d", s)
+	}
+	return fmt.Sprintf("%04d-%02d-%02dT%s%s", t.Year(), int(t.Month()), t.Day(), clock, zone)
+}
+
+// DateFromISOFormat is date.fromisoformat: YYYY-MM-DD, YYYYMMDD and the ISO week forms, nothing with a time.
+func DateFromISOFormat(s string) (year, month, day int, ok bool) {
+	if n := len(s); n != 7 && n != 8 && n != 10 {
+		return 0, 0, 0, false
+	}
+	dt, ok := FromISOFormat(s)
+	return dt.Year, dt.Month, dt.Day, ok
 }

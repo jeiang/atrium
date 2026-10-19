@@ -1,6 +1,7 @@
 package py
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -168,6 +169,46 @@ func TestCasefold(t *testing.T) {
 	} {
 		if got := Casefold(in); got != want {
 			t.Errorf("Casefold(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestISOFormat(t *testing.T) {
+	loc, err := time.LoadLocation("America/Port_of_Spain")
+	if err != nil {
+		t.Skip(err)
+	}
+	moment := time.Date(2026, 10, 16, 9, 0, 0, 0, loc)
+	if got := ISOFormat(moment, "minutes"); got != "2026-10-16T09:00-04:00" {
+		t.Errorf("minutes = %q", got)
+	}
+	if got := ISOFormat(moment.In(time.UTC), "seconds"); got != "2026-10-16T13:00:00+00:00" {
+		t.Errorf("seconds = %q", got)
+	}
+	odd := time.Date(1900, 1, 1, 0, 0, 0, 0, time.FixedZone("x", 4*3600+30*60+5))
+	if got := ISOFormat(odd, "seconds"); got != "1900-01-01T00:00:00+04:30:05" {
+		t.Errorf("odd offset = %q", got)
+	}
+}
+
+func TestDateFromISOFormat(t *testing.T) {
+	for in, want := range map[string]string{"2026-10-16": "2026-10-16", "20261016": "2026-10-16", "2026-W42-5": "2026-10-16", "2026W425": "2026-10-16"} {
+		y, m, d, ok := DateFromISOFormat(in)
+		if got := fmt.Sprintf("%04d-%02d-%02d", y, m, d); !ok || got != want {
+			t.Errorf("DateFromISOFormat(%q) = %s, %v", in, got, ok)
+		}
+	}
+	for _, bad := range []string{"", "2026-10-1", "2026-13-01", "2026-10-16T", "20261016T12", "soon"} {
+		if _, _, _, ok := DateFromISOFormat(bad); ok {
+			t.Errorf("DateFromISOFormat(%q) accepted", bad)
+		}
+	}
+}
+
+func TestUpper(t *testing.T) {
+	for in, want := range map[string]string{"abc-12": "ABC-12", "straße": "STRASSE", "ǆ": "Ǆ", "ŉ": "ʼN", "ﬃ": "FFI"} {
+		if got := Upper(in); got != want {
+			t.Errorf("Upper(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
