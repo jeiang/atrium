@@ -650,3 +650,26 @@ func TestSelectionOfDeletionAndLabelMergeMustStayInsideTheProposal(t *testing.T)
 		t.Fatalf("status = %s", p.Status)
 	}
 }
+
+func TestSelectionIDsFollowPythonInt(t *testing.T) {
+	w := icloudWorld(t)
+	ids := w.messageIDs("Bills")
+	pid := w.propose(executors.DeletionRule, deletionPayload(w, ids, config.ICloud))
+	for _, bad := range []string{"+_1", "-_1"} {
+		done := w.apply(pid, py.Dict{{Key: "message_ids", Value: []any{bad}}})
+		if done.Status != proposals.Failed || field(done.Result, "error") != "ValueError: invalid literal for int() with base 10: "+py.Repr(bad) {
+			t.Fatalf("%q: %s %v", bad, done.Status, done.Result)
+		}
+	}
+	if n := count(t, w.db, "SELECT COUNT(*) FROM rules"); n != 0 || len(w.fake.Writes) != 0 {
+		t.Fatalf("a malformed selection wrote: rules %d, writes %v", n, w.fake.Writes)
+	}
+	arabic := ""
+	for _, r := range strconv.FormatInt(ids[0], 10) {
+		arabic += string('\u0660' + r - '0')
+	}
+	done := w.apply(pid, py.Dict{{Key: "message_ids", Value: []any{arabic, " " + strconv.FormatInt(ids[1], 10) + " "}}})
+	if field(done.Result, "trashed") != int64(2) {
+		t.Fatalf("Unicode and padded ids = %s %v", done.Status, done.Result)
+	}
+}

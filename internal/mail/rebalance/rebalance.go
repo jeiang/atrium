@@ -554,15 +554,21 @@ func mergeCandidates(f folders) []Candidate {
 
 // Detect is detect: the merge candidates, then the split candidates.
 func Detect(ctx context.Context, q proposals.Querier) ([]Candidate, error) {
+	_, found, err := detect(ctx, q)
+	return found, err
+}
+
+// detect is detect with the folder rows it read, which build previews from.
+func detect(ctx context.Context, q proposals.Querier) (folders, []Candidate, error) {
 	f, err := folderRows(ctx, q)
 	if err != nil {
-		return nil, err
+		return f, nil, err
 	}
 	splits, err := splitCandidates(ctx, q, f)
 	if err != nil {
-		return nil, err
+		return f, nil, err
 	}
-	return append(mergeCandidates(f), splits...), nil
+	return f, append(mergeCandidates(f), splits...), nil
 }
 
 // termsOf is terms_of: the commonest subject template words that are not stopwords, each counted once a message.
@@ -607,21 +613,17 @@ func SuggestName(chatURL string) Namer {
 		raw, err := llm.ChatJSON(ctx, chatURL, NameSystem, prompt, NameSchema, 0)
 		var down *httpx.ServiceUnavailable
 		switch {
-		case errors.As(err, &down) || errors.Is(err, httpx.ErrValue) || errors.Is(err, httpx.ErrKey) || errors.Is(err, httpx.ErrType):
+		case errors.As(err, &down) || errors.Is(err, httpx.ErrValue) || errors.Is(err, httpx.ErrKey) ||
+			errors.Is(err, httpx.ErrIndex) || errors.Is(err, httpx.ErrType):
 		case err != nil:
 			return "", err
 		default:
-			answer, err := py.JSONLoads(raw)
-			if err != nil {
-				break
-			}
-			fields, ok := answer.(py.Dict)
-			if !ok {
-				return "", fmt.Errorf("'%s' object has no attribute 'get'", py.TypeName(answer))
-			}
-			if value, _ := fields.Get("name"); value != nil {
-				if s, isString := value.(string); isString {
-					name = CleanName(s)
+			answer, _ := py.JSONLoads(raw)
+			if fields, ok := answer.(py.Dict); ok {
+				if value, _ := fields.Get("name"); value != nil {
+					if s, isString := value.(string); isString {
+						name = CleanName(s)
+					}
 				}
 			}
 		}
@@ -801,15 +803,10 @@ func track(ctx context.Context, d *db.DB, candidates []Candidate, ts float64) (m
 // Scan is scan at ts: a candidate seen on RunsRequired runs at least RunGapSeconds apart becomes a proposal,
 // created at ts, unless its fingerprint is known.
 func Scan(ctx context.Context, d *db.DB, ts float64, namer Namer) (scanutil.Result, error) {
-	f, err := folderRows(ctx, d.Read)
+	f, candidates, err := detect(ctx, d.Read)
 	if err != nil {
 		return scanutil.Result{}, err
 	}
-	splits, err := splitCandidates(ctx, d.Read, f)
-	if err != nil {
-		return scanutil.Result{}, err
-	}
-	candidates := append(mergeCandidates(f), splits...)
 	runs, err := track(ctx, d, candidates, ts)
 	if err != nil {
 		return scanutil.Result{}, err
