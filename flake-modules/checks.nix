@@ -40,7 +40,6 @@
       "atrium-codemode.socket"
       "atrium-codemode@.service"
       "atrium-notion-sync.service"
-      "atrium-notion-sync.timer"
       "atrium-scan.service"
       "atrium-scan.timer"
       "atrium-sync.service"
@@ -76,6 +75,9 @@
         grep -q 'ATRIUM_PUBLIC_HOST=atrium.example.org' "$units/atrium-web.service"
         ! grep -q 'ATRIUM_PUBLIC_HOST' "$units/atrium-web-local.service"
         grep -q -- '--setenv=ATRIUM_MODE=live' ${pkgs.writeText "atrium-run" (builtins.unsafeDiscardStringContext atriumRun.text)}
+        ! grep -q 'ATRIUM_STATIC_DIR' "$units/atrium-web.service"
+        grep -q 'ExecStart=.*/bin/true' "$units/atrium-notion-sync.service"
+        ! grep -q 'notion sync' "$units/atrium-notion-sync.service"
         ln -s "$units" $out
       '';
 

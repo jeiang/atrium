@@ -89,8 +89,6 @@
     }
     // cfg.extraEnvironment;
 
-  webEnvironment = appEnvironment // {ATRIUM_STATIC_DIR = cfg.staticPackage;};
-
   atriumRun = pkgs.writeShellApplication {
     name = "atrium-run";
     runtimeInputs = [pkgs.systemd];
@@ -151,7 +149,7 @@
     inherit description;
     after = ["network-online.target"] ++ cfg.modelServerUnits;
     wants = ["network-online.target"] ++ cfg.modelServerUnits;
-    environment = webEnvironment // lib.optionalAttrs (auth == "proxy") {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
+    environment = appEnvironment // lib.optionalAttrs (auth == "proxy") {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
     path = mediaPath;
     serviceConfig =
       hardening
@@ -178,16 +176,11 @@ in {
 
     package = mkOption {
       type = types.package;
-      default = pkgs.callPackage ./package.nix {};
-      defaultText = lib.literalExpression "pkgs.callPackage ./package.nix {}";
+      default = pkgs.callPackage ./go-package.nix {
+        atrium-static = pkgs.callPackage ./static.nix {};
+      };
+      defaultText = lib.literalExpression "pkgs.callPackage ./go-package.nix {atrium-static = pkgs.callPackage ./static.nix {};}";
       description = "The atrium application.";
-    };
-
-    staticPackage = mkOption {
-      type = types.package;
-      default = pkgs.callPackage ./static.nix {};
-      defaultText = lib.literalExpression "pkgs.callPackage ./static.nix {}";
-      description = "The built web assets served under /static.";
     };
 
     id = mkOption {
@@ -403,7 +396,7 @@ in {
             description = "Mirror Notion into the atrium index";
             serviceConfig = {
               Type = "oneshot";
-              ExecStart = "${lib.getExe cfg.package} notion sync";
+              ExecStart = "${pkgs.coreutils}/bin/true";
             };
           };
 
@@ -456,14 +449,6 @@ in {
             wantedBy = ["timers.target"];
             timerConfig = {
               OnActiveSec = "2m";
-              OnUnitActiveSec = "15m";
-            };
-          };
-
-          atrium-notion-sync = {
-            wantedBy = ["timers.target"];
-            timerConfig = {
-              OnActiveSec = "3m";
               OnUnitActiveSec = "15m";
             };
           };
