@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/sdnotify"
 )
 
 var watchLog = logx.Logger("atrium.watch")
@@ -73,8 +74,59 @@ type Watcher struct {
 	Pass  func(d *db.DB) *Pass
 	Sleep func(ctx context.Context, d time.Duration)
 
+	Notify *sdnotify.Notifier
+
 	mu       sync.Mutex
 	migrated bool
+	beats    map[string]*sdnotify.Heartbeat
+}
+
+func (w *Watcher) heartbeat(account string) *sdnotify.Heartbeat {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.beats == nil {
+		w.beats = map[string]*sdnotify.Heartbeat{}
+	}
+	h := w.beats[account]
+	if h == nil {
+		h = sdnotify.NewHeartbeat()
+		w.beats[account] = h
+	}
+	return h
+}
+
+func (w *Watcher) alive(maxAge time.Duration) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, h := range w.beats {
+		if !h.Fresh(maxAge) {
+			return false
+		}
+	}
+	return true
+}
+
+// waiting beats while fn waits: every wait is bounded, so only a stuck pass lets the heartbeat go stale.
+func waiting(h *sdnotify.Heartbeat, fn func()) {
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+				h.Beat()
+			}
+		}
+	}()
+	fn()
+	close(stop)
+	<-done
+	h.Beat()
 }
 
 // connect is the db.connect at the top of each cycle: the schema is migrated by the first one that succeeds.
@@ -91,6 +143,8 @@ func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
 			return nil, nil, err
 		}
 		w.migrated = true
+		w.Notify.Ready()
+		w.Notify.Status("watching")
 	}
 	if w.Pass != nil {
 		return w.Pass(d), func() { _ = d.Close() }, nil
@@ -133,7 +187,9 @@ func (w *Watcher) waitForChange(ctx context.Context, client mail.Client) (bool, 
 // has started runs to its end: ctx is seen only between passes and while waiting.
 func (w *Watcher) Account(ctx context.Context, account string) {
 	backoff := 0
+	h := w.heartbeat(account)
 	for ctx.Err() == nil {
+		h.Beat()
 		err := w.cycle(ctx, account, &backoff)
 		if err == nil || ctx.Err() != nil {
 			continue
@@ -144,7 +200,7 @@ func (w *Watcher) Account(ctx context.Context, account string) {
 		} else {
 			watchLog.Error(fmt.Sprintf("%s watch failed, retrying in %ds", account, backoff), logx.Err, err.Error())
 		}
-		w.sleep(ctx, time.Duration(backoff)*time.Second)
+		waiting(h, func() { w.sleep(ctx, time.Duration(backoff)*time.Second) })
 	}
 }
 
@@ -163,10 +219,14 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 	if err := pass.Locked(whole, []string{account}); err != nil {
 		return err
 	}
+	h := w.heartbeat(account)
 	return mailops.Session(ctx, pass.Open, account, func(client mail.Client) error {
 		*backoff = 0
 		for ctx.Err() == nil {
-			changed, err := w.waitForChange(ctx, client)
+			h.Beat()
+			var changed bool
+			var err error
+			waiting(h, func() { changed, err = w.waitForChange(ctx, client) })
 			if ctx.Err() != nil {
 				break
 			}
@@ -174,7 +234,7 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 				return err
 			}
 			if changed {
-				w.sleep(ctx, settle)
+				waiting(h, func() { w.sleep(ctx, settle) })
 				if ctx.Err() != nil {
 					break
 				}
@@ -193,7 +253,12 @@ func Watch(ctx context.Context, cfg config.Config, requested string, open mailop
 	if err != nil {
 		return err
 	}
-	w := &Watcher{Cfg: cfg, Open: open}
+	notifier := sdnotify.FromEnv()
+	w := &Watcher{Cfg: cfg, Open: open, Notify: notifier}
+	for _, account := range accounts {
+		w.heartbeat(account)
+	}
+	go notifier.RunWatchdog(ctx, func() bool { return w.alive(notifier.Interval() * 2) })
 	var wg sync.WaitGroup
 	for _, account := range accounts {
 		wg.Go(func() { w.Account(ctx, account) })
@@ -206,6 +271,7 @@ func Watch(ctx context.Context, cfg config.Config, requested string, open mailop
 	select {
 	case <-done:
 	case <-ctx.Done():
+		notifier.Stopping()
 		select {
 		case <-done:
 		case <-time.After(shutdownWindow):

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
@@ -65,6 +66,7 @@ type Server struct {
 	errPage  ErrorPage
 	stop     chan struct{}
 	stopOnce sync.Once
+	starting atomic.Bool
 	closers  []func()
 }
 
@@ -89,6 +91,10 @@ func New(o Options) (*Server, error) {
 	s.mux.NotFound(s.notFound)
 	s.mux.MethodNotAllowed(s.methodNotAllowed)
 	s.mux.Get(HealthPath, func(w http.ResponseWriter, _ *http.Request) {
+		if s.starting.Load() || s.stopped() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	})
 	s.mux.Handle(StaticPrefix+"*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -111,6 +117,20 @@ func New(o Options) (*Server, error) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }
+
+func (s *Server) stopped() bool {
+	select {
+	case <-s.stop:
+		return true
+	default:
+		return false
+	}
+}
+
+// Hold makes /healthz answer 503 until Release, the state READY=1 is sent on.
+func (s *Server) Hold() { s.starting.Store(true) }
+
+func (s *Server) Release() { s.starting.Store(false) }
 
 func (s *Server) StopStreams() { s.stopOnce.Do(func() { close(s.stop) }) }
 

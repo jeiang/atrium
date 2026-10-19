@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const writeTimeout = time.Second
+
 type Notifier struct {
 	addr     string
 	interval time.Duration
@@ -49,6 +51,7 @@ func (n *Notifier) send(msg string) {
 		return
 	}
 	defer func() { _ = conn.Close() }()
+	_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
 	_, _ = conn.Write([]byte(msg))
 }
 
