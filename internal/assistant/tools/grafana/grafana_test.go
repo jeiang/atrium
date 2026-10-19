@@ -82,3 +82,28 @@ func TestNotConfigured(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestMalformedURLIsUnreachable(t *testing.T) {
+	for url, class := range map[string]string{
+		"grafana.local:3000":  "UnsupportedProtocol",
+		"not a url":           "UnsupportedProtocol",
+		"ftp://x":             "UnsupportedProtocol",
+		"/relative":           "UnsupportedProtocol",
+		"http://":             "ConnectError",
+		"http:///path":        "ConnectError",
+		"http://[bad":         "ConnectError",
+		"http://exa mple.com": "ConnectError",
+		"http://host:99999":   "ConnectError",
+	} {
+		tc := &tool.Context{Env: config.Map(map[string]string{"GRAFANA_URL": url, "GRAFANA_VIEWER_TOKEN": "t"})}
+		for _, tl := range Tools() {
+			if tl.Name != "grafana_datasources" {
+				continue
+			}
+			_, err := tl.Handler(context.Background(), tc, py.Dict{})
+			if msg, ok := tool.Message(err); !ok || msg != "grafana unreachable: "+class {
+				t.Errorf("%q: err = %v, want %s", url, err, class)
+			}
+		}
+	}
+}

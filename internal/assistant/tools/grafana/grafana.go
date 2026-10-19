@@ -74,6 +74,17 @@ func errorClass(err error) string {
 	return "ReadError"
 }
 
+func urlClass(target string) string {
+	scheme, _, found := strings.Cut(target, ":")
+	if !found || !strings.EqualFold(scheme, "http") && !strings.EqualFold(scheme, "https") {
+		return "UnsupportedProtocol"
+	}
+	if u, err := url.Parse(target); err != nil || u.Host == "" {
+		return "ConnectError"
+	}
+	return ""
+}
+
 func request(ctx context.Context, tc *tool.Context, method, path, rawQuery string, body any) (any, error) {
 	if method != http.MethodGet && (method != http.MethodPost || path != "/api/ds/query") {
 		return nil, tool.Error("grafana tools are read-only")
@@ -90,9 +101,12 @@ func request(ctx context.Context, tc *tool.Context, method, path, rawQuery strin
 	if body != nil {
 		reader = strings.NewReader(py.JSONDumps(body, py.JSONOpts{NoEnsureASCII: true, Compact: true}))
 	}
+	if class := urlClass(target); class != "" {
+		return nil, tool.Error("grafana unreachable: " + class)
+	}
 	req, err := http.NewRequestWithContext(ctx, method, target, reader)
 	if err != nil {
-		return nil, &tool.Raised{Class: "InvalidURL"}
+		return nil, tool.Error("grafana unreachable: ConnectError")
 	}
 	req.Header.Set("Authorization", "Bearer "+access.Token)
 	req.Header.Set("Accept", "application/json")
