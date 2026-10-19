@@ -341,6 +341,10 @@ when something is due, using upcoming bills from the ledger), `calendar-candidat
 (hourly, drafts calendar proposals only when event candidates are queued), `fx-rates`
 (Monday 06:00, stores the CBTT USD selling rate; no model) and the three media jobs below
 (`media-channels`, `media-sweep`, `media-thumbnails`; no model). Their prompts live in code.
+Until the Go binary gains the media, calendar and money modules, the scheduler logs
+`built-in job X has no function in this build; not run` once per start for each of these
+callable jobs (`media-sweep`, `media-channels`, `calendar-candidates`, `fx-rates`,
+`media-thumbnails`) and writes no job run.
 
 Skills (/settings/skills) are playbooks. Four wiki skills are seeded once and can be
 edited or deleted: `wiki-capture` (save a durable fact from a conversation; the nightly

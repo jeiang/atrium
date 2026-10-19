@@ -116,7 +116,11 @@ switched.
     Python's; this is expected and one-time.
 7. Scheduler log: `journalctl -u atrium-agent-scheduler.service -e` shows the
     worker started and claiming due jobs, with the core-first lines listed in
-    section 8 and no other errors. `/scheduled` is not served until its page
+    section 8 and no other errors. The five callables (`media-sweep`,
+    `media-channels`, `calendar-candidates`, `fx-rates`, `media-thumbnails`)
+    each log `built-in job X has no function in this build; not run` once and
+    write no job run (the #157 acceptance replaces "a media poll succeeds"
+    with exactly this). `/scheduled` is not served until its page
     lands; use `sqlite3 $STATE/atrium.db "SELECT id, name, next_run FROM jobs ORDER BY id"`.
 8. Units: `systemctl --failed 'atrium-*'` is empty.
 
@@ -525,7 +529,8 @@ do not start. What the operator sees until then:
   `watches`, `reindex`, `shadow-report`, `agent` and `serve` work.
 - The built-in callable jobs `media-sweep`, `media-channels`,
   `calendar-candidates`, `fx-rates` and `media-thumbnails` are skipped with
-  one Info line each; they are not recorded as job runs.
+  one Info line each (`built-in job X has no function in this build; not
+  run`, logged once per scheduler start); they are not recorded as job runs.
 - The system prompt names `event_propose`, and the nightly wiki-capture skill
   names the Notion tools (`search_knowledge`, `notion_create_page`, ...).
   Accepted: the model also sees the tools it is offered, finds these absent
