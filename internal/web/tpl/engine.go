@@ -147,6 +147,7 @@ type sources struct {
 
 func collect(cfg Config) (sources, error) {
 	out := sources{pages: map[string]source{}}
+	seen := map[string]bool{}
 	add := func(fsys fs.FS, dir string) error {
 		entries, err := fs.ReadDir(fsys, dir)
 		if err != nil {
@@ -157,6 +158,10 @@ func collect(cfg Config) (sources, error) {
 			if entry.IsDir() || !strings.HasSuffix(name, ".gohtml") {
 				continue
 			}
+			if seen[name] {
+				return fmt.Errorf("tpl: template file %s is defined twice", name)
+			}
+			seen[name] = true
 			src := source{fsys, path.Join(dir, name)}
 			if name == layout || strings.HasPrefix(name, "_") || strings.Contains(dir, "basecoat") {
 				out.shared = append(out.shared, src)
