@@ -165,10 +165,13 @@ func RunTokens(ctx context.Context, q db.Querier, runID int64) (int64, error) {
 }
 
 // ReleaseStale is release_stale: runs a crashed worker left running are marked failed once their lease lapsed.
+// A job run whose agent run is still running or interrupted is left to SettleResumed.
 func ReleaseStale(ctx context.Context, d *db.DB, now float64) error {
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, "SELECT r.id AS run_id, j.id AS job_id FROM job_runs r JOIN jobs j ON j.id = r.job_id "+
-			"WHERE r.status = ? AND j.lease_until IS NOT NULL AND j.lease_until < ?", StatusRunning, now)
+			"WHERE r.status = ? AND j.lease_until IS NOT NULL AND j.lease_until < ? AND NOT EXISTS (SELECT 1 FROM runs x WHERE x.id = "+
+			"(SELECT MIN(id) FROM runs WHERE thread_id = r.thread_id AND parent_run_id IS NULL) AND x.state IN ('running', 'interrupted'))",
+			StatusRunning, now)
 		if err != nil {
 			return err
 		}

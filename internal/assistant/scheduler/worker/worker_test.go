@@ -628,3 +628,45 @@ func TestUnparsableScheduleIsSkippedNotPoisoning(t *testing.T) {
 		t.Errorf("the unparsable job was touched: %+v", j)
 	}
 }
+
+func TestInterruptedJobRunSettlesAfterResumeNotWorkerLost(t *testing.T) {
+	w := newWorld(t, nil, nil)
+	id := w.job(scheduler.NewJob{})
+	claims, _ := w.claim(now, "w1")
+	w.svc.Now = func() float64 { return now }
+	thread, err := service.CreateThread(t.Context(), w.d.Write, now, threads.NewThread{Kind: threads.Cron, JobID: &id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.d.Write.ExecContext(t.Context(), "UPDATE job_runs SET thread_id = ? WHERE id = ?", thread, claims[0].JobRunID); err != nil {
+		t.Fatal(err)
+	}
+	run, err := w.svc.Prepare(t.Context(), thread, "check", now, service.Start{Kind: threads.Cron})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.w.Spawn = func(string, func()) {}
+	w.srv.Push(ok("done"))
+	later := now + scheduler.LeaseSeconds + journal.LeaseSeconds + 10
+	w.svc.Now = func() float64 { return later }
+	if err := w.w.Cycle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	w.svc.Wait()
+	if got := w.jobRuns()[0]; got.Status == scheduler.StatusError {
+		t.Fatalf("the interrupted job run was released: %+v", got)
+	}
+	if err := w.w.Cycle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	found, err := journal.GetRun(t.Context(), w.d.Read, run)
+	if err != nil || found.State != journal.Done {
+		t.Fatalf("run = %+v, %v", found, err)
+	}
+	if got := w.jobRuns()[0]; got.Status != scheduler.StatusMissed || got.Error != nil {
+		t.Fatalf("job run = %+v", got)
+	}
+	if w.getJob(id).LeaseOwner != nil {
+		t.Error("the lease was kept")
+	}
+}
