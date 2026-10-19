@@ -115,8 +115,10 @@ func TestMagnetAndTorrentHashes(t *testing.T) {
 		t.Errorf("torrent hash = %q %v, want %q", got, err, want)
 	}
 	var qbitErr QbitError
-	if _, err := TorrentHash([]byte("not a torrent")); !errors.As(err, &qbitErr) {
-		t.Errorf("garbage torrent: %v", err)
+	for _, bad := range []string{"not a torrent", "d4:info9223372036854775800:e", "d4:info99999999999999999999:e", "d4:infoi-e", "d4:info"} {
+		if _, err := TorrentHash([]byte(bad)); !errors.As(err, &qbitErr) {
+			t.Errorf("garbage torrent %q: %v", bad, err)
+		}
 	}
 	if !(Torrent{Tags: "media, filed"}).HasTag("filed") || (Torrent{}).HasTag("media") {
 		t.Error("HasTag")

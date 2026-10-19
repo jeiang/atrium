@@ -265,8 +265,11 @@ func bdecode(data []byte, i, depth int) (value any, end int, ok bool) {
 			return nil, 0, false
 		}
 		from := i + colon + 1
-		to := min(int64(from)+length, int64(len(data)))
-		return data[from:max(int64(from), to)], int(to), true
+		if length > int64(len(data)-from) {
+			return nil, 0, false
+		}
+		to := from + int(length)
+		return data[from:to], to, true
 	}
 	return nil, 0, false
 }
