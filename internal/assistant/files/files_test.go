@@ -393,7 +393,7 @@ func TestBranchCopiesAttachmentsSoEitherThreadCanBeDeleted(t *testing.T) {
 	if want := filepath.Join(f.dir, fmt.Sprint(child), fmt.Sprintf("%d-notes.txt", copied.ID)); copied.Path != want {
 		t.Errorf("path %q, want %q", copied.Path, want)
 	}
-	if want := fmt.Sprintf(`{"type":"attachment","file_id":%d,"name":"notes.txt","media_type":"text/plain","kind":"text","tokens":2,"cache_control":{"type":"ephemeral"}}`, copied.ID); string(content[0]) != want {
+	if want := fmt.Sprintf(`{"type": "attachment", "file_id": %d, "name": "notes.txt", "media_type": "text/plain", "kind": "text", "tokens": 2, "cache_control": {"type": "ephemeral"}}`, copied.ID); string(content[0]) != want {
 		t.Errorf("block %s, want %s", content[0], want)
 	}
 	if string(content[1]) != string(text) {

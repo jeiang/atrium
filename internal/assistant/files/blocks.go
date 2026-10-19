@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -88,7 +87,7 @@ func unavailable(d py.Dict) (json.RawMessage, error) {
 	return marshal(textBlock{Type: "text", Text: "[attachment " + name + " is no longer available]"})
 }
 
-func apiBlocks(ctx context.Context, q db.Querier, d py.Dict) ([]json.RawMessage, error) {
+func apiBlocks(ctx context.Context, q querier, d py.Dict) ([]json.RawMessage, error) {
 	id, err := fileIDOf(d)
 	if err != nil {
 		return nil, err
@@ -103,7 +102,7 @@ func apiBlocks(ctx context.Context, q db.Querier, d py.Dict) ([]json.RawMessage,
 	}
 	var cache json.RawMessage
 	if v, ok := d.Get("cache_control"); ok {
-		cache = json.RawMessage(py.JSONDumps(v, py.JSONOpts{Compact: true, NoEnsureASCII: true}))
+		cache = json.RawMessage(py.JSONDumps(v))
 	}
 	var block any
 	if found.Text != nil {
@@ -133,7 +132,7 @@ func apiBlocks(ctx context.Context, q db.Querier, d py.Dict) ([]json.RawMessage,
 
 // APIBlocks is api_blocks: the content blocks one journaled attachment stands for, a document (a PDF or the
 // extracted text) or an image, or a note that the file is gone.
-func APIBlocks(ctx context.Context, q db.Querier, block json.RawMessage) ([]json.RawMessage, error) {
+func APIBlocks(ctx context.Context, q querier, block json.RawMessage) ([]json.RawMessage, error) {
 	d, err := decodeBlock(block)
 	if err != nil {
 		return nil, err
@@ -143,7 +142,7 @@ func APIBlocks(ctx context.Context, q db.Querier, block json.RawMessage) ([]json
 
 // Expand is expand for one message's content: attachment blocks become their request blocks, every other block
 // stays as it is.
-func Expand(ctx context.Context, q db.Querier, content []json.RawMessage) ([]json.RawMessage, error) {
+func Expand(ctx context.Context, q querier, content []json.RawMessage) ([]json.RawMessage, error) {
 	out := make([]json.RawMessage, 0, len(content))
 	for _, raw := range content {
 		d, err := decodeBlock(raw)
@@ -165,7 +164,7 @@ func Expand(ctx context.Context, q db.Querier, content []json.RawMessage) ([]jso
 
 // CloneContent is clone_content: a branch's copy of each attachment in content, as new rows and bytes under the
 // new thread. An attachment whose file is gone stays as it is.
-func CloneContent(ctx context.Context, q db.Querier, content []json.RawMessage, threadID int64, now float64) ([]json.RawMessage, error) {
+func CloneContent(ctx context.Context, q querier, content []json.RawMessage, threadID int64, now float64) ([]json.RawMessage, error) {
 	out := make([]json.RawMessage, 0, len(content))
 	for _, raw := range content {
 		d, err := decodeBlock(raw)
@@ -188,7 +187,7 @@ func CloneContent(ctx context.Context, q db.Querier, content []json.RawMessage, 
 			out = append(out, raw)
 			continue
 		}
-		out = append(out, json.RawMessage(py.JSONDumps(d.Set("file_id", copied), py.JSONOpts{Compact: true, NoEnsureASCII: true})))
+		out = append(out, json.RawMessage(py.JSONDumps(d.Set("file_id", copied))))
 	}
 	return out, nil
 }
@@ -216,7 +215,7 @@ func HiddenTokens(content []json.RawMessage) (int64, error) {
 
 // ProjectBlocks is project_message: the blocks that open every request of a project's threads, one attachment per
 // project file and a notice that they are untrusted data. Nil when the project has no files.
-func ProjectBlocks(ctx context.Context, q db.Querier, projectID int64) ([]json.RawMessage, error) {
+func ProjectBlocks(ctx context.Context, q querier, projectID int64) ([]json.RawMessage, error) {
 	rows, err := OfProject(ctx, q, projectID)
 	if err != nil || len(rows) == 0 {
 		return nil, err
