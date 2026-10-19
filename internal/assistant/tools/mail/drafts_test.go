@@ -1,12 +1,14 @@
 package mailtools_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/drafts"
+	"github.com/jeiang/atrium/internal/py"
 )
 
 func draftWorld(t *testing.T) (*db.DB, *tool.Context, int64) {
@@ -98,5 +100,38 @@ func TestDraftUpdateChangesRecipientsForReview(t *testing.T) {
 	after := draftRow(t, d, id)
 	if after.ToAddrs != "attacker@x.test" || after.UpdatedAt < before.UpdatedAt || after.Status != "draft" {
 		t.Errorf("after = %+v", after)
+	}
+}
+
+func TestDraftCreateValidatesBeforeAHugeReplyIDOverflows(t *testing.T) {
+	d, tc, _ := draftWorld(t)
+	_, err := call(t, tc, "draft_email_create", `{"account": "yahoo", "to": ["a@x.test"], "subject": "s", "body": "b", "in_reply_to_message_id": 99999999999999999999}`)
+	wantToolError(t, err, "account must be one of icloud, gmail")
+	_, err = call(t, tc, "draft_email_create", `{"account": "icloud", "to": [], "subject": "s", "body": "b", "in_reply_to_message_id": 99999999999999999999}`)
+	wantToolError(t, err, "to is required")
+	_, err = call(t, tc, "draft_email_create", `{"account": "icloud", "to": ["a@x.test"], "subject": "s", "body": "b", "in_reply_to_message_id": 99999999999999999999}`)
+	var classed py.Classed
+	if !errors.As(err, &classed) || classed.PyClass() != "OverflowError" {
+		t.Errorf("err = %v", err)
+	}
+	var n int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM drafts").Scan(&n); err != nil || n != 0 {
+		t.Errorf("%d drafts stored (%v)", n, err)
+	}
+}
+
+func TestDraftUpdateWronglyTypedFieldsRaisePythonClasses(t *testing.T) {
+	_, tc, _ := draftWorld(t)
+	out := mustCall(t, tc, "draft_email_create", `{"account": "gmail", "to": ["a@x.test"], "subject": "Hi", "body": "body"}`)
+	id := itoa(get(t, out, "draft_id").(int64))
+	for args, class := range map[string]string{
+		`{"draft_id": ` + id + `, "subject": 5}`:                  "AttributeError",
+		`{"draft_id": ` + id + `, "in_reply_to_message_id": [1]}`: "ProgrammingError",
+	} {
+		_, err := call(t, tc, "draft_email_update", args)
+		var classed py.Classed
+		if !errors.As(err, &classed) || classed.PyClass() != class {
+			t.Errorf("%s: err = %v (%T)", args, err, err)
+		}
 	}
 }

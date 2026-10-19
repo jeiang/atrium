@@ -3,11 +3,9 @@ package mailtools
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail/birthdays"
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/py"
@@ -51,9 +49,6 @@ func packages(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 		return nil, tool.Error("active_only must be true or false")
 	}
 	items, err := watches.ListPackages(ctx, tc.DB.Read, tc.Env, tc.Now(), activeOnly, false)
-	if errors.Is(err, httpx.ErrKey) {
-		return nil, &tool.Raised{Class: "ZoneInfoNotFoundError"}
-	}
 	if err != nil {
 		return nil, err
 	}

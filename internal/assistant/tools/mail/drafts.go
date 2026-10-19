@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math/big"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/mail/drafts"
@@ -60,16 +61,15 @@ func draftFailed(err error) error {
 	return err
 }
 
-func replyID(args py.Dict) (*int64, error) {
+// replyID is _reply_id: nil or an int, which may exceed int64; the store raises OverflowError for that only
+// after it has validated everything else, as create does.
+func replyID(args py.Dict) (any, error) {
 	value, _ := args.Get("in_reply_to_message_id")
-	if value == nil {
-		return nil, nil
+	switch value.(type) {
+	case nil, int64, *big.Int:
+		return value, nil
 	}
-	id, err := intArg(value, "in_reply_to_message_id must be an integer message_id from mail_search")
-	if err != nil {
-		return nil, err
-	}
-	return &id, nil
+	return nil, tool.Error("in_reply_to_message_id must be an integer message_id from mail_search")
 }
 
 func draftEmailCreate(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {

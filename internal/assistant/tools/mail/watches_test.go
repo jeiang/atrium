@@ -2,6 +2,7 @@ package mailtools_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -91,4 +92,21 @@ func TestUpcomingBirthdaysTurningAndDismissal(t *testing.T) {
 	}
 	_, err := call(t, tc, "upcoming_birthdays", `{"days": "x"}`)
 	wantToolError(t, err, "days must be a number")
+}
+
+func TestPackagesUnknownTimezoneKeepsItsClass(t *testing.T) {
+	d := newDB(t)
+	dbtest.AddMessage(t, d, 1, "1Z999AA10123456784", fields{
+		"from_addr": "billing@shop.test", "from_domain": "shop.test", "date_ts": now - day, "subject": "Shipped", "k_order": 1,
+	})
+	env := map[string]string{"ATRIUM_TZ": "Mars/Base"}
+	chat := func(context.Context, string, string, string, any, int) (any, error) { return py.Dict{}, nil }
+	if _, err := watches.ScanPackages(t.Context(), d, config.Config{}, watches.ScanLimit, now, watches.Options{Env: config.Map(map[string]string{"ATRIUM_TZ": tz}), Chat: chat}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := call(t, ctxFor(d, config.Config{}, env), "packages", `{}`)
+	var classed py.Classed
+	if !errors.As(err, &classed) || classed.PyClass() != "ZoneInfoNotFoundError" {
+		t.Errorf("err = %v (%T)", err, err)
+	}
 }
