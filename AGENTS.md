@@ -195,6 +195,13 @@ and backups; nothing of that lives here.
   generates properties in the order given.
 - `internal/embed/`: `embed.py` and the `notion_vec` writes, model
   `embeddinggemma`, 768-d vectors normalised bit-for-bit as Python.
+- `internal/notify/`: `agent/tools/notify.py`. `Send(ctx, q, env, Message)` records the notification, then
+  publishes (one JSON POST to `NTFY_URL`, bearer `NTFY_TOKEN`) and records the outcome; the row exists before
+  the push, a failed or unconfigured push is `Sent.Error` text and never an error, only a malformed
+  `NTFY_URL` raises. Scheduler budget notices and media channel notices (topic, click) call `Send`; the
+  `notify` tool (`Tools()`) and the `/settings/notifications` module (`Module`, `Templates()`) are
+  registered by the wiring slices. `settings_tabs` in `tpl/templates/_settings.gohtml` is the settings tab
+  bar every settings page includes.
 - `internal/testutil/golden`: the golden loaders, canonical-JSON
   comparison and `Replay`, an `httptest` server for recorded exchanges.
 - `internal/rx/`: Python `re` patterns on regexp2 with Python semantics and
