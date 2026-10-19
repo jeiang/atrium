@@ -83,6 +83,27 @@ tags `sqlite_fts5` and `modernc`).
   dependencies in the default build. It is only written after the gate
   passes.
 - Commits are signed and signed off (DCO), as for Python.
+- Templates (`internal/web/tpl`): stdlib `html/template` with
+  `missingkey=error`, one parse per page. `templates/<page>.gohtml` is a page
+  that fills the `title`, `heading`, `content`, `content_class`, `body_attrs`
+  and `page` blocks of `base.gohtml`. A file starting with `_` is a fragment
+  (an htmx response or an include) and holds macros as `{{define}}`;
+  `templates/basecoat/` holds the shared basecoat components. Every template
+  receives the `*tpl.Frame`; page data is `.Data`. `tpl.View` turns typed
+  structs into snake_case (json tag) maps, so a struct and a decoded golden
+  JSON read the same; an ordered mapping is a `py.Dict`, iterated with
+  `{{range items .x}}` (`.Key`, `.Value`). A macro takes one `dict` using the
+  Jinja parameter names (`opt . "key" default` for optional ones), or the
+  value itself when it has one parameter. A `{% call %}` body or `{% set %}`
+  capture becomes a named `{{define}}` passed through `partial`. Text-only
+  macros are functions (`lbl "stage" x`, `pct`, `place`, `proposal`). Markup
+  crosses the escaping boundary only as `template.HTML`, `template.URL` or
+  `template.JS`; a plain string is escaped, and `safeurl` filters link
+  schemes. A page slice adds functions in its own `funcs_<slice>.go` through
+  `registerFuncs`. Tests render with `tpltest`: `Compare` canonical-diffs a
+  Go render against `testdata/golden/html` and fails on any difference not
+  listed as a `tpltest.Rewrite`, which is where a slice documents its diffs;
+  `tpltest.Load` keeps JSON key order.
 
 ## Branches and pull requests
 
