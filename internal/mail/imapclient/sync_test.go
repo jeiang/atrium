@@ -45,12 +45,12 @@ func syncSearch(criteria string, uids string) string {
 
 func syncFull(set string, fetched map[int]string, flags string) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf(fullFetch, set) + "\n")
+	fmt.Fprintf(&b, fullFetch+"\n", set)
 	seq := 0
 	for _, uid := range slices.Sorted(maps.Keys(fetched)) {
 		seq++
-		b.WriteString(fmt.Sprintf("S: * %d FETCH (UID %d FLAGS (%s) INTERNALDATE \" 6-Oct-2026 10:00:00 +0000\" RFC822.SIZE 34 "+
-			`BODYSTRUCTURE ("text" "plain" ("charset" "utf-8") NIL NIL "7bit" 4 1 NIL NIL NIL NIL) BODY[HEADER] {30}`+"\n", seq, uid, flags))
+		fmt.Fprintf(&b, "S: * %d FETCH (UID %d FLAGS (%s) INTERNALDATE \" 6-Oct-2026 10:00:00 +0000\" RFC822.SIZE 34 "+
+			`BODYSTRUCTURE ("text" "plain" ("charset" "utf-8") NIL NIL "7bit" 4 1 NIL NIL NIL NIL) BODY[HEADER] {30}`+"\n", seq, uid, flags)
 		b.WriteString("S: From: a@x.test\nS: Subject: " + fetched[uid] + "\nS:  BODY[TEXT]<0> {4}\nS: body)\n")
 	}
 	b.WriteString("S: {t} OK FETCH completed\n")
