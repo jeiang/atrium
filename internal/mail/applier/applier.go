@@ -827,7 +827,8 @@ func (a *Applier) correctionIntents(ctx context.Context, account string, budget 
 	}
 	all, err := db.Collect(rows, func(r *sql.Rows) (row, error) {
 		var x row
-		return x, r.Scan(&x.id, &x.digest, &x.location, &x.labels, &x.target)
+		err := r.Scan(&x.id, &x.digest, &x.location, &x.labels, &x.target)
+		return x, err
 	})
 	if err != nil {
 		return nil, err
@@ -873,7 +874,8 @@ func (a *Applier) flagIntents(ctx context.Context, account string, budget *Budge
 	}
 	found, err := db.Collect(rows, func(r *sql.Rows) (Intent, error) {
 		in := Intent{Kind: live.Flag, check: unreadInbox}
-		return in, r.Scan(&in.ID, &in.Digest)
+		err := r.Scan(&in.ID, &in.Digest)
+		return in, err
 	})
 	if err != nil {
 		return nil, err
