@@ -289,3 +289,15 @@ def test_rule_editor_saves_and_reopens_an_age_condition(cfg, conn):
     (stored,) = [r for r in db.connect(cfg.db_path).execute("SELECT id, conditions FROM rules")]
     assert '"value": 7' in stored["conditions"] or '"value":7' in stored["conditions"]
     assert client.get(f"/rules/{stored['id']}/edit").status_code == 200
+
+
+def test_every_offered_proposal_kind_is_accepted(cfg, conn):
+    import re
+
+    client = make_client(cfg)
+    page = client.get("/proposals").text
+    select = re.search(r'<select id="p-kind".*?</select>', page, re.S).group(0)
+    offered = re.findall(r'<option value="([^"]+)"', select)
+    assert {"calendar_event", "reminder", "notion_wiki_plan"} <= set(offered)
+    for kind in offered:
+        assert client.get(f"/proposals?kind={kind}", headers=HX).status_code == 200, kind

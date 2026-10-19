@@ -19,6 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .. import (
     applier,
+    calendar_proposals,
     corrections,
     db,
     drafts,
@@ -27,8 +28,10 @@ from .. import (
     live,
     llm,
     message,
+    notion_migrate,
     notion_proposals,
     notion_search,
+    openloops,
     proposals,
     router,
     ruleedit,
@@ -78,7 +81,15 @@ NO_NOTION_PROPOSAL = "No proposal was made. The pages may already be linked, or 
 SPLIT_KINDS = (executors.REBALANCE_SPLIT, executors.REBALANCE_MERGE, executors.INBOX_BACKLOG)
 GROUPED_KINDS = (executors.REBALANCE_SPLIT, executors.INBOX_BACKLOG)
 MESSAGE_KINDS = (executors.DELETION_RULE, executors.GMAIL_LABEL_MERGE)
-PROPOSAL_KINDS = (*SPLIT_KINDS, *MESSAGE_KINDS, notion_proposals.KIND_LINK, notion_proposals.KIND_EDIT)
+PROPOSAL_KINDS = (
+    *SPLIT_KINDS,
+    *MESSAGE_KINDS,
+    notion_proposals.KIND_LINK,
+    notion_proposals.KIND_EDIT,
+    calendar_proposals.KIND,
+    openloops.KIND_REMINDER,
+    notion_migrate.KIND,
+)
 RULE_PROBLEMS = {
     "op eq needs a value": "“is” needs a value.",
     "op re needs a value": "“matches regex” needs a pattern.",
