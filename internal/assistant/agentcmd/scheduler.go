@@ -2,6 +2,7 @@ package agentcmd
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
@@ -9,10 +10,15 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/media/mediacmd"
 )
 
 // Callables are the built-in jobs that run a function. A slice that ports one adds it here.
-func callables() map[string]worker.Callable { return map[string]worker.Callable{} }
+func callables() map[string]worker.Callable {
+	out := map[string]worker.Callable{}
+	maps.Copy(out, mediacmd.Callables())
+	return out
+}
 
 // schedulerCommand is `agent scheduler`: the worker loop until SIGTERM or SIGINT, which cancel the context and
 // exit 0 after the claims in flight returned. Their runs stay resumable.

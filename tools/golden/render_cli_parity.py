@@ -19,7 +19,6 @@ CLI_GOLDEN = GOLDEN / "cli"
 EXCLUDED_TOP = {
     "notion": "Notion module lands after cutover; the production binary answers invalid choice (exit 2)",
     "money": "money module lands after cutover; the production binary answers invalid choice (exit 2)",
-    "media": "media module lands after cutover; the production binary answers invalid choice (exit 2)",
     "codemode-worker": "code mode is gone; the production binary keeps the command only as an inert unit target that exits 1 with a removed-in-v2 message",
 }
 EXCLUDED_PATHS = {

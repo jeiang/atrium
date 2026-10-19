@@ -19,6 +19,7 @@ import (
 	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/assistant/writes"
+	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/notify"
 )
 
@@ -43,5 +44,6 @@ func Undoers() *writes.Registry {
 	r := writes.NewRegistry()
 	profiletools.RegisterUndoer(r)
 	calendartools.RegisterUndoers(r)
+	money.RegisterUndoer(r)
 	return r
 }
