@@ -1451,23 +1451,23 @@
         }
       ],
       "command": "notion",
-      "note": "Notion module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "notion"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium notion [-h] {sync,search,wiki-plan} ..."
     },
     {
       "args": [],
       "cases": [],
       "command": "notion sync",
-      "note": "Notion module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "notion",
         "sync"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium notion sync [-h]"
     },
     {
@@ -1500,19 +1500,19 @@
         }
       ],
       "command": "notion search",
-      "note": "Notion module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "notion",
         "search"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium notion search [-h] [--private] [--limit LIMIT] query"
     },
     {
       "args": [],
       "cases": [],
       "command": "notion wiki-plan",
-      "note": "Notion module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "wiki-plan is not ported in Phase A; the binary prints `atrium notion wiki-plan is not ported in v2` and exits 1",
       "path": [
         "notion",
         "wiki-plan"
@@ -1701,7 +1701,7 @@
       "args": [],
       "cases": [],
       "command": "calendar candidates",
-      "note": "lands with the event candidates slice (#136); the production binary answers invalid choice (exit 2)",
+      "note": "lands with the event candidates slice (#136); the binary prints `atrium calendar candidates is not ported in v2` and exits 1",
       "path": [
         "calendar",
         "candidates"

@@ -18,7 +18,9 @@ import (
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
+	moneypages "github.com/jeiang/atrium/internal/money/pages"
 	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -53,6 +55,7 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 		mailCmds.GmailLabelsCommand(),
 		mailCmds.LiveCommand(),
 		mailCmds.ProposalsCommand(),
+		notion.Command(notion.Options{}),
 		openloops.Command(now),
 		watches.Command(now),
 		agentcmd.Command(),
@@ -63,6 +66,7 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 			web.Page{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
 			web.Page{Module: notify.Module, Templates: notify.Templates()},
 			web.Page{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers()}), Templates: reviewpages.Templates()},
+			web.Page{Module: moneypages.Module(moneypages.Options{}), Templates: moneypages.Templates()},
 		),
 		codemodeWorkerCommand(),
 	}

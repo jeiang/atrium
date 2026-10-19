@@ -17,13 +17,12 @@ from atrium import cli  # noqa: E402
 
 CLI_GOLDEN = GOLDEN / "cli"
 EXCLUDED_TOP = {
-    "notion": "Notion module lands after cutover; the production binary answers invalid choice (exit 2)",
     "money": "money module lands after cutover; the production binary answers invalid choice (exit 2)",
     "codemode-worker": "code mode is gone; the production binary keeps the command only as an inert unit target that exits 1 with a removed-in-v2 message",
 }
 EXCLUDED_PATHS = {
-    ("notion", "wiki-plan"): "excluded with the Notion module",
-    ("calendar", "candidates"): "lands with the event candidates slice (#136); the production binary answers invalid choice (exit 2)",
+    ("notion", "wiki-plan"): "wiki-plan is not ported in Phase A; the binary prints `atrium notion wiki-plan is not ported in v2` and exits 1",
+    ("calendar", "candidates"): "lands with the event candidates slice (#136); the binary prints `atrium calendar candidates is not ported in v2` and exits 1",
 }
 GO_ONLY = [
     {"command": "--version", "args": [], "usage": "atrium --version", "status": "go-only", "note": "prints `atrium <version>` and exits 0; Python had no version flag", "cases": []},

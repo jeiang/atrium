@@ -13,7 +13,7 @@ import (
 
 // Command is the `calendar` group.
 func Command() *cli.Command {
-	return &cli.Command{Name: "calendar", Commands: []*cli.Command{googleAuth(config.OS)}}
+	return &cli.Command{Name: "calendar", Commands: []*cli.Command{candidates(), googleAuth(config.OS)}}
 }
 
 func googleAuth(env config.Env) *cli.Command {
@@ -36,6 +36,18 @@ func googleAuth(env config.Env) *cli.Command {
 				}
 				_, _ = fmt.Fprintf(e.Stdout, "\nGOOGLE_REFRESH_TOKEN=%s\n", token)
 				return cli.ExitOK
+			}
+		},
+	}
+}
+
+func candidates() *cli.Command {
+	return &cli.Command{
+		Name: "candidates",
+		Setup: func(*cli.Args) cli.Handler {
+			return func(e *cli.Env) int {
+				_, _ = fmt.Fprintln(e.Stderr, "atrium calendar candidates is not ported in v2")
+				return cli.ExitError
 			}
 		},
 	}

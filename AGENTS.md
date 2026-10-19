@@ -136,6 +136,8 @@ and backups; nothing of that lives here.
 - `cmd/atrium/`: the Go binary's entry point (root command).
 - `internal/cli/`: the subcommand table and argparse-compatible parsing;
   usage errors exit 2, a handler's return value is the exit code.
+- `internal/notion/`: the Notion API client, page text conversion, mirror sync, hybrid search and the
+  `notion sync` and `notion search` commands.
 - `internal/mail/mailcmd/`: `rules`, `shadow-report`, `reindex`, the scans,
   `live` and `proposals` commands.
 - `internal/media/`: qBittorrent client, release parsing, filing, EZTV

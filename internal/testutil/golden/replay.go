@@ -96,8 +96,8 @@ func checkReplayed(t testing.TB, i int, want Request, r *http.Request, query fun
 	if query != nil {
 		gotQuery, wantQuery = query(gotQuery), query(wantQuery)
 	}
-	if r.Method != want.Method || r.URL.Path != want.Path || gotQuery != wantQuery {
-		t.Errorf("golden replay: request %d: %s %s?%s, want %s %s?%s", i, r.Method, r.URL.Path, gotQuery, want.Method, want.Path, wantQuery)
+	if r.Method != want.Method || r.URL.EscapedPath() != want.Path || gotQuery != wantQuery {
+		t.Errorf("golden replay: request %d: %s %s?%s, want %s %s?%s", i, r.Method, r.URL.EscapedPath(), gotQuery, want.Method, want.Path, wantQuery)
 	}
 	for k, v := range want.Headers {
 		if got := r.Header.Get(k); got != v && (!strings.HasPrefix(v, "multipart/") || !strings.HasPrefix(got, v)) {

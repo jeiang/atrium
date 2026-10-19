@@ -215,12 +215,6 @@ func withUnported(have []*cli.Command) []*cli.Command {
 		switch {
 		case i >= 0:
 			out = append(out, have[i])
-		case name == "notion":
-			out = append(out, &cli.Command{Name: name, Commands: []*cli.Command{
-				{Name: "sync", Setup: noop},
-				{Name: "search", Setup: noop},
-				{Name: "wiki-plan", Help: "draft one proposal that turns every database and page into the wiki page tree", Setup: noop},
-			}})
 		default:
 			out = append(out, &cli.Command{Name: name, Setup: noop})
 		}
@@ -503,7 +497,7 @@ func TestCLIParity(t *testing.T) {
 		if row.Status == "ported" && !registered[row.Path[0]] {
 			t.Errorf("%s: ported but the binary has no %q command", row.Command, row.Path[0])
 		}
-		if row.Status == "excluded-until-ported" && row.Path[0] != "codemode-worker" && len(row.Path) == 1 && registered[row.Path[0]] {
+		if row.Status == "excluded-until-ported" && len(row.Path) == 1 && row.Path[0] != "codemode-worker" && registered[row.Path[0]] {
 			t.Errorf("%s: excluded but the binary registers %q", row.Command, row.Path[0])
 		}
 	}
@@ -532,6 +526,12 @@ func TestCLIParity(t *testing.T) {
 		t.Run("excluded "+row.Command, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := newApp().Run(context.Background(), row.Path, &stdout, &stderr)
+			if len(row.Path) > 1 && registered[row.Path[0]] {
+				if want := "atrium " + row.Command + " is not ported in v2"; code != cli.ExitError || !strings.Contains(stderr.String(), want) {
+					t.Errorf("exit %d, stderr %q; want exit 1 and %q", code, stderr.String(), want)
+				}
+				return
+			}
 			if row.Path[0] == "codemode-worker" {
 				if code != cli.ExitError || !strings.Contains(stderr.String(), "removed in v2") {
 					t.Errorf("exit %d, stderr %q; want exit 1 and the removed-in-v2 message", code, stderr.String())

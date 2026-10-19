@@ -11,6 +11,7 @@ import (
 	contexttools "github.com/jeiang/atrium/internal/assistant/tools/context"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
+	moneytools "github.com/jeiang/atrium/internal/assistant/tools/money"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
@@ -29,7 +30,7 @@ func Registry() (*registry.Registry, error) {
 	for _, tools := range [][]tool.Tool{
 		mailtools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
 		contexttools.Tools(), recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
-		scheduletools.Tools(), skillstools.Tools(),
+		scheduletools.Tools(), skillstools.Tools(), moneytools.Tools(),
 		grafanatools.Tools(), calendartools.Tools(),
 	} {
 		if err := r.Add(tools...); err != nil {
