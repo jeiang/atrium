@@ -1,7 +1,6 @@
 package openloops
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -17,24 +16,10 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// headerBlock is the bytes up to the first blank line: what a headers-only parse reads.
-func headerBlock(data []byte) []byte {
-	for start := 0; start < len(data); {
-		end := bytes.IndexByte(data[start:], '\n')
-		if end < 0 {
-			break
-		}
-		line := bytes.TrimSuffix(data[start:start+end], []byte("\r"))
-		if len(line) == 0 {
-			return data[:start+end+1]
-		}
-		start += end + 1
-	}
-	return data
-}
-
 // BackfillHeaders is backfill_headers: in_reply_to and refs for rows indexed before those columns existed, from the
-// stored raw header. A raw file whose headers do not parse leaves both empty.
+// stored raw header, read as Python's headers-only parse reads it. A file that is missing leaves both empty; a
+// header Python's parser raises on (a Content-Type whose parameters cannot be parsed) fails the whole step, with
+// the rows before it already updated.
 func BackfillHeaders(ctx context.Context, d *db.DB, cfg config.Config, now float64, limit int) (int, error) {
 	rows, err := d.Read.QueryContext(ctx,
 		"SELECT id, raw_path FROM messages WHERE in_reply_to IS NULL AND date_ts >= ? ORDER BY id DESC LIMIT ?",
@@ -61,10 +46,12 @@ func BackfillHeaders(ctx context.Context, d *db.DB, cfg config.Config, now float
 			if err != nil {
 				return 0, err
 			}
-			if msg, err := mime.Parse(headerBlock(data)); err == nil {
-				inReplyTo = strings.Join(features.MsgIDList(features.Header(msg, "In-Reply-To")), " ")
-				refs = strings.Join(features.MsgIDList(features.Header(msg, "References")), " ")
+			msg, err := mime.ParseHeaders(data)
+			if err != nil {
+				return 0, err
 			}
+			inReplyTo = strings.Join(features.MsgIDList(features.Header(msg, "In-Reply-To")), " ")
+			refs = strings.Join(features.MsgIDList(features.Header(msg, "References")), " ")
 		}
 		if _, err := d.Write.ExecContext(ctx, "UPDATE messages SET in_reply_to = ?, refs = ? WHERE id = ?", inReplyTo, refs, r.id); err != nil {
 			return 0, err

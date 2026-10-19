@@ -76,3 +76,37 @@ func TestBackfillStopsAtTheHeaderBlock(t *testing.T) {
 		t.Errorf("headers = %q %q, %v", in, refs, err)
 	}
 }
+
+func TestBackfillReadsBareCarriageReturnsAndFailsOnAnUnparsableContentType(t *testing.T) {
+	d := newDB(t)
+	cache := t.TempDir()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(cache, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("cr.eml", "In-Reply-To: <p1@x.test>\rReferences: <p0@x.test>\r\rbody")
+	row := mail(t, d, 1, 1, fields{"raw_path": "cr.eml"})
+	exec(t, d, "UPDATE messages SET in_reply_to = NULL, refs = NULL")
+	cfg := config.Config{CacheDir: cache}
+	if n, err := openloops.BackfillHeaders(ctx, d, cfg, NOW(), 10); err != nil || n != 1 {
+		t.Fatalf("BackfillHeaders = %d, %v", n, err)
+	}
+	var in, refs string
+	if err := d.Read.QueryRow("SELECT in_reply_to, refs FROM messages WHERE id = ?", row).Scan(&in, &refs); err != nil || in != "p1@x.test" || refs != "p0@x.test" {
+		t.Errorf("headers = %q %q, %v", in, refs, err)
+	}
+	write("bad.eml", "In-Reply-To: <p2@x.test>\r\nContent-Type: text/plain; name*=\"'\"\r\n\r\nbody")
+	bad := mail(t, d, 2, 1, fields{"raw_path": "bad.eml"})
+	exec(t, d, "UPDATE messages SET in_reply_to = NULL WHERE id = ?", bad)
+	if _, err := openloops.BackfillHeaders(ctx, d, cfg, NOW(), 10); err == nil {
+		t.Error("an unparsable Content-Type must fail the step as it does in Python")
+	}
+	out := openloops.Refresh(ctx, d, cfg, NOW(), openloops.Options{Env: env(), Judge: (&fakeJudge{}).judge, Clock: NOW})
+	if v, _ := out.Get("backfilled"); v != nil {
+		t.Errorf("backfilled = %v, want null", v)
+	}
+	if v, _ := out.Get("loops"); v == nil {
+		t.Error("the other steps still run")
+	}
+}

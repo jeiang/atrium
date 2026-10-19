@@ -563,7 +563,7 @@ type Package struct {
 }
 
 // ListPackages is list_packages: newest update first; activeOnly drops delivered and stale packages and
-// includeDismissed keeps dismissed ones. Updated is a date in ATRIUM_TZ of env.
+// includeDismissed keeps dismissed ones. Updated is a date in ATRIUM_TZ of env, which is read only when a package is listed.
 func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64, activeOnly, includeDismissed bool) ([]Package, error) {
 	where := " WHERE dismissed = 0"
 	if includeDismissed {
@@ -593,6 +593,9 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 				out = append(out, p)
 			}
 		}
+	}
+	if len(out) == 0 {
+		return out, nil
 	}
 	zone, err := config.Zone(config.TZName(env))
 	if err != nil {

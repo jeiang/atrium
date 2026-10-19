@@ -257,3 +257,16 @@ func TestPackageSchemaAndHint(t *testing.T) {
 		t.Errorf("schema = %s, %v", raw, err)
 	}
 }
+
+func TestListPackagesReadsTheZoneOnlyForRows(t *testing.T) {
+	d := dbtest.Mail(t)
+	bad := config.Map(map[string]string{"ATRIUM_TZ": "Not/AZone"})
+	if got, err := watches.ListPackages(ctx, d.Read, bad, now, false, false); err != nil || len(got) != 0 {
+		t.Errorf("no rows = %v, %v; want no error", got, err)
+	}
+	mail(t, d, 1, 1, "1Z999AA10123456784", fields{"subject": "Shipped", "k_order": 1})
+	scan(t, d, &chat{})
+	if _, err := watches.ListPackages(ctx, d.Read, bad, now, false, false); err == nil {
+		t.Error("an unknown zone must fail once a package is listed")
+	}
+}

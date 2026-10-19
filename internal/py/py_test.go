@@ -1,7 +1,9 @@
 package py
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -192,21 +194,35 @@ func TestISOFormat(t *testing.T) {
 }
 
 func TestDateFromISOFormat(t *testing.T) {
-	for in, want := range map[string]string{"2026-10-16": "2026-10-16", "20261016": "2026-10-16", "2026-W42-5": "2026-10-16", "2026W425": "2026-10-16"} {
+	raw, err := os.ReadFile("testdata/date_fromisoformat.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want map[string]*string
+	if err := json.Unmarshal(raw, &want); err != nil {
+		t.Fatal(err)
+	}
+	valid := 0
+	for in, w := range want {
 		y, m, d, ok := DateFromISOFormat(in)
-		if got := fmt.Sprintf("%04d-%02d-%02d", y, m, d); !ok || got != want {
-			t.Errorf("DateFromISOFormat(%q) = %s, %v", in, got, ok)
+		got := ""
+		if ok {
+			got = fmt.Sprintf("%04d-%02d-%02d", y, m, d)
+			valid++
+		}
+		if (w == nil) == ok || (w != nil && *w != got) {
+			t.Errorf("DateFromISOFormat(%q) = %q, %v; Python %v", in, got, ok, w)
 		}
 	}
-	for _, bad := range []string{"", "2026-10-1", "2026-13-01", "2026-10-16T", "20261016T12", "soon"} {
-		if _, _, _, ok := DateFromISOFormat(bad); ok {
-			t.Errorf("DateFromISOFormat(%q) accepted", bad)
-		}
+	if valid < 500 {
+		t.Errorf("only %d valid cases; the corpus is too thin", valid)
 	}
 }
 
 func TestUpper(t *testing.T) {
-	for in, want := range map[string]string{"abc-12": "ABC-12", "straße": "STRASSE", "ǆ": "Ǆ", "ŉ": "ʼN", "ﬃ": "FFI"} {
+	for in, want := range map[string]string{"abc-12": "ABC-12", "straße": "STRASSE", "ǆ": "Ǆ", "ŉ": "ʼN", "ﬃ": "FFI",
+		"\ua7cd\ua7db": "\ua7cc\ua7da", "\U00010d70\U00010d85": "\U00010d50\U00010d65", "\u1f80": "\u1f08\u0399",
+	} {
 		if got := Upper(in); got != want {
 			t.Errorf("Upper(%q) = %q, want %q", in, got, want)
 		}

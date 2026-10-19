@@ -324,7 +324,7 @@ and backups; nothing of that lives here.
   exception is `internal/mail/mime`'s own `pystr.go`). Ported float
   reductions use `py.Sum`/`py.SumSq`, never a hand-written loop. `py.Casefold`
   (`str.casefold`) and the `str.isspace` table come from
-  `tools/contacts/gen_tables.py` (`casefoldtable.go`, `spacetable.go`).
+  `tools/contacts/gen_tables.py` (`casefoldtable.go`, `spacetable.go`, `uppertable.go`); `py.Upper` is `str.upper`.
 - `internal/contacts/`: read-only `.vcf` parsing of the vdirsyncer mirror
   under `ATRIUM_CONTACTS_DIR` (no decoding of quoted-printable or charset
   parameters, as in Python); an unset, missing or empty directory yields no
