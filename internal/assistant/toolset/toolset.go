@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	contexttools "github.com/jeiang/atrium/internal/assistant/tools/context"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
+	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
@@ -17,6 +18,7 @@ import (
 	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/assistant/writes"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/notify"
 )
 
@@ -24,7 +26,7 @@ import (
 func Registry() (*registry.Registry, error) {
 	r := registry.New()
 	for _, tools := range [][]tool.Tool{
-		mailtools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
+		mailtools.Tools(), mediatools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
 		contexttools.Tools(), recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
 		scheduletools.Tools(), skillstools.Tools(),
 	} {
@@ -39,5 +41,6 @@ func Registry() (*registry.Registry, error) {
 func Undoers() *writes.Registry {
 	r := writes.NewRegistry()
 	profiletools.RegisterUndoer(r)
+	mediatools.RegisterUndoer(r, config.OS)
 	return r
 }

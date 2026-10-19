@@ -1,0 +1,31 @@
+{{define "title"}}{{.Data.show.title}}{{end}}
+{{define "heading"}}Media · {{.Data.show.title}}{{if .Data.show.year}} ({{.Data.show.year}}){{end}}{{end}}
+{{define "content"}}{{$ttl := .Data.ttl_hours}}{{$dir := .Data.show.dir}}
+<p class="text-xs"><a class="underline underline-offset-4" href="/media/library">{{icon "arrow-left" "inline size-3.5"}} Library</a></p>
+<div class="flex items-start gap-4">
+  <img class="aspect-[2/3] w-32 shrink-0 rounded-lg border bg-muted object-cover" src="/media/art/show/{{urlencode $dir}}" alt="">
+  <p class="text-sm text-muted-foreground">{{len .Data.show.seasons}} season{{if ne (len .Data.show.seasons) 1}}s{{end}}. Public links are signed and expire after {{$ttl}} hours; VPN links need the mesh.</p>
+</div>
+{{range $i, $s := .Data.show.seasons}}{{$n := inc $i}}
+<section class="flex flex-col gap-3" aria-labelledby="season-{{$n}}">
+  <div class="flex items-center gap-3">
+    {{if not (isnil $s.number)}}<img class="aspect-[2/3] w-12 rounded-md border bg-muted object-cover" src="/media/art/season/{{urlencode $dir}}/{{$s.number}}" alt="">{{end}}
+    <h2 id="season-{{$n}}" class="text-sm font-medium">{{$s.dir}} <span class="text-muted-foreground">({{len $s.episodes}})</span></h2>
+  </div>
+  <ul class="flex flex-col gap-3" role="list" aria-label="{{$s.dir}} episodes">
+    {{range $s.episodes}}
+    <li class="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center">
+      <img class="aspect-video w-full rounded-md bg-muted object-cover sm:w-40" src="/media/thumb/{{urlencode .rel}}" alt="" loading="lazy">
+      <div class="flex min-w-0 flex-1 flex-col gap-2">
+        <span class="text-sm font-medium">{{if not (isnil .episode)}}Episode {{.episode}}{{else}}{{.name}}{{end}}</span>
+        <span class="break-all font-mono text-xs text-muted-foreground">{{.name}} · {{printf "%.1f" (fdiv .size 1e9)}} GB</span>
+        {{template "media_file_links" (dict "f" . "ttl_hours" $ttl)}}
+      </div>
+    </li>
+    {{else}}
+    <li class="text-sm text-muted-foreground">No episodes in this folder.</li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+{{end}}
