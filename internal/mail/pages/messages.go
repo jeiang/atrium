@@ -45,8 +45,8 @@ func withQuery(path, query string) string {
 }
 
 func referer(r *http.Request) (path, query string, sameHost bool) {
-	netloc, path, query, ok := web.SplitURL(r.Header.Get("Referer"))
-	return path, query, ok && netloc == r.Host
+	parts, err := py.URLSplit(r.Header.Get("Referer"))
+	return parts.Path, parts.Query, err == nil && parts.Netloc == r.Host
 }
 
 func backTo(r *http.Request) backLink {
@@ -116,8 +116,8 @@ func (s *service) correctForm(w http.ResponseWriter, r *http.Request) {
 func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 	id, errs := pathInt(r, "message_id")
 	form := formValues(r)
-	dest := lastValue(form["dest"], "")
-	context := lastValue(form["context"], contextMessage)
+	dest := web.FormString(form, "dest", "")
+	context := web.FormString(form, "context", contextMessage)
 	if context != contextRow && context != contextMessage {
 		errs = append(errs, web.BadLiteral("body", "context", context, "'row'", "'message'"))
 	}

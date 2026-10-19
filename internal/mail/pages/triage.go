@@ -15,7 +15,7 @@ func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var offset int
 	if values, given := q["offset"]; given {
-		n, ok := web.ParseInt(lastValue(values, ""))
+		n, ok := py.LaxInt64(lastValue(values, ""))
 		if !ok {
 			web.Unprocessable(w, web.BadInt("query", "offset", lastValue(values, "")))
 			return

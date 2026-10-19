@@ -4,13 +4,12 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"math/big"
 	"net/http"
 	"net/url"
 	"reflect"
 	"slices"
 	"strings"
-	"unicode"
+	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail/ruleedit"
@@ -43,20 +42,16 @@ func ruleProblem(err error) string {
 	if friendly, ok := ruleProblems[text]; ok {
 		return friendly
 	}
-	for i, r := range text {
-		return string(unicode.ToUpper(r)) + text[i+len(string(r)):]
-	}
-	return text
+	_, size := utf8.DecodeRuneInString(text)
+	return py.Upper(text[:size]) + text[size:]
 }
 
 func (s *service) ruleViews(ctx context.Context, account string) []ruleView {
-	var listed []ruleedit.RuleDict
-	var err error
-	if account == "" {
-		listed, err = ruleedit.ListAllRules(ctx, s.deps.DB.Read)
-	} else {
-		listed, err = ruleedit.ListRules(ctx, s.deps.DB.Read, account)
+	var scope *string
+	if account != "" {
+		scope = &account
 	}
+	listed, err := ruleedit.ListRules(ctx, s.deps.DB.Read, scope)
 	check(err)
 	out := make([]ruleView, len(listed))
 	for i, r := range listed {
@@ -130,7 +125,7 @@ func (s *service) ruleNew(w http.ResponseWriter, r *http.Request) {
 	data := ruleEditData{IsNew: true, Suggestions: []map[string]any{}, Errors: []string{}}
 	ctx := r.Context()
 	if values, given := q["message"]; given {
-		sourceID, ok := web.ParseInt(lastValue(values, ""))
+		sourceID, ok := py.LaxInt64(lastValue(values, ""))
 		if !ok {
 			web.Unprocessable(w, web.BadInt("query", "message", lastValue(values, "")))
 			return
@@ -183,7 +178,7 @@ type ruleForm struct {
 
 func readRuleForm(form url.Values) ruleForm {
 	return ruleForm{
-		account: lastValue(form["account"], ""), action: lastValue(form["action"], rules.ActionFile), dest: lastValue(form["dest"], ""),
+		account: web.FormString(form, "account", ""), action: web.FormString(form, "action", rules.ActionFile), dest: web.FormString(form, "dest", ""),
 		fields: form["field"], ops: form["op"], values: form["value"],
 	}
 }
@@ -207,8 +202,11 @@ func conditionList(fields, ops, values []string) []any {
 				}
 			}
 			condition["value"] = list
-		case field == rules.AgeField && isDigits(py.Strip(value)):
-			n, _ := new(big.Int).SetString(py.Strip(value), 10)
+		case field == rules.AgeField && py.IsDigits(py.Strip(value)):
+			n, err := py.IntString(value)
+			if err != nil {
+				panic(err)
+			}
 			if n.IsInt64() {
 				condition["value"] = n.Int64()
 			} else {
@@ -220,18 +218,6 @@ func conditionList(fields, ops, values []string) []any {
 		out = append(out, condition)
 	}
 	return out
-}
-
-func isDigits(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, r := range s {
-		if r > unicode.MaxASCII || !unicode.IsDigit(r) {
-			return false
-		}
-	}
-	return true
 }
 
 // raw is rule_raw: the rule dict the editor functions take, without its id.
@@ -307,7 +293,7 @@ func (s *service) saveRule(w http.ResponseWriter, r *http.Request, id string, is
 
 func (s *service) ruleCreate(w http.ResponseWriter, r *http.Request) {
 	form := formValues(r)
-	s.saveRule(w, r, py.Strip(lastValue(form["id"], "")), true, readRuleForm(form))
+	s.saveRule(w, r, py.Strip(web.FormString(form, "id", "")), true, readRuleForm(form))
 }
 
 func (s *service) ruleUpdate(w http.ResponseWriter, r *http.Request) {
@@ -331,8 +317,8 @@ func (s *service) ruleMove(w http.ResponseWriter, r *http.Request) {
 	id := web.PathParam(r, "rule_id")
 	form := formValues(r)
 	var errs []web.FieldError
-	direction := lastValue(form["direction"], "")
-	switch _, given := form["direction"]; {
+	direction, given := web.FormField(form, "direction")
+	switch {
 	case !given:
 		errs = append(errs, web.Missing("body", "direction"))
 	case direction != "up" && direction != "down":
@@ -342,7 +328,7 @@ func (s *service) ruleMove(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	account := lastValue(form["account"], "")
+	account := web.FormString(form, "account", "")
 	ctx := context.WithoutCancel(r.Context())
 	ordered := idsOf(s.ruleViews(ctx, account))
 	index := slices.Index(ordered, id)

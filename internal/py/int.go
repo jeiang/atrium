@@ -138,3 +138,39 @@ func AttributeError(v any, attr string) error {
 
 // TypeError is a TypeError with the given text.
 func TypeError(format string, args ...any) error { return raise("TypeError", format, args...) }
+
+// LaxInt is how pydantic reads a str for an int field in lax mode, as FastAPI does for a query, path or form
+// value: surrounding whitespace is stripped, then one sign, ASCII digits with single underscores between digits,
+// and optionally "." followed by one or more zeros; anything else, including exponents and Unicode digits, is
+// refused (ok is false).
+func LaxInt(s string) (n *big.Int, ok bool) {
+	body := Strip(s)
+	whole, fraction, hasFraction := strings.Cut(body, ".")
+	if hasFraction && (fraction == "" || strings.Trim(fraction, "0") != "") {
+		return nil, false
+	}
+	unsigned := strings.TrimLeft(whole, "+-")
+	if len(whole)-len(unsigned) > 1 || unsigned == "" {
+		return nil, false
+	}
+	for i := range len(unsigned) {
+		c := unsigned[i]
+		switch {
+		case c >= '0' && c <= '9':
+		case c == '_' && i > 0 && i < len(unsigned)-1 && unsigned[i-1] != '_' && unsigned[i+1] != '_':
+		default:
+			return nil, false
+		}
+	}
+	n, err := IntString(whole)
+	return n, err == nil
+}
+
+// LaxInt64 is LaxInt as an int64; ok is also false when the value does not fit.
+func LaxInt64(s string) (int64, bool) {
+	n, ok := LaxInt(s)
+	if !ok || !n.IsInt64() {
+		return 0, false
+	}
+	return n.Int64(), true
+}

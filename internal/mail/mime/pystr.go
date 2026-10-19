@@ -4,6 +4,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/jeiang/atrium/internal/py"
 )
 
 const surrogateBase = 0xDC00
@@ -207,7 +209,7 @@ func isDigit(r rune) bool {
 	if r < utf8.RuneSelf {
 		return r >= '0' && r <= '9'
 	}
-	return unicode.Is(pyDigit, r)
+	return py.IsDigit(r)
 }
 
 func decimalValue(r rune) (int, bool) {

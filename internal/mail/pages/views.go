@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/mail/triage"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -156,7 +157,7 @@ func formValues(r *http.Request) url.Values {
 
 func pathInt(r *http.Request, name string) (int64, []web.FieldError) {
 	text := web.PathParam(r, name)
-	n, ok := web.ParseInt(text)
+	n, ok := py.LaxInt64(text)
 	if !ok {
 		return 0, []web.FieldError{web.BadInt("path", name, text)}
 	}
