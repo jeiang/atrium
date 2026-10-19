@@ -9,7 +9,6 @@ import (
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -70,12 +69,12 @@ func (s *Service) Branch(ctx context.Context, threadID, seq int64) (int64, error
 		urls = []string{}
 	}
 	if _, err := s.DB.Write.ExecContext(ctx,
-		"UPDATE threads SET effort = ?, context_limit = ?, allowed_urls = ?, project_id = ?, code_sandbox = ?, branched_from_thread_id = ?, branched_from_seq = ? WHERE id = ?",
-		source.Effort, source.ContextLimit, py.JSONDumps(urls), source.ProjectID, store.Bit(bool(source.CodeSandbox)), threadID, seq, child); err != nil {
+		"UPDATE threads SET effort = ?, context_limit = ?, allowed_urls = ?, project_id = ?, branched_from_thread_id = ?, branched_from_seq = ? WHERE id = ?",
+		source.Effort, source.ContextLimit, py.JSONDumps(urls), source.ProjectID, threadID, seq, child); err != nil {
 		return 0, err
 	}
 	for _, m := range messages {
-		content, err := files.CloneContent(ctx, s.DB.Write, m.Content, child, s.now())
+		content, err := files.CloneContent(ctx, s.DB.Write, files.Scope{ThreadID: threadID, ProjectID: source.ProjectID}, m.Content, child, s.now())
 		if err != nil {
 			return 0, err
 		}

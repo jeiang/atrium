@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
@@ -34,7 +35,9 @@ type Deps struct {
 	Render *Renderer
 	// Error answers with the app's error handling: the error page for 404 and
 	// 422, a JSON {"detail": ...} body for every other status.
-	Error func(w http.ResponseWriter, r *http.Request, status int, detail string)
+	Error    func(w http.ResponseWriter, r *http.Request, status int, detail string)
+	Stopping <-chan struct{}
+	OnClose  func(func())
 }
 
 // Module registers one page set's routes on the shared router, in the order
@@ -57,9 +60,12 @@ type Options struct {
 }
 
 type Server struct {
-	handler http.Handler
-	mux     *chi.Mux
-	errPage ErrorPage
+	handler  http.Handler
+	mux      *chi.Mux
+	errPage  ErrorPage
+	stop     chan struct{}
+	stopOnce sync.Once
+	closers  []func()
 }
 
 func New(o Options) (*Server, error) {
@@ -91,7 +97,11 @@ func New(o Options) (*Server, error) {
 	s.mux.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/chat", http.StatusSeeOther)
 	})
-	deps := &Deps{Cfg: o.Cfg, Env: o.Env, DB: o.DB, Render: o.Render, Error: s.Error}
+	s.stop = make(chan struct{})
+	deps := &Deps{
+		Cfg: o.Cfg, Env: o.Env, DB: o.DB, Render: o.Render, Error: s.Error, Stopping: s.stop,
+		OnClose: func(f func()) { s.closers = append(s.closers, f) },
+	}
 	for _, register := range o.Modules {
 		register(s.mux, deps)
 	}
@@ -101,6 +111,16 @@ func New(o Options) (*Server, error) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }
+
+func (s *Server) StopStreams() { s.stopOnce.Do(func() { close(s.stop) }) }
+
+func (s *Server) Close() {
+	s.StopStreams()
+	for i := len(s.closers) - 1; i >= 0; i-- {
+		s.closers[i]()
+	}
+	s.closers = nil
+}
 
 // IsPartial is deps.is_partial: an htmx request that is not a history restore,
 // which wants the fragment rather than the full page.

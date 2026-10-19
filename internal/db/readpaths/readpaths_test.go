@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/db/readpaths"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 
+	_ "github.com/jeiang/atrium/internal/assistant/pages"
 	_ "github.com/jeiang/atrium/internal/mail/drafts"
 )
 

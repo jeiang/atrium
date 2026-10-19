@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
+	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/pages"
@@ -29,6 +30,7 @@ func newApp() *cli.App {
 	app.Version = version
 	app.Add(agentcmd.Command())
 	app.Add(web.ServeCommand(
+		web.Page{Module: chatpages.Module(chatpages.Options{}), Templates: chatpages.Templates()},
 		web.Page{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
 		web.Page{Module: notify.Module, Templates: notify.Templates()},
 		web.Page{Module: reviewpages.Module(reviewpages.Options{}), Templates: reviewpages.Templates()},

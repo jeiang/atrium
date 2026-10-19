@@ -1,0 +1,9 @@
+{{$d := .Data}}{{$csrf := .CSRF}}{{$v := $d.view}}{{$run := $d.run}}
+{{range $d.items}}{{template "chat_item" (dict "item" . "thread" $v.thread "last_seq" $v.last_operator_seq "busy" false "csrf" $csrf)}}{{end}}
+{{if eq $run.state "failed"}}
+<li class="ps-10" data-run="{{$run.id}}"><div class="alert" data-variant="destructive" role="alert">{{icon "circle-alert"}}<p>Run {{$run.id}} stopped: {{$run.error}}</p></div></li>
+{{else if eq $run.state "interrupted"}}
+{{template "chat_interrupted" (dict "thread_id" $d.thread_id "run_id" $run.id)}}
+{{end}}
+{{range $v.queued}}{{template "chat_item" (dict "item" (dict "kind" "queued" "id" .id "text" .text))}}{{end}}
+{{template "chat_meter" (dict "view" $v "oob" true)}}
