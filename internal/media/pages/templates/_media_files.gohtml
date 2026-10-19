@@ -1,0 +1,27 @@
+{{$hash := .Data.hash}}{{$name := or .Data.torrent_name .Data.hash}}
+<header class="flex-row items-center gap-2">
+  <h2 class="min-w-0 flex-1 truncate" title="{{$name}}">{{$name}}</h2>
+  <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close files" data-action="close-dialog">{{icon "x"}}</button>
+</header>
+<section class="max-h-[70vh] overflow-y-auto">
+  {{if .Data.error}}
+  <p class="text-sm text-destructive" role="alert">{{.Data.error}}</p>
+  {{else if .Data.files}}
+  <ul class="flex flex-col divide-y text-xs" role="list" aria-label="Files of {{$name}}">
+    {{range .Data.files}}
+    <li class="flex flex-wrap items-center gap-3 py-2">
+      <form hx-post="/media/torrents/{{$hash}}/files" hx-target="#torrent-files" hx-swap="innerHTML" class="contents">
+        <input type="hidden" name="index" value="{{.index}}">
+        <input type="hidden" name="wanted" value="{{if .wanted}}0{{else}}1{{end}}">
+        <button type="submit" class="btn" data-size="sm" data-variant="{{if .wanted}}secondary{{else}}outline{{end}}" aria-pressed="{{if .wanted}}true{{else}}false{{end}}" title="{{if .wanted}}Skip this file{{else}}Download this file{{end}}">{{if .wanted}}{{icon "check" "size-3.5"}}Wanted{{else}}{{icon "x" "size-3.5"}}Skipped{{end}}</button>
+      </form>
+      <span class="min-w-0 flex-1 break-all font-mono">{{.name}}</span>
+      <span class="text-muted-foreground tabular-nums">{{.size_text}} · {{.percent}}%</span>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="text-sm text-muted-foreground">No file list yet: metadata has not arrived.</p>
+  {{end}}
+</section>
+{{if .Toast}}{{template "_toast.gohtml" .}}{{end}}

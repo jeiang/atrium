@@ -1,0 +1,36 @@
+{{define "media_torrents"}}<div id="torrents" class="flex flex-col gap-3"{{if .active}} hx-get="/media/torrents" hx-trigger="load delay:{{.poll}}s" hx-swap="outerHTML"{{end}}>
+  {{if .error}}
+  <p class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{{.error}}</p>
+  {{end}}
+  {{if .torrents}}
+  <ul class="flex flex-col gap-3" role="list" aria-label="Torrents">
+    {{range .torrents}}
+    <li class="flex flex-col gap-2 rounded-lg border bg-card p-4">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="min-w-0 flex-1 truncate text-sm font-medium" title="{{.name}}">{{.name}}</span>
+        <span class="badge" data-variant="{{if eq .kind "media"}}secondary{{else}}outline{{end}}">{{.kind}}</span>
+        {{if .filed}}<span class="badge border-success/30 bg-success/10 text-success">filed</span>{{end}}
+        {{if .ignored}}<span class="badge" data-variant="ghost">ignored</span>{{end}}
+        <span class="badge" data-variant="outline">{{.label}}</span>
+      </div>
+      <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow="{{.percent}}" aria-valuemin="0" aria-valuemax="100" aria-label="{{.percent}}%">
+        <div class="h-full bg-primary" style="width: {{.percent}}%"></div>
+      </div>
+      <p class="flex flex-wrap gap-x-3 text-xs text-muted-foreground tabular-nums">
+        <span>{{.percent}}%</span><span>{{.size}}</span>
+        {{if .down}}<span>↓ {{.down}}</span>{{end}}
+        {{if .up}}<span>↑ {{.up}}</span>{{end}}
+        {{if .eta}}<span>ETA {{.eta}}</span>{{end}}
+      </p>
+      <div>
+        <button type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/media/torrents/{{.hash}}/files" hx-target="#torrent-files" hx-swap="innerHTML show:top">{{icon "list-checks"}}Files</button>
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  {{else if not .error}}
+  {{template "empty_state" (dict "icon_name" "download" "title" "No torrents" "body" "Add a magnet link or a .torrent file to start one.")}}
+  {{end}}
+</div>
+{{end}}
+{{template "media_torrents" .Data}}

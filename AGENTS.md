@@ -146,6 +146,17 @@ and backups; nothing of that lives here.
   callables. Filing keeps `media.group` and umask 0002: the process umask
   applies to the directories it creates, and a torrent without the `media`
   tag is never written to.
+  `links.go` signs `/media/file/*` URLs (HMAC-SHA256 over `rel\nexp`; key from
+  `ATRIUM_MEDIA_LINK_KEY` or `media-link.key`, created `O_EXCL` 0600; rotate by
+  changing the env or deleting the file), `tmdb.go` and `artwork.go` are the
+  TMDB client, posters and the `nice`d ffmpeg thumbnails behind one
+  process-wide mutex (`media-thumbnails` runs the same pass).
+  `internal/media/pages/` is the media `web.Page`: downloads, add, channels,
+  library, art and the signed file route (`http.ServeContent`, so Range edge
+  cases follow Go); `web.Page.Public` is how `PublicCheck` reaches the Guard,
+  which still checks the Host first. `internal/assistant/tools/media/` holds
+  the six `media_*` tools and their undoers (`RegisterUndoer` takes the env
+  the torrent undoer reads `QBITTORRENT_URL` from).
 - `internal/config/`: every environment variable with the Python names,
   defaults and errors; paths beside `ATRIUM_DB`; `ATRIUM_MODE` is read live
   on every call; `ATRIUM_TZ` has one accessor.

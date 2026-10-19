@@ -10,6 +10,7 @@ import (
 	contexttools "github.com/jeiang/atrium/internal/assistant/tools/context"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
+	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
 	moneytools "github.com/jeiang/atrium/internal/assistant/tools/money"
 	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
@@ -30,7 +31,7 @@ func Registry() (*registry.Registry, error) {
 	notiontools.RegisterProposalKinds()
 	r := registry.New()
 	for _, tools := range [][]tool.Tool{
-		mailtools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
+		mailtools.Tools(), mediatools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
 		contexttools.Tools(), recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
 		scheduletools.Tools(), skillstools.Tools(), moneytools.Tools(), notiontools.Tools(),
 		grafanatools.Tools(),
@@ -46,6 +47,7 @@ func Registry() (*registry.Registry, error) {
 func Undoers(env config.Env) *writes.Registry {
 	r := writes.NewRegistry()
 	profiletools.RegisterUndoer(r)
+	mediatools.RegisterUndoer(r, env)
 	notiontools.RegisterUndoers(r, env)
 	money.RegisterUndoer(r)
 	return r
