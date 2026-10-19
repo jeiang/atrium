@@ -34,6 +34,7 @@ const (
 	FlushSeconds = 0.2
 	CheckSeconds = 1.0
 	ArgsChars    = 120
+	PreviewChars = 240
 )
 
 // ErrStopped is the error a Writer raises when the operator asked the run to stop.
@@ -51,6 +52,19 @@ func ShortArgs(args json.RawMessage) (string, error) {
 		return text, nil
 	}
 	return py.Clip(text, ArgsChars-1) + "…", nil
+}
+
+// PreviewOf is preview_of: a tool result as the page previews it, a string as is and any other decoded JSON
+// value as JSON, cut to PreviewChars with an ellipsis.
+func PreviewOf(content any) string {
+	text, ok := content.(string)
+	if !ok {
+		text = py.JSONDumps(content, dataOpts)
+	}
+	if utf8.RuneCountInString(text) <= PreviewChars {
+		return text
+	}
+	return py.Clip(text, PreviewChars-1) + "…"
 }
 
 // Emit is emit: it journals one event of the run. data is dumped with its keys in the order given.

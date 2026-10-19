@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/jeiang/atrium/internal/assistant/agentcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
@@ -28,6 +29,7 @@ func newApp() *cli.App {
 	app := cli.New("atrium", logx.Setup)
 	app.Version = version
 	app.Add(run.SyncCommand(imapclient.Opener), run.WatchCommand(imapclient.Opener))
+	app.Add(agentcmd.Command())
 	app.Add(web.ServeCommand(
 		web.Page{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
 		web.Page{Module: notify.Module, Templates: notify.Templates()},
