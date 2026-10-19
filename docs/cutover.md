@@ -116,8 +116,8 @@ switched.
     Python's; this is expected and one-time.
 7. Scheduler log: `journalctl -u atrium-agent-scheduler.service -e` shows the
     worker started and claiming due jobs, with the core-first lines listed in
-    section 8 and no other errors. The two callables (`calendar-candidates`,
-    `fx-rates`) each log `built-in job X has no function in
+    section 8 and no other errors. The callable of a module not yet ported
+    (`calendar-candidates`) logs `built-in job X has no function in
     this build; not run` once and write no job run. `/scheduled` lists the jobs; from the shell use
     `sqlite3 $STATE/atrium.db "SELECT id, name, next_due FROM jobs ORDER BY id"`.
 8. Units: `systemctl --failed 'atrium-*'` is empty.
@@ -522,34 +522,37 @@ migration hold for them, not that Go reads them.
 Calendar, Notion, money and Grafana land after cutover. Their units
 do not start. What the operator sees until then:
 
-- `atrium-run calendar|money ...` answer `invalid choice` (exit 2)
-  until the module lands. Mail, `live`, `proposals`, `rules`, `loops`,
-  `watches`, `reindex`, `shadow-report`, `agent`, `media`, `notion` and
+- `atrium-run calendar ...` answers `invalid choice` (exit 2) until the
+  module lands. Mail, `live`, `proposals`, `rules`, `loops`, `watches`,
+  `reindex`, `shadow-report`, `agent`, `media`, `notion`, `money refresh` and
   `serve` work.
-- The built-in callable jobs `calendar-candidates` and `fx-rates` are skipped with
+- The built-in callable job `calendar-candidates` is skipped with
   one Info line each (`built-in job X has no function in this build; not
   run`, logged once per scheduler start); they are not recorded as job runs.
-- The system prompt names `event_propose`, and the nightly wiki-capture skill
-  names the Notion tools (`search_knowledge`, `notion_create_page`, ...).
-  Accepted: the model also sees the tools it is offered, finds these absent
-  and says so; `profile_set` and the summary still work.
-- After cutover, on `/settings/subagents` disable the research roles
-  `notion`, `observability` and `calendar`: their tools are absent, so a
-  delegated child would run with `recall` only.
+- The system prompt names `event_propose`, which is absent until the calendar
+  module lands; the model sees the tools it is offered and says so.
+  The Notion tools (`search_knowledge`, `fetch_knowledge`, `notion_create_page`,
+  `notion_update_page`, `notion_move_page`, `notion_archive_page`,
+  `notion_add_alias`), the `notion_edit` and `notion_link` proposal kinds, the
+  `/notion/{id}` pages and `POST /projects/{id}/wiki-hub` are served (#138).
+- After cutover, on `/settings/subagents` disable the research role
+  `calendar`: its tools are absent, so a delegated child would run with
+  `recall` only.
 - On `/settings/subagents` use the Enable/Disable toggle only. Do not Save
-  the `notion`, `observability` or `calendar` cards, or a custom agent that
-  names Grafana tools, until their modules land: the form
-  submits only the tools this build registers, so a save drops the others
-  from the stored allowlist and the seed does not restore them.
+  the `observability` or `calendar` cards, or a custom agent that names Grafana tools, until their modules land: the form submits only the tools
+  this build registers, so a save drops the others from the stored allowlist
+  and the seed does not restore them.
 - The Money pages (`/money/*`) and the eleven money agent tools are served.
-- Pending proposals of post-cutover kinds (`notion_edit`, `notion_link`,
-  `calendar_event`, `notion_wiki_plan`) still list on `/proposals`; approve
-  refuses with `no executor for kind` and undo refuses for lack of an undoer.
-  Existing `agent_writes` rows of those tools show no undoer on `/activity`.
+- Pending proposals of post-cutover kinds (`calendar_event`,
+  `notion_wiki_plan`) still list on `/proposals`; approve refuses with `no
+  executor for kind` and undo refuses for lack of an undoer. Existing
+  `agent_writes` rows of those tools show no undoer on `/activity`.
 - Data gaps while the modules are absent:
   - Calendar invitations the operator reads during the gap are never
     proposed: `event_candidates` only looks at unread Inbox mail.
-  - Money ingestion stops. It self-heals: the money rescan covers the last
-    90 days of unscanned money mail, so land the money module (#142) within
-    90 days of cutover.
+  - Money ingestion stops until #142 is deployed. It self-heals: the money
+    rescan covers the last 90 days of unscanned money mail, so deploy #142
+    within 90 days of cutover. The mail pass then extracts the backlog 50
+    messages per pass; `atrium-run money refresh --limit 1000` drains it at
+    once.
   - The Notion mirror goes stale.

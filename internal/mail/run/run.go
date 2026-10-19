@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/router"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/mail/watches"
+	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -67,18 +68,19 @@ type Pass struct {
 	Judge   flags.Judge
 	Applier *applier.Applier
 	Events  func(ctx context.Context, account string) (invites, candidates int, err error)
+	Money   money.Options
 	Extras  []Extra
 }
 
 // New is the pass run.py makes: the sync, routing, flagging and live pass of the mail core, then the open loops
-// and watches refreshes. now is the clock of every step in seconds, the wall clock when nil.
+// and watches refreshes and the money ledger's. now is the clock of every step in seconds, the wall clock when nil.
 func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *Pass {
 	if now == nil {
 		now = wallClock
 	}
 	syncer := &mailsync.Syncer{DB: d, Cfg: cfg, Now: now}
 	l := &live.Live{DB: d, Cfg: cfg, Now: now}
-	return &Pass{
+	p := &Pass{
 		DB:      d,
 		Cfg:     cfg,
 		Open:    open,
@@ -87,15 +89,19 @@ func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *
 		Live:    l,
 		Router:  &router.Router{DB: d, ChatURL: cfg.ChatURL, Now: now},
 		Applier: applier.New(l, open, syncer),
-		Extras: []Extra{
-			{"open loops", func(ctx context.Context) (any, error) {
-				return openloops.Refresh(ctx, d, cfg, now(), openloops.Options{Clock: now}), nil
-			}},
-			{"watches", func(ctx context.Context) (any, error) {
-				return watches.Refresh(ctx, d, cfg, watches.ScanLimit, now(), watches.Options{Clock: now}), nil
-			}},
-		},
 	}
+	p.Extras = []Extra{
+		{"open loops", func(ctx context.Context) (any, error) {
+			return openloops.Refresh(ctx, d, cfg, now(), openloops.Options{Clock: now}), nil
+		}},
+		{"watches", func(ctx context.Context) (any, error) {
+			return watches.Refresh(ctx, d, cfg, watches.ScanLimit, now(), watches.Options{Clock: now}), nil
+		}},
+		{"money", func(ctx context.Context) (any, error) {
+			return money.Refresh(ctx, d, cfg, money.ScanLimit, now(), p.Money)
+		}},
+	}
+	return p
 }
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }

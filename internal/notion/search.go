@@ -312,7 +312,8 @@ func scanInfo(r *sql.Rows) (hitInfo, error) {
 	return i, err
 }
 
-func pageTitles(ctx context.Context, q Querier, texts []string) (map[string]string, error) {
+// PageTitles is page_titles: the titles of the mirrored pages whose ids the texts mention.
+func PageTitles(ctx context.Context, q Querier, texts []string) (map[string]string, error) {
 	ids := notionid.IDsInText(strings.Join(texts, " "))
 	if len(ids) == 0 {
 		return map[string]string{}, nil
@@ -362,7 +363,7 @@ func heads(ctx context.Context, q Querier, rids []int64) (map[int64]string, erro
 	for i, h := range list {
 		texts[i] = h.text
 	}
-	titles, err := pageTitles(ctx, q, texts)
+	titles, err := PageTitles(ctx, q, texts)
 	if err != nil {
 		return nil, err
 	}
@@ -512,7 +513,7 @@ func Search(ctx context.Context, q Querier, cfg config.Config, query string, inc
 		lexIDs[i] = h.rid
 		snippets[i] = h.snippet
 	}
-	titles, err := pageTitles(ctx, q, snippets)
+	titles, err := PageTitles(ctx, q, snippets)
 	if err != nil {
 		return Result{}, err
 	}

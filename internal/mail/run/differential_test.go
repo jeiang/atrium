@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/watches"
+	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
@@ -57,6 +59,16 @@ type pipelineScenario struct {
 	Steps       []scenarioStep     `json:"steps"`
 	Rules       json.RawMessage    `json:"rules"`
 	Environment map[string]string  `json:"environment"`
+	CBTTHTML    string             `json:"cbtt_html"`
+	Money       []struct {
+		Bank           string   `json:"bank"`
+		Name           string   `json:"name"`
+		Kind           string   `json:"kind"`
+		Currency       string   `json:"currency"`
+		Last4          string   `json:"last4"`
+		SenderPatterns []string `json:"sender_patterns"`
+		Forex          bool     `json:"forex"`
+	} `json:"money_accounts"`
 }
 
 type seedMessage struct {
@@ -89,6 +101,7 @@ type seeds struct {
 type llmScript struct {
 	Defaults  map[string]json.RawMessage            `json:"defaults"`
 	BySubject map[string]map[string]json.RawMessage `json:"by_subject"`
+	Payees    map[string]json.RawMessage            `json:"payees"`
 }
 
 func loadPipeline(t *testing.T, file string, into any) {
@@ -127,6 +140,7 @@ func models(t *testing.T) *httptest.Server {
 	features := map[string]string{
 		llm.FolderSystem: "folder", llm.FlagSystem: "flag", llm.EventSystem: "event",
 		openloops.CommitmentSystem: "commitments", watches.PackageSystem: "package", rebalance.NameSystem: "folder_name",
+		money.ExtractSystem: "money", money.PayeeSystem: "payee",
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -151,6 +165,16 @@ func models(t *testing.T) *httptest.Server {
 		feature, known := features[req.Messages[0].Content]
 		if !known {
 			http.Error(w, "unknown system prompt", http.StatusBadRequest)
+			return
+		}
+		if feature == "payee" {
+			content := req.Messages[1].Content
+			normalized := content[strings.Index(content, "\nNormalized: ")+len("\nNormalized: "):]
+			answer, known := script.Payees[normalized]
+			if !known {
+				answer = json.RawMessage(`{"name": ` + strconv.Quote(titleCase(normalized)) + `, "category": "Other"}`)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": string(answer)}}}})
 			return
 		}
 		answer := script.Defaults[feature]
@@ -190,6 +214,8 @@ type replay struct {
 	accounts map[string]*replayAccount
 	app      *cli.App
 	stdin    *bytes.Buffer
+	cbtt     string
+	ledger   []money.NewAccount
 }
 
 func (r *replay) now() float64 { return r.clock }
@@ -249,7 +275,9 @@ func (r *replay) runSync(mode string) {
 	if err != nil {
 		r.t.Fatal(err)
 	}
-	if err := run.New(r.d, cfg, r.open, r.now).Locked(r.ctx, accounts); err != nil {
+	pass := run.New(r.d, cfg, r.open, r.now)
+	pass.Money.Fetch = func(context.Context, string) (string, error) { return r.cbtt, nil }
+	if err := pass.Locked(r.ctx, accounts); err != nil {
 		r.t.Fatalf("run_sync (%s): %v", mode, err)
 	}
 }
@@ -264,6 +292,11 @@ func (r *replay) step(s scenarioStep, clocks map[string]float64, rules json.RawM
 		r.stdin.Write(rules)
 		r.cli("rules", "import", "-")
 	case "money_accounts":
+		for _, a := range r.ledger {
+			if _, err := money.AddAccount(r.ctx, r.d.Write, a, r.clock); err != nil {
+				r.t.Fatal(err)
+			}
+		}
 	case "run_sync":
 		r.runSync(s.Mode)
 	case "server_move":
@@ -468,7 +501,7 @@ func compareTable(t *testing.T, table string, want, got []row) {
 }
 
 // pipelineTables are the generator's PIPELINE_TABLES with their order; the skipped ones belong to modules that
-// land after cutover (event candidates and calendar proposals #136, money #142) and are reported, not compared.
+// land after cutover (event candidates and calendar proposals #136) and are reported, not compared.
 var pipelineTables = []struct {
 	name, order string
 	skipped     bool
@@ -476,8 +509,8 @@ var pipelineTables = []struct {
 	{"decisions", "id", false},
 	{"flag_decisions", "message_id", false},
 	{"events", "id", false},
-	{"transactions", "id", true},
-	{"transaction_sources", "id", true},
+	{"transactions", "id", false},
+	{"transaction_sources", "id", false},
 	{"packages", "id", false},
 	{"event_candidates", "message_id", true},
 	{"proposals", "id", false},
@@ -546,7 +579,10 @@ func TestGoldenPipelineDifferential(t *testing.T) {
 		order[b["account"].(string)] = append(order[b["account"].(string)], b["imap_name"].(string))
 	}
 
-	r := &replay{t: t, ctx: ctx, d: d, stdin: &bytes.Buffer{}}
+	r := &replay{t: t, ctx: ctx, d: d, stdin: &bytes.Buffer{}, cbtt: sc.CBTTHTML}
+	for _, a := range sc.Money {
+		r.ledger = append(r.ledger, money.NewAccount{Bank: a.Bank, Name: a.Name, Kind: a.Kind, Currency: a.Currency, Last4: a.Last4, SenderPatterns: a.SenderPatterns, Forex: a.Forex})
+	}
 	rulesNow := rules.Now
 	rules.Now = r.now
 	t.Cleanup(func() { rules.Now = rulesNow })
@@ -610,4 +646,22 @@ func TestGoldenPipelineDifferential(t *testing.T) {
 		t.Errorf("proposals: expected exactly one skipped calendar_event proposal")
 	}
 	t.Logf("skipped (post-cutover modules): %s", strings.Join(skipped, ", "))
+}
+
+func titleCase(s string) string {
+	var b strings.Builder
+	cased := false
+	for _, r := range s {
+		letter := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+		switch {
+		case !letter:
+			b.WriteRune(r)
+		case cased:
+			b.WriteString(strings.ToLower(string(r)))
+		default:
+			b.WriteString(strings.ToUpper(string(r)))
+		}
+		cased = letter
+	}
+	return b.String()
 }

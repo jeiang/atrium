@@ -1,0 +1,20 @@
+{{template "notion_action" .Data}}
+
+{{define "notion_action"}}
+{{if opt . "error" ""}}
+<div class="alert" data-variant="destructive" role="alert">
+  {{icon "circle-alert"}}
+  <h3>No proposal</h3>
+  <section><p>{{.error}}</p></section>
+</div>
+{{else}}
+<div class="alert" role="status">
+  {{icon "check"}}
+  <h3>{{lbl "kind" .created.kind}} proposed</h3>
+  <section>
+    <p>{{.created.title}}</p>
+    <p><a class="font-medium text-foreground underline underline-offset-4" href="/proposals?kind={{.created.kind}}#proposal-{{.created.id}}">Review proposal #{{.created.id}}</a>. Nothing changes in Notion until you approve it.</p>
+  </section>
+</div>
+{{end}}
+{{- end}}

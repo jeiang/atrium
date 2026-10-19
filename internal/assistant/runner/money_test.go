@@ -30,7 +30,7 @@ func TestPayeeRenameThroughTheLoopIsLoggedAndUndoable(t *testing.T) {
 	if tool != "payee_rename" || target != "payee:7" {
 		t.Errorf("write %q %q", tool, target)
 	}
-	if _, err := toolset.Undoers().Undo(ctx, w.d.Write, int64(writeID), w.svc.Now); err != nil {
+	if _, err := toolset.Undoers(w.env).Undo(ctx, w.d.Write, int64(writeID), w.svc.Now); err != nil {
 		t.Fatal(err)
 	}
 	var name string

@@ -1883,11 +1883,11 @@
       ],
       "cases": [],
       "command": "money",
-      "note": "money module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "money"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium money [-h] {refresh} ..."
     },
     {
@@ -1901,12 +1901,12 @@
       ],
       "cases": [],
       "command": "money refresh",
-      "note": "money module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "money",
         "refresh"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium money refresh [-h] [--limit LIMIT]"
     },
     {
