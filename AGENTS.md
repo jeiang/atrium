@@ -199,8 +199,10 @@ and backups; nothing of that lives here.
   publishes (one JSON POST to `NTFY_URL`, bearer `NTFY_TOKEN`) and records the outcome; the row exists before
   the push, a failed or unconfigured push is `Sent.Error` text and never an error, only a malformed
   `NTFY_URL` raises. Scheduler budget notices and media channel notices (topic, click) call `Send`; the
-  `notify` tool (`Tools()`) and the `/settings/notifications` module (`Module`, `Templates()`) are
-  registered by the wiring slices. `settings_tabs` in `tpl/templates/_settings.gohtml` is the settings tab
+  `notify` tool (`Tools()`) is registered by the loop's registry composition (#126); the
+  `/settings/notifications` page (`Module`, `Templates()`) is registered in `cmd/atrium` as a `web.Page`.
+  Every page slice registers its own `web.Page` (module plus template files) in `cmd/atrium`'s
+  `web.ServeCommand` call; `tpl.Config.Modules` carries their templates into the engine. `settings_tabs` in `tpl/templates/_settings.gohtml` is the settings tab
   bar every settings page includes.
 - `internal/testutil/golden`: the golden loaders, canonical-JSON
   comparison and `Replay`, an `httptest` server for recorded exchanges.

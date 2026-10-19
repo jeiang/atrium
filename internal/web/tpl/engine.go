@@ -19,11 +19,13 @@ var builtin embed.FS
 const layout = "base.gohtml"
 
 // Config configures an Engine. Extra holds additional template files at its root, classified like the
-// built-in ones: pages are plain names, shared files start with an underscore.
+// built-in ones: pages are plain names, shared files start with an underscore. Modules holds the template
+// files of each page module being served.
 type Config struct {
 	AssetVersion string
 	Globals      map[string]any
 	Extra        fs.FS
+	Modules      []fs.FS
 }
 
 // Toast is the notification the layout and _toast.gohtml render.
@@ -71,7 +73,7 @@ func New(cfg Config) (*Engine, error) {
 		assetVersion: cfg.AssetVersion,
 		pages:        map[string]*template.Template{},
 	}
-	sources, err := collect(cfg.Extra)
+	sources, err := collect(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +145,7 @@ type sources struct {
 	pages  map[string]source
 }
 
-func collect(extra fs.FS) (sources, error) {
+func collect(cfg Config) (sources, error) {
 	out := sources{pages: map[string]source{}}
 	add := func(fsys fs.FS, dir string) error {
 		entries, err := fs.ReadDir(fsys, dir)
@@ -169,7 +171,10 @@ func collect(extra fs.FS) (sources, error) {
 			return out, err
 		}
 	}
-	if extra != nil {
+	for _, extra := range append([]fs.FS{cfg.Extra}, cfg.Modules...) {
+		if extra == nil {
+			continue
+		}
 		if err := add(extra, "."); err != nil {
 			return out, err
 		}
