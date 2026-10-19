@@ -242,8 +242,9 @@ func (m *Message) parseHeaders(lines [][]byte, r *lineReader) {
 		}
 		joined := escapeBytes(bytes.Join(last, nil))
 		i := indexRune(joined, ':')
-		value := rstripNewlines(lstripSet(joined[i+1:], " \t\r\n"))
-		m.fields = append(m.fields, field{name: joined[:i], key: string(lowerRunes(joined[:i])), value: value})
+		source := joined[i+1:]
+		value := rstripNewlines(lstripSet(source, " \t\r\n"))
+		m.fields = append(m.fields, field{name: joined[:i], key: string(lowerRunes(joined[:i])), value: value, source: source})
 		last = nil
 	}
 	for n, line := range lines {

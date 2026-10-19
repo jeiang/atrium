@@ -17,6 +17,9 @@ type Pair struct {
 // Dict is a Python dict that dumps in insertion order.
 type Dict []Pair
 
+// MarshalJSON is JSONDumps(d), so encoding/json keeps the insertion order.
+func (d Dict) MarshalJSON() ([]byte, error) { return []byte(JSONDumps(d)), nil }
+
 // JSONDumps is json.dumps(v) with its defaults: ", " and ": " separators and every non-ASCII character
 // escaped. v is nil, a bool, an integer, a float64, a *big.Int, a string, a []string, a []any or a Dict.
 func JSONDumps(v any) string {

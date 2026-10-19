@@ -86,10 +86,13 @@ type SearchCriteria struct {
 	GmailRaw    string
 }
 
+// FetchItems selects what UIDFetch asks for. Header or Body is fetch_items' full set; HeaderOnly alone is
+// mailops' verify items, BODY.PEEK[HEADER] with UID, FLAGS and the labels.
 type FetchItems struct {
 	Labels       bool
 	Header       bool
 	Body         bool
+	HeaderOnly   bool
 	ChangedSince uint64
 }
 
