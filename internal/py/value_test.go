@@ -71,3 +71,15 @@ func TestJSONDumpsFloats(t *testing.T) {
 
 func nanValue() float64 { return math.NaN() }
 func posInf() float64   { return math.Inf(1) }
+
+func TestJSONLoadsEscapes(t *testing.T) {
+	v, err := JSONLoads([]byte(`"\"\\\/\b\f\n\r\t\u00e9\u0041\ud83d\ude00"`))
+	if want := "\"\\/\b\f\n\r\t\u00e9A\U0001F600"; err != nil || v != want {
+		t.Errorf("JSONLoads = %q, %v; want %q", v, err, want)
+	}
+	for _, bad := range []string{`"\x"`, `"\u12"`, `"\u+123"`, `"\`} {
+		if _, err := JSONLoads([]byte(bad)); err == nil {
+			t.Errorf("JSONLoads(%s) succeeded", bad)
+		}
+	}
+}

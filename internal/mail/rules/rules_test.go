@@ -183,7 +183,7 @@ func TestImportExportRoundtripKeepsOrderAndScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, _ := json.Marshal(exported)
+	got := []byte(py.JSONDumps(exported))
 	var want, have any
 	_ = json.Unmarshal([]byte(text), &want)
 	_ = json.Unmarshal(got, &have)
@@ -400,6 +400,21 @@ func TestSpecialFloatsRoundTrip(t *testing.T) {
 	loaded, err := rules.LoadAllRules(ctx, d.Read)
 	if err != nil || len(loaded) != 1 {
 		t.Fatalf("LoadAllRules = %v, %v", loaded, err)
+	}
+	exported, err := rules.ExportRules(ctx, d.Read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := py.JSONDumps(exported)
+	if text != `{"rules": [{"id": "old", "action": "delete", "when": [{"field": "age_days", "op": "gte", "value": Infinity}]}]}` {
+		t.Fatalf("export %s", text)
+	}
+	again, err := py.JSONLoads([]byte(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rules.ImportRules(ctx, d, again); err != nil {
+		t.Fatal(err)
 	}
 	if got := loaded[0].Conditions[0].JSON(); got != `{"field": "age_days", "op": "gte", "value": Infinity}` {
 		t.Errorf("reloaded %s", got)
