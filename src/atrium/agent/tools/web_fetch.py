@@ -31,7 +31,7 @@ def web_fetch(ctx: ToolContext, args: dict):
     for stored in ctx.allowed_urls:
         try:
             allowed.add(normalize_url(stored))
-        except ToolError:
+        except (ToolError, ValueError):
             continue
     if url not in allowed:
         raise ToolError("url is not allowed: only URLs the operator typed or web_search returned in this thread can be fetched")
