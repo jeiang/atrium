@@ -60,6 +60,7 @@ type Pass struct {
 	DB      *db.DB
 	Cfg     config.Config
 	Open    mailops.Opener
+	Now     func() float64
 	Syncer  *mailsync.Syncer
 	Live    *live.Live
 	Router  *router.Router
@@ -70,24 +71,28 @@ type Pass struct {
 }
 
 // New is the pass run.py makes: the sync, routing, flagging and live pass of the mail core, then the open loops
-// and watches refreshes.
-func New(d *db.DB, cfg config.Config, open mailops.Opener) *Pass {
-	syncer := &mailsync.Syncer{DB: d, Cfg: cfg}
-	l := &live.Live{DB: d, Cfg: cfg}
+// and watches refreshes. now is the clock of every step in seconds, the wall clock when nil.
+func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *Pass {
+	if now == nil {
+		now = wallClock
+	}
+	syncer := &mailsync.Syncer{DB: d, Cfg: cfg, Now: now}
+	l := &live.Live{DB: d, Cfg: cfg, Now: now}
 	return &Pass{
 		DB:      d,
 		Cfg:     cfg,
 		Open:    open,
+		Now:     now,
 		Syncer:  syncer,
 		Live:    l,
-		Router:  &router.Router{DB: d, ChatURL: cfg.ChatURL},
+		Router:  &router.Router{DB: d, ChatURL: cfg.ChatURL, Now: now},
 		Applier: applier.New(l, open, syncer),
 		Extras: []Extra{
 			{"open loops", func(ctx context.Context) (any, error) {
-				return openloops.Refresh(ctx, d, cfg, wallClock(), openloops.Options{}), nil
+				return openloops.Refresh(ctx, d, cfg, now(), openloops.Options{Clock: now}), nil
 			}},
 			{"watches", func(ctx context.Context) (any, error) {
-				return watches.Refresh(ctx, d, cfg, watches.ScanLimit, wallClock(), watches.Options{}), nil
+				return watches.Refresh(ctx, d, cfg, watches.ScanLimit, now(), watches.Options{Clock: now}), nil
 			}},
 		},
 	}
@@ -118,7 +123,8 @@ func (p *Pass) SyncAll(ctx context.Context) error {
 // Process is process(): in live mode the go-live baseline is taken after syncing every account the first time;
 // pending messages are embedded (an unavailable embedder is logged); each account is routed, flagged, scanned for
 // events and given its live pass; the extras follow. Routing, flagging and embedding errors end the pass; an event
-// scan, live pass or extra that fails is logged and the pass goes on.
+// scan, live pass or extra that fails is logged and the pass goes on. A cancelled ctx is seen between accounts
+// and between extras, never inside a live pass, whose writes and resync run to their end.
 func (p *Pass) Process(ctx context.Context, accounts []string) error {
 	if p.Cfg.Mode == config.Live {
 		if _, err := p.Live.EnsureGolive(ctx, func() error { return p.SyncAll(ctx) }); err != nil {
@@ -129,11 +135,14 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		return err
 	}
 	for _, account := range accounts {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		routed, err := p.Router.RouteAccount(ctx, account)
 		if err != nil {
 			return err
 		}
-		flagged, err := flags.FlagAccount(ctx, p.DB, p.Cfg, account, p.Judge)
+		flagged, err := flags.FlagAccount(ctx, p.DB, p.Cfg, account, p.Judge, p.Now)
 		if err != nil {
 			return err
 		}
@@ -150,6 +159,9 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		}
 	}
 	for _, extra := range p.Extras {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		result, err := extra.Run(ctx)
 		if err != nil {
 			log.Error(extra.Name+" refresh failed", logx.Err, err.Error())
@@ -165,6 +177,7 @@ const checkpointWait = time.Second
 
 // Locked is one pass of accounts under the database's exclusive lock: each is synced, then processed. The WAL is
 // checkpointed (TRUNCATE) before the lock is released, so readers that never stop cannot grow it without bound.
+// A ctx cancelled during the pass ends it with its error once the running stage is complete.
 func (p *Pass) Locked(ctx context.Context, accounts []string) error {
 	lock, err := db.Exclusive(p.Cfg.DBPath)
 	if err != nil {
@@ -177,7 +190,10 @@ func (p *Pass) Locked(ctx context.Context, accounts []string) error {
 			return err
 		}
 	}
-	return p.Process(ctx, accounts)
+	if err := p.Process(ctx, accounts); err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 func (p *Pass) checkpoint(ctx context.Context) {
@@ -207,5 +223,5 @@ func Sync(ctx context.Context, cfg config.Config, requested string, open mailops
 	if err != nil {
 		return nil, err
 	}
-	return accounts, New(d, cfg, open).Locked(ctx, accounts)
+	return accounts, New(d, cfg, open, nil).Locked(ctx, accounts)
 }

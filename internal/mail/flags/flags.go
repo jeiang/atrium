@@ -130,10 +130,13 @@ func b2i(v bool) int {
 // FlagAccount is flag_account: it records the contacts rule and, while the chat server answers, the LLM verdict
 // for each unjudged unread inbox message of account, and returns how many it recorded. Once the server is
 // unavailable the remaining rows are recorded with no verdict; any other judge error is returned. A nil judge is
-// llm.JudgeFlag.
-func FlagAccount(ctx context.Context, d *db.DB, cfg config.Config, account string, judge Judge) (int, error) {
+// llm.JudgeFlag; a nil now is the wall clock.
+func FlagAccount(ctx context.Context, d *db.DB, cfg config.Config, account string, judge Judge, now func() float64) (int, error) {
 	if judge == nil {
 		judge = llm.JudgeFlag
+	}
+	if now == nil {
+		now = func() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 	}
 	rows, err := pending(ctx, d, account)
 	if err != nil || len(rows) == 0 {
@@ -169,7 +172,7 @@ func FlagAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 		_, err = d.Write.ExecContext(ctx,
 			"INSERT OR REPLACE INTO flag_decisions (message_id, account, ts, contacts_match, person_asking, "+
 				"deadline_or_payment_due, security_event, llm_flag) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-			row.ID, account, float64(time.Now().UnixNano())/1e9, b2i(match),
+			row.ID, account, now(), b2i(match),
 			nullable(judged, verdict.PersonAsking), nullable(judged, verdict.DeadlineOrPaymentDue),
 			nullable(judged, verdict.SecurityEvent), nullable(judged, verdict.Flag))
 		if err != nil {

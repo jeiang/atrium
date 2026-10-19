@@ -25,7 +25,7 @@ func runCLI(t *testing.T, ctx context.Context, w *world, vars map[string]string,
 	t.Helper()
 	t.Setenv("ATRIUM_DB", w.cfg.DBPath)
 	t.Setenv("ATRIUM_CACHE_DIR", w.cfg.CacheDir)
-	t.Setenv("ATRIUM_MODE", "shadow")
+	t.Setenv("ATRIUM_MODE", w.cfg.Mode)
 	for _, k := range []string{"ICLOUD_MAIL_USERNAME", "ICLOUD_APP_PASSWORD", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
 		t.Setenv(k, vars[k])
 	}

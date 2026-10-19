@@ -966,7 +966,9 @@ type builder func(ctx context.Context, budget *Budget) ([]Intent, error)
 
 // runPass is run_pass: nothing runs outside live mode or while paused (logged); otherwise interrupted actions
 // are recovered, the intents are built within the write cap and executed as automatic writes, which the gate
-// refuses again for every write once paused, and the account is resynced if anything was written.
+// refuses again for every write once paused, and the account is resynced if anything was written. A pass that
+// has started runs to its end on a context that cannot be cancelled, so a shutdown or an abandoned request never
+// leaves a write half done or its ledger row in flight.
 func (a *Applier) runPass(ctx context.Context, account string, build builder, label string) (Outcome, error) {
 	var out Outcome
 	if a.Live.Cfg.Mode != config.Live {
@@ -978,6 +980,7 @@ func (a *Applier) runPass(ctx context.Context, account string, build builder, la
 		return out, nil
 	}
 	out.Ran = true
+	ctx = context.WithoutCancel(ctx)
 	budget := &Budget{Left: a.cap()}
 	auto := safety.AutomaticWrites(ctx, pause)
 	if _, err := a.Live.Recover(auto); err != nil {
@@ -1040,6 +1043,7 @@ func (a *Applier) ApplyCorrections(ctx context.Context, account string, messageI
 // DeletionPass is deletion_pass: the delete rules run once per DeletionIntervalSeconds per account unless forced
 // (`live deletions`), and a pass that ran records its time under deletion_pass_ts:<account>.
 func (a *Applier) DeletionPass(ctx context.Context, account string, force bool) (Outcome, error) {
+	ctx = context.WithoutCancel(ctx)
 	if !force {
 		due, err := a.deletionDue(ctx, account)
 		if err != nil || !due {

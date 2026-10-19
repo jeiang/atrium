@@ -60,7 +60,7 @@ func liveBacklog(x *Exec) error {
 
 func rebaseline(x *Exec) error {
 	return x.Exclusive(func() error {
-		if err := run.New(x.DB, x.Cfg, x.Open()).SyncAll(x.Ctx); err != nil {
+		if err := run.New(x.DB, x.Cfg, x.Open(), x.opts.Now).SyncAll(x.Ctx); err != nil {
 			return err
 		}
 		baseline, err := x.Live().Rebaseline(x.Ctx)

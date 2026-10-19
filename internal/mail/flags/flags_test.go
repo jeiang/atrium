@@ -129,7 +129,7 @@ func TestFlagAccountRecordsBothSignalsAndDefersLLM(t *testing.T) {
 	down := func(context.Context, string, llm.Message, string) (llm.Flags, error) {
 		return llm.Flags{}, &httpx.ServiceUnavailable{Msg: "down"}
 	}
-	n, err := FlagAccount(ctx, d, cfg, "icloud", down)
+	n, err := FlagAccount(ctx, d, cfg, "icloud", down, nil)
 	if err != nil || n != 2 {
 		t.Fatalf("FlagAccount = %d, %v", n, err)
 	}
@@ -139,14 +139,14 @@ func TestFlagAccountRecordsBothSignalsAndDefersLLM(t *testing.T) {
 	}
 	verdict := llm.Flags{PersonAsking: true, Flag: true}
 	judge := func(context.Context, string, llm.Message, string) (llm.Flags, error) { return verdict, nil }
-	if n, err := FlagAccount(ctx, d, cfg, "icloud", judge); err != nil || n != 2 {
+	if n, err := FlagAccount(ctx, d, cfg, "icloud", judge, nil); err != nil || n != 2 {
 		t.Fatalf("second pass = %d, %v", n, err)
 	}
 	got = readDecisions(t, d)
 	if len(got) != 2 || got[0].llm == nil || *got[0].llm != 1 || *got[1].llm != 1 || *got[0].person != 1 || got[1].contacts != 0 {
 		t.Errorf("judged rows = %+v", got)
 	}
-	if n, err := FlagAccount(ctx, d, cfg, "icloud", judge); err != nil || n != 0 {
+	if n, err := FlagAccount(ctx, d, cfg, "icloud", judge, nil); err != nil || n != 0 {
 		t.Errorf("third pass = %d, %v", n, err)
 	}
 }
@@ -164,7 +164,7 @@ func TestFlagAccountStopsJudgingAfterOutage(t *testing.T) {
 		}
 		return llm.Flags{Flag: true}, nil
 	}
-	if n, err := FlagAccount(t.Context(), d, config.Config{}, "icloud", judge); err != nil || n != 3 || calls != 2 {
+	if n, err := FlagAccount(t.Context(), d, config.Config{}, "icloud", judge, nil); err != nil || n != 3 || calls != 2 {
 		t.Fatalf("FlagAccount = %d, %v after %d calls", n, err, calls)
 	}
 	got := readDecisions(t, d)
@@ -178,7 +178,7 @@ func TestFlagAccountPropagatesMalformedVerdict(t *testing.T) {
 	rulestest.Inbox(t, d, 1, "a@x.test", "x.test", nil, rulestest.Fields{"seen": 0})
 	bad := fmt.Errorf("%w: chat reply content is not JSON: %q", httpx.ErrValue, "nope")
 	judge := func(context.Context, string, llm.Message, string) (llm.Flags, error) { return llm.Flags{}, bad }
-	n, err := FlagAccount(t.Context(), d, config.Config{}, "icloud", judge)
+	n, err := FlagAccount(t.Context(), d, config.Config{}, "icloud", judge, nil)
 	if !errors.Is(err, httpx.ErrValue) || n != 0 {
 		t.Fatalf("FlagAccount = %d, %v", n, err)
 	}
