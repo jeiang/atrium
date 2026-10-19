@@ -187,6 +187,13 @@ the source. It reports PASS, SKIP or FAIL per check and exits 1 on any FAIL
   exit is FAIL, except the documented `invalid choice` usage error (exit 2),
   which is SKIP.
 
+The gate scrubs its own environment first and hands the same one to the binary:
+only `PATH`, `HOME`, `TZ`, `LANG` and `ATRIUM_TZ` survive; `ATRIUM_DB`,
+`ATRIUM_CACHE_DIR` and `ATRIUM_CONTACTS_DIR` point at the scratch copy or the
+given directories, `ATRIUM_MODE` is forced to `shadow`, and a `pause` file is
+created next to the scratch DB. No credential, service URL or proxy variable
+reaches the checks, so they cannot reach a mailbox or a service.
+
 Run it on a copy made with `.backup`, from a checkout of the release commit:
 
 ```sh

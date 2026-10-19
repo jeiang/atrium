@@ -118,6 +118,9 @@ func gate(ctx context.Context, r *report, o options) error {
 	}
 	r.ok("copy", fmt.Sprintf("%s -> scratch copy (the source is never opened)", src))
 
+	if err := scrubEnv(path, cacheDir, o.contactsDir); err != nil {
+		return err
+	}
 	d, err := db.Connect(path)
 	if err != nil {
 		return err
@@ -193,14 +196,6 @@ func gate(ctx context.Context, r *report, o options) error {
 			return err
 		}
 	}
-	if err := os.Setenv("ATRIUM_DB", path); err != nil {
-		return err
-	}
-	if cacheDir != "" {
-		if err := os.Setenv("ATRIUM_CACHE_DIR", cacheDir); err != nil {
-			return err
-		}
-	}
 	for _, p := range readpaths.All() {
 		got, err := p.Result(ctx, d)
 		if errors.Is(err, sql.ErrNoRows) && recorded == nil {
@@ -228,7 +223,7 @@ func gate(ctx context.Context, r *report, o options) error {
 	}
 	var srv *e2e
 	if o.e2e {
-		srv, err = newE2E(ctx, o.bin, path, cacheDir, o.contactsDir, d)
+		srv, err = newE2E(ctx, o.bin, d)
 		if err != nil {
 			return err
 		}

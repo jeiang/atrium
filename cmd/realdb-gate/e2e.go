@@ -11,12 +11,14 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 )
 
@@ -96,24 +98,17 @@ type e2e struct {
 	client *http.Client
 }
 
-func newE2E(ctx context.Context, bin, dbPath, cacheDir, contactsDir string, d *db.DB) (*e2e, error) {
+func newE2E(ctx context.Context, bin string, d *db.DB) (*e2e, error) {
 	path, err := exec.LookPath(bin)
 	if err != nil {
 		return nil, fmt.Errorf("atrium binary %q: %w (build it with: go build -o /tmp/atrium ./cmd/atrium)", bin, err)
-	}
-	env := append(os.Environ(), "ATRIUM_DB="+dbPath)
-	if cacheDir != "" {
-		env = append(env, "ATRIUM_CACHE_DIR="+cacheDir)
-	}
-	if contactsDir != "" {
-		env = append(env, "ATRIUM_CONTACTS_DIR="+contactsDir)
 	}
 	routes, err := discoverRoutes(ctx, d)
 	if err != nil {
 		return nil, err
 	}
 	return &e2e{
-		bin: path, env: env, routes: routes, log: &syncBuf{},
+		bin: path, env: os.Environ(), routes: routes, log: &syncBuf{},
 		client: &http.Client{Timeout: 60 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}, nil
 }
@@ -288,4 +283,34 @@ func (e *e2e) readsTable(ctx context.Context) bool {
 		}
 	}
 	return false
+}
+
+var keptEnv = []string{"PATH", "HOME", "TZ", "LANG", "ATRIUM_TZ"}
+
+func scrubEnv(dbPath, cacheDir, contactsDir string) error {
+	keep := map[string]string{}
+	for _, k := range keptEnv {
+		if v, ok := os.LookupEnv(k); ok {
+			keep[k] = v
+		}
+	}
+	os.Clearenv()
+	for k, v := range keep {
+		if err := os.Setenv(k, v); err != nil {
+			return err
+		}
+	}
+	if cacheDir == "" {
+		cacheDir = filepath.Join(filepath.Dir(dbPath), "cache")
+	}
+	set := map[string]string{"ATRIUM_DB": dbPath, "ATRIUM_CACHE_DIR": cacheDir, "ATRIUM_MODE": "shadow"}
+	if contactsDir != "" {
+		set["ATRIUM_CONTACTS_DIR"] = contactsDir
+	}
+	for k, v := range set {
+		if err := os.Setenv(k, v); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(filepath.Join(filepath.Dir(dbPath), config.PauseFile), nil, 0o666)
 }
