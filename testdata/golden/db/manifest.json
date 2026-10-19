@@ -91,6 +91,93 @@
       "name": "media-poll",
       "stderr": "media-poll.stderr",
       "stdout": "media-poll.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync"
+      ],
+      "exit_code": 0,
+      "name": "sync",
+      "stderr": "sync.stderr",
+      "stdout": "sync.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "--account",
+        "gmail"
+      ],
+      "exit_code": 0,
+      "name": "sync-account-gmail",
+      "stderr": "sync-account-gmail.stderr",
+      "stdout": "sync-account-gmail.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "--account",
+        "gmail"
+      ],
+      "env": {
+        "GMAIL_APP_PASSWORD": ""
+      },
+      "exit_code": 1,
+      "name": "sync-missing-credentials",
+      "stderr": "sync-missing-credentials.stderr",
+      "stdout": "sync-missing-credentials.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "--account",
+        "work"
+      ],
+      "exit_code": 2,
+      "name": "sync-account-invalid",
+      "stderr": "sync-account-invalid.stderr",
+      "stdout": "sync-account-invalid.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "extra"
+      ],
+      "exit_code": 2,
+      "name": "sync-extra-argument",
+      "stderr": "sync-extra-argument.stderr",
+      "stdout": "sync-extra-argument.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "watch",
+        "--account",
+        "icloud"
+      ],
+      "exit_code": 0,
+      "name": "watch-one-pass",
+      "stderr": "watch-one-pass.stderr",
+      "stdout": "watch-one-pass.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "watch",
+        "--account",
+        "gmail"
+      ],
+      "env": {
+        "GMAIL_APP_PASSWORD": ""
+      },
+      "exit_code": 1,
+      "name": "watch-missing-credentials",
+      "stderr": "watch-missing-credentials.stderr",
+      "stdout": "watch-missing-credentials.stdout"
     }
   ],
   "clock": {

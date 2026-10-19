@@ -31,7 +31,10 @@ const (
 	FlagBatch        = 500
 )
 
-var log = logx.Logger("atrium.sync")
+var (
+	log    = logx.Logger("atrium.sync")
+	runLog = logx.Logger("atrium.run")
+)
 
 // Stats is SyncStats.
 type Stats struct {
@@ -69,7 +72,7 @@ func (s *Syncer) One(ctx context.Context, account string, open Opener) (Stats, e
 	if err != nil {
 		return stats, err
 	}
-	log.Info(fmt.Sprintf("%s: %d new, %d gone, %d flag changes", account, stats.New, len(stats.GoneIDs), stats.FlagChanges))
+	runLog.Info(fmt.Sprintf("%s: %d new, %d gone, %d flag changes", account, stats.New, len(stats.GoneIDs), stats.FlagChanges))
 	return stats, nil
 }
 

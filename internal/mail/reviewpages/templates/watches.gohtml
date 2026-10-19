@@ -1,0 +1,65 @@
+{{define "title"}}Watches{{end}}
+{{define "heading"}}Watches{{end}}
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
+<p class="text-sm text-muted-foreground">Read from your mail and address book by a local model. Dates and statuses can be wrong or stale; open the source mail to check. Nothing here pays, cancels or contacts anyone. Subscriptions and bills live on <a class="underline" href="/money/bills">Money · Bills</a>.</p>
+
+<section class="flex flex-col gap-3" aria-labelledby="packages-h">
+  <h2 id="packages-h" class="text-sm font-medium">Packages in transit ({{len $d.packages}})</h2>
+  {{if $d.packages}}
+  <ul class="flex flex-col gap-3" role="list" aria-label="Packages">
+    {{range $d.packages}}
+    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+      <div class="flex min-w-0 flex-col gap-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-sm font-medium">{{or .merchant .carrier "Package"}}</span>
+          <span class="badge" data-variant="secondary">{{replace "_" " " .status}}</span>
+          {{if .carrier}}<span class="badge" data-variant="outline">{{.carrier}}</span>{{end}}
+        </div>
+        <p class="text-xs text-muted-foreground">
+          {{if .tracking_number}}<span class="font-mono">{{.tracking_number}}</span> · {{end}}
+          {{if .order_ref}}order {{.order_ref}} · {{end}}
+          {{.status_text}} · <span class="tabular-nums">{{.updated}}</span> ·
+          <a class="underline" href="/messages/{{.last_message_id}}">latest mail</a>
+        </p>
+      </div>
+      <form method="post" action="/watches/packages/{{.id}}/dismiss">
+        <input type="hidden" name="csrf_token" value="{{$csrf}}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "x"}}Dismiss</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  {{template "empty_state" (dict "icon_name" "package" "title" "No packages in transit" "body" "Status only changes when a later shipping email arrives.")}}
+  {{end}}
+</section>
+
+<section class="flex flex-col gap-3" aria-labelledby="birthdays-h">
+  <h2 id="birthdays-h" class="text-sm font-medium">Birthdays and anniversaries, next 60 days{{if not (isnil $d.birthdays)}} ({{len $d.birthdays}}){{end}}</h2>
+  {{if isnil $d.birthdays}}
+  {{template "empty_state" (dict "icon_name" "book-user" "title" "Address book not configured" "body" "ATRIUM_CONTACTS_DIR is not set.")}}
+  {{else if $d.birthdays}}
+  <ul class="flex flex-col gap-3" role="list" aria-label="Birthdays">
+    {{range $d.birthdays}}
+    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+      <div class="flex min-w-0 flex-col gap-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-sm font-medium">{{.name}}</span>
+          <span class="badge" data-variant="outline">{{.label}}</span>
+        </div>
+        <p class="text-xs text-muted-foreground tabular-nums">{{.date}} ({{if eq .days_until 0}}today{{else}}in {{.days_until}} days{{end}}){{if .turning}} · turning {{.turning}}{{end}}</p>
+      </div>
+      <form method="post" action="/watches/birthdays/dismiss">
+        <input type="hidden" name="csrf_token" value="{{$csrf}}">
+        <input type="hidden" name="key" value="{{.key}}">
+        <input type="hidden" name="date" value="{{.date}}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "x"}}Dismiss</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  {{template "empty_state" (dict "icon_name" "check" "title" "Nothing coming up" "body" "No contact has a birthday or anniversary in the next 60 days.")}}
+  {{end}}
+</section>
+{{end}}

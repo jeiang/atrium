@@ -58,7 +58,7 @@
         "account": "gmail",
         "in_reply_to_message_id": 501,
         "thread_id": 7,
-        "updated_at": 1759996400,
+        "updated_at": 1759996400.0,
         "unexpected": [
           "stranger@evil.example",
           "<script>alert(\"xss\")</script>"
@@ -75,7 +75,7 @@
         "account": "icloud",
         "in_reply_to_message_id": null,
         "thread_id": null,
-        "updated_at": 1759913600,
+        "updated_at": 1759913600.0,
         "unexpected": [],
         "to_addrs": "x@y.example",
         "cc_addrs": "cc@y.example",
@@ -89,7 +89,7 @@
         "account": "icloud",
         "in_reply_to_message_id": null,
         "thread_id": 8,
-        "updated_at": 1759827200,
+        "updated_at": 1759827200.0,
         "unexpected": [],
         "to_addrs": "z@y.example",
         "cc_addrs": "",

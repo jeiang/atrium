@@ -15,12 +15,47 @@ import (
 	"time"
 )
 
+const busyTimeout = 30 * time.Second
+
 func connPragmas(foreignKeys bool) []string {
 	fk := "PRAGMA foreign_keys = OFF"
 	if foreignKeys {
 		fk = "PRAGMA foreign_keys = ON"
 	}
-	return []string{"PRAGMA busy_timeout = 30000", fk, "PRAGMA synchronous = FULL", "PRAGMA journal_size_limit = 67108864"}
+	return []string{busyPragma(busyTimeout), fk, "PRAGMA synchronous = FULL", "PRAGMA journal_size_limit = 67108864"}
+}
+
+func busyPragma(d time.Duration) string {
+	return fmt.Sprintf("PRAGMA busy_timeout = %d", d.Milliseconds())
+}
+
+// Checkpoint is the result of PRAGMA wal_checkpoint: Busy is true when a reader or writer kept it from finishing,
+// Frames is the WAL's length in frames and Done how many of them are in the database file.
+type Checkpoint struct {
+	Busy   bool
+	Frames int64
+	Done   int64
+}
+
+// Checkpoint runs PRAGMA wal_checkpoint(TRUNCATE) on the writer, waiting at most wait for readers, so a caller
+// holding a lock is not kept for the full busy timeout.
+func (d *DB) Checkpoint(ctx context.Context, wait time.Duration) (Checkpoint, error) {
+	conn, err := d.Write.Conn(ctx)
+	if err != nil {
+		return Checkpoint{}, err
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, busyPragma(wait)); err != nil {
+		return Checkpoint{}, err
+	}
+	var c Checkpoint
+	var busy int64
+	err = conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &c.Frames, &c.Done)
+	c.Busy = busy != 0
+	if _, rerr := conn.ExecContext(context.WithoutCancel(ctx), busyPragma(busyTimeout)); rerr != nil {
+		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+	}
+	return c, err
 }
 
 // DB is atrium.db: Write is the single writer connection, whose

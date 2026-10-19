@@ -3,7 +3,6 @@ package pages
 import (
 	"math/big"
 	"net/http"
-	"net/url"
 
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/message"
@@ -138,21 +137,6 @@ func conditionViews(cs []rules.Condition) []map[string]any {
 
 func toast(category, title, description string) *tpl.Toast {
 	return &tpl.Toast{Category: category, Title: title, Description: description}
-}
-
-func lastValue(values []string, def string) string {
-	if len(values) == 0 {
-		return def
-	}
-	return values[len(values)-1]
-}
-
-func queryValue(q url.Values, name string) string { return lastValue(q[name], "") }
-
-// formValues is the urlencoded body of r.
-func formValues(r *http.Request) url.Values {
-	_ = r.ParseForm()
-	return r.PostForm
 }
 
 func pathInt(r *http.Request, name string) (int64, []web.FieldError) {

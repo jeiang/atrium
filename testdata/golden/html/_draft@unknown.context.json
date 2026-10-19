@@ -55,7 +55,7 @@
       "account": "icloud",
       "in_reply_to_message_id": null,
       "thread_id": null,
-      "updated_at": 1759913600,
+      "updated_at": 1759913600.0,
       "unexpected": [],
       "to_addrs": "x@y.example",
       "cc_addrs": "cc@y.example",

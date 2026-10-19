@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"encoding/json"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -81,4 +82,37 @@ func Unprocessable(w http.ResponseWriter, errs ...FieldError) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnprocessableEntity)
 	_, _ = w.Write(bytes.TrimRight(body.Bytes(), "\n"))
+}
+
+// LastValue is the last of values, def when there are none: how FastAPI binds a scalar parameter.
+func LastValue(values []string, def string) string {
+	if len(values) == 0 {
+		return def
+	}
+	return values[len(values)-1]
+}
+
+// QueryValue is the last value of a query parameter, "" when absent.
+func QueryValue(q url.Values, name string) string { return LastValue(q[name], "") }
+
+// FormValues is the body of a form post, urlencoded or multipart; an unreadable body is empty.
+func FormValues(r *http.Request) url.Values {
+	if media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err == nil && strings.HasPrefix(media, "multipart/") {
+		if err := r.ParseMultipartForm(BodyCap); err != nil || r.MultipartForm == nil {
+			return url.Values{}
+		}
+		return r.MultipartForm.Value
+	}
+	_ = r.ParseForm()
+	return r.PostForm
+}
+
+// FormLast is a field as Starlette's form.get reads it: the last value sent, an empty string included, and
+// ok false only when the field was not sent. Parameters declared with Form() use FormField instead.
+func FormLast(form url.Values, name string) (value string, ok bool) {
+	values := form[name]
+	if len(values) == 0 {
+		return "", false
+	}
+	return values[len(values)-1], true
 }

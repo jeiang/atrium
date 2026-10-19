@@ -36,7 +36,7 @@ func (k *kindFlag) Set(v string) error {
 
 // Command is the `agent` group.
 func Command() *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(config.OS)}}
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(config.OS), schedulerCommand(config.OS)}}
 }
 
 func runCommand(cfgEnv config.Env) *cli.Command {
