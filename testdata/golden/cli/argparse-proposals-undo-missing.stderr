@@ -1,0 +1,2 @@
+usage: atrium proposals undo [-h] id
+atrium proposals undo: error: the following arguments are required: id

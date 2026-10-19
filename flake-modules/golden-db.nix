@@ -14,6 +14,7 @@
           (root + "/tools/golden/common.py")
           (root + "/tools/golden/make_db.py")
           (root + "/tools/golden/make_db_mail.py")
+          (root + "/tools/golden/render_cli_parity.py")
         ]
         ++ map (name: root + "/testdata/golden/${name}") outputs);
     };
@@ -26,8 +27,10 @@
       cp -r tree/testdata/golden "$TMPDIR/committed"
       cd tree
       python tools/golden/make_db.py
+      python tools/golden/render_cli_parity.py
       cp -r testdata/golden "$TMPDIR/first"
       python tools/golden/make_db.py
+      python tools/golden/render_cli_parity.py
       diff -r "$TMPDIR/first" testdata/golden
       diff -r "$TMPDIR/committed" testdata/golden
       touch $out

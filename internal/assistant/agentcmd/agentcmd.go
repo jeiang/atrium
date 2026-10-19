@@ -20,7 +20,7 @@ var Kinds = []string{threads.Chat, threads.Cron, threads.Nightly, threads.Sub}
 
 // Command is the `agent` group.
 func Command() *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(config.OS), schedulerCommand(config.OS)}}
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(config.OS), runCommand(config.OS)}}
 }
 
 func runCommand(cfgEnv config.Env) *cli.Command {
@@ -28,8 +28,8 @@ func runCommand(cfgEnv config.Env) *cli.Command {
 		Name: "run",
 		Setup: func(args *cli.Args) cli.Handler {
 			thread := args.Int("thread", 0, cli.Opt{Help: "existing thread id; omitted creates a new thread of --kind"})
-			text := args.String("text", "", cli.Opt{Help: "the message", Required: true})
-			kind := args.String("kind", threads.Chat, cli.Opt{Choices: Kinds, Help: "run kind"})
+			text := args.String("text", "", cli.Opt{Required: true})
+			kind := args.String("kind", threads.Chat, cli.Opt{Choices: Kinds})
 			return func(env *cli.Env) int {
 				var threadID *int64
 				if args.Has("thread") {

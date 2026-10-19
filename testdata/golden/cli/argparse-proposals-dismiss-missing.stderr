@@ -1,0 +1,2 @@
+usage: atrium proposals dismiss [-h] [--forever] id
+atrium proposals dismiss: error: the following arguments are required: id

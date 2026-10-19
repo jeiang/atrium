@@ -1,0 +1,8 @@
+usage: atrium proposals list [-h]
+                             [--status {pending,approved,dismissed,applied,failed,suppressed}]
+                             [--kind KIND]
+
+options:
+  -h, --help            show this help message and exit
+  --status {pending,approved,dismissed,applied,failed,suppressed}
+  --kind KIND
