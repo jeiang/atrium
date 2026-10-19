@@ -124,6 +124,10 @@ func cookieToken(r *http.Request) (string, bool) {
 	return token, found
 }
 
+func isHTTPS(r *http.Request) bool {
+	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+}
+
 func newToken() string {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -195,9 +199,8 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 		h := w.Header()
 		setSecurityHeaders(h)
 		if fresh {
-			secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 			cookie := CSRFCookie + "=" + token + "; Path=/; HttpOnly; SameSite=Strict"
-			if secure {
+			if isHTTPS(r) {
 				cookie += "; Secure"
 			}
 			h.Add("Set-Cookie", cookie)

@@ -13,7 +13,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -77,7 +76,6 @@ func New(o Options) (*Server, error) {
 	static := newStaticHandler(o.Static)
 	s.mux.NotFound(s.notFound)
 	s.mux.MethodNotAllowed(s.methodNotAllowed)
-	s.mux.Use(middleware.GetHead)
 	s.mux.Get(HealthPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -106,47 +104,41 @@ func IsPartial(r *http.Request) bool {
 	return hx && !restore
 }
 
-func (s *Server) routed(method, path string) bool {
-	return s.mux.Match(chi.NewRouteContext(), method, path)
+var methods = [...]string{http.MethodDelete, http.MethodGet, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut}
+
+func (s *Server) allowed(path string) []string {
+	var allow []string
+	for _, m := range methods {
+		if s.mux.Match(chi.NewRouteContext(), m, path) {
+			allow = append(allow, m)
+		}
+	}
+	return allow
 }
 
-// slashRedirect is Starlette's redirect_slashes: a 307 to the sibling path
-// with or without its trailing slash when that one is routed for the method.
-func (s *Server) slashRedirect(w http.ResponseWriter, r *http.Request) bool {
+// notFound is Starlette's redirect_slashes: a path no route matches gets a
+// 307 to its sibling with or without the trailing slash when that matches any
+// method.
+func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	alt := path + "/"
 	if strings.HasSuffix(path, "/") {
 		alt = strings.TrimRight(path, "/")
 	}
-	if alt == "" || alt == path || !s.routed(r.Method, alt) {
-		return false
+	if alt == "" || alt == path || len(s.allowed(alt)) == 0 {
+		s.Error(w, r, http.StatusNotFound, "Not Found")
+		return
 	}
 	scheme := "http"
-	if r.TLS != nil {
+	if isHTTPS(r) {
 		scheme = "https"
 	}
 	target := url.URL{Scheme: scheme, Host: r.Host, Path: alt, RawQuery: r.URL.RawQuery}
 	http.Redirect(w, r, target.String(), http.StatusTemporaryRedirect)
-	return true
-}
-
-func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
-	if !s.slashRedirect(w, r) {
-		s.Error(w, r, http.StatusNotFound, "Not Found")
-	}
 }
 
 func (s *Server) methodNotAllowed(w http.ResponseWriter, r *http.Request) {
-	if s.slashRedirect(w, r) {
-		return
-	}
-	var allow []string
-	for _, m := range []string{http.MethodDelete, http.MethodGet, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut} {
-		if s.routed(m, r.URL.Path) {
-			allow = append(allow, m)
-		}
-	}
-	if len(allow) > 0 {
+	if allow := s.allowed(r.URL.Path); len(allow) > 0 {
 		w.Header().Set("Allow", strings.Join(allow, ", "))
 	}
 	s.Error(w, r, http.StatusMethodNotAllowed, "Method Not Allowed")

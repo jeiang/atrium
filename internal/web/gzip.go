@@ -22,12 +22,7 @@ const (
 // 1024 bytes.
 func Gzip(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			next.ServeHTTP(w, r)
-			return
-		}
-		w.Header().Add("Vary", "Accept-Encoding")
-		g := &gzipWriter{ResponseWriter: w}
+		g := &gzipWriter{ResponseWriter: w, accept: strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")}
 		defer g.finish()
 		next.ServeHTTP(g, r)
 	})
@@ -35,6 +30,7 @@ func Gzip(next http.Handler) http.Handler {
 
 type gzipWriter struct {
 	http.ResponseWriter
+	accept bool
 	mode   gzipMode
 	status int
 	buf    bytes.Buffer
@@ -76,8 +72,13 @@ func (g *gzipWriter) startGzip() {
 		g.passThrough()
 		return
 	}
-	g.mode = gzipOn
 	h := g.Header()
+	h.Add("Vary", "Accept-Encoding")
+	if !g.accept {
+		g.passThrough()
+		return
+	}
+	g.mode = gzipOn
 	h.Del("Content-Length")
 	h.Set("Content-Encoding", "gzip")
 	h.Add("Vary", "Accept-Encoding")

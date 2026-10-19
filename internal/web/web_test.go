@@ -623,7 +623,49 @@ func TestMethodErrors(t *testing.T) {
 	if rec.Header().Get("Allow") != "DELETE" {
 		t.Errorf("Allow = %q", rec.Header().Get("Allow"))
 	}
-	wantStatus(t, c.do(http.MethodHead, "/small", nil), 200, "HEAD follows GET")
+	wantStatus(t, c.do(http.MethodHead, "/small", nil), 405, "no implicit HEAD")
+	wantStatus(t, c.do(http.MethodHead, "/static/app.css", nil), 200, "static HEAD")
 	redirect := c.do(http.MethodPost, "/chat/", nil)
 	wantStatus(t, redirect, 307, "method-differs slash redirect")
+}
+
+func TestSlashRedirectParity(t *testing.T) {
+	c := local(t)
+	r := c.get("/rules/x/")
+	wantStatus(t, r, 307, "alternate matches another method")
+	wantStatus(t, c.do(http.MethodDelete, "/slash", nil), 307, "alternate matches any method")
+	wantStatus(t, c.do(http.MethodPost, "/small", nil), 405, "405 beats redirect")
+	https := c.get("/slash", [2]string{"X-Forwarded-Proto", "https"})
+	if https.Header().Get("Location") != "https://testserver/slash/" {
+		t.Errorf("location = %q", https.Header().Get("Location"))
+	}
+}
+
+func TestVaryOnLargeOrStreamedBodies(t *testing.T) {
+	mod := func(r chi.Router, _ *Deps) {
+		r.Get("/big", func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, strings.Repeat("a", 2000)) })
+		r.Get("/small", func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "x") })
+		r.Get("/stream", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, "x")
+			w.(http.Flusher).Flush()
+		})
+		r.Get("/sse", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "x")
+			w.(http.Flusher).Flush()
+		})
+		r.Get("/encoded", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Encoding", "br")
+			_, _ = io.WriteString(w, strings.Repeat("a", 2000))
+		})
+	}
+	c := newClient(t, newServer(t, AuthLocal, []string{testHost}, func(o *Options) { o.Modules = []Module{mod} }))
+	for path, want := range map[string]bool{"/big": true, "/stream": true, "/small": false, "/sse": false, "/encoded": false} {
+		for _, enc := range []string{"", "gzip"} {
+			got := strings.Contains(c.get(path, [2]string{"Accept-Encoding", enc}).Header().Get("Vary"), "Accept-Encoding")
+			if got != want {
+				t.Errorf("%s with %q: Vary = %v, want %v", path, enc, got, want)
+			}
+		}
+	}
 }
