@@ -106,8 +106,9 @@ func Outcomes(ctx context.Context, q Querier, account string, since float64) ([]
 	}
 	return db.Collect(rows, func(r *sql.Rows) (Row, error) {
 		var row Row
-		return row, r.Scan(&row.DecisionID, &row.Stage, &row.Action, &row.Dest, &row.MessageID, &row.MsgID, &row.FromDomain,
+		err := r.Scan(&row.DecisionID, &row.Stage, &row.Action, &row.Dest, &row.MessageID, &row.MsgID, &row.FromDomain,
 			&row.Actual, &row.ActualInbox)
+		return row, err
 	})
 }
 
@@ -281,7 +282,8 @@ func CountFlags(ctx context.Context, q Querier, account string, since float64) (
 	}
 	all, err := db.Collect(rows, func(r *sql.Rows) (decision, error) {
 		var d decision
-		return d, r.Scan(&d.contacts, &d.llm)
+		err := r.Scan(&d.contacts, &d.llm)
+		return d, err
 	})
 	if err != nil {
 		return FlagCounts{}, err
