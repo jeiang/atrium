@@ -59,7 +59,7 @@ func TestCLIGoldens(t *testing.T) {
 	}
 	ran := 0
 	for _, g := range index {
-		if g.Argv[1] != "sync" && g.Argv[1] != "watch" {
+		if len(g.Argv) < 2 || g.Argv[1] != "sync" && g.Argv[1] != "watch" {
 			continue
 		}
 		ran++

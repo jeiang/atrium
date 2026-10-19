@@ -60,6 +60,8 @@ func (e UndoError) Error() string { return string(e) }
 
 func (UndoError) PyClass() string { return "UndoError" }
 
+func (UndoError) PyModule() string { return "atrium.live" }
+
 // Querier is the read side of *sql.DB and *sql.Tx.
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
@@ -489,20 +491,13 @@ func (l *Live) Paused() bool { return safety.IsPaused(l.Cfg.PausePath()) }
 // SetPaused is set_paused.
 func (l *Live) SetPaused(paused bool) error { return safety.SetPaused(l.Cfg.PausePath(), paused) }
 
-// StatusReport is status.
-type StatusReport struct {
-	Mode     string                      `json:"mode"`
-	Paused   bool                        `json:"paused"`
-	GoliveTS *string                     `json:"golive_ts"`
-	Baseline int64                       `json:"baseline"`
-	Actions  map[string]map[string]int64 `json:"actions"`
-}
-
-func (l *Live) Status(ctx context.Context) (StatusReport, error) {
-	out := StatusReport{Mode: l.Cfg.Mode, Paused: l.Paused(), Actions: map[string]map[string]int64{}}
+// Status is status: the mode, whether writes are paused, the go-live time, the baseline size and the count of
+// auto_actions per kind and state, in the order the grouped query returns them.
+func (l *Live) Status(ctx context.Context) (py.Dict, error) {
+	counts := py.Dict{}
 	rows, err := l.DB.Read.QueryContext(ctx, "SELECT kind, ok, undone_ts IS NOT NULL AS undone, COUNT(*) AS n FROM auto_actions GROUP BY 1, 2, 3")
 	if err != nil {
-		return out, err
+		return nil, err
 	}
 	for rows.Next() {
 		var kind string
@@ -511,26 +506,39 @@ func (l *Live) Status(ctx context.Context) (StatusReport, error) {
 		var n int64
 		if err := rows.Scan(&kind, &ok, &undone, &n); err != nil {
 			_ = rows.Close()
-			return out, err
+			return nil, err
 		}
 		var mark *float64
 		if undone {
 			mark = new(1.0)
 		}
-		if out.Actions[kind] == nil {
-			out.Actions[kind] = map[string]int64{}
+		label := StateOf(ok, mark)
+		byState := py.Dict{}
+		if existing, found := counts.Get(kind); found {
+			byState = existing.(py.Dict)
 		}
-		out.Actions[kind][StateOf(ok, mark)] += n
+		total := n
+		if prior, found := byState.Get(label); found {
+			total += prior.(int64)
+		}
+		counts = counts.Set(kind, byState.Set(label, total))
 	}
 	if err := rows.Close(); err != nil {
-		return out, err
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
-		return out, err
+		return nil, err
 	}
-	if out.GoliveTS, err = GetState(ctx, l.DB.Read, GoliveKey); err != nil {
-		return out, err
+	golive, err := GetState(ctx, l.DB.Read, GoliveKey)
+	if err != nil {
+		return nil, err
 	}
-	err = l.DB.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM live_baseline").Scan(&out.Baseline)
-	return out, err
+	var baseline int64
+	if err := l.DB.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM live_baseline").Scan(&baseline); err != nil {
+		return nil, err
+	}
+	return py.Dict{
+		{Key: "mode", Value: l.Cfg.Mode}, {Key: "paused", Value: l.Paused()}, {Key: "golive_ts", Value: nullable(golive)},
+		{Key: "baseline", Value: baseline}, {Key: "actions", Value: counts},
+	}, nil
 }

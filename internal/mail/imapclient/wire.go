@@ -25,6 +25,9 @@ func (e *Error) Error() string { return e.Msg }
 
 func (e *Error) PyClass() string { return e.Kind }
 
+// PyModule is the qualifier of an imaplib exception's traceback name: imaplib.IMAP4.error.
+func (e *Error) PyModule() string { return "imaplib.IMAP4" }
+
 func pyError(format string, a ...any) *Error {
 	return &Error{Kind: "error", Msg: fmt.Sprintf(format, a...)}
 }

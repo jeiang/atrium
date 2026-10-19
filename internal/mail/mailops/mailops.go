@@ -45,6 +45,8 @@ func (e Error) Error() string { return string(e) }
 
 func (Error) PyClass() string { return "MailOpError" }
 
+func (Error) PyModule() string { return "atrium.mailops" }
+
 // PartialMove is a batch that was copied but not expunged: Copied is what COPYUID reported, nil without it.
 type PartialMove struct {
 	Copied *mail.CopyUID
@@ -54,6 +56,8 @@ type PartialMove struct {
 func (e *PartialMove) Error() string { return "copied but not expunged: " + e.Err.Error() }
 
 func (*PartialMove) PyClass() string { return "PartialMove" }
+
+func (*PartialMove) PyModule() string { return "atrium.mailops" }
 
 func (e *PartialMove) Unwrap() error { return e.Err }
 
