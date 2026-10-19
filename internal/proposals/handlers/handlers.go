@@ -12,7 +12,9 @@ import (
 )
 
 // Deps is what the registered executors and undoers run against: the database, the account opener, the
-// syncer of the post-write resync, and the clock of the action log (time.Now when nil).
+// syncer of the post-write resync, and the clock of the action log (time.Now when nil). A later slice that
+// registers a kind adds the fields its handlers need here and its registration call to Register, at its
+// place in Python's order; nothing registers handlers outside Register.
 type Deps struct {
 	DB     *db.DB
 	Open   mailops.Opener
@@ -20,7 +22,8 @@ type Deps struct {
 	Now    func() float64
 }
 
-// Register is register.
+// Register is register: executors, then (as their slices land) notion_proposals, calendar_proposals
+// and openloops. notion_migrate (wiki-plan) is not registered.
 func Register(r *proposals.Registry, deps Deps) {
 	executors.Register(r, &executors.Executors{DB: deps.DB, Open: deps.Open, Now: deps.Now}, deps.Syncer)
 }

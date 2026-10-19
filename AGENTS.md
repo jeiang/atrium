@@ -274,8 +274,10 @@ and backups; nothing of that lives here.
   is written only through it) and `Resolve` (`Path.resolve()`, CPython's `realpath` with its `seen` map),
   `FromISOFormat` with `DateTime.Timestamp`/`WallToUnix`/`SplitTimestamp`,
   `B64Decode` (non-strict `base64.b64decode`), `DecodeUTF16BE`,
-  `FloatRepr`/`FormatFixed`/`FormatPercent`/`ParseFloat`/`ParseInt`
-  (`repr`, `format`, `float()` and `int()` of a str), `Truthy`, and
+  `FloatRepr`/`FormatFixed`/`FormatPercent`/`ParseFloat`
+  (`repr`, `format`, `float()` of a str), `Int`/`IntString` (`int()`, Unicode
+  digits included; `ParseInt` is its int64 view), `Iter` (`list()`),
+  `TypeName`, `Exception` (a built-in exception an emulated builtin raises), `Truthy`, and
   `JSONRedump` (JSON text respelled as Python would, keys in their original order).
   Python-emulation helpers live here; never add a per-package copy (the one
   exception is `internal/mail/mime`'s own `pystr.go`). Ported float

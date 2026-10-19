@@ -14,7 +14,9 @@ import (
 // Names is SCANNERS' names in run order.
 var Names = [...]string{"rebalance", "deletions", "gmail_labels"}
 
-// ScanAll is scan_all at ts: each scanner's result by name; namer names rebalance's split folders.
+// ScanAll is scan_all: each scanner's result by name; namer names rebalance's split folders. Every scanner gets
+// the one ts as its run clock and created_ts; Python reads now() inside each scanner (rebalance once, the others
+// per created proposal), so its timestamps of one pass can differ by the milliseconds the pass took.
 func ScanAll(ctx context.Context, d *db.DB, ts float64, namer rebalance.Namer) (py.Dict, error) {
 	rb, err := rebalance.Scan(ctx, d, ts, namer)
 	if err != nil {

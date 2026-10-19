@@ -94,18 +94,11 @@ func digitRun(s string) (string, int) {
 	return "", n
 }
 
-// ParseInt is int(s) for a str in base 10: whitespace stripped, an optional sign, digits with single
-// underscores between them. ok is false when s is not such a literal or the value does not fit int64.
+// ParseInt is IntString as an int64: ok is false when s is not an int() literal or the value does not fit.
 func ParseInt(s string) (int64, bool) {
-	text := Strip(s)
-	body := strings.TrimLeft(text, "+-")
-	if len(text)-len(body) > 1 {
+	n, err := IntString(s)
+	if err != nil || !n.IsInt64() {
 		return 0, false
 	}
-	rest, n := digitRun(body)
-	if rest != "" || n <= 0 {
-		return 0, false
-	}
-	v, err := strconv.ParseInt(strings.ReplaceAll(text, "_", ""), 10, 64)
-	return v, err == nil
+	return n.Int64(), true
 }

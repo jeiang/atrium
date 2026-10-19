@@ -8,10 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
@@ -37,91 +35,38 @@ const (
 	OpRuleDelete   = "rule_delete"
 )
 
-// pyError is a Python built-in exception the executors raise from malformed input.
-type pyError struct{ class, msg string }
-
-func (e pyError) Error() string { return e.msg }
-
-func (e pyError) PyClass() string { return e.class }
-
-func attributeError(v any) error {
-	return pyError{"AttributeError", fmt.Sprintf("'%s' object has no attribute 'get'", py.TypeName(v))}
-}
-
-// pyInt is int(v) for a decoded JSON value.
-func pyInt(v any) (int64, error) {
-	switch v := v.(type) {
-	case bool:
-		if v {
-			return 1, nil
-		}
-		return 0, nil
-	case int64:
-		return v, nil
-	case float64:
-		if math.IsNaN(v) {
-			return 0, pyError{"ValueError", "cannot convert float NaN to integer"}
-		}
-		if math.IsInf(v, 0) {
-			return 0, pyError{"OverflowError", "cannot convert float infinity to integer"}
-		}
-		return int64(v), nil
-	case string:
-		s := strings.ReplaceAll(py.Strip(v), "_", "")
-		if n, err := strconv.ParseInt(s, 10, 64); err == nil && !strings.HasPrefix(py.Strip(v), "_") && !strings.HasSuffix(py.Strip(v), "_") && !strings.Contains(v, "__") {
-			return n, nil
-		}
-		return 0, pyError{"ValueError", "invalid literal for int() with base 10: " + py.Repr(v)}
-	}
-	return 0, pyError{"TypeError", fmt.Sprintf("int() argument must be a string, a bytes-like object or a real number, not '%s'", py.TypeName(v))}
-}
-
-func iterate(v any) ([]any, error) {
-	switch v := v.(type) {
-	case []any:
-		return v, nil
-	case string:
-		out := make([]any, 0, len(v))
-		for _, r := range v {
-			out = append(out, string(r))
-		}
-		return out, nil
-	case py.Dict:
-		out := make([]any, len(v))
-		for i, p := range v {
-			out[i] = p.Key
-		}
-		return out, nil
-	}
-	return nil, pyError{"TypeError", fmt.Sprintf("'%s' object is not iterable", py.TypeName(v))}
-}
-
 // chosenSnapshots is chosen_snapshots: every message without a selection, else the selected ones, which must all
 // belong to the proposal.
 func chosenSnapshots(messages []mailops.Snapshot, wanted any) ([]mailops.Snapshot, error) {
 	if wanted == nil {
 		return slices.Clone(messages), nil
 	}
-	items, err := iterate(wanted)
+	items, err := py.Iter(wanted)
 	if err != nil {
 		return nil, err
 	}
 	ids := map[int64]bool{}
+	outside := false
 	for _, item := range items {
-		id, err := pyInt(item)
+		id, err := py.Int(item)
 		if err != nil {
 			return nil, err
 		}
-		ids[id] = true
+		if id.IsInt64() {
+			ids[id.Int64()] = true
+		} else {
+			outside = true
+		}
 	}
 	known := map[int64]bool{}
 	for _, m := range messages {
 		known[m.ID] = true
 	}
 	for id := range ids {
-		if !known[id] {
-			return nil, proposals.SelectionError("selection names messages outside the proposal")
-		}
+		outside = outside || !known[id]
+	}
+	if outside {
+		return nil, proposals.SelectionError("selection names messages outside the proposal")
 	}
 	var out []mailops.Snapshot
 	for _, m := range messages {
@@ -152,7 +97,7 @@ func resolveGroups(groups []group, selection py.Dict) ([]planned, error) {
 	picksV := get(selection, "groups")
 	var picks []any
 	if picksV != nil {
-		list, err := iterate(picksV)
+		list, err := py.Iter(picksV)
 		if err != nil {
 			return nil, err
 		}
@@ -167,7 +112,7 @@ func resolveGroups(groups []group, selection py.Dict) ([]planned, error) {
 		if picks != nil {
 			d, ok := picks[i].(py.Dict)
 			if !ok {
-				return nil, attributeError(picks[i])
+				return nil, py.AttributeError(picks[i], "get")
 			}
 			pick = d
 		}
@@ -175,7 +120,7 @@ func resolveGroups(groups []group, selection py.Dict) ([]planned, error) {
 		if chosen := get(pick, "name"); py.Truthy(chosen) {
 			s, ok := chosen.(string)
 			if !ok {
-				return nil, pyError{"AttributeError", fmt.Sprintf("'%s' object has no attribute 'strip'", py.TypeName(chosen))}
+				return nil, py.AttributeError(chosen, "strip")
 			}
 			value = s
 		}
@@ -427,7 +372,7 @@ func decode(raw json.RawMessage) (py.Dict, error) {
 	}
 	d, ok := v.(py.Dict)
 	if !ok {
-		return nil, pyError{"TypeError", fmt.Sprintf("'%s' object is not subscriptable", py.TypeName(v))}
+		return nil, py.TypeError("'%s' object is not subscriptable", py.TypeName(v))
 	}
 	return d, nil
 }
@@ -538,7 +483,7 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 	}
 	ruleDict, ok := rule.(py.Dict)
 	if !ok {
-		return nil, pyError{"TypeError", fmt.Sprintf("'%s' object is not subscriptable", py.TypeName(rule))}
+		return nil, py.TypeError("'%s' object is not subscriptable", py.TypeName(rule))
 	}
 	id, err := required(ruleDict, "id")
 	if err != nil {
