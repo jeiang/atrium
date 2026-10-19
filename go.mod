@@ -6,6 +6,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.82.0
 	github.com/dlclark/regexp2 v1.12.0
 	github.com/emersion/go-imap/v2 v2.0.0-beta.8
+	github.com/go-chi/chi/v5 v5.5.0
 	github.com/jeiang/atrium/third_party/sqlite-vec v0.0.0
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/microcosm-cc/bluemonday v1.0.27
