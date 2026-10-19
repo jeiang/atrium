@@ -327,7 +327,18 @@ and backups; nothing of that lives here.
 - `internal/mail/drafts/`: the draft lifecycle. `Send` is the only path that
   sends mail; it files the iCloud copy with APPEND `\Seen` under
   `safety.OperatorSend` to the mailbox `mail.MailboxRole` names `sent`.
-- `internal/pyhtml/`: `html.unescape`; tables from `tools/pyhtml/gen_entities.py`.
+- `internal/pyhtml/`: `html.unescape` (tables from `tools/pyhtml/gen_entities.py`)
+  and `Parser`, `html.parser.HTMLParser` with `convert_charrefs=True`, checked
+  against `tools/pyhtml/gen_parser_cases.py`.
+- `internal/assistant/webfetch/`: `webfetch.py` and `tools/web_fetch.py`, the
+  only fetch of an arbitrary URL. Every hop resolves once, vets every answer
+  (`DefaultAllowed`: NAT64, IPv4-compatible, SIIT, fec0 and the special-purpose
+  ranges), connects to the vetted address and re-checks it at connect, and
+  vets each redirect again. The tool fetches only URLs in the run's allowed
+  set (operator-typed or web_search results; files, mail and pages never add
+  to it). The HTTP reader is a port of `http.client`
+  (`tools/webfetch/gen_wire_cases.py`); readable text is go-trafilatura, with
+  its divergences in `testdata/corpora/README.md`.
 - `internal/mail/sync/`: `sync.py`'s read path. `Syncer.Account` discovers
   mailboxes (`mail.MailboxRole`), handles UIDVALIDITY, fetches new mail in
   batches of `config.FetchBatch`, refreshes flags with CHANGEDSINCE when
@@ -355,7 +366,9 @@ and backups; nothing of that lives here.
   `FloatRepr`/`FormatFixed`/`FormatPercent`/`ParseFloat`
   (`repr`, `format`, `float()` of a str), `Int`/`IntString` (`int()`, Unicode
   digits included; `ParseInt` is its int64 view), `Iter` (`list()`),
-  `TypeName`, `Exception` (a built-in exception an emulated builtin raises), `Truthy`, and
+  `TypeName`, `Exception` (a built-in exception an emulated builtin raises), `Truthy`,
+  `URLSplit`/`URLJoin`/`URLUnsplit` (`urllib.parse`), `OSError`/`OSErrorOf`/`OSErrorText`
+  (a Go network error as Python's `OSError`) and `ASCIIEncode`/`ASCIIEncodeError`, and
   `JSONRedump` (JSON text respelled as Python would, keys in their original order).
   Python-emulation helpers live here; never add a per-package copy (the one
   exception is `internal/mail/mime`'s own `pystr.go`). Ported float

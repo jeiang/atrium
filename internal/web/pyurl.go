@@ -3,38 +3,9 @@ package web
 import (
 	"net/http"
 	"strings"
+
+	"github.com/jeiang/atrium/internal/py"
 )
-
-func isSchemeChar(c byte) bool {
-	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '+' || c == '-' || c == '.'
-}
-
-// splitNetloc is urlsplit(url).netloc; ok is false where Python raises
-// ValueError (unbalanced IPv6 brackets).
-func splitNetloc(url string) (netloc string, ok bool) {
-	url = strings.TrimLeftFunc(url, func(r rune) bool { return r <= ' ' })
-	url = strings.NewReplacer("\t", "", "\r", "", "\n", "").Replace(url)
-	if i := strings.IndexByte(url, ':'); i > 0 && (url[0] >= 'a' && url[0] <= 'z' || url[0] >= 'A' && url[0] <= 'Z') {
-		valid := true
-		for j := 1; j < i; j++ {
-			valid = valid && isSchemeChar(url[j])
-		}
-		if valid {
-			url = url[i+1:]
-		}
-	}
-	if !strings.HasPrefix(url, "//") {
-		return "", true
-	}
-	rest := url[2:]
-	if end := strings.IndexAny(rest, "/?#"); end >= 0 {
-		rest = rest[:end]
-	}
-	if strings.Contains(rest, "[") != strings.Contains(rest, "]") {
-		return "", false
-	}
-	return rest, true
-}
 
 // sameOrigin is the Python same_origin: no Origin header passes; a "null"
 // origin or one whose authority differs from the Host header fails.
@@ -47,8 +18,8 @@ func sameOrigin(r *http.Request) bool {
 	if origin == "null" {
 		return false
 	}
-	netloc, ok := splitNetloc(origin)
-	return ok && strings.EqualFold(netloc, r.Host)
+	parts, err := py.URLSplit(origin)
+	return err == nil && strings.EqualFold(parts.Netloc, r.Host)
 }
 
 func hexVal(c byte) int {
