@@ -4,10 +4,9 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/jeiang/atrium/internal/assistant/loop"
+	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
-	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -47,11 +46,11 @@ func runScheduler(env *cli.Env, cfgEnv config.Env) error {
 	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
 		return err
 	}
-	reg, err := toolset.Registry()
+	r, err := runner.New()
 	if err != nil {
 		return err
 	}
-	svc := service.New(ctx, d, cfg, cfgEnv, &loop.Runner{Registry: reg})
+	svc := service.New(ctx, d, cfg, cfgEnv, r)
 	defer svc.Close()
 	worker.New(svc, callables()).Run(ctx)
 	return nil
