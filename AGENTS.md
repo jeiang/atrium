@@ -256,6 +256,17 @@ and backups; nothing of that lives here.
   time, 12 steps and $0.25 each; `Batch` runs parallel research calls.
 - `internal/assistant/agentcmd/`: `atrium agent run` (Python's `--kind
   code` is not ported); `#127` adds `agent scheduler` to its group.
+- `internal/assistant/pages/`: the assistant web pages as one `web.Module` (`Module(Options)`, `Templates()`), shared by
+  chat, threads and files (`#134`) and by projects, scheduled and the settings pages assistant, usage, skills and
+  subagents (`#251`; `GET /settings` is a 303 to `/settings/assistant`). Handlers hand templates explicit view
+  structs with json tags and no embedded struct (`JobView`, `RunView`, `SkillView`, `AgentView`, ...); defines are
+  prefixed (`project_*`, `schedule_*`, `scheduled_*`, `skills_*`, `subagent_*`) and take one dict, so a define gets
+  `csrf` and `toast` passed in. A successful htmx project create, update or archive is a 204 with `HX-Redirect` and
+  no body; every scheduled list reply sets `HX-Retarget`/`HX-Reswap` before the body and `HX-Trigger: close-dialogs`
+  only on success. `GET /scheduled` seeds the nightly and built-in jobs on the write handle. Run history stamps
+  (`%a %d %b %H:%M`) use the page zone (`ATRIUM_TZ`), a job's cadence its own `tz`. `Options.Registry` is the
+  registry behind the subagent tool pool and `subagents.Save`; nil is `toolset.Registry()`. `scheduler.ListRuns` is
+  `list_runs` and its read path `scheduler.list_runs`.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
   600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
