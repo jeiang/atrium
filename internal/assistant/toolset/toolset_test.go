@@ -20,6 +20,7 @@ func TestEveryRegisteredToolIsThePythonTool(t *testing.T) {
 		"mail_read", "mail_search", "open_loops", "packages", "upcoming_birthdays", "threads_today",
 		"context_status", "context_pin", "context_drop", "context_fold", "recall", "plan", "profile_get", "profile_set", "propose",
 		"schedule_create", "schedule_update", "schedule_cancel", "schedule_list", "load_skill",
+		"grafana_datasources", "grafana_query", "grafana_alerts", "grafana_search_dashboards",
 		"spending", "transactions", "bills", "payees", "payee_rename", "payee_merge", "payee_alias_add", "payee_set_category",
 		"transaction_merge", "transaction_split", "transaction_set_account"} {
 		found := false
