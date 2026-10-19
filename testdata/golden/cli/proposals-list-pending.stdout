@@ -1,0 +1,42 @@
+[
+  {
+    "id": 9,
+    "kind": "rebalance_split",
+    "account": "icloud",
+    "status": "pending",
+    "title": "Split 21 messages out of Receipts into 1 new folders",
+    "undoable": false
+  },
+  {
+    "id": 8,
+    "kind": "rebalance_merge",
+    "account": "icloud",
+    "status": "pending",
+    "title": "Move 3 messages from Receipts to Travel",
+    "undoable": false
+  },
+  {
+    "id": 10,
+    "kind": "calendar_event",
+    "account": "calendar",
+    "status": "pending",
+    "title": "Add to calendar: Dinner with Friend Two (2026-10-17 19:00)",
+    "undoable": false
+  },
+  {
+    "id": 7,
+    "kind": "gmail_label_merge",
+    "account": "gmail",
+    "status": "pending",
+    "title": "Merge label Work/Old into Work",
+    "undoable": false
+  },
+  {
+    "id": 6,
+    "kind": "deletion_rule",
+    "account": "gmail",
+    "status": "pending",
+    "title": "Delete 1 messages and future mail matching login.example / your login code <n>",
+    "undoable": false
+  }
+]

@@ -1,0 +1,80 @@
+{
+  "id": 7,
+  "kind": "gmail_label_merge",
+  "account": "gmail",
+  "status": "applied",
+  "created_ts": 1792096200.0,
+  "decided_ts": 1792339200.0,
+  "applied_ts": 1792339200.0,
+  "title": "Merge label Work/Old into Work",
+  "preview": {
+    "from": "Work/Old",
+    "into": "Work",
+    "from_count": 3,
+    "into_count": 13,
+    "messages": [
+      {
+        "id": 122,
+        "subject": "Archived memo 1",
+        "from_name": "Boss",
+        "from_addr": "boss@work.example",
+        "date_ts": 1774368000.0
+      },
+      {
+        "id": 123,
+        "subject": "Archived memo 2",
+        "from_name": "Boss",
+        "from_addr": "boss@work.example",
+        "date_ts": 1773936000.0
+      },
+      {
+        "id": 124,
+        "subject": "Archived memo 3",
+        "from_name": "Boss",
+        "from_addr": "boss@work.example",
+        "date_ts": 1773504000.0
+      }
+    ]
+  },
+  "result": {
+    "summary": "3 relabelled, label deleted, 0 skipped as changed",
+    "relabelled": 3,
+    "label_deleted": true,
+    "skipped": []
+  },
+  "fingerprint": "gmail_label_merge:19cde32c435d3341",
+  "payload": {
+    "label": "Work/Old",
+    "into": "Work",
+    "messages": [
+      {
+        "id": 122,
+        "uid": 23,
+        "uidvalidity": 11,
+        "msgid": "oldwork-1@golden.example",
+        "digest": "d146e404bff3df45ad158db8aa8b223fbe06c981104c4ac941590513fbfe0b88",
+        "mailbox": "[Gmail]/All Mail",
+        "imap_name": "[Gmail]/All Mail"
+      },
+      {
+        "id": 123,
+        "uid": 24,
+        "uidvalidity": 11,
+        "msgid": "oldwork-2@golden.example",
+        "digest": "4a03455fa0674c19bee3c1def4ec03c157ecd376db037ff566e16e896cf016a6",
+        "mailbox": "[Gmail]/All Mail",
+        "imap_name": "[Gmail]/All Mail"
+      },
+      {
+        "id": 124,
+        "uid": 25,
+        "uidvalidity": 11,
+        "msgid": "oldwork-3@golden.example",
+        "digest": "760988f8cbb06e931a3be42924e18200564d81a90499e0cf13dff32ef021489a",
+        "mailbox": "[Gmail]/All Mail",
+        "imap_name": "[Gmail]/All Mail"
+      }
+    ]
+  },
+  "undoable": true
+}

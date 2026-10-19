@@ -126,10 +126,29 @@ Input for the Go end-to-end differential in the mail parity gate.
 
 ## CLI outputs (`../cli/`)
 
-`index.json` lists argv, exit code and the stdout/stderr files of each
-command, run in-process through `atrium.cli.main` against a copy of
-`atrium.db` with the same fakes: `live status`, `proposals list --status all`,
-`proposals list`, `live actions`, `shadow-report --since 365d`, `rules export`,
-`notion search alpha` and `media poll`. `--status all` is not a valid choice
-in the frozen CLI, so that entry records argparse's exit 2 and usage error;
-`proposals list` without a filter is the listing of every status.
+`index.json` lists, per command, `name`, `argv`, `exit_code` and the
+stdout/stderr files, run in-process through `atrium.cli.main` with the same
+fakes (the fake IMAP world, local LLM, embeddings, media). An uncaught
+exception exits 1 and stderr holds only its last traceback line. `--status all`
+is not a valid choice in the frozen CLI, so `proposals-list-status-all` records
+argparse's exit 2 and usage error.
+
+The first entries (`live-status` .. `watch-missing-credentials`) run in order
+against one mutated copy of `atrium.db` and one mutated fake IMAP world. Every
+entry after them (mail commands, then `argparse-*` parse errors and help) runs
+in isolation: a fresh copy of `atrium.db` in an empty state directory (no pause
+file, no -wal/-shm) and a fresh copy of the fake IMAP world as it stood before
+the first command, at the same frozen clock (`world.json` `clock`).
+
+Optional entry keys, only on the isolated entries: `stdin` (string fed to
+`sys.stdin`) and `files` (`{name: content}` written into a per-command temp
+directory before the run). An `argv` element may contain the placeholder
+`{tmp}`, which stands for that directory and is recorded unsubstituted; no
+output contains the real path.
+
+`world.json` is the fake IMAP world before the first command: `clock`,
+`gmail_categories` (category name to UIDs), and per account `uidvalidity`
+(the same for every mailbox), `gmail`, `special_use` (mailbox to special-use
+flags), `order` (mailbox listing order), `mailboxes` (mailbox to messages with
+`uid`, `flags`, `labels` (null outside Gmail), `header`, `text`, `modseq`),
+`next_uid` and `modseq` (mailbox to the fake box counters).

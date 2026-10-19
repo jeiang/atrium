@@ -1,0 +1,22 @@
+{
+  "undone": true,
+  "outcomes": [
+    {
+      "action": 4,
+      "ok": true
+    },
+    {
+      "action": 3,
+      "ok": true
+    },
+    {
+      "action": 2,
+      "ok": true
+    },
+    {
+      "action": 1,
+      "ok": true
+    }
+  ],
+  "sync_error": null
+}

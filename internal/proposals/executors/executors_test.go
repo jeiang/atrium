@@ -156,7 +156,7 @@ func (w *world) splitPayload(ids []int64, dest string) py.Dict {
 	}}}
 }
 
-func (w *world) apply(id int64, selection py.Dict) *proposals.Proposal {
+func (w *world) apply(id int64, selection any) *proposals.Proposal {
 	w.t.Helper()
 	p, err := w.pipeline.ApproveAndApply(context.Background(), id, selection)
 	if err != nil {
@@ -271,7 +271,7 @@ func TestApproveAndUndoRunAsTheApprovedProposalOnly(t *testing.T) {
 	w := icloudWorld(t)
 	pid := w.propose("probe", py.Dict{})
 	var seen []string
-	w.registry.Executors["probe"] = func(ctx context.Context, p *proposals.Proposal, _ py.Dict) (py.Dict, error) {
+	w.registry.Executors["probe"] = func(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
 		id, ok := safety.ApprovedProposal(ctx)
 		seen = append(seen, fmt.Sprintf("%s %v", id, ok))
 		_, err := proposals.RecordAction(ctx, w.db.Write, p.ID, py.Dict{{Key: "op", Value: "probe"}}, py.Dict{{Key: "op", Value: "probe"}}, true, nil, w.clock)
@@ -671,5 +671,33 @@ func TestSelectionIDsFollowPythonInt(t *testing.T) {
 	done := w.apply(pid, py.Dict{{Key: "message_ids", Value: []any{arabic, " " + strconv.FormatInt(ids[1], 10) + " "}}})
 	if field(done.Result, "trashed") != int64(2) {
 		t.Fatalf("Unicode and padded ids = %s %v", done.Status, done.Result)
+	}
+}
+
+func TestNonObjectSelectionFailsTheProposalLikePythonsGet(t *testing.T) {
+	proposeMoves := func(w *world) int64 {
+		return w.propose(executors.InboxBacklog, py.Dict{{Key: "folder", Value: "INBOX"}, {Key: "groups", Value: []any{}}})
+	}
+	proposeDeletion := func(w *world) int64 {
+		return w.propose(executors.DeletionRule, deletionPayload(w, w.messageIDs("Bills"), config.ICloud))
+	}
+	for name, selection := range map[string]any{"list": []any{int64(1)}, "int": int64(3), "str": "x", "true": true, "float": 1.5} {
+		for kind, propose := range map[string]func(*world) int64{"moves": proposeMoves, "deletion": proposeDeletion} {
+			w := icloudWorld(t)
+			done := w.apply(propose(w), selection)
+			want := "AttributeError: '" + py.TypeName(selection) + "' object has no attribute 'get'"
+			if done.Status != proposals.Failed || field(done.Result, "error") != want {
+				t.Fatalf("%s %s: %s %v, want %q", kind, name, done.Status, done.Result, want)
+			}
+			if n := count(t, w.db, "SELECT COUNT(*) FROM rules"); n != 0 || len(w.fake.Writes) != 0 {
+				t.Fatalf("%s %s wrote: rules %d, writes %v", kind, name, n, w.fake.Writes)
+			}
+		}
+	}
+	for _, falsy := range []any{nil, py.Dict{}, []any{}, int64(0), "", false} {
+		w := icloudWorld(t)
+		if done := w.apply(proposeMoves(w), falsy); done.Status != proposals.Applied {
+			t.Fatalf("falsy selection %#v: %s %v", falsy, done.Status, done.Result)
+		}
 	}
 }

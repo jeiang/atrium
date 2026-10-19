@@ -1,0 +1,8 @@
+usage: atrium [-h]
+              {sync,watch,rules,shadow-report,reindex,rebalance,deletions,gmail-labels,live,proposals,notion,agent,calendar,loops,watches,money,media,serve,codemode-worker} ...
+
+positional arguments:
+  {sync,watch,rules,shadow-report,reindex,rebalance,deletions,gmail-labels,live,proposals,notion,agent,calendar,loops,watches,money,media,serve,codemode-worker}
+
+options:
+  -h, --help            show this help message and exit

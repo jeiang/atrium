@@ -1,0 +1,2 @@
+usage: atrium rules import [-h] file
+atrium rules import: error: the following arguments are required: file

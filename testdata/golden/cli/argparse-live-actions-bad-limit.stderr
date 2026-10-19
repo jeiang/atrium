@@ -1,0 +1,3 @@
+usage: atrium live actions [-h] [--limit LIMIT]
+                           [--kind {file,flag,trash,correct}]
+atrium live actions: error: argument --limit: invalid int value: 'x'

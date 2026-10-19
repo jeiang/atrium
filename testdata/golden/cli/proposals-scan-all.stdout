@@ -1,0 +1,14 @@
+{
+  "rebalance": {
+    "candidates": 2,
+    "created": 0
+  },
+  "deletions": {
+    "candidates": 2,
+    "created": 0
+  },
+  "gmail_labels": {
+    "candidates": 1,
+    "created": 0
+  }
+}

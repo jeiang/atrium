@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // FloatRepr is repr(float).
@@ -132,16 +133,47 @@ func (d Dict) Set(key string, value any) Dict {
 	return append(out, Pair{key, value})
 }
 
-// JSONError is the message of Python's json.JSONDecodeError, without its ": line L column C (char N)" suffix.
-type JSONError string
+// JSONError is Python's json.JSONDecodeError: Msg is the bare message, Pos the offset of the error in code
+// points, Line and Col its 1-based line and column, as the C scanner of CPython 3.14 reports them.
+type JSONError struct {
+	Msg       string
+	Pos       int
+	Line, Col int
+}
 
-func (e JSONError) Error() string { return string(e) }
+func (e JSONError) Error() string {
+	return fmt.Sprintf("%s: line %d column %d (char %d)", e.Msg, e.Line, e.Col, e.Pos)
+}
+
+// PyClass is the exception class name Python reports.
+func (JSONError) PyClass() string { return "JSONDecodeError" }
+
+// PyModule is the module Python reports for the class.
+func (JSONError) PyModule() string { return "json.decoder" }
+
+// jsonFail builds the JSONError for the byte offset pos of doc.
+func jsonFail(msg, doc string, pos int) JSONError {
+	pos = min(pos, len(doc))
+	head := doc[:pos]
+	cp := utf8.RuneCountInString(head)
+	line := strings.Count(head, "\n") + 1
+	col := cp + 1
+	if nl := strings.LastIndexByte(head, '\n'); nl >= 0 {
+		col = utf8.RuneCountInString(head[nl:])
+	}
+	return JSONError{Msg: msg, Pos: cp, Line: line, Col: col}
+}
+
+func (p *jsonParser) fail(msg string, pos int) JSONError { return jsonFail(msg, p.s, pos) }
 
 // JSONLoads is json.loads: objects become Dict (a duplicate key keeps its first position and its last value),
 // arrays []any, integers int64 or *big.Int, other numbers float64 (NaN and the infinities included).
 // A lone surrogate escape becomes U+FFFD: a Go string cannot hold it.
 func JSONLoads(data []byte) (any, error) {
 	p := &jsonParser{s: string(data)}
+	if strings.HasPrefix(p.s, "\ufeff") {
+		return nil, p.fail("Unexpected UTF-8 BOM (decode using utf-8-sig)", 0)
+	}
 	p.space()
 	v, err := p.value(0)
 	if err != nil {
@@ -149,7 +181,7 @@ func JSONLoads(data []byte) (any, error) {
 	}
 	p.space()
 	if p.i < len(p.s) {
-		return nil, JSONError("Extra data")
+		return nil, p.fail("Extra data", p.i)
 	}
 	return v, nil
 }
@@ -178,7 +210,7 @@ func (p *jsonParser) value(depth int) (any, error) {
 		return nil, errors.New("maximum recursion depth exceeded")
 	}
 	if p.i >= len(p.s) {
-		return nil, JSONError("Expecting value")
+		return nil, p.fail("Expecting value", p.i)
 	}
 	switch c := p.s[p.i]; {
 	case c == '{':
@@ -202,7 +234,7 @@ func (p *jsonParser) value(depth int) (any, error) {
 	case c == '-' || c >= '0' && c <= '9':
 		return p.num()
 	}
-	return nil, JSONError("Expecting value")
+	return nil, p.fail("Expecting value", p.i)
 }
 
 func (p *jsonParser) num() (any, error) {
@@ -222,7 +254,7 @@ func (p *jsonParser) num() (any, error) {
 		p.i++
 	} else if digits() == 0 {
 		p.i = start
-		return nil, JSONError("Expecting value")
+		return nil, p.fail("Expecting value", start)
 	}
 	save := p.i
 	if p.i+1 < len(p.s) && p.s[p.i] == '.' {
@@ -245,11 +277,12 @@ func (p *jsonParser) num() (any, error) {
 }
 
 func (p *jsonParser) str() (any, error) {
+	begin := p.i
 	p.i++
 	var b strings.Builder
 	for {
 		if p.i >= len(p.s) {
-			return nil, JSONError("Unterminated string")
+			return nil, p.fail("Unterminated string starting at", begin)
 		}
 		c := p.s[p.i]
 		switch {
@@ -257,15 +290,16 @@ func (p *jsonParser) str() (any, error) {
 			p.i++
 			return b.String(), nil
 		case c < 0x20:
-			return nil, JSONError("Invalid control character")
+			return nil, p.fail("Invalid control character at", p.i)
 		case c != '\\':
 			b.WriteByte(c)
 			p.i++
 			continue
 		}
+		esc := p.i
 		p.i++
 		if p.i >= len(p.s) {
-			return nil, JSONError("Unterminated string")
+			return nil, p.fail("Unterminated string starting at", begin)
 		}
 		e := p.s[p.i]
 		p.i++
@@ -274,21 +308,21 @@ func (p *jsonParser) str() (any, error) {
 			continue
 		}
 		if e != 'u' {
-			return nil, JSONError("Invalid \\escape")
+			return nil, p.fail("Invalid \\escape", esc)
 		}
 		r, ok := p.hex4()
 		if !ok {
-			return nil, JSONError("Invalid \\uXXXX escape")
+			return nil, p.fail("Invalid \\uXXXX escape", esc+1)
 		}
-		if utf16.IsSurrogate(r) && strings.HasPrefix(p.s[p.i:], "\\u") {
+		if r >= 0xD800 && r < 0xDC00 && strings.HasPrefix(p.s[p.i:], "\\u") {
 			save := p.i
 			p.i += 2
-			if lo, ok := p.hex4(); ok {
-				if c := utf16.DecodeRune(r, lo); c != unicode.ReplacementChar {
-					r = c
-				} else {
-					p.i = save
-				}
+			lo, ok := p.hex4()
+			if !ok {
+				return nil, p.fail("Invalid \\uXXXX escape", save+1)
+			}
+			if c := utf16.DecodeRune(r, lo); c != unicode.ReplacementChar {
+				r = c
 			} else {
 				p.i = save
 			}
@@ -327,12 +361,17 @@ func (p *jsonParser) array(depth int) (any, error) {
 		p.space()
 		switch {
 		case p.i < len(p.s) && p.s[p.i] == ',':
+			comma := p.i
 			p.i++
+			p.space()
+			if p.i < len(p.s) && p.s[p.i] == ']' {
+				return nil, p.fail("Illegal trailing comma before end of array", comma)
+			}
 		case p.i < len(p.s) && p.s[p.i] == ']':
 			p.i++
 			return out, nil
 		default:
-			return nil, JSONError("Expecting ',' delimiter")
+			return nil, p.fail("Expecting ',' delimiter", p.i)
 		}
 	}
 }
@@ -348,7 +387,7 @@ func (p *jsonParser) object(depth int) (any, error) {
 	for {
 		p.space()
 		if p.i >= len(p.s) || p.s[p.i] != '"' {
-			return nil, JSONError("Expecting property name enclosed in double quotes")
+			return nil, p.fail("Expecting property name enclosed in double quotes", p.i)
 		}
 		k, err := p.str()
 		if err != nil {
@@ -356,7 +395,7 @@ func (p *jsonParser) object(depth int) (any, error) {
 		}
 		p.space()
 		if p.i >= len(p.s) || p.s[p.i] != ':' {
-			return nil, JSONError("Expecting ':' delimiter")
+			return nil, p.fail("Expecting ':' delimiter", p.i)
 		}
 		p.i++
 		p.space()
@@ -368,12 +407,17 @@ func (p *jsonParser) object(depth int) (any, error) {
 		p.space()
 		switch {
 		case p.i < len(p.s) && p.s[p.i] == ',':
+			comma := p.i
 			p.i++
+			p.space()
+			if p.i < len(p.s) && p.s[p.i] == '}' {
+				return nil, p.fail("Illegal trailing comma before end of object", comma)
+			}
 		case p.i < len(p.s) && p.s[p.i] == '}':
 			p.i++
 			return out, nil
 		default:
-			return nil, JSONError("Expecting ',' delimiter")
+			return nil, p.fail("Expecting ',' delimiter", p.i)
 		}
 	}
 }
