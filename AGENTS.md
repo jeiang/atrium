@@ -154,6 +154,20 @@ and backups; nothing of that lives here.
   `datetime.fromisoformat`) and the `jobs` CRUD with the 20-active cap
   and 1 h minimum gap (`SkipLimits` is Python's `enforce=False`). Its
   test runs `testdata/corpora/scheduler.jsonl` with exact match.
+- `internal/assistant/{journal,threads,usage,budget,pricing,projects,workspace,progress,writes}/`:
+  the assistant's persistence, each package one Python module of
+  `agent/`; `store` holds `Flag` (a Python bool
+  column, JSON 0/1); `db.Collect` never returns nil. Functions take a
+  `db.Querier` (so a caller picks the transaction) except the ones
+  whose Python opens `BEGIN IMMEDIATE` (`AppendMessage`, `Supersede`,
+  `QueueMessage`, `FinishUnlessQueued`, `AddAllowedURLs`), which take the
+  `*db.DB`. Journal message content is `[]json.RawMessage`, stored with
+  `json.dumps(..., separators=(",", ":"), ensure_ascii=False)`. The month
+  boundary comes from a `*time.Location` (`config.Location`), never the
+  process zone. `budget.BudgetExceeded` is a refusal; `usage.Record` prices
+  every `usage.iterations` entry on its own tier. The `workspace` view
+  (subagent cards, drafts) is assembled by #128/#134.
+- `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
   600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
   malformed reply wraps `ErrValue`, `ErrKey`, `ErrIndex` or `ErrType`, so
@@ -247,11 +261,14 @@ and backups; nothing of that lives here.
   imapscript transcripts in its `testdata/`.
 - `internal/py/`: the shared CPython emulation: `Repr`/`ReprBytes`, `IsSpace`/`Strip`/
   `Split`/`SplitLines`/`Clip`/`Lower`, `Sum`/`SumSq` (Neumaier, as `sum()`),
-  `JSONDumps` (`json.dumps` defaults over `Dict`, `[]string`, `[]any` and
-  scalars; stored JSON text such as `flags`, `labels` and `events.detail`
+  `JSONDumps(v, opts...)` (the one `json.dumps`: `JSONOpts` is `NoEnsureASCII`, `Compact`, `SortKeys`; over `Dict`, `map`, `[]string`, `[]any`,
+  floats, `*big.Int` and scalars; stored JSON text such as `flags`, `labels` and `events.detail`
   is written only through it) and `Resolve` (`Path.resolve()`, CPython's `realpath` with its `seen` map),
   `FromISOFormat` with `DateTime.Timestamp`/`WallToUnix`/`SplitTimestamp`,
-  `B64Decode` (non-strict `base64.b64decode`) and `DecodeUTF16BE`.
+  `B64Decode` (non-strict `base64.b64decode`), `DecodeUTF16BE`,
+  `FloatRepr`/`FormatFixed`/`FormatPercent`/`ParseFloat`/`ParseInt`
+  (`repr`, `format`, `float()` and `int()` of a str), `Truthy`, and
+  `JSONRedump` (JSON text respelled as Python would, keys in their original order).
   Python-emulation helpers live here; never add a per-package copy (the one
   exception is `internal/mail/mime`'s own `pystr.go`). Ported float
   reductions use `py.Sum`/`py.SumSq`, never a hand-written loop. `py.Casefold`

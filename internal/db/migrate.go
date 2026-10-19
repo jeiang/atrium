@@ -48,7 +48,7 @@ func pending(applied map[int]bool) bool {
 	return false
 }
 
-func appliedVersions(ctx context.Context, q querier) (map[int]bool, error) {
+func appliedVersions(ctx context.Context, q Querier) (map[int]bool, error) {
 	var n int
 	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").Scan(&n); err != nil {
 		return nil, err
@@ -163,7 +163,7 @@ func unquote(name string) string {
 	return strings.ToLower(strings.Trim(name, "\"`[]"))
 }
 
-func readSchema(ctx context.Context, q querier) (schemaShape, error) {
+func readSchema(ctx context.Context, q Querier) (schemaShape, error) {
 	s := schemaShape{objects: map[string]string{}, columns: map[string][]string{}, indexes: map[string][]string{}}
 	rows, err := q.QueryContext(ctx, "SELECT type, name, COALESCE(sql, '') FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
 	if err != nil {
@@ -216,7 +216,7 @@ func shadowOf(objects map[string]string, name string) bool {
 	return false
 }
 
-func indexNames(ctx context.Context, q querier, table string) ([]string, error) {
+func indexNames(ctx context.Context, q Querier, table string) ([]string, error) {
 	rows, err := q.QueryContext(ctx, "SELECT name FROM pragma_index_list(?) WHERE origin = 'c'", table)
 	if err != nil {
 		return nil, err

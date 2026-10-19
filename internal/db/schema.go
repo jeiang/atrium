@@ -13,12 +13,6 @@ import (
 //go:embed schema
 var schemaFS embed.FS
 
-type querier interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
-
 type column struct{ name, ddl string }
 
 var (
@@ -45,7 +39,7 @@ var (
 
 // initSchema is Python's db.connect schema pass (db.SCHEMA,
 // init_extra_schemas, refresh_views) in its order, without the seeds.
-func initSchema(ctx context.Context, q querier) error {
+func initSchema(ctx context.Context, q Querier) error {
 	steps := []func() error{
 		script(ctx, q, "core"),
 		script(ctx, q, "proposals"),
@@ -100,7 +94,7 @@ func initSchema(ctx context.Context, q querier) error {
 	return nil
 }
 
-func script(ctx context.Context, q querier, name string) func() error {
+func script(ctx context.Context, q Querier, name string) func() error {
 	return func() error {
 		text, err := schemaFS.ReadFile("schema/" + name + ".sql")
 		if err != nil {
@@ -113,7 +107,7 @@ func script(ctx context.Context, q querier, name string) func() error {
 	}
 }
 
-func exec(ctx context.Context, q querier, stmt string) func() error {
+func exec(ctx context.Context, q Querier, stmt string) func() error {
 	return func() error {
 		if _, err := q.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("db: %s: %w", stmt, err)
@@ -122,7 +116,7 @@ func exec(ctx context.Context, q querier, stmt string) func() error {
 	}
 }
 
-func columns(ctx context.Context, q querier, table string, cols []column) func() error {
+func columns(ctx context.Context, q Querier, table string, cols []column) func() error {
 	return func() error {
 		for _, c := range cols {
 			if _, err := addColumn(ctx, q, table, c); err != nil {
@@ -138,7 +132,7 @@ type tableColumn struct {
 	notNull bool
 }
 
-func tableInfo(ctx context.Context, q querier, table string) ([]tableColumn, error) {
+func tableInfo(ctx context.Context, q Querier, table string) ([]tableColumn, error) {
 	rows, err := q.QueryContext(ctx, "SELECT name, \"notnull\" FROM pragma_table_info(?)", table)
 	if err != nil {
 		return nil, err
@@ -157,7 +151,7 @@ func tableInfo(ctx context.Context, q querier, table string) ([]tableColumn, err
 
 // addColumn adds the column unless the table has it; the caller holds the
 // write transaction, so Python's duplicate-column race cannot happen.
-func addColumn(ctx context.Context, q querier, table string, c column) (bool, error) {
+func addColumn(ctx context.Context, q Querier, table string, c column) (bool, error) {
 	cols, err := tableInfo(ctx, q, table)
 	if err != nil {
 		return false, err
@@ -174,7 +168,7 @@ func addColumn(ctx context.Context, q querier, table string, c column) (bool, er
 	return true, nil
 }
 
-func notNull(ctx context.Context, q querier, table, column string) (bool, error) {
+func notNull(ctx context.Context, q Querier, table, column string) (bool, error) {
 	cols, err := tableInfo(ctx, q, table)
 	if err != nil {
 		return false, err
@@ -187,7 +181,7 @@ func notNull(ctx context.Context, q querier, table, column string) (bool, error)
 	return false, fmt.Errorf("db: %s has no column %s", table, column)
 }
 
-func execAll(ctx context.Context, q querier, stmts ...string) error {
+func execAll(ctx context.Context, q Querier, stmts ...string) error {
 	for _, s := range stmts {
 		if _, err := q.ExecContext(ctx, s); err != nil {
 			return fmt.Errorf("db: %s: %w", s, err)
@@ -196,7 +190,7 @@ func execAll(ctx context.Context, q querier, stmts ...string) error {
 	return nil
 }
 
-func relaxWrites(ctx context.Context, q querier) error {
+func relaxWrites(ctx context.Context, q Querier) error {
 	strict, err := notNull(ctx, q, "agent_writes", "thread_id")
 	if err != nil || !strict {
 		return err
@@ -211,7 +205,7 @@ func relaxWrites(ctx context.Context, q querier) error {
 	)
 }
 
-func relaxOwner(ctx context.Context, q querier) error {
+func relaxOwner(ctx context.Context, q Querier) error {
 	strict, err := notNull(ctx, q, "thread_files", "thread_id")
 	if err != nil || !strict {
 		return err
@@ -226,7 +220,7 @@ func relaxOwner(ctx context.Context, q querier) error {
 	)
 }
 
-func dropRenewals(ctx context.Context, q querier) error {
+func dropRenewals(ctx context.Context, q Querier) error {
 	var n int
 	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'renewals'").Scan(&n); err != nil || n == 0 {
 		return err
@@ -234,7 +228,7 @@ func dropRenewals(ctx context.Context, q querier) error {
 	return execAll(ctx, q, "DROP TABLE renewals", "DELETE FROM watch_scans WHERE watch = 'renewals'")
 }
 
-func moneyColumns(ctx context.Context, q querier) error {
+func moneyColumns(ctx context.Context, q Querier) error {
 	added, err := addColumn(ctx, q, "money_accounts", column{"forex", "INTEGER NOT NULL DEFAULT 0"})
 	if err != nil {
 		return err
@@ -252,7 +246,7 @@ func moneyColumns(ctx context.Context, q querier) error {
 
 // filedViewSQL is Python's filed_view_sql byte for byte, so either runtime
 // leaves the other's view in place.
-func filedViewSQL(ctx context.Context, q querier) (string, error) {
+func filedViewSQL(ctx context.Context, q Querier) (string, error) {
 	cols, err := tableInfo(ctx, q, "messages")
 	if err != nil {
 		return "", err
@@ -275,7 +269,7 @@ func filedViewSQL(ctx context.Context, q querier) (string, error) {
 		"AND (c.folder IS NOT NULL OR m.in_inbox = 0)", nil
 }
 
-func refreshViews(ctx context.Context, q querier) error {
+func refreshViews(ctx context.Context, q Querier) error {
 	wanted, err := filedViewSQL(ctx, q)
 	if err != nil {
 		return err
@@ -309,7 +303,7 @@ type seeds struct {
 
 // seed inserts the built-in skills, subagents and starter categories that
 // are missing, as Python's skills/subagents/money init do.
-func seed(ctx context.Context, q querier, now time.Time) error {
+func seed(ctx context.Context, q Querier, now time.Time) error {
 	raw, err := schemaFS.ReadFile("schema/seeds.json")
 	if err != nil {
 		return err

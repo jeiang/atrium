@@ -117,7 +117,7 @@ func dumpReflect(b *strings.Builder, v reflect.Value) error {
 			b.WriteString(FloatRepr(f))
 		}
 	case reflect.String:
-		dumpString(b, v.String())
+		dumpString(b, v.String(), JSONOpts{})
 	case reflect.Slice, reflect.Array:
 		if v.Kind() == reflect.Slice && v.IsNil() {
 			b.WriteString("[]")
@@ -144,7 +144,7 @@ func dumpReflect(b *strings.Builder, v reflect.Value) error {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			dumpString(b, k.String())
+			dumpString(b, k.String(), JSONOpts{})
 			b.WriteString(": ")
 			if err := dumpReflect(b, v.MapIndex(k)); err != nil {
 				return err

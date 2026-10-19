@@ -20,12 +20,6 @@ const (
 	JobBuiltin = "builtin"
 )
 
-type Querier interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
-
 type Job struct {
 	ID              int64
 	Name            string
@@ -75,7 +69,7 @@ func errTooMany() error {
 	return Error(fmt.Sprintf("at most %d active schedules; cancel one first", MaxActiveJobs))
 }
 
-func GetJob(ctx context.Context, q Querier, id int64) (*Job, error) {
+func GetJob(ctx context.Context, q db.Querier, id int64) (*Job, error) {
 	var j Job
 	err := q.QueryRowContext(ctx, "SELECT "+jobColumns+" FROM jobs WHERE id = ?", id).Scan(j.fields()...)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -87,13 +81,13 @@ func GetJob(ctx context.Context, q Querier, id int64) (*Job, error) {
 	return &j, nil
 }
 
-func ActiveCount(ctx context.Context, q Querier) (int, error) {
+func ActiveCount(ctx context.Context, q db.Querier) (int, error) {
 	var n int
 	err := q.QueryRowContext(ctx, "SELECT COUNT(*) AS n FROM jobs WHERE enabled = 1 AND cancelled = 0 AND kind = ?", JobCron).Scan(&n)
 	return n, err
 }
 
-func atCap(ctx context.Context, q Querier) error {
+func atCap(ctx context.Context, q db.Querier) error {
 	n, err := ActiveCount(ctx, q)
 	if err != nil {
 		return err
@@ -117,7 +111,7 @@ type NewJob struct {
 	PromptBy   string
 }
 
-func CreateJob(ctx context.Context, q Querier, n NewJob) (int64, error) {
+func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
 	name, prompt := py.Strip(n.Name), py.Strip(n.Prompt)
 	if name == "" || prompt == "" {
 		return 0, Error("name and prompt are required")
@@ -156,7 +150,7 @@ type JobUpdate struct {
 	PromptBy   string
 }
 
-func UpdateJob(ctx context.Context, q Querier, id int64, now float64, u JobUpdate) (*Job, error) {
+func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUpdate) (*Job, error) {
 	job, err := GetJob(ctx, q, id)
 	if err != nil {
 		return nil, err
@@ -232,7 +226,7 @@ func UpdateJob(ctx context.Context, q Querier, id int64, now float64, u JobUpdat
 	return GetJob(ctx, q, id)
 }
 
-func CancelJob(ctx context.Context, q Querier, id int64) error {
+func CancelJob(ctx context.Context, q db.Querier, id int64) error {
 	job, err := GetJob(ctx, q, id)
 	if err != nil {
 		return err
@@ -247,7 +241,7 @@ func CancelJob(ctx context.Context, q Querier, id int64) error {
 	return err
 }
 
-func ListJobs(ctx context.Context, q Querier, includeCancelled bool) ([]ListedJob, error) {
+func ListJobs(ctx context.Context, q db.Querier, includeCancelled bool) ([]ListedJob, error) {
 	where := "WHERE j.cancelled = 0"
 	if includeCancelled {
 		where = ""

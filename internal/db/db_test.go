@@ -343,3 +343,15 @@ func diff[T comparable](t *testing.T, name string, got, want []T) {
 		}
 	}
 }
+
+func TestCollectIsNeverNil(t *testing.T) {
+	d := openTest(t)
+	rows, err := d.QueryContext(t.Context(), "SELECT 1 WHERE 0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Collect(rows, func(r *sql.Rows) (int, error) { return 0, nil })
+	if err != nil || got == nil || len(got) != 0 {
+		t.Errorf("Collect = %v, %v", got, err)
+	}
+}
