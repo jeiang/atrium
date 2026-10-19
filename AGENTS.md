@@ -241,6 +241,19 @@ and backups; nothing of that lives here.
   tool definitions (`registrytest.Stubs`).
 - `internal/assistant/toolset/`: the production registry: every tool
   package's `Tools()`. A tool slice adds its package there.
+- `internal/assistant/runner/`: the ONE place the production `*loop.Runner`
+  is composed (`runner.New()`: toolset registry, the research tool and its
+  `Bind`, `ResearchBatch`, `SkillsIndex`, `ExpandSkills`). serve, the scheduler
+  and `agent run` call it; nothing else builds a `loop.Runner`. A slice that
+  owns another hook (`Profile`) sets it there.
+- `internal/assistant/skills/`: `skills.py` (storage, references, `Expand`,
+  `IndexBlock`, `LoadedInThread`). Built-in wiki skills and subagents are
+  seeded by `db.Migrate` (insert or ignore, once per process: a deleted
+  built-in returns at the next start, accepted divergence).
+- `internal/assistant/subagents/`: `subagents.py` (agents, allowlists, cards,
+  `DigestOf`); `subagents/research/` is `tools/research.py`: child runs of
+  kind `sub` with `allowed_tools` stored in the run limits, at most 2 at a
+  time, 12 steps and $0.25 each; `Batch` runs parallel research calls.
 - `internal/assistant/agentcmd/`: `atrium agent run` (Python's `--kind
   code` is not ported); `#127` adds `agent scheduler` to its group.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
