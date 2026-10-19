@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
@@ -87,6 +88,9 @@ func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *
 		Live:    l,
 		Router:  &router.Router{DB: d, ChatURL: cfg.ChatURL, Now: now},
 		Applier: applier.New(l, open, syncer),
+		Events: func(ctx context.Context, account string) (int, int, error) {
+			return candidates.ScanAccount(ctx, d, cfg, account, nil, config.OS, now)
+		},
 		Extras: []Extra{
 			{"open loops", func(ctx context.Context) (any, error) {
 				return openloops.Refresh(ctx, d, cfg, now(), openloops.Options{Clock: now}), nil

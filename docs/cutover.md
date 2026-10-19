@@ -116,8 +116,8 @@ switched.
     Python's; this is expected and one-time.
 7. Scheduler log: `journalctl -u atrium-agent-scheduler.service -e` shows the
     worker started and claiming due jobs, with the core-first lines listed in
-    section 8 and no other errors. The three callables (`calendar-candidates`,
-    `fx-rates`, `media-thumbnails`) each log `built-in job X has no function in
+    section 8 and no other errors. The two callables (`fx-rates`,
+    `media-thumbnails`) each log `built-in job X has no function in
     this build; not run` once and write no job run. `/scheduled` lists the jobs; from the shell use
     `sqlite3 $STATE/atrium.db "SELECT id, name, next_due FROM jobs ORDER BY id"`.
 8. Units: `systemctl --failed 'atrium-*'` is empty.
@@ -506,7 +506,7 @@ not read; with the end-to-end checks on the merged preview binary, 28 are not:
 | --- | --- |
 | mail core, cutover set | `mailboxes`, `message_vec`, `rebalance_candidates`, `commitment_scans`, `watch_scans` |
 | assistant, cutover set (#131, #251) | `agent_profile`, `context_ledger`, `context_projections`, `run_events` |
-| calendar, post-cutover | `agent_events`, `event_candidates`, `events` |
+| calendar, post-cutover | `agent_events`, `events` |
 | money, post-cutover | `money_accounts`, `fx_rates`, `payees`, `payee_aliases`, `transactions`, `transaction_sources`, `money_scans` |
 | media, post-cutover | `media_channels`, `media_seen`, `media_state` |
 | Notion, post-cutover | `notion_pages`, `notion_sources`, `notion_state`, `notion_fts`, `notion_vec`, `wiki_pages` |
@@ -523,11 +523,11 @@ Calendar, Notion, money, media and Grafana land after cutover. Their units
 do not start. What the operator sees until then:
 
 - `atrium-run notion|money ...` answer `invalid choice` (exit 2) until the
-  module lands, and so does `atrium-run calendar candidates` (it lands with
-  #136); `atrium-run calendar google-auth` works. Mail, `live`, `proposals`,
+  module lands; `atrium-run calendar candidates` and `atrium-run calendar
+  google-auth` work. Mail, `live`, `proposals`,
   `rules`, `loops`, `watches`, `reindex`, `shadow-report`, `agent`, `media`
   and `serve` work.
-- The built-in callable jobs `calendar-candidates`, `fx-rates` and
+- The built-in callable jobs `fx-rates` and
   `media-thumbnails` are skipped with
   one Info line each (`built-in job X has no function in this build; not
   run`, logged once per scheduler start); they are not recorded as job runs.

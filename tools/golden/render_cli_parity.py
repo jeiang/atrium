@@ -23,7 +23,6 @@ EXCLUDED_TOP = {
 }
 EXCLUDED_PATHS = {
     ("notion", "wiki-plan"): "excluded with the Notion module",
-    ("calendar", "candidates"): "lands with the event candidates slice (#136); the production binary answers invalid choice (exit 2)",
 }
 GO_ONLY = [
     {"command": "--version", "args": [], "usage": "atrium --version", "status": "go-only", "note": "prints `atrium <version>` and exits 0; Python had no version flag", "cases": []},

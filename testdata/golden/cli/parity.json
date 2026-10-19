@@ -1701,12 +1701,12 @@
       "args": [],
       "cases": [],
       "command": "calendar candidates",
-      "note": "lands with the event candidates slice (#136); the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "calendar",
         "candidates"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium calendar candidates [-h]"
     },
     {

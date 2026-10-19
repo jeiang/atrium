@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/calendar"
+	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -215,34 +216,11 @@ func propose(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		return py.Dict{{Key: "proposed", Value: false}, {Key: "reason", Value: "an identical proposal already exists"}}, nil
 	}
 	if hasID && py.Truthy(messageID) {
-		if err := markDrafted(ctx, tc.DB, messageID, tc.Now()); err != nil {
+		if err := candidates.Mark(ctx, tc.DB, messageID, candidates.Drafted, tc.Now()); err != nil {
 			return nil, err
 		}
 	}
 	return py.Dict{{Key: "proposed", Value: true}, {Key: "proposal_id", Value: id}}, nil
-}
-
-func markDrafted(ctx context.Context, d *db.DB, messageID any, now float64) error {
-	id := messageID
-	if b, ok := id.(bool); ok {
-		id = int64(0)
-		if b {
-			id = int64(1)
-		}
-	}
-	if n, ok := id.(*big.Int); ok {
-		id = n.String()
-	}
-	res, err := d.Write.ExecContext(ctx, "UPDATE event_candidates SET status = ?, ts = ? WHERE message_id = ?", "drafted", now, id)
-	if err != nil {
-		return err
-	}
-	if changed, err := res.RowsAffected(); err != nil || changed > 0 {
-		return err
-	}
-	_, err = d.Write.ExecContext(ctx, "INSERT OR REPLACE INTO event_candidates (message_id, reason, status, ts) VALUES (?, ?, ?, ?)",
-		id, "", "drafted", now)
-	return err
 }
 
 func undoDelete(ctx context.Context, q db.Querier, info map[string]any) (any, error) {

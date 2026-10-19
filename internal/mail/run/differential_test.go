@@ -128,6 +128,31 @@ func models(t *testing.T) *httptest.Server {
 		llm.FolderSystem: "folder", llm.FlagSystem: "flag", llm.EventSystem: "event",
 		openloops.CommitmentSystem: "commitments", watches.PackageSystem: "package", rebalance.NameSystem: "folder_name",
 	}
+	var recorded []struct {
+		Feature string          `json:"feature"`
+		Request json.RawMessage `json:"request"`
+	}
+	if err := json.Unmarshal(golden.ReadFile(t, "pipeline", "llm_exchanges.json"), &recorded); err != nil {
+		t.Fatal(err)
+	}
+	wantEvents := map[string]bool{}
+	sentEvents := map[string]bool{}
+	for _, e := range recorded {
+		if e.Feature == "event" {
+			key, err := golden.Canonical(e.Request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantEvents[string(key)] = true
+		}
+	}
+	t.Cleanup(func() {
+		for key := range wantEvents {
+			if !sentEvents[key] {
+				t.Errorf("recorded event request never sent: %s", key)
+			}
+		}
+	})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Input    []string `json:"input"`
@@ -152,6 +177,15 @@ func models(t *testing.T) *httptest.Server {
 		if !known {
 			http.Error(w, "unknown system prompt", http.StatusBadRequest)
 			return
+		}
+		if feature == "event" {
+			key, err := golden.Canonical(body)
+			if err != nil || !wantEvents[string(key)] {
+				t.Errorf("event request body is not one Python sent:\n%s", body)
+				http.Error(w, "unexpected", http.StatusBadRequest)
+				return
+			}
+			sentEvents[string(key)] = true
 		}
 		answer := script.Defaults[feature]
 		if subject, found := subjectOf(req.Messages[1].Content); found {
@@ -467,8 +501,8 @@ func compareTable(t *testing.T, table string, want, got []row) {
 	}
 }
 
-// pipelineTables are the generator's PIPELINE_TABLES with their order; the skipped ones belong to modules that
-// land after cutover (event candidates and calendar proposals #136, money #142) and are reported, not compared.
+// pipelineTables are the generator's PIPELINE_TABLES with their order; the skipped ones belong to the money module
+// (#142), which lands after cutover, and are reported, not compared.
 var pipelineTables = []struct {
 	name, order string
 	skipped     bool
@@ -479,7 +513,7 @@ var pipelineTables = []struct {
 	{"transactions", "id", true},
 	{"transaction_sources", "id", true},
 	{"packages", "id", false},
-	{"event_candidates", "message_id", true},
+	{"event_candidates", "message_id", false},
 	{"proposals", "id", false},
 	{"proposal_actions", "id", false},
 	{"auto_actions", "id", false},
@@ -491,9 +525,8 @@ var pipelineTables = []struct {
 // TestGoldenPipelineDifferential replays every step of the Python generator's scenario (tools/golden/make_db.py)
 // through the Go mail core: the locked sync-and-process pass at each recorded clock, the operator's corrections,
 // and the rules, live and proposals commands through the CLI, against the same seeded mailboxes and the scripted
-// local model. Every core table must then equal the Python rows column for column, timestamps included. Python
-// also made one calendar_event proposal (event scanning lands post-cutover), so proposal ids are matched by
-// fingerprint and translated wherever a row refers to one.
+// local model. Every core table must then equal the Python rows column for column, timestamps included. Proposal
+// ids are matched by fingerprint and translated wherever a row refers to one.
 func TestGoldenPipelineDifferential(t *testing.T) {
 	local := time.Local
 	time.Local = time.UTC
@@ -569,9 +602,6 @@ func TestGoldenPipelineDifferential(t *testing.T) {
 	proposalIDs := map[float64]float64{}
 	var wantProposals []row
 	for _, p := range goldenProposals {
-		if p["kind"] == "calendar_event" {
-			continue
-		}
 		id, ok := byFingerprint[p["fingerprint"].(string)]
 		if !ok {
 			t.Errorf("proposals: no replayed proposal with fingerprint %v (%v)", p["fingerprint"], p["title"])
@@ -606,8 +636,5 @@ func TestGoldenPipelineDifferential(t *testing.T) {
 		}
 		compareTable(t, tb.name, want, r.tableRows(tb.name, tb.order))
 	}
-	if len(goldenRows(t, "proposals")) != len(wantProposals)+1 {
-		t.Errorf("proposals: expected exactly one skipped calendar_event proposal")
-	}
-	t.Logf("skipped (post-cutover modules): %s", strings.Join(skipped, ", "))
+	t.Logf("skipped (money module): %s", strings.Join(skipped, ", "))
 }
