@@ -28,9 +28,6 @@
       packages = [
         config.treefmt.build.wrapper
         pkgs.just
-        (pkgs.python314.withPackages (ps:
-          self'.packages.atrium.propagatedBuildInputs
-          ++ [ps.pytest ps.respx]))
         pkgs.golangci-lint
         pkgs.govulncheck
         pkgs.go-licenses

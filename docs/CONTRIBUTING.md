@@ -20,13 +20,9 @@ Run `just` to list them.
 - `just check`: `nix flake check --impure --keep-going`.
 - `just fast-check`: the same checks built in parallel with nix-fast-build,
   skipping what the substituters already have.
-- `just test`: the pytest suite against the working tree.
-- `just golden`: regenerates `testdata/golden/` from the frozen Python app
-  (every `tools/golden/gen_*.py`, `make_db.py` and `render_pages.py`). Run it
-  only after a Python fix and commit the result; the `golden-*` flake checks
-  regenerate twice and fail on any difference.
 
-`nix build .#atrium` builds the package and runs the tests.
+`testdata/golden/` holds the recorded goldens the tests read; they are plain
+files whose provenance is their git history.
 
 ## Go
 
@@ -56,7 +52,7 @@ the web assets from `internal/web/static`, which the shell stages from
   the result in; `third_party/go-imap/PATCH.md` is the procedure. The
   `go-imap drift` workflow runs it weekly against upstream `v2`.
 
-`nix build .#atrium-go` builds the static Go binary for the host (Linux
+`nix build .#atrium` builds the static Go binary for the host (Linux
 only) and runs the Go tests; `.#atrium-go-x86_64-v3` and
 `.#atrium-go-aarch64` are the release targets.
 
@@ -82,7 +78,7 @@ tags `sqlite_fts5` and `modernc`).
   `result/THIRD_PARTY_NOTICES`. That file holds the licence texts of the Go
   dependencies in the default build. It is only written after the gate
   passes.
-- Commits are signed and signed off (DCO), as for Python.
+- Commits are signed and signed off (DCO).
 - Templates (`internal/web/tpl`): stdlib `html/template` with
   `missingkey=error`, one parse per page. `templates/<page>.gohtml` is a page
   that fills the `title`, `heading`, `content`, `content_class`, `body_attrs`
@@ -135,8 +131,7 @@ tags `sqlite_fts5` and `modernc`).
 - Merge with `gh pr merge --auto --merge`.
 - Read [AGENTS.md](../AGENTS.md) before changing mail, agent or web code.
   It lists the invariants.
-- The Python app is frozen to fixes until the Go port cuts over. New
-  features go to Phase B tickets.
+- New features go to Phase B tickets.
 
 ## Wayfinder map and board
 

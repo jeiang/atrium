@@ -51,11 +51,11 @@
       "atrium-web-local.service"
       "atrium-web.service"
     ];
-    goBinary = "${builtins.unsafeDiscardStringContext self.packages.x86_64-linux.atrium-go.outPath}/bin/atrium";
+    goBinary = "${builtins.unsafeDiscardStringContext self.packages.x86_64-linux.atrium.outPath}/bin/atrium";
     atriumRun = lib.findFirst (p: (p.name or "") == "atrium-run") (throw "atrium-run is not installed") nixos.config.environment.systemPackages;
   in {
     checks = {
-      inherit (self'.packages) atrium atrium-static;
+      inherit (self'.packages) atrium-static;
 
       statix = pkgs.runCommand "statix-check" {nativeBuildInputs = [pkgs.statix];} ''
         statix check ${self}
@@ -84,19 +84,6 @@
         grep -q "^ExecStart=${goBinary} notion sync" "$units/atrium-notion-sync.service"
         grep -q 'OnUnitActiveSec=15m' "$units/atrium-notion-sync.timer"
         ln -s "$units" $out
-      '';
-
-      # Fails when src/atrium gains a `re` call site the regex manifest lacks, or the committed corpus is stale.
-      golden-regex = pkgs.runCommand "atrium-golden-regex-check" {nativeBuildInputs = [pkgs.python314];} ''
-        cd ${lib.fileset.toSource {
-          root = ../.;
-          fileset = lib.fileset.unions [../src/atrium ../tools/golden/common.py ../tools/golden/corpora ../testdata/corpora];
-        }}
-        # Ids and the corpus must not depend on hash order: check under two seeds, like golden-corpora.
-        for seed in 1 2; do
-          PYTHONHASHSEED=$seed PYTHONDONTWRITEBYTECODE=1 python tools/golden/corpora/gen_regex.py --check
-        done
-        touch $out
       '';
     };
   };

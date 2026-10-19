@@ -25,10 +25,11 @@
     packages =
       targets
       // lib.optionalAttrs hostPlatform.isLinux {
-        atrium-go =
+        atrium =
           if hostPlatform.isx86_64
           then targets.atrium-go-x86_64-v3
           else targets.atrium-go-aarch64;
+        default = self'.packages.atrium;
       };
     checks = targets;
   };

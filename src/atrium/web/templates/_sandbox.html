@@ -1,2 +1,0 @@
-{% from "_icons.html" import icon %}
-<p id="sandbox" class="flex items-center gap-1 text-xs text-warning" role="status"{% if not view.thread.code_sandbox %} hidden{% endif %}>{{ icon("circle-alert", "size-3.5 shrink-0") }}Code sandbox on: attached files are uploaded to Anthropic's Files API and run in its container (not zero data retention; containers keep data up to 30 days).</p>

@@ -10,7 +10,7 @@
 in
   buildGo126Module (finalAttrs: {
     pname = "atrium";
-    version = (builtins.fromTOML (builtins.readFile (root + "/pyproject.toml"))).project.version;
+    version = "0.1.0";
     src = lib.fileset.toSource {
       inherit root;
       fileset = lib.fileset.unions [

@@ -1,7 +1,7 @@
 # AGENTS.md
 
-atrium is one operator's assistant: a Python package (`src/atrium`) with a
-FastAPI web UI, packaged by `nix/package.nix`, its web assets by
+atrium is one operator's assistant: a Go binary (`cmd/atrium`, `internal/`)
+with an embedded web UI, packaged by `nix/go-package.nix`, its web assets by
 `nix/static.nix`, and deployed through the `services.atrium` NixOS module in
 `nix/module.nix`. The host that runs it (artemis, in `jeiang/cornn-flaek`)
 supplies the secrets, the local model servers, the reverse proxy, persistence
@@ -17,16 +17,14 @@ and backups; nothing of that lives here.
 - Use Conventional Commits.
 - Wayfinder tickets: claim by assigning yourself before work; post a
   resolution comment, then close.
-- Tests: `nix build .#atrium` runs pytest in the package's checkPhase.
-  For a faster loop, `just test` (`nix develop --impure -c python -m pytest`)
-  runs the suite against the working tree. `.envrc` loads the devshell with
-  direnv.
+- Tests: `nix build .#atrium` runs `go test` in the package's check phase.
+  For a faster loop, `just go-test` runs the suite inside the devshell.
+  `.envrc` loads the devshell with direnv.
 - `nix flake check` also builds `atrium-static` and the `module` check, which
   renders every unit of an example host and greps the wiring it expects.
 - `nix fmt` (treefmt: alejandra, deadnix, gofmt, goimports) formats Nix and
   Go; `just fmt` also runs `statix fix`. The devshell installs git hooks for
-  editorconfig-checker, statix and treefmt. Python has no formatter in the
-  flake.
+  editorconfig-checker, statix and treefmt.
 - Go (the v2 port): inside the devshell, `just go-test` runs `go test`,
   `just lint` golangci-lint (`.golangci.yml`), `just vuln` govulncheck and
   `just licenses` the dependency licence gate.
@@ -46,8 +44,8 @@ and backups; nothing of that lives here.
   No personal literal (hostname, Apple ID, URL, port of another service)
   belongs in this repository; it comes through `services.atrium.*` or the
   environment file.
-- Dependencies are what `pyproject.toml` lists, and `nix/package.nix` names
-  the same set from `python314Packages`. Add a dependency in both.
+- Dependencies are what `go.mod` lists; `vendorHash` in
+  `nix/go-package.nix` and `flake-modules/go-checks.nix` changes with `go.sum`.
 - Go: the module is `github.com/jeiang/atrium` and `go.mod` carries no
   `toolchain` line: the Go release is the one `withGo1269` in
   `flake-modules/go-toolchain.nix` builds, Nix is authoritative, and checks
@@ -69,16 +67,16 @@ and backups; nothing of that lives here.
   `internal/mail/mailcmd`; `atrium codemode-worker` is a stub that fails with
   "removed in v2" (the inert `atrium-codemode@` unit still names it), and
   `agent run --kind` no longer accepts `code` (its slice drops the choice).
-- Golden provenance: `FREEZE_COMMIT` lives only in `tools/golden/common.py`
-  and every generator imports it. After each post-freeze Python fix the
-  goldens are regenerated from main; their provenance is the git history of
-  `testdata`.
+- Golden provenance: the goldens under `testdata` were generated from the
+  Python app at its freeze commit and are now plain files; their provenance
+  is the git history of `testdata`. A golden changes only with the behavior
+  it records.
 - Go errors: an error that is only a message is `type X string` with an
   `Error` method and is returned by value; an error that carries fields is a
   struct returned as `*X`. A built-in failure class is a `httpx.Err*` value
   wrapped with `%w`, never recreated. Callers match with `errors.Is` and
   `errors.As`, never on message text.
-- Go logging: every package logs through `logx.Logger` with the Python
+- Go logging: every package logs through `logx.Logger` with the component
   logger name (`atrium.rx`, `atrium.features`, `atrium.mime`) and the
   `logx` key constants (`logx.Err`), never the default `slog` logger or a
   literal key.
@@ -99,8 +97,8 @@ and backups; nothing of that lives here.
   transaction go through its `tx`
   (https://github.com/jeiang/atrium/issues/72).
 - Go schema: `db.Migrate` runs once per process start. Migration 0001 is
-  Python's `db.connect` schema pass in its order (DDL in
-  `internal/db/schema/*.sql`, copied verbatim from `src/atrium`), so it
+  the schema pass of the retired Python app in its order (DDL in
+  `internal/db/schema/*.sql`), so it
   creates an empty DB and migrates legacy shapes, then asserts the fresh
   schema's tables, columns, indexes, FTS5 and vec0 tables exist. Later
   schema changes are new additive migrations; Phase A adds only
@@ -110,12 +108,11 @@ and backups; nothing of that lives here.
   (https://github.com/jeiang/atrium/issues/102).
 - Go packaging: `nix/go-package.nix` builds `atrium-go-x86_64-v3`
   (`GOAMD64=v3`, `-mavx2`) and `atrium-go-aarch64`, both musl-static cgo
-  with `sqlite_fts5`; `atrium-go` is the host's target and both are flake
-  checks (the aarch64 one cross-builds; its tests run on x86_64 only). The
-  Python `atrium` stays the default package until the module switch
-  (https://github.com/jeiang/atrium/issues/152). `atrium-static` is staged
+  with `sqlite_fts5`; `atrium` (also `default`) is the host's target
+  and both are flake checks (the aarch64 one cross-builds; its tests run on
+  x86_64 only). `atrium-static` is staged
   into `internal/web/static` before `go build` and embedded; `vendorHash`
-  changes with `go.sum`.
+  changes with `go.sum`; the version is the literal in `nix/go-package.nix`.
 - Go Anthropic: only `internal/anthropic` imports `anthropic-sdk-go`
   (pinned v1.82.0; `just lint` enforces it). Callers hand it request parts
   as JSON values and get content blocks back as raw JSON; the body it sends
@@ -123,16 +120,9 @@ and backups; nothing of that lives here.
 
 ## Layout
 
-- `src/atrium/`: the package. `cli.py` is the entry point; `config.py`
-  reads the environment; `safety.py` gates every mailbox write.
-- `src/atrium/agent/`: the assistant loop, tool registry, scheduler,
-  subagents and code mode.
-- `src/atrium/media/`: filing, EZTV channels and the library.
-- `src/atrium/web/`: the FastAPI app, templates and `static/` sources.
-- `tests/`: pytest, with fakes for IMAP, Anthropic, Notion and qBittorrent.
 - `flake.nix` and `flake-modules/`: flake-parts modules (outputs, checks,
   devshell), loaded by import-tree. `.ci/` holds the garret cache push helper.
-- `nix/`: the Python and Go packages, static assets and the NixOS module.
+- `nix/`: the Go package, static assets and the NixOS module.
 - `cmd/atrium/`: the Go binary's entry point (root command).
 - `internal/cli/`: the subcommand table and argparse-compatible parsing;
   usage errors exit 2, a handler's return value is the exit code.
@@ -213,7 +203,7 @@ and backups; nothing of that lives here.
   1,048,576 x 16,384 grid, Word's 63 columns, extracted text bounded by the
   largest compaction budget), each a `FileError` naming a too-large
   document. `mimetypes_table.go` is CPython 3.14's built-in table, never a
-  host `mime.types` (`tools/golden/gen_mimetypes.py`). Divergences from the
+  host `mime.types`. Divergences from the
   Python extractor are listed in `testdata/corpora/README.md`.
 
 - `internal/assistant/tool/`: the `Tool` value (name, description, JSON
@@ -256,8 +246,7 @@ and backups; nothing of that lives here.
   continuation. A failed run is finished with its reason and is not an
   error; a lost lease or a cancelled context leaves the run running.
   Response blocks are journaled in the Python SDK's `model_dump` key
-  order (`blockorder_table.go`, generated by
-  `tools/anthropic/gen_blockorder.py`). `Owner` is the process's lease
+  order (`blockorder_table.go`). `Owner` is the process's lease
   identity.
 - `internal/assistant/service/`: `service.py`. `Load` refuses before any
   run exists (`UnknownThread`, `RunActive`, `budget.BudgetExceeded`);
@@ -303,7 +292,7 @@ and backups; nothing of that lives here.
   `*Change`; `Change.Record` writes the `agent_writes` snapshot and `RegisterUndoer` (added in
   `toolset.Undoers`) restores it, refusing when a snapshotted row changed. `Item` is one stored source
   (`transaction_sources.extracted`), re-dumped with `py.JSONDumps` sorted keys. `LedgerError` is a `ValueError`.
-  Its test replays `testdata/corpora/money.jsonl` (`tools/golden/corpora/gen_money.py`) and the CBTT goldens; read
+  Its test replays `testdata/corpora/money.jsonl` and the CBTT goldens; read
   paths are in `internal/db/readpaths/money_test.go`. Ingestion is `Refresh` (`ensure_rates`, then `Scan`: unscanned
   mail from a `MessageSource`, `MailSource` by default, 90-day window, 50 per pass, 1000 on the CLI; a model that is
   down defers the scan without marking, an unreadable answer marks the message scanned). `PostItem` runs in one
@@ -354,7 +343,7 @@ and backups; nothing of that lives here.
   applies it to bytes (feedparser, header registry and value parser,
   `parseaddr`/`getaddresses`, `parsedate_to_datetime`, codecs, transfer
   decoding), including where Python raises, and the header refolding it
-  writes with (`FoldHeader`); tables come from `tools/mime/gen_tables.py`.
+  writes with (`FoldHeader`).
   `Compat32Header` is the one `policy.compat32` read (`mailops.server_msgid`).
 - `internal/mail/features/`: `features.py` (`Extract`, `ContentDigest`,
   `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
@@ -436,7 +425,7 @@ and backups; nothing of that lives here.
 - `internal/calendar/`: `calendar.py`, `google_auth.py` and `calendar_proposals.py`. `ListEvents` merges the
   vdirsyncer mirror (`ATRIUM_CALENDAR_DIR`, read through go-ical's decoder, never its values) with the primary Google
   calendar; icalendar's value rules are ported (`Value` is a date, a naive or an aware datetime; a TZID resolves
-  to IANA, then the Windows table `windowstz_table.go` from `tools/calendar/gen_windows_tz.py`, then the file's
+  to IANA, then the Windows table `windowstz_table.go`, then the file's
   VTIMEZONE, else floating) and recurrences expand on rrule-go in UTC-labelled wall time resolved with
   zoneinfo's `fold=0` (`py.WallToUnix`), with dateutil's rule parser and rruleset semantics (an RDATE-only event
   omits DTSTART, `COUNT=0` is empty, a naive/aware mix between DTSTART and its RDATE or EXDATE is a note).
@@ -473,17 +462,15 @@ and backups; nothing of that lives here.
 - `internal/mail/drafts/`: the draft lifecycle. `Send` is the only path that
   sends mail; it files the iCloud copy with APPEND `\Seen` under
   `safety.OperatorSend` to the mailbox `mail.MailboxRole` names `sent`.
-- `internal/pyhtml/`: `html.unescape` (tables from `tools/pyhtml/gen_entities.py`)
-  and `Parser`, `html.parser.HTMLParser` with `convert_charrefs=True`, checked
-  against `tools/pyhtml/gen_parser_cases.py`.
+- `internal/pyhtml/`: `html.unescape` and
+  `Parser`, `html.parser.HTMLParser` with `convert_charrefs=True`.
 - `internal/assistant/webfetch/`: `webfetch.py` and `tools/web_fetch.py`, the
   only fetch of an arbitrary URL. Every hop resolves once, vets every answer
   (`DefaultAllowed`: NAT64, IPv4-compatible, SIIT, fec0 and the special-purpose
   ranges), connects to the vetted address and re-checks it at connect, and
   vets each redirect again. The tool fetches only URLs in the run's allowed
   set (operator-typed or web_search results; files, mail and pages never add
-  to it). The HTTP reader is a port of `http.client`
-  (`tools/webfetch/gen_wire_cases.py`); readable text is go-trafilatura, with
+  to it). The HTTP reader is a port of `http.client`; readable text is go-trafilatura, with
   its divergences in `testdata/corpora/README.md`.
 - `internal/mail/sync/`: `sync.py`'s read path. `Syncer.Account` discovers
   mailboxes (`mail.MailboxRole`), handles UIDVALIDITY, fetches new mail in
@@ -538,12 +525,12 @@ and backups; nothing of that lives here.
   Python-emulation helpers live here; never add a per-package copy (the one
   exception is `internal/mail/mime`'s own `pystr.go`). Ported float
   reductions use `py.Sum`/`py.SumSq`, never a hand-written loop. `py.Casefold`
-  (`str.casefold`) and the `str.isspace` table come from
-  `tools/contacts/gen_tables.py` (`casefoldtable.go`, `spacetable.go`, `uppertable.go`); `py.Upper` is `str.upper`.
+  (`str.casefold`) and the `str.isspace` table are in
+  `casefoldtable.go`, `spacetable.go` and `uppertable.go`; `py.Upper` is `str.upper`.
 - `internal/contacts/`: read-only `.vcf` parsing of the vdirsyncer mirror
   under `ATRIUM_CONTACTS_DIR` (no decoding of quoted-printable or charset
   parameters, as in Python); an unset, missing or empty directory yields no
-  cards. `testdata/expected.json` is generated by `tools/contacts/gen_expected.py`.
+  cards.
 - `internal/web/`: the embedded web assets (`Static`, `AssetVersion`);
   `internal/web/static` is staged, never committed.
 - `internal/anthropic/`: Messages create and stream, progress events from
@@ -568,18 +555,32 @@ and backups; nothing of that lives here.
   workflow.
 - `docs/vision.md`: what atrium is for and the owner's v2 direction.
 
+## Invariants by Go package
+
+The invariants below are unchanged by the port; the Go packages that hold them:
+
+- Mail safety, gates, go-live, caps and undo: `internal/safety` (the gate),
+  `internal/mail` (`Gated`), `internal/mail/mailops`, `internal/mail/live`,
+  `internal/mail/applier`, `internal/mail/backlog`, `internal/mail/drafts`
+  (the operator's Send) and `internal/mail/smtp`.
+- Routing and flagging in code: `internal/mail/router`, `rules`, `flags`.
+- Assistant tool policy per run kind, budget and prompt:
+  `internal/assistant/registry`, `toolset`, `budget`, `prompts`, `loop`.
+- Code mode is not part of the Go binary: `atrium codemode-worker` fails
+  with "removed in v2" and the `atrium-codemode` units in `nix/module.nix`
+  are inert.
+- Web access, CSRF, CSP and Host checks: `internal/web`.
+- Media filing, signed links and the EZTV watches: `internal/media`.
+- Unit names, environment variables and `atrium-run`: `nix/module.nix` and
+  `internal/config`.
+
 ## Decisions that constrain changes
 
-- The Python app is frozen to fixes until the Go port (v2) cuts over. v2 is
-  planned on the wayfinder map
-  (https://github.com/jeiang/atrium/issues/15). Phase A ports behavior as-is
-  and keeps the host interface; new features go to Phase B tickets.
-- Cutover is core first: mail, web and the assistant cut over to Go; the
-  calendar, Notion, money, media and Grafana ports land after cutover, in
-  parallel, and Python is deleted after the last of them. Before cutover
-  only blockers are fixed (data integrity, mailbox safety, security, a broken
-  golden or parity check); other findings become post-cutover tickets.
-- v2 direction (not the frozen Python app): memory precedence is profile >
+- v2 is planned on the wayfinder map
+  (https://github.com/jeiang/atrium/issues/15). Phase A ported the Python
+  app as-is and kept the host interface; the Python code is deleted and
+  new features go to Phase B tickets.
+- v2 direction: memory precedence is profile >
   nightly > wiki; the profile is the source of truth and the nightly run
   updates the wiki weighted by confidence.
 - v2 direction: money currencies are settings with USD as the base; the

@@ -115,7 +115,7 @@ also the admin. In v2 those roles split into the `atrium_access` and
   gets a draft PR without a terminal. The token never enters the VM.
 - v2: a second person stands up their own instance from the NixOS module and
   the docs, and connects each integration from the web UI.
-- The Go port passes the parity inventory against the frozen Python app.
+- The Go port passed the parity inventory against the Python app it replaced.
 
 ## Still open
 
