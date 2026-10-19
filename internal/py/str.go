@@ -81,3 +81,26 @@ func Casefold(s string) string {
 	}
 	return b.String()
 }
+
+// Upper is str.upper: ASCII letters, then the generated table of every other code point whose uppercase differs
+// (including the multi-character SpecialCasing forms such as "ß" to "SS").
+func Upper(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r < utf8.RuneSelf:
+			if r >= 'a' && r <= 'z' {
+				r -= 'a' - 'A'
+			}
+			b.WriteRune(r)
+		default:
+			if u, ok := pyUpper[r]; ok {
+				b.WriteString(u)
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+	return b.String()
+}

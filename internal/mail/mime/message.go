@@ -164,6 +164,34 @@ func Parse(data []byte) (msg *Message, err error) {
 	return parseMessage(r, "text/plain", 0)
 }
 
+// ParseHeaders is BytesParser(policy=email.policy.default).parse(fp, headersonly=True): the header block of a
+// binary file, read through a text wrapper that turns every "\r\n" and bare "\r" into "\n", then the one
+// Content-Type read FeedParser.close() makes. Nothing else is parsed; err is set where Python raises (a
+// Content-Type value whose parse raises).
+func ParseHeaders(data []byte) (msg *Message, err error) {
+	defer guard(&err)
+	data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+	data = bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))
+	r := &lineReader{lines: splitLines(data)}
+	m := &Message{defaultType: "text/plain"}
+	var headers [][]byte
+	for {
+		line, ok := r.readline()
+		if !ok {
+			break
+		}
+		if !isHeaderLine(line) {
+			break
+		}
+		headers = append(headers, line)
+	}
+	m.parseHeaders(headers, r)
+	if _, err := m.contentType(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func parseMessage(r *lineReader, defaultType string, depth int) (*Message, error) {
 	m := &Message{defaultType: defaultType, level: depth}
 	var headers [][]byte

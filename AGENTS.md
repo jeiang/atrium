@@ -167,6 +167,21 @@ and backups; nothing of that lives here.
   process zone. `budget.BudgetExceeded` is a refusal; `usage.Record` prices
   every `usage.iterations` entry on its own tier. The `workspace` view
   (subagent cards, drafts) is assembled by #128/#134.
+- `internal/assistant/files/`: `agent/files.py`. Attachments live under the
+  state dir's `files/<thread_id>/` and `files/p<project_id>/` as
+  `<id>-<safe name>` with a `thread_files` row; `IngestUploads` inspects
+  every file before it stores any, and `DeleteOwned` removes the directory,
+  the rows and any legacy `anthropic_file_id` copy (no Files API upload, no
+  container parts). docx and xlsx text come from a hand-written reader over
+  `encoding/xml` that follows python-docx and openpyxl read-only
+  semantics (CSV per sheet, style-driven dates); it adds Phase A caps the
+  Python extractor lacks (decompressed part and archive size, Excel's
+  1,048,576 x 16,384 grid, Word's 63 columns, extracted text bounded by the
+  largest compaction budget), each a `FileError` naming a too-large
+  document. `mimetypes_table.go` is CPython 3.14's built-in table, never a
+  host `mime.types` (`tools/golden/gen_mimetypes.py`). Divergences from the
+  Python extractor are listed in `testdata/corpora/README.md`.
+
 - `internal/assistant/tool/`: the `Tool` value (name, description, JSON
   schema, handler, `Effect`, `Kinds`: exactly what Python's dataclass
   carries; the `code` kind is not ported), `Context`, the `Error`,
@@ -278,6 +293,20 @@ and backups; nothing of that lives here.
   registration order, `scans` `scan_all`, `scanutil` `scanutil.py`. The
   scanners are `internal/mail/rebalance`, `deletions` and `gmaillabels`;
   read paths in `internal/db/readpaths/proposals_test.go`.
+- `internal/mail/openloops/`, `watches/`, `birthdays/`: `openloops.py`,
+  `watches.py` (packages) and `birthdays.py`. A chat outage logs and stops the
+  pass without marking the message scanned; a `ValueError`, `KeyError` or
+  `TypeError` from the model (`httpx.ErrValue`/`ErrKey`/`ErrType`) marks it
+  scanned with nothing found, any other error ends the pass. Model answers
+  are `py.JSONLoads` values (`py.Dict`), not `httpx.Key` maps. `Compute` runs
+  in one transaction; `Reminders` is the `reminder` kind (`Register` is called
+  from `handlers.Register`, its undo plan is `reminder_cancel`, the job is
+  `scheduler.CreateJob` with `SkipLimits`). `openloops.Command()` and
+  `watches.Command()` are `loops refresh` and `watches refresh` (the shared
+  shape is `mail/refreshcmd`: migrate, flock, indented JSON); the root command
+  adds them. Golden: the llama.cpp request bodies, the proposal and job the
+  reminder makes, the 56 loops and the four read paths in
+  `internal/db/readpaths/openloops_test.go`.
 - `internal/mail/rules/`, `ruleedit/`, `corrections/`, `router/`: the routing
   pipeline (`rules.py`, `ruleedit.py`, `corrections.py`, `router.py`).
   Stages are correction, operator rule, learned rule, nearest neighbours,
@@ -332,7 +361,7 @@ and backups; nothing of that lives here.
   exception is `internal/mail/mime`'s own `pystr.go`). Ported float
   reductions use `py.Sum`/`py.SumSq`, never a hand-written loop. `py.Casefold`
   (`str.casefold`) and the `str.isspace` table come from
-  `tools/contacts/gen_tables.py` (`casefoldtable.go`, `spacetable.go`).
+  `tools/contacts/gen_tables.py` (`casefoldtable.go`, `spacetable.go`, `uppertable.go`); `py.Upper` is `str.upper`.
 - `internal/contacts/`: read-only `.vcf` parsing of the vdirsyncer mirror
   under `ATRIUM_CONTACTS_DIR` (no decoding of quoted-printable or charset
   parameters, as in Python); an unset, missing or empty directory yields no

@@ -58,3 +58,13 @@ func TestFormat(t *testing.T) {
 		}
 	}
 }
+
+func TestFloorDiv(t *testing.T) {
+	for _, tc := range []struct{ a, b, want float64 }{
+		{7, 2, 3}, {-7, 2, -4}, {7, -2, -4}, {86400 * 47.5, 86400, 47}, {1, 0.1, 9}, {0, 5, 0},
+	} {
+		if got := FloorDiv(tc.a, tc.b); got != tc.want {
+			t.Errorf("FloorDiv(%v, %v) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}

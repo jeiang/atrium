@@ -1,6 +1,7 @@
 package py
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 	"slices"
@@ -409,4 +410,111 @@ func SplitTimestamp(ts float64) (sec, us int64) {
 		frac -= microsecondsPerSec
 	}
 	return int64(whole), int64(frac)
+}
+
+// ISOFormat is datetime.isoformat(timespec=timespec) of an aware datetime: "minutes" or "seconds", then the UTC
+// offset as +HH:MM, with :SS when the offset is not a whole minute. Any other timespec panics.
+func ISOFormat(t time.Time, timespec string) string {
+	var clock string
+	switch timespec {
+	case "minutes":
+		clock = t.Format("15:04")
+	case "seconds":
+		clock = t.Format("15:04:05")
+	default:
+		panic("py.ISOFormat: unsupported timespec " + timespec)
+	}
+	_, off := t.Zone()
+	sign := byte('+')
+	if off < 0 {
+		sign, off = '-', -off
+	}
+	zone := fmt.Sprintf("%c%02d:%02d", sign, off/3600, off%3600/60)
+	if s := off % 60; s != 0 {
+		zone += fmt.Sprintf(":%02d", s)
+	}
+	return fmt.Sprintf("%04d-%02d-%02dT%s%s", t.Year(), int(t.Month()), t.Day(), clock, zone)
+}
+
+// DateFromISOFormat is date.fromisoformat (CPython 3.14 date_fromisoformat): a string of 7, 8 or 10 UTF-8 bytes
+// read as YYYY-MM-DD, YYYYMMDD, YYYY-Www-D, YYYYWwwD or the week forms without a day; whatever follows the
+// digits parsed is not checked, as in C, and the result must be a valid date of years 1 to 9999.
+func DateFromISOFormat(s string) (year, month, day int, ok bool) {
+	if n := len(s); n != 7 && n != 8 && n != 10 {
+		return 0, 0, 0, false
+	}
+	b := isoBuf(s)
+	p, ok := b.digits(0, &year, 4)
+	if !ok {
+		return 0, 0, 0, false
+	}
+	sep := b.at(p) == '-'
+	if sep {
+		p++
+	}
+	if b.at(p) == 'W' {
+		var week, wday int
+		if p, ok = b.digits(p+1, &week, 2); !ok {
+			return 0, 0, 0, false
+		}
+		if p < len(s) {
+			if sep {
+				p++
+				if b.at(p-1) != '-' {
+					return 0, 0, 0, false
+				}
+			}
+			if _, ok = b.digits(p, &wday, 1); !ok {
+				return 0, 0, 0, false
+			}
+		} else {
+			wday = 1
+		}
+		return isoWeekToDate(year, week, wday)
+	}
+	if p, ok = b.digits(p, &month, 2); !ok {
+		return 0, 0, 0, false
+	}
+	if sep {
+		p++
+		if b.at(p-1) != '-' {
+			return 0, 0, 0, false
+		}
+	}
+	if _, ok = b.digits(p, &day, 2); !ok {
+		return 0, 0, 0, false
+	}
+	return year, month, day, validYMD(year, month, day)
+}
+
+func validYMD(year, month, day int) bool {
+	if year < 1 || year > 9999 || month < 1 || month > 12 || day < 1 {
+		return false
+	}
+	t := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+	return t.Day() == day
+}
+
+// isoWeekToDate is iso_to_ymd.
+func isoWeekToDate(isoYear, week, wday int) (year, month, day int, ok bool) {
+	if isoYear < 1 || isoYear > 9999 {
+		return 0, 0, 0, false
+	}
+	jan1 := time.Date(isoYear, 1, 1, 0, 0, 0, 0, time.UTC)
+	first := (int(jan1.Weekday()) + 6) % 7
+	if week <= 0 || week >= 53 {
+		leap := isoYear%4 == 0 && (isoYear%100 != 0 || isoYear%400 == 0)
+		if week != 53 || (first != 3 && (first != 2 || !leap)) {
+			return 0, 0, 0, false
+		}
+	}
+	if wday <= 0 || wday >= 8 {
+		return 0, 0, 0, false
+	}
+	monday := -first
+	if first > 3 {
+		monday += 7
+	}
+	t := jan1.AddDate(0, 0, monday+(week-1)*7+wday-1)
+	return t.Year(), int(t.Month()), t.Day(), validYMD(t.Year(), int(t.Month()), t.Day())
 }

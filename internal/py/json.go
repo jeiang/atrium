@@ -22,12 +22,26 @@ func (d Dict) MarshalJSON() ([]byte, error) { return []byte(JSONDumps(d)), nil }
 
 // JSONOpts selects json.dumps arguments. The zero value is the defaults: ", " and ": " separators, non-ASCII
 // escaped, keys in insertion order. NoEnsureASCII is ensure_ascii=False, Compact is separators=(",", ":"),
-// SortKeys is sort_keys=True, Indent is indent=N (items on their own lines, separated by "," alone).
+// SortKeys is sort_keys=True and Indent > 0 is indent=Indent (items on their own lines, "," and ": " separators,
+// empty containers as "[]" and "{}").
 type JSONOpts struct {
 	NoEnsureASCII bool
 	Compact       bool
 	SortKeys      bool
 	Indent        int
+	level         int
+}
+
+func (o JSONOpts) nested() JSONOpts {
+	o.level++
+	return o
+}
+
+func (o JSONOpts) newline(b *strings.Builder) {
+	if o.Indent > 0 {
+		b.WriteByte('\n')
+		b.WriteString(strings.Repeat(" ", o.Indent*o.level))
+	}
 }
 
 // JSONDumps is json.dumps(v, ...), the one JSON encoder: v is nil, a bool, an integer, a float64, a *big.Int, a
@@ -53,55 +67,22 @@ func JSONRedump(raw []byte, opts ...JSONOpts) (string, error) {
 	return JSONDumps(v, opts...), nil
 }
 
-func dump(b *strings.Builder, v any, o JSONOpts) { dumpAt(b, v, o, 0) }
-
-// container writes the n elements of an array or object, each through each(i), as json.dumps lays them out.
-func container(b *strings.Builder, open, closer byte, n int, o JSONOpts, level int, each func(i int)) {
-	itemSep := ", "
-	if o.Compact || o.Indent > 0 {
-		itemSep = ","
-	}
-	b.WriteByte(open)
-	for i := range n {
-		if i > 0 {
-			b.WriteString(itemSep)
-		}
-		if o.Indent > 0 {
-			b.WriteByte('\n')
-			b.WriteString(strings.Repeat(" ", o.Indent*(level+1)))
-		}
-		each(i)
-	}
-	if n > 0 && o.Indent > 0 {
-		b.WriteByte('\n')
-		b.WriteString(strings.Repeat(" ", o.Indent*level))
-	}
-	b.WriteByte(closer)
-}
-
-func anySlice[T any](v []T) []any {
-	out := make([]any, len(v))
-	for i, e := range v {
-		out[i] = e
-	}
-	return out
-}
-
-func dumpAt(b *strings.Builder, v any, o JSONOpts, level int) {
-	keySep, itemSep := ": ", ", "
+func dump(b *strings.Builder, v any, o JSONOpts) {
+	itemSep, keySep := ", ", ": "
 	if o.Compact {
-		keySep, itemSep = ":", ","
+		itemSep, keySep = ",", ":"
 	}
 	if o.Indent > 0 {
-		switch s := v.(type) {
+		itemSep, keySep = ",", ": "
+		switch list := v.(type) {
 		case []string:
-			v = anySlice(s)
+			v = toAny(list)
 		case []int:
-			v = anySlice(s)
+			v = toAny(list)
 		case []int64:
-			v = anySlice(s)
+			v = toAny(list)
 		case []uint32:
-			v = anySlice(s)
+			v = toAny(list)
 		}
 	}
 	switch v := v.(type) {
@@ -135,7 +116,14 @@ func dumpAt(b *strings.Builder, v any, o JSONOpts, level int) {
 	case string:
 		dumpString(b, v, o)
 	case []string:
-		container(b, '[', ']', len(v), o, level, func(i int) { dumpString(b, v[i], o) })
+		b.WriteByte('[')
+		for i, s := range v {
+			if i > 0 {
+				b.WriteString(itemSep)
+			}
+			dumpString(b, s, o)
+		}
+		b.WriteByte(']')
 	case []int:
 		dumpInts(b, v, itemSep)
 	case []int64:
@@ -143,24 +131,46 @@ func dumpAt(b *strings.Builder, v any, o JSONOpts, level int) {
 	case []uint32:
 		dumpInts(b, v, itemSep)
 	case []any:
-		container(b, '[', ']', len(v), o, level, func(i int) { dumpAt(b, v[i], o, level+1) })
+		b.WriteByte('[')
+		inner := o.nested()
+		for i, e := range v {
+			if i > 0 {
+				b.WriteString(itemSep)
+			}
+			inner.newline(b)
+			dump(b, e, inner)
+		}
+		if len(v) > 0 {
+			o.newline(b)
+		}
+		b.WriteByte(']')
 	case map[string]any:
 		pairs := make(Dict, 0, len(v))
 		for k, e := range v {
 			pairs = append(pairs, Pair{k, e})
 		}
 		slices.SortFunc(pairs, func(a, c Pair) int { return strings.Compare(a.Key, c.Key) })
-		dumpAt(b, pairs, o, level)
+		dump(b, pairs, o)
 	case Dict:
 		if o.SortKeys {
 			v = slices.Clone(v)
 			slices.SortStableFunc(v, func(a, c Pair) int { return strings.Compare(a.Key, c.Key) })
 		}
-		container(b, '{', '}', len(v), o, level, func(i int) {
-			dumpString(b, v[i].Key, o)
+		b.WriteByte('{')
+		inner := o.nested()
+		for i, p := range v {
+			if i > 0 {
+				b.WriteString(itemSep)
+			}
+			inner.newline(b)
+			dumpString(b, p.Key, o)
 			b.WriteString(keySep)
-			dumpAt(b, v[i].Value, o, level+1)
-		})
+			dump(b, p.Value, inner)
+		}
+		if len(v) > 0 {
+			o.newline(b)
+		}
+		b.WriteByte('}')
 	default:
 		panic(fmt.Sprintf("py: JSONDumps of %T", v))
 	}
