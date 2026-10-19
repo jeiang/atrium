@@ -21,7 +21,7 @@ type Dict []Pair
 func (d Dict) MarshalJSON() ([]byte, error) { return []byte(JSONDumps(d)), nil }
 
 // JSONDumps is json.dumps(v) with its defaults: ", " and ": " separators and every non-ASCII character
-// escaped. v is nil, a bool, an integer, a float64, a *big.Int, a string, a []string, a []any or a Dict.
+// escaped. v is nil, a bool, an integer, a float64, a *big.Int, a string, a []string, an []int, []int64 or []uint32, a []any or a Dict.
 func JSONDumps(v any) string {
 	var b strings.Builder
 	dump(&b, v)
@@ -59,6 +59,12 @@ func dump(b *strings.Builder, v any) {
 		b.WriteString(v.String())
 	case string:
 		dumpString(b, v)
+	case []int:
+		dumpInts(b, v)
+	case []int64:
+		dumpInts(b, v)
+	case []uint32:
+		dumpInts(b, v)
 	case []string:
 		b.WriteByte('[')
 		for i, s := range v {
@@ -91,6 +97,17 @@ func dump(b *strings.Builder, v any) {
 	default:
 		panic(fmt.Sprintf("py: JSONDumps of %T", v))
 	}
+}
+
+func dumpInts[T int | int64 | uint32](b *strings.Builder, v []T) {
+	b.WriteByte('[')
+	for i, n := range v {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(strconv.FormatInt(int64(n), 10))
+	}
+	b.WriteByte(']')
 }
 
 func dumpString(b *strings.Builder, s string) {

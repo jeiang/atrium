@@ -516,3 +516,12 @@ func refused(err error) bool {
 	var r safety.WriteRefused
 	return errors.As(err, &r)
 }
+
+func TestUndoWithoutRegistryHasNoHandler(t *testing.T) {
+	w := livetest.ICloud(t, "live")
+	w.Arrive("m", []string{}...)
+	id := w.Flag("m")
+	bare := &live.Live{DB: w.DB, Cfg: w.Cfg}
+	_, err := bare.Undo(t.Context(), id)
+	undoErr(t, err, "no undo handler for 'unflag'")
+}

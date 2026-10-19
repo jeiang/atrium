@@ -145,7 +145,8 @@ type Result struct {
 	Accounts py.Dict `json:"accounts"`
 }
 
-// Backlog is backlog: one proposal per account in the accounts table, created at ts. It fails before go-live.
+// Backlog is backlog: one proposal per account in the accounts table, created at ts, the caller's clock (Python's
+// now()). It fails before go-live.
 func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 	out := Result{Created: []int64{}, Accounts: py.Dict{}}
 	golive, err := live.GetState(ctx, d.Write, live.GoliveKey)
@@ -195,7 +196,8 @@ func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 	return out, nil
 }
 
-// Refresh is refresh: the pending backlog proposals are dismissed at ts and the backlog is built again.
+// Refresh is refresh: the pending backlog proposals are dismissed at ts and the backlog is built again with the
+// same ts; the caller passes its clock once, where Python read now() for each.
 func Refresh(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 	if _, err := d.Write.ExecContext(ctx, "UPDATE proposals SET status = 'dismissed', decided_ts = ? WHERE kind = ? AND status = 'pending'",
 		ts, Kind); err != nil {

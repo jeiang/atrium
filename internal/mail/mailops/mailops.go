@@ -87,16 +87,16 @@ func Chunks[T any](items []T, size int) [][]T {
 
 // Snapshot is one message as a proposal or action saw it.
 type Snapshot struct {
-	ID          int64
-	UID         uint32
-	UIDValidity uint32
-	MsgID       string
-	Digest      string
-	Mailbox     string
-	IMAPName    string
+	ID          int64  `json:"id"`
+	UID         uint32 `json:"uid"`
+	UIDValidity uint32 `json:"uidvalidity"`
+	MsgID       string `json:"msgid"`
+	Digest      string `json:"digest"`
+	Mailbox     string `json:"mailbox"`
+	IMAPName    string `json:"imap_name"`
 }
 
-// Dict is the snapshot as Python stores it in a payload.
+// Dict is the snapshot as Python stores it in a payload; encoding/json reads it back through the tags.
 func (s Snapshot) Dict() py.Dict {
 	return py.Dict{
 		{Key: "id", Value: s.ID}, {Key: "uid", Value: s.UID}, {Key: "uidvalidity", Value: s.UIDValidity},

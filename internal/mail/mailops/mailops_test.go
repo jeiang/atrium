@@ -2,6 +2,7 @@ package mailops_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
@@ -394,5 +395,13 @@ func TestEveryWriteGoesThroughTheGate(t *testing.T) {
 				t.Fatalf("approved = %v, writes %v", err, w.Fake.Writes)
 			}
 		})
+	}
+}
+
+func TestSnapshotRoundTripsThroughPayloadJSON(t *testing.T) {
+	want := mailops.Snapshot{ID: 3, UID: 41, UIDValidity: 7, MsgID: "a@x.test", Digest: "d", Mailbox: "Café", IMAPName: "Caf&AOk-"}
+	var got mailops.Snapshot
+	if err := json.Unmarshal([]byte(py.JSONDumps(want.Dict())), &got); err != nil || got != want {
+		t.Fatalf("round trip = %+v, %v", got, err)
 	}
 }

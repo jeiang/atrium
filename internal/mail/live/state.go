@@ -112,8 +112,8 @@ func QueryParams(ctx context.Context, q Querier, account string) (Params, error)
 	return p, err
 }
 
-// Live is live.py over one database: Registry holds the undo handlers and the post-undo sync, Now the clock
-// (time.Now when nil).
+// Live is live.py over one database: Registry holds the undo handlers and the post-undo sync (nil: none
+// registered, every undo fails with "no undo handler"), Now the clock (time.Now when nil).
 type Live struct {
 	DB       *db.DB
 	Cfg      config.Config
@@ -449,7 +449,10 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		return UndoResult{}, fmt.Errorf("%w: 'op'", httpx.ErrKey)
 	}
 	name, _ := op.(string)
-	undoer := l.Registry.Undoers[name]
+	var undoer proposals.Undoer
+	if l.Registry != nil {
+		undoer = l.Registry.Undoers[name]
+	}
 	if _, isString := op.(string); !isString || undoer == nil {
 		return UndoResult{}, UndoError("no undo handler for " + py.ReprValue(op))
 	}
@@ -470,7 +473,7 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		}
 	}
 	out := UndoResult{ID: id, Undone: true, Detail: detail}
-	if l.Registry.Sync != nil {
+	if l.Registry != nil && l.Registry.Sync != nil {
 		if err := l.Registry.Sync(ctx, account); err != nil {
 			log.Error(fmt.Sprintf("post-undo sync failed for action %d", id), logx.Err, err.Error())
 			text := py.ExceptionText(err)

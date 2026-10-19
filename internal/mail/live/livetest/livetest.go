@@ -280,7 +280,7 @@ func (w *World) Relabel(subject, dest string) int64 {
 	}
 	undo := py.Dict{
 		{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: v.IMAPName}, {Key: "uidvalidity", Value: v.UIDValidity},
-		{Key: "uids", Value: []any{v.UID}}, {Key: "add", Value: []string{mailops.InboxLabel}}, {Key: "remove", Value: []string{dest}},
+		{Key: "uids", Value: []uint32{v.UID}}, {Key: "add", Value: []string{mailops.InboxLabel}}, {Key: "remove", Value: []string{dest}},
 	}
 	after := py.Dict{{Key: "add", Value: []string{dest}}, {Key: "remove", Value: []string{mailops.InboxLabel}}}
 	if err := w.Live.Finish(ctx, id, after, undo, nil); err != nil {
@@ -300,7 +300,7 @@ func (w *World) Flag(subject string) int64 {
 	}
 	undo := py.Dict{
 		{Key: "op", Value: live.OpUnflag}, {Key: "account", Value: w.Account}, {Key: "imap_name", Value: v.IMAPName},
-		{Key: "uidvalidity", Value: v.UIDValidity}, {Key: "uids", Value: []any{v.UID}},
+		{Key: "uidvalidity", Value: v.UIDValidity}, {Key: "uids", Value: []uint32{v.UID}},
 	}
 	if err := w.Live.Finish(ctx, id, py.Dict{{Key: "flag", Value: mailops.Flagged}}, undo, nil); err != nil {
 		w.T.Fatal(err)
@@ -328,7 +328,7 @@ func (w *World) GmailTrash(subject string) int64 {
 	destUID := copied.Mapping[v.UID]
 	undo := py.Dict{
 		{Key: "op", Value: live.OpGmailUntrash}, {Key: "trash_imap", Value: trash},
-		{Key: "dest_uidvalidity", Value: copied.UIDValidity}, {Key: "uids", Value: []any{destUID}},
+		{Key: "dest_uidvalidity", Value: copied.UIDValidity}, {Key: "uids", Value: []uint32{destUID}},
 	}
 	after := py.Dict{{Key: "imap_name", Value: trash}, {Key: "uidvalidity", Value: copied.UIDValidity}, {Key: "uid", Value: destUID}}
 	if err := w.Live.Finish(ctx, id, after, undo, nil); err != nil {
