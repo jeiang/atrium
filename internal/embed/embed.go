@@ -211,7 +211,8 @@ func Pending(ctx context.Context, d *db.DB, url string) (int, error) {
 		}
 		batch, err := collect(rows, func(r *sql.Rows) (pendingMessage, error) {
 			var m pendingMessage
-			return m, r.Scan(&m.id, &m.account)
+			err := r.Scan(&m.id, &m.account)
+			return m, err
 		})
 		if err != nil {
 			return done, err
@@ -296,7 +297,8 @@ func NotionPending(ctx context.Context, d *db.DB, url string, texts TextsFunc) (
 		}
 		batch, err := collect(rows, func(r *sql.Rows) (pendingPage, error) {
 			var p pendingPage
-			return p, r.Scan(&p.rid, &p.title, &p.path, &p.markdown, &p.private)
+			err := r.Scan(&p.rid, &p.title, &p.path, &p.markdown, &p.private)
+			return p, err
 		})
 		if err != nil {
 			return done, err

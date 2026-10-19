@@ -222,7 +222,8 @@ func NewLLMContext(ctx context.Context, q Querier, account, url string) (LLMCont
 	}
 	folders, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
 		var f string
-		return f, r.Scan(&f)
+		err := r.Scan(&f)
+		return f, err
 	})
 	if err != nil {
 		return LLMContext{}, err
@@ -242,7 +243,8 @@ func NewLLMContext(ctx context.Context, q Querier, account, url string) (LLMCont
 	}
 	senders, err := db.Collect(rows, func(r *sql.Rows) (llm.FolderSender, error) {
 		var s llm.FolderSender
-		return s, r.Scan(&s.Folder, &s.FromDomain)
+		err := r.Scan(&s.Folder, &s.FromDomain)
+		return s, err
 	})
 	if err != nil {
 		return LLMContext{}, err

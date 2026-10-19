@@ -191,7 +191,8 @@ func (w *World) Actions() []live.Action {
 	}
 	ids, err := db.Collect(rows, func(r *sql.Rows) (int64, error) {
 		var id int64
-		return id, r.Scan(&id)
+		err := r.Scan(&id)
+		return id, err
 	})
 	if err != nil {
 		w.T.Fatal(err)
