@@ -118,8 +118,8 @@ switched.
     worker started and claiming due jobs, with the core-first lines listed in
     section 8 and no other errors. The three callables (`calendar-candidates`,
     `fx-rates`, `media-thumbnails`) each log `built-in job X has no function in
-    this build; not run` once and write no job run. `/scheduled` is not served until its page
-    lands; use `sqlite3 $STATE/atrium.db "SELECT id, name, next_run FROM jobs ORDER BY id"`.
+    this build; not run` once and write no job run. `/scheduled` lists the jobs; from the shell use
+    `sqlite3 $STATE/atrium.db "SELECT id, name, next_due FROM jobs ORDER BY id"`.
 8. Units: `systemctl --failed 'atrium-*'` is empty.
 
 ## 5. Unpause
