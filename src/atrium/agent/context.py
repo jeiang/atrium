@@ -404,7 +404,7 @@ def fold(conn, thread_id, run_id, from_seq, to_seq, summary, source_ids, now):
         raise ContextError("summary is required")
     if not all(isinstance(s, str | int) and not isinstance(s, bool) for s in source_ids):
         raise ContextError("source_ids must be strings or integers")
-    if not (isinstance(from_seq, int) and isinstance(to_seq, int)) or isinstance(from_seq, bool) or from_seq > to_seq:
+    if not (isinstance(from_seq, int) and isinstance(to_seq, int)) or isinstance(from_seq, bool) or isinstance(to_seq, bool) or from_seq > to_seq:
         raise ContextError("from_seq and to_seq must be integers with from_seq <= to_seq")
     proj = projection(conn, thread_id)
     messages = journal.messages_of(conn, thread_id)
