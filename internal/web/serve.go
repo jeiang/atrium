@@ -124,6 +124,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 		return err
 	}
 	defer srv.Close()
+	srv.Hold()
 	listener, err := net.Listen("tcp", net.JoinHostPort(a.host, strconv.Itoa(a.port)))
 	if err != nil {
 		return err
@@ -152,6 +153,7 @@ func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server) 
 	go func() { failed <- httpServer.Serve(listener) }()
 	log.Info("listening", "addr", listener.Addr().String())
 	notifier := sdnotify.FromEnv()
+	srv.Release()
 	notifier.Ready()
 	notifier.Status("serving " + listener.Addr().String())
 	go notifier.RunWatchdog(ctx, nil)
@@ -160,6 +162,7 @@ func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server) 
 		return err
 	case <-ctx.Done():
 	}
+	srv.StopStreams()
 	notifier.Stopping()
 	stop, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()

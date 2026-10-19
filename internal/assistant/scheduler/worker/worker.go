@@ -51,6 +51,7 @@ type Worker struct {
 	Interval  time.Duration
 	Owner     string
 	Spawn     func(name string, fn func())
+	Beat      func()
 
 	wg     sync.WaitGroup
 	active atomic.Int64
@@ -334,13 +335,21 @@ func (w *Worker) Run(ctx context.Context) {
 	log.Info(fmt.Sprintf("scheduler %s started", w.Owner))
 	defer w.wg.Wait()
 	for ctx.Err() == nil {
+		w.beat()
 		if err := w.safeCycle(ctx); err != nil && ctx.Err() == nil {
 			log.Error("scheduler tick failed", logx.Err, err)
 		}
+		w.beat()
 		select {
 		case <-ctx.Done():
 		case <-time.After(w.Interval):
 		}
+	}
+}
+
+func (w *Worker) beat() {
+	if w.Beat != nil {
+		w.Beat()
 	}
 }
 

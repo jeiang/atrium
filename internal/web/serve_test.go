@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/drafts"
+	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 )
 
 func runServe(t *testing.T, ctx context.Context, args ...string) (int, string, string) {
@@ -80,6 +81,7 @@ func TestServeRecoversStuckDraftsAndStopsOnCancel(t *testing.T) {
 	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	notify := sdnotifytest.Listen(t, 200*time.Millisecond)
 	ctx := context.Background()
 	seed, err := db.Connect(filepath.Join(dir, "atrium.db"))
 	if err != nil {
@@ -115,7 +117,12 @@ func TestServeRecoversStuckDraftsAndStopsOnCancel(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Errorf("healthz = %d", resp.StatusCode)
 	}
+	notify.Wait("WATCHDOG=1")
+	if got := notify.Messages(); len(got) < 3 || got[0] != "READY=1" || got[1] != "STATUS=serving 127.0.0.1:"+port {
+		t.Errorf("notify messages = %q", got)
+	}
 	cancel()
+	notify.Wait("STOPPING=1")
 	select {
 	case code := <-done:
 		if code != cli.ExitOK {

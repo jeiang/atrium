@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/money"
+	"github.com/jeiang/atrium/internal/sdnotify"
 )
 
 // Callables are the built-in jobs that run a function. A slice that ports one adds it here.
@@ -71,6 +72,18 @@ func runScheduler(env *cli.Env, cfgEnv config.Env) error {
 	}
 	svc := service.New(ctx, d, cfg, cfgEnv, r)
 	defer svc.Close()
-	worker.New(svc, callables()).Run(ctx)
+	notifier := sdnotify.FromEnv()
+	beat := sdnotify.NewHeartbeat()
+	w := worker.New(svc, callables())
+	w.Beat = beat.Beat
+	notifier.Ready()
+	notifier.Status("scheduling")
+	stopWatchdog := notifier.Watch(ctx, beat)
+	defer stopWatchdog()
+	go func() {
+		<-ctx.Done()
+		notifier.Stopping()
+	}()
+	w.Run(ctx)
 	return nil
 }

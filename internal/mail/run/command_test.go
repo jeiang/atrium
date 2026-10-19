@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 )
 
 func app(w *world) *cli.App {
@@ -85,6 +86,27 @@ func TestWatchCommandExitsZeroOnShutdown(t *testing.T) {
 	if code != cli.ExitOK {
 		t.Fatalf("watch with no account = %d", code)
 	}
+}
+
+func TestWatchCommandNotifiesSystemd(t *testing.T) {
+	w := newWorld(t, config.Shadow, nil)
+	w.fakes[config.ICloud].Idle = true
+	notify := sdnotifytest.Listen(t, 200*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int, 1)
+	go func() {
+		code, _, _ := runCLI(t, ctx, w, credentials, "watch")
+		done <- code
+	}()
+	notify.Wait("WATCHDOG=1")
+	if got := notify.Messages(); got[0] != "READY=1" || got[1] != "STATUS=watching" {
+		t.Errorf("notify messages = %q", got)
+	}
+	cancel()
+	if code := <-done; code != cli.ExitOK {
+		t.Fatalf("watch = %d", code)
+	}
+	notify.Wait("STOPPING=1")
 }
 
 func TestSyncInterruptedBySignalEndsLikePython(t *testing.T) {

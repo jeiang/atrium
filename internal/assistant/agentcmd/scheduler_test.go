@@ -11,12 +11,14 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 )
 
 func TestSchedulerRunsUntilCancelledAndExitsZero(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	env := config.Map(map[string]string{"ATRIUM_DB": path, "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow"})
+	notify := sdnotifytest.Listen(t, 2*time.Second)
 	a := cli.New("atrium", func(io.Writer) {})
 	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env)}})
 	ctx, cancel := context.WithCancel(t.Context())
@@ -40,7 +42,12 @@ func TestSchedulerRunsUntilCancelledAndExitsZero(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	notify.Wait("WATCHDOG=1")
+	if got := notify.Messages(); got[0] != "READY=1" || got[1] != "STATUS=scheduling" {
+		t.Errorf("notify messages = %q", got)
+	}
 	cancel()
+	notify.Wait("STOPPING=1")
 	select {
 	case code := <-done:
 		if code != cli.ExitOK {
