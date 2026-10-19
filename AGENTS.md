@@ -337,6 +337,9 @@ and backups; nothing of that lives here.
   undo plan and stops at `Cap` (`config.WriteCap`) intents per pass. A
   group that fails unexpectedly leaves its rows held, and a ledger failure
   that cannot be recorded aborts the pass with the row held, as a crash does.
+  A pass that has started runs on `context.WithoutCancel`, so no caller's
+  shutdown or abandoned request leaves a write half done or its ledger row
+  in flight.
 - `internal/mail/pages/`: the mail web pages as one `web.Page` (`Module(Options)`, `Templates()`, `Globals()`):
   `/messages/{id}` and its correction form, `/live/pause|resume|actions/{id}/undo`, `/triage` and `/rules` with
   the rule editor. A correction in live mode moves the message through `applier.ApplyCorrections` under
@@ -437,10 +440,15 @@ and backups; nothing of that lives here.
   blocked one is logged) before the lock is released. `Watcher` is the
   per-account loop: each cycle connects (a failure backs off like a lost
   connection), passes, then IDLEs (or 58 s + NOOP), 2 s settle, backoff 5 s
-  doubling to 300 s. A started pass runs on `context.WithoutCancel`, so
-  shutdown never interrupts an automatic write; cancellation is seen only
-  while waiting, and `watch` gives the loops 30 s. `sync` and `watch` are
-  its commands and log as `atrium.run` and `atrium.watch`.
+  doubling to 300 s. In `watch` a started pass runs on `context.WithoutCancel`,
+  so shutdown never interrupts it; cancellation is seen only while waiting,
+  and `watch` gives the loops 30 s. `sync` sees a signal between accounts and
+  between extras (never inside a live pass) and exits 143 or 130 once the
+  running stage is complete. `sync` and `watch` are its commands and log as
+  `atrium.run` and `atrium.watch`. `run.New` takes the clock every stage
+  shares; the pipeline differential (`TestGoldenPipelineDifferential`)
+  replays `testdata/golden/pipeline/scenario.json` through it and the mail
+  commands and compares every core table with Python's rows.
 - `internal/py/`: the shared CPython emulation: `Repr`/`ReprBytes`, `IsSpace`/`Strip`/
   `Split`/`SplitLines`/`Clip`/`Lower`, `Sum`/`SumSq` (Neumaier, as `sum()`),
   `JSONDumps(v, opts...)` (the one `json.dumps`: `JSONOpts` is `NoEnsureASCII`, `Compact`, `SortKeys`; over `Dict`, `map`, `[]string`, `[]any`,
