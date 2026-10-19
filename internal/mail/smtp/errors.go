@@ -1,13 +1,8 @@
 package smtp
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"net"
-	"os"
 	"strings"
-	"syscall"
 
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -65,22 +60,6 @@ type Failure struct {
 
 func (e *Failure) Error() string { return e.Msg }
 
-// OSError is Python's OSError family as smtplib lets it through: "[Errno N] text" with an errno, the bare
-// text without one (TimeoutError("timed out")).
-type OSError struct {
-	Kind     string
-	Errno    int
-	HasErrno bool
-	Strerror string
-}
-
-func (e *OSError) Error() string {
-	if e.HasErrno {
-		return fmt.Sprintf("[Errno %d] %s", e.Errno, e.Strerror)
-	}
-	return e.Strerror
-}
-
 // Refusal is one entry of the per-recipient refusal map smtplib returns.
 type Refusal struct {
 	Addr string
@@ -109,76 +88,10 @@ const (
 	notSupported = "SMTPNotSupportedError"
 )
 
-func linuxErrno(errno syscall.Errno) (int, string) {
-	switch errno {
-	case syscall.EPIPE:
-		return 32, "Broken pipe"
-	case syscall.EADDRNOTAVAIL:
-		return 99, "Cannot assign requested address"
-	case syscall.ENETUNREACH:
-		return 101, "Network is unreachable"
-	case syscall.ECONNABORTED:
-		return 103, "Software caused connection abort"
-	case syscall.ECONNRESET:
-		return 104, "Connection reset by peer"
-	case syscall.ETIMEDOUT:
-		return 110, "Connection timed out"
-	case syscall.ECONNREFUSED:
-		return 111, "Connection refused"
-	case syscall.EHOSTUNREACH:
-		return 113, "No route to host"
-	}
-	text := errno.Error()
-	if text != "" {
-		text = strings.ToUpper(text[:1]) + text[1:]
-	}
-	return int(errno), text
-}
-
 // osError renders a Go network error as the OSError Python raises for the same condition.
 func osError(err error) error {
-	var dns *net.DNSError
-	var errno syscall.Errno
-	var timeout interface{ Timeout() bool }
-	switch {
-	case errors.As(err, &dns) && dns.IsNotFound:
-		return &OSError{Kind: "gaierror", Errno: -2, HasErrno: true, Strerror: "Name or service not known"}
-	case errors.As(err, &dns) && !dns.IsTimeout:
-		return &OSError{Kind: "gaierror", Errno: -3, HasErrno: true, Strerror: "Temporary failure in name resolution"}
-	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded),
-		errors.As(err, &timeout) && timeout.Timeout():
-		return &OSError{Kind: "TimeoutError", Strerror: "timed out"}
-	case errors.As(err, &errno):
-		n, text := linuxErrno(errno)
-		return &OSError{Kind: "OSError", Errno: n, HasErrno: true, Strerror: text}
+	if e, ok := py.OSErrorOf(err); ok {
+		return e
 	}
 	return err
-}
-
-// ASCIIEncodeError is the UnicodeEncodeError s.encode('ascii') raises, nil when s is ASCII.
-func ASCIIEncodeError(s string) error {
-	rs := []rune(s)
-	for i, r := range rs {
-		if r < 0x80 {
-			continue
-		}
-		j := i
-		for j+1 < len(rs) && rs[j+1] >= 0x80 {
-			j++
-		}
-		if j > i {
-			return &Failure{Kind: "UnicodeEncodeError", Msg: fmt.Sprintf("'ascii' codec can't encode characters in position %d-%d: ordinal not in range(128)", i, j)}
-		}
-		var char string
-		switch {
-		case r <= 0xff:
-			char = fmt.Sprintf(`\x%02x`, r)
-		case r <= 0xffff:
-			char = fmt.Sprintf(`\u%04x`, r)
-		default:
-			char = fmt.Sprintf(`\U%08x`, r)
-		}
-		return &Failure{Kind: "UnicodeEncodeError", Msg: fmt.Sprintf("'ascii' codec can't encode character '%s' in position %d: ordinal not in range(128)", char, i)}
-	}
-	return nil
 }

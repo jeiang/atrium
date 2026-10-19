@@ -10,15 +10,8 @@ import (
 	"syscall"
 )
 
-// UnicodeEncodeError is the exception str.encode raises; the text is str(e).
-type UnicodeEncodeError string
-
-func (e UnicodeEncodeError) Error() string { return string(e) }
-func (UnicodeEncodeError) PyClass() string { return "UnicodeEncodeError" }
-
-// ASCIIEncode is s.encode("ascii"): the bytes, or the UnicodeEncodeError CPython raises for the first run of
-// non-ASCII characters.
-func ASCIIEncode(s string) ([]byte, error) {
+// ASCIIEncodeError is the UnicodeEncodeError s.encode("ascii") raises, nil when s is ASCII.
+func ASCIIEncodeError(s string) error {
 	ascii := true
 	for i := range len(s) {
 		if s[i] >= 0x80 {
@@ -27,7 +20,7 @@ func ASCIIEncode(s string) ([]byte, error) {
 		}
 	}
 	if ascii {
-		return []byte(s), nil
+		return nil
 	}
 	rs := []rune(s)
 	for i, r := range rs {
@@ -39,7 +32,7 @@ func ASCIIEncode(s string) ([]byte, error) {
 			j++
 		}
 		if j > i {
-			return nil, UnicodeEncodeError(fmt.Sprintf("'ascii' codec can't encode characters in position %d-%d: ordinal not in range(128)", i, j))
+			return &Exception{"UnicodeEncodeError", fmt.Sprintf("'ascii' codec can't encode characters in position %d-%d: ordinal not in range(128)", i, j)}
 		}
 		var char string
 		switch {
@@ -50,10 +43,36 @@ func ASCIIEncode(s string) ([]byte, error) {
 		default:
 			char = fmt.Sprintf(`\U%08x`, r)
 		}
-		return nil, UnicodeEncodeError(fmt.Sprintf("'ascii' codec can't encode character '%s' in position %d: ordinal not in range(128)", char, i))
+		return &Exception{"UnicodeEncodeError", fmt.Sprintf("'ascii' codec can't encode character '%s' in position %d: ordinal not in range(128)", char, i)}
+	}
+	return nil
+}
+
+// ASCIIEncode is s.encode("ascii").
+func ASCIIEncode(s string) ([]byte, error) {
+	if err := ASCIIEncodeError(s); err != nil {
+		return nil, err
 	}
 	return []byte(s), nil
 }
+
+// OSError is Python's OSError family as a network call raises it: "[Errno N] text" with an errno, the bare text
+// without one (TimeoutError("timed out")). Kind is the class name: OSError, gaierror or TimeoutError.
+type OSError struct {
+	Kind     string
+	Errno    int
+	HasErrno bool
+	Strerror string
+}
+
+func (e *OSError) Error() string {
+	if e.HasErrno {
+		return fmt.Sprintf("[Errno %d] %s", e.Errno, e.Strerror)
+	}
+	return e.Strerror
+}
+
+func (e *OSError) PyClass() string { return e.Kind }
 
 func linuxErrno(errno syscall.Errno) (int, string) {
 	switch errno {
@@ -81,25 +100,33 @@ func linuxErrno(errno syscall.Errno) (int, string) {
 	return int(errno), text
 }
 
-// OSErrorText is str(e) of the OSError Python raises for the condition a Go network error reports: "[Errno N]
-// text" with the Linux number and glibc text, "timed out" for a timeout, "[Errno -2] Name or service not known"
-// and "[Errno -3] Temporary failure in name resolution" for resolver failures. ok is false for an error that
-// has no such counterpart.
-func OSErrorText(err error) (text string, ok bool) {
+// OSErrorOf renders a Go network error as the OSError Python raises for the same condition: the Linux errno
+// and glibc text for the common errnos, gaierror -2 and -3 for resolver failures, TimeoutError for a timeout.
+// ok is false for an error that has no such counterpart.
+func OSErrorOf(err error) (*OSError, bool) {
 	var dns *net.DNSError
 	var errno syscall.Errno
 	var timeout interface{ Timeout() bool }
 	switch {
 	case errors.As(err, &dns) && dns.IsNotFound:
-		return "[Errno -2] Name or service not known", true
+		return &OSError{Kind: "gaierror", Errno: -2, HasErrno: true, Strerror: "Name or service not known"}, true
 	case errors.As(err, &dns) && !dns.IsTimeout:
-		return "[Errno -3] Temporary failure in name resolution", true
+		return &OSError{Kind: "gaierror", Errno: -3, HasErrno: true, Strerror: "Temporary failure in name resolution"}, true
 	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded),
 		errors.As(err, &timeout) && timeout.Timeout():
-		return "timed out", true
+		return &OSError{Kind: "TimeoutError", Strerror: "timed out"}, true
 	case errors.As(err, &errno):
 		n, msg := linuxErrno(errno)
-		return fmt.Sprintf("[Errno %d] %s", n, msg), true
+		return &OSError{Kind: "OSError", Errno: n, HasErrno: true, Strerror: msg}, true
 	}
-	return "", false
+	return nil, false
+}
+
+// OSErrorText is str(e) of OSErrorOf.
+func OSErrorText(err error) (text string, ok bool) {
+	e, ok := OSErrorOf(err)
+	if !ok {
+		return "", false
+	}
+	return e.Error(), true
 }

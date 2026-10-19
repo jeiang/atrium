@@ -108,13 +108,17 @@ func (f *Fetcher) FetchPage(ctx context.Context, url string) (Page, error) {
 				port = 443
 			}
 		}
+		ascii, err := asciiHost(host)
+		if err != nil {
+			return Page{}, err
+		}
 		bounded, cancelBound := context.WithDeadline(ctx, deadline)
-		address, err := f.resolve(bounded, host, port)
+		address, err := f.resolve(bounded, host, ascii)
 		cancelBound()
 		if err != nil {
 			return Page{}, connectError(ctx, err)
 		}
-		next, page, err := f.hop(ctx, deadline, url, parts, Dest{Scheme: parts.Scheme, Host: host, Port: port, Address: address})
+		next, page, err := f.hop(ctx, deadline, url, parts, Dest{Scheme: parts.Scheme, Host: ascii, Port: port, Address: address})
 		if err != nil {
 			return Page{}, err
 		}
@@ -130,15 +134,7 @@ func (f *Fetcher) lookup(ctx context.Context, host string) ([]netip.Addr, error)
 	if f.Lookup != nil {
 		return f.Lookup(ctx, host)
 	}
-	name := host
-	if !isASCII(name) {
-		ascii, err := idna.Lookup.ToASCII(name)
-		if err != nil {
-			return nil, py.ValueError("encoding with 'idna' codec failed (UnicodeError: " + err.Error() + ")")
-		}
-		name = ascii
-	}
-	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", name)
+	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 	for i, a := range addrs {
 		addrs[i] = a.Unmap()
 	}
@@ -154,14 +150,24 @@ func isASCII(s string) bool {
 	return true
 }
 
-// resolve is resolve(host, port, allowed): the first answer, after every answer passed the guard.
-func (f *Fetcher) resolve(ctx context.Context, host string, port int) (netip.Addr, error) {
-	addrs, err := f.lookup(ctx, host)
+// asciiHost is the host as the socket layer takes it, the IDNA form the lookup, the Host header and the TLS
+// server name all use (http.client's _encode_hostname).
+func asciiHost(host string) (string, error) {
+	if isASCII(host) {
+		return host, nil
+	}
+	ascii, err := idna.Lookup.ToASCII(host)
 	if err != nil {
-		var ve py.ValueError
-		if errors.As(err, &ve) {
-			return netip.Addr{}, err
-		}
+		return "", &py.Exception{Class: "UnicodeError", Msg: "encoding with 'idna' codec failed (UnicodeError: " + err.Error() + ")"}
+	}
+	return ascii, nil
+}
+
+// resolve is resolve(host, port, allowed): the first answer for the ASCII form of host, after every answer
+// passed the guard.
+func (f *Fetcher) resolve(ctx context.Context, host, ascii string) (netip.Addr, error) {
+	addrs, err := f.lookup(ctx, ascii)
+	if err != nil {
 		return netip.Addr{}, FetchError("dns: " + osText(err))
 	}
 	if len(addrs) == 0 {
@@ -210,13 +216,6 @@ func hostHeader(d Dest) (string, error) {
 	}
 	if i := strings.IndexByte(host, '%'); i >= 0 {
 		host = host[:i]
-	}
-	if !isASCII(host) {
-		ascii, err := idna.Lookup.ToASCII(host)
-		if err != nil {
-			return "", py.ValueError("encoding with 'idna' codec failed (UnicodeError: " + err.Error() + ")")
-		}
-		host = ascii
 	}
 	if strings.Contains(host, ":") {
 		host = "[" + host + "]"
@@ -319,13 +318,12 @@ func isDigits(s string) bool {
 // connectError is the FetchError for an OSError or HTTPException; errors Python lets through keep their class.
 func connectError(ctx context.Context, err error) error {
 	var (
-		fe  FetchError
-		bl  Blocked
-		ve  py.ValueError
-		uee py.UnicodeEncodeError
+		fe FetchError
+		bl Blocked
+		pe *py.Exception
 	)
 	switch {
-	case errors.As(err, &fe), errors.As(err, &bl), errors.As(err, &ve), errors.As(err, &uee):
+	case errors.As(err, &fe), errors.As(err, &bl), errors.As(err, &pe):
 		return err
 	case errors.Is(ctx.Err(), context.Canceled):
 		return ctx.Err()

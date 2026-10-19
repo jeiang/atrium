@@ -98,6 +98,10 @@ func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args py.Dict) (an
 	allowed := make(map[string]struct{}, len(tc.AllowedURLs))
 	for u := range tc.AllowedURLs {
 		n, err := NormalizeURL(u)
+		var te tool.Error
+		if errors.As(err, &te) {
+			continue
+		}
 		if err != nil {
 			return nil, raised(err)
 		}
@@ -130,9 +134,9 @@ func fetchFailed(err error) error {
 	var (
 		blocked Blocked
 		fetch   FetchError
-		lookup  mime.LookupError
+		pe      *py.Exception
 	)
-	if errors.As(err, &blocked) || errors.As(err, &fetch) || errors.As(err, &lookup) {
+	if errors.As(err, &blocked) || errors.As(err, &fetch) || errors.As(err, &pe) && pe.Class == "LookupError" {
 		return tool.Error("fetch failed: " + err.Error())
 	}
 	return raised(err)

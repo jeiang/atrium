@@ -85,7 +85,7 @@ func (w *textWriter) walk(n *html.Node) {
 		}
 		return
 	}
-	if n.Data == "pre" {
+	if n.Data == "pre" || n.Data == "code" && blockContainer(n.Parent) {
 		w.flush()
 		var raw strings.Builder
 		collectText(n, &raw)
@@ -131,4 +131,17 @@ func renderText(root *html.Node) string {
 	w.walk(root)
 	w.flush()
 	return strings.Join(w.lines, "\n")
+}
+
+// blockContainer reports whether a code element inside n is a block of its own, as trafilatura writes a pre
+// element, rather than inline text.
+func blockContainer(n *html.Node) bool {
+	if n == nil || n.Type != html.ElementNode {
+		return true
+	}
+	switch n.Data {
+	case "body", "code", "div", "section", "article", "blockquote":
+		return true
+	}
+	return false
 }

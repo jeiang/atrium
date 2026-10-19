@@ -265,15 +265,17 @@ show on a page:
 
 - Layout. The plain text is rebuilt from go-trafilatura's content tree, one
   line per block, `- ` before a list item, as trafilatura's text output
-  does. go-trafilatura collapses the whitespace inside a `pre` element, where
-  trafilatura keeps its lines (`article`).
-- Pages with under 250 characters of content. trafilatura replaces its
-  result with a baseline pass over the whole page, which keeps navigation
-  text (`minimal`, `uppercase_tags`). go-trafilatura's equivalent pass
-  appends a second copy of the page text to the result, so it is switched
-  off and the main extractor's result stands (`whitespace`, `malformed`). A
-  page it finds nothing in reads as `plain_text` reads it, except that bare
-  text is one paragraph (`plain_text`).
+  does; a `code` block (as in `<pre><code>`) keeps its lines. go-trafilatura
+  collapses the whitespace inside a bare `<pre>` element, where trafilatura
+  keeps its lines (`article`).
+- Pages whose extracted text is under 250 characters. trafilatura then
+  replaces its result with a baseline pass over the whole page, which keeps
+  navigation text (`minimal`, `uppercase_tags`). go-trafilatura's equivalent
+  pass appends a second copy of the page text to the result, so it is
+  switched off (`MinExtractedSize` 0) and the main extractor's result stands
+  (`whitespace`, `malformed`). A page it finds nothing in reads as
+  `plain_text` reads it, except that bare text is one paragraph
+  (`plain_text`).
 - Fallback extractors. go-trafilatura compares against go-readability and
   go-domdistiller where trafilatura uses readability-lxml and jusText; they
   differ on malformed markup (`malformed`, `nested_skip`, `unbalanced_skip`,

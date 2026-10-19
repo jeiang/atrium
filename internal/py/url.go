@@ -9,11 +9,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// ValueError is a Python ValueError raised by a ported stdlib function; the text is str(e).
-type ValueError string
-
-func (e ValueError) Error() string { return string(e) }
-func (ValueError) PyClass() string { return "ValueError" }
+func valueError(msg string) error { return &Exception{"ValueError", msg} }
 
 // URLParts is the result of urlsplit; the Has fields tell an absent component (None) from an empty one, which
 // urljoin and urlunsplit distinguish.
@@ -66,7 +62,7 @@ func checkNetloc(netloc string) error {
 		return nil
 	}
 	if strings.ContainsAny(folded, "/?#@:") {
-		return ValueError("netloc '" + netloc + "' contains invalid characters under NFKC normalization")
+		return valueError("netloc '" + netloc + "' contains invalid characters under NFKC normalization")
 	}
 	return nil
 }
@@ -76,12 +72,12 @@ func checkBracketedNetloc(netloc string) error {
 	var host string
 	if before, bracketed, ok := strings.Cut(hostAndPort, "["); ok {
 		if before != "" {
-			return ValueError("Invalid IPv6 URL")
+			return valueError("Invalid IPv6 URL")
 		}
 		var port string
 		host, port, _ = strings.Cut(bracketed, "]")
 		if port != "" && !strings.HasPrefix(port, ":") {
-			return ValueError("Invalid IPv6 URL")
+			return valueError("Invalid IPv6 URL")
 		}
 	} else {
 		host, _, _ = strings.Cut(hostAndPort, ":")
@@ -92,20 +88,20 @@ func checkBracketedNetloc(netloc string) error {
 func checkBracketedHost(host string) error {
 	if strings.HasPrefix(host, "v") || strings.HasPrefix(host, "V") {
 		if !ipvFuture(host) {
-			return ValueError("IPvFuture address is invalid")
+			return valueError("IPvFuture address is invalid")
 		}
 		return nil
 	}
 	addr, zone, hasZone := strings.Cut(host, "%")
 	if hasZone && (zone == "" || strings.Contains(zone, "%")) {
-		return ValueError(Repr(host) + " does not appear to be an IPv4 or IPv6 address")
+		return valueError(Repr(host) + " does not appear to be an IPv4 or IPv6 address")
 	}
 	ip, err := netip.ParseAddr(addr)
 	if err != nil || hasZone && ip.Is4() {
-		return ValueError(Repr(host) + " does not appear to be an IPv4 or IPv6 address")
+		return valueError(Repr(host) + " does not appear to be an IPv4 or IPv6 address")
 	}
 	if ip.Is4() {
-		return ValueError("An IPv4 address cannot be in brackets")
+		return valueError("An IPv4 address cannot be in brackets")
 	}
 	return nil
 }
@@ -144,7 +140,7 @@ func URLSplit(url string) (URLParts, error) {
 		p.HasNetloc = true
 		open, closed := strings.Contains(p.Netloc, "["), strings.Contains(p.Netloc, "]")
 		if open != closed {
-			return URLParts{}, ValueError("Invalid IPv6 URL")
+			return URLParts{}, valueError("Invalid IPv6 URL")
 		}
 		if open && closed {
 			if err := checkBracketedNetloc(p.Netloc); err != nil {
@@ -198,12 +194,12 @@ func (p URLParts) Port() (port int, ok bool, err error) {
 	}
 	for i := range len(text) {
 		if text[i] < '0' || text[i] > '9' {
-			return 0, false, ValueError("Port could not be cast to integer value as " + Repr(text))
+			return 0, false, valueError("Port could not be cast to integer value as " + Repr(text))
 		}
 	}
 	n, convErr := strconv.Atoi(text)
 	if convErr != nil || n > 65535 {
-		return 0, false, ValueError("Port out of range 0-65535")
+		return 0, false, valueError("Port out of range 0-65535")
 	}
 	return n, true, nil
 }
