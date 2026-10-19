@@ -307,6 +307,12 @@ and backups; nothing of that lives here.
   adds them. Golden: the llama.cpp request bodies, the proposal and job the
   reminder makes, the 56 loops and the four read paths in
   `internal/db/readpaths/openloops_test.go`.
+- `internal/assistant/tools/mail/` (package `mailtools`): `agent/tools/{mail,drafts,openloops,watches,contacts}.py`,
+  nine tools in one `Tools()`: `mail_search`, `mail_read` (untrusted body), `draft_email_create`/`_update` (the only
+  writes, to the drafts table; nothing here sends or touches a mailbox, and a test over the matrix and the package's
+  imports and calls enforces it), `open_loops`, `commitments`, `packages`, `upcoming_birthdays` and `contacts_lookup`.
+  None logs to `agent_writes`, as in Python, so this slice registers no undoer; the production registry composition
+  (`toolset`) adds `Tools()`. A handler's non-`ToolError` failures are `tool.Raised` with the Python class.
 - `internal/mail/rules/`, `ruleedit/`, `corrections/`, `router/`: the routing
   pipeline (`rules.py`, `ruleedit.py`, `corrections.py`, `router.py`).
   Stages are correction, operator rule, learned rule, nearest neighbours,
