@@ -601,7 +601,9 @@ func TestRunStopsOnCancelAndWaits(t *testing.T) {
 		w.w.Run(ctx)
 		close(done)
 	}()
-	time.Sleep(50 * time.Millisecond)
+	for deadline := time.Now().Add(30 * time.Second); w.scalar("SELECT COUNT(*) FROM jobs WHERE kind = 'nightly'") != int64(1) && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
 	cancel()
 	select {
 	case <-done:
