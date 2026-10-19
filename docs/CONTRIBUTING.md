@@ -104,6 +104,13 @@ tags `sqlite_fts5` and `modernc`).
   read with `get`, printed with `pyattr`/`pystr` (Python's `str()`: `None`,
   `True`, `1.0`; an absent key prints nothing) and measured with `pylen`; its
   objects are plain maps, never `py.Dict`, except where their order is shown.
+  A view struct given to `tpl.View` lists every field with a json tag and
+  embeds no struct: an embedded struct nests under its type name and an
+  untagged field takes its Go name, so `.name` misses and `missingkey=error`
+  fails the page. `has list item` is Jinja's `item in list`. A settings page
+  fills `title` with `<Tab> · Settings` and `heading` with `Settings · <Tab>`,
+  starts `content` with `{{template "settings_tabs" "<tab id>"}}`, and its
+  handler sets `Frame.Page` to `settings`.
   Tests render with `tpltest`: `Compare` canonical-diffs a
   Go render against `testdata/golden/html` and fails on any difference not
   listed as a `tpltest.Rewrite`, which is where a slice documents its diffs;

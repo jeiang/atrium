@@ -1,0 +1,63 @@
+{{define "title"}}Subagents · Settings{{end}}
+{{define "heading"}}Settings · Subagents{{end}}
+
+{{define "subagent_fields"}}{{$a := .a}}{{$prefix := .prefix}}
+<div class="grid gap-3 sm:grid-cols-2">
+  <div role="group" class="field"><label for="{{$prefix}}-description">One-line description (shown to the assistant when it picks a role)</label><input id="{{$prefix}}-description" name="description" type="text" value="{{$a.description}}" maxlength="160" required></div>
+  <div role="group" class="field">
+    <label for="{{$prefix}}-effort">Effort</label>
+    <select id="{{$prefix}}-effort" name="effort">
+      {{range .efforts}}<option value="{{.}}"{{if eq (or $a.effort "medium") .}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </div>
+</div>
+<div role="group" class="field"><label for="{{$prefix}}-prompt">System prompt addendum</label><textarea id="{{$prefix}}-prompt" name="prompt" rows="4" class="w-full" required>{{$a.prompt}}</textarea></div>
+<fieldset class="flex flex-col gap-2">
+  <legend class="text-sm font-medium">Tools (read-only)</legend>
+  <div class="grid gap-x-4 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+    {{range .pool}}
+    <label class="flex items-start gap-2 text-xs"><input type="checkbox" name="tools" value="{{.name}}" class="input"{{if has $a.tools .name}} checked{{end}}><span><code class="font-mono">{{.name}}</code> <span class="text-muted-foreground">{{truncate 90 .description}}</span></span></label>
+    {{end}}
+  </div>
+</fieldset>
+{{end}}
+
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
+{{template "settings_tabs" "subagents"}}
+<p class="text-sm text-muted-foreground">Research subagents the assistant can delegate to with <code class="font-mono">research(role=…)</code>. Each runs in its own thread with only the tools listed here (read-only; never write, notify, schedule or spawn), at its own effort level. Built-in agents can be edited and disabled but not deleted.</p>
+
+<div class="flex flex-col gap-4">
+  {{range $d.agents}}
+  <details class="rounded-lg border bg-card p-4" data-agent="{{.name}}" data-enabled="{{if .enabled}}true{{else}}false{{end}}">
+    <summary class="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
+      <span class="font-mono font-medium">{{.name}}</span>
+      <span class="badge" data-variant="outline">effort {{.effort}}</span>
+      {{if .builtin}}<span class="badge" data-variant="outline">built-in</span>{{end}}
+      <span class="badge" data-variant="{{if .enabled}}secondary{{else}}outline{{end}}">{{if .enabled}}Enabled{{else}}Disabled{{end}}</span>
+      <span class="line-clamp-2 basis-full break-words text-muted-foreground">{{.description}}</span>
+    </summary>
+    <p class="mt-2 text-xs text-muted-foreground">Tools: {{range $i, $t := .tools}}{{if $i}}, {{end}}<code class="font-mono">{{$t}}</code>{{end}}</p>
+    <form method="post" action="/settings/subagents" class="mt-3 flex flex-col gap-3">
+      <input type="hidden" name="csrf_token" value="{{$csrf}}">
+      <input type="hidden" name="name" value="{{.name}}">
+      {{template "subagent_fields" (dict "prefix" (printf "a-%s" .name) "a" . "pool" $d.pool "efforts" $d.efforts)}}
+      <div class="flex flex-wrap gap-2">
+        <button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button>
+        <button type="submit" class="btn" data-size="sm" data-variant="outline" formaction="/settings/subagents/{{.name}}/toggle">{{if .enabled}}Disable{{else}}Enable{{end}}</button>
+        {{if not .builtin}}
+        <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/subagents/{{.name}}/delete">{{icon "trash-2"}}Delete</button>
+        {{end}}
+      </div>
+    </form>
+  </details>
+  {{end}}
+</div>
+
+<form method="post" action="/settings/subagents" class="flex flex-col gap-3 rounded-lg border p-4">
+  <input type="hidden" name="csrf_token" value="{{$csrf}}">
+  <h2 class="text-sm font-medium">New subagent</h2>
+  <div role="group" class="field"><label for="new-name">Name</label><input id="new-name" name="name" type="text" value="{{$d.draft.name}}" class="font-mono" placeholder="finance" required></div>
+  {{template "subagent_fields" (dict "prefix" "new" "a" $d.draft "pool" $d.pool "efforts" $d.efforts)}}
+  <button type="submit" class="btn self-start" data-size="sm">{{icon "plus"}}Save subagent</button>
+</form>
+{{end}}

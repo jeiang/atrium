@@ -1,0 +1,22 @@
+{{template "schedule_runs" (dict "runs" .Data.runs "show_job" (opt .Data "show_job" true))}}
+
+{{define "schedule_runs"}}{{$show_job := opt . "show_job" true}}
+{{if .runs}}
+<ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card text-sm" role="list" aria-label="Run history">
+  {{range .runs}}
+  <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+    {{if $show_job}}<span class="font-medium">{{.job_name}}</span>{{end}}
+    <span class="badge" data-variant="{{template "scheduled_variant" .status}}"{{if .error}} title="{{.error}}"{{end}}>{{.status}}</span>
+    <span class="text-xs text-muted-foreground tabular-nums">{{.started_text}}</span>
+    {{if .cost}}<span class="text-xs text-muted-foreground tabular-nums">${{printf "%.3f" .cost}}</span>{{end}}
+    {{if .error}}<span class="min-w-0 max-w-full truncate text-xs text-muted-foreground" title="{{.error}}">{{.error}}</span>{{end}}
+    <span class="ms-auto flex items-center gap-1">
+      {{if .thread_id}}<a class="btn" data-size="sm" data-variant="ghost" href="/chat/{{.thread_id}}">{{icon "messages-square"}}Thread</a>{{end}}
+    </span>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="rounded-lg border px-4 py-6 text-center text-sm text-muted-foreground">No runs yet.</p>
+{{end}}
+{{- end}}

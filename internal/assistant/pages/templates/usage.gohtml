@@ -1,0 +1,65 @@
+{{define "title"}}Usage · Settings{{end}}
+{{define "heading"}}Settings · Usage{{end}}
+{{define "content"}}{{$d := .Data}}{{$s := $d.summary}}{{$b := $d.budget}}
+{{template "settings_tabs" "usage"}}
+<section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="This month">
+  <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
+    <span class="text-xs text-muted-foreground">Spent this month</span>
+    <span class="text-2xl font-semibold tabular-nums">${{printf "%.2f" $b.spent_usd}}</span>
+    <span class="text-xs text-muted-foreground">{{$s.calls}} API calls</span>
+  </div>
+  <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
+    <span class="text-xs text-muted-foreground">Budget remaining</span>
+    <span class="text-2xl font-semibold tabular-nums">${{printf "%.2f" $b.remaining_usd}}</span>
+    <span class="text-xs text-muted-foreground">{{printf "%.0f%%" (mul $b.share 100)}} of ${{printf "%.0f" $b.budget_usd}} used; unattended runs pause at 80%, chat at 100%</span>
+  </div>
+  <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
+    <span class="text-xs text-muted-foreground">Cache read share</span>
+    <span class="text-2xl font-semibold tabular-nums">{{printf "%.0f%%" (mul $s.cache_read_share 100)}}</span>
+    <span class="text-xs text-muted-foreground">{{$s.cache_read}} read · {{$s.cache_write}} written · {{$s.input_tokens}} uncached</span>
+  </div>
+  <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
+    <span class="text-xs text-muted-foreground">Requests over 100K tokens</span>
+    <span class="text-2xl font-semibold tabular-nums">{{$s.high_tier}}</span>
+    <span class="text-xs text-muted-foreground">{{$s.output_tokens}} output tokens · {{$s.searches}} web searches</span>
+  </div>
+</section>
+
+<section class="flex flex-col gap-2" aria-labelledby="by-kind">
+  <h2 id="by-kind" class="text-sm font-medium">By kind</h2>
+  {{if $d.by_kind}}
+  <table class="w-full text-sm">
+    <thead><tr class="text-left text-xs text-muted-foreground"><th class="py-1">Kind</th><th class="py-1 text-right">Calls</th><th class="py-1 text-right">Searches</th><th class="py-1 text-right">Cost</th></tr></thead>
+    <tbody>
+      {{range $d.by_kind}}
+      <tr class="border-t"><td class="py-1">{{.kind}}</td><td class="py-1 text-right tabular-nums">{{.calls}}</td><td class="py-1 text-right tabular-nums">{{.searches}}</td><td class="py-1 text-right tabular-nums">${{printf "%.3f" .cost}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  {{template "empty_state" (dict "icon_name" "chart-column" "title" "No usage yet" "body" "Costs appear here after the first model call this month.")}}
+  {{end}}
+</section>
+
+<section class="flex flex-col gap-2" aria-labelledby="by-thread">
+  <h2 id="by-thread" class="text-sm font-medium">By thread</h2>
+  {{if $d.by_thread}}
+  <table class="w-full text-sm">
+    <thead><tr class="text-left text-xs text-muted-foreground"><th class="py-1">Thread</th><th class="py-1">Kind</th><th class="py-1 text-right">Calls</th><th class="py-1 text-right" title="Summed over every call in the thread">Prompt tokens (all calls)</th><th class="py-1 text-right" title="Largest single request; over 100K bills at 5x">Largest request</th><th class="py-1 text-right">Output</th><th class="py-1 text-right">Cost</th></tr></thead>
+    <tbody>
+      {{range $d.by_thread}}
+      <tr class="border-t">
+        <td class="py-1"><a class="underline underline-offset-4" href="/chat/{{.thread_id}}">{{or .title "Untitled thread"}}</a></td>
+        <td class="py-1">{{.kind}}</td>
+        <td class="py-1 text-right tabular-nums">{{.calls}}</td>
+        <td class="py-1 text-right tabular-nums">{{.prompt_tokens}}</td>
+        <td class="py-1 text-right tabular-nums">{{.max_prompt_tokens}}</td>
+        <td class="py-1 text-right tabular-nums">{{.output_tokens}}</td>
+        <td class="py-1 text-right tabular-nums">${{printf "%.3f" .cost}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{end}}
+</section>
+{{end}}

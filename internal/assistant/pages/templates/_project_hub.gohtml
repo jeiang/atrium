@@ -1,0 +1,16 @@
+{{template "project_hub" (dict "project" .Data.project "hub_id" .Data.hub_id "notice" .Data.notice "error" .Data.error)}}
+
+{{define "project_hub"}}
+<div id="project-hub" class="flex flex-col gap-2">
+  <div role="group" class="field">
+    <label for="project-hub-id">Wiki hub page (Notion id or URL)</label>
+    <input id="project-hub-id" name="wiki_hub_id" type="text" value="{{.hub_id}}" class="font-mono" spellcheck="false" autocomplete="off" placeholder="none">
+    <p>The assistant keeps this page updated with durable project knowledge.</p>
+  </div>
+  {{if .error}}<p class="text-sm text-destructive" role="alert">{{.error}}</p>{{end}}
+  {{if .notice}}<p class="text-sm text-muted-foreground" role="status">{{.notice}}</p>{{end}}
+  {{if and .project (not .hub_id)}}
+  <button type="button" class="btn self-start" data-size="sm" data-variant="outline" hx-post="/projects/{{.project.id}}/wiki-hub" hx-target="#project-hub" hx-swap="outerHTML" hx-disabled-elt="this">{{icon "book-open"}}Create wiki hub</button>
+  {{end}}
+</div>
+{{- end}}

@@ -13,8 +13,10 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/loop"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/service"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -37,6 +39,7 @@ type Options struct {
 	Now       func() float64
 	Poll      time.Duration
 	KeepAlive time.Duration
+	Registry  *registry.Registry
 }
 
 type pages struct {
@@ -45,6 +48,7 @@ type pages struct {
 	now       func() float64
 	poll      time.Duration
 	keepalive time.Duration
+	reg       *registry.Registry
 }
 
 const (
@@ -88,7 +92,15 @@ func Module(o Options) web.Module {
 		if keepalive == 0 {
 			keepalive = 15 * time.Second
 		}
-		p := &pages{deps: d, svc: svc, now: now, poll: poll, keepalive: keepalive}
+		reg := o.Registry
+		if reg == nil {
+			made, err := toolset.Registry()
+			if err != nil {
+				panic(err)
+			}
+			reg = made
+		}
+		p := &pages{deps: d, svc: svc, now: now, poll: poll, keepalive: keepalive, reg: reg}
 
 		r.Get("/chat", p.chatIndex)
 		r.Post("/chat", p.chatNew)
@@ -114,6 +126,10 @@ func Module(o Options) web.Module {
 		r.Post("/projects/{project_id}/files", p.projectFilesUpload)
 		r.Get("/projects/{project_id}/files/{file_id}/download", p.projectFileDownload)
 		r.Post("/projects/{project_id}/files/{file_id}/delete", p.projectFileDelete)
+
+		p.projectRoutes(r)
+		p.scheduledRoutes(r)
+		p.settingsRoutes(r)
 	}
 }
 
