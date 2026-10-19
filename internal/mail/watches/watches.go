@@ -599,7 +599,7 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 	}
 	zone, err := config.Zone(config.TZName(env))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", httpx.ErrKey, err)
+		return nil, &py.Exception{Class: "ZoneInfoNotFoundError", Msg: py.Repr("No time zone found with key " + config.TZName(env))}
 	}
 	for i := range out {
 		sec, _ := py.SplitTimestamp(out[i].UpdatedTS)

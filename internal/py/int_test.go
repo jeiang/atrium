@@ -95,3 +95,32 @@ func TestTypeNameNamesEveryValue(t *testing.T) {
 	}()
 	TypeName(struct{}{})
 }
+
+func TestLaxInt(t *testing.T) {
+	for in, want := range map[string]int64{
+		"5": 5, "+5": 5, " 5 ": 5, "5.0": 5, "5.00": 5, "-0.0": 0, "1_0": 10, "1_0.0": 10, "\t7\n": 7, "\u00a07": 7, "-3": -3, "007": 7,
+	} {
+		if got, ok := LaxInt64(in); !ok || got != want {
+			t.Errorf("LaxInt64(%q) = %d, %v; want %d", in, got, ok, want)
+		}
+	}
+	for _, in := range []string{
+		"", " ", "+", "-", "1e3", "1.5e1", "0x1p4", ".0", "5.", "5.0_0", "5.5", "1__0", "_1", "1_", "\u0663", "--5", "+-5", "5-", "1 0", "1_.0", "1._0",
+		"\x1c7", "\x1f7", "7\x1c", "inf", "nan", "99999999999999999999",
+	} {
+		if got, ok := LaxInt64(in); ok {
+			t.Errorf("LaxInt64(%q) = %d, accepted", in, got)
+		}
+	}
+	if n, ok := LaxInt("99999999999999999999"); !ok || n.String() != "99999999999999999999" {
+		t.Errorf("LaxInt keeps a value past int64: %v, %v", n, ok)
+	}
+}
+
+func TestIsDigits(t *testing.T) {
+	for in, want := range map[string]bool{"": false, "30": true, "\u0663\u0660": true, "\u00b2": true, "3.0": false, "-3": false, " 3": false, "a": false} {
+		if got := IsDigits(in); got != want {
+			t.Errorf("IsDigits(%q) = %v", in, got)
+		}
+	}
+}

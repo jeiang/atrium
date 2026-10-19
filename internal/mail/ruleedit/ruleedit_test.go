@@ -14,6 +14,8 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
+var icloud = "icloud"
+
 func when(field, op string, value ...any) py.Dict {
 	d := py.Dict{{Key: "field", Value: field}, {Key: "op", Value: op}}
 	if len(value) > 0 {
@@ -30,7 +32,7 @@ func raw(pairs ...any) py.Dict {
 	return d
 }
 
-func ids(t *testing.T, d *db.DB, account string) []string {
+func ids(t *testing.T, d *db.DB, account *string) []string {
 	t.Helper()
 	listed, err := ruleedit.ListRules(t.Context(), d.Read, account)
 	if err != nil {
@@ -68,13 +70,13 @@ func TestRuleCRUDAndReorder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ids(t, d, "icloud"); !slices.Equal(got, []string{a.ID, "b"}) {
+	if got := ids(t, d, &icloud); !slices.Equal(got, []string{a.ID, "b"}) {
 		t.Errorf("icloud rules %v", got)
 	}
 	if err := ruleedit.ReorderRules(ctx, d, []string{"b", a.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if got := ids(t, d, "icloud"); !slices.Equal(got, []string{"b", a.ID}) {
+	if got := ids(t, d, &icloud); !slices.Equal(got, []string{"b", a.ID}) {
 		t.Errorf("reordered %v", got)
 	}
 	all, _ := rules.LoadAllRules(ctx, d.Read)
@@ -84,7 +86,7 @@ func TestRuleCRUDAndReorder(t *testing.T) {
 	if _, err := ruleedit.UpdateRule(ctx, d, "b", raw("account", "icloud", "dest", "B2", "when", []any{when("subject", "re", "inv")})); err != nil {
 		t.Fatal(err)
 	}
-	listed, _ := ruleedit.ListRules(ctx, d.Read, "icloud")
+	listed, _ := ruleedit.ListRules(ctx, d.Read, &icloud)
 	if listed[0].Dest == nil || *listed[0].Dest != "B2" {
 		t.Errorf("updated rule %+v", listed[0])
 	}
@@ -108,7 +110,7 @@ func TestRuleCRUDAndReorder(t *testing.T) {
 	wantRuleError(t, err, "unknown rule 'missing'")
 	wantRuleError(t, ruleedit.ReorderRules(ctx, d, []string{"b", "missing"}), "unknown rule id in order")
 	wantRuleError(t, ruleedit.ReorderRules(ctx, d, []string{"b", "b"}), "duplicate rule ids")
-	if got := ids(t, d, "icloud"); !slices.Equal(got, []string{"b", a.ID}) {
+	if got := ids(t, d, &icloud); !slices.Equal(got, []string{"b", a.ID}) {
 		t.Errorf("failed reorder changed %v", got)
 	}
 }
@@ -196,4 +198,27 @@ func TestLearnedSummaryAndFeatures(t *testing.T) {
 	}
 	_, err = ruleedit.MessageFeatures(ctx, d.Read, 999)
 	wantRuleError(t, err, "unknown message 999")
+}
+
+func TestListRulesWithoutAnAccountListsEveryRule(t *testing.T) {
+	d := rulestest.DB(t)
+	ctx := t.Context()
+	for _, account := range []string{"icloud", "gmail"} {
+		if _, err := ruleedit.CreateRule(ctx, d, raw("id", account, "account", account, "dest", "A", "when", []any{when("from_addr", "present")})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := ruleedit.CreateRule(ctx, d, raw("id", "any", "dest", "A", "when", []any{when("from_addr", "present")})); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(t, d, nil); !slices.Equal(got, []string{"icloud", "gmail", "any"}) {
+		t.Errorf("nil account = %v", got)
+	}
+	gmail, empty := "gmail", ""
+	if got := ids(t, d, &gmail); !slices.Equal(got, []string{"gmail", "any"}) {
+		t.Errorf("gmail = %v", got)
+	}
+	if got := ids(t, d, &empty); !slices.Equal(got, []string{"any"}) {
+		t.Errorf("empty account = %v: only unscoped rules apply", got)
+	}
 }

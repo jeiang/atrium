@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net"
 	"net/http"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
@@ -24,10 +26,12 @@ const (
 	shutdownTimeout = 10 * time.Second
 )
 
-// Page is one page set: its routes and the template files they render (nil when it brings none).
+// Page is one page set: its routes, the template files they render (nil when it brings none) and the template
+// globals its templates read through the global function.
 type Page struct {
 	Module    Module
 	Templates fs.FS
+	Globals   map[string]any
 }
 
 // ServeCommand is `atrium serve`; pages are the page sets the server
@@ -98,13 +102,15 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	}
 	var modules []Module
 	var templates []fs.FS
+	globals := map[string]any{}
 	for _, p := range a.pages {
 		modules = append(modules, p.Module)
 		if p.Templates != nil {
 			templates = append(templates, p.Templates)
 		}
+		maps.Copy(globals, p.Globals)
 	}
-	render, err := NewRenderer(cfg, d, tpl.Config{Modules: templates})
+	render, err := NewRenderer(cfg, d, tpl.Config{Modules: templates, Globals: globals})
 	if err != nil {
 		return err
 	}
@@ -124,11 +130,16 @@ func listenAndShutdown(ctx context.Context, listener net.Listener, handler http.
 	failed := make(chan error, 1)
 	go func() { failed <- httpServer.Serve(listener) }()
 	log.Info("listening", "addr", listener.Addr().String())
+	notifier := sdnotify.FromEnv()
+	notifier.Ready()
+	notifier.Status("serving " + listener.Addr().String())
+	go notifier.RunWatchdog(ctx, nil)
 	select {
 	case err := <-failed:
 		return err
 	case <-ctx.Done():
 	}
+	notifier.Stopping()
 	stop, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	err := httpServer.Shutdown(stop)

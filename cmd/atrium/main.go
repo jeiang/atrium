@@ -4,11 +4,14 @@ import (
 	"context"
 	"os"
 
+	"github.com/jeiang/atrium/internal/assistant/agentcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
 	"github.com/jeiang/atrium/internal/mail/openloops"
+	"github.com/jeiang/atrium/internal/mail/pages"
+	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/notify"
@@ -48,8 +51,11 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 		mailCmds.ProposalsCommand(),
 		openloops.Command(now),
 		watches.Command(now),
+		agentcmd.Command(),
 		web.ServeCommand(
+			web.Page{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
 			web.Page{Module: notify.Module, Templates: notify.Templates()},
+			web.Page{Module: reviewpages.Module(reviewpages.Options{}), Templates: reviewpages.Templates()},
 		),
 		codemodeWorkerCommand(),
 	}

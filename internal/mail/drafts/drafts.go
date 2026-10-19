@@ -10,8 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"math/big"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -428,7 +431,7 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 }
 
 // Create is create: a new draft in status draft, threaded to replyTo when it is set.
-func (s *Store) Create(ctx context.Context, threadID *int64, account string, to, cc any, subject string, body any, replyTo *int64) (int64, error) {
+func (s *Store) Create(ctx context.Context, threadID *int64, account string, to, cc any, subject string, body any, replyTo any) (int64, error) {
 	if _, ok := validAccount(account); !ok {
 		return 0, accountError()
 	}
@@ -455,30 +458,63 @@ func (s *Store) Create(ctx context.Context, threadID *int64, account string, to,
 		return 0, Error(fmt.Sprintf("body is limited to %d characters", MaxBody))
 	}
 	var r reply
+	var replyID any
 	if replyTo != nil {
-		if r, err = s.replyContext(ctx, *replyTo); err != nil {
+		var id int64
+		if id, r, err = s.replyFor(ctx, replyTo); err != nil {
 			return 0, err
 		}
+		replyID = id
 	}
 	ts := s.now()
 	res, err := s.DB.Write.ExecContext(ctx,
 		"INSERT INTO drafts (thread_id, account, to_addrs, cc_addrs, subject, body, in_reply_to_message_id, "+
 			"in_reply_to, refs, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		threadID, account, toAddrs, ccAddrs, subject, text, replyTo, r.inReplyTo, r.refs, Draft, ts, ts)
+		threadID, account, toAddrs, ccAddrs, subject, text, replyID, r.inReplyTo, r.refs, Draft, ts, ts)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
-func messageID(v any) (int64, bool) {
+// replyFor is reply_context for the value a caller passed as in_reply_to_message_id. The value is bound to
+// SQLite as Python's sqlite3 binds it: an int, a bool, a whole float or a numeric string finds the message of
+// that id, any other float or string finds none, and a list or dict is a ProgrammingError. It returns the id
+// the draft stores.
+func (s *Store) replyFor(ctx context.Context, v any) (int64, reply, error) {
+	var id int64
+	shown := ""
+	found := true
 	switch n := v.(type) {
 	case int:
-		return int64(n), true
+		id = int64(n)
 	case int64:
-		return n, true
+		id = n
+	case *big.Int:
+		return 0, reply{}, &py.Exception{Class: "OverflowError", Msg: "Python int too large to convert to SQLite INTEGER"}
+	case bool:
+		shown = "False"
+		if n {
+			id, shown = 1, "True"
+		}
+	case float64:
+		shown = py.FloatRepr(n)
+		found = n == math.Trunc(n) && math.Abs(n) < 1<<63
+		id = int64(n)
+	case string:
+		shown = n
+		id, found = sqliteInteger(n)
+	default:
+		return 0, reply{}, &py.Exception{Class: "ProgrammingError", Msg: "Error binding parameter 1: type '" + py.TypeName(v) + "' is not supported"}
 	}
-	return 0, false
+	if !found {
+		return 0, reply{}, Error("no message " + shown)
+	}
+	r, err := s.replyContext(ctx, id)
+	if _, plain := v.(int64); !plain && err != nil && err.Error() == fmt.Sprintf("no message %d", id) && shown != "" {
+		return 0, reply{}, Error("no message " + shown)
+	}
+	return id, r, err
 }
 
 // Update is update: changes holds any of account, to, cc, subject, body and in_reply_to_message_id; only a
@@ -501,6 +537,10 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 		args = append(args, v)
 	}
 	if v, ok := changes["account"]; ok {
+		switch v.(type) {
+		case []any, []string, py.Dict, map[string]any:
+			return nil, &py.Exception{Class: "TypeError", Msg: "unhashable type: '" + py.TypeName(v) + "'"}
+		}
 		name, valid := validAccount(v)
 		if !valid {
 			return nil, accountError()
@@ -526,8 +566,8 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 	}
 	if v, ok := changes["subject"]; ok {
 		text, isText := v.(string)
-		if v != nil && !isText {
-			return nil, fmt.Errorf("subject must be a string, not %T", v)
+		if !isText && py.Truthy(v) {
+			return nil, &py.Exception{Class: "AttributeError", Msg: "'" + py.TypeName(v) + "' object has no attribute 'strip'"}
 		}
 		subject, err := cleanLine("subject", text, MaxSubject)
 		if err != nil {
@@ -543,11 +583,7 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 		set("body", body)
 	}
 	if v := changes["in_reply_to_message_id"]; v != nil {
-		replyTo, ok := messageID(v)
-		if !ok {
-			return nil, fmt.Errorf("in_reply_to_message_id must be an integer, not %T", v)
-		}
-		r, err := s.replyContext(ctx, replyTo)
+		replyTo, r, err := s.replyFor(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -648,4 +684,21 @@ func (s *Store) UnexpectedRecipients(ctx context.Context, d Row) ([]string, erro
 		}
 	}
 	return out, nil
+}
+
+// sqliteInteger is how SQLite compares text with an INTEGER PRIMARY KEY: numeric text, with ASCII blanks around it,
+// that converts to an integer without loss is that integer.
+func sqliteInteger(text string) (int64, bool) {
+	text = strings.Trim(text, " \t\n\v\f\r")
+	if text == "" || strings.Trim(text, "0123456789+-.eE") != "" {
+		return 0, false
+	}
+	if n, err := strconv.ParseInt(text, 10, 64); err == nil {
+		return n, true
+	}
+	f, err := strconv.ParseFloat(text, 64)
+	if err != nil || f != math.Trunc(f) || math.Abs(f) >= 1<<63 {
+		return 0, false
+	}
+	return int64(f), true
 }

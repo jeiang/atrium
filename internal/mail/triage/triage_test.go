@@ -2,6 +2,7 @@ package triage
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/rulestest"
+	"github.com/jeiang/atrium/internal/py"
 )
 
 type fields = rulestest.Fields
@@ -176,5 +178,19 @@ func TestFolders(t *testing.T) {
 	}
 	if got, err := Folders(t.Context(), d.Read, "gmail"); err != nil || got == nil || strings.TrimSpace(fmt.Sprint(got)) != "[]" {
 		t.Errorf("empty Folders = %v, %v", got, err)
+	}
+}
+
+func TestUnknownFilterIsAFilterError(t *testing.T) {
+	d := rulestest.DB(t)
+	for _, f := range []Filter{{Stage: "nonsense"}, {Agreement: "nonsense"}} {
+		_, err := Triage(t.Context(), d.Read, f)
+		var filter FilterError
+		if !errors.As(err, &filter) || py.ExceptionClass(err) != "ValueError" {
+			t.Errorf("Triage(%+v) error = %v", f, err)
+		}
+	}
+	if _, err := Triage(t.Context(), d.Read, Filter{Stage: "llm", Agreement: "gone"}); err != nil {
+		t.Error(err)
 	}
 }

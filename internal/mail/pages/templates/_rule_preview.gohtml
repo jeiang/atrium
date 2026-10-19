@@ -1,0 +1,38 @@
+{{define "mail_rule_preview"}}{{$error := opt . "error" nil}}
+{{if $error}}
+<div class="alert" role="status">
+  {{icon "circle-alert"}}
+  <h3>Not a complete rule yet</h3>
+  <section><p>{{$error}}</p></section>
+</div>
+{{else}}
+{{$p := .preview}}
+<div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
+  <p class="text-sm"><span class="text-2xl font-semibold tabular-nums">{{$p.count}}</span> <span class="text-muted-foreground">of {{$p.total}} indexed messages match</span></p>
+  {{if $p.count}}<p class="text-xs text-muted-foreground tabular-nums">{{$p.in_inbox}} of them are in the inbox now.</p>{{end}}
+</div>
+{{if $p.sample}}
+<div class="flex flex-col gap-2">
+  <h3 class="text-xs font-medium text-muted-foreground">{{if gt $p.count (len $p.sample)}}Newest {{len $p.sample}}{{else}}All{{end}} {{if eq (len $p.sample) 1}}match{{else}}matches{{end}}</h3>
+  <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
+    {{range $p.sample}}
+    <li>
+      <a class="flex flex-col gap-0.5 px-3 py-2 hover:bg-accent/60 focus-visible:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset" {{template "open_attrs" .id}}>
+        <span class="truncate text-sm">{{or .subject "(no subject)"}}</span>
+        <span class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <span class="truncate">{{sender .}}</span>
+          <span aria-hidden="true">·</span>
+          <span class="shrink-0 font-medium text-foreground">{{place .folder}}</span>
+          <span class="ml-auto shrink-0 tabular-nums">{{template "when" (dict "epoch" .date_ts)}}</span>
+        </span>
+      </a>
+    </li>
+    {{end}}
+  </ul>
+</div>
+{{else}}
+<p class="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">No indexed message matches this draft.</p>
+{{end}}
+{{end}}
+{{end}}
+{{template "mail_rule_preview" (dict "error" (opt .Data "error" nil) "preview" (opt .Data "preview" nil))}}

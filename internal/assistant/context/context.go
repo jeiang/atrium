@@ -95,6 +95,8 @@ type ContextError string
 
 func (e ContextError) Error() string { return string(e) }
 
+func (ContextError) PyClass() string { return "ContextError" }
+
 // Betas is list(BETAS): the beta flags every assistant request carries.
 func Betas() []string { return []string{BetaContextManagement, BetaCompaction} }
 

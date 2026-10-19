@@ -1,0 +1,135 @@
+{{define "page"}}triage{{end}}
+{{define "title"}}Decisions{{end}}
+{{define "heading"}}Decisions{{end}}
+{{define "mail_triage_flags_tab"}}Unread flags <span class="badge" data-variant="secondary">{{len .Data.flags}}{{if .Data.flags_capped}}+{{end}}</span>{{end}}
+{{define "mail_triage_decisions_panel"}}{{$d := .Data -}}
+<div class="flex flex-col gap-3 pt-3">
+  <form class="flex flex-wrap items-end gap-3" action="/triage" method="get"
+        hx-get="/triage" hx-target="#decisions" hx-push-url="true" hx-trigger="change, input changed delay:300ms from:#t-q" hx-sync="this:replace" hx-indicator="#decisions">
+    <input type="hidden" name="account" value="{{$d.account}}">
+    <div role="group" class="field w-full sm:w-72">
+      <label for="t-q">Search</label>
+      <input id="t-q" name="q" type="search" value="{{$d.q}}" placeholder="sender, subject, folder, rule">
+    </div>
+    <div role="group" class="field w-auto">
+      <label for="t-stage">Stage</label>
+      <select id="t-stage" name="stage">
+        <option value="">All stages</option>
+        {{range $name := global "stages"}}<option value="{{$name}}"{{if eq $d.stage $name}} selected{{end}}>{{lbl "stage" $name}}</option>{{end}}
+      </select>
+    </div>
+    <div role="group" class="field w-auto">
+      <label for="t-agreement">Outcome</label>
+      <select id="t-agreement" name="agreement">
+        {{range $o := list (list "" "Any outcome") (list "agree" "Matches where it went") (list "disagree" "Differs from where it went") (list "pending" "Still in inbox") (list "gone" "Gone")}}
+        <option value="{{index $o 0}}"{{if eq $d.agreement (index $o 0)}} selected{{end}}>{{index $o 1}}</option>
+        {{end}}
+      </select>
+    </div>
+    <noscript><button type="submit" class="btn" data-variant="outline">Apply</button></noscript>
+  </form>
+  <div id="decisions" class="flex flex-col gap-2 transition-opacity [&.htmx-request]:opacity-60">
+    {{template "mail_decisions" (dict "rows" $d.rows "offset" $d.offset "mode" .Mode "stage" $d.stage "agreement" $d.agreement "q" $d.q "next_offset" $d.next_offset "total" $d.total "account" $d.account)}}
+  </div>
+</div>
+{{end}}
+{{define "mail_triage_flags_panel"}}{{$d := .Data -}}
+<div class="flex flex-col gap-3 pt-3">
+  <p class="text-sm text-muted-foreground">Unread inbox mail and whether it {{if eq .Mode "live"}}is flagged: mail from a contact is flagged automatically, the 9B judgment is only logged{{else}}would be flagged. Nothing is flagged in shadow mode{{end}}.{{if $d.flags_capped}} Showing the newest {{len $d.flags}}.{{end}}</p>
+  {{if $d.flags}}
+  <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
+    {{range $d.flags}}
+    <li class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <a class="truncate rounded-sm text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {{template "open_attrs" .message_id}}>{{or .subject "(no subject)"}}</a>
+        <p class="truncate text-xs text-muted-foreground">{{sender .}} · {{template "when" (dict "epoch" .date_ts)}} · {{.account}}</p>
+      </div>
+      <ul class="flex flex-wrap items-center gap-1.5" role="list" aria-label="Signals">
+        {{if .contacts_match}}<li class="badge" data-variant="secondary">{{icon "book-user"}}Contact</li>{{end}}
+        {{if .person_asking}}<li class="badge" data-variant="outline">Asking</li>{{end}}
+        {{if .deadline_or_payment_due}}<li class="badge" data-variant="outline">Deadline</li>{{end}}
+        {{if .security_event}}<li class="badge" data-variant="outline">Security</li>{{end}}
+        {{if isnil .llm_flag}}
+        <li class="badge" data-variant="ghost">{{icon "circle-dot"}}9B pending</li>
+        {{else if .llm_flag}}
+        <li class="badge border-warning/30 bg-warning/10 text-warning">{{icon "flag"}}9B flags</li>
+        {{else}}
+        <li class="badge" data-variant="ghost">9B: no flag</li>
+        {{end}}
+      </ul>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">No unread inbox mail has been judged.</p>
+  {{end}}
+</div>
+{{end}}
+{{define "content"}}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <p class="max-w-prose text-sm text-muted-foreground">{{if eq .Mode "live"}}What atrium decided for read mail in the inbox, whether it was applied, and where the mail is now.{{else}}What atrium would do with read mail still in the inbox, compared with where the mail actually went.{{end}}</p>
+  {{template "account_switch" (dict "path" "/triage" "current" .Data.account)}}
+</div>
+
+<div class="grid gap-4 {{if gt (len .Data.summaries) 1}}lg:grid-cols-2{{end}}">
+  {{range $s := .Data.summaries}}
+  {{$staged := sumvalues $s.by_stage}}
+  <section class="flex flex-col gap-4 rounded-lg border bg-card p-4" aria-labelledby="summary-{{$s.account}}">
+    <header class="flex flex-wrap items-baseline gap-x-2">
+      <h2 id="summary-{{$s.account}}" class="font-medium">{{$s.account}}</h2>
+      <span class="text-sm text-muted-foreground tabular-nums">{{$s.decisions}} {{if eq $s.decisions 1}}decision{{else}}decisions{{end}}</span>
+    </header>
+    {{if $staged}}
+    <div class="flex flex-col gap-2">
+      <div class="flex h-2 gap-px overflow-hidden rounded-full bg-muted" role="img"
+        aria-label="By stage: {{$sep := ""}}{{range global "stages"}}{{$n := index $s.by_stage .}}{{if $n}}{{$sep}}{{lbl "stage" .}} {{$n}}{{$sep = ", "}}{{end}}{{end}}">
+        {{range global "stages"}}{{$n := index $s.by_stage .}}{{if $n}}
+        <span class="{{lbl "stage_dot" .}}" style="flex-grow: {{$n}}"></span>
+        {{end}}{{end}}
+      </div>
+      <ul class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" role="list" aria-hidden="true">
+        {{range global "stages"}}
+        <li class="inline-flex items-center gap-1.5"><span class="size-2 rounded-full {{lbl "stage_dot" .}}"></span>{{lbl "stage" .}} <span class="text-foreground tabular-nums">{{index $s.by_stage .}}</span></li>
+        {{end}}
+      </ul>
+    </div>
+    {{end}}
+    <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+      <div class="flex flex-col gap-0.5">
+        <dt class="text-xs text-muted-foreground">Proposed</dt>
+        <dd class="tabular-nums"><span class="font-medium">{{$s.proposed_moves}}</span> moves</dd>
+        <dd class="text-xs text-muted-foreground tabular-nums">{{$s.proposed_deletes}} deletes · {{$s.no_label}} stay</dd>
+      </div>
+      <div class="flex flex-col gap-0.5">
+        <dt class="text-xs text-muted-foreground">Since then</dt>
+        <dd class="tabular-nums"><span class="font-medium">{{$s.moved}}</span> moved</dd>
+        <dd class="text-xs text-muted-foreground tabular-nums">{{$s.still_in_inbox}} in inbox · {{$s.gone}} gone</dd>
+      </div>
+      <div class="flex flex-col gap-0.5">
+        <dt class="text-xs text-muted-foreground">Agreement</dt>
+        {{if not (isnil $s.agreement_pct)}}
+        <dd class="font-medium tabular-nums">{{percent $s.agreement_pct}}</dd>
+        <dd class="text-xs text-muted-foreground tabular-nums">{{$s.agreed}} of {{$s.moved}} moved</dd>
+        {{else}}
+        <dd class="text-muted-foreground">Nothing moved yet</dd>
+        {{end}}
+      </div>
+      <div class="flex flex-col gap-0.5">
+        <dt class="text-xs text-muted-foreground">Flag judgments</dt>
+        <dd class="tabular-nums"><span class="font-medium">{{$s.flags.llm}}</span> flagged by 9B <span class="text-muted-foreground">of {{$s.flags.judged}}</span></dd>
+        <dd class="text-xs text-muted-foreground tabular-nums">{{$s.flags.contacts}} contacts · {{$s.flags.both}} both</dd>
+      </div>
+    </dl>
+  </section>
+  {{end}}
+</div>
+
+{{template "tabs" (dict
+  "id" "triage-tabs"
+  "tabsets" (list
+    (dict "tab" "Decisions" "panel" (partial "mail_triage_decisions_panel" .))
+    (dict "tab" (partial "mail_triage_flags_tab" .) "panel" (partial "mail_triage_flags_panel" .)))
+  "class" "gap-0"
+  "variant" "line"
+  "label" "Decisions views")}}
+{{end}}

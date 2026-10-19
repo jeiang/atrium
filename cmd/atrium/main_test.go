@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -34,7 +36,10 @@ func TestHelpExitsZero(t *testing.T) {
 	}
 }
 
-func TestServeRendersNotificationsPage(t *testing.T) {
+// startServe runs `atrium serve --auth local` on a free port over empty state and returns its base URL; the server
+// is stopped, and its exit code checked, when the test ends.
+func startServe(t *testing.T) string {
+	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
@@ -52,28 +57,111 @@ func TestServeRendersNotificationsPage(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		done <- newApp().Run(ctx, []string{"serve", "--port", port, "--auth", "local"}, &stdout, &stderr)
 	}()
-	var resp *http.Response
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case code := <-done:
+			if code != cli.ExitOK {
+				t.Errorf("exit code %d", code)
+			}
+		case <-time.After(15 * time.Second):
+			t.Error("serve did not stop on cancel")
+		}
+	})
+	base := "http://127.0.0.1:" + port
 	for range 100 {
-		if resp, err = http.Get("http://127.0.0.1:" + port + "/settings/notifications"); err == nil {
-			break
+		if resp, err := http.Get(base + "/healthz"); err == nil {
+			_ = resp.Body.Close()
+			return base
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	t.Fatal("serve did not start")
+	return ""
+}
+
+func fetch(t *testing.T, client *http.Client, method, url string, form url.Values) (int, string, http.Header) {
+	t.Helper()
+	var body io.Reader
+	if form != nil {
+		body = strings.NewReader(form.Encode())
+	}
+	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "No notifications") {
-		t.Errorf("GET /settings/notifications = %d: %s", resp.StatusCode, body)
-	}
-	cancel()
-	select {
-	case code := <-done:
-		if code != cli.ExitOK {
-			t.Errorf("exit code %d", code)
+	if form != nil {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		for _, c := range client.Jar.Cookies(req.URL) {
+			if c.Name == "atrium_csrf" {
+				req.Header.Set("X-CSRF-Token", c.Value)
+			}
 		}
-	case <-time.After(15 * time.Second):
-		t.Fatal("serve did not stop on cancel")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	text, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(text), resp.Header
+}
+
+func TestServeRendersNotificationsPage(t *testing.T) {
+	base := startServe(t)
+	status, body, _ := fetch(t, http.DefaultClient, "GET", base+"/settings/notifications", nil)
+	if status != http.StatusOK || !strings.Contains(body, "No notifications") {
+		t.Errorf("GET /settings/notifications = %d: %s", status, body)
+	}
+}
+
+func TestServeRendersMailPages(t *testing.T) {
+	base := startServe(t)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	for _, tc := range []struct {
+		path   string
+		status int
+		want   string
+	}{
+		{"/triage", 200, "No decisions match"},
+		{"/triage?stage=llm", 200, "No decisions match"},
+		{"/triage?stage=nonsense", 422, "Filter not understood"},
+		{"/rules", 200, "Nothing learned yet."},
+		{"/rules/new", 200, "Generated if empty"},
+		{"/rules/condition", 200, "Remove condition"},
+		{"/rules/missing/edit", 404, "Nothing here"},
+		{"/messages/1", 404, "Nothing here"},
+		{"/messages/1/correct", 404, "Nothing here"},
+	} {
+		if status, body, _ := fetch(t, client, "GET", base+tc.path, nil); status != tc.status || !strings.Contains(body, tc.want) {
+			t.Errorf("GET %s = %d, want %d with %q: %.300s", tc.path, status, tc.status, tc.want, body)
+		}
+	}
+	created := url.Values{"id": {"shop"}, "action": {"file"}, "dest": {"Bills"}, "field": {"from_addr"}, "op": {"eq"}, "value": {"a@shop.test"}}
+	status, _, header := fetch(t, client, "POST", base+"/rules", created)
+	if status != http.StatusSeeOther || header.Get("Location") != "/rules?saved=shop&created=1" {
+		t.Fatalf("POST /rules = %d %q", status, header.Get("Location"))
+	}
+	if status, body, _ := fetch(t, client, "GET", base+header.Get("Location"), nil); status != http.StatusOK || !strings.Contains(body, "Rule created") || !strings.Contains(body, `id="rule-shop"`) {
+		t.Errorf("saved rules page = %d: %.300s", status, body)
+	}
+	if status, _, _ := fetch(t, client, "POST", base+"/rules", nil); status != http.StatusForbidden {
+		t.Errorf("POST /rules without a form or token = %d", status)
+	}
+	if status, _, header := fetch(t, client, "POST", base+"/live/pause", url.Values{}); status != http.StatusSeeOther || header.Get("Location") != "/triage" {
+		t.Errorf("POST /live/pause = %d %q", status, header.Get("Location"))
+	}
+}
+
+func TestServeRendersReviewPages(t *testing.T) {
+	base := startServe(t)
+	for _, path := range []string{"/proposals", "/activity", "/drafts", "/loops", "/watches"} {
+		if status, _, _ := fetch(t, http.DefaultClient, "GET", base+path, nil); status != http.StatusOK {
+			t.Errorf("GET %s = %d", path, status)
+		}
 	}
 }

@@ -266,7 +266,9 @@ func TestListPackagesReadsTheZoneOnlyForRows(t *testing.T) {
 	}
 	mail(t, d, 1, 1, "1Z999AA10123456784", fields{"subject": "Shipped", "k_order": 1})
 	scan(t, d, &chat{})
-	if _, err := watches.ListPackages(ctx, d.Read, bad, now, false, false); err == nil {
-		t.Error("an unknown zone must fail once a package is listed")
+	_, err := watches.ListPackages(ctx, d.Read, bad, now, false, false)
+	var classed py.Classed
+	if !errors.As(err, &classed) || classed.PyClass() != "ZoneInfoNotFoundError" || err.Error() != "'No time zone found with key Not/AZone'" {
+		t.Errorf("an unknown zone must fail once a package is listed as ZoneInfoNotFoundError: %v", err)
 	}
 }
