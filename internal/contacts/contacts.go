@@ -84,12 +84,12 @@ func ParseDate(value string) (month, day int, year *int, ok bool) {
 	if m == nil {
 		return 0, 0, nil, false
 	}
-	month, day = decimal(m.Group(2)), decimal(m.Group(3))
+	month, day = py.DecimalValue(m.Group(2)), py.DecimalValue(m.Group(3))
 	if month < 1 || month > 12 || day < 1 || day > monthDays(month) {
 		return 0, 0, nil, false
 	}
 	if g, found := m.GroupOK(1); found {
-		if y := decimal(g); y != 0 && !unknownYears[y] {
+		if y := py.DecimalValue(g); y != 0 && !unknownYears[y] {
 			year = new(y)
 		}
 	}

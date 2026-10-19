@@ -60,7 +60,10 @@ func ParseSince(env config.Env, value *string, at time.Time) (float64, error) {
 		return 0, err
 	}
 	if m != nil {
-		n, _ := new(big.Int).SetString(m.Group(1), 10)
+		n := new(big.Int)
+		for _, r := range m.Group(1) {
+			n.Mul(n, big.NewInt(10)).Add(n, big.NewInt(int64(py.DigitValue(r))))
+		}
 		if m.Group(2) == "h" {
 			n.Mul(n, big.NewInt(3600))
 		} else {

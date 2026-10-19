@@ -44,6 +44,10 @@ func TestStrptimeDate(t *testing.T) {
 		{" 2026-10-06", false, 0, 0, 0},
 		{"2026-1-10", true, 2026, 1, 10},
 		{"2026-10-1x", false, 0, 0, 0},
+		{"٢٠٢٦-10-06", true, 2026, 10, 6},
+		{"2026-10-٠6", false, 0, 0, 0},
+		{"2026-10-1٣", true, 2026, 10, 13},
+		{"2026-10-2٣", true, 2026, 10, 23},
 	} {
 		got, ok := StrptimeDate(c.in)
 		if ok != c.ok || ok && (got.Year != c.y || got.Month != c.m || got.Day != c.d) {

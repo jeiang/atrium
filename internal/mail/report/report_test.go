@@ -30,6 +30,7 @@ func TestParseSince(t *testing.T) {
 		{str("2d"), 200000, 200000 - 2*86400},
 		{str("3h"), 100000, 100000 - 3*3600},
 		{str("7d\n"), 1e6, 1e6 - 7*86400},
+		{str("٣d"), 1e6, 1e6 - 3*86400},
 	} {
 		got, err := ParseSince(env, c.since, time.Unix(int64(c.at), 0))
 		if err != nil || got != c.want {
@@ -50,7 +51,7 @@ func TestParseSinceDateIsMidnightInAtriumTZ(t *testing.T) {
 
 func TestParseSinceRejects(t *testing.T) {
 	env := config.Map(nil)
-	for _, value := range []string{"", "x", "2026-02-30", "2026-13-01", "2026-10-06 ", "2026-10-061", "0000-01-01", "7w", "h", "-3d"} {
+	for _, value := range []string{"", "x", "2026-02-30", "2026-13-01", "2026-10-06 ", "2026-10-061", "0000-01-01", "7w", "h", "-3d", "٣w"} {
 		if _, err := ParseSince(env, str(value), time.Unix(0, 0)); err == nil {
 			t.Errorf("ParseSince(%q) succeeded", value)
 		}
