@@ -1,0 +1,38 @@
+{{define "title"}}Bills{{end}}
+{{define "heading"}}Money · Bills{{end}}
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
+{{template "money_nav" "/money/bills"}}
+<p class="text-sm text-muted-foreground">A payee is a bill when its mail used subscription or renewal wording, or when it charged at a regular interval with similar amounts. Next expected is computed from the last charge. Override per payee here or on Payees.</p>
+{{if $d.bills}}
+<ul class="flex flex-col gap-3" role="list" aria-label="Bills">
+  {{range $b := $d.bills}}
+  <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+    <div class="flex min-w-0 flex-col gap-1">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-sm font-medium">{{$b.payee}}</span>
+        <span class="badge" data-variant="outline">{{$b.cadence}}</span>
+        {{if $b.category}}<span class="badge" data-variant="outline">{{$b.category}}</span>{{end}}
+        {{if $b.override}}<span class="badge" data-variant="secondary">forced</span>{{else if $b.subscription_seen}}<span class="badge" data-variant="secondary">subscription wording</span>{{end}}
+      </div>
+      <p class="text-xs text-muted-foreground tabular-nums">
+        Typical {{range $i, $c := items $b.typical}}{{if $i}}, {{end}}{{printf "%.2f" (mul $c.Value 1)}} {{$c.Key}}{{end}} · last {{$b.last_charge}} ·
+        {{if $b.next_expected}}next {{$b.next_expected}} ({{if ge $b.days_until 0}}in {{$b.days_until}} days{{else}}{{int (mul -1 $b.days_until)}} days overdue{{end}}){{else}}cadence unknown{{end}}
+        · {{$b.charges}} charge{{if ne $b.charges 1}}s{{end}}
+      </p>
+    </div>
+    <form method="post" action="/money/bills/{{$b.payee_id}}/override" class="flex items-center gap-1">
+      <input type="hidden" name="csrf_token" value="{{$csrf}}">
+      <select name="override" class="select" aria-label="Bill override for {{$b.payee}}">
+        <option value=""{{if not $b.override}} selected{{end}}>Automatic</option>
+        <option value="bill"{{if eq $b.override "bill"}} selected{{end}}>Always a bill</option>
+        <option value="not_bill">Not a bill</option>
+      </select>
+      <button type="submit" class="btn" data-size="sm" data-variant="outline">Set</button>
+    </form>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+{{template "empty_state" (dict "icon_name" "receipt" "title" "No bills detected" "body" "Bills show up once a payee has recurring charges or subscription wording in its mail.")}}
+{{end}}
+{{end}}
