@@ -1,0 +1,401 @@
+{
+  "id": 9,
+  "kind": "rebalance_split",
+  "account": "icloud",
+  "status": "failed",
+  "created_ts": 1793392200.0,
+  "decided_ts": 1792339200.0,
+  "applied_ts": null,
+  "title": "Split 21 messages out of Receipts into 1 new folders",
+  "preview": {
+    "folder": "Receipts",
+    "groups": [
+      {
+        "name": "Receipts/Shop B",
+        "count": 21,
+        "senders": [
+          {
+            "label": "shopb.example",
+            "count": 21
+          }
+        ],
+        "addresses": [
+          {
+            "label": "receipts@shopb.example",
+            "count": 20
+          },
+          {
+            "label": "ship@shopb.example",
+            "count": 1
+          }
+        ],
+        "terms": [
+          "order",
+          "receipt",
+          "shop",
+          "shipped"
+        ],
+        "subjects": [
+          "Your order has shipped",
+          "Shop B order 1 receipt",
+          "Shop B order 2 receipt",
+          "Shop B order 3 receipt",
+          "Shop B order 4 receipt"
+        ],
+        "messages": [
+          {
+            "id": 48,
+            "subject": "Shop B order 1 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1790870400.0
+          },
+          {
+            "id": 49,
+            "subject": "Shop B order 2 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1790611200.0
+          },
+          {
+            "id": 50,
+            "subject": "Shop B order 3 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1790352000.0
+          },
+          {
+            "id": 51,
+            "subject": "Shop B order 4 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1790092800.0
+          },
+          {
+            "id": 52,
+            "subject": "Shop B order 5 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1789833600.0
+          },
+          {
+            "id": 53,
+            "subject": "Shop B order 6 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1789574400.0
+          },
+          {
+            "id": 54,
+            "subject": "Shop B order 7 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1789315200.0
+          },
+          {
+            "id": 55,
+            "subject": "Shop B order 8 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1789056000.0
+          },
+          {
+            "id": 56,
+            "subject": "Shop B order 9 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1788796800.0
+          },
+          {
+            "id": 57,
+            "subject": "Shop B order 10 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1788537600.0
+          },
+          {
+            "id": 58,
+            "subject": "Shop B order 11 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1788278400.0
+          },
+          {
+            "id": 59,
+            "subject": "Shop B order 12 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1788019200.0
+          },
+          {
+            "id": 60,
+            "subject": "Shop B order 13 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1787760000.0
+          },
+          {
+            "id": 61,
+            "subject": "Shop B order 14 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1787500800.0
+          },
+          {
+            "id": 62,
+            "subject": "Shop B order 15 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1787241600.0
+          },
+          {
+            "id": 63,
+            "subject": "Shop B order 16 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1786982400.0
+          },
+          {
+            "id": 64,
+            "subject": "Shop B order 17 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1786723200.0
+          },
+          {
+            "id": 65,
+            "subject": "Shop B order 18 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1786464000.0
+          },
+          {
+            "id": 66,
+            "subject": "Shop B order 19 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1786204800.0
+          },
+          {
+            "id": 67,
+            "subject": "Shop B order 20 receipt",
+            "from_name": "Shop B",
+            "from_addr": "receipts@shopb.example",
+            "date_ts": 1785945600.0
+          },
+          {
+            "id": 157,
+            "subject": "Your order has shipped",
+            "from_name": "Shop B",
+            "from_addr": "ship@shopb.example",
+            "date_ts": 1791907200.0
+          }
+        ]
+      }
+    ]
+  },
+  "result": {
+    "error": "AttributeError: 'list' object has no attribute 'get'"
+  },
+  "fingerprint": "rebalance_split:icloud:Receipts::domain:ce3ee3def4f604a2",
+  "payload": {
+    "folder": "Receipts",
+    "groups": [
+      {
+        "dest": "Receipts/Shop B",
+        "messages": [
+          {
+            "id": 48,
+            "uid": 23,
+            "uidvalidity": 7,
+            "msgid": "shopb-1@golden.example",
+            "digest": "143fd90471d8215d11f324ad84908272b0b119d710d7d82001045ccc229dd2a5",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 49,
+            "uid": 24,
+            "uidvalidity": 7,
+            "msgid": "shopb-2@golden.example",
+            "digest": "6e4330eecc28c2c379928f1a11df599bf6b5f89cbb04f2eda8a1f4a285aa0dd4",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 50,
+            "uid": 25,
+            "uidvalidity": 7,
+            "msgid": "shopb-3@golden.example",
+            "digest": "8c750d150438a42c69168d68b63515fb1c5f5b066b10b8d9f6228218966986c2",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 51,
+            "uid": 26,
+            "uidvalidity": 7,
+            "msgid": "shopb-4@golden.example",
+            "digest": "d55cbbc0668a033aebc43f14b4a90a47287562ac67b0269aaae69c7792c02726",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 52,
+            "uid": 27,
+            "uidvalidity": 7,
+            "msgid": "shopb-5@golden.example",
+            "digest": "8d45f9e650327d531501ecf19719c6e5402a04713796db9ec3ceedea42b186f6",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 53,
+            "uid": 28,
+            "uidvalidity": 7,
+            "msgid": "shopb-6@golden.example",
+            "digest": "ab3c3d716d831c47fbc80b0e7a1b3348b7a1e348f02e03daabbe028a301120b4",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 54,
+            "uid": 29,
+            "uidvalidity": 7,
+            "msgid": "shopb-7@golden.example",
+            "digest": "ea7cfe6e5b50c5b043352866cb5a3aa3706d96a93d3289ee72b29c049835bbda",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 55,
+            "uid": 30,
+            "uidvalidity": 7,
+            "msgid": "shopb-8@golden.example",
+            "digest": "726ad073872aac87d278f2f88a26952022b7e933e19c985b1813ac39c2e024df",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 56,
+            "uid": 31,
+            "uidvalidity": 7,
+            "msgid": "shopb-9@golden.example",
+            "digest": "c3b6dd270f3e499b76b4ad49675c0a6f4dbbd68e7113e242ef632e41602b0916",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 57,
+            "uid": 32,
+            "uidvalidity": 7,
+            "msgid": "shopb-10@golden.example",
+            "digest": "0af61ff0ee5aec0e3500b3ee9cdcbdfbf4e67040b3b52d709e94731c270893ea",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 58,
+            "uid": 33,
+            "uidvalidity": 7,
+            "msgid": "shopb-11@golden.example",
+            "digest": "ee887181b7fbabaac62d04d904c896fa78eb25317a8c853aedb02a4f801fceee",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 59,
+            "uid": 34,
+            "uidvalidity": 7,
+            "msgid": "shopb-12@golden.example",
+            "digest": "06240e320c64335635bcd4d2c0d0789d190b02af6a71edcb153b8d31a061097d",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 60,
+            "uid": 35,
+            "uidvalidity": 7,
+            "msgid": "shopb-13@golden.example",
+            "digest": "85c0ebac3df3744631aa650dac93b48355ae3807098be6359b80fc17a73d5aeb",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 61,
+            "uid": 36,
+            "uidvalidity": 7,
+            "msgid": "shopb-14@golden.example",
+            "digest": "21a4f633383787bdb8fbd32e03ed2c0f4baab5e4487c8eb60df0f1156b3b9f07",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 62,
+            "uid": 37,
+            "uidvalidity": 7,
+            "msgid": "shopb-15@golden.example",
+            "digest": "d62bb87a80fc113014ad242be60c2e2f7e9d613e89a7fd6c7841d43ef94d28d9",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 63,
+            "uid": 38,
+            "uidvalidity": 7,
+            "msgid": "shopb-16@golden.example",
+            "digest": "91998ca19c564bcdd3b9b9b5c7270bc9ff768f9ab956d94e9d5c888561a5c5e3",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 64,
+            "uid": 39,
+            "uidvalidity": 7,
+            "msgid": "shopb-17@golden.example",
+            "digest": "c8de3505efce504c6a1d40203bab5449553f1a774671af5ed628ad64355d248a",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 65,
+            "uid": 40,
+            "uidvalidity": 7,
+            "msgid": "shopb-18@golden.example",
+            "digest": "5531c64325cd167fa83c9bfeb3636359753b88d4296929cc0d9e751f78decdc9",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 66,
+            "uid": 41,
+            "uidvalidity": 7,
+            "msgid": "shopb-19@golden.example",
+            "digest": "31af355df0be001525f4a7c46ecd9110ca74dd824b60861c475e9d47f2cf503e",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 67,
+            "uid": 42,
+            "uidvalidity": 7,
+            "msgid": "shopb-20@golden.example",
+            "digest": "a5b885e38505fb60f8deeb2f0a6979608a4ed0598060aadd514a686e6c10411a",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 157,
+            "uid": 49,
+            "uidvalidity": 7,
+            "msgid": "shipped@golden.example",
+            "digest": "d72e095b7dd9bb1fa2d371852c1017753cb9db4df2ce237fcec79139d5dad7b8",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          }
+        ]
+      }
+    ]
+  },
+  "undoable": false
+}

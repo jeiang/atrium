@@ -1,0 +1,44 @@
+{{template "schedule_form" (dict "job" .Data.job "values" .Data.values "error" .Data.error "runs" .Data.runs "tz" .Data.tz "csrf" .CSRF)}}
+
+{{define "schedule_form"}}{{$fixed := and .job (has (list "nightly" "builtin") .job.kind)}}{{$v := .values}}{{$action := "/scheduled"}}{{if .job}}{{$action = printf "/scheduled/%v" .job.id}}{{end}}
+<form method="post" action="{{$action}}" class="w-full sm:max-w-2xl"
+      hx-post="{{$action}}" hx-target="#schedule-dialog" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="csrf_token" value="{{.csrf}}">
+  <header class="flex-row items-center gap-2">
+    <h2 class="min-w-0 flex-1 truncate">{{if .job}}Edit {{.job.name}}{{else}}New schedule{{end}}</h2>
+    <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close" data-action="close-dialog">{{icon "x"}}</button>
+  </header>
+  <section class="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
+    {{if .error}}<p class="text-sm text-destructive" role="alert">{{.error}}</p>{{end}}
+    <div class="grid gap-3 sm:grid-cols-2">
+      <div role="group" class="field">
+        <label for="sched-name">Name</label>
+        <input id="sched-name" name="name" type="text" value="{{$v.name}}"{{if $fixed}} readonly{{else}} required{{end}}>
+      </div>
+      <div role="group" class="field">
+        <label for="sched-schedule">Schedule</label>
+        <input id="sched-schedule" name="schedule" type="text" value="{{$v.schedule}}" class="font-mono" spellcheck="false" autocomplete="off" placeholder="daily 08:00" required>
+      </div>
+    </div>
+    <p class="-mt-2 text-xs text-muted-foreground">Times are {{.tz}}. Formats: an ISO datetime, <code class="font-mono">daily 07:30</code>, <code class="font-mono">weekly mon 07:30</code> or a 5-field cron expression.</p>
+    <div role="group" class="field">
+      <label for="sched-prompt">Prompt</label>
+      <textarea id="sched-prompt" name="prompt" rows="{{if $fixed}}5{{else}}4{{end}}" class="w-full"{{if $fixed}} readonly{{else}} required{{end}}>{{$v.prompt}}</textarea>
+      {{if $fixed}}<p>The {{.job.kind}} prompt is fixed in code.</p>{{else}}<p>A prompt may reference skills as <code class="font-mono">/skill:name</code>; they are expanded into the prompt when the job runs.</p>{{end}}
+    </div>
+    {{if .job}}
+    <div class="flex flex-col gap-2">
+      <h3 class="text-sm font-medium">Recent runs</h3>
+      {{template "schedule_runs" (dict "runs" .runs "show_job" false)}}
+    </div>
+    {{end}}
+  </section>
+  <footer class="flex-wrap">
+    {{if and .job (not $fixed)}}
+    <button type="button" class="btn me-auto" data-size="sm" data-variant="destructive" hx-post="/scheduled/{{.job.id}}/cancel" hx-target="#scheduled-list" hx-swap="outerHTML" hx-confirm="Delete this schedule?">{{icon "trash-2"}}Delete</button>
+    {{end}}
+    <button type="button" class="btn" data-variant="outline" data-action="close-dialog">Cancel</button>
+    <button type="submit" class="btn">{{icon "check"}}{{if .job}}Save{{else}}Create{{end}}</button>
+  </footer>
+</form>
+{{- end}}

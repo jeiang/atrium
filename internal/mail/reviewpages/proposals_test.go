@@ -14,7 +14,7 @@ import (
 
 // recorder is an executor that notes the selection it ran with.
 func (s *site) recording(kind string, seen map[string]string) {
-	s.registry.Executors[kind] = func(_ context.Context, _ *proposals.Proposal, selection py.Dict) (py.Dict, error) {
+	s.registry.Executors[kind] = func(_ context.Context, _ *proposals.Proposal, selection any) (py.Dict, error) {
 		if selection == nil {
 			seen[kind] = "None"
 		} else {
@@ -82,7 +82,7 @@ func TestApproveAllPassesNoSelectionAndPlainKindsMapMessageIDs(t *testing.T) {
 func TestSelectionErrorComesBackAsAToastAndStaysPending(t *testing.T) {
 	s := newSite(t)
 	id := s.splitProposal("split-1")
-	s.registry.Executors["rebalance_split"] = func(context.Context, *proposals.Proposal, py.Dict) (py.Dict, error) {
+	s.registry.Executors["rebalance_split"] = func(context.Context, *proposals.Proposal, any) (py.Dict, error) {
 		return nil, proposals.SelectionError("invalid folder name ''")
 	}
 	target := "/proposals/" + itoa(int(id)) + "/approve"
@@ -97,7 +97,7 @@ func TestSelectionErrorComesBackAsAToastAndStaysPending(t *testing.T) {
 func TestFailedApplyShowsTheErrorAndKeepsTheCard(t *testing.T) {
 	s := newSite(t)
 	id := s.splitProposal("split-1")
-	s.registry.Executors["rebalance_split"] = func(context.Context, *proposals.Proposal, py.Dict) (py.Dict, error) {
+	s.registry.Executors["rebalance_split"] = func(context.Context, *proposals.Proposal, any) (py.Dict, error) {
 		return nil, errors.New("imap down")
 	}
 	body := status(t, s.post("/proposals/"+itoa(int(id))+"/approve", form("all", "1"), hx, "true"), http.StatusOK)
@@ -111,7 +111,7 @@ func TestDismissAndUndoCardsUpdateTheBadge(t *testing.T) {
 	s := newSite(t)
 	keep, drop := s.splitProposal("a"), s.splitProposal("b")
 	var undone []int64
-	s.registry.Executors["rebalance_split"] = func(ctx context.Context, p *proposals.Proposal, _ py.Dict) (py.Dict, error) {
+	s.registry.Executors["rebalance_split"] = func(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
 		_, err := proposals.RecordAction(ctx, s.db.Write, p.ID, py.Dict{{Key: "op", Value: "move"}}, py.Dict{{Key: "op", Value: "fake"}}, true, nil, 1.0)
 		return py.Dict{{Key: "summary", Value: "ok"}}, err
 	}
@@ -139,7 +139,7 @@ func TestDismissAndUndoCardsUpdateTheBadge(t *testing.T) {
 func TestUndoThatDoesNotFinishReportsTheFirstFailure(t *testing.T) {
 	s := newSite(t)
 	id := s.splitProposal("a")
-	s.registry.Executors["rebalance_split"] = func(ctx context.Context, p *proposals.Proposal, _ py.Dict) (py.Dict, error) {
+	s.registry.Executors["rebalance_split"] = func(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
 		_, err := proposals.RecordAction(ctx, s.db.Write, p.ID, py.Dict{{Key: "op", Value: "move"}}, py.Dict{{Key: "op", Value: "fake"}}, true, nil, 1.0)
 		return py.Dict{}, err
 	}
@@ -323,7 +323,7 @@ func TestFailedAndAppliedFootersByKind(t *testing.T) {
 func TestUndoableAppliedWithoutSummaryShowsApplied(t *testing.T) {
 	s := newSite(t)
 	id := s.splitProposal("a")
-	s.registry.Executors["rebalance_split"] = func(ctx context.Context, p *proposals.Proposal, _ py.Dict) (py.Dict, error) {
+	s.registry.Executors["rebalance_split"] = func(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
 		_, err := proposals.RecordAction(ctx, s.db.Write, p.ID, py.Dict{{Key: "op", Value: "move"}}, py.Dict{{Key: "op", Value: "fake"}}, true, nil, 1.0)
 		return py.Dict{}, err
 	}

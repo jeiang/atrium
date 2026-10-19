@@ -69,7 +69,7 @@ func startServe(t *testing.T) string {
 		}
 	})
 	base := "http://127.0.0.1:" + port
-	for range 100 {
+	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
 		if resp, err := http.Get(base + "/healthz"); err == nil {
 			_ = resp.Body.Close()
 			return base
@@ -163,5 +163,48 @@ func TestServeRendersReviewPages(t *testing.T) {
 		if status, _, _ := fetch(t, http.DefaultClient, "GET", base+path, nil); status != http.StatusOK {
 			t.Errorf("GET %s = %d", path, status)
 		}
+	}
+}
+
+func TestServeRendersAssistantPages(t *testing.T) {
+	base := startServe(t)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	for _, tc := range []struct {
+		path   string
+		status int
+		want   string
+	}{
+		{"/projects", 200, "No projects yet"},
+		{"/projects/new", 200, "New project"},
+		{"/projects/1", 404, "Nothing here"},
+		{"/scheduled", 200, "Every day at 02:30"},
+		{"/scheduled/new", 200, "New schedule"},
+		{"/settings/assistant", 200, "Default effort"},
+		{"/settings/usage", 200, "No usage yet"},
+		{"/settings/skills", 200, `data-skill="wiki-capture"`},
+		{"/settings/subagents", 200, `data-agent="mail"`},
+		{"/settings/notifications", 200, "No notifications"},
+	} {
+		status, body, _ := fetch(t, client, "GET", base+tc.path, nil)
+		if status != tc.status || !strings.Contains(body, tc.want) {
+			t.Errorf("GET %s = %d, want %d with %q: %.300s", tc.path, status, tc.status, tc.want, body)
+		}
+		if strings.HasPrefix(tc.path, "/settings/") && !strings.Contains(body, `href="/settings/notifications"`) {
+			t.Errorf("GET %s has no notifications tab", tc.path)
+		}
+	}
+	if status, _, header := fetch(t, client, "GET", base+"/settings", nil); status != http.StatusSeeOther || header.Get("Location") != "/settings/assistant" {
+		t.Errorf("GET /settings = %d %q", status, header.Get("Location"))
+	}
+	made := url.Values{"name": {"Kitchen"}, "effort": {"high"}, "context_limit": {"200000"}}
+	if status, _, header := fetch(t, client, "POST", base+"/projects", made); status != http.StatusSeeOther || header.Get("Location") != "/projects/1" {
+		t.Errorf("POST /projects = %d %q", status, header.Get("Location"))
+	}
+	if status, body, _ := fetch(t, client, "GET", base+"/projects/1", nil); status != http.StatusOK || !strings.Contains(body, "Kitchen") {
+		t.Errorf("GET /projects/1 = %d: %.300s", status, body)
 	}
 }

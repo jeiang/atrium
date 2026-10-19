@@ -91,6 +91,1028 @@
       "name": "media-poll",
       "stderr": "media-poll.stderr",
       "stdout": "media-poll.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync"
+      ],
+      "exit_code": 0,
+      "name": "sync",
+      "stderr": "sync.stderr",
+      "stdout": "sync.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "--account",
+        "gmail"
+      ],
+      "exit_code": 0,
+      "name": "sync-account-gmail",
+      "stderr": "sync-account-gmail.stderr",
+      "stdout": "sync-account-gmail.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "--account",
+        "gmail"
+      ],
+      "env": {
+        "GMAIL_APP_PASSWORD": ""
+      },
+      "exit_code": 1,
+      "name": "sync-missing-credentials",
+      "stderr": "sync-missing-credentials.stderr",
+      "stdout": "sync-missing-credentials.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "--account",
+        "work"
+      ],
+      "exit_code": 2,
+      "name": "sync-account-invalid",
+      "stderr": "sync-account-invalid.stderr",
+      "stdout": "sync-account-invalid.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "extra"
+      ],
+      "exit_code": 2,
+      "name": "sync-extra-argument",
+      "stderr": "sync-extra-argument.stderr",
+      "stdout": "sync-extra-argument.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "watch",
+        "--account",
+        "icloud"
+      ],
+      "exit_code": 0,
+      "name": "watch-one-pass",
+      "stderr": "watch-one-pass.stderr",
+      "stdout": "watch-one-pass.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "watch",
+        "--account",
+        "gmail"
+      ],
+      "env": {
+        "GMAIL_APP_PASSWORD": ""
+      },
+      "exit_code": 1,
+      "name": "watch-missing-credentials",
+      "stderr": "watch-missing-credentials.stderr",
+      "stdout": "watch-missing-credentials.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "rules",
+        "import",
+        "-"
+      ],
+      "exit_code": 0,
+      "name": "rules-import-stdin",
+      "stderr": "rules-import-stdin.stderr",
+      "stdin": "{\n  \"rules\": [\n    {\n      \"id\": \"club-news\",\n      \"action\": \"file\",\n      \"dest\": \"Newsletters\",\n      \"when\": [\n        {\n          \"field\": \"from_domain\",\n          \"op\": \"suffix\",\n          \"value\": \"club.example\"\n        }\n      ]\n    },\n    {\n      \"id\": \"promo-spam\",\n      \"account\": \"icloud\",\n      \"action\": \"delete\",\n      \"when\": [\n        {\n          \"field\": \"from_addr\",\n          \"op\": \"eq\",\n          \"value\": \"spam@promo.example\"\n        }\n      ]\n    },\n    {\n      \"id\": \"old-flash\",\n      \"account\": \"gmail\",\n      \"action\": \"delete\",\n      \"when\": [\n        {\n          \"field\": \"subject_tmpl\",\n          \"op\": \"re\",\n          \"value\": \"^flash sale\"\n        },\n        {\n          \"field\": \"age_days\",\n          \"op\": \"gte\",\n          \"value\": 30\n        }\n      ]\n    }\n  ]\n}\n",
+      "stdout": "rules-import-stdin.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "rules",
+        "import",
+        "{tmp}/rules.json"
+      ],
+      "exit_code": 0,
+      "files": {
+        "rules.json": "{\n  \"rules\": [\n    {\n      \"id\": \"club-news\",\n      \"action\": \"file\",\n      \"dest\": \"Newsletters\",\n      \"when\": [\n        {\n          \"field\": \"from_domain\",\n          \"op\": \"suffix\",\n          \"value\": \"club.example\"\n        }\n      ]\n    },\n    {\n      \"id\": \"promo-spam\",\n      \"account\": \"icloud\",\n      \"action\": \"delete\",\n      \"when\": [\n        {\n          \"field\": \"from_addr\",\n          \"op\": \"eq\",\n          \"value\": \"spam@promo.example\"\n        }\n      ]\n    },\n    {\n      \"id\": \"old-flash\",\n      \"account\": \"gmail\",\n      \"action\": \"delete\",\n      \"when\": [\n        {\n          \"field\": \"subject_tmpl\",\n          \"op\": \"re\",\n          \"value\": \"^flash sale\"\n        },\n        {\n          \"field\": \"age_days\",\n          \"op\": \"gte\",\n          \"value\": 30\n        }\n      ]\n    }\n  ]\n}\n"
+      },
+      "name": "rules-import-file",
+      "stderr": "rules-import-file.stderr",
+      "stdout": "rules-import-file.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "rules",
+        "import",
+        "-"
+      ],
+      "exit_code": 2,
+      "name": "rules-import-invalid-rule",
+      "stderr": "rules-import-invalid-rule.stderr",
+      "stdin": "{\"rules\": [{\"id\": \"x\"}]}",
+      "stdout": "rules-import-invalid-rule.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "rules",
+        "import",
+        "-"
+      ],
+      "exit_code": 1,
+      "name": "rules-import-bad-json",
+      "stderr": "rules-import-bad-json.stderr",
+      "stdin": "not json",
+      "stdout": "rules-import-bad-json.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "shadow-report"
+      ],
+      "exit_code": 0,
+      "name": "shadow-report",
+      "stderr": "shadow-report.stderr",
+      "stdout": "shadow-report.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "shadow-report",
+        "--since",
+        "bogus"
+      ],
+      "exit_code": 1,
+      "name": "shadow-report-bad-since",
+      "stderr": "shadow-report-bad-since.stderr",
+      "stdout": "shadow-report-bad-since.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "reindex"
+      ],
+      "exit_code": 0,
+      "name": "reindex",
+      "stderr": "reindex.stderr",
+      "stdout": "reindex.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "rebalance",
+        "scan"
+      ],
+      "exit_code": 0,
+      "name": "rebalance-scan",
+      "stderr": "rebalance-scan.stderr",
+      "stdout": "rebalance-scan.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "deletions",
+        "scan"
+      ],
+      "exit_code": 0,
+      "name": "deletions-scan",
+      "stderr": "deletions-scan.stderr",
+      "stdout": "deletions-scan.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "gmail-labels",
+        "scan"
+      ],
+      "exit_code": 0,
+      "name": "gmail-labels-scan",
+      "stderr": "gmail-labels-scan.stderr",
+      "stdout": "gmail-labels-scan.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "scan-all"
+      ],
+      "exit_code": 0,
+      "name": "proposals-scan-all",
+      "stderr": "proposals-scan-all.stderr",
+      "stdout": "proposals-scan-all.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "backlog"
+      ],
+      "exit_code": 0,
+      "name": "live-backlog",
+      "stderr": "live-backlog.stderr",
+      "stdout": "live-backlog.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "rebaseline"
+      ],
+      "exit_code": 0,
+      "name": "live-rebaseline",
+      "stderr": "live-rebaseline.stderr",
+      "stdout": "live-rebaseline.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "pause"
+      ],
+      "exit_code": 0,
+      "name": "live-pause",
+      "stderr": "live-pause.stderr",
+      "stdout": "live-pause.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "resume"
+      ],
+      "exit_code": 0,
+      "name": "live-resume",
+      "stderr": "live-resume.stderr",
+      "stdout": "live-resume.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "deletions"
+      ],
+      "exit_code": 0,
+      "name": "live-deletions",
+      "stderr": "live-deletions.stderr",
+      "stdout": "live-deletions.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "actions",
+        "--kind",
+        "file",
+        "--limit",
+        "3"
+      ],
+      "exit_code": 0,
+      "name": "live-actions-kind",
+      "stderr": "live-actions-kind.stderr",
+      "stdout": "live-actions-kind.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "actions",
+        "--limit",
+        "2"
+      ],
+      "exit_code": 0,
+      "name": "live-actions-limit",
+      "stderr": "live-actions-limit.stderr",
+      "stdout": "live-actions-limit.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "undo",
+        "7"
+      ],
+      "exit_code": 0,
+      "name": "live-undo-file-icloud",
+      "stderr": "live-undo-file-icloud.stderr",
+      "stdout": "live-undo-file-icloud.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "undo",
+        "6"
+      ],
+      "exit_code": 1,
+      "name": "live-undo-file-icloud-moved",
+      "stderr": "live-undo-file-icloud-moved.stderr",
+      "stdout": "live-undo-file-icloud-moved.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "undo",
+        "8"
+      ],
+      "exit_code": 0,
+      "name": "live-undo-file-gmail",
+      "stderr": "live-undo-file-gmail.stderr",
+      "stdout": "live-undo-file-gmail.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "undo",
+        "1"
+      ],
+      "exit_code": 0,
+      "name": "live-undo-flag",
+      "stderr": "live-undo-flag.stderr",
+      "stdout": "live-undo-flag.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "undo",
+        "3"
+      ],
+      "exit_code": 0,
+      "name": "live-undo-trash",
+      "stderr": "live-undo-trash.stderr",
+      "stdout": "live-undo-trash.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "undo",
+        "10"
+      ],
+      "exit_code": 0,
+      "name": "live-undo-correct",
+      "stderr": "live-undo-correct.stderr",
+      "stdout": "live-undo-correct.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "undo",
+        "9999"
+      ],
+      "exit_code": 1,
+      "name": "live-undo-unknown",
+      "stderr": "live-undo-unknown.stderr",
+      "stdout": "live-undo-unknown.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "undo",
+        "5"
+      ],
+      "exit_code": 1,
+      "name": "live-undo-twice",
+      "stderr": "live-undo-twice.stderr",
+      "stdout": "live-undo-twice.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "list",
+        "--status",
+        "pending"
+      ],
+      "exit_code": 0,
+      "name": "proposals-list-pending",
+      "stderr": "proposals-list-pending.stderr",
+      "stdout": "proposals-list-pending.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "list",
+        "--kind",
+        "deletion_rule"
+      ],
+      "exit_code": 0,
+      "name": "proposals-list-kind",
+      "stderr": "proposals-list-kind.stderr",
+      "stdout": "proposals-list-kind.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "7"
+      ],
+      "exit_code": 0,
+      "name": "proposals-approve-7",
+      "stderr": "proposals-approve-7.stderr",
+      "stdout": "proposals-approve-7.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "8"
+      ],
+      "exit_code": 0,
+      "name": "proposals-approve-8",
+      "stderr": "proposals-approve-8.stderr",
+      "stdout": "proposals-approve-8.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "6"
+      ],
+      "exit_code": 0,
+      "name": "proposals-approve-6",
+      "stderr": "proposals-approve-6.stderr",
+      "stdout": "proposals-approve-6.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "9",
+        "--selection",
+        "{\"groups\": [{\"name\": \"Receipts/Shop B Subset\", \"message_ids\": [48, 49, 50, 51, 52]}]}"
+      ],
+      "exit_code": 0,
+      "name": "proposals-approve-selection",
+      "stderr": "proposals-approve-selection.stderr",
+      "stdout": "proposals-approve-selection.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "9",
+        "--selection",
+        "{\"groups\": []}"
+      ],
+      "exit_code": 1,
+      "name": "proposals-approve-bad-selection",
+      "stderr": "proposals-approve-bad-selection.stderr",
+      "stdout": "proposals-approve-bad-selection.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "9",
+        "--selection",
+        "{"
+      ],
+      "exit_code": 1,
+      "name": "proposals-approve-bad-json",
+      "stderr": "proposals-approve-bad-json.stderr",
+      "stdout": "proposals-approve-bad-json.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "9999"
+      ],
+      "exit_code": 1,
+      "name": "proposals-approve-unknown",
+      "stderr": "proposals-approve-unknown.stderr",
+      "stdout": "proposals-approve-unknown.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "9",
+        "--selection",
+        "[1]"
+      ],
+      "exit_code": 0,
+      "name": "proposals-approve-list-selection",
+      "stderr": "proposals-approve-list-selection.stderr",
+      "stdout": "proposals-approve-list-selection.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "6",
+        "--selection",
+        "[1]"
+      ],
+      "exit_code": 0,
+      "name": "proposals-approve-list-selection-deletion",
+      "stderr": "proposals-approve-list-selection-deletion.stderr",
+      "stdout": "proposals-approve-list-selection-deletion.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "9999",
+        "--selection",
+        "[1]"
+      ],
+      "exit_code": 1,
+      "name": "proposals-approve-list-selection-unknown",
+      "stderr": "proposals-approve-list-selection-unknown.stderr",
+      "stdout": "proposals-approve-list-selection-unknown.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "10",
+        "--selection",
+        "[1]"
+      ],
+      "exit_code": 0,
+      "name": "proposals-approve-list-selection-calendar",
+      "stderr": "proposals-approve-list-selection-calendar.stderr",
+      "stdout": "proposals-approve-list-selection-calendar.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "dismiss",
+        "8"
+      ],
+      "exit_code": 0,
+      "name": "proposals-dismiss",
+      "stderr": "proposals-dismiss.stderr",
+      "stdout": "proposals-dismiss.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "dismiss",
+        "6",
+        "--forever"
+      ],
+      "exit_code": 0,
+      "name": "proposals-dismiss-forever",
+      "stderr": "proposals-dismiss-forever.stderr",
+      "stdout": "proposals-dismiss-forever.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "undo",
+        "3"
+      ],
+      "exit_code": 0,
+      "name": "proposals-undo-3",
+      "stderr": "proposals-undo-3.stderr",
+      "stdout": "proposals-undo-3.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "undo",
+        "9999"
+      ],
+      "exit_code": 1,
+      "name": "proposals-undo-unknown",
+      "stderr": "proposals-undo-unknown.stderr",
+      "stdout": "proposals-undo-unknown.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "undo",
+        "7"
+      ],
+      "exit_code": 1,
+      "name": "proposals-undo-pending",
+      "stderr": "proposals-undo-pending.stderr",
+      "stdout": "proposals-undo-pending.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "loops",
+        "refresh"
+      ],
+      "exit_code": 0,
+      "name": "loops-refresh",
+      "stderr": "loops-refresh.stderr",
+      "stdout": "loops-refresh.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "watches",
+        "refresh"
+      ],
+      "exit_code": 0,
+      "name": "watches-refresh",
+      "stderr": "watches-refresh.stderr",
+      "stdout": "watches-refresh.stdout"
+    },
+    {
+      "argv": [
+        "atrium"
+      ],
+      "exit_code": 2,
+      "name": "argparse-root-empty",
+      "stderr": "argparse-root-empty.stderr",
+      "stdout": "argparse-root-empty.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "bogus"
+      ],
+      "exit_code": 2,
+      "name": "argparse-root-bogus",
+      "stderr": "argparse-root-bogus.stderr",
+      "stdout": "argparse-root-bogus.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "--bogus"
+      ],
+      "exit_code": 2,
+      "name": "argparse-root-bogus-flag",
+      "stderr": "argparse-root-bogus-flag.stderr",
+      "stdout": "argparse-root-bogus-flag.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "-h"
+      ],
+      "exit_code": 0,
+      "name": "argparse-root-help",
+      "stderr": "argparse-root-help.stderr",
+      "stdout": "argparse-root-help.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live"
+      ],
+      "exit_code": 2,
+      "name": "argparse-live-empty",
+      "stderr": "argparse-live-empty.stderr",
+      "stdout": "argparse-live-empty.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "bogus"
+      ],
+      "exit_code": 2,
+      "name": "argparse-live-bogus",
+      "stderr": "argparse-live-bogus.stderr",
+      "stdout": "argparse-live-bogus.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "-h"
+      ],
+      "exit_code": 0,
+      "name": "argparse-live-help",
+      "stderr": "argparse-live-help.stderr",
+      "stdout": "argparse-live-help.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "actions",
+        "-h"
+      ],
+      "exit_code": 0,
+      "name": "argparse-live-actions-help",
+      "stderr": "argparse-live-actions-help.stderr",
+      "stdout": "argparse-live-actions-help.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "actions",
+        "--kind",
+        "zzz"
+      ],
+      "exit_code": 2,
+      "name": "argparse-live-actions-bad-kind",
+      "stderr": "argparse-live-actions-bad-kind.stderr",
+      "stdout": "argparse-live-actions-bad-kind.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "actions",
+        "--limit",
+        "x"
+      ],
+      "exit_code": 2,
+      "name": "argparse-live-actions-bad-limit",
+      "stderr": "argparse-live-actions-bad-limit.stderr",
+      "stdout": "argparse-live-actions-bad-limit.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "actions",
+        "--li",
+        "1"
+      ],
+      "exit_code": 0,
+      "name": "argparse-live-actions-abbrev",
+      "stderr": "argparse-live-actions-abbrev.stderr",
+      "stdout": "argparse-live-actions-abbrev.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "undo"
+      ],
+      "exit_code": 2,
+      "name": "argparse-live-undo-missing",
+      "stderr": "argparse-live-undo-missing.stderr",
+      "stdout": "argparse-live-undo-missing.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "undo",
+        "x"
+      ],
+      "exit_code": 2,
+      "name": "argparse-live-undo-text",
+      "stderr": "argparse-live-undo-text.stderr",
+      "stdout": "argparse-live-undo-text.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "live",
+        "status",
+        "extra"
+      ],
+      "exit_code": 2,
+      "name": "argparse-live-status-extra",
+      "stderr": "argparse-live-status-extra.stderr",
+      "stdout": "argparse-live-status-extra.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "--nope"
+      ],
+      "exit_code": 2,
+      "name": "argparse-sync-unknown-flag",
+      "stderr": "argparse-sync-unknown-flag.stderr",
+      "stdout": "argparse-sync-unknown-flag.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "--acc",
+        "gmail"
+      ],
+      "exit_code": 0,
+      "name": "argparse-sync-abbrev",
+      "stderr": "argparse-sync-abbrev.stderr",
+      "stdout": "argparse-sync-abbrev.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "--account"
+      ],
+      "exit_code": 2,
+      "name": "argparse-sync-expected-one",
+      "stderr": "argparse-sync-expected-one.stderr",
+      "stdout": "argparse-sync-expected-one.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "--account",
+        "bogus"
+      ],
+      "exit_code": 2,
+      "name": "argparse-sync-bad-account",
+      "stderr": "argparse-sync-bad-account.stderr",
+      "stdout": "argparse-sync-bad-account.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve"
+      ],
+      "exit_code": 2,
+      "name": "argparse-proposals-approve-missing",
+      "stderr": "argparse-proposals-approve-missing.stderr",
+      "stdout": "argparse-proposals-approve-missing.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "-h"
+      ],
+      "exit_code": 0,
+      "name": "argparse-proposals-approve-help",
+      "stderr": "argparse-proposals-approve-help.stderr",
+      "stdout": "argparse-proposals-approve-help.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "list",
+        "--status",
+        "bogus"
+      ],
+      "exit_code": 2,
+      "name": "argparse-proposals-list-bad-status",
+      "stderr": "argparse-proposals-list-bad-status.stderr",
+      "stdout": "argparse-proposals-list-bad-status.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "dismiss",
+        "6",
+        "--for"
+      ],
+      "exit_code": 0,
+      "name": "argparse-proposals-dismiss-flag-abbrev",
+      "stderr": "argparse-proposals-dismiss-flag-abbrev.stderr",
+      "stdout": "argparse-proposals-dismiss-flag-abbrev.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "rules",
+        "import"
+      ],
+      "exit_code": 2,
+      "name": "argparse-rules-import-missing",
+      "stderr": "argparse-rules-import-missing.stderr",
+      "stdout": "argparse-rules-import-missing.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "rules",
+        "import",
+        "a",
+        "b"
+      ],
+      "exit_code": 2,
+      "name": "argparse-rules-import-extra",
+      "stderr": "argparse-rules-import-extra.stderr",
+      "stdout": "argparse-rules-import-extra.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "shadow-report",
+        "--since"
+      ],
+      "exit_code": 2,
+      "name": "argparse-shadow-report-expected-one",
+      "stderr": "argparse-shadow-report-expected-one.stderr",
+      "stdout": "argparse-shadow-report-expected-one.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "serve"
+      ],
+      "exit_code": 2,
+      "name": "argparse-serve-missing-port",
+      "stderr": "argparse-serve-missing-port.stderr",
+      "stdout": "argparse-serve-missing-port.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "serve",
+        "--port",
+        "x"
+      ],
+      "exit_code": 2,
+      "name": "argparse-serve-bad-port",
+      "stderr": "argparse-serve-bad-port.stderr",
+      "stdout": "argparse-serve-bad-port.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "serve",
+        "--port",
+        "1",
+        "--auth",
+        "x"
+      ],
+      "exit_code": 2,
+      "name": "argparse-serve-bad-auth",
+      "stderr": "argparse-serve-bad-auth.stderr",
+      "stdout": "argparse-serve-bad-auth.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "serve",
+        "--port",
+        "1",
+        "--a",
+        "x"
+      ],
+      "exit_code": 2,
+      "name": "argparse-serve-ambiguous",
+      "stderr": "argparse-serve-ambiguous.stderr",
+      "stdout": "argparse-serve-ambiguous.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "serve",
+        "-h"
+      ],
+      "exit_code": 0,
+      "name": "argparse-serve-help",
+      "stderr": "argparse-serve-help.stderr",
+      "stdout": "argparse-serve-help.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "sync",
+        "--",
+        "x"
+      ],
+      "exit_code": 2,
+      "name": "argparse-dashdash",
+      "stderr": "argparse-dashdash.stderr",
+      "stdout": "argparse-dashdash.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "notion",
+        "-h"
+      ],
+      "exit_code": 0,
+      "name": "argparse-notion-help",
+      "stderr": "argparse-notion-help.stderr",
+      "stdout": "argparse-notion-help.stdout"
     }
   ],
   "clock": {

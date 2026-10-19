@@ -88,7 +88,19 @@ func unavailable(d py.Dict) (json.RawMessage, error) {
 	return marshal(textBlock{Type: "text", Text: "[attachment " + name + " is no longer available]"})
 }
 
-func apiBlocks(ctx context.Context, q db.Querier, d py.Dict) ([]json.RawMessage, error) {
+type Scope struct {
+	ThreadID  int64
+	ProjectID *int64
+}
+
+func (s Scope) owns(r *Row) bool {
+	if r.ThreadID != nil && *r.ThreadID == s.ThreadID {
+		return true
+	}
+	return s.ProjectID != nil && r.ProjectID != nil && *r.ProjectID == *s.ProjectID
+}
+
+func apiBlocks(ctx context.Context, q db.Querier, scope Scope, d py.Dict) ([]json.RawMessage, error) {
 	id, err := fileIDOf(d)
 	if err != nil {
 		return nil, err
@@ -97,7 +109,7 @@ func apiBlocks(ctx context.Context, q db.Querier, d py.Dict) ([]json.RawMessage,
 	if err != nil {
 		return nil, err
 	}
-	if found == nil {
+	if found == nil || !scope.owns(found) {
 		b, err := unavailable(d)
 		return []json.RawMessage{b}, err
 	}
@@ -131,19 +143,9 @@ func apiBlocks(ctx context.Context, q db.Querier, d py.Dict) ([]json.RawMessage,
 	return []json.RawMessage{b}, err
 }
 
-// APIBlocks is api_blocks: the content blocks one journaled attachment stands for, a document (a PDF or the
-// extracted text) or an image, or a note that the file is gone.
-func APIBlocks(ctx context.Context, q db.Querier, block json.RawMessage) ([]json.RawMessage, error) {
-	d, err := decodeBlock(block)
-	if err != nil {
-		return nil, err
-	}
-	return apiBlocks(ctx, q, d)
-}
-
 // Expand is expand for one message's content: attachment blocks become their request blocks, every other block
 // stays as it is.
-func Expand(ctx context.Context, q db.Querier, content []json.RawMessage) ([]json.RawMessage, error) {
+func Expand(ctx context.Context, q db.Querier, scope Scope, content []json.RawMessage) ([]json.RawMessage, error) {
 	out := make([]json.RawMessage, 0, len(content))
 	for _, raw := range content {
 		d, err := decodeBlock(raw)
@@ -154,7 +156,7 @@ func Expand(ctx context.Context, q db.Querier, content []json.RawMessage) ([]jso
 			out = append(out, raw)
 			continue
 		}
-		blocks, err := apiBlocks(ctx, q, d)
+		blocks, err := apiBlocks(ctx, q, scope, d)
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +167,7 @@ func Expand(ctx context.Context, q db.Querier, content []json.RawMessage) ([]jso
 
 // CloneContent is clone_content: a branch's copy of each attachment in content, as new rows and bytes under the
 // new thread. An attachment whose file is gone stays as it is.
-func CloneContent(ctx context.Context, q db.Querier, content []json.RawMessage, threadID int64, now float64) ([]json.RawMessage, error) {
+func CloneContent(ctx context.Context, q db.Querier, from Scope, content []json.RawMessage, threadID int64, now float64) ([]json.RawMessage, error) {
 	out := make([]json.RawMessage, 0, len(content))
 	for _, raw := range content {
 		d, err := decodeBlock(raw)
@@ -180,7 +182,7 @@ func CloneContent(ctx context.Context, q db.Querier, content []json.RawMessage, 
 		if err != nil {
 			return nil, err
 		}
-		copied, ok, err := clone(ctx, q, id, threadID, now)
+		copied, ok, err := clone(ctx, q, from, id, threadID, now)
 		if err != nil {
 			return nil, err
 		}

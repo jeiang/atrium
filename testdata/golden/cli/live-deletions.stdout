@@ -1,0 +1,14 @@
+{
+  "icloud": {
+    "ran": true,
+    "trashed": 0,
+    "skipped": 0,
+    "failed": 0
+  },
+  "gmail": {
+    "ran": true,
+    "trashed": 0,
+    "skipped": 0,
+    "failed": 0
+  }
+}

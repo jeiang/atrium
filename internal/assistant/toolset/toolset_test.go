@@ -17,7 +17,9 @@ func TestEveryRegisteredToolIsThePythonTool(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"notify", "web_fetch", "commitments", "contacts_lookup", "draft_email_create", "draft_email_update",
-		"mail_read", "mail_search", "open_loops", "packages", "upcoming_birthdays"} {
+		"mail_read", "mail_search", "open_loops", "packages", "upcoming_birthdays", "threads_today",
+		"context_status", "context_pin", "context_drop", "context_fold", "recall", "plan", "profile_get", "profile_set", "propose",
+		"schedule_create", "schedule_update", "schedule_cancel", "schedule_list", "load_skill"} {
 		found := false
 		for _, tl := range tools {
 			found = found || tl.Name == name

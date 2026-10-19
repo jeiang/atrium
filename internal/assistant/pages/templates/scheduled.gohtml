@@ -1,0 +1,10 @@
+{{define "title"}}Scheduled{{end}}
+{{define "heading"}}Scheduled{{end}}
+{{define "content"}}{{$d := .Data}}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <p class="max-w-prose text-sm text-muted-foreground">Scheduled runs start a new thread with read, notify and propose tools only; the nightly run also writes to Notion and the profile. Times are {{$d.tz}}.</p>
+  <button type="button" class="btn" data-size="sm" hx-get="/scheduled/new" hx-target="#schedule-dialog" hx-swap="innerHTML">{{icon "plus"}}New schedule</button>
+</div>
+{{template "scheduled_list" (dict "jobs" $d.jobs "runs" $d.runs "toast" .Toast)}}
+<dialog id="schedule-dialog" class="dialog" aria-label="Schedule"></dialog>
+{{end}}

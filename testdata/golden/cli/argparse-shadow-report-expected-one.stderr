@@ -1,0 +1,2 @@
+usage: atrium shadow-report [-h] [--since SINCE]
+atrium shadow-report: error: argument --since: expected one argument

@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
+	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/progress"
@@ -477,7 +478,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err != nil {
 		return false, nil, err
 	}
-	messages, err := s.req.buildMessages(ctx, s.d.Read, sent)
+	messages, err := s.req.buildMessages(ctx, s.d.Read, files.Scope{ThreadID: s.thread.ID, ProjectID: s.thread.ProjectID}, sent)
 	if err != nil {
 		return false, nil, err
 	}

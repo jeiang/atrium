@@ -208,9 +208,9 @@ func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []Uplo
 	return blocks, nil
 }
 
-func clone(ctx context.Context, q db.Querier, fileID, threadID int64, now float64) (int64, bool, error) {
+func clone(ctx context.Context, q db.Querier, from Scope, fileID, threadID int64, now float64) (int64, bool, error) {
 	found, err := Get(ctx, q, fileID)
-	if err != nil || found == nil {
+	if err != nil || found == nil || !from.owns(found) {
 		return 0, false, err
 	}
 	res, err := q.ExecContext(ctx,

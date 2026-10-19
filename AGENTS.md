@@ -57,8 +57,18 @@ and backups; nothing of that lives here.
   https://github.com/jeiang/atrium/issues/71), `just lint` and an rx test
   enforce it, and a slice that ports patterns passes them to `rxtest.Run`
   keyed by their `regex_manifest.json` id.
-  The CLI is stdlib `flag` through `internal/cli`: no CLI framework. A
-  handler gets `Env.Ctx`, cancelled on SIGINT and SIGTERM.
+  The CLI is `internal/cli`, a port of the argparse behaviour `cli.py` used
+  (parse algorithm, prefix abbreviations, quoted `choose from`, usage and
+  help layout, errors from the root parser for unrecognized arguments): no
+  CLI framework and no stdlib `flag`. A command declares options and
+  arguments through `cli.Args` in declaration order. A handler gets
+  `Env.Ctx`, cancelled on SIGINT and SIGTERM (`cli.SignalContext`), and
+  reports an uncaught failure with `cli.Fail`: the last traceback line
+  (`py.UncaughtText`), exit 130 with `KeyboardInterrupt` after SIGINT, 143
+  after SIGTERM. Mail commands that are not part of the pass live in
+  `internal/mail/mailcmd`; `atrium codemode-worker` is a stub that fails with
+  "removed in v2" (the inert `atrium-codemode@` unit still names it), and
+  `agent run --kind` no longer accepts `code` (its slice drops the choice).
 - Golden provenance: `FREEZE_COMMIT` lives only in `tools/golden/common.py`
   and every generator imports it. After each post-freeze Python fix the
   goldens are regenerated from main; their provenance is the git history of
@@ -124,8 +134,10 @@ and backups; nothing of that lives here.
   devshell), loaded by import-tree. `.ci/` holds the garret cache push helper.
 - `nix/`: the Python and Go packages, static assets and the NixOS module.
 - `cmd/atrium/`: the Go binary's entry point (root command).
-- `internal/cli/`: the subcommand table; usage errors exit 2, a handler's
-  return value is the exit code.
+- `internal/cli/`: the subcommand table and argparse-compatible parsing;
+  usage errors exit 2, a handler's return value is the exit code.
+- `internal/mail/mailcmd/`: `rules`, `shadow-report`, `reindex`, the scans,
+  `live` and `proposals` commands.
 - `internal/config/`: every environment variable with the Python names,
   defaults and errors; paths beside `ATRIUM_DB`; `ATRIUM_MODE` is read live
   on every call; `ATRIUM_TZ` has one accessor.
@@ -137,7 +149,8 @@ and backups; nothing of that lives here.
   secret, token, key, cookie, credential or authorization is logged as
   `[redacted]`; token counts (`*_TOKENS`) are not.
 - `internal/db/`: the SQLite driver seam (`Open`), `Connect` (writer and
-  reader pools, `WithTx`), `Exclusive` (flock on `<path>.lock`), `Migrate`
+  reader pools, `WithTx`), `Exclusive` (flock on `<path>.lock`), `Checkpoint`
+  (`wal_checkpoint(TRUNCATE)` with its own short busy wait), `Migrate`
   and the schema, vec0 and FTS5 tests, tests against the golden DBs;
   `internal/db/dbtest` connects to a temp-file DB, with or without foreign
   keys (Python's `connect_memory` has them off), migrated (`Schema`) or a
@@ -240,8 +253,32 @@ and backups; nothing of that lives here.
   tool definitions (`registrytest.Stubs`).
 - `internal/assistant/toolset/`: the production registry: every tool
   package's `Tools()`. A tool slice adds its package there.
+- `internal/assistant/runner/`: the ONE place the production `*loop.Runner`
+  is composed (`runner.New()`: toolset registry, the research tool and its
+  `Bind`, `ResearchBatch`, `SkillsIndex`, `ExpandSkills`). serve, the scheduler
+  and `agent run` call it; nothing else builds a `loop.Runner`. A slice that
+  owns another hook (`Profile`) sets it there.
+- `internal/assistant/skills/`: `skills.py` (storage, references, `Expand`,
+  `IndexBlock`, `LoadedInThread`). Built-in wiki skills and subagents are
+  seeded by `db.Migrate` (insert or ignore, once per process: a deleted
+  built-in returns at the next start, accepted divergence).
+- `internal/assistant/subagents/`: `subagents.py` (agents, allowlists, cards,
+  `DigestOf`); `subagents/research/` is `tools/research.py`: child runs of
+  kind `sub` with `allowed_tools` stored in the run limits, at most 2 at a
+  time, 12 steps and $0.25 each; `Batch` runs parallel research calls.
 - `internal/assistant/agentcmd/`: `atrium agent run` (Python's `--kind
   code` is not ported); `#127` adds `agent scheduler` to its group.
+- `internal/assistant/pages/`: the assistant web pages as one `web.Module` (`Module(Options)`, `Templates()`), shared by
+  chat, threads and files (`#134`) and by projects, scheduled and the settings pages assistant, usage, skills and
+  subagents (`#251`; `GET /settings` is a 303 to `/settings/assistant`). Handlers hand templates explicit view
+  structs with json tags and no embedded struct (`JobView`, `RunView`, `SkillView`, `AgentView`, ...); defines are
+  prefixed (`project_*`, `schedule_*`, `scheduled_*`, `skills_*`, `subagent_*`) and take one dict, so a define gets
+  `csrf` and `toast` passed in. A successful htmx project create, update or archive is a 204 with `HX-Redirect` and
+  no body; every scheduled list reply sets `HX-Retarget`/`HX-Reswap` before the body and `HX-Trigger: close-dialogs`
+  only on success. `GET /scheduled` seeds the nightly and built-in jobs on the write handle. Run history stamps
+  (`%a %d %b %H:%M`) use the page zone (`ATRIUM_TZ`), a job's cadence its own `tz`. `Options.Registry` is the
+  registry behind the subagent tool pool and `subagents.Save`; nil is `toolset.Registry()`. `scheduler.ListRuns` is
+  `list_runs` and its read path `scheduler.list_runs`.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
   600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
@@ -311,6 +348,9 @@ and backups; nothing of that lives here.
   undo plan and stops at `Cap` (`config.WriteCap`) intents per pass. A
   group that fails unexpectedly leaves its rows held, and a ledger failure
   that cannot be recorded aborts the pass with the row held, as a crash does.
+  A pass that has started runs on `context.WithoutCancel`, so no caller's
+  shutdown or abandoned request leaves a write half done or its ledger row
+  in flight.
 - `internal/mail/pages/`: the mail web pages as one `web.Page` (`Module(Options)`, `Templates()`, `Globals()`):
   `/messages/{id}` and its correction form, `/live/pause|resume|actions/{id}/undo`, `/triage` and `/rules` with
   the rule editor. A correction in live mode moves the message through `applier.ApplyCorrections` under
@@ -400,7 +440,26 @@ and backups; nothing of that lives here.
 - `internal/mail/imapclient/`: `imap.py`'s client on go-imap v2; go-imap
   drives the session and the bytes it reads are parsed again as Python
   3.14's imaplib does, so results match what Python stored. Wire tests are
-  imapscript transcripts in its `testdata/`.
+  imapscript transcripts in its `testdata/`. `Opener` is `run.open_client`;
+  go-imap re-issues IDLE only after 30 minutes, so the watch loop's 29-minute
+  IDLE goes out once, as imaplib sends it.
+- `internal/mail/run/`: `run.py` and `watch.py`. `Pass.Locked` is one pass
+  under `db.Exclusive`: sync, then `Process` (go-live baseline in live mode,
+  embedding, then per account route, flag, the `Events` hook of
+  `event_candidates`, `ApplyAll`, then the `Extras`: open loops, watches,
+  and money once ported), then `DB.Checkpoint` (1 s wait for readers; a
+  blocked one is logged) before the lock is released. `Watcher` is the
+  per-account loop: each cycle connects (a failure backs off like a lost
+  connection), passes, then IDLEs (or 58 s + NOOP), 2 s settle, backoff 5 s
+  doubling to 300 s. In `watch` a started pass runs on `context.WithoutCancel`,
+  so shutdown never interrupts it; cancellation is seen only while waiting,
+  and `watch` gives the loops 30 s. `sync` sees a signal between accounts and
+  between extras (never inside a live pass) and exits 143 or 130 once the
+  running stage is complete. `sync` and `watch` are its commands and log as
+  `atrium.run` and `atrium.watch`. `run.New` takes the clock every stage
+  shares; the pipeline differential (`TestGoldenPipelineDifferential`)
+  replays `testdata/golden/pipeline/scenario.json` through it and the mail
+  commands and compares every core table with Python's rows.
 - `internal/py/`: the shared CPython emulation: `Repr`/`ReprBytes`, `IsSpace`/`Strip`/
   `Split`/`SplitLines`/`Clip`/`Lower`, `Sum`/`SumSq` (Neumaier, as `sum()`),
   `JSONDumps(v, opts...)` (the one `json.dumps`: `JSONOpts` is `NoEnsureASCII`, `Compact`, `SortKeys`; over `Dict`, `map`, `[]string`, `[]any`,

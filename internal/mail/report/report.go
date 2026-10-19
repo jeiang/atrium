@@ -41,11 +41,15 @@ type Querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// ErrSince is the ValueError parse_since raises on a malformed value.
-var ErrSince = errors.New("report: bad since")
+// SinceError is the ValueError parse_since raises on a malformed value.
+type SinceError string
+
+func (e SinceError) Error() string { return string(e) }
+
+func (SinceError) PyClass() string { return "ValueError" }
 
 func sinceError(value string) error {
-	return fmt.Errorf("%w: time data %s does not match format '%%Y-%%m-%%d'", ErrSince, py.Repr(value))
+	return SinceError(fmt.Sprintf("time data %s does not match format '%%Y-%%m-%%d'", py.Repr(value)))
 }
 
 // ParseSince is parse_since: nil is the epoch, "<n>h" and "<n>d" count back from at, and a date is midnight in
