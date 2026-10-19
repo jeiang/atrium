@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -75,14 +76,13 @@ func New(o Options) (*Server, error) {
 	}
 	static := newStaticHandler(o.Static)
 	s.mux.NotFound(s.notFound)
-	s.mux.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
-		s.Error(w, r, http.StatusMethodNotAllowed, "Method Not Allowed")
-	})
+	s.mux.MethodNotAllowed(s.methodNotAllowed)
+	s.mux.Use(middleware.GetHead)
 	s.mux.Get(HealthPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	s.mux.Handle(StaticPrefix+"*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		static.serve(w, r, func() { s.Error(w, r, http.StatusNotFound, "Not Found") })
+		static.serve(w, r, func(status int, detail string) { s.Error(w, r, status, detail) })
 	}))
 	s.mux.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/chat", http.StatusSeeOther)
@@ -92,7 +92,7 @@ func New(o Options) (*Server, error) {
 		register(s.mux, deps)
 	}
 	guard := NewGuard(o.Auth, o.AllowedHosts, o.Public)
-	s.handler = recoverer(guard.Middleware(Gzip(s.mux)))
+	s.handler = guard.Middleware(Gzip(recoverer(s.mux)))
 	return s, nil
 }
 
@@ -106,20 +106,50 @@ func IsPartial(r *http.Request) bool {
 	return hx && !restore
 }
 
-// notFound redirects with a 307 to the sibling path with or without its
-// trailing slash when that one is routed (Starlette's redirect_slashes).
-func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
+func (s *Server) routed(method, path string) bool {
+	return s.mux.Match(chi.NewRouteContext(), method, path)
+}
+
+// slashRedirect is Starlette's redirect_slashes: a 307 to the sibling path
+// with or without its trailing slash when that one is routed for the method.
+func (s *Server) slashRedirect(w http.ResponseWriter, r *http.Request) bool {
 	path := r.URL.Path
 	alt := path + "/"
 	if strings.HasSuffix(path, "/") {
 		alt = strings.TrimRight(path, "/")
 	}
-	if alt != "" && alt != path && s.mux.Match(chi.NewRouteContext(), r.Method, alt) {
-		target := url.URL{Path: alt, RawQuery: r.URL.RawQuery}
-		http.Redirect(w, r, target.String(), http.StatusTemporaryRedirect)
+	if alt == "" || alt == path || !s.routed(r.Method, alt) {
+		return false
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	target := url.URL{Scheme: scheme, Host: r.Host, Path: alt, RawQuery: r.URL.RawQuery}
+	http.Redirect(w, r, target.String(), http.StatusTemporaryRedirect)
+	return true
+}
+
+func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
+	if !s.slashRedirect(w, r) {
+		s.Error(w, r, http.StatusNotFound, "Not Found")
+	}
+}
+
+func (s *Server) methodNotAllowed(w http.ResponseWriter, r *http.Request) {
+	if s.slashRedirect(w, r) {
 		return
 	}
-	s.Error(w, r, http.StatusNotFound, "Not Found")
+	var allow []string
+	for _, m := range []string{http.MethodDelete, http.MethodGet, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut} {
+		if s.routed(m, r.URL.Path) {
+			allow = append(allow, m)
+		}
+	}
+	if len(allow) > 0 {
+		w.Header().Set("Allow", strings.Join(allow, ", "))
+	}
+	s.Error(w, r, http.StatusMethodNotAllowed, "Method Not Allowed")
 }
 
 // Error is the app's HTTPException handler: 404 and 422 render the error
@@ -159,6 +189,10 @@ func recoverer(next http.Handler) http.Handler {
 			}
 			if rec == http.ErrAbortHandler {
 				panic(rec)
+			}
+			h := w.Header()
+			for _, name := range []string{"Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy", "Set-Cookie"} {
+				h.Del(name)
 			}
 			log.Error("unhandled exception", logx.Err, fmt.Sprint(rec), "method", r.Method, "path", r.URL.Path)
 			deny(w, http.StatusInternalServerError, "Internal Server Error")

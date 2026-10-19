@@ -26,6 +26,7 @@ func Gzip(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		w.Header().Add("Vary", "Accept-Encoding")
 		g := &gzipWriter{ResponseWriter: w}
 		defer g.finish()
 		next.ServeHTTP(g, r)

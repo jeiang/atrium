@@ -107,15 +107,18 @@ func isUnsafe(method string) bool {
 }
 
 func cookieToken(r *http.Request) (string, bool) {
-	raw := r.Header.Get("Cookie")
-	if raw == "" {
-		return "", false
-	}
-	cookies, _ := http.ParseCookie(raw)
 	token, found := "", false
-	for _, c := range cookies {
-		if c.Name == CSRFCookie {
-			token, found = c.Value, true
+	for _, line := range r.Header.Values("Cookie") {
+		for pair := range strings.SplitSeq(line, ";") {
+			name, value, ok := strings.Cut(pair, "=")
+			if !ok || py.Strip(name) != CSRFCookie {
+				continue
+			}
+			value = py.Strip(value)
+			if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+				value = value[1 : len(value)-1]
+			}
+			token, found = value, true
 		}
 	}
 	return token, found
@@ -138,7 +141,7 @@ func deny(w http.ResponseWriter, status int, text string) {
 // healthProbe is exempt from the Host and group checks: the unit and the
 // proxy probe it by address and carry no Remote-Groups.
 func healthProbe(r *http.Request) bool {
-	return r.Method == http.MethodGet && r.URL.Path == HealthPath
+	return r.Method == http.MethodGet && r.URL.EscapedPath() == HealthPath
 }
 
 func setSecurityHeaders(h http.Header) {

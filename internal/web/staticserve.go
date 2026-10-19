@@ -31,10 +31,10 @@ func (s *staticHandler) etag(name string, content []byte) string {
 	return tag
 }
 
-func (s *staticHandler) serve(w http.ResponseWriter, r *http.Request, notFound func()) {
+func (s *staticHandler) serve(w http.ResponseWriter, r *http.Request, fail func(status int, detail string)) {
+	notFound := func() { fail(http.StatusNotFound, "Not Found") }
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.Header().Set("Allow", "GET, HEAD")
-		deny(w, http.StatusMethodNotAllowed, "Method Not Allowed")
+		fail(http.StatusMethodNotAllowed, "Method Not Allowed")
 		return
 	}
 	name := strings.TrimPrefix(r.URL.Path, StaticPrefix)

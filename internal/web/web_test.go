@@ -474,12 +474,12 @@ func TestTrailingSlashRedirect(t *testing.T) {
 	c := local(t)
 	rec := c.get("/slash?x=1")
 	wantStatus(t, rec, 307, "add slash")
-	if rec.Header().Get("Location") != "/slash/?x=1" {
+	if rec.Header().Get("Location") != "http://testserver/slash/?x=1" {
 		t.Errorf("location = %q", rec.Header().Get("Location"))
 	}
 	rec = c.get("/chat/")
 	wantStatus(t, rec, 307, "drop slash")
-	if rec.Header().Get("Location") != "/chat" {
+	if rec.Header().Get("Location") != "http://testserver/chat" {
 		t.Errorf("location = %q", rec.Header().Get("Location"))
 	}
 	wantStatus(t, c.get("/unrouted/"), 404, "unrouted")
@@ -542,7 +542,7 @@ func TestStaticServing(t *testing.T) {
 func TestStaticSlashRedirect(t *testing.T) {
 	rec := local(t).get("/static")
 	wantStatus(t, rec, 307, "/static")
-	if rec.Header().Get("Location") != "/static/" {
+	if rec.Header().Get("Location") != "http://testserver/static/" {
 		t.Errorf("location = %q", rec.Header().Get("Location"))
 	}
 }
@@ -567,4 +567,63 @@ func TestFormFieldMatchesParseQS(t *testing.T) {
 			t.Errorf("formField(%q) = %q, %v; want %q, %v", tc.body, got, ok, tc.want, tc.ok)
 		}
 	}
+}
+
+func TestPanicWithGzipIs500WithoutGuardHeaders(t *testing.T) {
+	c := newClient(t, newServer(t, AuthLocal, []string{testHost}))
+	rec := c.get("/boom", [2]string{"Accept-Encoding", "gzip"})
+	wantStatus(t, rec, 500, "panic with gzip")
+	h := rec.Header()
+	if h.Get("Content-Security-Policy") != "" || h.Get("Set-Cookie") != "" {
+		t.Errorf("500 carries guard headers: %v", h)
+	}
+}
+
+func TestCookieTokenIsLenient(t *testing.T) {
+	cases := map[string]string{
+		"atrium_csrf=tok;":                 "tok",
+		"a:b=1; atrium_csrf=tok":           "tok",
+		`prefs={"a":1}; atrium_csrf=tok`:   "tok",
+		"lang=caf\u00e9; atrium_csrf=tok":  "tok",
+		"atrium_csrf=old; atrium_csrf=new": "new",
+		`atrium_csrf="quoted"`:             "quoted",
+		"junk; atrium_csrf=tok; =x":        "tok",
+	}
+	for raw, want := range cases {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Cookie", raw)
+		if got, ok := cookieToken(req); !ok || got != want {
+			t.Errorf("%q = %q, %v; want %q", raw, got, ok, want)
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Cookie", "other=1")
+	if _, ok := cookieToken(req); ok {
+		t.Error("found a token in a foreign cookie")
+	}
+}
+
+func TestHealthzExemptionNeedsExactPath(t *testing.T) {
+	c := newClient(t, newServer(t, AuthProxy, []string{"atrium.test"}))
+	c.host = "127.0.0.1:8480"
+	wantStatus(t, c.get("/healthz"), 200, "exact")
+	wantStatus(t, c.get("/health%7Az"), 400, "escaped variant goes through the Guard")
+	wantStatus(t, c.get("/healthz/"), 400, "trailing slash")
+}
+
+func TestMethodErrors(t *testing.T) {
+	c := local(t)
+	post := c.do(http.MethodPost, "/static/app.css", nil)
+	wantStatus(t, post, 405, "POST static")
+	if post.Header().Get("Allow") != "" || post.Body.String() != `{"detail":"Method Not Allowed"}` {
+		t.Errorf("static 405 = %v %q", post.Header(), post.Body.String())
+	}
+	rec := c.do(http.MethodGet, "/rules/x", nil)
+	wantStatus(t, rec, 405, "route 405")
+	if rec.Header().Get("Allow") != "DELETE" {
+		t.Errorf("Allow = %q", rec.Header().Get("Allow"))
+	}
+	wantStatus(t, c.do(http.MethodHead, "/small", nil), 200, "HEAD follows GET")
+	redirect := c.do(http.MethodPost, "/chat/", nil)
+	wantStatus(t, redirect, 307, "method-differs slash redirect")
 }
