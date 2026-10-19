@@ -1,0 +1,85 @@
+{{define "sidebar"}}{{$id := opt . "id" ""}}{{$open := opt . "open" true}}{{$menu := opt . "menu" nil}}{{$header := opt . "header" nil}}{{$footer := opt . "footer" nil -}}
+<aside
+  {{if $id}}id="{{$id}}"{{end}}
+  class="sidebar {{opt . "class" ""}}"
+  data-side="{{or (opt . "side" "") "left"}}"
+  aria-hidden="{{if $open}}false{{else}}true{{end}}"
+  {{if not $open}}inert{{end}}
+>
+  <nav
+    aria-label="{{opt . "label" "Sidebar navigation"}}"
+  >
+    {{if $header}}
+    <header>
+      {{$header}}
+    </header>
+    {{end}}
+
+    <section>
+      {{if $menu}}
+        {{template "sidebar_items" (dict "items" $menu "prefix" (ternary (ne $id "") (printf "%s-content" $id) "content"))}}
+      {{else}}
+        {{opt . "body" ""}}
+      {{end}}
+    </section>
+
+    {{if $footer}}
+    <footer>
+      {{$footer}}
+    </footer>
+    {{end}}
+  </nav>
+</aside>
+{{- end}}
+
+{{define "sidebar_items"}}{{$prefix := .prefix}}
+  {{range $i, $item := .items}}
+    {{$item_id := printf "%s-%d" $prefix (inc $i)}}
+    {{$type := opt $item "type" "item"}}
+    {{if eq $type "group"}}
+      {{$label := opt $item "label" ""}}
+      {{$group_label_id := or (opt $item "id" nil) (printf "group-label-%s" $item_id)}}
+      <div
+        role="group"
+        {{if $label}}aria-labelledby="{{$group_label_id}}"{{end}}
+        {{with opt $item "class" ""}}class="{{.}}"{{end}}
+      >
+        {{if $label}}
+          <h3 id="{{$group_label_id}}">{{$label}}</h3>
+        {{end}}
+        <ul>
+          {{with opt $item "items" nil}}{{template "sidebar_items" (dict "items" . "prefix" $item_id)}}{{end}}
+        </ul>
+      </div>
+    {{else if eq $type "separator"}}
+      <hr role="separator"/>
+    {{else if eq $type "submenu"}}
+      <li>
+        <details
+          id="submenu-{{$item_id}}"
+          {{if opt $item "open" false}}open{{end}}
+          {{with opt $item "class" ""}}class="{{.}}"{{end}}
+        >
+          <summary aria-controls="submenu-{{$item_id}}-content">
+            {{with opt $item "icon" nil}}{{.}}{{end}}
+            <span>{{opt $item "label" ""}}</span>
+          </summary>
+          <ul id="submenu-{{$item_id}}-content">
+            {{with opt $item "items" nil}}{{template "sidebar_items" (dict "items" . "prefix" $item_id)}}{{end}}
+          </ul>
+        </details>
+      </li>
+    {{else if eq $type "item"}}
+      <li>
+        <a
+          href="{{safeurl (opt $item "url" "#")}}"
+          {{if opt $item "current" false}}aria-current="page"{{end}}
+          {{with opt $item "class" ""}}class="{{.}}"{{end}}
+        >
+          {{with opt $item "icon" nil}}{{.}}{{end}}
+          <span>{{opt $item "label" ""}}</span>
+        </a>
+      </li>
+    {{end}}
+  {{end}}
+{{end}}
