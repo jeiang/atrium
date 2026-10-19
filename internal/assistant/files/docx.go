@@ -183,7 +183,10 @@ func continuesMerge(tc *element) bool {
 	return !ok || val == "continue"
 }
 
-type rowSet struct{ rows []*element }
+type rowSet struct {
+	rows  []*element
+	index map[*element]int
+}
 
 // rowGrid is one w:tr's layout grid: where each w:tc starts, computed once however many cells of the row below
 // ask for the cell above them.
@@ -280,16 +283,13 @@ func (r *docxReader) grid(tr *element) *rowGrid {
 	set := r.sets[tr.parent]
 	if set == nil {
 		set = &rowSet{rows: tr.parent.kids(nsWord, "tr")}
+		set.index = make(map[*element]int, len(set.rows))
+		for j, row := range set.rows {
+			set.index[row] = j
+		}
 		r.sets[tr.parent] = set
 	}
-	index := 0
-	for j, row := range set.rows {
-		if row == tr {
-			index = j
-			break
-		}
-	}
-	g := newRowGrid(set, index, tr)
+	g := newRowGrid(set, set.index[tr], tr)
 	r.grids[tr] = g
 	return g
 }
@@ -381,6 +381,7 @@ func docxText(data []byte) (string, error) {
 		}
 		for _, tr := range tbl.kids(nsWord, "tr") {
 			var cells []string
+			rowBytes := 0
 			for _, tc := range tr.kids(nsWord, "tc") {
 				if reader.count++; reader.count > tableCellCap {
 					return "", errTooLarge
@@ -390,7 +391,12 @@ func docxText(data []byte) (string, error) {
 					return "", err
 				}
 				for _, t := range texts {
-					cells = append(cells, py.Strip(t))
+					stripped := py.Strip(t)
+					rowBytes += len(stripped) + 1
+					if size+rowBytes > maxTextBytes {
+						return "", errTooLarge
+					}
+					cells = append(cells, stripped)
 				}
 			}
 			if err := add(strings.Join(cells, "\t")); err != nil {

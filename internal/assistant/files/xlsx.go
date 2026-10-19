@@ -344,10 +344,17 @@ func xlsxText(data []byte) (string, error) {
 	return py.Strip(out.String()), nil
 }
 
-func writeCSVRow(out *strings.Builder, fields []string) {
+func writeCSVRow(out *strings.Builder, fields []string) error {
+	size := out.Len() + len(fields) + 1
+	for _, f := range fields {
+		size += len(f)
+		if size > maxTextBytes {
+			return errTooLarge
+		}
+	}
 	if len(fields) == 1 && fields[0] == "" {
 		out.WriteString("\"\"\n")
-		return
+		return nil
 	}
 	for i, f := range fields {
 		if i > 0 {
@@ -362,6 +369,7 @@ func writeCSVRow(out *strings.Builder, fields []string) {
 		}
 	}
 	out.WriteByte('\n')
+	return nil
 }
 
 type cell struct {
@@ -441,8 +449,7 @@ func (p *sheetParser) emit(cells []cell) error {
 		}
 	}
 	if len(cells) == 0 && p.maxCol == none {
-		writeCSVRow(p.out, nil)
-		return nil
+		return writeCSVRow(p.out, nil)
 	}
 	fields := make([]string, width)
 	for _, c := range cells {
@@ -450,8 +457,7 @@ func (p *sheetParser) emit(cells []cell) error {
 			fields[c.column-1] = c.value
 		}
 	}
-	writeCSVRow(p.out, fields)
-	return nil
+	return writeCSVRow(p.out, fields)
 }
 
 func (p *sheetParser) row(e *element) error {
@@ -667,6 +673,9 @@ func (p *sheetParser) cell(e *element) (cell, error) {
 	} else {
 		p.colCounter++
 		column = p.colCounter
+		if column > maxSheetCols {
+			return cell{}, errTooLarge
+		}
 	}
 	out := cell{column: column}
 	if !hasValue {

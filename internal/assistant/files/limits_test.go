@@ -232,3 +232,31 @@ func TestDocxTextBoundIsTheRequestBudget(t *testing.T) {
 		t.Errorf("error %v", err)
 	}
 }
+
+func TestSharedStringAmplificationIsBoundedMidRow(t *testing.T) {
+	big := strings.Repeat("a", 1<<20)
+	shared := zipOf(t,
+		[2]string{"[Content_Types].xml", `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="` + workbookTypes[3] + `"/><Override PartName="/xl/sharedStrings.xml" ContentType="` + typeSharedStrings + `"/></Types>`},
+		[2]string{"_rels/.rels", `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="` + relOfficeDoc + `" Target="xl/workbook.xml"/></Relationships>`},
+		[2]string{"xl/workbook.xml", `<workbook xmlns="` + nsSheet + `" xmlns:r="` + nsOfficeRels + `"><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>`},
+		[2]string{"xl/_rels/workbook.xml.rels", `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="x/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`},
+		[2]string{"xl/sharedStrings.xml", `<sst xmlns="` + nsSheet + `"><si><t>` + big + `</t></si></sst>`},
+		[2]string{"xl/worksheets/sheet1.xml", `<worksheet xmlns="` + nsSheet + `"><sheetData><row r="1">` + strings.Repeat(`<c t="s"><v>0</v></c>`, 100) + `</row></sheetData></worksheet>`})
+	if _, err := Inspect("a.xlsx", shared, ""); err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Errorf("error %v", err)
+	}
+}
+
+func TestCellsWithoutRefsAreBoundedByTheColumnLimit(t *testing.T) {
+	rows := `<row r="1">` + strings.Repeat(`<c><v>1</v></c>`, maxSheetCols+1) + `</row>`
+	if _, err := Inspect("a.xlsx", plainXLSX(t, rows, "", "", ""), ""); err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Errorf("error %v", err)
+	}
+}
+
+func TestDocxRowTextIsBoundedBeforeJoining(t *testing.T) {
+	cell := `<w:tc><w:tcPr><w:gridSpan w:val="63"/></w:tcPr><w:p><w:r><w:t>` + strings.Repeat("a", 1<<20) + `</w:t></w:r></w:p></w:tc>`
+	if _, err := Inspect("a.docx", docxFrom(t, `<w:tbl><w:tr>`+cell+`</w:tr></w:tbl>`), ""); err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Errorf("error %v", err)
+	}
+}
