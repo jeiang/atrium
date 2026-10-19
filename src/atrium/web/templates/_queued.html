@@ -1,2 +1,0 @@
-{% from "_macros.html" import chat_item %}
-{% for q in queued %}{{ chat_item({"kind": "queued", "id": q.id, "text": q.text, "files": q.files}) }}{% endfor %}

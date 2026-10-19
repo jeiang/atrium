@@ -23,12 +23,11 @@ Limits that hold today:
 
 ## Status
 
-The Python app in `src/atrium` runs today and is frozen to fixes.
+The Go app (`cmd/atrium`, `internal/`) runs in production. v2 is a Go
+rewrite, in two phases:
 
-v2 is a planned Go rewrite, in two phases:
-
-- Phase A ports the app as-is: same behavior, same SQLite data, same host
-  interface. Then it cuts over and the Python code is deleted.
+- Phase A ported the app as-is: same behavior, same SQLite data, same host
+  interface. It has cut over and the Python code is deleted.
 - Phase B improves the Go code: OIDC login, settings editable in the UI and
   pinnable by deploy-time config, runtime-toggled modules, a remote microVM
   sandbox manager for scripts and repository work, GitHub integration, and

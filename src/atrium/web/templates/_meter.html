@@ -1,9 +1,0 @@
-{% set m = view.meter %}
-<span id="meter" class="flex items-center gap-2 tabular-nums" title="Prompt tokens of the last request against the point where the context is compacted ({{ m.compact_at }} of the {{ m.limit }} limit)"{% if oob %} hx-swap-oob="true"{% endif %}>
-  <span class="badge" data-variant="outline">effort {{ view.thread.effort }}</span>
-  <span class="flex items-center gap-1.5" aria-label="Context used">
-    <span class="h-1.5 w-16 overflow-hidden rounded-full bg-muted" aria-hidden="true"><span class="block h-full rounded-full {{ 'bg-warning' if m.share >= 0.8 else 'bg-chart-3' }}" style="width: {{ (m.share * 100) | round | int }}%"></span></span>
-    <span>{{ "%.1f" | format(m.tokens / 1000) }}K / {{ (m.compact_at / 1000) | round | int }}K</span>
-  </span>
-  <span data-cost>${{ "%.3f" | format(view.cost) }}</span>
-</span>

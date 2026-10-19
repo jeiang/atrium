@@ -220,26 +220,15 @@ var pythonOrder = []string{
 	"notion", "agent", "calendar", "loops", "watches", "money", "media", "serve", "codemode-worker",
 }
 
-// withUnported fills the commands other slices still port with name-only stand-ins in cli.py's order, so usage lines
-// list every command the Python parser had.
-func withUnported(have []*cli.Command) []*cli.Command {
+func inPythonOrder(have []*cli.Command) []*cli.Command {
 	var out []*cli.Command
 	for _, name := range pythonOrder {
-		i := slices.IndexFunc(have, func(c *cli.Command) bool { return c.Name == name })
-		switch {
-		case i >= 0:
+		if i := slices.IndexFunc(have, func(c *cli.Command) bool { return c.Name == name }); i >= 0 {
 			out = append(out, have[i])
-		default:
-			out = append(out, &cli.Command{Name: name, Setup: noop})
 		}
 	}
 	return out
 }
-
-func noop(*cli.Args) cli.Handler { return func(*cli.Env) int { return cli.ExitOK } }
-
-// unported are goldens of commands whose proposal kind or executor another slice ports; each is enabled there.
-var unported = map[string]string{}
 
 type parityCase struct {
 	Name     string  `json:"name"`
@@ -345,7 +334,7 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 		return func(_ context.Context, account string) (mail.Client, error) { return fakes[account], nil }
 	}
 	app := cli.New("atrium", logx.Setup)
-	app.Add(withUnported(commands(clients, func() float64 { return data.world.Clock }))...)
+	app.Add(inPythonOrder(commands(clients, func() float64 { return data.world.Clock }))...)
 	app.Stdin = strings.NewReader(stdin)
 	return &rig{dir: dir, app: app}
 }
@@ -380,9 +369,6 @@ func TestCLIGoldens(t *testing.T) {
 		}
 		ran++
 		t.Run(g.Name, func(t *testing.T) {
-			if reason, skip := unported[g.Name]; skip {
-				t.Skip(reason)
-			}
 			r := newRig(t, data, goldenEnv(t, g), g.Stdin)
 			tmp := filepath.Join(r.dir, "tmp")
 			if err := os.MkdirAll(tmp, 0o777); err != nil {

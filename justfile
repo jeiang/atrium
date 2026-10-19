@@ -15,16 +15,6 @@ check extraArgs="":
 fast-check extraArgs="":
   nix run nixpkgs#nix-fast-build -- --flake '.#checks' --skip-cached --no-nom {{extraArgs}}
 
-# Run the pytest suite against the working tree
-test *args:
-  nix develop --impure -c python -m pytest {{args}}
-
-# Regenerate testdata/golden from the frozen Python app
-golden:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  nix develop --impure -c bash -c 'for script in tools/golden/gen_*.py tools/golden/make_db.py tools/golden/render_cli_parity.py tools/golden/render_pages.py; do if [ -e "$script" ]; then echo "$script" >&2; python "$script"; fi; done'
-
 # Stage the built web assets into internal/web/static, which go build and go test embed (inside the dev shell)
 assets:
   rm -rf internal/web/static
