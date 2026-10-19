@@ -696,7 +696,7 @@ func SyncAfter(syncer *mailsync.Syncer, open mailops.Opener) proposals.SyncHook 
 		if err != nil {
 			return err
 		}
-		defer lock.Close()
+		defer func() { _ = lock.Close() }()
 		_, err = syncer.One(ctx, account, mailsync.Opener(open))
 		return err
 	}

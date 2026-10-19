@@ -205,8 +205,16 @@ and backups; nothing of that lives here.
   `internal/db/readpaths/live_test.go`.
 - `internal/mail/backlog/`: `backlog.py`, one `inbox_backlog` proposal per
   account from the go-live baseline; `BacklogError` before go-live.
-- `internal/proposals/`: `proposals.py`'s `Registry` (undoers and the sync
-  hook), `Known` and `Create`; `scanutil` is `scanutil.py`.
+- `internal/proposals/`: `proposals.py`. `Registry` holds the executor of
+  each kind, the undoers and the sync hook; `Pipeline.ApproveAndApply` and
+  `Undo` run as the approved write of the proposal id, a `SelectionError`
+  (also a `ProposalError`) puts the proposal back to pending, any other
+  failure stores `Class: message` and marks it failed. `executors` is
+  `executors.py` (mail kinds, `delete_folder`/`rule_delete` undoers, the
+  post-write resync; `Register` adds live's undoers too), `handlers` the
+  registration order, `scans` `scan_all`, `scanutil` `scanutil.py`. The
+  scanners are `internal/mail/rebalance`, `deletions` and `gmaillabels`;
+  read paths in `internal/db/readpaths/proposals_test.go`.
 - `internal/mail/rules/`, `ruleedit/`, `corrections/`, `router/`: the routing
   pipeline (`rules.py`, `ruleedit.py`, `corrections.py`, `router.py`).
   Stages are correction, operator rule, learned rule, nearest neighbours,

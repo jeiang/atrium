@@ -784,7 +784,7 @@ func track(ctx context.Context, d *db.DB, candidates []Candidate, ts float64) (m
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var fp string
 			var n int64

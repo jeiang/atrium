@@ -631,3 +631,22 @@ func TestPayloadSurvivesJSONRoundtrip(t *testing.T) {
 		t.Fatalf("stored = %v", stored)
 	}
 }
+
+func TestSelectionOfDeletionAndLabelMergeMustStayInsideTheProposal(t *testing.T) {
+	outside := py.Dict{{Key: "message_ids", Value: []any{int64(10_000)}}}
+	icloud := icloudWorld(t)
+	pid := icloud.propose(executors.DeletionRule, deletionPayload(icloud, icloud.messageIDs("Bills"), config.ICloud))
+	_, err := icloud.pipeline.ApproveAndApply(context.Background(), pid, outside)
+	selectionErr(t, err, "selection names messages outside the proposal")
+	if n := count(t, icloud.db, "SELECT COUNT(*) FROM rules"); n != 0 || len(icloud.fake.Writes) != 0 {
+		t.Fatalf("a refused selection wrote: rules %d, writes %v", n, icloud.fake.Writes)
+	}
+	gmail := gmailWorld(t, []string{"Parent/Small"})
+	ids := gmail.ids("SELECT id FROM messages ORDER BY id")
+	pid = gmail.propose(executors.GmailLabelMerge, py.Dict{{Key: "label", Value: "Parent/Small"}, {Key: "into", Value: "Parent"}, {Key: "messages", Value: gmail.snapshots(ids)}})
+	_, err = gmail.pipeline.ApproveAndApply(context.Background(), pid, outside)
+	selectionErr(t, err, "selection names messages outside the proposal")
+	if p, _ := proposals.Get(context.Background(), gmail.db.Read, pid); p.Status != proposals.Pending {
+		t.Fatalf("status = %s", p.Status)
+	}
+}
