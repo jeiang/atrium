@@ -247,6 +247,20 @@ and backups; nothing of that lives here.
   registration order, `scans` `scan_all`, `scanutil` `scanutil.py`. The
   scanners are `internal/mail/rebalance`, `deletions` and `gmaillabels`;
   read paths in `internal/db/readpaths/proposals_test.go`.
+- `internal/mail/openloops/`, `watches/`, `birthdays/`: `openloops.py`,
+  `watches.py` (packages) and `birthdays.py`. A chat outage logs and stops the
+  pass without marking the message scanned; a `ValueError`, `KeyError` or
+  `TypeError` from the model (`httpx.ErrValue`/`ErrKey`/`ErrType`) marks it
+  scanned with nothing found, any other error ends the pass. Model answers
+  are `py.JSONLoads` values (`py.Dict`), not `httpx.Key` maps. `Compute` runs
+  in one transaction; `Reminders` is the `reminder` kind (`Register` is called
+  from `handlers.Register`, its undo plan is `reminder_cancel`, the job is
+  `scheduler.CreateJob` with `SkipLimits`). `openloops.Command()` and
+  `watches.Command()` are `loops refresh` and `watches refresh` (the shared
+  shape is `mail/refreshcmd`: migrate, flock, indented JSON); the root command
+  adds them. Golden: the llama.cpp request bodies, the proposal and job the
+  reminder makes, the 56 loops and the four read paths in
+  `internal/db/readpaths/openloops_test.go`.
 - `internal/mail/rules/`, `ruleedit/`, `corrections/`, `router/`: the routing
   pipeline (`rules.py`, `ruleedit.py`, `corrections.py`, `router.py`).
   Stages are correction, operator rule, learned rule, nearest neighbours,
