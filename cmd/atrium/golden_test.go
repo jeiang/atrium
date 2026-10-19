@@ -27,6 +27,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/watches"
+	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
@@ -367,7 +368,7 @@ func TestCLIGoldens(t *testing.T) {
 			if reason, skip := unported[g.Name]; skip {
 				t.Skip(reason)
 			}
-			r := newRig(t, data, g.Env, g.Stdin)
+			r := newRig(t, data, goldenEnv(t, g), g.Stdin)
 			tmp := filepath.Join(r.dir, "tmp")
 			if err := os.MkdirAll(tmp, 0o777); err != nil {
 				t.Fatal(err)
@@ -558,4 +559,40 @@ func TestCLIParity(t *testing.T) {
 			t.Errorf("status %d", resp.StatusCode)
 		}
 	})
+}
+
+func goldenEnv(t *testing.T, g cliGolden) map[string]string {
+	t.Helper()
+	if len(g.Argv) < 2 || g.Argv[1] != "media" {
+		return g.Env
+	}
+	return mediaServices(t)
+}
+
+func mediaServices(t *testing.T) map[string]string {
+	t.Helper()
+	release := func(hash, title, size string) map[string]any {
+		return map[string]any{"hash": hash, "title": title, "magnet_url": "magnet:?xt=urn:btih:" + hash + "&dn=x", "size_bytes": size, "season": "1", "episode": "1"}
+	}
+	releases := map[string][]map[string]any{
+		"1234567": {
+			release(strings.Repeat("a", 40), "Lanterns S01E07 1080p WEB h264", "1500000000"),
+			release(strings.Repeat("c", 40), "Lanterns S01E08 1080p WEB h264", "2500000000"),
+			release(strings.Repeat("d", 40), "Lanterns S01E09 1080p WEB h264", "2600000000"),
+		},
+		"7654321": {},
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/get-torrents", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"torrents": releases[r.URL.Query().Get("imdb_id")]})
+	})
+	mux.HandleFunc("/api/v2/torrents/add", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "Ok.") })
+	mux.HandleFunc("/api/v2/torrents/info", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "[]") })
+	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	previous := media.EZTVAPI
+	media.EZTVAPI = srv.URL + "/api/get-torrents"
+	t.Cleanup(func() { media.EZTVAPI = previous })
+	return map[string]string{"QBITTORRENT_URL": srv.URL, "NTFY_URL": srv.URL}
 }
