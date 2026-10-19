@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	contexttools "github.com/jeiang/atrium/internal/assistant/tools/context"
+	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
@@ -27,6 +28,7 @@ func Registry() (*registry.Registry, error) {
 		mailtools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
 		contexttools.Tools(), recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
 		scheduletools.Tools(), skillstools.Tools(),
+		grafanatools.Tools(),
 	} {
 		if err := r.Add(tools...); err != nil {
 			return nil, err
