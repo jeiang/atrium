@@ -151,7 +151,7 @@ func (s *session) putcmd(cmd, args string) error {
 		return &Failure{Kind: "ValueError", Msg: "command and arguments contain prohibited newline characters: " + line}
 	}
 	if !s.utf8Cmds {
-		if err := ASCIIEncodeError(line); err != nil {
+		if err := py.ASCIIEncodeError(line); err != nil {
 			return err
 		}
 	}
@@ -538,7 +538,7 @@ func (s *session) SendMessage(msg *Message, from string, to []string) (Refusals,
 	if err := s.ehloOrHelo(); err != nil {
 		return nil, err
 	}
-	international := ASCIIEncodeError(from+strings.Join(to, "")) != nil
+	international := py.ASCIIEncodeError(from+strings.Join(to, "")) != nil
 	var mailOptions []string
 	if international {
 		if !s.hasExtn("smtputf8") {

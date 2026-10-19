@@ -27,7 +27,12 @@ def normalize_url(url):
 def web_fetch(ctx: ToolContext, args: dict):
     url = normalize_url(text_arg(args, "url", required=True))
     max_chars = bounded_int(args, "max_chars", TEXT_DEFAULT, TEXT_DEFAULT)
-    allowed = {normalize_url(u) for u in ctx.allowed_urls}
+    allowed = set()
+    for stored in ctx.allowed_urls:
+        try:
+            allowed.add(normalize_url(stored))
+        except (ToolError, ValueError):
+            continue
     if url not in allowed:
         raise ToolError("url is not allowed: only URLs the operator typed or web_search returned in this thread can be fetched")
     try:
