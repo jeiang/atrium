@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -18,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/mail/smtp"
 	"github.com/jeiang/atrium/internal/mail/smtp/smtptest"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
@@ -122,7 +125,11 @@ func (w *world) get(id int64) drafts.Row {
 
 func (w *world) create(account string, to, cc any, subject, body string, replyTo *int64) int64 {
 	w.t.Helper()
-	id, err := w.store.Create(context.Background(), new(int64(1)), account, to, cc, subject, body, replyTo)
+	var reply any
+	if replyTo != nil {
+		reply = *replyTo
+	}
+	id, err := w.store.Create(context.Background(), new(int64(1)), account, to, cc, subject, body, reply)
 	if err != nil {
 		w.t.Fatal(err)
 	}
@@ -181,7 +188,7 @@ func TestCreateAndUpdateValidation(t *testing.T) {
 		_, err := w.store.Create(ctx, nil, c.account, c.to, c.cc, c.subject, c.body, nil)
 		draftError(t, err, c.want)
 	}
-	_, err := w.store.Create(ctx, nil, config.ICloud, "a@x.test", nil, "s", "b", new(int64(999)))
+	_, err := w.store.Create(ctx, nil, config.ICloud, "a@x.test", nil, "s", "b", int64(999))
 	draftError(t, err, "no message 999")
 
 	id := w.create(config.ICloud, "a@x.test", nil, "s", "b", nil)
@@ -560,5 +567,70 @@ func TestDegradedStuckDraftOnGoldenDB(t *testing.T) {
 		if got := w.get(b.ID); !reflect.DeepEqual(got, b) {
 			t.Fatalf("golden draft %d changed: %+v", b.ID, got)
 		}
+	}
+}
+
+func TestUpdateTypeErrorsFollowPython(t *testing.T) {
+	w := newWorld(t)
+	ctx := t.Context()
+	mid := w.original()
+	id := w.create(config.ICloud, "a@x.test", nil, "s", "b", nil)
+	for _, c := range []struct {
+		changes     map[string]any
+		class, text string
+	}{
+		{map[string]any{"subject": int64(5)}, "AttributeError", "'int' object has no attribute 'strip'"},
+		{map[string]any{"subject": []any{"x"}}, "AttributeError", "'list' object has no attribute 'strip'"},
+		{map[string]any{"subject": true}, "AttributeError", "'bool' object has no attribute 'strip'"},
+		{map[string]any{"in_reply_to_message_id": []any{}}, "ProgrammingError", "Error binding parameter 1: type 'list' is not supported"},
+		{map[string]any{"in_reply_to_message_id": py.Dict{{Key: "a", Value: int64(1)}}}, "ProgrammingError", "Error binding parameter 1: type 'dict' is not supported"},
+		{map[string]any{"in_reply_to_message_id": big.NewInt(1).Lsh(big.NewInt(1), 70)}, "OverflowError", "Python int too large to convert to SQLite INTEGER"},
+	} {
+		_, err := w.store.Update(ctx, id, c.changes)
+		var classed py.Classed
+		if !errors.As(err, &classed) || classed.PyClass() != c.class || err.Error() != c.text {
+			t.Errorf("%v: err = %v (%T)", c.changes, err, err)
+		}
+	}
+	if _, err := w.store.Update(ctx, id, map[string]any{"subject": int64(0)}); err != nil {
+		t.Errorf("a falsy non-string subject is the empty string: %v", err)
+	}
+	for _, v := range []any{true, float64(mid), strconv.FormatInt(mid, 10), " " + strconv.FormatInt(mid, 10)} {
+		if _, err := w.store.Update(ctx, id, map[string]any{"in_reply_to_message_id": v}); err != nil && v != true {
+			t.Errorf("reply %v (%T): %v", v, v, err)
+		}
+	}
+	got := w.get(id)
+	if got.InReplyToMessageID == nil || *got.InReplyToMessageID != mid {
+		t.Errorf("stored reply id = %v, want %d", got.InReplyToMessageID, mid)
+	}
+	for _, v := range []any{strconv.FormatInt(mid, 10) + ".0", strconv.FormatInt(mid, 10) + "e0", " " + strconv.FormatInt(mid, 10) + " "} {
+		if _, err := w.store.Update(ctx, id, map[string]any{"in_reply_to_message_id": v}); err != nil {
+			t.Errorf("reply %q: %v", v, err)
+		}
+	}
+	draftError(t, func() error {
+		_, err := w.store.Update(ctx, id, map[string]any{"in_reply_to_message_id": "\u00a0" + strconv.FormatInt(mid, 10)})
+		return err
+	}(), "no message \u00a0"+strconv.FormatInt(mid, 10))
+	for v, want := range map[any]string{float64(1.5): "no message 1.5", "abc": "no message abc", false: "no message False", float64(999): "no message 999.0", "999": "no message 999"} {
+		_, err := w.store.Update(ctx, id, map[string]any{"in_reply_to_message_id": v})
+		draftError(t, err, want)
+	}
+}
+
+func TestCreateValidatesBeforeTheReplyIDOverflows(t *testing.T) {
+	w := newWorld(t)
+	huge := new(big.Int).Lsh(big.NewInt(1), 70)
+	_, err := w.store.Create(t.Context(), nil, "yahoo", "a@x.test", nil, "s", "b", huge)
+	draftError(t, err, "account must be one of icloud, gmail")
+	_, err = w.store.Create(t.Context(), nil, config.ICloud, "a@x.test", nil, "s", "b", huge)
+	var classed py.Classed
+	if !errors.As(err, &classed) || classed.PyClass() != "OverflowError" {
+		t.Errorf("err = %v", err)
+	}
+	var n int
+	if err := w.db.Read.QueryRow("SELECT COUNT(*) FROM drafts").Scan(&n); err != nil || n != 0 {
+		t.Errorf("%d drafts stored", n)
 	}
 }
