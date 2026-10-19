@@ -1,0 +1,44 @@
+{
+  "id": 10,
+  "kind": "calendar_event",
+  "account": "calendar",
+  "status": "applied",
+  "created_ts": 1792166400.0,
+  "decided_ts": 1792339200.0,
+  "applied_ts": 1792339200.0,
+  "title": "Add to calendar: Dinner with Friend Two (2026-10-17 19:00)",
+  "preview": {
+    "calendar": "icloud",
+    "title": "Dinner with Friend Two",
+    "start": "2026-10-17T19:00:00-04:00",
+    "end": "2026-10-17T21:00:00-04:00",
+    "all_day": false,
+    "location": "",
+    "notes": "",
+    "source": {
+      "message_id": 90
+    }
+  },
+  "result": {
+    "summary": "Added to the icloud calendar",
+    "calendar": "icloud",
+    "uid": "f8d2074a0f0846d2ab0d4ff75a357cb1"
+  },
+  "fingerprint": "836329d6239bf21ac6fecf916a8ec3ad",
+  "payload": {
+    "calendar": "icloud",
+    "spec": {
+      "uid": "f8d2074a0f0846d2ab0d4ff75a357cb1",
+      "title": "Dinner with Friend Two",
+      "start": "2026-10-17T19:00:00-04:00",
+      "end": "2026-10-17T21:00:00-04:00",
+      "all_day": false,
+      "location": "",
+      "notes": ""
+    },
+    "source": {
+      "message_id": 90
+    }
+  },
+  "undoable": true
+}

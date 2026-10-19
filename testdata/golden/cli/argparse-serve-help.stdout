@@ -1,0 +1,11 @@
+usage: atrium serve [-h] [--host HOST] --port PORT [--auth {proxy,local}]
+                    [--allowed-host ALLOWED_HOST]
+
+options:
+  -h, --help            show this help message and exit
+  --host HOST
+  --port PORT
+  --auth {proxy,local}
+  --allowed-host ALLOWED_HOST
+                        accepted Host header; repeatable (proxy mode requires
+                        one, or ATRIUM_PUBLIC_HOST)

@@ -168,8 +168,8 @@ func TestInterruptedActionIsFlaggedAndNeverRetried(t *testing.T) {
 		t.Fatal("discard removed a flagged interrupted row")
 	}
 	st, _ := w.Live.Status(t.Context())
-	if !reflect.DeepEqual(st.Actions, map[string]map[string]int64{"file": {"interrupted": 1}}) {
-		t.Fatalf("status actions = %v", st.Actions)
+	if got, _ := st.Get("actions"); !reflect.DeepEqual(got, py.Dict{{Key: "file", Value: py.Dict{{Key: "interrupted", Value: int64(1)}}}}) {
+		t.Fatalf("status actions = %v", got)
 	}
 	if len(w.Fake.Writes) != 0 {
 		t.Fatalf("writes = %v", w.Fake.Writes)
@@ -439,10 +439,10 @@ func TestPauseResumeStatus(t *testing.T) {
 		t.Fatalf("pause file: %v", err)
 	}
 	st, err := w.Live.Status(t.Context())
-	want := live.StatusReport{Mode: "live", Paused: true, GoliveTS: new("1792080000.0"), Baseline: 1,
-		Actions: map[string]map[string]int64{"flag": {"applied": 1}}}
+	want := py.Dict{{Key: "mode", Value: "live"}, {Key: "paused", Value: true}, {Key: "golive_ts", Value: "1792080000.0"},
+		{Key: "baseline", Value: int64(1)}, {Key: "actions", Value: py.Dict{{Key: "flag", Value: py.Dict{{Key: "applied", Value: int64(1)}}}}}}
 	if err != nil || !reflect.DeepEqual(st, want) {
-		t.Fatalf("Status = %+v, %v", st, err)
+		t.Fatalf("Status = %v, %v", st, err)
 	}
 	if err := w.Live.SetPaused(false); err != nil || w.Live.Paused() {
 		t.Fatalf("resume: %v", err)

@@ -69,7 +69,7 @@ func startServe(t *testing.T) string {
 		}
 	})
 	base := "http://127.0.0.1:" + port
-	for range 100 {
+	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
 		if resp, err := http.Get(base + "/healthz"); err == nil {
 			_ = resp.Body.Close()
 			return base

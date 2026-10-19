@@ -1,0 +1,110 @@
+{
+  "id": 6,
+  "kind": "deletion_rule",
+  "account": "gmail",
+  "status": "applied",
+  "created_ts": 1792096200.0,
+  "decided_ts": 1792339200.0,
+  "applied_ts": 1792339200.0,
+  "title": "Delete 1 messages and future mail matching login.example / your login code <n>",
+  "preview": {
+    "reason": "otp",
+    "rule": {
+      "account": "gmail",
+      "when": [
+        {
+          "field": "from_domain",
+          "op": "suffix",
+          "value": "login.example"
+        },
+        {
+          "field": "subject_tmpl",
+          "op": "eq",
+          "value": "your login code <n>"
+        },
+        {
+          "field": "age_days",
+          "op": "gte",
+          "value": 7
+        }
+      ]
+    },
+    "stats": {
+      "messages": 5,
+      "matched": 5
+    },
+    "older_than_days": 7,
+    "backlog": 1,
+    "sample": [
+      {
+        "id": 135,
+        "subject": "Your login code 5",
+        "from_name": "Login",
+        "from_addr": "verify@login.example",
+        "date_ts": 1791475200.0
+      }
+    ],
+    "subjects": [
+      "Your login code 5"
+    ],
+    "senders": [
+      {
+        "label": "verify@login.example",
+        "count": 1
+      }
+    ],
+    "messages": [
+      {
+        "id": 135,
+        "subject": "Your login code 5",
+        "from_name": "Login",
+        "from_addr": "verify@login.example",
+        "date_ts": 1791475200.0
+      }
+    ]
+  },
+  "result": {
+    "summary": "rule created, 1 moved to Trash, 0 skipped as changed",
+    "rule": "del-ee72bd9f0f",
+    "trashed": 1,
+    "skipped": []
+  },
+  "fingerprint": "deletion_rule:gmail:otp:domain:7ab518470601df19",
+  "payload": {
+    "rule": {
+      "id": "del-ee72bd9f0f",
+      "account": "gmail",
+      "action": "delete",
+      "when": [
+        {
+          "field": "from_domain",
+          "op": "suffix",
+          "value": "login.example"
+        },
+        {
+          "field": "subject_tmpl",
+          "op": "eq",
+          "value": "your login code <n>"
+        },
+        {
+          "field": "age_days",
+          "op": "gte",
+          "value": 7
+        }
+      ]
+    },
+    "reason": "otp",
+    "messages": [
+      {
+        "id": 135,
+        "uid": 36,
+        "uidvalidity": 11,
+        "msgid": "otp-5@golden.example",
+        "digest": "b4aa736f72b4be1ef31227e9f29fcdd2592e7c2f3a6b45b00266f8563ff417fa",
+        "mailbox": "[Gmail]/All Mail",
+        "imap_name": "[Gmail]/All Mail"
+      }
+    ]
+  },
+  "undoable": true
+}

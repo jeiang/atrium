@@ -2,6 +2,7 @@ package py
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -225,6 +226,34 @@ func TestUpper(t *testing.T) {
 	} {
 		if got := Upper(in); got != want {
 			t.Errorf("Upper(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+type moduledError struct{}
+
+func (moduledError) Error() string    { return "boom" }
+func (moduledError) PyClass() string  { return "ProposalError" }
+func (moduledError) PyModule() string { return "atrium.proposals" }
+
+type quietError struct{}
+
+func (quietError) Error() string   { return "" }
+func (quietError) PyClass() string { return "KeyError" }
+
+func TestUncaughtText(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{errors.New("plain"), "RuntimeError: plain"},
+		{&Exception{Class: "ValueError", Msg: "bad"}, "ValueError: bad"},
+		{moduledError{}, "atrium.proposals.ProposalError: boom"},
+		{fmt.Errorf("wrapped: %w", moduledError{}), "atrium.proposals.ProposalError: wrapped: boom"},
+		{quietError{}, "KeyError"},
+	} {
+		if got := UncaughtText(c.err); got != c.want {
+			t.Errorf("UncaughtText(%v) = %q, want %q", c.err, got, c.want)
 		}
 	}
 }

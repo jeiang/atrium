@@ -18,6 +18,7 @@ import (
 
 func runServe(t *testing.T, ctx context.Context, args ...string) (int, string, string) {
 	t.Helper()
+	t.Setenv("COLUMNS", "")
 	app := cli.New("atrium", nil)
 	app.Add(ServeCommand())
 	var stdout, stderr bytes.Buffer
@@ -27,14 +28,17 @@ func runServe(t *testing.T, ctx context.Context, args ...string) (int, string, s
 
 func TestServePortIsRequired(t *testing.T) {
 	code, _, stderr := runServe(t, context.Background())
-	if code != cli.ExitUsage || !strings.Contains(stderr, "the following arguments are required: --port") {
+	want := "usage: atrium serve [-h] [--host HOST] --port PORT [--auth {proxy,local}]\n" +
+		"                    [--allowed-host ALLOWED_HOST]\n" +
+		"atrium serve: error: the following arguments are required: --port\n"
+	if code != cli.ExitUsage || stderr != want {
 		t.Errorf("code %d stderr %q", code, stderr)
 	}
 }
 
 func TestServeRejectsUnknownAuthMode(t *testing.T) {
 	code, _, stderr := runServe(t, context.Background(), "--port", "1", "--auth", "open")
-	if code != cli.ExitUsage || !strings.Contains(stderr, "invalid choice: 'open' (choose from proxy, local)") {
+	if code != cli.ExitUsage || !strings.HasSuffix(stderr, "\natrium serve: error: argument --auth: invalid choice: 'open' (choose from 'proxy', 'local')\n") {
 		t.Errorf("code %d stderr %q", code, stderr)
 	}
 }

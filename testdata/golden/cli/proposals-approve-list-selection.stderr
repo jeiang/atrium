@@ -1,0 +1,11 @@
+2026-10-18 16:00:00,000 atrium.proposals ERROR proposal 9 failed
+Traceback (most recent call last):
+  File "src/atrium/proposals.py", line 234, in approve_and_apply
+    result = executor(conn, cfg, proposal, selection)
+  File "src/atrium/executors.py", line 136, in execute_moves
+    plan = resolve_groups(payload["groups"], selection)
+  File "src/atrium/executors.py", line 34, in resolve_groups
+    picks = (selection or {}).get("groups")
+            ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'get'
+2026-10-18 16:00:00,000 atrium.run INFO icloud: 0 new, 0 gone, 0 flag changes

@@ -14,7 +14,7 @@ func TestWatchesRefreshCommand(t *testing.T) {
 	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	app := cli.New("atrium", nil)
-	app.Add(watches.Command())
+	app.Add(watches.Command(nil))
 	var out, errOut bytes.Buffer
 	if code := app.Run(t.Context(), []string{"watches", "refresh"}, &out, &errOut); code != cli.ExitOK {
 		t.Fatalf("exit %d: %s", code, errOut.String())

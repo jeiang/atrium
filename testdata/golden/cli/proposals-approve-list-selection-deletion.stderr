@@ -1,0 +1,9 @@
+2026-10-18 16:00:00,000 atrium.proposals ERROR proposal 6 failed
+Traceback (most recent call last):
+  File "src/atrium/proposals.py", line 234, in approve_and_apply
+    result = executor(conn, cfg, proposal, selection)
+  File "src/atrium/executors.py", line 170, in execute_deletion
+    snaps = chosen_snapshots(payload["messages"], (selection or {}).get("message_ids"))
+                                                  ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'get'
+2026-10-18 16:00:00,000 atrium.run INFO gmail: 0 new, 0 gone, 0 flag changes
