@@ -65,10 +65,37 @@ func ConnectionLost(err error) bool {
 		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
 }
 
-// Watcher is watch.py over one pass. Sleep is stop.wait: it returns early when ctx ends (sleepCtx when nil).
+// Watcher is watch.py: Cfg and Open are the configuration and the accounts' clients, Pass builds a cycle's pass
+// over its connection (New when nil), Sleep is stop.wait, returning early when ctx ends (sleepCtx when nil).
 type Watcher struct {
-	Pass  *Pass
+	Cfg   config.Config
+	Open  mailops.Opener
+	Pass  func(d *db.DB) *Pass
 	Sleep func(ctx context.Context, d time.Duration)
+
+	mu       sync.Mutex
+	migrated bool
+}
+
+// connect is the db.connect at the top of each cycle: the schema is migrated by the first one that succeeds.
+func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
+	d, err := db.Connect(w.Cfg.DBPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.migrated {
+		if err := db.Migrate(ctx, d, w.Cfg.DBPath); err != nil {
+			_ = d.Close()
+			return nil, nil, err
+		}
+		w.migrated = true
+	}
+	if w.Pass != nil {
+		return w.Pass(d), func() { _ = d.Close() }, nil
+	}
+	return New(d, w.Cfg, w.Open), func() { _ = d.Close() }, nil
 }
 
 func (w *Watcher) sleep(ctx context.Context, d time.Duration) {
@@ -102,7 +129,8 @@ func (w *Watcher) waitForChange(ctx context.Context, client mail.Client) (bool, 
 }
 
 // Account is watch_account: a locked pass, then a pass after every change the Inbox reports, until ctx ends. A
-// failure closes the connection and reconnects after the backoff, which a successful first pass resets.
+// failure closes the connection and reconnects after the backoff, which a successful first pass resets. A pass that
+// has started runs to its end: ctx is seen only between passes and while waiting.
 func (w *Watcher) Account(ctx context.Context, account string) {
 	backoff := 0
 	for ctx.Err() == nil {
@@ -126,23 +154,32 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 			err = fmt.Errorf("panic: %v", r)
 		}
 	}()
-	if err := w.Pass.Locked(ctx, []string{account}); err != nil {
+	pass, closeDB, err := w.connect(ctx)
+	if err != nil {
 		return err
 	}
-	return mailops.Session(ctx, w.Pass.Open, account, func(client mail.Client) error {
+	defer closeDB()
+	whole := context.WithoutCancel(ctx)
+	if err := pass.Locked(whole, []string{account}); err != nil {
+		return err
+	}
+	return mailops.Session(ctx, pass.Open, account, func(client mail.Client) error {
 		*backoff = 0
 		for ctx.Err() == nil {
 			changed, err := w.waitForChange(ctx, client)
-			if err != nil {
-				return err
-			}
 			if ctx.Err() != nil {
 				break
 			}
+			if err != nil {
+				return err
+			}
 			if changed {
 				w.sleep(ctx, settle)
+				if ctx.Err() != nil {
+					break
+				}
 			}
-			if err := w.Pass.Locked(ctx, []string{account}); err != nil {
+			if err := pass.Locked(whole, []string{account}); err != nil {
 				return err
 			}
 		}
@@ -156,15 +193,7 @@ func Watch(ctx context.Context, cfg config.Config, requested string, open mailop
 	if err != nil {
 		return err
 	}
-	d, err := db.Connect(cfg.DBPath)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = d.Close() }()
-	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
-		return err
-	}
-	w := &Watcher{Pass: New(d, cfg, open)}
+	w := &Watcher{Cfg: cfg, Open: open}
 	var wg sync.WaitGroup
 	for _, account := range accounts {
 		wg.Go(func() { w.Account(ctx, account) })

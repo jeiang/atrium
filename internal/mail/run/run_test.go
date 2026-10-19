@@ -312,7 +312,7 @@ func TestSyncWatchAndCorrectionsSerialiseOnOneLock(t *testing.T) {
 	defer cancel()
 	s := &sleeper{stopAt: 3, cancel: cancel}
 	var wg sync.WaitGroup
-	wg.Go(func() { (&Watcher{Pass: w.pass, Sleep: s.sleep}).Account(ctx, config.ICloud) })
+	wg.Go(func() { w.watcher(s.sleep).Account(ctx, config.ICloud) })
 	for range 3 {
 		wg.Go(func() {
 			if err := w.pass.Locked(context.Background(), []string{config.Gmail}); err != nil {

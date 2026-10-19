@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -95,6 +96,15 @@ func (w *world) open(_ context.Context, account string) (mail.Client, error) {
 		return w.Wrap(account, w.fakes[account]), nil
 	}
 	return w.fakes[account], nil
+}
+
+// watcher is a Watcher whose cycles build the world's pass, configuration and hooks over their own connection.
+func (w *world) watcher(sleep func(context.Context, time.Duration)) *Watcher {
+	return &Watcher{Cfg: w.pass.Cfg, Open: w.open, Sleep: sleep, Pass: func(d *db.DB) *Pass {
+		p := New(d, w.pass.Cfg, w.open)
+		p.Events = w.pass.Events
+		return p
+	}}
 }
 
 func (w *world) opens() []string {

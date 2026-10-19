@@ -165,7 +165,7 @@ S: * BYE Server shutting down
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		(&run.Watcher{Pass: run.New(d, cfg, open), Sleep: clock.sleep}).Account(ctx, config.ICloud)
+		(&run.Watcher{Cfg: cfg, Open: open, Sleep: clock.sleep}).Account(ctx, config.ICloud)
 	}()
 	select {
 	case <-done:

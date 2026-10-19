@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"sync"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/live"
 )
 
 // imaplibError stands for imapclient.Error: an imaplib exception class and its text.
@@ -65,7 +67,7 @@ func watch(t *testing.T, w *world, stopAt int) []time.Duration {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		(&Watcher{Pass: w.pass, Sleep: s.sleep}).Account(ctx, config.ICloud)
+		w.watcher(s.sleep).Account(ctx, config.ICloud)
 	}()
 	select {
 	case <-done:
@@ -198,7 +200,7 @@ func TestWatchPassesAfterAnIdleTimeoutWithoutSettling(t *testing.T) {
 		}}
 	}
 	s := &sleeper{stopAt: 1, cancel: cancel}
-	(&Watcher{Pass: w.pass, Sleep: s.sleep}).Account(ctx, config.ICloud)
+	w.watcher(s.sleep).Account(ctx, config.ICloud)
 	if len(s.got) != 0 || idles != 3 {
 		t.Fatalf("waits %v, idles %d", s.got, idles)
 	}
@@ -228,7 +230,7 @@ func TestWatchFirstPassWaitsForTheDatabaseLock(t *testing.T) {
 	defer cancel()
 	w.fakes[config.ICloud].Idle = true
 	s := &sleeper{stopAt: 1, cancel: cancel}
-	lockedOut(t, w, func() { (&Watcher{Pass: w.pass, Sleep: s.sleep}).Account(ctx, config.ICloud) },
+	lockedOut(t, w, func() { w.watcher(s.sleep).Account(ctx, config.ICloud) },
 		func() bool { return len(w.opens()) > 0 })
 }
 
@@ -267,5 +269,80 @@ func TestWatchRunsOneLoopPerSelectedAccountUntilCancelled(t *testing.T) {
 	var missing MissingCredentials
 	if !errors.As(err, &missing) {
 		t.Errorf("Watch(gmail) err = %v", err)
+	}
+}
+
+// cancelOnCopy ends the watch while the live pass is moving a message.
+type cancelOnCopy struct {
+	mail.Client
+	cancel context.CancelFunc
+}
+
+func (c cancelOnCopy) Copy(ctx context.Context, uids mail.UIDSet, dest string) (*mail.CopyUID, error) {
+	c.cancel()
+	return c.Client.Copy(ctx, uids, dest)
+}
+
+func TestShutdownDuringALivePassLetsThePassFinish(t *testing.T) {
+	w := newWorld(t, config.Live, credentials)
+	if err := w.pass.Locked(context.Background(), []string{config.ICloud}); err != nil {
+		t.Fatal(err)
+	}
+	w.rule("x.test", "Bills")
+	w.arrive(config.ICloud, "Invoice", "a@x.test")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w.Wrap = func(_ string, c mail.Client) mail.Client { return cancelOnCopy{c, cancel} }
+	s := &sleeper{stopAt: 100, cancel: cancel}
+	w.watcher(s.sleep).Account(ctx, config.ICloud)
+	if ctx.Err() == nil || len(s.got) != 0 {
+		t.Fatalf("cancelled %v, waits %v", ctx.Err(), s.got)
+	}
+	if n := w.count("SELECT COUNT(*) FROM auto_actions WHERE ok = 1 AND kind = 'file'"); n != 1 {
+		t.Errorf("finished file actions = %d", n)
+	}
+	if n := w.count("SELECT COUNT(*) FROM auto_actions WHERE ok IS NULL OR error = ?", live.Interrupted); n != 0 {
+		t.Errorf("%d actions held or interrupted", n)
+	}
+	fake := w.fakes[config.ICloud]
+	if len(fake.Boxes["Bills"].UIDs()) != 1 || len(fake.Boxes[config.Inbox].UIDs()) != 0 {
+		t.Errorf("Bills %v, INBOX %v", fake.Boxes["Bills"].UIDs(), fake.Boxes[config.Inbox].UIDs())
+	}
+	if n := w.count("SELECT COUNT(*) FROM messages m JOIN mailboxes b ON b.id = m.mailbox_id WHERE b.name = 'Bills' AND m.gone_at IS NULL"); n != 1 {
+		t.Errorf("the pass did not resync after the move: %d live messages in Bills", n)
+	}
+}
+
+func TestWatchRetriesADatabaseThatCannotBeOpened(t *testing.T) {
+	w := newWorld(t, config.Shadow, credentials)
+	logs := captureLogs(t)
+	w.fakes[config.ICloud].Idle = true
+	blocker := filepath.Join(t.TempDir(), "state")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := w.cfg
+	cfg.DBPath = filepath.Join(blocker, "atrium.db")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var waits []time.Duration
+	sleep := func(_ context.Context, d time.Duration) {
+		waits = append(waits, d)
+		switch len(waits) {
+		case 2:
+			if err := os.Remove(blocker); err != nil {
+				t.Error(err)
+			}
+		case 3:
+			cancel()
+		}
+	}
+	(&Watcher{Cfg: cfg, Open: w.open, Sleep: sleep}).Account(ctx, config.ICloud)
+	if want := seconds(5, 10, 2); !reflect.DeepEqual(waits, want) {
+		t.Fatalf("waits = %v, want %v", waits, want)
+	}
+	logs.has(t, "level=WARN", "icloud connection lost (mkdir "+blocker+": not a directory), reconnecting in 5s")
+	if _, err := os.Stat(cfg.DBPath); err != nil {
+		t.Errorf("the database was not created once its directory could be: %v", err)
 	}
 }

@@ -160,6 +160,9 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 	return nil
 }
 
+// checkpointWait is how long the end-of-pass checkpoint waits for readers while the lock is held.
+const checkpointWait = time.Second
+
 // Locked is one pass of accounts under the database's exclusive lock: each is synced, then processed. The WAL is
 // checkpointed (TRUNCATE) before the lock is released, so readers that never stop cannot grow it without bound.
 func (p *Pass) Locked(ctx context.Context, accounts []string) error {
@@ -181,9 +184,12 @@ func (p *Pass) checkpoint(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
-	var busy, frames, done int64
-	if err := p.DB.Write.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &frames, &done); err != nil {
+	c, err := p.DB.Checkpoint(ctx, checkpointWait)
+	switch {
+	case err != nil:
 		log.Warn("wal checkpoint failed", logx.Err, err.Error())
+	case c.Busy:
+		log.Warn(fmt.Sprintf("wal checkpoint blocked by a reader: %d of %d frames checkpointed", c.Done, c.Frames))
 	}
 }
 
