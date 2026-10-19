@@ -116,11 +116,9 @@ switched.
     Python's; this is expected and one-time.
 7. Scheduler log: `journalctl -u atrium-agent-scheduler.service -e` shows the
     worker started and claiming due jobs, with the core-first lines listed in
-    section 8 and no other errors. The five callables (`media-sweep`,
-    `media-channels`, `calendar-candidates`, `fx-rates`, `media-thumbnails`)
-    each log `built-in job X has no function in this build; not run` once and
-    write no job run (the #157 acceptance replaces "a media poll succeeds"
-    with exactly this). `/scheduled` is not served until its page
+    section 8 and no other errors. The three callables (`calendar-candidates`,
+    `fx-rates`, `media-thumbnails`) each log `built-in job X has no function in
+    this build; not run` once and write no job run. `/scheduled` is not served until its page
     lands; use `sqlite3 $STATE/atrium.db "SELECT id, name, next_run FROM jobs ORDER BY id"`.
 8. Units: `systemctl --failed 'atrium-*'` is empty.
 
@@ -524,11 +522,11 @@ migration hold for them, not that Go reads them.
 Calendar, Notion, money, media and Grafana land after cutover. Their units
 do not start. What the operator sees until then:
 
-- `atrium-run notion|calendar|money|media ...` answer `invalid choice` (exit
-  2) until the module lands. Mail, `live`, `proposals`, `rules`, `loops`,
-  `watches`, `reindex`, `shadow-report`, `agent` and `serve` work.
-- The built-in callable jobs `media-sweep`, `media-channels`,
-  `calendar-candidates`, `fx-rates` and `media-thumbnails` are skipped with
+- `atrium-run notion|calendar|money ...` answer `invalid choice` (exit 2)
+  until the module lands. Mail, `live`, `proposals`, `rules`, `loops`,
+  `watches`, `reindex`, `shadow-report`, `agent`, `media` and `serve` work.
+- The built-in callable jobs `calendar-candidates`, `fx-rates` and
+  `media-thumbnails` are skipped with
   one Info line each (`built-in job X has no function in this build; not
   run`, logged once per scheduler start); they are not recorded as job runs.
 - The system prompt names `event_propose`, and the nightly wiki-capture skill
@@ -554,6 +552,6 @@ do not start. What the operator sees until then:
   - Money ingestion stops. It self-heals: the money rescan covers the last
     90 days of unscanned money mail, so land the money module (#142) within
     90 days of cutover.
-  - qBittorrent torrents tagged `media` wait unselected and unfiled until the
-    media module lands (#145).
+  - qBittorrent torrents tagged `media` are selected and swept by the media
+    jobs, but filing them into the library waits for the media pages (#146).
   - The Notion mirror goes stale.
