@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
+	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -19,6 +20,7 @@ import (
 // Callables are the built-in jobs that run a function. A slice that ports one adds it here.
 func callables() map[string]worker.Callable {
 	out := map[string]worker.Callable{scheduler.FXRatesName: fxRates}
+	maps.Copy(out, calendarcmd.Callables())
 	maps.Copy(out, mediacmd.Callables())
 	return out
 }

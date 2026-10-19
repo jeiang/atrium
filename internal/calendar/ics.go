@@ -32,6 +32,7 @@ type icsEvent struct {
 	status       string
 	summary      string
 	location     string
+	description  string
 	dtstart      *Value
 	dtend        *Value
 	duration     *time.Duration
@@ -254,6 +255,9 @@ func parseEvent(comp *ical.Component, z *zones) (*icsEvent, error) {
 	if p := comp.Props.Get(ical.PropLocation); p != nil {
 		ev.location = unescapeText(p.Value)
 	}
+	if p := comp.Props.Get(ical.PropDescription); p != nil {
+		ev.description = unescapeText(p.Value)
+	}
 	single := func(name string) (*Value, error) {
 		p := comp.Props.Get(name)
 		if p == nil {
@@ -340,11 +344,7 @@ func parseICS(data []byte) ([]*icsEvent, error) {
 	if err != nil {
 		return nil, err
 	}
-	var events []*icsEvent
-	if err := walkEvents(cal.Component, &zones{custom: map[string]*time.Location{}}, &events); err != nil {
-		return nil, err
-	}
-	return events, nil
+	return parseEvents(cal)
 }
 
 func endOf(ev *icsEvent, start Value, tz *time.Location) (Value, error) {

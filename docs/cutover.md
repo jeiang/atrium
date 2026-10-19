@@ -116,9 +116,9 @@ switched.
     Python's; this is expected and one-time.
 7. Scheduler log: `journalctl -u atrium-agent-scheduler.service -e` shows the
     worker started and claiming due jobs, with the core-first lines listed in
-    section 8 and no other errors. The callable of a module not yet ported
-    (`calendar-candidates`) logs `built-in job X has no function in
-    this build; not run` once and write no job run. `/scheduled` lists the jobs; from the shell use
+    section 8 and no other errors. Every built-in callable has a function, so no
+    `built-in job X has no function in this build; not run` line appears.
+    `/scheduled` lists the jobs; from the shell use
     `sqlite3 $STATE/atrium.db "SELECT id, name, next_due FROM jobs ORDER BY id"`.
 8. Units: `systemctl --failed 'atrium-*'` is empty.
 
@@ -506,7 +506,7 @@ not read; with the end-to-end checks on the merged preview binary, 28 are not:
 | --- | --- |
 | mail core, cutover set | `mailboxes`, `message_vec`, `rebalance_candidates`, `commitment_scans`, `watch_scans` |
 | assistant, cutover set (#131, #251) | `agent_profile`, `context_ledger`, `context_projections`, `run_events` |
-| calendar, post-cutover | `agent_events`, `event_candidates`, `events` |
+| calendar, post-cutover | `agent_events`, `events` |
 | money, post-cutover | `money_accounts`, `fx_rates`, `payees`, `payee_aliases`, `transactions`, `transaction_sources`, `money_scans` |
 | media, post-cutover | `media_channels`, `media_seen`, `media_state` |
 | Notion, post-cutover | `notion_pages`, `notion_sources`, `notion_state`, `notion_fts`, `notion_vec`, `wiki_pages` |
@@ -522,13 +522,9 @@ migration hold for them, not that Go reads them.
 Calendar, Notion, money and Grafana land after cutover. Their units
 do not start. What the operator sees until then:
 
-- `atrium-run calendar candidates` (#136) exits 1 with "not ported in v2";
-  `calendar google-auth` works. Mail, `live`, `proposals`, `rules`, `loops`, `watches`,
-  `reindex`, `shadow-report`, `agent`, `media`, `notion`, `money refresh` and
-  `serve` work.
-- The built-in callable job `calendar-candidates` is skipped with
-  one Info line each (`built-in job X has no function in this build; not
-  run`, logged once per scheduler start); they are not recorded as job runs.
+- `atrium-run calendar candidates` and `calendar google-auth` work, as do mail,
+  `live`, `proposals`, `rules`, `loops`, `watches`, `reindex`, `shadow-report`,
+  `agent`, `media`, `notion`, `money refresh` and `serve`.
 - The Notion tools (`search_knowledge`, `fetch_knowledge`, `notion_create_page`,
   `notion_update_page`, `notion_move_page`, `notion_archive_page`,
   `notion_add_alias`), the `notion_edit` and `notion_link` proposal kinds, the
