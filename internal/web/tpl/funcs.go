@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"maps"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	ttemplate "text/template"
@@ -60,6 +62,8 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 		},
 		"urlencode": urlencode,
 		"items":     items,
+		"odict":     odict,
+		"get":       get,
 		"tojson":    py.JSONHTMLSafe,
 		"round": func(v any, digits ...int) (float64, error) {
 			f, err := toFloat(v)
@@ -336,7 +340,11 @@ func pyStr(v any) (string, error) {
 func items(v any) ([]py.Pair, error) {
 	switch x := v.(type) {
 	case map[string]any:
-		return py.Items(x), nil
+		pairs := make([]py.Pair, 0, len(x))
+		for _, k := range slices.Sorted(maps.Keys(x)) {
+			pairs = append(pairs, py.Pair{Key: k, Value: x[k]})
+		}
+		return pairs, nil
 	case py.Dict:
 		return x, nil
 	case []py.Pair:
@@ -364,4 +372,30 @@ func urlencode(v any) (string, error) {
 	}
 	s, err := pyStr(v)
 	return py.URLQuote(s), err
+}
+
+func odict(kv ...any) (py.Dict, error) {
+	if len(kv)%2 != 0 {
+		return nil, errors.New("odict: odd number of arguments")
+	}
+	out := make(py.Dict, 0, len(kv)/2)
+	for i := 0; i < len(kv); i += 2 {
+		k, ok := kv[i].(string)
+		if !ok {
+			return nil, fmt.Errorf("odict: key %v is not a string", kv[i])
+		}
+		out = out.Set(k, kv[i+1])
+	}
+	return out, nil
+}
+
+func get(m any, key string) any {
+	switch x := m.(type) {
+	case map[string]any:
+		return x[key]
+	case py.Dict:
+		v, _ := x.Get(key)
+		return v
+	}
+	return nil
 }

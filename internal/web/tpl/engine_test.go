@@ -214,7 +214,7 @@ func TestPartialPageSetsDoNotLeak(t *testing.T) {
 }
 
 func TestItemsAndUrlencodeMapping(t *testing.T) {
-	ordered := py.OrderedMap(py.Dict{{Key: "pending", Value: int64(10)}, {Key: "applied", Value: int64(2)}, {Key: "failed", Value: int64(1)}})
+	ordered := py.Dict{{Key: "pending", Value: int64(10)}, {Key: "applied", Value: int64(2)}, {Key: "failed", Value: int64(1)}}
 	for _, tc := range []struct {
 		name, text string
 		data       any
@@ -222,7 +222,7 @@ func TestItemsAndUrlencodeMapping(t *testing.T) {
 	}{
 		{"insertion order", `{{range items .Data}}{{.Key}}={{.Value}},{{end}}`, ordered, "pending=10,applied=2,failed=1,"},
 		{"plain map sorted", `{{range items .Data}}{{.Key}},{{end}}`, map[string]any{"b": 1, "a": 2}, "a,b,"},
-		{"mapping", `{{urlencode .Data}}`, py.OrderedMap(py.Dict{{Key: "q", Value: "a b&c"}, {Key: "n", Value: int64(50)}, {Key: "x", Value: nil}, {Key: "t", Value: true}}), "q=a&#43;b%26c&amp;n=50&amp;x=None&amp;t=True"},
+		{"mapping", `{{urlencode .Data}}`, py.Dict{{Key: "q", Value: "a b&c"}, {Key: "n", Value: int64(50)}, {Key: "x", Value: nil}, {Key: "t", Value: true}}, "q=a&#43;b%26c&amp;n=50&amp;x=None&amp;t=True"},
 		{"mapping order", `{{urlencode .Data}}`, py.Dict{{Key: "z", Value: "1"}, {Key: "a", Value: "é"}}, "z=1&amp;a=%C3%A9"},
 		{"scalar", `{{urlencode .Data}}`, "a b/é+", "a%20b/%C3%A9%2B"},
 		{"int", `{{urlencode .Data}}`, int64(7), "7"},
@@ -253,5 +253,37 @@ func TestSafeURLKeepsSchemeCheckedURLs(t *testing.T) {
 		if got := render(t, `{{safeurl .Data}}`, bad); got != "#" {
 			t.Errorf("safeurl(%q) = %q", bad, got)
 		}
+	}
+}
+
+func TestOrderedMappingsKeepBuiltinsCorrect(t *testing.T) {
+	full := py.Dict{{Key: "pending", Value: int64(10)}, {Key: "applied", Value: int64(2)}}
+	for _, tc := range []struct {
+		name string
+		data any
+		want string
+	}{
+		{"ordered", full, "true 2 pending,applied, 10"},
+		{"empty ordered", py.Dict{}, "false 0  "},
+		{"plain", map[string]any{"b": 1, "a": 2}, "true 2 a,b, "},
+		{"empty plain", map[string]any{}, "false 0  "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := render(t, `{{if .Data}}true{{else}}false{{end}} {{len .Data}} {{range items .Data}}{{.Key}},{{end}} {{get .Data "pending"}}`, tc.data)
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+	viewed := render(t, `{{range .Data.counts}}{{.Key}}={{.Value}},{{end}}{{len .Data.counts}}`, map[string]any{"counts": full})
+	if viewed != "pending=10,applied=2,2" {
+		t.Errorf("View of an ordered value = %q", viewed)
+	}
+}
+
+func TestODictKeepsCallOrder(t *testing.T) {
+	got := render(t, `{{range items (odict "z" 1 "a" 2 "m" 3)}}{{.Key}}{{end}} {{urlencode (odict "z" "1" "a" "2")}} {{urlencode (dict "z" "1" "a" "2")}}`, nil)
+	if want := "zam z=1&amp;a=2 a=2&amp;z=1"; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

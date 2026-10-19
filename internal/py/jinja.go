@@ -2,10 +2,8 @@ package py
 
 import (
 	"fmt"
-	"maps"
 	"math"
 	"reflect"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -139,7 +137,7 @@ func dumpReflect(b *strings.Builder, v reflect.Value) error {
 		if v.Type().Key().Kind() != reflect.String {
 			return fmt.Errorf("py: JSON map key type %s", v.Type().Key())
 		}
-		keys := slices.DeleteFunc(v.MapKeys(), func(k reflect.Value) bool { return k.String() == OrderKey })
+		keys := v.MapKeys()
 		sort.Slice(keys, func(i, j int) bool { return keys[i].String() < keys[j].String() })
 		b.WriteByte('{')
 		for i, k := range keys {
@@ -157,38 +155,6 @@ func dumpReflect(b *strings.Builder, v reflect.Value) error {
 		return fmt.Errorf("py: cannot encode %s as JSON", v.Type())
 	}
 	return nil
-}
-
-// OrderKey is the key under which an ordered map keeps its key order.
-const OrderKey = "$order"
-
-// OrderedMap is a Dict as a map templates can index, with the insertion order kept under OrderKey for Items.
-func OrderedMap(d Dict) map[string]any {
-	out := make(map[string]any, len(d)+1)
-	keys := make([]string, 0, len(d))
-	for _, p := range d {
-		if _, seen := out[p.Key]; !seen {
-			keys = append(keys, p.Key)
-		}
-		out[p.Key] = p.Value
-	}
-	out[OrderKey] = keys
-	return out
-}
-
-// Items is dict.items(): the pairs of an ordered map in insertion order, of any other map in key order.
-func Items(m map[string]any) []Pair {
-	keys, ok := m[OrderKey].([]string)
-	if !ok {
-		keys = slices.Sorted(maps.Keys(m))
-	}
-	out := make([]Pair, 0, len(keys))
-	for _, k := range keys {
-		if k != OrderKey {
-			out = append(out, Pair{k, m[k]})
-		}
-	}
-	return out
 }
 
 // URLQuotePlus is urllib.parse.quote_plus on UTF-8 bytes, the quoting Jinja's urlencode applies to mapping keys

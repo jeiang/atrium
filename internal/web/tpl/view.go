@@ -27,11 +27,9 @@ func view(rv reflect.Value) any {
 		return nil
 	}
 	if d, ok := rv.Interface().(py.Dict); ok {
-		out := py.OrderedMap(d)
-		for k, e := range out {
-			if k != py.OrderKey {
-				out[k] = view(reflect.ValueOf(e))
-			}
+		out := make(py.Dict, len(d))
+		for i, p := range d {
+			out[i] = py.Pair{Key: p.Key, Value: view(reflect.ValueOf(p.Value))}
 		}
 		return out
 	}
@@ -71,10 +69,6 @@ func view(rv reflect.Value) any {
 		out := make(map[string]any, rv.Len())
 		iter := rv.MapRange()
 		for iter.Next() {
-			if key := iter.Key().String(); key == py.OrderKey {
-				out[key] = iter.Value().Interface()
-				continue
-			}
 			out[iter.Key().String()] = view(iter.Value())
 		}
 		return out
