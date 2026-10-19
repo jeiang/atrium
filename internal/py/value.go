@@ -89,23 +89,25 @@ func ReprValue(v any) string {
 	panic(fmt.Sprintf("py: ReprValue of %T", v))
 }
 
-// TypeName is type(v).__name__ of a decoded JSON value.
+// TypeName is type(v).__name__ of a decoded JSON value or a Go value standing for one.
 func TypeName(v any) string {
 	switch v.(type) {
 	case nil:
 		return "NoneType"
 	case bool:
 		return "bool"
-	case int, int64, *big.Int:
+	case int, int64, uint32, *big.Int:
 		return "int"
 	case float64:
 		return "float"
 	case string:
 		return "str"
-	case []string, []any:
+	case []string, []any, []int, []int64, []uint32:
 		return "list"
+	case Dict, map[string]any:
+		return "dict"
 	}
-	return "dict"
+	panic(fmt.Sprintf("py: TypeName of %T", v))
 }
 
 // Get is d.get(key): the value of the last pair named key.
