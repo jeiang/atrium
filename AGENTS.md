@@ -256,6 +256,16 @@ and backups; nothing of that lives here.
   `gmail_labels`, `gmail_untrash`, `unflag`, the only flag clear).
   `livetest` is `test_live.py`'s world; read paths in
   `internal/db/readpaths/live_test.go`.
+- `internal/mail/applier/`: `applier.py`. `ApplyAccount` (corrections,
+  decided Inbox mail, contacts flags), `ApplyCorrections`, `DeletionPass`
+  (due every `DeletionIntervalSeconds` under `deletion_pass_ts:<account>`,
+  `force` for `live deletions`) and `ApplyAll`. Nothing runs outside live
+  mode or while paused; a pass writes as `safety.AutomaticWrites`, so the
+  gate refuses every write once paused, verifies with `mailops.Verify`
+  first, logs each write `Begin`/`Finish`/`Fail`/`Partial`/`Hold` with its
+  undo plan and stops at `Cap` (`config.WriteCap`) intents per pass. A
+  group that fails unexpectedly leaves its rows held, and a ledger failure
+  that cannot be recorded aborts the pass with the row held, as a crash does.
 - `internal/mail/backlog/`: `backlog.py`, one `inbox_backlog` proposal per
   account from the go-live baseline; `BacklogError` before go-live.
 - `internal/proposals/`: `proposals.py`. `Registry` holds the executor of
