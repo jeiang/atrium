@@ -1,0 +1,38 @@
+[
+  {
+    "id": 9,
+    "ts": 1792090800.0,
+    "account": "gmail",
+    "kind": "file",
+    "status": "applied",
+    "src": "[Gmail]/All Mail",
+    "dest": "Family",
+    "subject": "Family news 11",
+    "error": null,
+    "undoable": true
+  },
+  {
+    "id": 8,
+    "ts": 1792090800.0,
+    "account": "gmail",
+    "kind": "file",
+    "status": "applied",
+    "src": "[Gmail]/All Mail",
+    "dest": "Work",
+    "subject": "Weekly status 14",
+    "error": null,
+    "undoable": true
+  },
+  {
+    "id": 7,
+    "ts": 1792090800.0,
+    "account": "icloud",
+    "kind": "file",
+    "status": "applied",
+    "src": "INBOX",
+    "dest": "Bills",
+    "subject": "Water statement October",
+    "error": null,
+    "undoable": true
+  }
+]

@@ -4,7 +4,6 @@ package refreshcmd
 
 import (
 	"context"
-	"flag"
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/cli"
@@ -22,7 +21,7 @@ func Command(group string, run Run) *cli.Command {
 		Name: group,
 		Commands: []*cli.Command{{
 			Name: "refresh",
-			Setup: func(*flag.FlagSet) cli.Handler {
+			Setup: func(*cli.Args) cli.Handler {
 				return func(env *cli.Env) int { return Execute(env, config.OS, run) }
 			},
 		}},
@@ -34,13 +33,11 @@ func Command(group string, run Run) *cli.Command {
 func Execute(env *cli.Env, cfgEnv config.Env, run Run) int {
 	cfg, err := config.Load(cfgEnv)
 	if err != nil {
-		_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
-		return cli.ExitError
+		return cli.Fail(env, err)
 	}
 	out, err := locked(env.Ctx, cfg, run)
 	if err != nil {
-		_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
-		return cli.ExitError
+		return cli.Fail(env, err)
 	}
 	_, _ = fmt.Fprintln(env.Stdout, py.JSONDumps(out, py.JSONOpts{Indent: 2}))
 	return cli.ExitOK

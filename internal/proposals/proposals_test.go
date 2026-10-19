@@ -104,7 +104,7 @@ func TestApproveErrors(t *testing.T) {
 	id, _ := create(t, d, "nothing", "t", "fp")
 	_, err = p.ApproveAndApply(ctx, id, nil)
 	proposalErr(t, err, "no executor for kind 'nothing'")
-	r.Executors["nothing"] = func(context.Context, *proposals.Proposal, py.Dict) (py.Dict, error) {
+	r.Executors["nothing"] = func(context.Context, *proposals.Proposal, any) (py.Dict, error) {
 		return py.Dict{{Key: "summary", Value: "done"}}, nil
 	}
 	done, err := p.ApproveAndApply(ctx, id, nil)
@@ -126,7 +126,7 @@ func TestFailureIsStoredWithItsPythonClass(t *testing.T) {
 		synced = append(synced, account)
 		return nil
 	}
-	r.Executors["k"] = func(context.Context, *proposals.Proposal, py.Dict) (py.Dict, error) {
+	r.Executors["k"] = func(context.Context, *proposals.Proposal, any) (py.Dict, error) {
 		return nil, mailops.Error("no Trash mailbox found")
 	}
 	id, _ := create(t, d, "k", "t", "fp")
@@ -137,7 +137,7 @@ func TestFailureIsStoredWithItsPythonClass(t *testing.T) {
 	if !reflect.DeepEqual(synced, []string{"icloud"}) {
 		t.Fatalf("synced = %v", synced)
 	}
-	r.Executors["k"] = func(context.Context, *proposals.Proposal, py.Dict) (py.Dict, error) {
+	r.Executors["k"] = func(context.Context, *proposals.Proposal, any) (py.Dict, error) {
 		return nil, proposals.SelectionError("selection does not match the proposal groups")
 	}
 	_, err = p.ApproveAndApply(ctx, id, nil)
@@ -155,7 +155,7 @@ func TestSyncFailureIsReportedNotRaised(t *testing.T) {
 	ctx := context.Background()
 	p, r := pipeline(d)
 	r.Sync = func(context.Context, string) error { return mailops.Error("server gone") }
-	r.Executors["k"] = func(ctx context.Context, prop *proposals.Proposal, _ py.Dict) (py.Dict, error) {
+	r.Executors["k"] = func(ctx context.Context, prop *proposals.Proposal, _ any) (py.Dict, error) {
 		_, err := proposals.RecordAction(ctx, d.Write, prop.ID, py.Dict{{Key: "op", Value: "x"}}, py.Dict{{Key: "op", Value: "x"}}, true, nil, clock)
 		return py.Dict{{Key: "summary", Value: "s"}}, err
 	}
@@ -175,7 +175,7 @@ func TestUndoReplaysNewestFirstAndKeepsFailures(t *testing.T) {
 	d := dbtest.Schema(t)
 	ctx := context.Background()
 	p, r := pipeline(d)
-	r.Executors["k"] = func(ctx context.Context, prop *proposals.Proposal, _ py.Dict) (py.Dict, error) {
+	r.Executors["k"] = func(ctx context.Context, prop *proposals.Proposal, _ any) (py.Dict, error) {
 		for _, op := range []string{"a", "b", "c"} {
 			if _, err := proposals.RecordAction(ctx, d.Write, prop.ID, py.Dict{{Key: "op", Value: op}}, py.Dict{{Key: "op", Value: op}}, true, nil, clock); err != nil {
 				return nil, err
@@ -233,7 +233,7 @@ func TestUndoWithoutHandlerStops(t *testing.T) {
 	d := dbtest.Schema(t)
 	ctx := context.Background()
 	p, r := pipeline(d)
-	r.Executors["k"] = func(ctx context.Context, prop *proposals.Proposal, _ py.Dict) (py.Dict, error) {
+	r.Executors["k"] = func(ctx context.Context, prop *proposals.Proposal, _ any) (py.Dict, error) {
 		_, err := proposals.RecordAction(ctx, d.Write, prop.ID, py.Dict{{Key: "op", Value: "x"}}, py.Dict{{Key: "op", Value: "gone"}}, true, nil, clock)
 		return py.Dict{}, err
 	}

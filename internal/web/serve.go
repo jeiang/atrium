@@ -3,14 +3,12 @@ package web
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io/fs"
 	"maps"
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
@@ -28,29 +26,6 @@ const (
 	shutdownTimeout = 10 * time.Second
 )
 
-type authFlag string
-
-func (a *authFlag) String() string { return string(*a) }
-
-func (a *authFlag) Set(v string) error {
-	for _, mode := range AuthModes {
-		if v == mode {
-			*a = authFlag(v)
-			return nil
-		}
-	}
-	return fmt.Errorf("argument --auth: invalid choice: %s (choose from %s)", py.Repr(v), strings.Join(AuthModes[:], ", "))
-}
-
-type hostsFlag []string
-
-func (h *hostsFlag) String() string { return strings.Join(*h, ",") }
-
-func (h *hostsFlag) Set(v string) error {
-	*h = append(*h, v)
-	return nil
-}
-
 // Page is one page set: its routes, the template files they render (nil when it brings none) and the template
 // globals its templates read through the global function.
 type Page struct {
@@ -64,20 +39,13 @@ type Page struct {
 func ServeCommand(pages ...Page) *cli.Command {
 	return &cli.Command{
 		Name: "serve",
-		Setup: func(fs *flag.FlagSet) cli.Handler {
-			host := fs.String("host", DefaultHost, "listen address")
-			port := fs.Int("port", 0, "listen port (required)")
-			mode := authFlag(AuthProxy)
-			fs.Var(&mode, "auth", "proxy or local")
-			var hosts hostsFlag
-			fs.Var(&hosts, "allowed-host", "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)")
+		Setup: func(args *cli.Args) cli.Handler {
+			host := args.String("host", DefaultHost, cli.Opt{})
+			port := args.Int("port", 0, cli.Opt{Required: true})
+			mode := args.String("auth", AuthProxy, cli.Opt{Choices: AuthModes[:]})
+			hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
 			return func(env *cli.Env) int {
-				given := false
-				fs.Visit(func(f *flag.Flag) { given = given || f.Name == "port" })
-				if !given {
-					return env.UsageError("the following arguments are required: --port")
-				}
-				return serve(env, serveArgs{host: *host, port: *port, auth: string(mode), hosts: hosts, pages: pages, env: config.OS})
+				return serve(env, serveArgs{host: *host, port: *port, auth: *mode, hosts: *hosts, pages: pages, env: config.OS})
 			}
 		},
 	}

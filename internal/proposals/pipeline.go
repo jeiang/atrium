@@ -28,7 +28,7 @@ var Statuses = [...]string{Pending, Approved, Dismissed, Applied, Failed, Suppre
 const UndoOp = "undo"
 
 // Executor applies an approved proposal under the operator's selection (nil: everything) and returns its result.
-type Executor func(ctx context.Context, p *Proposal, selection py.Dict) (py.Dict, error)
+type Executor func(ctx context.Context, p *Proposal, selection any) (py.Dict, error)
 
 // Execer is the write side of *sql.DB and *sql.Tx.
 type Execer interface {
@@ -398,7 +398,7 @@ func scope(ctx context.Context, id int64) context.Context {
 // ApproveAndApply is approve_and_apply: the open proposal is claimed and its executor runs as approved proposal
 // id. A SelectionError puts it back to pending and is returned; any other failure marks it failed with the error
 // as its result. The account is resynced either way.
-func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection py.Dict) (*Proposal, error) {
+func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any) (*Proposal, error) {
 	prop, err := Get(ctx, p.DB.Write, id)
 	if err != nil {
 		return nil, err

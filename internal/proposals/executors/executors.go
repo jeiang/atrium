@@ -92,9 +92,25 @@ func get(d py.Dict, key string) any {
 	return v
 }
 
+// selected is (selection or {}).get(key): a falsy selection has no keys, and a truthy one that is not an object
+// fails as Python's .get does.
+func selected(selection any, key string) (any, error) {
+	if !py.Truthy(selection) {
+		return nil, nil
+	}
+	d, ok := selection.(py.Dict)
+	if !ok {
+		return nil, py.AttributeError(selection, "get")
+	}
+	return get(d, key), nil
+}
+
 // resolveGroups is resolve_groups: each group under its chosen name with its chosen messages.
-func resolveGroups(groups []group, selection py.Dict) ([]planned, error) {
-	picksV := get(selection, "groups")
+func resolveGroups(groups []group, selection any) ([]planned, error) {
+	picksV, err := selected(selection, "groups")
+	if err != nil {
+		return nil, err
+	}
 	var picks []any
 	if picksV != nil {
 		list, err := py.Iter(picksV)
@@ -394,7 +410,7 @@ func snapshotsOf(v any) ([]mailops.Snapshot, error) {
 // ExecuteMoves is execute_moves for rebalance_split, rebalance_merge and inbox_backlog: each chosen group is
 // verified, then Gmail relabels from the payload's folder to the group's label and iCloud moves into the group's
 // folder, created (with a delete_folder undo) when missing.
-func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, selection py.Dict) (py.Dict, error) {
+func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
 	var payload struct {
 		Folder string  `json:"folder"`
 		Groups []group `json:"groups"`
@@ -460,7 +476,7 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 
 // ExecuteDeletion is execute_deletion: the proposed delete rule is created (with a rule_delete undo) unless it
 // exists, then the chosen backlog is verified and trashed.
-func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, selection py.Dict) (py.Dict, error) {
+func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
 	payload, err := decode(p.Payload)
 	if err != nil {
 		return nil, err
@@ -473,7 +489,11 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 	if err != nil {
 		return nil, err
 	}
-	snaps, err := chosenSnapshots(all, get(selection, "message_ids"))
+	ids, err := selected(selection, "message_ids")
+	if err != nil {
+		return nil, err
+	}
+	snaps, err := chosenSnapshots(all, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -540,7 +560,7 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 
 // ExecuteLabelMerge is execute_label_merge: the chosen messages move from the label to the target label, and
 // the label is deleted once no message carries it.
-func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal, selection py.Dict) (py.Dict, error) {
+func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
 	var payload struct {
 		Label    string             `json:"label"`
 		Into     string             `json:"into"`
@@ -549,7 +569,11 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 	if err := json.Unmarshal(p.Payload, &payload); err != nil {
 		return nil, err
 	}
-	snaps, err := chosenSnapshots(payload.Messages, get(selection, "message_ids"))
+	ids, err := selected(selection, "message_ids")
+	if err != nil {
+		return nil, err
+	}
+	snaps, err := chosenSnapshots(payload.Messages, ids)
 	if err != nil {
 		return nil, err
 	}

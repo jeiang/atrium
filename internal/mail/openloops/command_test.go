@@ -15,7 +15,7 @@ func TestLoopsRefreshCommand(t *testing.T) {
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	t.Setenv("ATRIUM_TZ", tz)
 	app := cli.New("atrium", nil)
-	app.Add(openloops.Command())
+	app.Add(openloops.Command(nil))
 	var out, errOut bytes.Buffer
 	if code := app.Run(t.Context(), []string{"loops", "refresh"}, &out, &errOut); code != cli.ExitOK {
 		t.Fatalf("exit %d: %s", code, errOut.String())

@@ -1,7 +1,6 @@
 package agentcmd
 
 import (
-	"flag"
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/assistant/runner"
@@ -20,7 +19,7 @@ func callables() map[string]worker.Callable { return map[string]worker.Callable{
 func schedulerCommand(cfgEnv config.Env) *cli.Command {
 	return &cli.Command{
 		Name: "scheduler",
-		Setup: func(*flag.FlagSet) cli.Handler {
+		Setup: func(*cli.Args) cli.Handler {
 			return func(env *cli.Env) int {
 				if err := runScheduler(env, cfgEnv); err != nil {
 					_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)

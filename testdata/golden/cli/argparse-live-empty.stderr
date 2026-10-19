@@ -1,0 +1,3 @@
+usage: atrium live [-h]
+                   {backlog,rebaseline,pause,resume,status,deletions,actions,undo} ...
+atrium live: error: the following arguments are required: live_command

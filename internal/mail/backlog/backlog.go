@@ -38,6 +38,8 @@ func (e Error) Error() string { return string(e) }
 
 func (Error) PyClass() string { return "BacklogError" }
 
+func (Error) PyModule() string { return "atrium.backlog" }
+
 // Proposal is what build returns: the inbox_backlog proposal for one account.
 type Proposal struct {
 	Fingerprint string

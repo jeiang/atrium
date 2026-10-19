@@ -1,0 +1,116 @@
+{
+  "id": 8,
+  "kind": "rebalance_merge",
+  "account": "icloud",
+  "status": "applied",
+  "created_ts": 1793392200.0,
+  "decided_ts": 1792339200.0,
+  "applied_ts": 1792339200.0,
+  "title": "Move 3 messages from Receipts to Travel",
+  "preview": {
+    "folder": "Receipts",
+    "sources": [
+      {
+        "folder": "Receipts",
+        "count": 3
+      }
+    ],
+    "into": "Travel",
+    "into_exists": true,
+    "group": {
+      "name": "Travel",
+      "count": 3,
+      "senders": [
+        {
+          "label": "airline.example",
+          "count": 3
+        }
+      ],
+      "addresses": [
+        {
+          "label": "noreply@airline.example",
+          "count": 3
+        }
+      ],
+      "terms": [
+        "booking",
+        "receipt"
+      ],
+      "subjects": [
+        "Booking 1 receipt",
+        "Booking 2 receipt",
+        "Booking 3 receipt"
+      ],
+      "messages": [
+        {
+          "id": 68,
+          "subject": "Booking 1 receipt",
+          "from_name": "Island Air",
+          "from_addr": "noreply@airline.example",
+          "date_ts": 1790438400.0
+        },
+        {
+          "id": 69,
+          "subject": "Booking 2 receipt",
+          "from_name": "Island Air",
+          "from_addr": "noreply@airline.example",
+          "date_ts": 1789833600.0
+        },
+        {
+          "id": 70,
+          "subject": "Booking 3 receipt",
+          "from_name": "Island Air",
+          "from_addr": "noreply@airline.example",
+          "date_ts": 1789228800.0
+        }
+      ]
+    }
+  },
+  "result": {
+    "summary": "3 moved, 0 skipped as changed",
+    "moved": 3,
+    "skipped": [],
+    "destinations": [
+      "Travel"
+    ]
+  },
+  "fingerprint": "rebalance_merge:icloud:Receipts:Travel:addr:2989ba8cb97a56cf",
+  "payload": {
+    "folder": "Receipts",
+    "groups": [
+      {
+        "dest": "Travel",
+        "messages": [
+          {
+            "id": 68,
+            "uid": 43,
+            "uidvalidity": 7,
+            "msgid": "airrcpt-1@golden.example",
+            "digest": "b5e64a718e5f6d27fcd96323c834680ab0f3a9e6a4931b94c0342b79d4cf1811",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 69,
+            "uid": 44,
+            "uidvalidity": 7,
+            "msgid": "airrcpt-2@golden.example",
+            "digest": "e73db8efe48cb495b0e2eed45ff63a16ed559df1b69cc511c962da656c69e0b1",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          },
+          {
+            "id": 70,
+            "uid": 45,
+            "uidvalidity": 7,
+            "msgid": "airrcpt-3@golden.example",
+            "digest": "bb41763cc171b22ecb08fc42f99f8dff381a53121c73e77da1924eaeb8785985",
+            "mailbox": "Receipts",
+            "imap_name": "Receipts"
+          }
+        ]
+      }
+    ]
+  },
+  "undoable": true
+}
