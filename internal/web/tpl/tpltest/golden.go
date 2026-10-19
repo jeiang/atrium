@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
@@ -45,43 +46,101 @@ func Load(t testing.TB, name string) Case {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dec := json.NewDecoder(bytes.NewReader(b))
-	dec.UseNumber()
-	var c Case
-	if err := dec.Decode(&c); err != nil {
+	var raw struct {
+		Globals json.RawMessage `json:"globals"`
+		Context json.RawMessage `json:"context"`
+		Calls   []struct {
+			Macro  string          `json:"macro"`
+			Args   json.RawMessage `json:"args"`
+			Kwargs json.RawMessage `json:"kwargs"`
+			Caller *string         `json:"caller"`
+		} `json:"calls"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
 		t.Fatal(err)
 	}
-	c.Globals = Normalise(c.Globals).(map[string]any)
-	c.Context = Normalise(c.Context).(map[string]any)
-	for i := range c.Calls {
-		c.Calls[i].Args = Normalise(c.Calls[i].Args).([]any)
-		c.Calls[i].Kwargs = Normalise(c.Calls[i].Kwargs).(map[string]any)
+	decode := func(data json.RawMessage) any {
+		if len(data) == 0 {
+			return nil
+		}
+		v, err := decodeOrdered(json.NewDecoder(bytes.NewReader(data)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	c := Case{Globals: map[string]any{}, Context: map[string]any{}}
+	if m, ok := decode(raw.Globals).(map[string]any); ok {
+		c.Globals = m
+	}
+	if m, ok := decode(raw.Context).(map[string]any); ok {
+		c.Context = m
+	}
+	for _, call := range raw.Calls {
+		out := Call{Macro: call.Macro, Caller: call.Caller, Args: []any{}, Kwargs: map[string]any{}}
+		if a, ok := decode(call.Args).([]any); ok {
+			out.Args = a
+		}
+		if m, ok := decode(call.Kwargs).(map[string]any); ok {
+			out.Kwargs = m
+		}
+		c.Calls = append(c.Calls, out)
 	}
 	return c
 }
 
-// Normalise turns decoded JSON into the value shapes the Python render saw: json.Number becomes int64 or
-// float64 and {"$safe": "..."} becomes template.HTML.
-func Normalise(v any) any {
-	switch x := v.(type) {
-	case map[string]any:
-		if safe, ok := x["$safe"].(string); ok && len(x) == 1 {
-			return template.HTML(safe)
+func decodeOrdered(dec *json.Decoder) (any, error) {
+	dec.UseNumber()
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, err
+	}
+	switch x := tok.(type) {
+	case json.Delim:
+		if x == '[' {
+			out := []any{}
+			for dec.More() {
+				e, err := decodeOrdered(dec)
+				if err != nil {
+					return nil, err
+				}
+				out = append(out, e)
+			}
+			_, err := dec.Token()
+			return out, err
 		}
-		for k, e := range x {
-			x[k] = Normalise(e)
+		var pairs py.Dict
+		for dec.More() {
+			key, err := dec.Token()
+			if err != nil {
+				return nil, err
+			}
+			e, err := decodeOrdered(dec)
+			if err != nil {
+				return nil, err
+			}
+			pairs = append(pairs, py.Pair{Key: key.(string), Value: e})
 		}
-	case []any:
-		for i, e := range x {
-			x[i] = Normalise(e)
+		if _, err := dec.Token(); err != nil {
+			return nil, err
 		}
+		if len(pairs) == 1 && pairs[0].Key == "$safe" {
+			if safe, ok := pairs[0].Value.(string); ok {
+				return template.HTML(safe), nil
+			}
+		}
+		return orderedIfNeeded(pairs), nil
 	case json.Number:
 		if strings.ContainsAny(string(x), ".eE") {
 			f, _ := x.Float64()
-			return f
+			return f, nil
 		}
 		i, _ := x.Int64()
-		return i
+		return i, nil
 	}
-	return v
+	return tok, nil
+}
+
+func orderedIfNeeded(pairs py.Dict) map[string]any {
+	return py.OrderedMap(pairs)
 }

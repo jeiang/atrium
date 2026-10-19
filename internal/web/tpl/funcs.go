@@ -58,7 +58,8 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 			f, err := toFloat(v)
 			return py.FileSizeFormat(f), err
 		},
-		"urlencode": func(v any) string { return py.URLQuote(str(v)) },
+		"urlencode": urlencode,
+		"items":     items,
 		"tojson":    py.JSONHTMLSafe,
 		"round": func(v any, digits ...int) (float64, error) {
 			f, err := toFloat(v)
@@ -304,4 +305,63 @@ func sumlens(key string, l any) int {
 		}
 	}
 	return n
+}
+
+func pyStr(v any) (string, error) {
+	switch x := v.(type) {
+	case nil:
+		return "None", nil
+	case bool:
+		if x {
+			return "True", nil
+		}
+		return "False", nil
+	case float64:
+		return py.FloatRepr(x), nil
+	case float32:
+		return py.FloatRepr(float64(x)), nil
+	case string:
+		return x, nil
+	case template.HTML:
+		return string(x), nil
+	}
+	switch reflect.ValueOf(v).Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return fmt.Sprint(v), nil
+	}
+	return "", fmt.Errorf("urlencode: cannot quote %T", v)
+}
+
+func items(v any) ([]py.Pair, error) {
+	switch x := v.(type) {
+	case map[string]any:
+		return py.Items(x), nil
+	case py.Dict:
+		return x, nil
+	case []py.Pair:
+		return x, nil
+	}
+	return nil, fmt.Errorf("items: not a mapping: %T", v)
+}
+
+func urlencode(v any) (string, error) {
+	switch v.(type) {
+	case map[string]any, py.Dict, []py.Pair:
+		pairs, err := items(v)
+		if err != nil {
+			return "", err
+		}
+		parts := make([]string, len(pairs))
+		for i, p := range pairs {
+			value, err := pyStr(p.Value)
+			if err != nil {
+				return "", err
+			}
+			parts[i] = py.URLQuotePlus(p.Key) + "=" + py.URLQuotePlus(value)
+		}
+		return strings.Join(parts, "&"), nil
+	}
+	s, err := pyStr(v)
+	return py.URLQuote(s), err
 }

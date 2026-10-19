@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/jeiang/atrium/internal/py"
 )
 
 func TestCanonicalRules(t *testing.T) {
@@ -87,4 +89,19 @@ func (r *recorder) Helper() {}
 func (r *recorder) Errorf(format string, args ...any) {
 	r.failed = true
 	r.msg = strings.TrimSpace(format)
+}
+
+func TestLoadKeepsKeyOrder(t *testing.T) {
+	c := Load(t, "proposals.context.json")
+	counts, ok := c.Context["counts"].(map[string]any)
+	if !ok {
+		t.Fatalf("counts is %T", c.Context["counts"])
+	}
+	var keys []string
+	for _, p := range py.Items(counts) {
+		keys = append(keys, p.Key)
+	}
+	if want := []string{"pending", "applied", "failed"}; !slices.Equal(keys, want) {
+		t.Errorf("counts order = %v, want %v", keys, want)
+	}
 }

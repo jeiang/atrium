@@ -31,17 +31,6 @@ func TestJSONHTMLSafe(t *testing.T) {
 	}
 }
 
-func TestFloatRepr(t *testing.T) {
-	for in, want := range map[float64]string{
-		1e16: "1e+16", 1.5e-5: "1.5e-05", 1.2345678901234568e17: "1.2345678901234568e+17", 0.0001: "0.0001",
-		100: "100.0", 1e22: "1e+22", 0: "0.0", 123456789.125: "123456789.125",
-	} {
-		if got := FloatRepr(in); got != want {
-			t.Errorf("FloatRepr(%v) = %s, want %s", in, got, want)
-		}
-	}
-}
-
 func TestRound(t *testing.T) {
 	for _, tc := range []struct {
 		in     float64

@@ -3,17 +3,19 @@ package tpl
 import (
 	"fmt"
 	"html/template"
-	"net/url"
 	"strings"
 )
 
 func safeURL(v any) template.URL {
 	raw := str(v)
-	u, err := url.Parse(raw)
-	if err != nil || strings.HasPrefix(raw, "//") {
+	if strings.HasPrefix(raw, "//") {
 		return "#"
 	}
-	switch strings.ToLower(u.Scheme) {
+	scheme := ""
+	if i := strings.IndexAny(raw, ":/?#"); i > 0 && raw[i] == ':' {
+		scheme = raw[:i]
+	}
+	switch strings.ToLower(scheme) {
 	case "", "http", "https", "mailto", "tel", "notion":
 		return template.URL(raw)
 	}

@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/jeiang/atrium/internal/py"
 )
 
 var timeType = reflect.TypeOf(time.Time{})
@@ -23,6 +25,15 @@ func view(rv reflect.Value) any {
 	}
 	if !rv.IsValid() {
 		return nil
+	}
+	if d, ok := rv.Interface().(py.Dict); ok {
+		out := py.OrderedMap(d)
+		for k, e := range out {
+			if k != py.OrderKey {
+				out[k] = view(reflect.ValueOf(e))
+			}
+		}
+		return out
 	}
 	switch rv.Kind() {
 	case reflect.Struct:
@@ -60,6 +71,10 @@ func view(rv reflect.Value) any {
 		out := make(map[string]any, rv.Len())
 		iter := rv.MapRange()
 		for iter.Next() {
+			if key := iter.Key().String(); key == py.OrderKey {
+				out[key] = iter.Value().Interface()
+				continue
+			}
 			out[iter.Key().String()] = view(iter.Value())
 		}
 		return out

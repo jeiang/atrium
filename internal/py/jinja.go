@@ -2,8 +2,10 @@ package py
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -43,13 +45,15 @@ func FileSizeFormat(value float64) string {
 }
 
 // URLQuote is urllib.parse.quote(s, safe="/") on UTF-8 bytes, which is Jinja's urlencode for a string.
-func URLQuote(s string) string {
+func URLQuote(s string) string { return quote(s, "/") }
+
+func quote(s, safe string) string {
 	const hex = "0123456789ABCDEF"
 	var b strings.Builder
 	for i := range len(s) {
 		c := s[i]
 		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_', c == '.', c == '-', c == '~', c == '/':
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_', c == '.', c == '-', c == '~', strings.IndexByte(safe, c) >= 0:
 			b.WriteByte(c)
 		default:
 			b.WriteByte('%')
@@ -73,46 +77,6 @@ func Round(x float64, ndigits int) float64 {
 		return x
 	}
 	return out
-}
-
-// FloatRepr is repr(float).
-func FloatRepr(f float64) string {
-	switch {
-	case math.IsNaN(f):
-		return "NaN"
-	case math.IsInf(f, 1):
-		return "Infinity"
-	case math.IsInf(f, -1):
-		return "-Infinity"
-	}
-	if f == 0 {
-		if math.Signbit(f) {
-			return "-0.0"
-		}
-		return "0.0"
-	}
-	s := strconv.FormatFloat(f, 'e', -1, 64)
-	mant, expText, _ := strings.Cut(s, "e")
-	exp, _ := strconv.Atoi(expText)
-	if exp < -4 || exp >= 16 {
-		sign := "+"
-		if exp < 0 {
-			sign = "-"
-		}
-		return fmt.Sprintf("%se%s%02d", mant, sign, abs(exp))
-	}
-	out := strconv.FormatFloat(f, 'f', -1, 64)
-	if !strings.ContainsRune(out, '.') {
-		out += ".0"
-	}
-	return out
-}
-
-func abs(n int) int {
-	if n < 0 {
-		return -n
-	}
-	return n
 }
 
 // JSONHTMLSafe is Jinja's tojson filter: json.dumps(sort_keys=True) with <, >, & and ' as \u escapes.
@@ -144,7 +108,16 @@ func dumpReflect(b *strings.Builder, v reflect.Value) error {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		b.WriteString(strconv.FormatUint(v.Uint(), 10))
 	case reflect.Float32, reflect.Float64:
-		b.WriteString(FloatRepr(v.Float()))
+		switch f := v.Float(); {
+		case math.IsNaN(f):
+			b.WriteString("NaN")
+		case math.IsInf(f, 1):
+			b.WriteString("Infinity")
+		case math.IsInf(f, -1):
+			b.WriteString("-Infinity")
+		default:
+			b.WriteString(FloatRepr(f))
+		}
 	case reflect.String:
 		dumpString(b, v.String())
 	case reflect.Slice, reflect.Array:
@@ -166,7 +139,7 @@ func dumpReflect(b *strings.Builder, v reflect.Value) error {
 		if v.Type().Key().Kind() != reflect.String {
 			return fmt.Errorf("py: JSON map key type %s", v.Type().Key())
 		}
-		keys := v.MapKeys()
+		keys := slices.DeleteFunc(v.MapKeys(), func(k reflect.Value) bool { return k.String() == OrderKey })
 		sort.Slice(keys, func(i, j int) bool { return keys[i].String() < keys[j].String() })
 		b.WriteByte('{')
 		for i, k := range keys {
@@ -184,4 +157,42 @@ func dumpReflect(b *strings.Builder, v reflect.Value) error {
 		return fmt.Errorf("py: cannot encode %s as JSON", v.Type())
 	}
 	return nil
+}
+
+// OrderKey is the key under which an ordered map keeps its key order.
+const OrderKey = "$order"
+
+// OrderedMap is a Dict as a map templates can index, with the insertion order kept under OrderKey for Items.
+func OrderedMap(d Dict) map[string]any {
+	out := make(map[string]any, len(d)+1)
+	keys := make([]string, 0, len(d))
+	for _, p := range d {
+		if _, seen := out[p.Key]; !seen {
+			keys = append(keys, p.Key)
+		}
+		out[p.Key] = p.Value
+	}
+	out[OrderKey] = keys
+	return out
+}
+
+// Items is dict.items(): the pairs of an ordered map in insertion order, of any other map in key order.
+func Items(m map[string]any) []Pair {
+	keys, ok := m[OrderKey].([]string)
+	if !ok {
+		keys = slices.Sorted(maps.Keys(m))
+	}
+	out := make([]Pair, 0, len(keys))
+	for _, k := range keys {
+		if k != OrderKey {
+			out = append(out, Pair{k, m[k]})
+		}
+	}
+	return out
+}
+
+// URLQuotePlus is urllib.parse.quote_plus on UTF-8 bytes, the quoting Jinja's urlencode applies to mapping keys
+// and values.
+func URLQuotePlus(s string) string {
+	return strings.ReplaceAll(quote(s, ""), "%20", "+")
 }

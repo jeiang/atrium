@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/jeiang/atrium/internal/py"
 )
 
 const hostile = `<script>alert("x")</script>' & "q" javascript:alert(1)`
@@ -207,6 +209,49 @@ func TestPartialPageSetsDoNotLeak(t *testing.T) {
 		}
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("%s: %s", page, out.String())
+		}
+	}
+}
+
+func TestItemsAndUrlencodeMapping(t *testing.T) {
+	ordered := py.OrderedMap(py.Dict{{Key: "pending", Value: int64(10)}, {Key: "applied", Value: int64(2)}, {Key: "failed", Value: int64(1)}})
+	for _, tc := range []struct {
+		name, text string
+		data       any
+		want       string
+	}{
+		{"insertion order", `{{range items .Data}}{{.Key}}={{.Value}},{{end}}`, ordered, "pending=10,applied=2,failed=1,"},
+		{"plain map sorted", `{{range items .Data}}{{.Key}},{{end}}`, map[string]any{"b": 1, "a": 2}, "a,b,"},
+		{"mapping", `{{urlencode .Data}}`, py.OrderedMap(py.Dict{{Key: "q", Value: "a b&c"}, {Key: "n", Value: int64(50)}, {Key: "x", Value: nil}, {Key: "t", Value: true}}), "q=a&#43;b%26c&amp;n=50&amp;x=None&amp;t=True"},
+		{"mapping order", `{{urlencode .Data}}`, py.Dict{{Key: "z", Value: "1"}, {Key: "a", Value: "é"}}, "z=1&amp;a=%C3%A9"},
+		{"scalar", `{{urlencode .Data}}`, "a b/é+", "a%20b/%C3%A9%2B"},
+		{"int", `{{urlencode .Data}}`, int64(7), "7"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := render(t, tc.text, tc.data); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+	e, err := New(Config{Extra: fstest.MapFS{"_t.gohtml": {Data: []byte(`{{define "_x"}}{{urlencode .Data}}{{end}}`)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []any{[]any{"a"}, map[string]any{"k": []any{1}}} {
+		if err := e.Fragment(&bytes.Buffer{}, "_x", &Frame{Data: bad}); err == nil {
+			t.Errorf("urlencode accepted %#v", bad)
+		}
+	}
+}
+
+func TestSafeURLKeepsSchemeCheckedURLs(t *testing.T) {
+	got := render(t, `<a href="{{safeurl .Data}}">x</a>`, "https://example.com/100%")
+	if !strings.Contains(got, `href="https://example.com/100%25"`) {
+		t.Errorf("got %s", got)
+	}
+	for _, bad := range []string{"javascript:alert(1)", " javascript:x", "//evil.example", "data:text/html,x"} {
+		if got := render(t, `{{safeurl .Data}}`, bad); got != "#" {
+			t.Errorf("safeurl(%q) = %q", bad, got)
 		}
 	}
 }
