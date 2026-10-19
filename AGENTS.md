@@ -167,6 +167,24 @@ and backups; nothing of that lives here.
   process zone. `budget.BudgetExceeded` is a refusal; `usage.Record` prices
   every `usage.iterations` entry on its own tier. The `workspace` view
   (subagent cards, drafts) is assembled by #128/#134.
+- `internal/assistant/tool/`: the `Tool` value (name, description, JSON
+  schema, handler, `Effect`, `Kinds`: exactly what Python's dataclass
+  carries; the `code` kind is not ported), `Context`, the `Error`,
+  `NotConfigured` and `Raised` classes and the `_args.py` helpers
+  (`BoundedInt`, `TextArg`, `Clip`).
+- `internal/assistant/registry/`: the per-run-kind tool lists, the
+  subagent allowlist (`nil` is no allowlist, an empty one allows
+  nothing), `SubagentPool`, the `web_search` server tool (chat and cron,
+  a subagent only by allowlist, `allowed_callers: ["direct"]`) and
+  `RequestTools`, which puts the one tools breakpoint on the last entry.
+  Every listing is sorted by name, so registration order never reaches a
+  request. `registrytest` holds the frozen matrix (`matrix.json`, the
+  inventory's effect and run-kind table without `run_code`, 59 tools) and
+  `Verify`, which each tool slice calls on its tools.
+- `internal/assistant/prompts/`: `System`, `Untrusted`, `SystemBlocks`
+  (breakpoints after `System` and after the last stable block; the
+  project block follows uncached), `PrefixCacheControl` (1 h only for chat
+  when the setting asks) and `Signature`.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
   600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
@@ -352,6 +370,16 @@ and backups; nothing of that lives here.
   writes Notion and the profile directly, each write logged with undo on
   `/activity`; research subagents and code mode are read-only. A monthly
   budget (default $75) pauses scheduled runs at 80% and chat at 100%.
+- The Go system prompt (`prompts.System`) is the frozen Python `SYSTEM`
+  with one sentence removed, "For several read-only lookups across
+  sources, call run_code once instead of many tool turns.", because
+  `run_code` and the code sandbox are not ported in Phase A
+  (https://github.com/jeiang/atrium/issues/19): the model must not be told
+  to call a tool that is not offered. `files.SANDBOX_PROMPT` is not ported
+  either. The prompt-stability test applies exactly that removal to the
+  recorded text, so any other difference fails it. The cached prefix (system
+  blocks up to the last breakpoint, then every tool) holds no date, count
+  or id; the date stamp rides on the operator message.
 - Code mode runs in `atrium-codemode@`, one socket-activated instance per
   connection under `DynamicUser` with no network and a read-only filesystem.
   That sandbox is the security boundary; the Monty interpreter is not one.
