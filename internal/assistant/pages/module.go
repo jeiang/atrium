@@ -78,8 +78,8 @@ func Module(o Options) web.Module {
 		svc.Client = o.Client
 		svc.Now = o.Now
 		shutdown := func() {
-			cancel()
 			svc.Close()
+			cancel()
 		}
 		if d.OnClose != nil {
 			d.OnClose(shutdown)

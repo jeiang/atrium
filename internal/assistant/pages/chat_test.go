@@ -230,6 +230,40 @@ func TestStreamsEndOnShutdown(t *testing.T) {
 	release()
 }
 
+func TestShutdownWaitsForRunToFinish(t *testing.T) {
+	s := newSite(t)
+	release := s.hold()
+	defer release()
+	s.api.Push(reply1(anthropictest.Text("finished")))
+	thread := s.startThread("long job")
+	run := s.lastRun(thread)
+	s.waitRequests(1)
+	s.srv.StopStreams()
+	closed := make(chan struct{})
+	go func() {
+		s.srv.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+		t.Fatal("shutdown returned while a run was in flight")
+	case <-time.After(200 * time.Millisecond):
+	}
+	release()
+	select {
+	case <-closed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("shutdown never returned after the run was released")
+	}
+	got, err := journal.GetRun(context.Background(), s.db.Read, run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.State != journal.Done {
+		t.Errorf("run at shutdown ended %+v, want done", got)
+	}
+}
+
 func TestUploadsLimitsAndFileServing(t *testing.T) {
 	s := newSite(t)
 	huge := upload{"huge.bin", "application/octet-stream", make([]byte, files.MessageCapBytes+(2<<20))}
