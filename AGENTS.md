@@ -36,10 +36,12 @@ and backups; nothing of that lives here.
 
 ## Code rules
 
-- The code describes the system; it does not carry prose. Write a comment
-  only for a workaround (what is broken and why) or for one line of context
-  the code cannot express. Git history is the archive. A decision that
-  constrains future changes goes in this file.
+- The code describes the system; it does not carry prose. Avoid comments:
+  write one only for a workaround (what is broken and why). Git history is
+  the archive. A decision that constrains future changes goes in this file.
+- Tests are end to end: golden and parity tests through the real command,
+  HTTP handler or module entry point, or module-level e2e tests. Do not add
+  unit or integration tests; prove other behavior with a smoke run.
 - The module exposes a host fact as an option only when a host must set it.
   No personal literal (hostname, Apple ID, URL, port of another service)
   belongs in this repository; it comes through `services.atrium.*` or the
@@ -452,6 +454,11 @@ and backups; nothing of that lives here.
   planned on the wayfinder map
   (https://github.com/jeiang/atrium/issues/15). Phase A ports behavior as-is
   and keeps the host interface; new features go to Phase B tickets.
+- Cutover is core first: mail, web and the assistant cut over to Go; the
+  calendar, Notion, money, media and Grafana ports land after cutover, in
+  parallel, and Python is deleted after the last of them. Before cutover
+  only blockers are fixed (data integrity, mailbox safety, security, a broken
+  golden or parity check); other findings become post-cutover tickets.
 - v2 direction (not the frozen Python app): memory precedence is profile >
   nightly > wiki; the profile is the source of truth and the nightly run
   updates the wiki weighted by confidence.
