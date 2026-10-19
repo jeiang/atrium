@@ -1,0 +1,18 @@
+[
+  {
+    "id": 6,
+    "kind": "deletion_rule",
+    "account": "gmail",
+    "status": "pending",
+    "title": "Delete 1 messages and future mail matching login.example / your login code <n>",
+    "undoable": false
+  },
+  {
+    "id": 5,
+    "kind": "deletion_rule",
+    "account": "gmail",
+    "status": "suppressed",
+    "title": "Delete 1 messages and future mail matching deals@promo.example / flash sale <n>% off",
+    "undoable": false
+  }
+]

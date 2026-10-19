@@ -1,0 +1,3 @@
+usage: atrium [-h]
+              {sync,watch,rules,shadow-report,reindex,rebalance,deletions,gmail-labels,live,proposals,notion,agent,calendar,loops,watches,money,media,serve,codemode-worker} ...
+atrium: error: unrecognized arguments: --nope

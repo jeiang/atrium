@@ -6,6 +6,7 @@ if os.environ.get("PYTHONHASHSEED") != "0" or os.environ.get("TZ") != "UTC":
     os.execv(sys.executable, [sys.executable, *sys.argv])
 
 import contextlib
+import copy
 import datetime as datetime_module
 import hashlib
 import importlib
@@ -756,7 +757,170 @@ def stop_after_first_wait(real):
     return wait
 
 
+ISOLATED_UNDO = (
+    ("live-undo-file-icloud", "icloud", "file", "MAX"),
+    ("live-undo-file-icloud-moved", "icloud", "file", "MIN"),
+    ("live-undo-file-gmail", "gmail", "file", "MIN"),
+    ("live-undo-flag", "icloud", "flag", "MIN"),
+    ("live-undo-trash", "icloud", "trash", "MIN"),
+    ("live-undo-correct", "icloud", "correct", "MIN"),
+)
+
+
+def action_id(conn, account, kind, undone=False, pick="MIN"):
+    cond = "undone_ts IS NOT NULL" if undone else "ok = 1 AND undone_ts IS NULL AND undo IS NOT NULL"
+    where = f"{cond} AND kind = ?" + ("" if undone else " AND account = ?")
+    args = (kind,) if undone else (kind, account)
+    return conn.execute(f"SELECT {pick}(id) FROM auto_actions WHERE {where}", args).fetchone()[0]
+
+
+def new_cli_commands(conn):
+    rules_document = (CLI_OUT / "rules-export.stdout").read_text()
+    split_ids = [m["id"] for m in json.loads(conn.execute("SELECT payload FROM proposals WHERE id = 9").fetchone()[0])["groups"][0]["messages"]]
+    selection = json.dumps({"groups": [{"name": "Receipts/Shop B Subset", "message_ids": split_ids[:5]}]})
+    bad_selection = json.dumps({"groups": []})
+    commands = [
+        {"name": "rules-import-stdin", "argv": ["rules", "import", "-"], "stdin": rules_document},
+        {"name": "rules-import-file", "argv": ["rules", "import", "{tmp}/rules.json"], "files": {"rules.json": rules_document}},
+        {"name": "rules-import-invalid-rule", "argv": ["rules", "import", "-"], "stdin": '{"rules": [{"id": "x"}]}'},
+        {"name": "rules-import-bad-json", "argv": ["rules", "import", "-"], "stdin": "not json"},
+        {"name": "shadow-report", "argv": ["shadow-report"]},
+        {"name": "shadow-report-bad-since", "argv": ["shadow-report", "--since", "bogus"]},
+        {"name": "reindex", "argv": ["reindex"]},
+        {"name": "rebalance-scan", "argv": ["rebalance", "scan"]},
+        {"name": "deletions-scan", "argv": ["deletions", "scan"]},
+        {"name": "gmail-labels-scan", "argv": ["gmail-labels", "scan"]},
+        {"name": "proposals-scan-all", "argv": ["proposals", "scan-all"]},
+        {"name": "live-backlog", "argv": ["live", "backlog"]},
+        {"name": "live-rebaseline", "argv": ["live", "rebaseline"]},
+        {"name": "live-pause", "argv": ["live", "pause"]},
+        {"name": "live-resume", "argv": ["live", "resume"]},
+        {"name": "live-deletions", "argv": ["live", "deletions"]},
+        {"name": "live-actions-kind", "argv": ["live", "actions", "--kind", "file", "--limit", "3"]},
+        {"name": "live-actions-limit", "argv": ["live", "actions", "--limit", "2"]},
+    ]
+    for name, account, kind, pick in ISOLATED_UNDO:
+        commands.append({"name": name, "argv": ["live", "undo", str(action_id(conn, account, kind, pick=pick))]})
+    commands += [
+        {"name": "live-undo-unknown", "argv": ["live", "undo", "9999"]},
+        {"name": "live-undo-twice", "argv": ["live", "undo", str(action_id(conn, None, "file", undone=True))]},
+        {"name": "proposals-list-pending", "argv": ["proposals", "list", "--status", "pending"]},
+        {"name": "proposals-list-kind", "argv": ["proposals", "list", "--kind", "deletion_rule"]},
+        {"name": "proposals-approve-7", "argv": ["proposals", "approve", "7"]},
+        {"name": "proposals-approve-8", "argv": ["proposals", "approve", "8"]},
+        {"name": "proposals-approve-6", "argv": ["proposals", "approve", "6"]},
+        {"name": "proposals-approve-selection", "argv": ["proposals", "approve", "9", "--selection", selection]},
+        {"name": "proposals-approve-bad-selection", "argv": ["proposals", "approve", "9", "--selection", bad_selection]},
+        {"name": "proposals-approve-bad-json", "argv": ["proposals", "approve", "9", "--selection", "{"]},
+        {"name": "proposals-approve-unknown", "argv": ["proposals", "approve", "9999"]},
+        {"name": "proposals-dismiss", "argv": ["proposals", "dismiss", "8"]},
+        {"name": "proposals-dismiss-forever", "argv": ["proposals", "dismiss", "6", "--forever"]},
+        {"name": "proposals-undo-3", "argv": ["proposals", "undo", "3"]},
+        {"name": "proposals-undo-unknown", "argv": ["proposals", "undo", "9999"]},
+        {"name": "proposals-undo-pending", "argv": ["proposals", "undo", "7"]},
+        {"name": "loops-refresh", "argv": ["loops", "refresh"]},
+        {"name": "watches-refresh", "argv": ["watches", "refresh"]},
+    ]
+    argparse_argv = {
+        "argparse-root-empty": [],
+        "argparse-root-bogus": ["bogus"],
+        "argparse-root-bogus-flag": ["--bogus"],
+        "argparse-root-help": ["-h"],
+        "argparse-live-empty": ["live"],
+        "argparse-live-bogus": ["live", "bogus"],
+        "argparse-live-help": ["live", "-h"],
+        "argparse-live-actions-help": ["live", "actions", "-h"],
+        "argparse-live-actions-bad-kind": ["live", "actions", "--kind", "zzz"],
+        "argparse-live-actions-bad-limit": ["live", "actions", "--limit", "x"],
+        "argparse-live-actions-abbrev": ["live", "actions", "--li", "1"],
+        "argparse-live-undo-missing": ["live", "undo"],
+        "argparse-live-undo-text": ["live", "undo", "x"],
+        "argparse-live-status-extra": ["live", "status", "extra"],
+        "argparse-sync-unknown-flag": ["sync", "--nope"],
+        "argparse-sync-abbrev": ["sync", "--acc", "gmail"],
+        "argparse-sync-expected-one": ["sync", "--account"],
+        "argparse-sync-bad-account": ["sync", "--account", "bogus"],
+        "argparse-proposals-approve-missing": ["proposals", "approve"],
+        "argparse-proposals-approve-help": ["proposals", "approve", "-h"],
+        "argparse-proposals-list-bad-status": ["proposals", "list", "--status", "bogus"],
+        "argparse-proposals-dismiss-flag-abbrev": ["proposals", "dismiss", "6", "--for"],
+        "argparse-rules-import-missing": ["rules", "import"],
+        "argparse-rules-import-extra": ["rules", "import", "a", "b"],
+        "argparse-shadow-report-expected-one": ["shadow-report", "--since"],
+        "argparse-serve-missing-port": ["serve"],
+        "argparse-serve-bad-port": ["serve", "--port", "x"],
+        "argparse-serve-bad-auth": ["serve", "--port", "1", "--auth", "x"],
+        "argparse-serve-ambiguous": ["serve", "--port", "1", "--a", "x"],
+        "argparse-serve-help": ["serve", "-h"],
+        "argparse-dashdash": ["sync", "--", "x"],
+        "argparse-notion-help": ["notion", "-h"],
+    }
+    return commands + [{"name": name, "argv": argv} for name, argv in argparse_argv.items()]
+
+
+def snapshot_world(world):
+    accounts = {}
+    for account, client in world.clients.items():
+        validities = {box.validity for box in client.boxes.values()}
+        assert len(validities) == 1, validities
+        accounts[account] = {
+            "uidvalidity": validities.pop(),
+            "gmail": client.gmail,
+            "special_use": {name: list(flags) for name, flags in client.box_flags.items()},
+            "order": list(client.boxes),
+            "mailboxes": {
+                name: [
+                    {
+                        "uid": uid,
+                        "flags": m["flags"],
+                        "labels": m["labels"],
+                        "header": m["header"].decode(),
+                        "text": m["text"].decode(),
+                        "modseq": m["modseq"],
+                    }
+                    for uid, m in box.messages.items()
+                ]
+                for name, box in client.boxes.items()
+            },
+            "next_uid": {name: box.next_uid for name, box in client.boxes.items()},
+            "modseq": {name: box.modseq for name, box in client.boxes.items()},
+        }
+    return {"clock": CLOCK[0], "accounts": accounts, "gmail_categories": world.clients["gmail"].category_uids}
+
+
+def execute(argv, stdin=None):
+    for handler in list(logging.root.handlers):
+        logging.root.removeHandler(handler)
+    out, err = io.StringIO(), io.StringIO()
+    real_stdin = sys.stdin
+    if stdin is not None:
+        sys.stdin = io.StringIO(stdin)
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                code = cli.main(argv)
+            except SystemExit as e:
+                code = e.code
+            except Exception as e:
+                # An uncaught exception exits 1; its traceback holds machine paths, so only its last line is kept.
+                err.write("".join(traceback.format_exception_only(e)))
+                code = 1
+    finally:
+        sys.stdin = real_stdin
+    return code, out.getvalue(), err.getvalue()
+
+
+def record(index, name, argv, result, **extra):
+    code, out, err = result
+    (CLI_OUT / f"{name}.stdout").write_text(out)
+    (CLI_OUT / f"{name}.stderr").write_text(err)
+    index.append({"name": name, "argv": ["atrium", *argv], "exit_code": code, "stdout": f"{name}.stdout", "stderr": f"{name}.stderr", **extra})
+
+
 def run_cli(world, golden_db):
+    original = world.clients
+    start = copy.deepcopy(original)
+    write_json(CLI_OUT / "world.json", snapshot_world(world))
     shutil.rmtree(CLI_STATE, ignore_errors=True)
     CLI_STATE.mkdir(parents=True)
     shutil.copyfile(golden_db, CLI_STATE / "atrium.db")
@@ -774,27 +938,32 @@ def run_cli(world, golden_db):
         for name, argv, *overrides in CLI_COMMANDS:
             changed = overrides[0] if overrides else {}
             set_environ({**env, **changed})
-            for handler in list(logging.root.handlers):
-                logging.root.removeHandler(handler)
-            out, err = io.StringIO(), io.StringIO()
-            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                try:
-                    code = cli.main(argv)
-                except SystemExit as e:
-                    code = e.code
-                except Exception as e:
-                    # An uncaught exception exits 1; its traceback holds machine paths, so only its last line is kept.
-                    err.write("".join(traceback.format_exception_only(e)))
-                    code = 1
-            (CLI_OUT / f"{name}.stdout").write_text(out.getvalue())
-            (CLI_OUT / f"{name}.stderr").write_text(err.getvalue())
-            entry = {"name": name, "argv": ["atrium", *argv], "exit_code": code, "stdout": f"{name}.stdout", "stderr": f"{name}.stderr"}
-            if changed:
-                entry["env"] = changed
-            index.append(entry)
+            extra = {"env": changed} if changed else {}
+            record(index, name, argv, execute(argv), **extra)
+        set_environ(env)
+        golden_conn = raw_connect(golden_db)
+        try:
+            new_commands = new_cli_commands(golden_conn)
+        finally:
+            golden_conn.close()
+        for command in new_commands:
+            shutil.rmtree(CLI_STATE, ignore_errors=True)
+            CLI_STATE.mkdir(parents=True)
+            shutil.copyfile(golden_db, CLI_STATE / "atrium.db")
+            world.clients = copy.deepcopy(start)
+            files = command.get("files", {})
+            with tempfile.TemporaryDirectory(prefix="atrium-cli-") as tmp:
+                for file_name, content in files.items():
+                    (Path(tmp) / file_name).write_text(content)
+                argv = [a.replace("{tmp}", tmp) for a in command["argv"]]
+                result = execute(argv, command.get("stdin"))
+            assert tmp not in result[1] + result[2], command["name"]
+            extra = {k: command[k] for k in ("stdin", "files") if k in command}
+            record(index, command["name"], command["argv"], result, **extra)
     finally:
         run.ImapClient, watch.wait_for_change = real_client, real_wait
-        for client in world.clients.values():
+        world.clients = original
+        for client in original.values():
             del client.idle_changes
     for handler in list(logging.root.handlers):
         logging.root.removeHandler(handler)
