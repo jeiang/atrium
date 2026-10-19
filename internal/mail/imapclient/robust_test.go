@@ -44,8 +44,10 @@ S: {t} NO [NONEXISTENT] Unknown
 
 func TestUnexpectedTaggedResponse(t *testing.T) {
 	client, _ := icloud(t, icloudLogin+`C: {t} NOOP
+# go-imap closes the connection on a tag it never sent; a line written after that meets a closed socket and
+# the client answers with a reset, so the section ends here.
 S: T77 OK stray
-S: {t} OK NOOP completed
+! close
 `, live)
 	must(t, client.Connect(context.Background()))
 	wantError(t, client.Noop(context.Background()), "abort", `command: NOOP => unexpected tagged response: b'T77 OK stray'`)
