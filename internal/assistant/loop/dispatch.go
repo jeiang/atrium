@@ -330,3 +330,6 @@ func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.Tool
 	}
 	return toolResult(use.ID, Verify, true), nil
 }
+
+// ClassName is type(e).__name__ of an error a tool raised, for batch hooks that report errors like invoke.
+func ClassName(err error) string { return className(err) }
