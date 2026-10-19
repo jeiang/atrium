@@ -540,10 +540,10 @@ do not start. What the operator sees until then:
   delegated child would run with `recall` only.
 - On `/settings/subagents` use the Enable/Disable toggle only. Do not Save
   the `notion`, `observability` or `calendar` cards, or a custom agent that
-  names money, media or Grafana tools, until their modules land: the form
+  names media or Grafana tools, until their modules land: the form
   submits only the tools this build registers, so a save drops the others
   from the stored allowlist and the seed does not restore them.
-- The Money and Media sidebar links return 404.
+- The Media sidebar link returns 404. The Money pages (`/money/*`) and the eleven money agent tools are served.
 - Pending proposals of post-cutover kinds (`notion_edit`, `notion_link`,
   `calendar_event`, `notion_wiki_plan`) still list on `/proposals`; approve
   refuses with `no executor for kind` and undo refuses for lack of an undoer.
