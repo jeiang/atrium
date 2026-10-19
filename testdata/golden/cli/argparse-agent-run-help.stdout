@@ -1,0 +1,9 @@
+usage: atrium agent run [-h] [--thread THREAD] --text TEXT
+                        [--kind {chat,cron,nightly,sub,code}]
+
+options:
+  -h, --help            show this help message and exit
+  --thread THREAD       existing thread id; omitted creates a new thread of
+                        --kind
+  --text TEXT
+  --kind {chat,cron,nightly,sub,code}

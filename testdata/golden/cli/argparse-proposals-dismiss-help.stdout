@@ -1,0 +1,8 @@
+usage: atrium proposals dismiss [-h] [--forever] id
+
+positional arguments:
+  id
+
+options:
+  -h, --help  show this help message and exit
+  --forever

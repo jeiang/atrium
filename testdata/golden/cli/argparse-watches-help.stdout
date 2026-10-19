@@ -1,0 +1,7 @@
+usage: atrium watches [-h] {refresh} ...
+
+positional arguments:
+  {refresh}
+
+options:
+  -h, --help  show this help message and exit

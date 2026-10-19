@@ -1,0 +1,4 @@
+usage: atrium rules export [-h]
+
+options:
+  -h, --help  show this help message and exit

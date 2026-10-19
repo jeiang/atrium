@@ -1,0 +1,2 @@
+usage: atrium proposals approve [-h] [--selection SELECTION] id
+atrium proposals approve: error: argument id: invalid int value: 'x'

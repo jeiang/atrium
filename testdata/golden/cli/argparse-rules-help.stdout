@@ -1,0 +1,7 @@
+usage: atrium rules [-h] {import,export} ...
+
+positional arguments:
+  {import,export}
+
+options:
+  -h, --help       show this help message and exit
