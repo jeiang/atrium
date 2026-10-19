@@ -18,7 +18,7 @@
     "kind_of",
     "check_budget"
   ],
-  "mimetypes": "built-in table only (mimetypes.init(files=[]))",
+  "mimetypes": "built-in table only (a mimetypes.MimeTypes() instance)",
   "process_tz": "America/Port_of_Spain",
   "python": "3.14",
   "records": 89,

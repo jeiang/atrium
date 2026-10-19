@@ -167,6 +167,21 @@ and backups; nothing of that lives here.
   process zone. `budget.BudgetExceeded` is a refusal; `usage.Record` prices
   every `usage.iterations` entry on its own tier. The `workspace` view
   (subagent cards, drafts) is assembled by #128/#134.
+- `internal/assistant/files/`: `agent/files.py`. Attachments live under the
+  state dir's `files/<thread_id>/` and `files/p<project_id>/` as
+  `<id>-<safe name>` with a `thread_files` row; `IngestUploads` inspects
+  every file before it stores any, and `DeleteOwned` removes the directory,
+  the rows and any legacy `anthropic_file_id` copy (no Files API upload, no
+  container parts). docx and xlsx text come from a hand-written reader over
+  `encoding/xml` that follows python-docx and openpyxl read-only
+  semantics (CSV per sheet, style-driven dates); it adds Phase A caps the
+  Python extractor lacks (decompressed part and archive size, Excel's
+  1,048,576 x 16,384 grid, Word's 63 columns, extracted text bounded by the
+  largest compaction budget), each a `FileError` naming a too-large
+  document. `mimetypes_table.go` is CPython 3.14's built-in table, never a
+  host `mime.types` (`tools/golden/gen_mimetypes.py`). Divergences from the
+  Python extractor are listed in `testdata/corpora/README.md`.
+
 - `internal/assistant/tool/`: the `Tool` value (name, description, JSON
   schema, handler, `Effect`, `Kinds`: exactly what Python's dataclass
   carries; the `code` kind is not ported), `Context`, the `Error`,
