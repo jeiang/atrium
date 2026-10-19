@@ -8,13 +8,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
 	"math/big"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
@@ -98,30 +96,11 @@ type Rule struct {
 	Conditions []Condition
 }
 
-// DumpValue is json.dumps of a condition value.
-func DumpValue(v any) string {
-	switch v := v.(type) {
-	case float64:
-		switch {
-		case math.IsNaN(v):
-			return "NaN"
-		case math.IsInf(v, 1):
-			return "Infinity"
-		case math.IsInf(v, -1):
-			return "-Infinity"
-		}
-		return py.FloatRepr(v)
-	case *big.Int:
-		return v.String()
-	}
-	return py.JSONDumps(v)
-}
-
 // JSON is json.dumps of the condition as the rules table stores it.
 func (c Condition) JSON() string {
 	s := `{"field": ` + py.JSONDumps(c.Field) + `, "op": ` + py.JSONDumps(c.Op)
 	if c.HasValue {
-		s += `, "value": ` + DumpValue(c.Value)
+		s += `, "value": ` + py.JSONDumps(c.Value)
 	}
 	return s + "}"
 }
@@ -333,9 +312,9 @@ func (c Condition) Matches(m *Message) (bool, error) {
 		if !ok {
 			return false, fmt.Errorf("op eq: value %s: not a string", py.ReprValue(c.Value))
 		}
-		target = contacts.Casefold(target)
+		target = py.Casefold(target)
 		for _, v := range values {
-			if contacts.Casefold(v) == target {
+			if py.Casefold(v) == target {
 				return true, nil
 			}
 		}
@@ -347,10 +326,10 @@ func (c Condition) Matches(m *Message) (bool, error) {
 		}
 		targets := map[string]bool{}
 		for _, t := range list {
-			targets[contacts.Casefold(t)] = true
+			targets[py.Casefold(t)] = true
 		}
 		for _, v := range values {
-			if targets[contacts.Casefold(v)] {
+			if targets[py.Casefold(v)] {
 				return true, nil
 			}
 		}
@@ -362,13 +341,13 @@ func (c Condition) Matches(m *Message) (bool, error) {
 		}
 		targets := make([]string, len(list))
 		for i, t := range list {
-			targets[i] = contacts.Casefold(t)
+			targets[i] = py.Casefold(t)
 		}
 		for _, v := range values {
 			if v == "" {
 				continue
 			}
-			folded := contacts.Casefold(v)
+			folded := py.Casefold(v)
 			for _, t := range targets {
 				if DomainSuffix(folded, t) {
 					return true, nil

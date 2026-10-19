@@ -1,6 +1,7 @@
 package py
 
 import (
+	"math"
 	"math/big"
 	"testing"
 )
@@ -60,3 +61,13 @@ func TestDictGetSet(t *testing.T) {
 		t.Errorf("dict %v", e)
 	}
 }
+
+func TestJSONDumpsFloats(t *testing.T) {
+	got := JSONDumps([]any{7.5, 2.0, nanValue(), posInf(), -posInf(), new(big.Int).Lsh(big.NewInt(1), 70)})
+	if want := `[7.5, 2.0, NaN, Infinity, -Infinity, 1180591620717411303424]`; got != want {
+		t.Errorf("JSONDumps = %s, want %s", got, want)
+	}
+}
+
+func nanValue() float64 { return math.NaN() }
+func posInf() float64   { return math.Inf(1) }
