@@ -291,9 +291,6 @@ func TestParseDate(t *testing.T) {
 }
 
 func TestPythonStrings(t *testing.T) {
-	if got := Casefold("Straße ÄRZTE ﬁ İ"); got != "strasse ärzte fi i̇" {
-		t.Errorf("Casefold = %q", got)
-	}
 	for in, want := range map[string]string{
 		"a\r\nb\rc":                 "a\nb\nc",
 		"\xff\xe2\x82a\xf0\x9f\x98": "\ufffd\ufffda\ufffd",

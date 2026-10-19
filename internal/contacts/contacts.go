@@ -107,7 +107,7 @@ func monthDays(month int) int {
 }
 
 func dateKind(label string) string {
-	low := Casefold(label)
+	low := py.Casefold(label)
 	switch {
 	case strings.Contains(low, "anniversary"):
 		return Anniversary
@@ -266,7 +266,7 @@ func Load(dir string) []Card {
 	}
 	keys := make(map[string]string, len(found))
 	for _, c := range found {
-		keys[c.Name] = Casefold(c.Name)
+		keys[c.Name] = py.Casefold(c.Name)
 	}
 	slices.SortStableFunc(found, func(a, b Card) int { return strings.Compare(keys[a.Name], keys[b.Name]) })
 	return found
@@ -296,10 +296,10 @@ func Search(dir, query string, limit int) []Card {
 // Filter keeps the cards whose name, org, emails and phones contain every whitespace-separated term of query,
 // casefolded. A limit of 0 keeps every match.
 func Filter(cards []Card, query string, limit int) []Card {
-	terms := py.Split(Casefold(query))
+	terms := py.Split(py.Casefold(query))
 	out := []Card{}
 	for _, c := range cards {
-		haystack := Casefold(strings.Join(slices.Concat([]string{c.Name, c.Org}, c.Emails, c.Phones), " "))
+		haystack := py.Casefold(strings.Join(slices.Concat([]string{c.Name, c.Org}, c.Emails, c.Phones), " "))
 		if !slices.ContainsFunc(terms, func(t string) bool { return !strings.Contains(haystack, t) }) {
 			out = append(out, c)
 			if limit != 0 && len(out) >= limit {
