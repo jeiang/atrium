@@ -8,10 +8,9 @@ import (
 var errHeader = errors.New("header value cannot be parsed")
 
 type field struct {
-	name   []rune
-	key    string
-	value  []rune
-	source []rune
+	name  []rune
+	key   string
+	value []rune
 }
 
 func unfold(v []rune) []rune {
