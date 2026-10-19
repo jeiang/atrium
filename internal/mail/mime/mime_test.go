@@ -230,3 +230,26 @@ func TestNulCharsetRaises(t *testing.T) {
 		t.Error("Body accepted a NUL in an RFC 2231 charset")
 	}
 }
+
+func TestParseHeadersIsHeadersOnly(t *testing.T) {
+	msg, err := ParseHeaders([]byte("In-Reply-To: <a@x>\rReferences: <b@x>\r <c@x>\r\rContent-Type: text/plain; name*=\"'\"\r\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _, _ := msg.Get("In-Reply-To"); v != "<a@x>" {
+		t.Errorf("In-Reply-To = %q", v)
+	}
+	if v, _, _ := msg.Get("References"); v != "<b@x> <c@x>" {
+		t.Errorf("References = %q", v)
+	}
+	if _, ok, _ := msg.Get("Content-Type"); ok {
+		t.Error("a line after the blank line is a body line, not a header")
+	}
+	multi := []byte("In-Reply-To: <a@x>\nContent-Type: multipart/mixed\nContent-Transfer-Encoding: base64\n\n--b\nbody")
+	if _, err := ParseHeaders(multi); err != nil {
+		t.Errorf("a multipart without a boundary is not parsed in headers-only mode: %v", err)
+	}
+	if _, err := ParseHeaders([]byte("Content-Type: text/plain; name*=\"'\"\r\n\r\nx")); err == nil {
+		t.Error("Python's Content-Type read in close() raises for name*=\"'\"")
+	}
+}
