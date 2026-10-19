@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
@@ -34,7 +35,7 @@ func newApp() *cli.App {
 	app.Add(web.ServeCommand(
 		web.Page{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
 		web.Page{Module: notify.Module, Templates: notify.Templates()},
-		web.Page{Module: reviewpages.Module(reviewpages.Options{}), Templates: reviewpages.Templates()},
+		web.Page{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers()}), Templates: reviewpages.Templates()},
 	))
 	return app
 }

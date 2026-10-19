@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -105,7 +106,7 @@ func TestActivityMailRowsWithoutPlacesShowGone(t *testing.T) {
 func TestUndoingAWriteSwapsTheRowAndRefusesASecondTime(t *testing.T) {
 	s := newSite(t)
 	var undone []map[string]any
-	s.writes.Register("fake", func(_ context.Context, info map[string]any) (any, error) {
+	s.writes.Register("fake", func(_ context.Context, _ db.Querier, info map[string]any) (any, error) {
 		undone = append(undone, info)
 		return "restored", nil
 	})
