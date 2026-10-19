@@ -60,3 +60,16 @@ func TestJSONRedump(t *testing.T) {
 		}
 	}
 }
+func TestJSONDumpsIntegerSlices(t *testing.T) {
+	for _, c := range []struct {
+		v    any
+		want string
+	}{
+		{[]int{}, "[]"}, {[]int{-1, 2}, "[-1, 2]"}, {[]int64{9007199254740993}, "[9007199254740993]"},
+		{[]uint32{4294967295, 0}, "[4294967295, 0]"}, {Dict{{Key: "uids", Value: []uint32{1, 2}}}, `{"uids": [1, 2]}`},
+	} {
+		if got := JSONDumps(c.v); got != c.want {
+			t.Errorf("JSONDumps(%#v) = %s, want %s", c.v, got, c.want)
+		}
+	}
+}

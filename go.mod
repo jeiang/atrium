@@ -6,14 +6,19 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.82.0
 	github.com/dlclark/regexp2 v1.12.0
 	github.com/emersion/go-imap/v2 v2.0.0-beta.8
+	github.com/go-chi/chi/v5 v5.5.0
 	github.com/jeiang/atrium/third_party/sqlite-vec v0.0.0
 	github.com/mattn/go-sqlite3 v1.14.52
+	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/systemd/slog-journal v0.1.2
+	github.com/yuin/goldmark v1.8.6
+	golang.org/x/net v0.59.0
 	golang.org/x/text v0.43.0
 	modernc.org/sqlite v1.60.1
 )
 
 require (
+	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -22,6 +27,7 @@ require (
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gorilla/css v1.0.1 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect

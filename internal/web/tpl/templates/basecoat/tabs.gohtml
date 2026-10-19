@@ -1,0 +1,45 @@
+{{define "tabs"}}{{$id := .id}}{{$default := opt . "default_tab_index" 1}}{{$tabsets := .tabsets -}}
+<div
+  class="tabs {{opt . "class" ""}}"
+  id="{{$id}}"
+>
+  <nav
+    role="tablist"
+    aria-orientation="{{opt . "orientation" "horizontal"}}"
+    {{with opt . "variant" ""}}data-variant="{{.}}"{{end}}
+    {{with opt . "label" ""}}aria-label="{{.}}"{{end}}
+  >
+    {{range $i, $tabset := $tabsets}}
+      {{$n := inc $i}}
+      {{$disabled := opt $tabset "disabled" false}}
+      <button
+        type="button"
+        role="tab"
+        id="{{$id}}-tab-{{$n}}"
+        aria-controls="{{$id}}-panel-{{$n}}"
+        aria-selected="{{if eq $n $default}}true{{else}}false{{end}}"
+        tabindex="{{if and (eq $n $default) (not $disabled)}}0{{else}}-1{{end}}"
+        {{if $disabled}}disabled{{end}}
+      >
+        {{$tabset.tab}}
+      </button>
+    {{end}}
+  </nav>
+
+  {{range $i, $tabset := $tabsets}}
+    {{$n := inc $i}}
+    {{with opt $tabset "panel" nil}}
+      <div
+        role="tabpanel"
+        id="{{$id}}-panel-{{$n}}"
+        aria-labelledby="{{$id}}-tab-{{$n}}"
+        tabindex="-1"
+        aria-selected="{{if eq $n $default}}true{{else}}false{{end}}"
+        {{if ne $n $default}}hidden{{end}}
+      >
+        {{.}}
+      </div>
+    {{end}}
+  {{end}}
+</div>
+{{- end}}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/web"
 )
 
 var version = "dev"
@@ -22,5 +23,6 @@ func main() {
 func newApp() *cli.App {
 	app := cli.New("atrium", logx.Setup)
 	app.Version = version
+	app.Add(web.ServeCommand())
 	return app
 }

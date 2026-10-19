@@ -17,6 +17,9 @@ type Pair struct {
 // Dict is a Python dict that dumps in insertion order.
 type Dict []Pair
 
+// MarshalJSON is JSONDumps(d), so encoding/json keeps the insertion order.
+func (d Dict) MarshalJSON() ([]byte, error) { return []byte(JSONDumps(d)), nil }
+
 // JSONOpts selects json.dumps arguments. The zero value is the defaults: ", " and ": " separators, non-ASCII
 // escaped, keys in insertion order. NoEnsureASCII is ensure_ascii=False, Compact is separators=(",", ":"),
 // SortKeys is sort_keys=True.
@@ -27,7 +30,7 @@ type JSONOpts struct {
 }
 
 // JSONDumps is json.dumps(v, ...), the one JSON encoder: v is nil, a bool, an integer, a float64, a *big.Int, a
-// string, a []string, a []any, a Dict or a map[string]any (dumped with sorted keys, Go maps being unordered).
+// string, a []string, an []int, []int64 or []uint32, a []any, a Dict or a map[string]any (dumped with sorted keys, Go maps being unordered).
 // It panics on any other type.
 func JSONDumps(v any, opts ...JSONOpts) string {
 	var o JSONOpts
@@ -93,6 +96,12 @@ func dump(b *strings.Builder, v any, o JSONOpts) {
 			dumpString(b, s, o)
 		}
 		b.WriteByte(']')
+	case []int:
+		dumpInts(b, v, itemSep)
+	case []int64:
+		dumpInts(b, v, itemSep)
+	case []uint32:
+		dumpInts(b, v, itemSep)
 	case []any:
 		b.WriteByte('[')
 		for i, e := range v {
@@ -172,4 +181,15 @@ func writeU(b *strings.Builder, r rune) {
 	b.WriteByte(hex[r>>8&0xf])
 	b.WriteByte(hex[r>>4&0xf])
 	b.WriteByte(hex[r&0xf])
+}
+
+func dumpInts[T int | int64 | uint32](b *strings.Builder, v []T, itemSep string) {
+	b.WriteByte('[')
+	for i, n := range v {
+		if i > 0 {
+			b.WriteString(itemSep)
+		}
+		b.WriteString(strconv.FormatInt(int64(n), 10))
+	}
+	b.WriteByte(']')
 }

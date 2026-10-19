@@ -650,11 +650,12 @@ func (c *conn) UIDSearch(ctx context.Context, criteria mail.SearchCriteria) ([]u
 	return out, err
 }
 
-// fetchOptions is imap.fetch_items(gmail, with_body) with CHANGEDSINCE.
+// fetchOptions is imap.fetch_items(gmail, with_body) with CHANGEDSINCE, or mailops.VERIFY_ITEMS(_GMAIL).
 func fetchOptions(items mail.FetchItems) *imap.FetchOptions {
 	opts := &imap.FetchOptions{UID: true, Flags: true, ChangedSince: items.ChangedSince}
 	opts.Gmail.Labels = items.Labels
-	if items.Header || items.Body {
+	switch {
+	case items.Header || items.Body:
 		opts.InternalDate = true
 		opts.RFC822Size = true
 		opts.BodyStructure = &imap.FetchItemBodyStructure{Extended: true}
@@ -664,6 +665,8 @@ func fetchOptions(items mail.FetchItems) *imap.FetchOptions {
 			{Specifier: imap.PartSpecifierHeader, Peek: true},
 			{Specifier: imap.PartSpecifierText, Peek: true, Partial: &imap.SectionPartial{Offset: 0, Size: bodyCapBytes}},
 		}
+	case items.HeaderOnly:
+		opts.BodySection = []*imap.FetchItemBodySection{{Specifier: imap.PartSpecifierHeader, Peek: true}}
 	}
 	return opts
 }
