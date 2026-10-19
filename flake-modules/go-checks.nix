@@ -76,13 +76,27 @@
         ${eachDriver ''golangci-lint run --build-tags "$tags" ./...''}
       '';
 
-      go-test = goCheck "test" [] (eachDriver ''go test -race -tags "$tags" ./...'');
-
       gofmt = goCheck "gofmt" [] ''
         unformatted=$(find . -name vendor -prune -o -name '*.go' -print | xargs -r gofmt -l)
         if [ -n "$unformatted" ]; then
           echo "gofmt would reformat:" >&2
           echo "$unformatted" >&2
+          exit 1
+        fi
+      '';
+
+      go-test = goCheck "test" [] ''
+        log=$TMPDIR/go-test.log
+        : >"$log"
+        status=0
+        for tags in sqlite_fts5 modernc; do
+          echo "tags: $tags"
+          go test -race -tags "$tags" ./... 2>&1 | tee -a "$log"
+          [ "''${PIPESTATUS[0]}" -eq 0 ] || status=1
+        done
+        if [ "$status" -ne 0 ]; then
+          echo "=== go-test failure summary ==="
+          grep -E -- '^(--- FAIL|FAIL[[:space:]]|panic:)|DATA RACE' "$log" | sort -u
           exit 1
         fi
       '';
