@@ -56,3 +56,11 @@ def test_private_addresses_refused(monkeypatch, address):
 def test_non_http_scheme_refused_even_if_listed():
     with pytest.raises(ToolError):
         web_fetch.web_fetch(ctx_for("file:///etc/passwd"), {"url": "file:///etc/passwd"})
+
+
+def test_unnormalizable_stored_urls_are_ignored(monkeypatch):
+    monkeypatch.setattr(webfetch, "fetch_page", lambda url, *a, **k: (b"<p>hi</p>", "utf-8", url))
+    bad = ("http://x:99999", "ftp://example.test/ok", "not a url", "http://example.test\uff1a8080/docs")
+    assert web_fetch.web_fetch(ctx_for(*bad, URL), {"url": URL})["text"]
+    with pytest.raises(ToolError, match="not allowed"):
+        web_fetch.web_fetch(ctx_for(*bad), {"url": URL})
