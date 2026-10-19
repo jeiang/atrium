@@ -269,10 +269,10 @@ func NormalizeAddresses(name string, value any) (string, error) {
 
 // formatAddr is email.utils.formataddr((name, address)) with a non-empty name.
 func formatAddr(name, address string) (string, error) {
-	if err := smtp.ASCIIEncodeError(address); err != nil {
+	if err := py.ASCIIEncodeError(address); err != nil {
 		return "", err
 	}
-	if smtp.ASCIIEncodeError(name) != nil {
+	if py.ASCIIEncodeError(name) != nil {
 		return headerEncode([]byte(name)) + " <" + address + ">", nil
 	}
 	quote := ""
