@@ -423,8 +423,12 @@ def claim_due(conn, cfg, now, owner):
             job = dict(row)
             due = job["next_due"]
             missed = now - due > MISSED_GRACE_SECONDS
-            spec = parse(job["schedule"], job["tz"])
-            following = spec.next_after(now) if spec.recurring else None
+            try:
+                spec = parse(job["schedule"], job["tz"])
+                following = spec.next_after(now) if spec.recurring else None
+            except ScheduleError as e:
+                log.error("job %s has an unparsable schedule, skipped: %s", job["id"], e)
+                continue
             enabled = 1 if following is not None else 0
             if paused or over_budget:
                 status = SKIPPED_PAUSE if paused else SKIPPED_BUDGET
