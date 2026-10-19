@@ -40,6 +40,7 @@
       "atrium-codemode.socket"
       "atrium-codemode@.service"
       "atrium-notion-sync.service"
+      "atrium-notion-sync.timer"
       "atrium-scan.service"
       "atrium-scan.timer"
       "atrium-sync.service"
@@ -77,11 +78,11 @@
         ! grep -q 'ATRIUM_PUBLIC_HOST' "$units/atrium-web-local.service"
         grep -q -- '--setenv=ATRIUM_MODE=live' ${pkgs.writeText "atrium-run" (builtins.unsafeDiscardStringContext atriumRun.text)}
         ! grep -q 'ATRIUM_STATIC_DIR' "$units/atrium-web.service"
-        for name in atrium-web atrium-web-local atrium-watch atrium-agent-scheduler atrium-sync atrium-scan; do
+        for name in atrium-web atrium-web-local atrium-watch atrium-agent-scheduler atrium-sync atrium-scan atrium-notion-sync; do
           grep -q "^ExecStart=${goBinary} " "$units/$name.service"
         done
-        grep -q 'ExecStart=.*/bin/true' "$units/atrium-notion-sync.service"
-        ! grep -q 'notion sync' "$units/atrium-notion-sync.service"
+        grep -q "^ExecStart=${goBinary} notion sync" "$units/atrium-notion-sync.service"
+        grep -q 'OnUnitActiveSec=15m' "$units/atrium-notion-sync.timer"
         ln -s "$units" $out
       '';
 

@@ -392,7 +392,7 @@ in {
             description = "Mirror Notion into the atrium index";
             serviceConfig = {
               Type = "oneshot";
-              ExecStart = "${pkgs.coreutils}/bin/true";
+              ExecStart = "${lib.getExe cfg.package} notion sync";
             };
           };
 
@@ -445,6 +445,14 @@ in {
             wantedBy = ["timers.target"];
             timerConfig = {
               OnActiveSec = "2m";
+              OnUnitActiveSec = "15m";
+            };
+          };
+
+          atrium-notion-sync = {
+            wantedBy = ["timers.target"];
+            timerConfig = {
+              OnActiveSec = "3m";
               OnUnitActiveSec = "15m";
             };
           };

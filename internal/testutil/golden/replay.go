@@ -85,8 +85,8 @@ func checkReplayed(t testing.TB, i int, want Request, r *http.Request) bool {
 		t.Errorf("golden replay: request %d: unknown body_encoding %q", i, want.BodyEncoding)
 		return false
 	}
-	if r.Method != want.Method || r.URL.Path != want.Path || r.URL.RawQuery != want.Query {
-		t.Errorf("golden replay: request %d: %s %s?%s, want %s %s?%s", i, r.Method, r.URL.Path, r.URL.RawQuery, want.Method, want.Path, want.Query)
+	if r.Method != want.Method || r.URL.EscapedPath() != want.Path || r.URL.RawQuery != want.Query {
+		t.Errorf("golden replay: request %d: %s %s?%s, want %s %s?%s", i, r.Method, r.URL.EscapedPath(), r.URL.RawQuery, want.Method, want.Path, want.Query)
 	}
 	for k, v := range want.Headers {
 		if got := r.Header.Get(k); got != v && (!strings.HasPrefix(v, "multipart/") || !strings.HasPrefix(got, v)) {
