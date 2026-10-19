@@ -607,21 +607,17 @@ func SuggestName(chatURL string) Namer {
 		raw, err := llm.ChatJSON(ctx, chatURL, NameSystem, prompt, NameSchema, 0)
 		var down *httpx.ServiceUnavailable
 		switch {
-		case errors.As(err, &down) || errors.Is(err, httpx.ErrValue) || errors.Is(err, httpx.ErrKey) || errors.Is(err, httpx.ErrType):
+		case errors.As(err, &down) || errors.Is(err, httpx.ErrValue) || errors.Is(err, httpx.ErrKey) ||
+			errors.Is(err, httpx.ErrIndex) || errors.Is(err, httpx.ErrType):
 		case err != nil:
 			return "", err
 		default:
-			answer, err := py.JSONLoads(raw)
-			if err != nil {
-				break
-			}
-			fields, ok := answer.(py.Dict)
-			if !ok {
-				return "", fmt.Errorf("'%s' object has no attribute 'get'", py.TypeName(answer))
-			}
-			if value, _ := fields.Get("name"); value != nil {
-				if s, isString := value.(string); isString {
-					name = CleanName(s)
+			answer, _ := py.JSONLoads(raw)
+			if fields, ok := answer.(py.Dict); ok {
+				if value, _ := fields.Get("name"); value != nil {
+					if s, isString := value.(string); isString {
+						name = CleanName(s)
+					}
 				}
 			}
 		}

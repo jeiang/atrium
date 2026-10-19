@@ -2,12 +2,10 @@ package rebalance_test
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
@@ -49,12 +47,20 @@ func TestSuggestNameFallsBackWhenTheModelFails(t *testing.T) {
 	}
 }
 
-func TestSuggestNameRaisesWhatPythonDoesNotCatch(t *testing.T) {
-	empty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"choices": []}`))
-	}))
-	defer empty.Close()
-	if _, err := rebalance.SuggestName(empty.URL)(context.Background(), "Shopping", []string{"a.test"}, nil); !errors.Is(err, httpx.ErrIndex) {
-		t.Fatalf("SuggestName on no choices = %v, want IndexError", err)
+func TestSuggestNameFallsBackOnEmptyOrMalformedReply(t *testing.T) {
+	for _, reply := range []string{
+		`{"choices": []}`, `{}`, `{"choices": [{"message": {"content": "[]"}}]}`, `{"choices": [{"message": {"content": null}}]}`,
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(reply)) }))
+		name := rebalance.SuggestName(srv.URL)
+		for _, c := range []struct {
+			domains []string
+			want    string
+		}{{[]string{"shoply.test"}, "shoply.test"}, {nil, "Split"}} {
+			if got, err := name(context.Background(), "Shopping", c.domains, []string{"order"}); err != nil || got != c.want {
+				t.Errorf("reply %s, domains %v: SuggestName = %q, %v; want %q", reply, c.domains, got, err, c.want)
+			}
+		}
+		srv.Close()
 	}
 }
