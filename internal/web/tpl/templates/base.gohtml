@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{{block "title" .}}{{end}} · atrium</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect%7Bfill:oklch(0.25 0.014 60)%7Dtext%7Bfill:oklch(0.985 0.003 85)%7D@media (prefers-color-scheme:dark)%7Brect%7Bfill:oklch(0.92 0.008 85)%7Dtext%7Bfill:oklch(0.2 0.012 60)%7D%7D%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='22.5' font-family='ui-monospace,monospace' font-size='19' font-weight='600' text-anchor='middle'%3Ea%3C/text%3E%3C/svg%3E">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+  <link rel="stylesheet" href="{{asset "app.css"}}">
+  <script src="{{asset "htmx.min.js"}}" defer></script>
+  <script src="{{asset "basecoat/all.min.js"}}" defer></script>
+  <script src="{{asset "app.js"}}" defer></script>
+</head>
+<body class="min-h-dvh" hx-headers='{{tojson (dict "X-CSRF-Token" .CSRF)}}'{{block "body_attrs" .}}{{end}}>
+  <a href="#content" class="sr-only rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50">Skip to content</a>
+  {{$page := partial "page" .}}
+  {{$state := dict "mode" .Mode "paused" .Paused}}
+  {{template "sidebar" (dict
+    "id" "sidebar"
+    "label" "Primary"
+    "header" (partial "base_brand" .)
+    "footer" (partial "base_footer" .)
+    "menu" (list
+      (dict "type" "group" "label" "Assistant" "items" (list
+        (dict "label" "Chat" "url" "/chat" "icon" (icon "messages-square") "current" (eq $page "chat"))
+        (dict "label" "Scheduled" "url" "/scheduled" "icon" (icon "clock") "current" (eq $page "scheduled"))
+        (dict "label" "Projects" "url" "/projects" "icon" (icon "folder") "current" (eq $page "projects"))))
+      (dict "type" "group" "label" "Review" "items" (list
+        (dict "label" (partial "base_proposals_label" .) "url" "/proposals" "icon" (icon "list-checks") "current" (eq $page "proposals") "class" "[&>span:last-child]:flex-1")
+        (dict "label" "Activity" "url" "/activity" "icon" (icon "history") "current" (eq $page "activity"))))
+      (dict "type" "group" "label" "Mail" "items" (list
+        (dict "label" "Decisions" "url" "/triage" "icon" (icon "route") "current" (eq $page "triage"))
+        (dict "label" "Rules" "url" "/rules" "icon" (icon "scroll-text") "current" (eq $page "rules"))
+        (dict "label" "Drafts" "url" "/drafts" "icon" (icon "mail") "current" (eq $page "drafts"))))
+      (dict "type" "group" "label" "Life" "items" (list
+        (dict "label" "Money" "url" "/money" "icon" (icon "wallet") "current" (eq $page "money"))
+        (dict "label" "Loops" "url" "/loops" "icon" (icon "list-checks") "current" (eq $page "loops"))
+        (dict "label" "Watches" "url" "/watches" "icon" (icon "package") "current" (eq $page "watches"))))
+      (dict "type" "group" "label" "Media" "items" (list
+        (dict "label" "Downloads" "url" "/media/downloads" "icon" (icon "download") "current" (or (eq $page "media_downloads") (eq $page "media_add")))
+        (dict "label" "Channels" "url" "/media/channels" "icon" (icon "tv") "current" (eq $page "media_channels"))
+        (dict "label" "Library" "url" "/media/library" "icon" (icon "film") "current" (eq $page "media_library"))))))}}
+  <main class="flex min-w-0 flex-col">
+    <header class="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-3 md:px-6">
+      <button id="nav-toggle" type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Toggle navigation" aria-controls="sidebar" data-action="toggle-sidebar">{{icon "panel-left"}}</button>
+      <hr role="separator" aria-orientation="vertical" class="h-4 w-px border-0 bg-border">
+      <h1 class="truncate px-1 text-sm font-medium">{{block "heading" .}}{{end}}</h1>
+      <div class="ml-auto flex items-center gap-3">
+        <a href="/settings" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{{if eq $page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}</a>
+        {{template "mode_badge" $state}}
+        {{if eq .Mode "live"}}
+        <form method="post" action="/live/{{if .Paused}}resume{{else}}pause{{end}}">
+          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+          <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon (ternary .Paused "zap" "lock")}}{{if .Paused}}Resume{{else}}Pause{{end}}</button>
+        </form>
+        {{end}}
+      </div>
+    </header>
+    <div id="content" tabindex="-1" class="mx-auto flex w-full {{block "content_class" .}}max-w-6xl{{end}} flex-col gap-6 px-4 py-6 outline-none md:px-8 md:py-8">
+      {{block "content" .}}{{end}}
+    </div>
+  </main>
+
+  <dialog id="reader" class="drawer" data-side="right" aria-label="Message">
+    <article class="w-full max-w-none sm:max-w-2xl">
+      <header class="flex-row items-center justify-between border-b">
+        <h2 class="text-sm font-medium">Message</h2>
+        <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close message" data-action="close-dialog">{{icon "x"}}</button>
+      </header>
+      <section id="reader-body" data-loading="reader-loading" class="p-4 md:p-6"></section>
+    </article>
+  </dialog>
+
+  <template id="reader-loading">
+    <div class="flex flex-col gap-3" role="status" aria-label="Loading message">
+      <div class="skeleton h-6 w-3/4 rounded-md bg-muted"></div>
+      <div class="skeleton h-4 w-1/2 rounded-md bg-muted"></div>
+      <div class="skeleton mt-4 h-40 w-full rounded-md bg-muted"></div>
+    </div>
+  </template>
+
+  {{$toasts := list}}
+  {{with .Toast}}{{$toasts = list (dict "category" .Category "title" .Title "description" .Description)}}{{end}}
+  {{template "toaster" (dict "toasts" $toasts)}}
+</body>
+</html>
+{{define "page"}}{{.Page}}{{end}}
+{{define "base_brand"}}
+  <a href="/chat" class="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <span class="grid size-7 place-items-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground" aria-hidden="true">a</span>
+    <span class="text-base font-semibold tracking-tight">atrium</span>
+  </a>
+{{end}}
+{{define "base_footer"}}
+  <div class="flex flex-col gap-1.5 rounded-lg border bg-background p-3 text-xs">
+    <div>{{template "mode_badge" (dict "mode" .Mode "paused" .Paused)}}</div>
+    <p class="text-pretty text-muted-foreground">{{template "mode_note" (dict "mode" .Mode "paused" .Paused)}}</p>
+  </div>
+{{end}}
+{{define "base_proposals_label"}}<span class="flex items-center gap-2">Proposals{{template "pending_badge" (dict "count" .PendingCount)}}</span>{{end}}

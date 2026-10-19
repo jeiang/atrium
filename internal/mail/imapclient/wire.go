@@ -23,6 +23,8 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Msg }
 
+func (e *Error) PyClass() string { return e.Kind }
+
 func pyError(format string, a ...any) *Error {
 	return &Error{Kind: "error", Msg: fmt.Sprintf(format, a...)}
 }

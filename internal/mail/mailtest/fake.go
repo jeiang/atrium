@@ -130,6 +130,9 @@ func NewFakeClient(env config.Env) *FakeClient {
 	return f
 }
 
+// SetEnv gates every later call with env instead of the one NewFakeClient got.
+func (f *FakeClient) SetEnv(env config.Env) { f.Client = mail.Gated(fakeConn{f}, env) }
+
 func (f *FakeClient) AddBox(imapName string, box *FakeBox, flags ...string) *FakeBox {
 	if _, ok := f.Boxes[imapName]; !ok {
 		f.Order = append(f.Order, imapName)
@@ -266,12 +269,15 @@ func (c fakeConn) UIDFetch(_ context.Context, uids mail.UIDSet, items mail.Fetch
 			msg.GmMsgID = fmt.Sprintf("g%d", uid)
 			msg.GmThrID = fmt.Sprintf("t%d", uid)
 		}
-		if full {
+		switch {
+		case full:
 			msg.Size = int64(len(m.Header) + len(m.Text))
 			msg.InternalDate = "06-Oct-2026 10:00:00 +0000"
 			msg.Attachments = []mail.Attachment{}
 			msg.Header = m.Header
 			msg.Text = m.Text
+		case items.HeaderOnly:
+			msg.Header = m.Header
 		}
 		out = append(out, msg)
 	}

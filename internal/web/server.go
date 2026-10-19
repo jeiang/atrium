@@ -30,6 +30,8 @@ type Deps struct {
 	Cfg config.Config
 	Env config.Env
 	DB  *db.DB
+	// Render writes pages and fragments; nil when the server was built without a Renderer.
+	Render *Renderer
 	// Error answers with the app's error handling: the error page for 404 and
 	// 422, a JSON {"detail": ...} body for every other status.
 	Error func(w http.ResponseWriter, r *http.Request, status int, detail string)
@@ -49,6 +51,7 @@ type Options struct {
 	// Public admits a request without Remote-Groups, see NewGuard.
 	Public    func(*http.Request) bool
 	ErrorPage ErrorPage
+	Render    *Renderer
 	Static    fs.FS
 	Modules   []Module
 }
@@ -70,6 +73,9 @@ func New(o Options) (*Server, error) {
 		o.Env = config.OS
 	}
 	s := &Server{mux: chi.NewRouter(), errPage: o.ErrorPage}
+	if s.errPage == nil && o.Render != nil {
+		s.errPage = o.Render.ErrorPage
+	}
 	if s.errPage == nil {
 		s.errPage = plainErrorPage
 	}
@@ -85,7 +91,7 @@ func New(o Options) (*Server, error) {
 	s.mux.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/chat", http.StatusSeeOther)
 	})
-	deps := &Deps{Cfg: o.Cfg, Env: o.Env, DB: o.DB, Error: s.Error}
+	deps := &Deps{Cfg: o.Cfg, Env: o.Env, DB: o.DB, Render: o.Render, Error: s.Error}
 	for _, register := range o.Modules {
 		register(s.mux, deps)
 	}
