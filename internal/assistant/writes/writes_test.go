@@ -69,7 +69,7 @@ func TestUndo(t *testing.T) {
 	ctx := t.Context()
 	reg := writes.NewRegistry()
 	var calls []map[string]any
-	reg.Register("restore", func(ctx context.Context, info map[string]any) (any, error) {
+	reg.Register("restore", func(ctx context.Context, _ db.Querier, info map[string]any) (any, error) {
 		calls = append(calls, info)
 		if info["fail"] == true {
 			return nil, writes.UndoError("changed since")
