@@ -401,7 +401,7 @@ func TestIntegerParametersFollowPydanticLaxMode(t *testing.T) {
 	for _, ok := range []string{"+" + s.id(s.ids.invoice), " " + s.id(s.ids.invoice) + " ", s.id(s.ids.invoice) + ".0"} {
 		status(t, s.get("/messages/"+url.PathEscape(ok)), 200, ok)
 	}
-	for _, bad := range []string{"1e1", "5.", ".0", "0x1p4", "1__0"} {
+	for _, bad := range []string{"1e1", "5.", ".0", "0x1p4", "1__0", "%1C7", "%1F7"} {
 		status(t, s.get("/messages/"+bad), 422, bad)
 	}
 	status(t, s.get("/triage?offset=1e3"), 422, "offset")

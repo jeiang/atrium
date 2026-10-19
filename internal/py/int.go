@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"slices"
 	"strings"
+	"unicode"
 )
 
 // Exception is a Python built-in exception (ValueError, TypeError, ...) raised by an emulated builtin; its
@@ -144,7 +145,7 @@ func TypeError(format string, args ...any) error { return raise("TypeError", for
 // and optionally "." followed by one or more zeros; anything else, including exponents and Unicode digits, is
 // refused (ok is false).
 func LaxInt(s string) (n *big.Int, ok bool) {
-	body := Strip(s)
+	body := strings.TrimFunc(s, func(r rune) bool { return unicode.Is(unicode.White_Space, r) })
 	whole, fraction, hasFraction := strings.Cut(body, ".")
 	if hasFraction && (fraction == "" || strings.Trim(fraction, "0") != "") {
 		return nil, false
