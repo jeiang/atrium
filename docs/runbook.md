@@ -299,25 +299,25 @@ sources: ...` footer at the end of each page. Every write is on /activity
 Setting up the wiki, or converting an existing workspace, once:
 
 1. Create a page "Wiki Home" in Notion and share it (and the databases and
-   pages that should move) with the integration.
+    pages that should move) with the integration.
 2. Put its page id in `atrium.env` as `ATRIUM_NOTION_WIKI_ROOT=...` and
-   restart the units (`systemctl restart atrium-web atrium-agent-scheduler`).
+    restart the units (`systemctl restart atrium-web atrium-agent-scheduler`).
 3. `atrium-run notion sync`, then `atrium-run notion wiki-plan`. The command
-   reads every database, row and page from the mirror, asks the assistant model
-   (structured output, chunked) for the hub structure, a mode per database
-   (one page with a table, or a hub with child pages) and a keep/merge/drop/
-   convert decision with a reason per item (drop: past one-off events,
-   receipts and purchases, facts available again from mail or the calendar,
-   unsourced guesses; private pages are kept and never sent to the model), and
-   queues one `notion_wiki_plan` proposal. The model calls are billed to a
-   "Wiki plan" chat thread on /usage.
+    reads every database, row and page from the mirror, asks the assistant model
+    (structured output, chunked) for the hub structure, a mode per database
+    (one page with a table, or a hub with child pages) and a keep/merge/drop/
+    convert decision with a reason per item (drop: past one-off events,
+    receipts and purchases, facts available again from mail or the calendar,
+    unsourced guesses; private pages are kept and never sent to the model), and
+    queues one `notion_wiki_plan` proposal. The model calls are billed to a
+    "Wiki plan" chat thread on /usage.
 4. Review it on /proposals (hubs, database modes, every item with its
-   decision and reason). Approve: hubs and converted pages are created under
-   Wiki Home, loose pages are moved, merged content is appended under a
-   "From <title>" heading, dropped rows and pages and every emptied database
-   are archived (never deleted), and the Wiki Log gets one line per step.
-   Undo on the proposal puts everything back. Dismiss and rerun `wiki-plan`
-   for a fresh draft; only one plan can be pending at a time.
+    decision and reason). Approve: hubs and converted pages are created under
+    Wiki Home, loose pages are moved, merged content is appended under a
+    "From <title>" heading, dropped rows and pages and every emptied database
+    are archived (never deleted), and the Wiki Log gets one line per step.
+    Undo on the proposal puts everything back. Dismiss and rerun `wiki-plan`
+    for a fresh draft; only one plan can be pending at a time.
 
 Drafts left in `sending` for more than 10 minutes (a crash mid-send) become
 `unknown` when the web app starts. /drafts?status=unknown asks you to check the
