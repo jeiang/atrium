@@ -445,3 +445,9 @@ def test_context_ops_are_not_offered_to_subagents_or_code():
         assert not any(t.name.startswith("context_") for t in registry.tools_for(kind))
     for kind in ("chat", "cron", "nightly"):
         assert {"context_status", "context_pin", "context_drop", "context_fold"} <= {t.name for t in registry.tools_for(kind)}
+
+
+@pytest.mark.parametrize("from_seq, to_seq", [(1, True), (True, 1), (True, True)])
+def test_fold_rejects_bool_seq(from_seq, to_seq):
+    with pytest.raises(context.ContextError, match="from_seq and to_seq must be integers"):
+        context.fold(None, 1, "run", from_seq, to_seq, "summary", [], 0)
