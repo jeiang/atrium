@@ -569,7 +569,7 @@ func TestWebFetchToolCorpus(t *testing.T) {
 		checkTraces(t, label, s, r)
 		n++
 	}
-	if n != 23 {
+	if n != 27 {
 		t.Errorf("%d web_fetch records", n)
 	}
 }
