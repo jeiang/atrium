@@ -916,6 +916,7 @@ def execute(argv, stdin=None):
 
 def record(index, name, argv, result, **extra):
     code, out, err = result
+    err = err.replace(str(ROOT) + "/", "")
     (CLI_OUT / f"{name}.stdout").write_text(out)
     (CLI_OUT / f"{name}.stderr").write_text(err)
     index.append({"name": name, "argv": ["atrium", *argv], "exit_code": code, "stdout": f"{name}.stdout", "stderr": f"{name}.stderr", **extra})
