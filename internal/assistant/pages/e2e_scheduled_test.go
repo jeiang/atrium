@@ -153,12 +153,17 @@ func TestScheduledShowsRunsInThePageZone(t *testing.T) {
 	}
 	last, _ := res.LastInsertId()
 	s.exec("INSERT INTO job_runs (job_id, due_at, status, error) VALUES (?, 1780003600, 'error', 'Budget <exceeded>')", nightly.id)
+	for _, state := range []string{"missed_coalesced", "skipped_pause", "skipped_budget", "running"} {
+		s.exec("INSERT INTO job_runs (job_id, due_at, status) VALUES (?, 1780007200, ?)", nightly.id, state)
+	}
 	s.exec("UPDATE jobs SET last_run_id = ? WHERE id = ?", last, nightly.id)
 	s.exec("INSERT INTO jobs (name, prompt, schedule, tz, next_due, created_by, created_at) VALUES ('Once', 'p', '2030-01-01T10:00', 'UTC', 1893492000, 'agent', 1)")
 
 	page := status(t, s.get("/scheduled"), http.StatusOK)
 	mustContain(t, page, "Thu 28 May 16:26", "Thu 28 May 17:26", "$0.123", fmt.Sprintf(`href="/chat/%d"`, thread), "Budget &lt;exceeded&gt;",
-		`data-variant="destructive" title="Budget &lt;exceeded&gt;">error`, "Once on Tue 01 Jan 2030 at 10:00", "Tue 01 Jan 06:00", "agent")
+		`data-variant="destructive" title="Budget &lt;exceeded&gt;">error`, "Once on Tue 01 Jan 2030 at 10:00", "Tue 01 Jan 06:00", "agent",
+		`data-variant="secondary">ok</span>`, `data-variant="secondary">missed_coalesced</span>`, `data-variant="outline">skipped_pause</span>`,
+		`data-variant="outline">skipped_budget</span>`, `data-variant="outline">running</span>`)
 	mustNotContain(t, page, "Budget <exceeded>")
 
 	edit := status(t, s.get(fmt.Sprintf("/scheduled/%d/edit", nightly.id)), http.StatusOK)
