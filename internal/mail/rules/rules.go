@@ -96,16 +96,20 @@ type Rule struct {
 	Conditions []Condition
 }
 
-// JSON is json.dumps of the condition as the rules table stores it.
-func (c Condition) JSON() string {
-	s := `{"field": ` + py.JSONDumps(c.Field) + `, "op": ` + py.JSONDumps(c.Op)
+// Dict is the condition as the Python dict: field, op and, when present, value.
+func (c Condition) Dict() py.Dict {
+	d := py.Dict{{Key: "field", Value: c.Field}, {Key: "op", Value: c.Op}}
 	if c.HasValue {
-		s += `, "value": ` + py.JSONDumps(c.Value)
+		d = append(d, py.Pair{Key: "value", Value: c.Value})
 	}
-	return s + "}"
+	return d
 }
 
-// MarshalJSON writes the condition as the Python dict: field, op and, when present, value.
+// JSON is json.dumps of the condition as the rules table stores it.
+func (c Condition) JSON() string { return py.JSONDumps(c.Dict()) }
+
+// MarshalJSON is JSON for encoding/json callers; it fails on a non-finite value, so serialize with py.JSONDumps
+// where one is possible.
 func (c Condition) MarshalJSON() ([]byte, error) { return []byte(c.JSON()), nil }
 
 // ConditionsJSON is json.dumps of a rule's conditions, the text of rules.conditions.
@@ -722,37 +726,30 @@ func LoadAllRules(ctx context.Context, q Querier) ([]Rule, error) {
 	return loadRules(ctx, q, func(sql.NullString) bool { return true })
 }
 
-// ExportedRule is one entry of export_rules; account and dest are left out when empty.
-type ExportedRule struct {
-	ID      string      `json:"id"`
-	Account string      `json:"account,omitempty"`
-	Action  string      `json:"action"`
-	Dest    string      `json:"dest,omitempty"`
-	When    []Condition `json:"when"`
-}
-
-// Export is the document export_rules returns.
-type Export struct {
-	Rules []ExportedRule `json:"rules"`
-}
-
-// ExportRules is rules.export_rules.
-func ExportRules(ctx context.Context, q Querier) (Export, error) {
+// ExportRules is rules.export_rules as the Python dict, to be serialized with py.JSONDumps: a condition value
+// may be a non-finite float, which encoding/json cannot write.
+func ExportRules(ctx context.Context, q Querier) (py.Dict, error) {
 	loaded, err := LoadAllRules(ctx, q)
 	if err != nil {
-		return Export{}, err
+		return nil, err
 	}
-	out := Export{Rules: make([]ExportedRule, len(loaded))}
+	out := make([]any, len(loaded))
 	for i, r := range loaded {
-		out.Rules[i] = ExportedRule{ID: r.ID, Action: r.Action, When: append([]Condition{}, r.Conditions...)}
-		if r.Account != nil {
-			out.Rules[i].Account = *r.Account
+		d := py.Dict{{Key: "id", Value: r.ID}}
+		if r.Account != nil && *r.Account != "" {
+			d = append(d, py.Pair{Key: "account", Value: *r.Account})
 		}
-		if r.Dest != nil {
-			out.Rules[i].Dest = *r.Dest
+		d = append(d, py.Pair{Key: "action", Value: r.Action})
+		if r.Dest != nil && *r.Dest != "" {
+			d = append(d, py.Pair{Key: "dest", Value: *r.Dest})
 		}
+		when := make([]any, len(r.Conditions))
+		for j, c := range r.Conditions {
+			when[j] = c.Dict()
+		}
+		out[i] = append(d, py.Pair{Key: "when", Value: when})
 	}
-	return out, nil
+	return py.Dict{{Key: "rules", Value: out}}, nil
 }
 
 // Picked is a folder that cleared the learned-rule thresholds.

@@ -130,13 +130,14 @@ func (d Dict) Set(key string, value any) Dict {
 	return append(out, Pair{key, value})
 }
 
-// JSONError is the text of Python's json.JSONDecodeError.
+// JSONError is the message of Python's json.JSONDecodeError, without its ": line L column C (char N)" suffix.
 type JSONError string
 
 func (e JSONError) Error() string { return string(e) }
 
 // JSONLoads is json.loads: objects become Dict (a duplicate key keeps its first position and its last value),
 // arrays []any, integers int64 or *big.Int, other numbers float64 (NaN and the infinities included).
+// A lone surrogate escape becomes U+FFFD: a Go string cannot hold it.
 func JSONLoads(data []byte) (any, error) {
 	p := &jsonParser{s: string(data)}
 	p.space()
@@ -266,7 +267,7 @@ func (p *jsonParser) str() (any, error) {
 		}
 		e := p.s[p.i]
 		p.i++
-		if i := strings.IndexByte(`"\\/bfnrt`, e); i >= 0 && e != 'u' {
+		if i := strings.IndexByte("\"\\/bfnrt", e); i >= 0 {
 			b.WriteByte("\"\\/\b\f\n\r\t"[i])
 			continue
 		}
