@@ -287,14 +287,19 @@ and backups; nothing of that lives here.
   (`%a %d %b %H:%M`) use the page zone (`ATRIUM_TZ`), a job's cadence its own `tz`. `Options.Registry` is the
   registry behind the subagent tool pool and `subagents.Save`; nil is `toolset.Registry()`. `scheduler.ListRuns` is
   `list_runs` and its read path `scheduler.list_runs`.
-- `internal/money/`: the ledger core of `money.py` (ingestion `scan`/`post_item` and the tools and pages come in later
-  slices). Functions take a `db.Querier` (a `*sql.Tx` wherever they write or `SAVEPOINT`), dates are `time.Time` civil
+- `internal/money/`: `money.py` (the tools and pages come in a later slice). Functions take a `db.Querier` (a `*sql.Tx` wherever they write or `SAVEPOINT`), dates are `time.Time` civil
   days from `LocalDate(ts, loc)` with `loc` from `config.Location`, never the process zone. A manual edit returns a
   `*Change`; `Change.Record` writes the `agent_writes` snapshot and `RegisterUndoer` (added in
   `toolset.Undoers`) restores it, refusing when a snapshotted row changed. `Item` is one stored source
   (`transaction_sources.extracted`), re-dumped with `py.JSONDumps` sorted keys. `LedgerError` is a `ValueError`.
   Its test replays `testdata/corpora/money.jsonl` (`tools/golden/corpora/gen_money.py`) and the CBTT goldens; read
-  paths are in `internal/db/readpaths/money_test.go`.
+  paths are in `internal/db/readpaths/money_test.go`. Ingestion is `Refresh` (`ensure_rates`, then `Scan`: unscanned
+  mail from a `MessageSource`, `MailSource` by default, 90-day window, 50 per pass, 1000 on the CLI; a model that is
+  down defers the scan without marking, an unreadable answer marks the message scanned). `PostItem` runs in one
+  transaction per message and its `Change` is recorded as `money_post` after commit; a new payee's model name is
+  requested before that transaction so the writer is not held during the call. `Options` holds the `Chat`, `Fetch`
+  and `MessageSource` seams; `run.Pass.Money` carries them into the mail pass's `money` extra. `Command` is
+  `money refresh [--limit]` under the database lock; the `fx-rates` callable is `agentcmd`'s.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
 - `internal/notion/pages/`: the Notion web pages as one `web.Module` (`Module(Options)`, `Templates()`): `GET /notion/{page_id}`
   (the article alone for an htmx request), `POST /notion/{page_id}/link` and `/edit` (a model-drafted proposal; every
@@ -471,8 +476,8 @@ and backups; nothing of that lives here.
 - `internal/mail/run/`: `run.py` and `watch.py`. `Pass.Locked` is one pass
   under `db.Exclusive`: sync, then `Process` (go-live baseline in live mode,
   embedding, then per account route, flag, the `Events` hook of
-  `event_candidates`, `ApplyAll`, then the `Extras`: open loops, watches,
-  and money once ported), then `DB.Checkpoint` (1 s wait for readers; a
+  `event_candidates`, `ApplyAll`, then the `Extras`: open loops, watches
+  and money), then `DB.Checkpoint` (1 s wait for readers; a
   blocked one is logged) before the lock is released. `Watcher` is the
   per-account loop: each cycle connects (a failure backs off like a lost
   connection), passes, then IDLEs (or 58 s + NOOP), 2 s settle, backoff 5 s

@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
+	"github.com/jeiang/atrium/internal/money"
 	moneypages "github.com/jeiang/atrium/internal/money/pages"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/notion"
@@ -59,6 +60,7 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 		notion.Command(notion.Options{}),
 		openloops.Command(now),
 		watches.Command(now),
+		money.Command(now),
 		agentcmd.Command(),
 		mediacmd.Command(now),
 		web.ServeCommand(

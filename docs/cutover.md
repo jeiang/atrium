@@ -116,8 +116,8 @@ switched.
     Python's; this is expected and one-time.
 7. Scheduler log: `journalctl -u atrium-agent-scheduler.service -e` shows the
     worker started and claiming due jobs, with the core-first lines listed in
-    section 8 and no other errors. The three callables (`calendar-candidates`,
-    `fx-rates`, `media-thumbnails`) each log `built-in job X has no function in
+    section 8 and no other errors. The callables of modules not yet ported
+    (`calendar-candidates`, `media-thumbnails`) each log `built-in job X has no function in
     this build; not run` once and write no job run. `/scheduled` lists the jobs; from the shell use
     `sqlite3 $STATE/atrium.db "SELECT id, name, next_due FROM jobs ORDER BY id"`.
 8. Units: `systemctl --failed 'atrium-*'` is empty.
@@ -522,11 +522,11 @@ migration hold for them, not that Go reads them.
 Calendar, Notion, money, media and Grafana land after cutover. Their units
 do not start. What the operator sees until then:
 
-- `atrium-run calendar|money ...` answer `invalid choice` (exit 2)
-  until the module lands. Mail, `live`, `proposals`, `rules`, `loops`,
-  `watches`, `reindex`, `shadow-report`, `agent`, `media`, `notion` and
+- `atrium-run calendar ...` answers `invalid choice` (exit 2) until the
+  module lands. Mail, `live`, `proposals`, `rules`, `loops`, `watches`,
+  `reindex`, `shadow-report`, `agent`, `media`, `notion`, `money refresh` and
   `serve` work.
-- The built-in callable jobs `calendar-candidates`, `fx-rates` and
+- The built-in callable jobs `calendar-candidates` and
   `media-thumbnails` are skipped with
   one Info line each (`built-in job X has no function in this build; not
   run`, logged once per scheduler start); they are not recorded as job runs.
@@ -552,9 +552,11 @@ do not start. What the operator sees until then:
 - Data gaps while the modules are absent:
   - Calendar invitations the operator reads during the gap are never
     proposed: `event_candidates` only looks at unread Inbox mail.
-  - Money ingestion stops. It self-heals: the money rescan covers the last
-    90 days of unscanned money mail, so land the money module (#142) within
-    90 days of cutover.
+  - Money ingestion stops until #142 is deployed. It self-heals: the money
+    rescan covers the last 90 days of unscanned money mail, so deploy #142
+    within 90 days of cutover. The mail pass then extracts the backlog 50
+    messages per pass; `atrium-run money refresh --limit 1000` drains it at
+    once.
   - qBittorrent torrents tagged `media` are selected and swept by the media
     jobs, but filing them into the library waits for the media pages (#146).
   - The Notion mirror goes stale.
