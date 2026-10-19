@@ -32,7 +32,11 @@ func (s *site) original() int64 {
 
 func (s *site) draft(account string, to, cc any, subject, body string, replyTo *int64) int64 {
 	s.t.Helper()
-	id, err := s.store.Create(s.t.Context(), nil, account, to, cc, subject, body, replyTo)
+	var reply any
+	if replyTo != nil {
+		reply = *replyTo
+	}
+	id, err := s.store.Create(s.t.Context(), nil, account, to, cc, subject, body, reply)
 	if err != nil {
 		s.t.Fatal(err)
 	}

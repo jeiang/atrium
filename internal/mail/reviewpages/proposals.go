@@ -34,11 +34,11 @@ var (
 )
 
 func (s *service) proposalsPage(w http.ResponseWriter, r *http.Request) {
-	status := queryLast(r, "status")
+	status := web.QueryValue(r.URL.Query(), "status")
 	if status == "" {
 		status = proposals.Pending
 	}
-	kind := queryLast(r, "kind")
+	kind := web.QueryValue(r.URL.Query(), "kind")
 	if !slices.Contains(proposalStatuses, status) {
 		s.fail(w, r, http.StatusUnprocessableEntity, "unknown status")
 		return
@@ -118,7 +118,7 @@ func selectionOf(p *proposals.Proposal, form url.Values) (py.Dict, error) {
 		for i, g := range groups {
 			group, _ := g.(py.Dict)
 			var name any
-			if v, ok := formLast(form, fmt.Sprintf("name-%d", i)); ok {
+			if v, ok := web.FormLast(form, fmt.Sprintf("name-%d", i)); ok {
 				name = v
 			}
 			messages, _ := group.Get("messages")
@@ -159,10 +159,10 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusNotFound, "unknown proposal")
 		return
 	}
-	form := formValues(r)
+	form := web.FormValues(r)
 	var selection py.Dict
 	var done *proposals.Proposal
-	if all, _ := formLast(form, "all"); all == "" {
+	if all, _ := web.FormLast(form, "all"); all == "" {
 		selection, err = selectionOf(found, form)
 	}
 	if err == nil {
@@ -189,7 +189,7 @@ func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	forever, _ := web.FormField(formValues(r), "forever")
+	forever, _ := web.FormField(web.FormValues(r), "forever")
 	err := proposals.Dismiss(detached(r), s.deps.DB.Write, id, forever != "", s.now())
 	var refused proposals.ProposalError
 	if errors.As(err, &refused) {

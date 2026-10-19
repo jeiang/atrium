@@ -1,6 +1,7 @@
 package reviewpages
 
 import (
+	"math/big"
 	"net/http"
 	"strconv"
 
@@ -42,6 +43,17 @@ func (s *service) notFound(w http.ResponseWriter, r *http.Request, found bool, w
 
 func (s *service) loopsPage(w http.ResponseWriter, r *http.Request) { s.showLoops(w, r, nil) }
 
+// clampDays is max(1, min(days, 60)) on an integer of any size.
+func clampDays(n *big.Int) int64 {
+	switch {
+	case n.Cmp(big.NewInt(1)) < 0:
+		return 1
+	case n.Cmp(big.NewInt(60)) > 0:
+		return 60
+	}
+	return n.Int64()
+}
+
 func plural(n int64, noun string) string {
 	if n == 1 {
 		return strconv.FormatInt(n, 10) + " " + noun
@@ -50,20 +62,20 @@ func plural(n int64, noun string) string {
 }
 
 func (s *service) loopSnooze(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "loop_id")
-	if !ok {
+	id, errs := pathInt(r, "loop_id")
+	days := int64(openloops.SnoozeDefaultDays)
+	if raw, given := web.FormField(web.FormValues(r), "days"); given {
+		n, valid := py.LaxInt(raw)
+		if !valid {
+			errs = append(errs, web.BadInt("body", "days", raw))
+		} else {
+			days = clampDays(n)
+		}
+	}
+	if len(errs) > 0 {
+		web.Unprocessable(w, errs...)
 		return
 	}
-	days := int64(openloops.SnoozeDefaultDays)
-	if raw, given := web.FormField(formValues(r), "days"); given {
-		n, valid := py.LaxInt64(raw)
-		if !valid {
-			web.Unprocessable(w, web.BadInt("body", "days", raw))
-			return
-		}
-		days = n
-	}
-	days = max(1, min(days, 60))
 	found, err := openloops.Snooze(r.Context(), s.deps.DB.Write, id, s.now()+float64(days)*openloops.Day)
 	check(err)
 	if !s.notFound(w, r, found, "loop") {
@@ -86,7 +98,7 @@ func (s *service) loopDismiss(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) loopDismissAll(w http.ResponseWriter, r *http.Request) {
-	state, given := web.FormField(formValues(r), "state")
+	state, given := web.FormField(web.FormValues(r), "state")
 	if !given {
 		web.Unprocessable(w, web.Missing("body", "state"))
 		return

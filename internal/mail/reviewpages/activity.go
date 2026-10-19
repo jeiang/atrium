@@ -137,10 +137,10 @@ func timeline(ctx context.Context, q db.Querier, category string, limit, offset 
 }
 
 func (s *service) activityPage(w http.ResponseWriter, r *http.Request) {
-	category := queryLast(r, "category")
+	category := web.QueryValue(r.URL.Query(), "category")
 	offset := int64(0)
 	if r.URL.Query().Has("offset") {
-		raw := queryLast(r, "offset")
+		raw := web.QueryValue(r.URL.Query(), "offset")
 		n, ok := py.LaxInt64(raw)
 		if !ok {
 			web.Unprocessable(w, web.BadInt("query", "offset", raw))

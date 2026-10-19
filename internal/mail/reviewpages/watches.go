@@ -58,7 +58,7 @@ func (s *service) packageDismiss(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) birthdayDismiss(w http.ResponseWriter, r *http.Request) {
-	form := formValues(r)
+	form := web.FormValues(r)
 	key, haveKey := web.FormField(form, "key")
 	date, haveDate := web.FormField(form, "date")
 	var problems []web.FieldError

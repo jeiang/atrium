@@ -57,7 +57,7 @@ func (s *service) reply(w http.ResponseWriter, r *http.Request, id int64, status
 func (s *service) draftsPage(w http.ResponseWriter, r *http.Request) {
 	status := drafts.Draft
 	if r.URL.Query().Has("status") {
-		status = queryLast(r, "status")
+		status = web.QueryValue(r.URL.Query(), "status")
 	}
 	if status != "" && !slices.Contains(statusFilters, status) && status != drafts.Sending {
 		s.fail(w, r, http.StatusUnprocessableEntity, "unknown status")
@@ -88,14 +88,14 @@ func (s *service) draftPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) draftUpdate(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "draft_id")
-	if !ok {
-		return
-	}
-	form := formValues(r)
+	id, errs := pathInt(r, "draft_id")
+	form := web.FormValues(r)
 	account, found := web.FormField(form, "account")
 	if !found {
-		web.Unprocessable(w, web.Missing("body", "account"))
+		errs = append(errs, web.Missing("body", "account"))
+	}
+	if len(errs) > 0 {
+		web.Unprocessable(w, errs...)
 		return
 	}
 	changes := map[string]any{"account": account}
@@ -133,7 +133,7 @@ func (s *service) draftSend(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	updated, _ := web.FormField(formValues(r), "updated_at")
+	updated, _ := web.FormField(web.FormValues(r), "updated_at")
 	var result drafts.Result
 	var err error
 	if at, perr := py.ParseFloat(updated); perr == nil {
@@ -164,7 +164,7 @@ func (s *service) draftResolve(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	outcome, _ := web.FormField(formValues(r), "outcome")
+	outcome, _ := web.FormField(web.FormValues(r), "outcome")
 	var verdict string
 	switch outcome {
 	case "sent":

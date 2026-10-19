@@ -181,3 +181,34 @@ func TestEmptyFormFieldsAreAbsent(t *testing.T) {
 	mustContain(t, status(t, s.post(target, form("days", "")), http.StatusOK), fmt.Sprintf("Hidden for %d days.", openloops.SnoozeDefaultDays))
 	status(t, s.post("/loops/dismiss-all", form("state", "")), http.StatusUnprocessableEntity)
 }
+
+func TestSnoozeClampsHugeDays(t *testing.T) {
+	s := newSite(t)
+	s.loop("a", "owe_reply", 2, "Dinner?", "pat@person.test", 1)
+	target := fmt.Sprintf("/loops/%d/snooze", s.loopID("a"))
+	huge := "99999999999999999999999999"
+	mustContain(t, status(t, s.post(target, form("days", huge)), http.StatusOK), "Hidden for 60 days.")
+	mustContain(t, status(t, s.post(target, form("days", "-"+huge)), http.StatusOK), "Hidden for 1 day.")
+}
+
+func TestPathAndBodyErrorsAreReportedTogether(t *testing.T) {
+	s := newSite(t)
+	count := func(rec interface{ String() string }) int {
+		return len(jsonOf(t, rec.String())["detail"].([]any))
+	}
+	snooze := s.post("/loops/x/snooze", form("days", "soon"))
+	if status(t, snooze, http.StatusUnprocessableEntity); count(snooze.Body) != 2 {
+		t.Errorf("snooze detail = %s", snooze.Body)
+	}
+	update := s.post("/drafts/x", form("to", "a"))
+	if status(t, update, http.StatusUnprocessableEntity); count(update.Body) != 2 {
+		t.Errorf("update detail = %s", update.Body)
+	}
+}
+
+func TestKindFilterAcceptsCalendarReminderAndWikiPlan(t *testing.T) {
+	s := newSite(t)
+	for _, kind := range []string{"calendar_event", "reminder", "notion_wiki_plan"} {
+		status(t, s.get("/proposals?kind="+kind), http.StatusOK)
+	}
+}

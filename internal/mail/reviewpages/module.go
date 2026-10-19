@@ -6,10 +6,7 @@ import (
 	"context"
 	"embed"
 	"io/fs"
-	"mime"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -168,47 +165,24 @@ func (s *service) fail(w http.ResponseWriter, r *http.Request, status int, detai
 // the browser goes away, as the Python app's worker thread did.
 func detached(r *http.Request) context.Context { return context.WithoutCancel(r.Context()) }
 
-// pathID reads an integer path parameter; it answers FastAPI's validation error and reports false when the
-// segment is not an integer.
-func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
+// pathInt reads an integer path parameter; a segment that is not one is a validation error.
+func pathInt(r *http.Request, name string) (int64, []web.FieldError) {
 	raw := web.PathParam(r, name)
 	id, ok := py.LaxInt64(raw)
 	if !ok {
-		web.Unprocessable(w, web.BadInt("path", name, raw))
+		return 0, []web.FieldError{web.BadInt("path", name, raw)}
 	}
-	return id, ok
+	return id, nil
 }
 
-// queryLast is the value of a query parameter as FastAPI reads it: the last one given.
-func queryLast(r *http.Request, name string) string {
-	values := r.URL.Query()[name]
-	if len(values) == 0 {
-		return ""
+// pathID is pathInt for a handler with no body parameters: it answers FastAPI's validation error itself.
+func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
+	id, errs := pathInt(r, name)
+	if len(errs) > 0 {
+		web.Unprocessable(w, errs...)
+		return 0, false
 	}
-	return values[len(values)-1]
-}
-
-// formValues is the body of a form post, urlencoded or multipart.
-func formValues(r *http.Request) url.Values {
-	if media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err == nil && strings.HasPrefix(media, "multipart/") {
-		if err := r.ParseMultipartForm(web.BodyCap); err != nil || r.MultipartForm == nil {
-			return url.Values{}
-		}
-		return r.MultipartForm.Value
-	}
-	if err := r.ParseForm(); err != nil {
-		return url.Values{}
-	}
-	return r.PostForm
-}
-
-// formLast is a form field as FastAPI reads it: the last value given, absent when none was.
-func formLast(form url.Values, name string) (string, bool) {
-	values := form[name]
-	if len(values) == 0 {
-		return "", false
-	}
-	return values[len(values)-1], true
+	return id, true
 }
 
 func accountConfigured(cfg config.Config) map[string]bool {
