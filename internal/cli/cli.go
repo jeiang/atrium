@@ -35,11 +35,19 @@ type Env struct {
 	Stderr io.Writer
 	prog   string
 	fs     *flag.FlagSet
+	root   *Command
 }
 
 func (e *Env) UsageError(format string, a ...any) int {
 	writeLeafUsage(e.Stderr, e.prog, e.fs)
 	printf(e.Stderr, "%s: error: %s\n", e.prog, fmt.Sprintf(format, a...))
+	return ExitUsage
+}
+
+// Unrecognized is argparse's error for positional arguments no parser takes: the root parser reports them.
+func (e *Env) Unrecognized(args []string) int {
+	writeGroupUsage(e.Stderr, e.root.Name, e.root)
+	printf(e.Stderr, "%s: error: unrecognized arguments: %s\n", e.root.Name, strings.Join(args, " "))
 	return ExitUsage
 }
 
@@ -99,13 +107,28 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 			return ExitOK
 		}
 		writeLeafUsage(stderr, prog, fs)
-		printf(stderr, "%s: error: %s\n", prog, err)
+		printf(stderr, "%s: error: %s\n", prog, flagError(fs, err))
 		return ExitUsage
 	}
 	if a.setup != nil {
 		a.setup(stderr)
 	}
-	return handler(&Env{Ctx: ctx, Args: positional, Stdout: stdout, Stderr: stderr, prog: prog, fs: fs})
+	return handler(&Env{Ctx: ctx, Args: positional, Stdout: stdout, Stderr: stderr, prog: prog, fs: fs, root: &a.root})
+}
+
+// flagError is the text argparse shows for a parse failure. A flag.Value whose Set error already reads as
+// argparse's ("argument --x: ...") is shown without the flag package's "invalid value ... for flag -x: " prefix.
+func flagError(fs *flag.FlagSet, err error) string {
+	msg := err.Error()
+	if !strings.HasPrefix(msg, "invalid value ") {
+		return msg
+	}
+	_, rest, _ := strings.Cut(msg, " for flag -")
+	name, text, ok := strings.Cut(rest, ": ")
+	if !ok || fs.Lookup(name) == nil || !strings.HasPrefix(text, "argument --"+name+": ") {
+		return msg
+	}
+	return text
 }
 
 func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {

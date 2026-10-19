@@ -28,6 +28,7 @@ const (
 	bodyCapBytes = 65536
 	dialTimeout  = 30 * time.Second
 	readTimeout  = 2 * time.Minute
+	idleRestart  = config.IdleSeconds*time.Second + time.Minute
 )
 
 var allowedVersions = []string{"IMAP4REV1", "IMAP4"}
@@ -58,6 +59,7 @@ func newConn(host, user, password string) *conn {
 		tlsConfig:   &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12},
 		dialTimeout: dialTimeout,
 		readTimeout: readTimeout,
+		idleRestart: idleRestart,
 	}
 	c.dial = c.dialTLS
 	return c
@@ -897,7 +899,8 @@ func (c *conn) Noop(ctx context.Context) error {
 }
 
 // IdleChanges is ImapClient.idle_changes: IDLE until the server reports EXISTS, EXPUNGE, FETCH or RECENT
-// (true) or duration passes (false). go-imap re-issues IDLE every 28 minutes.
+// (true) or duration passes (false). imaplib sends one IDLE for the whole call; go-imap re-issues it only after
+// idleRestart, which is longer than the watch loop's IdleSeconds.
 func (c *conn) IdleChanges(ctx context.Context, duration time.Duration) (bool, error) {
 	var changed bool
 	err := c.run(ctx, func() error {

@@ -20,6 +20,7 @@ import shutil
 import sqlite3
 import tempfile
 import time
+import traceback
 import uuid
 from pathlib import Path
 
@@ -120,6 +121,7 @@ from atrium import (
     scans,
     search,
     triage,
+    watch,
     watches,
 )
 from atrium.agent import budget, context, journal, projects, scheduler, service, skills, subagents, threads, usage, workspace, writes
@@ -727,7 +729,31 @@ CLI_COMMANDS = [
     ("rules-export", ["rules", "export"]),
     ("notion-search-alpha", ["notion", "search", "alpha"]),
     ("media-poll", ["media", "poll"]),
+    ("sync", ["sync"]),
+    ("sync-account-gmail", ["sync", "--account", "gmail"]),
+    ("sync-missing-credentials", ["sync", "--account", "gmail"], {"GMAIL_APP_PASSWORD": ""}),
+    ("sync-account-invalid", ["sync", "--account", "work"]),
+    ("sync-extra-argument", ["sync", "extra"]),
+    ("watch-one-pass", ["watch", "--account", "icloud"]),
+    ("watch-missing-credentials", ["watch", "--account", "gmail"], {"GMAIL_APP_PASSWORD": ""}),
 ]
+
+
+class Connecting:
+    def __init__(self, client):
+        self.client = client
+
+    def connect(self):
+        return self.client
+
+
+def stop_after_first_wait(real):
+    def wait(client, stop):
+        changed = real(client, stop)
+        stop.set()
+        return changed
+
+    return wait
 
 
 def run_cli(world, golden_db):
@@ -737,19 +763,39 @@ def run_cli(world, golden_db):
     env = {**world.env, "ATRIUM_DB": str(CLI_STATE / "atrium.db")}
     set_environ(env)
     world.eztv.release("1234567", "d" * 40, "Lanterns S01E09 1080p WEB h264", size="2600000000")
+    hosts = {spec.host: name for name, spec in config.ACCOUNTS.items()}
+    real_client, real_wait = run.ImapClient, watch.wait_for_change
+    run.ImapClient = lambda host, *creds: Connecting(world.clients[hosts[host]])
+    watch.wait_for_change = stop_after_first_wait(real_wait)
+    for client in world.clients.values():
+        client.idle_changes = lambda duration: False
     index = []
-    for name, argv in CLI_COMMANDS:
-        for handler in list(logging.root.handlers):
-            logging.root.removeHandler(handler)
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            try:
-                code = cli.main(argv)
-            except SystemExit as e:
-                code = e.code
-        (CLI_OUT / f"{name}.stdout").write_text(out.getvalue())
-        (CLI_OUT / f"{name}.stderr").write_text(err.getvalue())
-        index.append({"name": name, "argv": ["atrium", *argv], "exit_code": code, "stdout": f"{name}.stdout", "stderr": f"{name}.stderr"})
+    try:
+        for name, argv, *overrides in CLI_COMMANDS:
+            changed = overrides[0] if overrides else {}
+            set_environ({**env, **changed})
+            for handler in list(logging.root.handlers):
+                logging.root.removeHandler(handler)
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                try:
+                    code = cli.main(argv)
+                except SystemExit as e:
+                    code = e.code
+                except Exception as e:
+                    # An uncaught exception exits 1; its traceback holds machine paths, so only its last line is kept.
+                    err.write("".join(traceback.format_exception_only(e)))
+                    code = 1
+            (CLI_OUT / f"{name}.stdout").write_text(out.getvalue())
+            (CLI_OUT / f"{name}.stderr").write_text(err.getvalue())
+            entry = {"name": name, "argv": ["atrium", *argv], "exit_code": code, "stdout": f"{name}.stdout", "stderr": f"{name}.stderr"}
+            if changed:
+                entry["env"] = changed
+            index.append(entry)
+    finally:
+        run.ImapClient, watch.wait_for_change = real_client, real_wait
+        for client in world.clients.values():
+            del client.idle_changes
     for handler in list(logging.root.handlers):
         logging.root.removeHandler(handler)
     set_environ(world.env)
