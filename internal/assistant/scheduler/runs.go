@@ -51,9 +51,7 @@ type sqlRows = sql.Rows
 
 // ClaimDue is claim_due: every due job without a live lease is claimed, or recorded as skipped while the pause
 // file exists or the unattended budget is spent, in one write transaction. loc is the budget month's zone.
-// A built-in job named in unavailable has no function in this build: it is left untouched (no job run, lease or
-// next_due change), so it is never recorded.
-func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Location, now float64, owner string, unavailable map[string]bool) ([]Claim, []Skipped, error) {
+func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Location, now float64, owner string) ([]Claim, []Skipped, error) {
 	paused := safety.IsPaused(cfg.PausePath())
 	overBudget := false
 	if _, err := budget.Check(ctx, d.Read, now, loc, true); err != nil {
@@ -79,9 +77,6 @@ func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Locati
 			return err
 		}
 		for _, job := range due {
-			if job.Kind == JobBuiltin && unavailable[job.Name] {
-				continue
-			}
 			dueAt := *job.NextDue
 			spec, err := Parse(job.Schedule, job.TZ)
 			if err != nil {

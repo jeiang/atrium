@@ -52,7 +52,6 @@ type Worker struct {
 	Owner     string
 	Spawn     func(name string, fn func())
 
-	noted  sync.Map
 	wg     sync.WaitGroup
 	active atomic.Int64
 	dirty  atomic.Bool
@@ -103,7 +102,7 @@ func (w *Worker) Tick(ctx context.Context) ([]scheduler.Claim, []scheduler.Skipp
 	if err != nil {
 		return nil, nil, err
 	}
-	claims, skipped, err := scheduler.ClaimDue(ctx, d, w.Service.Cfg, loc, stamp, w.Owner, w.unavailable())
+	claims, skipped, err := scheduler.ClaimDue(ctx, d, w.Service.Cfg, loc, stamp, w.Owner)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -272,10 +271,6 @@ func (w *Worker) failedRun(ctx context.Context, claim scheduler.Claim, threadID 
 }
 
 func (w *Worker) executeCallable(ctx context.Context, claim scheduler.Claim, call Callable) string {
-	if call == nil {
-		err := fmt.Errorf("built-in job %s has no function in this build", claim.Job.Name)
-		return w.failedRun(ctx, claim, nil, err)
-	}
 	result, err := call(ctx, Env{DB: w.Service.DB, Cfg: w.Service.Cfg, Env: w.Service.Env, Service: w.Service, Now: w.now})
 	if err != nil {
 		return w.failedRun(ctx, claim, nil, err)
@@ -356,19 +351,4 @@ func (w *Worker) safeCycle(ctx context.Context) (err error) {
 		}
 	}()
 	return w.Cycle(ctx)
-}
-
-// unavailable names the built-in functions this build lacks; each is logged once per process.
-func (w *Worker) unavailable() map[string]bool {
-	out := map[string]bool{}
-	for _, name := range scheduler.CallableNames {
-		if w.Callables[name] != nil {
-			continue
-		}
-		out[name] = true
-		if _, seen := w.noted.LoadOrStore(name, true); !seen {
-			log.Info(fmt.Sprintf("built-in job %s has no function in this build; not run", name), logx.Job, name)
-		}
-	}
-	return out
 }
