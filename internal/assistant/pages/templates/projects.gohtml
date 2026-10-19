@@ -1,0 +1,33 @@
+{{define "title"}}Projects{{end}}
+{{define "heading"}}Projects{{end}}
+{{define "content"}}{{$d := .Data}}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <p class="max-w-prose text-sm text-muted-foreground">A project groups chats under shared instructions, default effort and context, and a wiki hub page the assistant keeps updated.</p>
+  <div class="flex items-center gap-2">
+    <nav class="button-group" aria-label="Project view">
+      <a class="btn" data-size="sm" data-variant="{{if $d.view}}outline{{else}}secondary{{end}}" href="/projects">Active</a>
+      <a class="btn" data-size="sm" data-variant="{{if $d.view}}secondary{{else}}outline{{end}}" href="/projects?view=archived">Archived</a>
+    </nav>
+    <button type="button" class="btn" data-size="sm" hx-get="/projects/new" hx-target="#project-dialog" hx-swap="innerHTML">{{icon "plus"}}New project</button>
+  </div>
+</div>
+{{if $d.projects}}
+<ul class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" role="list">
+  {{range $d.projects}}
+  <li class="relative flex flex-col gap-2 rounded-lg border bg-card p-4 hover:bg-accent">
+    <h2 class="truncate text-sm font-medium"><a href="/projects/{{.id}}" class="after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:rounded-lg">{{.name}}</a></h2>
+    <p class="line-clamp-2 min-h-8 text-xs text-muted-foreground">{{or .instructions "No instructions."}}</p>
+    <p class="flex gap-3 text-xs text-muted-foreground tabular-nums">
+      <span>{{.thread_count}} {{if eq .thread_count 1}}thread{{else}}threads{{end}}</span>
+      <span>{{if .last_activity}}active {{template "when" (dict "epoch" .last_activity "style" "datetime")}}{{else}}no activity yet{{end}}</span>
+    </p>
+  </li>
+  {{end}}
+</ul>
+{{else if eq $d.view "archived"}}
+{{template "empty_state" (dict "icon_name" "archive" "title" "Nothing archived" "body" "Archived projects appear here.")}}
+{{else}}
+{{template "empty_state" (dict "icon_name" "folder" "title" "No projects yet" "body" "Create one to give a set of chats shared instructions and a wiki hub.")}}
+{{end}}
+<dialog id="project-dialog" class="dialog" aria-label="Project"></dialog>
+{{end}}

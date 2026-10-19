@@ -1,0 +1,52 @@
+{{template "scheduled_list" (dict "jobs" .Data.jobs "runs" .Data.runs "toast" .Toast)}}
+
+{{define "scheduled_variant"}}{{if or (eq . "ok") (eq . "missed_coalesced")}}secondary{{else if eq . "error"}}destructive{{else}}outline{{end}}{{end}}
+
+{{define "scheduled_list"}}
+{{with .toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
+<div id="scheduled-list" class="flex flex-col gap-8">
+  <section class="flex flex-col gap-3" aria-labelledby="schedules-h">
+    <h2 id="schedules-h" class="text-sm font-medium">Schedules</h2>
+    {{if .jobs}}
+    <ul class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" role="list">
+      {{range .jobs}}
+      <li class="flex flex-col gap-3 rounded-lg border bg-card p-4" data-job="{{.id}}">
+        <header class="flex items-start gap-2">
+          <div class="flex min-w-0 flex-1 flex-col gap-1">
+            <h3 class="truncate text-sm font-medium" title="{{.name}}">{{.name}}</h3>
+            <p class="text-xs text-muted-foreground">{{.cadence}}</p>
+          </div>
+          <label class="flex items-center gap-2 text-xs text-muted-foreground">
+            <span class="sr-only">{{.name}} enabled</span>
+            <input type="checkbox" role="switch" class="input"{{if .enabled}} checked{{end}}
+                    hx-post="/scheduled/{{.id}}/toggle" hx-trigger="change" hx-target="#scheduled-list" hx-swap="outerHTML">
+          </label>
+        </header>
+        <p class="line-clamp-2 text-xs text-muted-foreground">{{.prompt}}</p>
+        <dl class="flex flex-col gap-1 text-xs">
+          <div class="flex gap-2"><dt class="w-16 shrink-0 text-muted-foreground">Next run</dt><dd>{{if .next_due_text}}{{.next_due_text}}{{else}}{{if .enabled}}Not scheduled{{else}}Paused{{end}}{{end}}</dd></div>
+          <div class="flex flex-wrap items-center gap-2">
+            <dt class="w-16 shrink-0 text-muted-foreground">Last run</dt>
+            <dd class="flex items-center gap-2">
+              {{if .last_status}}<span class="badge" data-variant="{{template "scheduled_variant" .last_status}}"{{if .last_error}} title="{{.last_error}}"{{end}}>{{.last_status}}</span>{{.last_started_text}}{{else}}Never{{end}}
+            </dd>
+          </div>
+        </dl>
+        <footer class="mt-auto flex items-center gap-2">
+          <span class="badge" data-variant="outline">{{if has (list "nightly" "builtin") .kind}}{{.kind}}{{else}}{{.created_by}}{{end}}</span>
+          <button type="button" class="btn ms-auto" data-size="sm" data-variant="outline" hx-get="/scheduled/{{.id}}/edit" hx-target="#schedule-dialog" hx-swap="innerHTML">{{icon "pencil"}}Edit</button>
+        </footer>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    {{template "empty_state" (dict "icon_name" "clock" "title" "No schedules" "body" "Ask the assistant in chat to schedule something, or create one here.")}}
+    {{end}}
+  </section>
+
+  <section class="flex flex-col gap-3" aria-labelledby="history-h">
+    <h2 id="history-h" class="text-sm font-medium">Run history</h2>
+    {{template "schedule_runs" (dict "runs" .runs)}}
+  </section>
+</div>
+{{- end}}

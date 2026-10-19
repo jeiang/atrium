@@ -1,0 +1,58 @@
+{{define "title"}}Skills · Settings{{end}}
+{{define "heading"}}Settings · Skills{{end}}
+
+{{define "skills_refs"}}{{range $i, $r := .}}{{if $i}}, {{end}}<code class="font-mono">{{$r}}</code>{{end}}{{end}}
+
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
+{{template "settings_tabs" "skills"}}
+<p class="text-sm text-muted-foreground">Markdown playbooks the assistant can load by name. Only the name and one-line description are in every conversation; the body is read on demand. A skill may reference another as <code class="font-mono">/skill:name</code> or <code class="font-mono">[[skill:name]]</code>; the same tokens in a chat message or schedule prompt expand the skill into the message before the run. The assistant cannot edit skills.</p>
+
+<form method="get" action="/settings/skills" class="flex items-end gap-2 text-sm">
+  <label class="flex min-w-0 flex-1 flex-col gap-1 text-xs sm:max-w-sm">Search<input class="input w-full" type="search" name="q" value="{{$d.q}}" placeholder="name, description or body"></label>
+  <button type="submit" class="btn" data-size="sm">{{icon "search"}}Find</button>
+</form>
+
+{{if $d.skills}}
+<div class="flex flex-col gap-4">
+  {{range $d.skills}}
+  <details class="rounded-lg border bg-card p-4" data-skill="{{.name}}">
+    <summary class="flex cursor-pointer flex-col items-start gap-1 text-sm">
+      <span class="flex flex-wrap items-center gap-2">
+        <span class="font-mono font-medium">{{.name}}</span>
+        {{if .references.unknown}}<span class="badge" data-variant="destructive" title="References skills that do not exist: {{join ", " .references.unknown}}">{{icon "circle-alert"}}unknown reference</span>{{end}}
+      </span>
+      <span class="line-clamp-2 max-w-full break-words text-muted-foreground">{{.description}}</span>
+    </summary>
+    <dl class="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+      <div class="flex gap-2"><dt>References</dt><dd>{{if .references.known}}{{template "skills_refs" .references.known}}{{else}}none{{end}}</dd></div>
+      {{if .references.unknown}}<div class="flex gap-2 text-destructive"><dt>Unknown</dt><dd>{{template "skills_refs" .references.unknown}}</dd></div>{{end}}
+      <div class="flex gap-2"><dt>Referenced by</dt><dd>{{if .referenced_by}}{{template "skills_refs" .referenced_by}}{{else}}none{{end}}</dd></div>
+    </dl>
+    <form method="post" action="/settings/skills" class="mt-3 flex flex-col gap-3">
+      <input type="hidden" name="csrf_token" value="{{$csrf}}">
+      <input type="hidden" name="name" value="{{.name}}">
+      <div role="group" class="field"><label for="d-{{.name}}">Description</label><input id="d-{{.name}}" name="description" type="text" value="{{.description}}" maxlength="160"></div>
+      <div role="group" class="field"><label for="b-{{.name}}">Body</label><textarea id="b-{{.name}}" name="body" rows="10" class="w-full font-mono text-xs">{{.body}}</textarea></div>
+      <div class="flex gap-2">
+        <button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button>
+        <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/skills/{{.name}}/delete">{{icon "trash-2"}}Delete</button>
+      </div>
+    </form>
+  </details>
+  {{end}}
+</div>
+{{else}}
+{{if $d.q}}{{template "empty_state" (dict "icon_name" "search" "title" "No skills match" "body" (printf "Nothing matches \"%s\"." $d.q))}}{{else}}{{template "empty_state" (dict "icon_name" "scroll-text" "title" "No skills yet" "body" "Add a playbook below.")}}{{end}}
+{{end}}
+
+<form method="post" action="/settings/skills" class="flex flex-col gap-3 rounded-lg border p-4">
+  <input type="hidden" name="csrf_token" value="{{$csrf}}">
+  <h2 class="text-sm font-medium">New skill</h2>
+  <div class="grid gap-3 sm:grid-cols-2">
+    <div role="group" class="field"><label for="new-name">Name</label><input id="new-name" name="name" type="text" value="{{$d.draft.name}}" class="font-mono" placeholder="weekly-review" required></div>
+    <div role="group" class="field"><label for="new-description">One-line description</label><input id="new-description" name="description" type="text" value="{{$d.draft.description}}" maxlength="160" required></div>
+  </div>
+  <div role="group" class="field"><label for="new-body">Body (Markdown)</label><textarea id="new-body" name="body" rows="8" class="w-full font-mono text-xs" required>{{$d.draft.body}}</textarea></div>
+  <button type="submit" class="btn self-start" data-size="sm">{{icon "plus"}}Save skill</button>
+</form>
+{{end}}

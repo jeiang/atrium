@@ -61,6 +61,19 @@ func TestGoldenLayout(t *testing.T) {
 	}
 }
 
+func TestGoldenSettingsLayout(t *testing.T) {
+	c := tpltest.Load(t, "settings.context.json")
+	page := `{{define "title"}} · Settings{{end}}{{define "heading"}}Settings · {{end}}{{define "content"}}{{template "settings_tabs" "usage"}}{{end}}`
+	e := newEngine(t, c, fstest.MapFS{"settings.gohtml": {Data: []byte(page)}})
+	f := frame(c, nil)
+	f.Page = "settings"
+	var out bytes.Buffer
+	if err := e.Page(&out, "settings.gohtml", f); err != nil {
+		t.Fatal(err)
+	}
+	tpltest.Compare(t, tpltest.Want(t, "settings.html"), out.String(), documented...)
+}
+
 func TestGoldenFragments(t *testing.T) {
 	for _, name := range []string{"_toast", "_toast@warning", "_error", "_error@404"} {
 		t.Run(name, func(t *testing.T) {
