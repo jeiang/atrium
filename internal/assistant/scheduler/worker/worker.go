@@ -52,6 +52,7 @@ type Worker struct {
 	Owner     string
 	Spawn     func(name string, fn func())
 
+	noted  sync.Map
 	wg     sync.WaitGroup
 	active atomic.Int64
 	dirty  atomic.Bool
@@ -102,7 +103,7 @@ func (w *Worker) Tick(ctx context.Context) ([]scheduler.Claim, []scheduler.Skipp
 	if err != nil {
 		return nil, nil, err
 	}
-	claims, skipped, err := scheduler.ClaimDue(ctx, d, w.Service.Cfg, loc, stamp, w.Owner)
+	claims, skipped, err := scheduler.ClaimDue(ctx, d, w.Service.Cfg, loc, stamp, w.Owner, w.unavailable())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -355,4 +356,19 @@ func (w *Worker) safeCycle(ctx context.Context) (err error) {
 		}
 	}()
 	return w.Cycle(ctx)
+}
+
+// unavailable names the built-in functions this build lacks; each is logged once per process.
+func (w *Worker) unavailable() map[string]bool {
+	out := map[string]bool{}
+	for _, name := range scheduler.CallableNames {
+		if w.Callables[name] != nil {
+			continue
+		}
+		out[name] = true
+		if _, seen := w.noted.LoadOrStore(name, true); !seen {
+			log.Info(fmt.Sprintf("built-in job %s has no function in this build; not run", name), logx.Job, name)
+		}
+	}
+	return out
 }

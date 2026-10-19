@@ -130,7 +130,7 @@ func (w *world) claim(at float64, owner string) ([]scheduler.Claim, []scheduler.
 
 func claimOn(t *testing.T, d *db.DB, cfg config.Config, loc *time.Location, at float64, owner string) ([]scheduler.Claim, []scheduler.Skipped) {
 	t.Helper()
-	c, s, err := scheduler.ClaimDue(t.Context(), d, cfg, loc, at, owner)
+	c, s, err := scheduler.ClaimDue(t.Context(), d, cfg, loc, at, owner, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +309,7 @@ func TestTwoConnectionsCannotBothClaim(t *testing.T) {
 	counts := make([]int, 2)
 	for i, d := range []*db.DB{w.d, other} {
 		wg.Go(func() {
-			c, _, err := scheduler.ClaimDue(t.Context(), d, w.cfg, w.loc(), now, "w"+string(rune('1'+i)))
+			c, _, err := scheduler.ClaimDue(t.Context(), d, w.cfg, w.loc(), now, "w"+string(rune('1'+i)), nil)
 			if err != nil {
 				t.Error(err)
 			}
@@ -668,5 +668,33 @@ func TestInterruptedJobRunSettlesAfterResumeNotWorkerLost(t *testing.T) {
 	}
 	if w.getJob(id).LeaseOwner != nil {
 		t.Error("the lease was kept")
+	}
+}
+
+func TestCycleSkipsBuiltinsWithoutFunctionsWithoutRows(t *testing.T) {
+	w := newWorld(t, nil, nil)
+	w.svc.Now = func() float64 { return now }
+	w.srv.Push(ok("a"), ok("b"), ok("c"), ok("d"), ok("e"), ok("f"))
+	for range 3 {
+		if err := w.w.Cycle(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	later := now + 7*86400
+	w.svc.Now = func() float64 { return later }
+	if err := w.w.Cycle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range w.jobRuns() {
+		var name string
+		_ = w.d.Read.QueryRow("SELECT j.name FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE r.id = ?", r.ID).Scan(&name)
+		for _, c := range scheduler.CallableNames {
+			if name == c {
+				t.Errorf("job run recorded for %s: %+v", name, r)
+			}
+		}
+	}
+	if got := w.scalar("SELECT COUNT(*) FROM jobs WHERE kind = 'builtin' AND lease_until IS NOT NULL"); got != int64(0) {
+		t.Errorf("leased builtins = %v", got)
 	}
 }
