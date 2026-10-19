@@ -30,7 +30,7 @@ New files:
   interval with upstream's 28 minutes as the default.
 - `imapclient/vanished.go`: `Client.handleVanished`, which reads untagged
   `VANISHED [(EARLIER)] <uid-set>` (iCloud sends it after UID EXPUNGE without
-  QRESYNC enabled) and only lowers the selected mailbox's message count.
+  QRESYNC enabled) and discards it without expanding the set.
 
 One-line hooks in upstream files:
 

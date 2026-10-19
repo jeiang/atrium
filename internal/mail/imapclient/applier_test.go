@@ -159,6 +159,8 @@ C: {t} UID STORE 301 +FLAGS.SILENT (\Deleted)
 S: {t} OK STORE completed
 C: {t} UID EXPUNGE 301
 S: * VANISHED 301
+S: * VANISHED (EARLIER) 1:4294967295
+S: * VANISHED 1:4000000000
 S: {t} OK EXPUNGE completed
 `+logout, live)
 	a, d, resynced := wireApplier(t, config.ICloud, client, nil, [2]any{301, "Bills"})
