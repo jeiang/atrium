@@ -610,3 +610,21 @@ func TestSystemSignatureChangeStripsThinking(t *testing.T) {
 		t.Errorf("without a signature every thinking block stays: %v", err)
 	}
 }
+
+func TestBlockHelpers(t *testing.T) {
+	if got := string(actx.TextBlock("é")); got != `{"type":"text","text":"é"}` {
+		t.Errorf("TextBlock = %s", got)
+	}
+	cc := py.Dict{{Key: "type", Value: "ephemeral"}, {Key: "ttl", Value: "1h"}}
+	got, err := actx.SetField(json.RawMessage(`{"type":"text","text":"a","cache_control":{"type":"ephemeral"}}`), "cache_control", cc)
+	if err != nil || string(got) != `{"type":"text","text":"a","cache_control":{"type":"ephemeral","ttl":"1h"}}` {
+		t.Errorf("SetField = %s, %v", got, err)
+	}
+	got, err = actx.SetField(actx.TextBlock("a"), "cache_control", py.Dict{{Key: "type", Value: "ephemeral"}})
+	if err != nil || string(got) != `{"type":"text","text":"a","cache_control":{"type":"ephemeral"}}` {
+		t.Errorf("SetField append = %s, %v", got, err)
+	}
+	if _, err := actx.SetField(json.RawMessage(`[]`), "k", "v"); err == nil {
+		t.Error("SetField on a non-object succeeded")
+	}
+}

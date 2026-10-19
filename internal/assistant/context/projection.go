@@ -14,7 +14,9 @@ import (
 )
 
 // Message is one message of the active list. Seq and RunID are nil for the projection's head (and for what
-// preserved and shrink return, which carry role and content only).
+// preserved and shrink return, which carry role and content only). ActiveMessages' Content may share its
+// backing array with the journal's messages: copy it before appending or replacing a block (Python's
+// list(m["content"])).
 type Message struct {
 	Role    string
 	Content []json.RawMessage
@@ -253,15 +255,17 @@ func dropStubValue(resultID *int64) string {
 
 // dropStub is drop_stub: the block with its content replaced by the dropped marker.
 func dropStub(raw json.RawMessage, resultID *int64) (json.RawMessage, error) {
-	v, err := py.JSONLoads(raw)
+	return SetField(raw, "content", dropStubValue(resultID))
+}
+
+// SetField is {**block, key: value}: a new block with key replaced in place or appended, other keys and
+// their order kept. value is anything py.JSONDumps encodes (a py.Dict for cache_control).
+func SetField(raw json.RawMessage, key string, value any) (json.RawMessage, error) {
+	d, err := blockDict(raw)
 	if err != nil {
-		return nil, fmt.Errorf("context: content block: %w", err)
+		return nil, err
 	}
-	d, ok := v.(py.Dict)
-	if !ok {
-		return nil, fmt.Errorf("context: content block is %s, not an object", py.TypeName(v))
-	}
-	return encode(d.Set("content", dropStubValue(resultID))), nil
+	return encode(d.Set(key, value)), nil
 }
 
 func foldBlock(r LedgerRow) (json.RawMessage, error) {
@@ -273,10 +277,11 @@ func foldBlock(r LedgerRow) (json.RawMessage, error) {
 	if len(sources) > 0 {
 		text += "\nSources: " + joinStr(sources)
 	}
-	return textBlock(text), nil
+	return TextBlock(text), nil
 }
 
-func textBlock(text string) json.RawMessage {
+// TextBlock is {"type": "text", "text": text} as the journal and requests encode it.
+func TextBlock(text string) json.RawMessage {
 	return encode(py.Dict{{Key: "type", Value: Text}, {Key: "text", Value: text}})
 }
 

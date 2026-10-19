@@ -193,7 +193,9 @@ and backups; nothing of that lives here.
   with committed pins, drops and folds; the journal is never rewritten);
   `Pin`/`Drop`/`Fold`/`Status` back the `context_*` tools and return the
   tool payload as a `py.Dict`; `Commit`, `ServerCompacted` and
-  `ClientCompact` (summary request `SummaryParams`) rebuild it. Its tests
+  `ClientCompact` (summary request `SummaryParams`) rebuild it. `TextBlock`
+  and `SetField` build and edit blocks in Python key order; active-message
+  content may alias the journal, so copy before mutating. Its tests
   replay the `server_compaction` and `client_compaction` goldens.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST

@@ -87,7 +87,7 @@ func ManifestBlock(ctx gocontext.Context, q db.Querier, threadID int64) (json.Ra
 	if err != nil {
 		return nil, err
 	}
-	return textBlock(text), nil
+	return TextBlock(text), nil
 }
 
 // unitStart is unit_start: where a re-inserted tail may begin: an assistant turn (its tool_uses are answered
@@ -107,9 +107,11 @@ func Preserved(sent []Message) []Message {
 	}
 	var kept []Message
 	for _, m := range sent[start:] {
-		content := append([]json.RawMessage{}, m.Content...)
+		var content []json.RawMessage
 		if m.Role == journal.Assistant {
 			content = StripThinking(m.Content)
+		} else {
+			content = append(content, m.Content...)
 		}
 		if len(content) > 0 {
 			kept = append(kept, Message{Role: m.Role, Content: content})
@@ -255,7 +257,7 @@ func Shrink(messages []Message, limit int64) ([]Message, error) {
 		result = append(result, Message{Role: m.role, Content: content})
 	}
 	if len(result) > 0 && result[0].Role == journal.Assistant {
-		lead := Message{Role: journal.User, Content: []json.RawMessage{textBlock("[conversation continues from an earlier compaction]")}}
+		lead := Message{Role: journal.User, Content: []json.RawMessage{TextBlock("[conversation continues from an earlier compaction]")}}
 		result = append([]Message{lead}, result...)
 	}
 	return result, nil
@@ -285,7 +287,7 @@ func SummaryParams(model string, active []Message, hardLimit int64) (anthropic.P
 	if err != nil {
 		return anthropic.Params{}, err
 	}
-	ask := textBlock(SummaryRequest)
+	ask := TextBlock(SummaryRequest)
 	if n := len(messages); n > 0 && messages[n-1].Role == journal.User {
 		messages[n-1].Content = append(messages[n-1].Content, ask)
 	} else {
@@ -342,7 +344,7 @@ func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client
 	if err != nil {
 		return 0, err
 	}
-	content := []json.RawMessage{textBlock("[Context summary written at compaction; earlier messages are no longer shown]\n" + summary), manifest}
+	content := []json.RawMessage{TextBlock("[Context summary written at compaction; earlier messages are no longer shown]\n" + summary), manifest}
 	content = append(content, lastOperatorBlocks(active)...)
 	base, err := nextSeq(ctx, q, threadID)
 	if err != nil {
