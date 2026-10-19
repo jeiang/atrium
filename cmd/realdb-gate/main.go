@@ -42,10 +42,13 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	cacheDir := fs.String("cache-dir", os.Getenv("ATRIUM_CACHE_DIR"), "cache directory next to the database (ATRIUM_CACHE_DIR)")
 	expect := fs.String("expect", "", "recorded readpaths.json to compare every path with (golden databases only)")
+	bin := fs.String("atrium", "atrium", "atrium binary to serve and run the CLI checks with (go build -o /tmp/atrium ./cmd/atrium)")
+	contactsDir := fs.String("contacts-dir", os.Getenv("ATRIUM_CONTACTS_DIR"), "contacts directory (ATRIUM_CONTACTS_DIR)")
+	noE2E := fs.Bool("no-e2e", false, "skip the web and CLI checks")
 	audit := fs.Bool("audit", false, "also list the tables no registered read path reads (renames each table on the scratch copy and reruns every path)")
 	legacy := fs.Bool("legacy", false, "the database is the pre-migration legacy fixture: report schema changes instead of failing on them")
 	fs.Usage = func() {
-		_, _ = fmt.Fprintln(stderr, "usage: realdb-gate [-legacy] [-audit] [-cache-dir DIR] [-expect readpaths.json] COPY_OF_ATRIUM_DB")
+		_, _ = fmt.Fprintln(stderr, "usage: realdb-gate [-legacy] [-audit] [-atrium BIN] [-no-e2e] [-cache-dir DIR] [-contacts-dir DIR] [-expect readpaths.json] COPY_OF_ATRIUM_DB")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -56,7 +59,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	r := &report{out: stdout}
-	if err := gate(ctx, r, fs.Arg(0), *cacheDir, *expect, *legacy, *audit); err != nil {
+	if err := gate(ctx, r, options{src: fs.Arg(0), cacheDir: *cacheDir, contactsDir: *contactsDir, expect: *expect, bin: *bin, legacy: *legacy, audit: *audit, e2e: !*noE2E}); err != nil {
 		r.fail("gate", err.Error())
 	}
 	return r.finish()
@@ -93,7 +96,13 @@ func (r *report) finish() int {
 	return 0
 }
 
-func gate(ctx context.Context, r *report, src, cacheDir, expectFile string, legacy, audit bool) error {
+type options struct {
+	src, cacheDir, contactsDir, expect, bin string
+	legacy, audit, e2e                      bool
+}
+
+func gate(ctx context.Context, r *report, o options) error {
+	src, cacheDir, expectFile, legacy := o.src, o.cacheDir, o.expect, o.legacy
 	tmp, err := os.MkdirTemp("", "realdb-gate-")
 	if err != nil {
 		return err
@@ -217,13 +226,27 @@ func gate(ctx context.Context, r *report, src, cacheDir, expectFile string, lega
 			r.fail(p.Name, "differs from recorded result")
 		}
 	}
-	if audit {
-		return auditTables(ctx, r, d)
+	var srv *e2e
+	if o.e2e {
+		srv, err = newE2E(ctx, o.bin, path, cacheDir, o.contactsDir, d)
+		if err != nil {
+			return err
+		}
+		defer srv.stop()
+		if err := srv.start(ctx); err != nil {
+			r.fail("atrium serve", err.Error())
+			return nil
+		}
+		srv.checkRoutes(ctx, r)
+		srv.checkCLI(ctx, r)
+	}
+	if o.audit {
+		return auditTables(ctx, r, d, srv)
 	}
 	return nil
 }
 
-func auditTables(ctx context.Context, r *report, d *db.DB) error {
+func auditTables(ctx context.Context, r *report, d *db.DB, srv *e2e) error {
 	names, err := scalarStrings(ctx, d.Read, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations' ORDER BY name")
 	if err != nil {
 		return err
@@ -254,6 +277,9 @@ func auditTables(ctx context.Context, r *report, d *db.DB) error {
 				break
 			}
 		}
+		if !read && srv != nil {
+			read = srv.readsTable(ctx)
+		}
 		if _, err := d.Write.ExecContext(ctx, "ALTER TABLE "+hidden+" RENAME TO "+name); err != nil {
 			return fmt.Errorf("audit: restoring %s: %w", name, err)
 		}
@@ -262,10 +288,10 @@ func auditTables(ctx context.Context, r *report, d *db.DB) error {
 		}
 	}
 	if len(unread) == 0 {
-		r.ok("audit", "every table is read by a registered path")
+		r.ok("audit", "every table is read by a registered path or an end-to-end check")
 		return nil
 	}
-	r.skip("audit", fmt.Sprintf("%d tables no registered path reads: %s", len(unread), strings.Join(unread, ", ")))
+	r.skip("audit", fmt.Sprintf("%d tables nothing reads: %s", len(unread), strings.Join(unread, ", ")))
 	return nil
 }
 

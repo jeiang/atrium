@@ -162,116 +162,351 @@ non-additive migration has landed, which holds because the only delta is
 
 ## 7. Real-DB gate
 
-`cmd/realdb-gate` opens a scratch copy of a database file, never the file
-itself, and reports pass/fail for each of:
+`cmd/realdb-gate` works on a scratch copy of a database file and never opens
+the source. It reports PASS, SKIP or FAIL per check and exits 1 on any FAIL
+(2 on bad usage):
 
 - `PRAGMA quick_check` before and after;
 - `db.Migrate`, asserting the change is additive (only `schema_migrations`
-  appears and no table disappears) and that `schema_migrations` holds
-  version 1;
-- every read path registered in `internal/db/readpaths`. On a real DB, a path
+  appears, no table disappears) and that `schema_migrations` holds version 1;
+- every read path registered in `internal/db/readpaths`. On a real DB a path
   keyed to a fixture row that does not exist (the golden `dentist` and `trip`
-  messages, the profile write) is reported SKIP; any other error is FAIL.
+  messages, the profile write) is SKIP; any other error is FAIL;
+- end to end, with the real binary (`-atrium`): `atrium serve --auth local`
+  runs against the copy and the gate GETs every cutover-set page: `/triage`,
+  `/rules` (new, edit), `/proposals`, `/activity`, `/drafts` (and each
+  draft), `/loops`, `/watches`, `/settings/notifications`, `/messages/{id}`
+  (and `/correct`) for the 5 latest messages, `/chat` (list, archived, search),
+  `/chat/{id}` and `/chat/{id}/work` for the 20 most recent threads,
+  `/projects/{id}` for every project, and the #251 routes (`/projects`,
+  `/scheduled`, `/settings*`). A 5xx, a panic in the server log or a
+  connection error is FAIL. A 404 is SKIP and listed once per route pattern:
+  the page is not registered in that binary (or the row does not exist). The
+  gate then runs `live status`, `live actions`, `proposals list`,
+  `shadow-report` and `rules export` through the binary's CLI table; a non-zero
+  exit is FAIL, except the documented `invalid choice` usage error (exit 2),
+  which is SKIP.
 
 Run it on a copy made with `.backup`, from a checkout of the release commit:
 
 ```sh
-nix develop --impure -c go run ./cmd/realdb-gate /root/atrium-cutover/atrium.db
-nix develop --impure -c go run ./cmd/realdb-gate -audit /root/atrium-cutover/atrium.db
+nix develop --impure -c bash -c '
+  go build -o /tmp/atrium ./cmd/atrium
+  go run ./cmd/realdb-gate -atrium /tmp/atrium -audit /root/atrium-cutover/atrium.db'
 ```
 
-Flags: `-cache-dir DIR` sets `ATRIUM_CACHE_DIR` for paths that read cached raw
-messages; `-expect FILE` compares every path with a recorded
-`readpaths.json` (golden databases only); `-legacy` is for the pre-migration
-fixture and reports schema changes instead of failing; `-audit` lists tables
-no registered path reads. Exit status is 0 on pass, 1 on any failure, 2 on
-bad usage. The gate does not run a mail sync check: that is the paused first
-sync in section 4.
+Flags: `-atrium BIN` is the binary to serve and run (default `atrium` on
+PATH); `-no-e2e` skips the web and CLI checks; `-cache-dir` and
+`-contacts-dir` set `ATRIUM_CACHE_DIR` and `ATRIUM_CONTACTS_DIR`; `-expect
+FILE` compares every read path with a recorded `readpaths.json` (golden
+databases only); `-legacy` is for the pre-migration fixture and reports schema
+changes instead of failing; `-audit` lists the tables nothing reads. The gate
+does not check mail sync: that is the paused first sync in section 4.
 
-Gate output on the golden databases (CI-reproducible):
+Gate output on the golden databases with the binary built from origin/main at
+the time of writing (the cutover-set pages and mail CLI commands are not all
+merged yet, hence the SKIPs). Read-path PASS lines and the passing
+`/messages` lines are omitted from the listings below, the totals are
+complete.
 
 ```
-$ realdb-gate -cache-dir testdata/golden/state/cache -expect testdata/golden/db/readpaths.json testdata/golden/atrium.db
+$ realdb-gate -atrium /tmp/atrium -cache-dir testdata/golden/state/cache -contacts-dir testdata/golden/state/contacts -expect testdata/golden/db/readpaths.json testdata/golden/atrium.db
 PASS  copy                                          testdata/golden/atrium.db -> scratch copy (the source is never opened)
 PASS  quick_check                                   ok
 PASS  db.Migrate additive                           added tables: schema_migrations
 PASS  schema_migrations                             versions 1
 PASS  quick_check after migrate                     ok
-PASS  budget.status                                 matches recorded result
-PASS  corrections.List                              matches recorded result
-PASS  drafts.list_drafts                            matches recorded result
-PASS  embed.message_document dentist                matches recorded result
-PASS  embed.message_document trip                   matches recorded result
-PASS  message.get_message dentist                   matches recorded result
-PASS  message.get_message trip                      matches recorded result
-PASS  notify.Recent                                 matches recorded result
-PASS  projects.list_projects                        matches recorded result
-PASS  ruleedit.LearnedRulesSummary icloud           matches recorded result
-PASS  rules.ExportRules                             matches recorded result
-PASS  scheduler.list_jobs                           matches recorded result
-PASS  threads.list service.list_threads             matches recorded result
-PASS  threads.list service.list_threads archived    matches recorded result
-PASS  usage.by_kind                                 matches recorded result
-PASS  usage.summary                                 matches recorded result
-PASS  writes.get profile                            matches recorded result
+PASS  GET /healthz                                  200
+PASS  GET /triage                                   200
+PASS  GET /rules                                    200
+PASS  GET /rules/new                                200
+PASS  GET /proposals                                200
+PASS  GET /activity                                 200
+PASS  GET /drafts                                   200
+PASS  GET /loops                                    200
+PASS  GET /watches                                  200
+PASS  GET /settings/notifications                   200
+PASS  GET /messages/158                             200
+PASS  GET /messages/158/correct                     200
+PASS  GET /messages/157                             200
+PASS  GET /messages/157/correct                     200
+PASS  GET /messages/156                             200
+PASS  GET /messages/156/correct                     200
+PASS  GET /messages/155                             200
+PASS  GET /messages/155/correct                     200
+PASS  GET /messages/154                             200
+PASS  GET /messages/154/correct                     200
+PASS  GET /drafts/2                                 200
+PASS  GET /drafts/1                                 200
+PASS  GET /rules/promo-spam/edit                    200
+PASS  GET /rules/old-flash/edit                     200
+PASS  GET /rules/club-news/edit                     200
+SKIP  GET /chat                                     404 x1: not registered in this binary, or no such row
+SKIP  GET /chat?view=archived                       404 x1: not registered in this binary, or no such row
+SKIP  GET /chat?q=a                                 404 x1: not registered in this binary, or no such row
+SKIP  GET /projects                                 404 x1: not registered in this binary, or no such row
+SKIP  GET /projects/new                             404 x1: not registered in this binary, or no such row
+SKIP  GET /scheduled                                404 x1: not registered in this binary, or no such row
+SKIP  GET /scheduled/new                            404 x1: not registered in this binary, or no such row
+SKIP  GET /settings                                 404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/assistant                       404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/usage                           404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/skills                          404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/subagents                       404 x1: not registered in this binary, or no such row
+SKIP  GET /chat/{id}                                404 x9: not registered in this binary, or no such row
+SKIP  GET /chat/{id}/work                           404 x9: not registered in this binary, or no such row
+SKIP  GET /projects/{id}                            404 x1: not registered in this binary, or no such row
+SKIP  GET /projects/{id}/edit                       404 x1: not registered in this binary, or no such row
+SKIP  GET /scheduled/{id}/edit                      404 x10: not registered in this binary, or no such row
+SKIP  atrium live status                            not in this binary (invalid choice)
+SKIP  atrium live actions                           not in this binary (invalid choice)
+SKIP  atrium proposals list                         not in this binary (invalid choice)
+SKIP  atrium shadow-report                          not in this binary (invalid choice)
+SKIP  atrium rules export                           not in this binary (invalid choice)
 
-22 passed, 0 skipped, 0 failed
+47 passed, 22 skipped, 0 failed
 RESULT: PASS
 ```
 
 ```
-$ realdb-gate -legacy -cache-dir testdata/golden/state/cache -expect testdata/golden/db/legacy/migrated/readpaths.json testdata/golden/atrium-legacy.db
+$ realdb-gate -legacy -atrium /tmp/atrium -cache-dir testdata/golden/state/cache -contacts-dir testdata/golden/state/contacts -expect testdata/golden/db/legacy/migrated/readpaths.json testdata/golden/atrium-legacy.db
 PASS  copy                                          testdata/golden/atrium-legacy.db -> scratch copy (the source is never opened)
 PASS  quick_check                                   ok
 PASS  db.Migrate schema change                      added: schema_migrations; removed: renewals
 PASS  schema_migrations                             versions 1
 PASS  quick_check after migrate                     ok
-PASS  budget.status                                 matches recorded result
-PASS  corrections.List                              matches recorded result
-PASS  drafts.list_drafts                            matches recorded result
-PASS  embed.message_document dentist                matches recorded result
-PASS  embed.message_document trip                   matches recorded result
-PASS  message.get_message dentist                   matches recorded result
-PASS  message.get_message trip                      matches recorded result
-PASS  notify.Recent                                 matches recorded result
-PASS  projects.list_projects                        matches recorded result
-PASS  ruleedit.LearnedRulesSummary icloud           matches recorded result
-PASS  rules.ExportRules                             matches recorded result
-PASS  scheduler.list_jobs                           matches recorded result
-PASS  threads.list service.list_threads             matches recorded result
-PASS  threads.list service.list_threads archived    matches recorded result
-PASS  usage.by_kind                                 matches recorded result
-PASS  usage.summary                                 matches recorded result
-PASS  writes.get profile                            matches recorded result
+PASS  GET /healthz                                  200
+PASS  GET /triage                                   200
+PASS  GET /rules                                    200
+PASS  GET /rules/new                                200
+PASS  GET /proposals                                200
+PASS  GET /activity                                 200
+PASS  GET /drafts                                   200
+PASS  GET /loops                                    200
+PASS  GET /watches                                  200
+PASS  GET /settings/notifications                   200
+PASS  GET /messages/158                             200
+PASS  GET /messages/158/correct                     200
+PASS  GET /messages/157                             200
+PASS  GET /messages/157/correct                     200
+PASS  GET /messages/156                             200
+PASS  GET /messages/156/correct                     200
+PASS  GET /messages/155                             200
+PASS  GET /messages/155/correct                     200
+PASS  GET /messages/154                             200
+PASS  GET /messages/154/correct                     200
+PASS  GET /drafts/2                                 200
+PASS  GET /drafts/1                                 200
+PASS  GET /rules/promo-spam/edit                    200
+PASS  GET /rules/old-flash/edit                     200
+PASS  GET /rules/club-news/edit                     200
+SKIP  GET /chat                                     404 x1: not registered in this binary, or no such row
+SKIP  GET /chat?view=archived                       404 x1: not registered in this binary, or no such row
+SKIP  GET /chat?q=a                                 404 x1: not registered in this binary, or no such row
+SKIP  GET /projects                                 404 x1: not registered in this binary, or no such row
+SKIP  GET /projects/new                             404 x1: not registered in this binary, or no such row
+SKIP  GET /scheduled                                404 x1: not registered in this binary, or no such row
+SKIP  GET /scheduled/new                            404 x1: not registered in this binary, or no such row
+SKIP  GET /settings                                 404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/assistant                       404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/usage                           404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/skills                          404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/subagents                       404 x1: not registered in this binary, or no such row
+SKIP  GET /chat/{id}                                404 x9: not registered in this binary, or no such row
+SKIP  GET /chat/{id}/work                           404 x9: not registered in this binary, or no such row
+SKIP  GET /projects/{id}                            404 x1: not registered in this binary, or no such row
+SKIP  GET /projects/{id}/edit                       404 x1: not registered in this binary, or no such row
+SKIP  GET /scheduled/{id}/edit                      404 x10: not registered in this binary, or no such row
+SKIP  atrium live status                            not in this binary (invalid choice)
+SKIP  atrium live actions                           not in this binary (invalid choice)
+SKIP  atrium proposals list                         not in this binary (invalid choice)
+SKIP  atrium shadow-report                          not in this binary (invalid choice)
+SKIP  atrium rules export                           not in this binary (invalid choice)
 
-22 passed, 0 skipped, 0 failed
+47 passed, 22 skipped, 0 failed
+RESULT: PASS
+```
+
+The same gate against a throwaway binary built from origin/main merged with
+the open mail CLI (#364) and chat pages (#372) branches, which is the
+cutover-set surface minus #251: every chat page and every CLI command
+passes, and only the #251 routes SKIP.
+
+```
+$ realdb-gate -audit -atrium /tmp/atrium-merged ... testdata/golden/atrium.db
+PASS  copy                                          testdata/golden/atrium.db -> scratch copy (the source is never opened)
+PASS  quick_check                                   ok
+PASS  db.Migrate additive                           added tables: schema_migrations
+PASS  schema_migrations                             versions 1
+PASS  quick_check after migrate                     ok
+PASS  GET /healthz                                  200
+PASS  GET /triage                                   200
+PASS  GET /rules                                    200
+PASS  GET /rules/new                                200
+PASS  GET /proposals                                200
+PASS  GET /activity                                 200
+PASS  GET /drafts                                   200
+PASS  GET /loops                                    200
+PASS  GET /watches                                  200
+PASS  GET /settings/notifications                   200
+PASS  GET /chat                                     200
+PASS  GET /chat?view=archived                       200
+PASS  GET /chat?q=a                                 200
+PASS  GET /chat/9                                   200
+PASS  GET /chat/9/work                              200
+PASS  GET /chat/8                                   200
+PASS  GET /chat/8/work                              200
+PASS  GET /chat/7                                   200
+PASS  GET /chat/7/work                              200
+PASS  GET /chat/5                                   200
+PASS  GET /chat/5/work                              200
+PASS  GET /chat/4                                   200
+PASS  GET /chat/4/work                              200
+PASS  GET /chat/2                                   200
+PASS  GET /chat/2/work                              200
+PASS  GET /chat/3                                   200
+PASS  GET /chat/3/work                              200
+PASS  GET /chat/1                                   200
+PASS  GET /chat/1/work                              200
+PASS  GET /messages/158                             200
+PASS  GET /messages/158/correct                     200
+PASS  GET /messages/157                             200
+PASS  GET /messages/157/correct                     200
+PASS  GET /messages/156                             200
+PASS  GET /messages/156/correct                     200
+PASS  GET /messages/155                             200
+PASS  GET /messages/155/correct                     200
+PASS  GET /messages/154                             200
+PASS  GET /messages/154/correct                     200
+PASS  GET /drafts/2                                 200
+PASS  GET /drafts/1                                 200
+PASS  GET /rules/promo-spam/edit                    200
+PASS  GET /rules/old-flash/edit                     200
+PASS  GET /rules/club-news/edit                     200
+SKIP  GET /projects                                 404 x1: not registered in this binary, or no such row
+SKIP  GET /projects/new                             404 x1: not registered in this binary, or no such row
+SKIP  GET /scheduled                                404 x1: not registered in this binary, or no such row
+SKIP  GET /scheduled/new                            404 x1: not registered in this binary, or no such row
+SKIP  GET /settings                                 404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/assistant                       404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/usage                           404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/skills                          404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/subagents                       404 x1: not registered in this binary, or no such row
+SKIP  GET /chat/{id}                                404 x1: not registered in this binary, or no such row
+SKIP  GET /chat/{id}/work                           404 x1: not registered in this binary, or no such row
+SKIP  GET /projects/{id}                            404 x1: not registered in this binary, or no such row
+SKIP  GET /projects/{id}/edit                       404 x1: not registered in this binary, or no such row
+SKIP  GET /scheduled/{id}/edit                      404 x10: not registered in this binary, or no such row
+PASS  atrium live status                            exit 0
+PASS  atrium live actions                           exit 0
+PASS  atrium proposals list                         exit 0
+PASS  atrium shadow-report                          exit 0
+PASS  atrium rules export                           exit 0
+SKIP  audit                                         28 tables nothing reads: agent_events, agent_profile, commitment_scans, context_ledger, context_projections, event_candidates, events, fx_rates, mai
+
+71 passed, 15 skipped, 0 failed
+RESULT: PASS
+```
+
+```
+$ realdb-gate -legacy -atrium /tmp/atrium-merged ... testdata/golden/atrium-legacy.db
+PASS  copy                                          testdata/golden/atrium-legacy.db -> scratch copy (the source is never opened)
+PASS  quick_check                                   ok
+PASS  db.Migrate schema change                      added: schema_migrations; removed: renewals
+PASS  schema_migrations                             versions 1
+PASS  quick_check after migrate                     ok
+PASS  GET /healthz                                  200
+PASS  GET /triage                                   200
+PASS  GET /rules                                    200
+PASS  GET /rules/new                                200
+PASS  GET /proposals                                200
+PASS  GET /activity                                 200
+PASS  GET /drafts                                   200
+PASS  GET /loops                                    200
+PASS  GET /watches                                  200
+PASS  GET /settings/notifications                   200
+PASS  GET /chat                                     200
+PASS  GET /chat?view=archived                       200
+PASS  GET /chat?q=a                                 200
+PASS  GET /chat/9                                   200
+PASS  GET /chat/9/work                              200
+PASS  GET /chat/8                                   200
+PASS  GET /chat/8/work                              200
+PASS  GET /chat/7                                   200
+PASS  GET /chat/7/work                              200
+PASS  GET /chat/5                                   200
+PASS  GET /chat/5/work                              200
+PASS  GET /chat/4                                   200
+PASS  GET /chat/4/work                              200
+PASS  GET /chat/2                                   200
+PASS  GET /chat/2/work                              200
+PASS  GET /chat/3                                   200
+PASS  GET /chat/3/work                              200
+PASS  GET /chat/1                                   200
+PASS  GET /chat/1/work                              200
+PASS  GET /messages/158                             200
+PASS  GET /messages/158/correct                     200
+PASS  GET /messages/157                             200
+PASS  GET /messages/157/correct                     200
+PASS  GET /messages/156                             200
+PASS  GET /messages/156/correct                     200
+PASS  GET /messages/155                             200
+PASS  GET /messages/155/correct                     200
+PASS  GET /messages/154                             200
+PASS  GET /messages/154/correct                     200
+PASS  GET /drafts/2                                 200
+PASS  GET /drafts/1                                 200
+PASS  GET /rules/promo-spam/edit                    200
+PASS  GET /rules/old-flash/edit                     200
+PASS  GET /rules/club-news/edit                     200
+SKIP  GET /projects                                 404 x1: not registered in this binary, or no such row
+SKIP  GET /projects/new                             404 x1: not registered in this binary, or no such row
+SKIP  GET /scheduled                                404 x1: not registered in this binary, or no such row
+SKIP  GET /scheduled/new                            404 x1: not registered in this binary, or no such row
+SKIP  GET /settings                                 404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/assistant                       404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/usage                           404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/skills                          404 x1: not registered in this binary, or no such row
+SKIP  GET /settings/subagents                       404 x1: not registered in this binary, or no such row
+SKIP  GET /chat/{id}                                404 x1: not registered in this binary, or no such row
+SKIP  GET /chat/{id}/work                           404 x1: not registered in this binary, or no such row
+SKIP  GET /projects/{id}                            404 x1: not registered in this binary, or no such row
+SKIP  GET /projects/{id}/edit                       404 x1: not registered in this binary, or no such row
+SKIP  GET /scheduled/{id}/edit                      404 x10: not registered in this binary, or no such row
+PASS  atrium live status                            exit 0
+PASS  atrium live actions                           exit 0
+PASS  atrium proposals list                         exit 0
+PASS  atrium shadow-report                          exit 0
+PASS  atrium rules export                           exit 0
+
+71 passed, 14 skipped, 0 failed
 RESULT: PASS
 ```
 
 ### Read-path coverage audit
 
-`-audit` renames each table on the scratch copy and reruns every registered
-path; a table is read when some path fails with `no such table`. With the 22
-registered paths, 48 of 64 tables (virtual tables included, FTS and vec0
-shadow tables skipped) are not read by any path:
+`-audit` renames each table of the scratch copy in turn and reruns every
+registered path plus the end-to-end checks; a table is read when something
+fails with `no such table` (a 5xx, an error in the server log, a failing
+command). A handler that swallows the error and renders an empty page hides
+its table, so the list is an upper bound. With the registered paths alone, 48
+of 64 tables (virtual tables included, FTS and vec0 shadow tables skipped) are
+not read; with the end-to-end checks on the merged preview binary, 28 are not:
 
-| Module | Tables with no registered read path |
+| Slice | Tables nothing reads |
 | --- | --- |
-| mail core | `accounts`, `mailboxes`, `events`, `message_vec`, `live_state`, `live_baseline`, `auto_actions`, `proposals`, `proposal_actions`, `rebalance_candidates`, `open_loops`, `commitments`, `commitment_scans`, `packages`, `watch_scans`, `watch_dismissed` |
-| assistant | `thread_messages`, `thread_fts`, `thread_queue`, `thread_files`, `thread_plans`, `tool_calls`, `tool_results`, `run_events`, `agent_profile`, `context_ledger`, `context_projections`, `skills`, `subagents` |
-| calendar | `agent_events`, `event_candidates` |
-| money | `money_accounts`, `fx_rates`, `categories`, `payees`, `payee_aliases`, `transactions`, `transaction_sources`, `money_scans` |
-| media | `media_channels`, `media_seen`, `media_state` |
-| Notion | `notion_pages`, `notion_sources`, `notion_state`, `notion_fts`, `notion_vec`, `wiki_pages` |
+| mail core, cutover set | `mailboxes`, `message_vec`, `rebalance_candidates`, `commitment_scans`, `watch_scans` |
+| assistant, cutover set (#131, #251) | `agent_profile`, `context_ledger`, `context_projections`, `run_events` |
+| calendar, post-cutover | `agent_events`, `event_candidates`, `events` |
+| money, post-cutover | `money_accounts`, `fx_rates`, `payees`, `payee_aliases`, `transactions`, `transaction_sources`, `money_scans` |
+| media, post-cutover | `media_channels`, `media_seen`, `media_state` |
+| Notion, post-cutover | `notion_pages`, `notion_sources`, `notion_state`, `notion_fts`, `notion_vec`, `wiki_pages` |
 
-Follow-ups, not fixed here (post-cutover per the owner policy): the first
-two rows belong to cutover-set slices whose Go code reads these tables
-without registering a path (live/proposals/loops/watches state, thread
-transcripts, skills, subagents, profile, context); register a path for each
-when its page or command lands (#251, #131). The calendar, money, media and
-Notion rows get paths with their module slices (#135, #142, #145, #137).
-Until then the gate proves only that `quick_check` and the additive
-migration hold for those tables, not that Go reads them.
+Follow-ups, not fixed here: register a read path (or reach the table from a
+route the gate GETs) for the nine cutover-set tables when #131 and #251 land;
+the post-cutover rows get paths with their module slices (#135, #142, #145,
+#137). Until then the gate proves only that `quick_check` and the additive
+migration hold for them, not that Go reads them.
 
 ## 8. Core-first cutover: expected differences
 
