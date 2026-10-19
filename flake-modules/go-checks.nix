@@ -97,7 +97,7 @@
         done
         if [ "$status" -ne 0 ]; then
           echo "=== go-test failure summary ==="
-          grep -E -- '^(--- FAIL|FAIL[[:space:]]|panic:)|DATA RACE' "$log" | sort -u
+          grep -E -- '^(--- FAIL|FAIL[[:space:]]|panic:)|DATA RACE|^[[:space:]]+[A-Za-z0-9_]+_test\.go:[0-9]+:' "$log" | sort -u
           exit 1
         fi
       '';
