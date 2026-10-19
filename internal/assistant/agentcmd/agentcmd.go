@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/loop"
+	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -61,11 +60,11 @@ func run(env *cli.Env, cfgEnv config.Env, threadID *int64, text, kind string) er
 	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
 		return err
 	}
-	reg, err := toolset.Registry()
+	r, err := runner.New()
 	if err != nil {
 		return err
 	}
-	svc := service.New(ctx, d, cfg, cfgEnv, &loop.Runner{Registry: reg})
+	svc := service.New(ctx, d, cfg, cfgEnv, r)
 	if threadID == nil {
 		now := float64(time.Now().UnixMicro()) / 1e6
 		id, err := service.CreateThread(ctx, d.Write, now, threads.NewThread{Kind: kind})
