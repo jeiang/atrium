@@ -10,8 +10,10 @@ import (
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
+	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -28,6 +30,7 @@ func main() {
 func newApp() *cli.App {
 	app := cli.New("atrium", logx.Setup)
 	app.Version = version
+	app.Add(run.SyncCommand(imapclient.Opener), run.WatchCommand(imapclient.Opener))
 	app.Add(agentcmd.Command())
 	app.Add(web.ServeCommand(
 		web.Page{Module: chatpages.Module(chatpages.Options{}), Templates: chatpages.Templates()},

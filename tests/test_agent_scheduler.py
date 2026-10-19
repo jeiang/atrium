@@ -516,3 +516,16 @@ def test_cli_registers_scheduler_command():
     from atrium import cli
 
     assert cli.parser().parse_args(["agent", "scheduler"]).agent_command == "scheduler"
+
+
+def test_unparsable_schedule_is_skipped_and_logged_without_blocking_others(cfg, conn, caplog):
+    bad = make_job(conn)
+    good = make_job(conn)
+    conn.execute("UPDATE jobs SET schedule = 'garbage' WHERE id = ?", (bad,))
+    caplog.set_level("ERROR", logger="atrium.agent.scheduler")
+    claims, skipped = scheduler.claim_due(conn, cfg, NOW, "w1")
+    assert [c.job["id"] for c in claims] == [good] and not skipped
+    assert f"job {bad} has an unparsable schedule, skipped:" in caplog.text
+    row = scheduler.get_job(conn, bad)
+    assert row["next_due"] is not None and row["enabled"] == 1 and row["lease_owner"] is None
+    assert conn.execute("SELECT COUNT(*) FROM job_runs WHERE job_id = ?", (bad,)).fetchone()[0] == 0

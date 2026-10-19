@@ -3,8 +3,10 @@
 package toolset
 
 import (
+	"github.com/jeiang/atrium/internal/assistant/nightly"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/notify"
 )
@@ -12,7 +14,7 @@ import (
 // Registry is the registry every run's tools come from.
 func Registry() (*registry.Registry, error) {
 	r := registry.New()
-	for _, tools := range [][]tool.Tool{notify.Tools(), webfetch.Tools()} {
+	for _, tools := range [][]tool.Tool{mailtools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools()} {
 		if err := r.Add(tools...); err != nil {
 			return nil, err
 		}

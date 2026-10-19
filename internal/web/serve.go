@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
@@ -163,11 +164,16 @@ func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server) 
 	failed := make(chan error, 1)
 	go func() { failed <- httpServer.Serve(listener) }()
 	log.Info("listening", "addr", listener.Addr().String())
+	notifier := sdnotify.FromEnv()
+	notifier.Ready()
+	notifier.Status("serving " + listener.Addr().String())
+	go notifier.RunWatchdog(ctx, nil)
 	select {
 	case err := <-failed:
 		return err
 	case <-ctx.Done():
 	}
+	notifier.Stopping()
 	stop, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	err := httpServer.Shutdown(stop)

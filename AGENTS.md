@@ -36,10 +36,12 @@ and backups; nothing of that lives here.
 
 ## Code rules
 
-- The code describes the system; it does not carry prose. Write a comment
-  only for a workaround (what is broken and why) or for one line of context
-  the code cannot express. Git history is the archive. A decision that
-  constrains future changes goes in this file.
+- The code describes the system; it does not carry prose. Avoid comments:
+  write one only for a workaround (what is broken and why). Git history is
+  the archive. A decision that constrains future changes goes in this file.
+- Tests are end to end: golden and parity tests through the real command,
+  HTTP handler or module entry point, or module-level e2e tests. Do not add
+  unit or integration tests; prove other behavior with a smoke run.
 - The module exposes a host fact as an option only when a host must set it.
   No personal literal (hostname, Apple ID, URL, port of another service)
   belongs in this repository; it comes through `services.atrium.*` or the
@@ -135,7 +137,8 @@ and backups; nothing of that lives here.
   secret, token, key, cookie, credential or authorization is logged as
   `[redacted]`; token counts (`*_TOKENS`) are not.
 - `internal/db/`: the SQLite driver seam (`Open`), `Connect` (writer and
-  reader pools, `WithTx`), `Exclusive` (flock on `<path>.lock`), `Migrate`
+  reader pools, `WithTx`), `Exclusive` (flock on `<path>.lock`), `Checkpoint`
+  (`wal_checkpoint(TRUNCATE)` with its own short busy wait), `Migrate`
   and the schema, vec0 and FTS5 tests, tests against the golden DBs;
   `internal/db/dbtest` connects to a temp-file DB, with or without foreign
   keys (Python's `connect_memory` has them off), migrated (`Schema`) or a
@@ -238,6 +241,19 @@ and backups; nothing of that lives here.
   tool definitions (`registrytest.Stubs`).
 - `internal/assistant/toolset/`: the production registry: every tool
   package's `Tools()`. A tool slice adds its package there.
+- `internal/assistant/runner/`: the ONE place the production `*loop.Runner`
+  is composed (`runner.New()`: toolset registry, the research tool and its
+  `Bind`, `ResearchBatch`, `SkillsIndex`, `ExpandSkills`). serve, the scheduler
+  and `agent run` call it; nothing else builds a `loop.Runner`. A slice that
+  owns another hook (`Profile`) sets it there.
+- `internal/assistant/skills/`: `skills.py` (storage, references, `Expand`,
+  `IndexBlock`, `LoadedInThread`). Built-in wiki skills and subagents are
+  seeded by `db.Migrate` (insert or ignore, once per process: a deleted
+  built-in returns at the next start, accepted divergence).
+- `internal/assistant/subagents/`: `subagents.py` (agents, allowlists, cards,
+  `DigestOf`); `subagents/research/` is `tools/research.py`: child runs of
+  kind `sub` with `allowed_tools` stored in the run limits, at most 2 at a
+  time, 12 steps and $0.25 each; `Batch` runs parallel research calls.
 - `internal/assistant/agentcmd/`: `atrium agent run` (Python's `--kind
   code` is not ported); `#127` adds `agent scheduler` to its group.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
@@ -398,7 +414,21 @@ and backups; nothing of that lives here.
 - `internal/mail/imapclient/`: `imap.py`'s client on go-imap v2; go-imap
   drives the session and the bytes it reads are parsed again as Python
   3.14's imaplib does, so results match what Python stored. Wire tests are
-  imapscript transcripts in its `testdata/`.
+  imapscript transcripts in its `testdata/`. `Opener` is `run.open_client`;
+  go-imap re-issues IDLE only after 30 minutes, so the watch loop's 29-minute
+  IDLE goes out once, as imaplib sends it.
+- `internal/mail/run/`: `run.py` and `watch.py`. `Pass.Locked` is one pass
+  under `db.Exclusive`: sync, then `Process` (go-live baseline in live mode,
+  embedding, then per account route, flag, the `Events` hook of
+  `event_candidates`, `ApplyAll`, then the `Extras`: open loops, watches,
+  and money once ported), then `DB.Checkpoint` (1 s wait for readers; a
+  blocked one is logged) before the lock is released. `Watcher` is the
+  per-account loop: each cycle connects (a failure backs off like a lost
+  connection), passes, then IDLEs (or 58 s + NOOP), 2 s settle, backoff 5 s
+  doubling to 300 s. A started pass runs on `context.WithoutCancel`, so
+  shutdown never interrupts an automatic write; cancellation is seen only
+  while waiting, and `watch` gives the loops 30 s. `sync` and `watch` are
+  its commands and log as `atrium.run` and `atrium.watch`.
 - `internal/py/`: the shared CPython emulation: `Repr`/`ReprBytes`, `IsSpace`/`Strip`/
   `Split`/`SplitLines`/`Clip`/`Lower`, `Sum`/`SumSq` (Neumaier, as `sum()`),
   `JSONDumps(v, opts...)` (the one `json.dumps`: `JSONOpts` is `NoEnsureASCII`, `Compact`, `SortKeys`; over `Dict`, `map`, `[]string`, `[]any`,
@@ -452,6 +482,11 @@ and backups; nothing of that lives here.
   planned on the wayfinder map
   (https://github.com/jeiang/atrium/issues/15). Phase A ports behavior as-is
   and keeps the host interface; new features go to Phase B tickets.
+- Cutover is core first: mail, web and the assistant cut over to Go; the
+  calendar, Notion, money, media and Grafana ports land after cutover, in
+  parallel, and Python is deleted after the last of them. Before cutover
+  only blockers are fixed (data integrity, mailbox safety, security, a broken
+  golden or parity check); other findings become post-cutover tickets.
 - v2 direction (not the frozen Python app): memory precedence is profile >
   nightly > wiki; the profile is the source of truth and the nightly run
   updates the wiki weighted by confidence.
