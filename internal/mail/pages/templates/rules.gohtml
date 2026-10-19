@@ -1,0 +1,63 @@
+{{define "page"}}rules{{end}}
+{{define "title"}}Rules{{end}}
+{{define "heading"}}Rules{{end}}
+{{define "body_attrs"}}{{if .Toast}} data-strip-params="saved,created"{{end}}{{end}}
+{{define "mail_rules_operator_tab"}}Operator <span class="badge" data-variant="secondary">{{len .Data.rules}}</span>{{end}}
+{{define "mail_rules_learned_tab"}}Learned <span class="badge" data-variant="secondary">{{len .Data.learned}}</span>{{end}}
+{{define "mail_rules_operator_panel"}}
+<div class="flex flex-col gap-3 pt-3">
+  <p class="text-sm text-muted-foreground">Checked top to bottom before anything learned; the first rule whose conditions all hold decides.</p>
+  {{template "mail_rule_list" (dict "rules" .Data.rules "account" .Data.account "moved" (opt .Data "moved" nil) "focus_id" (opt .Data "focus_id" nil))}}
+</div>
+{{end}}
+{{define "mail_rules_learned_panel"}}{{$account := .Data.account -}}
+<div class="flex flex-col gap-3 pt-3">
+  <p class="text-sm text-muted-foreground">Learned from where you file mail with the same sender or subject template. Read-only: correct a message to teach atrium.{{if .Data.learned_limit}} Showing the {{.Data.learned_limit}} keys with the most messages per account.{{end}}</p>
+  {{if .Data.learned}}
+  <div class="table-container rounded-lg border bg-card">
+    <table class="table">
+      <caption class="sr-only">Learned rules, most messages first</caption>
+      <thead>
+        <tr>
+          <th scope="col">Key</th>
+          <th scope="col">Level</th>
+          <th scope="col">Destination</th>
+          <th scope="col" class="text-right">Purity</th>
+          <th scope="col" class="text-right">Messages</th>
+          {{if not $account}}<th scope="col">Account</th>{{end}}
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Data.learned}}
+        <tr>
+          <td class="max-w-80 truncate font-mono text-xs" title="{{.key}}">{{.key}}</td>
+          <td class="text-muted-foreground">{{lbl "level" .level}}</td>
+          <td class="font-medium">{{.dest}}</td>
+          <td class="text-right tabular-nums">{{pct .purity}}</td>
+          <td class="text-right tabular-nums">{{.n}}</td>
+          {{if not $account}}<td class="text-muted-foreground">{{.account}}</td>{{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Nothing learned yet. atrium needs a few filed messages that agree before it trusts a key.</p>
+  {{end}}
+</div>
+{{end}}
+{{define "content"}}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  {{template "account_switch" (dict "path" "/rules" "current" .Data.account)}}
+  <a class="btn" href="/rules/new{{if .Data.account}}?account={{queryval .Data.account}}{{end}}">{{icon "plus"}}New rule</a>
+</div>
+
+{{template "tabs" (dict
+  "id" "rules-tabs"
+  "tabsets" (list
+    (dict "tab" (partial "mail_rules_operator_tab" .) "panel" (partial "mail_rules_operator_panel" .))
+    (dict "tab" (partial "mail_rules_learned_tab" .) "panel" (partial "mail_rules_learned_panel" .)))
+  "class" "gap-0"
+  "variant" "line"
+  "label" "Rule sources")}}
+{{end}}

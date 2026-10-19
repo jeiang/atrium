@@ -2,6 +2,7 @@ package py
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -103,4 +104,17 @@ func Upper(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// IsDigit is str.isdigit for one code point.
+func IsDigit(r rune) bool {
+	if r < utf8.RuneSelf {
+		return r >= '0' && r <= '9'
+	}
+	return unicode.Is(DigitTable, r)
+}
+
+// IsDigits is str.isdigit(): a non-empty string of digit code points.
+func IsDigits(s string) bool {
+	return s != "" && strings.IndexFunc(s, func(r rune) bool { return !IsDigit(r) }) < 0
 }

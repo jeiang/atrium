@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net"
 	"net/http"
 	"strconv"
@@ -49,10 +50,12 @@ func (h *hostsFlag) Set(v string) error {
 	return nil
 }
 
-// Page is one page set: its routes and the template files they render (nil when it brings none).
+// Page is one page set: its routes, the template files they render (nil when it brings none) and the template
+// globals its templates read through the global function.
 type Page struct {
 	Module    Module
 	Templates fs.FS
+	Globals   map[string]any
 }
 
 // ServeCommand is `atrium serve`; pages are the page sets the server
@@ -130,13 +133,15 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	}
 	var modules []Module
 	var templates []fs.FS
+	globals := map[string]any{}
 	for _, p := range a.pages {
 		modules = append(modules, p.Module)
 		if p.Templates != nil {
 			templates = append(templates, p.Templates)
 		}
+		maps.Copy(globals, p.Globals)
 	}
-	render, err := NewRenderer(cfg, d, tpl.Config{Modules: templates})
+	render, err := NewRenderer(cfg, d, tpl.Config{Modules: templates, Globals: globals})
 	if err != nil {
 		return err
 	}
