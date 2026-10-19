@@ -6,4 +6,5 @@ import (
 	_ "github.com/jeiang/atrium/internal/assistant/threads"
 	_ "github.com/jeiang/atrium/internal/assistant/usage"
 	_ "github.com/jeiang/atrium/internal/assistant/writes"
+	_ "github.com/jeiang/atrium/internal/notify"
 )

@@ -185,6 +185,18 @@ and backups; nothing of that lives here.
   (breakpoints after `System` and after the last stable block; the
   project block follows uncached), `PrefixCacheControl` (1 h only for chat
   when the setting asks) and `Signature`.
+- `internal/assistant/context/`: `context.py` (package `context`; import
+  it aliased, e.g. `actx`). `Ingest` stubs results over 2000 estimated
+  tokens into `tool_results`; `LimitsFor`, `ContextManagement` and
+  `Betas` build the request's server edits; `ClearsOf` and `HistoryTokens`
+  meter responses. `ActiveMessages` is the projection (head + journal tail
+  with committed pins, drops and folds; the journal is never rewritten);
+  `Pin`/`Drop`/`Fold`/`Status` back the `context_*` tools and return the
+  tool payload as a `py.Dict`; `Commit`, `ServerCompacted` and
+  `ClientCompact` (summary request `SummaryParams`) rebuild it. `TextBlock`
+  and `SetField` build and edit blocks in Python key order; active-message
+  content may alias the journal, so copy before mutating. Its tests
+  replay the `server_compaction` and `client_compaction` goldens.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
   600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
@@ -195,6 +207,15 @@ and backups; nothing of that lives here.
   generates properties in the order given.
 - `internal/embed/`: `embed.py` and the `notion_vec` writes, model
   `embeddinggemma`, 768-d vectors normalised bit-for-bit as Python.
+- `internal/notify/`: `agent/tools/notify.py`. `Send(ctx, q, env, Message)` records the notification, then
+  publishes (one JSON POST to `NTFY_URL`, bearer `NTFY_TOKEN`) and records the outcome; the row exists before
+  the push, a failed or unconfigured push is `Sent.Error` text and never an error, only a malformed
+  `NTFY_URL` raises. Scheduler budget notices and media channel notices (topic, click) call `Send`; the
+  `notify` tool (`Tools()`) is registered by the loop's registry composition (#126); the
+  `/settings/notifications` page (`Module`, `Templates()`) is registered in `cmd/atrium` as a `web.Page`.
+  Every page slice registers its own `web.Page` (module plus template files) in `cmd/atrium`'s
+  `web.ServeCommand` call; `tpl.Config.Modules` carries their templates into the engine. `settings_tabs` in `tpl/templates/_settings.gohtml` is the settings tab
+  bar every settings page includes.
 - `internal/testutil/golden`: the golden loaders, canonical-JSON
   comparison and `Replay`, an `httptest` server for recorded exchanges.
 - `internal/rx/`: Python `re` patterns on regexp2 with Python semantics and
