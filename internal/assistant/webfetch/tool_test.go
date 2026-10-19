@@ -147,19 +147,6 @@ func TestNonHTTPSchemeIsRefusedEvenIfListed(t *testing.T) {
 	}
 }
 
-func TestEscapingErrorsKeepTheirClass(t *testing.T) {
-	f := siteFetcher(map[string]string{"http example.test 80 /": html("x", "y")}, new([]connectionRecord))
-	_, err := webfetch.Tool(f).Handler(t.Context(), allowed("http://example.test/"), args(t, `{"url":"http://example.test/"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = webfetch.Tool(f).Handler(t.Context(), allowed("http://[::1/"), args(t, `{"url":"http://example.test/"}`))
-	var raised *tool.Raised
-	if !errors.As(err, &raised) || raised.Class != "ValueError" {
-		t.Errorf("a stored URL urlsplit rejects: %v", err)
-	}
-}
-
 // Operator-written cron prompts put their URLs in the thread's allowed set; the tool fetches those and nothing a
 // fetched page, a file or a mail names.
 func TestCronThreadFetchesOnlyTheOperatorsURLs(t *testing.T) {
@@ -206,5 +193,20 @@ func TestCronThreadFetchesOnlyTheOperatorsURLs(t *testing.T) {
 	}
 	if !webfetch.Tool(f).Contexts.Has(tool.Cron) || webfetch.Tool(f).Contexts.Has(tool.Nightly) {
 		t.Errorf("run kinds %v", webfetch.Tool(f).Contexts)
+	}
+}
+
+func TestUnnormalizableStoredURLsAreSkipped(t *testing.T) {
+	var conns []connectionRecord
+	f := siteFetcher(map[string]string{"https example.test 443 /ok": html("T", "body")}, &conns)
+	for _, bad := range []string{"http://x:99999", "ftp://example.test/ok", "http://example.test\uff1a8080/docs", "http://[::1/"} {
+		_, err := webfetch.Tool(f).Handler(t.Context(), allowed(bad, "https://example.test/ok"), args(t, `{"url":"https://example.test/ok"}`))
+		if err != nil {
+			t.Errorf("%q poisoned the allowed set: %v", bad, err)
+		}
+		_, err = webfetch.Tool(f).Handler(t.Context(), allowed(bad), args(t, `{"url":"https://example.test/ok"}`))
+		if err == nil || !strings.Contains(err.Error(), "not allowed") {
+			t.Errorf("%q alone: %v", bad, err)
+		}
 	}
 }
