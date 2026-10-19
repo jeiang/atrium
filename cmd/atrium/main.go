@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/watches"
+	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -54,6 +55,7 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 		openloops.Command(now),
 		watches.Command(now),
 		agentcmd.Command(),
+		mediacmd.Command(now),
 		web.ServeCommand(
 			web.Page{Module: chatpages.Module(chatpages.Options{}), Templates: chatpages.Templates()},
 			web.Page{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},

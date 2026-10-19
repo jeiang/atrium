@@ -1922,11 +1922,11 @@
       ],
       "cases": [],
       "command": "media",
-      "note": "media module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "media"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium media [-h] {poll,sweep} ..."
     },
     {
@@ -1941,24 +1941,24 @@
         }
       ],
       "command": "media poll",
-      "note": "media module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "media",
         "poll"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium media poll [-h]"
     },
     {
       "args": [],
       "cases": [],
       "command": "media sweep",
-      "note": "media module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "media",
         "sweep"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium media sweep [-h]"
     },
     {
