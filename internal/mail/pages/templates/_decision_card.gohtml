@@ -1,0 +1,38 @@
+{{define "mail_decision_card"}}{{$m := .m}}{{$mode := .mode}}{{$d := $m.decision}}{{$toast := opt . "toast" nil}}{{$correct := opt . "correct" nil}}{{$current := $m.location}}{{if $m.in_inbox}}{{$current = "INBOX"}}{{end -}}
+<section id="decision-card-{{$m.id}}" class="group/card flex flex-col gap-3 rounded-lg border bg-card p-4" aria-labelledby="decision-title-{{$m.id}}">
+  <header class="flex flex-wrap items-center gap-2">
+    <h3 id="decision-title-{{$m.id}}" class="text-sm font-medium">atrium’s decision</h3>
+    {{if $d}}{{template "stage_badge" $d.stage}}{{if and (ne $d.stage "correction") (not (isnil $d.confidence))}}<span class="text-xs text-muted-foreground tabular-nums">{{pct $d.confidence}}</span>{{end}}{{end}}
+    {{if $d}}<span class="ml-auto text-xs text-muted-foreground">{{template "when" (dict "epoch" $d.ts "style" "datetime")}}</span>{{end}}
+  </header>
+  {{if $d}}
+  {{$state := "disagree"}}{{if $m.in_inbox}}{{$state = "pending"}}{{else if and $d.dest (splitin "|" $m.location $d.dest)}}{{$state = "agree"}}{{end}}
+  <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+    <span class="sr-only">Now in</span><span>{{place $current}}</span>
+    {{icon "arrow-right" "size-3.5 text-muted-foreground"}}
+    <span class="sr-only">proposed</span><span class="font-medium">{{proposal $d.action $d.dest}}</span>
+    {{if ne $d.stage "correction"}}<span class="text-xs">{{template "agreement" $state}}</span>{{end}}
+  </div>
+  <p class="text-sm text-muted-foreground">{{template "reason" (dict "d" $d "mode" $mode)}}</p>
+  {{else}}
+  <p class="text-sm text-muted-foreground">No decision yet. atrium decides once a message has been read and is still in the inbox.</p>
+  {{end}}
+  {{if and $m.corrected_to (or (not $d) (ne $d.stage "correction"))}}
+  <p class="text-sm">You corrected this to <span class="font-medium">{{$m.corrected_to}}</span>.</p>
+  {{end}}
+  {{if $toast}}
+  <p class="flex items-start gap-2 rounded-md bg-success/10 px-3 py-2 text-sm text-success" role="status">
+    {{icon "check" "mt-0.5 size-4 shrink-0"}}<span><span class="font-medium">{{$toast.Title}}</span>{{if $toast.Description}} {{$toast.Description}}{{end}}</span>
+  </p>
+  {{end}}
+  <div id="correct-slot-message-{{$m.id}}" class="empty:hidden">{{if $correct}}{{template "mail_correct" (dict "c" $correct "mode" $mode)}}{{end}}</div>
+  <div class="flex flex-wrap gap-2 group-has-[form]/card:hidden">
+    <button type="button" class="btn" data-size="sm" data-variant="outline"
+            hx-get="/messages/{{$m.id}}/correct?context=message" hx-target="#correct-slot-message-{{$m.id}}" hx-swap="innerHTML">
+      {{icon "folder-input"}}Correct
+    </button>
+    <a class="btn" data-size="sm" data-variant="ghost" href="/rules/new?message={{$m.id}}">{{icon "list-plus"}}Make rule</a>
+  </div>
+</section>
+{{end}}
+{{template "mail_decision_card" (dict "m" .Data.message "mode" .Mode "toast" .Toast "correct" (opt .Data "correct" nil))}}

@@ -228,8 +228,8 @@ and backups; nothing of that lives here.
   `NTFY_URL` raises. Scheduler budget notices and media channel notices (topic, click) call `Send`; the
   `notify` tool (`Tools()`) is registered by the loop's registry composition (#126); the
   `/settings/notifications` page (`Module`, `Templates()`) is registered in `cmd/atrium` as a `web.Page`.
-  Every page slice registers its own `web.Page` (module plus template files) in `cmd/atrium`'s
-  `web.ServeCommand` call; `tpl.Config.Modules` carries their templates into the engine. `settings_tabs` in `tpl/templates/_settings.gohtml` is the settings tab
+  Every page slice registers its own `web.Page` (module, template files and the template globals its
+  templates read through `global`) in `cmd/atrium`'s `web.ServeCommand` call; `tpl.Config.Modules` carries their templates into the engine. `settings_tabs` in `tpl/templates/_settings.gohtml` is the settings tab
   bar every settings page includes.
 - `internal/testutil/golden`: the golden loaders, canonical-JSON
   comparison and `Replay`, an `httptest` server for recorded exchanges.
@@ -281,6 +281,15 @@ and backups; nothing of that lives here.
   undo plan and stops at `Cap` (`config.WriteCap`) intents per pass. A
   group that fails unexpectedly leaves its rows held, and a ledger failure
   that cannot be recorded aborts the pass with the row held, as a crash does.
+- `internal/mail/pages/`: the mail web pages as one `web.Page` (`Module(Options)`, `Templates()`, `Globals()`):
+  `/messages/{id}` and its correction form, `/live/pause|resume|actions/{id}/undo`, `/triage` and `/rules` with
+  the rule editor. A correction in live mode moves the message through `applier.ApplyCorrections` under
+  `db.Exclusive`, detached from request cancellation like undo and every rule write; its failure is a toast
+  suffix, never a failed request. Template defines carry a `mail_` prefix and take one dict (pass `mode` and
+  `csrf` in, never read the frame inside a define). A request that fails validation answers FastAPI's 422 JSON
+  (`web.Unprocessable`), an unknown id the 404 page; `web.PathParam` decodes ids chi leaves escaped. Tailwind
+  scans only `src/atrium/web/templates`: before Python is deleted `nix/static.nix` must scan the Go templates
+  too (`internal/**/templates/*.gohtml`, `labels.go`, `icons.go`).
 - `internal/mail/backlog/`: `backlog.py`, one `inbox_backlog` proposal per
   account from the go-live baseline; `BacklogError` before go-live.
 - `internal/proposals/`: `proposals.py`. `Registry` holds the executor of
