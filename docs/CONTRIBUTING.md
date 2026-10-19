@@ -100,7 +100,11 @@ tags `sqlite_fts5` and `modernc`).
   crosses the escaping boundary only as `template.HTML`, `template.URL` or
   `template.JS`; a plain string is escaped, and `safeurl` filters link
   schemes. A page slice adds functions in its own `funcs_<slice>.go` through
-  `registerFuncs`. Tests render with `tpltest`: `Compare` canonical-diffs a
+  `registerFuncs`. Schemaless JSON (a proposal's preview, a stored result) is
+  read with `get`, printed with `pyattr`/`pystr` (Python's `str()`: `None`,
+  `True`, `1.0`; an absent key prints nothing) and measured with `pylen`; its
+  objects are plain maps, never `py.Dict`, except where their order is shown.
+  Tests render with `tpltest`: `Compare` canonical-diffs a
   Go render against `testdata/golden/html` and fails on any difference not
   listed as a `tpltest.Rewrite`, which is where a slice documents its diffs;
   `tpltest.Load` keeps JSON key order.
