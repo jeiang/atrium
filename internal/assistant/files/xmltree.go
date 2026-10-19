@@ -20,7 +20,6 @@ var maxTextBytes = int(4 * actx.CharsPerToken * actx.LimitsFor(actx.ModelContext
 
 // readError carries the name of the Python exception the same failure raises in the frozen app; the operator sees
 // it after "could not read the Word file: ".
-
 type readError string
 
 func (e readError) Error() string { return string(e) }
