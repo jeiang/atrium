@@ -197,7 +197,8 @@ func safeLabel(name string) bool {
 }
 
 // Applier runs the automatic passes of one database. Resync syncs an account after a pass wrote to it; Cap is
-// WRITE_CAP (config.WriteCap when 0).
+// WRITE_CAP (config.WriteCap when 0). As in Python's process(), a caller runs every pass under db.Exclusive and
+// after Live.EnsureGolive has taken the go-live baseline.
 type Applier struct {
 	Live   *live.Live
 	Open   mailops.Opener
@@ -769,17 +770,19 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 		}
 	}
 	for _, g := range slices.Concat(moves.order, labels.order, trashes.order, flagging.order) {
-		err := g.run(ctx, client, account, g, out)
-		if err == nil {
+		runErr := g.run(ctx, client, account, g, out)
+		if runErr == nil {
 			continue
 		}
-		log.Error(account+": group failed unexpectedly", logx.Err, err.Error())
-		_, refused := errors.AsType[safety.WriteRefused](err)
+		log.Error(account+": group failed unexpectedly", logx.Err, runErr.Error())
+		_, refused := errors.AsType[safety.WriteRefused](runErr)
+		text := py.ExceptionText(runErr)
 		for _, e := range g.entries {
+			var err error
 			if refused {
 				err = a.Live.Discard(ctx, e.aid)
 			} else {
-				err = a.Live.Hold(ctx, e.aid, py.ExceptionText(err), nil)
+				err = a.Live.Hold(ctx, e.aid, text, nil)
 			}
 			if err != nil {
 				return err

@@ -1158,3 +1158,25 @@ func TestNewResyncsTheAccountOnAFreshSession(t *testing.T) {
 	want(t, "gone", w.count("SELECT gone_at IS NOT NULL FROM messages WHERE id = ?", mid), 1)
 	want(t, "bills", w.count("SELECT COUNT(*) FROM messages m JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE mb.name = 'Bills' AND m.gone_at IS NULL"), 1)
 }
+
+// TestGroupFailureHoldsEveryEntry: a group that fails unexpectedly (here an earlier partial's undo plan that
+// cannot be read) holds every one of its actions with the same error.
+func TestGroupFailureHoldsEveryEntry(t *testing.T) {
+	w := gmail(t, "live")
+	w.arrive("first", arrival{})
+	w.arrive("second", arrival{})
+	w.decide("first", "Receipts")
+	w.decide("second", "Receipts")
+	mid := w.MID("first")
+	w.Exec("INSERT INTO auto_actions (ts, account, message_id, digest, kind, ok, error, undo) "+
+		"SELECT 1, 'gmail', id, digest || '-old', 'file', 0, 'partial: earlier', 'not json' FROM messages WHERE id = ?", mid)
+	buf := captureLog(t)
+	out := w.apply()
+	if out.Written != 0 || !strings.Contains(buf.String(), "gmail: group failed unexpectedly") {
+		t.Fatalf("outcome %+v log %q", out, buf.String())
+	}
+	held := w.Actions()[1:]
+	if len(held) != 2 || held[0].Error == nil || ok(held[0]) != "None" || ok(held[1]) != "None" || str(held[1].Error) != str(held[0].Error) {
+		t.Fatalf("held rows %+v", held)
+	}
+}
