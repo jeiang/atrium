@@ -1,9 +1,8 @@
 package mail
 
 import (
-	"strings"
-
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/py"
 )
 
 var systemFlags = map[string]string{`\trash`: "trash", `\sent`: "sent", `\drafts`: "drafts", `\junk`: "junk"}
@@ -31,18 +30,19 @@ func MailboxRole(name string, flags []string, account string) string {
 		return "system"
 	}
 	for _, flag := range flags {
-		if role, ok := systemFlags[strings.ToLower(flag)]; ok {
+		if role, ok := systemFlags[py.Lower(flag)]; ok {
 			return role
 		}
 	}
-	if strings.EqualFold(name, config.Inbox) {
+	folded := py.Casefold(name)
+	if folded == py.Casefold(config.Inbox) {
 		return "inbox"
 	}
-	if strings.EqualFold(name, "misc") {
+	if folded == "misc" {
 		return "misc"
 	}
 	for _, n := range systemNames {
-		if strings.EqualFold(name, n[0]) {
+		if folded == n[0] {
 			return n[1]
 		}
 	}
