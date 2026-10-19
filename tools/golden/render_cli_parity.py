@@ -1,3 +1,8 @@
+import os
+
+os.environ.pop("FORCE_COLOR", None)
+os.environ["NO_COLOR"] = "1"
+
 import argparse
 import contextlib
 import io
