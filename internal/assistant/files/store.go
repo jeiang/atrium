@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/py"
 )
 
 // Row is a thread_files row. ThreadID is nil for a project file.
@@ -67,7 +68,7 @@ func nullable(n int64) any {
 }
 
 // Get is get: nil when there is no such file.
-func Get(ctx context.Context, q querier, fileID int64) (*Row, error) {
+func Get(ctx context.Context, q db.Querier, fileID int64) (*Row, error) {
 	f, err := scan(q.QueryRowContext(ctx, "SELECT "+columns+" FROM thread_files WHERE id = ?", fileID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -79,7 +80,7 @@ func Get(ctx context.Context, q querier, fileID int64) (*Row, error) {
 }
 
 // OfProject is of_project.
-func OfProject(ctx context.Context, q querier, projectID int64) ([]Row, error) {
+func OfProject(ctx context.Context, q db.Querier, projectID int64) ([]Row, error) {
 	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE project_id = ? ORDER BY id", projectID)
 	if err != nil {
 		return nil, err
@@ -109,7 +110,7 @@ func writeStored(dir string, owner Owner, fileID int64, name string, data []byte
 
 // Store is store: the row and the bytes under dir/<owner>/<id>-<safe name>. Run it in the caller's transaction so a
 // failed write leaves no row.
-func Store(ctx context.Context, q querier, dir string, f NewFile, now float64) (int64, error) {
+func Store(ctx context.Context, q db.Querier, dir string, f NewFile, now float64) (int64, error) {
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO thread_files (thread_id, project_id, run_id, name, media_type, bytes, path, origin, created_at, anthropic_file_id, text, tokens) "+
 			"VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, NULL, ?, ?)",
@@ -157,7 +158,7 @@ func newAttachment(id int64, name, mediaType, kind string, tokens int64) Attachm
 
 // IngestUploads is ingest_uploads: every upload is read and checked before any is stored, so a refused message
 // leaves no row and no file. contextLimit is the thread's or the project's; nil skips the budget check.
-func IngestUploads(ctx context.Context, q querier, dir string, uploads []UploadedFile, now float64, owner Owner, contextLimit *int64) ([]AttachmentBlock, error) {
+func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []UploadedFile, now float64, owner Owner, contextLimit *int64) ([]AttachmentBlock, error) {
 	if len(uploads) == 0 {
 		return nil, nil
 	}
@@ -179,18 +180,18 @@ func IngestUploads(ctx context.Context, q querier, dir string, uploads []Uploade
 		if err != nil {
 			return nil, err
 		}
-		name := pathName(u.Name)
+		name := py.PathName(u.Name)
 		if name == "" {
 			name = "file"
 		}
 		found = append(found, inspected{name, u.Data, info})
 	}
 	if contextLimit != nil {
-		items := make([]NameTokens, len(found))
+		items := make([]nameTokens, len(found))
 		for i, f := range found {
-			items[i] = NameTokens{f.name, f.info.Tokens}
+			items[i] = nameTokens{f.name, f.info.Tokens}
 		}
-		if err := CheckBudget(items, *contextLimit); err != nil {
+		if err := checkBudget(items, *contextLimit); err != nil {
 			return nil, err
 		}
 	}
@@ -207,7 +208,7 @@ func IngestUploads(ctx context.Context, q querier, dir string, uploads []Uploade
 	return blocks, nil
 }
 
-func clone(ctx context.Context, q querier, fileID, threadID int64, now float64) (int64, bool, error) {
+func clone(ctx context.Context, q db.Querier, fileID, threadID int64, now float64) (int64, bool, error) {
 	found, err := Get(ctx, q, fileID)
 	if err != nil || found == nil {
 		return 0, false, err
@@ -264,7 +265,7 @@ func deleteRemote(ctx context.Context, remote RemoteDeleter, id *string) {
 }
 
 // DeleteOwned is delete_owned: the owner's remote copies, directory and rows. It returns the number of rows.
-func DeleteOwned(ctx context.Context, q querier, dir string, remote RemoteDeleter, owner Owner) (int, error) {
+func DeleteOwned(ctx context.Context, q db.Querier, dir string, remote RemoteDeleter, owner Owner) (int, error) {
 	column, id := owner.column()
 	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE "+column+" = ?", id)
 	if err != nil {
@@ -285,7 +286,7 @@ func DeleteOwned(ctx context.Context, q querier, dir string, remote RemoteDelete
 }
 
 // DeleteOne is delete_one: false when there is no such file.
-func DeleteOne(ctx context.Context, q querier, remote RemoteDeleter, fileID int64) (bool, error) {
+func DeleteOne(ctx context.Context, q db.Querier, remote RemoteDeleter, fileID int64) (bool, error) {
 	found, err := Get(ctx, q, fileID)
 	if err != nil || found == nil {
 		return false, err
@@ -296,10 +297,4 @@ func DeleteOne(ctx context.Context, q querier, remote RemoteDeleter, fileID int6
 	}
 	_, err = q.ExecContext(ctx, "DELETE FROM thread_files WHERE id = ?", fileID)
 	return err == nil, err
-}
-
-type querier interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }

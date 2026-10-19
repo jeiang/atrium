@@ -21,7 +21,7 @@ func contentTypeOf(types *element, partName string) (string, error) {
 			return kind, nil
 		}
 	}
-	ext := strings.TrimPrefix(py.Lower(pathSuffix(pathName(partName))), ".")
+	ext := strings.TrimPrefix(py.Lower(py.PathSuffix(py.PathName(partName))), ".")
 	for _, d := range types.kids(nsContentTypes, "Default") {
 		if e, _ := d.attr("", "Extension"); py.Lower(e) == ext {
 			kind, _ := d.attr("", "ContentType")
@@ -139,6 +139,8 @@ func cellText(tc *element) (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
+const maxGridSpan = 63
+
 func valueOf(parent *element, local string) (int, bool, error) {
 	if parent == nil {
 		return 0, false, nil
@@ -160,7 +162,7 @@ func gridSpan(tc *element) (int, error) {
 	if !ok {
 		return 1, err
 	}
-	return n, err
+	return min(n, maxGridSpan), err
 }
 
 func gridBefore(tr *element) (int, error) {
@@ -181,81 +183,159 @@ func continuesMerge(tc *element) bool {
 	return !ok || val == "continue"
 }
 
-func gridOffset(tc *element) (int, error) {
-	offset, err := gridBefore(tc.parent)
-	if err != nil {
-		return 0, err
-	}
-	for _, sibling := range tc.parent.kids(nsWord, "tc") {
-		if sibling == tc {
-			break
-		}
-		span, err := gridSpan(sibling)
-		if err != nil {
-			return 0, err
-		}
-		offset += span
-	}
-	return offset, nil
+type rowSet struct{ rows []*element }
+
+// rowGrid is one w:tr's layout grid: where each w:tc starts, computed once however many cells of the row below
+// ask for the cell above them.
+type rowGrid struct {
+	set       *rowSet
+	index     int
+	tcs       []*element
+	position  map[*element]int
+	beforeErr error
+	offsets   []int
+	errAt     int
+	regular   bool
+	byOffset  map[int]int
+	before    int
+	spans     []int
 }
 
-func cellAbove(tc *element) (*element, error) {
-	tr := tc.parent
-	var above *element
-	for _, sibling := range tr.parent.kids(nsWord, "tr") {
-		if sibling == tr {
+func newRowGrid(set *rowSet, index int, tr *element) *rowGrid {
+	g := &rowGrid{set: set, index: index, tcs: tr.kids(nsWord, "tc"), regular: true, byOffset: map[int]int{}}
+	g.before, g.beforeErr = gridBefore(tr)
+	g.errAt = len(g.tcs)
+	g.position = make(map[*element]int, len(g.tcs))
+	offset := g.before
+	for j, tc := range g.tcs {
+		g.position[tc] = j
+		g.offsets = append(g.offsets, offset)
+		if _, seen := g.byOffset[offset]; !seen {
+			g.byOffset[offset] = j
+		}
+		span, err := gridSpan(tc)
+		if err != nil {
+			g.errAt = j
 			break
 		}
-		above = sibling
+		if span < 0 {
+			g.regular = false
+		}
+		g.spans = append(g.spans, span)
+		offset += span
 	}
-	if above == nil {
+	return g
+}
+
+func (g *rowGrid) offsetOf(tc *element) (int, error) {
+	if g.beforeErr != nil {
+		return 0, g.beforeErr
+	}
+	j := g.position[tc]
+	if j > g.errAt || j >= len(g.offsets) {
+		return 0, errValue
+	}
+	return g.offsets[j], nil
+}
+
+func (g *rowGrid) cellAt(target int) (*element, error) {
+	if g.beforeErr != nil {
+		return nil, g.beforeErr
+	}
+	if g.regular {
+		if j, ok := g.byOffset[target]; ok && j <= g.errAt && j < len(g.tcs) {
+			return g.tcs[j], nil
+		}
 		return nil, errValue
 	}
-	offset, err := gridOffset(tc)
-	if err != nil {
-		return nil, err
-	}
-	remaining, err := gridBefore(above)
-	if err != nil {
-		return nil, err
-	}
-	remaining = offset - remaining
-	for _, candidate := range above.kids(nsWord, "tc") {
+	remaining := target - g.before
+	for j, tc := range g.tcs {
 		if remaining < 0 {
 			break
 		}
 		if remaining == 0 {
-			return candidate, nil
+			return tc, nil
 		}
-		span, err := gridSpan(candidate)
-		if err != nil {
-			return nil, err
+		if j >= len(g.spans) {
+			return nil, errValue
 		}
-		remaining -= span
+		remaining -= g.spans[j]
 	}
 	return nil, errValue
 }
 
-func cellTexts(tc *element) ([]string, error) {
+// docxReader reads the cells of a document's tables the way python-docx's Row.cells does: a cell spanning columns
+// repeats, a vMerge continuation repeats the text of the cell above.
+type docxReader struct {
+	sets  map[*element]*rowSet
+	grids map[*element]*rowGrid
+	cells map[*element][]string
+	count int
+}
+
+func (r *docxReader) grid(tr *element) *rowGrid {
+	if g, ok := r.grids[tr]; ok {
+		return g
+	}
+	set := r.sets[tr.parent]
+	if set == nil {
+		set = &rowSet{rows: tr.parent.kids(nsWord, "tr")}
+		r.sets[tr.parent] = set
+	}
+	index := 0
+	for j, row := range set.rows {
+		if row == tr {
+			index = j
+			break
+		}
+	}
+	g := newRowGrid(set, index, tr)
+	r.grids[tr] = g
+	return g
+}
+
+func (r *docxReader) above(tc *element) (*element, error) {
+	tr := tc.parent
+	g := r.grid(tr)
+	if g.index == 0 {
+		return nil, errValue
+	}
+	offset, err := g.offsetOf(tc)
+	if err != nil {
+		return nil, err
+	}
+	return r.grid(g.set.rows[g.index-1]).cellAt(offset)
+}
+
+func (r *docxReader) texts(tc *element) ([]string, error) {
+	if cached, ok := r.cells[tc]; ok {
+		return cached, nil
+	}
+	var out []string
 	if continuesMerge(tc) {
-		above, err := cellAbove(tc)
+		above, err := r.above(tc)
 		if err != nil {
 			return nil, err
 		}
-		return cellTexts(above)
+		out, err = r.texts(above)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		text, err := cellText(tc)
+		if err != nil {
+			return nil, err
+		}
+		span, err := gridSpan(tc)
+		if err != nil {
+			return nil, err
+		}
+		out = make([]string, 0, max(span, 0))
+		for range span {
+			out = append(out, text)
+		}
 	}
-	text, err := cellText(tc)
-	if err != nil {
-		return nil, err
-	}
-	span, err := gridSpan(tc)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, max(span, 0))
-	for range span {
-		out = append(out, text)
-	}
+	r.cells[tc] = out
 	return out, nil
 }
 
@@ -275,20 +355,37 @@ func docxText(data []byte) (string, error) {
 	if body == nil {
 		return "", readError("AttributeError")
 	}
+	size := 0
 	var lines []string
+	add := func(line string) error {
+		size += len(line) + 1
+		if size > maxTextBytes {
+			return errTooLarge
+		}
+		lines = append(lines, line)
+		return nil
+	}
 	for _, p := range body.kids(nsWord, "p") {
 		s, err := paragraphText(p)
 		if err != nil {
 			return "", err
 		}
-		lines = append(lines, s)
+		if err := add(s); err != nil {
+			return "", err
+		}
 	}
+	reader := &docxReader{sets: map[*element]*rowSet{}, grids: map[*element]*rowGrid{}, cells: map[*element][]string{}}
 	for _, tbl := range body.kids(nsWord, "tbl") {
-		lines = append(lines, "")
+		if err := add(""); err != nil {
+			return "", err
+		}
 		for _, tr := range tbl.kids(nsWord, "tr") {
 			var cells []string
 			for _, tc := range tr.kids(nsWord, "tc") {
-				texts, err := cellTexts(tc)
+				if reader.count++; reader.count > tableCellCap {
+					return "", errTooLarge
+				}
+				texts, err := reader.texts(tc)
 				if err != nil {
 					return "", err
 				}
@@ -296,7 +393,9 @@ func docxText(data []byte) (string, error) {
 					cells = append(cells, py.Strip(t))
 				}
 			}
-			lines = append(lines, strings.Join(cells, "\t"))
+			if err := add(strings.Join(cells, "\t")); err != nil {
+				return "", err
+			}
 		}
 	}
 	return py.Strip(strings.Join(lines, "\n")), nil

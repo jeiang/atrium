@@ -5,6 +5,7 @@
 package files
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -78,7 +79,7 @@ func IsImageType(mediaType string) bool { return imageTypes[mediaType] }
 
 // SafeName is safe_name: the file name a stored copy is saved under.
 func SafeName(name string) string {
-	cleaned, _ := nameRe.Sub("_", pathName(name), 0)
+	cleaned, _ := nameRe.Sub("_", py.PathName(name), 0)
 	cleaned = strings.TrimLeft(cleaned, "._")
 	if cleaned == "" {
 		cleaned = "file"
@@ -92,7 +93,7 @@ func SafeName(name string) string {
 // MediaTypeOf is media_type_of: the suffix table first, then the operator's declared type, then the built-in
 // mimetypes table.
 func MediaTypeOf(name, supplied string) string {
-	if media, ok := suffixTypes[py.Lower(pathSuffix(pathName(name)))]; ok {
+	if media, ok := suffixTypes[py.Lower(py.PathSuffix(py.PathName(name)))]; ok {
 		return media
 	}
 	declared, _, _ := strings.Cut(supplied, ";")
@@ -120,8 +121,9 @@ func KindOf(mediaType string) string {
 	return ""
 }
 
-// EstimateTokens is context.estimate_tokens: four characters to a token, rounded up.
-func EstimateTokens(text string) int64 {
+// estimateTokens is context.estimate_tokens: four characters to a token, rounded up. A private copy until #255's
+// context package exports it.
+func estimateTokens(text string) int64 {
 	return (int64(utf8.RuneCountInString(text)) + charsPerToken - 1) / charsPerToken
 }
 
@@ -148,21 +150,26 @@ func ExtractText(data []byte, mediaType string) (string, error) {
 	switch mediaType {
 	case DOCXType:
 		text, err := docxText(data)
-		if err != nil {
-			return "", FileError("could not read the Word file: " + errorName(err))
-		}
-		return text, nil
+		return text, extractFailure("Word", err)
 	case XLSXType:
 		text, err := xlsxText(data)
-		if err != nil {
-			return "", FileError("could not read the Excel file: " + errorName(err))
-		}
-		return text, nil
+		return text, extractFailure("Excel", err)
 	}
 	if indexZero(data[:min(len(data), binarySniffBytes)]) {
 		return "", FileError("binary content; atrium reads " + Supported)
 	}
 	return httpx.DecodeReplace(data), nil
+}
+
+func extractFailure(app string, err error) error {
+	var limit limitError
+	switch {
+	case err == nil:
+		return nil
+	case errors.As(err, &limit):
+		return FileError(limit.Error())
+	}
+	return FileError("could not read the " + app + " file: " + errorName(err))
 }
 
 func indexZero(b []byte) bool {
@@ -200,20 +207,21 @@ func Inspect(name string, data []byte, supplied string) (Info, error) {
 			return Info{}, FileError(name + ": " + err.Error())
 		}
 		info.Text = &text
-		info.Tokens = EstimateTokens(text)
+		info.Tokens = estimateTokens(text)
 	}
 	return info, nil
 }
 
-// NameTokens is one attachment of a message with its token estimate.
-type NameTokens struct {
+// nameTokens is one attachment of a message with its token estimate.
+type nameTokens struct {
 	Name   string
 	Tokens int64
 }
 
-// CheckBudget is check_budget: the attachments of one message must fit under the thread's compaction point, or
+// checkBudget is check_budget over context.limits_for, which #255 owns (a private copy of its compaction share
+// until then): the attachments of one message must fit under the thread's compaction point, or
 // the request could never be sent.
-func CheckBudget(items []NameTokens, contextLimit int64) error {
+func checkBudget(items []nameTokens, contextLimit int64) error {
 	budget := min(contextLimit, modelContext) * compactShareNum / compactShareDiv
 	var total int64
 	for _, it := range items {

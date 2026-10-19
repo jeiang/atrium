@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"io"
+	"math"
 	"math/big"
 	"path"
 	"strconv"
@@ -32,6 +33,13 @@ var workbookTypes = []string{
 	strings.Replace(typeBook, "%s", "sheet", 1),
 }
 
+func parseFailure(err error) error {
+	if errors.Is(err, errTooLarge) {
+		return errTooLarge
+	}
+	return errParse
+}
+
 type sheetRef struct {
 	title string
 	id    string
@@ -46,7 +54,7 @@ func stream(r io.Reader, want func(depth int, name xml.Name) bool, fn func(e *el
 			return nil
 		}
 		if err != nil {
-			return errParse
+			return parseFailure(err)
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
@@ -68,16 +76,16 @@ func stream(r io.Reader, want func(depth int, name xml.Name) bool, fn func(e *el
 }
 
 func subtree(dec *xml.Decoder, start xml.StartElement, parent *element) (*element, error) {
-	root := &element{space: start.Name.Space, local: start.Name.Local, attrs: start.Attr, parent: parent}
+	root := &element{space: start.Name.Space, local: start.Name.Local, attrs: normalizeAttrs(start.Attr), parent: parent}
 	cur := root
 	for {
 		tok, err := dec.Token()
 		if err != nil {
-			return nil, errParse
+			return nil, parseFailure(err)
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			e := &element{space: t.Name.Space, local: t.Name.Local, attrs: t.Attr, parent: cur}
+			e := &element{space: t.Name.Space, local: t.Name.Local, attrs: normalizeAttrs(t.Attr), parent: cur}
 			cur.children = append(cur.children, e)
 			cur = e
 		case xml.EndElement:
@@ -125,7 +133,7 @@ func sharedStrings(a *archive, types *element) ([]string, error) {
 	if part == "" {
 		return nil, nil
 	}
-	rc, err := a.open(strings.TrimPrefix(part, "/"))
+	rc, err := a.open(strings.TrimPrefix(part, "/"), streamPartCap)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +196,7 @@ func sheetsOf(a *archive, types *element) ([]sheetRef, []string, bool, error) {
 	date1904 := false
 	if props := root.kid(nsSheet, "workbookPr"); props != nil {
 		v, _ := props.attr("", "date1904")
-		date1904 = v == "1" || v == "true"
+		date1904 = v != "" && v != "false" && v != "f" && v != "0"
 	}
 	var refs []sheetRef
 	var targets []string
@@ -321,7 +329,7 @@ func xlsxText(data []byte) (string, error) {
 	var out strings.Builder
 	for i, sheet := range sheets {
 		out.WriteString("# Sheet: " + sheet.title + "\n")
-		rc, err := a.open(targets[i])
+		rc, err := a.open(targets[i], streamPartCap)
 		if err != nil {
 			return "", err
 		}
@@ -359,9 +367,16 @@ func writeCSVRow(out *strings.Builder, fields []string) {
 type cell struct {
 	column int
 	value  string
-	set    bool
 }
 
+const (
+	maxSheetRows = 1 << 20
+	maxSheetCols = 1 << 14
+	none         = -1
+)
+
+// sheetParser is openpyxl's read-only worksheet iteration written as CSV: rows are padded to the dimension
+// element's columns and missing rows are filled in; maxRow and maxCol are none when the dimension leaves them out.
 type sheetParser struct {
 	shared   []string
 	formats  styleFormats
@@ -369,32 +384,28 @@ type sheetParser struct {
 	out      *strings.Builder
 
 	maxCol, maxRow int
-	sized          bool
 	rowCounter     int
 	colCounter     int
-
-	counter int
+	counter        int
 }
 
 func (p *sheetParser) run(r io.Reader) error {
-	p.counter = 1
-	inData := false
+	p.counter, p.maxCol, p.maxRow = 1, none, none
+	seenRow := false
 	err := stream(r, func(depth int, n xml.Name) bool {
 		if n.Space != nsSheet {
 			return false
 		}
 		return n.Local == "dimension" && depth == 1 || n.Local == "row" && depth == 2
 	}, func(e *element) error {
-		switch e.local {
-		case "dimension":
-			if p.sized || inData {
+		if e.local == "dimension" {
+			if seenRow {
 				return nil
 			}
 			return p.setDimension(e)
-		default:
-			inData = true
-			return p.row(e)
 		}
+		seenRow = true
+		return p.row(e)
 	})
 	if errors.Is(err, errStop) {
 		return nil
@@ -407,33 +418,40 @@ func (p *sheetParser) setDimension(e *element) error {
 	if !ok {
 		return readError("TypeError")
 	}
-	col, row, err := dimensionMax(ref)
+	_, _, col, row, err := rangeBoundaries(ref)
 	if err != nil {
 		return err
 	}
-	p.maxCol, p.maxRow, p.sized = col, row, true
+	if row > maxSheetRows || col > maxSheetCols {
+		return errTooLarge
+	}
+	p.maxCol, p.maxRow = col, row
 	return nil
 }
 
-func (p *sheetParser) emit(cells []cell) {
+func (p *sheetParser) emit(cells []cell) error {
+	if p.out.Len() > maxTextBytes {
+		return errTooLarge
+	}
 	width := p.maxCol
-	if !p.sized {
+	if width == none {
 		width = 0
 		if n := len(cells); n > 0 {
 			width = cells[n-1].column
 		}
 	}
-	if len(cells) == 0 && !p.sized {
+	if len(cells) == 0 && p.maxCol == none {
 		writeCSVRow(p.out, nil)
-		return
+		return nil
 	}
 	fields := make([]string, width)
 	for _, c := range cells {
-		if c.column >= 1 && c.column <= width && c.set {
+		if c.column >= 1 && c.column <= width {
 			fields[c.column-1] = c.value
 		}
 	}
 	writeCSVRow(p.out, fields)
+	return nil
 }
 
 func (p *sheetParser) row(e *element) error {
@@ -446,6 +464,9 @@ func (p *sheetParser) row(e *element) error {
 	} else {
 		p.rowCounter++
 	}
+	if p.rowCounter > maxSheetRows {
+		return errTooLarge
+	}
 	p.colCounter = 0
 	var cells []cell
 	for _, c := range e.children {
@@ -456,17 +477,23 @@ func (p *sheetParser) row(e *element) error {
 		cells = append(cells, parsed)
 	}
 	idx := p.rowCounter
-	if p.sized && idx > p.maxRow {
+	if p.maxRow != none && idx > p.maxRow {
 		for ; p.counter <= p.maxRow; p.counter++ {
-			p.emit(nil)
+			if err := p.emit(nil); err != nil {
+				return err
+			}
 		}
 		return errStop
 	}
 	for ; p.counter < idx; p.counter++ {
-		p.emit(nil)
+		if err := p.emit(nil); err != nil {
+			return err
+		}
 	}
 	if p.counter <= idx {
-		p.emit(cells)
+		if err := p.emit(cells); err != nil {
+			return err
+		}
 		p.counter++
 	}
 	return nil
@@ -479,7 +506,7 @@ func rowNumber(raw string) (int, error) {
 		return n, nil
 	}
 	f, err := strconv.ParseFloat(py.Strip(raw), 64)
-	if err != nil || f != float64(int(f)) {
+	if err != nil || f != math.Trunc(f) || math.Abs(f) > 1<<40 {
 		return 0, errValue
 	}
 	return int(f), nil
@@ -521,24 +548,90 @@ func coordinate(ref string) (row, column int, err error) {
 	if err != nil {
 		return 0, 0, errValue
 	}
+	if column > maxSheetCols {
+		return 0, 0, errTooLarge
+	}
 	return row, column, nil
 }
 
-func dimensionMax(ref string) (col, row int, err error) {
-	clean := strings.ReplaceAll(ref, "$", "")
-	first, last, ranged := strings.Cut(clean, ":")
-	if !ranged {
-		last = first
+type rangePart struct {
+	col, row string
+}
+
+func isLetter(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }
+
+func takeRangePart(s string) (rangePart, string) {
+	s = strings.TrimPrefix(s, "$")
+	n := 0
+	for n < len(s) && n < 3 && isLetter(s[n]) {
+		n++
 	}
-	for _, part := range []string{first, last} {
-		letters := strings.TrimRight(part, "0123456789")
-		digits := part[len(letters):]
-		if letters == "" || digits == "" {
-			return 0, 0, errValue
+	part := rangePart{col: s[:n]}
+	s = strings.TrimPrefix(s[n:], "$")
+	n = 0
+	for n < len(s) && s[n] >= '0' && s[n] <= '9' {
+		n++
+	}
+	part.row = s[:n]
+	return part, s[n:]
+}
+
+// rangeBoundaries is openpyxl's range_boundaries(ref) for the (min_col, min_row, max_col, max_row) of a worksheet
+// dimension; a bound the reference leaves out is none.
+func rangeBoundaries(ref string) (minCol, minRow, maxCol, maxRow int, err error) {
+	first, rest := takeRangePart(ref)
+	var second rangePart
+	ranged := strings.HasPrefix(rest, ":")
+	if ranged {
+		second, rest = takeRangePart(rest[1:])
+	}
+	if rest != "" {
+		return 0, 0, 0, 0, errValue
+	}
+	if ranged {
+		cols := first.col != "" && second.col != ""
+		rows := first.row != "" && second.row != ""
+		noCols := first.col == "" && second.col == ""
+		noRows := first.row == "" && second.row == ""
+		valid := cols && rows || cols && noRows || rows && noCols
+		if !valid {
+			return 0, 0, 0, 0, errValue
 		}
 	}
-	row, col, err = coordinate(last)
-	return col, row, err
+	minCol, minRow, maxCol, maxRow = none, none, none, none
+	if first.col != "" {
+		if minCol, err = columnIndex(first.col); err != nil {
+			return 0, 0, 0, 0, err
+		}
+	}
+	if first.row != "" {
+		if minRow, err = rowBound(first.row); err != nil {
+			return 0, 0, 0, 0, err
+		}
+	}
+	maxCol, maxRow = minCol, minRow
+	if second.col != "" {
+		if maxCol, err = columnIndex(second.col); err != nil {
+			return 0, 0, 0, 0, err
+		}
+	}
+	if second.row != "" {
+		if maxRow, err = rowBound(second.row); err != nil {
+			return 0, 0, 0, 0, err
+		}
+	}
+	return minCol, minRow, maxCol, maxRow, nil
+}
+
+func rowBound(digits string) (int, error) {
+	n, err := strconv.Atoi(digits)
+	if err != nil {
+		if len(digits) > pyIntDigits {
+			return 0, errValue
+		}
+		return maxSheetRows + 1, nil
+	}
+	return n, nil
 }
 
 func (p *sheetParser) cell(e *element) (cell, error) {
@@ -547,12 +640,15 @@ func (p *sheetParser) cell(e *element) (cell, error) {
 		kind = t
 	}
 	var style int
-	if s, ok := e.attr("", "s"); ok && s != "" {
-		n, err := strconv.Atoi(py.Strip(s))
-		if err != nil {
-			return cell{}, errValue
+	if s, ok := e.attr("", "s"); ok {
+		style = none
+		if s != "" {
+			n, err := strconv.Atoi(py.Strip(s))
+			if err != nil {
+				return cell{}, errValue
+			}
+			style = n
 		}
-		style = n
 	}
 	value, hasValue := "", false
 	if kind != "inlineStr" {
@@ -576,7 +672,7 @@ func (p *sheetParser) cell(e *element) (cell, error) {
 	if !hasValue {
 		if kind == "inlineStr" {
 			if is := e.kid(nsSheet, "is"); is != nil {
-				out.value, out.set = richText(is), true
+				out.value = richText(is)
 			}
 		}
 		return out, nil
@@ -585,7 +681,7 @@ func (p *sheetParser) cell(e *element) (cell, error) {
 	if err != nil {
 		return cell{}, err
 	}
-	out.value, out.set = text, true
+	out.value = text
 	return out, nil
 }
 
@@ -651,6 +747,8 @@ func (n number) float() float64 {
 	return n.f
 }
 
+const pyIntDigits = 4300
+
 func castNumber(value string) (number, error) {
 	s := py.Strip(value)
 	if strings.ContainsAny(value, ".Ee") {
@@ -659,6 +757,9 @@ func castNumber(value string) (number, error) {
 			return number{}, errValue
 		}
 		return number{f: f}, nil
+	}
+	if len(strings.TrimLeft(s, "+-")) > pyIntDigits {
+		return number{}, errValue
 	}
 	i, ok := new(big.Int).SetString(s, 10)
 	if !ok {

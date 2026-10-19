@@ -27,6 +27,24 @@ func errorName(err error) string {
 	return "Exception"
 }
 
+// limitError is a document that goes past a Phase A resource cap (decompressed part size, Excel's grid, extracted
+// text); the frozen Python extractor has no such caps.
+type limitError string
+
+func (e limitError) Error() string { return string(e) }
+
+const (
+	treePartCap   = 16 << 20
+	streamPartCap = FileCapBytes
+	archiveCap    = 128 << 20
+	tableCellCap  = 1 << 20
+	// maxTextBytes is the most text any attachment can carry into a request: the compaction budget of the
+	// largest context (modelContext, 7/8 of it) at four characters a token, four bytes a character.
+	maxTextBytes = 4 * charsPerToken * modelContext * compactShareNum / compactShareDiv
+
+	errTooLarge = limitError("the document is too large to read")
+)
+
 const (
 	errBadZip = readError("BadZipFile")
 	errKey    = readError("KeyError")
@@ -58,7 +76,7 @@ func parseXML(data []byte) (*element, error) {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			e := &element{space: t.Name.Space, local: t.Name.Local, attrs: t.Attr, parent: cur}
+			e := &element{space: t.Name.Space, local: t.Name.Local, attrs: normalizeAttrs(t.Attr), parent: cur}
 			if cur != nil {
 				cur.children = append(cur.children, e)
 			} else if root == nil {
@@ -79,6 +97,16 @@ func parseXML(data []byte) (*element, error) {
 		return nil, errSyntax
 	}
 	return root, nil
+}
+
+var attrSpace = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ")
+
+// normalizeAttrs applies XML's attribute-value normalization, which encoding/xml leaves out.
+func normalizeAttrs(attrs []xml.Attr) []xml.Attr {
+	for i := range attrs {
+		attrs[i].Value = attrSpace.Replace(attrs[i].Value)
+	}
+	return attrs
 }
 
 func (e *element) attr(space, local string) (string, bool) {
@@ -118,7 +146,8 @@ func decimal(s string) (int, error) {
 }
 
 type archive struct {
-	files map[string]*zip.File
+	files     map[string]*zip.File
+	remaining int64
 }
 
 func openArchive(data []byte) (*archive, error) {
@@ -126,7 +155,7 @@ func openArchive(data []byte) (*archive, error) {
 	if err != nil {
 		return nil, errBadZip
 	}
-	a := &archive{files: make(map[string]*zip.File, len(zr.File))}
+	a := &archive{files: make(map[string]*zip.File, len(zr.File)), remaining: archiveCap}
 	for _, f := range zr.File {
 		a.files[f.Name] = f
 	}
@@ -135,25 +164,55 @@ func openArchive(data []byte) (*archive, error) {
 
 func (a *archive) has(name string) bool { _, ok := a.files[name]; return ok }
 
-func (a *archive) open(name string) (io.ReadCloser, error) {
+type cappedReader struct {
+	rc   io.ReadCloser
+	left int64
+}
+
+func (c *cappedReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if c.left <= 0 {
+		n, err := c.rc.Read(p[:1])
+		if n > 0 {
+			return 0, errTooLarge
+		}
+		return 0, err
+	}
+	n, err := c.rc.Read(p[:min(int64(len(p)), c.left)])
+	c.left -= int64(n)
+	return n, err
+}
+
+func (c *cappedReader) Close() error { return c.rc.Close() }
+
+func (a *archive) open(name string, limit int64) (io.ReadCloser, error) {
 	f, ok := a.files[name]
 	if !ok {
 		return nil, errKey
 	}
+	if f.UncompressedSize64 > uint64(limit) || int64(f.UncompressedSize64) > a.remaining {
+		return nil, errTooLarge
+	}
+	a.remaining -= int64(f.UncompressedSize64)
 	rc, err := f.Open()
 	if err != nil {
 		return nil, errBadZip
 	}
-	return rc, nil
+	return &cappedReader{rc: rc, left: limit}, nil
 }
 
 func (a *archive) read(name string) ([]byte, error) {
-	rc, err := a.open(name)
+	rc, err := a.open(name, treePartCap)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rc.Close() }()
 	data, err := io.ReadAll(rc)
+	if errors.Is(err, errTooLarge) {
+		return nil, errTooLarge
+	}
 	if err != nil {
 		return nil, errBadZip
 	}

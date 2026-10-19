@@ -6,37 +6,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-func pathName(s string) string {
-	name := ""
-	for part := range strings.SplitSeq(s, "/") {
-		if part != "" && part != "." {
-			name = part
-		}
-	}
-	return name
-}
-
-func pathSuffix(name string) string {
-	i := strings.LastIndex(name, ".")
-	if i > 0 && i < len(name)-1 {
-		return name[i:]
-	}
-	return ""
-}
-
-func splitExt(p string) (string, string) {
-	sep := strings.LastIndex(p, "/")
-	dot := strings.LastIndex(p, ".")
-	if dot > sep {
-		for i := sep + 1; i < dot; i++ {
-			if p[i] != '.' {
-				return p[:dot], p[dot:]
-			}
-		}
-	}
-	return p, ""
-}
-
 func urlScheme(url string) (scheme, rest string) {
 	i := strings.IndexByte(url, ':')
 	if i <= 0 || !isASCIILetter(url[0]) {
@@ -80,16 +49,16 @@ func guessType(name string) (string, bool) {
 			return guessData(path)
 		}
 	}
-	base, ext := splitExt(path)
+	base, ext := py.SplitExt(path)
 	for {
 		replaced, ok := mimeSuffixes[py.Lower(ext)]
 		if !ok {
 			break
 		}
-		base, ext = splitExt(base + replaced)
+		base, ext = py.SplitExt(base + replaced)
 	}
 	if _, ok := mimeEncodings[ext]; ok {
-		_, ext = splitExt(base)
+		_, ext = py.SplitExt(base)
 	}
 	media, ok := mimeTypes[py.Lower(ext)]
 	return media, ok

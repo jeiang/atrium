@@ -157,19 +157,7 @@ func formatDelta(value float64) (string, bool) {
 			secs = 0
 		}
 	}
-	text := ""
-	if days != 0 {
-		plural := "s"
-		if days == 1 || days == -1 {
-			plural = ""
-		}
-		text = fmt.Sprintf("%d day%s, ", days, plural)
-	}
-	text += fmt.Sprintf("%d:%02d:%02d", secs/3600, secs/60%60, secs%60)
-	if us != 0 {
-		text += fmt.Sprintf(".%06d", us)
-	}
-	return text, true
+	return formatTimedelta(days, secs, us), true
 }
 
 func digits(s string, n int) (int, bool) {
@@ -260,35 +248,104 @@ func validDate(year, month, day int) (time.Time, error) {
 	return t, nil
 }
 
+func takeDigits(s string) (digits, rest string) {
+	n := 0
+	for n < len(s) && s[n] >= '0' && s[n] <= '9' {
+		n++
+	}
+	return s[:n], s[n:]
+}
+
+func takeUnit(s string, unit byte) (digits, rest string, ok bool) {
+	d, r := takeDigits(s)
+	if d != "" && r != "" && r[0] == unit {
+		return d, r[1:], true
+	}
+	return "", s, false
+}
+
+func takeSeconds(s string) (whole, millis, rest string, ok bool) {
+	d, r := takeDigits(s)
+	if d == "" {
+		return "", "", s, false
+	}
+	if strings.HasPrefix(r, "S") {
+		return d, "", r[1:], true
+	}
+	if strings.HasPrefix(r, ".") {
+		frac, after := takeDigits(r[1:])
+		if len(frac) >= 1 && len(frac) <= 3 && strings.HasPrefix(after, "S") {
+			return d, frac, after[1:], true
+		}
+	}
+	return "", "", s, false
+}
+
+var errOverflow = readError("OverflowError")
+
+// durationISO is openpyxl's ISO_DURATION branch of from_ISO8601: PT[nH][nM][n[.fff]S] at the start of the text
+// (trailing text is ignored), at least one part, shown as str(timedelta).
 func durationISO(value string) (string, error) {
 	rest, ok := strings.CutPrefix(value, "PT")
 	if !ok {
 		return "", errValue
 	}
-	var hours, minutes, seconds float64
+	var hours, minutes, secs, millis int64
 	matched := false
-	for _, unit := range []struct {
-		suffix byte
-		target *float64
-	}{{'H', &hours}, {'M', &minutes}, {'S', &seconds}} {
-		i := strings.IndexByte(rest, unit.suffix)
-		if i <= 0 {
-			continue
+	parse := func(digits string) (int64, error) {
+		n, err := strconv.ParseInt(digits, 10, 64)
+		if err != nil || n > 1<<40 {
+			return 0, errOverflow
 		}
-		f, err := strconv.ParseFloat(rest[:i], 64)
-		if err != nil {
-			continue
+		return n, nil
+	}
+	if d, r, ok := takeUnit(rest, 'H'); ok {
+		var err error
+		if hours, err = parse(d); err != nil {
+			return "", err
 		}
-		*unit.target = f
-		rest = rest[i+1:]
+		rest, matched = r, true
+	}
+	if d, r, ok := takeUnit(rest, 'M'); ok {
+		var err error
+		if minutes, err = parse(d); err != nil {
+			return "", err
+		}
+		rest, matched = r, true
+	}
+	if whole, frac, _, ok := takeSeconds(rest); ok {
+		var err error
+		if secs, err = parse(whole); err != nil {
+			return "", err
+		}
+		if frac != "" {
+			f, _ := strconv.ParseInt((frac + "00")[:3], 10, 64)
+			millis = f
+		}
 		matched = true
 	}
 	if !matched {
 		return "", errValue
 	}
-	text, ok := formatDelta((hours*3600 + minutes*60 + seconds) / 86400)
-	if !ok {
-		return "", errValue
+	total := hours*3600 + minutes*60 + secs
+	if total/86400 > 999_999_999 {
+		return "", errOverflow
 	}
-	return text, nil
+	return formatTimedelta(total/86400, total%86400, millis*1000), nil
+}
+
+func formatTimedelta(days, secs, us int64) string {
+	text := ""
+	if days != 0 {
+		plural := "s"
+		if days == 1 || days == -1 {
+			plural = ""
+		}
+		text = fmt.Sprintf("%d day%s, ", days, plural)
+	}
+	text += fmt.Sprintf("%d:%02d:%02d", secs/3600, secs/60%60, secs%60)
+	if us != 0 {
+		text += fmt.Sprintf(".%06d", us)
+	}
+	return text
 }

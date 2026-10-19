@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Writes internal/assistant/files/mimetypes_table.go from CPython's built-in mimetypes tables (no host mime.types)."""
+"""Writes internal/assistant/files/mimetypes_table.go from CPython's built-in mimetypes tables (a MimeTypes() instance: no host mime.types; mimetypes.init(files=[]) still reads the host's knownfiles)."""
 import mimetypes
 import sys
 from pathlib import Path
 
-mimetypes.init(files=[])
-db = mimetypes._db
+db = mimetypes.MimeTypes()
 
 
 def literal(name, table):

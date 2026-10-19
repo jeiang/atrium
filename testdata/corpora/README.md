@@ -207,7 +207,7 @@ and `data`, and output `{kind, media_type, text, tokens}`. The `.docx` and
 stored zips with fixed timestamps; `word_features.docx` has a handwritten
 `word/document.xml` with tabs, breaks, hyperlinks, fields, content controls,
 tracked changes, merged and nested table cells. `media_type_of` falls back to
-Python's built-in `mimetypes` table only (the generator ignores the host's
+Python's built-in `mimetypes` table only (a `MimeTypes()` instance; the generator ignores the host's
 `mime.types`).
 
 ### Documents divergences
@@ -237,6 +237,19 @@ wider set of generated workbooks and documents.
   `application/octet-stream` in Go.
 - A `<dimension>` element that follows an empty `<sheetData>` is used by Go;
   openpyxl ignores it.
+- Phase A resource caps, none of which Python has (outputs are identical for
+  every input under them; a document over one is refused with a
+  `FileError`, "the document is too large to read"): a part of an
+  OOXML zip over 16 MiB (worksheets and shared strings 32 MiB) or 128 MiB
+  of parts in one file; a worksheet row past 1,048,576, a column past
+  16,384 or a `<dimension>` beyond those; extracted text past 14 MB (the
+  compaction budget of the 1M context at four bytes a character); more than
+  1,048,576 table cells in a `.docx`. A `w:gridSpan` above Word's 63
+  columns is clamped to 63 where python-docx repeats the cell that many
+  times. An integer of more than 4,300 digits in a worksheet is a
+  `ValueError`, as in Python 3.14.
+- XML attribute values are whitespace-normalized as lxml does; a character
+  reference for a line feed inside an attribute is also read as a space.
 
 ## Web fetch
 

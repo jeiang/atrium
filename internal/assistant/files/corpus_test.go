@@ -151,17 +151,17 @@ func deref(s *string) string {
 }
 
 func (r corpusRecord) checkBudget(t *testing.T) {
-	var items []NameTokens
+	var items []nameTokens
 	for _, raw := range r.Input[0].([]any) {
 		pair := raw.([]any)
-		items = append(items, NameTokens{pair[0].(string), int64(pair[1].(float64))})
+		items = append(items, nameTokens{pair[0].(string), int64(pair[1].(float64))})
 	}
-	err := CheckBudget(items, int64(r.Input[1].(float64)))
+	err := checkBudget(items, int64(r.Input[1].(float64)))
 	switch {
 	case r.Error == nil && err != nil:
-		t.Errorf("CheckBudget: %v", err)
+		t.Errorf("checkBudget: %v", err)
 	case r.Error != nil && (err == nil || err.Error() != r.Error.Message):
-		t.Errorf("CheckBudget error %v, Python %q", err, r.Error.Message)
+		t.Errorf("checkBudget error %v, Python %q", err, r.Error.Message)
 	}
 }
 
