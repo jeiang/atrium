@@ -59,12 +59,12 @@ func TestSyncAndWatchRejectAnUnknownAccount(t *testing.T) {
 	w := newWorld(t, config.Shadow, nil)
 	for _, cmd := range []string{"sync", "watch"} {
 		code, stdout, stderr := runCLI(t, context.Background(), w, nil, cmd, "--account", "work")
-		want := "atrium " + cmd + ": error: invalid value \"work\" for flag -account: argument --account: invalid choice: 'work' (choose from gmail, icloud)\n"
+		want := "atrium " + cmd + ": error: argument --account: invalid choice: 'work' (choose from 'gmail', 'icloud')\n"
 		if code != cli.ExitUsage || stdout != "" || !strings.HasSuffix(stderr, want) {
 			t.Errorf("%s --account work = %d, %q, %q", cmd, code, stdout, stderr)
 		}
 		code, _, stderr = runCLI(t, context.Background(), w, nil, cmd, "extra")
-		if code != cli.ExitUsage || !strings.HasSuffix(stderr, "atrium "+cmd+": error: unrecognized arguments: extra\n") {
+		if code != cli.ExitUsage || !strings.HasSuffix(stderr, "\natrium: error: unrecognized arguments: extra\n") {
 			t.Errorf("%s extra = %d, %q", cmd, code, stderr)
 		}
 	}

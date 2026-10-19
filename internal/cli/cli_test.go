@@ -24,8 +24,15 @@ func fakeApp(setupCalls *int) *App {
 		}
 	}
 	group := &Command{Name: "group", Help: "nested commands"}
-	group.Add(&Command{Name: "leaf", Help: "succeed", Setup: func(*flag.FlagSet) Handler {
-		return func(env *Env) int { return ExitOK }
+	group.Add(&Command{Name: "leaf", Help: "succeed", Setup: func(fs *flag.FlagSet) Handler {
+		var c choice
+		fs.Var(&c, "pick", "a or b")
+		return func(env *Env) int {
+			if len(env.Args) > 0 {
+				return env.Unrecognized(env.Args)
+			}
+			return ExitOK
+		}
 	}})
 	dismiss := &Command{Name: "dismiss", Help: "echo flags and positionals"}
 	dismiss.Setup = func(fs *flag.FlagSet) Handler {
@@ -39,6 +46,18 @@ func fakeApp(setupCalls *int) *App {
 	group.Add(dismiss)
 	app.Add(fake, group)
 	return app
+}
+
+type choice string
+
+func (c *choice) String() string { return string(*c) }
+
+func (c *choice) Set(v string) error {
+	if v != "a" && v != "b" {
+		return fmt.Errorf("argument --pick: invalid choice: '%s' (choose from 'a', 'b')", v)
+	}
+	*c = choice(v)
+	return nil
 }
 
 func TestRun(t *testing.T) {
@@ -64,6 +83,8 @@ func TestRun(t *testing.T) {
 		{name: "leaf help", args: []string{"fake", "--help"}, code: ExitOK, stdout: "exit code to return"},
 		{name: "group without subcommand", args: []string{"group"}, code: ExitUsage, stderr: "usage: atrium group [-h] {leaf,dismiss} ..."},
 		{name: "nested leaf", args: []string{"group", "leaf"}, code: ExitOK, setup: 1},
+		{name: "positional no parser takes", args: []string{"group", "leaf", "x", "y"}, code: ExitUsage, setup: 1, stderr: "usage: atrium [-h] {fake,group} ...\natrium: error: unrecognized arguments: x y\n"},
+		{name: "argparse-worded flag value error", args: []string{"group", "leaf", "--pick", "c"}, code: ExitUsage, stderr: "atrium group leaf: error: argument --pick: invalid choice: 'c' (choose from 'a', 'b')\n"},
 		{name: "flag after positional", args: []string{"group", "dismiss", "5", "--forever"}, code: ExitOK, setup: 1, stdout: "forever=true note=\"\" args=[\"5\"]\n"},
 		{name: "flag before positional", args: []string{"group", "dismiss", "--forever", "5"}, code: ExitOK, setup: 1, stdout: "forever=true note=\"\" args=[\"5\"]\n"},
 		{name: "flags between positionals", args: []string{"group", "dismiss", "5", "--note", "x", "6", "--forever", "7"}, code: ExitOK, setup: 1, stdout: "forever=true note=\"x\" args=[\"5\" \"6\" \"7\"]\n"},

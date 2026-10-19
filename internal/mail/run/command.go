@@ -31,7 +31,11 @@ func (a *accountFlag) String() string { return string(*a) }
 func (a *accountFlag) Set(v string) error {
 	choices := accountChoices()
 	if !slices.Contains(choices, v) {
-		return fmt.Errorf("argument --account: invalid choice: %s (choose from %s)", py.Repr(v), strings.Join(choices, ", "))
+		quoted := make([]string, len(choices))
+		for i, c := range choices {
+			quoted[i] = py.Repr(c)
+		}
+		return fmt.Errorf("argument --account: invalid choice: %s (choose from %s)", py.Repr(v), strings.Join(quoted, ", "))
 	}
 	*a = accountFlag(v)
 	return nil
@@ -63,7 +67,7 @@ func command(name string, clients Clients, run runner) *cli.Command {
 			fs.Var(&account, "account", "{"+strings.Join(accountChoices(), ",")+"}")
 			return func(env *cli.Env) int {
 				if len(env.Args) > 0 {
-					return env.UsageError("unrecognized arguments: %s", strings.Join(env.Args, " "))
+					return env.Unrecognized(env.Args)
 				}
 				return execute(env, string(account), run, clients)
 			}
