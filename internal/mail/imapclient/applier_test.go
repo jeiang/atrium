@@ -16,14 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/testutil/imapscript"
 )
 
-const gmailLogin = `S: {gmail.greeting}
-C: {t} CAPABILITY
-S: * CAPABILITY {gmail.caps}
-S: {t} OK Thats all she wrote!
-C: {t} LOGIN "atrium.test@gmail.com" "app password"
-S: {t} OK [CAPABILITY {gmail.authcaps}] atrium.test@gmail.com authenticated (Success)
-`
-
 const appliedList = `C: {t} LIST "" "*"
 S: * LIST (\HasNoChildren) "/" INBOX
 S: * LIST (\HasNoChildren) "/" "Bills"
