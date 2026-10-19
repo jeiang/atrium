@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -91,6 +92,27 @@ func SampleSubjectsOf(rows []Message) []string {
 		if len(out) >= SampleSubjects {
 			break
 		}
+	}
+	return out
+}
+
+// Result is a scanner's {"candidates": n, "created": n}.
+type Result struct {
+	Candidates int
+	Created    int
+}
+
+func (r Result) Dict() py.Dict {
+	return py.Dict{{Key: "candidates", Value: r.Candidates}, {Key: "created", Value: r.Created}}
+}
+
+func (r Result) MarshalJSON() ([]byte, error) { return []byte(py.JSONDumps(r.Dict())), nil }
+
+// SnapshotList is the snapshots as a payload stores them.
+func SnapshotList(snaps []mailops.Snapshot) []any {
+	out := make([]any, len(snaps))
+	for i, s := range snaps {
+		out[i] = s.Dict()
 	}
 	return out
 }

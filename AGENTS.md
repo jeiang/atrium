@@ -181,6 +181,25 @@ and backups; nothing of that lives here.
   document. `mimetypes_table.go` is CPython 3.14's built-in table, never a
   host `mime.types` (`tools/golden/gen_mimetypes.py`). Divergences from the
   Python extractor are listed in `testdata/corpora/README.md`.
+
+- `internal/assistant/tool/`: the `Tool` value (name, description, JSON
+  schema, handler, `Effect`, `Kinds`: exactly what Python's dataclass
+  carries; the `code` kind is not ported), `Context`, the `Error`,
+  `NotConfigured` and `Raised` classes and the `_args.py` helpers
+  (`BoundedInt`, `TextArg`, `Clip`).
+- `internal/assistant/registry/`: the per-run-kind tool lists, the
+  subagent allowlist (`nil` is no allowlist, an empty one allows
+  nothing), `SubagentPool`, the `web_search` server tool (chat and cron,
+  a subagent only by allowlist, `allowed_callers: ["direct"]`) and
+  `RequestTools`, which puts the one tools breakpoint on the last entry.
+  Every listing is sorted by name, so registration order never reaches a
+  request. `registrytest` holds the frozen matrix (`matrix.json`, the
+  inventory's effect and run-kind table without `run_code`, 59 tools) and
+  `Verify`, which each tool slice calls on its tools.
+- `internal/assistant/prompts/`: `System`, `Untrusted`, `SystemBlocks`
+  (breakpoints after `System` and after the last stable block; the
+  project block follows uncached), `PrefixCacheControl` (1 h only for chat
+  when the setting asks) and `Signature`.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
   600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
@@ -233,8 +252,16 @@ and backups; nothing of that lives here.
   `internal/db/readpaths/live_test.go`.
 - `internal/mail/backlog/`: `backlog.py`, one `inbox_backlog` proposal per
   account from the go-live baseline; `BacklogError` before go-live.
-- `internal/proposals/`: `proposals.py`'s `Registry` (undoers and the sync
-  hook), `Known` and `Create`; `scanutil` is `scanutil.py`.
+- `internal/proposals/`: `proposals.py`. `Registry` holds the executor of
+  each kind, the undoers and the sync hook; `Pipeline.ApproveAndApply` and
+  `Undo` run as the approved write of the proposal id, a `SelectionError`
+  (also a `ProposalError`) puts the proposal back to pending, any other
+  failure stores `Class: message` and marks it failed. `executors` is
+  `executors.py` (mail kinds, `delete_folder`/`rule_delete` undoers, the
+  post-write resync; `Register` adds live's undoers too), `handlers` the
+  registration order, `scans` `scan_all`, `scanutil` `scanutil.py`. The
+  scanners are `internal/mail/rebalance`, `deletions` and `gmaillabels`;
+  read paths in `internal/db/readpaths/proposals_test.go`.
 - `internal/mail/rules/`, `ruleedit/`, `corrections/`, `router/`: the routing
   pipeline (`rules.py`, `ruleedit.py`, `corrections.py`, `router.py`).
   Stages are correction, operator rule, learned rule, nearest neighbours,
@@ -280,8 +307,10 @@ and backups; nothing of that lives here.
   is written only through it) and `Resolve` (`Path.resolve()`, CPython's `realpath` with its `seen` map),
   `FromISOFormat` with `DateTime.Timestamp`/`WallToUnix`/`SplitTimestamp`,
   `B64Decode` (non-strict `base64.b64decode`), `DecodeUTF16BE`,
-  `FloatRepr`/`FormatFixed`/`FormatPercent`/`ParseFloat`/`ParseInt`
-  (`repr`, `format`, `float()` and `int()` of a str), `Truthy`, and
+  `FloatRepr`/`FormatFixed`/`FormatPercent`/`ParseFloat`
+  (`repr`, `format`, `float()` of a str), `Int`/`IntString` (`int()`, Unicode
+  digits included; `ParseInt` is its int64 view), `Iter` (`list()`),
+  `TypeName`, `Exception` (a built-in exception an emulated builtin raises), `Truthy`, and
   `JSONRedump` (JSON text respelled as Python would, keys in their original order).
   Python-emulation helpers live here; never add a per-package copy (the one
   exception is `internal/mail/mime`'s own `pystr.go`). Ported float
@@ -366,6 +395,16 @@ and backups; nothing of that lives here.
   writes Notion and the profile directly, each write logged with undo on
   `/activity`; research subagents and code mode are read-only. A monthly
   budget (default $75) pauses scheduled runs at 80% and chat at 100%.
+- The Go system prompt (`prompts.System`) is the frozen Python `SYSTEM`
+  with one sentence removed, "For several read-only lookups across
+  sources, call run_code once instead of many tool turns.", because
+  `run_code` and the code sandbox are not ported in Phase A
+  (https://github.com/jeiang/atrium/issues/19): the model must not be told
+  to call a tool that is not offered. `files.SANDBOX_PROMPT` is not ported
+  either. The prompt-stability test applies exactly that removal to the
+  recorded text, so any other difference fails it. The cached prefix (system
+  blocks up to the last breakpoint, then every tool) holds no date, count
+  or id; the date stamp rides on the operator message.
 - Code mode runs in `atrium-codemode@`, one socket-activated instance per
   connection under `DynamicUser` with no network and a read-only filesystem.
   That sandbox is the security boundary; the Monty interpreter is not one.

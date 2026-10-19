@@ -76,6 +76,8 @@ type RuleError string
 
 func (e RuleError) Error() string { return string(e) }
 
+func (RuleError) PyClass() string { return "RuleError" }
+
 func ruleErrorf(format string, args ...any) error { return RuleError(fmt.Sprintf(format, args...)) }
 
 // Condition is one `when` entry. Value is nil, a string, a []string, an int64, a *big.Int or a float64;
@@ -240,10 +242,11 @@ var (
 	errNotStr  = errors.New("expected a list of strings")
 )
 
-func now() float64 { return float64(time.Now().UnixNano()) / 1e9 }
+// Now is the clock of age_days conditions, time.time().
+var Now = func() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 func ageMatches(m *Message, days float64) bool {
-	return m.DateTS != 0 && (now()-m.DateTS)/secondsPerDay >= days
+	return m.DateTS != 0 && (Now()-m.DateTS)/secondsPerDay >= days
 }
 
 // DomainSuffix is rules.domain_suffix.
