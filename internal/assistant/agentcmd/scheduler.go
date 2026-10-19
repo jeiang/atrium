@@ -1,18 +1,34 @@
 package agentcmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/assistant/runner"
+	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/money"
 )
 
 // Callables are the built-in jobs that run a function. A slice that ports one adds it here.
-func callables() map[string]worker.Callable { return map[string]worker.Callable{} }
+func callables() map[string]worker.Callable {
+	return map[string]worker.Callable{
+		scheduler.FXRatesName: fxRates,
+	}
+}
+
+func fxRates(ctx context.Context, e worker.Env) (worker.Result, error) {
+	loc, err := config.Location(e.Env)
+	if err != nil {
+		return worker.Result{}, err
+	}
+	_, err = money.FetchRates(ctx, e.DB.Write, e.Now(), loc, nil)
+	return worker.Result{}, err
+}
 
 // schedulerCommand is `agent scheduler`: the worker loop until SIGTERM or SIGINT, which cancel the context and
 // exit 0 after the claims in flight returned. Their runs stay resumable.

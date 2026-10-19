@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/watches"
+	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -53,6 +54,7 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 		mailCmds.ProposalsCommand(),
 		openloops.Command(now),
 		watches.Command(now),
+		money.Command(now),
 		agentcmd.Command(),
 		web.ServeCommand(
 			web.Page{Module: chatpages.Module(chatpages.Options{}), Templates: chatpages.Templates()},

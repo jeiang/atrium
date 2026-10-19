@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/watches"
+	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
@@ -99,6 +101,7 @@ func (w goldenWorld) fakes(env config.Env) map[string]*mailtest.FakeClient {
 type llmScript struct {
 	Defaults  map[string]json.RawMessage            `json:"defaults"`
 	BySubject map[string]map[string]json.RawMessage `json:"by_subject"`
+	Payees    map[string]json.RawMessage            `json:"payees"`
 }
 
 func subjectOf(prompt string) (string, bool) {
@@ -132,6 +135,7 @@ func models(t *testing.T) *httptest.Server {
 	features := map[string]string{
 		llm.FolderSystem: "folder", llm.FlagSystem: "flag", llm.EventSystem: "event",
 		openloops.CommitmentSystem: "commitments", watches.PackageSystem: "package", rebalance.NameSystem: "folder_name",
+		money.ExtractSystem: "money", money.PayeeSystem: "payee",
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -156,6 +160,16 @@ func models(t *testing.T) *httptest.Server {
 		feature, known := features[req.Messages[0].Content]
 		if !known {
 			http.Error(w, "unknown system prompt", http.StatusBadRequest)
+			return
+		}
+		if feature == "payee" {
+			content := req.Messages[1].Content
+			normalized := content[strings.Index(content, "\nNormalized: ")+len("\nNormalized: "):]
+			answer, known := script.Payees[normalized]
+			if !known {
+				answer = json.RawMessage(`{"name": ` + strconv.Quote(titleCase(normalized)) + `, "category": "Other"}`)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": string(answer)}}}})
 			return
 		}
 		answer := script.Defaults[feature]
@@ -425,10 +439,10 @@ func TestCLIGoldens(t *testing.T) {
 }
 
 // TestWritingCommandsTakeTheDatabaseLock holds atrium.db.lock and expects every command that holds it in
-// Python (the rebaseline and deletion passes and the loops and watches refreshes) to wait for it.
+// Python (the rebaseline and deletion passes and the loops, watches and money refreshes) to wait for it.
 func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
 	data := loadGoldenData(t)
-	for _, argv := range [][]string{{"live", "rebaseline"}, {"live", "deletions"}, {"loops", "refresh"}, {"watches", "refresh"}} {
+	for _, argv := range [][]string{{"live", "rebaseline"}, {"live", "deletions"}, {"loops", "refresh"}, {"watches", "refresh"}, {"money", "refresh"}} {
 		t.Run(strings.Join(argv, " "), func(t *testing.T) {
 			r := newRig(t, data, nil, "")
 			lock, err := db.Exclusive(filepath.Join(r.dir, "atrium.db"))
@@ -558,4 +572,22 @@ func TestCLIParity(t *testing.T) {
 			t.Errorf("status %d", resp.StatusCode)
 		}
 	})
+}
+
+func titleCase(s string) string {
+	var b strings.Builder
+	cased := false
+	for _, r := range s {
+		letter := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+		switch {
+		case !letter:
+			b.WriteRune(r)
+		case cased:
+			b.WriteString(strings.ToLower(string(r)))
+		default:
+			b.WriteString(strings.ToUpper(string(r)))
+		}
+		cased = letter
+	}
+	return b.String()
 }
