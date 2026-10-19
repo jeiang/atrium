@@ -22,12 +22,12 @@ func dayText(s []rune) (int, bool) {
 	case 1:
 		return DigitValue(s[0]), ascii(s[0], '1', '9')
 	case 2:
-		switch {
-		case s[0] == '3':
+		switch s[0] {
+		case '3':
 			return DigitValue(s[1]) + 30, s[1] == '0' || s[1] == '1'
-		case s[0] == '1' || s[0] == '2':
+		case '1', '2':
 			return DigitValue(s[0])*10 + DigitValue(s[1]), IsDecimal(s[1])
-		case s[0] == '0', s[0] == ' ':
+		case '0', ' ':
 			return DigitValue(s[1]), ascii(s[1], '1', '9')
 		}
 	}
