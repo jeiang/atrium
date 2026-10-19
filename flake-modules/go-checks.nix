@@ -91,8 +91,9 @@
         status=0
         for tags in sqlite_fts5 modernc; do
           echo "tags: $tags"
-          go test -race -tags "$tags" ./... 2>&1 | tee -a "$log"
-          [ "''${PIPESTATUS[0]}" -eq 0 ] || status=1
+          if ! go test -race -tags "$tags" ./... 2>&1 | tee -a "$log"; then
+            status=1
+          fi
         done
         if [ "$status" -ne 0 ]; then
           echo "=== go-test failure summary ==="
