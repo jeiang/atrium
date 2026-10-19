@@ -3,6 +3,7 @@ package tpl
 import (
 	"bytes"
 	"html/template"
+	"io/fs"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -285,5 +286,18 @@ func TestODictKeepsCallOrder(t *testing.T) {
 	got := render(t, `{{range items (odict "z" 1 "a" 2 "m" 3)}}{{.Key}}{{end}} {{urlencode (odict "z" "1" "a" "2")}} {{urlencode (dict "z" "1" "a" "2")}}`, nil)
 	if want := "zam z=1&amp;a=2 a=2&amp;z=1"; got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestDuplicateTemplateFileIsAnError(t *testing.T) {
+	file := fstest.MapFS{"dup.gohtml": {Data: []byte(`{{define "content"}}x{{end}}`)}}
+	for name, cfg := range map[string]Config{
+		"two modules":      {Modules: []fs.FS{file, file}},
+		"module and extra": {Extra: file, Modules: []fs.FS{file}},
+		"built-in":         {Modules: []fs.FS{fstest.MapFS{"error.gohtml": {Data: []byte("x")}}}},
+	} {
+		if _, err := New(cfg); err == nil || !strings.Contains(err.Error(), "defined twice") {
+			t.Errorf("%s: err = %v", name, err)
+		}
 	}
 }

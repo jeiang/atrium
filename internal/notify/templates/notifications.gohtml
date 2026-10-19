@@ -1,0 +1,25 @@
+{{define "title"}}Notifications · Settings{{end}}
+{{define "heading"}}Settings · Notifications{{end}}
+{{define "content"}}
+{{template "settings_tabs" "notifications"}}
+{{if .Data.notifications}}
+<div class="table-container rounded-lg border bg-card">
+  <table class="table">
+    <caption class="sr-only">Notifications sent by the assistant, newest first</caption>
+    <thead><tr><th scope="col">When</th><th scope="col">Notification</th><th scope="col">Thread</th><th scope="col">Push</th></tr></thead>
+    <tbody>
+      {{range .Data.notifications}}
+      <tr>
+        <td class="whitespace-nowrap text-muted-foreground">{{ts .ts}}</td>
+        <td><span class="font-medium">{{.title}}</span><br><span class="whitespace-pre-line text-muted-foreground">{{.body}}</span></td>
+        <td>{{if .thread_link}}<a class="underline underline-offset-4" href="{{.thread_link}}">open</a>{{end}}</td>
+        <td>{{if .delivered}}<span class="badge" data-variant="secondary">Sent</span>{{else}}<span class="badge" data-variant="outline" title="{{or .error ""}}">Local only</span>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+{{template "empty_state" (dict "icon_name" "inbox" "title" "No notifications" "body" "Notifications the assistant sends appear here, even when push is not configured.")}}
+{{end}}
+{{end}}
