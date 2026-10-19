@@ -3,36 +3,12 @@ package contacts
 import (
 	"bytes"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 )
 
-// decimal is int() of a string of \d characters.
-func decimal(s string) int {
-	n := 0
-	for _, r := range s {
-		n = n*10 + digitValue(r)
-	}
-	return n
-}
-
-func digitValue(r rune) int {
-	for _, rg := range unicode.Nd.R16 {
-		if lo, hi := rune(rg.Lo), rune(rg.Hi); r >= lo && r <= hi {
-			return int(r-lo) % 10
-		}
-	}
-	for _, rg := range unicode.Nd.R32 {
-		if lo, hi := rune(rg.Lo), rune(rg.Hi); r >= lo && r <= hi {
-			return int(r-lo) % 10
-		}
-	}
-	return 0
-}
-
-// readText is Path.read_text(encoding="utf-8-sig", errors="replace"): UTF-8 without a leading BOM, with one
+// ReadText is Path.read_text(encoding="utf-8-sig", errors="replace"): UTF-8 without a leading BOM, with one
 // U+FFFD per maximal invalid subpart, and universal newlines.
-func readText(data []byte) string {
+func ReadText(data []byte) string {
 	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	var b strings.Builder
 	b.Grow(len(data))

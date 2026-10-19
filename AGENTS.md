@@ -181,6 +181,25 @@ and backups; nothing of that lives here.
   writes with (`FoldHeader`); tables come from `tools/mime/gen_tables.py`.
 - `internal/mail/features/`: `features.py` (`Extract`, `ContentDigest`,
   `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
+- `internal/mail/flags/`, `report/`, `triage/`, `search/`, `live/`: `flags.py`
+  (contacts rule; the LLM verdict is only recorded, a chat outage records
+  all-NULL fields, any other judge error propagates), `report.py`, `triage.py`,
+  `search.py` (FTS5 + vec0 KNN fused by RRF; lexical only with
+  `semantic=false` and the error text when the embedder is down) and
+  `live.StateOf`. Their golden read paths live in
+  `internal/db/readpaths/mail_test.go`.
+- `internal/mail/rules/`, `ruleedit/`, `corrections/`, `router/`: the routing
+  pipeline (`rules.py`, `ruleedit.py`, `corrections.py`, `router.py`).
+  Stages are correction, operator rule, learned rule, nearest neighbours,
+  the local model, fallback; a decision is appended to `decisions` and no
+  mailbox is written. A `ServiceUnavailable` from the model sets
+  `LLMContext.Down` for the rest of the account's pass, logs
+  `chat unavailable, deferring <account>`, and leaves the message undecided;
+  any other model error ends the pass. Rule `re` conditions compile through
+  `rules.Pattern`/`rules.CheckPattern` (`internal/rx`), rule JSON is read with
+  `py.JSONLoads` and written with Python's `json.dumps` spacing, and
+  `RuleError`/`corrections.Error` texts are shown to the operator.
+  `mail/rulestest` seeds the routing tests' databases.
 - `internal/mail/smtp/`: the operator's send. It speaks SMTP command for
   command as smtplib does and keeps its error wording (`SendError`);
   `BuildMessage` serializes as `EmailMessage` does. `smtptest` is the
