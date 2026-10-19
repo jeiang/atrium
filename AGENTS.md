@@ -344,7 +344,17 @@ and backups; nothing of that lives here.
 - `internal/mail/imapclient/`: `imap.py`'s client on go-imap v2; go-imap
   drives the session and the bytes it reads are parsed again as Python
   3.14's imaplib does, so results match what Python stored. Wire tests are
-  imapscript transcripts in its `testdata/`.
+  imapscript transcripts in its `testdata/`. `Opener` is `run.open_client`;
+  go-imap re-issues IDLE only after 30 minutes, so the watch loop's 29-minute
+  IDLE goes out once, as imaplib sends it.
+- `internal/mail/run/`: `run.py` and `watch.py`. `Pass.Locked` is one pass
+  under `db.Exclusive`: sync, then `Process` (go-live baseline in live mode,
+  embedding, then per account route, flag, the `Events` hook of
+  `event_candidates`, `ApplyAll`, then the `Extras`: open loops, watches,
+  and money once ported), then `PRAGMA wal_checkpoint(TRUNCATE)` before the
+  lock is released. `Watcher` is the per-account loop (IDLE or 58 s + NOOP,
+  2 s settle, backoff 5 s doubling to 300 s); `sync` and `watch` are its
+  commands and log as `atrium.run` and `atrium.watch`.
 - `internal/py/`: the shared CPython emulation: `Repr`/`ReprBytes`, `IsSpace`/`Strip`/
   `Split`/`SplitLines`/`Clip`/`Lower`, `Sum`/`SumSq` (Neumaier, as `sum()`),
   `JSONDumps(v, opts...)` (the one `json.dumps`: `JSONOpts` is `NoEnsureASCII`, `Compact`, `SortKeys`; over `Dict`, `map`, `[]string`, `[]any`,
