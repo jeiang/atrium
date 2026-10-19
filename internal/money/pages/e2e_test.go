@@ -49,7 +49,7 @@ func newE2E(t *testing.T, fetch money.Fetch) *e2eSite {
 		Cfg: cfg, Env: env, DB: d, Auth: web.AuthLocal, AllowedHosts: []string{"testserver"}, Render: render,
 		Modules: []web.Module{
 			Module(Options{Now: func() float64 { clock++; return clock }, Fetch: fetch}),
-			reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers()}),
+			reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(env)}),
 		},
 	})
 	if err != nil {

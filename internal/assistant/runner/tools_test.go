@@ -414,16 +414,16 @@ func TestProfileSetIsLoggedAndShownAsASystemBlock(t *testing.T) {
 	isError(t, resultOf(t, w.request(9), "c1"), "unknown tool profile_set")
 }
 
-func TestProposeRejectsUnknownKindsUntilAKindRegisters(t *testing.T) {
+func TestProposeRejectsUnknownKinds(t *testing.T) {
 	w := newWorld(t)
 	thread := w.thread(threads.Cron)
 	w.turn(thread, threads.Cron, "propose",
-		toolTurn(use("pr1", "propose", map[string]any{"kind": "notion_edit", "payload": map[string]any{}})),
+		toolTurn(use("pr1", "propose", map[string]any{"kind": "notion_wiki_plan", "payload": map[string]any{}})),
 		toolTurn(use("pr2", "propose", map[string]any{"kind": "send_email", "payload": "x"})),
 		toolTurn(use("pr3", "propose", map[string]any{"kind": "", "payload": map[string]any{}})),
 		reply("nothing"),
 	)
-	isError(t, resultOf(t, w.request(1), "pr1"), "unknown proposal kind 'notion_edit'; allowed: ")
+	isError(t, resultOf(t, w.request(1), "pr1"), "unknown proposal kind 'notion_wiki_plan'; allowed: notion_edit, notion_link")
 	isError(t, resultOf(t, w.request(2), "pr2"), "unknown proposal kind 'send_email'; allowed: ")
 	isError(t, resultOf(t, w.request(3), "pr3"), "kind is required")
 }

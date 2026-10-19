@@ -14,7 +14,10 @@ import (
 	"github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/util"
 
+	"github.com/jeiang/atrium/internal/notion"
+	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/pyhtml"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
@@ -64,66 +67,53 @@ func without(parsers []util.PrioritizedValue, drop ...string) []util.Prioritized
 	return kept
 }
 
-// Markdown renders untrusted markdown to sanitised HTML: the Python markdown_html minus the Notion-flavoured
-// steps. Raw HTML and indented code blocks are not parsed, so they render as escaped text like markdown-it.
-func Markdown(text string) template.HTML {
+func Markdown(text string) template.HTML { return MarkdownWith(text, nil) }
+
+func MarkdownWith(text string, pages map[string]string) template.HTML {
 	var b bytes.Buffer
-	if err := renderer.Convert([]byte(mediaLinks(text)), &b); err != nil {
+	if err := renderer.Convert([]byte(notion.Commonmark(text, pages)), &b); err != nil {
 		return ""
 	}
-	cleaned := policy.Sanitize(b.String())
+	cleaned := strings.ReplaceAll(policy.Sanitize(b.String()), `rel="noreferrer"`, `rel="noopener noreferrer"`)
 	cleaned, _ = emptyHeadRe.Sub("", cleaned, 0)
-	cleaned, _ = taskRe.SubFunc(cleaned, func(m *rx.Match) string {
-		checked := ""
-		if m.Group(2) != " " {
-			checked = " checked"
-		}
-		return m.Group(1) + `<input class="input" type="checkbox" disabled` + checked + "> "
-	}, 0)
+	cleaned, _ = taskRe.SubFunc(cleaned, taskBox, 0)
+	cleaned, _ = hrefRe.SubFunc(cleaned, func(m *rx.Match) string { return internalHref(m, pages) }, 0)
 	return template.HTML(cleaned)
 }
 
 var (
-	codeRe      = rx.MustCompile("(^[ \\t]*```[^\\n]*\\n.*?^[ \\t]*```[ \\t]*$|`[^`\\n]+`)", rx.DotAll|rx.Multiline)
-	mediaRe     = rx.MustCompile(`(?<!\\)<(audio|video|file|pdf|embed)\b([^>]*?)(?:/>|>(.*?)</\1>)`, rx.DotAll)
-	imageRe     = rx.MustCompile(`!\[([^\]]*)\]\(([^)\s]+)\)`, 0)
-	attrRe      = rx.MustCompile(`([\w-]+)="([^"]*)"`, 0)
 	emptyHeadRe = rx.MustCompile(`<thead>\s*<tr>\s*(?:<th>\s*</th>\s*)+</tr>\s*</thead>\s*`, 0)
 	taskRe      = rx.MustCompile(`(<li>(?:\s*<p>)?)\[([ xX])\] `, 0)
+	hrefRe      = rx.MustCompile(`href="([^"]*)"`, 0)
 )
 
-func mediaLink(caption, url string) string {
-	label := py.Strip(caption)
-	if label == "" {
-		label = url
+var notionHosts = []string{"notion.so", "www.notion.so", "app.notion.com"}
+
+func taskBox(m *rx.Match) string {
+	checked := ""
+	if m.Group(2) != " " {
+		checked = " checked"
 	}
-	if url == "" {
-		return label
-	}
-	return "[" + label + "](<" + url + ">)"
+	return m.Group(1) + `<input class="input" type="checkbox" disabled` + checked + "> "
 }
 
-func mediaLinks(text string) string {
-	pieces, err := codeRe.Split(text, 0)
+func internalHref(m *rx.Match, pages map[string]string) string {
+	url := pyhtml.Unescape(m.Group(1))
+	parts, err := py.URLSplit(url)
 	if err != nil {
-		return text
+		return m.Text()
 	}
-	var b strings.Builder
-	for i, piece := range pieces {
-		if i%2 == 0 {
-			piece, _ = mediaRe.SubFunc(piece, func(m *rx.Match) string {
-				src := ""
-				groups, _ := attrRe.FindAllGroups(m.Group(2))
-				for _, g := range groups {
-					if g[0] == "src" {
-						src = g[1]
-					}
-				}
-				return mediaLink(m.Group(3), src)
-			}, 0)
-			piece, _ = imageRe.SubFunc(piece, func(m *rx.Match) string { return mediaLink(m.Group(1), m.Group(2)) }, 0)
+	if host, _ := parts.Hostname(); !slices.Contains(notionHosts, host) {
+		return m.Text()
+	}
+	known := ""
+	for _, id := range notionid.IDsInText(url) {
+		if _, ok := pages[id]; ok {
+			known = id
 		}
-		b.WriteString(piece)
 	}
-	return b.String()
+	if known == "" {
+		return m.Text()
+	}
+	return `href="/notion/` + known + `"`
 }

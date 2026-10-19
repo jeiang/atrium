@@ -530,23 +530,25 @@ do not start. What the operator sees until then:
   `media-thumbnails` are skipped with
   one Info line each (`built-in job X has no function in this build; not
   run`, logged once per scheduler start); they are not recorded as job runs.
-- The system prompt names `event_propose`, and the nightly wiki-capture skill
-  names the Notion tools (`search_knowledge`, `notion_create_page`, ...).
-  Accepted: the model also sees the tools it is offered, finds these absent
-  and says so; `profile_set` and the summary still work.
-- After cutover, on `/settings/subagents` disable the research roles
-  `notion`, `observability` and `calendar`: their tools are absent, so a
-  delegated child would run with `recall` only.
+- The system prompt names `event_propose`, which is absent until the calendar
+  module lands; the model sees the tools it is offered and says so.
+  The Notion tools (`search_knowledge`, `fetch_knowledge`, `notion_create_page`,
+  `notion_update_page`, `notion_move_page`, `notion_archive_page`,
+  `notion_add_alias`), the `notion_edit` and `notion_link` proposal kinds, the
+  `/notion/{id}` pages and `POST /projects/{id}/wiki-hub` are served (#138).
+- After cutover, on `/settings/subagents` disable the research role
+  `calendar`: its tools are absent, so a delegated child would run with
+  `recall` only.
 - On `/settings/subagents` use the Enable/Disable toggle only. Do not Save
-  the `notion`, `observability` or `calendar` cards, or a custom agent that
-  names media or Grafana tools, until their modules land: the form
-  submits only the tools this build registers, so a save drops the others
-  from the stored allowlist and the seed does not restore them.
+  the `observability` or `calendar` cards, or a custom agent that names media
+  or Grafana tools, until their modules land: the form submits only the tools
+  this build registers, so a save drops the others from the stored allowlist
+  and the seed does not restore them.
 - The Media sidebar link returns 404. The Money pages (`/money/*`) and the eleven money agent tools are served.
-- Pending proposals of post-cutover kinds (`notion_edit`, `notion_link`,
-  `calendar_event`, `notion_wiki_plan`) still list on `/proposals`; approve
-  refuses with `no executor for kind` and undo refuses for lack of an undoer.
-  Existing `agent_writes` rows of those tools show no undoer on `/activity`.
+- Pending proposals of post-cutover kinds (`calendar_event`,
+  `notion_wiki_plan`) still list on `/proposals`; approve refuses with `no
+  executor for kind` and undo refuses for lack of an undoer. Existing
+  `agent_writes` rows of those tools show no undoer on `/activity`.
 - Data gaps while the modules are absent:
   - Calendar invitations the operator reads during the gap are never
     proposed: `event_candidates` only looks at unread Inbox mail.

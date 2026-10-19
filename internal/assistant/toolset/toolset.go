@@ -11,6 +11,7 @@ import (
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	moneytools "github.com/jeiang/atrium/internal/assistant/tools/money"
+	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
@@ -19,17 +20,19 @@ import (
 	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/assistant/writes"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/notify"
 )
 
 // Registry is the registry every run's tools come from.
 func Registry() (*registry.Registry, error) {
+	notiontools.RegisterProposalKinds()
 	r := registry.New()
 	for _, tools := range [][]tool.Tool{
 		mailtools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
 		contexttools.Tools(), recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
-		scheduletools.Tools(), skillstools.Tools(), moneytools.Tools(),
+		scheduletools.Tools(), skillstools.Tools(), moneytools.Tools(), notiontools.Tools(),
 		grafanatools.Tools(),
 	} {
 		if err := r.Add(tools...); err != nil {
@@ -40,9 +43,10 @@ func Registry() (*registry.Registry, error) {
 }
 
 // Undoers is the writes registry of every undoer the tool packages define.
-func Undoers() *writes.Registry {
+func Undoers(env config.Env) *writes.Registry {
 	r := writes.NewRegistry()
 	profiletools.RegisterUndoer(r)
+	notiontools.RegisterUndoers(r, env)
 	money.RegisterUndoer(r)
 	return r
 }

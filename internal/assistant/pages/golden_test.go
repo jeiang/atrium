@@ -51,7 +51,6 @@ var (
 		return strings.HasPrefix(token, "<section ") && strings.Contains(token, `aria-labelledby="work-code"`)
 	}}
 	macroRewrites = []tpltest.Rewrite{
-		{From: `rel="noopener noreferrer"`, To: `rel="noreferrer"`, Why: "#121: bluemonday RequireNoReferrerOnLinks emits only noreferrer; nh3 emitted both for markdown links", Only: func(token string) bool { return strings.HasPrefix(token, "<a href=") }},
 		{From: `javascript:alert(document.cookie)`, To: `#`, Why: "#121: external() filters schemes outside http, https, mailto, tel and notion"},
 		{From: `[bad](javascript:alert(1))`, To: `bad`, Why: "#121: markdown-it leaves a javascript: link as literal text; goldmark parses the link and bluemonday strips it to its label"},
 	}

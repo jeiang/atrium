@@ -11,10 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/web/tpl/tpltest"
 )
 
-var documented = []tpltest.Rewrite{
-	{From: `rel="noopener noreferrer"`, To: `rel="noreferrer"`, Why: "bluemonday RequireNoReferrerOnLinks emits only noreferrer; nh3 emitted both for markdown links", Only: func(token string) bool { return strings.HasPrefix(token, "<a href=") }},
-}
-
 func newEngine(t testing.TB, c tpltest.Case, extra fstest.MapFS) *Engine {
 	t.Helper()
 	globals := map[string]any{}
@@ -56,7 +52,7 @@ func TestGoldenLayout(t *testing.T) {
 			if err := e.Page(&out, "blank.gohtml", frame(c, nil)); err != nil {
 				t.Fatal(err)
 			}
-			tpltest.Compare(t, tpltest.Want(t, name+".html"), out.String(), documented...)
+			tpltest.Compare(t, tpltest.Want(t, name+".html"), out.String())
 		})
 	}
 }
@@ -71,7 +67,7 @@ func TestGoldenSettingsLayout(t *testing.T) {
 	if err := e.Page(&out, "settings.gohtml", f); err != nil {
 		t.Fatal(err)
 	}
-	tpltest.Compare(t, tpltest.Want(t, "settings.html"), out.String(), documented...)
+	tpltest.Compare(t, tpltest.Want(t, "settings.html"), out.String())
 }
 
 func TestGoldenFragments(t *testing.T) {
@@ -83,7 +79,7 @@ func TestGoldenFragments(t *testing.T) {
 			if err := e.Fragment(&out, strings.SplitN(name, "@", 2)[0]+".gohtml", frame(c, errorView(c))); err != nil {
 				t.Fatal(err)
 			}
-			tpltest.Compare(t, tpltest.Want(t, name+".html"), out.String(), documented...)
+			tpltest.Compare(t, tpltest.Want(t, name+".html"), out.String())
 		})
 	}
 }
@@ -110,7 +106,7 @@ func TestGoldenErrorPage(t *testing.T) {
 			if err := e.Page(&out, "error.gohtml", frame(c, errorView(c))); err != nil {
 				t.Fatal(err)
 			}
-			tpltest.Compare(t, tpltest.Want(t, name+".html"), out.String(), append(documented, errorRewrites[name]...)...)
+			tpltest.Compare(t, tpltest.Want(t, name+".html"), out.String(), errorRewrites[name]...)
 		})
 	}
 }
@@ -299,7 +295,7 @@ func TestGoldenMacros(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			tpltest.Compare(t, tpltest.Want(t, tc.html), out.String(), append(documented, tc.rewrite...)...)
+			tpltest.Compare(t, tpltest.Want(t, tc.html), out.String(), tc.rewrite...)
 		})
 	}
 }
