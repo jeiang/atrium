@@ -117,11 +117,9 @@ switched.
 7. Scheduler log: `journalctl -u atrium-agent-scheduler.service -e` shows the
     worker started and claiming due jobs, with the core-first lines listed in
     section 8 and no other errors. The callables of modules not yet ported
-    (`media-sweep`, `media-channels`, `calendar-candidates`,
-    `media-thumbnails`; `fx-rates` once the money ingestion slice, #142, is
-    deployed) each log `built-in job X has no function in this build; not run` once and
-    write no job run (the #157 acceptance replaces "a media poll succeeds"
-    with exactly this). `/scheduled` lists the jobs; from the shell use
+    (`calendar-candidates`, `media-thumbnails`; `fx-rates` until the money
+    ingestion slice, #142, is deployed) each log `built-in job X has no function in
+    this build; not run` once and write no job run. `/scheduled` lists the jobs; from the shell use
     `sqlite3 $STATE/atrium.db "SELECT id, name, next_due FROM jobs ORDER BY id"`.
 8. Units: `systemctl --failed 'atrium-*'` is empty.
 
@@ -525,14 +523,14 @@ migration hold for them, not that Go reads them.
 Calendar, Notion, money, media and Grafana land after cutover. Their units
 do not start. What the operator sees until then:
 
-- `atrium-run notion|calendar|media ...` answer `invalid choice` (exit 2)
-  until the module lands, and so does `atrium-run money ...` until the money
-  ingestion slice (#142) is deployed; it adds `money refresh [--limit N]`.
-  Mail, `live`, `proposals`, `rules`, `loops`, `watches`, `reindex`,
-  `shadow-report`, `agent` and `serve` work.
-- The built-in callable jobs `media-sweep`, `media-channels`,
-  `calendar-candidates` and `media-thumbnails` (and `fx-rates` until #142 is
-  deployed) are skipped with one Info line each (`built-in job X has no function in this build; not
+- `atrium-run notion|calendar ...` answer `invalid choice` (exit 2) until the
+  module lands, and so does `atrium-run money ...` until the money ingestion
+  slice (#142) is deployed; it adds `money refresh [--limit N]`. Mail, `live`,
+  `proposals`, `rules`, `loops`, `watches`, `reindex`, `shadow-report`,
+  `agent`, `media` and `serve` work.
+- The built-in callable jobs `calendar-candidates` and `media-thumbnails`
+  (and `fx-rates` until #142 is deployed) are skipped with
+  one Info line each (`built-in job X has no function in this build; not
   run`, logged once per scheduler start); they are not recorded as job runs.
 - The system prompt names `event_propose`, and the nightly wiki-capture skill
   names the Notion tools (`search_knowledge`, `notion_create_page`, ...).
@@ -559,6 +557,6 @@ do not start. What the operator sees until then:
     within 90 days of cutover. The mail pass then extracts the backlog 50
     messages per pass; `atrium-run money refresh --limit 1000` drains it at
     once.
-  - qBittorrent torrents tagged `media` wait unselected and unfiled until the
-    media module lands (#145).
+  - qBittorrent torrents tagged `media` are selected and swept by the media
+    jobs, but filing them into the library waits for the media pages (#146).
   - The Notion mirror goes stale.

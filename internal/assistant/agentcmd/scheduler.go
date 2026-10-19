@@ -3,6 +3,7 @@ package agentcmd
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
@@ -11,14 +12,15 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/money"
 )
 
 // Callables are the built-in jobs that run a function. A slice that ports one adds it here.
 func callables() map[string]worker.Callable {
-	return map[string]worker.Callable{
-		scheduler.FXRatesName: fxRates,
-	}
+	out := map[string]worker.Callable{scheduler.FXRatesName: fxRates}
+	maps.Copy(out, mediacmd.Callables())
+	return out
 }
 
 func fxRates(ctx context.Context, e worker.Env) (worker.Result, error) {

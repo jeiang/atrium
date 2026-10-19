@@ -138,6 +138,12 @@ and backups; nothing of that lives here.
   usage errors exit 2, a handler's return value is the exit code.
 - `internal/mail/mailcmd/`: `rules`, `shadow-report`, `reindex`, the scans,
   `live` and `proposals` commands.
+- `internal/media/`: qBittorrent client, release parsing, filing, EZTV
+  channels and the library; `internal/media/mediacmd/` holds `media poll` and
+  `media sweep` and the `media-channels` and `media-sweep` scheduler
+  callables. Filing keeps `media.group` and umask 0002: the process umask
+  applies to the directories it creates, and a torrent without the `media`
+  tag is never written to.
 - `internal/config/`: every environment variable with the Python names,
   defaults and errors; paths beside `ATRIUM_DB`; `ATRIUM_MODE` is read live
   on every call; `ATRIUM_TZ` has one accessor.
