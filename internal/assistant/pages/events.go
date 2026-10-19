@@ -94,7 +94,7 @@ func (p *pages) stream(r *http.Request, w io.Writer, flusher *http.ResponseContr
 		}
 		if found == nil || found.State != journal.Running {
 			if found != nil {
-				if last, err = p.drainRunDone(ctx, w, runID, last); err != nil {
+				if _, err = p.drainRunDone(ctx, w, runID, last); err != nil {
 					return err
 				}
 			}

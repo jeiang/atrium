@@ -44,7 +44,8 @@ type PlanItem struct {
 	Done bool   `json:"done"`
 }
 
-// CleanPlan is clean_plan: items is the decoded JSON list the model sent, each step an object with a text.
+// CleanPlan is clean_plan: items is the decoded JSON list the model sent (py.JSONLoads or encoding/json), each
+// step an object with a text.
 func CleanPlan(items any) ([]PlanItem, error) {
 	list, ok := items.([]any)
 	if !ok || len(list) > PlanItems {
@@ -52,12 +53,19 @@ func CleanPlan(items any) ([]PlanItem, error) {
 	}
 	out := make([]PlanItem, 0, len(list))
 	for _, item := range list {
-		step, _ := item.(map[string]any)
-		text, isText := step["text"].(string)
-		if step == nil || !isText || py.Strip(text) == "" {
+		var rawText, done any
+		switch step := item.(type) {
+		case map[string]any:
+			rawText, done = step["text"], step["done"]
+		case py.Dict:
+			rawText, _ = step.Get("text")
+			done, _ = step.Get("done")
+		}
+		text, isText := rawText.(string)
+		if !isText || py.Strip(text) == "" {
 			return nil, PlanError("each step needs a non-empty text")
 		}
-		out = append(out, PlanItem{Text: py.Clip(py.Strip(text), PlanItemChars), Done: py.Truthy(step["done"])})
+		out = append(out, PlanItem{Text: py.Clip(py.Strip(text), PlanItemChars), Done: py.Truthy(done)})
 	}
 	return out, nil
 }

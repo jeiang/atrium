@@ -2,13 +2,19 @@ package reviewpages
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -105,7 +111,7 @@ func TestActivityMailRowsWithoutPlacesShowGone(t *testing.T) {
 func TestUndoingAWriteSwapsTheRowAndRefusesASecondTime(t *testing.T) {
 	s := newSite(t)
 	var undone []map[string]any
-	s.writes.Register("fake", func(_ context.Context, info map[string]any) (any, error) {
+	s.writes.Register("fake", func(_ context.Context, _ db.Querier, info map[string]any) (any, error) {
 		undone = append(undone, info)
 		return "restored", nil
 	})
@@ -175,5 +181,72 @@ func TestSnippetIsIndentedAndCut(t *testing.T) {
 	}
 	if empty, _ := snippet(nil); empty != "" {
 		t.Errorf("nil snippet = %q", empty)
+	}
+}
+
+func (s *site) profileSet(run int64, key, value string) map[string]any {
+	s.t.Helper()
+	reg, err := toolset.Registry()
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	tools, err := reg.All()
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	i := slices.IndexFunc(tools, func(tl tool.Tool) bool { return tl.Name == "profile_set" })
+	tc := &tool.Context{DB: s.db, Cfg: s.cfg, Env: s.env, Kind: tool.Chat, ThreadID: 1, RunID: run, Now: func() float64 { return 100 }}
+	out, err := tools[i].Handler(context.Background(), tc, py.Dict{{Key: "key", Value: key}, {Key: "value", Value: value}})
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	return jsonOf(s.t, py.JSONDumps(out))
+}
+
+func (s *site) profile(key string) any {
+	s.t.Helper()
+	var value string
+	err := s.db.Read.QueryRow("SELECT value FROM agent_profile WHERE key = ?", key).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	return value
+}
+
+func TestUndoingAProfileSetRestoresThePreviousValue(t *testing.T) {
+	s := newSite(t)
+	s.thread()
+	run, err := journal.StartRun(context.Background(), s.db.Write, 1, "chat", "m", "medium", 100, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := s.profileSet(run, "tz", "AST")
+	second := s.profileSet(run, "tz", "UTC")
+	if first["previous"] != nil || second["previous"] != "AST" || s.profile("tz") != "UTC" {
+		t.Fatalf("profile_set %v %v", first, second)
+	}
+	page := status(t, s.get("/activity?category=assistant"), http.StatusOK)
+	mustContain(t, page, "profile:tz", fmt.Sprintf("/activity/write/%v/undo", second["write_id"]))
+	body := status(t, s.post(fmt.Sprintf("/activity/write/%v/undo", second["write_id"]), nil, hx, "true"), http.StatusOK)
+	mustContain(t, body, "Undone", fmt.Sprintf("Change %v was reverted.", second["write_id"]))
+	if s.profile("tz") != "AST" {
+		t.Errorf("profile tz = %v after undo", s.profile("tz"))
+	}
+	rec := s.post(fmt.Sprintf("/activity/write/%v/undo", first["write_id"]), nil)
+	status(t, rec, http.StatusSeeOther)
+	if s.profile("tz") != nil {
+		t.Errorf("profile tz = %v after undoing the first write", s.profile("tz"))
+	}
+	third := s.profileSet(run, "tz", "AST")
+	s.profileSet(run, "tz", "UTC")
+	refused := s.post(fmt.Sprintf("/activity/write/%v/undo", third["write_id"]), nil)
+	if got := status(t, refused, http.StatusConflict); jsonOf(t, got)["detail"] != "profile 'tz' changed since this write" {
+		t.Errorf("detail = %s", got)
+	}
+	if s.profile("tz") != "UTC" {
+		t.Errorf("a refused undo changed the profile: %v", s.profile("tz"))
 	}
 }
