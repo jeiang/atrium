@@ -245,8 +245,56 @@ add `allowed_urls`, `lookups` and `connections`.
 
 ### Web fetch divergences
 
-None recorded yet. The Go web fetch slice lists here how its readable-text
-extraction differs from trafilatura's.
+`internal/assistant/webfetch` ports the guard, the fetch and `plain_text`
+exactly: `TestDefaultAllowedCorpus`, `TestFetchPageCorpus` (including the
+lookups and connections of every scenario), `TestPlainTextCorpus` and
+`TestNormalizeURLCorpus` compare every record. `urlsplit`, `urljoin`,
+`html.parser` and the `http.client` reply reader are ports of CPython 3.14.7
+(`internal/py/url.go`, `internal/pyhtml/parser.go`,
+`internal/assistant/webfetch/httpclient.go`), each checked against the frozen
+Python over generated inputs (`tools/pyhtml/gen_parser_cases.py`,
+`tools/webfetch/gen_wire_cases.py`).
+
+Readable text (`extract_text` and the `text` and `title` of `web_fetch`) uses
+go-trafilatura v1.12.2, a port of trafilatura 2.0 with the options the Python
+call passes (comments and tables excluded, fallback extractors on); the
+frozen app runs trafilatura 2.2.0. `TestExtractTextCorpus` asserts every page
+in the corpus either matches or sits in its divergence list, so a change in
+either direction fails the test. Differences, in order of how often they
+show on a page:
+
+- Layout. The plain text is rebuilt from go-trafilatura's content tree, one
+  line per block, `- ` before a list item, as trafilatura's text output
+  does. go-trafilatura collapses the whitespace inside a `pre` element, where
+  trafilatura keeps its lines (`article`).
+- Pages with under 250 characters of content. trafilatura replaces its
+  result with a baseline pass over the whole page, which keeps navigation
+  text (`minimal`, `uppercase_tags`). go-trafilatura's equivalent pass
+  appends a second copy of the page text to the result, so it is switched
+  off and the main extractor's result stands (`whitespace`, `malformed`). A
+  page it finds nothing in reads as `plain_text` reads it, except that bare
+  text is one paragraph (`plain_text`).
+- Fallback extractors. go-trafilatura compares against go-readability and
+  go-domdistiller where trafilatura uses readability-lxml and jusText; they
+  differ on malformed markup (`malformed`, `nested_skip`, `unbalanced_skip`,
+  `whitespace`).
+- Title. The title is go-trafilatura's metadata title; its date detection is
+  off, as the title is all `web_fetch` takes from the metadata.
+- A panic inside the extractor is the absence of a result, as an exception is
+  in Python.
+
+Other divergences of the fetch itself:
+
+- The text after `dns: ` is the system resolver's. An IPv4-mapped answer from
+  the Go resolver is unwrapped to its IPv4 address before it is vetted and
+  connected to; the guard judges both the same.
+- An OS error reads as the Python `OSError` for the errnos `py.OSErrorText`
+  knows (`[Errno 111] Connection refused`); a TLS failure reads as Go's
+  `crypto/tls` text, not OpenSSL's, and any other failure keeps Go's wording.
+- The guard checks the address once more as the socket connects, so a
+  resolver bug cannot connect to an address the guard refuses.
+- A host with non-ASCII characters is converted to ASCII with UTS 46 lookup
+  processing, Python's `idna` codec uses IDNA 2003.
 
 ## SMTP
 
