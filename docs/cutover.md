@@ -524,7 +524,7 @@ migration hold for them, not that Go reads them.
 Calendar, Notion, money, media and Grafana land after cutover. Their units
 do not start. What the operator sees until then:
 
-- `atrium-run notion|calendar|money|media ...` answer `invalid choice` (exit
+- `atrium-run calendar|money|media ...` answer `invalid choice` (exit
   2) until the module lands. Mail, `live`, `proposals`, `rules`, `loops`,
   `watches`, `reindex`, `shadow-report`, `agent` and `serve` work.
 - The built-in callable jobs `media-sweep`, `media-channels`,
