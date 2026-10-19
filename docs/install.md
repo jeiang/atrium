@@ -34,5 +34,5 @@ secrets in `environmentFiles` and persistence of the state directory are the
 host's. [runbook.md](runbook.md) lists the environment the units read and the
 operating procedures.
 
-`services.atrium.package` defaults to the Go build (`nix build .#atrium-go`), which embeds the assets built by `atrium-static`; `staticPackage` and `ATRIUM_STATIC_DIR` are gone. `atrium-notion-sync.service` is defined with a no-op `ExecStart` and no timer until the Notion module lands, and `atrium-codemode` is inert. `nix build .#atrium` builds the Python package and runs its tests; `just test` runs
+`services.atrium.package` defaults, in the flake's `nixosModules.default`, to the Go build (`nix build .#atrium-go`), which embeds the assets built by `atrium-static`; `staticPackage` and `ATRIUM_STATIC_DIR` are gone. `atrium-notion-sync.service` is defined with a no-op `ExecStart` and no timer until the Notion module lands, and `atrium-codemode` is inert. `nix build .#atrium` builds the Python package and runs its tests; `just test` runs
 them against the working tree in the devshell.

@@ -176,11 +176,7 @@ in {
 
     package = mkOption {
       type = types.package;
-      default = pkgs.callPackage ./go-package.nix {
-        atrium-static = pkgs.callPackage ./static.nix {};
-      };
-      defaultText = lib.literalExpression "pkgs.callPackage ./go-package.nix {atrium-static = pkgs.callPackage ./static.nix {};}";
-      description = "The atrium application.";
+      description = "The atrium application; the flake module defaults it to the static Go build for the host platform.";
     };
 
     id = mkOption {

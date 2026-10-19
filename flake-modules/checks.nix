@@ -50,6 +50,7 @@
       "atrium-web-local.service"
       "atrium-web.service"
     ];
+    goBinary = "${builtins.unsafeDiscardStringContext self.packages.x86_64-linux.atrium-go.outPath}/bin/atrium";
     atriumRun = lib.findFirst (p: (p.name or "") == "atrium-run") (throw "atrium-run is not installed") nixos.config.environment.systemPackages;
   in {
     checks = {
@@ -76,6 +77,9 @@
         ! grep -q 'ATRIUM_PUBLIC_HOST' "$units/atrium-web-local.service"
         grep -q -- '--setenv=ATRIUM_MODE=live' ${pkgs.writeText "atrium-run" (builtins.unsafeDiscardStringContext atriumRun.text)}
         ! grep -q 'ATRIUM_STATIC_DIR' "$units/atrium-web.service"
+        for name in atrium-web atrium-web-local atrium-watch atrium-agent-scheduler atrium-sync atrium-scan; do
+          grep -q "^ExecStart=${goBinary} " "$units/$name.service"
+        done
         grep -q 'ExecStart=.*/bin/true' "$units/atrium-notion-sync.service"
         ! grep -q 'notion sync' "$units/atrium-notion-sync.service"
         ln -s "$units" $out
