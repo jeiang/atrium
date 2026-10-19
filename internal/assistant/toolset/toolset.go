@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	contexttools "github.com/jeiang/atrium/internal/assistant/tools/context"
+	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
@@ -19,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/notify"
 )
 
@@ -29,6 +31,7 @@ func Registry() (*registry.Registry, error) {
 		mailtools.Tools(), mediatools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
 		contexttools.Tools(), recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
 		scheduletools.Tools(), skillstools.Tools(),
+		grafanatools.Tools(),
 	} {
 		if err := r.Add(tools...); err != nil {
 			return nil, err
@@ -42,5 +45,6 @@ func Undoers() *writes.Registry {
 	r := writes.NewRegistry()
 	profiletools.RegisterUndoer(r)
 	mediatools.RegisterUndoer(r, config.OS)
+	money.RegisterUndoer(r)
 	return r
 }
