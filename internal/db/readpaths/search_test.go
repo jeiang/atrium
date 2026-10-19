@@ -112,7 +112,8 @@ func init() {
 				}
 				got, err := db.Collect(rows, func(r *sql.Rows) (near, error) {
 					var n near
-					return n, r.Scan(&n.id, &n.distance)
+					err := r.Scan(&n.id, &n.distance)
+					return n, err
 				})
 				if err != nil {
 					return nil, err

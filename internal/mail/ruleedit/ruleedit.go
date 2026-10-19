@@ -213,7 +213,8 @@ func ReorderRules(ctx context.Context, d *db.DB, ordered []string) error {
 		}
 		slots, err := db.Collect(rows, func(r *sql.Rows) (int, error) {
 			var p int
-			return p, r.Scan(&p)
+			err := r.Scan(&p)
+			return p, err
 		})
 		if err != nil {
 			return err
