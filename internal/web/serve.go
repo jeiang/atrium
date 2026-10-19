@@ -32,6 +32,7 @@ type Page struct {
 	Module    Module
 	Templates fs.FS
 	Globals   map[string]any
+	Public    func(config.Config, config.Env) func(*http.Request) bool
 }
 
 // ServeCommand is `atrium serve`; pages are the page sets the server
@@ -103,8 +104,12 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	var modules []Module
 	var templates []fs.FS
 	globals := map[string]any{}
+	var public []func(*http.Request) bool
 	for _, p := range a.pages {
 		modules = append(modules, p.Module)
+		if p.Public != nil {
+			public = append(public, p.Public(cfg, a.env))
+		}
 		if p.Templates != nil {
 			templates = append(templates, p.Templates)
 		}
@@ -114,7 +119,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	if err != nil {
 		return err
 	}
-	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, AllowedHosts: hosts, Render: render, Modules: modules})
+	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules})
 	if err != nil {
 		return err
 	}
@@ -124,6 +129,20 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 		return err
 	}
 	return listenAndShutdown(ctx, listener, srv)
+}
+
+func anyPublic(checks []func(*http.Request) bool) func(*http.Request) bool {
+	if len(checks) == 0 {
+		return nil
+	}
+	return func(r *http.Request) bool {
+		for _, check := range checks {
+			if check(r) {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server) error {

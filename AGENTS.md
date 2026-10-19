@@ -136,6 +136,8 @@ and backups; nothing of that lives here.
 - `cmd/atrium/`: the Go binary's entry point (root command).
 - `internal/cli/`: the subcommand table and argparse-compatible parsing;
   usage errors exit 2, a handler's return value is the exit code.
+- `internal/notion/`: the Notion API client, page text conversion, mirror sync, hybrid search and the
+  `notion sync` and `notion search` commands.
 - `internal/mail/mailcmd/`: `rules`, `shadow-report`, `reindex`, the scans,
   `live` and `proposals` commands.
 - `internal/media/`: qBittorrent client, release parsing, filing, EZTV
@@ -144,6 +146,17 @@ and backups; nothing of that lives here.
   callables. Filing keeps `media.group` and umask 0002: the process umask
   applies to the directories it creates, and a torrent without the `media`
   tag is never written to.
+  `links.go` signs `/media/file/*` URLs (HMAC-SHA256 over `rel\nexp`; key from
+  `ATRIUM_MEDIA_LINK_KEY` or `media-link.key`, created `O_EXCL` 0600; rotate by
+  changing the env or deleting the file), `tmdb.go` and `artwork.go` are the
+  TMDB client, posters and the `nice`d ffmpeg thumbnails behind one
+  process-wide mutex (`media-thumbnails` runs the same pass).
+  `internal/media/pages/` is the media `web.Page`: downloads, add, channels,
+  library, art and the signed file route (`http.ServeContent`, so Range edge
+  cases follow Go); `web.Page.Public` is how `PublicCheck` reaches the Guard,
+  which still checks the Host first. `internal/assistant/tools/media/` holds
+  the six `media_*` tools and their undoers (`RegisterUndoer` takes the env
+  the torrent undoer reads `QBITTORRENT_URL` from).
 - `internal/config/`: every environment variable with the Python names,
   defaults and errors; paths beside `ATRIUM_DB`; `ATRIUM_MODE` is read live
   on every call; `ATRIUM_TZ` has one accessor.
@@ -285,15 +298,29 @@ and backups; nothing of that lives here.
   (`%a %d %b %H:%M`) use the page zone (`ATRIUM_TZ`), a job's cadence its own `tz`. `Options.Registry` is the
   registry behind the subagent tool pool and `subagents.Save`; nil is `toolset.Registry()`. `scheduler.ListRuns` is
   `list_runs` and its read path `scheduler.list_runs`.
-- `internal/money/`: the ledger core of `money.py` (ingestion `scan`/`post_item` and the tools and pages come in later
-  slices). Functions take a `db.Querier` (a `*sql.Tx` wherever they write or `SAVEPOINT`), dates are `time.Time` civil
+- `internal/money/`: `money.py` (the tools and pages come in a later slice). Functions take a `db.Querier` (a `*sql.Tx` wherever they write or `SAVEPOINT`), dates are `time.Time` civil
   days from `LocalDate(ts, loc)` with `loc` from `config.Location`, never the process zone. A manual edit returns a
   `*Change`; `Change.Record` writes the `agent_writes` snapshot and `RegisterUndoer` (added in
   `toolset.Undoers`) restores it, refusing when a snapshotted row changed. `Item` is one stored source
   (`transaction_sources.extracted`), re-dumped with `py.JSONDumps` sorted keys. `LedgerError` is a `ValueError`.
   Its test replays `testdata/corpora/money.jsonl` (`tools/golden/corpora/gen_money.py`) and the CBTT goldens; read
-  paths are in `internal/db/readpaths/money_test.go`.
+  paths are in `internal/db/readpaths/money_test.go`. Ingestion is `Refresh` (`ensure_rates`, then `Scan`: unscanned
+  mail from a `MessageSource`, `MailSource` by default, 90-day window, 50 per pass, 1000 on the CLI; a model that is
+  down defers the scan without marking, an unreadable answer marks the message scanned). `PostItem` runs in one
+  transaction per message and its `Change` is recorded as `money_post` after commit; a new payee's model name is
+  requested before that transaction so the writer is not held during the call. `Options` holds the `Chat`, `Fetch`
+  and `MessageSource` seams; `run.Pass.Money` carries them into the mail pass's `money` extra. `Command` is
+  `money refresh [--limit]` under the database lock; the `fx-rates` callable is `agentcmd`'s.
 - `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
+- `internal/notion/pages/`: the Notion web pages as one `web.Module` (`Module(Options)`, `Templates()`): `GET /notion/{page_id}`
+  (the article alone for an htmx request), `POST /notion/{page_id}/link` and `/edit` (a model-drafted proposal; every
+  outcome, an error included, is a 200 `_notion_action` alert, and the draft runs on `context.WithoutCancel`) and
+  `POST /projects/{project_id}/wiki-hub` (`notiontools.CreatePage` as the chat kind with no thread, then
+  `projects.SetHub`; a refusal is a 422 `_project_hub` fragment and leaves the project untouched). The body is
+  `tpl.MarkdownWith(markdown, notion.PageTitles)`: `notion.Commonmark`, goldmark, the bluemonday policy (links get
+  `rel="noopener noreferrer"`), then the empty-header, task-box and internal-href steps of `markup.markdown_html`
+  (`testdata/corpora/markup.jsonl`); `tpl.Markdown` is the same with no mirrored pages, so chat text takes the Notion
+  passes too. Defines carry a `notion_` prefix; the hub fragment is `_project_hub.gohtml` of `internal/assistant/pages`.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
   600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
   malformed reply wraps `ErrValue`, `ErrKey`, `ErrIndex` or `ErrType`, so
@@ -480,8 +507,8 @@ and backups; nothing of that lives here.
 - `internal/mail/run/`: `run.py` and `watch.py`. `Pass.Locked` is one pass
   under `db.Exclusive`: sync, then `Process` (go-live baseline in live mode,
   embedding, then per account route, flag, the `Events` hook of
-  `event_candidates`, `ApplyAll`, then the `Extras`: open loops, watches,
-  and money once ported), then `DB.Checkpoint` (1 s wait for readers; a
+  `event_candidates`, `ApplyAll`, then the `Extras`: open loops, watches
+  and money), then `DB.Checkpoint` (1 s wait for readers; a
   blocked one is logged) before the lock is released. `Watcher` is the
   per-account loop: each cycle connects (a failure backs off like a lost
   connection), passes, then IDLEs (or 58 s + NOOP), 2 s settle, backoff 5 s

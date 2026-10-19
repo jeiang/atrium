@@ -640,6 +640,8 @@ func TestPatterns(t *testing.T) {
 		"src/atrium/money.py:normalize_raw:06157e46":    nonDescriptorRE,
 		"src/atrium/money.py:_patterns:875c02cb":        patternSplitRE,
 		"src/atrium/money.py:add_account:78701180":      nonDigitRE,
+		"src/atrium/money.py:clean_extraction:78701180": nonDigitRE,
+		"src/atrium/money.py:_currency:8a6b6517":        currencyRE,
 		"src/atrium/money.py:update_account:78701180":   nonDigitRE,
 		"src/atrium/money.py:parse_rate_table:d072aa40": isoDateRE,
 		"src/atrium/money.py:period_bounds:53692041":    periodMonthRE,

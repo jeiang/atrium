@@ -88,7 +88,7 @@ It runs in the `atrium-watch` and `atrium-sync` passes, right after routing.
 | --- | --- |
 | `atrium-watch` | `atrium watch`: IMAP IDLE on each INBOX, syncs, routes and applies on change |
 | `atrium-sync` | timer every 15 minutes, `atrium sync` as reconciliation |
-| `atrium-notion-sync` | inert: no timer, `ExecStart` exits 0 until the Notion module lands |
+| `atrium-notion-sync` | timer every 15 minutes, `atrium notion sync` mirrors Notion into `atrium.db` under `notion.lock` |
 | `atrium-scan` | monthly timer, `atrium proposals scan-all` |
 | `atrium-agent-scheduler` | `atrium agent scheduler`: scheduled and nightly agent jobs |
 | `atrium-web` | `atrium serve` on `web.host:web.port` (default `0.0.0.0:8480`) with `web.auth` |
@@ -272,9 +272,11 @@ in `atrium.env`.
 
 ### Notion wiki and scans
 
-`atrium-notion-sync.service` stays defined because host configuration names it,
-but its `ExecStart` is a no-op that exits 0 and it has no timer: the Go binary
-does not mirror Notion until the Notion module lands. `atrium-scan.timer` runs
+`atrium-notion-sync.timer` runs `atrium notion sync` every 15 minutes: it mirrors
+the Notion workspace into the `notion_*` tables and embeds changed pages, and
+`atrium notion search QUERY [--private] [--limit N]` searches the mirror.
+`atrium notion wiki-plan` is not part of the Go binary yet and exits 1.
+`atrium-scan.timer` runs
 `atrium proposals scan-all` monthly with `Persistent=true`. Rebalance
 proposals only appear after two scans at least 14 days apart see the same
 candidate, so the first scan after deploy creates none of those:
@@ -341,9 +343,6 @@ when something is due, using upcoming bills from the ledger), `calendar-candidat
 (hourly, drafts calendar proposals only when event candidates are queued), `fx-rates`
 (Monday 06:00, stores the CBTT USD selling rate; no model) and the three media jobs below
 (`media-channels`, `media-sweep`, `media-thumbnails`; no model). Their prompts live in code.
-Until the Go binary gains the money module and the media artwork, the scheduler logs
-`built-in job X has no function in this build; not run` once per start for each of these
-callable jobs (`fx-rates`, `media-thumbnails`) and writes no job run.
 
 Skills (/settings/skills) are playbooks. Four wiki skills are seeded once and can be
 edited or deleted: `wiki-capture` (save a durable fact from a conversation; the nightly

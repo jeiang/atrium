@@ -53,6 +53,9 @@ func Int(v any) (*big.Int, error) {
 	return nil, raise("TypeError", "int() argument must be a string, a bytes-like object or a real number, not '%s'", TypeName(v))
 }
 
+// MaxStrDigits is sys.get_int_max_str_digits()'s default.
+const MaxStrDigits = 4300
+
 // IntString is int(s) in base 10: surrounding whitespace, one sign, Unicode decimal digits and single
 // underscores between digits.
 func IntString(s string) (*big.Int, error) {
@@ -64,15 +67,14 @@ func IntString(s string) (*big.Int, error) {
 	} else if rest, ok := strings.CutPrefix(body, "+"); ok {
 		body = rest
 	}
-	n := new(big.Int)
-	ten := big.NewInt(10)
+	var text []byte
 	digits, underscore := 0, false
 	for _, r := range body {
 		switch {
 		case r == '_' && digits > 0 && !underscore:
 			underscore = true
 		case IsDecimal(r):
-			n.Mul(n, ten).Add(n, big.NewInt(int64(DigitValue(r))))
+			text = append(text, byte('0'+DigitValue(r)))
 			digits++
 			underscore = false
 		default:
@@ -82,6 +84,10 @@ func IntString(s string) (*big.Int, error) {
 	if digits == 0 || underscore {
 		return nil, invalid
 	}
+	if digits > MaxStrDigits {
+		return nil, raise("ValueError", "Exceeds the limit (%d digits) for integer string conversion: value has %d digits; use sys.set_int_max_str_digits() to increase the limit", MaxStrDigits, digits)
+	}
+	n, _ := new(big.Int).SetString(string(text), 10)
 	if neg {
 		n.Neg(n)
 	}

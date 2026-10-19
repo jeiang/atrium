@@ -49,12 +49,12 @@ func TestMarkdownStripsUnsafeLinksAndImages(t *testing.T) {
 		{"vbscript link", "[bad](vbscript:x)", "<p>bad</p>\n"},
 		{"relative link", "[home](/chat)", "<p>home</p>\n"},
 		{"mailto link", "[me](mailto:a@b.c)", "<p>me</p>\n"},
-		{"image", "![alt](https://e.com/x.png)", `<p><a href="https://e.com/x.png" rel="noreferrer">alt</a></p>` + "\n"},
+		{"image", "![alt](https://e.com/x.png)", `<p><a href="https://e.com/x.png" rel="noopener noreferrer">alt</a></p>` + "\n"},
 		{"onerror image", `<img src=x onerror=alert(1)>`, "<p>&lt;img src=x onerror=alert(1)&gt;</p>\n"},
-		{"https link", "[ok](https://e.com/a?b=1&c=2)", `<p><a href="https://e.com/a?b=1&amp;c=2" rel="noreferrer">ok</a></p>` + "\n"},
-		{"notion link", "[n](notion://x)", `<p><a href="notion://x" rel="noreferrer">n</a></p>` + "\n"},
-		{"title survives", `[ok](https://e.com "t")`, `<p><a href="https://e.com" title="t" rel="noreferrer">ok</a></p>` + "\n"},
-		{"autolink", "<https://e.com>", `<p><a href="https://e.com" rel="noreferrer">https://e.com</a></p>` + "\n"},
+		{"https link", "[ok](https://e.com/a?b=1&c=2)", `<p><a href="https://e.com/a?b=1&amp;c=2" rel="noopener noreferrer">ok</a></p>` + "\n"},
+		{"notion link", "[n](notion://x)", `<p><a href="notion://x" rel="noopener noreferrer">n</a></p>` + "\n"},
+		{"title survives", `[ok](https://e.com "t")`, `<p><a href="https://e.com" title="t" rel="noopener noreferrer">ok</a></p>` + "\n"},
+		{"autolink", "<https://e.com>", `<p><a href="https://e.com" rel="noopener noreferrer">https://e.com</a></p>` + "\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := string(Markdown(tc.in)); got != tc.want {

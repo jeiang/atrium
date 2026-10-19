@@ -1451,23 +1451,23 @@
         }
       ],
       "command": "notion",
-      "note": "Notion module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "notion"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium notion [-h] {sync,search,wiki-plan} ..."
     },
     {
       "args": [],
       "cases": [],
       "command": "notion sync",
-      "note": "Notion module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "notion",
         "sync"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium notion sync [-h]"
     },
     {
@@ -1500,19 +1500,19 @@
         }
       ],
       "command": "notion search",
-      "note": "Notion module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "notion",
         "search"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium notion search [-h] [--private] [--limit LIMIT] query"
     },
     {
       "args": [],
       "cases": [],
       "command": "notion wiki-plan",
-      "note": "Notion module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "wiki-plan is not ported in Phase A; the binary prints `atrium notion wiki-plan is not ported in v2` and exits 1",
       "path": [
         "notion",
         "wiki-plan"
@@ -1883,11 +1883,11 @@
       ],
       "cases": [],
       "command": "money",
-      "note": "money module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "money"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium money [-h] {refresh} ..."
     },
     {
@@ -1901,12 +1901,12 @@
       ],
       "cases": [],
       "command": "money refresh",
-      "note": "money module lands after cutover; the production binary answers invalid choice (exit 2)",
+      "note": "",
       "path": [
         "money",
         "refresh"
       ],
-      "status": "excluded-until-ported",
+      "status": "ported",
       "usage": "usage: atrium money refresh [-h] [--limit LIMIT]"
     },
     {

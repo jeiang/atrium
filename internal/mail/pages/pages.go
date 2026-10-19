@@ -83,7 +83,7 @@ func Module(o Options) web.Module {
 		}
 		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
 		registry := proposals.NewRegistry()
-		handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now})
+		handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now, Env: d.Env})
 		l := &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: now}
 		s := &service{deps: d, now: now, live: l, applier: applier.New(l, open, syncer), drafts: &drafts.Store{DB: d.DB, Cfg: d.Cfg}}
 

@@ -3,12 +3,15 @@ package mediacmd_test
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
+	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
@@ -61,12 +64,40 @@ func TestUnconfiguredMediaJobsReportSkipped(t *testing.T) {
 
 func TestCallablesAreTheBuiltinMediaJobs(t *testing.T) {
 	got := mediacmd.Callables()
-	for _, name := range []string{scheduler.MediaChannelsName, scheduler.MediaSweepName} {
+	for _, name := range []string{scheduler.MediaChannelsName, scheduler.MediaSweepName, scheduler.MediaThumbnailsName} {
 		if got[name] == nil || !slices.Contains(scheduler.CallableNames, name) {
 			t.Errorf("%s is not a registered callable", name)
 		}
 	}
-	if len(got) != 2 {
-		t.Errorf("callables = %d, want the channel poll and the sweep", len(got))
+	if len(got) != 3 {
+		t.Errorf("callables = %d, want the channel poll, the sweep and the thumbnail pass", len(got))
+	}
+}
+
+func TestThumbnailCallableWorksTheLibraryAndSkipsWithoutRoot(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.Config{CacheDir: filepath.Join(dir, "cache")}
+	callable := mediacmd.Callables()[scheduler.MediaThumbnailsName]
+	if _, err := callable(t.Context(), worker.Env{Cfg: cfg, Env: config.Map(map[string]string{})}); err != nil {
+		t.Fatalf("without a media root: %v", err)
+	}
+	if _, err := os.Stat(cfg.MediaCacheDir()); !os.IsNotExist(err) {
+		t.Fatalf("the cache was touched without a media root: %v", err)
+	}
+
+	episodes := filepath.Join(dir, "lib", "tv", "Show", "Season 01")
+	if err := os.MkdirAll(episodes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(episodes, "Show - S01E01.mkv"), []byte("not a video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := config.Map(map[string]string{"ATRIUM_MEDIA_ROOT": filepath.Join(dir, "lib")})
+	if _, err := callable(t.Context(), worker.Env{Cfg: cfg, Env: env}); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(cfg.MediaCacheDir(), "thumbs", "tv", "Show", "Season 01", "Show - S01E01.mkv.none")
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("a failed thumbnail left no .none marker: %v", err)
 	}
 }
