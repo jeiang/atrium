@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
@@ -24,10 +25,6 @@ const (
 	PDFTokensPerPage = 2000
 	ImageTokens      = 1600
 
-	modelContext     = 1_000_000
-	charsPerToken    = 4
-	compactShareNum  = 7
-	compactShareDiv  = 8
 	binarySniffBytes = 8192
 )
 
@@ -121,12 +118,6 @@ func KindOf(mediaType string) string {
 	return ""
 }
 
-// estimateTokens is context.estimate_tokens: four characters to a token, rounded up. A private copy until #255's
-// context package exports it.
-func estimateTokens(text string) int64 {
-	return (int64(utf8.RuneCountInString(text)) + charsPerToken - 1) / charsPerToken
-}
-
 // Info is what Inspect found in one file. Text is nil for a PDF or an image.
 type Info struct {
 	Kind      string
@@ -207,7 +198,7 @@ func Inspect(name string, data []byte, supplied string) (Info, error) {
 			return Info{}, FileError(name + ": " + err.Error())
 		}
 		info.Text = &text
-		info.Tokens = estimateTokens(text)
+		info.Tokens = actx.EstimateTokens(text)
 	}
 	return info, nil
 }
@@ -218,11 +209,10 @@ type nameTokens struct {
 	Tokens int64
 }
 
-// checkBudget is check_budget over context.limits_for, which #255 owns (a private copy of its compaction share
-// until then): the attachments of one message must fit under the thread's compaction point, or
+// checkBudget is check_budget: the attachments of one message must fit under the thread's compaction point, or
 // the request could never be sent.
 func checkBudget(items []nameTokens, contextLimit int64) error {
-	budget := min(contextLimit, modelContext) * compactShareNum / compactShareDiv
+	budget := actx.LimitsFor(contextLimit).Compact
 	var total int64
 	for _, it := range items {
 		total += it.Tokens
