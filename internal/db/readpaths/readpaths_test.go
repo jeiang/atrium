@@ -31,7 +31,9 @@ func TestGoldenReadPaths(t *testing.T) {
 			if err := json.Unmarshal(raw, &recorded); err != nil {
 				t.Fatal(err)
 			}
-			d, _ := dbtest.Copy(t, filepath.Join(golden.Dir(), c.db))
+			d, path := dbtest.Copy(t, filepath.Join(golden.Dir(), c.db))
+			t.Setenv("ATRIUM_DB", path)
+			t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(golden.Dir(), "state", "cache"))
 			for _, p := range paths {
 				t.Run(p.Name, func(t *testing.T) {
 					want, err := p.Expected(recorded)

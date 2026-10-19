@@ -127,8 +127,8 @@ type Limits struct {
 	SystemExtra *string
 }
 
-func (l Limits) object() py.Object {
-	var o py.Object
+func (l Limits) object() py.Dict {
+	var o py.Dict
 	if l.MaxSteps != nil {
 		o = append(o, py.Pair{Key: "max_steps", Value: *l.MaxSteps})
 	}
@@ -143,7 +143,7 @@ func (l Limits) object() py.Object {
 
 // SetLimits is set_limits.
 func SetLimits(ctx context.Context, q store.Querier, runID int64, l Limits) error {
-	text, err := py.JSONDumps(l.object(), py.JSONOpts{EnsureASCII: true})
+	text, err := py.Dumps(l.object(), py.JSONOpts{EnsureASCII: true})
 	if err != nil {
 		return err
 	}
@@ -174,7 +174,7 @@ func LimitsOf(ctx context.Context, q store.Querier, runID int64) (Limits, error)
 
 // SetSkills is set_skills: the skills expanded into the run's operator message.
 func SetSkills(ctx context.Context, q store.Querier, runID int64, names []string) error {
-	text, err := py.JSONDumps(append([]string{}, names...), py.JSONOpts{EnsureASCII: true})
+	text, err := py.Dumps(append([]string{}, names...), py.JSONOpts{EnsureASCII: true})
 	if err != nil {
 		return err
 	}
@@ -312,7 +312,7 @@ func Dumps(content []json.RawMessage) (string, error) {
 	for i, b := range content {
 		items[i] = b
 	}
-	return py.JSONDumps(items, jsonCompact)
+	return py.Dumps(items, jsonCompact)
 }
 
 type textBlock struct {
@@ -573,7 +573,7 @@ func scanCall(row interface{ Scan(...any) error }) (ToolCall, error) {
 // StartToolCall is start_tool_call: it journals the call before the tool runs. args is the tool input as
 // the model sent it; the row keeps it compact and hashes that text.
 func StartToolCall(ctx context.Context, q store.Querier, runID int64, toolUseID, name string, args json.RawMessage, replayClass string, now float64) (int64, error) {
-	body, err := py.JSONRedump(args, jsonCompact)
+	body, err := py.Redump(args, jsonCompact)
 	if err != nil {
 		return 0, err
 	}

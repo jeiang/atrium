@@ -158,3 +158,16 @@ func TestDecodeUTF16BE(t *testing.T) {
 		}
 	}
 }
+
+func TestCasefold(t *testing.T) {
+	for in, want := range map[string]string{
+		"Straße ÄRZTE ﬁ İ": "strasse ärzte fi i̇",
+		"Sent Meßages":     "sent messages",
+		"INBOX":            "inbox",
+		"":                 "",
+	} {
+		if got := Casefold(in); got != want {
+			t.Errorf("Casefold(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

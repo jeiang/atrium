@@ -56,11 +56,11 @@ func TestEmitAndSince(t *testing.T) {
 	for i, c := range []struct {
 		run  int64
 		kind string
-		data py.Object
+		data py.Dict
 	}{
-		{run, progress.RunStart, py.Object{{Key: "kind", Value: "chat"}}},
-		{childRun, progress.Text, py.Object{{Key: "text", Value: "é\u2028"}}},
-		{run, progress.ToolDone, py.Object{{Key: "id", Value: "t"}, {Key: "ok", Value: true}, {Key: "preview", Value: "3 results"}}},
+		{run, progress.RunStart, py.Dict{{Key: "kind", Value: "chat"}}},
+		{childRun, progress.Text, py.Dict{{Key: "text", Value: "é\u2028"}}},
+		{run, progress.ToolDone, py.Dict{{Key: "id", Value: "t"}, {Key: "ok", Value: true}, {Key: "preview", Value: "3 results"}}},
 	} {
 		if err := progress.Emit(ctx, d.Write, c.run, c.kind, c.data, float64(i)); err != nil {
 			t.Fatal(err)
@@ -109,7 +109,7 @@ func TestWriterBuffersDeltasAndFlushesOnKindChange(t *testing.T) {
 	step(progress.Text, "x", 0.01)
 	step(progress.Text, "y", 0.3)
 	step(progress.Text, "z", 0.01)
-	if err := w.Event(ctx, progress.ToolStart, py.Object{{Key: "id", Value: "t1"}, {Key: "name", Value: "web_search"}, {Key: "args", Value: "{}"}}); err != nil {
+	if err := w.Event(ctx, progress.ToolStart, py.Dict{{Key: "id", Value: "t1"}, {Key: "name", Value: "web_search"}, {Key: "args", Value: "{}"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.Flush(ctx); err != nil {

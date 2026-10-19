@@ -361,7 +361,7 @@ func AddAllowedURLs(ctx context.Context, d *db.DB, threadID int64, urls []string
 			list = append(list, u)
 		}
 		slices.Sort(list)
-		text, err := py.JSONDumps(list, py.JSONOpts{EnsureASCII: true})
+		text, err := py.Dumps(list, py.JSONOpts{EnsureASCII: true})
 		if err != nil {
 			return err
 		}

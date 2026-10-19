@@ -69,9 +69,9 @@ func SetPlan(ctx context.Context, q store.Querier, threadID int64, runID *int64,
 	}
 	pairs := make([]any, len(clean))
 	for i, it := range clean {
-		pairs[i] = py.Object{{Key: "text", Value: it.Text}, {Key: "done", Value: it.Done}}
+		pairs[i] = py.Dict{{Key: "text", Value: it.Text}, {Key: "done", Value: it.Done}}
 	}
-	text, err := py.JSONDumps(pairs, py.JSONOpts{})
+	text, err := py.Dumps(pairs, py.JSONOpts{})
 	if err != nil {
 		return nil, err
 	}

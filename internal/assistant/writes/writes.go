@@ -64,7 +64,7 @@ func dump(value any) (*string, error) {
 	if value == nil {
 		return nil, nil
 	}
-	text, err := py.JSONDumps(value, py.JSONOpts{EnsureASCII: true, SortKeys: true})
+	text, err := py.Dumps(value, py.JSONOpts{EnsureASCII: true, SortKeys: true})
 	if err != nil {
 		return nil, err
 	}

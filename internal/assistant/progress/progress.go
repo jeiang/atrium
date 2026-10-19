@@ -41,7 +41,7 @@ var dataOpts = py.JSONOpts{}
 
 // ShortArgs is short_args for a tool's input: its JSON, cut to ArgsChars with an ellipsis.
 func ShortArgs(args json.RawMessage) (string, error) {
-	text, err := py.JSONRedump(args, dataOpts)
+	text, err := py.Redump(args, dataOpts)
 	if err != nil {
 		return "", err
 	}
@@ -52,8 +52,8 @@ func ShortArgs(args json.RawMessage) (string, error) {
 }
 
 // Emit is emit: it journals one event of the run. data is dumped with its keys in the order given.
-func Emit(ctx context.Context, q store.Querier, runID int64, kind string, data py.Object, now float64) error {
-	text, err := py.JSONDumps(data, dataOpts)
+func Emit(ctx context.Context, q store.Querier, runID int64, kind string, data py.Dict, now float64) error {
+	text, err := py.Dumps(data, dataOpts)
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ func NewWriter(q store.Querier, runID int64, now func() float64) *Writer {
 }
 
 // Event is Writer.event: it flushes the buffered deltas and journals the event.
-func (w *Writer) Event(ctx context.Context, kind string, data py.Object) error {
+func (w *Writer) Event(ctx context.Context, kind string, data py.Dict) error {
 	if err := w.Flush(ctx); err != nil {
 		return err
 	}
@@ -146,7 +146,7 @@ func (w *Writer) Flush(ctx context.Context) error {
 	if text == "" {
 		return nil
 	}
-	return Emit(ctx, w.q, w.runID, w.kind, py.Object{{Key: "text", Value: text}}, w.flushedAt)
+	return Emit(ctx, w.q, w.runID, w.kind, py.Dict{{Key: "text", Value: text}}, w.flushedAt)
 }
 
 // CheckStop is check_stop: ErrStopped when the operator asked the run to stop. Without force it asks the
@@ -182,10 +182,10 @@ func (w *Writer) Observe(ctx context.Context, ev anthropic.Event) error {
 	case anthropic.EventToolStart:
 		var args string
 		if args, err = ShortArgs(ev.Input); err == nil {
-			err = w.Event(ctx, ToolStart, py.Object{{Key: "id", Value: ev.ID}, {Key: "name", Value: ev.Name}, {Key: "args", Value: args}})
+			err = w.Event(ctx, ToolStart, py.Dict{{Key: "id", Value: ev.ID}, {Key: "name", Value: ev.Name}, {Key: "args", Value: args}})
 		}
 	case anthropic.EventToolDone:
-		err = w.Event(ctx, ToolDone, py.Object{{Key: "id", Value: ev.ID}, {Key: "ok", Value: ev.OK}, {Key: "preview", Value: ev.Preview}})
+		err = w.Event(ctx, ToolDone, py.Dict{{Key: "id", Value: ev.ID}, {Key: "ok", Value: ev.OK}, {Key: "preview", Value: ev.Preview}})
 	}
 	if err != nil {
 		return err
