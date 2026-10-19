@@ -1,0 +1,32 @@
+{{$d := .Data}}{{$f := $d.file}}
+<article class="flex min-w-0 flex-col gap-4" aria-labelledby="file-title">
+  <header class="flex flex-col gap-2">
+    <h2 id="file-title" class="flex items-center gap-2 text-lg font-semibold tracking-tight break-all">{{template "file_icon" (dict "media_type" $f.media_type "class" "size-4 shrink-0 text-muted-foreground")}}{{$f.name}}</h2>
+    <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <span class="badge" data-variant="outline">{{$f.media_type}}</span>
+      <span class="tabular-nums">{{filesizeformat $f.bytes}}</span>
+      <span class="tabular-nums">{{template "when" (dict "epoch" $f.created_at "style" "datetime")}}</span>
+      <span class="badge" data-variant="secondary">{{$f.origin}}</span>
+      <a class="btn ms-auto" data-size="sm" data-variant="outline" href="{{$d.file_url}}/download" download>{{icon "download" "size-3.5"}}Download</a>
+    </div>
+  </header>
+  {{if eq $f.render "image"}}
+  <img class="max-w-full rounded-md border" src="{{$d.file_url}}/raw" alt="{{$f.name}}">
+  {{else if eq $f.render "markdown"}}
+  <div class="markdown">{{markdown $f.text}}</div>
+  {{else if eq $f.render "table"}}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      {{with $f.rows}}
+      <thead><tr class="text-left text-xs text-muted-foreground">{{range index . 0}}<th class="border px-2 py-1 font-medium">{{.}}</th>{{end}}</tr></thead>
+      <tbody>{{range slice . 1}}<tr>{{range .}}<td class="border px-2 py-1 align-top">{{.}}</td>{{end}}</tr>{{end}}</tbody>
+      {{end}}
+    </table>
+  </div>
+  {{else if eq $f.render "text"}}
+  <pre class="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-words">{{$f.text}}</pre>
+  {{else}}
+  <p class="text-sm text-muted-foreground">No preview for this file type; download it instead.</p>
+  {{end}}
+  {{if $f.truncated}}<p class="text-xs text-muted-foreground">Showing the first part of the file.</p>{{end}}
+</article>

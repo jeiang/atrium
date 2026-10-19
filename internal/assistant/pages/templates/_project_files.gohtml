@@ -1,0 +1,32 @@
+{{template "project_files" (dict "project" .Data.project "files" .Data.files "error" (opt .Data "error" nil) "csrf" .CSRF)}}
+
+{{define "project_files"}}{{$p := .project}}
+<h2 id="project-files-title" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "paperclip" "size-3.5"}}Project files</h2>
+{{if .files}}
+<ul class="flex flex-col gap-1 text-sm" data-project-files>
+  {{range .files}}
+  <li class="flex items-center gap-2 rounded-md border px-3 py-2">
+    {{template "file_icon" (dict "media_type" .media_type)}}
+    <span class="truncate">{{.name}}</span>
+    <span class="text-xs text-muted-foreground tabular-nums">{{filesizeformat .bytes}} · ~{{pystr (round (fdiv .tokens 1000) 1)}}K tokens</span>
+    <span class="ms-auto flex items-center gap-1">
+      <a class="btn" data-size="icon-sm" data-variant="ghost" href="/projects/{{$p.id}}/files/{{.id}}/download" download aria-label="Download {{.name}}">{{icon "download" "size-3.5"}}</a>
+      {{if not $p.archived}}
+      <button type="button" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Remove {{.name}}" hx-post="/projects/{{$p.id}}/files/{{.id}}/delete" hx-target="#project-files" hx-swap="innerHTML" hx-confirm="Remove {{.name}} from the project?">{{icon "trash-2" "size-3.5"}}</button>
+      {{end}}
+    </span>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="text-xs text-muted-foreground">Files every chat in this project can read: briefs, data, reference documents.</p>
+{{end}}
+{{with .error}}<p class="text-xs text-destructive" role="alert">{{.}}</p>{{end}}
+{{if not $p.archived}}
+<form method="post" action="/projects/{{$p.id}}/files" enctype="multipart/form-data" hx-post="/projects/{{$p.id}}/files" hx-encoding="multipart/form-data" hx-trigger="change from:find input[type=file]" hx-target="#project-files" hx-swap="innerHTML" hx-indicator="find .htmx-indicator" class="flex flex-wrap items-center gap-2 text-xs">
+  <input type="hidden" name="csrf_token" value="{{.csrf}}">
+  <label class="btn" data-size="sm" data-variant="outline">{{icon "plus" "size-3.5"}}Add files<input type="file" name="upload" multiple class="sr-only"></label>
+  <span class="htmx-indicator inline-flex text-muted-foreground" role="status" aria-label="Uploading">{{icon "loader-circle" "size-4 animate-spin"}}</span>
+</form>
+{{end}}
+{{- end}}

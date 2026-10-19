@@ -207,7 +207,7 @@ func (req request) estimate(active []actx.Message, a *anchor) (int64, error) {
 
 // buildMessages is build_messages then files.expand: the request's messages, the last user block carrying the
 // history breakpoint, attachments expanded into their content blocks.
-func (req request) buildMessages(ctx context.Context, q db.Querier, messages []actx.Message) ([]json.RawMessage, error) {
+func (req request) buildMessages(ctx context.Context, q db.Querier, scope files.Scope, messages []actx.Message) ([]json.RawMessage, error) {
 	out := make([]json.RawMessage, len(messages))
 	last := len(messages) - 1
 	for i, m := range messages {
@@ -221,7 +221,7 @@ func (req request) buildMessages(ctx context.Context, q db.Querier, messages []a
 			}
 			content[end] = marked
 		}
-		expanded, err := files.Expand(ctx, q, content)
+		expanded, err := files.Expand(ctx, q, scope, content)
 		if err != nil {
 			return nil, err
 		}

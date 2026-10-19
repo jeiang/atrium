@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"slices"
+	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
@@ -12,6 +13,9 @@ import (
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/util"
+
+	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/rx"
 )
 
 var markdownTags = []string{
@@ -64,8 +68,62 @@ func without(parsers []util.PrioritizedValue, drop ...string) []util.Prioritized
 // steps. Raw HTML and indented code blocks are not parsed, so they render as escaped text like markdown-it.
 func Markdown(text string) template.HTML {
 	var b bytes.Buffer
-	if err := renderer.Convert([]byte(text), &b); err != nil {
+	if err := renderer.Convert([]byte(mediaLinks(text)), &b); err != nil {
 		return ""
 	}
-	return template.HTML(policy.Sanitize(b.String()))
+	cleaned := policy.Sanitize(b.String())
+	cleaned, _ = emptyHeadRe.Sub("", cleaned, 0)
+	cleaned, _ = taskRe.SubFunc(cleaned, func(m *rx.Match) string {
+		checked := ""
+		if m.Group(2) != " " {
+			checked = " checked"
+		}
+		return m.Group(1) + `<input class="input" type="checkbox" disabled` + checked + "> "
+	}, 0)
+	return template.HTML(cleaned)
+}
+
+var (
+	codeRe      = rx.MustCompile("(^[ \\t]*```[^\\n]*\\n.*?^[ \\t]*```[ \\t]*$|`[^`\\n]+`)", rx.DotAll|rx.Multiline)
+	mediaRe     = rx.MustCompile(`(?<!\\)<(audio|video|file|pdf|embed)\b([^>]*?)(?:/>|>(.*?)</\1>)`, rx.DotAll)
+	imageRe     = rx.MustCompile(`!\[([^\]]*)\]\(([^)\s]+)\)`, 0)
+	attrRe      = rx.MustCompile(`([\w-]+)="([^"]*)"`, 0)
+	emptyHeadRe = rx.MustCompile(`<thead>\s*<tr>\s*(?:<th>\s*</th>\s*)+</tr>\s*</thead>\s*`, 0)
+	taskRe      = rx.MustCompile(`(<li>(?:\s*<p>)?)\[([ xX])\] `, 0)
+)
+
+func mediaLink(caption, url string) string {
+	label := py.Strip(caption)
+	if label == "" {
+		label = url
+	}
+	if url == "" {
+		return label
+	}
+	return "[" + label + "](<" + url + ">)"
+}
+
+func mediaLinks(text string) string {
+	pieces, err := codeRe.Split(text, 0)
+	if err != nil {
+		return text
+	}
+	var b strings.Builder
+	for i, piece := range pieces {
+		if i%2 == 0 {
+			piece, _ = mediaRe.SubFunc(piece, func(m *rx.Match) string {
+				src := ""
+				groups, _ := attrRe.FindAllGroups(m.Group(2))
+				for _, g := range groups {
+					if g[0] == "src" {
+						src = g[1]
+					}
+				}
+				return mediaLink(m.Group(3), src)
+			}, 0)
+			piece, _ = imageRe.SubFunc(piece, func(m *rx.Match) string { return mediaLink(m.Group(1), m.Group(2)) }, 0)
+		}
+		b.WriteString(piece)
+	}
+	return b.String()
 }
