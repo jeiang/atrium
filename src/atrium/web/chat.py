@@ -17,6 +17,7 @@ THREAD_LIMIT = 50
 EMPTY_MESSAGE = "Type a message first."
 ARCHIVED = "archived"
 POLL_SECONDS = 0.3
+RUN_DONE_GRACE_SECONDS = 3.0
 KEEPALIVE_SECONDS = 15.0
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
@@ -282,6 +283,10 @@ def register(app, deps):
         def poll(last):
             return progress.since(conn, run, last), journal.get_run(conn, run)
 
+        def drain(last):
+            written = conn.execute("SELECT 1 FROM run_events WHERE run_id = ? AND kind = ?", (run, progress.RUN_DONE)).fetchone()
+            return progress.since(conn, run, last), written is not None
+
         async def stream():
             last, quiet = after, time.monotonic()
             try:
@@ -293,6 +298,16 @@ def register(app, deps):
                     if events:
                         quiet = time.monotonic()
                     if found is None or found["state"] != journal.RUNNING:
+                        if found is not None:
+                            deadline = time.monotonic() + RUN_DONE_GRACE_SECONDS
+                            while True:
+                                events, written = await run_in_threadpool(drain, last)
+                                for e in events:
+                                    last = e["id"]
+                                    yield sse(e["kind"], {"run_id": e["run_id"], **e["data"]}, e["id"])
+                                if written or time.monotonic() >= deadline:
+                                    break
+                                await asyncio.sleep(POLL_SECONDS)
                         yield sse("done", {"state": found["state"] if found else None})
                         return
                     if time.monotonic() - quiet >= KEEPALIVE_SECONDS:

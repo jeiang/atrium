@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -92,6 +93,11 @@ func (p *pages) stream(r *http.Request, w io.Writer, flusher *http.ResponseContr
 			return err
 		}
 		if found == nil || found.State != journal.Running {
+			if found != nil {
+				if last, err = p.drainRunDone(ctx, w, runID, last); err != nil {
+					return err
+				}
+			}
 			var state any
 			if found != nil {
 				state = found.State
@@ -114,6 +120,42 @@ func (p *pages) stream(r *http.Request, w io.Writer, flusher *http.ResponseContr
 			return nil
 		case <-p.deps.Stopping:
 			return nil
+		case <-time.After(p.poll):
+		}
+	}
+}
+
+const runDoneGrace = 3 * time.Second
+
+func (p *pages) drainRunDone(ctx context.Context, w io.Writer, runID, last int64) (int64, error) {
+	deadline := time.Now().Add(runDoneGrace)
+	for {
+		var written int
+		if err := p.deps.DB.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM run_events WHERE run_id = ? AND kind = ?", runID, progress.RunDone).Scan(&written); err != nil {
+			return last, err
+		}
+		events, err := progress.Since(ctx, p.deps.DB.Read, runID, last)
+		if err != nil {
+			return last, err
+		}
+		for _, e := range events {
+			last = e.ID
+			frame, err := sseFrame(e)
+			if err != nil {
+				return last, err
+			}
+			if _, err := io.WriteString(w, frame); err != nil {
+				return last, nil
+			}
+		}
+		if written > 0 || time.Now().After(deadline) {
+			return last, nil
+		}
+		select {
+		case <-ctx.Done():
+			return last, nil
+		case <-p.deps.Stopping:
+			return last, nil
 		case <-time.After(p.poll):
 		}
 	}
