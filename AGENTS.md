@@ -181,6 +181,13 @@ and backups; nothing of that lives here.
   writes with (`FoldHeader`); tables come from `tools/mime/gen_tables.py`.
 - `internal/mail/features/`: `features.py` (`Extract`, `ContentDigest`,
   `SubjectTemplate`, `EmailTS`), tested against `testdata/corpora/features.jsonl`.
+- `internal/mail/flags/`, `report/`, `triage/`, `search/`, `live/`: `flags.py`
+  (contacts rule; the LLM verdict is only recorded, a chat outage records
+  all-NULL fields, any other judge error propagates), `report.py`, `triage.py`,
+  `search.py` (FTS5 + vec0 KNN fused by RRF; lexical only with
+  `semantic=false` and the error text when the embedder is down) and
+  `live.StateOf`. Their golden read paths live in
+  `internal/db/readpaths/mail_test.go`.
 - `internal/mail/rules/`, `ruleedit/`, `corrections/`, `router/`: the routing
   pipeline (`rules.py`, `ruleedit.py`, `corrections.py`, `router.py`).
   Stages are correction, operator rule, learned rule, nearest neighbours,
