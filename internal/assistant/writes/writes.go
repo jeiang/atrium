@@ -12,7 +12,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/jeiang/atrium/internal/assistant/store"
+	"github.com/jeiang/atrium/internal/db"
+
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -64,15 +65,12 @@ func dump(value any) (*string, error) {
 	if value == nil {
 		return nil, nil
 	}
-	text, err := py.Dumps(value, py.JSONOpts{EnsureASCII: true, SortKeys: true})
-	if err != nil {
-		return nil, err
-	}
+	text := py.JSONDumps(value, py.JSONOpts{SortKeys: true})
 	return &text, nil
 }
 
 // Record is record: it logs one write and returns its id. Run it in the transaction of the write it logs.
-func Record(ctx context.Context, q store.Querier, w New) (int64, error) {
+func Record(ctx context.Context, q db.Querier, w New) (int64, error) {
 	before, err := dump(w.Before)
 	if err != nil {
 		return 0, err
@@ -109,7 +107,7 @@ type Row struct {
 }
 
 // Get is get: nil when there is no such write.
-func Get(ctx context.Context, q store.Querier, writeID int64) (*Row, error) {
+func Get(ctx context.Context, q db.Querier, writeID int64) (*Row, error) {
 	var r Row
 	err := q.QueryRowContext(ctx,
 		"SELECT id, ts, thread_id, run_id, tool, target, before_json, after_json, undo_json, undone_at FROM agent_writes WHERE id = ?", writeID).
@@ -125,7 +123,7 @@ func Get(ctx context.Context, q store.Querier, writeID int64) (*Row, error) {
 
 // Undo is undo: it runs the write's undoer and marks the write undone, returning the undoer's result. now
 // is read after the undoer ran.
-func (r *Registry) Undo(ctx context.Context, q store.Querier, writeID int64, now func() float64) (any, error) {
+func (r *Registry) Undo(ctx context.Context, q db.Querier, writeID int64, now func() float64) (any, error) {
 	row, err := Get(ctx, q, writeID)
 	if err != nil {
 		return nil, err

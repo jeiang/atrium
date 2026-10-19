@@ -7,47 +7,6 @@ import (
 	"strings"
 )
 
-// FloatRepr is repr(float): the shortest digits that round-trip, fixed notation for decimal exponents in
-// (-4, 16] and exponential ("1e+16", "1e-05") otherwise, always with a "." or an exponent.
-func FloatRepr(x float64) string {
-	switch {
-	case math.IsNaN(x):
-		return "nan"
-	case math.IsInf(x, 1):
-		return "inf"
-	case math.IsInf(x, -1):
-		return "-inf"
-	}
-	e := strconv.FormatFloat(x, 'e', -1, 64)
-	sign := ""
-	if e[0] == '-' {
-		sign, e = "-", e[1:]
-	}
-	mant, exp, _ := strings.Cut(e, "e")
-	digits := strings.Replace(mant, ".", "", 1)
-	exp10, _ := strconv.Atoi(exp)
-	decpt := exp10 + 1
-	if decpt > -4 && decpt <= 16 {
-		switch {
-		case decpt <= 0:
-			return sign + "0." + strings.Repeat("0", -decpt) + digits
-		case decpt >= len(digits):
-			return sign + digits + strings.Repeat("0", decpt-len(digits)) + ".0"
-		default:
-			return sign + digits[:decpt] + "." + digits[decpt:]
-		}
-	}
-	out := digits[:1]
-	if len(digits) > 1 {
-		out += "." + digits[1:]
-	}
-	esign := "+"
-	if exp10 < 0 {
-		esign, exp10 = "-", -exp10
-	}
-	return fmt.Sprintf("%s%se%s%02d", sign, out, esign, exp10)
-}
-
 // FormatFixed is format(x, ".<prec>f").
 func FormatFixed(x float64, prec int) string {
 	switch {

@@ -164,10 +164,18 @@ func SerializeFloat32(v []float32) []byte {
 	return b
 }
 
-// Collect scans every row of rows with scan, closes rows and returns the scanned values.
+// Querier is what a *sql.DB, a *sql.Tx or a *sql.Conn offers: callers take it to run in the caller's transaction.
+type Querier interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// Collect scans every row of rows with scan, closes rows and returns the scanned values. Like a Python list
+// the result is never nil, so it encodes as [] when there are no rows.
 func Collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
 	defer func() { _ = rows.Close() }()
-	var out []T
+	out := []T{}
 	for rows.Next() {
 		v, err := scan(rows)
 		if err != nil {

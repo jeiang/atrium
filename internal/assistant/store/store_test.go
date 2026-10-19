@@ -1,7 +1,6 @@
 package store_test
 
 import (
-	"database/sql"
 	"encoding/json"
 	"testing"
 
@@ -37,20 +36,5 @@ func TestFlag(t *testing.T) {
 	}
 	if store.Bit(true) != 1 || store.Bit(false) != 0 {
 		t.Error("Bit")
-	}
-}
-
-func TestCollectIsNeverNil(t *testing.T) {
-	d := dbtest.File(t)
-	rows, err := d.Read.QueryContext(t.Context(), "SELECT 1 WHERE 0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := store.Collect(rows, func(r *sql.Rows) (int, error) { return 0, nil })
-	if err != nil || got == nil || len(got) != 0 {
-		t.Errorf("Collect = %v, %v", got, err)
-	}
-	if b, _ := json.Marshal(got); string(b) != "[]" {
-		t.Errorf("encodes as %s", b)
 	}
 }

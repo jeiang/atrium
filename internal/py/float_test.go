@@ -5,23 +5,6 @@ import (
 	"testing"
 )
 
-func TestFloatRepr(t *testing.T) {
-	for x, want := range map[float64]string{
-		75: "75.0", 0.1: "0.1", 1e16: "1e+16", 1e15: "1000000000000000.0", 123456789012345680: "1.2345678901234568e+17",
-		1e-5: "1e-05", 0.0001: "0.0001", 1.5e-7: "1.5e-07", 200: "200.0", math.Copysign(0, -1): "-0.0",
-		0.30000000000000004: "0.30000000000000004", 1e22: "1e+22", 5e-324: "5e-324",
-		math.MaxFloat64: "1.7976931348623157e+308", 100000: "100000.0", 12345678.9: "12345678.9",
-		math.Inf(1): "inf", math.Inf(-1): "-inf",
-	} {
-		if got := FloatRepr(x); got != want {
-			t.Errorf("FloatRepr(%v) = %s, want %s", x, got, want)
-		}
-	}
-	if FloatRepr(math.NaN()) != "nan" {
-		t.Error("nan")
-	}
-}
-
 func TestParseFloat(t *testing.T) {
 	for in, want := range map[string]float64{
 		"75": 75, " 75.5\n": 75.5, "1_0.5e1_0": 10.5e10, "-INF": math.Inf(-1), "+1e400": math.Inf(1), ".5": 0.5, "5.": 5,

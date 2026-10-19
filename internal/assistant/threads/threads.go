@@ -105,7 +105,7 @@ type Options struct {
 }
 
 // Defaults is defaults: the operator's defaults for new chat threads (Settings > Assistant).
-func Defaults(ctx context.Context, q store.Querier) (Options, error) {
+func Defaults(ctx context.Context, q db.Querier) (Options, error) {
 	effort, ok, err := budget.GetSetting(ctx, q, EffortKey)
 	if err != nil {
 		return Options{}, err
@@ -125,7 +125,7 @@ func Defaults(ctx context.Context, q store.Querier) (Options, error) {
 }
 
 // SetDefaults is set_defaults.
-func SetDefaults(ctx context.Context, q store.Querier, effort string, contextLimit any) error {
+func SetDefaults(ctx context.Context, q db.Querier, effort string, contextLimit any) error {
 	e, err := CleanEffort(effort)
 	if err != nil {
 		return err
@@ -166,7 +166,7 @@ type NewThread struct {
 
 // Create is create: a thread takes the options of its project, else the operator's defaults; a thread that
 // is not a chat takes its kind's fixed effort.
-func Create(ctx context.Context, q store.Querier, now float64, n NewThread) (int64, error) {
+func Create(ctx context.Context, q db.Querier, now float64, n NewThread) (int64, error) {
 	chosen, err := Defaults(ctx, q)
 	if err != nil {
 		return 0, err
@@ -197,7 +197,7 @@ func Create(ctx context.Context, q store.Querier, now float64, n NewThread) (int
 }
 
 // SetOptions is set_options: it changes a chat thread's effort and context limit; false when there is none.
-func SetOptions(ctx context.Context, q store.Querier, threadID int64, effort string, contextLimit any) (bool, error) {
+func SetOptions(ctx context.Context, q db.Querier, threadID int64, effort string, contextLimit any) (bool, error) {
 	e, err := CleanEffort(effort)
 	if err != nil {
 		return false, err
@@ -262,7 +262,7 @@ func Scan(row interface{ Scan(...any) error }) (Thread, error) {
 }
 
 // Get is get: the thread, or nil when there is none or it was purged.
-func Get(ctx context.Context, q store.Querier, threadID int64) (*Thread, error) {
+func Get(ctx context.Context, q db.Querier, threadID int64) (*Thread, error) {
 	t, err := Scan(q.QueryRowContext(ctx, "SELECT "+Columns+" FROM threads WHERE id = ? AND deleted_at IS NULL", threadID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -282,7 +282,7 @@ func ContextLimitOf(t Thread) int64 {
 }
 
 // SetTitle is set_title: it names a thread that has no title and indexes the title for search.
-func SetTitle(ctx context.Context, q store.Querier, threadID int64, title string) error {
+func SetTitle(ctx context.Context, q db.Querier, threadID int64, title string) error {
 	changed, err := changed(q.ExecContext(ctx, "UPDATE threads SET title = ? WHERE id = ? AND title IS NULL", title, threadID))
 	if err != nil || !changed {
 		return err
@@ -292,7 +292,7 @@ func SetTitle(ctx context.Context, q store.Querier, threadID int64, title string
 }
 
 // RootKind is root_kind: the kind of the thread at the top of the parent chain.
-func RootKind(ctx context.Context, q store.Querier, threadID int64) (string, error) {
+func RootKind(ctx context.Context, q db.Querier, threadID int64) (string, error) {
 	kind := ""
 	seen := map[int64]bool{}
 	for next := &threadID; next != nil && !seen[*next]; {
@@ -312,7 +312,7 @@ func RootKind(ctx context.Context, q store.Querier, threadID int64) (string, err
 }
 
 // AllowedURLs is allowed_urls: the URLs the operator gave the thread, which the agent may fetch.
-func AllowedURLs(ctx context.Context, q store.Querier, threadID int64) (map[string]bool, error) {
+func AllowedURLs(ctx context.Context, q db.Querier, threadID int64) (map[string]bool, error) {
 	var raw string
 	err := q.QueryRowContext(ctx, "SELECT allowed_urls FROM threads WHERE id = ?", threadID).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -361,11 +361,7 @@ func AddAllowedURLs(ctx context.Context, d *db.DB, threadID int64, urls []string
 			list = append(list, u)
 		}
 		slices.Sort(list)
-		text, err := py.Dumps(list, py.JSONOpts{EnsureASCII: true})
-		if err != nil {
-			return err
-		}
-		_, err = tx.ExecContext(ctx, "UPDATE threads SET allowed_urls = ? WHERE id = ?", text, threadID)
+		_, err = tx.ExecContext(ctx, "UPDATE threads SET allowed_urls = ? WHERE id = ?", py.JSONDumps(list), threadID)
 		return err
 	})
 }
@@ -411,7 +407,7 @@ const listSQL = "SELECT t.id, t.kind, t.title, t.pinned, t.archived, t.created_a
 	"FROM threads t WHERE t.kind = ? AND t.archived = ? AND t.deleted_at IS NULL"
 
 // ListThreads is list_threads: chat threads, pinned first, newest first.
-func ListThreads(ctx context.Context, q store.Querier, o ListOpts) ([]Listed, error) {
+func ListThreads(ctx context.Context, q db.Querier, o ListOpts) ([]Listed, error) {
 	query := listSQL
 	args := []any{Chat, store.Bit(o.Archived)}
 	if o.ProjectID != 0 {
@@ -428,7 +424,7 @@ func ListThreads(ctx context.Context, q store.Querier, o ListOpts) ([]Listed, er
 	if err != nil {
 		return nil, err
 	}
-	return store.Collect(rows, func(r *sql.Rows) (Listed, error) {
+	return db.Collect(rows, func(r *sql.Rows) (Listed, error) {
 		var l Listed
 		return l, r.Scan(&l.ID, &l.Kind, &l.Title, &l.Pinned, &l.Archived, &l.CreatedAt, &l.UpdatedAt, &l.ProjectID,
 			&l.ProjectName, &l.RunState, &l.Cost)
@@ -436,7 +432,7 @@ func ListThreads(ctx context.Context, q store.Querier, o ListOpts) ([]Listed, er
 }
 
 // SetFlag is set_flag: column is "pinned", "archived" or "code_sandbox" of a live chat thread.
-func SetFlag(ctx context.Context, q store.Querier, threadID int64, column string, value bool) (bool, error) {
+func SetFlag(ctx context.Context, q db.Querier, threadID int64, column string, value bool) (bool, error) {
 	switch column {
 	case "pinned", "archived", "code_sandbox":
 	default:
@@ -447,7 +443,7 @@ func SetFlag(ctx context.Context, q store.Querier, threadID int64, column string
 }
 
 // SetContainer is set_container.
-func SetContainer(ctx context.Context, q store.Querier, threadID int64, containerID *string) error {
+func SetContainer(ctx context.Context, q db.Querier, threadID int64, containerID *string) error {
 	_, err := q.ExecContext(ctx, "UPDATE threads SET container_id = ? WHERE id = ?", containerID, threadID)
 	return err
 }
@@ -455,7 +451,7 @@ func SetContainer(ctx context.Context, q store.Querier, threadID int64, containe
 // Purge is purge: it deletes a thread's conversation, queue, plan, projections and tool records. The thread
 // row stays as a tombstone (deleted_at set, hidden everywhere) because usage, agent_writes and runs
 // reference it for accounting. Run it in one transaction.
-func Purge(ctx context.Context, q store.Querier, threadID int64, now float64) error {
+func Purge(ctx context.Context, q db.Querier, threadID int64, now float64) error {
 	const runs = "SELECT id FROM runs WHERE thread_id = ?"
 	for _, stmt := range []string{
 		"DELETE FROM run_events WHERE run_id IN (" + runs + ")",

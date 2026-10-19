@@ -2,6 +2,7 @@ package journal_test
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -159,7 +160,7 @@ func TestLimitsAndSkills(t *testing.T) {
 	d, thread := world(t)
 	ctx := t.Context()
 	id := start(t, d, thread, 0, "w")
-	if got, err := journal.LimitsOf(ctx, d.Read, id); err != nil || got != (journal.Limits{}) {
+	if got, err := journal.LimitsOf(ctx, d.Read, id); err != nil || !reflect.DeepEqual(got, journal.Limits{}) {
 		t.Fatalf("limits of a fresh run = %+v, %v", got, err)
 	}
 	l := journal.Limits{MaxSteps: ptr(int64(3)), SystemExtra: ptr("BE BRIEF é")}
@@ -179,7 +180,7 @@ func TestLimitsAndSkills(t *testing.T) {
 	if text := *run(t, d, id).LimitsJSON; text != `{"max_cost_usd": 1.0}` {
 		t.Errorf("limits_json = %s", text)
 	}
-	if got, err := journal.LimitsOf(ctx, d.Read, 999); err != nil || got != (journal.Limits{}) {
+	if got, err := journal.LimitsOf(ctx, d.Read, 999); err != nil || !reflect.DeepEqual(got, journal.Limits{}) {
 		t.Errorf("limits of no run = %+v, %v", got, err)
 	}
 	if names, err := journal.SkillsOf(run(t, d, id)); err != nil || len(names) != 0 {
@@ -438,5 +439,35 @@ func TestToolCalls(t *testing.T) {
 	all, err := journal.ToolCallsForThread(ctx, d.Read, thread)
 	if err != nil || len(all) != 2 || all[journal.CallKey{RunID: other, ToolUseID: "toolu_1"}].ReplayClass != journal.Write {
 		t.Errorf("ToolCallsForThread = %+v, %v", all, err)
+	}
+}
+
+func TestLimitsKeepAllowedToolsLastLikeTheGoldenSubagentRun(t *testing.T) {
+	var golden string
+	src, _ := dbtest.Copy(t, "../../../testdata/golden/atrium.db")
+	if err := src.Read.QueryRowContext(t.Context(), "SELECT limits_json FROM runs WHERE id = 3").Scan(&golden); err != nil {
+		t.Fatal(err)
+	}
+	got, err := journal.LimitsOf(t.Context(), src.Read, 3)
+	if err != nil || got.MaxSteps == nil || got.MaxCostUSD == nil || got.SystemExtra == nil || len(got.AllowedTools) != 4 {
+		t.Fatalf("LimitsOf = %+v, %v", got, err)
+	}
+	w, _ := world(t)
+	owner := "w"
+	id, err := journal.StartRun(t.Context(), w.Write, 1, "sub", "m", "low", 1, nil, &owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := journal.SetLimits(t.Context(), w.Write, id, got); err != nil {
+		t.Fatal(err)
+	}
+	if text := *run(t, w, id).LimitsJSON; text != golden {
+		t.Errorf("limits_json\n got %s\nwant %s", text, golden)
+	}
+	if err := journal.SetLimits(t.Context(), w.Write, id, journal.Limits{AllowedTools: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	if text := *run(t, w, id).LimitsJSON; text != `{"allowed_tools": []}` {
+		t.Errorf("an empty allowlist is kept: %s", text)
 	}
 }

@@ -13,11 +13,7 @@ import (
 //go:embed schema
 var schemaFS embed.FS
 
-type querier interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type querier = Querier
 
 type column struct{ name, ddl string }
 

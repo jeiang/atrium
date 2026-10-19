@@ -61,7 +61,7 @@ func NewOwner() string {
 	return fmt.Sprintf("%s:%d:%s", host, os.Getpid(), hex.EncodeToString(suffix))
 }
 
-var jsonCompact = py.JSONOpts{Compact: true}
+var jsonCompact = py.JSONOpts{Compact: true, NoEnsureASCII: true}
 
 // Run is a runs row.
 type Run struct {
@@ -98,7 +98,7 @@ func runs(rows *sql.Rows, err error) ([]Run, error) {
 	if err != nil {
 		return nil, err
 	}
-	return store.Collect(rows, func(r *sql.Rows) (Run, error) { return scanRun(r) })
+	return db.Collect(rows, func(r *sql.Rows) (Run, error) { return scanRun(r) })
 }
 
 func changed(res sql.Result, err error) (bool, error) {
@@ -110,7 +110,7 @@ func changed(res sql.Result, err error) (bool, error) {
 }
 
 // StartRun is start_run: a running run holding its lease for LeaseSeconds. owner is nil for a run no process owns.
-func StartRun(ctx context.Context, q store.Querier, threadID int64, kind, model, effort string, now float64, parentRunID *int64, owner *string) (int64, error) {
+func StartRun(ctx context.Context, q db.Querier, threadID int64, kind, model, effort string, now float64, parentRunID *int64, owner *string) (int64, error) {
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO runs (thread_id, parent_run_id, kind, model, effort, state, started_at, owner, lease_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		threadID, parentRunID, kind, model, effort, Running, now, owner, now+LeaseSeconds)
@@ -122,9 +122,10 @@ func StartRun(ctx context.Context, q store.Querier, threadID int64, kind, model,
 
 // Limits are the per-run overrides loop.run takes, stored at start so a resumed run keeps them.
 type Limits struct {
-	MaxSteps    *int64
-	MaxCostUSD  *float64
-	SystemExtra *string
+	MaxSteps     *int64
+	MaxCostUSD   *float64
+	SystemExtra  *string
+	AllowedTools []string
 }
 
 func (l Limits) object() py.Dict {
@@ -138,21 +139,20 @@ func (l Limits) object() py.Dict {
 	if l.SystemExtra != nil {
 		o = append(o, py.Pair{Key: "system_extra", Value: *l.SystemExtra})
 	}
+	if l.AllowedTools != nil {
+		o = append(o, py.Pair{Key: "allowed_tools", Value: l.AllowedTools})
+	}
 	return o
 }
 
 // SetLimits is set_limits.
-func SetLimits(ctx context.Context, q store.Querier, runID int64, l Limits) error {
-	text, err := py.Dumps(l.object(), py.JSONOpts{EnsureASCII: true})
-	if err != nil {
-		return err
-	}
-	_, err = q.ExecContext(ctx, "UPDATE runs SET limits_json = ? WHERE id = ?", text, runID)
+func SetLimits(ctx context.Context, q db.Querier, runID int64, l Limits) error {
+	_, err := q.ExecContext(ctx, "UPDATE runs SET limits_json = ? WHERE id = ?", py.JSONDumps(l.object()), runID)
 	return err
 }
 
 // LimitsOf is limits_of: the overrides stored at start, none for an unknown run.
-func LimitsOf(ctx context.Context, q store.Querier, runID int64) (Limits, error) {
+func LimitsOf(ctx context.Context, q db.Querier, runID int64) (Limits, error) {
 	var raw *string
 	err := q.QueryRowContext(ctx, "SELECT limits_json FROM runs WHERE id = ?", runID).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && (raw == nil || *raw == "") {
@@ -162,23 +162,20 @@ func LimitsOf(ctx context.Context, q store.Querier, runID int64) (Limits, error)
 		return Limits{}, err
 	}
 	var stored struct {
-		MaxSteps    *int64   `json:"max_steps"`
-		MaxCostUSD  *float64 `json:"max_cost_usd"`
-		SystemExtra *string  `json:"system_extra"`
+		MaxSteps     *int64   `json:"max_steps"`
+		MaxCostUSD   *float64 `json:"max_cost_usd"`
+		SystemExtra  *string  `json:"system_extra"`
+		AllowedTools []string `json:"allowed_tools"`
 	}
 	if err := json.Unmarshal([]byte(*raw), &stored); err != nil {
 		return Limits{}, fmt.Errorf("journal: run %d limits_json: %w", runID, err)
 	}
-	return Limits{stored.MaxSteps, stored.MaxCostUSD, stored.SystemExtra}, nil
+	return Limits{stored.MaxSteps, stored.MaxCostUSD, stored.SystemExtra, stored.AllowedTools}, nil
 }
 
 // SetSkills is set_skills: the skills expanded into the run's operator message.
-func SetSkills(ctx context.Context, q store.Querier, runID int64, names []string) error {
-	text, err := py.Dumps(append([]string{}, names...), py.JSONOpts{EnsureASCII: true})
-	if err != nil {
-		return err
-	}
-	_, err = q.ExecContext(ctx, "UPDATE runs SET skills_json = ? WHERE id = ?", text, runID)
+func SetSkills(ctx context.Context, q db.Querier, runID int64, names []string) error {
+	_, err := q.ExecContext(ctx, "UPDATE runs SET skills_json = ? WHERE id = ?", py.JSONDumps(append([]string{}, names...)), runID)
 	return err
 }
 
@@ -195,7 +192,7 @@ func SkillsOf(r Run) ([]string, error) {
 }
 
 // GetRun is get_run: nil when there is no such run.
-func GetRun(ctx context.Context, q store.Querier, runID int64) (*Run, error) {
+func GetRun(ctx context.Context, q db.Querier, runID int64) (*Run, error) {
 	r, err := scanRun(q.QueryRowContext(ctx, "SELECT "+runColumns+" FROM runs WHERE id = ?", runID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -207,19 +204,19 @@ func GetRun(ctx context.Context, q store.Querier, runID int64) (*Run, error) {
 }
 
 // FinishRun is finish_run.
-func FinishRun(ctx context.Context, q store.Querier, runID int64, state string, now float64, errText *string) error {
+func FinishRun(ctx context.Context, q db.Querier, runID int64, state string, now float64, errText *string) error {
 	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, error = ?, ended_at = ? WHERE id = ?", state, errText, now, runID)
 	return err
 }
 
 // SetRunState is set_run_state.
-func SetRunState(ctx context.Context, q store.Querier, runID int64, state string) error {
+func SetRunState(ctx context.Context, q db.Querier, runID int64, state string) error {
 	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ? WHERE id = ?", state, runID)
 	return err
 }
 
 // RequestStop is request_stop: true when a running run was asked to stop.
-func RequestStop(ctx context.Context, q store.Querier, runID int64) (bool, error) {
+func RequestStop(ctx context.Context, q db.Querier, runID int64) (bool, error) {
 	return changed(q.ExecContext(ctx, "UPDATE runs SET stop_requested = 1 WHERE id = ? AND state = ?", runID, Running))
 }
 
@@ -240,20 +237,20 @@ func FinishUnlessQueued(ctx context.Context, d *db.DB, runID, threadID int64, st
 }
 
 // BumpSteps is bump_steps.
-func BumpSteps(ctx context.Context, q store.Querier, runID int64) error {
+func BumpSteps(ctx context.Context, q db.Querier, runID int64) error {
 	_, err := q.ExecContext(ctx, "UPDATE runs SET steps = steps + 1 WHERE id = ?", runID)
 	return err
 }
 
 // RenewLease is renew_lease: false when another process has taken the run over (it lapsed and was resumed
 // elsewhere).
-func RenewLease(ctx context.Context, q store.Querier, runID int64, owner string, now float64) (bool, error) {
+func RenewLease(ctx context.Context, q db.Querier, runID int64, owner string, now float64) (bool, error) {
 	return changed(q.ExecContext(ctx, "UPDATE runs SET lease_until = ? WHERE id = ? AND owner = ? AND state = ?",
 		now+LeaseSeconds, runID, owner, Running))
 }
 
 // MarkInterrupted is mark_interrupted: running runs whose lease lapsed become interrupted; it returns how many.
-func MarkInterrupted(ctx context.Context, q store.Querier, now float64) (int64, error) {
+func MarkInterrupted(ctx context.Context, q db.Querier, now float64) (int64, error) {
 	res, err := q.ExecContext(ctx,
 		"UPDATE runs SET state = ?, owner = NULL, lease_until = NULL WHERE state = ? AND (lease_until IS NULL OR lease_until < ?)",
 		Interrupted, Running, now)
@@ -265,18 +262,18 @@ func MarkInterrupted(ctx context.Context, q store.Querier, now float64) (int64, 
 
 // ClaimResume is claim_resume: it atomically takes an interrupted run back to running under owner; false if
 // it was not interrupted.
-func ClaimResume(ctx context.Context, q store.Querier, runID int64, owner string, now float64) (bool, error) {
+func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, now float64) (bool, error) {
 	return changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state = ?",
 		Running, owner, now+LeaseSeconds, runID, Interrupted))
 }
 
 // InterruptedRuns is interrupted_runs.
-func InterruptedRuns(ctx context.Context, q store.Querier) ([]Run, error) {
+func InterruptedRuns(ctx context.Context, q db.Querier) ([]Run, error) {
 	return runs(q.QueryContext(ctx, "SELECT "+runColumns+" FROM runs WHERE state = ? ORDER BY id", Interrupted))
 }
 
 // ActiveRun is active_run: the thread's latest running or interrupted run, nil when it has none.
-func ActiveRun(ctx context.Context, q store.Querier, threadID int64) (*Run, error) {
+func ActiveRun(ctx context.Context, q db.Querier, threadID int64) (*Run, error) {
 	r, err := scanRun(q.QueryRowContext(ctx,
 		"SELECT "+runColumns+" FROM runs WHERE thread_id = ? AND state IN (?, ?) ORDER BY id DESC LIMIT 1", threadID, Running, Interrupted))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -289,7 +286,7 @@ func ActiveRun(ctx context.Context, q store.Querier, threadID int64) (*Run, erro
 }
 
 // RunsOf is runs_of.
-func RunsOf(ctx context.Context, q store.Querier, threadID int64) ([]Run, error) {
+func RunsOf(ctx context.Context, q db.Querier, threadID int64) ([]Run, error) {
 	return runs(q.QueryContext(ctx, "SELECT "+runColumns+" FROM runs WHERE thread_id = ? ORDER BY id", threadID))
 }
 
@@ -310,9 +307,13 @@ type Message struct {
 func Dumps(content []json.RawMessage) (string, error) {
 	items := make([]any, len(content))
 	for i, b := range content {
-		items[i] = b
+		v, err := py.JSONLoads(b)
+		if err != nil {
+			return "", fmt.Errorf("journal: content block: %w", err)
+		}
+		items[i] = v
 	}
-	return py.Dumps(items, jsonCompact)
+	return py.JSONDumps(items, jsonCompact), nil
 }
 
 type textBlock struct {
@@ -373,7 +374,7 @@ func decodeContent(id int64, raw string) ([]json.RawMessage, error) {
 }
 
 // MessagesOf is messages_of: the thread's messages in order, without the superseded ones unless asked.
-func MessagesOf(ctx context.Context, q store.Querier, threadID int64, includeSuperseded bool) ([]Message, error) {
+func MessagesOf(ctx context.Context, q db.Querier, threadID int64, includeSuperseded bool) ([]Message, error) {
 	query := "SELECT id, run_id, seq, role, content_json, created_at, system_sig, superseded FROM thread_messages WHERE thread_id = ?"
 	if !includeSuperseded {
 		query += " AND superseded = 0"
@@ -382,7 +383,7 @@ func MessagesOf(ctx context.Context, q store.Querier, threadID int64, includeSup
 	if err != nil {
 		return nil, err
 	}
-	return store.Collect(rows, func(r *sql.Rows) (Message, error) {
+	return db.Collect(rows, func(r *sql.Rows) (Message, error) {
 		var m Message
 		var raw string
 		var superseded store.Flag
@@ -397,7 +398,7 @@ func MessagesOf(ctx context.Context, q store.Querier, threadID int64, includeSup
 }
 
 // LastMessage is last_message: the newest live message, nil for an empty thread.
-func LastMessage(ctx context.Context, q store.Querier, threadID int64) (*Message, error) {
+func LastMessage(ctx context.Context, q db.Querier, threadID int64) (*Message, error) {
 	var m Message
 	var raw string
 	err := q.QueryRowContext(ctx,
@@ -428,7 +429,7 @@ func HasText(content []json.RawMessage) bool {
 
 // LastOperatorMessage is last_operator_message: the latest live operator (text) user message, the only one
 // that can be edited or regenerated.
-func LastOperatorMessage(ctx context.Context, q store.Querier, threadID int64) (*Message, error) {
+func LastOperatorMessage(ctx context.Context, q db.Querier, threadID int64) (*Message, error) {
 	all, err := MessagesOf(ctx, q, threadID, false)
 	if err != nil {
 		return nil, err
@@ -509,14 +510,14 @@ func QueueMessage(ctx context.Context, d *db.DB, threadID int64, text string, no
 }
 
 // Queued is queued: the thread's messages no run has consumed yet, oldest first.
-func Queued(ctx context.Context, q store.Querier, threadID int64) ([]QueuedMessage, error) {
+func Queued(ctx context.Context, q db.Querier, threadID int64) ([]QueuedMessage, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT id, thread_id, text, created_at, consumed_at, run_id, files_json FROM thread_queue WHERE thread_id = ? AND consumed_at IS NULL ORDER BY id",
 		threadID)
 	if err != nil {
 		return nil, err
 	}
-	return store.Collect(rows, func(r *sql.Rows) (QueuedMessage, error) {
+	return db.Collect(rows, func(r *sql.Rows) (QueuedMessage, error) {
 		var m QueuedMessage
 		if err := r.Scan(&m.ID, &m.ThreadID, &m.Text, &m.CreatedAt, &m.ConsumedAt, &m.RunID, &m.FilesJSON); err != nil {
 			return QueuedMessage{}, err
@@ -532,7 +533,7 @@ func Queued(ctx context.Context, q store.Querier, threadID int64) ([]QueuedMessa
 }
 
 // TakeQueued is take_queued: it marks the queued messages consumed by the run and returns them.
-func TakeQueued(ctx context.Context, q store.Querier, threadID, runID int64, now float64) ([]QueuedMessage, error) {
+func TakeQueued(ctx context.Context, q db.Querier, threadID, runID int64, now float64) ([]QueuedMessage, error) {
 	rows, err := Queued(ctx, q, threadID)
 	if err != nil {
 		return nil, err
@@ -572,8 +573,8 @@ func scanCall(row interface{ Scan(...any) error }) (ToolCall, error) {
 
 // StartToolCall is start_tool_call: it journals the call before the tool runs. args is the tool input as
 // the model sent it; the row keeps it compact and hashes that text.
-func StartToolCall(ctx context.Context, q store.Querier, runID int64, toolUseID, name string, args json.RawMessage, replayClass string, now float64) (int64, error) {
-	body, err := py.Redump(args, jsonCompact)
+func StartToolCall(ctx context.Context, q db.Querier, runID int64, toolUseID, name string, args json.RawMessage, replayClass string, now float64) (int64, error) {
+	body, err := py.JSONRedump(args, jsonCompact)
 	if err != nil {
 		return 0, err
 	}
@@ -588,14 +589,14 @@ func StartToolCall(ctx context.Context, q store.Querier, runID int64, toolUseID,
 }
 
 // FinishToolCall is finish_tool_call.
-func FinishToolCall(ctx context.Context, q store.Querier, callID int64, state string, now float64, errText *string, resultID *int64) error {
+func FinishToolCall(ctx context.Context, q db.Querier, callID int64, state string, now float64, errText *string, resultID *int64) error {
 	_, err := q.ExecContext(ctx, "UPDATE tool_calls SET state = ?, error = ?, result_id = ?, finished_at = ? WHERE id = ?",
 		state, errText, resultID, now, callID)
 	return err
 }
 
 // GetToolCall is tool_call: nil when the run made no such call.
-func GetToolCall(ctx context.Context, q store.Querier, runID int64, toolUseID string) (*ToolCall, error) {
+func GetToolCall(ctx context.Context, q db.Querier, runID int64, toolUseID string) (*ToolCall, error) {
 	c, err := scanCall(q.QueryRowContext(ctx, "SELECT "+callColumns+" FROM tool_calls WHERE run_id = ? AND tool_use_id = ?", runID, toolUseID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -610,11 +611,11 @@ func calls(rows *sql.Rows, err error) ([]ToolCall, error) {
 	if err != nil {
 		return nil, err
 	}
-	return store.Collect(rows, func(r *sql.Rows) (ToolCall, error) { return scanCall(r) })
+	return db.Collect(rows, func(r *sql.Rows) (ToolCall, error) { return scanCall(r) })
 }
 
 // ToolCallsOf is tool_calls_of.
-func ToolCallsOf(ctx context.Context, q store.Querier, runID int64) ([]ToolCall, error) {
+func ToolCallsOf(ctx context.Context, q db.Querier, runID int64) ([]ToolCall, error) {
 	return calls(q.QueryContext(ctx, "SELECT "+callColumns+" FROM tool_calls WHERE run_id = ? ORDER BY id", runID))
 }
 
@@ -625,7 +626,7 @@ type CallKey struct {
 }
 
 // ToolCallsForThread is tool_calls_for_thread: every call the thread's runs made, by run and tool_use id.
-func ToolCallsForThread(ctx context.Context, q store.Querier, threadID int64) (map[CallKey]ToolCall, error) {
+func ToolCallsForThread(ctx context.Context, q db.Querier, threadID int64) (map[CallKey]ToolCall, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT c.id, c.run_id, c.tool_use_id, c.name, c.args_json, c.args_sha256, c.replay_class, c.state, c.error, c.result_id, c.started_at, c.finished_at "+
 			"FROM tool_calls c JOIN runs r ON r.id = c.run_id WHERE r.thread_id = ? ORDER BY c.id", threadID)

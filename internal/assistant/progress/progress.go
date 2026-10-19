@@ -10,6 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/db"
+
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/py"
@@ -37,11 +39,11 @@ const (
 // ErrStopped is the error a Writer raises when the operator asked the run to stop.
 var ErrStopped = errors.New("stopped by the operator")
 
-var dataOpts = py.JSONOpts{}
+var dataOpts = py.JSONOpts{NoEnsureASCII: true}
 
 // ShortArgs is short_args for a tool's input: its JSON, cut to ArgsChars with an ellipsis.
 func ShortArgs(args json.RawMessage) (string, error) {
-	text, err := py.Redump(args, dataOpts)
+	text, err := py.JSONRedump(args, dataOpts)
 	if err != nil {
 		return "", err
 	}
@@ -52,12 +54,8 @@ func ShortArgs(args json.RawMessage) (string, error) {
 }
 
 // Emit is emit: it journals one event of the run. data is dumped with its keys in the order given.
-func Emit(ctx context.Context, q store.Querier, runID int64, kind string, data py.Dict, now float64) error {
-	text, err := py.Dumps(data, dataOpts)
-	if err != nil {
-		return err
-	}
-	_, err = q.ExecContext(ctx, "INSERT INTO run_events (run_id, ts, kind, data_json) VALUES (?, ?, ?, ?)", runID, now, kind, text)
+func Emit(ctx context.Context, q db.Querier, runID int64, kind string, data py.Dict, now float64) error {
+	_, err := q.ExecContext(ctx, "INSERT INTO run_events (run_id, ts, kind, data_json) VALUES (?, ?, ?, ?)", runID, now, kind, py.JSONDumps(data, dataOpts))
 	return err
 }
 
@@ -70,14 +68,14 @@ type Event struct {
 }
 
 // Since is since: the events of the run and of its subagent runs, in id order, after afterID.
-func Since(ctx context.Context, q store.Querier, runID, afterID int64) ([]Event, error) {
+func Since(ctx context.Context, q db.Querier, runID, afterID int64) ([]Event, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT e.id, e.run_id, e.kind, e.data_json FROM run_events e WHERE e.id > ? "+
 			"AND (e.run_id = ? OR e.run_id IN (SELECT id FROM runs WHERE parent_run_id = ?)) ORDER BY e.id", afterID, runID, runID)
 	if err != nil {
 		return nil, err
 	}
-	return store.Collect(rows, func(r *sql.Rows) (Event, error) {
+	return db.Collect(rows, func(r *sql.Rows) (Event, error) {
 		var e Event
 		var data string
 		if err := r.Scan(&e.ID, &e.RunID, &e.Kind, &data); err != nil {
@@ -91,7 +89,7 @@ func Since(ctx context.Context, q store.Querier, runID, afterID int64) ([]Event,
 // ClearThread is clear_thread: it drops the progress of the thread's earlier runs (and their subagent runs).
 // Called when a new run starts, so a finished run's events stay readable until then: a page that connects
 // late still replays them.
-func ClearThread(ctx context.Context, q store.Querier, threadID int64) error {
+func ClearThread(ctx context.Context, q db.Querier, threadID int64) error {
 	_, err := q.ExecContext(ctx,
 		"DELETE FROM run_events WHERE run_id IN (SELECT id FROM runs WHERE thread_id = ? OR parent_run_id IN (SELECT id FROM runs WHERE thread_id = ?))",
 		threadID, threadID)
@@ -101,7 +99,7 @@ func ClearThread(ctx context.Context, q store.Querier, threadID int64) error {
 // Writer journals a run's live progress. Streamed thinking and answer deltas are buffered and written as one
 // row per FlushSeconds, so a long answer is a few dozen rows rather than one per token.
 type Writer struct {
-	q         store.Querier
+	q         db.Querier
 	runID     int64
 	now       func() float64
 	kind      string
@@ -111,7 +109,7 @@ type Writer struct {
 }
 
 // NewWriter is Writer(conn, run_id, now).
-func NewWriter(q store.Querier, runID int64, now func() float64) *Writer {
+func NewWriter(q db.Querier, runID int64, now func() float64) *Writer {
 	return &Writer{q: q, runID: runID, now: now}
 }
 

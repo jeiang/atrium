@@ -1,22 +1,11 @@
-// Package store is what the assistant's persistence packages share: the query surface that a *sql.DB, a
-// *sql.Tx or a *sql.Conn satisfies, so a caller picks the transaction a write runs in.
+// Package store is what the assistant's persistence packages share: Python bool columns, the golden read-path
+// clock and the sql.Scanner for flags.
 package store
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
 	"time"
-
-	"github.com/jeiang/atrium/internal/db"
 )
-
-// Querier is the part of database/sql the persistence packages use.
-type Querier interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
 
 // Bit is a Python bool stored as an INTEGER column.
 func Bit(b bool) int {
@@ -74,14 +63,4 @@ func (f *Flag) Scan(src any) error {
 		return fmt.Errorf("store: cannot scan %T into a flag", src)
 	}
 	return nil
-}
-
-// Collect scans every row of rows with scan and closes rows. Like a Python list it is never nil, so it
-// encodes as [] when there are no rows.
-func Collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
-	out, err := db.Collect(rows, scan)
-	if out == nil {
-		out = []T{}
-	}
-	return out, err
 }

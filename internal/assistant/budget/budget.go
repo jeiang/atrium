@@ -30,7 +30,7 @@ type BudgetExceeded string
 func (e BudgetExceeded) Error() string { return string(e) }
 
 // GetSetting is get_setting: the stored text of key, and whether it is set.
-func GetSetting(ctx context.Context, q store.Querier, key string) (string, bool, error) {
+func GetSetting(ctx context.Context, q db.Querier, key string) (string, bool, error) {
 	var value string
 	err := q.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = ?", key).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -41,7 +41,7 @@ func GetSetting(ctx context.Context, q store.Querier, key string) (string, bool,
 
 // SetSetting is set_setting: it stores str(value). Strings, integers, floats (as Python's repr) and bools
 // are accepted.
-func SetSetting(ctx context.Context, q store.Querier, key string, value any) error {
+func SetSetting(ctx context.Context, q db.Querier, key string, value any) error {
 	var text string
 	switch v := value.(type) {
 	case string:
@@ -62,7 +62,7 @@ func SetSetting(ctx context.Context, q store.Querier, key string, value any) err
 }
 
 // MonthlyBudget is monthly_budget; a stored value that is not a float is Python's ValueError.
-func MonthlyBudget(ctx context.Context, q store.Querier) (float64, error) {
+func MonthlyBudget(ctx context.Context, q db.Querier) (float64, error) {
 	value, ok, err := GetSetting(ctx, q, BudgetKey)
 	if err != nil || !ok {
 		return DefaultBudgetUSD, err
@@ -79,7 +79,7 @@ type Status struct {
 }
 
 // StatusAt is status: the month is the one now falls in under loc, the ATRIUM_TZ zone.
-func StatusAt(ctx context.Context, q store.Querier, now float64, loc *time.Location) (Status, error) {
+func StatusAt(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Status, error) {
 	limit, err := MonthlyBudget(ctx, q)
 	if err != nil {
 		return Status{}, err
@@ -101,7 +101,7 @@ func StatusAt(ctx context.Context, q store.Querier, now float64, loc *time.Locat
 
 // Check is check: it returns the status, or BudgetExceeded when the share spent reached the threshold of
 // an unattended run (80%) or of chat (100%).
-func Check(ctx context.Context, q store.Querier, now float64, loc *time.Location, unattended bool) (Status, error) {
+func Check(ctx context.Context, q db.Querier, now float64, loc *time.Location, unattended bool) (Status, error) {
 	found, err := StatusAt(ctx, q, now, loc)
 	if err != nil {
 		return Status{}, err

@@ -10,8 +10,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/db"
+
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -62,7 +63,7 @@ func CleanPlan(items any) ([]PlanItem, error) {
 }
 
 // SetPlan is set_plan: it replaces the thread's plan and returns the cleaned items.
-func SetPlan(ctx context.Context, q store.Querier, threadID int64, runID *int64, items any, now float64) ([]PlanItem, error) {
+func SetPlan(ctx context.Context, q db.Querier, threadID int64, runID *int64, items any, now float64) ([]PlanItem, error) {
 	clean, err := CleanPlan(items)
 	if err != nil {
 		return nil, err
@@ -71,10 +72,7 @@ func SetPlan(ctx context.Context, q store.Querier, threadID int64, runID *int64,
 	for i, it := range clean {
 		pairs[i] = py.Dict{{Key: "text", Value: it.Text}, {Key: "done", Value: it.Done}}
 	}
-	text, err := py.Dumps(pairs, py.JSONOpts{})
-	if err != nil {
-		return nil, err
-	}
+	text := py.JSONDumps(pairs, py.JSONOpts{NoEnsureASCII: true})
 	_, err = q.ExecContext(ctx,
 		"INSERT INTO thread_plans (thread_id, run_id, items_json, updated_at) VALUES (?, ?, ?, ?) "+
 			"ON CONFLICT(thread_id) DO UPDATE SET run_id = excluded.run_id, items_json = excluded.items_json, updated_at = excluded.updated_at",
@@ -90,7 +88,7 @@ type Plan struct {
 }
 
 // PlanOf is plan_of: nil when the thread has no plan.
-func PlanOf(ctx context.Context, q store.Querier, threadID int64) (*Plan, error) {
+func PlanOf(ctx context.Context, q db.Querier, threadID int64) (*Plan, error) {
 	var p Plan
 	var raw string
 	err := q.QueryRowContext(ctx, "SELECT items_json, updated_at, run_id FROM thread_plans WHERE thread_id = ?", threadID).Scan(&raw, &p.UpdatedAt, &p.RunID)
@@ -134,16 +132,16 @@ func scanFile(r interface{ Scan(...any) error }) (File, error) {
 }
 
 // FilesOf is files_of.
-func FilesOf(ctx context.Context, q store.Querier, threadID int64) ([]File, error) {
+func FilesOf(ctx context.Context, q db.Querier, threadID int64) ([]File, error) {
 	rows, err := q.QueryContext(ctx, "SELECT "+fileColumns+" FROM thread_files WHERE thread_id = ? ORDER BY id", threadID)
 	if err != nil {
 		return nil, err
 	}
-	return store.Collect(rows, func(r *sql.Rows) (File, error) { return scanFile(r) })
+	return db.Collect(rows, func(r *sql.Rows) (File, error) { return scanFile(r) })
 }
 
 // GetFile is get_file: nil when the thread has no such file.
-func GetFile(ctx context.Context, q store.Querier, threadID, fileID int64) (*File, error) {
+func GetFile(ctx context.Context, q db.Querier, threadID, fileID int64) (*File, error) {
 	f, err := scanFile(q.QueryRowContext(ctx, "SELECT "+fileColumns+" FROM thread_files WHERE id = ? AND thread_id = ?", fileID, threadID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -155,13 +153,13 @@ func GetFile(ctx context.Context, q store.Querier, threadID, fileID int64) (*Fil
 }
 
 // ChildThreads is child_threads: the thread's live subagent threads.
-func ChildThreads(ctx context.Context, q store.Querier, threadID int64) ([]threads.Thread, error) {
+func ChildThreads(ctx context.Context, q db.Querier, threadID int64) ([]threads.Thread, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT "+threads.Columns+" FROM threads WHERE parent_thread_id = ? AND deleted_at IS NULL ORDER BY id", threadID)
 	if err != nil {
 		return nil, err
 	}
-	return store.Collect(rows, func(r *sql.Rows) (threads.Thread, error) { return threads.Scan(r) })
+	return db.Collect(rows, func(r *sql.Rows) (threads.Thread, error) { return threads.Scan(r) })
 }
 
 // Source is something the thread read. Via names the subagent role that read it, nil for the thread itself.
@@ -205,7 +203,7 @@ type resultBlock struct {
 
 // resultBodies is result_bodies: tool_use id to the full result text, the stored body for stubbed results,
 // else the journaled tool_result.
-func resultBodies(ctx context.Context, q store.Querier, threadIDs []int64) (map[string]string, error) {
+func resultBodies(ctx context.Context, q db.Querier, threadIDs []int64) (map[string]string, error) {
 	bodies := map[string]string{}
 	for _, id := range threadIDs {
 		msgs, err := journal.MessagesOf(ctx, q, id, false)
@@ -232,7 +230,7 @@ func resultBodies(ctx context.Context, q store.Querier, threadIDs []int64) (map[
 	if err != nil {
 		return nil, err
 	}
-	stored, err := store.Collect(rows, func(r *sql.Rows) ([2]string, error) {
+	stored, err := db.Collect(rows, func(r *sql.Rows) ([2]string, error) {
 		var kv [2]string
 		return kv, r.Scan(&kv[0], &kv[1])
 	})
@@ -256,7 +254,7 @@ type threadCall struct {
 	Via      *string
 }
 
-func callsOfThreads(ctx context.Context, q store.Querier, threadIDs []int64) ([]threadCall, error) {
+func callsOfThreads(ctx context.Context, q db.Querier, threadIDs []int64) ([]threadCall, error) {
 	marks, args := inList(threadIDs)
 	rows, err := q.QueryContext(ctx,
 		"SELECT c.id, c.run_id, c.tool_use_id, c.name, c.args_json, c.args_sha256, c.replay_class, c.state, c.error, c.result_id, "+
@@ -266,7 +264,7 @@ func callsOfThreads(ctx context.Context, q store.Querier, threadIDs []int64) ([]
 	if err != nil {
 		return nil, err
 	}
-	return store.Collect(rows, func(r *sql.Rows) (threadCall, error) {
+	return db.Collect(rows, func(r *sql.Rows) (threadCall, error) {
 		var c threadCall
 		err := r.Scan(&c.ID, &c.RunID, &c.ToolUseID, &c.Name, &c.ArgsJSON, &c.ArgsSHA256, &c.ReplayClass, &c.State, &c.Error,
 			&c.ResultID, &c.StartedAt, &c.FinishedAt, &c.ThreadID, &c.Via)
@@ -274,7 +272,7 @@ func callsOfThreads(ctx context.Context, q store.Querier, threadIDs []int64) ([]
 	})
 }
 
-func searchSources(ctx context.Context, q store.Querier, threadID int64, children []threads.Thread) ([]Source, error) {
+func searchSources(ctx context.Context, q db.Querier, threadID int64, children []threads.Thread) ([]Source, error) {
 	type owner struct {
 		id   int64
 		role *string
@@ -351,7 +349,7 @@ func sourceOf(c journal.ToolCall, result map[string]any) (*Source, error) {
 
 // SourcesOf is sources_of: what the thread (and its subagents) read, fetched pages, search hits, mail
 // messages and Notion pages, each once.
-func SourcesOf(ctx context.Context, q store.Querier, threadID int64) ([]Source, error) {
+func SourcesOf(ctx context.Context, q db.Querier, threadID int64) ([]Source, error) {
 	children, err := ChildThreads(ctx, q, threadID)
 	if err != nil {
 		return nil, err
@@ -360,7 +358,7 @@ func SourcesOf(ctx context.Context, q store.Querier, threadID int64) ([]Source, 
 }
 
 // SourcesWith is sources_of with the subagent threads already loaded.
-func SourcesWith(ctx context.Context, q store.Querier, threadID int64, children []threads.Thread) ([]Source, error) {
+func SourcesWith(ctx context.Context, q db.Querier, threadID int64, children []threads.Thread) ([]Source, error) {
 	ids := []int64{threadID}
 	for _, c := range children {
 		ids = append(ids, c.ID)

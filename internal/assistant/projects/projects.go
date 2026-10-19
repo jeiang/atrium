@@ -10,6 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/db"
+
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/notionid"
@@ -102,7 +104,7 @@ func clean(f Fields) (cleaned, error) {
 }
 
 // Create is create: it validates the fields and adds the project.
-func Create(ctx context.Context, q store.Querier, now float64, f Fields) (int64, error) {
+func Create(ctx context.Context, q db.Querier, now float64, f Fields) (int64, error) {
 	v, err := clean(f)
 	if err != nil {
 		return 0, err
@@ -117,7 +119,7 @@ func Create(ctx context.Context, q store.Querier, now float64, f Fields) (int64,
 }
 
 // Update is update: false when there is no such project.
-func Update(ctx context.Context, q store.Querier, projectID int64, now float64, f Fields) (bool, error) {
+func Update(ctx context.Context, q db.Querier, projectID int64, now float64, f Fields) (bool, error) {
 	v, err := clean(f)
 	if err != nil {
 		return false, err
@@ -136,7 +138,7 @@ func changed(res sql.Result, err error) (bool, error) {
 }
 
 // Get is get: nil when there is no such project.
-func Get(ctx context.Context, q store.Querier, projectID int64) (*Project, error) {
+func Get(ctx context.Context, q db.Querier, projectID int64) (*Project, error) {
 	p, err := scan(q.QueryRowContext(ctx, listSQL+" WHERE p.id = ?", projectID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -148,28 +150,28 @@ func Get(ctx context.Context, q store.Querier, projectID int64) (*Project, error
 }
 
 // List is list_projects: the active (or archived) projects, most recently used first.
-func List(ctx context.Context, q store.Querier, archived bool) ([]Project, error) {
+func List(ctx context.Context, q db.Querier, archived bool) ([]Project, error) {
 	rows, err := q.QueryContext(ctx,
 		listSQL+" WHERE p.archived = ? ORDER BY COALESCE(last_activity, p.updated_at) DESC, p.id DESC", store.Bit(archived))
 	if err != nil {
 		return nil, err
 	}
-	return store.Collect(rows, func(r *sql.Rows) (Project, error) { return scan(r) })
+	return db.Collect(rows, func(r *sql.Rows) (Project, error) { return scan(r) })
 }
 
 // SetArchived is set_archived.
-func SetArchived(ctx context.Context, q store.Querier, projectID int64, value bool) (bool, error) {
+func SetArchived(ctx context.Context, q db.Querier, projectID int64, value bool) (bool, error) {
 	return changed(q.ExecContext(ctx, "UPDATE projects SET archived = ? WHERE id = ?", store.Bit(value), projectID))
 }
 
 // SetHub is set_hub.
-func SetHub(ctx context.Context, q store.Querier, projectID int64, pageID string, now float64) (bool, error) {
+func SetHub(ctx context.Context, q db.Querier, projectID int64, pageID string, now float64) (bool, error) {
 	return changed(q.ExecContext(ctx, "UPDATE projects SET wiki_hub_id = ?, updated_at = ? WHERE id = ?", pageID, now, projectID))
 }
 
 // MoveThread is move_thread: a nil projectID takes the thread out of its project; an archived or unknown
 // project is refused. False when the thread is not a chat.
-func MoveThread(ctx context.Context, q store.Querier, threadID int64, projectID *int64) (bool, error) {
+func MoveThread(ctx context.Context, q db.Querier, threadID int64, projectID *int64) (bool, error) {
 	if projectID != nil {
 		var one int
 		err := q.QueryRowContext(ctx, "SELECT 1 FROM projects WHERE id = ? AND archived = 0", *projectID).Scan(&one)
@@ -194,7 +196,7 @@ func HubMarkdown(p Project) string {
 
 // SystemBlock is system_block: the per-project prompt text, appended after the cached prefix. Nil when the
 // thread has no project or the project has nothing to say.
-func SystemBlock(ctx context.Context, q store.Querier, t threads.Thread) (*string, error) {
+func SystemBlock(ctx context.Context, q db.Querier, t threads.Thread) (*string, error) {
 	if t.ProjectID == nil || *t.ProjectID == 0 {
 		return nil, nil
 	}

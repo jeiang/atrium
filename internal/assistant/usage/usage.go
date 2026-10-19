@@ -7,9 +7,10 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/jeiang/atrium/internal/db"
+
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
-	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -61,7 +62,7 @@ func BilledEntries(u anthropic.Usage) []pricing.Tokens {
 }
 
 // Record is record: it prices every billed entry on its own tier, writes the summed row and returns its cost.
-func Record(ctx context.Context, q store.Querier, e Entry, u anthropic.Usage) (float64, error) {
+func Record(ctx context.Context, q db.Querier, e Entry, u anthropic.Usage) (float64, error) {
 	entries := BilledEntries(u)
 	var sum pricing.Tokens
 	costs := make([]float64, len(entries))
@@ -103,14 +104,14 @@ func MonthStart(now float64, loc *time.Location) float64 {
 }
 
 // MonthToDate is month_to_date: what the month has cost so far.
-func MonthToDate(ctx context.Context, q store.Querier, now float64, loc *time.Location) (float64, error) {
+func MonthToDate(ctx context.Context, q db.Querier, now float64, loc *time.Location) (float64, error) {
 	var cost float64
 	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE ts >= ?", MonthStart(now, loc)).Scan(&cost)
 	return cost, err
 }
 
 // RunCost is run_cost: what one run has cost.
-func RunCost(ctx context.Context, q store.Querier, runID int64) (float64, error) {
+func RunCost(ctx context.Context, q db.Querier, runID int64) (float64, error) {
 	var cost float64
 	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE run_id = ?", runID).Scan(&cost)
 	return cost, err
@@ -135,7 +136,7 @@ const summarySQL = "SELECT COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost
 	"COALESCE(SUM(tier = ?), 0) AS high_tier FROM usage WHERE ts >= ?"
 
 // MonthSummary is summary.
-func MonthSummary(ctx context.Context, q store.Querier, now float64, loc *time.Location) (Summary, error) {
+func MonthSummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
 	var s Summary
 	err := q.QueryRowContext(ctx, summarySQL, pricing.TierHigh, MonthStart(now, loc)).Scan(
 		&s.Calls, &s.Cost, &s.InputTokens, &s.CacheWrite, &s.CacheRead, &s.OutputTokens, &s.Searches, &s.HighTier)
@@ -157,14 +158,14 @@ type KindRow struct {
 }
 
 // ByKind is by_kind: the month grouped by run kind, dearest first.
-func ByKind(ctx context.Context, q store.Querier, now float64, loc *time.Location) ([]KindRow, error) {
+func ByKind(ctx context.Context, q db.Querier, now float64, loc *time.Location) ([]KindRow, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT kind, COUNT(*) AS calls, SUM(cost_usd) AS cost, SUM(searches) AS searches FROM usage "+
 			"WHERE ts >= ? GROUP BY kind ORDER BY cost DESC", MonthStart(now, loc))
 	if err != nil {
 		return nil, err
 	}
-	return store.Collect(rows, func(r *sql.Rows) (KindRow, error) {
+	return db.Collect(rows, func(r *sql.Rows) (KindRow, error) {
 		var k KindRow
 		return k, r.Scan(&k.Kind, &k.Calls, &k.Cost, &k.Searches)
 	})
@@ -184,7 +185,7 @@ type ThreadRow struct {
 }
 
 // ByThread is by_thread: the month grouped by thread, dearest first, at most limit threads (Python's default is 50).
-func ByThread(ctx context.Context, q store.Querier, now float64, loc *time.Location, limit int) ([]ThreadRow, error) {
+func ByThread(ctx context.Context, q db.Querier, now float64, loc *time.Location, limit int) ([]ThreadRow, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT u.thread_id, t.title, t.kind, COUNT(*) AS calls, SUM(u.cost_usd) AS cost, "+
 			"SUM(u.input_tokens + u.cache_write_5m + u.cache_write_1h + u.cache_read) AS prompt_tokens, "+
@@ -195,7 +196,7 @@ func ByThread(ctx context.Context, q store.Querier, now float64, loc *time.Locat
 	if err != nil {
 		return nil, err
 	}
-	return store.Collect(rows, func(r *sql.Rows) (ThreadRow, error) {
+	return db.Collect(rows, func(r *sql.Rows) (ThreadRow, error) {
 		var t ThreadRow
 		return t, r.Scan(&t.ThreadID, &t.Title, &t.Kind, &t.Calls, &t.Cost, &t.PromptTokens, &t.MaxPromptTokens, &t.OutputTokens, &t.Searches)
 	})
