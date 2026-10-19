@@ -261,7 +261,7 @@ def suggest_name(cfg, folder, domains, terms):
     try:
         answer = llm.chat_json(cfg.chat_url, NAME_SYSTEM, prompt, NAME_SCHEMA)
         name = clean_name(answer.get("name"))
-    except (ServiceUnavailable, ValueError, KeyError, TypeError):
+    except (ServiceUnavailable, ValueError, KeyError, IndexError, TypeError, AttributeError):
         name = ""
     return name or clean_name(domains[0] if domains else "") or "Split"
 

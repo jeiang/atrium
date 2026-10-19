@@ -228,3 +228,11 @@ def test_cli_scan_all_and_list(tmp_path, monkeypatch, capsys):
     for argv in (["rebalance", "scan"], ["deletions", "scan"], ["gmail-labels", "scan"]):
         assert cli.main(argv) == 0
         assert json.loads(capsys.readouterr().out) == {"candidates": 0, "created": 0}
+
+
+def test_suggest_name_falls_back_on_empty_or_malformed_reply(monkeypatch):
+    cfg = type("Cfg", (), {"chat_url": "http://llm.test"})()
+    for reply in ({"choices": []}, {}, {"choices": [{"message": {"content": "[]"}}]}, {"choices": [{"message": {"content": None}}]}):
+        monkeypatch.setattr(rebalance.llm, "post_json", lambda url, body, reply=reply: reply)
+        assert rebalance.suggest_name(cfg, "Shopping", ["shoply.test"], ["order"]) == "shoply.test"
+        assert rebalance.suggest_name(cfg, "Shopping", [], []) == "Split"
