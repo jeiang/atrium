@@ -136,6 +136,45 @@ S: {t} OK EXPUNGE completed
 	}
 }
 
+func TestApplierFilesICloudMailVanishedWire(t *testing.T) {
+	ctx := context.Background()
+	client, _ := icloud(t, icloudLogin+`C/ ^{t} STATUS INBOX \((UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)( (UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)){3}\)$
+S: * STATUS INBOX (MESSAGES 1 UIDNEXT 302 UIDVALIDITY 7 HIGHESTMODSEQ 5)
+S: {t} OK STATUS completed
+C: {t} EXAMINE INBOX
+S: {t} OK [READ-ONLY] EXAMINE completed
+C: {t} UID SEARCH UID 301
+S: * SEARCH 301
+S: {t} OK SEARCH completed
+C/ ^{t} UID FETCH 301 \((UID|FLAGS|BODY\.PEEK\[HEADER\])( (UID|FLAGS|BODY\.PEEK\[HEADER\])){2}\)$
+S: * 1 FETCH (UID 301 FLAGS (\Seen) BODY[HEADER] {25}
+S: Message-ID: <m1@x.test>
+S: )
+S: {t} OK FETCH completed
+`+appliedList+appliedList+`C: {t} SELECT INBOX
+S: {t} OK [READ-WRITE] SELECT completed
+C: {t} UID COPY 301 "Bills"
+S: {t} OK [COPYUID 99 301 500] Done
+C: {t} UID STORE 301 +FLAGS.SILENT (\Deleted)
+S: {t} OK STORE completed
+C: {t} UID EXPUNGE 301
+S: * VANISHED 301
+S: {t} OK EXPUNGE completed
+`+logout, live)
+	a, d, resynced := wireApplier(t, config.ICloud, client, nil, [2]any{301, "Bills"})
+	out, err := a.ApplyAccount(ctx, config.ICloud)
+	must(t, err)
+	if out.Written != 1 || len(*resynced) != 1 {
+		t.Fatalf("outcome %+v resynced %v", out, *resynced)
+	}
+	got := actionRows(t, d)
+	want := `1||{"imap_name": "Bills", "uidvalidity": 99, "uid": 500}|{"op": "move_back", "account": "icloud", "src_imap": "INBOX", ` +
+		`"dest_imap": "Bills", "dest_uidvalidity": 99, "items": [{"id": 1, "msgid": "m1@x.test", "uid": 301, "dest_uid": 500}]}`
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("auto_actions = %q", got)
+	}
+}
+
 func TestApplierRelabelsGmailMailWire(t *testing.T) {
 	ctx := context.Background()
 	script := gmailLogin + `C/ ^{t} STATUS "\[Gmail\]/All Mail" \((UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)( (UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)){3}\)$
