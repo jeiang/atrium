@@ -98,7 +98,7 @@ func (s *service) correctForm(w http.ResponseWriter, r *http.Request) {
 	id, errs := pathInt(r, "message_id")
 	context := contextMessage
 	if values, given := r.URL.Query()["context"]; given {
-		if context = lastValue(values, ""); context != contextRow && context != contextMessage {
+		if context = web.LastValue(values, ""); context != contextRow && context != contextMessage {
 			errs = append(errs, web.BadLiteral("query", "context", context, "'row'", "'message'"))
 		}
 	}
@@ -115,7 +115,7 @@ func (s *service) correctForm(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 	id, errs := pathInt(r, "message_id")
-	form := formValues(r)
+	form := web.FormValues(r)
 	dest := web.FormString(form, "dest", "")
 	context := web.FormString(form, "context", contextMessage)
 	if context != contextRow && context != contextMessage {

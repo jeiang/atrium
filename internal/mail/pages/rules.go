@@ -96,7 +96,7 @@ func (s *service) learnedFor(ctx context.Context, account string) ([]learnedView
 
 func (s *service) rulesPage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	account, saved, created := queryValue(q, "account"), queryValue(q, "saved"), queryValue(q, "created")
+	account, saved, created := web.QueryValue(q, "account"), web.QueryValue(q, "saved"), web.QueryValue(q, "created")
 	ctx := r.Context()
 	learned, capped := s.learnedFor(ctx, account)
 	data := rulesData{Account: account, Rules: s.ruleViews(ctx, account), Learned: learned}
@@ -117,7 +117,7 @@ func (s *service) rulesPage(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) ruleNew(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	account := queryValue(q, "account")
+	account := web.QueryValue(q, "account")
 	rule := ruleView{Action: rules.ActionFile, When: []map[string]any{}}
 	if account != "" {
 		rule.Account = &account
@@ -125,9 +125,9 @@ func (s *service) ruleNew(w http.ResponseWriter, r *http.Request) {
 	data := ruleEditData{IsNew: true, Suggestions: []map[string]any{}, Errors: []string{}}
 	ctx := r.Context()
 	if values, given := q["message"]; given {
-		sourceID, ok := py.LaxInt64(lastValue(values, ""))
+		sourceID, ok := py.LaxInt64(web.LastValue(values, ""))
 		if !ok {
-			web.Unprocessable(w, web.BadInt("query", "message", lastValue(values, "")))
+			web.Unprocessable(w, web.BadInt("query", "message", web.LastValue(values, "")))
 			return
 		}
 		features, err := ruleedit.MessageFeatures(ctx, s.deps.DB.Read, sourceID)
@@ -156,13 +156,13 @@ func (s *service) ruleCondition(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	field, op := "from_addr", "eq"
 	if values, given := q["field"]; given {
-		field = lastValue(values, "")
+		field = web.LastValue(values, "")
 	}
 	if values, given := q["op"]; given {
-		op = lastValue(values, "")
+		op = web.LastValue(values, "")
 	}
-	c := map[string]any{"field": field, "op": op, "value": queryValue(q, "value")}
-	s.fragment(w, r, "_condition_row.gohtml", conditionData{C: c, Focus: queryValue(q, "focus")}, nil)
+	c := map[string]any{"field": field, "op": op, "value": web.QueryValue(q, "value")}
+	s.fragment(w, r, "_condition_row.gohtml", conditionData{C: c, Focus: web.QueryValue(q, "focus")}, nil)
 }
 
 type previewData struct {
@@ -233,7 +233,7 @@ func (f ruleForm) raw() map[string]any {
 }
 
 func (s *service) rulePreview(w http.ResponseWriter, r *http.Request) {
-	raw := readRuleForm(formValues(r)).raw()
+	raw := readRuleForm(web.FormValues(r)).raw()
 	raw["id"] = ruleedit.PreviewID
 	found, err := ruleedit.PreviewRule(r.Context(), s.deps.DB.Read, raw, ruleedit.DefaultLimit)
 	var invalid rules.RuleError
@@ -292,12 +292,12 @@ func (s *service) saveRule(w http.ResponseWriter, r *http.Request, id string, is
 }
 
 func (s *service) ruleCreate(w http.ResponseWriter, r *http.Request) {
-	form := formValues(r)
+	form := web.FormValues(r)
 	s.saveRule(w, r, py.Strip(web.FormString(form, "id", "")), true, readRuleForm(form))
 }
 
 func (s *service) ruleUpdate(w http.ResponseWriter, r *http.Request) {
-	s.saveRule(w, r, web.PathParam(r, "rule_id"), false, readRuleForm(formValues(r)))
+	s.saveRule(w, r, web.PathParam(r, "rule_id"), false, readRuleForm(web.FormValues(r)))
 }
 
 func (s *service) ruleEdit(w http.ResponseWriter, r *http.Request) {
@@ -315,7 +315,7 @@ func (s *service) ruleEdit(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) ruleMove(w http.ResponseWriter, r *http.Request) {
 	id := web.PathParam(r, "rule_id")
-	form := formValues(r)
+	form := web.FormValues(r)
 	var errs []web.FieldError
 	direction, given := web.FormField(form, "direction")
 	switch {
@@ -358,7 +358,7 @@ func idsOf(views []ruleView) []string {
 
 func (s *service) ruleDelete(w http.ResponseWriter, r *http.Request) {
 	id := web.PathParam(r, "rule_id")
-	account := queryValue(r.URL.Query(), "account")
+	account := web.QueryValue(r.URL.Query(), "account")
 	ctx := context.WithoutCancel(r.Context())
 	before := idsOf(s.ruleViews(ctx, account))
 	deleted, err := ruleedit.DeleteRule(ctx, s.deps.DB, id)
