@@ -42,14 +42,69 @@ func (b isoBuf) digits(p int, v *int, n int) (int, bool) {
 
 // FromISOFormat is CPython 3.14's datetime.fromisoformat (Modules/_datetimemodule.c).
 func FromISOFormat(s string) (DateTime, bool) {
+	dt, text := fromISOFormat(s)
+	return dt, text == ""
+}
+
+// ISOFormatError is the ValueError text datetime.fromisoformat raises for s, "" when s parses.
+func ISOFormatError(s string) string {
+	_, text := fromISOFormat(s)
+	return text
+}
+
+func invalidISO(s string) string { return "Invalid isoformat string: " + Repr(s) }
+
+func offsetError(total int64) string {
+	days := floorDiv64(total, 86_400_000_000)
+	rest := total - days*86_400_000_000
+	parts := ""
+	add := func(name string, v int64) {
+		if v == 0 {
+			return
+		}
+		if parts != "" {
+			parts += ", "
+		}
+		parts += fmt.Sprintf("%s=%d", name, v)
+	}
+	add("days", days)
+	add("seconds", rest/1_000_000)
+	add("microseconds", rest%1_000_000)
+	if parts == "" {
+		parts = "0"
+	}
+	return "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(" + parts + ")"
+}
+
+func floorDiv64(a, b int64) int64 {
+	q := a / b
+	if a%b != 0 && (a < 0) != (b < 0) {
+		q--
+	}
+	return q
+}
+
+func dateFieldsError(year, month, day int) string {
+	switch {
+	case year < 1 || year > 9999:
+		return fmt.Sprintf("year must be in 1..9999, not %d", year)
+	case month < 1 || month > 12:
+		return fmt.Sprintf("month must be in 1..12, not %d", month)
+	case day < 1 || day > daysInMonth(year, month):
+		return fmt.Sprintf("day %d must be in range 1..%d for month %d in year %d", day, daysInMonth(year, month), month, year)
+	}
+	return ""
+}
+
+func fromISOFormat(s string) (DateTime, string) {
 	var dt DateTime
 	if !utf8.ValidString(s) || utf8.RuneCountInString(s) < 7 {
-		return dt, false
+		return dt, invalidISO(s)
 	}
 	b := isoBuf(s)
 	sep := separatorLocation(b)
 	if sep < 0 {
-		return dt, false
+		return dt, invalidISO(s)
 	}
 	rv := b.parseDate(sep, &dt)
 	if rv == 0 && len(b) > sep {
@@ -67,20 +122,20 @@ func FromISOFormat(s string) (DateTime, bool) {
 		rv = b.parseTime(p, len(b), &dt)
 	}
 	if rv < 0 {
-		return dt, false
+		return dt, invalidISO(s)
 	}
 	if rv == 1 {
 		dt.Aware = true
 		total := int64(dt.OffsetSeconds)*1_000_000 + int64(dt.OffsetMicroseconds)
 		if total <= -86_400_000_000 || total >= 86_400_000_000 {
-			return dt, false
+			return dt, offsetError(total)
 		}
 	}
 	if dt.Hour == 24 && dt.Month >= 1 && dt.Month <= 12 {
 		dim := daysInMonth(dt.Year, dt.Month)
 		if dt.Day <= dim {
 			if dt.Minute != 0 || dt.Second != 0 || dt.Microsecond != 0 {
-				return dt, false
+				return dt, "minute, second, and microsecond must be 0 when hour is 24"
 			}
 			dt.Hour = 0
 			dt.Day++
@@ -94,13 +149,20 @@ func FromISOFormat(s string) (DateTime, bool) {
 			}
 		}
 	}
-	if dt.Year < 1 || dt.Year > 9999 || dt.Month < 1 || dt.Month > 12 || dt.Day < 1 || dt.Day > daysInMonth(dt.Year, dt.Month) {
-		return dt, false
+	if text := dateFieldsError(dt.Year, dt.Month, dt.Day); text != "" {
+		return dt, text
 	}
-	if dt.Hour > 23 || dt.Minute > 59 || dt.Second > 59 || dt.Microsecond > 999_999 {
-		return dt, false
+	switch {
+	case dt.Hour > 23:
+		return dt, fmt.Sprintf("hour must be in 0..23, not %d", dt.Hour)
+	case dt.Minute > 59:
+		return dt, fmt.Sprintf("minute must be in 0..59, not %d", dt.Minute)
+	case dt.Second > 59:
+		return dt, fmt.Sprintf("second must be in 0..59, not %d", dt.Second)
+	case dt.Microsecond > 999_999:
+		return dt, fmt.Sprintf("microsecond must be in 0..999999, not %d", dt.Microsecond)
 	}
-	return dt, true
+	return dt, ""
 }
 
 func separatorLocation(b isoBuf) int {
@@ -517,4 +579,43 @@ func isoWeekToDate(isoYear, week, wday int) (year, month, day int, ok bool) {
 	}
 	t := jan1.AddDate(0, 0, monday+(week-1)*7+wday-1)
 	return t.Year(), int(t.Month()), t.Day(), validYMD(t.Year(), int(t.Month()), t.Day())
+}
+
+// DateISOFormatError is the ValueError text date.fromisoformat raises for s, "" when s parses.
+func DateISOFormatError(s string) string {
+	if _, _, _, ok := DateFromISOFormat(s); ok {
+		return ""
+	}
+	if n := len(s); n != 7 && n != 8 && n != 10 {
+		return invalidISO(s)
+	}
+	b := isoBuf(s)
+	var year, month, day int
+	p, ok := b.digits(0, &year, 4)
+	if !ok {
+		return invalidISO(s)
+	}
+	sep := b.at(p) == '-'
+	if sep {
+		p++
+	}
+	if b.at(p) == 'W' {
+		return invalidISO(s)
+	}
+	if p, ok = b.digits(p, &month, 2); !ok {
+		return invalidISO(s)
+	}
+	if sep {
+		p++
+		if b.at(p-1) != '-' {
+			return invalidISO(s)
+		}
+	}
+	if _, ok = b.digits(p, &day, 2); !ok {
+		return invalidISO(s)
+	}
+	if text := dateFieldsError(year, month, day); text != "" {
+		return text
+	}
+	return invalidISO(s)
 }

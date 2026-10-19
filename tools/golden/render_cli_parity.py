@@ -18,12 +18,14 @@ from atrium import cli  # noqa: E402
 CLI_GOLDEN = GOLDEN / "cli"
 EXCLUDED_TOP = {
     "notion": "Notion module lands after cutover; the production binary answers invalid choice (exit 2)",
-    "calendar": "calendar module lands after cutover; the production binary answers invalid choice (exit 2)",
     "money": "money module lands after cutover; the production binary answers invalid choice (exit 2)",
     "media": "media module lands after cutover; the production binary answers invalid choice (exit 2)",
     "codemode-worker": "code mode is gone; the production binary keeps the command only as an inert unit target that exits 1 with a removed-in-v2 message",
 }
-EXCLUDED_PATHS = {("notion", "wiki-plan"): "excluded with the Notion module"}
+EXCLUDED_PATHS = {
+    ("notion", "wiki-plan"): "excluded with the Notion module",
+    ("calendar", "candidates"): "lands with the event candidates slice (#136); the production binary answers invalid choice (exit 2)",
+}
 GO_ONLY = [
     {"command": "--version", "args": [], "usage": "atrium --version", "status": "go-only", "note": "prints `atrium <version>` and exits 0; Python had no version flag", "cases": []},
     {"command": "GET /healthz", "args": [], "usage": "GET /healthz", "status": "go-only", "note": "unauthenticated liveness endpoint of `atrium serve`, answers 200", "cases": []},
@@ -41,6 +43,7 @@ NOTES = {
     ("proposals", "dismiss"): "exit 0 and prints {id, dismissed}",
     ("proposals", "undo"): "exit 1 (traceback) on an unknown or not-undoable proposal",
     ("serve",): "proxy mode without --allowed-host or ATRIUM_PUBLIC_HOST exits 1 with the message on stderr",
+    ("calendar", "google-auth"): "exit 1 with `error: ...` on a CalendarError; prints the consent URL, then GOOGLE_REFRESH_TOKEN=...",
 }
 
 

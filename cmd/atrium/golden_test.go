@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/calendar"
+	caldav "github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -228,9 +230,7 @@ func withUnported(have []*cli.Command) []*cli.Command {
 func noop(*cli.Args) cli.Handler { return func(*cli.Env) int { return cli.ExitOK } }
 
 // unported are goldens of commands whose proposal kind or executor another slice ports; each is enabled there.
-var unported = map[string]string{
-	"proposals-approve-list-selection-calendar": "the calendar_event executor is not ported yet",
-}
+var unported = map[string]string{}
 
 type parityCase struct {
 	Name     string  `json:"name"`
@@ -314,6 +314,7 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 	copyGoldenFile(t, filepath.Join(golden.Dir(), "atrium.db"), filepath.Join(dir, "atrium.db"))
 	copyTree(t, filepath.Join(golden.Dir(), "state", "cache"), filepath.Join(dir, "cache"))
 	srv := models(t)
+	t.Cleanup(calendar.UseEndpoints(calendar.Endpoints{CalDAV: caldav.New(t, data.environment["ICLOUD_APPLE_ID"], data.environment["ICLOUD_APP_PASSWORD"]).URL + "/"}))
 	vars := map[string]string{}
 	for k, v := range data.environment {
 		vars[k] = v
@@ -501,7 +502,7 @@ func TestCLIParity(t *testing.T) {
 		if row.Status == "ported" && !registered[row.Path[0]] {
 			t.Errorf("%s: ported but the binary has no %q command", row.Command, row.Path[0])
 		}
-		if row.Status == "excluded-until-ported" && row.Path[0] != "codemode-worker" && registered[row.Path[0]] {
+		if row.Status == "excluded-until-ported" && row.Path[0] != "codemode-worker" && len(row.Path) == 1 && registered[row.Path[0]] {
 			t.Errorf("%s: excluded but the binary registers %q", row.Command, row.Path[0])
 		}
 	}
@@ -536,7 +537,11 @@ func TestCLIParity(t *testing.T) {
 				}
 				return
 			}
-			if want := "invalid choice: '" + row.Path[0] + "'"; code != cli.ExitUsage || !strings.Contains(stderr.String(), want) {
+			refused := row.Path[0]
+			if registered[refused] && len(row.Path) > 1 {
+				refused = row.Path[1]
+			}
+			if want := "invalid choice: '" + refused + "'"; code != cli.ExitUsage || !strings.Contains(stderr.String(), want) {
 				t.Errorf("exit %d, stderr %q; want exit 2 and %q", code, stderr.String(), want)
 			}
 		})

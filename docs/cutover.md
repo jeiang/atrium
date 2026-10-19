@@ -524,29 +524,31 @@ migration hold for them, not that Go reads them.
 Calendar, Notion, money, media and Grafana land after cutover. Their units
 do not start. What the operator sees until then:
 
-- `atrium-run notion|calendar|money|media ...` answer `invalid choice` (exit
-  2) until the module lands. Mail, `live`, `proposals`, `rules`, `loops`,
-  `watches`, `reindex`, `shadow-report`, `agent` and `serve` work.
+- `atrium-run notion|money|media ...` answer `invalid choice` (exit 2) until
+  the module lands, and so does `atrium-run calendar candidates` (it lands
+  with #136); `atrium-run calendar google-auth` works. Mail, `live`,
+  `proposals`, `rules`, `loops`, `watches`, `reindex`, `shadow-report`,
+  `agent` and `serve` work.
 - The built-in callable jobs `media-sweep`, `media-channels`,
   `calendar-candidates`, `fx-rates` and `media-thumbnails` are skipped with
   one Info line each (`built-in job X has no function in this build; not
   run`, logged once per scheduler start); they are not recorded as job runs.
-- The system prompt names `event_propose`, and the nightly wiki-capture skill
-  names the Notion tools (`search_knowledge`, `notion_create_page`, ...).
-  Accepted: the model also sees the tools it is offered, finds these absent
-  and says so; `profile_set` and the summary still work.
+- The nightly wiki-capture skill names the Notion tools (`search_knowledge`,
+  `notion_create_page`, ...). Accepted: the model also sees the tools it is
+  offered, finds these absent and says so; `profile_set` and the summary
+  still work.
 - After cutover, on `/settings/subagents` disable the research roles
-  `notion`, `observability` and `calendar`: their tools are absent, so a
-  delegated child would run with `recall` only.
+  `notion` and `observability`: their tools are absent, so a delegated
+  child would run with `recall` only.
 - On `/settings/subagents` use the Enable/Disable toggle only. Do not Save
-  the `notion`, `observability` or `calendar` cards, or a custom agent that
-  names money, media or Grafana tools, until their modules land: the form
+  the `notion` or `observability` cards, or a custom agent that names money,
+  media or Grafana tools, until their modules land: the form
   submits only the tools this build registers, so a save drops the others
   from the stored allowlist and the seed does not restore them.
 - The Money and Media sidebar links return 404.
 - Pending proposals of post-cutover kinds (`notion_edit`, `notion_link`,
-  `calendar_event`, `notion_wiki_plan`) still list on `/proposals`; approve
-  refuses with `no executor for kind` and undo refuses for lack of an undoer.
+  `notion_wiki_plan`) still list on `/proposals`; approve refuses with `no
+  executor for kind` and undo refuses for lack of an undoer.
   Existing `agent_writes` rows of those tools show no undoer on `/activity`.
 - Data gaps while the modules are absent:
   - Calendar invitations the operator reads during the gap are never

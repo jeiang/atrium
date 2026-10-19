@@ -7,6 +7,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
+	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
@@ -54,6 +55,7 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 		openloops.Command(now),
 		watches.Command(now),
 		agentcmd.Command(),
+		calendarcmd.Command(),
 		web.ServeCommand(
 			web.Page{Module: chatpages.Module(chatpages.Options{}), Templates: chatpages.Templates()},
 			web.Page{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},

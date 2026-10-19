@@ -7,6 +7,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/nightly"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
 	contexttools "github.com/jeiang/atrium/internal/assistant/tools/context"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
@@ -26,7 +27,7 @@ func Registry() (*registry.Registry, error) {
 	for _, tools := range [][]tool.Tool{
 		mailtools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
 		contexttools.Tools(), recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
-		scheduletools.Tools(), skillstools.Tools(),
+		scheduletools.Tools(), skillstools.Tools(), calendartools.Tools(),
 	} {
 		if err := r.Add(tools...); err != nil {
 			return nil, err
@@ -39,5 +40,6 @@ func Registry() (*registry.Registry, error) {
 func Undoers() *writes.Registry {
 	r := writes.NewRegistry()
 	profiletools.RegisterUndoer(r)
+	calendartools.RegisterUndoers(r)
 	return r
 }
