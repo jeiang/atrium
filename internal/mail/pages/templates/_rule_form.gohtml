@@ -1,0 +1,98 @@
+{{define "mail_rule_form"}}{{$rule := .rule}}{{$is_new := .is_new}}{{$folders := .folders}}{{$suggestions := opt . "suggestions" nil}}{{$errors := opt . "errors" nil -}}
+<form id="rule-form" method="post" action="{{if $is_new}}/rules{{else}}/rules/{{urlencode $rule.id}}{{end}}" class="flex min-w-0 flex-col gap-6">
+  <input type="hidden" name="csrf_token" value="{{.csrf}}">
+  {{if $errors}}
+  <div class="alert" data-variant="destructive" role="alert">
+    {{icon "circle-alert"}}
+    <h2>The rule was not saved</h2>
+    <section><ul>{{range $errors}}<li>{{.}}</li>{{end}}</ul></section>
+  </div>
+  {{end}}
+
+  <fieldset class="fieldset">
+    <legend>Rule</legend>
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div role="group" class="field">
+        <label for="rule-id">Name</label>
+        {{if $is_new}}
+        <input id="rule-id" name="id" type="text" value="{{or $rule.id ""}}" placeholder="Generated if empty" autocomplete="off" spellcheck="false" class="font-mono" aria-describedby="rule-id-help">
+        <p id="rule-id-help">Shown in Decisions when this rule decides.</p>
+        {{else}}
+        <input id="rule-id" name="id" type="text" value="{{$rule.id}}" readonly class="font-mono" aria-describedby="rule-id-help">
+        <p id="rule-id-help">A rule keeps its name; delete it and create another to rename.</p>
+        {{end}}
+      </div>
+      <div role="group" class="field">
+        <label for="rule-account">Account</label>
+        <select id="rule-account" name="account" class="w-full">
+          <option value="">All accounts</option>
+          {{range $name := global "accounts"}}<option value="{{$name}}"{{if eq $rule.account $name}} selected{{end}}>{{$name}}</option>{{end}}
+        </select>
+      </div>
+      <fieldset class="fieldset gap-2">
+        <legend data-variant="label">Action</legend>
+        <div role="radiogroup" aria-label="Action" class="flex gap-4">
+          <div role="group" class="field" data-orientation="horizontal">
+            <input id="action-file" type="radio" name="action" value="file"{{if ne $rule.action "delete"}} checked{{end}}>
+            <label for="action-file" class="font-normal">File into</label>
+          </div>
+          <div role="group" class="field" data-orientation="horizontal">
+            <input id="action-delete" type="radio" name="action" value="delete"{{if eq $rule.action "delete"}} checked{{end}}>
+            <label for="action-delete" class="font-normal">Delete</label>
+          </div>
+        </div>
+      </fieldset>
+      <div role="group" class="field [form:has(#action-delete:checked)_&]:hidden">
+        <label for="rule-dest">Destination</label>
+        <select id="rule-dest" name="dest" class="w-full">
+          <option value=""{{if not $rule.dest}} selected{{end}}>Choose a folder or label</option>
+          {{range $name := global "accounts"}}
+          <optgroup label="{{$name}}">
+            {{range (get $folders $name)}}<option value="{{.folder}}"{{if eq $rule.dest .folder}} selected{{end}}>{{.folder}}</option>{{end}}
+          </optgroup>
+          {{end}}
+        </select>
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset class="fieldset group/conditions">
+    <legend>Conditions</legend>
+    <p>A message matches when every condition holds. Values compare without regard to case.</p>
+    <div class="hidden gap-2 px-0 text-xs font-medium text-muted-foreground sm:group-has-[#conditions>li]/conditions:grid sm:grid-cols-[--spacing(44)_--spacing(44)_minmax(0,1fr)_--spacing(9)]" aria-hidden="true">
+      <span>Field</span><span>Operator</span><span>Value</span><span></span>
+    </div>
+    <ol id="conditions" class="flex flex-col gap-2" role="list" aria-label="Conditions">
+      {{range $rule.when}}
+      {{template "mail_condition_row" (dict "c" (dict "field" .field "op" .op "value" (join ", " (get . "value"))))}}
+      {{end}}
+    </ol>
+    <div class="flex flex-wrap items-center gap-2">
+      <button id="add-condition" type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/rules/condition?focus=field" hx-target="#conditions" hx-swap="beforeend">{{icon "plus"}}Add condition</button>
+    </div>
+    {{if $suggestions}}
+    <div class="flex flex-col gap-2 rounded-md bg-muted/60 p-3 not-has-[li]:hidden">
+      <p class="text-xs font-medium text-muted-foreground">From the message: add a condition</p>
+      <ul class="flex flex-wrap gap-2" role="list">
+        {{range $suggestions}}
+        {{$value := join ", " (get . "value")}}
+        <li class="max-w-full min-w-0">
+          <button type="button" class="btn h-auto max-w-full flex-wrap justify-start gap-x-1.5 py-1 text-left font-normal whitespace-normal" data-size="sm" data-variant="outline"
+                  hx-get="/rules/condition?{{urlencode (odict "field" .field "op" .op "value" $value)}}" hx-target="#conditions" hx-swap="beforeend"
+                  data-suggestion>
+            {{icon "plus"}}{{template "condition_text" .}}
+          </button>
+        </li>
+        {{end}}
+      </ul>
+    </div>
+    {{end}}
+  </fieldset>
+
+  <div class="flex flex-wrap gap-2 border-t pt-4">
+    <button type="submit" class="btn">{{icon "check"}}{{if $is_new}}Create rule{{else}}Save rule{{end}}</button>
+    <a class="btn" data-variant="outline" href="/rules{{if $rule.account}}?account={{queryval $rule.account}}{{end}}">Cancel</a>
+  </div>
+</form>
+{{end}}
+{{template "mail_rule_form" (dict "rule" .Data.rule "is_new" .Data.is_new "folders" .Data.folders "suggestions" (opt .Data "suggestions" nil) "errors" (opt .Data "errors" nil) "csrf" .CSRF)}}

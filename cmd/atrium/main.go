@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
+	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/web"
@@ -28,6 +29,7 @@ func newApp() *cli.App {
 	app.Version = version
 	app.Add(run.SyncCommand(imapclient.Opener), run.WatchCommand(imapclient.Opener))
 	app.Add(web.ServeCommand(
+		web.Page{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
 		web.Page{Module: notify.Module, Templates: notify.Templates()},
 	))
 	return app

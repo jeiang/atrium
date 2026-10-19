@@ -1,0 +1,12 @@
+{{define "mail_decisions"}}
+<p class="text-xs text-muted-foreground tabular-nums" role="status">{{.total}} {{if eq .total 1}}decision{{else}}decisions{{end}}</p>
+<div class="overflow-hidden rounded-lg border bg-card">
+  <div class="hidden gap-x-4 border-b px-4 py-2 text-xs font-medium text-muted-foreground lg:grid lg:grid-cols-[minmax(0,1fr)_--spacing(64)_--spacing(48)_auto]" aria-hidden="true">
+    <span>Message</span><span>Now → proposed</span><span>Stage</span><span class="w-18"></span>
+  </div>
+  <ul id="decision-list" class="flex flex-col divide-y" role="list" aria-label="Decisions, newest first">
+    {{template "mail_triage_rows" .}}
+  </ul>
+</div>
+{{end}}
+{{template "mail_decisions" (dict "rows" .Data.rows "offset" .Data.offset "mode" .Mode "stage" .Data.stage "agreement" .Data.agreement "q" .Data.q "next_offset" .Data.next_offset "total" .Data.total "account" .Data.account)}}

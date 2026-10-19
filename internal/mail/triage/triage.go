@@ -129,6 +129,13 @@ type Filter struct {
 	Q         string
 }
 
+// FilterError is the ValueError of a stage or agreement filter that names none.
+type FilterError string
+
+func (e FilterError) Error() string { return string(e) }
+
+func (FilterError) PyClass() string { return "ValueError" }
+
 // Page is what triage returns.
 type Page struct {
 	Total int   `json:"total"`
@@ -138,10 +145,10 @@ type Page struct {
 // Triage is triage. A zero Limit is Python's default 50. An unknown stage or agreement is an error.
 func Triage(ctx context.Context, q report.Querier, f Filter) (Page, error) {
 	if f.Stage != "" && !slices.Contains(router.Stages[:], f.Stage) {
-		return Page{}, fmt.Errorf("unknown stage %s", py.Repr(f.Stage))
+		return Page{}, FilterError("unknown stage " + py.Repr(f.Stage))
 	}
 	if f.Agreement != "" && !slices.Contains(Agreements[:], f.Agreement) {
-		return Page{}, fmt.Errorf("unknown agreement %s", py.Repr(f.Agreement))
+		return Page{}, FilterError("unknown agreement " + py.Repr(f.Agreement))
 	}
 	if f.Limit == 0 {
 		f.Limit = 50
