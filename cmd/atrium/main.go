@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
 	mediapages "github.com/jeiang/atrium/internal/media/pages"
+	moneypages "github.com/jeiang/atrium/internal/money/pages"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -63,6 +64,7 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 			web.Page{Module: mediapages.Module(mediapages.Options{}), Templates: mediapages.Templates(), Public: mediapages.PublicCheck},
 			web.Page{Module: notify.Module, Templates: notify.Templates()},
 			web.Page{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers()}), Templates: reviewpages.Templates()},
+			web.Page{Module: moneypages.Module(moneypages.Options{}), Templates: moneypages.Templates()},
 		),
 		codemodeWorkerCommand(),
 	}

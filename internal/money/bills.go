@@ -17,6 +17,7 @@ type Bill struct {
 	Category         *string            `json:"category"`
 	Cadence          string             `json:"cadence"`
 	Typical          map[string]float64 `json:"typical"`
+	Currencies       []string           `json:"-"`
 	LastCharge       string             `json:"last_charge"`
 	NextExpected     *string            `json:"next_expected"`
 	DaysUntil        *int               `json:"days_until"`
@@ -167,7 +168,7 @@ func Bills(ctx context.Context, q db.Querier, today time.Time, upcomingDays *int
 			continue
 		}
 		out = append(out, Bill{
-			PayeeID: p.ID, Payee: p.Name, Category: p.Category, Cadence: cadence, Typical: typical,
+			PayeeID: p.ID, Payee: p.Name, Category: p.Category, Cadence: cadence, Typical: typical, Currencies: currencies,
 			LastCharge: isoDate(last), NextExpected: nextISO, DaysUntil: daysUntil, Override: p.RecurringOverride,
 			SubscriptionSeen: p.SubscriptionSeen != 0, Charges: len(found),
 		})
