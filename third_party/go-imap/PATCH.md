@@ -28,6 +28,9 @@ New files:
   scripted wire transcript test (`TestGmailTranscript`).
 - `imapclient/idle_restart.go`: `Options.idleRestart`, the IDLE re-issue
   interval with upstream's 28 minutes as the default.
+- `imapclient/vanished.go`: `Client.handleVanished`, which reads untagged
+  `VANISHED [(EARLIER)] <uid-set>` (iCloud sends it after UID EXPUNGE without
+  QRESYNC enabled) and discards it without expanding the set.
 
 One-line hooks in upstream files:
 
@@ -40,7 +43,9 @@ One-line hooks in upstream files:
   `unsupported msg-att name`.
 - `imapclient/search.go`: `writeSearchKey` writes the Gmail keys;
   `searchCriteriaIsASCII` checks `X-GM-RAW`.
-- `imapclient/client.go`: `Options.IdleRestartInterval`, so atrium's tests
+- `imapclient/client.go`: `readResponseData` dispatches `VANISHED` to
+  `handleVanished` instead of failing with `unsupported response type`;
+  `Options.IdleRestartInterval`, so atrium's tests
   can reach the IDLE re-issue; `imapclient/idle.go` reads it through
   `idleRestart` instead of the constant.
 
