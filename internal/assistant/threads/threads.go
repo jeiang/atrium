@@ -428,7 +428,7 @@ func ListThreads(ctx context.Context, q store.Querier, o ListOpts) ([]Listed, er
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Listed, error) {
+	return store.Collect(rows, func(r *sql.Rows) (Listed, error) {
 		var l Listed
 		return l, r.Scan(&l.ID, &l.Kind, &l.Title, &l.Pinned, &l.Archived, &l.CreatedAt, &l.UpdatedAt, &l.ProjectID,
 			&l.ProjectName, &l.RunState, &l.Cost)

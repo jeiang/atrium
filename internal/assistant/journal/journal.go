@@ -98,7 +98,7 @@ func runs(rows *sql.Rows, err error) ([]Run, error) {
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Run, error) { return scanRun(r) })
+	return store.Collect(rows, func(r *sql.Rows) (Run, error) { return scanRun(r) })
 }
 
 func changed(res sql.Result, err error) (bool, error) {
@@ -382,7 +382,7 @@ func MessagesOf(ctx context.Context, q store.Querier, threadID int64, includeSup
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Message, error) {
+	return store.Collect(rows, func(r *sql.Rows) (Message, error) {
 		var m Message
 		var raw string
 		var superseded store.Flag
@@ -516,7 +516,7 @@ func Queued(ctx context.Context, q store.Querier, threadID int64) ([]QueuedMessa
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (QueuedMessage, error) {
+	return store.Collect(rows, func(r *sql.Rows) (QueuedMessage, error) {
 		var m QueuedMessage
 		if err := r.Scan(&m.ID, &m.ThreadID, &m.Text, &m.CreatedAt, &m.ConsumedAt, &m.RunID, &m.FilesJSON); err != nil {
 			return QueuedMessage{}, err
@@ -610,7 +610,7 @@ func calls(rows *sql.Rows, err error) ([]ToolCall, error) {
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (ToolCall, error) { return scanCall(r) })
+	return store.Collect(rows, func(r *sql.Rows) (ToolCall, error) { return scanCall(r) })
 }
 
 // ToolCallsOf is tool_calls_of.

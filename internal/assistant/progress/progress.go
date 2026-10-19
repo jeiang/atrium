@@ -12,7 +12,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/store"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -78,7 +77,7 @@ func Since(ctx context.Context, q store.Querier, runID, afterID int64) ([]Event,
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Event, error) {
+	return store.Collect(rows, func(r *sql.Rows) (Event, error) {
 		var e Event
 		var data string
 		if err := r.Scan(&e.ID, &e.RunID, &e.Kind, &data); err != nil {

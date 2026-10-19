@@ -152,6 +152,20 @@ and backups; nothing of that lives here.
   `datetime.fromisoformat`) and the `jobs` CRUD with the 20-active cap
   and 1 h minimum gap (`SkipLimits` is Python's `enforce=False`). Its
   test runs `testdata/corpora/scheduler.jsonl` with exact match.
+- `internal/assistant/{journal,threads,usage,budget,pricing,projects,workspace,progress,writes}/`:
+  the assistant's persistence, each package one Python module of
+  `agent/`; `store` holds the `Querier` they take, `Flag` (a Python bool
+  column, JSON 0/1) and a never-nil `Collect`. Functions take a
+  `store.Querier` (so a caller picks the transaction) except the ones
+  whose Python opens `BEGIN IMMEDIATE` (`AppendMessage`, `Supersede`,
+  `QueueMessage`, `FinishUnlessQueued`, `AddAllowedURLs`), which take the
+  `*db.DB`. Journal message content is `[]json.RawMessage`, stored with
+  `json.dumps(..., separators=(",", ":"), ensure_ascii=False)`. The month
+  boundary comes from a `*time.Location` (`config.Location`), never the
+  process zone. `budget.BudgetExceeded` is a refusal; `usage.Record` prices
+  every `usage.iterations` entry on its own tier. The `workspace` view
+  (subagent cards, drafts) is assembled by the service layer.
+- `internal/notionid/`: `normalize_id`/`ids_in_text` of `notion_api.py`.
 - `internal/httpx/`: `http.py`. Every transport failure, timeout (POST
   600 s, GET 30 s) or non-2xx status is a `*ServiceUnavailable`; a
   malformed reply wraps `ErrValue`, `ErrKey`, `ErrIndex` or `ErrType`, so
@@ -195,7 +209,11 @@ and backups; nothing of that lives here.
 - `internal/py/`: the shared CPython emulation: `Repr`/`ReprBytes`, `IsSpace`/`Strip`/
   `Split`/`SplitLines`/`Clip`/`Lower`, `Sum`/`SumSq` (Neumaier, as `sum()`),
   `FromISOFormat` with `DateTime.Timestamp`/`WallToUnix`/`SplitTimestamp`,
-  `B64Decode` (non-strict `base64.b64decode`) and `DecodeUTF16BE`.
+  `B64Decode` (non-strict `base64.b64decode`), `DecodeUTF16BE`,
+  `FloatRepr`/`FormatFixed`/`FormatPercent`/`ParseFloat`/`ParseInt`
+  (`repr`, `format`, `float()` and `int()` of a str), `Truthy`, and
+  `JSONDumps`/`JSONRedump` (`json.dumps` spacing, escapes and number
+  spelling; `Object` keeps key order, a `map` dumps sorted).
   Python-emulation helpers live here; never add a per-package copy (the one
   exception is `internal/mail/mime`'s own `pystr.go`). Ported float
   reductions use `py.Sum`/`py.SumSq`, never a hand-written loop. The

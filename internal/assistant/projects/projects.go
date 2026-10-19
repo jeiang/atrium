@@ -12,7 +12,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -155,7 +154,7 @@ func List(ctx context.Context, q store.Querier, archived bool) ([]Project, error
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Project, error) { return scan(r) })
+	return store.Collect(rows, func(r *sql.Rows) (Project, error) { return scan(r) })
 }
 
 // SetArchived is set_archived.

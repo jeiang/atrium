@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -140,7 +139,7 @@ func FilesOf(ctx context.Context, q store.Querier, threadID int64) ([]File, erro
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (File, error) { return scanFile(r) })
+	return store.Collect(rows, func(r *sql.Rows) (File, error) { return scanFile(r) })
 }
 
 // GetFile is get_file: nil when the thread has no such file.
@@ -162,7 +161,7 @@ func ChildThreads(ctx context.Context, q store.Querier, threadID int64) ([]threa
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (threads.Thread, error) { return threads.Scan(r) })
+	return store.Collect(rows, func(r *sql.Rows) (threads.Thread, error) { return threads.Scan(r) })
 }
 
 // Source is something the thread read. Via names the subagent role that read it, nil for the thread itself.
@@ -233,7 +232,7 @@ func resultBodies(ctx context.Context, q store.Querier, threadIDs []int64) (map[
 	if err != nil {
 		return nil, err
 	}
-	stored, err := db.Collect(rows, func(r *sql.Rows) ([2]string, error) {
+	stored, err := store.Collect(rows, func(r *sql.Rows) ([2]string, error) {
 		var kv [2]string
 		return kv, r.Scan(&kv[0], &kv[1])
 	})
@@ -267,7 +266,7 @@ func callsOfThreads(ctx context.Context, q store.Querier, threadIDs []int64) ([]
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (threadCall, error) {
+	return store.Collect(rows, func(r *sql.Rows) (threadCall, error) {
 		var c threadCall
 		err := r.Scan(&c.ID, &c.RunID, &c.ToolUseID, &c.Name, &c.ArgsJSON, &c.ArgsSHA256, &c.ReplayClass, &c.State, &c.Error,
 			&c.ResultID, &c.StartedAt, &c.FinishedAt, &c.ThreadID, &c.Via)

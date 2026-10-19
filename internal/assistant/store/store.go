@@ -7,6 +7,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/jeiang/atrium/internal/db"
 )
 
 // Querier is the part of database/sql the persistence packages use.
@@ -72,4 +74,14 @@ func (f *Flag) Scan(src any) error {
 		return fmt.Errorf("store: cannot scan %T into a flag", src)
 	}
 	return nil
+}
+
+// Collect scans every row of rows with scan and closes rows. Like a Python list it is never nil, so it
+// encodes as [] when there are no rows.
+func Collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
+	out, err := db.Collect(rows, scan)
+	if out == nil {
+		out = []T{}
+	}
+	return out, err
 }

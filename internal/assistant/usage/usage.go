@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/store"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -165,7 +164,7 @@ func ByKind(ctx context.Context, q store.Querier, now float64, loc *time.Locatio
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (KindRow, error) {
+	return store.Collect(rows, func(r *sql.Rows) (KindRow, error) {
 		var k KindRow
 		return k, r.Scan(&k.Kind, &k.Calls, &k.Cost, &k.Searches)
 	})
@@ -196,7 +195,7 @@ func ByThread(ctx context.Context, q store.Querier, now float64, loc *time.Locat
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (ThreadRow, error) {
+	return store.Collect(rows, func(r *sql.Rows) (ThreadRow, error) {
 		var t ThreadRow
 		return t, r.Scan(&t.ThreadID, &t.Title, &t.Kind, &t.Calls, &t.Cost, &t.PromptTokens, &t.MaxPromptTokens, &t.OutputTokens, &t.Searches)
 	})
