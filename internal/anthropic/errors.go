@@ -53,6 +53,9 @@ func (e *APIError) Error() string { return e.Message }
 
 func (e *APIError) Unwrap() error { return e.err }
 
+// PyClass is the Python SDK exception class the error stands for.
+func (e *APIError) PyClass() string { return e.Class }
+
 func (e *APIError) RateLimited() bool {
 	return e.StatusCode == http.StatusTooManyRequests || e.Type == "rate_limit_error"
 }
