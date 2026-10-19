@@ -45,8 +45,8 @@ func ids(t *testing.T, d *db.DB, account string) []string {
 
 func wantRuleError(t *testing.T, err error, msg string) {
 	t.Helper()
-	var re *rules.RuleError
-	if !errors.As(err, &re) || (msg != "" && re.Msg != msg) {
+	var re rules.RuleError
+	if !errors.As(err, &re) || (msg != "" && string(re) != msg) {
 		t.Errorf("error %v, want RuleError %q", err, msg)
 	}
 }

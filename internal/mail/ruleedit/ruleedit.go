@@ -8,12 +8,14 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -39,7 +41,7 @@ var featureFields = []featureField{
 
 var listFeatures = []featureField{{"dkim_d", "in"}, {"esp", "in"}}
 
-func ruleErrorf(msg string) error { return &rules.RuleError{Msg: msg} }
+func ruleErrorf(msg string) error { return rules.RuleError(msg) }
 
 // withID is {**raw, "id": id}.
 func withID(raw any, id string) (any, bool) {
@@ -68,36 +70,10 @@ func get(raw any, key string) any {
 	return nil
 }
 
-func truthy(v any) bool {
-	switch v := v.(type) {
-	case nil:
-		return false
-	case string:
-		return v != ""
-	case bool:
-		return v
-	case int:
-		return v != 0
-	case int64:
-		return v != 0
-	case float64:
-		return v != 0
-	case []any:
-		return len(v) > 0
-	case []string:
-		return len(v) > 0
-	case py.Dict:
-		return len(v) > 0
-	case map[string]any:
-		return len(v) > 0
-	}
-	return true
-}
-
 func checked(raw any, id string) (rules.Rule, error) {
 	doc, ok := withID(raw, id)
 	if !ok {
-		return rules.Rule{}, errors.New("TypeError: 'raw' object is not a mapping")
+		return rules.Rule{}, fmt.Errorf("%w: 'raw' object is not a mapping", httpx.ErrType)
 	}
 	rule, err := rules.ValidateRule(doc)
 	if err != nil {
@@ -151,7 +127,7 @@ func ListRules(ctx context.Context, q rules.Querier, account string) ([]RuleDict
 // CreateRule is create_rule: it validates raw, generates an id when raw has none and appends the rule.
 func CreateRule(ctx context.Context, d *db.DB, raw any) (rules.Rule, error) {
 	id := "r-" + randomHex()
-	if truthy(get(raw, "id")) {
+	if py.Truthy(get(raw, "id")) {
 		s, ok := get(raw, "id").(string)
 		if !ok {
 			return rules.Rule{}, ruleErrorf("rule needs a string id")
@@ -277,7 +253,7 @@ type Preview struct {
 // PreviewRule is preview_rule: how many live messages the rule would match.
 func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int) (Preview, error) {
 	id := PreviewID
-	if truthy(get(raw, "id")) {
+	if py.Truthy(get(raw, "id")) {
 		s, ok := get(raw, "id").(string)
 		if !ok {
 			return Preview{}, ruleErrorf("rule needs a string id")

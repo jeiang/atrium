@@ -88,17 +88,15 @@ func TestRecordLogsDecisionAndValidates(t *testing.T) {
 		t.Errorf("eligible after a decision: %v, %v", pending, err)
 	}
 	for _, bad := range []string{"", "a|b", "INBOX", "   ", string(make([]rune, 201))} {
-		var ce *corrections.Error
-		if _, err := corrections.Record(ctx, d, m, bad, corrections.Source, 9); !errors.As(err, &ce) {
+		if _, err := corrections.Record(ctx, d, m, bad, corrections.Source, 9); !errors.As(err, new(corrections.Error)) {
 			t.Errorf("%q: %v", bad, err)
 		}
 	}
-	var ce *corrections.Error
-	if _, err := corrections.Record(ctx, d, 999, "X", corrections.Source, 9); !errors.As(err, &ce) || ce.Msg != "unknown message 999" {
+	if _, err := corrections.Record(ctx, d, 999, "X", corrections.Source, 9); err == nil || err != corrections.Error("unknown message 999") {
 		t.Errorf("unknown message: %v", err)
 	}
 	sent := rulestest.Add(t, d, 5, nil, "", rulestest.Fields{"sent": 1})
-	if _, err := corrections.Record(ctx, d, sent, "X", corrections.Source, 9); !errors.As(err, &ce) || ce.Msg != "cannot correct a sent message" {
+	if _, err := corrections.Record(ctx, d, sent, "X", corrections.Source, 9); err == nil || err != corrections.Error("cannot correct a sent message") {
 		t.Errorf("sent message: %v", err)
 	}
 	if _, err := corrections.Record(ctx, d, m, "|", corrections.Source, 9); err == nil || err.Error() != "invalid destination '|'" {
