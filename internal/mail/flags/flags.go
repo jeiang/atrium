@@ -101,7 +101,8 @@ func pending(ctx context.Context, d *db.DB, account string) ([]Row, error) {
 	}
 	return db.Collect(rows, func(r *sql.Rows) (Row, error) {
 		var row Row
-		return row, r.Scan(&row.ID, &row.FromAddr, &row.FromName, &row.Subject, &row.ListID)
+		err := r.Scan(&row.ID, &row.FromAddr, &row.FromName, &row.Subject, &row.ListID)
+		return row, err
 	})
 }
 

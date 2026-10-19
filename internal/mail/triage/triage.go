@@ -314,8 +314,9 @@ func FlagJudgments(ctx context.Context, q report.Querier, account string, limit,
 	}
 	out, err := db.Collect(rows, func(r *sql.Rows) (Judgment, error) {
 		var j Judgment
-		return j, r.Scan(&j.MessageID, &j.Account, &j.TS, &j.ContactsMatch, &j.PersonAsking, &j.DeadlineOrPaymentDue,
+		err := r.Scan(&j.MessageID, &j.Account, &j.TS, &j.ContactsMatch, &j.PersonAsking, &j.DeadlineOrPaymentDue,
 			&j.SecurityEvent, &j.LLMFlag, &j.Subject, &j.FromAddr, &j.FromName, &j.DateTS)
+		return j, err
 	})
 	if out == nil {
 		out = []Judgment{}
@@ -338,7 +339,8 @@ func Folders(ctx context.Context, q report.Querier, account string) ([]Folder, e
 	}
 	out, err := db.Collect(rows, func(r *sql.Rows) (Folder, error) {
 		var f Folder
-		return f, r.Scan(&f.Folder, &f.Count)
+		err := r.Scan(&f.Folder, &f.Count)
+		return f, err
 	})
 	if out == nil {
 		out = []Folder{}

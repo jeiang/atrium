@@ -309,7 +309,8 @@ func lexical(ctx context.Context, q Querier, match string, f Filters, limit int)
 	}
 	return db.Collect(rows, func(r *sql.Rows) (lexicalHit, error) {
 		var h lexicalHit
-		return h, r.Scan(&h.id, &h.snippet)
+		err := r.Scan(&h.id, &h.snippet)
+		return h, err
 	})
 }
 
@@ -319,7 +320,8 @@ func ids(rows *sql.Rows, err error) ([]int64, error) {
 	}
 	return db.Collect(rows, func(r *sql.Rows) (int64, error) {
 		var id int64
-		return id, r.Scan(&id)
+		err := r.Scan(&id)
+		return id, err
 	})
 }
 
@@ -408,7 +410,8 @@ func bodyHead(ctx context.Context, q Querier, list []int64) (map[int64]string, e
 	}
 	found, err := db.Collect(rows, func(r *sql.Rows) (head, error) {
 		var h head
-		return h, r.Scan(&h.id, &h.text)
+		err := r.Scan(&h.id, &h.text)
+		return h, err
 	})
 	for _, h := range found {
 		heads[h.id] = strings.Join(py.Split(h.text.String), " ")

@@ -260,7 +260,8 @@ func decidedIDs(t *testing.T, d *db.DB) []int64 {
 	}
 	ids, err := db.Collect(rows, func(r *sql.Rows) (int64, error) {
 		var id int64
-		return id, r.Scan(&id)
+		err := r.Scan(&id)
+		return id, err
 	})
 	if err != nil {
 		t.Fatal(err)
