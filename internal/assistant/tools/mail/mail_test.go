@@ -157,8 +157,10 @@ func TestMailReadArgumentErrors(t *testing.T) {
 		_, err := call(t, tc, "mail_read", args)
 		wantToolError(t, err, "message_id must be an integer")
 	}
+	_, err := call(t, tc, "mail_read", `{"message_id": 99999999999999999999, "max_chars": "x"}`)
+	wantToolError(t, err, "max_chars must be a number")
 	var raised *tool.Raised
-	_, err := call(t, tc, "mail_read", `{"message_id": 99999999999999999999}`)
+	_, err = call(t, tc, "mail_read", `{"message_id": 99999999999999999999}`)
 	if !asRaised(err, &raised) || raised.Class != "OverflowError" {
 		t.Errorf("huge id: %v", err)
 	}

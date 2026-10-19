@@ -503,8 +503,7 @@ func (s *Store) replyFor(ctx context.Context, v any) (int64, reply, error) {
 		id = int64(n)
 	case string:
 		shown = n
-		parsed, err := strconv.ParseInt(strings.TrimSpace(n), 10, 64)
-		found, id = err == nil, parsed
+		id, found = sqliteInteger(n)
 	default:
 		return 0, reply{}, &py.Exception{Class: "ProgrammingError", Msg: "Error binding parameter 1: type '" + py.TypeName(v) + "' is not supported"}
 	}
@@ -538,6 +537,10 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 		args = append(args, v)
 	}
 	if v, ok := changes["account"]; ok {
+		switch v.(type) {
+		case []any, []string, py.Dict, map[string]any:
+			return nil, &py.Exception{Class: "TypeError", Msg: "unhashable type: '" + py.TypeName(v) + "'"}
+		}
 		name, valid := validAccount(v)
 		if !valid {
 			return nil, accountError()
@@ -681,4 +684,21 @@ func (s *Store) UnexpectedRecipients(ctx context.Context, d Row) ([]string, erro
 		}
 	}
 	return out, nil
+}
+
+// sqliteInteger is how SQLite compares text with an INTEGER PRIMARY KEY: numeric text, with ASCII blanks around it,
+// that converts to an integer without loss is that integer.
+func sqliteInteger(text string) (int64, bool) {
+	text = strings.Trim(text, " \t\n\v\f\r")
+	if text == "" || strings.Trim(text, "0123456789+-.eE") != "" {
+		return 0, false
+	}
+	if n, err := strconv.ParseInt(text, 10, 64); err == nil {
+		return n, true
+	}
+	f, err := strconv.ParseFloat(text, 64)
+	if err != nil || f != math.Trunc(f) || math.Abs(f) >= 1<<63 {
+		return 0, false
+	}
+	return int64(f), true
 }

@@ -50,7 +50,7 @@ func packages(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	}
 	items, err := watches.ListPackages(ctx, tc.DB.Read, tc.Env, tc.Now(), activeOnly, false)
 	if err != nil {
-		return nil, err
+		return nil, raised(err)
 	}
 	out := make([]any, len(items))
 	for i, p := range items {

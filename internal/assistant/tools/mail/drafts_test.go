@@ -8,7 +8,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func draftWorld(t *testing.T) (*db.DB, *tool.Context, int64) {
@@ -110,9 +109,9 @@ func TestDraftCreateValidatesBeforeAHugeReplyIDOverflows(t *testing.T) {
 	_, err = call(t, tc, "draft_email_create", `{"account": "icloud", "to": [], "subject": "s", "body": "b", "in_reply_to_message_id": 99999999999999999999}`)
 	wantToolError(t, err, "to is required")
 	_, err = call(t, tc, "draft_email_create", `{"account": "icloud", "to": ["a@x.test"], "subject": "s", "body": "b", "in_reply_to_message_id": 99999999999999999999}`)
-	var classed py.Classed
-	if !errors.As(err, &classed) || classed.PyClass() != "OverflowError" {
-		t.Errorf("err = %v", err)
+	var raised *tool.Raised
+	if !errors.As(err, &raised) || raised.Class != "OverflowError" {
+		t.Errorf("err = %v (%T)", err, err)
 	}
 	var n int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM drafts").Scan(&n); err != nil || n != 0 {
@@ -127,10 +126,12 @@ func TestDraftUpdateWronglyTypedFieldsRaisePythonClasses(t *testing.T) {
 	for args, class := range map[string]string{
 		`{"draft_id": ` + id + `, "subject": 5}`:                  "AttributeError",
 		`{"draft_id": ` + id + `, "in_reply_to_message_id": [1]}`: "ProgrammingError",
+		`{"draft_id": ` + id + `, "account": ["icloud"]}`:         "TypeError",
+		`{"draft_id": ` + id + `, "account": {"a": 1}}`:           "TypeError",
 	} {
 		_, err := call(t, tc, "draft_email_update", args)
-		var classed py.Classed
-		if !errors.As(err, &classed) || classed.PyClass() != class {
+		var raised *tool.Raised
+		if !errors.As(err, &raised) || raised.Class != class {
 			t.Errorf("%s: err = %v (%T)", args, err, err)
 		}
 	}

@@ -105,8 +105,8 @@ func TestPackagesUnknownTimezoneKeepsItsClass(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := call(t, ctxFor(d, config.Config{}, env), "packages", `{}`)
-	var classed py.Classed
-	if !errors.As(err, &classed) || classed.PyClass() != "ZoneInfoNotFoundError" {
+	var raised *tool.Raised
+	if !errors.As(err, &raised) || raised.Class != "ZoneInfoNotFoundError" {
 		t.Errorf("err = %v (%T)", err, err)
 	}
 }

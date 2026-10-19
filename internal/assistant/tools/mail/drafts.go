@@ -58,7 +58,7 @@ func draftFailed(err error) error {
 	if errors.As(err, &de) {
 		return tool.Error(string(de))
 	}
-	return err
+	return raised(err)
 }
 
 // replyID is _reply_id: nil or an int, which may exceed int64; the store raises OverflowError for that only

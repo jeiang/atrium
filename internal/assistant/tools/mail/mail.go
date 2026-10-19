@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -177,13 +178,20 @@ func mailSearch(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 
 func mailRead(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	raw, _ := args.Get("message_id")
-	id, err := intArg(raw, "message_id must be an integer")
-	if err != nil {
-		return nil, err
+	var id int64
+	switch v := raw.(type) {
+	case int64:
+		id = v
+	case *big.Int:
+	default:
+		return nil, tool.Error("message_id must be an integer")
 	}
 	maxChars, err := tool.BoundedInt(args, "max_chars", BodyDefault, BodyDefault, 1)
 	if err != nil {
 		return nil, err
+	}
+	if _, huge := raw.(*big.Int); huge {
+		return nil, &tool.Raised{Class: "OverflowError"}
 	}
 	found, err := message.Get(ctx, tc.DB.Read, tc.Cfg.CacheDir, id)
 	if err != nil {

@@ -604,6 +604,15 @@ func TestUpdateTypeErrorsFollowPython(t *testing.T) {
 	if got.InReplyToMessageID == nil || *got.InReplyToMessageID != mid {
 		t.Errorf("stored reply id = %v, want %d", got.InReplyToMessageID, mid)
 	}
+	for _, v := range []any{strconv.FormatInt(mid, 10) + ".0", strconv.FormatInt(mid, 10) + "e0", " " + strconv.FormatInt(mid, 10) + " "} {
+		if _, err := w.store.Update(ctx, id, map[string]any{"in_reply_to_message_id": v}); err != nil {
+			t.Errorf("reply %q: %v", v, err)
+		}
+	}
+	draftError(t, func() error {
+		_, err := w.store.Update(ctx, id, map[string]any{"in_reply_to_message_id": "\u00a0" + strconv.FormatInt(mid, 10)})
+		return err
+	}(), "no message \u00a0"+strconv.FormatInt(mid, 10))
 	for v, want := range map[any]string{float64(1.5): "no message 1.5", "abc": "no message abc", false: "no message False", float64(999): "no message 999.0", "999": "no message 999"} {
 		_, err := w.store.Update(ctx, id, map[string]any{"in_reply_to_message_id": v})
 		draftError(t, err, want)

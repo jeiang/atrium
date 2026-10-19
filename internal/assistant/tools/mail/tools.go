@@ -4,6 +4,7 @@
 package mailtools
 
 import (
+	"errors"
 	"math/big"
 	"time"
 
@@ -45,4 +46,13 @@ func zone(env config.Env) (*time.Location, error) {
 func localTime(ts float64, loc *time.Location) time.Time {
 	sec, us := py.SplitTimestamp(ts)
 	return time.Unix(sec, us*1000).In(loc)
+}
+
+// raised is the loop's view of a Python exception: tool.Raised with the class, or err itself when it has none.
+func raised(err error) error {
+	var c py.Classed
+	if errors.As(err, &c) {
+		return &tool.Raised{Class: c.PyClass()}
+	}
+	return err
 }
