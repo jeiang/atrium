@@ -48,7 +48,7 @@ The module sets the rest from its options: `ATRIUM_DB`, `ATRIUM_CACHE_DIR`,
 `ATRIUM_CODEMODE_SOCKET`, `ATRIUM_MODE` (`mode`), `ATRIUM_CHAT_URL` and
 `ATRIUM_EMBED_URL` (`chatUrl`, `embedUrl`), `ATRIUM_TZ` (`timeZone`),
 `ATRIUM_PUBLIC_URL` (`publicUrl`), `ATRIUM_PUBLIC_HOST` (`web.allowedHost`,
-public listener only), `ATRIUM_STATIC_DIR` (`staticPackage`), `GRAFANA_URL`
+public listener only), `GRAFANA_URL`
 (`grafanaUrl`), `NTFY_URL`, `NTFY_TOPIC`, `NTFY_MEDIA_TOPIC` (`ntfy.*`),
 `ICLOUD_APPLE_ID`, `ATRIUM_CONTACTS_DIR` and `ATRIUM_CALENDAR_DIR`
 (`icloudAppleId`), `ATRIUM_MEDIA_ROOT`, `QBITTORRENT_URL`,
@@ -88,7 +88,7 @@ It runs in the `atrium-watch` and `atrium-sync` passes, right after routing.
 | --- | --- |
 | `atrium-watch` | `atrium watch`: IMAP IDLE on each INBOX, syncs, routes and applies on change |
 | `atrium-sync` | timer every 15 minutes, `atrium sync` as reconciliation |
-| `atrium-notion-sync` | timer every 15 minutes, `atrium notion sync` |
+| `atrium-notion-sync` | inert: no timer, `ExecStart` exits 0 until the Notion module lands |
 | `atrium-scan` | monthly timer, `atrium proposals scan-all` |
 | `atrium-agent-scheduler` | `atrium agent scheduler`: scheduled and nightly agent jobs |
 | `atrium-web` | `atrium serve` on `web.host:web.port` (default `0.0.0.0:8480`) with `web.auth` |
@@ -129,7 +129,7 @@ moves, relabels or deletes mail and edits Notion immediately; every such write
 is gated to an approved proposal and can be undone from `/proposals`. Correct
 records a correction and moves the message unless paused; rule edits change
 `atrium.db`.
-Assets (`app.css`, `app.js`, htmx, Basecoat) are built into `atrium-static` (`staticPackage`);
+Assets (`app.css`, `app.js`, htmx, Basecoat) are built into `atrium-static` and embedded in the Go binary;
 nothing loads from a CDN and no script is inline.
 
 ### Assistant
@@ -213,8 +213,7 @@ them with `container_upload` blocks, reuses the thread's container
 (`threads.container_id`; a rejected one is dropped and the call repeated) and, after each
 response, downloads files the container left in `$OUTPUT_DIR` into `thread_files` as
 `generated`. The switch shows the data note: files go to Anthropic, not under zero data
-retention, containers keep data up to 30 days. Monty `run_code` is unchanged and runs on
-the host in `atrium-codemode@`; the Work tab lists both as code sessions.
+retention, containers keep data up to 30 days. The Go binary has no code mode: `atrium-codemode.socket` and `atrium-codemode@.service` stay defined but inert (the worker exits non-zero).
 
 Context size is kept in check in layers, all scaled from the thread's context limit
 (never above the model's 1M). Requests go through the beta Messages API with
@@ -273,14 +272,14 @@ in `atrium.env`.
 
 ### Notion wiki and scans
 
-`atrium-notion-sync.timer` mirrors Notion every 15 minutes
-(`atrium notion sync`). `atrium-scan.timer` runs
+`atrium-notion-sync.service` stays defined because host configuration names it,
+but its `ExecStart` is a no-op that exits 0 and it has no timer: the Go binary
+does not mirror Notion until the Notion module lands. `atrium-scan.timer` runs
 `atrium proposals scan-all` monthly with `Persistent=true`. Rebalance
 proposals only appear after two scans at least 14 days apart see the same
 candidate, so the first scan after deploy creates none of those:
 
 ```sh
-systemctl start atrium-notion-sync.service
 systemctl start atrium-scan.service
 ```
 
@@ -300,25 +299,25 @@ sources: ...` footer at the end of each page. Every write is on /activity
 Setting up the wiki, or converting an existing workspace, once:
 
 1. Create a page "Wiki Home" in Notion and share it (and the databases and
-   pages that should move) with the integration.
+    pages that should move) with the integration.
 2. Put its page id in `atrium.env` as `ATRIUM_NOTION_WIKI_ROOT=...` and
-   restart the units (`systemctl restart atrium-web atrium-agent-scheduler`).
+    restart the units (`systemctl restart atrium-web atrium-agent-scheduler`).
 3. `atrium-run notion sync`, then `atrium-run notion wiki-plan`. The command
-   reads every database, row and page from the mirror, asks the assistant model
-   (structured output, chunked) for the hub structure, a mode per database
-   (one page with a table, or a hub with child pages) and a keep/merge/drop/
-   convert decision with a reason per item (drop: past one-off events,
-   receipts and purchases, facts available again from mail or the calendar,
-   unsourced guesses; private pages are kept and never sent to the model), and
-   queues one `notion_wiki_plan` proposal. The model calls are billed to a
-   "Wiki plan" chat thread on /usage.
+    reads every database, row and page from the mirror, asks the assistant model
+    (structured output, chunked) for the hub structure, a mode per database
+    (one page with a table, or a hub with child pages) and a keep/merge/drop/
+    convert decision with a reason per item (drop: past one-off events,
+    receipts and purchases, facts available again from mail or the calendar,
+    unsourced guesses; private pages are kept and never sent to the model), and
+    queues one `notion_wiki_plan` proposal. The model calls are billed to a
+    "Wiki plan" chat thread on /usage.
 4. Review it on /proposals (hubs, database modes, every item with its
-   decision and reason). Approve: hubs and converted pages are created under
-   Wiki Home, loose pages are moved, merged content is appended under a
-   "From <title>" heading, dropped rows and pages and every emptied database
-   are archived (never deleted), and the Wiki Log gets one line per step.
-   Undo on the proposal puts everything back. Dismiss and rerun `wiki-plan`
-   for a fresh draft; only one plan can be pending at a time.
+    decision and reason). Approve: hubs and converted pages are created under
+    Wiki Home, loose pages are moved, merged content is appended under a
+    "From <title>" heading, dropped rows and pages and every emptied database
+    are archived (never deleted), and the Wiki Log gets one line per step.
+    Undo on the proposal puts everything back. Dismiss and rerun `wiki-plan`
+    for a fresh draft; only one plan can be pending at a time.
 
 Drafts left in `sending` for more than 10 minutes (a crash mid-send) become
 `unknown` when the web app starts. /drafts?status=unknown asks you to check the
@@ -342,6 +341,10 @@ when something is due, using upcoming bills from the ledger), `calendar-candidat
 (hourly, drafts calendar proposals only when event candidates are queued), `fx-rates`
 (Monday 06:00, stores the CBTT USD selling rate; no model) and the three media jobs below
 (`media-channels`, `media-sweep`, `media-thumbnails`; no model). Their prompts live in code.
+Until the Go binary gains the media, calendar and money modules, the scheduler logs
+`built-in job X has no function in this build; not run` once per start for each of these
+callable jobs (`media-sweep`, `media-channels`, `calendar-candidates`, `fx-rates`,
+`media-thumbnails`) and writes no job run.
 
 Skills (/settings/skills) are playbooks. Four wiki skills are seeded once and can be
 edited or deleted: `wiki-capture` (save a durable fact from a conversation; the nightly

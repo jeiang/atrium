@@ -36,10 +36,10 @@ css:
   #!/usr/bin/env bash
   set -euo pipefail
   [ -e internal/web/static/app.js ] || just assets
-  mkdir -p src/atrium/web/node_modules/basecoat-css
-  tar -xzf "${ATRIUM_BASECOAT:?set by the dev shell}" --strip-components=1 -C src/atrium/web/node_modules/basecoat-css
-  cd src/atrium/web
-  exec tailwindcss --input static/input.css --output ../../../internal/web/static/app.css --watch
+  mkdir -p internal/web/assets/node_modules/basecoat-css
+  tar -xzf "${ATRIUM_BASECOAT:?set by the dev shell}" --strip-components=1 -C internal/web/assets/node_modules/basecoat-css
+  cd internal/web/assets
+  exec tailwindcss --input input.css --output ../static/app.css --watch
 
 # Run the Go tests with the race detector (inside the dev shell)
 go-test *args="./...":

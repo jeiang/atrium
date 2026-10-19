@@ -1,4 +1,8 @@
 {
+  self,
+  lib,
+  ...
+}: {
   perSystem = {
     pkgs,
     self',
@@ -11,5 +15,8 @@
     };
   };
 
-  flake.nixosModules.default = ../nix/module.nix;
+  flake.nixosModules.default = {pkgs, ...}: {
+    imports = [../nix/module.nix];
+    services.atrium.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.atrium-go;
+  };
 }

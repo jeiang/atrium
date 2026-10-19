@@ -1,4 +1,5 @@
 {
+  lib,
   stdenvNoCC,
   fetchurl,
   tailwindcss_4,
@@ -13,7 +14,16 @@
 in
   stdenvNoCC.mkDerivation {
     name = "atrium-static";
-    src = ../src/atrium/web;
+    src = lib.fileset.toSource {
+      root = ../.;
+      fileset = lib.fileset.unions [
+        (../internal/web/assets)
+        (../internal/web/tpl/labels.go)
+        (../internal/web/tpl/icons.go)
+        (lib.fileset.fileFilter (file: file.hasExt "gohtml") ../internal)
+      ];
+    };
+    sourceRoot = "source/internal/web/assets";
     nativeBuildInputs = [tailwindcss_4];
     dontConfigure = true;
     passthru = {inherit basecoat;};
@@ -21,13 +31,13 @@ in
       runHook preBuild
       mkdir -p node_modules/basecoat-css
       tar -xzf ${basecoat} --strip-components=1 -C node_modules/basecoat-css
-      tailwindcss --input static/input.css --output app.css --minify
+      tailwindcss --input input.css --output app.css --minify
       runHook postBuild
     '';
     installPhase = ''
       runHook preInstall
       install -Dm444 app.css $out/app.css
-      install -Dm444 static/app.js $out/app.js
+      install -Dm444 app.js $out/app.js
       install -Dm444 node_modules/basecoat-css/dist/js/all.min.js $out/basecoat/all.min.js
       tar -xzOf ${htmx} package/dist/htmx.min.js > $out/htmx.min.js
       runHook postInstall

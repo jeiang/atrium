@@ -358,8 +358,8 @@ and backups; nothing of that lives here.
   suffix, never a failed request. Template defines carry a `mail_` prefix and take one dict (pass `mode` and
   `csrf` in, never read the frame inside a define). A request that fails validation answers FastAPI's 422 JSON
   (`web.Unprocessable`), an unknown id the 404 page; `web.PathParam` decodes ids chi leaves escaped. Tailwind
-  scans only `src/atrium/web/templates`: before Python is deleted `nix/static.nix` must scan the Go templates
-  too (`internal/**/templates/*.gohtml`, `labels.go`, `icons.go`).
+  scans the Go templates (`internal/**/*.gohtml`, `labels.go`, `icons.go`); `input.css` and `app.js` live in
+  `internal/web/assets`.
 - `internal/mail/backlog/`: `backlog.py`, one `inbox_backlog` proposal per
   account from the go-live baseline; `BacklogError` before go-live.
 - `internal/proposals/`: `proposals.py`. `Registry` holds the executor of
