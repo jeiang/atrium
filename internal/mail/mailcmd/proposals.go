@@ -78,15 +78,13 @@ func listProposals(x *Exec, status, kind string) error {
 }
 
 func approve(x *Exec, id int64, selection string) error {
-	var chosen py.Dict
+	var chosen any
 	if selection != "" {
 		parsed, err := py.JSONLoads([]byte(selection))
 		if err != nil {
 			return err
 		}
-		if chosen, err = selectionDocument(parsed); err != nil {
-			return err
-		}
+		chosen = parsed
 	}
 	approved, err := x.Pipeline().ApproveAndApply(x.Ctx, id, chosen)
 	if err != nil {
@@ -94,18 +92,4 @@ func approve(x *Exec, id int64, selection string) error {
 	}
 	x.JSON(approved.Dict())
 	return nil
-}
-
-// selectionDocument is the --selection value as the executors read it: an object, or nothing for any falsy value.
-// A truthy value that is not an object is refused up front: Python's executors fail on it with AttributeError
-// after the proposal was claimed, or ignore it, depending on the kind.
-func selectionDocument(parsed any) (py.Dict, error) {
-	if !py.Truthy(parsed) {
-		return nil, nil
-	}
-	document, ok := parsed.(py.Dict)
-	if !ok {
-		return nil, py.AttributeError(parsed, "get")
-	}
-	return document, nil
 }

@@ -226,6 +226,11 @@ func withUnported(have []*cli.Command) []*cli.Command {
 
 func noop(*cli.Args) cli.Handler { return func(*cli.Env) int { return cli.ExitOK } }
 
+// unported are goldens of commands whose proposal kind or executor another slice ports; each is enabled there.
+var unported = map[string]string{
+	"proposals-approve-list-selection-calendar": "the calendar_event executor is not ported yet",
+}
+
 // ported is what cmd/atrium registers today and so what the goldens can check.
 var ported = []string{"rules", "shadow-report", "reindex", "rebalance", "deletions", "gmail-labels", "live", "proposals", "loops", "watches"}
 
@@ -311,6 +316,9 @@ func TestCLIGoldens(t *testing.T) {
 		}
 		ran++
 		t.Run(g.Name, func(t *testing.T) {
+			if reason, skip := unported[g.Name]; skip {
+				t.Skip(reason)
+			}
 			r := newRig(t, data, g.Env, g.Stdin)
 			tmp := filepath.Join(r.dir, "tmp")
 			if err := os.MkdirAll(tmp, 0o777); err != nil {

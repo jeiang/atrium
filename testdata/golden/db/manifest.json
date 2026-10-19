@@ -608,6 +608,62 @@
       "argv": [
         "atrium",
         "proposals",
+        "approve",
+        "9",
+        "--selection",
+        "[1]"
+      ],
+      "exit_code": 0,
+      "name": "proposals-approve-list-selection",
+      "stderr": "proposals-approve-list-selection.stderr",
+      "stdout": "proposals-approve-list-selection.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "6",
+        "--selection",
+        "[1]"
+      ],
+      "exit_code": 0,
+      "name": "proposals-approve-list-selection-deletion",
+      "stderr": "proposals-approve-list-selection-deletion.stderr",
+      "stdout": "proposals-approve-list-selection-deletion.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "9999",
+        "--selection",
+        "[1]"
+      ],
+      "exit_code": 1,
+      "name": "proposals-approve-list-selection-unknown",
+      "stderr": "proposals-approve-list-selection-unknown.stderr",
+      "stdout": "proposals-approve-list-selection-unknown.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
+        "approve",
+        "10",
+        "--selection",
+        "[1]"
+      ],
+      "exit_code": 0,
+      "name": "proposals-approve-list-selection-calendar",
+      "stderr": "proposals-approve-list-selection-calendar.stderr",
+      "stdout": "proposals-approve-list-selection-calendar.stdout"
+    },
+    {
+      "argv": [
+        "atrium",
+        "proposals",
         "dismiss",
         "8"
       ],
