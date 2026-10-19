@@ -36,7 +36,11 @@ func TestJSONLoads(t *testing.T) {
 	if got := ReprValue(v); got != want {
 		t.Errorf("JSONLoads = %s, want %s", got, want)
 	}
-	for _, bad := range []string{``, `{`, `[1,]`, `1 2`, `{"a": }`} {
+	special, err := JSONLoads([]byte(`[NaN, Infinity, -Infinity, 1e400, "\ud83d\ude00 \u00e9"]`))
+	if err != nil || ReprValue(special) != `[nan, inf, -inf, inf, '😀 é']` {
+		t.Errorf("specials %s, %v", ReprValue(special), err)
+	}
+	for _, bad := range []string{``, `{`, `[1,]`, `1 2`, `{"a": }`, `01`, "\"a\nb\"", `[1 2]`, `{1: 2}`, `nan`} {
 		if _, err := JSONLoads([]byte(bad)); err == nil {
 			t.Errorf("JSONLoads(%q) succeeded", bad)
 		}

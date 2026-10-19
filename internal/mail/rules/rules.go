@@ -74,11 +74,11 @@ var LearnedLevels = []LearnedLevel{
 }
 
 // RuleError is Python's RuleError, a ValueError whose text is shown to the operator.
-type RuleError struct{ Msg string }
+type RuleError string
 
-func (e *RuleError) Error() string { return e.Msg }
+func (e RuleError) Error() string { return string(e) }
 
-func ruleErrorf(format string, args ...any) error { return &RuleError{fmt.Sprintf(format, args...)} }
+func ruleErrorf(format string, args ...any) error { return RuleError(fmt.Sprintf(format, args...)) }
 
 // Condition is one `when` entry. Value is nil, a string, a []string, an int64, a *big.Int or a float64;
 // HasValue tells an absent value from a null one.
@@ -520,7 +520,7 @@ func ValidateCondition(raw any) (Condition, error) {
 	if op == "in" && !isList {
 		return Condition{}, ruleErrorf("op in needs a non-empty list of strings")
 	}
-	if op == "suffix" && !(isStr || isList) {
+	if op == "suffix" && !isStr && !isList {
 		return Condition{}, ruleErrorf("op suffix needs a string or list of strings")
 	}
 	if op == "re" {
@@ -555,7 +555,7 @@ func ValidateRule(raw any) (Rule, error) {
 	}
 	destV, _ := get("dest")
 	dest, destIsStr := destV.(string)
-	if act == ActionFile && !(destIsStr && dest != "") {
+	if act == ActionFile && (!destIsStr || dest == "") {
 		return Rule{}, ruleErrorf("%s: file rule needs dest", id)
 	}
 	if act == ActionDelete && destV != nil {
@@ -598,7 +598,7 @@ func ValidateRule(raw any) (Rule, error) {
 
 // ParseRuleset is rules.parse_ruleset: a list of rules or {"rules": [...]}.
 func ParseRuleset(document any) ([]Rule, error) {
-	var list any = document
+	list := document
 	if get, ok := object(document); ok {
 		list, _ = get("rules")
 	}

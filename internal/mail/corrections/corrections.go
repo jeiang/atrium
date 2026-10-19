@@ -21,11 +21,11 @@ const (
 )
 
 // Error is Python's CorrectionError; its text is shown to the operator.
-type Error struct{ Msg string }
+type Error string
 
-func (e *Error) Error() string { return e.Msg }
+func (e Error) Error() string { return string(e) }
 
-func errorf(format string, args ...any) error { return &Error{fmt.Sprintf(format, args...)} }
+func errorf(format string, args ...any) error { return Error(fmt.Sprintf(format, args...)) }
 
 // Correction is one corrections row.
 type Correction struct {

@@ -138,8 +138,8 @@ func TestInvalidRulesRejected(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := rules.ParseRuleset([]any{c.rule})
-			var re *rules.RuleError
-			if !errors.As(err, &re) || re.Msg != c.want {
+			var re rules.RuleError
+			if !errors.As(err, &re) || string(re) != c.want {
 				t.Errorf("error %v, want RuleError %q", err, c.want)
 			}
 		})
@@ -378,4 +378,33 @@ func TestRegexCorpus(t *testing.T) {
 	}
 	rxtest.Run(t, match)
 	rxtest.Run(t, validation)
+}
+
+func TestSpecialFloatsRoundTrip(t *testing.T) {
+	d := rulestest.DB(t)
+	ctx := t.Context()
+	doc, err := py.JSONLoads([]byte(`[{"id": "old", "action": "delete", "when": [{"field": "age_days", "op": "gte", "value": 1e400}]}]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rules.ImportRules(ctx, d, doc); err != nil {
+		t.Fatal(err)
+	}
+	var stored string
+	if err := d.Read.QueryRowContext(ctx, "SELECT conditions FROM rules").Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != `[{"field": "age_days", "op": "gte", "value": Infinity}]` {
+		t.Fatalf("stored %s", stored)
+	}
+	loaded, err := rules.LoadAllRules(ctx, d.Read)
+	if err != nil || len(loaded) != 1 {
+		t.Fatalf("LoadAllRules = %v, %v", loaded, err)
+	}
+	if got := loaded[0].Conditions[0].JSON(); got != `{"field": "age_days", "op": "gte", "value": Infinity}` {
+		t.Errorf("reloaded %s", got)
+	}
+	if ok, err := loaded[0].Conditions[0].Matches(row(func(m *rules.Message) { m.DateTS = 1 })); err != nil || ok {
+		t.Errorf("Matches = %v, %v", ok, err)
+	}
 }

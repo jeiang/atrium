@@ -1,16 +1,15 @@
 package py
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"math/big"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf16"
 )
 
 // FloatRepr is repr(float).
@@ -131,58 +130,249 @@ func (d Dict) Set(key string, value any) Dict {
 	return append(out, Pair{key, value})
 }
 
-// JSONLoads is json.loads for what encoding/json accepts: objects become Dict (a duplicate key keeps its first
-// position and its last value), arrays []any, integers int64 or *big.Int, other numbers float64.
+// JSONError is the text of Python's json.JSONDecodeError.
+type JSONError string
+
+func (e JSONError) Error() string { return string(e) }
+
+// JSONLoads is json.loads: objects become Dict (a duplicate key keeps its first position and its last value),
+// arrays []any, integers int64 or *big.Int, other numbers float64 (NaN and the infinities included).
 func JSONLoads(data []byte) (any, error) {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
-	v, err := decodeValue(dec)
+	p := &jsonParser{s: string(data)}
+	p.space()
+	v, err := p.value(0)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return nil, errors.New("Extra data")
+	p.space()
+	if p.i < len(p.s) {
+		return nil, JSONError("Extra data")
 	}
 	return v, nil
 }
 
-func decodeValue(dec *json.Decoder) (any, error) {
-	tok, err := dec.Token()
-	if err != nil {
-		return nil, err
+type jsonParser struct {
+	s string
+	i int
+}
+
+func (p *jsonParser) space() {
+	for p.i < len(p.s) && strings.IndexByte(" \t\n\r", p.s[p.i]) >= 0 {
+		p.i++
 	}
-	switch tok := tok.(type) {
-	case json.Delim:
-		if tok == '[' {
-			out := []any{}
-			for dec.More() {
-				e, err := decodeValue(dec)
-				if err != nil {
-					return nil, err
+}
+
+func (p *jsonParser) lit(word string) bool {
+	if strings.HasPrefix(p.s[p.i:], word) {
+		p.i += len(word)
+		return true
+	}
+	return false
+}
+
+func (p *jsonParser) value(depth int) (any, error) {
+	if depth > 900 {
+		return nil, errors.New("maximum recursion depth exceeded")
+	}
+	if p.i >= len(p.s) {
+		return nil, JSONError("Expecting value")
+	}
+	switch c := p.s[p.i]; {
+	case c == '{':
+		return p.object(depth)
+	case c == '[':
+		return p.array(depth)
+	case c == '"':
+		return p.str()
+	case p.lit("null"):
+		return nil, nil
+	case p.lit("true"):
+		return true, nil
+	case p.lit("false"):
+		return false, nil
+	case p.lit("NaN"):
+		return math.NaN(), nil
+	case p.lit("Infinity"):
+		return math.Inf(1), nil
+	case p.lit("-Infinity"):
+		return math.Inf(-1), nil
+	case c == '-' || c >= '0' && c <= '9':
+		return p.num()
+	}
+	return nil, JSONError("Expecting value")
+}
+
+func (p *jsonParser) num() (any, error) {
+	start := p.i
+	if p.s[p.i] == '-' {
+		p.i++
+	}
+	digits := func() int {
+		n := 0
+		for p.i < len(p.s) && p.s[p.i] >= '0' && p.s[p.i] <= '9' {
+			p.i++
+			n++
+		}
+		return n
+	}
+	if p.i < len(p.s) && p.s[p.i] == '0' {
+		p.i++
+	} else if digits() == 0 {
+		p.i = start
+		return nil, JSONError("Expecting value")
+	}
+	save := p.i
+	if p.i+1 < len(p.s) && p.s[p.i] == '.' {
+		p.i++
+		if digits() == 0 {
+			p.i = save
+		}
+	}
+	save = p.i
+	if p.i < len(p.s) && (p.s[p.i] == 'e' || p.s[p.i] == 'E') {
+		p.i++
+		if p.i < len(p.s) && (p.s[p.i] == '+' || p.s[p.i] == '-') {
+			p.i++
+		}
+		if digits() == 0 {
+			p.i = save
+		}
+	}
+	return number(p.s[start:p.i])
+}
+
+func (p *jsonParser) str() (any, error) {
+	p.i++
+	var b strings.Builder
+	for {
+		if p.i >= len(p.s) {
+			return nil, JSONError("Unterminated string")
+		}
+		c := p.s[p.i]
+		switch {
+		case c == '"':
+			p.i++
+			return b.String(), nil
+		case c < 0x20:
+			return nil, JSONError("Invalid control character")
+		case c != '\\':
+			b.WriteByte(c)
+			p.i++
+			continue
+		}
+		p.i++
+		if p.i >= len(p.s) {
+			return nil, JSONError("Unterminated string")
+		}
+		e := p.s[p.i]
+		p.i++
+		if i := strings.IndexByte(`"\\/bfnrt`, e); i >= 0 && e != 'u' {
+			b.WriteByte("\"\\/\b\f\n\r\t"[i])
+			continue
+		}
+		if e != 'u' {
+			return nil, JSONError("Invalid \\escape")
+		}
+		r, ok := p.hex4()
+		if !ok {
+			return nil, JSONError("Invalid \\uXXXX escape")
+		}
+		if utf16.IsSurrogate(r) && strings.HasPrefix(p.s[p.i:], "\\u") {
+			save := p.i
+			p.i += 2
+			if lo, ok := p.hex4(); ok {
+				if c := utf16.DecodeRune(r, lo); c != unicode.ReplacementChar {
+					r = c
+				} else {
+					p.i = save
 				}
-				out = append(out, e)
+			} else {
+				p.i = save
 			}
-			_, err := dec.Token()
-			return out, err
 		}
-		out := Dict{}
-		for dec.More() {
-			k, err := dec.Token()
-			if err != nil {
-				return nil, err
-			}
-			e, err := decodeValue(dec)
-			if err != nil {
-				return nil, err
-			}
-			out = out.Set(k.(string), e)
-		}
-		_, err := dec.Token()
-		return out, err
-	case json.Number:
-		return number(tok.String())
+		b.WriteRune(r)
 	}
-	return tok, nil
+}
+
+func (p *jsonParser) hex4() (rune, bool) {
+	if p.i+4 > len(p.s) {
+		return 0, false
+	}
+	n, err := strconv.ParseUint(p.s[p.i:p.i+4], 16, 32)
+	if err != nil || strings.ContainsAny(p.s[p.i:p.i+4], "+-_") {
+		return 0, false
+	}
+	p.i += 4
+	return rune(n), true
+}
+
+func (p *jsonParser) array(depth int) (any, error) {
+	p.i++
+	out := []any{}
+	p.space()
+	if p.i < len(p.s) && p.s[p.i] == ']' {
+		p.i++
+		return out, nil
+	}
+	for {
+		p.space()
+		v, err := p.value(depth + 1)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+		p.space()
+		switch {
+		case p.i < len(p.s) && p.s[p.i] == ',':
+			p.i++
+		case p.i < len(p.s) && p.s[p.i] == ']':
+			p.i++
+			return out, nil
+		default:
+			return nil, JSONError("Expecting ',' delimiter")
+		}
+	}
+}
+
+func (p *jsonParser) object(depth int) (any, error) {
+	p.i++
+	out := Dict{}
+	p.space()
+	if p.i < len(p.s) && p.s[p.i] == '}' {
+		p.i++
+		return out, nil
+	}
+	for {
+		p.space()
+		if p.i >= len(p.s) || p.s[p.i] != '"' {
+			return nil, JSONError("Expecting property name enclosed in double quotes")
+		}
+		k, err := p.str()
+		if err != nil {
+			return nil, err
+		}
+		p.space()
+		if p.i >= len(p.s) || p.s[p.i] != ':' {
+			return nil, JSONError("Expecting ':' delimiter")
+		}
+		p.i++
+		p.space()
+		v, err := p.value(depth + 1)
+		if err != nil {
+			return nil, err
+		}
+		out = out.Set(k.(string), v)
+		p.space()
+		switch {
+		case p.i < len(p.s) && p.s[p.i] == ',':
+			p.i++
+		case p.i < len(p.s) && p.s[p.i] == '}':
+			p.i++
+			return out, nil
+		default:
+			return nil, JSONError("Expecting ',' delimiter")
+		}
+	}
 }
 
 func number(text string) (any, error) {
@@ -201,4 +391,33 @@ func number(text string) (any, error) {
 		return nil, err
 	}
 	return f, nil
+}
+
+// Truthy is bool(v) of a decoded JSON value.
+func Truthy(v any) bool {
+	switch v := v.(type) {
+	case nil:
+		return false
+	case string:
+		return v != ""
+	case bool:
+		return v
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	case *big.Int:
+		return v.Sign() != 0
+	case []any:
+		return len(v) > 0
+	case []string:
+		return len(v) > 0
+	case Dict:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	}
+	return true
 }

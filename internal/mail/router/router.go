@@ -266,7 +266,7 @@ func MessageBody(ctx context.Context, q interface {
 func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleList []rules.Rule, lc *LLMContext) (*Decision, error) {
 	spec, ok := config.Account(m.Account)
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", errUnknownAccount, py.Repr(m.Account))
+		return nil, fmt.Errorf("%w: %s", httpx.ErrKey, py.Repr(m.Account))
 	}
 	corrected, err := corrections.Get(ctx, q, m.ID)
 	if err != nil {
@@ -326,8 +326,6 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 	}
 	return &Decision{Stage: "fallback", Action: "none"}, nil
 }
-
-var errUnknownAccount = errors.New("KeyError")
 
 // Record is router.record: it appends the decision to the decisions table.
 func (r *Router) Record(ctx context.Context, m *rules.Message, d *Decision) error {
