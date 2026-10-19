@@ -434,14 +434,14 @@ and backups; nothing of that lives here.
   checks it); iCloud runs on go-webdav, except that discovery reads `calendar-home-set` itself because go-webdav
   drops the host iCloud load-balances to. `UseEndpoints` and `UseTokens` are the test seams for the service URLs
   and the PKCE randomness. `Proposals` is the `calendar_event` kind (`Propose`, `Execute`, `Undo`, registered
-  by `proposals/handlers`); `event_candidates.py` and `calendar candidates` belong to #136. Its tests are the
+  by `proposals/handlers`); `candidates/` is `event_candidates.py` and `calendar candidates`. Its tests are the
   calendar corpus (`testdata/corpora/calendar.jsonl`, exact), the `google_auth` goldens and an end-to-end run over
   `calendar/caldavtest`, an iCloud CalDAV stand-in.
 - `internal/calendar/calendarcmd/`: `atrium calendar google-auth` (no configuration load; `error: ...` and exit
   1 on a `calendar.Error`). `internal/assistant/tools/calendar/` (package `calendartools`): `calendar_list`,
   `calendar_create`, `calendar_delete`, `event_propose` and the undoers `calendar_delete`/`calendar_recreate`
   (`RegisterUndoers`, read from `config.OS` as Python reads `os.environ`); `event_propose` marks its source
-  message `drafted` in `event_candidates` itself until #136 owns that module.
+  message `drafted` through `candidates.Mark`.
 - `internal/mail/rules/`, `ruleedit/`, `corrections/`, `router/`: the routing
   pipeline (`rules.py`, `ruleedit.py`, `corrections.py`, `router.py`).
   Stages are correction, operator rule, learned rule, nearest neighbours,
