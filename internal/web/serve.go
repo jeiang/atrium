@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"strconv"
@@ -48,9 +49,15 @@ func (h *hostsFlag) Set(v string) error {
 	return nil
 }
 
-// ServeCommand is `atrium serve`; modules are the page sets the server
+// Page is one page set: its routes and the template files they render (nil when it brings none).
+type Page struct {
+	Module    Module
+	Templates fs.FS
+}
+
+// ServeCommand is `atrium serve`; pages are the page sets the server
 // registers, in route order.
-func ServeCommand(modules ...Module) *cli.Command {
+func ServeCommand(pages ...Page) *cli.Command {
 	return &cli.Command{
 		Name: "serve",
 		Setup: func(fs *flag.FlagSet) cli.Handler {
@@ -66,19 +73,19 @@ func ServeCommand(modules ...Module) *cli.Command {
 				if !given {
 					return env.UsageError("the following arguments are required: --port")
 				}
-				return serve(env, serveArgs{host: *host, port: *port, auth: string(mode), hosts: hosts, modules: modules, env: config.OS})
+				return serve(env, serveArgs{host: *host, port: *port, auth: string(mode), hosts: hosts, pages: pages, env: config.OS})
 			}
 		},
 	}
 }
 
 type serveArgs struct {
-	host    string
-	port    int
-	auth    string
-	hosts   []string
-	modules []Module
-	env     config.Env
+	host  string
+	port  int
+	auth  string
+	hosts []string
+	pages []Page
+	env   config.Env
 }
 
 func publicHosts(given []string, env config.Env) []string {
@@ -121,11 +128,19 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil {
 		return err
 	}
-	render, err := NewRenderer(cfg, d, tpl.Config{})
+	var modules []Module
+	var templates []fs.FS
+	for _, p := range a.pages {
+		modules = append(modules, p.Module)
+		if p.Templates != nil {
+			templates = append(templates, p.Templates)
+		}
+	}
+	render, err := NewRenderer(cfg, d, tpl.Config{Modules: templates})
 	if err != nil {
 		return err
 	}
-	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, AllowedHosts: hosts, Render: render, Modules: a.modules})
+	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, AllowedHosts: hosts, Render: render, Modules: modules})
 	if err != nil {
 		return err
 	}
