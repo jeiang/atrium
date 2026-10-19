@@ -76,6 +76,8 @@ type RuleError string
 
 func (e RuleError) Error() string { return string(e) }
 
+func (RuleError) PyClass() string { return "RuleError" }
+
 func ruleErrorf(format string, args ...any) error { return RuleError(fmt.Sprintf(format, args...)) }
 
 // Condition is one `when` entry. Value is nil, a string, a []string, an int64, a *big.Int or a float64;
