@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -267,10 +266,18 @@ func portedCommands(rows []parityRow) map[string]bool {
 	return out
 }
 
-var volatileRunFields = regexp.MustCompile(`"(started_at|ended_at|lease_until|owner)": [^\n]*`)
+var volatileRunFields = []string{"started_at", "ended_at", "lease_until", "owner"}
 
 func normalizeRun(s string) string {
-	return volatileRunFields.ReplaceAllString(s, `"$1": <volatile>`)
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		for _, field := range volatileRunFields {
+			if strings.HasPrefix(strings.TrimLeft(line, " "), `"`+field+`": `) {
+				lines[i] = `"` + field + `": <volatile>`
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func lastLine(s string) string {
