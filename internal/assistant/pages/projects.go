@@ -70,11 +70,13 @@ func submittedValues(f projects.Fields, fallback ProjectFormValues) ProjectFormV
 		}
 	}
 	limit := *fallback.ContextLimit
-	if submitted, ok := py.LaxInt64(f.ContextLimit); ok {
-		for _, choice := range threads.ContextLimits {
-			if submitted == choice {
-				limit = submitted
-				break
+	if raw, ok := f.ContextLimit.(string); ok {
+		if submitted, valid := py.LaxInt64(raw); valid {
+			for _, choice := range threads.ContextLimits {
+				if submitted == choice {
+					limit = submitted
+					break
+				}
 			}
 		}
 	}
