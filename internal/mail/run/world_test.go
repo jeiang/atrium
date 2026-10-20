@@ -3,7 +3,11 @@ package run
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
+	"net"
+	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -76,6 +80,20 @@ func newWorld(t *testing.T, mode string, creds map[string]string) *world {
 	w := &world{t: t, env: env, cfg: cfg, db: d, fakes: map[string]*mailtest.FakeClient{config.ICloud: icloud, config.Gmail: gmail}}
 	w.pass = New(d, cfg, w.open, nil)
 	return w
+}
+
+type loopbackOnly struct{ next http.RoundTripper }
+
+func (l loopbackOnly) RoundTrip(r *http.Request) (*http.Response, error) {
+	if ip := net.ParseIP(r.URL.Hostname()); ip == nil || !ip.IsLoopback() {
+		return nil, errors.New("offline")
+	}
+	return l.next.RoundTrip(r)
+}
+
+func TestMain(m *testing.M) {
+	http.DefaultTransport = loopbackOnly{http.DefaultTransport}
+	os.Exit(m.Run())
 }
 
 func (w *world) open(ctx context.Context, account string) (mail.Client, error) {
