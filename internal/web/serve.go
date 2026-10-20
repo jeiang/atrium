@@ -102,7 +102,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil {
 		return err
 	}
-	if n, err := proposals.RecoverStuck(ctx, d); err != nil {
+	if n, err := proposals.RecoverStuck(ctx, d, float64(time.Now().UnixNano())/1e9); err != nil {
 		return err
 	} else if n > 0 {
 		log.Warn("failed approved proposals with a write in flight", "count", n)

@@ -923,10 +923,18 @@ func TestKilledApproveIsRecoveredFailedKeepsSettledBatchesUndoableAndNeverWrites
 	if _, err := w.pipeline.Undo(ctx, pid); err == nil {
 		t.Fatal("an approved proposal was undone")
 	}
-	if n, err := proposals.RecoverStuck(ctx, w.db); err != nil || n != 1 {
+	if n, err := proposals.RecoverStuck(ctx, w.db, w.clock+proposals.StuckSeconds-1); err != nil || n != 0 {
+		t.Fatalf("a write still inside the bound was recovered: %d, %v", n, err)
+	}
+	w.exec("UPDATE proposal_actions SET ts = ts + 100 WHERE proposal_id = ? AND ok = 1", pid)
+	if n, err := proposals.RecoverStuck(ctx, w.db, w.clock+proposals.StuckSeconds+1); err != nil || n != 0 {
+		t.Fatalf("a proposal with a recent settled row was recovered: %d, %v", n, err)
+	}
+	w.exec("UPDATE proposal_actions SET ts = ts - 100 WHERE proposal_id = ? AND ok = 1", pid)
+	if n, err := proposals.RecoverStuck(ctx, w.db, w.clock+proposals.StuckSeconds+1); err != nil || n != 1 {
 		t.Fatalf("recovered = %d, %v", n, err)
 	}
-	if n, err := proposals.RecoverStuck(ctx, w.db); err != nil || n != 0 {
+	if n, err := proposals.RecoverStuck(ctx, w.db, w.clock+proposals.StuckSeconds+1); err != nil || n != 0 {
 		t.Fatalf("second recovery = %d, %v", n, err)
 	}
 	p, _ := proposals.Get(ctx, w.db.Read, pid)

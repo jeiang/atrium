@@ -368,8 +368,8 @@ func CanUndo(ctx context.Context, q Querier, id int64) (bool, error) {
 	return len(pending(logged)) > 0, nil
 }
 
-// recovered reports a proposal whose approve was killed with a write in flight: only RecoverStuck leaves such a
-// row under a failed proposal, since every other failure settles or drops it.
+// recovered reports a proposal that still has a write in flight: a kill, or a ledger write that failed, leaves a row
+// nothing settled or dropped, and the batches settled before it stay undoable.
 func recovered(logged []Action) bool {
 	for _, a := range logged {
 		if op, _ := a.field("op"); op != UndoOp && !a.OK && a.Error != nil && *a.Error == InFlightText {
@@ -379,13 +379,20 @@ func recovered(logged []Action) bool {
 	return false
 }
 
-// RecoverStuck fails every approved proposal that has a write in flight. The row stays, so refuseUnresolved and
-// Known keep blocking a retry; the settled batches stay undoable.
-func RecoverStuck(ctx context.Context, d *db.DB) (int64, error) {
+// StuckSeconds is how long a proposal's newest ledger row must be idle before RecoverStuck treats its in-flight
+// write as dead: one IMAP write is bounded by the client's write timeout (2 min), and a live approve touches the
+// ledger between its writes. The same bound as drafts.SendingStaleSeconds.
+const StuckSeconds = 600
+
+// RecoverStuck fails every approved proposal that has a write in flight and no ledger row newer than StuckSeconds
+// before now. The in-flight row stays, so refuseUnresolved and Known keep blocking a retry; the settled batches
+// stay undoable.
+func RecoverStuck(ctx context.Context, d *db.DB, now float64) (int64, error) {
 	failure := py.Dict{{Key: "error", Value: mailops.UnknownPrefix + ": approve interrupted; resolve the mailbox by hand before approving again"}}
 	res, err := d.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, result = ? WHERE status = ? AND EXISTS "+
-		"(SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.ok = 0 AND a.error = ? AND json_extract(a.action, '$.op') IS NOT ?)",
-		Failed, py.JSONDumps(failure), Approved, InFlightText, UndoOp)
+		"(SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.ok = 0 AND a.error = ? AND json_extract(a.action, '$.op') IS NOT ?) "+
+		"AND NOT EXISTS (SELECT 1 FROM proposal_actions b WHERE b.proposal_id = proposals.id AND b.ts >= ?)",
+		Failed, py.JSONDumps(failure), Approved, InFlightText, UndoOp, now-StuckSeconds)
 	if err != nil {
 		return 0, err
 	}
