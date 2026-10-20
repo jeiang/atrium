@@ -98,10 +98,9 @@ func TestWatchCommandNotifiesSystemd(t *testing.T) {
 		code, _, _ := runCLI(t, ctx, w, credentials, "watch")
 		done <- code
 	}()
+	notify.Wait("READY=1")
+	notify.Wait("STATUS=watching")
 	notify.Wait("WATCHDOG=1")
-	if got := notify.Messages(); got[0] != "READY=1" || got[1] != "STATUS=watching" {
-		t.Errorf("notify messages = %q", got)
-	}
 	cancel()
 	if code := <-done; code != cli.ExitOK {
 		t.Fatalf("watch = %d", code)
