@@ -183,8 +183,7 @@ func (w *Watcher) waitForChange(ctx context.Context, client mail.Client) (bool, 
 }
 
 // Account is watch_account: a locked pass, then a pass after every change the Inbox reports, until ctx ends. A
-// failure closes the connection and reconnects after the backoff, which a successful first pass resets. A pass that
-// has started runs to its end: ctx is seen only between passes and while waiting.
+// failure closes the connection and reconnects after the backoff, which a successful first pass resets.
 func (w *Watcher) Account(ctx context.Context, account string) {
 	backoff := 0
 	h := w.heartbeat(account)
@@ -195,11 +194,14 @@ func (w *Watcher) Account(ctx context.Context, account string) {
 			continue
 		}
 		backoff = NextBackoff(backoff)
+		reason := "watch failed"
 		if ConnectionLost(err) {
+			reason = "connection lost"
 			watchLog.Warn(fmt.Sprintf("%s connection lost (%s), reconnecting in %ds", account, err, backoff))
 		} else {
 			watchLog.Error(fmt.Sprintf("%s watch failed, retrying in %ds", account, backoff), logx.Err, err.Error())
 		}
+		w.Notify.Status(fmt.Sprintf("%s: reconnecting in %ds (%s)", account, backoff, reason))
 		waiting(h, func() { w.sleep(ctx, time.Duration(backoff)*time.Second) })
 	}
 }
@@ -215,10 +217,11 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 		return err
 	}
 	defer closeDB()
-	whole := context.WithoutCancel(ctx)
-	if err := pass.Locked(whole, []string{account}); err != nil {
+	workCtx := context.WithoutCancel(ctx)
+	if err := pass.Locked(ctx, workCtx, []string{account}); err != nil {
 		return err
 	}
+	w.Notify.Status("watching")
 	h := w.heartbeat(account)
 	return mailops.Session(ctx, pass.Open, account, func(client mail.Client) error {
 		*backoff = 0
@@ -239,7 +242,7 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 					break
 				}
 			}
-			if err := pass.Locked(whole, []string{account}); err != nil {
+			if err := pass.Locked(ctx, workCtx, []string{account}); err != nil {
 				return err
 			}
 		}

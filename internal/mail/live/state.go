@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/corrections"
+	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
@@ -389,8 +390,9 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	var ok *int64
 	var dest, plan *string
 	var undoneTS *float64
-	err := l.DB.Write.QueryRowContext(ctx, "SELECT account, kind, message_id, ok, dest, undo, undone_ts FROM auto_actions WHERE id = ?", id).
-		Scan(&account, &kind, &messageID, &ok, &dest, &plan, &undoneTS)
+	var undoneError *string
+	err := l.DB.Write.QueryRowContext(ctx, "SELECT account, kind, message_id, ok, dest, undo, undone_ts, undone_error FROM auto_actions WHERE id = ?", id).
+		Scan(&account, &kind, &messageID, &ok, &dest, &plan, &undoneTS, &undoneError)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UndoResult{}, UndoError(fmt.Sprintf("unknown action %d", id))
 	}
@@ -399,6 +401,9 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	}
 	if ok == nil || (*ok != 0 && *ok != 1) || undoneTS != nil || plan == nil {
 		return UndoResult{}, UndoError(fmt.Sprintf("action %d cannot be undone", id))
+	}
+	if undoneError != nil && mailops.Blocks(*undoneError) {
+		return UndoResult{}, UndoError(fmt.Sprintf("action %d has a partial undo (%s); resolve it in the mailbox before undoing again", id, *undoneError))
 	}
 	parsed, err := py.JSONLoads([]byte(*plan))
 	if err != nil {
@@ -418,18 +423,25 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		return UndoResult{}, UndoError("no undo handler for " + py.ReprValue(op))
 	}
 	detail, err := undoer(safety.ApprovedWrites(ctx, fmt.Sprintf("undo-%d", id)), json.RawMessage(*plan))
+	settle := context.WithoutCancel(ctx)
 	if err != nil {
 		text := py.ExceptionText(err)
-		if _, uerr := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET undone_error = ? WHERE id = ?", text, id); uerr != nil {
+		if ctx.Err() != nil {
+			text = mailops.UnknownPrefix + ": " + text
+		}
+		if _, uerr := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET undone_error = ? WHERE id = ?", text, id); uerr != nil {
 			return UndoResult{}, uerr
+		}
+		if ctx.Err() != nil {
+			return UndoResult{}, err
 		}
 		return UndoResult{}, UndoError(text)
 	}
-	if _, err := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET undone_ts = ?, undone_error = NULL WHERE id = ?", l.now(), id); err != nil {
+	if _, err := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET undone_ts = ?, undone_error = NULL WHERE id = ?", l.now(), id); err != nil {
 		return UndoResult{}, err
 	}
 	if kind == Correct {
-		if _, err := corrections.Clear(ctx, l.DB, messageID, dest); err != nil {
+		if _, err := corrections.Clear(settle, l.DB, messageID, dest); err != nil {
 			return UndoResult{}, err
 		}
 	}

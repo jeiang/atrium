@@ -5,11 +5,11 @@
       hx-post="/scheduled/2" hx-target="#schedule-dialog" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
   <input type="hidden" name="csrf_token" value="csrf-golden-token">
   <header class="flex-row items-center gap-2">
-    <h2 class="min-w-0 flex-1 truncate">Edit Morning &lt;brief&gt; Café naïve — 東京 🎉 مرحبا</h2>
+    <h2 id="schedule-dialog-title" class="min-w-0 flex-1 truncate">Edit Morning &lt;brief&gt; Café naïve — 東京 🎉 مرحبا</h2>
     <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close" data-action="close-dialog"><svg class="lucide lucide-x " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
   </header>
   <section class="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
-    <p class="text-sm text-destructive" role="alert">Unrecognised schedule &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</p>
+    <p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>Unrecognised schedule &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</p>
     <div class="grid gap-3 sm:grid-cols-2">
       <div role="group" class="field">
         <label for="sched-name">Name</label>
@@ -36,7 +36,7 @@
   
   <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
     
-    <span class="badge" data-variant="destructive" title="&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;">error</span>
+    <span class="badge" data-variant="destructive" title="&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;">Failed</span>
     <span class="text-xs text-muted-foreground tabular-nums">Mon 06 Oct 07:30</span>
     
     <span class="min-w-0 max-w-full truncate text-xs text-muted-foreground" title="&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;">&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</span>

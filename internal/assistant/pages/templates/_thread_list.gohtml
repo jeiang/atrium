@@ -22,7 +22,7 @@
 
 {{define "chat_thread_group"}}{{$project_id := .project_id}}
 <section class="flex flex-col gap-2" aria-label="{{.title}}">
-  <h2 class="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{.title}}</h2>
+  <h2 class="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground" tabindex="-1" data-focus-fallback>{{.title}}</h2>
   <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
     {{range .items}}{{template "chat_thread_row" (dict "t" . "project_id" $project_id)}}{{end}}
   </ul>
@@ -43,10 +43,10 @@
     </span>
   </a>
   {{if not $t.archived}}
-  <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="{{if $t.pinned}}Unpin{{else}}Pin{{end}}" aria-label="{{if $t.pinned}}Unpin{{else}}Pin{{end}} {{or $t.title "thread"}}"
+  <button id="thread-{{$t.id}}-pin" type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="{{if $t.pinned}}Unpin{{else}}Pin{{end}}" aria-label="{{if $t.pinned}}Unpin{{else}}Pin{{end}} {{or $t.title "thread"}}"
           hx-post="/chat/{{$t.id}}/pin" hx-vals='{"pinned": {{if $t.pinned}}0{{else}}1{{end}}, "project_id": {{or $project_id 0}}}' hx-include="#thread-search" hx-target="#threads" hx-swap="innerHTML">{{icon (ternary $t.pinned "pin-off" "pin")}}</button>
   {{end}}
-  <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="{{if $t.archived}}Unarchive{{else}}Archive{{end}}" aria-label="{{if $t.archived}}Unarchive{{else}}Archive{{end}} {{or $t.title "thread"}}"
+  <button id="thread-{{$t.id}}-archive" type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="{{if $t.archived}}Unarchive{{else}}Archive{{end}}" aria-label="{{if $t.archived}}Unarchive{{else}}Archive{{end}} {{or $t.title "thread"}}"
           hx-post="/chat/{{$t.id}}/archive" hx-vals='{"archived": {{if $t.archived}}0{{else}}1{{end}}, "project_id": {{or $project_id 0}}}' hx-include="#thread-search" hx-target="#threads" hx-swap="innerHTML">{{icon (ternary $t.archived "archive-restore" "archive")}}</button>
 </li>
 {{- end}}

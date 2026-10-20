@@ -4,11 +4,11 @@
 <form method="post" action="{{$action}}" class="w-full sm:max-w-2xl" hx-post="{{$action}}" hx-target="#project-dialog" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
   <input type="hidden" name="csrf_token" value="{{.csrf}}">
   <header class="flex-row items-center gap-2">
-    <h2 class="min-w-0 flex-1 truncate">{{if .project}}Edit {{.project.name}}{{else}}New project{{end}}</h2>
+    <h2 id="project-dialog-title" class="min-w-0 flex-1 truncate">{{if .project}}Edit {{.project.name}}{{else}}New project{{end}}</h2>
     <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close" data-action="close-dialog">{{icon "x"}}</button>
   </header>
   <section class="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
-    {{if .error}}<p class="text-sm text-destructive" role="alert">{{.error}}</p>{{end}}
+    {{if .error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.error}}</p>{{end}}
     <div role="group" class="field">
       <label for="project-name">Name</label>
       <input id="project-name" name="name" type="text" value="{{$v.name}}" required>
@@ -20,15 +20,17 @@
     <div class="grid gap-3 sm:grid-cols-2">
       <div role="group" class="field">
         <label for="project-effort">Default effort</label>
-        <select id="project-effort" name="effort" class="select">
+        <select id="project-effort" name="effort" class="select" aria-describedby="project-effort-help">
           {{range .efforts}}<option value="{{.}}"{{if eq . $v.effort}} selected{{end}}>{{.}}</option>{{end}}
         </select>
+        <p id="project-effort-help">How hard the assistant thinks in new chats of this project: low is quick, max is the most thorough. Each chat can still change it.</p>
       </div>
       <div role="group" class="field">
         <label for="project-context">Default context limit</label>
-        <select id="project-context" name="context_limit" class="select">
+        <select id="project-context" name="context_limit" class="select" aria-describedby="project-context-help">
           {{range .context_limits}}<option value="{{.}}"{{if and $v.context_limit (eq . $v.context_limit)}} selected{{end}}>{{int (fdiv . 1000)}}K{{if gt . 100000}} (5× price over 100K){{end}}</option>{{end}}
         </select>
+        <p id="project-context-help">When a chat approaches this limit, older tool results are cleared and the conversation is compacted.</p>
       </div>
     </div>
     {{template "project_hub" (dict "project" .project "hub_id" (or $v.wiki_hub_id "") "notice" nil "error" nil)}}

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"net/url"
 
 	"github.com/jeiang/atrium/internal/assistant/subagents"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -23,17 +24,21 @@ type AgentView struct {
 }
 
 type SubagentsData struct {
-	Agents  []AgentView          `json:"agents"`
-	Pool    []subagents.PoolTool `json:"pool"`
-	Efforts []string             `json:"efforts"`
-	Draft   AgentView            `json:"draft"`
+	Agents      []AgentView          `json:"agents"`
+	Pool        []subagents.PoolTool `json:"pool"`
+	Efforts     []string             `json:"efforts"`
+	Draft       AgentView            `json:"draft"`
+	Editing     string               `json:"editing"`
+	Error       string               `json:"error"`
+	Focus       string               `json:"focus"`
+	StripParams bool                 `json:"strip_params"`
 }
 
 func agentView(a subagents.Agent) AgentView {
 	return AgentView{Name: a.Name, Description: a.Description, Prompt: a.Prompt, Effort: a.Effort, Enabled: a.Enabled, Builtin: a.Builtin, Tools: a.Tools}
 }
 
-func (p *pages) subagentsPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, draft AgentView) {
+func (p *pages) subagentsPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, draft AgentView, editing, formError, focus string, stripParams bool) {
 	found, err := subagents.List(r.Context(), p.deps.DB.Read)
 	check(err)
 	pool, err := subagents.Pool(p.reg)
@@ -42,11 +47,45 @@ func (p *pages) subagentsPage(w http.ResponseWriter, r *http.Request, status int
 	for i, a := range found {
 		views[i] = agentView(a)
 	}
-	p.settings(w, r, status, "subagents.gohtml", SubagentsData{Agents: views, Pool: pool, Efforts: threads.Efforts[:], Draft: draft}, toast)
+	p.settings(w, r, status, "subagents.gohtml", SubagentsData{
+		Agents: views, Pool: pool, Efforts: threads.Efforts[:], Draft: draft, Editing: editing, Error: formError, Focus: focus, StripParams: stripParams,
+	}, toast)
 }
 
 func (p *pages) subagentsIndex(w http.ResponseWriter, r *http.Request) {
-	p.subagentsPage(w, r, http.StatusOK, nil, AgentView{})
+	ctx := r.Context()
+	var toast *tpl.Toast
+	var focus string
+	saved := web.QueryValue(r.URL.Query(), "saved")
+	if saved != "" {
+		agent, err := subagents.Get(ctx, p.deps.DB.Read, saved)
+		check(err)
+		if agent != nil {
+			focus = saved
+			toast = notice("success", "Subagent saved", saved)
+		}
+	}
+	toggled := web.QueryValue(r.URL.Query(), "toggled")
+	if toast == nil && toggled != "" {
+		agent, err := subagents.Get(ctx, p.deps.DB.Read, toggled)
+		check(err)
+		if agent != nil {
+			state := "disabled"
+			if agent.Enabled {
+				state = "enabled"
+			}
+			toast = notice("success", "Subagent updated", agent.Name+" is now "+state)
+		}
+	}
+	deleted := web.QueryValue(r.URL.Query(), "deleted")
+	if toast == nil && deleted != "" {
+		agent, err := subagents.Get(ctx, p.deps.DB.Read, deleted)
+		check(err)
+		if agent == nil {
+			toast = notice("success", "Subagent deleted", deleted)
+		}
+	}
+	p.subagentsPage(w, r, http.StatusOK, toast, AgentView{}, "", "", focus, toast != nil)
 }
 
 func (p *pages) subagentSave(w http.ResponseWriter, r *http.Request) {
@@ -69,11 +108,19 @@ func (p *pages) subagentSave(w http.ResponseWriter, r *http.Request) {
 	})
 	var refused subagents.Error
 	if errors.As(err, &refused) {
-		p.subagentsPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()), draft)
+		editing := ""
+		if web.FormString(form, "from", "") == "edit" {
+			existing, getErr := subagents.Get(ctx, p.deps.DB.Read, py.Strip(draft.Name))
+			check(getErr)
+			if existing != nil {
+				editing = existing.Name
+			}
+		}
+		p.subagentsPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()), draft, editing, err.Error(), "", false)
 		return
 	}
 	check(err)
-	p.subagentsPage(w, r, http.StatusOK, notice("success", "Subagent saved", py.Strip(draft.Name)), AgentView{})
+	settingsRedirect(w, "/settings/subagents?saved="+url.QueryEscape(py.Strip(draft.Name)))
 }
 
 func (p *pages) subagentToggle(w http.ResponseWriter, r *http.Request) {
@@ -94,7 +141,7 @@ func (p *pages) subagentToggle(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, r, http.StatusNotFound, "unknown subagent")
 		return
 	}
-	p.subagentsPage(w, r, http.StatusOK, notice("success", "Subagent updated", name), AgentView{})
+	settingsRedirect(w, "/settings/subagents?toggled="+url.QueryEscape(name))
 }
 
 func (p *pages) subagentDelete(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +149,7 @@ func (p *pages) subagentDelete(w http.ResponseWriter, r *http.Request) {
 	removed, err := subagents.Delete(detached(r), p.deps.DB.Write, name)
 	var refused subagents.Error
 	if errors.As(err, &refused) {
-		p.subagentsPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not deleted", err.Error()), AgentView{})
+		p.subagentsPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not deleted", err.Error()), AgentView{}, "", "", "", false)
 		return
 	}
 	check(err)
@@ -110,5 +157,5 @@ func (p *pages) subagentDelete(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, r, http.StatusNotFound, "unknown subagent")
 		return
 	}
-	p.subagentsPage(w, r, http.StatusOK, notice("success", "Subagent deleted", name), AgentView{})
+	settingsRedirect(w, "/settings/subagents?deleted="+url.QueryEscape(name))
 }

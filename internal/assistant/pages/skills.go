@@ -3,6 +3,7 @@ package pages
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/skills"
@@ -26,16 +27,20 @@ type SkillDraft struct {
 }
 
 type SkillsData struct {
-	Skills []SkillView `json:"skills"`
-	Q      string      `json:"q"`
-	Draft  SkillDraft  `json:"draft"`
+	Skills      []SkillView `json:"skills"`
+	Q           string      `json:"q"`
+	Draft       SkillDraft  `json:"draft"`
+	Editing     string      `json:"editing"`
+	Error       string      `json:"error"`
+	Focus       string      `json:"focus"`
+	StripParams bool        `json:"strip_params"`
 }
 
 func skillView(l skills.Listed) SkillView {
 	return SkillView{Name: l.Name, Description: l.Description, Body: l.Body, References: l.References, ReferencedBy: l.ReferencedBy}
 }
 
-func (p *pages) skillsPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, draft SkillDraft, q string) {
+func (p *pages) skillsPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, draft SkillDraft, q, editing, formError, focus string, stripParams bool) {
 	found, err := skills.List(r.Context(), p.deps.DB.Read, q)
 	check(err)
 	listed, err := skills.WithReferences(r.Context(), p.deps.DB.Read, found)
@@ -44,11 +49,42 @@ func (p *pages) skillsPage(w http.ResponseWriter, r *http.Request, status int, t
 	for i, l := range listed {
 		views[i] = skillView(l)
 	}
-	p.settings(w, r, status, "skills.gohtml", SkillsData{Skills: views, Q: q, Draft: draft}, toast)
+	p.settings(w, r, status, "skills.gohtml", SkillsData{
+		Skills: views, Q: q, Draft: draft, Editing: editing, Error: formError, Focus: focus, StripParams: stripParams,
+	}, toast)
 }
 
 func (p *pages) skillsIndex(w http.ResponseWriter, r *http.Request) {
-	p.skillsPage(w, r, http.StatusOK, nil, SkillDraft{}, py.Strip(web.QueryValue(r.URL.Query(), "q")))
+	ctx := r.Context()
+	q := py.Strip(web.QueryValue(r.URL.Query(), "q"))
+	var toast *tpl.Toast
+	var focus string
+	saved := web.QueryValue(r.URL.Query(), "saved")
+	if saved != "" {
+		skill, err := skills.Get(ctx, p.deps.DB.Read, saved)
+		check(err)
+		if skill != nil {
+			focus = saved
+			refs, err := skills.ReferencesOf(ctx, p.deps.DB.Read, saved)
+			check(err)
+			description := saved
+			category := "success"
+			if len(refs.Unknown) > 0 {
+				category = "warning"
+				description += " references skills that do not exist: " + strings.Join(refs.Unknown, ", ")
+			}
+			toast = notice(category, "Skill saved", description)
+		}
+	}
+	deleted := web.QueryValue(r.URL.Query(), "deleted")
+	if toast == nil && deleted != "" {
+		skill, err := skills.Get(ctx, p.deps.DB.Read, deleted)
+		check(err)
+		if skill == nil {
+			toast = notice("success", "Skill deleted", deleted)
+		}
+	}
+	p.skillsPage(w, r, http.StatusOK, toast, SkillDraft{}, q, "", "", focus, toast != nil)
 }
 
 func (p *pages) skillSave(w http.ResponseWriter, r *http.Request) {
@@ -58,18 +94,20 @@ func (p *pages) skillSave(w http.ResponseWriter, r *http.Request) {
 	err := skills.Save(ctx, p.deps.DB.Write, draft.Name, draft.Description, draft.Body, p.now())
 	var refused skills.Error
 	if errors.As(err, &refused) {
-		p.skillsPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()), draft, "")
+		editing := ""
+		if web.FormString(form, "from", "") == "edit" {
+			existing, getErr := skills.Get(ctx, p.deps.DB.Read, py.Strip(draft.Name))
+			check(getErr)
+			if existing != nil {
+				editing = existing.Name
+			}
+		}
+		p.skillsPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()), draft, "", editing, err.Error(), "", false)
 		return
 	}
 	check(err)
 	saved := py.Strip(draft.Name)
-	refs, err := skills.ReferencesOf(ctx, p.deps.DB.Read, saved)
-	check(err)
-	if len(refs.Unknown) > 0 {
-		p.skillsPage(w, r, http.StatusOK, notice("warning", "Skill saved", saved+" references skills that do not exist: "+strings.Join(refs.Unknown, ", ")), SkillDraft{}, "")
-		return
-	}
-	p.skillsPage(w, r, http.StatusOK, notice("success", "Skill saved", saved), SkillDraft{}, "")
+	settingsRedirect(w, "/settings/skills?saved="+url.QueryEscape(saved))
 }
 
 func (p *pages) skillDelete(w http.ResponseWriter, r *http.Request) {
@@ -80,5 +118,5 @@ func (p *pages) skillDelete(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, r, http.StatusNotFound, "unknown skill")
 		return
 	}
-	p.skillsPage(w, r, http.StatusOK, notice("success", "Skill deleted", name), SkillDraft{}, "")
+	settingsRedirect(w, "/settings/skills?deleted="+url.QueryEscape(name))
 }

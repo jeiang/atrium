@@ -90,6 +90,9 @@ type state struct {
 	steps   int
 	maxCost float64
 	savings int64
+
+	callsKey string
+	repeats  int
 }
 
 func deref[T any](p *T) T {
@@ -417,6 +420,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	}
 	if injected {
 		last = nil
+		s.callsKey, s.repeats = "", 0
 	}
 	spent, err := usage.RunCost(ctx, s.d.Read, s.run.ID)
 	if err != nil {
@@ -469,6 +473,10 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, err
 	}
 	compacted := response.StopReason == actx.Compaction
+	var stop error
+	if !compacted {
+		blocks, stop = judge(response.StopReason, blocks)
+	}
 	clearEdits, cleared := actx.ClearsOf(response)
 	entry := usage.Entry{
 		TS: s.now(), ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: Model, Effort: s.run.Effort,
@@ -480,6 +488,9 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	seq, err := journal.AppendMessage(ctx, s.d, s.thread.ID, &s.run.ID, journal.Assistant, blocks, s.now(), new(s.req.sig))
 	if err != nil {
 		return false, nil, err
+	}
+	if stop != nil {
+		return false, nil, stop
 	}
 	if compacted {
 		_, err := actx.ServerCompacted(ctx, s.d.Write, s.thread.ID, s.run.ID, blocks, active, s.now())
@@ -513,6 +524,9 @@ func (s *state) answer(ctx context.Context, uses []ToolUse, next **anchor) error
 		return err
 	}
 	if _, err := journal.AppendMessage(ctx, s.d, s.thread.ID, &s.run.ID, journal.User, results, s.now(), nil); err != nil {
+		return err
+	}
+	if err := s.repeat(uses, results); err != nil {
 		return err
 	}
 	staged, err := actx.StagedSavings(ctx, s.d.Read, s.thread.ID)

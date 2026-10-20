@@ -188,7 +188,7 @@ func (s *service) moveCorrection(r *http.Request, found *message.View, id int64)
 	}
 	ctx := context.WithoutCancel(r.Context())
 	out, err := func() (out appliedOutcome, err error) {
-		lock, err := db.Exclusive(s.deps.Cfg.DBPath)
+		lock, err := db.Exclusive(ctx, s.deps.Cfg.DBPath, db.ShortLockWait)
 		if err != nil {
 			return out, err
 		}

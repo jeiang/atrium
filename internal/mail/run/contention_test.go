@@ -114,7 +114,7 @@ func TestWatchWebCorrectionAndSyncContendForTheLock(t *testing.T) {
 		return slowMailbox{session}
 	}
 	w.rule("x.test", "Bills")
-	if err := w.pass.Locked(context.Background(), []string{config.ICloud}); err != nil {
+	if err := w.pass.Locked(context.Background(), context.Background(), []string{config.ICloud}); err != nil {
 		t.Fatal(err)
 	}
 	header, text := mailtest.RawWith("Needs a correction", "o@y.test", "needs-a-correction", "hello")

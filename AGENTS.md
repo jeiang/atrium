@@ -338,7 +338,8 @@ and backups; nothing of that lives here.
 - `internal/mail/`: the `Client` interface. Only `Gated` builds one, and
   every write method calls the gate before the connection;
   `mail/mailtest.FakeClient` runs the same gate. A move is COPY, STORE
-  `\Deleted`, UID EXPUNGE: nothing under `internal/mail` uses IMAP MOVE.
+  `\Deleted`, UID EXPUNGE: nothing under `internal/` or `cmd/` uses IMAP MOVE
+  (`TestNoMoveInGoSources`; the imapscript server profile is the one exception).
 - `internal/mail/mime/`: CPython 3.14.7's `email` package as `policy.default`
   applies it to bytes (feedparser, header registry and value parser,
   `parseaddr`/`getaddresses`, `parsedate_to_datetime`, codecs, transfer
@@ -499,11 +500,18 @@ and backups; nothing of that lives here.
   blocked one is logged) before the lock is released. `Watcher` is the
   per-account loop: each cycle connects (a failure backs off like a lost
   connection), passes, then IDLEs (or 58 s + NOOP), 2 s settle, backoff 5 s
-  doubling to 300 s. In `watch` a started pass runs on `context.WithoutCancel`,
-  so shutdown never interrupts it; cancellation is seen only while waiting,
-  and `watch` gives the loops 30 s. `sync` sees a signal between accounts and
-  between extras (never inside a live pass) and exits 143 or 130 once the
-  running stage is complete. `sync` and `watch` are its commands and log as
+  doubling to 300 s. In `watch`, lock acquisition uses the signal context and
+  a started pass runs on `context.WithoutCancel`, so shutdown cancels a pending
+  wait but not the pass; `watch` gives the loops 30 s. `sync` uses its signal
+  context for lock acquisition and work, observing cancellation between
+  accounts and extras. `Locked` applies `passDeadline` (20 min) only after the
+  lock is acquired; expiry cancels remaining work while a started automatic
+  write pass finishes. The `sync` and `scan` units, which wait for it, set
+  `TimeoutStopSec` (45 min, `writeTimeout` in `nix/module.nix`) above the deadline plus a write cap's moves;
+  `watch` exits 30 s after a signal whatever its pass is doing and relies on held rows becoming `Interrupted`. `proposals approve`, `proposals undo` and `live undo` run on the signal context: SIGTERM
+  kills the IMAP connection, the gate refuses a write on a done context, and the proposal ends `failed` with
+  the partial move, or a `cancelled, write outcome unknown` row for the write in flight, in the ledger. A
+  failed `move_back` (`mailops.PartialPrefix`) blocks a retry of that undo until the mailbox is resolved by hand, and ledger and status writes never run on a cancelled context. `sync` and `watch` are its commands and log as
   `atrium.run` and `atrium.watch`. `run.New` takes the clock every stage
   shares; the pipeline differential (`TestGoldenPipelineDifferential`)
   replays `testdata/golden/pipeline/scenario.json` through it and the mail

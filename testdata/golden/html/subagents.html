@@ -398,6 +398,8 @@
       
     >
       
+  <a href="/about" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"><svg class="lucide lucide-file-text " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg><span>About</span></a>
+  <hr role="separator"/>
   <div class="flex flex-col gap-1.5 rounded-lg border bg-background p-3 text-xs">
     <div><span class="badge" data-variant="destructive"><svg class="lucide lucide-zap " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></svg>Live</span></div>
     <p class="text-pretty text-muted-foreground">Live mode: atrium files read mail, flags unread mail from your contacts and trashes mail your deletion rules match.</p>
@@ -426,7 +428,7 @@
     </header>
     <div id="content" tabindex="-1" class="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 outline-none md:px-8 md:py-8">
       
-<nav aria-label="Settings sections" class="-mb-2 flex gap-1 overflow-x-auto border-b text-sm">
+<nav aria-label="Settings sections" class="-mb-2 flex flex-wrap gap-x-1 border-b text-sm">
   
   <a href="/settings/assistant" class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 font-medium border-transparent text-muted-foreground hover:text-foreground">Assistant</a>
   
@@ -456,14 +458,16 @@
     <form method="post" action="/settings/subagents" class="mt-3 flex flex-col gap-3">
       <input type="hidden" name="csrf_token" value="csrf-golden-token">
       <input type="hidden" name="name" value="researcher">
+      <input type="hidden" name="from" value="edit">
       
 <div class="grid gap-3 sm:grid-cols-2">
   <div role="group" class="field"><label for="a-researcher-description">One-line description (shown to the assistant when it picks a role)</label><input id="a-researcher-description" name="description" type="text" value="General research &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;" maxlength="160" required></div>
   <div role="group" class="field">
     <label for="a-researcher-effort">Effort</label>
-    <select id="a-researcher-effort" name="effort">
+    <select id="a-researcher-effort" name="effort" aria-describedby="a-researcher-effort-help">
       <option value="low" selected>low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option>
     </select>
+    <p id="a-researcher-effort-help" class="text-xs text-muted-foreground">How hard this subagent thinks each time the assistant delegates to it.</p>
   </div>
 </div>
 <div role="group" class="field"><label for="a-researcher-prompt">System prompt addendum</label><textarea id="a-researcher-prompt" name="prompt" rows="4" class="w-full" required>Be thorough &amp; cite.</textarea></div>
@@ -500,14 +504,16 @@
     <form method="post" action="/settings/subagents" class="mt-3 flex flex-col gap-3">
       <input type="hidden" name="csrf_token" value="csrf-golden-token">
       <input type="hidden" name="name" value="finance-Café naïve — 東京 🎉 مرحبا">
+      <input type="hidden" name="from" value="edit">
       
 <div class="grid gap-3 sm:grid-cols-2">
   <div role="group" class="field"><label for="a-finance-Café naïve — 東京 🎉 مرحبا-description">One-line description (shown to the assistant when it picks a role)</label><input id="a-finance-Café naïve — 東京 🎉 مرحبا-description" name="description" type="text" value="Money questions &amp; &lt;ledgers&gt;" maxlength="160" required></div>
   <div role="group" class="field">
     <label for="a-finance-Café naïve — 東京 🎉 مرحبا-effort">Effort</label>
-    <select id="a-finance-Café naïve — 東京 🎉 مرحبا-effort" name="effort">
+    <select id="a-finance-Café naïve — 東京 🎉 مرحبا-effort" name="effort" aria-describedby="a-finance-Café naïve — 東京 🎉 مرحبا-effort-help">
       <option value="low">low</option><option value="medium">medium</option><option value="high" selected>high</option><option value="xhigh">xhigh</option><option value="max">max</option>
     </select>
+    <p id="a-finance-Café naïve — 東京 🎉 مرحبا-effort-help" class="text-xs text-muted-foreground">How hard this subagent thinks each time the assistant delegates to it.</p>
   </div>
 </div>
 <div role="group" class="field"><label for="a-finance-Café naïve — 東京 🎉 مرحبا-prompt">System prompt addendum</label><textarea id="a-finance-Café naïve — 東京 🎉 مرحبا-prompt" name="prompt" rows="4" class="w-full" required>Answer from the ledger.</textarea></div>
@@ -528,7 +534,7 @@
         <button type="submit" class="btn" data-size="sm"><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Save</button>
         <button type="submit" class="btn" data-size="sm" data-variant="outline" formaction="/settings/subagents/finance-Café naïve — 東京 🎉 مرحبا/toggle">Enable</button>
         
-        <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/subagents/finance-Café naïve — 東京 🎉 مرحبا/delete"><svg class="lucide lucide-trash-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete</button>
+        <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/subagents/finance-Café naïve — 東京 🎉 مرحبا/delete" data-confirm-submit="Delete the subagent “finance-Café naïve — 東京 🎉 مرحبا”? The assistant can no longer delegate to it. This cannot be undone."><svg class="lucide lucide-trash-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete</button>
         
       </div>
     </form>
@@ -545,9 +551,10 @@
   <div role="group" class="field"><label for="new-description">One-line description (shown to the assistant when it picks a role)</label><input id="new-description" name="description" type="text" value="&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;" maxlength="160" required></div>
   <div role="group" class="field">
     <label for="new-effort">Effort</label>
-    <select id="new-effort" name="effort">
+    <select id="new-effort" name="effort" aria-describedby="new-effort-help">
       <option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh" selected>xhigh</option><option value="max">max</option>
     </select>
+    <p id="new-effort-help" class="text-xs text-muted-foreground">How hard this subagent thinks each time the assistant delegates to it.</p>
   </div>
 </div>
 <div role="group" class="field"><label for="new-prompt">System prompt addendum</label><textarea id="new-prompt" name="prompt" rows="4" class="w-full" required></textarea></div>

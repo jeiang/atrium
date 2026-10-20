@@ -398,6 +398,8 @@
       
     >
       
+  <a href="/about" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"><svg class="lucide lucide-file-text " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg><span>About</span></a>
+  <hr role="separator"/>
   <div class="flex flex-col gap-1.5 rounded-lg border bg-background p-3 text-xs">
     <div><span class="badge" data-variant="destructive"><svg class="lucide lucide-zap " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></svg>Live</span></div>
     <p class="text-pretty text-muted-foreground">Live mode: atrium files read mail, flags unread mail from your contacts and trashes mail your deletion rules match.</p>
@@ -456,7 +458,7 @@
 
 
 <section class="flex flex-col gap-2" aria-label="Archived">
-  <h2 class="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Archived</h2>
+  <h2 class="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground" tabindex="-1" data-focus-fallback>Archived</h2>
   <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
     
 <li class="flex items-center gap-1 pe-2 hover:bg-accent">
@@ -472,7 +474,7 @@
     </span>
   </a>
   
-  <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="Unarchive" aria-label="Unarchive Plan &#34;Q4&#34; &amp; &lt;review&gt; Café naïve — 東京 🎉 مرحبا"
+  <button id="thread-7-archive" type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="Unarchive" aria-label="Unarchive Plan &#34;Q4&#34; &amp; &lt;review&gt; Café naïve — 東京 🎉 مرحبا"
           hx-post="/chat/7/archive" hx-vals='{"archived": 0, "project_id": 0}' hx-include="#thread-search" hx-target="#threads" hx-swap="innerHTML"><svg class="lucide lucide-archive-restore " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/></svg></button>
 </li>
 
@@ -489,7 +491,7 @@
     </span>
   </a>
   
-  <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="Unarchive" aria-label="Unarchive thread"
+  <button id="thread-8-archive" type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="Unarchive" aria-label="Unarchive thread"
           hx-post="/chat/8/archive" hx-vals='{"archived": 0, "project_id": 0}' hx-include="#thread-search" hx-target="#threads" hx-swap="innerHTML"><svg class="lucide lucide-archive-restore " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/></svg></button>
 </li>
 

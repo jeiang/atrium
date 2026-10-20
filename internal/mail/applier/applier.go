@@ -183,7 +183,7 @@ func safeLabel(name string) bool {
 	if _, err := executors.ValidName(name); err != nil {
 		return false
 	}
-	return !mail.IsSystemName(name) && !strings.HasPrefix(name, "[Gmail]")
+	return !strings.HasPrefix(name, "\\") && !mail.IsSystemName(name) && !strings.HasPrefix(name, "[Gmail]")
 }
 
 type Applier struct {
@@ -937,6 +937,7 @@ func (a *Applier) deletionDue(ctx context.Context, account string) (bool, error)
 
 type builder func(ctx context.Context, budget *Budget) ([]Intent, error)
 
+
 func (a *Applier) runPass(ctx context.Context, account string, build builder, label string) (Outcome, error) {
 	var out Outcome
 	if a.Live.Cfg.Mode != config.Live {
@@ -946,6 +947,9 @@ func (a *Applier) runPass(ctx context.Context, account string, build builder, la
 	if safety.IsPaused(pause) {
 		log.Info(account + ": paused, automatic writes skipped")
 		return out, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return out, err
 	}
 	out.Ran = true
 	ctx = context.WithoutCancel(ctx)
@@ -1007,7 +1011,6 @@ func (a *Applier) ApplyCorrections(ctx context.Context, account string, messageI
 }
 
 func (a *Applier) DeletionPass(ctx context.Context, account string, force bool) (Outcome, error) {
-	ctx = context.WithoutCancel(ctx)
 	if !force {
 		due, err := a.deletionDue(ctx, account)
 		if err != nil || !due {
@@ -1020,7 +1023,7 @@ func (a *Applier) DeletionPass(ctx context.Context, account string, force bool) 
 	if err != nil || !out.Ran {
 		return out, err
 	}
-	return out, live.SetState(ctx, a.Live.DB.Write, live.DeletionKey+":"+account, py.FloatRepr(a.now()))
+	return out, live.SetState(context.WithoutCancel(ctx), a.Live.DB.Write, live.DeletionKey+":"+account, py.FloatRepr(a.now()))
 }
 
 func (a *Applier) ApplyAll(ctx context.Context, account string) (applied, deleted Outcome, err error) {

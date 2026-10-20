@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
 )
@@ -223,7 +224,7 @@ func RecordAction(ctx context.Context, x Execer, proposalID int64, action, undo 
 	if undo != nil {
 		plan = py.JSONDumps(undo)
 	}
-	res, err := x.ExecContext(ctx, "INSERT INTO proposal_actions (proposal_id, ts, action, undo, ok, error) VALUES (?, ?, ?, ?, ?, ?)",
+	res, err := x.ExecContext(context.WithoutCancel(ctx), "INSERT INTO proposal_actions (proposal_id, ts, action, undo, ok, error) VALUES (?, ?, ?, ?, ?, ?)",
 		proposalID, ts, py.JSONDumps(action), plan, ok, errText)
 	if err != nil {
 		return 0, err
@@ -291,6 +292,18 @@ func undoneIDs(logged []Action) map[int64]bool {
 		}
 	}
 	return done
+}
+
+func partialUndo(logged []Action, id int64) bool {
+	for _, a := range logged {
+		if op, _ := a.field("op"); op != UndoOp || a.OK || a.Error == nil || !mailops.Blocks(*a.Error) {
+			continue
+		}
+		if of, ok := a.field("of"); ok && of == id {
+			return true
+		}
+	}
+	return false
 }
 
 func pending(logged []Action) []Action {
@@ -372,6 +385,7 @@ func scope(ctx context.Context, id int64) context.Context {
 	return safety.ApprovedWrites(ctx, strconv.FormatInt(id, 10))
 }
 
+
 func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any) (*Proposal, error) {
 	prop, err := Get(ctx, p.DB.Write, id)
 	if err != nil {
@@ -394,31 +408,32 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any)
 	if !claimed {
 		return nil, ProposalError(fmt.Sprintf("proposal %d is not open", id))
 	}
+	settle := context.WithoutCancel(ctx)
 	result, err := executor(scope(ctx, id), prop, selection)
 	var selErr SelectionError
 	switch {
 	case errors.As(err, &selErr):
-		if _, uerr := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET status = 'pending', decided_ts = NULL WHERE id = ?", id); uerr != nil {
+		if _, uerr := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'pending', decided_ts = NULL WHERE id = ?", id); uerr != nil {
 			return nil, uerr
 		}
 		return nil, err
 	case err != nil:
 		log.Error(fmt.Sprintf("proposal %d failed", id), logx.Err, err.Error())
 		failure := py.Dict{{Key: "error", Value: py.ExceptionText(err)}}
-		if _, uerr := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET status = 'failed', result = ? WHERE id = ?", py.JSONDumps(failure), id); uerr != nil {
+		if _, uerr := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'failed', result = ? WHERE id = ?", py.JSONDumps(failure), id); uerr != nil {
 			return nil, uerr
 		}
 		p.sync(ctx, prop)
-		return Get(ctx, p.DB.Write, id)
+		return Get(settle, p.DB.Write, id)
 	}
 	if syncErr := p.sync(ctx, prop); syncErr != nil {
 		result = result.Set("sync_error", *syncErr)
 	}
-	if _, err := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET status = 'applied', applied_ts = ?, result = ? WHERE id = ?",
+	if _, err := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'applied', applied_ts = ?, result = ? WHERE id = ?",
 		p.now(), py.JSONDumps(result), id); err != nil {
 		return nil, err
 	}
-	return Get(ctx, p.DB.Write, id)
+	return Get(settle, p.DB.Write, id)
 }
 
 type UndoResult struct {
@@ -451,7 +466,14 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	}
 	approved := scope(ctx, id)
 	out := UndoResult{Outcomes: []py.Dict{}}
+	settle := context.WithoutCancel(ctx)
 	for _, entry := range pending(logged) {
+		if partialUndo(logged, entry.ID) {
+			return out, ProposalError(fmt.Sprintf("action %d has a partial undo; resolve it in the mailbox before undoing again", entry.ID))
+		}
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
 		plan, _ := entry.Undo.(py.Dict)
 		op, found := plan.Get("op")
 		if !found {
@@ -468,6 +490,9 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		detail, err := undoer(approved, entry.Plan)
 		if err != nil {
 			text := py.ExceptionText(err)
+			if ctx.Err() != nil {
+				text = mailops.UnknownPrefix + ": " + text
+			}
 			if _, rerr := RecordAction(ctx, p.DB.Write, id, py.Dict{{Key: "op", Value: UndoOp}, {Key: "of", Value: entry.ID}}, nil, false, &text, p.now()); rerr != nil {
 				return UndoResult{}, rerr
 			}
@@ -483,6 +508,9 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		}
 		out.Outcomes = append(out.Outcomes, py.Dict{{Key: "action", Value: entry.ID}, {Key: "ok", Value: true}})
 	}
+	if err := ctx.Err(); err != nil {
+		return out, err
+	}
 	out.SyncError = p.sync(ctx, prop)
 	out.Undone = true
 	for _, o := range out.Outcomes {
@@ -493,7 +521,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	if out.Undone {
 		result, _ := prop.Result.(py.Dict)
 		result = result.Set("undone_ts", p.now())
-		if _, err := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET result = ? WHERE id = ?", py.JSONDumps(result), id); err != nil {
+		if _, err := p.DB.Write.ExecContext(settle, "UPDATE proposals SET result = ? WHERE id = ?", py.JSONDumps(result), id); err != nil {
 			return UndoResult{}, err
 		}
 	}
