@@ -28,8 +28,6 @@ type emitter struct {
 	b strings.Builder
 }
 
-// emitPattern writes the regexp2 program. IGNORECASE is resolved here into explicit sets, so regexp2's own case
-// folding (stale .NET tables for ranges) is only used for backreferences.
 func emitPattern(root *node) string {
 	e := &emitter{}
 	e.emit(root)
@@ -78,7 +76,6 @@ func (e *emitter) emit(n *node) {
 	case nCond:
 		fmt.Fprintf(&e.b, "(?(%d)", n.group)
 		e.emit(n.subs[0])
-		// regexp2 skips a match when a leading (?(N)yes) has no "no" branch and group N did not participate.
 		e.b.WriteByte('|')
 		if n.hasNo {
 			e.emit(n.no)
@@ -199,9 +196,6 @@ func asciiOtherCase(r rune) (rune, bool) {
 	return 0, false
 }
 
-// class emits a Python character set. regexp2 cannot union a complemented category (\W, \S, \D) with other
-// members of one set (CharIn stops at the first category holding the character, so [\P{Nd}\p{N}] rejects "1"),
-// so a set holding one becomes an alternation of sets, negated through a lookahead.
 func (e *emitter) class(items []classItem, negate bool, flags Flags) {
 	var body strings.Builder
 	var complements []string
@@ -236,7 +230,6 @@ func (e *emitter) class(items []classItem, negate bool, flags Flags) {
 	}
 	ranges = normalize(ranges)
 	if negate && len(complements) == 0 && body.Len() == 0 && len(ranges) == 1 && ranges[0][0] == ranges[0][1] && ranges[0][0] >= 0xffff {
-		// regexp2's first-character filter for [^c] (Notone) drops every character above c when c >= U+FFFF.
 		e.b.WriteString(`(?!` + escapeRune(ranges[0][0]) + `)[\s\S]`)
 		return
 	}

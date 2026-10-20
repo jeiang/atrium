@@ -45,8 +45,6 @@ func newApp() *cli.App {
 	return app
 }
 
-// commands are the subcommands in the order cli.py's parser lists them; now is the clock of the commands that
-// take one (the wall clock when nil).
 func commands(clients run.Clients, now func() float64) []*cli.Command {
 	mailCmds := mailcmd.Options{Clients: clients, Now: now}
 	return []*cli.Command{

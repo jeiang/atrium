@@ -1,6 +1,3 @@
-// Package mailops is mailops.py: the mailbox write helpers every applied proposal, automatic action and undo
-// shares, and the pre-write verification of message snapshots against the live mailbox. Every write goes
-// through the gated mail.Client; a move is COPY, STORE \Deleted and UID EXPUNGE.
 package mailops
 
 import (
@@ -37,16 +34,11 @@ const (
 	ReasonUnresolved  = "unresolved"
 )
 
-// BlockingActionSQL is the condition on a proposal_actions row aliased alias: a failed write, not an undo, whose
-// text Blocks.
 func BlockingActionSQL(alias string) string {
 	return alias + ".ok = 0 AND json_extract(" + alias + ".action, '$.op') IS NOT 'undo' AND (instr(" + alias + ".error, '" +
 		UnknownPrefix + "') > 0 OR instr(" + alias + ".error, '" + PartialPrefix + "') > 0)"
 }
 
-// UnresolvedSQL is true for a message (aliases m for messages and mb for its mailbox) named by a blocking
-// proposal_actions row of any proposal: by its uids, or by the copied mapping of a partial move. A write whose
-// outcome is unknown may have left a copy, and the untouched source would be copied again.
 var UnresolvedSQL = "(EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.uids') u WHERE " + BlockingActionSQL("pa") + " AND " +
 	"u.value = m.uid AND COALESCE(json_extract(pa.action, '$.src_uidvalidity'), json_extract(pa.action, '$.uidvalidity')) = m.uidvalidity " +
 	"AND COALESCE(json_extract(pa.action, '$.src_imap'), json_extract(pa.action, '$.imap_name')) = mb.imap_name) OR " +
@@ -56,7 +48,6 @@ var UnresolvedSQL = "(EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.ac
 
 var trashNames = map[string]bool{"deleted messages": true, "deleted items": true, "trash": true, "bin": true}
 
-// Error is MailOpError.
 type Error string
 
 func (e Error) Error() string { return string(e) }
@@ -65,29 +56,20 @@ func (Error) PyClass() string { return "MailOpError" }
 
 func (Error) PyModule() string { return "atrium.mailops" }
 
-// ErrValidityChanged is the refusal of a write whose mailbox reports another UIDVALIDITY than the verified one;
-// nothing was sent.
 var ErrValidityChanged = Error("UIDVALIDITY changed")
 
-// PartialMove is a batch that was copied but not expunged: Copied is what COPYUID reported, nil without it.
 type PartialMove struct {
-	Copied *mail.CopyUID
-	Err    error
-	// Unconfirmed is a COPY whose reply never came: the destination may hold the copy.
+	Copied      *mail.CopyUID
+	Err         error
 	Unconfirmed bool
 }
 
-// PartialPrefix is in the text of a PartialMove: a retry of the same move would copy the batch a second time.
-// UnknownPrefix starts the ledger text of a write a cancelled context cut off: the server may have executed it.
 const UnknownPrefix = "cancelled, write outcome unknown"
 
-// Blocks reports whether an undo's recorded failure text forbids repeating the undo.
 func Blocks(text string) bool {
 	return strings.Contains(text, PartialPrefix) || strings.Contains(text, UnknownPrefix)
 }
 
-// OutcomeUnknown reports whether err is a write the server may or may not have executed: a command that was sent
-// and never answered, alone or as the COPY of a PartialMove.
 func OutcomeUnknown(err error) bool {
 	if partial, ok := errors.AsType[*PartialMove](err); ok {
 		return partial.Unconfirmed
@@ -96,8 +78,6 @@ func OutcomeUnknown(err error) bool {
 	return ok
 }
 
-// UnknownText is the ledger text of a failed write: err's text, led by UnknownPrefix when its outcome is unknown
-// and the text does not already say so.
 func UnknownText(err error, text string) string {
 	if OutcomeUnknown(err) && !Blocks(text) {
 		return UnknownPrefix + ": " + text
@@ -120,16 +100,13 @@ func (*PartialMove) PyModule() string { return "atrium.mailops" }
 
 func (e *PartialMove) Unwrap() error { return e.Err }
 
-// Opener connects an account's mail client.
 type Opener func(ctx context.Context, account string) (mail.Client, error)
 
-// Querier is the read side of *sql.DB and *sql.Tx.
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// Session is `with session(cfg, account) as client`: fn runs on a connected client that is closed after.
 func Session(ctx context.Context, open Opener, account string, fn func(mail.Client) error) error {
 	client, err := open(ctx, account)
 	if err != nil {
@@ -139,7 +116,6 @@ func Session(ctx context.Context, open Opener, account string, fn func(mail.Clie
 	return fn(client)
 }
 
-// Chunks is chunks(items, size).
 func Chunks[T any](items []T, size int) [][]T {
 	var out [][]T
 	for start := 0; start < len(items); start += size {
@@ -148,7 +124,6 @@ func Chunks[T any](items []T, size int) [][]T {
 	return out
 }
 
-// Snapshot is one message as a proposal or action saw it.
 type Snapshot struct {
 	ID          int64  `json:"id"`
 	UID         uint32 `json:"uid"`
@@ -159,7 +134,6 @@ type Snapshot struct {
 	IMAPName    string `json:"imap_name"`
 }
 
-// Dict is the snapshot as Python stores it in a payload; encoding/json reads it back through the tags.
 func (s Snapshot) Dict() py.Dict {
 	return py.Dict{
 		{Key: "id", Value: s.ID}, {Key: "uid", Value: s.UID}, {Key: "uidvalidity", Value: s.UIDValidity},
@@ -168,14 +142,12 @@ func (s Snapshot) Dict() py.Dict {
 	}
 }
 
-// Verified is a snapshot verify found unchanged, with the flags and labels the server has now.
 type Verified struct {
 	Snapshot
 	Flags  []string
 	Labels []string
 }
 
-// Skip is one snapshot verify dropped and why.
 type Skip struct {
 	ID     int64
 	Reason string
@@ -185,7 +157,6 @@ func (s Skip) Dict() py.Dict {
 	return py.Dict{{Key: "id", Value: s.ID}, {Key: "reason", Value: s.Reason}}
 }
 
-// Snapshots is snapshots(conn, ids), by id.
 func Snapshots(ctx context.Context, q Querier, ids []int64) ([]Snapshot, error) {
 	var out []Snapshot
 	for _, chunk := range Chunks(ids, 500) {
@@ -217,7 +188,6 @@ func Snapshots(ctx context.Context, q Querier, ids []int64) ([]Snapshot, error) 
 	return out, nil
 }
 
-// ServerMsgID is server_msgid: the normalized Message-ID of a fetched header as policy.compat32 reads it.
 func ServerMsgID(header []byte) string {
 	value, _ := mime.Compat32Header(header, "Message-ID")
 	return features.NormalizeMsgID(value)
@@ -228,8 +198,6 @@ type boxKey struct {
 	validity uint32
 }
 
-// Verify is verify: each snapshot is checked against the database, then against the live mailbox; ok is by id,
-// skipped in the order Python found them.
 func Verify(ctx context.Context, q Querier, client mail.Client, account string, snaps []Snapshot) (ok []Verified, skipped []Skip, err error) {
 	var order []boxKey
 	survivors := map[boxKey][]Snapshot{}
@@ -337,14 +305,12 @@ func Verify(ctx context.Context, q Querier, client mail.Client, account string, 
 	return ok, skipped, nil
 }
 
-// Group is the verified items of one mailbox at one UIDVALIDITY.
 type Group struct {
 	IMAPName    string
 	UIDValidity uint32
 	Items       []Verified
 }
 
-// GroupByMailbox is group_by_mailbox, groups in the order their first item appears.
 func GroupByMailbox(items []Verified) []Group {
 	var out []Group
 	index := map[boxKey]int{}
@@ -361,8 +327,6 @@ func GroupByMailbox(items []Verified) []Group {
 	return out
 }
 
-// TrashMailbox is trash_mailbox: the mailbox flagged \Trash, else (not on Gmail) the first one named like a
-// trash folder.
 func TrashMailbox(ctx context.Context, client mail.Client, account string) (string, error) {
 	boxes, err := client.ListMailboxes(ctx)
 	if err != nil {
@@ -385,7 +349,6 @@ func TrashMailbox(ctx context.Context, client mail.Client, account string) (stri
 	return found, nil
 }
 
-// EnsureFolder is ensure_folder: it creates and subscribes imapName unless it is listed; true when created.
 func EnsureFolder(ctx context.Context, client mail.Client, imapName string) (bool, error) {
 	boxes, err := client.ListMailboxes(ctx)
 	if err != nil {
@@ -402,7 +365,6 @@ func EnsureFolder(ctx context.Context, client mail.Client, imapName string) (boo
 	return true, client.SubscribeMailbox(ctx, imapName)
 }
 
-// DeleteFolderIfEmpty is delete_folder_if_empty: true when imapName had no message and was deleted.
 func DeleteFolderIfEmpty(ctx context.Context, client mail.Client, imapName string) (bool, error) {
 	st, err := client.Status(ctx, imapName)
 	if err != nil {
@@ -414,8 +376,6 @@ func DeleteFolderIfEmpty(ctx context.Context, client mail.Client, imapName strin
 	return true, client.DeleteMailbox(ctx, imapName)
 }
 
-// SelectRW opens imapName read-write and refuses when the server's UIDVALIDITY is not validity, before any write
-// is sent. A validity of 0 is an undo plan that recorded none; every other caller passes the verified value.
 func SelectRW(ctx context.Context, client mail.Client, imapName string, validity uint32) error {
 	got, err := client.SelectRW(ctx, imapName)
 	if err != nil {
@@ -427,15 +387,10 @@ func SelectRW(ctx context.Context, client mail.Client, imapName string, validity
 	return nil
 }
 
-// CopyUIDs is copy_uids: the COPYUID mapping, nil when the server sent none.
 func CopyUIDs(ctx context.Context, client mail.Client, destIMAP string, uids []uint32) (*mail.CopyUID, error) {
 	return client.Copy(ctx, mail.UIDs(uids...), destIMAP)
 }
 
-// MoveUIDs is move_uids: per batch of Batch UIDs a COPY, STORE +FLAGS.SILENT \Deleted and UID EXPUNGE, then
-// moved with the batch and its COPYUID. A server without UIDPLUS is refused before anything is sent; a batch
-// copied but not expunged is a *PartialMove, and so is a COPY whose reply never came (Copied is nil: the
-// destination may hold the copy, so it is never sent again).
 func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string, validity uint32, uids []uint32,
 	moved func(batch []uint32, copied *mail.CopyUID) error) error {
 	if !client.HasCapability("UIDPLUS") {
@@ -466,7 +421,6 @@ func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string,
 	return nil
 }
 
-// StoreLabels is store_labels: per batch, +X-GM-LABELS add then -X-GM-LABELS remove.
 func StoreLabels(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32, add, remove []string) error {
 	if err := SelectRW(ctx, client, imapName, validity); err != nil {
 		return err
@@ -487,7 +441,6 @@ func StoreLabels(ctx context.Context, client mail.Client, imapName string, valid
 	return nil
 }
 
-// StoreFlag is store_flag: per batch, +FLAGS.SILENT or -FLAGS.SILENT flag.
 func StoreFlag(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32, flag string, add bool) error {
 	if err := SelectRW(ctx, client, imapName, validity); err != nil {
 		return err
@@ -500,19 +453,16 @@ func StoreFlag(ctx context.Context, client mail.Client, imapName string, validit
 	return nil
 }
 
-// ArchiveUIDs is archive_uids: the Gmail \Inbox label comes off.
 func ArchiveUIDs(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32) error {
 	return StoreLabels(ctx, client, imapName, validity, uids, nil, []string{InboxLabel})
 }
 
-// Relabel is one relabel_plan group: the labels still to add and to remove for its items.
 type Relabel struct {
 	Add    []string
 	Remove []string
 	Items  []Verified
 }
 
-// RelabelPlan is relabel_plan, groups in the order their first item appears.
 func RelabelPlan(items []Verified, add, remove []string) []Relabel {
 	var out []Relabel
 	index := map[string]int{}

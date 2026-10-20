@@ -39,7 +39,6 @@ func urlPath(rest string) string {
 	return rest
 }
 
-// guessType is mimetypes.guess_type(name) (strict) over CPython's built-in table only.
 func guessType(name string) (string, bool) {
 	scheme, rest := urlScheme(name)
 	path := name

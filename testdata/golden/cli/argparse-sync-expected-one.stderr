@@ -1,2 +1,0 @@
-usage: atrium sync [-h] [--account {gmail,icloud}]
-atrium sync: error: argument --account: expected one argument

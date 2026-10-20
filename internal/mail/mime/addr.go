@@ -274,8 +274,6 @@ func (p *addrParser) getphraselist() []string {
 	return plist
 }
 
-// addrCommentLimit is the comment nesting email.utils.getaddresses parses before RecursionError when
-// features.extract runs four frames below a module.
 const addrCommentLimit = 494
 
 var errAddrTooDeep = errors.New("address comment nesting exceeds Python's recursion limit")

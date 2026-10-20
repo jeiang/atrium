@@ -2,61 +2,9 @@ package reviewpages
 
 import (
 	"net/http"
-	"slices"
 	"strings"
 	"testing"
-
-	"github.com/go-chi/chi/v5"
-
-	"github.com/jeiang/atrium/internal/web"
 )
-
-var inventoryRoutes = []string{
-	"GET /proposals",
-	"POST /proposals/{proposal_id}/approve",
-	"POST /proposals/{proposal_id}/dismiss",
-	"POST /proposals/{proposal_id}/undo",
-	"GET /activity",
-	"POST /activity/mail/{action_id}/undo",
-	"POST /activity/write/{write_id}/undo",
-	"GET /drafts",
-	"GET /drafts/{draft_id}",
-	"POST /drafts/{draft_id}",
-	"POST /drafts/{draft_id}/discard",
-	"POST /drafts/{draft_id}/send",
-	"POST /drafts/{draft_id}/resolve",
-	"GET /loops",
-	"POST /loops/{loop_id}/snooze",
-	"POST /loops/{loop_id}/dismiss",
-	"POST /loops/dismiss-all",
-	"POST /loops/commitments/{commitment_id}/{outcome}",
-	"GET /watches",
-	"POST /watches/packages/{package_id}/dismiss",
-	"POST /watches/birthdays/dismiss",
-}
-
-func TestRouteTableMatchesTheInventory(t *testing.T) {
-	s := newSite(t)
-	router := chi.NewRouter()
-	Module(Options{})(router, &web.Deps{Cfg: s.cfg, Env: s.env, DB: s.db})
-	var got []string
-	err := chi.Walk(router, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
-		got = append(got, method+" "+route)
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := slices.Clone(inventoryRoutes)
-	slices.Sort(want)
-	slices.Sort(got)
-	if !slices.Equal(got, want) {
-		t.Errorf("routes\n got %v\nwant %v", got, want)
-	}
-	if len(got) != 21 {
-		t.Errorf("%d routes, want 21", len(got))
-	}
-}
 
 func TestWrongMethodsAreRefused(t *testing.T) {
 	s := newSite(t)

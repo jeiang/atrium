@@ -1,5 +1,0 @@
-usage: atrium watch [-h] [--account {gmail,icloud}]
-
-options:
-  -h, --help            show this help message and exit
-  --account {gmail,icloud}

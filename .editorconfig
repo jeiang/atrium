@@ -1,4 +1,3 @@
-# Editor configuration, see http://editorconfig.org
 root = true
 
 [*]
@@ -32,24 +31,3 @@ trim_trailing_whitespace = unset
 indent_style = unset
 indent_size = unset
 
-[testdata/corpora/*/**]
-end_of_line = unset
-insert_final_newline = unset
-trim_trailing_whitespace = unset
-charset = unset
-indent_style = unset
-indent_size = unset
-
-[testdata/golden/html/**]
-insert_final_newline = unset
-trim_trailing_whitespace = unset
-indent_style = unset
-indent_size = unset
-
-[internal/contacts/testdata/book/**]
-end_of_line = unset
-insert_final_newline = unset
-trim_trailing_whitespace = unset
-charset = unset
-indent_style = unset
-indent_size = unset

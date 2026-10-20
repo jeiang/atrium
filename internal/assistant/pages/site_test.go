@@ -141,9 +141,6 @@ func (s *site) do(method, target string, body io.Reader, contentType string, hea
 	return &reply{resp, string(b)}
 }
 
-// chunked sends the body without a Content-Length. A Go client pushing a 66 MB Content-Length body at this server
-// over loopback trickles on the artemis build host (about 100 KB/s, ten minutes for the refusal), while chunked
-// transfer, curl and a plain net/http server are all fast; see the over-limit upload test.
 func (s *site) chunked(method, target string, body io.Reader, contentType string, headers ...string) *reply {
 	s.t.Helper()
 	return s.do(method, target, struct{ io.Reader }{body}, contentType, headers...)

@@ -19,8 +19,6 @@ func Tools() []tool.Tool {
 	return out
 }
 
-// intArg is the `isinstance(value, int)` check the tools make by hand: a bool, a float and any other type fail.
-// An integer beyond SQLite's range is the OverflowError Python's sqlite3 raises when it is bound.
 func intArg(value any, message string) (int64, error) {
 	switch v := value.(type) {
 	case int64:

@@ -14,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
-	"github.com/jeiang/atrium/internal/web/tpl/tpltest"
 )
 
 const host = "testserver"
@@ -141,35 +140,4 @@ func lacks(t *testing.T, body string, nots ...string) {
 			t.Errorf("response has %q:\n%s", not, body)
 		}
 	}
-}
-
-func goldenFrame(c tpltest.Case) *tpl.Frame {
-	f := &tpl.Frame{Data: c.Context}
-	f.CSRF, _ = c.Globals["csrf_token"].(string)
-	f.Mode, _ = c.Globals["mode"].(string)
-	if v, ok := c.Context["mode"].(string); ok {
-		f.Mode = v
-	}
-	f.Paused, _ = c.Context["paused"].(bool)
-	if n, ok := c.Context["pending_count"].(int64); ok {
-		f.PendingCount = int(n)
-	}
-	if m, ok := c.Context["toast"].(map[string]any); ok {
-		f.Toast = &tpl.Toast{Category: m["category"].(string), Title: m["title"].(string), Description: m["description"].(string)}
-	}
-	return f
-}
-
-func goldenEngine(t testing.TB, c tpltest.Case) *tpl.Engine {
-	t.Helper()
-	globals := map[string]any{}
-	for k, v := range c.Globals {
-		globals[k] = v
-	}
-	version, _ := c.Globals["asset_version"].(string)
-	e, err := tpl.New(tpl.Config{AssetVersion: version, Globals: globals, Modules: []fs.FS{Templates()}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return e
 }

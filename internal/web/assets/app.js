@@ -234,8 +234,6 @@ document.addEventListener("DOMContentLoaded", () => {
   history.replaceState(history.state, "", url);
 });
 
-// Add-torrent form: the zakkart shim opens /media/add#torrent=<base64url>&name=<file> so the bytes never reach a
-// URL log; a locally chosen .torrent is read the same way. Both land in the hidden "torrent" and "name" fields.
 const torrentForm = () => document.querySelector("form[data-torrent-form]");
 
 const setTorrent = (form, b64, name) => {
@@ -266,8 +264,6 @@ document.addEventListener("change", (event) => {
   file.arrayBuffer().then((buffer) => setTorrent(form, base64url(buffer), file.name));
 });
 
-// Composer attachments: files picked or dropped on a form[data-attach] accumulate in a DataTransfer that backs the
-// hidden file input, shown as chips until the form is sent or reset.
 const pendingFiles = new WeakMap();
 const uploadInput = (form) => form.querySelector("[data-upload]");
 const formatBytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
@@ -310,7 +306,6 @@ document.addEventListener("reset", (event) => {
   if (!form.matches || !form.matches("form[data-attach]")) return;
   pendingFiles.delete(form);
   form.querySelector("[data-chips]").replaceChildren();
-  // Options saved by their own requests (effort, context, sandbox) must survive the reset that clears the text.
   form.querySelectorAll("select[data-option] option").forEach((option) => { option.defaultSelected = option.selected; });
   form.querySelectorAll("input[type=checkbox][hx-post]").forEach((box) => { box.defaultChecked = box.checked; });
 });
@@ -332,8 +327,6 @@ document.addEventListener("drop", (event) => {
   if (event.dataTransfer.files.length) addFiles(form, [...event.dataTransfer.files]);
 });
 
-// Thread workspace: the right panel (Work/Preview tabs, drag to resize, drawer on small screens), the composer's
-// edit mode, and the live run view fed by server-sent events written by whichever process executes the run.
 const PANEL_WIDTH_KEY = "atrium.panel.width";
 const PANEL_MIN = 260;
 
@@ -570,9 +563,6 @@ const connectLive = (li) => {
     if (group) { group.textContent = data.state; if (data.state !== "done") group.dataset.variant = "destructive"; }
     refreshWork();
   });
-  // Whatever ends the stream (the server's `done`, a dropped connection, a proxy timeout), the live view is
-  // replaced by what the journal says: the run partial is the finished transcript, or a fresh live view that
-  // reconnects and replays the run's events when the run is still going.
   let settled = false;
   const settle = (completed = false) => {
     if (settled) return;

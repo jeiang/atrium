@@ -1,9 +1,6 @@
 package store
 
-import (
-	"fmt"
-	"time"
-)
+import "fmt"
 
 func Bit(b bool) int {
 	if b {
@@ -11,13 +8,6 @@ func Bit(b bool) int {
 	}
 	return 0
 }
-
-const (
-	GoldenNow  = 1792080000.0 + 3*86400
-	GoldenZone = "America/Port_of_Spain"
-)
-
-func GoldenLocation() (*time.Location, error) { return time.LoadLocation(GoldenZone) }
 
 type Flag bool
 

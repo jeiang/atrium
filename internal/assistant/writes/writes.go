@@ -1,7 +1,3 @@
-// Package writes is agent/writes.py: the undo log for direct agent writes (Notion, profile, calendar...).
-//
-// Each write tool records the write with an undo description whose "op" names a registered undoer. Undoers
-// re-check that the target is unchanged since the write and refuse otherwise.
 package writes
 
 import (
@@ -18,25 +14,19 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// UndoError is a refused undo.
 type UndoError string
 
 func (e UndoError) Error() string { return string(e) }
 
-// Undoer reverses one kind of write in the caller's transaction q. info is the undo description recorded with
-// the write; an UndoError means the target changed since or cannot be restored.
 type Undoer func(ctx context.Context, q db.Querier, info map[string]any) (any, error)
 
-// Registry maps an undo op to its undoer.
 type Registry struct {
 	mu sync.RWMutex
 	by map[string]Undoer
 }
 
-// NewRegistry returns an empty registry.
 func NewRegistry() *Registry { return &Registry{by: map[string]Undoer{}} }
 
-// Register is register_undoer; a later registration of an op replaces the earlier one.
 func (r *Registry) Register(op string, fn Undoer) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -49,8 +39,6 @@ func (r *Registry) lookup(op string) Undoer {
 	return r.by[op]
 }
 
-// New is the arguments of Record. Before, After and Undo are JSON values (decoded maps, lists, scalars) or
-// nil for NULL.
 type New struct {
 	TS       float64
 	ThreadID *int64
@@ -70,7 +58,6 @@ func dump(value any) (*string, error) {
 	return &text, nil
 }
 
-// Record is record: it logs one write and returns its id. Run it in the transaction of the write it logs.
 func Record(ctx context.Context, q db.Querier, w New) (int64, error) {
 	before, err := dump(w.Before)
 	if err != nil {
@@ -93,7 +80,6 @@ func Record(ctx context.Context, q db.Querier, w New) (int64, error) {
 	return res.LastInsertId()
 }
 
-// Row is an agent_writes row.
 type Row struct {
 	ID         int64    `json:"id"`
 	TS         float64  `json:"ts"`
@@ -107,7 +93,6 @@ type Row struct {
 	UndoneAt   *float64 `json:"undone_at"`
 }
 
-// Get is get: nil when there is no such write.
 func Get(ctx context.Context, q db.Querier, writeID int64) (*Row, error) {
 	var r Row
 	err := q.QueryRowContext(ctx,
@@ -122,8 +107,6 @@ func Get(ctx context.Context, q db.Querier, writeID int64) (*Row, error) {
 	return &r, nil
 }
 
-// lazyTx begins the write transaction on the first statement, so an undoer's slow external call runs
-// before the writer connection is taken.
 type lazyTx struct {
 	d  *db.DB
 	tx *sql.Tx
@@ -258,11 +241,6 @@ func mark(ctx context.Context, q db.Querier, writeID int64, now func() float64) 
 	return nil
 }
 
-// Undo is undo: it runs the write's undoer and marks the write undone, returning the undoer's result. The
-// undoer's database statements and the mark share one write transaction that opens at the undoer's first
-// statement (or at the mark), so a slow external call never holds the writer. A failed undoer or mark leaves
-// the database as it was; an external call the undoer already made is not rolled back. Undoes of one write
-// run one at a time. now is read after the undoer ran.
 func (r *Registry) Undo(ctx context.Context, d *db.DB, writeID int64, now func() float64) (any, error) {
 	defer undoing.lock(writeID)()
 	fn, desc, err := r.resolve(ctx, d.Read, writeID)
@@ -284,7 +262,6 @@ func (r *Registry) Undo(ctx context.Context, d *db.DB, writeID int64, now func()
 	return result, nil
 }
 
-// UndoIn is Undo inside the caller's transaction q.
 func (r *Registry) UndoIn(ctx context.Context, q db.Querier, writeID int64, now func() float64) (any, error) {
 	fn, desc, err := r.resolve(ctx, q, writeID)
 	if err != nil {

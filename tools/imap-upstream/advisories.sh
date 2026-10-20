@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# The replaced module has no version for govulncheck, so this checks the
-# pinned upstream base for advisories against go-imap itself.
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)

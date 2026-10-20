@@ -1,5 +1,0 @@
-From: a@b.example.test
-Subject: broken
-Content-Type: multipart/alternative; boundary="missing"
-
-no boundary lines here

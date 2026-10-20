@@ -86,8 +86,6 @@ type SearchCriteria struct {
 	GmailRaw    string
 }
 
-// FetchItems selects what UIDFetch asks for. Header or Body is fetch_items' full set; HeaderOnly alone is
-// mailops' verify items, BODY.PEEK[HEADER] with UID, FLAGS and the labels.
 type FetchItems struct {
 	Labels       bool
 	Header       bool
@@ -96,9 +94,6 @@ type FetchItems struct {
 	ChangedSince uint64
 }
 
-// WriteInterrupted is a write command whose bytes were sent and whose reply never came: the connection failed,
-// timed out or was cancelled, so the server may or may not have executed it. A server NO or BAD is never one.
-// It is an imaplib abort, so a watch loop reconnects on it.
 type WriteInterrupted struct {
 	Command string
 	Err     error

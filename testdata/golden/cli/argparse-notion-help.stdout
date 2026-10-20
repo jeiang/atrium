@@ -1,9 +1,0 @@
-usage: atrium notion [-h] {sync,search,wiki-plan} ...
-
-positional arguments:
-  {sync,search,wiki-plan}
-    wiki-plan           draft one proposal that turns every database and page
-                        into the wiki page tree
-
-options:
-  -h, --help            show this help message and exit

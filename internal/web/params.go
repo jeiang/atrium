@@ -11,8 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// PathParam is the path parameter name of the matched route, percent-decoded: chi routes on the escaped path when
-// the request has one that differs from the default encoding, and then leaves the parameter escaped.
 func PathParam(r *http.Request, name string) string {
 	v := chi.URLParam(r, name)
 	if r.URL.RawPath != "" {

@@ -273,12 +273,3 @@ func between(s, start, end string) string {
 	out, _, _ := strings.Cut(rest, end)
 	return out
 }
-
-func optionValues(s string) []string {
-	var out []string
-	for _, part := range strings.Split(s, `<option value="`)[1:] {
-		value, _, _ := strings.Cut(part, `"`)
-		out = append(out, value)
-	}
-	return out
-}

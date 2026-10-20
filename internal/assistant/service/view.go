@@ -24,10 +24,8 @@ const (
 	draftCreate     = "draft_email_create"
 )
 
-// codeExecutionResults are files.CODE_EXECUTION_RESULTS: legacy code execution results in old journals.
 var codeExecutionResults = []string{"bash_code_execution_tool_result", "text_editor_code_execution_tool_result", "code_execution_tool_result"}
 
-// Item kinds.
 const (
 	ItemUser       = "user"
 	ItemActivity   = "activity"
@@ -36,7 +34,6 @@ const (
 	ItemCompaction = "compaction"
 )
 
-// Step kinds of an activity.
 const (
 	StepNote      = "note"
 	StepThinking  = "thinking"
@@ -44,7 +41,6 @@ const (
 	StepWebSearch = "web_search"
 )
 
-// Attachment is a file the operator attached to a message.
 type Attachment struct {
 	ID        any
 	Name      any
@@ -52,20 +48,17 @@ type Attachment struct {
 	Kind      any
 }
 
-// Citation is one source of an answer: a web URL, or an attachment's title and the cited text.
 type Citation struct {
 	URL   string
 	Title string
 	Cited string
 }
 
-// SearchResult is one web_search result.
 type SearchResult struct {
 	URL   any
 	Title any
 }
 
-// Step is one entry of a run's activity: a note, thinking, a tool call with its result, or a web search.
 type Step struct {
 	Kind          string
 	Text          string
@@ -80,8 +73,6 @@ type Step struct {
 	Error         any
 }
 
-// Item is one entry of the conversation: an operator message, a run's activity, an answer, a draft card or
-// a compaction marker.
 type Item struct {
 	Seq       int64
 	RunID     *int64
@@ -118,8 +109,6 @@ func text(d py.Dict, key string) string {
 	return s
 }
 
-// citationsOf is citations_of: web citations carry a URL; document citations (attachments) carry the
-// document title and the cited text.
 func citationsOf(block py.Dict) []Citation {
 	list, _ := get(block, "citations", nil).([]any)
 	var found []Citation
@@ -142,8 +131,6 @@ func citationsOf(block py.Dict) []Citation {
 	return found
 }
 
-// addAnswer is add_answer: consecutive text blocks of one answer form one item; each cited span gets a [n]
-// marker into its sources.
 func addAnswer(items []*Item, base Item, block py.Dict) []*Item {
 	var last *Item
 	if n := len(items); n > 0 && items[n-1].Kind == ItemAssistant && items[n-1].Seq == base.Seq {
@@ -171,7 +158,6 @@ func addAnswer(items []*Item, base Item, block py.Dict) []*Item {
 	return items
 }
 
-// parsed is parsed: a tool result's JSON object, else empty.
 func parsed(content string) py.Dict {
 	v, err := py.JSONLoads([]byte(content))
 	if err != nil {
@@ -201,7 +187,6 @@ func draftKey(v any) (int64, bool) {
 	return 0, false
 }
 
-// executionResult is workspace.execution_result for a legacy code execution result block.
 func executionResult(block py.Dict) (any, bool) {
 	content, _ := get(block, "content", nil).(py.Dict)
 	if v, ok := content.Get("error_code"); ok {
@@ -228,9 +213,6 @@ func executionResult(block py.Dict) (any, bool) {
 	return py.JSONDumps(rest, py.JSONOpts{NoEnsureASCII: true}), false
 }
 
-// Items is items_of: the conversation in order. Operator messages; one expandable activity per run (thinking,
-// tool steps with their results, subagent spawns, searches, notes written between tool calls); the run's
-// answers; mail cards for the drafts it created; compaction markers.
 func Items(messages []journal.Message, calls map[journal.CallKey]journal.ToolCall, drafts map[int64]py.Dict) ([]*Item, error) {
 	items := []*Item{}
 	uses := map[any]*Step{}
@@ -374,8 +356,6 @@ func shortArgs(input any) (string, error) {
 	return progress.ShortArgs(json.RawMessage(py.JSONDumps(input)))
 }
 
-// Meter is meter_of: the prompt tokens of the thread's last request against the point where compaction
-// kicks in.
 type Meter struct {
 	Tokens    int64   `json:"tokens"`
 	CompactAt int64   `json:"compact_at"`
@@ -383,7 +363,6 @@ type Meter struct {
 	Share     float64 `json:"share"`
 }
 
-// MeterOf is meter_of.
 func MeterOf(ctx context.Context, q db.Querier, thread threads.Thread) (Meter, error) {
 	limits := actx.LimitsFor(threads.ContextLimitOf(thread))
 	var tokens int64
@@ -400,7 +379,6 @@ func MeterOf(ctx context.Context, q db.Querier, thread threads.Thread) (Meter, e
 	return Meter{Tokens: tokens, CompactAt: limits.Compact, Limit: limits.Hard, Share: share}, nil
 }
 
-// CostOfThread is cost_of_thread: the spend of the thread's runs including its subagents' runs.
 func CostOfThread(ctx context.Context, q db.Querier, threadID int64) (float64, error) {
 	var cost float64
 	err := q.QueryRowContext(ctx,
@@ -409,12 +387,10 @@ func CostOfThread(ctx context.Context, q db.Querier, threadID int64) (float64, e
 	return cost, err
 }
 
-// DraftsOf is workspace.drafts_of: the thread's drafts rows as column-to-value dicts, oldest first.
 func DraftsOf(ctx context.Context, q db.Querier, threadID int64) ([]py.Dict, error) {
 	return rowDicts(ctx, q, "SELECT * FROM drafts WHERE thread_id = ? ORDER BY id", threadID)
 }
 
-// rowDicts is [dict(r) for r in conn.execute(query, args)]: each row as its columns in table order.
 func rowDicts(ctx context.Context, q db.Querier, query string, args ...any) ([]py.Dict, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -446,7 +422,6 @@ func rowDicts(ctx context.Context, q db.Querier, query string, args ...any) ([]p
 	})
 }
 
-// ThreadView is thread_view: what the chat page shows of a thread.
 type ThreadView struct {
 	Thread          threads.Thread
 	Items           []*Item
@@ -459,7 +434,6 @@ type ThreadView struct {
 	BranchedFrom    *threads.Thread
 }
 
-// View is thread_view: nil when there is no such thread.
 func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error) {
 	thread, err := threads.Get(ctx, q, threadID)
 	if err != nil || thread == nil {
@@ -517,7 +491,6 @@ func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error
 	return v, nil
 }
 
-// RunView is run_view: the run row with its tool calls, its cost and the skills expanded into its message.
 type RunView struct {
 	journal.Run
 	Calls  []journal.ToolCall `json:"calls"`
@@ -525,7 +498,6 @@ type RunView struct {
 	Skills []string           `json:"skills"`
 }
 
-// ViewRun is run_view: nil when there is no such run.
 func ViewRun(ctx context.Context, q db.Querier, runID int64) (*RunView, error) {
 	found, err := journal.GetRun(ctx, q, runID)
 	if err != nil || found == nil {
@@ -544,8 +516,6 @@ func ViewRun(ctx context.Context, q db.Querier, runID int64) (*RunView, error) {
 	return v, nil
 }
 
-// Dict is the run_view dict as Python built it: the runs row in table column order, then calls (tool_calls rows
-// in column order), cost and skills.
 func (v *RunView) Dict(ctx context.Context, q db.Querier) (py.Dict, error) {
 	run, err := rowDicts(ctx, q, "SELECT * FROM runs WHERE id = ?", v.ID)
 	if err != nil {

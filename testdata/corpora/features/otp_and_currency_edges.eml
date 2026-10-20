@@ -1,7 +1,0 @@
-From: verify@auth.example.test
-Subject: Your login code
-Content-Type: text/plain
-
-Your one-time passcode: 123456
-Not codes: $654321 #111111 1234567 222222.5 -333333 4.444444
-Amounts: 12.50 usd, cad 5, 7.25

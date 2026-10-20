@@ -120,8 +120,6 @@
     LockPersonality = true;
   };
 
-  # Files the library gains must be group-writable and readable by the
-  # library's own servers, so media writers use the media group and 0002.
   mediaWriter = lib.optionalAttrs cfg.media.enable {
     SupplementaryGroups = [cfg.media.group];
     UMask = "0002";
@@ -157,8 +155,6 @@
       hardening
       // mediaWriter
       // {
-        # 0.0.0.0 on purpose for the public listener: binding to a VPN address would race the interface
-        # coming up. In proxy mode the guard rejects any Host but allowedHost.
         ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} --auth ${auth}" + lib.optionalString (auth == "proxy") " --allowed-host ${cfg.web.allowedHost}";
         Restart = "always";
         RestartSec = 5;
@@ -196,7 +192,7 @@ in {
     environmentFiles = mkOption {
       type = types.listOf types.str;
       default = [];
-      description = "EnvironmentFile= paths holding the credentials (see docs/runbook.md); read by every unit and atrium-run.";
+      description = "EnvironmentFile= paths holding the credentials; read by every unit and atrium-run.";
     };
 
     modelServerUnits = mkOption {
@@ -308,7 +304,6 @@ in {
     systemd.tmpfiles.rules = ["d ${cacheDir} 0750 atrium atrium -"];
 
     systemd = {
-      # Code-mode worker: one sandboxed instance per connection (the Monty interpreter is not an OS boundary).
       sockets.atrium-codemode = {
         description = "atrium code-mode worker socket";
         wantedBy = ["sockets.target"];
@@ -435,9 +430,6 @@ in {
 
               install -d -m 0700 "${calendarDir}" "${contactsDir}" "${vdirsyncerStatusDir}"
 
-              # discover prompts on stdin for each new remote collection and has
-              # no --yes flag; a bounded y-feed (not `yes |`, which would
-              # SIGPIPE under pipefail) keeps it non-interactive.
               printf 'y\n%.0s' $(seq 1 100) | vdirsyncer discover
               vdirsyncer sync
             '';

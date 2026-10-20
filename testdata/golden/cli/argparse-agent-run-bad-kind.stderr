@@ -1,3 +1,0 @@
-usage: atrium agent run [-h] [--thread THREAD] --text TEXT
-                        [--kind {chat,cron,nightly,sub,code}]
-atrium agent run: error: argument --kind: invalid choice: 'bogus' (choose from 'chat', 'cron', 'nightly', 'sub', 'code')

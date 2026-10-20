@@ -138,8 +138,6 @@ func pyLen(v any) (int, error) {
 	return 0, fmt.Errorf("%w: object of type '%s' has no len()", httpx.ErrType, httpx.TypeName(v))
 }
 
-// Normalize scales vector to unit length; the norm is summed as CPython's
-// sum() does (Neumaier compensation) so stored vectors match Python's bits.
 func Normalize(vector []float64) []float64 {
 	norm := math.Sqrt(py.SumSq(vector))
 	if norm == 0 {

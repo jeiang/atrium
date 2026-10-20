@@ -45,8 +45,6 @@ type Field struct {
 	Value any
 }
 
-// Object is a JSON object that keeps its member order, as a Python dict
-// does; llama.cpp generates schema properties in the order given.
 type Object []Field
 
 func (o Object) MarshalJSON() ([]byte, error) {

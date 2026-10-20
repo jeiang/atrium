@@ -1,4 +1,0 @@
-usage: atrium proposals list [-h]
-                             [--status {pending,approved,dismissed,applied,failed,suppressed}]
-                             [--kind KIND]
-atrium proposals list: error: argument --kind: expected one argument

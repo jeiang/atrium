@@ -265,8 +265,6 @@ func (g *rowGrid) cellAt(target int) (*element, error) {
 	return nil, errValue
 }
 
-// docxReader reads the cells of a document's tables the way python-docx's Row.cells does: a cell spanning columns
-// repeats, a vMerge continuation repeats the text of the cell above.
 type docxReader struct {
 	sets  map[*element]*rowSet
 	grids map[*element]*rowGrid

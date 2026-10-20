@@ -12,7 +12,6 @@ import (
 
 var utf7ShiftRE = rx.MustCompile(`&([^-]*)-`, 0)
 
-// UTF7Decode is imap.utf7_decode: modified UTF-7 (RFC 3501 5.1.3) to text.
 func UTF7Decode(value string) (string, error) {
 	var failed error
 	out, err := utf7ShiftRE.SubFunc(value, func(m *rx.Match) string {
@@ -40,7 +39,6 @@ func UTF7Decode(value string) (string, error) {
 	return out, failed
 }
 
-// UTF7Encode is imap.utf7_encode: text to modified UTF-7.
 func UTF7Encode(value string) string {
 	var out strings.Builder
 	var pending []rune
@@ -73,8 +71,6 @@ func UTF7Encode(value string) string {
 	return out.String()
 }
 
-// CollapseLabels is imap.collapse_labels: the user labels (no leading backslash) that have no sub-label in the
-// set, sorted.
 func CollapseLabels(labels []string) []string {
 	user := map[string]bool{}
 	for _, l := range labels {
