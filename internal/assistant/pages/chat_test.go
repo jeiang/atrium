@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -437,4 +438,48 @@ func TestListFlagsOptionsProjectsDelete(t *testing.T) {
 	}
 	status(t, s.get(fmt.Sprintf("/projects/2/files/%d/download", fid)), http.StatusNotFound)
 	mustContain(t, status(t, s.post(fmt.Sprintf("/projects/1/files/%d/delete", fid), nil, hx, "true"), http.StatusOK), "Files every chat in this project can read")
+}
+
+func TestEventsMalformedLastEventID(t *testing.T) {
+	s := newSite(t)
+	s.api.Push(reply1(anthropictest.Text("ok")))
+	thread := s.startThread("hi")
+	run := s.lastRun(thread)
+	s.settle(run)
+	r := s.get(fmt.Sprintf("/chat/%d/events?run=%d", thread, run), "Last-Event-ID", "not-a-number")
+	status(t, r, http.StatusBadRequest)
+}
+
+func TestStreamDrainsRunDoneWrittenAfterTerminalState(t *testing.T) {
+	s := newSite(t)
+	release := s.hold()
+	defer release()
+	s.api.Push(reply1(anthropictest.Text("late")))
+	thread := s.startThread("race")
+	run := s.lastRun(thread)
+	s.waitRequests(1)
+	s.exec("UPDATE runs SET state = ? WHERE id = ?", journal.Done, run)
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		_, _ = s.db.Write.Exec("INSERT INTO run_events (run_id, ts, kind, data_json) VALUES (?, ?, ?, ?)", run, 1.0, "run_done", `{"state": "done"}`)
+	}()
+	body := status(t, s.get(fmt.Sprintf("/chat/%d/events?run=%d", thread, run)), http.StatusOK)
+	mustContain(t, body, "event: run_done\n", "event: done\ndata: {\"state\": \"done\"}\n\n")
+	release()
+}
+
+func TestRawImageMissingFromStorage(t *testing.T) {
+	s := newSite(t)
+	s.api.Push(reply1(anthropictest.Text("got it")))
+	thread := s.startThread("look", upload{"pic.png", "image/png", pngBytes})
+	s.settle(s.lastRun(thread))
+	var id int64
+	var path string
+	if err := s.db.Read.QueryRow("SELECT id, path FROM thread_files WHERE thread_id = ?", thread).Scan(&id, &path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	status(t, s.get(fmt.Sprintf("/chat/%d/files/%d/raw", thread, id)), http.StatusNotFound)
 }
