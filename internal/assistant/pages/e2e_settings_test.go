@@ -8,6 +8,23 @@ import (
 	"testing"
 )
 
+func assertNoConfirmOnAction(t *testing.T, page, action string) {
+	t.Helper()
+	marker := `formaction="` + action + `"`
+	i := strings.Index(page, marker)
+	if i < 0 {
+		t.Fatalf("missing form action %q", action)
+	}
+	start := strings.LastIndex(page[:i], "<button ")
+	end := strings.Index(page[i:], "</button>")
+	if start < 0 || end < 0 {
+		t.Fatalf("could not find button for action %q", action)
+	}
+	if strings.Contains(page[start:i+end], "data-confirm-submit=") {
+		t.Errorf("%q unexpectedly requires confirmation", action)
+	}
+}
+
 var settingsTabs = []struct{ id, label string }{
 	{"assistant", "Assistant"}, {"skills", "Skills"}, {"subagents", "Subagents"}, {"notifications", "Notifications"}, {"usage", "Usage"},
 }
@@ -107,6 +124,9 @@ func TestSkillsEditor(t *testing.T) {
 	saved := status(t, s.get(savedResponse.Header.Get("Location")), http.StatusOK)
 	mustContain(t, saved, "references skills that do not exist: ghost", `data-category="warning"`, `data-skill="a" open`, "autofocus", `data-confirm-submit="Delete the skill “a”? referrer references it and will show an unknown reference. This cannot be undone."`)
 
+	mustNotContain(t, status(t, s.get("/settings/skills?saved=nope"), http.StatusOK), `data-category=`)
+	mustNotContain(t, status(t, s.get("/settings/skills?deleted=a"), http.StatusOK), `data-category=`)
+
 	s.exec("INSERT INTO skills (name, description, body, updated_at) VALUES ('weekly-review', 'Review the week', 'check the calendar', 1), ('trip-plan', 'Plan trips', 'book flights', 1)")
 	byBody := status(t, s.get("/settings/skills?q=FLIGHTS"), http.StatusOK)
 	mustContain(t, byBody, `data-skill="trip-plan"`, `value="FLIGHTS"`)
@@ -146,6 +166,8 @@ func TestSkillsEditor(t *testing.T) {
 func TestSubagentsSettings(t *testing.T) {
 	s := newSite(t)
 	page := status(t, s.get("/settings/subagents"), http.StatusOK)
+	mustContain(t, page, `data-agent="mail"`, `name="tools" value="mail_search"`, `name="tools" value="web_search"`, "built-in")
+	mustNotContain(t, page, `name="tools" value="notion_create_page"`)
 	mustContain(t, page, `<nav aria-label="Settings sections" class="-mb-2 flex flex-wrap gap-x-1 border-b text-sm">`)
 
 	form := url.Values{"name": {"finance"}, "description": {"Spending and bills"}, "prompt": {"Use the ledger."}, "effort": {"high"}, "tools": {"mail_search", "contacts_lookup"}}
@@ -155,11 +177,25 @@ func TestSubagentsSettings(t *testing.T) {
 	}
 	made := status(t, s.get(madeResponse.Header.Get("Location")), http.StatusOK)
 	mustContain(t, made, `data-agent="finance"`, "effort high", "Subagent saved", `data-enabled="true"`, `data-strip-params="saved,deleted,toggled"`, `data-agent="finance" data-enabled="true" open`, "autofocus", `data-confirm-submit="Delete the subagent “finance”? The assistant can no longer delegate to it. This cannot be undone."`)
+	assertNoConfirmOnAction(t, made, "/settings/subagents/finance/toggle")
 	var tools string
 	if err := s.db.Read.QueryRow("SELECT tools_json FROM subagents WHERE name = 'finance'").Scan(&tools); err != nil || tools != `["contacts_lookup", "mail_search"]` {
 		t.Errorf("stored tools %q (%v)", tools, err)
 	}
-	mustContain(t, status(t, s.get("/settings/subagents?saved=nope"), http.StatusOK), `New subagent`)
+	mustNotContain(t, status(t, s.get("/settings/subagents?saved=nope"), http.StatusOK), `data-category=`)
+	mustNotContain(t, status(t, s.get("/settings/subagents?deleted=finance"), http.StatusOK), `data-category=`)
+	mustNotContain(t, status(t, s.get("/settings/subagents?toggled=nope"), http.StatusOK), `data-category=`)
+	special := "fin&ance #1 Café"
+	s.exec("INSERT INTO subagents (name, description, prompt, effort, tools_json, enabled, builtin, updated_at) VALUES (?, ?, ?, 'medium', '[]', 1, 0, 1)", special, "Special name", "Research.")
+	specialToggle := s.post("/settings/subagents/"+url.PathEscape(special)+"/toggle", nil)
+	specialLocation := "/settings/subagents?toggled=" + url.QueryEscape(special)
+	if specialToggle.StatusCode != http.StatusSeeOther || specialToggle.Header.Get("Location") != specialLocation || specialToggle.body != "" {
+		t.Fatalf("special subagent toggle: %d %q %q", specialToggle.StatusCode, specialToggle.Header.Get("Location"), specialToggle.body)
+	}
+	specialPage := status(t, s.get(specialLocation), http.StatusOK)
+	mustContain(t, specialPage, "Subagent updated", `data-category="success"`, `data-agent="fin&amp;ance #1 Café"`)
+
+	assertNoConfirmOnAction(t, page, "/settings/subagents/mail/toggle")
 	bad := status(t, s.post("/settings/subagents", url.Values{"name": {"evil"}, "description": {"d"}, "prompt": {"p"}, "effort": {"high"}, "tools": {"notion_create_page"}}), http.StatusUnprocessableEntity)
 	mustContain(t, bad, "Not saved", "not read-only tools open to subagents: notion_create_page", `<input id="new-name" name="name" type="text" value="evil"`, `<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>not read-only tools`)
 	if n := s.count("SELECT COUNT(*) FROM subagents WHERE name = 'evil'"); n != 0 {
@@ -168,6 +204,9 @@ func TestSubagentsSettings(t *testing.T) {
 
 	editBad := status(t, s.post("/settings/subagents", url.Values{"name": {"finance"}, "description": {"Draft description"}, "prompt": {"Draft prompt"}, "effort": {"low"}, "tools": {"mail_search", "notion_create_page"}, "from": {"edit"}}), http.StatusUnprocessableEntity)
 	mustContain(t, editBad, `data-agent="finance" data-enabled="true" open`, `value="Draft description"`, `>Draft prompt</textarea>`, `name="tools" value="mail_search" class="input" checked>`, `role="alert"`)
+	unknownEdit := status(t, s.post("/settings/subagents", url.Values{"name": {"missing"}, "description": {"Draft"}, "prompt": {"Draft"}, "effort": {"low"}, "tools": {"notion_create_page"}, "from": {"edit"}}), http.StatusUnprocessableEntity)
+	mustContain(t, unknownEdit, "New subagent", `id="new-name" name="name" type="text" value="missing"`, `role="alert"`)
+	mustNotContain(t, unknownEdit, `data-agent="missing"`)
 	newBad := status(t, s.post("/settings/subagents", url.Values{"name": {"finance"}, "description": {"New draft"}, "prompt": {"Draft"}, "effort": {"low"}, "tools": {"mail_search", "notion_create_page"}}), http.StatusUnprocessableEntity)
 	mustContain(t, newBad, `value="finance"`, `value="New draft"`, `>Draft</textarea>`)
 	if strings.Contains(newBad[strings.Index(newBad, `data-agent="finance"`):], `data-agent="finance" data-enabled="true" open`) {
@@ -180,6 +219,7 @@ func TestSubagentsSettings(t *testing.T) {
 	}
 	toggled := status(t, s.get(toggledResponse.Header.Get("Location")), http.StatusOK)
 	mustContain(t, toggled, "Subagent updated", "finance is now disabled", `data-agent="finance" data-enabled="false"`, ">Enable</button>")
+	assertNoConfirmOnAction(t, toggled, "/settings/subagents/finance/toggle")
 	if n := s.count("SELECT COUNT(*) FROM subagents WHERE name = 'finance' AND enabled = 0"); n != 1 {
 		t.Error("toggle did not disable the agent")
 	}

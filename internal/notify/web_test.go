@@ -87,8 +87,12 @@ func TestPageListsNotifications(t *testing.T) {
 		}
 		return rec.Body.String()
 	}
-	if body := get(); !strings.Contains(body, "No notifications") {
-		t.Errorf("empty page = %s", body)
+	empty := get()
+	if !strings.Contains(empty, "No notifications") {
+		t.Errorf("empty page = %s", empty)
+	}
+	if !strings.Contains(empty, `class="-mb-2 flex flex-wrap gap-x-1 border-b text-sm"`) || strings.Contains(empty, "overflow-x-auto") {
+		t.Errorf("notifications settings tabs do not wrap")
 	}
 	link := "3"
 	if _, err := Send(t.Context(), d.Write, config.Map(nil), Message{Title: "Hello", Body: "World", ThreadLink: &link, ThreadID: 3, Now: fixedNow}); err != nil {
