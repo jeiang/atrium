@@ -1130,18 +1130,30 @@ func TestOnlyTheUnflagUndoClearsAFlag(t *testing.T) {
 }
 
 func TestProtectedAndUnsafeDestinationsAreSkipped(t *testing.T) {
-	w := icloud(t, "live")
-	for i, dest := range []string{"Deleted Messages", "Sent Messages", "Trash", "[Gmail]/Spam", "a|b"} {
+	w := gmail(t, "live")
+	dests := []string{"Deleted Messages", "Sent Messages", "Trash", "[Gmail]/Spam", "a|b", `\Trash`, `\Spam`, `\Starred`, `\Important`, `\\Trash`, `Receipts\Q`}
+	for i, dest := range dests {
 		subject := fmt.Sprintf("d%d", i)
 		w.arrive(subject, arrival{})
 		w.decide(subject, dest)
 	}
 	out := w.apply()
-	if out.Written != 0 || out.Skipped != 5 || len(w.Fake.Writes) != 0 {
+	if out.Written != 1 || out.Skipped != 10 {
 		t.Fatalf("outcome %+v", out)
 	}
-	for _, a := range w.Actions() {
-		want(t, "error "+str(a.Dest), str(a.Error), "skipped: unsafe destination")
+	for _, action := range w.Actions() {
+		if action.Dest != `Receipts\Q` {
+			want(t, "error "+str(action.Dest), str(action.Error), "skipped: unsafe destination")
+		}
+	}
+	var labelWrites int
+	for _, write := range w.Fake.Writes {
+		if write.Verb == "STORE" && slices.Contains(write.Args, "+X-GM-LABELS") {
+			labelWrites++
+		}
+	}
+	if labelWrites != 1 {
+		t.Fatalf("label writes %+v", w.Fake.Writes)
 	}
 }
 
