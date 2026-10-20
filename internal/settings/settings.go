@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -97,6 +98,16 @@ func (r *Registry) SetPins(p PinSource) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.pins = p
+	if p == nil {
+		return
+	}
+	for _, d := range r.defs {
+		if d.Secret && d.pinnable() {
+			if value, _, ok := p.Pin(d.Key); ok {
+				logx.AddSecret(value)
+			}
+		}
+	}
 }
 
 func (r *Registry) Defs() []Def {

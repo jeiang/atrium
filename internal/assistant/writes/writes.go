@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -54,7 +55,7 @@ func dump(value any) (*string, error) {
 	if value == nil {
 		return nil, nil
 	}
-	text := py.JSONDumps(value, py.JSONOpts{SortKeys: true})
+	text := logx.Scrub(py.JSONDumps(value, py.JSONOpts{SortKeys: true}))
 	return &text, nil
 }
 

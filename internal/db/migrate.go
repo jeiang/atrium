@@ -20,6 +20,7 @@ var migrations = []migration{
 	{1, pythonSchema},
 	{2, usageIndexes},
 	{3, secretsTable},
+	{4, settingsAudit},
 }
 
 type FutureSchemaError struct {
@@ -312,4 +313,23 @@ func secretsTable(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS secrets ("+
 		"name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at REAL NOT NULL, set_by TEXT NOT NULL)")
 	return err
+}
+
+func settingsAudit(ctx context.Context, tx *sql.Tx) error {
+	for _, stmt := range []string{
+		"CREATE TABLE IF NOT EXISTS settings_audit (" +
+			"id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, key TEXT NOT NULL, thread_id INTEGER, " +
+			"old_value TEXT, new_value TEXT, secret INTEGER NOT NULL CHECK (secret IN (0, 1)), " +
+			"actor TEXT NOT NULL, source TEXT NOT NULL CHECK (source IN ('cli', 'ui', 'migration')), " +
+			"CHECK (secret = 0 OR (old_value IS NULL AND new_value = 'changed')))",
+		"CREATE TRIGGER IF NOT EXISTS settings_audit_no_update BEFORE UPDATE ON settings_audit " +
+			"BEGIN SELECT RAISE(ABORT, 'settings_audit is append-only'); END",
+		"CREATE TRIGGER IF NOT EXISTS settings_audit_no_delete BEFORE DELETE ON settings_audit " +
+			"BEGIN SELECT RAISE(ABORT, 'settings_audit is append-only'); END",
+	} {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const (
@@ -63,12 +65,21 @@ func (e EncryptionRequired) Error() string {
 
 type Store struct {
 	reg    *settings.Registry
+	d      *db.DB
 	q      db.Querier
 	cipher Cipher
 }
 
-func New(q db.Querier, cipher Cipher) *Store {
-	return &Store{reg: settings.Default, q: q, cipher: cipher}
+func New(d *db.DB, cipher Cipher) *Store {
+	return &Store{reg: settings.Default, d: d, q: d.Write, cipher: cipher}
+}
+
+func (s *Store) InTx(ctx context.Context, fn func(*Store) error) error {
+	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		scoped := *s
+		scoped.q = tx
+		return fn(&scoped)
+	})
 }
 
 func (s *Store) Known(name string) error {
@@ -113,19 +124,46 @@ func (s *Store) Set(ctx context.Context, name, value, by string) error {
 	if d.RequiresEncryptedDB && !s.cipher.Encrypted() {
 		return EncryptionRequired(name)
 	}
-	_, err = s.q.ExecContext(ctx,
+	if _, err = s.q.ExecContext(ctx,
 		"INSERT INTO secrets (name, value, set_at, set_by) VALUES (?, ?, ?, ?) "+
 			"ON CONFLICT(name) DO UPDATE SET value = excluded.value, set_at = excluded.set_at, set_by = excluded.set_by",
-		name, value, now(), by)
-	return err
+		name, value, now(), by); err != nil {
+		return err
+	}
+	logx.AddSecret(value)
+	return audit.Record(ctx, s.q, audit.Entry{Key: name, Secret: true})
+}
+
+func (s *Store) Load(ctx context.Context) error {
+	rows, err := s.q.QueryContext(ctx, "SELECT value FROM secrets")
+	if err != nil {
+		return err
+	}
+	values, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var v string
+		return v, r.Scan(&v)
+	})
+	if err != nil {
+		return err
+	}
+	for _, v := range values {
+		logx.AddSecret(v)
+	}
+	return nil
 }
 
 func (s *Store) Delete(ctx context.Context, name string) error {
 	if _, err := s.def(name); err != nil {
 		return err
 	}
-	_, err := s.q.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name)
-	return err
+	res, err := s.q.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return err
+	}
+	return audit.Record(ctx, s.q, audit.Entry{Key: name, Secret: true})
 }
 
 func (s *Store) IsSet(ctx context.Context, name string) (Status, error) {
@@ -161,6 +199,9 @@ func (s *Store) GeneratedKey(ctx context.Context, name string) (string, error) {
 		return "", err
 	} else if pinned {
 		found, err := s.reg.Resolve(ctx, s.q, name, 0)
+		if err == nil {
+			logx.AddSecret(found.Value)
+		}
 		return found.Value, err
 	}
 	var buf [32]byte
@@ -174,6 +215,9 @@ func (s *Store) GeneratedKey(ctx context.Context, name string) (string, error) {
 	}
 	var value string
 	err = s.q.QueryRowContext(ctx, "SELECT value FROM secrets WHERE name = ?", name).Scan(&value)
+	if err == nil {
+		logx.AddSecret(value)
+	}
 	return value, err
 }
 

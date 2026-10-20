@@ -1,6 +1,7 @@
 package secretscmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +12,10 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
+
+const actor = "operator"
 
 const maxValue = 1 << 20
 
@@ -51,10 +55,7 @@ func (s *service) set(a *cli.Args) cli.Handler {
 			return e.UsageError("the secret on standard input is larger than %d bytes", maxValue)
 		}
 		return s.with(e, func(st *secrets.Store) int {
-			if err := st.Set(e.Ctx, *name, value, "cli"); err != nil {
-				return failure(e, err)
-			}
-			return report(e, st, *name)
+			return write(e, st, *name, func(ctx context.Context, w *secrets.Store) error { return w.Set(ctx, *name, value, "cli") })
 		})
 	}
 }
@@ -63,10 +64,7 @@ func (s *service) delete(a *cli.Args) cli.Handler {
 	name := a.Arg("name", cli.Opt{})
 	return func(e *cli.Env) int {
 		return s.with(e, func(st *secrets.Store) int {
-			if err := st.Delete(e.Ctx, *name); err != nil {
-				return failure(e, err)
-			}
-			return report(e, st, *name)
+			return write(e, st, *name, func(ctx context.Context, w *secrets.Store) error { return w.Delete(ctx, *name) })
 		})
 	}
 }
@@ -84,6 +82,15 @@ func (s *service) status(*cli.Args) cli.Handler {
 			return cli.ExitOK
 		})
 	}
+}
+
+func write(e *cli.Env, st *secrets.Store, name string, act func(context.Context, *secrets.Store) error) int {
+	ctx := audit.With(e.Ctx, actor, audit.CLI)
+	err := st.InTx(ctx, func(w *secrets.Store) error { return act(ctx, w) })
+	if err != nil {
+		return failure(e, err)
+	}
+	return report(e, st, name)
 }
 
 func report(e *cli.Env, st *secrets.Store, name string) int {
@@ -124,5 +131,9 @@ func (s *service) with(e *cli.Env, run func(*secrets.Store) int) int {
 	if err := db.Migrate(e.Ctx, d, cfg.DBPath); err != nil {
 		return cli.Fail(e, err)
 	}
-	return run(secrets.New(d.Write, secrets.Plaintext{}))
+	st := secrets.New(d, secrets.Plaintext{})
+	if err := st.Load(e.Ctx); err != nil {
+		return cli.Fail(e, err)
+	}
+	return run(st)
 }
