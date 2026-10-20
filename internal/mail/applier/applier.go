@@ -937,7 +937,6 @@ func (a *Applier) deletionDue(ctx context.Context, account string) (bool, error)
 
 type builder func(ctx context.Context, budget *Budget) ([]Intent, error)
 
-
 func (a *Applier) runPass(ctx context.Context, account string, build builder, label string) (Outcome, error) {
 	var out Outcome
 	if a.Live.Cfg.Mode != config.Live {

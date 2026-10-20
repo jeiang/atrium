@@ -385,7 +385,6 @@ func scope(ctx context.Context, id int64) context.Context {
 	return safety.ApprovedWrites(ctx, strconv.FormatInt(id, 10))
 }
 
-
 func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any) (*Proposal, error) {
 	prop, err := Get(ctx, p.DB.Write, id)
 	if err != nil {
