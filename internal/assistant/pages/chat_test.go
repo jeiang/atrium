@@ -279,7 +279,7 @@ func TestUploadsLimitsAndFileServing(t *testing.T) {
 	if n := s.count("SELECT COUNT(*) FROM thread_files") + s.count("SELECT COUNT(*) FROM threads WHERE deleted_at IS NULL"); n != 0 {
 		t.Errorf("a refused file left %d rows", n)
 	}
-	unnamed := s.multipart("/chat", map[string]string{"text": " "}, []upload{huge}, hx, "true")
+	unnamed := s.multipartVia(s.chunked, "/chat", map[string]string{"text": " "}, []upload{huge}, hx, "true")
 	mustContain(t, status(t, unnamed, http.StatusUnprocessableEntity), "Nothing sent", "Type a message to go with the files.")
 	mustNotContain(t, unnamed.body, "Not attached")
 	status(t, s.do(http.MethodPost, "/chat", strings.NewReader("--x\r\nbroken"), "multipart/form-data; boundary=x"), http.StatusBadRequest)

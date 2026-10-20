@@ -33,6 +33,8 @@ const (
 	badBodyDetail   = "There was an error parsing the body"
 	fieldBytes      = 1 << 20
 	bodyBufferBytes = 1 << 16
+	maxParts        = 1000
+	formBytes       = 4 << 20
 )
 
 var (
@@ -55,6 +57,7 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 	reader := multipart.NewReader(bufio.NewReaderSize(r.Body, bodyBufferBytes), boundary)
 	form := url.Values{}
 	var uploads []files.UploadedFile
+	var parts, text int
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
@@ -63,13 +66,16 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 		if err != nil {
 			return form, nil, uploadReadError(err)
 		}
+		if parts++; parts > maxParts {
+			return form, nil, errBadBody
+		}
 		name, filename := part.FormName(), part.FileName()
 		if filename == "" {
 			value, err := io.ReadAll(io.LimitReader(part, fieldBytes+1))
 			if err != nil {
 				return form, nil, uploadReadError(err)
 			}
-			if len(value) > fieldBytes {
+			if text += len(name) + len(value); len(value) > fieldBytes || text > formBytes {
 				return form, nil, errBadBody
 			}
 			form.Add(name, string(value))

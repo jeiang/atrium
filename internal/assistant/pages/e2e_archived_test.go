@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -15,6 +16,7 @@ func TestArchivedProjectRefusesAddingContent(t *testing.T) {
 	status(t, s.multipart("/projects/"+id+"/files", nil, []upload{note}, hx, "true"), http.StatusOK)
 	fileID := s.count("SELECT id FROM thread_files WHERE project_id = ?", project)
 	thread := s.newThread("Loose", 0)
+	inside := s.newThread("Inside", project)
 
 	status(t, s.post("/projects/"+id+"/archive", url.Values{"archived": {"1"}}), http.StatusSeeOther)
 	files := s.count("SELECT COUNT(*) FROM thread_files")
@@ -38,6 +40,9 @@ func TestArchivedProjectRefusesAddingContent(t *testing.T) {
 	moved := s.post(fmt.Sprintf("/chat/%d/project", thread), url.Values{"project_id": {id}}, hx, "true")
 	mustContain(t, status(t, moved, http.StatusUnprocessableEntity), "Project archived", "Restore it to move chats into it.")
 	status(t, s.post(fmt.Sprintf("/chat/%d/project", thread), url.Values{"project_id": {id}}), http.StatusUnprocessableEntity)
+	branch := s.post(fmt.Sprintf("/chat/%d/branch", inside), url.Values{"seq": {"1"}}, hx, "true")
+	mustContain(t, status(t, branch, http.StatusUnprocessableEntity), "Project archived", "Restore it to start chats in it.")
+	status(t, s.post(fmt.Sprintf("/chat/%d/branch", inside), url.Values{"seq": {"1"}}), http.StatusUnprocessableEntity)
 	status(t, s.post(fmt.Sprintf("/chat/%d/project", thread), url.Values{"project_id": {"999"}}), http.StatusNotFound)
 	status(t, s.multipart("/chat", map[string]string{"text": "hello", "project_id": "999"}, nil), http.StatusNotFound)
 	status(t, s.multipart("/projects/999/files", nil, []upload{note}), http.StatusNotFound)
@@ -63,4 +68,22 @@ func TestArchivedProjectRefusesAddingContent(t *testing.T) {
 	status(t, s.multipart("/chat", map[string]string{"text": "", "project_id": id}, nil, hx, "true"), http.StatusNoContent)
 	status(t, s.post(fmt.Sprintf("/chat/%d/project", thread), url.Values{"project_id": {id}}), http.StatusSeeOther)
 	status(t, s.post(fmt.Sprintf("/projects/%s/files/%d/delete", id, fileID), nil, hx, "true"), http.StatusOK)
+}
+
+func TestUploadBodyLimits(t *testing.T) {
+	s := newSite(t)
+	fields := map[string]string{"text": "hello"}
+	for i := 0; i <= maxParts; i++ {
+		fields[fmt.Sprintf("f%d", i)] = "x"
+	}
+	status(t, s.multipart("/chat", fields, nil, hx, "true"), http.StatusBadRequest)
+	heavy := map[string]string{"text": "hello"}
+	for i := 0; i < 5; i++ {
+		heavy[fmt.Sprintf("f%d", i)] = strings.Repeat("x", fieldBytes-1)
+	}
+	status(t, s.multipart("/chat", heavy, nil, hx, "true"), http.StatusBadRequest)
+	status(t, s.multipart("/chat", map[string]string{"text": strings.Repeat("x", fieldBytes+1)}, nil, hx, "true"), http.StatusBadRequest)
+	if n := s.count("SELECT COUNT(*) FROM threads WHERE deleted_at IS NULL"); n != 0 {
+		t.Errorf("refused bodies left %d threads", n)
+	}
 }
