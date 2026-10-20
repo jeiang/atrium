@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Mail is Schema with the two accounts and their mailboxes (1 iCloud, 2 Gmail) tests/helpers.prepare adds.
 func Mail(t testing.TB) *db.DB {
 	t.Helper()
 	d := Schema(t)
@@ -25,8 +24,6 @@ func Mail(t testing.TB) *db.DB {
 	return d
 }
 
-// AddMessage is tests/helpers.add_message: a messages row and its message_fts row with body. fields override the
-// defaults; a []string value is stored as the JSON text Python's helper dumps (to_addrs and the other list columns).
 func AddMessage(t testing.TB, d *db.DB, uid int, body string, fields map[string]any) int64 {
 	t.Helper()
 	row := map[string]any{

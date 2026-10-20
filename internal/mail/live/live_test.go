@@ -111,23 +111,6 @@ func TestEnsureGoliveRunsBeforeOnlyTheFirstTime(t *testing.T) {
 	}
 }
 
-func TestQueryParamsGoliveIsInfinityWhenUnset(t *testing.T) {
-	w := livetest.ICloud(t, "live")
-	p, err := live.QueryParams(t.Context(), w.DB.Read, config.ICloud)
-	if err != nil || p.Golive != 1_792_080_000 || p.Attempts != config.WriteAttempts || p.Account != config.ICloud {
-		t.Fatalf("QueryParams = %+v, %v", p, err)
-	}
-	w.Exec("DELETE FROM live_state")
-	p, err = live.QueryParams(t.Context(), w.DB.Read, config.ICloud)
-	if err != nil || !math.IsInf(p.Golive, 1) {
-		t.Fatalf("QueryParams before go-live = %+v, %v", p, err)
-	}
-	var newer bool
-	if err := w.DB.Read.QueryRow("SELECT 1e308 >= :golive", p.Args()...).Scan(&newer); err != nil || newer {
-		t.Fatalf("a correction at 1e308 counts as after an unset go-live: %v %v", newer, err)
-	}
-}
-
 func TestInterruptedActionIsFlaggedAndNeverRetried(t *testing.T) {
 	w := livetest.ICloud(t, "live")
 	w.Arrive("crashy")
@@ -265,13 +248,13 @@ func TestUndoRunsAsApprovedWriteInShadowAndWhilePaused(t *testing.T) {
 		t.Fatal("flag not set")
 	}
 	shadow := livetest.ICloud(t, "shadow")
-	if err := mailops.StoreFlag(shadow.Automatic(), shadow.Fake, "INBOX", []uint32{1}, flagged, true); !refused(err) {
+	if err := mailops.StoreFlag(shadow.Automatic(), shadow.Fake, "INBOX", 0, []uint32{1}, flagged, true); !refused(err) {
 		t.Fatalf("shadow automatic write = %v", err)
 	}
 	if err := w.Live.SetPaused(true); err != nil {
 		t.Fatal(err)
 	}
-	if err := mailops.StoreFlag(w.Automatic(), w.Fake, "INBOX", []uint32{1}, flagged, true); !refused(err) {
+	if err := mailops.StoreFlag(w.Automatic(), w.Fake, "INBOX", 0, []uint32{1}, flagged, true); !refused(err) {
 		t.Fatalf("paused automatic write = %v", err)
 	}
 	w.Fake.SetEnv(config.Map(map[string]string{"ATRIUM_MODE": "shadow"}))
@@ -524,4 +507,21 @@ func TestUndoWithoutRegistryHasNoHandler(t *testing.T) {
 	bare := &live.Live{DB: w.DB, Cfg: w.Cfg}
 	_, err := bare.Undo(t.Context(), id)
 	undoErr(t, err, "no undo handler for 'unflag'")
+}
+
+func TestQueryParamsGoliveIsInfinityWhenUnset(t *testing.T) {
+	w := livetest.ICloud(t, "live")
+	p, err := live.QueryParams(t.Context(), w.DB.Read, config.ICloud)
+	if err != nil || p.Golive != 1_792_080_000 || p.Attempts != config.WriteAttempts || p.Account != config.ICloud {
+		t.Fatalf("QueryParams = %+v, %v", p, err)
+	}
+	w.Exec("DELETE FROM live_state")
+	p, err = live.QueryParams(t.Context(), w.DB.Read, config.ICloud)
+	if err != nil || !math.IsInf(p.Golive, 1) {
+		t.Fatalf("QueryParams before go-live = %+v, %v", p, err)
+	}
+	var newer bool
+	if err := w.DB.Read.QueryRow("SELECT 1e308 >= :golive", p.Args()...).Scan(&newer); err != nil || newer {
+		t.Fatalf("a correction at 1e308 counts as after an unset go-live: %v %v", newer, err)
+	}
 }

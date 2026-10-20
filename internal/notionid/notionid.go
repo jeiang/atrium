@@ -1,5 +1,3 @@
-// Package notionid is the Notion page id handling of notion_api.py: finding ids in text and spelling them in
-// the dashed lowercase form.
 package notionid
 
 import (
@@ -15,8 +13,6 @@ var (
 	idRe    = rx.MustCompile(`[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}`, 0)
 )
 
-// Normalize is normalize_id: a dashed or 32-digit hexadecimal id becomes dashed lowercase; any other text is
-// returned stripped.
 func Normalize(value string) string {
 	text := py.Strip(value)
 	if m, _ := dashed.FullMatch(text); m != nil {
@@ -30,7 +26,6 @@ func Normalize(value string) string {
 	return text
 }
 
-// IDsInText is ids_in_text: every distinct page id in text, normalized, in order of first appearance.
 func IDsInText(text string) []string {
 	var found []string
 	matches, _ := idRe.FindIter(text)

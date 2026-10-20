@@ -1,5 +1,3 @@
-// Package search is search.py: hybrid mail search, FTS5 bm25 and vec0 KNN fused by reciprocal rank, with the
-// lexical branch alone when the embeddings server is down.
 package search
 
 import (
@@ -47,7 +45,6 @@ type Querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// FTSQuery is fts_query: every word a prefix term, every quoted phrase a phrase, at most MaxTerms terms.
 func FTSQuery(text string) (string, error) {
 	var terms []string
 	matches, err := tokenRe.FindIter(text)
@@ -71,13 +68,11 @@ func FTSQuery(text string) (string, error) {
 	return strings.Join(terms[:min(len(terms), MaxTerms)], " "), nil
 }
 
-// Scored is one rrf result.
 type Scored struct {
 	ID    int64
 	Score float64
 }
 
-// RRF is rrf: reciprocal-rank fusion of the rankings, best score first, ties by best rank then id.
 func RRF(rankings ...[]int64) []Scored {
 	scores := map[int64]float64{}
 	best := map[int64]int{}
@@ -118,7 +113,6 @@ func RRF(rankings ...[]int64) []Scored {
 	return out
 }
 
-// Filters is normalize_filters' result, as search returns it.
 type Filters struct {
 	Account       *string  `json:"account"`
 	Folder        *string  `json:"folder"`
@@ -208,7 +202,6 @@ func timestamp(v any, endOfDay bool) (*float64, error) {
 	return &f, nil
 }
 
-// NormalizeFilters is normalize_filters over the decoded JSON a caller supplied; a nil map filters nothing.
 func NormalizeFilters(filters map[string]any) (Filters, error) {
 	var f Filters
 	var err error
@@ -231,7 +224,6 @@ func NormalizeFilters(filters map[string]any) (Filters, error) {
 	return f, nil
 }
 
-// filterSQL is filter_sql with positional parameters in the order the named ones occur.
 func filterSQL(f Filters) (string, []any) {
 	clauses := []string{"m.gone_at IS NULL"}
 	var params []any
@@ -267,7 +259,6 @@ func filterSQL(f Filters) (string, []any) {
 	return strings.Join(clauses, " AND "), params
 }
 
-// Part is one snippet segment and whether the match highlights it; it encodes as [text, highlighted].
 type Part struct {
 	Text        string
 	Highlighted bool
@@ -275,7 +266,6 @@ type Part struct {
 
 func (p Part) MarshalJSON() ([]byte, error) { return json.Marshal([]any{p.Text, p.Highlighted}) }
 
-// SnippetParts is snippet_parts: the text between the marker bytes snippet() put around matches.
 func SnippetParts(marked string) []Part {
 	parts := []Part{}
 	for _, chunk := range strings.Split(marked, start) {
@@ -419,7 +409,6 @@ func bodyHead(ctx context.Context, q Querier, list []int64) (map[int64]string, e
 	return heads, err
 }
 
-// Info is the message row a hit shows.
 type Info struct {
 	ID            int64   `json:"id"`
 	Account       string  `json:"account"`
@@ -458,7 +447,6 @@ func hydrate(ctx context.Context, q Querier, list []int64) (map[int64]Info, erro
 	return out, err
 }
 
-// Hit is one search result. Score and the ranks are null for the recent list and for a branch that missed it.
 type Hit struct {
 	Info
 	Score        *float64 `json:"score"`
@@ -505,7 +493,6 @@ func recent(ctx context.Context, q Querier, f Filters, limit int) ([]Hit, error)
 	return hits, nil
 }
 
-// Result is what search returns; Error is the embeddings server's complaint when Semantic is false.
 type Result struct {
 	Hits     []Hit   `json:"hits"`
 	Semantic bool    `json:"semantic"`
@@ -521,7 +508,6 @@ func rank(list []int64) map[int64]int {
 	return out
 }
 
-// Search is search. A nil embedTexts is embed.Texts; limit is DefaultLimit unless the caller means otherwise.
 func Search(ctx context.Context, q Querier, cfg config.Config, query string, filters map[string]any, limit int, embedTexts embed.TextsFunc) (Result, error) {
 	if embedTexts == nil {
 		embedTexts = embed.Texts

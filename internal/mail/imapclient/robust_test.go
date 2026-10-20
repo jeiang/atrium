@@ -99,7 +99,6 @@ func TestPanicInAReplyClosesTheConnection(t *testing.T) {
 	}
 }
 
-// slowConn delays writes that carry the APPEND literal.
 type slowConn struct {
 	net.Conn
 	delay time.Duration
@@ -131,7 +130,6 @@ S: {t} OK APPEND completed
 	gated.Close()
 }
 
-// FuzzReadResponse feeds arbitrary server bytes through the imaplib reader and the imap.py parsers.
 func FuzzReadResponse(f *testing.F) {
 	for _, path := range []string{"testdata/icloud.txt", "testdata/gmail.txt"} {
 		file, err := os.Open(path)

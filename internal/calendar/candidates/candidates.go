@@ -1,6 +1,3 @@
-// Package candidates is event_candidates.py: invitations in new mail become calendar proposals, other mail the
-// local model flags as mentioning an event is queued, and draft_event_proposals has the agent turn the queue into
-// event_propose calls.
 package candidates
 
 import (
@@ -39,7 +36,6 @@ const (
 
 var calendarTypes = map[string]bool{"text/calendar": true, "application/ics": true}
 
-// Judge is llm.JudgeEvent's shape.
 type Judge func(ctx context.Context, url string, m llm.Message, body string) (bool, error)
 
 func set(ctx context.Context, d *db.DB, messageID any, status, reason string, now float64) error {
@@ -48,7 +44,6 @@ func set(ctx context.Context, d *db.DB, messageID any, status, reason string, no
 	return err
 }
 
-// Mark is mark: the candidate's status, a row of its own when the message was never a candidate.
 func Mark(ctx context.Context, d *db.DB, messageID any, status string, now float64) error {
 	id := messageID
 	switch v := id.(type) {
@@ -70,13 +65,11 @@ func Mark(ctx context.Context, d *db.DB, messageID any, status string, now float
 	return set(ctx, d, id, status, "", now)
 }
 
-// Item is one queued candidate.
 type Item struct {
 	MessageID int64  `json:"message_id"`
 	Reason    string `json:"reason"`
 }
 
-// Queued is queued: the candidates waiting for the agent, oldest first.
 func Queued(ctx context.Context, q db.Querier, limit int) ([]Item, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT message_id, reason FROM event_candidates WHERE status = ? ORDER BY ts, message_id LIMIT ?", StatusQueued, limit)
@@ -206,9 +199,6 @@ func proposeInvites(ctx context.Context, p *calendar.Proposals, r row, invites [
 	return made, nil
 }
 
-// ScanAccount is scan_account: it parses invitations and queues event-looking mail for the new eligible messages of
-// account and returns the proposals made and the messages queued. A nil judge is llm.JudgeEvent, a nil now the wall
-// clock. While the chat server is down the remaining mail without an invitation is left for the next scan.
 func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account string, judge Judge, env config.Env, now func() float64) (proposed, flagged int, err error) {
 	if judge == nil {
 		judge = llm.JudgeEvent

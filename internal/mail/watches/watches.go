@@ -1,7 +1,3 @@
-// Package watches is watches.py: package tracking extracted from indexed mail. Carrier-format patterns come
-// first and the local model reads what they miss. Everything read from mail is untrusted data. Nothing here
-// pays, cancels or contacts anyone; package status changes only when a later carrier or merchant email says so
-// (no carrier API, no scraping).
 package watches
 
 import (
@@ -44,7 +40,6 @@ const (
 	Day               = 86400.0
 )
 
-// Statuses is STATUSES.
 var Statuses = [...]string{Ordered, Shipped, InTransit, OutForDelivery, Delivered, Delayed, Exception}
 
 var (
@@ -74,7 +69,6 @@ var (
 	carrierDomains = [...]string{"ups.com", "fedex.com", "usps.com", "dhl.com", "usps.gov", "dhl.de"}
 )
 
-// PackageHint is PACKAGE_HINT.
 var PackageHint = "m.k_order = 1 OR " + strings.Join(func() []string {
 	var out []string
 	for _, w := range [...]string{"shipped", "tracking", "delivered", "out for delivery", "on its way", "your package"} {
@@ -83,7 +77,6 @@ var PackageHint = "m.k_order = 1 OR " + strings.Join(func() []string {
 	return out
 }(), " OR ")
 
-// PackageSystem is PACKAGE_SYSTEM.
 const PackageSystem = "You read one email for the mailbox owner and decide whether it is an order confirmation, shipping notice or " +
 	"delivery update for a physical package. is_order=false for marketing, receipts for services, and anything else. " +
 	"Copy tracking_number and order_ref exactly as written in the email, or leave them empty if absent; never invent " +
@@ -92,7 +85,6 @@ const PackageSystem = "You read one email for the mailbox owner and decide wheth
 
 func str() llm.Object { return llm.Object{{Key: "type", Value: "string"}} }
 
-// PackageSchema is PACKAGE_SCHEMA.
 var PackageSchema = llm.Object{
 	{Key: "type", Value: "object"},
 	{Key: "properties", Value: llm.Object{
@@ -108,13 +100,11 @@ var PackageSchema = llm.Object{
 	{Key: "additionalProperties", Value: false},
 }
 
-// MerchantKey is merchant_key: the lower-cased name with every run of other characters as one space.
 func MerchantKey(name string) (string, error) {
 	text, err := nonAlnum.Sub(" ", py.Casefold(name), 0)
 	return strings.Join(py.Split(text), " "), err
 }
 
-// clip is _clip: whitespace collapsed, then cut to limit code points with "…" in the last place.
 func clip(text string, limit int) string {
 	text = strings.Join(py.Split(text), " ")
 	if utf8.RuneCountInString(text) <= limit {
@@ -123,7 +113,6 @@ func clip(text string, limit int) string {
 	return py.Clip(text, limit-1) + "…"
 }
 
-// Row is the part of a messages row the package scan reads.
 type Row struct {
 	ID         int64
 	DateTS     float64
@@ -137,18 +126,14 @@ func rowText(row Row, body string) string {
 	return fmt.Sprintf("From: %s <%s>\nSubject: %s\nBody:\n%s", row.FromName, row.FromAddr, row.Subject, py.Clip(body, BodyChars))
 }
 
-// Options are the seams of the scan: Chat is the model (the local one when nil), Clock the time.time of the scan
-// marks (the wall clock when nil) and Env where ATRIUM_TZ is read (config.OS when nil).
 type Options struct {
 	Chat  Chat
 	Clock func() float64
 	Env   config.Env
 }
 
-// Chat is llm.chat_json's shape: the decoded answer.
 type Chat func(ctx context.Context, url, system, user string, schema any, maxTokens int) (any, error)
 
-// ChatJSON is llm.chat_json.
 func ChatJSON(ctx context.Context, url, system, user string, schema any, maxTokens int) (any, error) {
 	raw, err := llm.ChatJSON(ctx, url, system, user, schema, maxTokens)
 	if err != nil {
@@ -205,10 +190,8 @@ func unscanned(ctx context.Context, q db.Querier, watch, where string, windowDay
 	})
 }
 
-// Tracking is one carrier and tracking number.
 type Tracking struct{ Carrier, Number string }
 
-// FindTracking is find_tracking: carrier-format numbers in text; bare digit formats need the carrier named.
 func FindTracking(text string) ([]Tracking, error) {
 	low := py.Casefold(text)
 	var found []Tracking
@@ -248,7 +231,6 @@ func FindTracking(text string) ([]Tracking, error) {
 	return out[:min(len(out), 5)], nil
 }
 
-// FindOrderRef is find_order_ref: the first order reference that holds a digit, upper-cased.
 func FindOrderRef(text string) (string, error) {
 	matches, err := orderRE.FindIter(text)
 	for _, m := range matches {
@@ -260,7 +242,6 @@ func FindOrderRef(text string) (string, error) {
 	return "", err
 }
 
-// ClassifyStatus is classify_status: the first status pattern the subject, then the start of the body, matches.
 func ClassifyStatus(subject, body string) (string, error) {
 	for _, text := range [...]string{subject, py.Clip(body, 1500)} {
 		for _, s := range statuses {
@@ -286,7 +267,6 @@ func senderMerchant(row Row) string {
 	return clip(row.FromName, 80)
 }
 
-// Item is one package a mail names.
 type Item struct {
 	Carrier        string
 	TrackingNumber string
@@ -296,7 +276,6 @@ type Item struct {
 	StatusText     string
 }
 
-// RegexPackages is regex_packages: the packages the carrier-format patterns find without the model.
 func RegexPackages(row Row, body string) ([]Item, error) {
 	text := row.Subject + "\n" + body
 	numbers, err := FindTracking(text)
@@ -319,7 +298,6 @@ func RegexPackages(row Row, body string) ([]Item, error) {
 	return out, nil
 }
 
-// pyStr is str(v or ""): the string of a truthy decoded JSON value.
 func pyStr(v any) string {
 	if !py.Truthy(v) {
 		return ""
@@ -330,8 +308,6 @@ func pyStr(v any) string {
 	return py.ReprValue(v)
 }
 
-// CleanPackage is clean_package: the package a model answer describes, or ok false when it is no order or
-// names a tracking number or order reference the mail does not contain.
 func CleanPackage(answer any, text string) (item Item, ok bool, err error) {
 	reply, isDict := answer.(py.Dict)
 	if !isDict {
@@ -445,8 +421,6 @@ func orElse(a, b string) string {
 	return b
 }
 
-// UpsertPackage is upsert_package: it inserts the package or fills the existing one's blanks, taking the status
-// of the mail only when the mail is not older than the package's last update. It returns the package's id.
 func UpsertPackage(ctx context.Context, q db.Querier, item Item, messageID int64, messageTS, now float64) (int64, error) {
 	key, err := MerchantKey(item.Merchant)
 	if err != nil {
@@ -478,15 +452,11 @@ func UpsertPackage(ctx context.Context, q db.Querier, item Item, messageID int64
 	return existing.ID, err
 }
 
-// ScanResult is the counts of one package scan.
 type ScanResult struct {
 	Scanned int `json:"scanned"`
 	Found   int `json:"found"`
 }
 
-// ScanPackages is scan_packages: it reads the unscanned order and shipping mail of the last PackageWindowDays,
-// regex first and the model for what the patterns miss. While the chat server is down the scan stops without
-// marking the message scanned; an answer that cannot be used marks it scanned with nothing found.
 func ScanPackages(ctx context.Context, d *db.DB, cfg config.Config, limit int, now float64, o Options) (ScanResult, error) {
 	rows, err := unscanned(ctx, d.Read, Packages, PackageHint, PackageWindowDays, limit, now)
 	if err != nil {
@@ -544,7 +514,6 @@ scan:
 	return result, nil
 }
 
-// Package is one packages row as list_packages returns it; Updated is the local date of UpdatedTS.
 type Package struct {
 	ID              int64   `json:"id"`
 	Carrier         string  `json:"carrier"`
@@ -562,8 +531,6 @@ type Package struct {
 	Updated         string  `json:"updated"`
 }
 
-// ListPackages is list_packages: newest update first; activeOnly drops delivered and stale packages and
-// includeDismissed keeps dismissed ones. Updated is a date in ATRIUM_TZ of env, which is read only when a package is listed.
 func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64, activeOnly, includeDismissed bool) ([]Package, error) {
 	where := " WHERE dismissed = 0"
 	if includeDismissed {
@@ -608,7 +575,6 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 	return out, nil
 }
 
-// DismissPackage is dismiss_package: whether the package exists.
 func DismissPackage(ctx context.Context, q db.Querier, id int64) (bool, error) {
 	res, err := q.ExecContext(ctx, "UPDATE packages SET dismissed = 1 WHERE id = ?", id)
 	if err != nil {
@@ -618,7 +584,6 @@ func DismissPackage(ctx context.Context, q db.Querier, id int64) (bool, error) {
 	return n == 1, err
 }
 
-// Refresh is refresh: every watch's scan; a scan that fails is logged and reports {"error": true}.
 func Refresh(ctx context.Context, d *db.DB, cfg config.Config, limit int, now float64, o Options) py.Dict {
 	result, err := ScanPackages(ctx, d, cfg, limit, now, o)
 	if err != nil {

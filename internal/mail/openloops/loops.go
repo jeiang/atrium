@@ -1,6 +1,3 @@
-// Package openloops is openloops.py: mail threads that owe the operator a reply or wait on someone else, the
-// commitments with dates the local model finds in new mail, and the reminder proposals that turn due commitments
-// into one-shot schedule jobs once the operator approves.
 package openloops
 
 import (
@@ -48,10 +45,8 @@ const (
 	DefaultListLimit     = 50
 )
 
-// States is STATES.
 var States = [...]string{OweReply, Waiting}
 
-// CommitmentStatuses is COMMITMENT_STATUSES.
 var CommitmentStatuses = [...]string{Open, Done, Dismissed}
 
 var (
@@ -62,7 +57,6 @@ var (
 	spaceRuns     = rx.MustCompile(`\s+`, 0)
 )
 
-// NormSubject is norm_subject: the casefolded subject without reply and forward prefixes and with single spaces.
 func NormSubject(subject string) (string, error) {
 	text := py.Casefold(subject)
 	for {
@@ -79,7 +73,6 @@ func NormSubject(subject string) (string, error) {
 	return py.Strip(text), err
 }
 
-// IsDraft is is_draft: the labels or flags JSON holds "\Draft".
 func IsDraft(labels, flagList string) (bool, error) {
 	for _, value := range [...]string{labels, flagList} {
 		if !strings.Contains(value, "Draft") {
@@ -109,7 +102,6 @@ func IsDraft(labels, flagList string) (bool, error) {
 	return false, nil
 }
 
-// Message is the part of a messages row the thread state and the commitment scan read.
 type Message struct {
 	ID         int64
 	Account    string
@@ -130,7 +122,6 @@ type Message struct {
 	Flags      string
 }
 
-// Recipients is recipients: the decoded to_addrs.
 func (m *Message) Recipients() ([]string, error) {
 	text := m.ToAddrs
 	if text == "" {
@@ -153,7 +144,6 @@ func (m *Message) Recipients() ([]string, error) {
 	return out, nil
 }
 
-// HumanSender is human_sender: a sender that is no list, bulk mailer, automated category or no-reply address.
 func (m *Message) HumanSender() (bool, error) {
 	if m.FromAddr == "" || m.ListID != "" || slices.Contains(automatedPrecedence, m.Precedence) ||
 		slices.Contains(automatedCategories, m.Category) {
@@ -196,8 +186,6 @@ func (g *groups) union(a, b string) {
 	}
 }
 
-// threadGroups is thread_groups: the messages joined by message id, Gmail thread id, reply headers and, for mail
-// without reply headers, subject and counterpart; threads come in the order of their first message.
 func threadGroups(rows []Message, selves map[string]bool) ([][]Message, error) {
 	g := &groups{parent: map[string]string{}}
 	node := func(m *Message) string { return "#" + strconv.FormatInt(m.ID, 10) }
@@ -261,7 +249,6 @@ func pendingFlag(ctx context.Context, q db.Querier, id int64) (sql.NullInt64, er
 	return asking, err
 }
 
-// classify is classify: the state and counterpart of a time-ordered thread, or ok false when it is no loop.
 func classify(ctx context.Context, q db.Querier, thread []Message, selves map[string]bool, now float64) (state, counterpart string, ok bool, err error) {
 	last := &thread[len(thread)-1]
 	age := now - last.DateTS
@@ -299,13 +286,11 @@ func classify(ctx context.Context, q db.Querier, thread []Message, selves map[st
 	return "", "", false, nil
 }
 
-// Counts is the number of loops per state compute left.
 type Counts struct {
 	OweReply      int `json:"owe_reply"`
 	WaitingOnThem int `json:"waiting_on_them"`
 }
 
-// Dict is the counts in the order Python builds them.
 func (c Counts) Dict() py.Dict {
 	return py.Dict{{Key: OweReply, Value: c.OweReply}, {Key: Waiting, Value: c.WaitingOnThem}}
 }
@@ -317,8 +302,6 @@ type previousLoop struct {
 	dismissed     int64
 }
 
-// Compute is compute: it rebuilds open_loops from indexed mail inside one transaction. Snooze and dismiss survive
-// while the thread is unchanged.
 func Compute(ctx context.Context, d *db.DB, now float64) (Counts, error) {
 	var counts Counts
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
@@ -449,7 +432,6 @@ func cmpInt(a, b int64) int {
 	return 0
 }
 
-// Loop is one open_loops row as list_loops returns it; ID is the rowid.
 type Loop struct {
 	ID            int64    `json:"id"`
 	ThreadKey     string   `json:"thread_key"`
@@ -464,7 +446,6 @@ type Loop struct {
 	Days          int64    `json:"days"`
 }
 
-// ListLoops is list_loops: oldest first; state "" does not filter and hidden includes snoozed and dismissed loops.
 func ListLoops(ctx context.Context, q db.Querier, now float64, state string, limit int, hidden bool) ([]Loop, error) {
 	var where []string
 	var params []any
@@ -503,18 +484,14 @@ func affectedOne(res sql.Result, err error) (bool, error) {
 	return n == 1, err
 }
 
-// Snooze is snooze: whether the loop exists.
 func Snooze(ctx context.Context, q db.Querier, id int64, until float64) (bool, error) {
 	return affectedOne(q.ExecContext(ctx, "UPDATE open_loops SET snoozed_until = ? WHERE rowid = ?", until, id))
 }
 
-// Dismiss is dismiss: whether the loop exists.
 func Dismiss(ctx context.Context, q db.Querier, id int64) (bool, error) {
 	return affectedOne(q.ExecContext(ctx, "UPDATE open_loops SET dismissed = 1 WHERE rowid = ?", id))
 }
 
-// DismissAll is dismiss_all: it dismisses every visible loop in one state and returns how many. Each stays
-// dismissed until its thread changes.
 func DismissAll(ctx context.Context, q db.Querier, state string) (int64, error) {
 	if !slices.Contains(States[:], state) {
 		return 0, fmt.Errorf("%w: unknown state %s", httpx.ErrValue, py.Repr(state))

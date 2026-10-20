@@ -14,7 +14,6 @@ import (
 
 var update = flag.Bool("update", false, "rewrite testdata/golden.json")
 
-// SQLite of the host nixpkgs (cornn-flaek c5c4a43) whose Python app writes atrium.db.
 const atriumDBSQLiteVersion = "3.51.2"
 
 const vecVersion = "v0.1.9"

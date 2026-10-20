@@ -24,7 +24,6 @@ func listRepr(data []datum) string {
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
-// latin1 is bytes.decode("latin1").
 func latin1(b []byte) string {
 	r := make([]rune, len(b))
 	for i, c := range b {
@@ -33,7 +32,6 @@ func latin1(b []byte) string {
 	return string(r)
 }
 
-// str is str(d) after d.decode("latin1") for bytes, as imap.py joins response data.
 func (d datum) str() string {
 	if d.none || d.tuple {
 		return d.repr()
@@ -41,7 +39,6 @@ func (d datum) str() string {
 	return latin1(d.text)
 }
 
-// split is str.split() as a list, empty rather than nil.
 func split(s string) []string {
 	if out := py.Split(s); out != nil {
 		return out

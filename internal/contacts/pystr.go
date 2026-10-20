@@ -6,8 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-// ReadText is Path.read_text(encoding="utf-8-sig", errors="replace"): UTF-8 without a leading BOM, with one
-// U+FFFD per maximal invalid subpart, and universal newlines.
 func ReadText(data []byte) string {
 	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	var b strings.Builder

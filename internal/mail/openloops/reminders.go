@@ -20,9 +20,6 @@ import (
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
-// Reminders is the reminder kind over one database: it queues proposals for due commitments, and its executor
-// and undoer create and cancel the one-shot schedule job. Now is the clock Python reads as db.now (the wall clock
-// when nil) and Env the environment ATRIUM_TZ is read from (config.OS when nil).
 type Reminders struct {
 	DB  *db.DB
 	Now func() float64
@@ -48,8 +45,6 @@ func local(ts float64, loc *time.Location) time.Time {
 	return time.Unix(sec, 0).In(loc)
 }
 
-// ReminderTime is reminder_time: the epoch of RemindHour local on the due date, or five minutes after now when
-// that has passed.
 func ReminderTime(due, tz string, now float64) (float64, error) {
 	loc, err := scheduler.Zone(tz)
 	if err != nil {
@@ -63,13 +58,10 @@ func ReminderTime(due, tz string, now float64) (float64, error) {
 	return max(float64(py.WallToUnix(loc, wall)), now+300), nil
 }
 
-// ReminderPrompt is reminder_prompt.
 func ReminderPrompt(text string, messageID int64) string {
 	return fmt.Sprintf("Remind the operator: %s (source mail %d)", text, messageID)
 }
 
-// Propose is propose_reminders: a reminder proposal for each open dated commitment that is due soon or recently
-// overdue, in the zone tz (ATRIUM_TZ when empty). It returns how many it created.
 func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, error) {
 	if tz == "" {
 		tz = config.TZName(r.env())
@@ -157,8 +149,6 @@ func payloadString(d py.Dict, key string) (string, error) {
 	return s, nil
 }
 
-// Execute is execute_reminder: on approval, the one-shot schedule job that delivers the reminder, logged with its
-// reminder_cancel undo plan.
 func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
 	decoded, err := py.JSONLoads(p.Payload)
 	if err != nil {
@@ -220,7 +210,6 @@ func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (
 	}, nil
 }
 
-// Undo is undo_reminder: it cancels the job the executor created.
 func (r *Reminders) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
 	var info struct {
 		JobID int64 `json:"job_id"`
@@ -234,7 +223,6 @@ func (r *Reminders) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, er
 	return py.Dict{{Key: "cancelled", Value: info.JobID}}, nil
 }
 
-// Register is register: the reminder executor and its undoer.
 func Register(reg *proposals.Registry, r *Reminders) {
 	reg.Executors[KindReminder] = r.Execute
 	reg.Undoers[UndoReminder] = r.Undo

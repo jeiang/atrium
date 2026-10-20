@@ -75,7 +75,6 @@ func newServer(t *testing.T, cfg config.Config, env config.Env, d *db.DB, o Opti
 	return srv
 }
 
-// seeded is the web test fixture of tests/test_web.py: three filed messages in Bills and two decided inbox messages.
 func seeded(t *testing.T, mode string, o Options) *site {
 	t.Helper()
 	cfg, env, d := newEnv(t, mode)

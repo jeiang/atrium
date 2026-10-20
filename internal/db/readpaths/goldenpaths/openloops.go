@@ -1,8 +1,7 @@
-package readpaths_test
+package goldenpaths
 
 import (
 	"context"
-	"path/filepath"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -10,10 +9,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail/birthdays"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/watches"
-	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
-// readClock is the clock make_db.py's read paths ran at (t0 + 3 days); the birthdays' today is its date.
 const readClock = 1_792_339_200.0
 
 func init() {
@@ -42,7 +39,10 @@ func init() {
 		Name:   "birthdays.UpcomingFor",
 		Golden: "birthdays.upcoming_for",
 		Run: func(ctx context.Context, d *db.DB) (any, error) {
-			cfg := config.Config{ContactsDir: filepath.Join(golden.Dir(), "state", "contacts")}
+			cfg, err := config.Load(config.OS)
+			if err != nil {
+				return nil, err
+			}
 			items, _, err := birthdays.UpcomingFor(ctx, d.Read, cfg, birthdays.Date(2026, 10, 18), 30)
 			return items, err
 		},

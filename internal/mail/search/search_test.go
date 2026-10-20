@@ -81,33 +81,6 @@ func TestFTSQueryEscapesAndPrefixes(t *testing.T) {
 	}
 }
 
-func TestHostileQueryDoesNotFail(t *testing.T) {
-	d := rulestest.DB(t)
-	rulestest.Filed(t, d, 1, "Alpha", "a@x.test", "example.test", nil, fields{"subject": "hello"})
-	for _, q := range []string{`"`, "AND", "NEAR(", "col:x", "-", "*", "'; DROP TABLE messages;--"} {
-		if _, err := Search(t.Context(), d.Read, config.Config{}, q, nil, DefaultLimit, down); err != nil {
-			t.Errorf("Search(%q): %v", q, err)
-		}
-	}
-}
-
-func TestRRFOrder(t *testing.T) {
-	fused := RRF([]int64{1, 2, 3}, []int64{3, 4, 1})
-	ids := []int64{}
-	for _, s := range fused {
-		ids = append(ids, s.ID)
-	}
-	if !slices.Equal(ids, []int64{1, 3, 2, 4}) {
-		t.Errorf("order = %v", ids)
-	}
-	if fused[0].Score != 1.0/61+1.0/63 {
-		t.Errorf("score = %v", fused[0].Score)
-	}
-	if got := RRF([]int64{5}, []int64{6})[0].ID; got != 5 {
-		t.Errorf("tie went to %d", got)
-	}
-}
-
 func TestLexicalOnlyWhenEmbedDown(t *testing.T) {
 	d := rulestest.DB(t)
 	a := rulestest.Add(t, d, 1, nil, "please pay the invoice today", fields{"from_addr": "a@x.test", "from_domain": "example.test", "folder": "Alpha",
@@ -286,5 +259,32 @@ func TestEmptyQueryListsRecent(t *testing.T) {
 	r := run(t, d, "", nil, 5, nil)
 	if !slices.Equal(hitIDs(r), []int64{newer, old}) || r.Hits[0].Snippet != "new body" || r.Semantic || r.Error != nil || r.Hits[0].Score != nil {
 		t.Errorf("result = %+v", r)
+	}
+}
+
+func TestHostileQueryDoesNotFail(t *testing.T) {
+	d := rulestest.DB(t)
+	rulestest.Filed(t, d, 1, "Alpha", "a@x.test", "example.test", nil, fields{"subject": "hello"})
+	for _, q := range []string{`"`, "AND", "NEAR(", "col:x", "-", "*", "'; DROP TABLE messages;--"} {
+		if _, err := Search(t.Context(), d.Read, config.Config{}, q, nil, DefaultLimit, down); err != nil {
+			t.Errorf("Search(%q): %v", q, err)
+		}
+	}
+}
+
+func TestRRFOrder(t *testing.T) {
+	fused := RRF([]int64{1, 2, 3}, []int64{3, 4, 1})
+	ids := []int64{}
+	for _, s := range fused {
+		ids = append(ids, s.ID)
+	}
+	if !slices.Equal(ids, []int64{1, 3, 2, 4}) {
+		t.Errorf("order = %v", ids)
+	}
+	if fused[0].Score != 1.0/61+1.0/63 {
+		t.Errorf("score = %v", fused[0].Score)
+	}
+	if got := RRF([]int64{5}, []int64{6})[0].ID; got != 5 {
+		t.Errorf("tie went to %d", got)
 	}
 }

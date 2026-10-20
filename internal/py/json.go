@@ -14,16 +14,10 @@ type Pair struct {
 	Value any
 }
 
-// Dict is a Python dict that dumps in insertion order.
 type Dict []Pair
 
-// MarshalJSON is JSONDumps(d), so encoding/json keeps the insertion order.
 func (d Dict) MarshalJSON() ([]byte, error) { return []byte(JSONDumps(d)), nil }
 
-// JSONOpts selects json.dumps arguments. The zero value is the defaults: ", " and ": " separators, non-ASCII
-// escaped, keys in insertion order. NoEnsureASCII is ensure_ascii=False, Compact is separators=(",", ":"),
-// SortKeys is sort_keys=True and Indent > 0 is indent=Indent (items on their own lines, "," and ": " separators,
-// empty containers as "[]" and "{}").
 type JSONOpts struct {
 	NoEnsureASCII bool
 	Compact       bool
@@ -44,9 +38,6 @@ func (o JSONOpts) newline(b *strings.Builder) {
 	}
 }
 
-// JSONDumps is json.dumps(v, ...), the one JSON encoder: v is nil, a bool, an integer, a float64, a *big.Int, a
-// string, a []string, an []int, []int64 or []uint32, a []any, a Dict or a map[string]any (dumped with sorted keys, Go maps being unordered).
-// It panics on any other type.
 func JSONDumps(v any, opts ...JSONOpts) string {
 	var o JSONOpts
 	if len(opts) > 0 {
@@ -57,8 +48,6 @@ func JSONDumps(v any, opts ...JSONOpts) string {
 	return b.String()
 }
 
-// JSONRedump is json.dumps(json.loads(raw), ...): JSON text spelled as Python would write it, keys in their
-// original order.
 func JSONRedump(raw []byte, opts ...JSONOpts) (string, error) {
 	v, err := JSONLoads(raw)
 	if err != nil {

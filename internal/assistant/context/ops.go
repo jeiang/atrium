@@ -12,8 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// callsByUse is calls_by_use: tool_use ids are unique per thread; a resumed run journals results under a
-// newer run than the call, so the newest call of an id wins.
 func callsByUse(ctx gocontext.Context, q db.Querier, threadID int64) (map[string]journal.ToolCall, error) {
 	all, err := journal.ToolCallsForThread(ctx, q, threadID)
 	if err != nil {
@@ -28,7 +26,6 @@ func callsByUse(ctx gocontext.Context, q db.Querier, threadID int64) (map[string
 	return out, nil
 }
 
-// Item is one tool result of the active context, as context_status lists it.
 type Item struct {
 	ID       string
 	Seq      int64
@@ -38,7 +35,6 @@ type Item struct {
 	ResultID *int64
 }
 
-// Dict is the item as the dashboard shows it.
 func (i Item) Dict() py.Dict {
 	var resultID any
 	if i.ResultID != nil {
@@ -76,7 +72,6 @@ func nonZero(p *int64) *int64 {
 	return p
 }
 
-// Items is items: every tool result of the active context outside folds, in journal order.
 func Items(ctx gocontext.Context, q db.Querier, threadID int64) ([]Item, error) {
 	p, err := GetProjection(ctx, q, threadID)
 	if err != nil {
@@ -141,7 +136,6 @@ func stagedOf(l Ledger) int64 {
 	return sum
 }
 
-// StagedSavings is staged_savings: the tokens staged drops and folds would save once committed.
 func StagedSavings(ctx gocontext.Context, q db.Querier, threadID int64) (int64, error) {
 	l, err := LedgerRows(ctx, q, threadID)
 	if err != nil {
@@ -162,7 +156,6 @@ func estimateMessages(messages []Message) (int64, error) {
 	return sum, nil
 }
 
-// Status is status: the context_status dashboard.
 func Status(ctx gocontext.Context, q db.Querier, threadID int64) (py.Dict, error) {
 	active, _, err := ActiveMessages(ctx, q, threadID, "")
 	if err != nil {
@@ -212,7 +205,6 @@ func Status(ctx gocontext.Context, q db.Querier, threadID int64) (py.Dict, error
 	}, nil
 }
 
-// StageOpts are stage's optional arguments.
 type StageOpts struct {
 	Tokens    int64
 	ResultID  *int64
@@ -223,7 +215,6 @@ type StageOpts struct {
 	Committed bool
 }
 
-// Stage is stage: it records an item's ledger state for this run (one row per run and item).
 func Stage(ctx gocontext.Context, q db.Querier, runID int64, itemID, kind, state string, now float64, o StageOpts) error {
 	sources := o.SourceIDs
 	if sources == nil {
@@ -242,8 +233,6 @@ func Stage(ctx gocontext.Context, q db.Querier, runID int64, itemID, kind, state
 	return err
 }
 
-// CleanIDs is clean_ids: ids (a decoded JSON value) must be a non-empty list of non-empty strings; repeats
-// are removed, first occurrence kept.
 func CleanIDs(ids any) ([]string, error) {
 	bad := ContextError("ids must be a non-empty list of context item ids (see context_status)")
 	list, ok := ids.([]any)
@@ -289,7 +278,6 @@ func knownItems(ctx gocontext.Context, q db.Querier, threadID int64, ids []strin
 	return out, nil
 }
 
-// Pin is pin: the items may no longer be dropped or folded by the agent.
 func Pin(ctx gocontext.Context, q db.Querier, threadID, runID int64, ids any, now float64) (py.Dict, error) {
 	clean, err := CleanIDs(ids)
 	if err != nil {
@@ -310,7 +298,6 @@ func Pin(ctx gocontext.Context, q db.Querier, threadID, runID int64, ids any, no
 	return py.Dict{{Key: "pinned", Value: clean}}, nil
 }
 
-// Drop is drop: the items are staged for removal; they are applied by the next commit.
 func Drop(ctx gocontext.Context, q db.Querier, threadID, runID int64, ids any, now float64) (py.Dict, error) {
 	clean, err := CleanIDs(ids)
 	if err != nil {
@@ -345,7 +332,6 @@ func Drop(ctx gocontext.Context, q db.Querier, threadID, runID int64, ids any, n
 	}, nil
 }
 
-// pyInt is isinstance(v, int) and not isinstance(v, bool) for a decoded JSON value.
 func pyInt(v any) (*big.Int, bool) {
 	switch v := v.(type) {
 	case int64:
@@ -358,8 +344,6 @@ func pyInt(v any) (*big.Int, bool) {
 	return nil, false
 }
 
-// Fold is fold: the agent's summary is staged to replace the completed messages fromSeq..toSeq (decoded JSON
-// values, validated as Python does) once committed.
 func Fold(ctx gocontext.Context, q db.Querier, threadID, runID int64, fromSeq, toSeq, summary any, sourceIDs []any, now float64) (py.Dict, error) {
 	text, ok := summary.(string)
 	if !ok || py.Strip(text) == "" {
@@ -466,8 +450,6 @@ func lookup(bySeq map[int64]journal.Message, seq *big.Int) (journal.Message, boo
 	return m, ok
 }
 
-// LoopHasThinking is loop_has_thinking: whether an assistant turn after start (the current tool loop)
-// carries thinking.
 func LoopHasThinking(messages []journal.Message, start int64) bool {
 	for _, m := range messages {
 		if m.Role != journal.Assistant || m.Seq <= start {
@@ -482,16 +464,12 @@ func LoopHasThinking(messages []journal.Message, start int64) bool {
 	return false
 }
 
-// Committed is what Commit applied.
 type Committed struct {
 	ProjectionID int64
 	SavedTokens  int64
 	Applied      []string
 }
 
-// Commit is commit: it applies staged drops and folds to completed turns and writes a commit projection,
-// or returns nil when nothing applied. Outside a natural boundary this is only safe while the current tool
-// loop carries no signed thinking: editing the prefix invalidates every later thinking block.
 func Commit(ctx gocontext.Context, q db.Querier, threadID, runID int64, now float64, boundary bool) (*Committed, error) {
 	ledger, err := LedgerRows(ctx, q, threadID)
 	if err != nil {
@@ -581,7 +559,6 @@ func Commit(ctx gocontext.Context, q db.Querier, threadID, runID int64, now floa
 	return &Committed{ProjectionID: id, SavedTokens: saved, Applied: applied}, nil
 }
 
-// storeDropped stores a dropped result that was sent whole (never stubbed), so recall can page it back.
 func storeDropped(ctx gocontext.Context, q db.Querier, call journal.ToolCall, m journal.Message, useID string, now float64) (*int64, error) {
 	for _, raw := range m.Content {
 		if h := headOf(raw); h.Type != ToolResult || h.ToolUseID != useID {

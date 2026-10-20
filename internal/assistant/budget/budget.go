@@ -1,5 +1,3 @@
-// Package budget is agent/budget.py: the settings table's get and set, the monthly spending limit and the
-// shares of it at which unattended runs and chat pause.
 package budget
 
 import (
@@ -24,12 +22,10 @@ const (
 	ChatShare        = 1.0
 )
 
-// BudgetExceeded is the refusal to start a call once the month's spending reached the run kind's share.
 type BudgetExceeded string
 
 func (e BudgetExceeded) Error() string { return string(e) }
 
-// GetSetting is get_setting: the stored text of key, and whether it is set.
 func GetSetting(ctx context.Context, q db.Querier, key string) (string, bool, error) {
 	var value string
 	err := q.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = ?", key).Scan(&value)
@@ -39,8 +35,6 @@ func GetSetting(ctx context.Context, q db.Querier, key string) (string, bool, er
 	return value, err == nil, err
 }
 
-// SetSetting is set_setting: it stores str(value). Strings, integers, floats (as Python's repr) and bools
-// are accepted.
 func SetSetting(ctx context.Context, q db.Querier, key string, value any) error {
 	var text string
 	switch v := value.(type) {
@@ -61,7 +55,6 @@ func SetSetting(ctx context.Context, q db.Querier, key string, value any) error 
 	return err
 }
 
-// MonthlyBudget is monthly_budget; a stored value that is not a float is Python's ValueError.
 func MonthlyBudget(ctx context.Context, q db.Querier) (float64, error) {
 	value, ok, err := GetSetting(ctx, q, BudgetKey)
 	if err != nil || !ok {
@@ -70,7 +63,6 @@ func MonthlyBudget(ctx context.Context, q db.Querier) (float64, error) {
 	return py.ParseFloat(value)
 }
 
-// Status is the month's limit, spending and the share spent.
 type Status struct {
 	BudgetUSD    float64 `json:"budget_usd"`
 	SpentUSD     float64 `json:"spent_usd"`
@@ -78,7 +70,6 @@ type Status struct {
 	Share        float64 `json:"share"`
 }
 
-// StatusAt is status: the month is the one now falls in under loc, the ATRIUM_TZ zone.
 func StatusAt(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Status, error) {
 	limit, err := MonthlyBudget(ctx, q)
 	if err != nil {
@@ -99,8 +90,6 @@ func StatusAt(ctx context.Context, q db.Querier, now float64, loc *time.Location
 	return Status{BudgetUSD: limit, SpentUSD: spent, RemainingUSD: remaining, Share: share}, nil
 }
 
-// Check is check: it returns the status, or BudgetExceeded when the share spent reached the threshold of
-// an unattended run (80%) or of chat (100%).
 func Check(ctx context.Context, q db.Querier, now float64, loc *time.Location, unattended bool) (Status, error) {
 	found, err := StatusAt(ctx, q, now, loc)
 	if err != nil {

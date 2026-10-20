@@ -188,8 +188,6 @@ type rowSet struct {
 	index map[*element]int
 }
 
-// rowGrid is one w:tr's layout grid: where each w:tc starts, computed once however many cells of the row below
-// ask for the cell above them.
 type rowGrid struct {
 	set       *rowSet
 	index     int

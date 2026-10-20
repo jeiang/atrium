@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 )
 
-// DateTime is the result of FromISOFormat: wall-clock fields plus the UTC offset when the text carried one.
 type DateTime struct {
 	Year, Month, Day                  int
 	Hour, Minute, Second, Microsecond int
@@ -40,13 +39,11 @@ func (b isoBuf) digits(p int, v *int, n int) (int, bool) {
 	return p, true
 }
 
-// FromISOFormat is CPython 3.14's datetime.fromisoformat (Modules/_datetimemodule.c).
 func FromISOFormat(s string) (DateTime, bool) {
 	dt, text := fromISOFormat(s)
 	return dt, text == ""
 }
 
-// ISOFormatError is the ValueError text datetime.fromisoformat raises for s, "" when s parses.
 func ISOFormatError(s string) string {
 	_, text := fromISOFormat(s)
 	return text
@@ -423,8 +420,6 @@ const (
 	microsecondsPerSec = 1_000_000
 )
 
-// Timestamp is datetime.timestamp(): a naive value is read as wall time in loc the way zoneinfo does with
-// fold=0, and the microsecond count is rounded to the nearest float64 once.
 func (d DateTime) Timestamp(loc *time.Location) float64 {
 	wall := time.Date(d.Year, time.Month(d.Month), d.Day, d.Hour, d.Minute, d.Second, 0, time.UTC).Unix()
 	var unix int64
@@ -445,9 +440,6 @@ func offsetAt(loc *time.Location, unix int64) int64 {
 	return int64(off)
 }
 
-// WallToUnix resolves a local wall time (seconds since the epoch as if it were UTC) as zoneinfo does with
-// fold=0: the earlier instant when it is ambiguous, the offset in effect before the transition when it falls
-// in a gap.
 func WallToUnix(loc *time.Location, wall int64) int64 {
 	offsets := []int64{offsetAt(loc, wall-secondsPerDay), offsetAt(loc, wall), offsetAt(loc, wall+secondsPerDay)}
 	best, found := int64(0), false
@@ -462,8 +454,6 @@ func WallToUnix(loc *time.Location, wall int64) int64 {
 	return wall - offsetAt(loc, wall-slices.Max(offsets))
 }
 
-// SplitTimestamp splits a float timestamp into whole seconds and microseconds, rounding half to even as
-// datetime.fromtimestamp does.
 func SplitTimestamp(ts float64) (sec, us int64) {
 	whole := math.Floor(ts)
 	frac := math.RoundToEven((ts - whole) * microsecondsPerSec)
@@ -474,8 +464,6 @@ func SplitTimestamp(ts float64) (sec, us int64) {
 	return int64(whole), int64(frac)
 }
 
-// ISOFormat is datetime.isoformat(timespec=timespec) of an aware datetime: "minutes" or "seconds", then the UTC
-// offset as +HH:MM, with :SS when the offset is not a whole minute. Any other timespec panics.
 func ISOFormat(t time.Time, timespec string) string {
 	var clock string
 	switch timespec {
@@ -498,9 +486,6 @@ func ISOFormat(t time.Time, timespec string) string {
 	return fmt.Sprintf("%04d-%02d-%02dT%s%s", t.Year(), int(t.Month()), t.Day(), clock, zone)
 }
 
-// DateFromISOFormat is date.fromisoformat (CPython 3.14 date_fromisoformat): a string of 7, 8 or 10 UTF-8 bytes
-// read as YYYY-MM-DD, YYYYMMDD, YYYY-Www-D, YYYYWwwD or the week forms without a day; whatever follows the
-// digits parsed is not checked, as in C, and the result must be a valid date of years 1 to 9999.
 func DateFromISOFormat(s string) (year, month, day int, ok bool) {
 	if n := len(s); n != 7 && n != 8 && n != 10 {
 		return 0, 0, 0, false
@@ -557,7 +542,6 @@ func validYMD(year, month, day int) bool {
 	return t.Day() == day
 }
 
-// isoWeekToDate is iso_to_ymd.
 func isoWeekToDate(isoYear, week, wday int) (year, month, day int, ok bool) {
 	if isoYear < 1 || isoYear > 9999 {
 		return 0, 0, 0, false
@@ -581,7 +565,6 @@ func isoWeekToDate(isoYear, week, wday int) (year, month, day int, ok bool) {
 	return t.Year(), int(t.Month()), t.Day(), validYMD(t.Year(), int(t.Month()), t.Day())
 }
 
-// DateISOFormatError is the ValueError text date.fromisoformat raises for s, "" when s parses.
 func DateISOFormatError(s string) string {
 	if _, _, _, ok := DateFromISOFormat(s); ok {
 		return ""

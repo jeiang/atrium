@@ -40,9 +40,6 @@ func canonical(t *testing.T, raw []byte, recorded bool) []byte {
 	return out
 }
 
-// TestSubagentRequestGolden replays subagent_research through the real research tool: the parent's research
-// call starts a web child whose requests, system addendum, allowlist and 5-minute cache TTL, the rows it
-// leaves and the digest the parent receives all equal what the frozen Python app recorded.
 func TestSubagentRequestGolden(t *testing.T) {
 	s := golden.LoadScenario(t, "anthropic", "subagent_research")
 	stab := registrytest.Load(t)

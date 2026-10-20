@@ -43,7 +43,7 @@ var writes = []struct {
 	name string
 	do   func(context.Context, *FakeClient) error
 }{
-	{"select read-write", func(ctx context.Context, f *FakeClient) error { return f.SelectRW(ctx, "INBOX") }},
+	{"select read-write", func(ctx context.Context, f *FakeClient) error { _, err := f.SelectRW(ctx, "INBOX"); return err }},
 	{"copy", func(ctx context.Context, f *FakeClient) error {
 		_, err := f.Copy(ctx, mail.UIDs(1), "Receipts")
 		return err
@@ -120,7 +120,7 @@ func TestFakeRefusesAutomaticWritesWhilePaused(t *testing.T) {
 func TestFakeApprovedScopeInShadow(t *testing.T) {
 	f := icloud("shadow")
 	ctx := safety.ApprovedWrites(context.Background(), "1")
-	if err := f.SelectRW(ctx, "INBOX"); err != nil {
+	if _, err := f.SelectRW(ctx, "INBOX"); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.StoreFlags(ctx, mail.UIDs(1), true, `\Seen`); err != nil {
@@ -169,7 +169,7 @@ func TestFakeOperatorSendAppendsOnlyToSent(t *testing.T) {
 func TestFakeLiveMoveIsCopyStoreExpunge(t *testing.T) {
 	f := icloud("live")
 	ctx := context.Background()
-	if err := f.SelectRW(ctx, "INBOX"); err != nil {
+	if _, err := f.SelectRW(ctx, "INBOX"); err != nil {
 		t.Fatal(err)
 	}
 	copied, err := f.Copy(ctx, mail.UIDs(1), "Receipts")
@@ -210,7 +210,7 @@ func TestFakeGmailLabelsAndFailingStore(t *testing.T) {
 		return nil
 	}
 	ctx := context.Background()
-	if err := f.SelectRW(ctx, gmailAllMail); err != nil {
+	if _, err := f.SelectRW(ctx, gmailAllMail); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.StoreLabels(ctx, mail.UIDs(1), true, "Receipts"); err != nil {

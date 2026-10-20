@@ -16,22 +16,18 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// The calendar_event proposal kind: it files under account Account, and its undo plan deletes the event.
 const (
 	Kind    = "calendar_event"
 	Account = "calendar"
 	UndoOp  = "calendar_delete"
 )
 
-// ProposalError is calendar_proposals.ProposalError, a ValueError.
 type ProposalError string
 
 func (e ProposalError) Error() string { return string(e) }
 
 func (e ProposalError) PyClass() string { return "ValueError" }
 
-// Proposals is the calendar_event kind over one database. Now is the clock (the wall clock when nil) and Env the
-// environment the providers read (config.OS when nil).
 type Proposals struct {
 	DB  *db.DB
 	Now func() float64
@@ -57,9 +53,6 @@ func fingerprint(parts ...any) string {
 	return hex.EncodeToString(sum[:])[:32]
 }
 
-// Propose is propose: it queues an event proposal. raw holds calendar, title, start, end, all_day, location and
-// notes; attendees are ignored. key replaces the content fingerprint (an invitation's UID, so a re-sent invite
-// dedupes). created is false when an identical proposal exists.
 func (p *Proposals) Propose(ctx context.Context, raw py.Dict, source py.Dict, key string) (id int64, created bool, err error) {
 	chosen, _ := raw.Get("calendar")
 	target := ICloud
@@ -128,7 +121,6 @@ func payloadOf(prop *proposals.Proposal) (target string, spec Spec, err error) {
 	return target, spec, err
 }
 
-// Execute is execute: it creates the approved event, tracks it and logs the action with its undo plan.
 func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any) (py.Dict, error) {
 	target, spec, err := payloadOf(prop)
 	if err != nil {
@@ -154,7 +146,6 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 	return append(py.Dict{{Key: "summary", Value: fmt.Sprintf("Added to the %s calendar", target)}}, ref.Dict()...), nil
 }
 
-// Undo is undo_delete: it deletes the event the executor created.
 func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
 	var info struct {
 		Calendar string `json:"calendar"`
@@ -172,7 +163,6 @@ func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, er
 	return py.Dict{{Key: "deleted", Value: info.UID}}, nil
 }
 
-// Register is register: the calendar_event executor and its undoer.
 func Register(reg *proposals.Registry, p *Proposals) {
 	reg.Executors[Kind] = p.Execute
 	reg.Undoers[UndoOp] = p.Undo

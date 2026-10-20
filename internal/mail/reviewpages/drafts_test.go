@@ -17,7 +17,6 @@ func (s *site) mailAccounts() {
 	s.exec("INSERT INTO mailboxes (id, account, name, imap_name, role) VALUES (1, 'icloud', 'box', 'box', 'filed')")
 }
 
-// original is a message from Friend that a draft answers.
 func (s *site) original() int64 {
 	s.t.Helper()
 	s.mailAccounts()

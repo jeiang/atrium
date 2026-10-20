@@ -140,18 +140,6 @@ func TestTransferDecoding(t *testing.T) {
 	}
 }
 
-func TestFilenameRFC2231(t *testing.T) {
-	msg, err := Parse([]byte("Content-Type: text/plain; name*0*=utf-8''a%C3%A9; name*1=b\r\nContent-Disposition: attachment\r\n\r\nx"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	name, ok, err := msg.Filename()
-	att, aerr := msg.IsAttachment()
-	if name != "aéb" || !ok || err != nil || !att || aerr != nil {
-		t.Errorf("Filename = %q, %v, %v; IsAttachment = %v, %v", name, ok, err, att, aerr)
-	}
-}
-
 func TestParseRaisesLikePython(t *testing.T) {
 	raw := "Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/pdf; name*\r=x\r\n\r\nbody\r\n--b--\r\n"
 	if _, err := Parse([]byte(raw)); err == nil {
@@ -228,6 +216,18 @@ func TestNulCharsetRaises(t *testing.T) {
 	}
 	if _, err := msg.Body("plain"); err == nil {
 		t.Error("Body accepted a NUL in an RFC 2231 charset")
+	}
+}
+
+func TestFilenameRFC2231(t *testing.T) {
+	msg, err := Parse([]byte("Content-Type: text/plain; name*0*=utf-8''a%C3%A9; name*1=b\r\nContent-Disposition: attachment\r\n\r\nx"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, ok, err := msg.Filename()
+	att, aerr := msg.IsAttachment()
+	if name != "aéb" || !ok || err != nil || !att || aerr != nil {
+		t.Errorf("Filename = %q, %v, %v; IsAttachment = %v, %v", name, ok, err, att, aerr)
 	}
 }
 

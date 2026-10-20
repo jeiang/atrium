@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// CommitmentSystem is COMMITMENT_SYSTEM.
 const CommitmentSystem = "You read one email for its owner and list explicit commitments and deadlines. A commitment is a clear promise " +
 	"to do something (owner 'me' when the mailbox owner promises or must act, owner 'them' when the other party " +
 	"promises or must act). Include a deadline only as an explicit calendar date written YYYY-MM-DD, resolved from " +
@@ -24,7 +23,6 @@ const CommitmentSystem = "You read one email for its owner and list explicit com
 	"invent dates, skip vague pleasantries ('let's catch up'), newsletters and automated notices. Return an empty " +
 	"list when there is nothing."
 
-// CommitmentSchema is COMMITMENT_SCHEMA.
 var CommitmentSchema = llm.Object{
 	{Key: "type", Value: "object"},
 	{Key: "properties", Value: llm.Object{
@@ -46,7 +44,6 @@ var CommitmentSchema = llm.Object{
 	{Key: "additionalProperties", Value: false},
 }
 
-// DueDate is due_date: the ISO date a model-written deadline starts with, or ok false for anything else.
 func DueDate(value any) (string, bool) {
 	text, isStr := value.(string)
 	if !isStr {
@@ -59,11 +56,8 @@ func DueDate(value any) (string, bool) {
 	return fmt.Sprintf("%04d-%02d-%02d", year, month, day), true
 }
 
-// Judge is judge_commitments' shape: the commitments value of the model's answer for one message. env supplies
-// the time zone of the message's date.
 type Judge func(ctx context.Context, env config.Env, url string, m Message, body string) (any, error)
 
-// JudgeCommitments is judge_commitments: one local-model call per message.
 func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message, body string) (any, error) {
 	direction := "received by the mailbox owner"
 	if m.Sent {
@@ -154,9 +148,6 @@ func commitmentItems(found any) ([]any, error) {
 	return nil, fmt.Errorf("%w: '%s' object is not subscriptable", httpx.ErrType, py.TypeName(found))
 }
 
-// ScanCommitments is scan_commitments: it extracts commitments from new inbound (human) and Sent mail and returns
-// the number stored. A nil judge is JudgeCommitments. While the chat server is down the pass stops without marking
-// the message scanned; a model answer that cannot be used marks it scanned with no commitments.
 func ScanCommitments(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, now float64, judge Judge, limit int) (int64, error) {
 	if judge == nil {
 		judge = JudgeCommitments
@@ -232,7 +223,6 @@ func storeCommitment(ctx context.Context, d *db.DB, messageID int64, item any, n
 	return res.RowsAffected()
 }
 
-// Commitment is one commitments row with its message's subject and sender as list_commitments returns it.
 type Commitment struct {
 	ID         int64   `json:"id"`
 	MessageID  int64   `json:"message_id"`
@@ -245,7 +235,6 @@ type Commitment struct {
 	FromAddr   *string `json:"from_addr"`
 }
 
-// ListCommitments is list_commitments: dated ones first, soonest first; status "" does not filter.
 func ListCommitments(ctx context.Context, q db.Querier, status string, limit int) ([]Commitment, error) {
 	where := ""
 	var params []any
@@ -266,7 +255,6 @@ func ListCommitments(ctx context.Context, q db.Querier, status string, limit int
 	})
 }
 
-// SetCommitmentStatus is set_commitment_status: whether the commitment exists.
 func SetCommitmentStatus(ctx context.Context, q db.Querier, id int64, status string) (bool, error) {
 	known := false
 	for _, s := range CommitmentStatuses {

@@ -103,6 +103,7 @@ type FakeClient struct {
 	Gmail        bool
 	CategoryUIDs map[string][]uint32
 	FailWrite    func(FakeWrite) error
+	RWValidity   map[string]uint32
 	Idle         bool
 
 	Selected  string
@@ -130,7 +131,6 @@ func NewFakeClient(env config.Env) *FakeClient {
 	return f
 }
 
-// SetEnv gates every later call with env instead of the one NewFakeClient got.
 func (f *FakeClient) SetEnv(env config.Env) { f.Client = mail.Gated(fakeConn{f}, env) }
 
 func (f *FakeClient) AddBox(imapName string, box *FakeBox, flags ...string) *FakeBox {
@@ -291,10 +291,16 @@ func (c fakeConn) Noop(context.Context) error {
 	return nil
 }
 
-func (c fakeConn) SelectRW(_ context.Context, imapName string) error {
+func (c fakeConn) SelectRW(_ context.Context, imapName string) (uint32, error) {
 	c.f.Selected = imapName
 	c.f.RW = imapName
-	return nil
+	if v, ok := c.f.RWValidity[imapName]; ok {
+		return v, nil
+	}
+	if box, ok := c.f.Boxes[imapName]; ok {
+		return box.Validity, nil
+	}
+	return 1, nil
 }
 
 func (c fakeConn) record(w FakeWrite) error {

@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-// Resolve is pathlib.Path(p).resolve(), CPython 3.14's posixpath.realpath(p, strict=False): a relative p is
-// taken against the working directory, symlinks are followed, a ".." removes the last resolved component, a
-// component that cannot be inspected is kept as it is, and a symlink loop leaves the link in place. The result
-// is absolute and normalized.
 func Resolve(p string) string {
 	path := "/"
 	if !strings.HasPrefix(p, "/") {

@@ -16,7 +16,6 @@ type urlCase struct {
 	portErr string
 }
 
-// Expected values are CPython 3.14.7's urllib.parse.
 var urlSplitCases = []urlCase{
 	{in: "\t//ftp[fe80::1%eth0][fe80::1%25eth0]ftp", err: "Invalid IPv6 URL"},
 	{in: "\r// \u2100\u00fc", err: "netloc ' \u2100\u00fc' contains invalid characters under NFKC normalization"},

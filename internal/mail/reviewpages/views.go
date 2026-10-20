@@ -7,9 +7,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// ProposalView is one proposal as the card template reads it. Preview and Result are the decoded JSON trees
-// with every object a plain map, which the template functions read; a wiki plan keeps its counts as an ordered
-// py.Dict, the order the card lists them in.
 type ProposalView struct {
 	ID        int64    `json:"id"`
 	Kind      string   `json:"kind"`
@@ -41,8 +38,6 @@ func proposalView(p *proposals.Proposal) ProposalView {
 	}
 }
 
-// plainJSON turns every py.Dict of a decoded JSON tree into a map[string]any, the object shape the template
-// functions read; lists are rebuilt, scalars are kept.
 func plainJSON(v any) any {
 	switch x := v.(type) {
 	case py.Dict:
@@ -82,8 +77,6 @@ type proposalCardData struct {
 	PendingOOB bool         `json:"pending_oob"`
 }
 
-// ActivityEntry is one row of the activity timeline. The mail and write fields are one union so that every key
-// a row template reads exists whichever source the row has.
 type ActivityEntry struct {
 	Source   string  `json:"source"`
 	ID       int64   `json:"id"`
@@ -131,7 +124,6 @@ type activityRowData struct {
 	E ActivityEntry `json:"e"`
 }
 
-// DraftView is a draft with the recipients that were not on the message it answers.
 type DraftView struct {
 	ID                 int64    `json:"id"`
 	Status             string   `json:"status"`

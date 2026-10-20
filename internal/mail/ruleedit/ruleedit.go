@@ -1,5 +1,3 @@
-// Package ruleedit is src/atrium/ruleedit.py: the rule editor behind the
-// rules page and the agent's rule tools.
 package ruleedit
 
 import (
@@ -43,7 +41,6 @@ var listFeatures = []featureField{{"dkim_d", "in"}, {"esp", "in"}}
 
 func ruleErrorf(msg string) error { return rules.RuleError(msg) }
 
-// withID is {**raw, "id": id}.
 func withID(raw any, id string) (any, bool) {
 	switch raw := raw.(type) {
 	case py.Dict:
@@ -98,7 +95,6 @@ func store(r rules.Rule) []any {
 	return []any{account, r.Action, dest, rules.ConditionsJSON(r.Conditions)}
 }
 
-// RuleDict is rule_dict: the rule as the editor shows it.
 type RuleDict struct {
 	ID      string            `json:"id"`
 	Account *string           `json:"account"`
@@ -111,7 +107,6 @@ func ruleDict(r rules.Rule) RuleDict {
 	return RuleDict{r.ID, r.Account, r.Action, r.Dest, slices.Clone(r.Conditions)}
 }
 
-// ListRules is list_rules: the operator rules in effect for account, every rule when account is nil.
 func ListRules(ctx context.Context, q rules.Querier, account *string) ([]RuleDict, error) {
 	var loaded []rules.Rule
 	var err error
@@ -130,7 +125,6 @@ func ListRules(ctx context.Context, q rules.Querier, account *string) ([]RuleDic
 	return out, nil
 }
 
-// CreateRule is create_rule: it validates raw, generates an id when raw has none and appends the rule.
 func CreateRule(ctx context.Context, d *db.DB, raw any) (rules.Rule, error) {
 	id := "r-" + randomHex()
 	if py.Truthy(get(raw, "id")) {
@@ -170,7 +164,6 @@ func randomHex() string {
 	return hex.EncodeToString(b[:])
 }
 
-// UpdateRule is update_rule.
 func UpdateRule(ctx context.Context, d *db.DB, id string, raw any) (rules.Rule, error) {
 	rule, err := checked(raw, id)
 	if err != nil {
@@ -187,7 +180,6 @@ func UpdateRule(ctx context.Context, d *db.DB, id string, raw any) (rules.Rule, 
 	return rule, nil
 }
 
-// DeleteRule is delete_rule: whether a rule was removed.
 func DeleteRule(ctx context.Context, d *db.DB, id string) (bool, error) {
 	res, err := d.Write.ExecContext(ctx, "DELETE FROM rules WHERE id = ?", id)
 	if err != nil {
@@ -199,7 +191,6 @@ func DeleteRule(ctx context.Context, d *db.DB, id string) (bool, error) {
 
 func marks(n int) string { return strings.TrimSuffix(strings.Repeat("?,", n), ",") }
 
-// ReorderRules is reorder_rules: the listed rules take the positions they already held, in the new order.
 func ReorderRules(ctx context.Context, d *db.DB, ordered []string) error {
 	seen := map[string]bool{}
 	for _, id := range ordered {
@@ -238,7 +229,6 @@ func ReorderRules(ctx context.Context, d *db.DB, ordered []string) error {
 	})
 }
 
-// PreviewSample is one matching message in a preview.
 type PreviewSample struct {
 	ID       int64   `json:"id"`
 	Account  string  `json:"account"`
@@ -249,7 +239,6 @@ type PreviewSample struct {
 	DateTS   float64 `json:"date_ts"`
 }
 
-// Preview is what preview_rule returns.
 type Preview struct {
 	Total   int             `json:"total"`
 	Count   int             `json:"count"`
@@ -257,8 +246,7 @@ type Preview struct {
 	Sample  []PreviewSample `json:"sample"`
 }
 
-// PreviewRule is preview_rule: how many live messages the rule would match.
-func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int) (Preview, error) {
+func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int, now float64) (Preview, error) {
 	id := PreviewID
 	if py.Truthy(get(raw, "id")) {
 		s, ok := get(raw, "id").(string)
@@ -289,7 +277,7 @@ func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int) (Prev
 	out := Preview{Total: len(all), Sample: []PreviewSample{}}
 	for i := range all {
 		m := &all[i]
-		ok, err := rule.Matches(m)
+		ok, err := rule.Matches(m, now)
 		if err != nil {
 			return Preview{}, err
 		}
@@ -311,7 +299,6 @@ func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int) (Prev
 	return out, nil
 }
 
-// Features is what message_features returns: conditions that describe a message, for pre-filling a rule.
 type Features struct {
 	Account    string            `json:"account"`
 	Dest       *string           `json:"dest"`
@@ -319,7 +306,6 @@ type Features struct {
 	Default    []rules.Condition `json:"default"`
 }
 
-// MessageFeatures is message_features. An unknown message is a RuleError.
 func MessageFeatures(ctx context.Context, q rules.Querier, messageID int64) (Features, error) {
 	row := q.QueryRowContext(ctx, "SELECT "+rules.MessageColumns+" FROM messages WHERE id = ?", messageID)
 	m, err := rules.ScanMessage(row)
@@ -368,7 +354,6 @@ func scalarOf(m *rules.Message, field string) string {
 	return values[0]
 }
 
-// LearnedRule is one learned rule in the summary.
 type LearnedRule struct {
 	Level  string  `json:"level"`
 	Key    string  `json:"key"`
@@ -377,10 +362,8 @@ type LearnedRule struct {
 	N      int     `json:"n"`
 }
 
-// DefaultLearnedLimit is learned_rules_summary's default limit.
 const DefaultLearnedLimit = 50
 
-// LearnedRulesSummary is learned_rules_summary: the learned rules of an account, most-supported first.
 func LearnedRulesSummary(ctx context.Context, q rules.Querier, account string, limit int) ([]LearnedRule, error) {
 	found := []LearnedRule{}
 	for _, level := range rules.LearnedLevels {

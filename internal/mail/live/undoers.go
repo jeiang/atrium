@@ -19,7 +19,6 @@ const (
 	OpUnflag       = "unflag"
 )
 
-// MoveBackItem is one message of a move_back plan; DestUID nil means COPYUID did not report it.
 type MoveBackItem struct {
 	ID      int64   `json:"id"`
 	MsgID   string  `json:"msgid"`
@@ -27,7 +26,6 @@ type MoveBackItem struct {
 	DestUID *uint32 `json:"dest_uid"`
 }
 
-// MoveBack is the move_back plan.
 type MoveBack struct {
 	Account         string         `json:"account"`
 	SrcIMAP         string         `json:"src_imap"`
@@ -36,7 +34,6 @@ type MoveBack struct {
 	Items           []MoveBackItem `json:"items"`
 }
 
-// GmailLabels is the gmail_labels plan: the labels to add and remove again.
 type GmailLabels struct {
 	IMAPName    string   `json:"imap_name"`
 	UIDValidity uint32   `json:"uidvalidity"`
@@ -45,14 +42,12 @@ type GmailLabels struct {
 	Remove      []string `json:"remove"`
 }
 
-// GmailUntrash is the gmail_untrash plan.
 type GmailUntrash struct {
 	TrashIMAP       string   `json:"trash_imap"`
 	DestUIDValidity *uint32  `json:"dest_uidvalidity"`
 	UIDs            []uint32 `json:"uids"`
 }
 
-// Unflag is the unflag plan.
 type Unflag struct {
 	Account     string   `json:"account"`
 	IMAPName    string   `json:"imap_name"`
@@ -60,7 +55,6 @@ type Unflag struct {
 	UIDs        []uint32 `json:"uids"`
 }
 
-// RegisterUndoers adds executors.py's four auto-action undoers, each opening its account through open.
 func RegisterUndoers(r *proposals.Registry, open mailops.Opener) {
 	r.Undoers[OpMoveBack] = plan(func(ctx context.Context, p MoveBack) (py.Dict, error) { return undoMoveBack(ctx, open, p) })
 	r.Undoers[OpGmailLabels] = plan(func(ctx context.Context, p GmailLabels) (py.Dict, error) { return undoGmailLabels(ctx, open, p) })
@@ -83,8 +77,6 @@ func validity(ctx context.Context, client mail.Client, imapName string) (uint32,
 	return st.UIDValidity, err
 }
 
-// undoMoveBack is undo_move_back: an item without a destination UID is found by a unique Message-ID match,
-// only UIDs still present move back, and nothing left to move is an error.
 func undoMoveBack(ctx context.Context, open mailops.Opener, p MoveBack) (py.Dict, error) {
 	var restored, missing int
 	err := mailops.Session(ctx, open, p.Account, func(client mail.Client) error {
@@ -141,7 +133,7 @@ func undoMoveBack(ctx context.Context, open mailops.Opener, p MoveBack) (py.Dict
 		if len(usable) == 0 {
 			return mailops.Error("no message left in the destination to move back")
 		}
-		return mailops.MoveUIDs(ctx, client, p.DestIMAP, p.SrcIMAP, usable, func(batch []uint32, _ *mail.CopyUID) error {
+		return mailops.MoveUIDs(ctx, client, p.DestIMAP, p.SrcIMAP, derefOr0(p.DestUIDValidity), usable, func(batch []uint32, _ *mail.CopyUID) error {
 			restored += len(batch)
 			return nil
 		})
@@ -161,7 +153,7 @@ func undoGmailLabels(ctx context.Context, open mailops.Opener, p GmailLabels) (p
 		if v != p.UIDValidity {
 			return mailops.Error("UIDVALIDITY changed")
 		}
-		return mailops.StoreLabels(ctx, client, p.IMAPName, p.UIDs, p.Add, p.Remove)
+		return mailops.StoreLabels(ctx, client, p.IMAPName, p.UIDValidity, p.UIDs, p.Add, p.Remove)
 	})
 	if err != nil {
 		return nil, err
@@ -180,7 +172,7 @@ func undoGmailUntrash(ctx context.Context, open mailops.Opener, p GmailUntrash) 
 				return mailops.Error("Trash UIDVALIDITY changed")
 			}
 		}
-		return mailops.StoreLabels(ctx, client, p.TrashIMAP, p.UIDs, nil, []string{mailops.TrashLabel})
+		return mailops.StoreLabels(ctx, client, p.TrashIMAP, derefOr0(p.DestUIDValidity), p.UIDs, nil, []string{mailops.TrashLabel})
 	})
 	if err != nil {
 		return nil, err
@@ -188,7 +180,6 @@ func undoGmailUntrash(ctx context.Context, open mailops.Opener, p GmailUntrash) 
 	return py.Dict{{Key: "messages", Value: len(p.UIDs)}}, nil
 }
 
-// undoUnflag is undo_unflag: the only path that clears \Flagged, and only on atrium's own flag.
 func undoUnflag(ctx context.Context, open mailops.Opener, p Unflag) (py.Dict, error) {
 	err := mailops.Session(ctx, open, p.Account, func(client mail.Client) error {
 		v, err := validity(ctx, client, p.IMAPName)
@@ -198,10 +189,17 @@ func undoUnflag(ctx context.Context, open mailops.Opener, p Unflag) (py.Dict, er
 		if v != p.UIDValidity {
 			return mailops.Error("UIDVALIDITY changed")
 		}
-		return mailops.StoreFlag(ctx, client, p.IMAPName, p.UIDs, mailops.Flagged, false)
+		return mailops.StoreFlag(ctx, client, p.IMAPName, p.UIDValidity, p.UIDs, mailops.Flagged, false)
 	})
 	if err != nil {
 		return nil, err
 	}
 	return py.Dict{{Key: "messages", Value: len(p.UIDs)}}, nil
+}
+
+func derefOr0(v *uint32) uint32 {
+	if v == nil {
+		return 0
+	}
+	return *v
 }

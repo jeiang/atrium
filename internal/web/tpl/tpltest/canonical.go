@@ -1,4 +1,3 @@
-// Package tpltest compares Go template renders with the Jinja goldens in testdata/golden/html by canonical form.
 package tpltest
 
 import (
@@ -13,8 +12,6 @@ type frame struct {
 	verbatim bool
 }
 
-// Canonical is the token form of the golden README: one token per doctype, tag and text node, comments dropped,
-// references decoded, attribute values and text whitespace collapsed outside pre, textarea and whitespace-pre*.
 func Canonical(doc string) []string {
 	z := html.NewTokenizer(strings.NewReader(doc))
 	var out []string

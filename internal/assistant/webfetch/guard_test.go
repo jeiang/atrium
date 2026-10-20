@@ -7,8 +7,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 )
 
-// The addresses of tests/test_webfetch.py: NAT64, IPv4-compatible, SIIT and site-local forms that carry or
-// stand for a private address are refused, the same forms around a public IPv4 address are allowed.
 func TestDefaultAllowedEmbeddedAddresses(t *testing.T) {
 	blocked := []string{
 		"64:ff9b::7f00:1", "64:ff9b::a9fe:a9fe", "64:ff9b::a00:1", "64:ff9b::c0a8:101", "64:ff9b::6440:1", "64:ff9b:1::a00:1",

@@ -15,8 +15,6 @@ func init() {
 	})
 }
 
-// pyScalar is Python's str() of a printed value: None, True and False, a float in repr form, an integer or a
-// string as it is; a list or a mapping prints as its repr.
 func pyScalar(v any) (string, error) {
 	switch v.(type) {
 	case nil, bool, float32, float64, string, template.HTML:
@@ -28,8 +26,6 @@ func pyScalar(v any) (string, error) {
 	return py.ReprValue(v), nil
 }
 
-// pyAttr is a Jinja attribute read printed: an absent key is Undefined and prints nothing, a key holding null
-// prints None.
 func pyAttr(m any, key string) (string, error) {
 	var v any
 	var found bool
@@ -45,7 +41,6 @@ func pyAttr(m any, key string) (string, error) {
 	return pyScalar(v)
 }
 
-// pyLen is Jinja's length filter: a missing or null value has length 0.
 func pyLen(v any) int {
 	if v == nil {
 		return 0

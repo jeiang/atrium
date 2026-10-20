@@ -16,10 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// BackfillHeaders is backfill_headers: in_reply_to and refs for rows indexed before those columns existed, from the
-// stored raw header, read as Python's headers-only parse reads it. A file that is missing leaves both empty; a
-// header Python's parser raises on (a Content-Type whose parameters cannot be parsed) fails the whole step, with
-// the rows before it already updated.
 func BackfillHeaders(ctx context.Context, d *db.DB, cfg config.Config, now float64, limit int) (int, error) {
 	rows, err := d.Read.QueryContext(ctx,
 		"SELECT id, raw_path FROM messages WHERE in_reply_to IS NULL AND date_ts >= ? ORDER BY id DESC LIMIT ?",
@@ -60,16 +56,12 @@ func BackfillHeaders(ctx context.Context, d *db.DB, cfg config.Config, now float
 	return len(todo), nil
 }
 
-// Options are the seams of Refresh: Env is where ATRIUM_TZ is read (config.OS when nil), Judge the commitment
-// model (JudgeCommitments when nil) and Clock the db.now of the proposals it creates (the wall clock when nil).
 type Options struct {
 	Env   config.Env
 	Judge Judge
 	Clock func() float64
 }
 
-// Refresh is refresh: one pass after indexing, thread state, commitments and reminder proposals, each step
-// isolated; a step that fails is logged and reports nil.
 func Refresh(ctx context.Context, d *db.DB, cfg config.Config, now float64, o Options) py.Dict {
 	env := o.Env
 	if env == nil {

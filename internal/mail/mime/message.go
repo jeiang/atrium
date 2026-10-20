@@ -1,7 +1,3 @@
-// Package mime reproduces the parts of CPython 3.14's email package (email.message_from_bytes with
-// policy.default, its header registry and parsers, email.utils.parseaddr/getaddresses and
-// parsedate_to_datetime) that the frozen Python app relies on, so ported code sees the same strings,
-// structure and failures that Python produced for the same bytes.
 package mime
 
 import (
@@ -22,7 +18,6 @@ const MaxDepth = 970
 
 var errTooDeep = errors.New("message nesting exceeds Python's recursion limit")
 
-// Message is one parsed message or MIME part.
 type Message struct {
 	fields      []field
 	payload     []byte
@@ -156,18 +151,12 @@ func guard(err *error) {
 	}
 }
 
-// Parse is email.message_from_bytes(data, policy=email.policy.default). err is set where Python raises: a
-// Content-Type or multipart Content-Transfer-Encoding value whose parse raises.
 func Parse(data []byte) (msg *Message, err error) {
 	defer guard(&err)
 	r := &lineReader{lines: splitLines(data)}
 	return parseMessage(r, "text/plain", 0)
 }
 
-// ParseHeaders is BytesParser(policy=email.policy.default).parse(fp, headersonly=True): the header block of a
-// binary file, read through a text wrapper that turns every "\r\n" and bare "\r" into "\n", then the one
-// Content-Type read FeedParser.close() makes. Nothing else is parsed; err is set where Python raises (a
-// Content-Type value whose parse raises).
 func ParseHeaders(data []byte) (msg *Message, err error) {
 	defer guard(&err)
 	data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
@@ -398,7 +387,6 @@ func isASCII(s string) bool {
 
 var errNoHeader = errors.New("no such header")
 
-// Keys is Message.keys(): every header name in order, duplicates included.
 func (m *Message) Keys() []string {
 	out := make([]string, len(m.fields))
 	for i, f := range m.fields {
@@ -419,14 +407,11 @@ func (m *Message) find(name string) (field, bool) {
 	return field{}, false
 }
 
-// Has is Python's `name in msg`.
 func (m *Message) Has(name string) bool {
 	_, ok := m.find(name)
 	return ok
 }
 
-// Get is str(msg.get(name)): the first header named name as its header class renders it. ok is false when the
-// header is absent; err is set where Python raises while parsing the value.
 func (m *Message) Get(name string) (string, bool, error) {
 	f, ok := m.find(name)
 	if !ok {
@@ -436,7 +421,6 @@ func (m *Message) Get(name string) (string, bool, error) {
 	return s, true, err
 }
 
-// GetAll is msg.get_all(name) rendered with str; err is set where Python raises for any of the values.
 func (m *Message) GetAll(name string) ([]string, error) {
 	want := Lower(name)
 	var out []string
@@ -453,8 +437,6 @@ func (m *Message) GetAll(name string) ([]string, error) {
 	return out, nil
 }
 
-// ContentType is get_content_type(); a Content-Type value Python cannot parse yields its default type, as
-// Python's caller sees the exception.
 func (m *Message) ContentType() string {
 	ct, _ := m.contentType()
 	return ct
@@ -476,17 +458,12 @@ func (m *Message) contentType() (string, error) {
 	return ctype, nil
 }
 
-// Strip is Python's str.strip().
 func Strip(s string) string { return string(strip([]rune(s))) }
 
-// IsMultipart is is_multipart(): the payload is a list of parts.
 func (m *Message) IsMultipart() bool { return m.multipart }
 
-// Parts is iter_parts().
 func (m *Message) Parts() []*Message { return m.parts }
 
-// Param is get_param(name, header=header) with values unquoted; RFC 2231 values come back collapsed into the
-// tuple form's text.
 func (m *Message) Param(name, header string) (string, bool, error) {
 	v, ok, err := m.rawParam(name, header)
 	if err != nil || !ok {
@@ -521,7 +498,6 @@ func (m *Message) rawParam(name, header string) (paramValue, bool, error) {
 	return paramValue{}, false, nil
 }
 
-// Filename is get_filename(): Content-Disposition filename, else Content-Type name.
 func (m *Message) Filename() (name string, found bool, err error) {
 	defer guard(&err)
 	v, found, err := m.rawParam("filename", "content-disposition")
@@ -537,7 +513,6 @@ func (m *Message) Filename() (name string, found bool, err error) {
 	return Strip(v.collapse()), true, nil
 }
 
-// IsAttachment is is_attachment().
 func (m *Message) IsAttachment() (bool, error) {
 	f, ok := m.find("content-disposition")
 	if !ok {
@@ -550,7 +525,6 @@ func (m *Message) IsAttachment() (bool, error) {
 	return has && d == "attachment", nil
 }
 
-// Body is get_body(preferencelist=prefs).
 func (m *Message) Body(prefs ...string) (*Message, error) {
 	best := len(prefs)
 	var body *Message
@@ -642,8 +616,6 @@ var errStop = errors.New("stop")
 
 var errNotMessage = errors.New("payload is text, not a list of parts")
 
-// Attachments is iter_attachments(); it returns the parts yielded before any exception Python would raise, and
-// that exception.
 func (m *Message) Attachments() ([]*Message, error) {
 	ctype, err := m.contentType()
 	if err != nil {
@@ -715,7 +687,6 @@ func containsString(list []string, s string) bool {
 	return false
 }
 
-// Payload is get_payload(decode=True) for a non-multipart message.
 func (m *Message) Payload() (out []byte, err error) {
 	defer guard(&err)
 	f, ok := m.find("content-transfer-encoding")
@@ -746,8 +717,6 @@ func (m *Message) Payload() (out []byte, err error) {
 	return m.payload, nil
 }
 
-// Content is get_content() for a text part: the decoded payload in its charset parameter (default ASCII) with
-// errors replaced. err is set where Python raises (unknown charset, unparseable header, non-text part).
 func (m *Message) Content() (s string, err error) {
 	defer guard(&err)
 	ctype, err := m.contentType()

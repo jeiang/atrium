@@ -1,6 +1,3 @@
-// Package anthropictest is a fake Anthropic API (tests/fake_anthropic.py): an httptest server that answers
-// Messages requests from a script, as SSE when the request streams, and a recording transport that keeps
-// every request the client sent.
 package anthropictest
 
 import (
@@ -20,9 +17,6 @@ import (
 
 const APIKey = "fake-anthropic-key"
 
-// Response is one scripted reply in the shape of the goldens' `response`. With Status set the server
-// answers that HTTP status with ErrorBody; with ErrorBody alone a stream sends it as an SSE error event
-// right after message_start.
 type Response struct {
 	Content           []json.RawMessage `json:"content"`
 	StopReason        string            `json:"stop_reason"`
@@ -51,10 +45,8 @@ func (r Request) JSON(t testing.TB) map[string]any {
 
 type Server struct {
 	*httptest.Server
-	t testing.TB
-	// OnRequest runs in the handler before a Messages reply; it may block to hold a call in flight.
-	OnRequest func(Request)
-	// FileDeleteStatus, when set, fails every Files API delete with that status.
+	t                testing.TB
+	OnRequest        func(Request)
 	FileDeleteStatus int
 
 	mu       sync.Mutex
@@ -83,7 +75,6 @@ func (s *Server) Requests() []Request {
 	return append([]Request(nil), s.requests...)
 }
 
-// Remaining is the number of scripted responses not yet served.
 func (s *Server) Remaining() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -94,7 +85,6 @@ func (s *Server) Env() config.Env {
 	return config.Map(map[string]string{"ANTHROPIC_API_KEY": APIKey, anthropic.BaseURLEnv: s.URL})
 }
 
-// Client is an adapter client for this server whose transport records each request it sends.
 func (s *Server) Client() *anthropic.Client {
 	c, err := anthropic.New(s.Env(), anthropic.HTTPClient(s.HTTPClient()))
 	if err != nil {
@@ -227,8 +217,6 @@ func (s sse) send(event string, data any) {
 	}
 }
 
-// stream sends a reply the way the API streams it: each block starts empty where the API streams its
-// fields (text, thinking and signature, tool input, compaction content) and the deltas fill it in.
 func stream(w http.ResponseWriter, id, model string, resp Response) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.WriteHeader(http.StatusOK)

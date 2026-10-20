@@ -103,6 +103,9 @@ func newE2E(ctx context.Context, bin string, d *db.DB) (*e2e, error) {
 	if err != nil {
 		return nil, fmt.Errorf("atrium binary %q: %w (build it with: go build -o /tmp/atrium ./cmd/atrium)", bin, err)
 	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(os.Getenv("ATRIUM_DB")), config.PauseFile), nil, 0o666); err != nil {
+		return nil, err
+	}
 	routes, err := discoverRoutes(ctx, d)
 	if err != nil {
 		return nil, err
@@ -312,5 +315,5 @@ func scrubEnv(dbPath, cacheDir, contactsDir string) error {
 			return err
 		}
 	}
-	return os.WriteFile(filepath.Join(filepath.Dir(dbPath), config.PauseFile), nil, 0o666)
+	return nil
 }

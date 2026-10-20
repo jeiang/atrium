@@ -81,6 +81,35 @@ func TestDraftToolErrors(t *testing.T) {
 	}
 }
 
+func TestDraftUpdateWronglyTypedFieldsRaisePythonClasses(t *testing.T) {
+	_, tc, _ := draftWorld(t)
+	out := mustCall(t, tc, "draft_email_create", `{"account": "gmail", "to": ["a@x.test"], "subject": "Hi", "body": "body"}`)
+	id := itoa(get(t, out, "draft_id").(int64))
+	for args, class := range map[string]string{
+		`{"draft_id": ` + id + `, "subject": 5}`:                  "AttributeError",
+		`{"draft_id": ` + id + `, "in_reply_to_message_id": [1]}`: "ProgrammingError",
+		`{"draft_id": ` + id + `, "account": ["icloud"]}`:         "TypeError",
+		`{"draft_id": ` + id + `, "account": {"a": 1}}`:           "TypeError",
+	} {
+		_, err := call(t, tc, "draft_email_update", args)
+		var raised *tool.Raised
+		if !errors.As(err, &raised) || raised.Class != class {
+			t.Errorf("%s: err = %v (%T)", args, err, err)
+		}
+	}
+}
+
+func TestDraftToolsNeverRecordAgentWrites(t *testing.T) {
+	d, tc, mid := draftWorld(t)
+	out := mustCall(t, tc, "draft_email_create",
+		`{"account": "icloud", "to": ["friend@x.test"], "subject": "Re: Lunch?", "body": "Yes", "in_reply_to_message_id": `+itoa(mid)+`}`)
+	mustCall(t, tc, "draft_email_update", `{"draft_id": `+itoa(get(t, out, "draft_id").(int64))+`, "body": "Yes please"}`)
+	var n int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM agent_writes").Scan(&n); err != nil || n != 0 {
+		t.Errorf("agent_writes = %d, %v", n, err)
+	}
+}
+
 func TestDraftUpdateRefusesSentDrafts(t *testing.T) {
 	d, tc, _ := draftWorld(t)
 	out := mustCall(t, tc, "draft_email_create", `{"account": "gmail", "to": ["a@x.test"], "subject": "Hi", "body": "body"}`)
@@ -116,23 +145,5 @@ func TestDraftCreateValidatesBeforeAHugeReplyIDOverflows(t *testing.T) {
 	var n int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM drafts").Scan(&n); err != nil || n != 0 {
 		t.Errorf("%d drafts stored (%v)", n, err)
-	}
-}
-
-func TestDraftUpdateWronglyTypedFieldsRaisePythonClasses(t *testing.T) {
-	_, tc, _ := draftWorld(t)
-	out := mustCall(t, tc, "draft_email_create", `{"account": "gmail", "to": ["a@x.test"], "subject": "Hi", "body": "body"}`)
-	id := itoa(get(t, out, "draft_id").(int64))
-	for args, class := range map[string]string{
-		`{"draft_id": ` + id + `, "subject": 5}`:                  "AttributeError",
-		`{"draft_id": ` + id + `, "in_reply_to_message_id": [1]}`: "ProgrammingError",
-		`{"draft_id": ` + id + `, "account": ["icloud"]}`:         "TypeError",
-		`{"draft_id": ` + id + `, "account": {"a": 1}}`:           "TypeError",
-	} {
-		_, err := call(t, tc, "draft_email_update", args)
-		var raised *tool.Raised
-		if !errors.As(err, &raised) || raised.Class != class {
-			t.Errorf("%s: err = %v (%T)", args, err, err)
-		}
 	}
 }

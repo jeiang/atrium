@@ -1,4 +1,4 @@
-package readpaths_test
+package goldenpaths
 
 import (
 	"context"
@@ -37,6 +37,9 @@ func init() {
 		}},
 		{Name: "money.ListRates", Golden: "money.list_rates", Run: func(ctx context.Context, d *db.DB) (any, error) {
 			return money.ListRates(ctx, d.Read, 20)
+		}},
+		{Name: "money.MailSource.Unscanned", Golden: "money.unscanned", Run: func(ctx context.Context, d *db.DB) (any, error) {
+			return money.MailSource{}.Unscanned(ctx, d.Read, float64(moneyToday.Unix()), 3650, money.DefaultList)
 		}},
 		{Name: "money.Categories", Golden: "money.categories", Run: func(ctx context.Context, d *db.DB) (any, error) {
 			return money.Categories(ctx, d.Read)

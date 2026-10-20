@@ -24,9 +24,8 @@ import (
 )
 
 const (
-	zone = "America/Port_of_Spain"
-	now0 = 1_800_000_000.0
-	// digest is the text of the child's answer in the Python tests.
+	zone   = "America/Port_of_Spain"
+	now0   = 1_800_000_000.0
 	digest = "Findings:\n- Invoice due Friday [msg-42]\nUncertainty: none found for March."
 )
 
@@ -37,7 +36,6 @@ var expected = map[string][]string{
 	"calendar": {"calendar_list", "recall"},
 }
 
-// clock is a thread-safe clock, one millisecond later at every call.
 func clock() func() float64 {
 	var mu sync.Mutex
 	t := now0
@@ -61,8 +59,6 @@ type world struct {
 	now    func() float64
 }
 
-// newWorld is a migrated database and a registry of the recorded tool definitions (stubs, replaced by
-// overrides) with the real research tool installed, run by a Runner with the production skills hooks.
 func newWorld(t *testing.T, overrides map[string]tool.Handler) *world {
 	t.Helper()
 	d := dbtest.Schema(t)
@@ -104,7 +100,6 @@ func newWorld(t *testing.T, overrides map[string]tool.Handler) *world {
 	return &world{t: t, d: d, cfg: cfg, env: env, srv: srv, reg: reg, runner: runner, svc: svc, now: svc.Now}
 }
 
-// parent is the Python helper of that name: a chat thread with a running run and the ToolContext of its tools.
 func (w *world) parent() (thread, run int64, tc *tool.Context) {
 	w.t.Helper()
 	ctx := w.t.Context()
@@ -122,7 +117,6 @@ func (w *world) parent() (thread, run int64, tc *tool.Context) {
 	}
 }
 
-// handler is the registered research tool's handler.
 func (w *world) handler() tool.Handler {
 	w.t.Helper()
 	all, err := w.reg.All()

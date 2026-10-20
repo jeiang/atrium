@@ -35,16 +35,12 @@ var (
 	redirectStatuses = []int{301, 302, 303, 307, 308}
 )
 
-// Page is what fetch_page returns: the body, the charset the server declared (utf-8 when none) and the URL the
-// last redirect led to.
 type Page struct {
 	Body    []byte
 	Charset string
 	URL     string
 }
 
-// Dest is one connection to open: the host and port the URL names and the vetted address to connect to instead of
-// resolving the host again.
 type Dest struct {
 	Scheme  string
 	Host    string
@@ -52,22 +48,15 @@ type Dest struct {
 	Address netip.Addr
 }
 
-// Fetcher runs fetch_page. The zero value is the production fetcher; the fields are test seams and the policy of
-// the guard (Python's allowed argument).
 type Fetcher struct {
-	// Allowed vets every address a host resolves to; nil is DefaultAllowed.
 	Allowed func(netip.Addr) bool
-	// Lookup is getaddrinfo for a stream socket; nil is the system resolver.
-	Lookup func(ctx context.Context, host string) ([]netip.Addr, error)
-	// Connect opens the connection for dest, wrapped in TLS for https; nil dials the pinned address.
+	Lookup  func(ctx context.Context, host string) ([]netip.Addr, error)
 	Connect func(ctx context.Context, dest Dest) (net.Conn, error)
-	// Timeout bounds the whole fetch, redirects included; zero is FetchTimeout.
 	Timeout time.Duration
 
 	tlsRoots *x509.CertPool
 }
 
-// FetchPage is fetch_page(url) with the production Fetcher.
 func FetchPage(ctx context.Context, url string) (Page, error) {
 	var f Fetcher
 	return f.FetchPage(ctx, url)
@@ -80,9 +69,6 @@ func (f *Fetcher) allowed(ip netip.Addr) bool {
 	return DefaultAllowed(ip)
 }
 
-// FetchPage is fetch_page: GET url as text, following at most MaxRedirects redirects. Every hop resolves its host
-// once, refuses the hop when any answer is not allowed, and connects to the first answer, so the address that was
-// vetted is the address that is used.
 func (f *Fetcher) FetchPage(ctx context.Context, url string) (Page, error) {
 	timeout := f.Timeout
 	if timeout == 0 {
@@ -150,8 +136,6 @@ func isASCII(s string) bool {
 	return true
 }
 
-// asciiHost is the host as the socket layer takes it, the IDNA form the lookup, the Host header and the TLS
-// server name all use (http.client's _encode_hostname).
 func asciiHost(host string) (string, error) {
 	if isASCII(host) {
 		return host, nil
@@ -163,8 +147,6 @@ func asciiHost(host string) (string, error) {
 	return ascii, nil
 }
 
-// resolve is resolve(host, port, allowed): the first answer for the ASCII form of host, after every answer
-// passed the guard.
 func (f *Fetcher) resolve(ctx context.Context, host, ascii string) (netip.Addr, error) {
 	addrs, err := f.lookup(ctx, ascii)
 	if err != nil {
@@ -181,8 +163,6 @@ func (f *Fetcher) resolve(ctx context.Context, host, ascii string) (netip.Addr, 
 	return addrs[0].WithZone(""), nil
 }
 
-// dial connects to the vetted address, never to the host name, and checks the address again as the socket
-// connects.
 func (f *Fetcher) dial(ctx context.Context, d Dest) (net.Conn, error) {
 	dialer := net.Dialer{Control: func(_, address string, _ syscall.RawConn) error {
 		ap, err := netip.ParseAddrPort(address)
@@ -315,7 +295,6 @@ func isDigits(s string) bool {
 	return true
 }
 
-// connectError is the FetchError for an OSError or HTTPException; errors Python lets through keep their class.
 func connectError(ctx context.Context, err error) error {
 	var (
 		fe FetchError
@@ -331,8 +310,6 @@ func connectError(ctx context.Context, err error) error {
 	return FetchError(osText(err))
 }
 
-// opConn gives every read and write the time the connection had left when it was opened, as the socket timeout of
-// http.client does: a stalled peer times out, and a slow one is caught by the deadline check between reads.
 type opConn struct {
 	net.Conn
 	timeout time.Duration
@@ -348,7 +325,6 @@ func (c *opConn) Write(p []byte) (int, error) {
 	return c.Conn.Write(p)
 }
 
-// readBody is read_body: blocks of ReadBlock bytes until the end, a FetchError past MaxBytes or the deadline.
 func readBody(resp *response, deadline time.Time) ([]byte, error) {
 	var body []byte
 	block := make([]byte, ReadBlock)

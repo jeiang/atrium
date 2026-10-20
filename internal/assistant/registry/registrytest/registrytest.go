@@ -1,5 +1,3 @@
-// Package registrytest holds what a tool slice tests its tools against: the frozen Python definitions and
-// effect/run-kind matrix of every ported tool (testdata/golden/anthropic/prompt_stability.json and matrix.json).
 package registrytest
 
 import (
@@ -19,15 +17,12 @@ import (
 //go:embed matrix.json
 var matrixJSON []byte
 
-// Entry is one row of the tool matrix: a tool's effect and the run kinds it is offered in.
 type Entry struct {
 	Name     string      `json:"name"`
 	Effect   tool.Effect `json:"effect"`
 	Contexts tool.Kinds  `json:"contexts"`
 }
 
-// Matrix is the tool matrix of the parity inventory (slice 05 section 2) without the code kind and run_code,
-// checked against the frozen Python registry; sorted by name.
 func Matrix(t testing.TB) []Entry {
 	t.Helper()
 	var rows []Entry
@@ -37,14 +32,12 @@ func Matrix(t testing.TB) []Entry {
 	return rows
 }
 
-// Definition is a recorded tool definition.
 type Definition struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"input_schema"`
 }
 
-// Kind is the recorded request prefix of one run kind.
 type Kind struct {
 	Kind                string          `json:"kind"`
 	CachedSystemBlocks  int             `json:"cached_system_blocks"`
@@ -60,14 +53,12 @@ type Kind struct {
 	} `json:"tool_cache_control"`
 }
 
-// Stability is prompt_stability.json.
 type Stability struct {
 	Kinds       map[string]Kind            `json:"kinds"`
 	SystemTexts map[string]string          `json:"system_texts"`
 	Defs        map[string]json.RawMessage `json:"tool_definitions"`
 }
 
-// Load reads prompt_stability.json.
 func Load(t testing.TB) *Stability {
 	t.Helper()
 	var s Stability
@@ -77,7 +68,6 @@ func Load(t testing.TB) *Stability {
 	return &s
 }
 
-// Definitions are the function tools of the golden (the server tool web_search excluded), sorted by name.
 func (s *Stability) Definitions(t testing.TB) []Definition {
 	t.Helper()
 	var out []Definition
@@ -95,8 +85,6 @@ func (s *Stability) Definitions(t testing.TB) []Definition {
 	return out
 }
 
-// Tools are stub tools carrying every recorded definition with the matrix's effect and run kinds. A stub's
-// handler always fails: they exist to drive registry and prompt tests before the real tools are ported.
 func (s *Stability) Stubs(t testing.TB) []tool.Tool {
 	t.Helper()
 	matrix := map[string]Entry{}
@@ -121,8 +109,6 @@ func stub(context.Context, *tool.Context, py.Dict) (any, error) {
 	return nil, &tool.Raised{Class: "NotImplementedError"}
 }
 
-// Verify fails t unless got equals the recorded Python tool of that name: description, schema, effect and run
-// kinds. A tool slice calls it for every tool it registers.
 func Verify(t testing.TB, got tool.Tool) {
 	t.Helper()
 	s := Load(t)

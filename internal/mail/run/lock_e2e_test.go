@@ -17,13 +17,6 @@ import (
 
 const lockTestPathEnv = "ATRIUM_RUN_LOCK_TEST_PATH"
 
-func TestMain(m *testing.M) {
-	if path := os.Getenv(lockTestPathEnv); path != "" {
-		os.Exit(lockTestHolder(path))
-	}
-	os.Exit(m.Run())
-}
-
 func lockTestHolder(path string) int {
 	lock, err := db.Exclusive(context.Background(), path, 0)
 	if err != nil {

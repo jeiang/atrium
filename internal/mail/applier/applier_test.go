@@ -35,14 +35,13 @@ const (
 
 var ctx = context.Background()
 
-// hooked is the fake with SelectRW or Copy wrapped, as the Python tests monkeypatch select_rw and mutate.
 type hooked struct {
 	*mailtest.FakeClient
-	selectRW func(ctx context.Context, name string) error
+	selectRW func(ctx context.Context, name string) (uint32, error)
 	copy     func(ctx context.Context, uids mail.UIDSet, dest string) (*mail.CopyUID, error)
 }
 
-func (h *hooked) SelectRW(ctx context.Context, name string) error {
+func (h *hooked) SelectRW(ctx context.Context, name string) (uint32, error) {
 	if h.selectRW != nil {
 		return h.selectRW(ctx, name)
 	}
@@ -447,6 +446,55 @@ func TestGmailDeletionPassCopiesToTrashAndUndoUntrashes(t *testing.T) {
 	}
 }
 
+func TestGmailDeletionPassRefusesBeforeCopyWhenUIDValidityDiffers(t *testing.T) {
+	w := gmail(t, "live")
+	w.arrive("doomed", arrival{labels: []string{"Receipts"}, sender: "x@spam.test"})
+	w.age("doomed", 1.0)
+	w.deleteRule(config.Gmail)
+	w.Fake.RWValidity = map[string]uint32{config.GmailAllMail: 99}
+	out := w.deletions(false)
+	want(t, "failed", out.Failed, 1)
+	want(t, "verbs", w.verbs(), []string(nil))
+	row := w.Actions()[0]
+	if row.Error == nil || *row.Error != "MailOpError: UIDVALIDITY changed" {
+		t.Fatalf("row error = %v", row.Error)
+	}
+}
+
+func TestGmailDeletionPassIgnoresATrashDuplicateWhenUIDValidityDiffers(t *testing.T) {
+	w := gmail(t, "live")
+	w.arrive("doomed", arrival{labels: []string{"Receipts"}, sender: "x@spam.test"})
+	w.age("doomed", 1.0)
+	w.deleteRule(config.Gmail)
+	orig := w.Fake.Boxes[allMail].Messages[1]
+	w.Fake.Boxes["[Gmail]/Trash"].Add(orig.Header, orig.Text, nil, nil)
+	w.Fake.RWValidity = map[string]uint32{allMail: 99}
+	out := w.deletions(false)
+	want(t, "failed", out.Failed, 1)
+	want(t, "by kind", out.ByKind, py.Dict(nil))
+	want(t, "verbs", w.verbs(), []string(nil))
+	row := w.Actions()[0]
+	if row.OK == nil || *row.OK != 0 || row.Undo != nil || row.Error == nil || *row.Error != "MailOpError: UIDVALIDITY changed" {
+		t.Fatalf("row = %+v", row)
+	}
+}
+
+func TestGmailRelabelRefusesWhenUIDValidityDiffers(t *testing.T) {
+	w := gmail(t, "live")
+	w.arrive("filed", arrival{})
+	w.decide("filed", "Receipts")
+	w.Fake.RWValidity = map[string]uint32{allMail: 99}
+	out := w.apply()
+	want(t, "failed", out.Failed, 1)
+	want(t, "written", out.Written, 0)
+	want(t, "verbs", w.verbs(), []string(nil))
+	want(t, "labels", w.Fake.Boxes[allMail].Messages[1].Labels, []string{inboxLabel})
+	row := w.Actions()[0]
+	if row.OK == nil || *row.OK != 0 || row.Undo != nil || row.After != nil || row.Error == nil || *row.Error != "MailOpError: UIDVALIDITY changed" {
+		t.Fatalf("row = %+v", row)
+	}
+}
+
 func TestWriteCapDefersTheExcessAndWarns(t *testing.T) {
 	w := icloud(t, "live")
 	w.applier.Cap = 2
@@ -467,12 +515,6 @@ func TestWriteCapDefersTheExcessAndWarns(t *testing.T) {
 	want(t, "bills", len(w.Fake.Boxes["Bills"].Messages), 2)
 	if out := w.apply(); out.Written != 2 {
 		t.Fatalf("second pass %+v", out)
-	}
-}
-
-func TestDefaultCapIsWriteCap(t *testing.T) {
-	if (&Applier{}).cap() != config.WriteCap || config.WriteCap != 100 || config.WriteAttempts != 3 {
-		t.Fatal("WRITE_CAP is 100 and WRITE_ATTEMPTS 3")
 	}
 }
 
@@ -805,10 +847,10 @@ func TestGmailSelectFailureDoesNotStrandOtherActions(t *testing.T) {
 	w.Decide("doomed", "delete", nil, "operator")
 	w.flagDecision("friend", 1)
 	calls := 0
-	w.client.selectRW = func(ctx context.Context, name string) error {
+	w.client.selectRW = func(ctx context.Context, name string) (uint32, error) {
 		calls++
 		if calls == 1 {
-			return errors.New("NO [SERVERBUG] try later")
+			return 0, errors.New("NO [SERVERBUG] try later")
 		}
 		return w.Fake.SelectRW(ctx, name)
 	}
@@ -973,9 +1015,6 @@ func TestApplyAllRunsTheLivePassThenTheDueDeletionPass(t *testing.T) {
 	}
 }
 
-// TestModePauseApprovalMatrix asserts exactly when a mailbox write happens: automatic passes write only in live
-// mode when not paused, whatever approval the caller holds; an approved operator write always goes through; an
-// unapproved operator write only in live mode.
 func TestModePauseApprovalMatrix(t *testing.T) {
 	for _, mode := range []string{config.Shadow, config.Live} {
 		for _, paused := range []bool{false, true} {
@@ -1017,7 +1056,7 @@ func TestModePauseApprovalMatrix(t *testing.T) {
 						}
 					}
 					w.Fake.Writes = nil
-					err = mailops.StoreFlag(caller, w.Fake, "INBOX", []uint32{2}, seen, true)
+					err = mailops.StoreFlag(caller, w.Fake, "INBOX", 0, []uint32{2}, seen, true)
 					operator := approved || mode == config.Live
 					if (err == nil) != operator || (len(w.Fake.Writes) > 0) != operator {
 						t.Fatalf("operator write = %v %v, want %v", err, w.Fake.Writes, operator)
@@ -1028,8 +1067,6 @@ func TestModePauseApprovalMatrix(t *testing.T) {
 	}
 }
 
-// TestPauseStopsAutomaticWritesButNotApprovalsOrUndo is the runbook: pausing stops the passes, approvals and undo
-// still write.
 func TestPauseStopsAutomaticWritesButNotApprovalsOrUndo(t *testing.T) {
 	w := icloud(t, "live")
 	w.arrive("friend", arrival{flags: []string{}})
@@ -1048,13 +1085,12 @@ func TestPauseStopsAutomaticWritesButNotApprovalsOrUndo(t *testing.T) {
 		t.Fatal("undo refused while paused")
 	}
 	approved := safety.ApprovedWrites(ctx, "42")
-	if err := mailops.StoreFlag(approved, w.Fake, "INBOX", []uint32{2}, seen, true); err != nil {
+	if err := mailops.StoreFlag(approved, w.Fake, "INBOX", 0, []uint32{2}, seen, true); err != nil {
 		t.Fatalf("approved write while paused = %v", err)
 	}
 	want(t, "verbs", w.verbs(), []string{"STORE", "STORE"})
 }
 
-// TestPauseDuringAPassRefusesTheRemainingWrites: the gate checks the pause again for every write.
 func TestPauseDuringAPassRefusesTheRemainingWrites(t *testing.T) {
 	w := icloud(t, "live")
 	w.arrive("bills", arrival{})
@@ -1079,8 +1115,6 @@ func TestPauseDuringAPassRefusesTheRemainingWrites(t *testing.T) {
 		"WriteRefused: refusing automatic mailbox write 'IMAP SELECT read-write': atrium is paused"})
 }
 
-// TestOnlyTheUnflagUndoClearsAFlag: no automatic path issues STORE -FLAGS \Flagged; undoing atrium's own flag
-// is the one write that does.
 func TestOnlyTheUnflagUndoClearsAFlag(t *testing.T) {
 	clears := func(w *world) int {
 		n := 0
@@ -1171,8 +1205,6 @@ func TestNewResyncsTheAccountOnAFreshSession(t *testing.T) {
 	want(t, "bills", w.count("SELECT COUNT(*) FROM messages m JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE mb.name = 'Bills' AND m.gone_at IS NULL"), 1)
 }
 
-// TestGroupFailureHoldsEveryEntry: a group that fails unexpectedly (here an earlier partial's undo plan that
-// cannot be read) holds every one of its actions with the same error.
 func TestGroupFailureHoldsEveryEntry(t *testing.T) {
 	w := gmail(t, "live")
 	w.arrive("first", arrival{})
@@ -1190,5 +1222,11 @@ func TestGroupFailureHoldsEveryEntry(t *testing.T) {
 	held := w.Actions()[1:]
 	if len(held) != 2 || held[0].Error == nil || ok(held[0]) != "None" || ok(held[1]) != "None" || str(held[1].Error) != str(held[0].Error) {
 		t.Fatalf("held rows %+v", held)
+	}
+}
+
+func TestDefaultCapIsWriteCap(t *testing.T) {
+	if (&Applier{}).cap() != config.WriteCap || config.WriteCap != 100 || config.WriteAttempts != 3 {
+		t.Fatal("WRITE_CAP is 100 and WRITE_ATTEMPTS 3")
 	}
 }

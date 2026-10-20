@@ -217,11 +217,8 @@ func (d pyDate) format() string {
 		d.t.Year(), d.t.Hour(), d.t.Minute(), d.t.Second(), zone)
 }
 
-// Timestamp is Python's email_ts rule: the POSIX time of the date, with a missing or -0000 zone read as UTC.
 func (d pyDate) Timestamp() float64 { return float64(d.t.Unix()) }
 
-// ParseDate is email.utils.parsedate_to_datetime followed by features.email_ts: the POSIX time of an RFC 5322
-// date, with no zone or -0000 read as UTC. ok is false where Python raises.
 func ParseDate(s string) (float64, bool) {
 	d, ok := parseDate([]rune(s))
 	if !ok {

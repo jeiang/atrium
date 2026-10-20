@@ -13,10 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Message is one message of the active list. Seq and RunID are nil for the projection's head (and for what
-// preserved and shrink return, which carry role and content only). ActiveMessages' Content may share its
-// backing array with the journal's messages: copy it before appending or replacing a block (Python's
-// list(m["content"])).
 type Message struct {
 	Role    string
 	Content []json.RawMessage
@@ -24,7 +20,6 @@ type Message struct {
 	RunID   *int64
 }
 
-// Wire is the message as a request sends it: {"role", "content"} with the blocks unchanged.
 func (m Message) Wire() json.RawMessage {
 	var b strings.Builder
 	b.WriteString(`{"role":`)
@@ -45,9 +40,6 @@ type headMessage struct {
 	Content []json.RawMessage `json:"content"`
 }
 
-// Projection is the latest context_projections row of a thread: the active list is Head (literal and
-// thinking-free) followed by the journal from BaseSeq, with thinking stripped from assistant turns in
-// [StripFromSeq, StripBeforeSeq). The zero Projection (ID 0, Kind "") is a thread never projected.
 type Projection struct {
 	ID             int64
 	Kind           string
@@ -57,7 +49,6 @@ type Projection struct {
 	Head           []Message
 }
 
-// GetProjection is projection.
 func GetProjection(ctx gocontext.Context, q db.Querier, threadID int64) (Projection, error) {
 	var p Projection
 	var head string
@@ -93,7 +84,6 @@ func dumpHead(head []Message) (string, error) {
 	return py.JSONDumps(items, compactJSON), nil
 }
 
-// SaveProjection is save_projection; it returns the new projection's id.
 func SaveProjection(ctx gocontext.Context, q db.Querier, threadID, runID int64, kind string, baseSeq, stripFromSeq, stripBeforeSeq int64, head []Message, savedTokens int64, now float64) (int64, error) {
 	body, err := dumpHead(head)
 	if err != nil {
@@ -109,7 +99,6 @@ func SaveProjection(ctx gocontext.Context, q db.Querier, threadID, runID int64, 
 	return res.LastInsertId()
 }
 
-// LedgerRow is a context_ledger row.
 type LedgerRow struct {
 	ID            int64
 	RunID         int64
@@ -141,14 +130,11 @@ func (r LedgerRow) sources() ([]any, error) {
 	return list, nil
 }
 
-// Ledger is ledger_rows: the latest row per item id, in the order each item first appeared (a Python dict
-// keyed by item_id, filled in row order).
 type Ledger struct {
 	Rows  []LedgerRow
 	index map[string]int
 }
 
-// Get is ledger_rows(...)[itemID].
 func (l Ledger) Get(itemID string) (LedgerRow, bool) {
 	i, ok := l.index[itemID]
 	if !ok {
@@ -157,7 +143,6 @@ func (l Ledger) Get(itemID string) (LedgerRow, bool) {
 	return l.Rows[i], true
 }
 
-// LedgerRows is ledger_rows.
 func LedgerRows(ctx gocontext.Context, q db.Querier, threadID int64) (Ledger, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT l.id, l.run_id, l.item_id, l.kind, l.result_id, l.source_ids_json, l.synopsis, l.tokens, l.state, l.staged_at, "+
@@ -200,7 +185,6 @@ func (l Ledger) withState(states ...string) []LedgerRow {
 	return out
 }
 
-// block is the part of a content block the projection reads.
 type block struct {
 	Type      string `json:"type"`
 	ToolUseID string `json:"tool_use_id"`
@@ -223,8 +207,6 @@ func hasType(content []json.RawMessage, kind string) bool {
 	return false
 }
 
-// TurnStart is turn_start: the seq of the latest operator (text) user message; everything before it is a
-// completed turn.
 func TurnStart(messages []journal.Message) int64 {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == journal.User && journal.HasText(messages[i].Content) {
@@ -234,7 +216,6 @@ func TurnStart(messages []journal.Message) int64 {
 	return 0
 }
 
-// StripThinking is strip_thinking.
 func StripThinking(content []json.RawMessage) []json.RawMessage {
 	out := make([]json.RawMessage, 0, len(content))
 	for _, raw := range content {
@@ -253,13 +234,10 @@ func dropStubValue(resultID *int64) string {
 	return py.JSONDumps(py.Dict{{Key: "result_id", Value: id}, {Key: "dropped", Value: true}})
 }
 
-// dropStub is drop_stub: the block with its content replaced by the dropped marker.
 func dropStub(raw json.RawMessage, resultID *int64) (json.RawMessage, error) {
 	return SetField(raw, "content", dropStubValue(resultID))
 }
 
-// SetField is {**block, key: value}: a new block with key replaced in place or appended, other keys and
-// their order kept. value is anything py.JSONDumps encodes (a py.Dict for cache_control).
 func SetField(raw json.RawMessage, key string, value any) (json.RawMessage, error) {
 	d, err := blockDict(raw)
 	if err != nil {
@@ -280,12 +258,10 @@ func foldBlock(r LedgerRow) (json.RawMessage, error) {
 	return TextBlock(text), nil
 }
 
-// TextBlock is {"type": "text", "text": text} as the journal and requests encode it.
 func TextBlock(text string) json.RawMessage {
 	return encode(py.Dict{{Key: "type", Value: Text}, {Key: "text", Value: text}})
 }
 
-// mergeRoles is merge_roles: adjacent messages of one role become one, keeping the newest journal position.
 func mergeRoles(messages []Message) []Message {
 	var out []Message
 	for _, m := range messages {
@@ -326,9 +302,6 @@ func inFold(folds []LedgerRow, seq int64) bool {
 	return false
 }
 
-// ActiveMessages is active_messages: what the next request shows of the thread. systemSig, when not empty,
-// is the signature of the current system prompt and tools: thinking is signed against the prompt it was made
-// with, so assistant turns made under another one (the profile or skills changed) lose their thinking.
 func ActiveMessages(ctx gocontext.Context, q db.Querier, threadID int64, systemSig string) ([]Message, Projection, error) {
 	p, err := GetProjection(ctx, q, threadID)
 	if err != nil {

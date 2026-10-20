@@ -15,8 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Manifest is manifest: the text that tells the model, after a compaction, what the ledger holds and which
-// stored results it can page back.
 func Manifest(ctx gocontext.Context, q db.Querier, threadID int64) (string, error) {
 	ledger, err := LedgerRows(ctx, q, threadID)
 	if err != nil {
@@ -81,7 +79,6 @@ func Manifest(ctx gocontext.Context, q db.Querier, threadID int64) (string, erro
 	return strings.Join(lines, "\n"), nil
 }
 
-// ManifestBlock is manifest_block: the manifest as a text block.
 func ManifestBlock(ctx gocontext.Context, q db.Querier, threadID int64) (json.RawMessage, error) {
 	text, err := Manifest(ctx, q, threadID)
 	if err != nil {
@@ -90,16 +87,10 @@ func ManifestBlock(ctx gocontext.Context, q db.Querier, threadID int64) (json.Ra
 	return TextBlock(text), nil
 }
 
-// unitStart is unit_start: where a re-inserted tail may begin: an assistant turn (its tool_uses are answered
-// by the next message) or a user message without tool_results (operator text). Starting at a tool_result
-// would leave it dangling.
 func unitStart(m Message) bool {
 	return m.Role == journal.Assistant || !hasType(m.Content, ToolResult)
 }
 
-// Preserved is preserved: the last PreserveMessages sent messages, moved forward to the next complete unit.
-// Thinking is removed from re-inserted assistant turns: threshold compaction requires it, and adaptive
-// thinking needs none.
 func Preserved(sent []Message) []Message {
 	start := max(len(sent)-PreserveMessages, 0)
 	for start < len(sent) && !unitStart(sent[start]) {
@@ -120,8 +111,6 @@ func Preserved(sent []Message) []Message {
 	return kept
 }
 
-// ServerCompacted is server_compacted, called after a `compaction` stop: the journaled compaction blocks,
-// the manifest and the last complete units of what was sent become the new head.
 func ServerCompacted(ctx gocontext.Context, q db.Querier, threadID, runID int64, blocks []json.RawMessage, sent []Message, now float64) (int64, error) {
 	if _, err := Commit(ctx, q, threadID, runID, now, true); err != nil {
 		return 0, err
@@ -171,7 +160,6 @@ func getOr(d py.Dict, key string, fallback any) any {
 	return fallback
 }
 
-// flatten is flatten: the summary request carries no `tools`, so every non-text block is rendered as text.
 func flatten(b py.Dict) py.Dict {
 	kind := getOr(b, "type", nil)
 	switch kind {
@@ -202,8 +190,6 @@ func dictValues(content []py.Dict) []any {
 	return out
 }
 
-// Shrink is shrink: a thinking-free, text-only copy of the messages for the summary request, with long tool
-// results truncated until the request fits limit. Roles alternate and the first message is a user message.
 func Shrink(messages []Message, limit int64) ([]Message, error) {
 	var out []shrunk
 	for _, m := range messages {
@@ -263,7 +249,6 @@ func Shrink(messages []Message, limit int64) ([]Message, error) {
 	return result, nil
 }
 
-// lastOperatorBlocks is last_operator_blocks: the text and attachment blocks of the latest operator message.
 func lastOperatorBlocks(sent []Message) []json.RawMessage {
 	for i := len(sent) - 1; i >= 0; i-- {
 		m := sent[i]
@@ -281,7 +266,6 @@ func lastOperatorBlocks(sent []Message) []json.RawMessage {
 	return nil
 }
 
-// SummaryParams is the summary request of ClientCompact: low effort, no tools, no thinking.
 func SummaryParams(model string, active []Message, hardLimit int64) (anthropic.Params, error) {
 	messages, err := Shrink(active, hardLimit-SummaryMaxTokens-EstimateTokens(SummaryRequest)-1000)
 	if err != nil {
@@ -306,9 +290,6 @@ func SummaryParams(model string, active []Message, hardLimit int64) (anthropic.P
 	}, nil
 }
 
-// ClientCompact is client_compact: one low-effort, tool-free, thinking-free summarization request; the
-// journal stays intact and the new projection is summary + manifest + the operator's latest message (as
-// sent, so its date stamp is kept). The call is metered as a compaction; a failed call fails the caller.
 func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client, model string, active []Message, threadID, runID int64, kind string, hardLimit int64, now float64) (int64, error) {
 	params, err := SummaryParams(model, active, hardLimit)
 	if err != nil {

@@ -1,5 +1,3 @@
-// Package caldavtest is an iCloud CalDAV stand-in for end-to-end tests: principal and calendar discovery over
-// PROPFIND, event storage over PUT, REPORT and DELETE.
 package caldavtest
 
 import (
@@ -13,7 +11,6 @@ import (
 	"testing"
 )
 
-// Server is the fake. Calendars lists the display names it serves (the first is "Home" by default).
 type Server struct {
 	*httptest.Server
 	mu        sync.Mutex
@@ -35,7 +32,6 @@ func response(href, prop string) string {
 	return "<D:response><D:href>" + href + "</D:href>" + propstat(prop) + "</D:response>"
 }
 
-// New starts the server and closes it when t ends.
 func New(t testing.TB, user, password string, calendars ...string) *Server {
 	t.Helper()
 	if len(calendars) == 0 {
@@ -47,7 +43,6 @@ func New(t testing.TB, user, password string, calendars ...string) *Server {
 	return s
 }
 
-// Objects returns the stored events by path.
 func (s *Server) Objects() map[string]string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -121,5 +116,4 @@ func (s *Server) propfind(w http.ResponseWriter, r *http.Request, body string) {
 	_, _ = io.WriteString(w, out.String())
 }
 
-// CalendarPath is the path of the i-th calendar.
 func CalendarPath(i int) string { return calendarPath(i) }

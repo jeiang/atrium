@@ -17,7 +17,6 @@ type Socket struct {
 	msgs []string
 }
 
-// Listen binds a fake NOTIFY_SOCKET and points the environment at it; WATCHDOG_USEC, when non-zero, is set too.
 func Listen(t *testing.T, watchdog time.Duration) *Socket {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "sdn")
@@ -60,7 +59,6 @@ func (s *Socket) Messages() []string {
 	return slices.Clone(s.msgs)
 }
 
-// Wait blocks until a message equal to want has arrived.
 func (s *Socket) Wait(want string) {
 	s.t.Helper()
 	deadline := time.Now().Add(10 * time.Second)

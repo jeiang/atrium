@@ -1,4 +1,3 @@
-// Package notify is agent/tools/notify.py: the ntfy publish, the notifications ledger and the notify tool.
 package notify
 
 import (
@@ -37,7 +36,6 @@ var (
 	threadLink = rx.MustCompile(`^/chat/\d+$`, 0)
 )
 
-// Notification is one row of the notifications ledger.
 type Notification struct {
 	ID         int64      `json:"id"`
 	TS         float64    `json:"ts"`
@@ -50,8 +48,6 @@ type Notification struct {
 	Error      *string    `json:"error"`
 }
 
-// Message is what Send records and publishes. ThreadLink is the raw link argument (nil: this thread), Topic and
-// Click override the configured topic and add a click action.
 type Message struct {
 	Title, Body string
 	ThreadID    int64
@@ -62,14 +58,12 @@ type Message struct {
 	Click       string
 }
 
-// Sent is Send's result: the ledger row id, whether ntfy accepted the push and the failure text when it did not.
 type Sent struct {
 	ID        int64
 	Delivered bool
 	Error     string
 }
 
-// Plain is plain: stripped, control characters removed and clipped to limit code points.
 func Plain(text string, limit int) string {
 	text = py.Strip(text)
 	cleaned, err := control.Sub("", text, 0)
@@ -79,7 +73,6 @@ func Plain(text string, limit int) string {
 	return tool.Clip(cleaned, limit)
 }
 
-// LinkFor is link_for: the thread link to record, a thread id or /chat/<id>.
 func LinkFor(raw *string, threadID int64) (string, error) {
 	if raw == nil {
 		if threadID != 0 {
@@ -103,8 +96,6 @@ func isDigits(s string) bool {
 	return s != "" && strings.IndexFunc(s, func(r rune) bool { return !unicode.Is(unicode.Nd, r) }) < 0
 }
 
-// Deliver is deliver: one JSON POST to NTFY_URL. A failure to configure or reach ntfy, or an HTTP status of 400
-// or more, is the returned text, never an error; an error is a malformed NTFY_URL, which Python raises.
 func Deliver(ctx context.Context, env config.Env, title, body, topic, click string) (bool, string, error) {
 	settings := config.Ntfy(env)
 	if topic == "" {
@@ -185,8 +176,6 @@ func errorClass(err error) string {
 	return "ReadError"
 }
 
-// Send is send: it records the notification, publishes it and records the outcome. The row exists before the
-// publish, so a failed push still shows on the Notifications page.
 func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, error) {
 	title, body := Plain(m.Title, TitleChars), Plain(m.Body, BodyChars)
 	if title == "" {
@@ -236,7 +225,6 @@ func nullID(id int64) any {
 	return id
 }
 
-// Recent is recent: the newest notifications first.
 func Recent(ctx context.Context, q db.Querier, limit int) ([]Notification, error) {
 	rows, err := q.QueryContext(ctx, "SELECT id, ts, title, body, thread_id, run_id, thread_link, delivered, error FROM notifications ORDER BY id DESC LIMIT ?", limit)
 	if err != nil {

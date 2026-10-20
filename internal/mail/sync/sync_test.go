@@ -20,27 +20,6 @@ import (
 
 const gmailAllMail = "[Gmail]/All Mail"
 
-func TestRoles(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		flags   []string
-		account string
-		want    string
-	}{
-		{"INBOX", nil, "icloud", "inbox"},
-		{"Misc", nil, "icloud", "misc"},
-		{"Bills/Utilities", nil, "icloud", "filed"},
-		{"Whatever", []string{`\Trash`}, "icloud", "trash"},
-		{"Junk", nil, "icloud", "junk"},
-		{gmailAllMail, nil, "gmail", "allmail"},
-		{"INBOX", nil, "gmail", "system"},
-	} {
-		if got := mail.MailboxRole(tc.name, tc.flags, tc.account); got != tc.want {
-			t.Errorf("MailboxRole(%q, %v, %q) = %q, want %q", tc.name, tc.flags, tc.account, got, tc.want)
-		}
-	}
-}
-
 func TestMessageStateGmailLeafAndInbox(t *testing.T) {
 	st := mailsync.MessageState("gmail", "allmail", "x", []string{`\Seen`}, []string{`\Inbox`, "A", "A/B"})
 	if st.InInbox != 1 || st.Seen != 1 || st.Folder == nil || *st.Folder != "A/B" || st.Location != "A/B" {
@@ -439,12 +418,6 @@ func TestSentSinceReachesBackToOldestIndexedMail(t *testing.T) {
 	}
 }
 
-func TestIMAPDate(t *testing.T) {
-	if got := mailsync.IMAPDate(time.Date(2026, 1, 5, 23, 59, 0, 0, time.UTC)); got != "05-Jan-2026" {
-		t.Errorf("IMAPDate = %s", got)
-	}
-}
-
 func TestIngestStoresReplyHeaders(t *testing.T) {
 	h := newHarness(t, "shadow")
 	boxes := h.icloudBoxes()
@@ -511,5 +484,32 @@ func TestOneClosesTheClientOnFailure(t *testing.T) {
 	_, err := h.s.One(context.Background(), "icloud", func(context.Context, string) (mail.Client, error) { return h.fake, nil })
 	if err == nil || !h.fake.Closed {
 		t.Fatalf("err = %v closed = %v", err, h.fake.Closed)
+	}
+}
+
+func TestRoles(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		flags   []string
+		account string
+		want    string
+	}{
+		{"INBOX", nil, "icloud", "inbox"},
+		{"Misc", nil, "icloud", "misc"},
+		{"Bills/Utilities", nil, "icloud", "filed"},
+		{"Whatever", []string{`\Trash`}, "icloud", "trash"},
+		{"Junk", nil, "icloud", "junk"},
+		{gmailAllMail, nil, "gmail", "allmail"},
+		{"INBOX", nil, "gmail", "system"},
+	} {
+		if got := mail.MailboxRole(tc.name, tc.flags, tc.account); got != tc.want {
+			t.Errorf("MailboxRole(%q, %v, %q) = %q, want %q", tc.name, tc.flags, tc.account, got, tc.want)
+		}
+	}
+}
+
+func TestIMAPDate(t *testing.T) {
+	if got := mailsync.IMAPDate(time.Date(2026, 1, 5, 23, 59, 0, 0, time.UTC)); got != "05-Jan-2026" {
+		t.Errorf("IMAPDate = %s", got)
 	}
 }

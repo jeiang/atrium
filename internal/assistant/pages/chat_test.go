@@ -268,7 +268,7 @@ func TestShutdownWaitsForRunToFinish(t *testing.T) {
 func TestUploadsLimitsAndFileServing(t *testing.T) {
 	s := newSite(t)
 	huge := upload{"huge.bin", "application/octet-stream", make([]byte, files.MessageCapBytes+(2<<20))}
-	refused := status(t, s.multipart("/chat", map[string]string{"text": "take this"}, []upload{huge}, hx, "true"), http.StatusUnprocessableEntity)
+	refused := status(t, s.multipartVia(s.chunked, "/chat", map[string]string{"text": "take this"}, []upload{huge}, hx, "true"), http.StatusUnprocessableEntity)
 	mustContain(t, refused, "Not attached", "files in one message must total under 64 MB")
 	if n := s.count("SELECT COUNT(*) FROM threads") + s.count("SELECT COUNT(*) FROM thread_files"); n != 0 {
 		t.Errorf("an oversize body left %d rows", n)

@@ -23,9 +23,6 @@ type exchange struct {
 	Reply   json.RawMessage `json:"reply"`
 }
 
-// TestPackageRequestsMatchTheGoldenBodies rescans the golden mail against a llama.cpp stand-in that accepts only
-// the request bodies Python sent and expects every recorded package request to be sent. The clock is one day
-// after t0, inside the 60-day window of all of the mail.
 func TestPackageRequestsMatchTheGoldenBodies(t *testing.T) {
 	var all []exchange
 	if err := json.Unmarshal(golden.ReadFile(t, "pipeline", "llm_exchanges.json"), &all); err != nil {

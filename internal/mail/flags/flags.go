@@ -1,5 +1,3 @@
-// Package flags is flags.py: the contacts rule and the logged LLM flag
-// judgment recorded per unread inbox message in flag_decisions.
 package flags
 
 import (
@@ -29,10 +27,8 @@ var (
 		`no[-_.]?reply|do[-_.]?not[-_.]?reply|notifications?|mailer-daemon|postmaster|bounces?`, rx.IgnoreCase)
 )
 
-// Contacts is the set of lower-cased addresses on the contacts' vCards.
 type Contacts map[string]struct{}
 
-// VCardEmails is vcard_emails: every EMAIL value that holds an "@", stripped and lower-cased.
 func VCardEmails(text string) Contacts {
 	found := Contacts{}
 	for _, line := range py.SplitLines(contacts.Unfold(text)) {
@@ -51,7 +47,6 @@ func VCardEmails(text string) Contacts {
 	return found
 }
 
-// LoadContacts is load_contacts: the addresses of every *.vcf under dir; an empty or missing dir has none.
 func LoadContacts(dir string) Contacts {
 	emails := Contacts{}
 	if info, err := os.Stat(dir); dir == "" || err != nil || !info.IsDir() {
@@ -69,7 +64,6 @@ func LoadContacts(dir string) Contacts {
 	return emails
 }
 
-// Row is the part of a messages row the rule and the judge read.
 type Row struct {
 	ID       int64
 	FromAddr string
@@ -78,7 +72,6 @@ type Row struct {
 	ListID   string
 }
 
-// ContactsFlag is contacts_flag: a contact's address, not on a list, whose local part is no automated sender's.
 func ContactsFlag(row Row, contacts Contacts) (bool, error) {
 	if _, ok := contacts[row.FromAddr]; row.FromAddr == "" || !ok || row.ListID != "" {
 		return false, nil
@@ -88,14 +81,11 @@ func ContactsFlag(row Row, contacts Contacts) (bool, error) {
 	return !automated && err == nil, err
 }
 
-// AutomatedLocal is AUTOMATED_LOCAL.search(local) is not None: whether the part of an address before "@" names an
-// automated sender.
 func AutomatedLocal(local string) (bool, error) {
 	m, err := automatedLocal.Search(local)
 	return m != nil, err
 }
 
-// Judge is llm.JudgeFlag's shape.
 type Judge func(ctx context.Context, url string, m llm.Message, body string) (llm.Flags, error)
 
 func pending(ctx context.Context, d *db.DB, account string) ([]Row, error) {
@@ -127,10 +117,6 @@ func b2i(v bool) int {
 	return 0
 }
 
-// FlagAccount is flag_account: it records the contacts rule and, while the chat server answers, the LLM verdict
-// for each unjudged unread inbox message of account, and returns how many it recorded. Once the server is
-// unavailable the remaining rows are recorded with no verdict; any other judge error is returned. A nil judge is
-// llm.JudgeFlag; a nil now is the wall clock.
 func FlagAccount(ctx context.Context, d *db.DB, cfg config.Config, account string, judge Judge, now func() float64) (int, error) {
 	if judge == nil {
 		judge = llm.JudgeFlag

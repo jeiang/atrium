@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// jsonErrorCorpus holds malformed documents with the exact json.loads error text of CPython 3.14.
 var jsonErrorCorpus = []struct{ doc, want string }{
 	{"", "Expecting value: line 1 column 1 (char 0)"},
 	{"   ", "Expecting value: line 1 column 4 (char 3)"},

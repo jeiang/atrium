@@ -26,7 +26,6 @@ type pyCase struct {
 	want    string
 }
 
-// Expected values are what CPython 3.14 returns for the same call (spans as [start, end] code point pairs).
 var pyCases = []pyCase{
 	{`\w+`, 0, "finditer", "café ²³ x_y ǅ\u0301e", nil, `[[0,4],[5,7],[8,11],[12,13],[14,15]]`},
 	{`\w`, 0, "finditer", "\u0301\u200d‿", nil, `[]`},

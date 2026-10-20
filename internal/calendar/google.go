@@ -14,7 +14,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// refresher is the refresh_token grant google-auth sends before a Calendar call.
 type refresher struct {
 	ctx      context.Context
 	creds    config.GoogleCredentials

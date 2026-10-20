@@ -113,7 +113,7 @@ type Conn interface {
 	IdleChanges(ctx context.Context, duration time.Duration) (bool, error)
 	Noop(ctx context.Context) error
 
-	SelectRW(ctx context.Context, imapName string) error
+	SelectRW(ctx context.Context, imapName string) (uint32, error)
 	Copy(ctx context.Context, uids UIDSet, destIMAPName string) (*CopyUID, error)
 	StoreFlags(ctx context.Context, uids UIDSet, add bool, flags ...string) error
 	StoreLabels(ctx context.Context, uids UIDSet, add bool, labels ...string) error
@@ -175,9 +175,9 @@ func (g gate) IdleChanges(ctx context.Context, duration time.Duration) (bool, er
 
 func (g gate) Noop(ctx context.Context) error { return g.conn.Noop(ctx) }
 
-func (g gate) SelectRW(ctx context.Context, imapName string) error {
+func (g gate) SelectRW(ctx context.Context, imapName string) (uint32, error) {
 	if err := g.check(ctx, ActionSelectRW, ""); err != nil {
-		return err
+		return 0, err
 	}
 	return g.conn.SelectRW(ctx, imapName)
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Row is a thread_files row. ThreadID is nil for a project file.
 type Row struct {
 	ID              int64   `json:"id"`
 	ThreadID        *int64  `json:"thread_id"`
@@ -40,7 +39,6 @@ func scan(r interface{ Scan(...any) error }) (Row, error) {
 	return f, err
 }
 
-// Owner is the thread or the project a file belongs to; a project wins when both are set.
 type Owner struct {
 	ThreadID  int64
 	ProjectID int64
@@ -67,7 +65,6 @@ func nullable(n int64) any {
 	return n
 }
 
-// Get is get: nil when there is no such file.
 func Get(ctx context.Context, q db.Querier, fileID int64) (*Row, error) {
 	f, err := scan(q.QueryRowContext(ctx, "SELECT "+columns+" FROM thread_files WHERE id = ?", fileID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -79,7 +76,6 @@ func Get(ctx context.Context, q db.Querier, fileID int64) (*Row, error) {
 	return &f, nil
 }
 
-// OfProject is of_project.
 func OfProject(ctx context.Context, q db.Querier, projectID int64) ([]Row, error) {
 	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE project_id = ? ORDER BY id", projectID)
 	if err != nil {
@@ -88,7 +84,6 @@ func OfProject(ctx context.Context, q db.Querier, projectID int64) ([]Row, error
 	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scan(r) })
 }
 
-// NewFile is one file to store. RunID zero means no run.
 type NewFile struct {
 	Name      string
 	Data      []byte
@@ -108,8 +103,6 @@ func writeStored(dir string, owner Owner, fileID int64, name string, data []byte
 	return path, os.WriteFile(path, data, 0o666)
 }
 
-// Store is store: the row and the bytes under dir/<owner>/<id>-<safe name>. Run it in the caller's transaction so a
-// failed write leaves no row.
 func Store(ctx context.Context, q db.Querier, dir string, f NewFile, now float64) (int64, error) {
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO thread_files (thread_id, project_id, run_id, name, media_type, bytes, path, origin, created_at, anthropic_file_id, text, tokens) "+
@@ -130,15 +123,12 @@ func Store(ctx context.Context, q db.Querier, dir string, f NewFile, now float64
 	return id, err
 }
 
-// UploadedFile is one file picked in a message or project form; Type is the browser's declared media type.
 type UploadedFile struct {
 	Name string
 	Data []byte
 	Type string
 }
 
-// AttachmentBlock is the journaled block that stands for an attached file. Kind is nil when the stored type is
-// not one atrium reads.
 type AttachmentBlock struct {
 	Type      string  `json:"type"`
 	FileID    int64   `json:"file_id"`
@@ -156,8 +146,6 @@ func newAttachment(id int64, name, mediaType, kind string, tokens int64) Attachm
 	return b
 }
 
-// IngestUploads is ingest_uploads: every upload is read and checked before any is stored, so a refused message
-// leaves no row and no file. contextLimit is the thread's or the project's; nil skips the budget check.
 func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []UploadedFile, now float64, owner Owner, contextLimit *int64) ([]AttachmentBlock, error) {
 	if len(uploads) == 0 {
 		return nil, nil
@@ -253,7 +241,6 @@ func copyFile(from, to string) error {
 	return dst.Close()
 }
 
-// RemoteDeleter removes a legacy Files API upload; *anthropic.Client is one. A nil RemoteDeleter skips the call.
 type RemoteDeleter interface {
 	DeleteFile(ctx context.Context, fileID string)
 }
@@ -264,7 +251,6 @@ func deleteRemote(ctx context.Context, remote RemoteDeleter, id *string) {
 	}
 }
 
-// DeleteOwned is delete_owned: the owner's remote copies, directory and rows. It returns the number of rows.
 func DeleteOwned(ctx context.Context, q db.Querier, dir string, remote RemoteDeleter, owner Owner) (int, error) {
 	column, id := owner.column()
 	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE "+column+" = ?", id)
@@ -285,7 +271,6 @@ func DeleteOwned(ctx context.Context, q db.Querier, dir string, remote RemoteDel
 	return len(found), nil
 }
 
-// DeleteOne is delete_one: false when there is no such file.
 func DeleteOne(ctx context.Context, q db.Querier, remote RemoteDeleter, fileID int64) (bool, error) {
 	found, err := Get(ctx, q, fileID)
 	if err != nil || found == nil {

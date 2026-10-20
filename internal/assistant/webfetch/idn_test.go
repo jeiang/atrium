@@ -44,8 +44,6 @@ func punycodeCert(t *testing.T, name string) (tls.Certificate, *x509.CertPool) {
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, pool
 }
 
-// An IDN host is converted to ASCII once: the lookup, the Host header and the TLS server name all carry the
-// punycode form, so the certificate of the punycode name verifies.
 func TestIDNHostUsesItsASCIIFormEverywhere(t *testing.T) {
 	const ascii = "xn--bcher-kva.example"
 	cert, roots := punycodeCert(t, ascii)
