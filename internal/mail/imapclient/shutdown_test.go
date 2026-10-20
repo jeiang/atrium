@@ -3,6 +3,7 @@ package imapclient
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -106,7 +107,7 @@ func (w *shutdownWorld) clients(config.Config, config.Env) func(context.Context,
 	return func(ctx context.Context, _ string) (mail.Client, error) {
 		w.opens++
 		if err := ctx.Err(); err != nil || w.opens > 1 {
-			return nil, context.Cause(ctx)
+			return nil, errors.New("unexpected connection")
 		}
 		c := newConn("imap.test", "atrium.test@icloud.com", "app-specific password")
 		c.dial = func(ctx context.Context) (net.Conn, error) {

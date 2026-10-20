@@ -443,7 +443,7 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	if ok == nil || (*ok != 0 && *ok != 1) || undoneTS != nil || plan == nil {
 		return UndoResult{}, UndoError(fmt.Sprintf("action %d cannot be undone", id))
 	}
-	if undoneError != nil && strings.HasPrefix(*undoneError, mailops.PartialPrefix) {
+	if undoneError != nil && strings.Contains(*undoneError, mailops.PartialPrefix) {
 		return UndoResult{}, UndoError(fmt.Sprintf("action %d has a partial undo (%s); resolve it in the mailbox before undoing again", id, *undoneError))
 	}
 	parsed, err := py.JSONLoads([]byte(*plan))

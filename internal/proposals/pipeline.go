@@ -315,7 +315,7 @@ func undoneIDs(logged []Action) map[int64]bool {
 
 func partialUndo(logged []Action, id int64) bool {
 	for _, a := range logged {
-		if op, _ := a.field("op"); op != UndoOp || a.OK || a.Error == nil || !strings.HasPrefix(*a.Error, mailops.PartialPrefix) {
+		if op, _ := a.field("op"); op != UndoOp || a.OK || a.Error == nil || !strings.Contains(*a.Error, mailops.PartialPrefix) {
 			continue
 		}
 		if of, ok := a.field("of"); ok && of == id {

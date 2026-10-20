@@ -53,7 +53,7 @@ type PartialMove struct {
 	Err    error
 }
 
-// PartialPrefix starts the text of a PartialMove: a retry of the same move would copy the batch a second time.
+// PartialPrefix is in the text of a PartialMove: a retry of the same move would copy the batch a second time.
 const PartialPrefix = "copied but not expunged: "
 
 func (e *PartialMove) Error() string { return PartialPrefix + e.Err.Error() }
