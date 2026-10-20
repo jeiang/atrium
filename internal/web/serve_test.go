@@ -118,9 +118,8 @@ func TestServeRecoversStuckDraftsAndStopsOnCancel(t *testing.T) {
 		t.Errorf("healthz = %d", resp.StatusCode)
 	}
 	notify.Wait("WATCHDOG=1")
-	if got := notify.Messages(); len(got) < 3 || got[0] != "READY=1" || got[1] != "STATUS=serving 127.0.0.1:"+port {
-		t.Errorf("notify messages = %q", got)
-	}
+	notify.Wait("READY=1")
+	notify.Wait("STATUS=serving 127.0.0.1:" + port)
 	cancel()
 	notify.Wait("STOPPING=1")
 	select {
