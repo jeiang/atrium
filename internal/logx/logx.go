@@ -17,6 +17,10 @@ const (
 	Job       = "JOB"
 	Account   = "ACCOUNT"
 	Err       = "ERR"
+	Module    = "MODULE"
+	State     = "STATE"
+	Reason    = "REASON"
+	Command   = "COMMAND"
 )
 
 const Redacted = "[redacted]"
