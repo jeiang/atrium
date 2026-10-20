@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	_ "github.com/jeiang/atrium/internal/assistant/budget"
-	_ "github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/settings"
 )
