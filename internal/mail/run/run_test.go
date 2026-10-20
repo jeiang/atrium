@@ -101,7 +101,7 @@ func TestPassOrderIsGoliveRouteFlagEventsApplyExtras(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t, config.Live, credentials)
 	logs := captureLogs(t)
-	if err := w.pass.Locked(ctx, []string{config.ICloud}); err != nil {
+	if err := w.pass.Locked(ctx, ctx, []string{config.ICloud}); err != nil {
 		t.Fatal(err)
 	}
 	if golive(t, w) == nil {
@@ -124,7 +124,7 @@ func TestPassOrderIsGoliveRouteFlagEventsApplyExtras(t *testing.T) {
 		order = append(order, "extra")
 		return py.Dict{{Key: "writes", Value: int64(w.count("SELECT COUNT(*) FROM auto_actions WHERE ok = 1"))}}, nil
 	}})
-	if err := w.pass.Locked(ctx, []string{config.ICloud}); err != nil {
+	if err := w.pass.Locked(ctx, ctx, []string{config.ICloud}); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(order, []string{"events", "extra"}) {
@@ -145,7 +145,7 @@ func TestOneAccountsFailureDoesNotStopTheOthers(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t, config.Live, credentials)
 	accounts := []string{config.ICloud, config.Gmail}
-	if err := w.pass.Locked(ctx, accounts); err != nil {
+	if err := w.pass.Locked(ctx, ctx, accounts); err != nil {
 		t.Fatal(err)
 	}
 	logs := captureLogs(t)
@@ -171,7 +171,7 @@ func TestOneAccountsFailureDoesNotStopTheOthers(t *testing.T) {
 		{"first", func(context.Context) (any, error) { ran = append(ran, "first"); return nil, errors.New("broken") }},
 		{"second", func(context.Context) (any, error) { ran = append(ran, "second"); return int64(7), nil }},
 	}
-	if err := w.pass.Locked(ctx, accounts); err != nil {
+	if err := w.pass.Locked(ctx, ctx, accounts); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(scanned, accounts) || !reflect.DeepEqual(ran, []string{"first", "second"}) {
@@ -195,7 +195,7 @@ func TestEmbeddingResponseOfTheWrongShapeEndsThePass(t *testing.T) {
 	w := newWorld(t, config.Shadow, credentials)
 	w.pass.Cfg.EmbedURL = srv.URL
 	w.arrive(config.ICloud, "Hello", "a@x.test")
-	err := w.pass.Locked(context.Background(), []string{config.ICloud})
+	err := w.pass.Locked(context.Background(), context.Background(), []string{config.ICloud})
 	if !errors.Is(err, httpx.ErrValue) {
 		t.Fatalf("pass err = %v, want a ValueError", err)
 	}
@@ -208,7 +208,7 @@ func TestEmbedderDownIsLoggedAndThePassGoesOn(t *testing.T) {
 	w := newWorld(t, config.Shadow, credentials)
 	logs := captureLogs(t)
 	w.arrive(config.ICloud, "Hello", "a@x.test")
-	if err := w.pass.Locked(context.Background(), []string{config.ICloud}); err != nil {
+	if err := w.pass.Locked(context.Background(), context.Background(), []string{config.ICloud}); err != nil {
 		t.Fatal(err)
 	}
 	logs.has(t, "level=WARN", "atrium.run", "embedding unavailable: no service URL configured for '/embeddings'")
@@ -239,7 +239,7 @@ func TestSyncRunsOneLockedPassOfTheSelectedAccounts(t *testing.T) {
 func TestPassCheckpointsTheWAL(t *testing.T) {
 	w := newWorld(t, config.Shadow, credentials)
 	w.arrive(config.ICloud, "Hello", "a@x.test")
-	if err := w.pass.Locked(context.Background(), []string{config.ICloud}); err != nil {
+	if err := w.pass.Locked(context.Background(), context.Background(), []string{config.ICloud}); err != nil {
 		t.Fatal(err)
 	}
 	var busy, frames, done int64
@@ -315,7 +315,7 @@ func TestSyncWatchAndCorrectionsSerialiseOnOneLock(t *testing.T) {
 	wg.Go(func() { w.watcher(s.sleep).Account(ctx, config.ICloud) })
 	for range 3 {
 		wg.Go(func() {
-			if err := w.pass.Locked(context.Background(), []string{config.Gmail}); err != nil {
+			if err := w.pass.Locked(context.Background(), context.Background(), []string{config.Gmail}); err != nil {
 				t.Error(err)
 			}
 		})
@@ -343,7 +343,7 @@ func TestPassLockWaitHonorsCancellation(t *testing.T) {
 	defer func() { _ = lock.Close() }()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- w.pass.Locked(ctx, []string{config.ICloud}) }()
+	go func() { done <- w.pass.Locked(ctx, ctx, []string{config.ICloud}) }()
 	time.Sleep(100 * time.Millisecond)
 	cancel()
 	select {

@@ -311,7 +311,7 @@ func (r *replay) runSync(mode string) {
 	}
 	pass := run.New(r.d, cfg, r.open, r.now)
 	pass.Money.Fetch = func(context.Context, string) (string, error) { return r.cbtt, nil }
-	if err := pass.Locked(r.ctx, accounts); err != nil {
+	if err := pass.Locked(r.ctx, r.ctx, accounts); err != nil {
 		r.t.Fatalf("run_sync (%s): %v", mode, err)
 	}
 }

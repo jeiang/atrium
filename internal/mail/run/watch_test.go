@@ -285,7 +285,7 @@ func (c cancelOnCopy) Copy(ctx context.Context, uids mail.UIDSet, dest string) (
 
 func TestShutdownDuringALivePassLetsThePassFinish(t *testing.T) {
 	w := newWorld(t, config.Live, credentials)
-	if err := w.pass.Locked(context.Background(), []string{config.ICloud}); err != nil {
+	if err := w.pass.Locked(context.Background(), context.Background(), []string{config.ICloud}); err != nil {
 		t.Fatal(err)
 	}
 	w.rule("x.test", "Bills")

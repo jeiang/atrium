@@ -214,7 +214,8 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 		return err
 	}
 	defer closeDB()
-	if err := pass.Locked(ctx, []string{account}); err != nil {
+	workCtx := context.WithoutCancel(ctx)
+	if err := pass.Locked(ctx, workCtx, []string{account}); err != nil {
 		return err
 	}
 	h := w.heartbeat(account)
@@ -237,7 +238,7 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 					break
 				}
 			}
-			if err := pass.Locked(ctx, []string{account}); err != nil {
+			if err := pass.Locked(ctx, workCtx, []string{account}); err != nil {
 				return err
 			}
 		}

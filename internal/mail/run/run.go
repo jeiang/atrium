@@ -191,23 +191,22 @@ var passDeadline = 20 * time.Minute
 
 // Locked is one pass of accounts under the database's exclusive lock: each is synced, then processed. The WAL is
 // checkpointed (TRUNCATE) before the lock is released, so readers that never stop cannot grow it without bound.
-// A ctx cancelled or a passDeadline that expires during the pass ends it with its error once the running stage
-// is complete.
-func (p *Pass) Locked(ctx context.Context, accounts []string) error {
-	lock, err := db.Exclusive(ctx, p.Cfg.DBPath, 0)
+// A cancelled waitCtx ends lock acquisition; passDeadline bounds workCtx after the lock is acquired.
+func (p *Pass) Locked(waitCtx, workCtx context.Context, accounts []string) error {
+	lock, err := db.Exclusive(waitCtx, p.Cfg.DBPath, 0)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = lock.Close() }()
-	defer p.checkpoint(ctx)
-	ctx, cancel := context.WithTimeout(ctx, passDeadline)
+	workCtx, cancel := context.WithTimeout(workCtx, passDeadline)
 	defer cancel()
+	defer p.checkpoint(workCtx)
 	for _, account := range accounts {
-		if err := p.SyncOne(ctx, account); err != nil {
+		if err := p.SyncOne(workCtx, account); err != nil {
 			return err
 		}
 	}
-	return p.Process(ctx, accounts)
+	return p.Process(workCtx, accounts)
 }
 
 func (p *Pass) checkpoint(ctx context.Context) {
@@ -237,5 +236,5 @@ func Sync(ctx context.Context, cfg config.Config, requested string, open mailops
 	if err != nil {
 		return nil, err
 	}
-	return accounts, New(d, cfg, open, nil).Locked(ctx, accounts)
+	return accounts, New(d, cfg, open, nil).Locked(ctx, ctx, accounts)
 }

@@ -66,7 +66,7 @@ func TestPassWaitsForExternalLockAndRunsAfterRelease(t *testing.T) {
 	}
 
 	done := make(chan error, 1)
-	go func() { done <- w.pass.Locked(ctx, []string{config.ICloud}) }()
+	go func() { done <- w.pass.Locked(ctx, ctx, []string{config.ICloud}) }()
 	select {
 	case err := <-done:
 		t.Fatalf("sync pass finished while another process held the lock: %v", err)
