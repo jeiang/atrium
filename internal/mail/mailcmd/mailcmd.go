@@ -98,7 +98,7 @@ func (x *Exec) Live() *live.Live {
 
 // Exclusive runs fn holding the database's exclusive lock, as `with db.exclusive(cfg.db_path)`.
 func (x *Exec) Exclusive(fn func() error) error {
-	lock, err := db.Exclusive(x.Cfg.DBPath)
+	lock, err := db.Exclusive(x.Ctx, x.Cfg.DBPath, db.ShortLockWait)
 	if err != nil {
 		return err
 	}

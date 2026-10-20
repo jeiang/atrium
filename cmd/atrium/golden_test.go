@@ -427,7 +427,7 @@ func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
 	for _, argv := range [][]string{{"live", "rebaseline"}, {"live", "deletions"}, {"loops", "refresh"}, {"watches", "refresh"}, {"money", "refresh"}} {
 		t.Run(strings.Join(argv, " "), func(t *testing.T) {
 			r := newRig(t, data, nil, "")
-			lock, err := db.Exclusive(filepath.Join(r.dir, "atrium.db"))
+			lock, err := db.Exclusive(context.Background(), filepath.Join(r.dir, "atrium.db"), db.ShortLockWait)
 			if err != nil {
 				t.Fatal(err)
 			}

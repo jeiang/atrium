@@ -46,7 +46,7 @@ func lockedRefresh(ctx context.Context, cfg config.Config, limit int, clock func
 	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
 		return nil, err
 	}
-	lock, err := db.Exclusive(cfg.DBPath)
+	lock, err := db.Exclusive(ctx, cfg.DBPath, db.ShortLockWait)
 	if err != nil {
 		return nil, err
 	}

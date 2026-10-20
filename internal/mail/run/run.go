@@ -189,7 +189,7 @@ const checkpointWait = time.Second
 // checkpointed (TRUNCATE) before the lock is released, so readers that never stop cannot grow it without bound.
 // A ctx cancelled during the pass ends it with its error once the running stage is complete.
 func (p *Pass) Locked(ctx context.Context, accounts []string) error {
-	lock, err := db.Exclusive(p.Cfg.DBPath)
+	lock, err := db.Exclusive(ctx, p.Cfg.DBPath, 0)
 	if err != nil {
 		return err
 	}

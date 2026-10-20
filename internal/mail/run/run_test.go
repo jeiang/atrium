@@ -255,7 +255,7 @@ func TestPassCheckpointsTheWAL(t *testing.T) {
 // is released.
 func lockedOut(t *testing.T, w *world, fn func(), started func() bool) {
 	t.Helper()
-	lock, err := db.Exclusive(w.cfg.DBPath)
+	lock, err := db.Exclusive(context.Background(), w.cfg.DBPath, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func TestSyncWatchAndCorrectionsSerialiseOnOneLock(t *testing.T) {
 			}
 		})
 		wg.Go(func() {
-			lock, err := db.Exclusive(w.cfg.DBPath)
+			lock, err := db.Exclusive(context.Background(), w.cfg.DBPath, 0)
 			if err != nil {
 				t.Error(err)
 				return
@@ -332,5 +332,26 @@ func TestSyncWatchAndCorrectionsSerialiseOnOneLock(t *testing.T) {
 	wg.Wait()
 	if overlaps.Load() != 0 || entries.Load() < 8 {
 		t.Fatalf("%d of %d lock holders overlapped", overlaps.Load(), entries.Load())
+	}
+}
+func TestPassLockWaitHonorsCancellation(t *testing.T) {
+	w := newWorld(t, config.Shadow, credentials)
+	lock, err := db.Exclusive(context.Background(), w.cfg.DBPath, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = lock.Close() }()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.pass.Locked(ctx, []string{config.ICloud}) }()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("pass error = %v, want context cancellation", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("pass did not stop after lock-wait cancellation")
 	}
 }

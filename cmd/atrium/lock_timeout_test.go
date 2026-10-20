@@ -19,7 +19,7 @@ const lockHolderEnv = "ATRIUM_LOCK_TIMEOUT_TEST_HOLDER"
 
 func TestMain(m *testing.M) {
 	if path := os.Getenv(lockHolderEnv); path != "" {
-		lock, err := db.Exclusive(path)
+		lock, err := db.Exclusive(context.Background(), path, 0)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)

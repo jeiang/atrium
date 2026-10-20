@@ -13,13 +13,18 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/jeiang/atrium/internal/logx"
 )
 
 const (
 	busyTimeout      = 30 * time.Second
-	exclusiveTimeout = 5 * time.Second
+	ShortLockWait    = 5 * time.Second
 	lockPollInterval = 10 * time.Millisecond
+	lockLogAfter     = ShortLockWait
 )
+
+var log = logx.Logger("atrium.db")
 
 func connPragmas(foreignKeys bool) []string {
 	fk := "PRAGMA foreign_keys = OFF"
@@ -139,9 +144,7 @@ func (e *LockTimeout) Error() string {
 	return fmt.Sprintf("db: timed out after %s waiting for exclusive lock on %s", e.Timeout, e.Path)
 }
 
-// Exclusive blocks until it holds flock(LOCK_EX) on path+".lock", which is
-// opened in append mode and never deleted.
-func Exclusive(path string) (*Lock, error) {
+func Exclusive(ctx context.Context, path string, wait time.Duration) (*Lock, error) {
 	lock := path + ".lock"
 	if err := os.MkdirAll(filepath.Dir(lock), 0o777); err != nil {
 		return nil, err
@@ -150,22 +153,50 @@ func Exclusive(path string) (*Lock, error) {
 	if err != nil {
 		return nil, err
 	}
-	deadline := time.Now().Add(exclusiveTimeout)
+	ticker := time.NewTicker(lockPollInterval)
+	defer ticker.Stop()
+	started := time.Now()
+	logged := false
+	var timeout <-chan time.Time
+	if wait > 0 {
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		timeout = timer.C
+	}
 	for {
+		if err := ctx.Err(); err != nil {
+			_ = f.Close()
+			return nil, err
+		}
+		if wait == 0 && !logged && time.Since(started) >= lockLogAfter {
+			log.InfoContext(ctx, "waiting for "+lock)
+			logged = true
+		}
 		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		switch {
 		case err == nil:
+			if err := ctx.Err(); err != nil {
+				_ = f.Close()
+				return nil, err
+			}
 			return &Lock{f: f}, nil
 		case errors.Is(err, syscall.EINTR):
 			continue
 		case !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN):
 			_ = f.Close()
 			return nil, fmt.Errorf("db: flock %s: %w", lock, err)
-		case !time.Now().Before(deadline):
+		case wait > 0 && timeout == nil:
 			_ = f.Close()
-			return nil, &LockTimeout{Path: lock, Timeout: exclusiveTimeout}
+			return nil, &LockTimeout{Path: lock, Timeout: wait}
 		default:
-			time.Sleep(min(lockPollInterval, time.Until(deadline)))
+			select {
+			case <-ctx.Done():
+				_ = f.Close()
+				return nil, ctx.Err()
+			case <-timeout:
+				timeout = nil
+			case <-ticker.C:
+			}
 		}
 	}
 }

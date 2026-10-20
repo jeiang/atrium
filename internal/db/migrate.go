@@ -73,7 +73,7 @@ func appliedVersions(ctx context.Context, q Querier) (map[int]bool, error) {
 }
 
 func applyPending(ctx context.Context, d *DB, path string) error {
-	lock, err := Exclusive(path)
+	lock, err := Exclusive(ctx, path, 0)
 	if err != nil {
 		return err
 	}

@@ -661,7 +661,7 @@ func (e *Executors) UndoRuleDelete(ctx context.Context, raw json.RawMessage) (py
 // SyncAfter is sync_after: the account's resync under the database's exclusive lock.
 func SyncAfter(syncer *mailsync.Syncer, open mailops.Opener) proposals.SyncHook {
 	return func(ctx context.Context, account string) error {
-		lock, err := db.Exclusive(syncer.Cfg.DBPath)
+		lock, err := db.Exclusive(ctx, syncer.Cfg.DBPath, db.ShortLockWait)
 		if err != nil {
 			return err
 		}

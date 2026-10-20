@@ -87,7 +87,7 @@ func writerProcess(path string) int {
 }
 
 func lockerProcess(path string) int {
-	l, err := db.Exclusive(path)
+	l, err := db.Exclusive(context.Background(), path, 0)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -334,13 +334,13 @@ func TestExclusiveProcesses(t *testing.T) {
 
 func TestExclusiveCloseReleases(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notion")
-	l, err := db.Exclusive(path)
+	l, err := db.Exclusive(context.Background(), path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	acquired := make(chan *db.Lock)
 	go func() {
-		l2, err := db.Exclusive(path)
+		l2, err := db.Exclusive(context.Background(), path, 0)
 		if err != nil {
 			t.Error(err)
 		}
