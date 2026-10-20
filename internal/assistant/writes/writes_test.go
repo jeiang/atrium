@@ -86,27 +86,27 @@ func TestUndo(t *testing.T) {
 	}
 	now := func() float64 { return 77 }
 	good := record(map[string]any{"op": "restore", "key": "k"})
-	got, err := reg.Undo(ctx, d.Write, good, now)
+	got, err := reg.Undo(ctx, d, good, now)
 	if err != nil || got != "restored" || len(calls) != 1 || calls[0]["key"] != "k" {
 		t.Fatalf("Undo = %v, %v (calls %v)", got, err, calls)
 	}
 	if row, _ := writes.Get(ctx, d.Read, good); row.UndoneAt == nil || *row.UndoneAt != 77 {
 		t.Errorf("undone_at %+v", row)
 	}
-	_, err = reg.Undo(ctx, d.Write, good, now)
+	_, err = reg.Undo(ctx, d, good, now)
 	wantUndoError(t, err, "already undone")
-	_, err = reg.Undo(ctx, d.Write, 999, now)
+	_, err = reg.Undo(ctx, d, 999, now)
 	wantUndoError(t, err, "no write 999")
 	for _, undo := range []any{nil, map[string]any{}, []any{}} {
-		_, err = reg.Undo(ctx, d.Write, record(undo), now)
+		_, err = reg.Undo(ctx, d, record(undo), now)
 		wantUndoError(t, err, "this write has no undo")
 	}
-	_, err = reg.Undo(ctx, d.Write, record(map[string]any{"op": "mystery"}), now)
+	_, err = reg.Undo(ctx, d, record(map[string]any{"op": "mystery"}), now)
 	wantUndoError(t, err, "unknown undo kind 'mystery'")
-	_, err = reg.Undo(ctx, d.Write, record(map[string]any{"key": 1}), now)
+	_, err = reg.Undo(ctx, d, record(map[string]any{"key": 1}), now)
 	wantUndoError(t, err, "unknown undo kind None")
 	refused := record(map[string]any{"op": "restore", "fail": true})
-	_, err = reg.Undo(ctx, d.Write, refused, now)
+	_, err = reg.Undo(ctx, d, refused, now)
 	wantUndoError(t, err, "changed since")
 	if row, _ := writes.Get(ctx, d.Read, refused); row.UndoneAt != nil {
 		t.Errorf("a refused undo was marked done: %+v", row)

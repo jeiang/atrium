@@ -94,7 +94,7 @@ func (w *world) call(name string, args string) py.Dict {
 func (w *world) undo(out py.Dict) {
 	w.t.Helper()
 	id, _ := out.Get("write_id")
-	if _, err := toolset.Undoers(w.env).Undo(w.t.Context(), w.d.Write, id.(int64), func() float64 { return now }); err != nil {
+	if _, err := toolset.Undoers(w.env).Undo(w.t.Context(), w.d, id.(int64), func() float64 { return now }); err != nil {
 		w.t.Fatal(err)
 	}
 }

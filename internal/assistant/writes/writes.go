@@ -121,9 +121,23 @@ func Get(ctx context.Context, q db.Querier, writeID int64) (*Row, error) {
 	return &r, nil
 }
 
-// Undo is undo: it runs the write's undoer and marks the write undone, returning the undoer's result. now
-// is read after the undoer ran.
-func (r *Registry) Undo(ctx context.Context, q db.Querier, writeID int64, now func() float64) (any, error) {
+// Undo is undo: it runs the write's undoer and marks the write undone in one write transaction, returning the
+// undoer's result. A failed undoer or mark leaves the database as it was; an external call the undoer already
+// made is not rolled back. now is read after the undoer ran.
+func (r *Registry) Undo(ctx context.Context, d *db.DB, writeID int64, now func() float64) (any, error) {
+	var result any
+	err := d.WithTx(ctx, func(tx *sql.Tx) (err error) {
+		result, err = r.UndoIn(ctx, tx, writeID, now)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// UndoIn is Undo inside the caller's transaction q.
+func (r *Registry) UndoIn(ctx context.Context, q db.Querier, writeID int64, now func() float64) (any, error) {
 	row, err := Get(ctx, q, writeID)
 	if err != nil {
 		return nil, err
