@@ -655,15 +655,14 @@ The invariants below are unchanged by the port; the Go packages that hold them:
   recorded text, so any other difference fails it. The cached prefix (system
   blocks up to the last breakpoint, then every tool) holds no date, count
   or id; the date stamp rides on the operator message.
-- Code mode runs in `atrium-codemode@`, one socket-activated instance per
-  connection under `DynamicUser` with no network and a read-only filesystem.
-  That sandbox is the security boundary; the Monty interpreter is not one.
-  Anthropic's code execution sandbox is a separate, per-thread opt-in
-  (`threads.code_sandbox`, off by default): only then do attached files go to
-  the Files API and does the model get `code_execution`. Uploaded and project
-  files are stored under the state directory's `files/` (backed up with it,
-  deleted with the thread) and are untrusted data like mail: their content
-  never adds to the web_fetch allowlist or expands skills.
+- Code execution is not ported in v2. The `atrium-codemode@` unit remains inert;
+  its worker exits with "removed in v2". Anthropic's Files API and code
+  execution container are not used. The old `threads.code_sandbox` and
+  `threads.container_id` columns remain unused, though old code results still
+  render. The replacement sandbox manager is deferred to issue #202. Uploaded
+  and project files are stored under the state directory's `files/` (backed
+  up with it, deleted with the thread) and are untrusted data like mail: their
+  content never adds to the web_fetch allowlist or expands skills.
 - The web UI has no login of its own. The public listener (`atrium-web`,
   `--auth proxy`) trusts a reverse proxy that authenticates the operator and
   sets `Remote-Groups`; the app rejects any request whose `Host` is not

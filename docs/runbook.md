@@ -13,7 +13,7 @@ back up; `cache/` can be rebuilt.
 | Path | Content |
 | --- | --- |
 | `atrium.db` | SQLite index, rules, decisions, automatic-action log and proposals of the mail core |
-| `files/<thread id>/`, `files/p<project id>/` | originals of chat and project uploads and files the code sandbox produced; deleted with the thread |
+| `files/<thread id>/`, `files/p<project id>/` | originals of chat and project uploads; deleted with the thread |
 | `cache/models` | where a host may keep local model weights; not atrium's |
 | `cache/messages` | `ATRIUM_CACHE_DIR`: `raw/<account>/<mailbox id>/<uidvalidity>_<uid>.eml` (raw message store of the mail core) and `media/` (TMDB posters in `media/posters`, ffmpeg episode thumbnails in `media/thumbs`); not backed up |
 | `pause` | exists while automatic mailbox writes are paused |
@@ -45,10 +45,10 @@ credentials:
   (any long random string; unset means a key file in the state dir).
 
 The module sets the rest from its options: `ATRIUM_DB`, `ATRIUM_CACHE_DIR`,
-`ATRIUM_CODEMODE_SOCKET`, `ATRIUM_MODE` (`mode`), `ATRIUM_CHAT_URL` and
-`ATRIUM_EMBED_URL` (`chatUrl`, `embedUrl`), `ATRIUM_TZ` (`timeZone`),
-`ATRIUM_PUBLIC_URL` (`publicUrl`), `ATRIUM_PUBLIC_HOST` (`web.allowedHost`,
-public listener only), `GRAFANA_URL`
+`ATRIUM_CODEMODE_SOCKET` (set by the module but unused), `ATRIUM_MODE` (`mode`),
+`ATRIUM_CHAT_URL` and `ATRIUM_EMBED_URL` (`chatUrl`, `embedUrl`), `ATRIUM_TZ`
+(`timeZone`), `ATRIUM_PUBLIC_URL` (`publicUrl`), `ATRIUM_PUBLIC_HOST`
+(`web.allowedHost`, public listener only), `GRAFANA_URL`
 (`grafanaUrl`), `NTFY_URL`, `NTFY_TOPIC`, `NTFY_MEDIA_TOPIC` (`ntfy.*`),
 `ICLOUD_APPLE_ID`, `ATRIUM_CONTACTS_DIR` and `ATRIUM_CALENDAR_DIR`
 (`icloudAppleId`), `ATRIUM_MEDIA_ROOT`, `QBITTORRENT_URL`,
@@ -94,7 +94,7 @@ It runs in the `atrium-watch` and `atrium-sync` passes, right after routing.
 | `atrium-agent-scheduler` | `atrium agent scheduler`: scheduled and nightly agent jobs |
 | `atrium-web` | `atrium serve` on `web.host:web.port` (default `0.0.0.0:8480`) with `web.auth` |
 | `atrium-web-local` | `atrium serve` on `127.0.0.1:web.local.port` (default 8481) with `--auth local` |
-| `atrium-codemode@` | code-mode worker, one sandboxed instance per connection on `atrium-codemode.socket` |
+| `atrium-codemode@` | inert; its worker exits non-zero with "removed in v2" |
 | `atrium-vdirsyncer-sync` | timer every 15 minutes, iCloud CalDAV/CardDAV mirror (with `icloudAppleId`) |
 
 The chat and embedding servers behind `chatUrl` and `embedUrl` are the
@@ -181,8 +181,8 @@ conversation); Branch copies the live history up to a message into a new thread
 (`branched_from_thread_id`, `branched_from_seq`). The `plan` tool stores a checklist in
 `thread_plans` for the Work tab, which also lists sources (derived from `web_fetch`,
 `web_search`, `mail_read` and `fetch_knowledge` calls of the thread and its subagents),
-subagent cards (the only entry point to their transcripts), files (`thread_files`,
-filled by uploads and generated files) with the thread's drafts, and `run_code` sessions.
+subagent cards (the only entry point to their transcripts), and files (`thread_files`,
+filled by uploads and generated files) with the thread's drafts.
 Drafts and sent mail created in a thread appear as cards in it and open in the Preview
 tab (`GET /drafts/{id}`); a sent copy found in the mailbox links back to its thread
 through `drafts.sent_msgid`.
@@ -201,20 +201,15 @@ twice. URLs inside files never join the web_fetch allowlist. A message whose att
 would not fit under the thread's compaction point is refused with the limit to raise.
 `GET /chat/{id}/files/{fid}` previews (Markdown, tables for CSV/xlsx, text, images),
 `/download` serves any file as an attachment (never inline HTML/SVG). Delete on a thread
-(`POST /chat/{id}/delete`) purges its messages, tool records, files and subagent threads
-and deletes its Files API uploads; the thread row stays as a hidden tombstone because
-`usage` and `agent_writes` reference it. Projects carry files too (`thread_files.project_id`,
-`files/p<id>/`, managed on the project page); they are attached ahead of the first user
-turn of every request in the project's threads.
+purges its messages, tool records, files and subagent threads. The thread row stays as a
+hidden tombstone because `usage` and `agent_writes` reference it. Projects carry files too
+(`thread_files.project_id`, `files/p<id>/`, managed on the project page); they are attached
+ahead of the first user turn of every request in the project's threads.
 
-Code sandbox: a per-thread switch in the composer (`threads.code_sandbox`, off by default)
-adds Anthropic's `code_execution_20260521` server tool and a system note, uploads files
-attached while it is on to the Files API (`thread_files.anthropic_file_id`) and references
-them with `container_upload` blocks, reuses the thread's container
-(`threads.container_id`; a rejected one is dropped and the call repeated) and, after each
-response, downloads files the container left in `$OUTPUT_DIR` into `thread_files` as
-`generated`. The switch shows the data note: files go to Anthropic, not under zero data
-retention, containers keep data up to 30 days. The Go binary has no code mode: `atrium-codemode.socket` and `atrium-codemode@.service` stay defined but inert (the worker exits non-zero).
+Code execution is not available in v2. The Anthropic Files API and code execution
+container are not used. The old `threads.code_sandbox` and `threads.container_id`
+columns remain unused; old code results still render. The replacement sandbox
+manager is deferred to issue #202.
 
 Context size is kept in check in layers, all scaled from the thread's context limit
 (never above the model's 1M). Requests go through the beta Messages API with
