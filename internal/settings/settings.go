@@ -41,17 +41,19 @@ const (
 )
 
 type Def struct {
-	Key          string
-	Module       string
-	Type         Type
-	Default      string
-	Choices      []string
-	Check        func(value string) error
-	Class        Class
-	Secret       bool
-	Restart      bool
-	Scopes       []Scope
-	ThreadColumn string
+	Key                 string
+	Module              string
+	Type                Type
+	Default             string
+	Choices             []string
+	Check               func(value string) error
+	Class               Class
+	Secret              bool
+	RequiresEncryptedDB bool
+	Generated           bool
+	Restart             bool
+	Scopes              []Scope
+	ThreadColumn        string
 }
 
 func (d Def) has(s Scope) bool { return slices.Contains(d.Scopes, s) }
@@ -146,6 +148,8 @@ func (d Def) valid() error {
 		return bad("unknown class %q", d.Class)
 	case (d.Class == Secret) != d.Secret:
 		return bad("the secret flag and the secret class go together")
+	case (d.RequiresEncryptedDB || d.Generated) && d.Class != Secret:
+		return bad("encrypted-database and generated flags belong to secret keys")
 	case d.Class.writable() == (len(d.Scopes) == 0):
 		return bad("class %s %s scopes", d.Class, map[bool]string{true: "needs", false: "takes no"}[d.Class.writable()])
 	case (d.Type == Enum) != (len(d.Choices) > 0):

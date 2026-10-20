@@ -19,6 +19,7 @@ type migration struct {
 var migrations = []migration{
 	{1, pythonSchema},
 	{2, usageIndexes},
+	{3, secretsTable},
 }
 
 type FutureSchemaError struct {
@@ -305,4 +306,10 @@ func usageIndexes(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func secretsTable(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS secrets ("+
+		"name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at REAL NOT NULL, set_by TEXT NOT NULL)")
+	return err
 }
