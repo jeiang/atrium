@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/drafts"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -100,6 +101,11 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	}
 	if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil {
 		return err
+	}
+	if n, err := proposals.RecoverStuck(ctx, d); err != nil {
+		return err
+	} else if n > 0 {
+		log.Warn("failed approved proposals with a write in flight", "count", n)
 	}
 	var modules []Module
 	var templates []fs.FS

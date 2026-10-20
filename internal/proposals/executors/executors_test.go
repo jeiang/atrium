@@ -880,6 +880,106 @@ func TestUndoHasItsRowBeforeTheUndoerRuns(t *testing.T) {
 	}
 }
 
+func (w *world) twoBatchSplit() int64 {
+	ids := w.messageIDs("Bills")
+	return w.propose(executors.RebalanceSplit, py.Dict{{Key: "folder", Value: "Bills"}, {Key: "groups", Value: []any{
+		py.Dict{{Key: "dest", Value: "Bills/A"}, {Key: "messages", Value: w.snapshots(ids[:2])}},
+		py.Dict{{Key: "dest", Value: "Bills/B"}, {Key: "messages", Value: w.snapshots(ids[2:])}},
+	}}})
+}
+
+func (w *world) boxLen(name string) int {
+	if box := w.fake.Boxes[name]; box != nil {
+		return len(box.Messages)
+	}
+	return 0
+}
+
+func TestKilledApproveIsRecoveredFailedKeepsSettledBatchesUndoableAndNeverWritesTheInFlightOne(t *testing.T) {
+	w := icloudWorld(t)
+	ctx := context.Background()
+	pid := w.twoBatchSplit()
+	reached, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	copies := 0
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb != "COPY" {
+			return nil
+		}
+		if copies++; copies == 2 {
+			close(reached)
+			<-release
+			return &mail.WriteInterrupted{Command: "COPY", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	go func() {
+		defer close(finished)
+		_, _ = w.pipeline.ApproveAndApply(ctx, pid, nil)
+	}()
+	<-reached
+	if p, _ := proposals.Get(ctx, w.db.Read, pid); p.Status != proposals.Approved || w.inFlight(pid) != 1 || p.Undoable {
+		t.Fatalf("at the kill: status = %s, in flight = %d, undoable = %v", p.Status, w.inFlight(pid), p.Undoable)
+	}
+	if _, err := w.pipeline.Undo(ctx, pid); err == nil {
+		t.Fatal("an approved proposal was undone")
+	}
+	if n, err := proposals.RecoverStuck(ctx, w.db); err != nil || n != 1 {
+		t.Fatalf("recovered = %d, %v", n, err)
+	}
+	if n, err := proposals.RecoverStuck(ctx, w.db); err != nil || n != 0 {
+		t.Fatalf("second recovery = %d, %v", n, err)
+	}
+	p, _ := proposals.Get(ctx, w.db.Read, pid)
+	if p.Status != proposals.Failed || !strings.HasPrefix(fmt.Sprint(field(p.Result, "error")), mailops.UnknownPrefix) || !p.Undoable {
+		t.Fatalf("after recovery: %s %v undoable = %v", p.Status, p.Result, p.Undoable)
+	}
+	_, err := w.pipeline.ApproveAndApply(ctx, pid, nil)
+	if !strings.Contains(fmt.Sprint(err), "resolve it in the mailbox before approving again") {
+		t.Fatalf("re-approve = %v", err)
+	}
+	account := w.account
+	if _, ok, err := proposals.Create(ctx, w.db, executors.RebalanceSplit, &account, "title", py.Dict{}, py.Dict{}, "fp", w.clock); err != nil || ok {
+		t.Fatalf("rescan = %v, %v; want the failed proposal kept as known", ok, err)
+	}
+	if got := slices.DeleteFunc(verbs(w.fake), func(v string) bool { return v != "COPY" }); len(got) != 1 {
+		t.Fatalf("COPY written %d times before the undo; the in-flight batch must not be written", len(got))
+	}
+	if out := w.undo(pid); !out.Undone {
+		t.Fatalf("undo = %+v", out)
+	}
+	if w.boxLen("Bills") != 4 || w.boxLen("Bills/A") != 0 || w.boxLen("Bills/B") != 0 {
+		t.Fatalf("mailbox: Bills = %d, A = %d, B = %d", w.boxLen("Bills"), w.boxLen("Bills/A"), w.boxLen("Bills/B"))
+	}
+	if p, _ := proposals.Get(ctx, w.db.Read, pid); p.Status != proposals.Failed || p.Undoable || w.inFlight(pid) != 1 {
+		t.Fatalf("after undo: %s undoable = %v, in flight = %d", p.Status, p.Undoable, w.inFlight(pid))
+	}
+	close(release)
+	<-finished
+}
+
+func TestAFailedProposalWithoutAnInFlightRowIsNeverUndoable(t *testing.T) {
+	w := icloudWorld(t)
+	ctx := context.Background()
+	pid := w.twoBatchSplit()
+	copies := 0
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb != "COPY" {
+			return nil
+		}
+		if copies++; copies > 1 {
+			return errors.New("try later")
+		}
+		return nil
+	}
+	if done := w.apply(pid, nil); done.Status != proposals.Failed || done.Undoable {
+		t.Fatalf("status = %s, undoable = %v", done.Status, done.Undoable)
+	}
+	var refused proposals.ProposalError
+	if _, err := w.pipeline.Undo(ctx, pid); !errors.As(err, &refused) {
+		t.Fatalf("undo of an ordinary failure = %v", err)
+	}
+}
+
 func TestPayloadSurvivesJSONRoundtrip(t *testing.T) {
 	w := icloudWorld(t)
 	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
