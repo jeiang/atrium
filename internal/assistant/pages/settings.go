@@ -20,6 +20,8 @@ type AssistantData struct {
 	Defaults      threads.Options `json:"defaults"`
 	Efforts       []string        `json:"efforts"`
 	ContextLimits []int64         `json:"context_limits"`
+	Saved         bool            `json:"saved"`
+	Error         string          `json:"error"`
 }
 
 type UsageData struct {
@@ -47,14 +49,19 @@ func (p *pages) settings(w http.ResponseWriter, r *http.Request, status int, nam
 	p.render(w, r, status, settingsFrame, name, data, toast)
 }
 
-func (p *pages) assistantPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast) {
+func (p *pages) assistantPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, saved bool, formError string) {
 	defaults, err := threads.Defaults(r.Context(), p.deps.DB.Read)
 	check(err)
-	p.settings(w, r, status, "settings_assistant.gohtml", AssistantData{Defaults: defaults, Efforts: threads.Efforts[:], ContextLimits: threads.ContextLimits[:]}, toast)
+	p.settings(w, r, status, "settings_assistant.gohtml", AssistantData{Defaults: defaults, Efforts: threads.Efforts[:], ContextLimits: threads.ContextLimits[:], Saved: saved, Error: formError}, toast)
 }
 
 func (p *pages) assistantSettings(w http.ResponseWriter, r *http.Request) {
-	p.assistantPage(w, r, http.StatusOK, nil)
+	var toast *tpl.Toast
+	saved := web.QueryValue(r.URL.Query(), "saved") == "1"
+	if saved {
+		toast = notice("success", "Saved", "New chat threads start with these defaults.")
+	}
+	p.assistantPage(w, r, http.StatusOK, toast, saved, "")
 }
 
 func (p *pages) assistantSave(w http.ResponseWriter, r *http.Request) {
@@ -62,11 +69,16 @@ func (p *pages) assistantSave(w http.ResponseWriter, r *http.Request) {
 	err := threads.SetDefaults(detached(r), p.deps.DB.Write, web.FormString(form, "effort", ""), web.FormString(form, "context_limit", ""))
 	var refused threads.OptionError
 	if errors.As(err, &refused) {
-		p.assistantPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()))
+		p.assistantPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()), false, err.Error())
 		return
 	}
 	check(err)
-	p.assistantPage(w, r, http.StatusOK, notice("success", "Saved", "New chat threads start with these defaults."))
+	settingsRedirect(w, "/settings/assistant?saved=1")
+}
+
+func settingsRedirect(w http.ResponseWriter, location string) {
+	w.Header().Set("Location", location)
+	w.WriteHeader(http.StatusSeeOther)
 }
 
 func (p *pages) usagePage(w http.ResponseWriter, r *http.Request) {
