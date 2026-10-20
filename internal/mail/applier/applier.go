@@ -193,7 +193,7 @@ func safeLabel(name string) bool {
 	if _, err := executors.ValidName(name); err != nil {
 		return false
 	}
-	return !mail.IsSystemName(name) && !strings.HasPrefix(name, "[Gmail]")
+	return !strings.HasPrefix(name, "\\") && !mail.IsSystemName(name) && !strings.HasPrefix(name, "[Gmail]")
 }
 
 // Applier runs the automatic passes of one database. Resync syncs an account after a pass wrote to it; Cap is
