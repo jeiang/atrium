@@ -145,7 +145,7 @@ func TestCreateDeleteAndUndoICloud(t *testing.T) {
 	if err := w.db.Write.QueryRow("SELECT id FROM agent_writes WHERE tool = 'calendar_delete'").Scan(&deleteWrite); err != nil {
 		t.Fatal(err)
 	}
-	res, err := undoers.Undo(ctx, w.db.Write, deleteWrite, func() float64 { return clock })
+	res, err := undoers.Undo(ctx, w.db, deleteWrite, func() float64 { return clock })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestCreateDeleteAndUndoICloud(t *testing.T) {
 	if err := w.db.Write.QueryRow("SELECT id FROM agent_writes WHERE tool = 'calendar_create'").Scan(&createWrite); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := undoers.Undo(ctx, w.db.Write, createWrite, func() float64 { return clock }); err != nil {
+	if _, err := undoers.Undo(ctx, w.db, createWrite, func() float64 { return clock }); err != nil {
 		t.Fatal(err)
 	}
 	if row, err := calendar.FindTracked(ctx, w.db.Write, uid); err != nil || row != nil {
