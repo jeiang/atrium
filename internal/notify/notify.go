@@ -90,8 +90,6 @@ func LinkFor(raw *string, threadID int64) (string, error) {
 	return link, nil
 }
 
-// isDigits is str.isdigit restricted to decimal digits: a string of other digit characters (superscripts) is
-// not prefixed, and fails the thread link pattern as the prefixed one would.
 func isDigits(s string) bool {
 	return s != "" && strings.IndexFunc(s, func(r rune) bool { return !unicode.Is(unicode.Nd, r) }) < 0
 }

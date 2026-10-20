@@ -1,7 +1,0 @@
-usage: atrium live actions [-h] [--limit LIMIT]
-                           [--kind {file,flag,trash,correct}]
-
-options:
-  -h, --help            show this help message and exit
-  --limit LIMIT
-  --kind {file,flag,trash,correct}

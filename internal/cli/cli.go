@@ -1,6 +1,3 @@
-// Package cli is the subset of Python's argparse that cli.py's parser() uses: sub-parsers, store, store_true and
-// append options, str and int positionals. Parsing, error texts, usage and help match Python 3.14 byte for byte
-// for that subset. Help is never coloured and the width is $COLUMNS (else 80) minus 2, as on a non-terminal.
 package cli
 
 import (
@@ -27,16 +24,11 @@ const (
 	ExitTerminated = 143
 )
 
-// Handler runs a parsed leaf command; its result is the exit code.
 type Handler func(env *Env) int
 
-// Command is one parser: a leaf when Setup is set, else a group whose sub-parsers are Commands.
 type Command struct {
-	Name string
-	// Help is add_parser's help=: the line the parent's help lists for this command; empty lists none.
-	Help string
-	// Dest is the dest of this group's subparsers action, named in its errors; empty is "command" at the root and
-	// "<name>_command" (dashes as underscores) below it.
+	Name     string
+	Help     string
 	Dest     string
 	Setup    func(a *Args) Handler
 	Commands []*Command
@@ -55,13 +47,9 @@ func (c *Command) find(name string) *Command {
 	return nil
 }
 
-// Opt holds add_argument's keywords besides the name and the default. Help is used verbatim: argparse's
-// %-expansion of help strings is not ported.
 type Opt struct {
-	Help string
-	// Metavar defaults to the upper-cased dest for options and to the dest for positionals.
-	Metavar string
-	// Choices are checked against the converted value; usage shows them as {a,b}.
+	Help     string
+	Metavar  string
 	Choices  []string
 	Required bool
 }
@@ -92,8 +80,6 @@ type action struct {
 	seen  bool
 }
 
-// Args declares a leaf's arguments in add_argument order; each declaration returns the pointer the handler reads
-// once parsing succeeded.
 type Args struct {
 	actions []*action
 }
@@ -111,14 +97,12 @@ func (a *Args) positional(name string, o Opt) *action {
 	return act
 }
 
-// String is `--name VALUE`.
 func (a *Args) String(name, def string, o Opt) *string {
 	v := def
 	a.option(name, kindStore, o).str = &v
 	return &v
 }
 
-// Int is `--name VALUE` with type=int.
 func (a *Args) Int(name string, def int, o Opt) *int {
 	v := def
 	act := a.option(name, kindStore, o)
@@ -126,28 +110,24 @@ func (a *Args) Int(name string, def int, o Opt) *int {
 	return &v
 }
 
-// Bool is `--name` with action="store_true".
 func (a *Args) Bool(name string, o Opt) *bool {
 	var v bool
 	a.option(name, kindStoreTrue, o).flag = &v
 	return &v
 }
 
-// Repeated is `--name VALUE` with action="append" and default=[].
 func (a *Args) Repeated(name string, o Opt) *[]string {
 	v := []string{}
 	a.option(name, kindAppend, o).list = &v
 	return &v
 }
 
-// Arg is a str positional.
 func (a *Args) Arg(name string, o Opt) *string {
 	var v string
 	a.positional(name, o).str = &v
 	return &v
 }
 
-// IntArg is a positional with type=int.
 func (a *Args) IntArg(name string, o Opt) *int {
 	var v int
 	act := a.positional(name, o)
@@ -155,8 +135,6 @@ func (a *Args) IntArg(name string, o Opt) *int {
 	return &v
 }
 
-// Has reports whether the argument declared as name was given on the command line, for options whose Python
-// default is None.
 func (a *Args) Has(name string) bool {
 	for _, act := range a.actions {
 		if act.name == name {
@@ -166,7 +144,6 @@ func (a *Args) Has(name string) bool {
 	return false
 }
 
-// Env is what a handler runs with.
 type Env struct {
 	Ctx    context.Context
 	Stdin  io.Reader
@@ -176,15 +153,12 @@ type Env struct {
 	width  int
 }
 
-// UsageError is parser.error(msg) on the leaf: its usage and "prog: error: msg" on stderr, exit 2.
 func (e *Env) UsageError(format string, a ...any) int {
 	printf(e.Stderr, "%s", e.p.usage(e.width))
 	printf(e.Stderr, "%s: error: %s\n", e.p.prog, fmt.Sprintf(format, a...))
 	return ExitUsage
 }
 
-// App is the root parser. A non-empty Version makes an exact root `--version` print "<name> <Version>"; it stays
-// out of usage and help, which mirror the Python parser. Stdin nil is os.Stdin.
 type App struct {
 	Version string
 	Stdin   io.Reader
@@ -192,7 +166,6 @@ type App struct {
 	setup   func(stderr io.Writer)
 }
 
-// New is the root parser named name; setup runs after a successful parse, before the handler.
 func New(name string, setup func(stderr io.Writer)) *App {
 	return &App{root: Command{Name: name}, setup: setup}
 }
@@ -201,7 +174,6 @@ func (a *App) Add(cmds ...*Command) {
 	a.root.Add(cmds...)
 }
 
-// Run is parse_args(args) followed by the selected handler.
 func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	s := &session{stdout: stdout, stderr: stderr, width: formatWidth()}
 	root, _ := newParser(a.root.Name, &a.root, true)
@@ -223,7 +195,6 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	return s.handler(&Env{Ctx: ctx, Stdin: stdin, Stdout: stdout, Stderr: stderr, p: s.leaf, width: s.width})
 }
 
-// formatWidth is HelpFormatter's width: shutil.get_terminal_size().columns - 2 off a terminal.
 func formatWidth() int {
 	if n, ok := py.ParseInt(os.Getenv("COLUMNS")); ok && n > 0 && n <= 1<<20 {
 		return int(n) - 2
@@ -281,7 +252,6 @@ func (p *parser) lookup(opt string) *action {
 	return nil
 }
 
-// exit ends parsing with an exit code once the parser has written its output.
 type exit int
 
 func (e exit) Error() string { return "exit status " + strconv.Itoa(int(e)) }
@@ -303,7 +273,6 @@ func (s *session) argError(p *parser, a *action, format string, args ...any) err
 	return s.fail(p, "argument "+a.displayName()+": "+fmt.Sprintf(format, args...))
 }
 
-// optTuple is one interpretation of an option string: _parse_optional's (action, option_string, sep, explicit_arg).
 type optTuple struct {
 	a           *action
 	opt         string
@@ -314,8 +283,6 @@ type optTuple struct {
 
 var negativeNumber = rx.MustCompile(`-\.?\d`, 0)
 
-// parseOptional is _parse_optional: nil for a positional, else its interpretations (a nil action when no
-// option of this parser matches).
 func (p *parser) parseOptional(s string) []optTuple {
 	if s == "" || s[0] != '-' {
 		return nil
@@ -346,7 +313,6 @@ func (p *parser) parseOptional(s string) []optTuple {
 	return []optTuple{{opt: s}}
 }
 
-// optionTuples is _get_option_tuples with allow_abbrev.
 func (p *parser) optionTuples(s string) []optTuple {
 	prefix, explicit, has := strings.Cut(s, "=")
 	sep := ""
@@ -390,7 +356,6 @@ func (a *action) nargsPattern() string {
 	return "(-*A-*)"
 }
 
-// parse is _parse_known_args: the unrecognized arguments, or an exit once the parser wrote help or an error.
 func (s *session) parse(p *parser, args []string) ([]string, error) {
 	optIdx := map[int][]optTuple{}
 	var b strings.Builder
@@ -572,8 +537,6 @@ func (s *session) parse(p *parser, args []string) ([]string, error) {
 	return append(extras, subExtras...), nil
 }
 
-// store converts and checks one value of a store or append action; only the first value of a positional that
-// took several (around a "--") is kept.
 func (s *session) store(p *parser, a *action, str string, keep bool) error {
 	value := str
 	var n int
@@ -610,7 +573,6 @@ func (s *session) checkChoice(p *parser, a *action, value string) error {
 	return s.argError(p, a, "invalid choice: %s (choose from %s)", py.Repr(value), strings.Join(quoted, ", "))
 }
 
-// matchPartial is _match_arguments_partial: how many argument strings each leading positional takes.
 func matchPartial(actions []*action, pattern string) []int {
 	for i := len(actions); i > 0; i-- {
 		var b strings.Builder
@@ -667,12 +629,10 @@ func (a *action) invocation() string {
 
 func runes(s string) int { return utf8.RuneCountInString(s) }
 
-// usage is format_usage: the usage line(s) and a newline.
 func (p *parser) usage(width int) string {
 	return p.formatUsage(width) + "\n"
 }
 
-// formatUsage is HelpFormatter._format_usage without its trailing blank line.
 func (p *parser) formatUsage(width int) string {
 	const prefix = "usage: "
 	var optParts, posParts []string
@@ -750,7 +710,6 @@ type helpItem struct {
 
 var longBreak = rx.MustCompile(`\n\n\n+`, 0)
 
-// help is format_help: usage, then the positional arguments and options sections.
 func (p *parser) help(width int) string {
 	maxHelp := min(24, max(width-20, 4))
 	var positional, options []helpItem
@@ -792,7 +751,6 @@ func (p *parser) help(width int) string {
 	return strings.Trim(out, "\n") + "\n"
 }
 
-// formatItem is HelpFormatter._format_action.
 func formatItem(b *strings.Builder, item helpItem, helpPos, width int) {
 	helpWidth := max(width-helpPos, 11)
 	actionWidth := helpPos - item.indent - 2
@@ -828,7 +786,6 @@ var (
 	wordSep    = rx.MustCompile(`([\t\n\x0b\x0c\r ]+|(?<=[\w!"'&.,?])-{2,}(?=\w)|[^\t\n\x0b\x0c\r ]+?(?:-(?:(?<=[^\d\W]{2}-)|(?<=[^\d\W]-[^\d\W]-))(?=[^\d\W]-?[^\d\W])|(?=[\t\n\x0b\x0c\r ]|\z)|(?<=[\w!"'&.,?])(?=-{2,}\w)))`, 0)
 )
 
-// splitLines is HelpFormatter._split_lines: whitespace runs collapsed, then textwrap.wrap(text, width).
 func splitLines(text string, width int) []string {
 	text, _ = asciiSpace.Sub(" ", text, 0)
 	split, _ := wordSep.Split(py.Strip(text), 0)
@@ -868,8 +825,6 @@ func splitLines(text string, width int) []string {
 	return lines
 }
 
-// breakLongWord is TextWrapper._handle_long_word with break_long_words and break_on_hyphens; chunks is reversed
-// and its last chunk is shortened in place.
 func breakLongWord(chunks, line [][]rune, lineLen, width int) [][]rune {
 	spaceLeft := 1
 	if width >= 1 {

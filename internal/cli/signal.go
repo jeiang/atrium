@@ -32,8 +32,6 @@ func (r *received) get() os.Signal {
 	return r.sig
 }
 
-// SignalContext is a context that ends at the first SIGINT or SIGTERM; Received tells which one. The returned
-// function releases the signal handler.
 func SignalContext(parent context.Context) (context.Context, context.CancelFunc) {
 	state := &received{}
 	ctx, cancel := context.WithCancel(context.WithValue(parent, signalKey{}, state))
@@ -53,7 +51,6 @@ func SignalContext(parent context.Context) (context.Context, context.CancelFunc)
 	}
 }
 
-// Received is the signal that ended a context made by SignalContext.
 func Received(ctx context.Context) (os.Signal, bool) {
 	state, _ := ctx.Value(signalKey{}).(*received)
 	if state == nil {
@@ -63,9 +60,6 @@ func Received(ctx context.Context) (os.Signal, bool) {
 	return sig, sig != nil
 }
 
-// Fail reports err the way an uncaught Python exception ends the process: the last line of its traceback on
-// stderr and exit status 1. A failure after SIGINT is Python's KeyboardInterrupt (exit status 130); after SIGTERM
-// the process Python would have been killed by it (128+15), with no message.
 func Fail(env *Env, err error) int {
 	if code, ok := signalExit(env.Ctx, env.Stderr); ok {
 		return code

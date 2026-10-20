@@ -1,4 +1,3 @@
-# Safety-critical paths: mail write paths, auth, spend limits, the IMAP fork, the host module and CI.
 /internal/safety/ @jeiang
 /internal/mail/client* @jeiang
 /internal/mail/mailtest/ @jeiang

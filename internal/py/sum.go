@@ -13,7 +13,7 @@ func Sum(values []float64) float64 {
 func SumSq(values []float64) float64 {
 	var s, c float64
 	for _, x := range values {
-		sq := float64(x * x) // the conversion stops arm64 fusing x*x+s into an FMA
+		sq := float64(x * x)
 		s, c = add(s, c, sq)
 	}
 	return finish(s, c)

@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// RulesCommand is `atrium rules import FILE|-` and `atrium rules export`.
 func (o Options) RulesCommand() *cli.Command {
 	return group("rules",
 		o.leaf("import", func(a *cli.Args) body {
@@ -62,7 +61,6 @@ func importRules(x *Exec, file string) error {
 	return nil
 }
 
-// ShadowReportCommand is `atrium shadow-report [--since SINCE]`.
 func (o Options) ShadowReportCommand() *cli.Command {
 	return o.leaf("shadow-report", func(a *cli.Args) body {
 		since := a.String("since", "", cli.Opt{})
@@ -85,7 +83,6 @@ func clockTime(ts float64) time.Time {
 	return time.Unix(0, int64(ts*1e9))
 }
 
-// ReindexCommand is `atrium reindex`: every message is embedded again.
 func (o Options) ReindexCommand() *cli.Command {
 	return o.leaf("reindex", func(*cli.Args) body {
 		return func(x *Exec) error {

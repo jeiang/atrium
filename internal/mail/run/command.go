@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailops"
 )
 
-// accountChoices is sorted(ACCOUNTS), the choices of `--account`.
 func accountChoices() []string {
 	names := make([]string, len(config.Accounts))
 	for i, spec := range config.Accounts {
@@ -22,10 +21,8 @@ func accountChoices() []string {
 
 type runner func(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) error
 
-// Clients is run.open_client over a configuration (imapclient.Opener).
 type Clients = func(cfg config.Config, env config.Env) func(ctx context.Context, account string) (mail.Client, error)
 
-// SyncCommand is `atrium sync [--account A]`: one locked sync and processing pass.
 func SyncCommand(clients Clients) *cli.Command {
 	return command("sync", clients, func(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) error {
 		_, err := Sync(ctx, cfg, requested, open)
@@ -33,7 +30,6 @@ func SyncCommand(clients Clients) *cli.Command {
 	})
 }
 
-// WatchCommand is `atrium watch [--account A]`: the watch loops until SIGINT or SIGTERM.
 func WatchCommand(clients Clients) *cli.Command {
 	return command("watch", clients, Watch)
 }
@@ -50,8 +46,6 @@ func command(name string, clients Clients, run runner) *cli.Command {
 	}
 }
 
-// execute runs the command with the configuration from the environment and the accounts' clients; a failure
-// prints the last line of Python's traceback and exits 1.
 func execute(env *cli.Env, requested string, run runner, clients Clients) int {
 	cfg, err := config.Load(config.OS)
 	if err == nil {

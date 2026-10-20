@@ -24,10 +24,6 @@ func ExtractText(markup, pageURL string) (title, text string) {
 	return collapse(title), py.Clip(text, PageTextChars)
 }
 
-// readable runs trafilatura with comments and tables excluded and its fallback extractors on. Its rescue for pages
-// with less than MinExtractedSize characters of content is off: it appends a second copy of the page text to the
-// result, and PlainText is the fallback here instead. A panic inside the extractor reads as no result, as an
-// exception does in the Python app.
 func readable(markup, pageURL string) (title, text string, ok bool) {
 	defer func() {
 		if recover() != nil {

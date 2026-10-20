@@ -149,8 +149,6 @@ func (s *service) fail(w http.ResponseWriter, r *http.Request, status int, detai
 	s.deps.Error(w, r, status, detail)
 }
 
-// detached is the request's context without its cancellation: a change that was started is finished even when
-// the browser goes away, as the Python app's worker thread did.
 func detached(r *http.Request) context.Context { return context.WithoutCancel(r.Context()) }
 
 func pathInt(r *http.Request, name string) (int64, []web.FieldError) {

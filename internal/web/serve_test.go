@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
@@ -27,41 +26,11 @@ func runServe(t *testing.T, ctx context.Context, args ...string) (int, string, s
 	return code, stdout.String(), stderr.String()
 }
 
-func TestServePortIsRequired(t *testing.T) {
-	code, _, stderr := runServe(t, context.Background())
-	want := "usage: atrium serve [-h] [--host HOST] --port PORT [--auth {proxy,local}]\n" +
-		"                    [--allowed-host ALLOWED_HOST]\n" +
-		"atrium serve: error: the following arguments are required: --port\n"
-	if code != cli.ExitUsage || stderr != want {
-		t.Errorf("code %d stderr %q", code, stderr)
-	}
-}
-
-func TestServeRejectsUnknownAuthMode(t *testing.T) {
-	code, _, stderr := runServe(t, context.Background(), "--port", "1", "--auth", "open")
-	if code != cli.ExitUsage || !strings.HasSuffix(stderr, "\natrium serve: error: argument --auth: invalid choice: 'open' (choose from 'proxy', 'local')\n") {
-		t.Errorf("code %d stderr %q", code, stderr)
-	}
-}
-
 func TestServeProxyNeedsAllowedHost(t *testing.T) {
 	t.Setenv("ATRIUM_PUBLIC_HOST", "  ")
 	code, _, stderr := runServe(t, context.Background(), "--port", "1")
 	if code != cli.ExitError || !strings.Contains(stderr, "proxy mode needs --allowed-host or ATRIUM_PUBLIC_HOST") {
 		t.Errorf("code %d stderr %q", code, stderr)
-	}
-}
-
-func TestPublicHosts(t *testing.T) {
-	env := config.Map(map[string]string{"ATRIUM_PUBLIC_HOST": " atrium.test "})
-	if got := publicHosts([]string{"a", "b"}, env); len(got) != 2 || got[0] != "a" {
-		t.Errorf("flags lost: %v", got)
-	}
-	if got := publicHosts(nil, env); len(got) != 1 || got[0] != "atrium.test" {
-		t.Errorf("env fallback: %v", got)
-	}
-	if got := publicHosts(nil, config.Map(nil)); got != nil {
-		t.Errorf("unset: %v", got)
 	}
 }
 

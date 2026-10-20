@@ -240,8 +240,6 @@ func readSchema(ctx context.Context, q Querier) (schemaShape, error) {
 	return s, nil
 }
 
-// shadowOf reports a virtual table's own storage table, whose set differs
-// between sqlite-vec releases.
 func shadowOf(objects map[string]string, name string) bool {
 	for vt, kind := range objects {
 		if (kind == "fts5" || kind == "vec0" || kind == "virtual") && strings.HasPrefix(name, vt+"_") {

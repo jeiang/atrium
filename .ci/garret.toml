@@ -1,10 +1,5 @@
-# garret client config for CI. In GitHub Actions the client mints its own OIDC token;
-# only the audience, which must match the one the Pusher expects, is needed.
 endpoint = "https://cache-push.jeiang.dev"
 puller_endpoint = "https://cache.jeiang.dev"
 
 [oidc]
-# Must match the `audience` on the github-actions issuer in
-# modules/garret/default.nix; the Pusher rejects a token minted for
-# anything else.
 audience = "https://cache-push.jeiang.dev/"

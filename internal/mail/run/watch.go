@@ -32,7 +32,6 @@ const (
 	shutdownWindow = 30 * time.Second
 )
 
-// NextBackoff is next_backoff: 0, then BackoffStart, doubling up to BackoffMax seconds.
 func NextBackoff(current int) int {
 	if current == 0 {
 		return config.BackoffStart
@@ -40,8 +39,6 @@ func NextBackoff(current int) int {
 	return min(current*2, config.BackoffMax)
 }
 
-// ConnectionLost is the `except (imaplib.IMAP4.abort, OSError)` of watch_account: an imaplib abort (readonly is
-// one) or a socket, TLS or file system failure.
 func ConnectionLost(err error) bool {
 	var classed py.Classed
 	if errors.As(err, &classed) && (classed.PyClass() == "abort" || classed.PyClass() == "readonly") {
@@ -66,8 +63,6 @@ func ConnectionLost(err error) bool {
 		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
 }
 
-// Watcher is watch.py: Cfg and Open are the configuration and the accounts' clients, Pass builds a cycle's pass
-// over its connection (New when nil), Sleep is stop.wait, returning early when ctx ends (sleepCtx when nil).
 type Watcher struct {
 	Cfg   config.Config
 	Open  mailops.Opener
@@ -106,7 +101,6 @@ func (w *Watcher) alive(maxAge time.Duration) bool {
 	return true
 }
 
-// waiting beats while fn waits: every wait is bounded, so only a stuck pass lets the heartbeat go stale.
 func waiting(h *sdnotify.Heartbeat, fn func()) {
 	stop := make(chan struct{})
 	done := make(chan struct{})
@@ -129,7 +123,6 @@ func waiting(h *sdnotify.Heartbeat, fn func()) {
 	h.Beat()
 }
 
-// connect is the db.connect at the top of each cycle: the schema is migrated by the first one that succeeds.
 func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
 	d, err := db.Connect(w.Cfg.DBPath)
 	if err != nil {
@@ -169,8 +162,6 @@ func sleepCtx(ctx context.Context, d time.Duration) {
 	}
 }
 
-// waitForChange is wait_for_change: IDLE on the Inbox until a change or IdleSeconds pass; without IDLE, a wait of
-// IdleSeconds/30 and a NOOP, which always counts as a change.
 func (w *Watcher) waitForChange(ctx context.Context, client mail.Client) (bool, error) {
 	if !client.HasCapability("IDLE") {
 		w.sleep(ctx, noIdleWait)
@@ -182,8 +173,6 @@ func (w *Watcher) waitForChange(ctx context.Context, client mail.Client) (bool, 
 	return client.IdleChanges(ctx, idleWait)
 }
 
-// Account is watch_account: a locked pass, then a pass after every change the Inbox reports, until ctx ends. A
-// failure closes the connection and reconnects after the backoff, which a successful first pass resets.
 func (w *Watcher) Account(ctx context.Context, account string) {
 	backoff := 0
 	h := w.heartbeat(account)
@@ -250,7 +239,6 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 	})
 }
 
-// Watch is watch(): one watch loop per selected account until ctx ends, then up to 30 s for the loops to stop.
 func Watch(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) error {
 	accounts, err := SelectAccounts(cfg, requested)
 	if err != nil {

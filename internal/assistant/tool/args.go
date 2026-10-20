@@ -8,8 +8,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// BoundedInt is bounded_int: max(minimum, min(int(value), maximum)) of args[name] or def. A bool or non-number is
-// a ToolError; a float truncates; NaN and the infinities raise ValueError and OverflowError as int() does.
 func BoundedInt(args py.Dict, name string, def, maximum, minimum int64) (int64, error) {
 	value, ok := args.Get(name)
 	if !ok {

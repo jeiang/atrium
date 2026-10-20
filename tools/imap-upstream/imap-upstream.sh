@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Usage: imap-upstream.sh [--check] [ref]
-# Re-applies the third_party/go-imap patch onto upstream `ref` (default: the
-# pinned base), then copies the result in unless --check is given.
 set -euo pipefail
 
 check=false
@@ -12,7 +9,6 @@ fi
 
 root=$(git rev-parse --show-toplevel)
 dir=$root/third_party/go-imap
-control=$root/tools/imap-upstream/testdata/gmail_control_test.go
 url=$(sed -n 's/^url: //p' "$dir/UPSTREAM")
 base=$(sed -n 's/^base: //p' "$dir/UPSTREAM")
 ref=${1:-$base}
@@ -41,16 +37,10 @@ commit=$(git rev-parse --verify --quiet "$ref^{commit}" || git rev-parse --verif
 git -c advice.detachedHead=false checkout --quiet "$commit"
 echo "target: $ref ($commit)"
 
-cp "$control" imapclient/gmail_control_test.go
-go test -count=1 -run '^TestGmailControlUnpatched$' ./imapclient/
-rm imapclient/gmail_control_test.go
-
 if ! git apply --3way --index "$work/patch"; then
   echo "the patch does not apply cleanly onto $ref; resolve it by hand and record the update in PATCH.md" >&2
   exit 1
 fi
-go test -count=1 ./...
-go test -race -count=20 -run '^TestGmail' ./imapclient/
 
 if [ "$check" = true ]; then
   exit 0

@@ -346,7 +346,6 @@ func (s *Syncer) SentSince(ctx context.Context, mailboxID, validity int64, run f
 		return time.Time{}, err
 	}
 	if oldest.Valid {
-		// two days before the oldest indexed message, so older indexed mail does not look vanished
 		cutoff = min(cutoff, oldest.Float64-2*86400)
 	}
 	return dayOf(cutoff), nil

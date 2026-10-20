@@ -176,10 +176,8 @@ func ContentDigest(header, text []byte) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// EmailTS: ok is false where Python raises.
 func EmailTS(value string) (float64, bool) { return mime.ParseDate(value) }
 
-// Header is "" when absent or when Python raises.
 func Header(msg *mime.Message, name string) string {
 	v, ok, err := msg.Get(name)
 	if !ok || err != nil {
@@ -277,7 +275,6 @@ func mimeAttachments(msg *mime.Message) []Attachment {
 	return out
 }
 
-// Extract: err is set where Python's extract raises (a Content-Type value its header parser cannot handle).
 func Extract(header, text []byte, attachments []Attachment, fallbackTS float64) (f Features, err error) {
 	defer func() {
 		if r := recover(); r != nil {

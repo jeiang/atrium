@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// LiveCommand is `atrium live`: backlog, rebaseline, pause, resume, status, deletions, actions and undo.
 func (o Options) LiveCommand() *cli.Command {
 	return group("live",
 		o.leaf("backlog", func(*cli.Args) body { return liveBacklog }),

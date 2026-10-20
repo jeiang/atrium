@@ -1,3 +1,0 @@
-usage: atrium live [-h]
-                   {backlog,rebaseline,pause,resume,status,deletions,actions,undo} ...
-atrium live: error: argument live_command: invalid choice: 'bogus' (choose from 'backlog', 'rebaseline', 'pause', 'resume', 'status', 'deletions', 'actions', 'undo')

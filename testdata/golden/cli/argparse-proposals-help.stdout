@@ -1,7 +1,0 @@
-usage: atrium proposals [-h] {scan-all,list,approve,dismiss,undo} ...
-
-positional arguments:
-  {scan-all,list,approve,dismiss,undo}
-
-options:
-  -h, --help            show this help message and exit

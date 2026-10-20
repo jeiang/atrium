@@ -179,8 +179,6 @@ func isDecimalASCII(s string) bool {
 	return true
 }
 
-// isIdentifier approximates Python's str.isidentifier (XID_Start/XID_Continue) with Unicode letter and digit
-// categories.
 func isIdentifier(s string) bool {
 	if s == "" {
 		return false

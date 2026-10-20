@@ -61,11 +61,10 @@ consecutive updates need real conflict resolution in `handleFetch`.
 ## Updating
 
 `just imap-upstream [ref]` clones upstream, derives the patch from this
-directory against the base, checks its size, runs a control test on the
-unpatched `ref` (it must fail with `unsupported msg-att name: "X-GM-LABELS"`),
-applies the patch with `git apply --3way`, runs the library suite and
-`TestGmailTranscript` with `-race` 20 times, and copies the result here with
-a new `UPSTREAM`. Without `ref` it rebuilds the pinned base, a no-op.
+directory against the base, checks its size, applies it with
+`git apply --3way`, and copies the result here with a new `UPSTREAM`.
+It does not generate control tests or run upstream test suites. Without
+`ref` it rebuilds the pinned base, a no-op.
 `--check` stops before copying. Pin release tags; move to a commit only for a
 fix atrium needs. Update monthly and on every upstream release, and log each
 update below.

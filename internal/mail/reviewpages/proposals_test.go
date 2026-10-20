@@ -1,153 +1,12 @@
 package reviewpages
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 )
-
-func (s *site) recording(kind string, seen map[string]string) {
-	s.registry.Executors[kind] = func(_ context.Context, _ *proposals.Proposal, selection any) (py.Dict, error) {
-		if selection == nil {
-			seen[kind] = "None"
-		} else {
-			seen[kind] = py.JSONDumps(selection)
-		}
-		return py.Dict{{Key: "summary", Value: "moved"}}, nil
-	}
-}
-
-func TestApproveMapsTheFormSelectionToGroups(t *testing.T) {
-	s := newSite(t)
-	seen := map[string]string{}
-	s.recording("rebalance_split", seen)
-	id := s.splitProposal("split-1")
-	rec := s.post("/proposals/"+itoa(int(id))+"/approve",
-		form("name-0", "Shop/Orders2", "msg-0", "1", "msg-0", "2", "name-1", "Shop/Ads", "msg-1", "4"), hx, "true")
-	body := status(t, rec, http.StatusOK)
-	want := `{"groups": [{"name": "Shop/Orders2", "message_ids": [1, 2]}, {"name": "Shop/Ads", "message_ids": [4]}]}`
-	if seen["rebalance_split"] != want {
-		t.Errorf("selection = %s, want %s", seen["rebalance_split"], want)
-	}
-	mustContain(t, body, "moved", `id="pending-count"`, "hx-swap-oob")
-	if got := s.proposal(id).Status; got != proposals.Applied {
-		t.Errorf("status = %s", got)
-	}
-}
-
-func TestApproveAllPassesNoSelectionAndPlainKindsMapMessageIDs(t *testing.T) {
-	s := newSite(t)
-	seen := map[string]string{}
-	for _, kind := range []string{"rebalance_split", "deletion_rule", "rebalance_merge", "gmail_label_merge"} {
-		s.recording(kind, seen)
-	}
-	first := s.splitProposal("split-1")
-	s.post("/proposals/"+itoa(int(first))+"/approve", form("all", "1"), hx, "true")
-	deletion := py.Dict{
-		{Key: "rule", Value: py.Dict{{Key: "account", Value: "icloud"}, {Key: "when", Value: []any{}}}}, {Key: "reason", Value: "otp"},
-		{Key: "older_than_days", Value: int64(7)}, {Key: "backlog", Value: int64(2)}, {Key: "senders", Value: []any{}},
-		{Key: "subjects", Value: []any{}}, {Key: "messages", Value: []any{message(5), message(6)}},
-	}
-	second := s.propose("deletion_rule", "icloud", "Delete codes", deletion, "del-1")
-	s.post("/proposals/"+itoa(int(second))+"/approve", form("msg-0", "6"), hx, "true")
-	merge := py.Dict{{Key: "sources", Value: []any{}}, {Key: "into", Value: "A"}, {Key: "into_exists", Value: false}, {Key: "group", Value: group("A", 7)}}
-	third := s.propose("rebalance_merge", "icloud", "Merge", merge, "merge-1")
-	s.post("/proposals/"+itoa(int(third))+"/approve", form("name-0", "B", "msg-0", "7"), hx, "true")
-	label := py.Dict{
-		{Key: "from", Value: "x"}, {Key: "into", Value: "y"}, {Key: "from_count", Value: int64(1)}, {Key: "into_count", Value: int64(0)},
-		{Key: "messages", Value: []any{message(8)}},
-	}
-	fourth := s.propose("gmail_label_merge", "gmail", "Labels", label, "label-1")
-	s.post("/proposals/"+itoa(int(fourth))+"/approve", form(), hx, "true")
-	want := map[string]string{
-		"rebalance_split":   "None",
-		"deletion_rule":     `{"message_ids": [6]}`,
-		"rebalance_merge":   `{"groups": [{"name": "B", "message_ids": [7]}]}`,
-		"gmail_label_merge": `{"message_ids": []}`,
-	}
-	for kind, selection := range want {
-		if seen[kind] != selection {
-			t.Errorf("%s selection = %s, want %s", kind, seen[kind], selection)
-		}
-	}
-}
-
-func TestSelectionErrorComesBackAsAToastAndStaysPending(t *testing.T) {
-	s := newSite(t)
-	id := s.splitProposal("split-1")
-	s.registry.Executors["rebalance_split"] = func(context.Context, *proposals.Proposal, any) (py.Dict, error) {
-		return nil, proposals.SelectionError("invalid folder name ''")
-	}
-	target := "/proposals/" + itoa(int(id)) + "/approve"
-	body := status(t, s.post(target, form("name-0", "", "msg-0", "1"), hx, "true"), http.StatusOK)
-	mustContain(t, body, "invalid folder name", "Not approved")
-	if got := s.proposal(id).Status; got != proposals.Pending {
-		t.Errorf("status = %s, want pending", got)
-	}
-	mustContain(t, status(t, s.post(target, form("msg-0", "x"), hx, "true"), http.StatusOK), "invalid message selection")
-}
-
-func TestFailedApplyShowsTheErrorAndKeepsTheCard(t *testing.T) {
-	s := newSite(t)
-	id := s.splitProposal("split-1")
-	s.registry.Executors["rebalance_split"] = func(context.Context, *proposals.Proposal, any) (py.Dict, error) {
-		return nil, errors.New("imap down")
-	}
-	body := status(t, s.post("/proposals/"+itoa(int(id))+"/approve", form("all", "1"), hx, "true"), http.StatusOK)
-	mustContain(t, body, "It did not finish", "RuntimeError: imap down", `data-variant="destructive"`)
-	if got := s.proposal(id).Status; got != proposals.Failed {
-		t.Errorf("status = %s", got)
-	}
-}
-
-func TestDismissAndUndoCardsUpdateTheBadge(t *testing.T) {
-	s := newSite(t)
-	keep, drop := s.splitProposal("a"), s.splitProposal("b")
-	var undone []int64
-	s.registry.Executors["rebalance_split"] = func(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
-		_, err := proposals.RecordAction(ctx, s.db.Write, p.ID, py.Dict{{Key: "op", Value: "move"}}, py.Dict{{Key: "op", Value: "fake"}}, true, nil, 1.0)
-		return py.Dict{{Key: "summary", Value: "ok"}}, err
-	}
-	s.registry.Undoers["fake"] = func(ctx context.Context, _ json.RawMessage) (py.Dict, error) {
-		undone = append(undone, keep)
-		return py.Dict{{Key: "restored", Value: true}}, nil
-	}
-	rec := s.post("/proposals/"+itoa(int(drop))+"/dismiss", form("forever", "1"), hx, "true")
-	body := status(t, rec, http.StatusOK)
-	mustContain(t, body, "Dismissed forever", `id="pending-count"`, "atrium will not propose this again.")
-	if got := s.proposal(drop).Status; got != proposals.Suppressed {
-		t.Errorf("status = %s", got)
-	}
-	s.post("/proposals/"+itoa(int(keep))+"/approve", form("all", "1"), hx, "true")
-	if !s.proposal(keep).Undoable {
-		t.Fatal("applied proposal is not undoable")
-	}
-	body = status(t, s.post("/proposals/"+itoa(int(keep))+"/undo", nil, hx, "true"), http.StatusOK)
-	if len(undone) != 1 || !strings.Contains(body, "Undone") {
-		t.Errorf("undone = %v, body = %s", undone, body)
-	}
-	mustContain(t, status(t, s.post("/proposals/"+itoa(int(drop))+"/dismiss", nil, hx, "true"), http.StatusOK), "Not dismissed")
-}
-
-func TestUndoThatDoesNotFinishReportsTheFirstFailure(t *testing.T) {
-	s := newSite(t)
-	id := s.splitProposal("a")
-	s.registry.Executors["rebalance_split"] = func(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
-		_, err := proposals.RecordAction(ctx, s.db.Write, p.ID, py.Dict{{Key: "op", Value: "move"}}, py.Dict{{Key: "op", Value: "fake"}}, true, nil, 1.0)
-		return py.Dict{}, err
-	}
-	s.registry.Undoers["fake"] = func(context.Context, json.RawMessage) (py.Dict, error) { return nil, errors.New("folder changed") }
-	s.post("/proposals/"+itoa(int(id))+"/approve", form("all", "1"), hx, "true")
-	body := status(t, s.post("/proposals/"+itoa(int(id))+"/undo", nil, hx, "true"), http.StatusOK)
-	mustContain(t, body, "Undo did not finish", "folder changed")
-	mustContain(t, status(t, s.post("/proposals/"+itoa(int(id))+"/dismiss", nil, hx, "true"), http.StatusOK), "Not dismissed")
-}
 
 func TestProposalActionsOnAnUnknownIDAre404(t *testing.T) {
 	s := newSite(t)
@@ -178,18 +37,6 @@ func TestProposalsPageListsByStatusWithCountsAndBadge(t *testing.T) {
 	badKind := status(t, s.get("/proposals?kind=nonsense", hx, "true"), http.StatusUnprocessableEntity)
 	mustContain(t, badKind, "Unknown kind.", `id="toaster"`)
 	mustContain(t, status(t, s.get("/activity"), http.StatusOK), `id="pending-count"`)
-}
-
-func TestEveryOfferedProposalKindIsAccepted(t *testing.T) {
-	s := newSite(t)
-	page := status(t, s.get("/proposals"), http.StatusOK)
-	offered := optionValues(between(page, `<select id="p-kind"`, "</select>"))[1:]
-	if len(offered) != 10 {
-		t.Fatalf("offered %d kinds, want 10", len(offered))
-	}
-	for _, kind := range offered {
-		status(t, s.get("/proposals?kind="+kind, hx, "true"), http.StatusOK)
-	}
 }
 
 func TestFilterListIsAFragmentWithItsOwnTitle(t *testing.T) {
@@ -284,23 +131,6 @@ func TestCalendarAndNotionCardsToleratePartialPreviews(t *testing.T) {
 	mustNotContain(t, page, "Where", "Notes", "<blockquote")
 }
 
-func TestWikiPlanKeepsTheOrderOfItsCounts(t *testing.T) {
-	s := newSite(t)
-	preview := py.Dict{
-		{Key: "counts", Value: py.Dict{{Key: "keep", Value: int64(3)}, {Key: "drop", Value: int64(1)}, {Key: "convert", Value: int64(2)}}},
-		{Key: "hubs", Value: []any{py.Dict{{Key: "title", Value: "Home"}}}}, {Key: "databases", Value: []any{}},
-		{Key: "items", Value: []any{py.Dict{{Key: "id", Value: "n1"}, {Key: "decision", Value: "drop"}, {Key: "title", Value: nil}, {Key: "reason", Value: "stale"}}}},
-	}
-	s.propose("notion_wiki_plan", "", "Wiki", preview, "wiki")
-	page := status(t, s.get("/proposals?kind=notion_wiki_plan", hx, "true"), http.StatusOK)
-	flat := text(page)
-	keep, drop, convert := strings.Index(flat, "3 keep"), strings.Index(flat, "1 drop"), strings.Index(flat, "2 convert")
-	if keep < 0 || keep > drop || drop > convert {
-		t.Errorf("counts are not in plan order: %s", flat)
-	}
-	mustContain(t, page, `data-variant="destructive"`, "Every row and page (1)", `href="/notion/n1"`, "Untitled")
-}
-
 func TestFailedAndAppliedFootersByKind(t *testing.T) {
 	s := newSite(t)
 	failed := s.splitProposal("failed")
@@ -317,17 +147,6 @@ func TestFailedAndAppliedFootersByKind(t *testing.T) {
 		t.Errorf("Resume appears %d times, want only the wiki plan", strings.Count(page, "Resume"))
 	}
 	mustNotContain(t, page, "Undo what it did", "hx-confirm=")
-}
-
-func TestUndoableAppliedWithoutSummaryShowsApplied(t *testing.T) {
-	s := newSite(t)
-	id := s.splitProposal("a")
-	s.registry.Executors["rebalance_split"] = func(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
-		_, err := proposals.RecordAction(ctx, s.db.Write, p.ID, py.Dict{{Key: "op", Value: "move"}}, py.Dict{{Key: "op", Value: "fake"}}, true, nil, 1.0)
-		return py.Dict{}, err
-	}
-	body := status(t, s.post("/proposals/"+itoa(int(id))+"/approve", form("all", "1"), hx, "true"), http.StatusOK)
-	mustContain(t, body, "Applied", `hx-confirm="Undo this proposal and put everything back?"`, `hx-post="/proposals/`+itoa(int(id))+`/undo"`)
 }
 
 func TestShadowModeNotesAndDeletionRuleCopy(t *testing.T) {

@@ -29,8 +29,6 @@ func TierOf(t Tokens) string {
 	return TierLow
 }
 
-// CostUSD is cost_usd: the tokens priced at the tier of their prompt, plus the web searches. The explicit
-// float64 conversions keep Go from fusing a multiply into the following add, which Python never does.
 func CostUSD(t Tokens, searches int64) float64 {
 	r := RatesPerMTok[TierOf(t)]
 	total := py.Sum([]float64{

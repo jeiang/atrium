@@ -1,7 +1,0 @@
-usage: atrium agent [-h] {scheduler,run} ...
-
-positional arguments:
-  {scheduler,run}
-
-options:
-  -h, --help       show this help message and exit

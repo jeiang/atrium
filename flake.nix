@@ -12,7 +12,6 @@
     treefmt-nix.url = "github:numtide/treefmt-nix";
     treefmt-nix.inputs.nixpkgs.follows = "nixpkgs";
 
-    # Deliberately no follows: CI installs the garret client from this input's locked rev, and a different pin than garret's own cache seeding would force from-source rebuilds every run.
     garret.url = "github:jeiang/garret";
   };
 

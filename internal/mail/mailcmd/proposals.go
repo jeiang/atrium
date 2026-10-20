@@ -8,7 +8,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// ProposalsCommand is `atrium proposals`: scan-all, list, approve, dismiss and undo.
 func (o Options) ProposalsCommand() *cli.Command {
 	return group("proposals",
 		o.leaf("scan-all", func(*cli.Args) body {
@@ -56,7 +55,6 @@ func (o Options) ProposalsCommand() *cli.Command {
 	)
 }
 
-// Pipeline is the proposal pipeline over the database with every executor and undoer registered.
 func (x *Exec) Pipeline() *proposals.Pipeline {
 	return &proposals.Pipeline{DB: x.DB, Registry: x.Registry(), Now: x.opts.Now}
 }

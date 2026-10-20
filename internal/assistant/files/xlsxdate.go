@@ -283,8 +283,6 @@ func takeSeconds(s string) (whole, millis, rest string, ok bool) {
 
 var errOverflow = readError("OverflowError")
 
-// durationISO is openpyxl's ISO_DURATION branch of from_ISO8601: PT[nH][nM][n[.fff]S] at the start of the text
-// (trailing text is ignored), at least one part, shown as str(timedelta).
 func durationISO(value string) (string, error) {
 	rest, ok := strings.CutPrefix(value, "PT")
 	if !ok {

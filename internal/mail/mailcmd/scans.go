@@ -21,21 +21,18 @@ func (o Options) scanGroup(name string, scan func(x *Exec) (scanutil.Result, err
 	}))
 }
 
-// RebalanceCommand is `atrium rebalance scan`.
 func (o Options) RebalanceCommand() *cli.Command {
 	return o.scanGroup("rebalance", func(x *Exec) (scanutil.Result, error) {
 		return rebalance.Scan(x.Ctx, x.DB, x.Now(), rebalance.SuggestName(x.Cfg.ChatURL))
 	})
 }
 
-// DeletionsCommand is `atrium deletions scan`.
 func (o Options) DeletionsCommand() *cli.Command {
 	return o.scanGroup("deletions", func(x *Exec) (scanutil.Result, error) {
 		return deletions.Scan(x.Ctx, x.DB, x.Now())
 	})
 }
 
-// GmailLabelsCommand is `atrium gmail-labels scan`.
 func (o Options) GmailLabelsCommand() *cli.Command {
 	return o.scanGroup("gmail-labels", func(x *Exec) (scanutil.Result, error) {
 		return gmaillabels.Scan(x.Ctx, x.DB, x.Now())

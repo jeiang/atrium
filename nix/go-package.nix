@@ -48,7 +48,6 @@ in
         GOAMD64 = "v3";
         CGO_CFLAGS = "-O2 -mavx2";
       }
-      # sqlite-vec's NEON int8 distances pass int8x16_t to vpaddlq_u8, which GCC 14+ rejects without this flag (clang allows it); cgo's #cgo allowlist refuses the flag, so it goes here.
       // lib.optionalAttrs isAarch64 {
         CGO_CFLAGS = "-O2 -flax-vector-conversions";
       };
