@@ -217,7 +217,7 @@ func (s *service) undoWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var notice *tpl.Toast
-	_, err = s.writes.Undo(ctx, s.deps.DB.Write, id, s.now)
+	_, err = s.writes.Undo(ctx, s.deps.DB, id, s.now)
 	var refused writes.UndoError
 	switch {
 	case errors.As(err, &refused):
