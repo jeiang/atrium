@@ -1,13 +1,13 @@
 {
   lib,
-  stdenv,
   buildGo126Module,
   file,
   go-licenses,
+  removeReferencesTo,
   atrium-static,
+  sqlcipherLib,
 }: let
   root = ../.;
-  inherit (stdenv.hostPlatform) isx86_64 isAarch64;
   noticesTemplate = builtins.toFile "third-party-notices.tmpl" ''
     {{range .}}================================================================
     {{.Name}} {{.Version}} ({{.LicenseName}})
@@ -34,7 +34,7 @@ in
     vendorHash = "sha256-6lVfSTy4LhejmYJ5Qh66nRgG82tWd880D32l0XmbkU8=";
     proxyVendor = true;
     excludedPackages = ["third_party"];
-    tags = ["sqlite_fts5"];
+    tags = ["libsqlite3" "sqlite_fts5"];
     ldflags = [
       "-s"
       "-w"
@@ -42,25 +42,25 @@ in
       "-extldflags=-static"
       "-X main.version=${finalAttrs.version}"
     ];
-    env =
-      {CGO_ENABLED = "1";}
-      // lib.optionalAttrs isx86_64 {
-        GOAMD64 = "v3";
-        CGO_CFLAGS = "-O2 -mavx2";
-      }
-      // lib.optionalAttrs isAarch64 {
-        CGO_CFLAGS = "-O2 -flax-vector-conversions";
-      };
+    env = {
+      CGO_ENABLED = "1";
+      GOAMD64 = "v3";
+      CGO_CFLAGS = "-O2 -mavx2 -I${sqlcipherLib}/include";
+      CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
+    };
 
-    nativeBuildInputs = [file go-licenses];
+    nativeBuildInputs = [file go-licenses removeReferencesTo];
 
     preBuild = ''
       cp -r --no-preserve=mode ${atrium-static} internal/web/static
+      export GOFLAGS="$GOFLAGS -tags=libsqlite3,sqlite_fts5"
       go-licenses check ./... --disallowed_types=forbidden,unknown
       go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --template ${noticesTemplate} > internal/about/THIRD_PARTY_NOTICES
+      ${sqlcipherLib.appendNotices "internal/about/THIRD_PARTY_NOTICES"}
     '';
 
     postInstall = ''
+      remove-references-to -t ${sqlcipherLib.openssl.etc} $out/bin/atrium
       file -L $out/bin/atrium | tee /dev/stderr | grep -q 'statically linked'
     '';
 
@@ -68,12 +68,13 @@ in
     installCheckPhase = ''
       runHook preInstallCheck
       [ "$($out/bin/atrium --version)" = "atrium ${finalAttrs.version}" ]
+      grep -qa sqlcipher_page_cipher $out/bin/atrium
       runHook postInstallCheck
     '';
 
     meta = {
       mainProgram = "atrium";
       license = lib.licenses.mit;
-      platforms = ["x86_64-linux" "aarch64-linux"];
+      platforms = ["x86_64-linux"];
     };
   })

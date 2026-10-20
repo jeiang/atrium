@@ -5,6 +5,12 @@
     go,
     ...
   }: let
+    sqlcipherLib = pkgs.callPackage ../nix/sqlcipher.nix {};
+    cgoEnv = {
+      CGO_ENABLED = "1";
+      CGO_CFLAGS = "-I${sqlcipherLib}/include";
+      CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
+    };
     root = ../.;
     src = lib.fileset.toSource {
       inherit root;
@@ -28,7 +34,7 @@
       inherit src;
       vendorHash = "sha256-6lVfSTy4LhejmYJ5Qh66nRgG82tWd880D32l0XmbkU8=";
       proxyVendor = true;
-      env.CGO_ENABLED = "1";
+      env = cgoEnv;
       doCheck = false;
       preBuild = stageAssets;
     };
@@ -60,7 +66,7 @@
       {{.LicenseText}}
       {{end}}'';
     eachDriver = cmd: ''
-      for tags in sqlite_fts5 modernc; do
+      for tags in libsqlite3,sqlite_fts5 modernc; do
         echo "tags: $tags"
         ${cmd}
       done
@@ -92,7 +98,7 @@
         log=$TMPDIR/go-test.log
         : >"$log"
         status=0
-        for tags in sqlite_fts5 modernc; do
+        for tags in libsqlite3,sqlite_fts5 modernc; do
           echo "tags: $tags"
           if ! go test -race -tags "$tags" ./... 2>&1 | tee -a "$log"; then
             status=1
@@ -108,7 +114,8 @@
       go-licenses = goCheck "licenses" [pkgs.go-licenses] ''
         ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" go-licenses check ./... --disallowed_types=forbidden,unknown''}
         mkdir -p $out
-        GOFLAGS="$GOFLAGS -tags=sqlite_fts5" go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --template ${notices} >$out/THIRD_PARTY_NOTICES
+        GOFLAGS="$GOFLAGS -tags=libsqlite3,sqlite_fts5" go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --template ${notices} >$out/THIRD_PARTY_NOTICES
+        ${sqlcipherLib.appendNotices "$out/THIRD_PARTY_NOTICES"}
         cp $out/THIRD_PARTY_NOTICES internal/about/THIRD_PARTY_NOTICES
         test -s internal/about/THIRD_PARTY_NOTICES
       '';
@@ -131,7 +138,7 @@
           inherit src;
           nativeBuildInputs = [go pkgs.govulncheck];
           env = {
-            CGO_ENABLED = "1";
+            inherit (cgoEnv) CGO_ENABLED CGO_CFLAGS;
             GOTOOLCHAIN = "local";
             GOFLAGS = "-mod=mod";
             SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";

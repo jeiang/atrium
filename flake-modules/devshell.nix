@@ -10,7 +10,10 @@
     self',
     go,
     ...
-  }: {
+  }: let
+    sqlcipherLib = pkgs.callPackage ../nix/sqlcipher.nix {};
+    sqlcipherMusl = pkgs.pkgsStatic.callPackage ../nix/sqlcipher.nix {};
+  in {
     treefmt.config = {
       projectRootFile = "flake.nix";
       programs = {
@@ -32,18 +35,21 @@
         pkgs.govulncheck
         pkgs.go-licenses
         pkgs.pkg-config
-        pkgs.sqlite.dev
         pkgs.tailwindcss_4
       ];
       env =
         {
           CGO_ENABLED = "1";
-          GOFLAGS = "-tags=sqlite_fts5";
+          GOFLAGS = "-tags=libsqlite3,sqlite_fts5";
+          CGO_CFLAGS = "-I${sqlcipherLib}/include";
+          CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
           ATRIUM_STATIC_ASSETS = "${self'.packages.atrium-static}";
           ATRIUM_BASECOAT = "${self'.packages.atrium-static.basecoat}";
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           ATRIUM_MUSL_CC = "${pkgs.pkgsStatic.stdenv.cc}/bin/${pkgs.pkgsStatic.stdenv.cc.targetPrefix}cc";
+          ATRIUM_MUSL_CGO_CFLAGS = "-I${sqlcipherMusl}/include";
+          ATRIUM_MUSL_CGO_LDFLAGS = "-L${sqlcipherMusl}/lib";
         };
       enterShell = ''
         [ -e "$DEVENV_ROOT/internal/web/static/app.css" ] || just --justfile "$DEVENV_ROOT/justfile" assets
