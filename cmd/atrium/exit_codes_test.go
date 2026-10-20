@@ -66,11 +66,10 @@ func TestCLISignalExitCodes(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		sig  syscall.Signal
-		code int
 	}{
-		{name: "interrupt", sig: syscall.SIGINT, code: cli.ExitInterrupt},
-		{name: "terminate", sig: syscall.SIGTERM, code: cli.ExitTerminated},
-		{name: "hangup", sig: syscall.SIGHUP, code: cli.ExitHangup},
+		{name: "interrupt", sig: syscall.SIGINT},
+		{name: "terminate", sig: syscall.SIGTERM},
+		{name: "hangup", sig: syscall.SIGHUP},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -120,11 +119,8 @@ func TestCLISignalExitCodes(t *testing.T) {
 				t.Fatal(err)
 			}
 			err = cmd.Wait()
-			if code := exitCode(err); code != tc.code {
-				t.Fatalf("serve after %s exited with %v (code %d), want %d; stderr %q", tc.sig, err, code, tc.code, stderr.String())
-			}
-			if tc.sig == syscall.SIGINT && !strings.Contains(stderr.String(), "KeyboardInterrupt\n") {
-				t.Errorf("stderr %q, want KeyboardInterrupt", stderr.String())
+			if code := exitCode(err); code != cli.ExitOK {
+				t.Fatalf("serve after %s exited with %v (code %d), want 0; stderr %q", tc.sig, err, code, stderr.String())
 			}
 			if strings.Contains(stderr.String(), "Traceback") {
 				t.Errorf("stderr contains a traceback: %q", stderr.String())

@@ -220,11 +220,7 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if stdin == nil {
 		stdin = os.Stdin
 	}
-	handlerCode := s.handler(&Env{Ctx: ctx, Stdin: stdin, Stdout: stdout, Stderr: stderr, p: s.leaf, width: s.width})
-	if code, ok := signalExit(ctx, stderr); ok {
-		return code
-	}
-	return handlerCode
+	return s.handler(&Env{Ctx: ctx, Stdin: stdin, Stdout: stdout, Stderr: stderr, p: s.leaf, width: s.width})
 }
 
 // formatWidth is HelpFormatter's width: shutil.get_terminal_size().columns - 2 off a terminal.

@@ -44,6 +44,7 @@ func TestSignalsEndAFailureLikePython(t *testing.T) {
 	}{
 		{syscall.SIGINT, ExitInterrupt, "KeyboardInterrupt\n"},
 		{syscall.SIGTERM, ExitTerminated, ""},
+		{syscall.SIGHUP, ExitHangup, ""},
 	} {
 		ctx, stop := SignalContext(context.Background())
 		if err := syscall.Kill(os.Getpid(), c.sig); err != nil {
