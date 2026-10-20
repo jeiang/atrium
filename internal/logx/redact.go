@@ -2,6 +2,7 @@ package logx
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"slices"
 	"strings"
@@ -14,8 +15,10 @@ var redactor struct {
 	replacer *strings.Replacer
 }
 
+const minSecret = 8
+
 func AddSecret(value string) {
-	if value == "" {
+	if len(value) < minSecret {
 		return
 	}
 	redactor.mu.Lock()
@@ -55,7 +58,31 @@ func forms(value string) []string {
 	if raw, err := json.Marshal(value); err == nil {
 		out = append(out, string(raw[1:len(raw)-1]))
 	}
+	if ascii := asciiEscaped(value); ascii != value {
+		out = append(out, ascii)
+	}
 	return slices.DeleteFunc(out, func(f string) bool { return f == "" })
+}
+
+func asciiEscaped(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		switch {
+		case r == '"' || r == '\\':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case r < 0x20:
+			fmt.Fprintf(&b, "\\u%04x", r)
+		case r < 0x80:
+			b.WriteRune(r)
+		case r >= 0x10000:
+			r -= 0x10000
+			fmt.Fprintf(&b, "\\u%04x\\u%04x", 0xd800+(r>>10), 0xdc00+(r&0x3ff))
+		default:
+			fmt.Fprintf(&b, "\\u%04x", r)
+		}
+	}
+	return b.String()
 }
 
 func active() bool {

@@ -133,7 +133,7 @@ func deref(s *string) string {
 }
 
 func TestStoredSecretsAreRedactedFromLogsAndAgentWrites(t *testing.T) {
-	const secret = "sk-redact-money-0123456789"
+	const secret = "sk-redact-money-é-0123456789"
 	extraction := `{"kind": "purchase", "payee_raw": "` + secret + `", "amount": 10, "currency": "TTD", "date": "", "bank": "", "account_last4": "", "account_amount": null, "account_currency": "", "statement_total": null, "description": "` + secret + `", "subscription": false, "cadence": "unknown"}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
