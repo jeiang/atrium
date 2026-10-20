@@ -3,10 +3,18 @@
   stdenv,
   buildGo126Module,
   file,
+  go-licenses,
   atrium-static,
 }: let
   root = ../.;
   inherit (stdenv.hostPlatform) isx86_64 isAarch64;
+  noticesTemplate = builtins.toFile "third-party-notices.tmpl" ''
+    {{range .}}================================================================
+    {{.Name}} {{.Version}} ({{.LicenseName}})
+    ================================================================
+
+    {{.LicenseText}}
+    {{end}}'';
 in
   buildGo126Module (finalAttrs: {
     pname = "atrium";
@@ -22,11 +30,9 @@ in
         (root + "/testdata")
       ];
     };
-    # Update whenever go.sum changes.
     vendorHash = "sha256-Wt9p+M2QtfTnPUSvz2pA2bn+PIAanU+hUcCbVTMYdZk=";
     proxyVendor = true;
     excludedPackages = ["third_party"];
-
     tags = ["sqlite_fts5"];
     ldflags = [
       "-s"
@@ -46,10 +52,12 @@ in
         CGO_CFLAGS = "-O2 -flax-vector-conversions";
       };
 
-    nativeBuildInputs = [file];
+    nativeBuildInputs = [file go-licenses];
 
     preBuild = ''
       cp -r --no-preserve=mode ${atrium-static} internal/web/static
+      go-licenses check ./... --disallowed_types=forbidden,unknown
+      go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --template ${noticesTemplate} > internal/about/THIRD_PARTY_NOTICES
     '';
 
     postInstall = ''
