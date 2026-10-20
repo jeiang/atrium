@@ -27,6 +27,7 @@ in
         (root + "/cmd")
         (root + "/internal")
         (root + "/third_party")
+        (root + "/LICENSE")
         (root + "/testdata")
       ];
     };
