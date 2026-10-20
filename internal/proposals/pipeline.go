@@ -455,6 +455,11 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any)
 	if executor == nil {
 		return nil, ProposalError(fmt.Sprintf("no executor for kind %s", py.Repr(prop.Kind)))
 	}
+	if prop.Status == Failed {
+		if err := p.refuseUnresolved(ctx, id); err != nil {
+			return nil, err
+		}
+	}
 	claimed, err := p.claim(ctx, id, Approved)
 	if err != nil {
 		return nil, err
@@ -488,6 +493,22 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any)
 		return nil, err
 	}
 	return Get(settle, p.DB.Write, id)
+}
+
+// refuseUnresolved is the guard of an approval of a failed proposal: a write it logged as outcome-unknown or
+// half done may have left a copy in the mailbox, and Verify would admit the untouched source again, so the
+// operator resolves the mailbox first.
+func (p *Pipeline) refuseUnresolved(ctx context.Context, id int64) error {
+	logged, err := Actions(ctx, p.DB.Write, id)
+	if err != nil {
+		return err
+	}
+	for _, a := range logged {
+		if op, _ := a.field("op"); op != UndoOp && !a.OK && a.Error != nil && mailops.Blocks(*a.Error) {
+			return ProposalError(fmt.Sprintf("action %d has an unknown or partial outcome (%s); resolve it in the mailbox before approving again", a.ID, *a.Error))
+		}
+	}
+	return nil
 }
 
 // UndoResult is undo's outcome: Undone when every replayed undo succeeded.
@@ -552,10 +573,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		}
 		detail, err := undoer(approved, entry.Plan)
 		if err != nil {
-			text := py.ExceptionText(err)
-			if ctx.Err() != nil {
-				text = mailops.UnknownPrefix + ": " + text
-			}
+			text := mailops.UnknownText(err, py.ExceptionText(err))
 			if rerr := SettleAction(ctx, p.DB.Write, held, undoAction, nil, false, &text, p.now()); rerr != nil {
 				return UndoResult{}, rerr
 			}

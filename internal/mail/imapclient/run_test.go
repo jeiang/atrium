@@ -226,7 +226,7 @@ func watchEmptyPass() string {
 		logout
 }
 
-func startWireWatch(t *testing.T, script string, ctx context.Context, sleep func(context.Context, time.Duration), afterConnect func(int)) <-chan struct{} {
+func startWireWatch(t *testing.T, script string, ctx context.Context, sleep func(context.Context, time.Duration), afterConnect func(int), tune ...func(*conn)) <-chan struct{} {
 	t.Helper()
 	srv := imapscript.Serve(t, imapscript.MustParse(t, script))
 	dir := t.TempDir()
@@ -249,6 +249,12 @@ func startWireWatch(t *testing.T, script string, ctx context.Context, sleep func
 			return dialer.DialContext(ctx, "tcp", srv.Addr())
 		}
 		c.readTimeout = 5 * time.Second
+		for _, f := range tune {
+			f(c)
+		}
+		for _, f := range tune {
+			f(c)
+		}
 		client := mail.Gated(c, env)
 		if err := client.Connect(ctx); err != nil {
 			return nil, err

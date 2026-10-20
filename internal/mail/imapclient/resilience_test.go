@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -31,6 +32,39 @@ S: )
 S: {t} OK FETCH completed
 `
 
+const appliedVerifyBoth = `C/ ^{t} STATUS INBOX \((UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)( (UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)){3}\)$
+S: * STATUS INBOX (MESSAGES 2 UIDNEXT 303 UIDVALIDITY 7 HIGHESTMODSEQ 5)
+S: {t} OK STATUS completed
+C: {t} EXAMINE INBOX
+S: {t} OK [READ-ONLY] EXAMINE completed
+C: {t} UID SEARCH UID 301:302
+S: * SEARCH 301 302
+S: {t} OK SEARCH completed
+C/ ^{t} UID FETCH 301:302 \((UID|FLAGS|BODY\.PEEK\[HEADER\])( (UID|FLAGS|BODY\.PEEK\[HEADER\])){2}\)$
+S: * 1 FETCH (UID 301 FLAGS (\Seen) BODY[HEADER] {25}
+S: Message-ID: <m1@x.test>
+S: )
+S: * 2 FETCH (UID 302 FLAGS (\Seen) BODY[HEADER] {25}
+S: Message-ID: <m2@x.test>
+S: )
+S: {t} OK FETCH completed
+`
+
+const appliedVerifySecond = `C/ ^{t} STATUS INBOX \((UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)( (UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)){3}\)$
+S: * STATUS INBOX (MESSAGES 2 UIDNEXT 303 UIDVALIDITY 7 HIGHESTMODSEQ 5)
+S: {t} OK STATUS completed
+C: {t} EXAMINE INBOX
+S: {t} OK [READ-ONLY] EXAMINE completed
+C: {t} UID SEARCH UID 302
+S: * SEARCH 302
+S: {t} OK SEARCH completed
+C/ ^{t} UID FETCH 302 \((UID|FLAGS|BODY\.PEEK\[HEADER\])( (UID|FLAGS|BODY\.PEEK\[HEADER\])){2}\)$
+S: * 2 FETCH (UID 302 FLAGS (\Seen) BODY[HEADER] {25}
+S: Message-ID: <m2@x.test>
+S: )
+S: {t} OK FETCH completed
+`
+
 func asWriteInterrupted(t *testing.T, err error) *mail.WriteInterrupted {
 	t.Helper()
 	var wi *mail.WriteInterrupted
@@ -42,35 +76,39 @@ func asWriteInterrupted(t *testing.T, err error) *mail.WriteInterrupted {
 
 func TestDropDuringCopyHoldsAndNeverRecopies(t *testing.T) {
 	ctx := context.Background()
-	script := icloudLogin + appliedVerifyInbox + appliedList + appliedList + `C: {t} SELECT INBOX
+	script := icloudLogin + appliedVerifyBoth + appliedList + appliedList + `C: {t} SELECT INBOX
 S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 301 "Bills"
 ! close
-`
+! accept
+` + icloudLogin + appliedVerifySecond + appliedList + appliedList + `C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
+S: {t} OK [READ-WRITE] SELECT completed
+C: {t} UID COPY 302 "Misc"
+S: {t} OK [COPYUID 98 302 600] Done
+C: {t} UID STORE 302 +FLAGS.SILENT (\Deleted)
+S: {t} OK STORE completed
+C: {t} UID EXPUNGE 302
+S: * 2 EXPUNGE
+S: {t} OK EXPUNGE completed
+` + logout
 	client, _ := session(t, imapscript.MustParse(t, script), "atrium.test@icloud.com", "app-specific password", live)
-	a, d, _ := wireApplier(t, config.ICloud, client, nil, [2]any{301, "Bills"})
+	a, d, _ := wireApplier(t, config.ICloud, client, nil, [2]any{301, "Bills"}, [2]any{302, "Misc"})
 	out, err := a.ApplyAccount(ctx, config.ICloud)
 	must(t, err)
-	if out.Written != 0 || out.Failed != 1 {
+	if out.Written != 0 || out.Failed < 1 {
 		t.Fatalf("first pass %+v", out)
 	}
-	rows, err := d.Read.Query("SELECT ok, error FROM auto_actions")
-	must(t, err)
-	defer func() { _ = rows.Close() }()
-	if !rows.Next() {
-		t.Fatal("no auto_actions row")
-	}
-	var ok *int64
-	var text string
-	must(t, rows.Scan(&ok, &text))
-	if ok != nil || !strings.HasPrefix(text, mailops.UnknownPrefix) {
-		t.Fatalf("row ok=%v error=%q, want held with an unknown outcome", ok, text)
+	var held int
+	must(t, d.Read.QueryRow("SELECT COUNT(*) FROM auto_actions WHERE ok IS NULL AND error LIKE ? AND src = 'INBOX' AND dest = 'Bills'", mailops.UnknownPrefix+"%").Scan(&held))
+	if held != 1 {
+		t.Fatalf("held rows = %d, rows %q", held, actionRows(t, d))
 	}
 	out, err = a.ApplyAccount(ctx, config.ICloud)
 	must(t, err)
-	if out.Written != 0 {
-		t.Fatalf("second pass %+v", out)
+	if out.Written != 1 {
+		t.Fatalf("second pass %+v, rows %q", out, actionRows(t, d))
 	}
 }
 
@@ -197,5 +235,82 @@ C: {t} IDLE
 	changed, err := client.IdleChanges(ctx, time.Minute)
 	if changed || err == nil || !strings.Contains(err.Error(), "timed out") || time.Since(start) > 2*time.Second {
 		t.Fatalf("IdleChanges = %v, %v after %v", changed, err, time.Since(start))
+	}
+}
+
+func TestWatchReconnectsAfterASilentDropDuringIdle(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	clock := &recorder{stopAt: -1}
+	script := watchEmptyPass() + "! accept\n" +
+		icloudLogin + `C: {t} EXAMINE INBOX
+S: * 0 EXISTS
+S: {t} OK [READ-ONLY] EXAMINE completed
+C: {t} IDLE
+S: + idling
+C: DONE
+C: {t} IDLE
+! sleep 5s
+! accept
+` + watchEmptyPass() + "! accept\n" +
+		icloudLogin + `C: {t} LOGOUT
+S: * BYE Logging out
+S: {t} OK LOGOUT completed
+`
+	start := time.Now()
+	done := startWireWatch(t, script, ctx, clock.sleep, func(opened int) {
+		if opened == 4 {
+			cancel()
+		}
+	}, func(c *conn) {
+		c.idleKeepalive = 150 * time.Millisecond
+		c.readTimeout = 400 * time.Millisecond
+	})
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		cancel()
+		t.Fatal("the watch loop did not stop")
+	}
+	if want := []time.Duration{5 * time.Second}; fmt.Sprint(clock.waits) != fmt.Sprint(want) {
+		t.Fatalf("waits = %v, want %v", clock.waits, want)
+	}
+	if time.Since(start) > 4*time.Second {
+		t.Fatalf("the silent link was noticed after %v", time.Since(start))
+	}
+}
+
+func TestTapRecordsOnlyCommandsWrittenInFull(t *testing.T) {
+	server, clientSide := net.Pipe()
+	tp := newTap(clientSide, 0)
+	got := make(chan int, 4)
+	go func() {
+		buf := make([]byte, 64)
+		for {
+			n, err := server.Read(buf)
+			if err != nil {
+				return
+			}
+			got <- n
+		}
+	}()
+	if _, err := tp.Write([]byte("T1 APPEND \"Sent\" {5}\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	if tp.written("APPEND", 0) {
+		t.Fatal("an APPEND whose literal was never sent counts as written")
+	}
+	if _, err := tp.Write([]byte("hello\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !tp.written("APPEND", 0) {
+		t.Fatal("a completed APPEND does not count as written")
+	}
+	_ = server.Close()
+	if n, err := tp.Write([]byte("T2 UID COPY 1 \"Bills\"\r\n")); err == nil || n != 0 {
+		t.Fatalf("write to a closed link = %d, %v", n, err)
+	}
+	if tp.written("UID", 0) {
+		t.Fatal("a command that reached no byte counts as written")
 	}
 }

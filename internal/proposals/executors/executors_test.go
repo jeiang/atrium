@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/config"
@@ -690,6 +691,59 @@ func TestInterruptedCopyIsLoggedAsUnknownAndHeld(t *testing.T) {
 	}
 	if uids, _ := field(last.Action, "uids").([]any); len(uids) != 4 {
 		t.Fatalf("logged uids = %v", field(last.Action, "uids"))
+	}
+}
+
+func TestReApprovingAFailedProposalWithAnUnknownCopyIsRefused(t *testing.T) {
+	w := icloudWorld(t)
+	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
+	copies := 0
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			copies++
+			return &mail.WriteInterrupted{Command: "COPY", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	if done := w.apply(pid, nil); done.Status != proposals.Failed {
+		t.Fatalf("status = %s", done.Status)
+	}
+	_, err := w.pipeline.ApproveAndApply(context.Background(), pid, nil)
+	var refused proposals.ProposalError
+	if !errors.As(err, &refused) || !strings.Contains(err.Error(), "resolve it in the mailbox before approving again") {
+		t.Fatalf("second approve = %v", err)
+	}
+	if copies != 1 {
+		t.Fatalf("COPY sent %d times", copies)
+	}
+	if p, _ := proposals.Get(context.Background(), w.db.Read, pid); p.Status != proposals.Failed {
+		t.Fatalf("status after the refusal = %s", p.Status)
+	}
+}
+
+func TestSecondChunkRowFailureReturnsTheErrorWithoutPanicking(t *testing.T) {
+	w := newWorld(t, config.ICloud, func(f *mailtest.FakeClient) {
+		f.AddBox(config.Inbox, mailtest.NewBox(1))
+		bills := f.AddBox("Bills", mailtest.NewBox(3))
+		f.AddBox("Deleted Messages", mailtest.NewBox(9), `\Trash`)
+		for i := range mailops.Batch + 1 {
+			header, text := mailtest.RawWith(fmt.Sprintf("invoice %d", i), "shop@bills.test", fmt.Sprintf("m%d", i), "hello")
+			bills.Add(header, text, nil, nil)
+		}
+	})
+	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
+	if _, err := w.db.Write.Exec("CREATE TRIGGER second_chunk BEFORE INSERT ON proposal_actions WHEN NEW.error = '" + proposals.InFlightText +
+		"' AND (SELECT COUNT(*) FROM proposal_actions WHERE ok = 1 AND json_extract(action, '$.op') = 'move') >= 1 " +
+		"BEGIN SELECT RAISE(ABORT, 'ledger busy'); END"); err != nil {
+		t.Fatal(err)
+	}
+	done := w.apply(pid, nil)
+	if done.Status != proposals.Failed || !strings.Contains(fmt.Sprint(done.Result), "ledger busy") {
+		t.Fatalf("status = %s, result = %v", done.Status, done.Result)
+	}
+	var settled int
+	if err := w.db.Read.QueryRow("SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND ok = 1 AND json_extract(action, '$.op') = 'move'", pid).Scan(&settled); err != nil || settled != 1 {
+		t.Fatalf("settled move rows = %d, %v", settled, err)
 	}
 }
 

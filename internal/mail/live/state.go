@@ -469,10 +469,7 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	}
 	detail, err := undoer(safety.ApprovedWrites(ctx, fmt.Sprintf("undo-%d", id)), json.RawMessage(*plan))
 	if err != nil {
-		text := py.ExceptionText(err)
-		if ctx.Err() != nil {
-			text = mailops.UnknownPrefix + ": " + text
-		}
+		text := mailops.UnknownText(err, py.ExceptionText(err))
 		if _, uerr := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET undone_error = ? WHERE id = ?", text, id); uerr != nil {
 			return UndoResult{}, uerr
 		}

@@ -430,6 +430,26 @@ func TestWritesRefuseWhenTheSelectedUIDValidityDiffers(t *testing.T) {
 	}
 }
 
+func TestUnknownTextOnlyMarksAWriteWhoseOutcomeIsUnknown(t *testing.T) {
+	interrupted := &mail.WriteInterrupted{Command: "COPY", Err: errors.New("socket error: EOF")}
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"plain failure", errors.New("refused"), "refused"},
+		{"validity refusal", mailops.ErrValidityChanged, "UIDVALIDITY changed"},
+		{"interrupted write", interrupted, "cancelled, write outcome unknown: socket error: EOF"},
+		{"unconfirmed copy", &mailops.PartialMove{Err: interrupted, Unconfirmed: true}, "cancelled, write outcome unknown: socket error: EOF"},
+		{"expunge cut off", &mailops.PartialMove{Copied: &mail.CopyUID{}, Err: interrupted}, "copied but not expunged: socket error: EOF"},
+	}
+	for _, c := range cases {
+		if got := mailops.UnknownText(c.err, c.err.Error()); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 func TestVerifySkipsAMessageWhoseUIDValidityIsZero(t *testing.T) {
 	w := livetest.ICloud(t, "live")
 	w.Arrive("a")

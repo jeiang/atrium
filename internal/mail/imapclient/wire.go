@@ -314,10 +314,16 @@ func readResponse(buf []byte) (response, int, error) {
 // connection.
 const maxBuffered = 256 << 20
 
-// sentCommand is one command go-imap wrote: its tag and name (UID for every UID command).
+// sentCommand is one command go-imap wrote: its tag and name (UID for every UID command). done is set once the
+// bytes that end the command, its last line after any literal, were written: before that the server cannot have
+// executed it.
 type sentCommand struct {
 	tag, name string
+	done      bool
 }
+
+// sentEnd is the index in sent of a command whose last byte is at offset end of the write being recorded.
+type sentEnd struct{ index, end int }
 
 // tap records every byte go-imap reads from the connection, so the responses can be parsed as imaplib does,
 // and the tag of every command go-imap writes, so each reply is matched to its command.
@@ -336,6 +342,8 @@ type tap struct {
 	wline   []byte
 	wskip   int
 	wcont   bool
+	wcur    int
+	ends    []sentEnd
 	limit   int
 
 	writeTimeout time.Duration
@@ -368,6 +376,7 @@ func (t *tap) Read(p []byte) (int, error) {
 
 func (t *tap) Write(p []byte) (int, error) {
 	t.mu.Lock()
+	t.ends = t.ends[:0]
 	t.record(p)
 	t.writing++
 	t.mu.Unlock()
@@ -380,6 +389,11 @@ func (t *tap) Write(p []byte) (int, error) {
 		_ = t.SetWriteDeadline(time.Time{})
 	}
 	t.mu.Lock()
+	for _, e := range t.ends {
+		if e.end > n {
+			t.sent[e.index].done = false
+		}
+	}
 	t.writing--
 	if t.window == 0 {
 		t.last = time.Now()
@@ -395,26 +409,33 @@ func (t *tap) Write(p []byte) (int, error) {
 // record follows the client byte stream: a line that starts a command adds its tag to sent, and a line ending in
 // a literal marker makes the literal's bytes and the line after them part of the same command.
 func (t *tap) record(p []byte) {
-	for len(p) > 0 {
+	off := 0
+	for off < len(p) {
 		if t.wskip > 0 {
-			k := min(t.wskip, len(p))
+			k := min(t.wskip, len(p)-off)
 			t.wskip -= k
-			p = p[k:]
+			off += k
 			continue
 		}
-		i := bytes.IndexByte(p, '\n')
+		i := bytes.IndexByte(p[off:], '\n')
 		if i < 0 {
-			t.wline = append(t.wline, p...)
+			t.wline = append(t.wline, p[off:]...)
 			return
 		}
-		line := bytes.TrimSuffix(append(t.wline, p[:i]...), []byte("\r"))
-		p = p[i+1:]
+		line := bytes.TrimSuffix(append(t.wline, p[off:off+i]...), []byte("\r"))
+		off += i + 1
 		if !t.wcont {
+			t.wcur = -1
 			if tag, name, ok := commandTag(line); ok {
-				t.sent = append(t.sent, sentCommand{tag, name})
+				t.sent = append(t.sent, sentCommand{tag: tag, name: name})
+				t.wcur = len(t.sent) - 1
 			}
 		}
 		t.wskip, t.wcont = clientLiteral(line)
+		if !t.wcont && t.wcur >= 0 {
+			t.sent[t.wcur].done = true
+			t.ends = append(t.ends, sentEnd{t.wcur, off})
+		}
 		t.wline = t.wline[:0]
 	}
 }
@@ -460,6 +481,18 @@ func (t *tap) target(name string, from int) int {
 		}
 	}
 	return -1
+}
+
+// written reports whether the last command named name at or after from was written in full.
+func (t *tap) written(name string, from int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for i := len(t.sent) - 1; i >= from; i-- {
+		if t.sent[i].name == name {
+			return t.sent[i].done
+		}
+	}
+	return false
 }
 
 // sentIndex is the index of the command tagged tag at or after from, or -1.

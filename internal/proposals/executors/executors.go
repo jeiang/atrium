@@ -249,15 +249,12 @@ func (s *slot) cancelled(ctx context.Context, action py.Dict, err error) error {
 	if err == nil {
 		return nil
 	}
+	if !mailops.OutcomeUnknown(err) {
+		return err
+	}
 	text := err.Error()
 	if partial, ok := errors.AsType[*mailops.PartialMove](err); ok {
-		if !partial.Unconfirmed {
-			return err
-		}
 		text = partial.Err.Error()
-	}
-	if _, unknown := errors.AsType[*mail.WriteInterrupted](err); ctx.Err() == nil && !unknown {
-		return err
 	}
 	logged := append(slices.Clone(action), py.Pair{Key: "uids", Value: uidList(s.uids)})
 	if rerr := s.recordFailed(ctx, logged, mailops.UnknownPrefix+": "+text); rerr != nil {
@@ -361,9 +358,11 @@ func (e *Executors) moveGroup(ctx context.Context, client mail.Client, pid int64
 		}
 		moved += len(batch)
 		if next++; next < len(chunks) {
-			var err error
-			s, err = e.hold(ctx, pid, action, chunks[next])
-			return err
+			held, err := e.hold(ctx, pid, action, chunks[next])
+			if err != nil {
+				return err
+			}
+			s = held
 		}
 		return nil
 	})

@@ -68,6 +68,25 @@ func Blocks(text string) bool {
 	return strings.Contains(text, PartialPrefix) || strings.Contains(text, UnknownPrefix)
 }
 
+// OutcomeUnknown reports whether err is a write the server may or may not have executed: a command that was sent
+// and never answered, alone or as the COPY of a PartialMove.
+func OutcomeUnknown(err error) bool {
+	if _, ok := errors.AsType[*mail.WriteInterrupted](err); ok {
+		return true
+	}
+	partial, ok := errors.AsType[*PartialMove](err)
+	return ok && partial.Unconfirmed
+}
+
+// UnknownText is the ledger text of a failed write: err's text, led by UnknownPrefix when its outcome is unknown
+// and the text does not already say so.
+func UnknownText(err error, text string) string {
+	if OutcomeUnknown(err) && !Blocks(text) {
+		return UnknownPrefix + ": " + text
+	}
+	return text
+}
+
 const PartialPrefix = "copied but not expunged: "
 
 func (e *PartialMove) Error() string {

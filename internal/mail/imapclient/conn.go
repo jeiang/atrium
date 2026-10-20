@@ -260,7 +260,7 @@ func wrapCommand(name string, err error) error {
 // and a command never written is provably not applied; both stay as they are.
 func (c *conn) interrupted(command, name string, err error) error {
 	var e *Error
-	if errors.As(err, &e) && e.Kind == "abort" && c.tap.target(name, c.sentPos) >= 0 {
+	if errors.As(err, &e) && e.Kind == "abort" && c.tap.written(name, c.sentPos) {
 		return &mail.WriteInterrupted{Command: command, Err: err}
 	}
 	return err
