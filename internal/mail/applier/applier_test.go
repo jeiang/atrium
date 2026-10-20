@@ -37,11 +37,11 @@ var ctx = context.Background()
 
 type hooked struct {
 	*mailtest.FakeClient
-	selectRW func(ctx context.Context, name string) error
+	selectRW func(ctx context.Context, name string) (uint32, error)
 	copy     func(ctx context.Context, uids mail.UIDSet, dest string) (*mail.CopyUID, error)
 }
 
-func (h *hooked) SelectRW(ctx context.Context, name string) error {
+func (h *hooked) SelectRW(ctx context.Context, name string) (uint32, error) {
 	if h.selectRW != nil {
 		return h.selectRW(ctx, name)
 	}
@@ -446,6 +446,55 @@ func TestGmailDeletionPassCopiesToTrashAndUndoUntrashes(t *testing.T) {
 	}
 }
 
+func TestGmailDeletionPassRefusesBeforeCopyWhenUIDValidityDiffers(t *testing.T) {
+	w := gmail(t, "live")
+	w.arrive("doomed", arrival{labels: []string{"Receipts"}, sender: "x@spam.test"})
+	w.age("doomed", 1.0)
+	w.deleteRule(config.Gmail)
+	w.Fake.RWValidity = map[string]uint32{config.GmailAllMail: 99}
+	out := w.deletions(false)
+	want(t, "failed", out.Failed, 1)
+	want(t, "verbs", w.verbs(), []string(nil))
+	row := w.Actions()[0]
+	if row.Error == nil || *row.Error != "MailOpError: UIDVALIDITY changed" {
+		t.Fatalf("row error = %v", row.Error)
+	}
+}
+
+func TestGmailDeletionPassIgnoresATrashDuplicateWhenUIDValidityDiffers(t *testing.T) {
+	w := gmail(t, "live")
+	w.arrive("doomed", arrival{labels: []string{"Receipts"}, sender: "x@spam.test"})
+	w.age("doomed", 1.0)
+	w.deleteRule(config.Gmail)
+	orig := w.Fake.Boxes[allMail].Messages[1]
+	w.Fake.Boxes["[Gmail]/Trash"].Add(orig.Header, orig.Text, nil, nil)
+	w.Fake.RWValidity = map[string]uint32{allMail: 99}
+	out := w.deletions(false)
+	want(t, "failed", out.Failed, 1)
+	want(t, "by kind", out.ByKind, py.Dict(nil))
+	want(t, "verbs", w.verbs(), []string(nil))
+	row := w.Actions()[0]
+	if row.OK == nil || *row.OK != 0 || row.Undo != nil || row.Error == nil || *row.Error != "MailOpError: UIDVALIDITY changed" {
+		t.Fatalf("row = %+v", row)
+	}
+}
+
+func TestGmailRelabelRefusesWhenUIDValidityDiffers(t *testing.T) {
+	w := gmail(t, "live")
+	w.arrive("filed", arrival{})
+	w.decide("filed", "Receipts")
+	w.Fake.RWValidity = map[string]uint32{allMail: 99}
+	out := w.apply()
+	want(t, "failed", out.Failed, 1)
+	want(t, "written", out.Written, 0)
+	want(t, "verbs", w.verbs(), []string(nil))
+	want(t, "labels", w.Fake.Boxes[allMail].Messages[1].Labels, []string{inboxLabel})
+	row := w.Actions()[0]
+	if row.OK == nil || *row.OK != 0 || row.Undo != nil || row.After != nil || row.Error == nil || *row.Error != "MailOpError: UIDVALIDITY changed" {
+		t.Fatalf("row = %+v", row)
+	}
+}
+
 func TestWriteCapDefersTheExcessAndWarns(t *testing.T) {
 	w := icloud(t, "live")
 	w.applier.Cap = 2
@@ -798,10 +847,10 @@ func TestGmailSelectFailureDoesNotStrandOtherActions(t *testing.T) {
 	w.Decide("doomed", "delete", nil, "operator")
 	w.flagDecision("friend", 1)
 	calls := 0
-	w.client.selectRW = func(ctx context.Context, name string) error {
+	w.client.selectRW = func(ctx context.Context, name string) (uint32, error) {
 		calls++
 		if calls == 1 {
-			return errors.New("NO [SERVERBUG] try later")
+			return 0, errors.New("NO [SERVERBUG] try later")
 		}
 		return w.Fake.SelectRW(ctx, name)
 	}
@@ -1007,7 +1056,7 @@ func TestModePauseApprovalMatrix(t *testing.T) {
 						}
 					}
 					w.Fake.Writes = nil
-					err = mailops.StoreFlag(caller, w.Fake, "INBOX", []uint32{2}, seen, true)
+					err = mailops.StoreFlag(caller, w.Fake, "INBOX", 0, []uint32{2}, seen, true)
 					operator := approved || mode == config.Live
 					if (err == nil) != operator || (len(w.Fake.Writes) > 0) != operator {
 						t.Fatalf("operator write = %v %v, want %v", err, w.Fake.Writes, operator)
@@ -1036,7 +1085,7 @@ func TestPauseStopsAutomaticWritesButNotApprovalsOrUndo(t *testing.T) {
 		t.Fatal("undo refused while paused")
 	}
 	approved := safety.ApprovedWrites(ctx, "42")
-	if err := mailops.StoreFlag(approved, w.Fake, "INBOX", []uint32{2}, seen, true); err != nil {
+	if err := mailops.StoreFlag(approved, w.Fake, "INBOX", 0, []uint32{2}, seen, true); err != nil {
 		t.Fatalf("approved write while paused = %v", err)
 	}
 	want(t, "verbs", w.verbs(), []string{"STORE", "STORE"})

@@ -329,7 +329,7 @@ func (a *Applier) discard(ctx context.Context, by map[uint32]entry, uids []uint3
 
 func (a *Applier) moveGroup(ctx context.Context, client mail.Client, account string, g *group, out *Outcome) error {
 	by, remaining := g.byUID()
-	err := mailops.MoveUIDs(ctx, client, g.imapName, g.dest, remaining, func(batch []uint32, c *mail.CopyUID) error {
+	err := mailops.MoveUIDs(ctx, client, g.imapName, g.dest, g.validity, remaining, func(batch []uint32, c *mail.CopyUID) error {
 		for _, uid := range batch {
 			e := by[uid]
 			validity, destUID := copied(c, uid)
@@ -406,8 +406,21 @@ func labelUndo(g *group, uid uint32, add, remove []string) py.Dict {
 func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account string, g *group, out *Outcome) error {
 	by, uids := g.byUID()
 	for _, chunk := range mailops.Chunks(uids, mailops.Batch) {
-		if err := mailops.StoreLabels(ctx, client, g.imapName, chunk, g.added, g.removed); err != nil {
+		if err := mailops.StoreLabels(ctx, client, g.imapName, g.validity, chunk, g.added, g.removed); err != nil {
 			text := py.ExceptionText(err)
+			if errors.Is(err, mailops.ErrValidityChanged) {
+				for _, uid := range chunk {
+					if err := a.Live.Fail(ctx, by[uid].aid, text); err != nil {
+						return err
+					}
+				}
+				out.Failed += len(chunk)
+				if err := a.discard(ctx, by, uids[slices.Index(uids, chunk[len(chunk)-1])+1:]); err != nil {
+					return err
+				}
+				log.Error(fmt.Sprintf("%s: relabel in %s refused: %s", account, g.imapName, err.Error()))
+				return nil
+			}
 			actual := observedLabels(ctx, client, g.imapName, chunk)
 			for _, uid := range chunk {
 				e := by[uid]
@@ -518,13 +531,14 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 	by, uids := g.byUID()
 	for _, chunk := range mailops.Chunks(uids, mailops.Batch) {
 		var c *mail.CopyUID
-		err := client.SelectRW(ctx, g.imapName)
+		err := mailops.SelectRW(ctx, client, g.imapName, g.validity)
 		if err == nil {
 			c, err = mailops.CopyUIDs(ctx, client, g.dest, chunk)
 		}
 		if err != nil {
 			text := py.ExceptionText(err)
 			_, refused := errors.AsType[safety.WriteRefused](err)
+			refused = refused || errors.Is(err, mailops.ErrValidityChanged)
 			for _, uid := range chunk {
 				e := by[uid]
 				var validity, destUID uint32
@@ -581,7 +595,7 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 func (a *Applier) flagGroup(ctx context.Context, client mail.Client, account string, g *group, out *Outcome) error {
 	by, uids := g.byUID()
 	for _, chunk := range mailops.Chunks(uids, mailops.Batch) {
-		if err := mailops.StoreFlag(ctx, client, g.imapName, chunk, mailops.Flagged, true); err != nil {
+		if err := mailops.StoreFlag(ctx, client, g.imapName, g.validity, chunk, mailops.Flagged, true); err != nil {
 			for _, uid := range chunk {
 				if err := a.Live.Fail(ctx, by[uid].aid, py.ExceptionText(err)); err != nil {
 					return err

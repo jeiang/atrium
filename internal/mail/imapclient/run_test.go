@@ -78,6 +78,7 @@ S: Message-ID: <m1@x.test>
 S: )
 S: {t} OK FETCH completed
 ` + runList + runList + `C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 301 "Bills"
 S: {t} OK [COPYUID 5 301 1] Done

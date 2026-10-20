@@ -55,6 +55,13 @@ func must(t *testing.T, err error) {
 	}
 }
 
+func selectRW(t *testing.T, ctx context.Context, client mail.Client, name string) uint32 {
+	t.Helper()
+	validity, err := client.SelectRW(ctx, name)
+	must(t, err)
+	return validity
+}
+
 func wantError(t *testing.T, err error, kind, msg string) {
 	t.Helper()
 	var e *Error
@@ -128,7 +135,7 @@ func TestICloudSession(t *testing.T) {
 		t.Fatalf("CHANGEDSINCE = %+v", changes)
 	}
 
-	must(t, client.SelectRW(ctx, "INBOX"))
+	selectRW(t, ctx, client, "INBOX")
 	copied, err := client.Copy(ctx, mail.UIDs(301, 302), "Deleted Messages")
 	must(t, err)
 	if want := (&mail.CopyUID{UIDValidity: 1544650202, Mapping: map[uint32]uint32{301: 900, 302: 901}}); !reflect.DeepEqual(copied, want) {
@@ -188,7 +195,7 @@ func TestGmailSession(t *testing.T) {
 		t.Fatalf("X-GM-RAW: %v %v", promotions, social)
 	}
 
-	must(t, client.SelectRW(ctx, "[Gmail]/All Mail"))
+	selectRW(t, ctx, client, "[Gmail]/All Mail")
 	must(t, client.StoreLabels(ctx, mail.UIDs(101, 102), true, `Café/Re"ceipts`, `\Important`))
 	must(t, client.StoreLabels(ctx, mail.UIDs(101), false, `\Inbox`))
 	copied, err := client.Copy(ctx, mail.UIDs(101), "[Gmail]/Trash")
@@ -206,12 +213,13 @@ func TestGmailSession(t *testing.T) {
 func TestRefusedWritesSendNothing(t *testing.T) {
 	ctx := context.Background()
 	client, _ := icloud(t, icloudLogin+`C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 `+logout, shadow)
 	must(t, client.Connect(ctx))
 	set := mail.UIDs(1)
 	writes := map[string]func() error{
-		"SelectRW":         func() error { return client.SelectRW(ctx, "INBOX") },
+		"SelectRW":         func() error { _, err := client.SelectRW(ctx, "INBOX"); return err },
 		"Copy":             func() error { _, err := client.Copy(ctx, set, "Archive"); return err },
 		"StoreFlags":       func() error { return client.StoreFlags(ctx, set, true, `\Deleted`) },
 		"StoreLabels":      func() error { return client.StoreLabels(ctx, set, true, "x") },
@@ -227,7 +235,7 @@ S: {t} OK [READ-WRITE] SELECT completed
 			t.Errorf("%s in shadow mode: err %v, want a refusal", name, err)
 		}
 	}
-	must(t, client.SelectRW(safety.ApprovedWrites(ctx, "1"), "INBOX"))
+	selectRW(t, safety.ApprovedWrites(ctx, "1"), client, "INBOX")
 	client.Close()
 }
 
@@ -297,7 +305,8 @@ S: {t} NO [NONEXISTENT] Unknown
 	must(t, client.Connect(ctx))
 	_, err := client.UIDSearch(ctx, mail.SearchCriteria{})
 	wantError(t, err, "error", "command SEARCH illegal in state AUTH, only allowed in states SELECTED")
-	wantError(t, client.SelectRW(ctx, "Shared"), "readonly", `'"Shared"' is not writable`)
+	_, err = client.SelectRW(ctx, "Shared")
+	wantError(t, err, "readonly", `'"Shared"' is not writable`)
 	wantError(t, client.Noop(ctx), "readonly", "mailbox status changed to READ-ONLY")
 	wantError(t, client.Select(ctx, "INBOX"), "error", `IMAP command failed: NO [b'[NONEXISTENT] Unknown']`)
 	_, err = client.UIDFetch(ctx, mail.UIDs(1), mail.FetchItems{})
@@ -311,6 +320,7 @@ S: {t} NO [NONEXISTENT] Unknown
 func TestCopyUID(t *testing.T) {
 	ctx := context.Background()
 	client, _ := icloud(t, icloudLogin+`C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 10:11 "Bills"
 S: {t} OK [COPYUID 99 10:11 500:501] Done
@@ -325,7 +335,7 @@ S: * OK [COPYUID 8 4,6 40:41] early
 S: {t} OK [COPYUID 9 4,6 90:91] Done
 `+logout, live)
 	must(t, client.Connect(ctx))
-	must(t, client.SelectRW(ctx, "INBOX"))
+	selectRW(t, ctx, client, "INBOX")
 	steps := []struct {
 		uids []uint32
 		dest string

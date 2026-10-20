@@ -262,7 +262,7 @@ func TestGateStillRefusesOutsideApprovedWrites(t *testing.T) {
 	if _, err := mailops.EnsureFolder(safety.ApprovedWrites(ctx, "1"), w.fake, "Nope"); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.fake.SelectRW(ctx, "Bills"); !errors.As(err, &refused) {
+	if _, err := w.fake.SelectRW(ctx, "Bills"); !errors.As(err, &refused) {
 		t.Fatalf("unapproved select = %v", err)
 	}
 }
@@ -574,6 +574,25 @@ func TestGmailDeleteCopiesToTrashAndUndoRemovesTrashLabel(t *testing.T) {
 	}
 	if !slices.Equal(last.Args, []string{"-X-GM-LABELS", `\Trash`}) {
 		t.Fatalf("last store = %+v", last)
+	}
+}
+
+func TestGmailDeleteRefusesBeforeCopyWhenUIDValidityDiffers(t *testing.T) {
+	w := gmailWorld(t, []string{"X"}, []string{"X"})
+	ids := w.ids("SELECT id FROM messages ORDER BY id")
+	pid := w.propose(executors.DeletionRule, deletionPayload(w, ids, config.Gmail))
+	w.fake.RWValidity = map[string]uint32{config.GmailAllMail: 99}
+	done := w.apply(pid, nil)
+	if done.Status != proposals.Failed || field(done.Result, "error") != "MailOpError: UIDVALIDITY changed" {
+		t.Fatalf("status = %s, result = %v", done.Status, done.Result)
+	}
+	for _, wr := range w.fake.Writes {
+		if wr.Verb == "COPY" {
+			t.Fatalf("COPY sent after a UIDVALIDITY mismatch: %+v", wr)
+		}
+	}
+	if len(w.fake.Boxes["[Gmail]/Trash"].Messages) != 0 {
+		t.Fatal("trash received a copy")
 	}
 }
 

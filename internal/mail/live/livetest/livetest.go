@@ -234,7 +234,7 @@ func (w *World) File(subject, kind, dest string) int64 {
 	v := w.verified(subject)
 	id := w.begin(v, kind, &dest)
 	ctx := w.Automatic()
-	err := mailops.MoveUIDs(ctx, w.Fake, v.IMAPName, dest, []uint32{v.UID}, func(_ []uint32, copied *mail.CopyUID) error {
+	err := mailops.MoveUIDs(ctx, w.Fake, v.IMAPName, dest, v.UIDValidity, []uint32{v.UID}, func(_ []uint32, copied *mail.CopyUID) error {
 		var validity, destUID any
 		if copied != nil {
 			validity = copied.UIDValidity
@@ -261,7 +261,7 @@ func (w *World) Relabel(subject, dest string) int64 {
 	v := w.verified(subject)
 	id := w.begin(v, live.File, &dest)
 	ctx := w.Automatic()
-	if err := mailops.StoreLabels(ctx, w.Fake, v.IMAPName, []uint32{v.UID}, []string{dest}, []string{mailops.InboxLabel}); err != nil {
+	if err := mailops.StoreLabels(ctx, w.Fake, v.IMAPName, v.UIDValidity, []uint32{v.UID}, []string{dest}, []string{mailops.InboxLabel}); err != nil {
 		w.T.Fatal(err)
 	}
 	undo := py.Dict{
@@ -280,7 +280,7 @@ func (w *World) Flag(subject string) int64 {
 	v := w.verified(subject)
 	id := w.begin(v, live.Flag, nil)
 	ctx := w.Automatic()
-	if err := mailops.StoreFlag(ctx, w.Fake, v.IMAPName, []uint32{v.UID}, mailops.Flagged, true); err != nil {
+	if err := mailops.StoreFlag(ctx, w.Fake, v.IMAPName, v.UIDValidity, []uint32{v.UID}, mailops.Flagged, true); err != nil {
 		w.T.Fatal(err)
 	}
 	undo := py.Dict{
@@ -302,7 +302,7 @@ func (w *World) GmailTrash(subject string) int64 {
 		w.T.Fatal(err)
 	}
 	id := w.begin(v, live.Trash, &trash)
-	if err := w.Fake.SelectRW(ctx, v.IMAPName); err != nil {
+	if err := mailops.SelectRW(ctx, w.Fake, v.IMAPName, v.UIDValidity); err != nil {
 		w.T.Fatal(err)
 	}
 	copied, err := mailops.CopyUIDs(ctx, w.Fake, trash, []uint32{v.UID})

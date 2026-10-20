@@ -243,7 +243,7 @@ func (e *Executors) moveItems(ctx context.Context, client mail.Client, pid int64
 			{Key: "op", Value: "move"}, {Key: "account", Value: account}, {Key: "src_imap", Value: g.IMAPName},
 			{Key: "src_uidvalidity", Value: g.UIDValidity}, {Key: "dest_imap", Value: destIMAP},
 		}
-		err := mailops.MoveUIDs(ctx, client, g.IMAPName, destIMAP, uids, func(batch []uint32, copied *mail.CopyUID) error {
+		err := mailops.MoveUIDs(ctx, client, g.IMAPName, destIMAP, g.UIDValidity, uids, func(batch []uint32, copied *mail.CopyUID) error {
 			entries := make([]any, len(batch))
 			for i, u := range batch {
 				entries[i] = py.Dict{
@@ -317,7 +317,7 @@ func (e *Executors) relabelItems(ctx context.Context, client mail.Client, pid in
 				ids[i] = item.ID
 			}
 			slices.Sort(uids)
-			if err := mailops.StoreLabels(ctx, client, g.IMAPName, uids, r.Add, r.Remove); err != nil {
+			if err := mailops.StoreLabels(ctx, client, g.IMAPName, g.UIDValidity, uids, r.Add, r.Remove); err != nil {
 				return changed, e.cancelled(ctx, pid, py.Dict{{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.IMAPName},
 					{Key: "uidvalidity", Value: g.UIDValidity}, {Key: "add", Value: stringList(r.Add)}, {Key: "remove", Value: stringList(r.Remove)}}, uids, err)
 			}
@@ -347,7 +347,7 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 	trashed := 0
 	for _, g := range mailops.GroupByMailbox(items) {
 		uids, byUID := sortedUIDs(g.Items)
-		if err := client.SelectRW(ctx, g.IMAPName); err != nil {
+		if err := mailops.SelectRW(ctx, client, g.IMAPName, g.UIDValidity); err != nil {
 			return trashed, err
 		}
 		for _, batch := range mailops.Chunks(uids, mailops.Batch) {

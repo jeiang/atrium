@@ -248,13 +248,13 @@ func TestUndoRunsAsApprovedWriteInShadowAndWhilePaused(t *testing.T) {
 		t.Fatal("flag not set")
 	}
 	shadow := livetest.ICloud(t, "shadow")
-	if err := mailops.StoreFlag(shadow.Automatic(), shadow.Fake, "INBOX", []uint32{1}, flagged, true); !refused(err) {
+	if err := mailops.StoreFlag(shadow.Automatic(), shadow.Fake, "INBOX", 0, []uint32{1}, flagged, true); !refused(err) {
 		t.Fatalf("shadow automatic write = %v", err)
 	}
 	if err := w.Live.SetPaused(true); err != nil {
 		t.Fatal(err)
 	}
-	if err := mailops.StoreFlag(w.Automatic(), w.Fake, "INBOX", []uint32{1}, flagged, true); !refused(err) {
+	if err := mailops.StoreFlag(w.Automatic(), w.Fake, "INBOX", 0, []uint32{1}, flagged, true); !refused(err) {
 		t.Fatalf("paused automatic write = %v", err)
 	}
 	w.Fake.SetEnv(config.Map(map[string]string{"ATRIUM_MODE": "shadow"}))
