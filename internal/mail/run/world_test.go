@@ -35,6 +35,7 @@ type world struct {
 
 	mu     sync.Mutex
 	opened []string
+	ctxs   []context.Context
 	Fail   func(account string, n int) error
 	Wrap   func(account string, c mail.Client) mail.Client
 }
@@ -77,9 +78,10 @@ func newWorld(t *testing.T, mode string, creds map[string]string) *world {
 	return w
 }
 
-func (w *world) open(_ context.Context, account string) (mail.Client, error) {
+func (w *world) open(ctx context.Context, account string) (mail.Client, error) {
 	w.mu.Lock()
 	w.opened = append(w.opened, account)
+	w.ctxs = append(w.ctxs, ctx)
 	n := 0
 	for _, a := range w.opened {
 		if a == account {
@@ -184,4 +186,17 @@ func captureLogs(t *testing.T) *logs {
 	slog.SetDefault(slog.New(slog.NewTextHandler(l, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	return l
+}
+
+// passContext is the context the next pass hands its first connection: it ends when the pass deadline does.
+func (w *world) passContext() context.Context {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.ctxs[0]
+}
+
+func (w *world) forgetContexts() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.ctxs = nil
 }

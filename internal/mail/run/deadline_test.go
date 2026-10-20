@@ -18,16 +18,17 @@ func shortDeadline(t *testing.T, d time.Duration) {
 	t.Cleanup(func() { passDeadline = old })
 }
 
+// slowCopy holds its first COPY until the pass deadline has expired, so the expiry always follows the write's start.
 type slowCopy struct {
 	mail.Client
-	delay time.Duration
-	once  bool
+	pass context.Context
+	once bool
 }
 
 func (s *slowCopy) Copy(ctx context.Context, uids mail.UIDSet, dest string) (*mail.CopyUID, error) {
 	if !s.once {
 		s.once = true
-		time.Sleep(s.delay)
+		<-s.pass.Done()
 	}
 	return s.Client.Copy(ctx, uids, dest)
 }
@@ -46,12 +47,13 @@ func TestPassDeadlineLetsAStartedWriteFinish(t *testing.T) {
 		t.Fatalf("baseline sync = %d, %q", code, stderr)
 	}
 	w.arrive(config.ICloud, "Invoice", "a@x.test")
-	shortDeadline(t, 300*time.Millisecond)
+	shortDeadline(t, 2*time.Second)
+	w.forgetContexts()
 	w.Wrap = func(account string, c mail.Client) mail.Client {
 		if account != config.ICloud {
 			return c
 		}
-		return &slowCopy{Client: c, delay: 700 * time.Millisecond}
+		return &slowCopy{Client: c, pass: w.passContext()}
 	}
 	code, stdout, stderr := runCLI(t, context.Background(), w, credentials, "sync", "--account", "icloud")
 	if code != cli.ExitError || stdout != "" || !strings.Contains(stderr, "deadline exceeded") {
@@ -73,7 +75,7 @@ func TestPassDeadlineLetsAStartedWriteFinish(t *testing.T) {
 func TestPassDeadlineEndsAStuckStageAndReleasesTheLock(t *testing.T) {
 	w := newWorld(t, config.Live, credentials)
 	w.rule("x.test", "Bills")
-	shortDeadline(t, 200*time.Millisecond)
+	shortDeadline(t, time.Second)
 	w.Wrap = func(account string, c mail.Client) mail.Client { return stuckList{c} }
 	started := time.Now()
 	code, _, stderr := runCLI(t, context.Background(), w, credentials, "sync", "--account", "icloud")
