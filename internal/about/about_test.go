@@ -1,6 +1,7 @@
 package about
 
 import (
+	"html"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -28,12 +29,13 @@ func TestAboutPage(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("GET /about = %d: %s", response.Code, response.Body.String())
 	}
+	body := html.UnescapeString(response.Body.String())
 	for _, want := range []string{"test-version", "Licence notices", "MIT License", "Developer Certificate of Origin"} {
-		if !strings.Contains(response.Body.String(), want) {
+		if !strings.Contains(body, want) {
 			t.Errorf("GET /about does not contain %q", want)
 		}
 	}
-	if notices := strings.TrimSpace(string(mustNotices())); notices != "" && !strings.Contains(response.Body.String(), notices) {
+	if notices := strings.TrimSpace(string(mustNotices())); notices != "" && !strings.Contains(body, notices) {
 		t.Error("GET /about does not include the embedded dependency notices")
 	}
 }
