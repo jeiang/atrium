@@ -19,6 +19,8 @@
         (lib.fileset.maybeMissing (root + "/go.sum"))
         (root + "/cmd")
         (root + "/internal")
+        (root + "/tools/settingsgen")
+        (root + "/docs/config")
         (lib.fileset.maybeMissing (root + "/third_party"))
         (lib.fileset.maybeMissing (root + "/testdata"))
         (root + "/LICENSE")
@@ -30,7 +32,7 @@
       pname = "atrium-go";
       version = "0";
       inherit src;
-      vendorHash = "sha256-Wt9p+M2QtfTnPUSvz2pA2bn+PIAanU+hUcCbVTMYdZk=";
+      vendorHash = "sha256-6lVfSTy4LhejmYJ5Qh66nRgG82tWd880D32l0XmbkU8=";
       proxyVendor = true;
       env = cgoEnv;
       doCheck = false;
@@ -85,6 +87,11 @@
           echo "$unformatted" >&2
           exit 1
         fi
+      '';
+
+      settingsgen = goCheck "settingsgen" [pkgs.diffutils] ''
+        go run -tags modernc ./tools/settingsgen $TMPDIR/config
+        diff -r docs/config $TMPDIR/config
       '';
 
       go-test = goCheck "test" [] ''

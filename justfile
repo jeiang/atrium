@@ -26,6 +26,17 @@ css:
   cd internal/web/assets
   exec tailwindcss --input input.css --output ../static/app.css --watch
 
+settingsgen:
+  go run -tags modernc ./tools/settingsgen docs/config
+
+settingsgen-check:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  out=$(mktemp -d)
+  trap 'rm -rf "$out"' EXIT
+  go run -tags modernc ./tools/settingsgen "$out"
+  diff -r docs/config "$out"
+
 go-test *args="./...":
   go test -race {{args}}
 

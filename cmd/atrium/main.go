@@ -49,7 +49,7 @@ func newApp() *cli.App {
 
 func commands(clients run.Clients, now func() float64) []*cli.Command {
 	mailCmds := mailcmd.Options{Clients: clients, Now: now}
-	return []*cli.Command{
+	return pinned([]*cli.Command{
 		run.SyncCommand(clients),
 		run.WatchCommand(clients),
 		mailCmds.RulesCommand(),
@@ -80,5 +80,5 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 			web.Page{Module: moneypages.Module(moneypages.Options{}), Templates: moneypages.Templates()},
 		),
 		codemodeWorkerCommand(),
-	}
+	})
 }

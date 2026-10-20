@@ -10,15 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
-	"github.com/jeiang/atrium/internal/settings"
 )
-
-type pinSet map[string]string
-
-func (p pinSet) Pin(key string) (string, string, bool) {
-	v, ok := p[key]
-	return v, "file", ok
-}
 
 func runSecrets(t *testing.T, stdin string, args ...string) settingsRun {
 	t.Helper()
@@ -84,13 +76,12 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 		t.Errorf("secrets rows after refusal and delete = %d, %v; want 0", rows, err)
 	}
 
-	settings.Default.SetPins(pinSet{secrets.ActionLinkKey: "pinned-value"})
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	t.Setenv("ATRIUM_ACTION_LINKS_ACTION_LINK_KEY", "pinned-value")
 	if _, err := d.Write.Exec("INSERT INTO secrets (name, value, set_at, set_by) VALUES (?, 'stale', 1.0, 'cli')", secrets.ActionLinkKey); err != nil {
 		t.Fatal(err)
 	}
 	pinned := runSecrets(t, value, "set", secrets.ActionLinkKey)
-	if pinned.code != cli.ExitError || !strings.Contains(pinned.stderr, "pinned by file") || strings.Contains(pinned.stderr, value) {
+	if pinned.code != cli.ExitError || !strings.Contains(pinned.stderr, "pinned by env ATRIUM_ACTION_LINKS_ACTION_LINK_KEY") || strings.Contains(pinned.stderr, value) {
 		t.Errorf("set on a pinned secret: exit %d stderr %q", pinned.code, pinned.stderr)
 	}
 	if st := runSecrets(t, "", "status"); !strings.Contains(st.stdout, "action_link_key: pinned\n") {

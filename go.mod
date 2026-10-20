@@ -3,6 +3,7 @@ module github.com/jeiang/atrium
 go 1.26.0
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/anthropics/anthropic-sdk-go v1.82.0
 	github.com/dlclark/regexp2 v1.12.0
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
