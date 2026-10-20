@@ -158,7 +158,7 @@ func Get(ctx context.Context, q Querier, id int64) (*Proposal, error) {
 }
 
 func undoable(ctx context.Context, q Querier, p *Proposal) (bool, error) {
-	if p.Status != Applied {
+	if p.Status != Applied && p.Status != Failed {
 		return false, nil
 	}
 	return CanUndo(ctx, q, p.ID)
@@ -346,7 +346,7 @@ func CanUndo(ctx context.Context, q Querier, id int64) (bool, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
-	if err != nil || status != Applied {
+	if err != nil || (status != Applied && status != Failed) {
 		return false, err
 	}
 	loaded, err := loads(result)
@@ -362,7 +362,33 @@ func CanUndo(ctx context.Context, q Querier, id int64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if status == Failed && !recovered(logged) {
+		return false, nil
+	}
 	return len(pending(logged)) > 0, nil
+}
+
+func recovered(logged []Action) bool {
+	for _, a := range logged {
+		if op, _ := a.field("op"); op != UndoOp && !a.OK && a.Error != nil && *a.Error == InFlightText {
+			return true
+		}
+	}
+	return false
+}
+
+const StuckSeconds = 600
+
+func RecoverStuck(ctx context.Context, d *db.DB, now float64) (int64, error) {
+	failure := py.Dict{{Key: "error", Value: mailops.UnknownPrefix + ": approve interrupted; resolve the mailbox by hand before approving again"}}
+	res, err := d.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, result = ? WHERE status = ? AND EXISTS "+
+		"(SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.ok = 0 AND a.error = ? AND json_extract(a.action, '$.op') IS NOT ?) "+
+		"AND NOT EXISTS (SELECT 1 FROM proposal_actions b WHERE b.proposal_id = proposals.id AND b.ts >= ?)",
+		Failed, py.JSONDumps(failure), Approved, InFlightText, UndoOp, now-StuckSeconds)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 type Pipeline struct {
@@ -498,12 +524,15 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	if err != nil {
 		return UndoResult{}, err
 	}
-	if prop == nil || prop.Status != Applied {
+	if prop == nil || (prop.Status != Applied && prop.Status != Failed) {
 		return UndoResult{}, ProposalError(fmt.Sprintf("proposal %d is not applied", id))
 	}
 	logged, err := Actions(ctx, p.DB.Write, id)
 	if err != nil {
 		return UndoResult{}, err
+	}
+	if prop.Status == Failed && !recovered(logged) {
+		return UndoResult{}, ProposalError(fmt.Sprintf("proposal %d is not applied", id))
 	}
 	approved := scope(ctx, id)
 	out := UndoResult{Outcomes: []py.Dict{}}

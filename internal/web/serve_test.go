@@ -7,12 +7,15 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/drafts"
+	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 )
 
@@ -107,5 +110,91 @@ func TestServeRecoversStuckDraftsAndStopsOnCancel(t *testing.T) {
 	var status string
 	if err := after.Read.QueryRow("SELECT status FROM drafts").Scan(&status); err != nil || status != drafts.Unknown {
 		t.Errorf("stuck draft status = %q, %v", status, err)
+	}
+}
+
+func TestServeRecoversAStuckApprovedProposalOnlyOnceItIsOlderThanTheBound(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	ctx := context.Background()
+	const base = 1_792_080_000.0
+	var advance atomic.Int64
+	oldInterval, oldClock := recoverInterval, recoverClock
+	recoverInterval = 50 * time.Millisecond
+	recoverClock = func() float64 { return base + float64(advance.Load()) }
+	t.Cleanup(func() { recoverInterval, recoverClock = oldInterval, oldClock })
+	seed, err := db.Connect(filepath.Join(dir, "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrate(ctx, seed, filepath.Join(dir, "atrium.db")); err != nil {
+		t.Fatal(err)
+	}
+	pid, _, err := proposals.Create(ctx, seed, "rebalance_split", nil, "title", py.Dict{}, py.Dict{}, "fp", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := seed.Write.Exec("UPDATE proposals SET status = 'approved' WHERE id = ?", pid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := proposals.BeginAction(ctx, seed.Write, pid, py.Dict{{Key: "op", Value: "move"}}, base); err != nil {
+		t.Fatal(err)
+	}
+	_ = seed.Close()
+	status := func() string {
+		check, err := db.Connect(filepath.Join(dir, "atrium.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = check.Close() }()
+		var s string
+		if err := check.Read.QueryRow("SELECT status FROM proposals WHERE id = ?", pid).Scan(&s); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+
+	cancelCtx, cancel := context.WithCancel(ctx)
+	port := freePort(t)
+	done := make(chan int, 1)
+	go func() {
+		code, _, _ := runServe(t, cancelCtx, "--port", port, "--auth", "local")
+		done <- code
+	}()
+	var resp *http.Response
+	for range 100 {
+		if resp, err = http.Get("http://127.0.0.1:" + port + "/healthz"); err == nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	time.Sleep(300 * time.Millisecond)
+	if s := status(); s != proposals.Approved {
+		t.Fatalf("status inside the bound = %q, want approved", s)
+	}
+	advance.Store(proposals.StuckSeconds + 1)
+	for range 100 {
+		if status() == proposals.Failed {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if s := status(); s != proposals.Failed {
+		t.Fatalf("status past the bound = %q, want failed", s)
+	}
+	cancel()
+	select {
+	case code := <-done:
+		if code != cli.ExitOK {
+			t.Errorf("exit code %d", code)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("serve did not stop on cancel")
 	}
 }

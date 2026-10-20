@@ -1,6 +1,7 @@
 package executors
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -392,35 +393,50 @@ func (e *Executors) relabelItems(ctx context.Context, client mail.Client, pid in
 			continue
 		}
 		for _, g := range mailops.GroupByMailbox(r.Items) {
-			uids := make([]uint32, len(g.Items))
-			ids := make([]any, len(g.Items))
-			for i, item := range g.Items {
-				uids[i] = item.UID
-				ids[i] = item.ID
+			for _, chunk := range mailops.Chunks(sortedItems(g.Items), mailops.Batch) {
+				n, err := e.relabelChunk(ctx, client, pid, g, chunk, r)
+				changed += n
+				if err != nil {
+					return changed, err
+				}
 			}
-			slices.Sort(uids)
-			attempt := py.Dict{{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.IMAPName},
-				{Key: "uidvalidity", Value: g.UIDValidity}, {Key: "add", Value: stringList(r.Add)}, {Key: "remove", Value: stringList(r.Remove)}}
-			s, err := e.hold(ctx, pid, attempt, uids)
-			if err != nil {
-				return changed, err
-			}
-			if err := mailops.StoreLabels(ctx, client, g.IMAPName, g.UIDValidity, uids, r.Add, r.Remove); err != nil {
-				return changed, s.fail(ctx, attempt, err)
-			}
-			base := py.Dict{
-				{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.IMAPName}, {Key: "uidvalidity", Value: g.UIDValidity},
-				{Key: "uids", Value: uidList(uids)}, {Key: "ids", Value: ids},
-			}
-			undo := append(slices.Clone(base), py.Pair{Key: "add", Value: stringList(r.Remove)}, py.Pair{Key: "remove", Value: stringList(r.Add)})
-			action := append(slices.Clone(base), py.Pair{Key: "add", Value: stringList(r.Add)}, py.Pair{Key: "remove", Value: stringList(r.Remove)})
-			if err := s.record(ctx, action, undo); err != nil {
-				return changed, err
-			}
-			changed += len(g.Items)
 		}
 	}
 	return changed, nil
+}
+
+func sortedItems(items []mailops.Verified) []mailops.Verified {
+	sorted := slices.Clone(items)
+	slices.SortFunc(sorted, func(a, b mailops.Verified) int { return cmp.Compare(a.UID, b.UID) })
+	return sorted
+}
+
+func (e *Executors) relabelChunk(ctx context.Context, client mail.Client, pid int64, g mailops.Group, chunk []mailops.Verified, r mailops.Relabel) (int, error) {
+	uids := make([]uint32, len(chunk))
+	ids := make([]any, len(chunk))
+	for i, item := range chunk {
+		uids[i] = item.UID
+		ids[i] = item.ID
+	}
+	attempt := py.Dict{{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.IMAPName},
+		{Key: "uidvalidity", Value: g.UIDValidity}, {Key: "add", Value: stringList(r.Add)}, {Key: "remove", Value: stringList(r.Remove)}}
+	s, err := e.hold(ctx, pid, attempt, uids)
+	if err != nil {
+		return 0, err
+	}
+	if err := mailops.StoreLabels(ctx, client, g.IMAPName, g.UIDValidity, uids, r.Add, r.Remove); err != nil {
+		return 0, s.fail(ctx, attempt, err)
+	}
+	base := py.Dict{
+		{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.IMAPName}, {Key: "uidvalidity", Value: g.UIDValidity},
+		{Key: "uids", Value: uidList(uids)}, {Key: "ids", Value: ids},
+	}
+	undo := append(slices.Clone(base), py.Pair{Key: "add", Value: stringList(r.Remove)}, py.Pair{Key: "remove", Value: stringList(r.Add)})
+	action := append(slices.Clone(base), py.Pair{Key: "add", Value: stringList(r.Add)}, py.Pair{Key: "remove", Value: stringList(r.Remove)})
+	if err := s.record(ctx, action, undo); err != nil {
+		return 0, err
+	}
+	return len(chunk), nil
 }
 
 func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int64, account string, items []mailops.Verified) (int, error) {

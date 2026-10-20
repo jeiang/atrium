@@ -18,7 +18,11 @@ import (
 
 func startServe(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	return startServeIn(t, t.TempDir())
+}
+
+func startServeIn(t *testing.T, dir string) string {
+	t.Helper()
 	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	t.Setenv("ATRIUM_PUBLIC_HOST", "")
