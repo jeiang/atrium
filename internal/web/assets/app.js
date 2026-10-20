@@ -404,6 +404,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const root = workspace();
   if (!root) return;
   const stored = Number(localStorage.getItem(PANEL_WIDTH_KEY));
+  if (stored >= PANEL_MIN) root.style.setProperty("--panel-w", `${stored}px`);
   const handle = document.getElementById("panel-handle");
   if (!handle) return;
   const panel = document.getElementById("panel");
