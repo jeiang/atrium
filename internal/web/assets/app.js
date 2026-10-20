@@ -25,6 +25,7 @@ document.addEventListener("htmx:historyRestore", () => {
 
 const dialogOpeners = new WeakMap();
 let panelOpener = null;
+const panelInert = new Map();
 
 const loadingForm = () => {
   const status = document.createElement("div");
@@ -60,7 +61,7 @@ document.addEventListener("htmx:beforeRequest", (event) => {
     if (!dialog.open) dialog.showModal();
     if (opener && opener.id) dialogOpeners.set(dialog, opener.id);
     dialog.setAttribute("aria-busy", "true");
-    dialog.replaceChildren(loadingForm());
+    if (target === dialog && !dialog.contains(opener)) dialog.replaceChildren(loadingForm());
   } else if (event.detail.boosted) {
     document.querySelectorAll("dialog[open]").forEach((openDialog) => openDialog.close());
   }
@@ -76,9 +77,11 @@ document.addEventListener("htmx:afterSwap", (event) => {
 document.addEventListener("close", (event) => {
   const dialog = event.target;
   if (!dialog.matches || !dialog.matches("dialog")) return;
+  dialog.removeAttribute("aria-busy");
   const opener = dialogOpeners.get(dialog);
   dialogOpeners.delete(dialog);
-  const returnTarget = (opener && document.getElementById(opener)) ||
+  if (!opener) return;
+  const returnTarget = document.getElementById(opener) ||
     document.querySelector("[data-focus-fallback]") ||
     document.getElementById("content");
   if (returnTarget) returnTarget.focus();
@@ -104,7 +107,8 @@ const focusFallback = (target) => {
 
 document.addEventListener("htmx:afterRequest", (event) => {
   const form = event.detail.elt;
-  const succeeded = event.detail.xhr.status < 400;
+  const status = event.detail.xhr.status;
+  const succeeded = status >= 200 && status < 400;
   if (form.matches && form.matches("form[data-reset]") && succeeded) form.reset();
   if (form.matches && form.matches("button[data-suggestion]") && succeeded) {
     const item = form.closest("li");
@@ -337,15 +341,20 @@ const panelOpen = (open, opener = document.activeElement, restoreFocus = true) =
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-modal", "true");
     ["#thread", "#panel-handle", "main > header", "#sidebar"].forEach((selector) => {
-      document.querySelector(selector)?.setAttribute("inert", "");
+      const target = document.querySelector(selector);
+      if (!target) return;
+      if (!panelInert.has(target)) panelInert.set(target, target.hasAttribute("inert"));
+      target.setAttribute("inert", "");
     });
     panel.querySelector('[role="tab"][aria-selected="true"]')?.focus();
   } else {
     panel.removeAttribute("role");
     panel.removeAttribute("aria-modal");
-    ["#thread", "#panel-handle", "main > header", "#sidebar"].forEach((selector) => {
-      document.querySelector(selector)?.removeAttribute("inert");
+    panelInert.forEach((wasInert, target) => {
+      if (wasInert) target.setAttribute("inert", "");
+      else target.removeAttribute("inert");
     });
+    panelInert.clear();
     const returnTo = panelOpener?.isConnected ? panelOpener : document.getElementById("panel-toggle");
     panelOpener = null;
     if (restoreFocus && returnTo) returnTo.focus();
@@ -391,24 +400,30 @@ document.addEventListener("DOMContentLoaded", () => {
   const root = workspace();
   if (!root) return;
   const stored = Number(localStorage.getItem(PANEL_WIDTH_KEY));
-  if (stored >= PANEL_MIN) root.style.setProperty("--panel-w", `${stored}px`);
   const handle = document.getElementById("panel-handle");
   if (!handle) return;
+  const panel = document.getElementById("panel");
+  const measuredWidth = () => panel?.getBoundingClientRect().width || stored || 384;
+  const updateAria = (width) => {
+    const max = Math.floor(root.getBoundingClientRect().width * 0.6);
+    const clamped = Math.min(Math.max(width, PANEL_MIN), max);
+    handle.setAttribute("aria-valuemax", String(max));
+    handle.setAttribute("aria-valuenow", String(clamped));
+    handle.setAttribute("aria-valuetext", `${clamped} pixels`);
+  };
   const apply = (width) => {
     const max = Math.floor(root.getBoundingClientRect().width * 0.6);
     const clamped = Math.min(Math.max(width, PANEL_MIN), max);
     root.style.setProperty("--panel-w", `${clamped}px`);
-    handle.setAttribute("aria-valuemax", String(max));
-    handle.setAttribute("aria-valuenow", String(clamped));
-    handle.setAttribute("aria-valuetext", `${clamped} pixels`);
+    updateAria(clamped);
     return clamped;
   };
-  apply(parseFloat(getComputedStyle(root).getPropertyValue("--panel-w")) || 384);
+  updateAria(measuredWidth());
   handle.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     handle.setPointerCapture(event.pointerId);
     const right = root.getBoundingClientRect().right;
-    let width = parseFloat(getComputedStyle(root).getPropertyValue("--panel-w"));
+    let width = measuredWidth();
     const move = (e) => { width = apply(right - e.clientX); };
     const stop = () => {
       handle.removeEventListener("pointermove", move);
@@ -422,7 +437,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const delta = { ArrowLeft: 24, ArrowRight: -24 }[event.key];
     if (!delta) return;
     event.preventDefault();
-    const width = apply(parseFloat(getComputedStyle(root).getPropertyValue("--panel-w")) + delta);
+    const width = apply(measuredWidth() + delta);
     localStorage.setItem(PANEL_WIDTH_KEY, String(Math.round(width)));
   });
 });
@@ -434,7 +449,7 @@ document.addEventListener("keydown", (event) => {
 
 const setBusy = (busy) => {
   const announcer = document.getElementById("transcript-announcer");
-  if (announcer && busy) announcer.textContent = "Working. Stop is available.";
+  if (announcer) announcer.textContent = busy ? "Working. Stop is available." : "";
   const form = document.getElementById("composer");
   if (!form) return;
   form.querySelector("[data-stop]").hidden = !busy;
@@ -549,7 +564,7 @@ const connectLive = (li) => {
   // replaced by what the journal says: the run partial is the finished transcript, or a fresh live view that
   // reconnects and replays the run's events when the run is still going.
   let settled = false;
-  const settle = () => {
+  const settle = (completed = false) => {
     if (settled) return;
     settled = true;
     source.close();
@@ -558,11 +573,11 @@ const connectLive = (li) => {
     refreshWork();
     document.querySelectorAll(`[data-live-user="${runId}"]`).forEach((bubble) => bubble.remove());
     if (li.isConnected) {
-      li.dataset.announceReady = "true";
+      if (completed) li.dataset.announceReady = "true";
       htmx.trigger(li, "run-done");
     }
   };
-  on("done", settle);
+  on("done", () => settle(true));
   source.onerror = () => setTimeout(settle, RETRY_MS);
   setBusy(true);
 };
