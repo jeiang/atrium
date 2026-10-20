@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 )
 
 func TestServeRejectsInvalidTimezoneBeforeListening(t *testing.T) {
+	t.Setenv("ATRIUM_DB", filepath.Join(t.TempDir(), "atrium.db"))
 	t.Setenv("ATRIUM_TZ", "Mars/Base")
 	port := freePort(t)
 	code, _, stderr := runServe(t, context.Background(), "--port", port, "--auth", "local")

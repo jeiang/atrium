@@ -6,7 +6,7 @@
 
 
 {{define "scheduled_list"}}
-{{with .toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
+{{with opt . "toast" nil}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
 <div id="scheduled-list" class="flex flex-col gap-8">
   <section class="flex flex-col gap-3" aria-labelledby="schedules-h">
     <h2 id="schedules-h" class="text-sm font-medium" tabindex="-1" data-focus-fallback>Schedules</h2>
