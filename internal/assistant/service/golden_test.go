@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
@@ -20,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
@@ -361,7 +361,7 @@ var scenarios = map[string]func(t *testing.T, r *replay){
 		r.chat(thread, "are you there?", threads.Chat)
 	},
 	"cache_ttl_1h": func(t *testing.T, r *replay) {
-		if err := budget.SetSetting(t.Context(), r.d.Write, loop.CacheTTLKey, "1h"); err != nil {
+		if err := settings.Default.Set(t.Context(), r.d.Write, loop.CacheTTLKey, "1h", 0); err != nil {
 			t.Fatal(err)
 		}
 		r.start(goldenNow)

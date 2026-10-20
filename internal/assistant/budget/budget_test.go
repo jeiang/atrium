@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const now = 1_780_000_000.0
@@ -150,5 +151,72 @@ func TestSettings(t *testing.T) {
 	}
 	if _, err := budget.MonthlyBudget(ctx, d.Read); err == nil || err.Error() != "could not convert string to float: 'lots'" {
 		t.Errorf("a stored budget that is not a number: %v", err)
+	}
+}
+
+func TestBudgetWrittenThroughTheRegistryIsWhatTheReadersUse(t *testing.T) {
+	d := dbtest.Schema(t)
+	ctx := t.Context()
+	spend(t, d, 75, now)
+	if _, err := budget.Check(ctx, d.Write, now, spain, false); err == nil {
+		t.Fatal("the default budget of 75 allows chat at 100%")
+	}
+	if err := settings.Default.Set(ctx, d.Write, budget.BudgetKey, "200", 0); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := budget.MonthlyBudget(ctx, d.Read); err != nil || got != 200 {
+		t.Errorf("budget after the write = %v, %v", got, err)
+	}
+	if _, err := budget.Check(ctx, d.Write, now, spain, false); err != nil {
+		t.Errorf("chat after raising the budget: %v", err)
+	}
+	if err := settings.Default.Set(ctx, d.Write, budget.UnattendedKey, "0.3", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := budget.Check(ctx, d.Write, now, spain, true); err == nil {
+		t.Error("unattended runs at 37% of the budget pass a 30% share")
+	}
+}
+
+type pinned map[string]string
+
+func (p pinned) Pin(key string) (string, string, bool) {
+	v, ok := p[key]
+	return v, "test pin", ok
+}
+
+func TestPinnedBudgetBeatsTheDatabaseAndRefusesWrites(t *testing.T) {
+	d := dbtest.Schema(t)
+	ctx := t.Context()
+	if err := budget.SetSetting(ctx, d.Write, budget.BudgetKey, 200); err != nil {
+		t.Fatal(err)
+	}
+	settings.Default.SetPins(pinned{budget.BudgetKey: "10"})
+	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	if got, err := budget.MonthlyBudget(ctx, d.Read); err != nil || got != 10 {
+		t.Errorf("pinned budget = %v, %v", got, err)
+	}
+	var refused *settings.PinnedError
+	if err := settings.Default.Set(ctx, d.Write, budget.BudgetKey, "50", 0); !errors.As(err, &refused) || refused.Source != "test pin" {
+		t.Errorf("write over a pin: %v", err)
+	}
+}
+
+func TestBudgetValidationMessageIsTheSameForEveryCaller(t *testing.T) {
+	d := dbtest.Schema(t)
+	ctx := t.Context()
+	const want = "monthly_budget_usd must be greater than 0"
+	for _, value := range []string{"0", "-5"} {
+		form := settings.Default.Validate(budget.BudgetKey, value)
+		cli := settings.Default.Set(ctx, d.Write, budget.BudgetKey, value, 0)
+		if form == nil || cli == nil || form.Error() != want || cli.Error() != want {
+			t.Errorf("value %q: validate %v, set %v, want %q", value, form, cli, want)
+		}
+	}
+	if err := settings.Default.Set(ctx, d.Write, budget.BudgetKey, "lots", 0); err == nil || err.Error() != "monthly_budget_usd must be a number" {
+		t.Errorf("non-number: %v", err)
+	}
+	if got, err := budget.MonthlyBudget(ctx, d.Read); err != nil || got != 75 {
+		t.Errorf("refused writes changed the budget to %v, %v", got, err)
 	}
 }

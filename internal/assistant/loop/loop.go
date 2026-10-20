@@ -28,11 +28,8 @@ import (
 
 const (
 	Model           = pricing.Model
-	MaxSteps        = 24
 	MaxTokens       = 16384
 	MaxTokensDeep   = 65536
-	MaxRunCostUSD   = 2.0
-	CacheTTLKey     = "cache_ttl_chat"
 	Research        = "research"
 	webSearchResult = "web_search_tool_result"
 
@@ -169,11 +166,17 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	ttl := prompts.TTL5m
 	if kind == tool.Chat {
-		if stored, ok, err := budget.GetSetting(ctx, d.Read, CacheTTLKey); err != nil {
+		if ttl, err = cacheTTL(ctx, d.Read); err != nil {
 			return nil, err
-		} else if ok {
-			ttl = stored
 		}
+	}
+	steps, err := maxSteps(ctx, d.Read)
+	if err != nil {
+		return nil, err
+	}
+	maxCost, err := maxRunCost(ctx, d.Read)
+	if err != nil {
+		return nil, err
 	}
 	limits := actx.LimitsFor(threads.ContextLimitOf(*thread))
 	req, err := r.request(ctx, d.Read, *thread, kind, found.Effort, tools, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), allow, limits)
@@ -199,7 +202,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
-		writer: writer, env: env, steps: MaxSteps, maxCost: MaxRunCostUSD, savings: actx.CommitSavings,
+		writer: writer, env: env, steps: steps, maxCost: maxCost, savings: actx.CommitSavings,
 		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch},
 	}
 	if o.Limits.MaxSteps != nil {

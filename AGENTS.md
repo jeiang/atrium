@@ -150,6 +150,26 @@ and backups; nothing of that lives here.
 - `internal/config/`: every environment variable with the Python names,
   defaults and errors; paths beside `ATRIUM_DB`; `ATRIUM_MODE` is read live
   on every call; `ATRIUM_TZ` has one accessor.
+- `internal/settings/`: the settings registry. A module adds its keys to
+  `settings.Default` from `init` with `settings.MustRegister`; a `Def` has a
+  key, module, type (`Enum` carries `Choices`), default, optional `Check`,
+  class (bootstrap, secret, ui, advanced, fixed, cap), secret and restart
+  flags, `Scopes` (a subset of instance and thread) and, with the thread
+  scope, the `threads` column that holds the thread value. Only ui, advanced
+  and cap keys have scopes; the rest resolve to a pin or the default.
+  `Resolve(ctx, q, key, thread)` is pin, then thread, then instance
+  (`settings` table row), then default; a `cap` key takes the lower of the
+  thread value and the instance value (the default when none is stored); a
+  level outside the key's scopes is a `*ScopeError` and a stray row there is
+  ignored. `PinSource` is how deploy-time config pins a key: a pinned key
+  resolves to the pin (`Resolved.Pinned`, `PinSource`) and `Set` refuses it
+  at every level with `*PinnedError`. `Validate(key, value)` is the one
+  validation per key; the UI form and the CLI both return its message, and
+  `Set` runs it before writing. A reader never reads the `settings` table for
+  a registered key itself: it calls `Resolve`; a stored value that does not
+  parse is the reader's error, as in Phase A. Registered so far:
+  `monthly_budget_usd` (75), `budget_unattended_share` (0.8),
+  `cache_ttl_chat` (`5m`), `max_steps` (24), `max_run_cost_usd` (2).
 - `internal/logx/`: `log/slog` to the journal when stderr is the journal
   stream, the Python `asctime name level message` text format otherwise.
   Logger names become `COMPONENT`; attribute keys are upper-case
