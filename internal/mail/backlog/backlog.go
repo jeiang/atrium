@@ -25,11 +25,11 @@ var log = logx.Logger("atrium.backlog")
 const Kind = "inbox_backlog"
 
 const candidates = "SELECT m.id, m.subject, m.from_name, m.from_addr, m.date_ts, d.dest " +
-	"FROM messages m JOIN decisions d ON d.id = (SELECT MAX(x.id) FROM decisions x WHERE x.message_id = m.id) " +
+	"FROM messages m JOIN mailboxes mb ON mb.id = m.mailbox_id JOIN decisions d ON d.id = (SELECT MAX(x.id) FROM decisions x WHERE x.message_id = m.id) " +
 	"WHERE m.account = :account AND m.in_inbox = 1 AND m.seen = 1 AND m.flagged = 0 AND m.sent = 0 " +
 	"AND m.gone_at IS NULL AND d.action = 'file' AND d.dest IS NOT NULL " +
 	"AND m.id IN (SELECT message_id FROM live_baseline) " +
-	"AND " + live.NoNewCorrection + " AND " + live.NotBlocked + " ORDER BY m.id"
+	"AND " + live.NoNewCorrection + " AND " + live.NotBlocked + " AND NOT " + mailops.UnresolvedSQL + " ORDER BY m.id"
 
 // Error is BacklogError.
 type Error string

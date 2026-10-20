@@ -407,9 +407,7 @@ func (p *Pipeline) now() float64 {
 
 // unresolvedSQL matches a proposal that has a failed write whose outcome is unknown or half done, in the form of
 // mailops.Blocks over proposal_actions; an undo's own failure does not count.
-const unresolvedSQL = "EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.ok = 0 " +
-	"AND json_extract(a.action, '$.op') IS NOT 'undo' AND (instr(a.error, '" + mailops.UnknownPrefix + "') > 0 OR instr(a.error, '" +
-	mailops.PartialPrefix + "') > 0))"
+var unresolvedSQL = "EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND (" + mailops.BlockingActionSQL("a") + "))"
 
 func (p *Pipeline) claim(ctx context.Context, id int64, status string) (bool, error) {
 	res, err := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, decided_ts = ? WHERE id = ? AND status IN ('pending', 'failed') AND NOT "+unresolvedSQL,

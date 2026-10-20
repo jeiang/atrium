@@ -103,7 +103,10 @@ type conn struct {
 	inflight      *inflight
 }
 
-type inflight struct{ command, name string }
+type inflight struct {
+	command, name string
+	from          int
+}
 
 var errNotConnected = errors.New("IMAP client is not connected")
 
@@ -121,7 +124,7 @@ func (c *conn) await(ctx context.Context, fn func() error) error {
 			if v := recover(); v != nil {
 				t.kill(fmt.Errorf("panic: %v", v))
 				err := fmt.Errorf("imapclient: panic reading the server's reply: %v", v)
-				if w := c.inflight; w != nil && t.written(w.name, c.sentPos) {
+				if w := c.inflight; w != nil && t.written(w.name, w.from) {
 					err = &mail.WriteInterrupted{Command: w.command, Err: err}
 				}
 				c.inflight = nil
@@ -270,7 +273,7 @@ func wrapCommand(name string, err error) error {
 
 // markWrite names the write command in flight, so a panic while its reply is read is reported as an unknown
 // outcome; await clears it when the command returns.
-func (c *conn) markWrite(command, name string) { c.inflight = &inflight{command, name} }
+func (c *conn) markWrite(command, name string) { c.inflight = &inflight{command, name, c.sentPos} }
 
 // ignoreAfterReply drops go-imap's own error once the server's tagged OK has been parsed: the write ran, and an
 // error would make a caller retry it.

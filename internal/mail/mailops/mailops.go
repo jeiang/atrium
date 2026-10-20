@@ -34,7 +34,25 @@ const (
 	ReasonUIDValidity = "uidvalidity"
 	ReasonMissing     = "missing"
 	ReasonMsgID       = "msgid"
+	ReasonUnresolved  = "unresolved"
 )
+
+// BlockingActionSQL is the condition on a proposal_actions row aliased alias: a failed write, not an undo, whose
+// text Blocks.
+func BlockingActionSQL(alias string) string {
+	return alias + ".ok = 0 AND json_extract(" + alias + ".action, '$.op') IS NOT 'undo' AND (instr(" + alias + ".error, '" +
+		UnknownPrefix + "') > 0 OR instr(" + alias + ".error, '" + PartialPrefix + "') > 0)"
+}
+
+// UnresolvedSQL is true for a message (aliases m for messages and mb for its mailbox) named by a blocking
+// proposal_actions row of any proposal: by its uids, or by the copied mapping of a partial move. A write whose
+// outcome is unknown may have left a copy, and the untouched source would be copied again.
+const UnresolvedSQL = "(EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.uids') u WHERE " +
+	"u.value = m.uid AND COALESCE(json_extract(pa.action, '$.src_uidvalidity'), json_extract(pa.action, '$.uidvalidity')) = m.uidvalidity " +
+	"AND COALESCE(json_extract(pa.action, '$.src_imap'), json_extract(pa.action, '$.imap_name')) = mb.imap_name) OR " +
+	"EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.copied') u WHERE " +
+	"u.key = CAST(m.uid AS TEXT) AND json_extract(pa.action, '$.src_uidvalidity') = m.uidvalidity " +
+	"AND json_extract(pa.action, '$.src_imap') = mb.imap_name))"
 
 var trashNames = map[string]bool{"deleted messages": true, "deleted items": true, "trash": true, "bin": true}
 
@@ -219,8 +237,9 @@ func Verify(ctx context.Context, q Querier, client mail.Client, account string, 
 		var gone sql.NullFloat64
 		var uid, validity int64
 		var digest, imapName string
-		err := q.QueryRowContext(ctx, "SELECT m.gone_at, m.uid, m.uidvalidity, m.digest, mb.imap_name FROM messages m "+
-			"JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE m.id = ?", snap.ID).Scan(&gone, &uid, &validity, &digest, &imapName)
+		var unresolved bool
+		err := q.QueryRowContext(ctx, "SELECT m.gone_at, m.uid, m.uidvalidity, m.digest, mb.imap_name, "+UnresolvedSQL+" FROM messages m "+
+			"JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE m.id = ?", snap.ID).Scan(&gone, &uid, &validity, &digest, &imapName, &unresolved)
 		reason := ""
 		switch {
 		case errors.Is(err, sql.ErrNoRows) || err == nil && gone.Valid:
@@ -231,6 +250,8 @@ func Verify(ctx context.Context, q Querier, client mail.Client, account string, 
 			reason = ReasonMoved
 		case digest != snap.Digest:
 			reason = ReasonChanged
+		case unresolved:
+			reason = ReasonUnresolved
 		}
 		if reason != "" {
 			skipped = append(skipped, Skip{snap.ID, reason})

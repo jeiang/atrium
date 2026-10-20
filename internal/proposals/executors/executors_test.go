@@ -752,6 +752,43 @@ func TestRescanNeverReopensAProposalWithAnUnknownCopy(t *testing.T) {
 	}
 }
 
+func TestANewProposalNeverRecopiesAMessageWithAnUnknownCopy(t *testing.T) {
+	w := icloudWorld(t)
+	ids := w.messageIDs("Bills")
+	payload := w.splitPayload(ids, "Bills/Shop")
+	pidA := w.propose(executors.RebalanceSplit, payload)
+	copies := 0
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			copies++
+			return &mail.WriteInterrupted{Command: "COPY", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	if done := w.apply(pidA, nil); done.Status != proposals.Failed {
+		t.Fatalf("status = %s", done.Status)
+	}
+	account := w.account
+	pidB, ok, err := proposals.Create(context.Background(), w.db, executors.RebalanceSplit, &account, "again", payload, py.Dict{}, "fp-b", w.clock)
+	if err != nil || !ok {
+		t.Fatalf("create B = %v, %v", ok, err)
+	}
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			copies++
+		}
+		return nil
+	}
+	done := w.apply(pidB, nil)
+	if copies != 1 {
+		t.Fatalf("COPY sent %d times across both proposals; B = %s %v", copies, done.Status, done.Result)
+	}
+	skipped, _ := field(done.Result, "skipped").([]any)
+	if len(skipped) != len(ids) {
+		t.Fatalf("skipped = %v", field(done.Result, "skipped"))
+	}
+}
+
 func TestSecondChunkRowFailureReturnsTheErrorWithoutPanicking(t *testing.T) {
 	w := newWorld(t, config.ICloud, func(f *mailtest.FakeClient) {
 		f.AddBox(config.Inbox, mailtest.NewBox(1))
