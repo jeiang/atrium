@@ -194,6 +194,7 @@ func (w *Watcher) Account(ctx context.Context, account string) {
 		if err == nil || ctx.Err() != nil {
 			continue
 		}
+		backoff = NextBackoff(backoff)
 		reason := "watch failed"
 		if ConnectionLost(err) {
 			reason = "connection lost"

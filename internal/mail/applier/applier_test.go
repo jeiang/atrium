@@ -1142,7 +1142,7 @@ func TestProtectedAndUnsafeDestinationsAreSkipped(t *testing.T) {
 		t.Fatalf("outcome %+v", out)
 	}
 	for _, action := range w.Actions() {
-		if action.Dest != `Receipts\Q` {
+		if str(action.Dest) != `Receipts\Q` {
 			want(t, "error "+str(action.Dest), str(action.Error), "skipped: unsafe destination")
 		}
 	}
