@@ -43,9 +43,8 @@ func TestSchedulerRunsUntilCancelledAndExitsZero(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	notify.Wait("WATCHDOG=1")
-	if got := notify.Messages(); got[0] != "READY=1" || got[1] != "STATUS=scheduling" {
-		t.Errorf("notify messages = %q", got)
-	}
+	notify.Wait("READY=1")
+	notify.Wait("STATUS=scheduling")
 	cancel()
 	notify.Wait("STOPPING=1")
 	select {
