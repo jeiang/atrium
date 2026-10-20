@@ -322,6 +322,58 @@ func TestSMTPFailureRevertsToDraft(t *testing.T) {
 	}
 }
 
+func TestSMTPFailureAfterDataIsUnknownNeverResent(t *testing.T) {
+	for _, c := range []struct {
+		name, dropAt, final string
+		status              string
+		result              string
+	}{
+		{"drop after body", "BODY", "", drafts.Unknown, "send outcome unknown: Connection unexpectedly closed"},
+		{"final 554", "", "554 5.7.0 Message rejected", drafts.Draft, "send failed: (554, b'5.7.0 Message rejected')"},
+		{"final 451", "", "451 4.3.0 Try again later", drafts.Draft, "send failed: (451, b'4.3.0 Try again later')"},
+		{"drop before DATA", "DATA", "", drafts.Draft, "send failed: Connection unexpectedly closed"},
+		{"drop before MAIL", "MAIL", "", drafts.Draft, "send failed: Connection unexpectedly closed"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			w := newWorld(t)
+			ctx := t.Context()
+			wire := smtptest.NewWire(t, c.dropAt, c.final)
+			w.store.SMTP = wire.Factory
+			id := w.create(config.Gmail, "a@x.test", nil, "Hi", "body", nil)
+			_, err := w.store.Send(ctx, id, w.get(id).UpdatedAt)
+			if err == nil {
+				t.Fatal("send succeeded")
+			}
+			row := w.get(id)
+			if row.Status != c.status || *row.SMTPResult != c.result || row.SentMsgID != nil {
+				t.Fatalf("row %+v (%s)", row, *row.SMTPResult)
+			}
+			if c.status != drafts.Unknown {
+				var serr smtp.SendError
+				if !errors.As(err, &serr) {
+					t.Fatalf("got %v (%T)", err, err)
+				}
+				return
+			}
+			var unknown drafts.OutcomeUnknown
+			if !errors.As(err, &unknown) {
+				t.Fatalf("got %v (%T)", err, err)
+			}
+			_, err = w.store.Send(ctx, id, row.UpdatedAt)
+			draftError(t, err, "draft is not in a sendable state")
+			if wire.Conns() != 1 {
+				t.Fatalf("%d SMTP connections, want 1", wire.Conns())
+			}
+			if err := w.store.ResolveUnknown(ctx, id, drafts.Draft); err != nil {
+				t.Fatal(err)
+			}
+			if w.get(id).Status != drafts.Draft {
+				t.Fatalf("status %s", w.get(id).Status)
+			}
+		})
+	}
+}
+
 func TestAppendGateOnlyInOperatorSendAndOnlyToSent(t *testing.T) {
 	ctx := t.Context()
 	shadow := config.Map(map[string]string{})

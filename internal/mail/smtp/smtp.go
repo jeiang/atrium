@@ -2,6 +2,7 @@ package smtp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -72,6 +73,10 @@ func Send(ctx context.Context, creds Credentials, account string, msg *Message, 
 		factory = Dialer{}.Dial
 	}
 	refused, err := send(ctx, factory, account, user, password, msg, recipients)
+	var unknown *OutcomeUnknown
+	if errors.As(err, &unknown) {
+		return nil, unknown
+	}
 	if err != nil {
 		return nil, SendError(err.Error())
 	}
@@ -91,7 +96,10 @@ func send(ctx context.Context, factory Factory, account, user, password string, 
 		case accepted:
 			log.Warn(fmt.Sprintf("%s SMTP session not closed cleanly after the mail was accepted: %s", account, qerr))
 		default:
-			refused, err = nil, qerr
+			var unknown *OutcomeUnknown
+			if !errors.As(err, &unknown) {
+				refused, err = nil, qerr
+			}
 		}
 	}()
 	if err := server.StartTLS(); err != nil {

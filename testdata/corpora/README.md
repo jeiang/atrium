@@ -361,6 +361,14 @@ Per-recipient refusals are returned, all refused raises
   draft; in Python they escape `smtp.send` and leave the draft `sending`.
   Non-ASCII credentials are sent as UTF-8 where Python raises
   `UnicodeEncodeError`.
+- A failure after the DATA body was written and before the final reply (a
+  timeout, a drop, an unparseable or non-4xx/5xx reply) is
+  `smtp.OutcomeUnknown`, which keeps the smtplib text of the failure;
+  `drafts.send` sets the draft to `unknown` instead of `draft`, since the
+  server may have accepted it. Python reports it as `SMTPServerDisconnected`
+  and returns the draft to `draft`. No corpus record covers it (the fake
+  session returns what the record names); the drafts end-to-end test drives a
+  protocol-level server.
 - The internal `RSET` after a refusal ignores its reply; smtplib ignores only a
   disconnect there.
 - Go serializes a message only as bytes (`as_bytes`); `as_string()` differs

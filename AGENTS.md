@@ -466,8 +466,14 @@ and backups; nothing of that lives here.
 - `internal/mail/smtp/`: the operator's send. It speaks SMTP command for
   command as smtplib does and keeps its error wording (`SendError`);
   `BuildMessage` serializes as `EmailMessage` does. `smtptest` is the
-  scripted session factory and the `smtp.jsonl` corpus loader; the
-  divergences from smtplib are listed in `testdata/corpora/README.md`.
+  scripted session factory (`Server`, and `Wire`, a loopback server that
+  speaks the protocol and can drop the connection or refuse at a chosen
+  point) and the `smtp.jsonl` corpus loader; the divergences from smtplib are
+  listed in `testdata/corpora/README.md`. A failure after the DATA body is
+  written and before the final reply, or a final reply outside 4xx/5xx,
+  is `*OutcomeUnknown`: the server may have accepted the message, so
+  `drafts.Send` sets the draft to `unknown` (`ResolveUnknown`) and never
+  back to `draft`. A 4xx/5xx final reply is a refusal (`SendError`).
 - `internal/mail/drafts/`: the draft lifecycle. `Send` is the only path that
   sends mail; it files the iCloud copy with APPEND `\Seen` under
   `safety.OperatorSend` to the mailbox `mail.MailboxRole` names `sent`.

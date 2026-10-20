@@ -141,6 +141,26 @@ func TestSMTPFailureRevertsToDraft(t *testing.T) {
 	status(t, plain, http.StatusConflict)
 }
 
+func TestSMTPLossAfterDataShowsTheUnknownCard(t *testing.T) {
+	s := newSite(t)
+	s.smtp.Fail = func(stage string) error {
+		if stage == "send" {
+			return &smtp.OutcomeUnknown{Err: &smtp.Failure{Kind: "SMTPServerDisconnected", Msg: "Connection unexpectedly closed"}}
+		}
+		return nil
+	}
+	id := s.draft(config.Gmail, "a@x.test", nil, "Hi", "body", nil)
+	target := fmt.Sprintf("/drafts/%d/send", id)
+	body := status(t, s.post(target, form("updated_at", reviewed(s.row(id))), hx, "true"), http.StatusConflict)
+	mustContain(t, body, "Send outcome unknown", "Check if the mail went out", "Mark sent", "Back to draft")
+	mustNotContain(t, body, "Not sent")
+	if row := s.row(id); row.Status != drafts.Unknown {
+		t.Errorf("row %+v", row)
+	}
+	full := status(t, s.post(fmt.Sprintf("/drafts/%d/send", id), form("updated_at", "1")), http.StatusConflict)
+	mustContain(t, full, "<html", "Not sent")
+}
+
 func TestPagesWarnOnNewRecipientsAndDiscard(t *testing.T) {
 	s := newSite(t)
 	mid := s.original()
@@ -192,7 +212,7 @@ func TestUnknownDraftsAreResolvedByTheOperator(t *testing.T) {
 	id := s.draft(config.Gmail, "a@x.test", nil, "Hi", "body", nil)
 	s.exec("UPDATE drafts SET status = 'unknown', smtp_result = 'send interrupted; outcome unknown' WHERE id = ?", id)
 	page := status(t, s.get("/drafts?status=unknown"), http.StatusOK)
-	mustContain(t, page, "Check the Sent folder", "Mark sent", "Back to draft", "send interrupted; outcome unknown")
+	mustContain(t, page, "Check if the mail went out", "Mark sent", "Back to draft", "send interrupted; outcome unknown")
 	target := fmt.Sprintf("/drafts/%d/resolve", id)
 	status(t, s.post(target, form("outcome", "bogus")), http.StatusUnprocessableEntity)
 	status(t, s.post(target, nil), http.StatusUnprocessableEntity)
@@ -218,7 +238,7 @@ func TestDraftStatusFiltersAndStates(t *testing.T) {
 		s.exec("UPDATE drafts SET status = ? WHERE id = ?", state, id)
 		page := status(t, s.get(fmt.Sprintf("/drafts/%d", id)), http.StatusOK)
 		mustContain(t, page, "Hi "+state, "body "+state)
-		mustNotContain(t, page, `action="/drafts/`+fmt.Sprint(id)+`/send"`, "Save changes", "Check the Sent folder")
+		mustNotContain(t, page, `action="/drafts/`+fmt.Sprint(id)+`/send"`, "Save changes", "Check if the mail went out")
 	}
 	status(t, s.get("/drafts/999"), http.StatusNotFound)
 	status(t, s.get("/drafts/999", hx, "true"), http.StatusNotFound)

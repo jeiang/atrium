@@ -513,7 +513,11 @@ func (s *session) data(msg []byte) (int, string, error) {
 	if err := s.send(q); err != nil {
 		return 0, "", err
 	}
-	return s.getreply()
+	code, repl, err = s.getreply()
+	if err != nil {
+		return 0, "", &OutcomeUnknown{Err: err}
+	}
+	return code, repl, nil
 }
 
 func (s *session) abort(code int) {
@@ -583,7 +587,11 @@ func (s *session) SendMessage(msg *Message, from string, to []string) (Refusals,
 	}
 	if code != 250 {
 		s.abort(code)
-		return nil, &ResponseError{Kind: "SMTPDataError", Code: code, Msg: resp}
+		var refusal error = &ResponseError{Kind: "SMTPDataError", Code: code, Msg: resp}
+		if code < 400 || code > 599 {
+			refusal = &OutcomeUnknown{Err: refusal}
+		}
+		return nil, refusal
 	}
 	return refused, nil
 }

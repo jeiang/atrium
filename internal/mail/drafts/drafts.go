@@ -47,6 +47,10 @@ type Error string
 
 func (e Error) Error() string { return string(e) }
 
+type OutcomeUnknown string
+
+func (e OutcomeUnknown) Error() string { return string(e) }
+
 type Row struct {
 	ID                 int64    `json:"id"`
 	ThreadID           *int64   `json:"thread_id"`
