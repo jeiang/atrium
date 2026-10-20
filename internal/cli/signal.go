@@ -37,7 +37,7 @@ func SignalContext(parent context.Context) (context.Context, context.CancelFunc)
 	state := &received{}
 	ctx, cancel := context.WithCancel(context.WithValue(parent, signalKey{}, state))
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
 		select {
 		case sig := <-signals:
@@ -73,6 +73,8 @@ func Fail(env *Env, err error) int {
 			return ExitInterrupt
 		case syscall.SIGTERM:
 			return ExitTerminated
+		case syscall.SIGHUP:
+			return ExitHangup
 		}
 	}
 	printf(env.Stderr, "%s\n", py.UncaughtText(err))

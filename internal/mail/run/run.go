@@ -179,15 +179,20 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		}
 		log.Info(extra.Name + ": " + py.ReprValue(result))
 	}
-	return nil
+	return ctx.Err()
 }
 
 // checkpointWait is how long the end-of-pass checkpoint waits for readers while the lock is held.
 const checkpointWait = time.Second
 
+// passDeadline bounds one locked pass. When it expires the running stage is abandoned and no further write pass
+// starts; a write pass that has started runs to its end, as it does after a shutdown signal.
+var passDeadline = 20 * time.Minute
+
 // Locked is one pass of accounts under the database's exclusive lock: each is synced, then processed. The WAL is
 // checkpointed (TRUNCATE) before the lock is released, so readers that never stop cannot grow it without bound.
-// A ctx cancelled during the pass ends it with its error once the running stage is complete.
+// A ctx cancelled or a passDeadline that expires during the pass ends it with its error once the running stage
+// is complete.
 func (p *Pass) Locked(ctx context.Context, accounts []string) error {
 	lock, err := db.Exclusive(ctx, p.Cfg.DBPath, 0)
 	if err != nil {
@@ -195,15 +200,14 @@ func (p *Pass) Locked(ctx context.Context, accounts []string) error {
 	}
 	defer func() { _ = lock.Close() }()
 	defer p.checkpoint(ctx)
+	ctx, cancel := context.WithTimeout(ctx, passDeadline)
+	defer cancel()
 	for _, account := range accounts {
 		if err := p.SyncOne(ctx, account); err != nil {
 			return err
 		}
 	}
-	if err := p.Process(ctx, accounts); err != nil {
-		return err
-	}
-	return ctx.Err()
+	return p.Process(ctx, accounts)
 }
 
 func (p *Pass) checkpoint(ctx context.Context) {
