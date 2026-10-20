@@ -1,11 +1,13 @@
 package pages
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,8 +30,9 @@ const (
 	uploadSlack  = 1 << 20
 	sniffBytes   = 4096
 
-	badBodyDetail = "There was an error parsing the body"
-	fieldBytes    = 1 << 20
+	badBodyDetail   = "There was an error parsing the body"
+	fieldBytes      = 1 << 20
+	bodyBufferBytes = 1 << 16
 )
 
 var (
@@ -40,15 +43,16 @@ var (
 )
 
 func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values, []files.UploadedFile, error) {
-	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	media, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || !strings.HasPrefix(media, "multipart/") {
 		return web.FormValues(r), nil, nil
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, files.MessageCapBytes+uploadSlack)
-	reader, err := r.MultipartReader()
-	if err != nil {
+	boundary := params["boundary"]
+	if boundary == "" {
 		return url.Values{}, nil, errBadBody
 	}
+	reader := multipart.NewReader(bufio.NewReaderSize(r.Body, bodyBufferBytes), boundary)
 	form := url.Values{}
 	var uploads []files.UploadedFile
 	for {
