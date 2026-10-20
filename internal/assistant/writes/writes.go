@@ -7,6 +7,7 @@ package writes
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -158,10 +159,17 @@ func (l *lazyTx) QueryContext(ctx context.Context, query string, args ...any) (*
 func (l *lazyTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
 	tx, err := l.begin(ctx)
 	if err != nil {
-		return l.d.Read.QueryRowContext(ctx, "SELECT 1 WHERE 0")
+		failed := sql.OpenDB(failedConn{err})
+		defer func() { _ = failed.Close() }()
+		return failed.QueryRowContext(ctx, "SELECT 1")
 	}
 	return tx.QueryRowContext(ctx, query, args...)
 }
+
+type failedConn struct{ err error }
+
+func (f failedConn) Connect(context.Context) (driver.Conn, error) { return nil, f.err }
+func (f failedConn) Driver() driver.Driver                        { return nil }
 
 func (l *lazyTx) rollback() {
 	if l.tx != nil {

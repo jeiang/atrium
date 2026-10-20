@@ -2,8 +2,10 @@ package writes_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/writes"
@@ -110,5 +112,31 @@ func TestUndo(t *testing.T) {
 	wantUndoError(t, err, "changed since")
 	if row, _ := writes.Get(ctx, d.Read, refused); row.UndoneAt != nil {
 		t.Errorf("a refused undo was marked done: %+v", row)
+	}
+}
+
+func TestUndoSurfacesAFailedTransactionBegin(t *testing.T) {
+	d, thread, run := world(t)
+	reg := writes.NewRegistry()
+	var seen error
+	reg.Register("read", func(ctx context.Context, q db.Querier, _ map[string]any) (any, error) {
+		var one int
+		seen = q.QueryRowContext(ctx, "SELECT 1").Scan(&one)
+		return nil, seen
+	})
+	id, err := writes.Record(t.Context(), d.Write, writes.New{TS: 1, ThreadID: &thread, RunID: &run, Tool: "t", Target: "x", Undo: map[string]any{"op": "read"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, err := d.Write.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = held.Rollback() }()
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+	_, err = reg.Undo(ctx, d, id, func() float64 { return 1 })
+	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(seen, sql.ErrNoRows) {
+		t.Errorf("undo error = %v, read error = %v", err, seen)
 	}
 }
