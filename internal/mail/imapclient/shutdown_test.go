@@ -24,29 +24,45 @@ import (
 	"github.com/jeiang/atrium/internal/testutil/imapscript"
 )
 
-// terminating delivers SIGTERM to the process shortly after its first STORE has gone out, while the scripted
-// server holds the reply, as a shutdown that lands in the middle of a move.
+// terminating delivers SIGTERM shortly after the named write has gone out, while the scripted server holds the
+// reply, as a shutdown that lands in the middle of a move.
 type terminating struct {
 	mail.Client
+	on   string
 	sent bool
 }
 
-func (c *terminating) StoreFlags(ctx context.Context, uids mail.UIDSet, add bool, flags ...string) error {
-	if !c.sent {
+func (c *terminating) strike(op string) {
+	if c.on == op && !c.sent {
 		c.sent = true
 		time.AfterFunc(200*time.Millisecond, func() { _ = syscall.Kill(os.Getpid(), syscall.SIGTERM) })
 	}
+}
+
+func (c *terminating) Copy(ctx context.Context, uids mail.UIDSet, dest string) (*mail.CopyUID, error) {
+	c.strike("copy")
+	return c.Client.Copy(ctx, uids, dest)
+}
+
+func (c *terminating) StoreFlags(ctx context.Context, uids mail.UIDSet, add bool, flags ...string) error {
+	c.strike("store")
 	return c.Client.StoreFlags(ctx, uids, add, flags...)
 }
 
+func (c *terminating) UIDExpunge(ctx context.Context, uids mail.UIDSet) error {
+	c.strike("expunge")
+	return c.Client.UIDExpunge(ctx, uids)
+}
+
 type shutdownWorld struct {
+	on    string
 	t     *testing.T
 	db    *db.DB
 	opens int
 	srv   *imapscript.Server
 }
 
-func newShutdownWorld(t *testing.T, script string) *shutdownWorld {
+func newShutdownWorld(t *testing.T, on, script string) *shutdownWorld {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
@@ -59,7 +75,7 @@ func newShutdownWorld(t *testing.T, script string) *shutdownWorld {
 	must(t, err)
 	t.Cleanup(func() { _ = d.Close() })
 	must(t, db.Migrate(context.Background(), d, path))
-	w := &shutdownWorld{t: t, db: d, srv: imapscript.Serve(t, imapscript.MustParse(t, script))}
+	w := &shutdownWorld{on: on, t: t, db: d, srv: imapscript.Serve(t, imapscript.MustParse(t, script))}
 	w.exec("INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')")
 	w.exec("INSERT INTO mailboxes (id, account, name, imap_name, role) VALUES (1, 'icloud', 'INBOX', 'INBOX', 'inbox')")
 	w.exec("INSERT INTO messages (id, account, mailbox_id, uidvalidity, uid, msgid, digest, first_seen) VALUES (1, 'icloud', 1, 7, 301, 'a@x.test', 'da', 0)")
@@ -102,7 +118,7 @@ func (w *shutdownWorld) clients(config.Config, config.Env) func(context.Context,
 		if err := client.Connect(ctx); err != nil {
 			return nil, err
 		}
-		return &terminating{Client: client}, nil
+		return &terminating{Client: client, on: w.on}, nil
 	}
 }
 
@@ -165,7 +181,7 @@ func (w *shutdownWorld) proposal(kind string) int64 {
 }
 
 func TestProposalsApproveSigtermKillsTheConnectionAndMarksTheProposalFailed(t *testing.T) {
-	w := newShutdownWorld(t, shutdownMove)
+	w := newShutdownWorld(t, "store", shutdownMove)
 	id := w.proposal(executors.InboxBacklog)
 	code, _, stderr := w.run("proposals", "approve", strconv.FormatInt(id, 10))
 	if code != cli.ExitTerminated || stderr != "" {
@@ -181,7 +197,7 @@ func TestProposalsApproveSigtermKillsTheConnectionAndMarksTheProposalFailed(t *t
 }
 
 func TestProposalsUndoSigtermKillsTheConnectionAndLogsTheFailedUndo(t *testing.T) {
-	w := newShutdownWorld(t, shutdownMoveBack)
+	w := newShutdownWorld(t, "store", shutdownMoveBack)
 	id := w.proposal(executors.InboxBacklog)
 	w.exec("UPDATE proposals SET status = 'applied', result = '{}' WHERE id = ?", id)
 	w.exec("INSERT INTO proposal_actions (proposal_id, ts, action, undo, ok) VALUES (?, 1, '{\"op\": \"move\"}', ?, 1)", id, moveBackPlan)
@@ -198,7 +214,7 @@ func TestProposalsUndoSigtermKillsTheConnectionAndLogsTheFailedUndo(t *testing.T
 }
 
 func TestLiveUndoSigtermKillsTheConnectionAndRecordsTheFailure(t *testing.T) {
-	w := newShutdownWorld(t, shutdownMoveBack)
+	w := newShutdownWorld(t, "store", shutdownMoveBack)
 	w.exec("INSERT INTO auto_actions (id, ts, account, message_id, kind, src, dest, undo, ok) VALUES (1, 1, 'icloud', 1, 'file', 'INBOX', 'Bills', ?, 1)", moveBackPlan)
 	code, _, stderr := w.run("live", "undo", "1")
 	if code != cli.ExitTerminated || stderr != "" {
@@ -209,5 +225,73 @@ func TestLiveUndoSigtermKillsTheConnectionAndRecordsTheFailure(t *testing.T) {
 	}
 	if got := w.text("SELECT undone_ts FROM auto_actions WHERE id = 1"); got != "<null>" {
 		t.Fatalf("undone_ts = %s", got)
+	}
+}
+
+const moveHead = icloudLogin + verifyInbox + `C: {t} CREATE "Receipts/Shop"
+S: {t} OK CREATE completed
+C: {t} SUBSCRIBE "Receipts/Shop"
+S: {t} OK SUBSCRIBE completed
+C: {t} SELECT INBOX
+S: {t} OK [READ-WRITE] SELECT completed
+`
+
+const shutdownMoveCopy = moveHead + `C: {t} UID COPY 301:302 "Receipts/Shop"
+! sleep 1s
+`
+
+const shutdownMoveExpunge = moveHead + `C: {t} UID COPY 301:302 "Receipts/Shop"
+S: {t} OK [COPYUID 9 301:302 1:2] Done
+C: {t} UID STORE 301:302 +FLAGS.SILENT (\Deleted)
+S: {t} OK STORE completed
+C: {t} UID EXPUNGE 301:302
+! sleep 1s
+`
+
+func TestProposalsApproveSigtermDuringCopyLogsTheUnknownOutcome(t *testing.T) {
+	w := newShutdownWorld(t, "copy", shutdownMoveCopy)
+	id := w.proposal(executors.InboxBacklog)
+	code, _, stderr := w.run("proposals", "approve", strconv.FormatInt(id, 10))
+	if code != cli.ExitTerminated || stderr != "" {
+		t.Fatalf("approve after SIGTERM = %d, %q", code, stderr)
+	}
+	if status := w.text("SELECT status FROM proposals WHERE id = ?", id); status != proposals.Failed {
+		t.Fatalf("status = %s", status)
+	}
+	want := `{"op": "move", "account": "icloud", "src_imap": "INBOX", "src_uidvalidity": 7, "dest_imap": "Receipts/Shop", "uids": [301, 302]}`
+	if got := w.text("SELECT action FROM proposal_actions WHERE proposal_id = ? AND ok = 0", id); got != want {
+		t.Fatalf("interrupted COPY logged as %s", got)
+	}
+	if got := w.text("SELECT error FROM proposal_actions WHERE proposal_id = ? AND ok = 0", id); !strings.HasPrefix(got, "cancelled, write outcome unknown") {
+		t.Fatalf("error = %q", got)
+	}
+}
+
+func TestProposalsApproveSigtermDuringExpungeLogsThePartialMove(t *testing.T) {
+	w := newShutdownWorld(t, "expunge", shutdownMoveExpunge)
+	id := w.proposal(executors.InboxBacklog)
+	code, _, stderr := w.run("proposals", "approve", strconv.FormatInt(id, 10))
+	if code != cli.ExitTerminated || stderr != "" {
+		t.Fatalf("approve after SIGTERM = %d, %q", code, stderr)
+	}
+	want := `{"op": "move", "account": "icloud", "src_imap": "INBOX", "src_uidvalidity": 7, "dest_imap": "Receipts/Shop", "dest_uidvalidity": 9, "copied": {"301": 1, "302": 2}}`
+	if got := w.text("SELECT action FROM proposal_actions WHERE proposal_id = ? AND ok = 0", id); got != want {
+		t.Fatalf("partial move logged as %s", got)
+	}
+}
+
+func TestLiveUndoRefusesToRetryAPartialUndo(t *testing.T) {
+	w := newShutdownWorld(t, "store", shutdownMoveBack)
+	w.exec("INSERT INTO auto_actions (id, ts, account, message_id, kind, src, dest, undo, ok) VALUES (1, 1, 'icloud', 1, 'file', 'INBOX', 'Bills', ?, 1)", moveBackPlan)
+	if code, _, _ := w.run("live", "undo", "1"); code != cli.ExitTerminated {
+		t.Fatalf("first undo = %d", code)
+	}
+	opens := w.opens
+	code, _, stderr := w.run("live", "undo", "1")
+	if code != cli.ExitError || !strings.Contains(stderr, "partial undo") {
+		t.Fatalf("retried undo = %d, %q", code, stderr)
+	}
+	if w.opens != opens {
+		t.Fatalf("the retry opened a connection")
 	}
 }

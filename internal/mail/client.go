@@ -139,6 +139,9 @@ type gate struct {
 func (gate) gated() {}
 
 func (g gate) check(ctx context.Context, action, target string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	return safety.WriteGate(ctx, g.env, action, target)
 }
 

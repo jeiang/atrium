@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
 )
@@ -312,6 +313,18 @@ func undoneIDs(logged []Action) map[int64]bool {
 	return done
 }
 
+func partialUndo(logged []Action, id int64) bool {
+	for _, a := range logged {
+		if op, _ := a.field("op"); op != UndoOp || a.OK || a.Error == nil || !strings.HasPrefix(*a.Error, mailops.PartialPrefix) {
+			continue
+		}
+		if of, ok := a.field("of"); ok && of == id {
+			return true
+		}
+	}
+	return false
+}
+
 func pending(logged []Action) []Action {
 	done := undoneIDs(logged)
 	var todo []Action
@@ -486,6 +499,9 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	out := UndoResult{Outcomes: []py.Dict{}}
 	settle := context.WithoutCancel(ctx)
 	for _, entry := range pending(logged) {
+		if partialUndo(logged, entry.ID) {
+			return out, ProposalError(fmt.Sprintf("action %d has a partial undo; resolve it in the mailbox before undoing again", entry.ID))
+		}
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}

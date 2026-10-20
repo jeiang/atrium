@@ -53,7 +53,10 @@ type PartialMove struct {
 	Err    error
 }
 
-func (e *PartialMove) Error() string { return "copied but not expunged: " + e.Err.Error() }
+// PartialPrefix starts the text of a PartialMove: a retry of the same move would copy the batch a second time.
+const PartialPrefix = "copied but not expunged: "
+
+func (e *PartialMove) Error() string { return PartialPrefix + e.Err.Error() }
 
 func (*PartialMove) PyClass() string { return "PartialMove" }
 

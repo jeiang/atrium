@@ -123,7 +123,9 @@ func (c *conn) await(ctx context.Context, fn func() error) error {
 			return err
 		case <-ctx.Done():
 			t.kill(ctx.Err())
-			<-done
+			if err := <-done; err == nil {
+				return nil
+			}
 			return ctx.Err()
 		case <-timer.C:
 			idle, watching := t.idleFor()
