@@ -40,6 +40,10 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 	if set.code != cli.ExitOK || set.stdout != secrets.ActionLinkKey+": set\n" || set.stderr != "" {
 		t.Fatalf("secrets set: exit %d stdout %q stderr %q", set.code, set.stdout, set.stderr)
 	}
+	argv := runSecrets(t, "", "set", secrets.ActionLinkKey, value)
+	if argv.code != cli.ExitUsage || strings.Contains(argv.stdout+argv.stderr, value) || !strings.Contains(argv.stderr, "must come from standard input") {
+		t.Errorf("set with the value in argv: exit %d stdout %q stderr %q", argv.code, argv.stdout, argv.stderr)
+	}
 	status := runSecrets(t, "", "status")
 	for _, want := range []string{"action_link_key: set\n", "anthropic_admin_key: unset\n", "openai_admin_key: unset\n"} {
 		if !strings.Contains(status.stdout, want) {
@@ -72,7 +76,7 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 
 	refused := runSecrets(t, value, "set", secrets.AnthropicAdminKey)
 	want := "error: " + secrets.EncryptionRequired(secrets.AnthropicAdminKey).Error() + "\n"
-	if refused.code != cli.ExitError || refused.stdout != "" || refused.stderr != want || !strings.Contains(want, secrets.EncryptionDoc) {
+	if refused.code != cli.ExitError || refused.stdout != "" || refused.stderr != want || !strings.Contains(want, "encrypt the database first") {
 		t.Fatalf("flagged set on plaintext: exit %d stdout %q stderr %q, want %q", refused.code, refused.stdout, refused.stderr, want)
 	}
 	var rows int
@@ -82,6 +86,9 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 
 	settings.Default.SetPins(pinSet{secrets.ActionLinkKey: "pinned-value"})
 	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	if _, err := d.Write.Exec("INSERT INTO secrets (name, value, set_at, set_by) VALUES (?, 'stale', 1.0, 'cli')", secrets.ActionLinkKey); err != nil {
+		t.Fatal(err)
+	}
 	pinned := runSecrets(t, value, "set", secrets.ActionLinkKey)
 	if pinned.code != cli.ExitError || !strings.Contains(pinned.stderr, "pinned by file") || strings.Contains(pinned.stderr, value) {
 		t.Errorf("set on a pinned secret: exit %d stderr %q", pinned.code, pinned.stderr)
@@ -89,7 +96,10 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 	if st := runSecrets(t, "", "status"); !strings.Contains(st.stdout, "action_link_key: pinned\n") {
 		t.Errorf("status = %q, want action_link_key pinned", st.stdout)
 	}
+	if del := runSecrets(t, "", "delete", secrets.ActionLinkKey); del.code != cli.ExitOK || del.stdout != "action_link_key: pinned\n" {
+		t.Errorf("delete of a stale row under a pin: exit %d stdout %q stderr %q", del.code, del.stdout, del.stderr)
+	}
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM secrets").Scan(&rows); err != nil || rows != 0 {
-		t.Errorf("secrets rows after pinned set = %d, %v; want 0", rows, err)
+		t.Errorf("secrets rows after pinned delete = %d, %v; want 0", rows, err)
 	}
 }

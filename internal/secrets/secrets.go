@@ -17,8 +17,6 @@ const (
 	AnthropicAdminKey = "anthropic_admin_key"
 	OpenAIAdminKey    = "openai_admin_key"
 	ActionLinkKey     = "action_link_key"
-
-	EncryptionDoc = "docs/database-encryption.md"
 )
 
 func init() {
@@ -60,7 +58,7 @@ func (e EmptyValue) Error() string { return "secrets: " + string(e) + " needs a 
 type EncryptionRequired string
 
 func (e EncryptionRequired) Error() string {
-	return fmt.Sprintf("secrets: %s can only be stored in an encrypted database and this database is plaintext; see %s", string(e), EncryptionDoc)
+	return fmt.Sprintf("secrets: %s can only be stored in an encrypted database and this database is plaintext; encrypt the database first", string(e))
 }
 
 type Store struct {
@@ -71,6 +69,11 @@ type Store struct {
 
 func New(q db.Querier, cipher Cipher) *Store {
 	return &Store{reg: settings.Default, q: q, cipher: cipher}
+}
+
+func (s *Store) Known(name string) error {
+	_, err := s.def(name)
+	return err
 }
 
 func (s *Store) def(name string) (settings.Def, error) {
@@ -118,7 +121,7 @@ func (s *Store) Set(ctx context.Context, name, value, by string) error {
 }
 
 func (s *Store) Delete(ctx context.Context, name string) error {
-	if _, err := s.writable(name); err != nil {
+	if _, err := s.def(name); err != nil {
 		return err
 	}
 	_, err := s.q.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name)

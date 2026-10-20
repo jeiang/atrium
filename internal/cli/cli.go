@@ -81,8 +81,11 @@ type action struct {
 }
 
 type Args struct {
-	actions []*action
+	actions    []*action
+	extrasText string
 }
+
+func (a *Args) RejectExtras(message string) { a.extrasText = message }
 
 func (a *Args) option(name string, k kind, o Opt) *action {
 	act := &action{Opt: o, kind: k, name: name, dest: strings.ReplaceAll(name, "-", "_"), opts: []string{"--" + name}}
@@ -180,7 +183,11 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	root.version = a.Version
 	extras, err := s.parse(root, args)
 	if err == nil && len(extras) > 0 {
-		err = s.fail(root, "unrecognized arguments: "+strings.Join(extras, " "))
+		msg := "unrecognized arguments: " + strings.Join(extras, " ")
+		if s.leaf != nil && s.leaf.extras != "" {
+			msg = s.leaf.extras
+		}
+		err = s.fail(root, msg)
 	}
 	if code, ok := errors.AsType[exit](err); ok {
 		return int(code)
@@ -206,6 +213,7 @@ type parser struct {
 	prog    string
 	actions []*action
 	version string
+	extras  string
 }
 
 var helpAction = Opt{Help: "show this help message and exit"}
@@ -216,6 +224,7 @@ func newParser(prog string, c *Command, root bool) (*parser, Handler) {
 		var args Args
 		h := c.Setup(&args)
 		p.actions = append(p.actions, args.actions...)
+		p.extras = args.extrasText
 		return p, h
 	}
 	dest := c.Dest

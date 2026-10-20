@@ -31,7 +31,17 @@ type service struct{ env config.Env }
 
 func (s *service) set(a *cli.Args) cli.Handler {
 	name := a.Arg("name", cli.Opt{})
+	a.RejectExtras("the value must come from standard input, not the command line")
 	return func(e *cli.Env) int {
+		known := s.with(e, func(st *secrets.Store) int {
+			if err := st.Known(*name); err != nil {
+				return failure(e, err)
+			}
+			return cli.ExitOK
+		})
+		if known != cli.ExitOK {
+			return known
+		}
 		raw, err := io.ReadAll(io.LimitReader(e.Stdin, maxValue+1))
 		if err != nil {
 			return cli.Fail(e, err)
