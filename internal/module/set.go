@@ -145,6 +145,18 @@ func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
 	return snap, nil
 }
 
+func (s *Set) coreOnly() *Snapshot {
+	snap := &Snapshot{set: s}
+	for _, r := range s.regs {
+		st := Status{Name: r.Name, State: Off}
+		if r.Core {
+			st.State = Enabled
+		}
+		snap.statuses = append(snap.statuses, st)
+	}
+	return snap
+}
+
 func (n *Snapshot) Statuses() []Status { return slices.Clone(n.statuses) }
 
 func (n *Snapshot) Status(name string) (Status, bool) {
@@ -178,12 +190,6 @@ func (n *Snapshot) Registry() (*registry.Registry, error) {
 }
 
 func (s *Set) Guard(ctx context.Context, q db.Querier, key, value string) error {
-	if key == FlagKey(Core) {
-		if value == "false" {
-			return Locked(Core)
-		}
-		return nil
-	}
 	for _, r := range s.regs {
 		if key != FlagKey(r.Name) || value != "true" {
 			continue

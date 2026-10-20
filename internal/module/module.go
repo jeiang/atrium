@@ -124,19 +124,11 @@ type DuplicateCommand string
 
 func (e DuplicateCommand) Error() string { return "module: duplicate command " + string(e) }
 
-type UnknownModule string
-
-func (e UnknownModule) Error() string { return "module: unknown module " + string(e) }
-
 type FlagNotRegistered string
 
 func (e FlagNotRegistered) Error() string {
 	return "module: setting " + string(e) + " is not registered"
 }
-
-type Locked string
-
-func (e Locked) Error() string { return string(e) + " cannot be disabled" }
 
 type UnknownDependency struct {
 	Module     string

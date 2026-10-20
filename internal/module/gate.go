@@ -20,7 +20,8 @@ func (s *Set) Pages() []web.Page {
 	pages := []web.Page{{Module: func(_ chi.Router, d *web.Deps) {
 		snap, err := s.Evaluate(context.Background(), d.DB.Read)
 		if err != nil {
-			panic(err)
+			log.Error("module evaluation failed, serving core only", logx.Err, err.Error())
+			snap = s.coreOnly()
 		}
 		s.cur.Store(snap)
 	}}}
@@ -73,7 +74,7 @@ func (s *Set) gateCommand(r Registration, c *cli.Command, path string, inherited
 		rule = inherited
 	}
 	out := *c
-	if out.Setup != nil && !rule.Always {
+	if out.Setup != nil && !rule.Always && (!r.Core || len(rule.Needs) > 0) {
 		out.Setup = s.gateSetup(r.Name, path, rule.Needs, c.Setup)
 	}
 	out.Commands = nil
