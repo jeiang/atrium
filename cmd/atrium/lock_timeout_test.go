@@ -51,8 +51,7 @@ func TestMoneyRefreshReportsExclusiveLockTimeout(t *testing.T) {
 
 	cmd := exec.Command(os.Args[0], "-test.run=^$")
 	cmd.Env = append(os.Environ(), lockHolderEnv+"="+path)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
+	if _, err := cmd.StdinPipe(); err != nil {
 		t.Fatal(err)
 	}
 	stdout, err := cmd.StdoutPipe()
