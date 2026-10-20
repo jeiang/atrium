@@ -93,7 +93,7 @@ C: {t} UID STORE 301 +FLAGS.SILENT (\Deleted)
 	if !ok || partial.Unconfirmed || partial.Copied == nil || partial.Copied.Mapping[301] != 500 {
 		t.Fatalf("err = %#v", err)
 	}
-	asWriteInterrupted(t, err)
+	_ = asWriteInterrupted(t, err)
 }
 
 func TestDropDuringExpungeKeepsThePartialMove(t *testing.T) {
@@ -114,7 +114,7 @@ C: {t} UID EXPUNGE 301
 	if !ok || partial.Unconfirmed || partial.Copied == nil || partial.Copied.Mapping[301] != 500 {
 		t.Fatalf("err = %#v", err)
 	}
-	asWriteInterrupted(t, err)
+	_ = asWriteInterrupted(t, err)
 }
 
 func TestDropDuringCopyIsAnUnconfirmedPartialMove(t *testing.T) {
@@ -131,7 +131,7 @@ C: {t} UID COPY 301 "Bills"
 	if !ok || !partial.Unconfirmed || partial.Copied != nil || !mailops.Blocks(err.Error()) {
 		t.Fatalf("err = %#v", err)
 	}
-	asWriteInterrupted(t, err)
+	_ = asWriteInterrupted(t, err)
 }
 
 func TestDropDuringAppendIsNotRetried(t *testing.T) {

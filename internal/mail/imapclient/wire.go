@@ -373,11 +373,11 @@ func (t *tap) Write(p []byte) (int, error) {
 	t.mu.Unlock()
 	t.signal()
 	if t.writeTimeout > 0 {
-		_ = t.Conn.SetWriteDeadline(time.Now().Add(t.writeTimeout))
+		_ = t.SetWriteDeadline(time.Now().Add(t.writeTimeout))
 	}
 	n, err := t.Conn.Write(p)
 	if t.writeTimeout > 0 {
-		_ = t.Conn.SetWriteDeadline(time.Time{})
+		_ = t.SetWriteDeadline(time.Time{})
 	}
 	t.mu.Lock()
 	t.writing--
