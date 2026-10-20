@@ -81,7 +81,7 @@ also the admin. In v2 those roles split into the `atrium_access` and
   OpenAI-compatible endpoint, local or hosted. The operator chooses, and the
   privacy consequence of a hosted endpoint is shown where it is chosen.
 - Code execution is not available in v2. Its replacement, the sandbox manager,
-  is deferred to issue #19.
+  is deferred to issue #202.
 - There is no fixed cost target yet. Measurements come first.
 
 ## Direction accepted
