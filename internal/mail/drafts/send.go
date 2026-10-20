@@ -83,6 +83,14 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedAt float64) (Result,
 		return Result{}, err
 	}
 	msg, refused, err := s.submit(ctx, draft)
+	var unknown *smtp.OutcomeUnknown
+	if errors.As(err, &unknown) {
+		if _, uerr := s.exec(ctx, "UPDATE drafts SET status = ?, smtp_result = ?, updated_at = ? WHERE id = ?",
+			Unknown, "send outcome unknown: "+unknown.Error(), s.now(), id); uerr != nil {
+			return Result{}, uerr
+		}
+		return Result{}, Error("send outcome unknown: " + unknown.Error() + "; check whether the recipient got it, then mark it sent or back to draft")
+	}
 	var serr smtp.SendError
 	if errors.As(err, &serr) {
 		if _, uerr := s.exec(ctx, "UPDATE drafts SET status = ?, smtp_result = ?, updated_at = ? WHERE id = ?",
