@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/safety"
 )
 
+// recorder logs every client call in order.
 type recorder struct {
 	mail.Client
 	calls []string
@@ -78,6 +79,21 @@ func snapshots(t *testing.T, w *livetest.World, subjects ...string) []mailops.Sn
 	return snaps
 }
 
+func TestSnapshotsDict(t *testing.T) {
+	w := livetest.ICloud(t, "live")
+	w.Arrive("b")
+	w.Arrive("a")
+	snaps := snapshots(t, w, "a", "b")
+	if snaps[0].ID >= snaps[1].ID || snaps[0].MsgID != "b@x.test" || snaps[0].IMAPName != "INBOX" || snaps[0].Mailbox != "INBOX" {
+		t.Fatalf("snapshots = %+v", snaps)
+	}
+	want := `{"id": 1, "uid": 1, "uidvalidity": 1, "msgid": "b@x.test", "digest": "` + snaps[0].Digest +
+		`", "mailbox": "INBOX", "imap_name": "INBOX"}`
+	if got := py.JSONDumps(snaps[0].Dict()); got != want {
+		t.Fatalf("Dict = %s", got)
+	}
+}
+
 func TestVerifySkipReasonsInPythonOrder(t *testing.T) {
 	w := livetest.ICloud(t, "live")
 	for _, s := range []string{"ok", "gone", "moved", "changed", "missing", "msgid"} {
@@ -120,6 +136,35 @@ func TestVerifySkipReasonsInPythonOrder(t *testing.T) {
 	}
 }
 
+func TestVerifyGmailFetchesLabels(t *testing.T) {
+	w := livetest.Gmail(t, "live")
+	w.Arrive("g")
+	ok, skipped, err := mailops.Verify(t.Context(), w.DB.Read, w.Fake, config.Gmail, snapshots(t, w, "g"))
+	if err != nil || len(skipped) != 0 || !reflect.DeepEqual(ok[0].Labels, []string{mailops.InboxLabel}) {
+		t.Fatalf("Verify = %+v %v %v", ok, skipped, err)
+	}
+	if items := w.Fake.Fetches[len(w.Fake.Fetches)-1].Items; items != (mail.FetchItems{HeaderOnly: true, Labels: true}) {
+		t.Fatalf("items = %+v", items)
+	}
+}
+
+func TestServerMsgID(t *testing.T) {
+	for header, want := range map[string]string{
+		"Message-ID: <a@b.test>\r\n\r\n":             "a@b.test",
+		"Message-ID:\r\n <folded@b.test>\r\n\r\n":    "folded@b.test",
+		"Message-ID: <caf\xc3\xa9@b.test>\r\n\r\n":   "caf\ufffd\ufffd@b.test",
+		"Message-ID: <a\xa0b@x>\r\n\r\n":             "a\ufffdb@x",
+		"From: a\r\n\r\n":                            "",
+		"Message-ID: <=?utf-8?q?a?=@b.test>\r\n\r\n": "=?utf-8?q?a?=@b.test",
+	} {
+		if got := mailops.ServerMsgID([]byte(header)); got != want {
+			t.Errorf("ServerMsgID(%q) = %q, want %q", header, got, want)
+		}
+	}
+}
+
+// TestNoWriteBeforeVerify composes verify and a move the way every group write does: the server is read for
+// exactly the snapshots before the first write, and only the verified UIDs are written.
 func TestNoWriteBeforeVerify(t *testing.T) {
 	w := livetest.ICloud(t, "live")
 	w.Arrive("a")
@@ -185,6 +230,16 @@ func TestMoveUIDsBatchesAndReportsPartialMove(t *testing.T) {
 	}
 }
 
+func TestMoveUIDsRefusesWithoutUIDPLUS(t *testing.T) {
+	w := livetest.ICloud(t, "live")
+	w.Arrive("m")
+	delete(w.Fake.Caps, "UIDPLUS")
+	err := mailops.MoveUIDs(t.Context(), w.Fake, "INBOX", "Bills", []uint32{1}, nil)
+	if err == nil || err.Error() != "server lacks UIDPLUS: refusing to move" || w.Fake.RW != "" || len(w.Fake.Writes) != 0 {
+		t.Fatalf("MoveUIDs = %v, rw %q, writes %v", err, w.Fake.RW, w.Fake.Writes)
+	}
+}
+
 func TestFolderHelpers(t *testing.T) {
 	w := livetest.ICloud(t, "live")
 	ctx := t.Context()
@@ -224,11 +279,55 @@ func verbs(f *mailtest.FakeClient) []string {
 	return out
 }
 
+func TestLabelAndFlagStores(t *testing.T) {
+	w := livetest.Gmail(t, "live")
+	w.Arrive("g")
+	ctx := t.Context()
+	if err := mailops.StoreLabels(ctx, w.Fake, config.GmailAllMail, []uint32{1}, []string{"Ré"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := mailops.ArchiveUIDs(ctx, w.Fake, config.GmailAllMail, []uint32{1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mailops.StoreFlag(ctx, w.Fake, config.GmailAllMail, []uint32{1}, mailops.Flagged, true); err != nil {
+		t.Fatal(err)
+	}
+	var args [][]string
+	for _, fw := range w.Fake.Writes {
+		args = append(args, fw.Args)
+	}
+	want := [][]string{{"+X-GM-LABELS", "Ré"}, {"-X-GM-LABELS", `\Inbox`}, {"+FLAGS.SILENT", `\Flagged`}}
+	if !reflect.DeepEqual(args, want) || w.Fake.RW != config.GmailAllMail {
+		t.Fatalf("stores = %v", args)
+	}
+}
+
+func TestRelabelPlanAndGroups(t *testing.T) {
+	item := func(id int64, box string, labels ...string) mailops.Verified {
+		return mailops.Verified{Snapshot: mailops.Snapshot{ID: id, IMAPName: box, UIDValidity: 1}, Labels: labels}
+	}
+	items := []mailops.Verified{item(1, "A", `\Inbox`), item(2, "B", `\Inbox`, "R"), item(3, "A", `\Inbox`)}
+	plan := mailops.RelabelPlan(items, []string{"R"}, []string{`\Inbox`})
+	if len(plan) != 2 || !reflect.DeepEqual(plan[0].Add, []string{"R"}) || len(plan[0].Items) != 2 ||
+		len(plan[1].Add) != 0 || !reflect.DeepEqual(plan[1].Remove, []string{`\Inbox`}) {
+		t.Fatalf("RelabelPlan = %+v", plan)
+	}
+	groups := mailops.GroupByMailbox(items)
+	if len(groups) != 2 || groups[0].IMAPName != "A" || len(groups[0].Items) != 2 || groups[1].IMAPName != "B" {
+		t.Fatalf("GroupByMailbox = %+v", groups)
+	}
+	if got := mailops.Chunks([]int{1, 2, 3}, 2); !reflect.DeepEqual(got, [][]int{{1, 2}, {3}}) || mailops.Chunks([]int{}, 2) != nil {
+		t.Fatalf("Chunks = %v", got)
+	}
+}
+
 func refused(err error) bool {
 	var r safety.WriteRefused
 	return errors.As(err, &r)
 }
 
+// TestEveryWriteGoesThroughTheGate runs every write helper of this package and every undoer of live in shadow
+// mode with no approval: each is refused before the connection sees a write, and each runs once approved.
 func TestEveryWriteGoesThroughTheGate(t *testing.T) {
 	type write func(ctx context.Context, w *livetest.World, r *proposals.Registry) error
 	undo := func(op string, plan py.Dict) write {
@@ -296,100 +395,6 @@ func TestEveryWriteGoesThroughTheGate(t *testing.T) {
 				t.Fatalf("approved = %v, writes %v", err, w.Fake.Writes)
 			}
 		})
-	}
-}
-
-func TestSnapshotsDict(t *testing.T) {
-	w := livetest.ICloud(t, "live")
-	w.Arrive("b")
-	w.Arrive("a")
-	snaps := snapshots(t, w, "a", "b")
-	if snaps[0].ID >= snaps[1].ID || snaps[0].MsgID != "b@x.test" || snaps[0].IMAPName != "INBOX" || snaps[0].Mailbox != "INBOX" {
-		t.Fatalf("snapshots = %+v", snaps)
-	}
-	want := `{"id": 1, "uid": 1, "uidvalidity": 1, "msgid": "b@x.test", "digest": "` + snaps[0].Digest +
-		`", "mailbox": "INBOX", "imap_name": "INBOX"}`
-	if got := py.JSONDumps(snaps[0].Dict()); got != want {
-		t.Fatalf("Dict = %s", got)
-	}
-}
-
-func TestVerifyGmailFetchesLabels(t *testing.T) {
-	w := livetest.Gmail(t, "live")
-	w.Arrive("g")
-	ok, skipped, err := mailops.Verify(t.Context(), w.DB.Read, w.Fake, config.Gmail, snapshots(t, w, "g"))
-	if err != nil || len(skipped) != 0 || !reflect.DeepEqual(ok[0].Labels, []string{mailops.InboxLabel}) {
-		t.Fatalf("Verify = %+v %v %v", ok, skipped, err)
-	}
-	if items := w.Fake.Fetches[len(w.Fake.Fetches)-1].Items; items != (mail.FetchItems{HeaderOnly: true, Labels: true}) {
-		t.Fatalf("items = %+v", items)
-	}
-}
-
-func TestServerMsgID(t *testing.T) {
-	for header, want := range map[string]string{
-		"Message-ID: <a@b.test>\r\n\r\n":             "a@b.test",
-		"Message-ID:\r\n <folded@b.test>\r\n\r\n":    "folded@b.test",
-		"Message-ID: <caf\xc3\xa9@b.test>\r\n\r\n":   "caf\ufffd\ufffd@b.test",
-		"Message-ID: <a\xa0b@x>\r\n\r\n":             "a\ufffdb@x",
-		"From: a\r\n\r\n":                            "",
-		"Message-ID: <=?utf-8?q?a?=@b.test>\r\n\r\n": "=?utf-8?q?a?=@b.test",
-	} {
-		if got := mailops.ServerMsgID([]byte(header)); got != want {
-			t.Errorf("ServerMsgID(%q) = %q, want %q", header, got, want)
-		}
-	}
-}
-
-func TestMoveUIDsRefusesWithoutUIDPLUS(t *testing.T) {
-	w := livetest.ICloud(t, "live")
-	w.Arrive("m")
-	delete(w.Fake.Caps, "UIDPLUS")
-	err := mailops.MoveUIDs(t.Context(), w.Fake, "INBOX", "Bills", []uint32{1}, nil)
-	if err == nil || err.Error() != "server lacks UIDPLUS: refusing to move" || w.Fake.RW != "" || len(w.Fake.Writes) != 0 {
-		t.Fatalf("MoveUIDs = %v, rw %q, writes %v", err, w.Fake.RW, w.Fake.Writes)
-	}
-}
-
-func TestLabelAndFlagStores(t *testing.T) {
-	w := livetest.Gmail(t, "live")
-	w.Arrive("g")
-	ctx := t.Context()
-	if err := mailops.StoreLabels(ctx, w.Fake, config.GmailAllMail, []uint32{1}, []string{"Ré"}, nil); err != nil {
-		t.Fatal(err)
-	}
-	if err := mailops.ArchiveUIDs(ctx, w.Fake, config.GmailAllMail, []uint32{1}); err != nil {
-		t.Fatal(err)
-	}
-	if err := mailops.StoreFlag(ctx, w.Fake, config.GmailAllMail, []uint32{1}, mailops.Flagged, true); err != nil {
-		t.Fatal(err)
-	}
-	var args [][]string
-	for _, fw := range w.Fake.Writes {
-		args = append(args, fw.Args)
-	}
-	want := [][]string{{"+X-GM-LABELS", "Ré"}, {"-X-GM-LABELS", `\Inbox`}, {"+FLAGS.SILENT", `\Flagged`}}
-	if !reflect.DeepEqual(args, want) || w.Fake.RW != config.GmailAllMail {
-		t.Fatalf("stores = %v", args)
-	}
-}
-
-func TestRelabelPlanAndGroups(t *testing.T) {
-	item := func(id int64, box string, labels ...string) mailops.Verified {
-		return mailops.Verified{Snapshot: mailops.Snapshot{ID: id, IMAPName: box, UIDValidity: 1}, Labels: labels}
-	}
-	items := []mailops.Verified{item(1, "A", `\Inbox`), item(2, "B", `\Inbox`, "R"), item(3, "A", `\Inbox`)}
-	plan := mailops.RelabelPlan(items, []string{"R"}, []string{`\Inbox`})
-	if len(plan) != 2 || !reflect.DeepEqual(plan[0].Add, []string{"R"}) || len(plan[0].Items) != 2 ||
-		len(plan[1].Add) != 0 || !reflect.DeepEqual(plan[1].Remove, []string{`\Inbox`}) {
-		t.Fatalf("RelabelPlan = %+v", plan)
-	}
-	groups := mailops.GroupByMailbox(items)
-	if len(groups) != 2 || groups[0].IMAPName != "A" || len(groups[0].Items) != 2 || groups[1].IMAPName != "B" {
-		t.Fatalf("GroupByMailbox = %+v", groups)
-	}
-	if got := mailops.Chunks([]int{1, 2, 3}, 2); !reflect.DeepEqual(got, [][]int{{1, 2}, {3}}) || mailops.Chunks([]int{}, 2) != nil {
-		t.Fatalf("Chunks = %v", got)
 	}
 }
 
