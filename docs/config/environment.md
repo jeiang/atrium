@@ -6,8 +6,11 @@ An environment variable pins its setting and wins over the configuration file an
 
 | Variable | Setting |
 | --- | --- |
+| `ATRIUM_ACTION_LINKS_ACTION_LINK_KEY` | `action_links.action_link_key` |
+| `ATRIUM_ANTHROPIC_ANTHROPIC_ADMIN_KEY` | `anthropic.anthropic_admin_key` |
 | `ATRIUM_ASSISTANT_BUDGET_UNATTENDED_SHARE` | `assistant.budget_unattended_share` |
 | `ATRIUM_ASSISTANT_CACHE_TTL_CHAT` | `assistant.cache_ttl_chat` |
 | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD` | `assistant.max_run_cost_usd` |
 | `ATRIUM_ASSISTANT_MAX_STEPS` | `assistant.max_steps` |
 | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` | `assistant.monthly_budget_usd` |
+| `ATRIUM_OPENAI_OPENAI_ADMIN_KEY` | `openai.openai_admin_key` |

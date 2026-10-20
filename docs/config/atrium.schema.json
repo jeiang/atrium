@@ -2,6 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "action_links": {
+      "additionalProperties": false,
+      "properties": {
+        "action_link_key_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "anthropic": {
+      "additionalProperties": false,
+      "properties": {
+        "anthropic_admin_key_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "assistant": {
       "additionalProperties": false,
       "properties": {
@@ -58,6 +78,16 @@
           ]
         },
         "monthly_budget_usd_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "openai": {
+      "additionalProperties": false,
+      "properties": {
+        "openai_admin_key_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
