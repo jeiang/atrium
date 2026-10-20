@@ -26,6 +26,12 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `max_steps` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS` |
 | `monthly_budget_usd` | float | `75` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
 
+## db
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `key` | string | none | secret | `ATRIUM_DB_KEY` |
+
 ## openai
 
 | Key | Type | Default | Class | Environment variable |

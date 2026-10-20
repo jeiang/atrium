@@ -64,9 +64,12 @@ func (d *DB) Checkpoint(ctx context.Context, wait time.Duration) (Checkpoint, er
 }
 
 type DB struct {
-	Write *sql.DB
-	Read  *sql.DB
+	Write     *sql.DB
+	Read      *sql.DB
+	encrypted bool
 }
+
+func (d *DB) Encrypted() bool { return d.encrypted }
 
 func Connect(path string, opts ...Option) (*DB, error) { return connect(path, true, opts) }
 
@@ -87,18 +90,25 @@ func connect(path string, foreignKeys bool, opts []Option) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := guardFile(path, key); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		return nil, err
 	}
 	pragmas := connPragmas(foreignKeys)
 	w := Open(writeDSN, pragmas...)
 	w.SetMaxOpenConns(1)
+	if err := guardEngine(w, key); err != nil {
+		_ = w.Close()
+		return nil, err
+	}
 	if err := setWAL(w); err != nil {
 		_ = w.Close()
 		return nil, fmt.Errorf("db: %s: %w", path, err)
 	}
 	r := Open(readDSN, append(pragmas, "PRAGMA query_only = ON")...)
-	return &DB{Write: w, Read: r}, nil
+	return &DB{Write: w, Read: r, encrypted: !key.IsZero()}, nil
 }
 
 func (d *DB) Close() error {

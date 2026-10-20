@@ -30,16 +30,12 @@ func init() {
 }
 
 func init() {
-	db.OnReady(func(ctx context.Context, d *db.DB) error { return New(d, Plaintext{}).Load(ctx) })
+	db.OnReady(func(ctx context.Context, d *db.DB) error { return New(d, d).Load(ctx) })
 }
 
 type Cipher interface {
 	Encrypted() bool
 }
-
-type Plaintext struct{}
-
-func (Plaintext) Encrypted() bool { return false }
 
 type Status string
 
@@ -56,6 +52,12 @@ func (e NotSecret) Error() string { return "secrets: " + string(e) + " is not a 
 type NotGenerated string
 
 func (e NotGenerated) Error() string { return "secrets: " + string(e) + " is not a generated key" }
+
+type PinOnly string
+
+func (e PinOnly) Error() string {
+	return "secrets: " + string(e) + " can only be pinned by the deployment"
+}
 
 type EmptyValue string
 
@@ -107,6 +109,9 @@ func (s *Store) writable(name string) (settings.Def, error) {
 	if err != nil {
 		return d, err
 	}
+	if d.PinOnly {
+		return d, PinOnly(name)
+	}
 	source, pinned, err := s.reg.Pinned(name)
 	if err != nil {
 		return d, err
@@ -157,8 +162,10 @@ func (s *Store) Load(ctx context.Context) error {
 }
 
 func (s *Store) Delete(ctx context.Context, name string) error {
-	if _, err := s.def(name); err != nil {
+	if d, err := s.def(name); err != nil {
 		return err
+	} else if d.PinOnly {
+		return PinOnly(name)
 	}
 	res, err := s.q.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name)
 	if err != nil {

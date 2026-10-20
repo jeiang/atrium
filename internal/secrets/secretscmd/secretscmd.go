@@ -107,11 +107,12 @@ func failure(e *cli.Env, err error) int {
 	var encrypted secrets.EncryptionRequired
 	var notSecret secrets.NotSecret
 	var empty secrets.EmptyValue
+	var pinOnly secrets.PinOnly
 	var unknown settings.UnknownKey
 	switch {
 	case errors.As(err, &unknown), errors.As(err, &notSecret):
 		return e.UsageError("%v", err)
-	case errors.As(err, &pinned), errors.As(err, &encrypted), errors.As(err, &empty):
+	case errors.As(err, &pinned), errors.As(err, &encrypted), errors.As(err, &empty), errors.As(err, &pinOnly):
 		_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
 		return cli.ExitError
 	}
@@ -131,5 +132,5 @@ func (s *service) with(e *cli.Env, run func(*secrets.Store) int) int {
 	if err := db.Migrate(e.Ctx, d, cfg.DBPath); err != nil {
 		return cli.Fail(e, err)
 	}
-	return run(secrets.New(d, secrets.Plaintext{}))
+	return run(secrets.New(d, d))
 }

@@ -52,6 +52,7 @@ type Def struct {
 	Secret              bool
 	RequiresEncryptedDB bool
 	Generated           bool
+	PinOnly             bool
 	Restart             bool
 	Scopes              []Scope
 	ThreadColumn        string
@@ -159,8 +160,8 @@ func (d Def) valid() error {
 		return bad("unknown class %q", d.Class)
 	case (d.Class == Secret) != d.Secret:
 		return bad("the secret flag and the secret class go together")
-	case (d.RequiresEncryptedDB || d.Generated) && d.Class != Secret:
-		return bad("encrypted-database and generated flags belong to secret keys")
+	case (d.RequiresEncryptedDB || d.Generated || d.PinOnly) && d.Class != Secret:
+		return bad("encrypted-database, generated and pin-only flags belong to secret keys")
 	case d.Class.writable() == (len(d.Scopes) == 0):
 		return bad("class %s %s scopes", d.Class, map[bool]string{true: "needs", false: "takes no"}[d.Class.writable()])
 	case (d.Type == Enum) != (len(d.Choices) > 0):
