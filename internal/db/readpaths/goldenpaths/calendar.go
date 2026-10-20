@@ -1,4 +1,4 @@
-package readpaths_test
+package goldenpaths
 
 import (
 	"context"

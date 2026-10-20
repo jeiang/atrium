@@ -106,4 +106,22 @@ func init() {
 			return Totals(ctx, d.Read)
 		},
 	})
+	readpaths.Register(readpaths.Path{
+		Name:   "notion.GetWiki",
+		Golden: "notion_wiki.get_local",
+		Run: func(ctx context.Context, d *db.DB) (any, error) {
+			return GetWiki(ctx, d.Read, goldenPageID)
+		},
+	})
+	readpaths.Register(readpaths.Path{
+		Name:   "notion.LogPageID",
+		Golden: "notion_wiki.log_page_id",
+		Run: func(ctx context.Context, d *db.DB) (any, error) {
+			var one int
+			if err := d.Read.QueryRowContext(ctx, "SELECT 1 FROM notion_state WHERE key = ?", logStateKey).Scan(&one); err != nil {
+				return nil, err
+			}
+			return LogPageID(ctx, d, nil, "")
+		},
+	})
 }

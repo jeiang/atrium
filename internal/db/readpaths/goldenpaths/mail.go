@@ -1,4 +1,4 @@
-package readpaths_test
+package goldenpaths
 
 import (
 	"context"
@@ -16,14 +16,12 @@ import (
 	"github.com/jeiang/atrium/internal/mail/triage"
 )
 
-// goldenNow is the clock make_db.py's last scenario step left running (manifest.json clock.steps.scan2).
 var goldenNow = time.Unix(1793392200, 0)
 
 func goldenEnv() config.Env {
 	return config.Map(map[string]string{"ATRIUM_TZ": "America/Port_of_Spain"})
 }
 
-// sparseEmbedding is make_db.py's local model: a bag of sha256-bucketed tokens, normalised as embed.Texts does.
 func sparseEmbedding(ctx context.Context, _ string, texts []string) ([][]float64, error) {
 	out := make([][]float64, len(texts))
 	for i, text := range texts {

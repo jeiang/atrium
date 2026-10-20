@@ -17,6 +17,7 @@ either run differs from the committed files.
 | `../atrium-legacy.db` | The same data in the pre-migration shapes a fresh DB never has (see below). `db.connect` migrates it. |
 | `../atrium-vec016.db`, `../atrium-vec016.json` | A minimal DB written by the live host's stack (SQLite 3.51.2, sqlite-vec 0.1.6) and what Python recorded from it (below). |
 | `schema.sql`, `rowcounts.json`, `quick_check.json`, `readpaths.json` | Schema, per-table row counts, `PRAGMA quick_check` and read-path results of `atrium.db`. |
+| `readpaths.json` entries `profile.entries`, `context.ledger_rows`, `context.projection`, `progress.since`, `calendar.find_tracked`, `media.seen`, `money.unscanned`, `notion_wiki.get_local`, `notion_wiki.log_page_id` | Recorded from the Go read paths run on the golden databases after the Python app was deleted; the Python app never produced them. |
 | `legacy/pre/` | Schema, row counts and quick check of `atrium-legacy.db` as committed. |
 | `legacy/migrated/` | The same after Python's `db.connect` migrated a copy, plus its read-path results. |
 | `sqlite_version.txt` | SQLite, sqlite-vec and Python versions that wrote the files. |
