@@ -69,7 +69,7 @@ func (s *site) threadRow(id int64) (project *int64, effort string, limit int64) 
 func TestProjectsCrudAndListing(t *testing.T) {
 	s := newSite(t)
 	list := status(t, s.get("/projects"), http.StatusOK)
-	mustContain(t, list, "No projects yet", `data-variant="secondary" href="/projects"`, `id="new-project"`, `aria-labelledby="project-dialog-title"`)
+	mustContain(t, list, "No projects yet", `data-variant="secondary" href="/projects"`, `id="new-project"`, `id="project-dialog"`, `aria-labelledby="project-dialog-title"`)
 	mustNotContain(t, list, `aria-label="Project"`)
 	mustContain(t, status(t, s.get("/projects?view=bogus"), http.StatusUnprocessableEntity), "Filter not understood", "Unknown view")
 
@@ -100,6 +100,7 @@ func TestProjectsCrudAndListing(t *testing.T) {
 
 	edit := status(t, s.get("/projects/1/edit"), http.StatusOK)
 	mustContain(t, edit, "Always answer in metric units.", `value="Kitchen"`, `<option value="200000" selected>`, `<option value="high" selected>`, "Create wiki hub", `hx-post="/projects/1/archive"`, `id="project-dialog-title"`, `aria-describedby="project-effort-help"`, `id="project-effort-help"`, `aria-describedby="project-context-help"`, `id="project-context-help"`)
+	mustNotContain(t, edit, "<html")
 	newForm := status(t, s.get("/projects/new"), http.StatusOK)
 	mustContain(t, newForm, "New project", `action="/projects"`, `<option value="90000" selected>`, `<option value="medium" selected>`)
 	mustNotContain(t, newForm, "Create wiki hub", `hx-post="/projects/0/archive"`, "<html")
@@ -181,6 +182,8 @@ func TestProjectPageListsItsThreadsPinnedFirst(t *testing.T) {
 		t.Errorf("chat list names the project %d times, want 2", n)
 	}
 	mustContain(t, listing, "Elsewhere", `href="/projects"`)
+	emptyArchived := status(t, s.get(fmt.Sprintf("/projects/%d?view=archived", project)), http.StatusOK)
+	mustContain(t, emptyArchived, "Nothing archived", `name="view" value="archived"`)
 	status(t, s.post(fmt.Sprintf("/chat/%d/archive", older), url.Values{"archived": {"1"}, "project_id": {strconv.FormatInt(project, 10)}}), http.StatusSeeOther)
 	archivedView := status(t, s.get(fmt.Sprintf("/projects/%d?view=archived", project)), http.StatusOK)
 	mustContain(t, archivedView, "Older", fmt.Sprintf(`id="thread-%d-archive"`, older))
