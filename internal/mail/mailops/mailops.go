@@ -47,6 +47,10 @@ func (Error) PyClass() string { return "MailOpError" }
 
 func (Error) PyModule() string { return "atrium.mailops" }
 
+// ErrValidityChanged is the refusal of a write whose mailbox reports another UIDVALIDITY than the verified one;
+// nothing was sent.
+var ErrValidityChanged = Error("UIDVALIDITY changed")
+
 // PartialMove is a batch that was copied but not expunged: Copied is what COPYUID reported, nil without it.
 type PartialMove struct {
 	Copied *mail.CopyUID
@@ -371,7 +375,7 @@ func SelectRW(ctx context.Context, client mail.Client, imapName string, validity
 		return err
 	}
 	if validity != 0 && got != validity {
-		return Error("UIDVALIDITY changed")
+		return ErrValidityChanged
 	}
 	return nil
 }

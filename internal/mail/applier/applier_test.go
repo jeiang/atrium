@@ -462,6 +462,40 @@ func TestGmailDeletionPassRefusesBeforeCopyWhenUIDValidityDiffers(t *testing.T) 
 	}
 }
 
+func TestGmailDeletionPassIgnoresATrashDuplicateWhenUIDValidityDiffers(t *testing.T) {
+	w := gmail(t, "live")
+	w.arrive("doomed", arrival{labels: []string{"Receipts"}, sender: "x@spam.test"})
+	w.age("doomed", 1.0)
+	w.deleteRule(config.Gmail)
+	orig := w.Fake.Boxes[allMail].Messages[1]
+	w.Fake.Boxes["[Gmail]/Trash"].Add(orig.Header, orig.Text, nil, nil)
+	w.Fake.RWValidity = map[string]uint32{allMail: 99}
+	out := w.deletions(false)
+	want(t, "failed", out.Failed, 1)
+	want(t, "by kind", out.ByKind, py.Dict(nil))
+	want(t, "verbs", w.verbs(), []string(nil))
+	row := w.Actions()[0]
+	if row.OK == nil || *row.OK != 0 || row.Undo != nil || row.Error == nil || *row.Error != "MailOpError: UIDVALIDITY changed" {
+		t.Fatalf("row = %+v", row)
+	}
+}
+
+func TestGmailRelabelRefusesWhenUIDValidityDiffers(t *testing.T) {
+	w := gmail(t, "live")
+	w.arrive("filed", arrival{})
+	w.decide("filed", "Receipts")
+	w.Fake.RWValidity = map[string]uint32{allMail: 99}
+	out := w.apply()
+	want(t, "failed", out.Failed, 1)
+	want(t, "written", out.Written, 0)
+	want(t, "verbs", w.verbs(), []string(nil))
+	want(t, "labels", w.Fake.Boxes[allMail].Messages[1].Labels, []string{inboxLabel})
+	row := w.Actions()[0]
+	if row.OK == nil || *row.OK != 0 || row.Undo != nil || row.After != nil || row.Error == nil || *row.Error != "MailOpError: UIDVALIDITY changed" {
+		t.Fatalf("row = %+v", row)
+	}
+}
+
 func TestWriteCapDefersTheExcessAndWarns(t *testing.T) {
 	w := icloud(t, "live")
 	w.applier.Cap = 2

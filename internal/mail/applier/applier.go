@@ -429,6 +429,19 @@ func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account st
 	for _, chunk := range mailops.Chunks(uids, mailops.Batch) {
 		if err := mailops.StoreLabels(ctx, client, g.imapName, g.validity, chunk, g.added, g.removed); err != nil {
 			text := py.ExceptionText(err)
+			if errors.Is(err, mailops.ErrValidityChanged) {
+				for _, uid := range chunk {
+					if err := a.Live.Fail(ctx, by[uid].aid, text); err != nil {
+						return err
+					}
+				}
+				out.Failed += len(chunk)
+				if err := a.discard(ctx, by, uids[slices.Index(uids, chunk[len(chunk)-1])+1:]); err != nil {
+					return err
+				}
+				log.Error(fmt.Sprintf("%s: relabel in %s refused: %s", account, g.imapName, err.Error()))
+				return nil
+			}
 			actual := observedLabels(ctx, client, g.imapName, chunk)
 			for _, uid := range chunk {
 				e := by[uid]
@@ -548,6 +561,7 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 		if err != nil {
 			text := py.ExceptionText(err)
 			_, refused := errors.AsType[safety.WriteRefused](err)
+			refused = refused || errors.Is(err, mailops.ErrValidityChanged)
 			for _, uid := range chunk {
 				e := by[uid]
 				var validity, destUID uint32
