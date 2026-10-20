@@ -363,6 +363,19 @@ func DeleteFolderIfEmpty(ctx context.Context, client mail.Client, imapName strin
 	return true, client.DeleteMailbox(ctx, imapName)
 }
 
+// SelectRW opens imapName read-write and refuses when the server's UIDVALIDITY is not validity, before any write
+// is sent. A validity of 0 is an undo plan that recorded none; every other caller passes the verified value.
+func SelectRW(ctx context.Context, client mail.Client, imapName string, validity uint32) error {
+	got, err := client.SelectRW(ctx, imapName)
+	if err != nil {
+		return err
+	}
+	if validity != 0 && got != validity {
+		return Error("UIDVALIDITY changed")
+	}
+	return nil
+}
+
 // CopyUIDs is copy_uids: the COPYUID mapping, nil when the server sent none.
 func CopyUIDs(ctx context.Context, client mail.Client, destIMAP string, uids []uint32) (*mail.CopyUID, error) {
 	return client.Copy(ctx, mail.UIDs(uids...), destIMAP)
@@ -371,12 +384,12 @@ func CopyUIDs(ctx context.Context, client mail.Client, destIMAP string, uids []u
 // MoveUIDs is move_uids: per batch of Batch UIDs a COPY, STORE +FLAGS.SILENT \Deleted and UID EXPUNGE, then
 // moved with the batch and its COPYUID. A server without UIDPLUS is refused before anything is sent; a batch
 // copied but not expunged is a *PartialMove.
-func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string, uids []uint32,
+func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string, validity uint32, uids []uint32,
 	moved func(batch []uint32, copied *mail.CopyUID) error) error {
 	if !client.HasCapability("UIDPLUS") {
 		return Error("server lacks UIDPLUS: refusing to move")
 	}
-	if err := client.SelectRW(ctx, srcIMAP); err != nil {
+	if err := SelectRW(ctx, client, srcIMAP, validity); err != nil {
 		return err
 	}
 	for _, batch := range Chunks(uids, Batch) {
@@ -399,8 +412,8 @@ func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string,
 }
 
 // StoreLabels is store_labels: per batch, +X-GM-LABELS add then -X-GM-LABELS remove.
-func StoreLabels(ctx context.Context, client mail.Client, imapName string, uids []uint32, add, remove []string) error {
-	if err := client.SelectRW(ctx, imapName); err != nil {
+func StoreLabels(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32, add, remove []string) error {
+	if err := SelectRW(ctx, client, imapName, validity); err != nil {
 		return err
 	}
 	for _, batch := range Chunks(uids, Batch) {
@@ -420,8 +433,8 @@ func StoreLabels(ctx context.Context, client mail.Client, imapName string, uids 
 }
 
 // StoreFlag is store_flag: per batch, +FLAGS.SILENT or -FLAGS.SILENT flag.
-func StoreFlag(ctx context.Context, client mail.Client, imapName string, uids []uint32, flag string, add bool) error {
-	if err := client.SelectRW(ctx, imapName); err != nil {
+func StoreFlag(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32, flag string, add bool) error {
+	if err := SelectRW(ctx, client, imapName, validity); err != nil {
 		return err
 	}
 	for _, batch := range Chunks(uids, Batch) {
@@ -433,8 +446,8 @@ func StoreFlag(ctx context.Context, client mail.Client, imapName string, uids []
 }
 
 // ArchiveUIDs is archive_uids: the Gmail \Inbox label comes off.
-func ArchiveUIDs(ctx context.Context, client mail.Client, imapName string, uids []uint32) error {
-	return StoreLabels(ctx, client, imapName, uids, nil, []string{InboxLabel})
+func ArchiveUIDs(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32) error {
+	return StoreLabels(ctx, client, imapName, validity, uids, nil, []string{InboxLabel})
 }
 
 // Relabel is one relabel_plan group: the labels still to add and to remove for its items.

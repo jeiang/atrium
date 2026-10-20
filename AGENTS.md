@@ -358,7 +358,11 @@ and backups; nothing of that lives here.
   automatic action and undo shares. `Verify` checks snapshots against the
   database, then the live mailbox (header-only fetch), before any write;
   `MoveUIDs` refuses a server without UIDPLUS and returns `*PartialMove`
-  for a batch copied but not expunged. Errors carry their Python class
+  for a batch copied but not expunged. `SelectRW` returns the UIDVALIDITY
+  the write SELECT reported; `mailops.SelectRW`, used by `MoveUIDs`,
+  `StoreLabels`, `StoreFlag` and the Gmail trash copies, refuses with
+  `UIDVALIDITY changed` when it differs from the verified value, before any
+  write command is sent. 0 means an undo plan recorded none. Errors carry their Python class
   (`py.Classed`) so `py.ExceptionText` gives the stored `Class: message`.
 - `internal/mail/live/`: `live.py`. `TakeBaseline`/`EnsureGolive`/
   `Rebaseline`, the `auto_actions` ledger (`Begin` refuses a held or applied

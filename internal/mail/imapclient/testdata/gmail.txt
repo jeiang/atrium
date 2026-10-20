@@ -44,6 +44,7 @@ S: {t} OK SEARCH completed (Success)
 
 C: {t} SELECT "[Gmail]/All Mail"
 S: * 4 EXISTS
+S: * OK [UIDVALIDITY 1] UIDs valid
 S: {t} OK [READ-WRITE] [Gmail]/All Mail selected. (Success)
 C: {t} UID STORE 101:102 +X-GM-LABELS ("Caf&AOk-/Re\"ceipts" \Important)
 S: * 1 FETCH (UID 101 X-GM-LABELS (\Inbox \Important "Caf&AOk-/Re\"ceipts"))

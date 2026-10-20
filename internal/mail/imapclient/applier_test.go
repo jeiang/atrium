@@ -113,6 +113,7 @@ S: Message-ID: <m1@x.test>
 S: )
 S: {t} OK FETCH completed
 `+appliedList+appliedList+`C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 301 "Bills"
 S: {t} OK [COPYUID 99 301 500] Done
@@ -152,6 +153,7 @@ S: Message-ID: <m1@x.test>
 S: )
 S: {t} OK FETCH completed
 `+appliedList+appliedList+`C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 301 "Bills"
 S: {t} OK [COPYUID 99 301 500] Done
@@ -198,6 +200,7 @@ S: * LIST (\All \HasNoChildren) "/" "[Gmail]/All Mail"
 S: * LIST (\HasNoChildren \Trash) "/" "[Gmail]/Trash"
 S: {t} OK Success
 C: {t} SELECT "[Gmail]/All Mail"
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] [Gmail]/All Mail selected. (Success)
 C: {t} UID STORE 101 +X-GM-LABELS ("Receipts")
 S: * 1 FETCH (UID 101 X-GM-LABELS (\Inbox "Receipts"))
@@ -242,6 +245,7 @@ S: Message-ID: <m2@x.test>
 S: )
 S: {t} OK FETCH completed
 `+appliedList+appliedList+`C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 301 "Bills"
 S: {t} OK [COPYUID 99 301 500] Done

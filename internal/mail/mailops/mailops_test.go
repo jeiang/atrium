@@ -36,7 +36,7 @@ func (r *recorder) Select(ctx context.Context, name string) error {
 	return r.Client.Select(ctx, name)
 }
 
-func (r *recorder) SelectRW(ctx context.Context, name string) error {
+func (r *recorder) SelectRW(ctx context.Context, name string) (uint32, error) {
 	r.log("SELECT-RW " + name)
 	return r.Client.SelectRW(ctx, name)
 }
@@ -182,7 +182,7 @@ func TestNoWriteBeforeVerify(t *testing.T) {
 		for _, it := range g.Items {
 			uids = append(uids, it.UID)
 		}
-		if err := mailops.MoveUIDs(ctx, rec, g.IMAPName, "Bills", uids, func([]uint32, *mail.CopyUID) error { return nil }); err != nil {
+		if err := mailops.MoveUIDs(ctx, rec, g.IMAPName, "Bills", g.UIDValidity, uids, func([]uint32, *mail.CopyUID) error { return nil }); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -201,7 +201,7 @@ func TestMoveUIDsBatchesAndReportsPartialMove(t *testing.T) {
 		all = append(all, inbox.Add(h, b, nil, nil))
 	}
 	var batches [][]uint32
-	err := mailops.MoveUIDs(t.Context(), w.Fake, "INBOX", "Bills", all, func(batch []uint32, copied *mail.CopyUID) error {
+	err := mailops.MoveUIDs(t.Context(), w.Fake, "INBOX", "Bills", inbox.Validity, all, func(batch []uint32, copied *mail.CopyUID) error {
 		if copied == nil || copied.UIDValidity != 3 || len(copied.Mapping) != len(batch) {
 			t.Fatalf("copied = %+v", copied)
 		}
@@ -219,7 +219,7 @@ func TestMoveUIDsBatchesAndReportsPartialMove(t *testing.T) {
 		}
 		return nil
 	}
-	err = mailops.MoveUIDs(t.Context(), w.Fake, "INBOX", "Bills", []uint32{uid}, func([]uint32, *mail.CopyUID) error {
+	err = mailops.MoveUIDs(t.Context(), w.Fake, "INBOX", "Bills", inbox.Validity, []uint32{uid}, func([]uint32, *mail.CopyUID) error {
 		t.Fatal("a partial batch was reported moved")
 		return nil
 	})
@@ -234,7 +234,7 @@ func TestMoveUIDsRefusesWithoutUIDPLUS(t *testing.T) {
 	w := livetest.ICloud(t, "live")
 	w.Arrive("m")
 	delete(w.Fake.Caps, "UIDPLUS")
-	err := mailops.MoveUIDs(t.Context(), w.Fake, "INBOX", "Bills", []uint32{1}, nil)
+	err := mailops.MoveUIDs(t.Context(), w.Fake, "INBOX", "Bills", 0, []uint32{1}, nil)
 	if err == nil || err.Error() != "server lacks UIDPLUS: refusing to move" || w.Fake.RW != "" || len(w.Fake.Writes) != 0 {
 		t.Fatalf("MoveUIDs = %v, rw %q, writes %v", err, w.Fake.RW, w.Fake.Writes)
 	}
@@ -283,13 +283,13 @@ func TestLabelAndFlagStores(t *testing.T) {
 	w := livetest.Gmail(t, "live")
 	w.Arrive("g")
 	ctx := t.Context()
-	if err := mailops.StoreLabels(ctx, w.Fake, config.GmailAllMail, []uint32{1}, []string{"Ré"}, nil); err != nil {
+	if err := mailops.StoreLabels(ctx, w.Fake, config.GmailAllMail, 0, []uint32{1}, []string{"Ré"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := mailops.ArchiveUIDs(ctx, w.Fake, config.GmailAllMail, []uint32{1}); err != nil {
+	if err := mailops.ArchiveUIDs(ctx, w.Fake, config.GmailAllMail, 0, []uint32{1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := mailops.StoreFlag(ctx, w.Fake, config.GmailAllMail, []uint32{1}, mailops.Flagged, true); err != nil {
+	if err := mailops.StoreFlag(ctx, w.Fake, config.GmailAllMail, 0, []uint32{1}, mailops.Flagged, true); err != nil {
 		t.Fatal(err)
 	}
 	var args [][]string
@@ -338,20 +338,20 @@ func TestEveryWriteGoesThroughTheGate(t *testing.T) {
 	}
 	writes := map[string]write{
 		"MoveUIDs": func(ctx context.Context, w *livetest.World, _ *proposals.Registry) error {
-			return mailops.MoveUIDs(ctx, w.Fake, "INBOX", "Bills", []uint32{1}, func([]uint32, *mail.CopyUID) error { return nil })
+			return mailops.MoveUIDs(ctx, w.Fake, "INBOX", "Bills", 0, []uint32{1}, func([]uint32, *mail.CopyUID) error { return nil })
 		},
 		"CopyUIDs": func(ctx context.Context, w *livetest.World, _ *proposals.Registry) error {
 			_, err := mailops.CopyUIDs(ctx, w.Fake, "Misc", []uint32{1})
 			return err
 		},
 		"StoreLabels": func(ctx context.Context, w *livetest.World, _ *proposals.Registry) error {
-			return mailops.StoreLabels(ctx, w.Fake, "INBOX", []uint32{1}, []string{"x"}, nil)
+			return mailops.StoreLabels(ctx, w.Fake, "INBOX", 0, []uint32{1}, []string{"x"}, nil)
 		},
 		"StoreFlag": func(ctx context.Context, w *livetest.World, _ *proposals.Registry) error {
-			return mailops.StoreFlag(ctx, w.Fake, "INBOX", []uint32{1}, mailops.Flagged, true)
+			return mailops.StoreFlag(ctx, w.Fake, "INBOX", 0, []uint32{1}, mailops.Flagged, true)
 		},
 		"ArchiveUIDs": func(ctx context.Context, w *livetest.World, _ *proposals.Registry) error {
-			return mailops.ArchiveUIDs(ctx, w.Fake, "INBOX", []uint32{1})
+			return mailops.ArchiveUIDs(ctx, w.Fake, "INBOX", 0, []uint32{1})
 		},
 		"EnsureFolder": func(ctx context.Context, w *livetest.World, _ *proposals.Registry) error {
 			_, err := mailops.EnsureFolder(ctx, w.Fake, "New")
@@ -403,5 +403,29 @@ func TestSnapshotRoundTripsThroughPayloadJSON(t *testing.T) {
 	var got mailops.Snapshot
 	if err := json.Unmarshal([]byte(py.JSONDumps(want.Dict())), &got); err != nil || got != want {
 		t.Fatalf("round trip = %+v, %v", got, err)
+	}
+}
+
+func TestWritesRefuseWhenTheSelectedUIDValidityDiffers(t *testing.T) {
+	w := livetest.Gmail(t, "live")
+	w.Arrive("g")
+	ctx := t.Context()
+	w.Fake.RWValidity = map[string]uint32{config.GmailAllMail: 99}
+	writes := map[string]error{
+		"StoreLabels": mailops.StoreLabels(ctx, w.Fake, config.GmailAllMail, 1, []uint32{1}, []string{"x"}, nil),
+		"StoreFlag":   mailops.StoreFlag(ctx, w.Fake, config.GmailAllMail, 1, []uint32{1}, mailops.Flagged, true),
+		"MoveUIDs": mailops.MoveUIDs(ctx, w.Fake, config.GmailAllMail, "Misc", 1, []uint32{1},
+			func([]uint32, *mail.CopyUID) error { return nil }),
+	}
+	for name, err := range writes {
+		if err == nil || err.Error() != "UIDVALIDITY changed" {
+			t.Errorf("%s = %v", name, err)
+		}
+	}
+	if len(w.Fake.Writes) != 0 {
+		t.Fatalf("writes after a mismatch: %v", w.Fake.Writes)
+	}
+	if err := mailops.StoreFlag(ctx, w.Fake, config.GmailAllMail, 0, []uint32{1}, mailops.Flagged, true); err != nil {
+		t.Fatalf("validity 0 = %v", err)
 	}
 }
