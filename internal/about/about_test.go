@@ -34,17 +34,21 @@ func TestAboutPage(t *testing.T) {
 		`class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent bg-accent font-medium"`,
 		`href="/about"`,
 		`aria-current="page"`,
+		`<hr role="separator"/>`,
 		"About",
 		"Version:",
 		"test-version",
 		"Licence notices",
 		"MIT License",
 		"Developer Certificate of Origin",
-		"<details>",
+		`<details class="group">`,
+		"cursor-pointer",
+		"focus-visible:ring-2 focus-visible:ring-ring",
+		"group-open:rotate-180",
 		"Third-party licences (",
 		" packages)",
 		`role="region" aria-label="Third-party licence notices"`,
-		"max-h-[70vh] overflow-auto break-words whitespace-pre-wrap text-xs",
+		"max-h-[70vh] overflow-auto break-words whitespace-pre-wrap rounded-lg border bg-card p-4 text-xs",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /about does not contain %q", want)
