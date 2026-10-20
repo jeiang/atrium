@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/signal"
 	"sync"
@@ -66,17 +67,26 @@ func Received(ctx context.Context) (os.Signal, bool) {
 // stderr and exit status 1. A failure after SIGINT is Python's KeyboardInterrupt (exit status 130); after SIGTERM
 // the process Python would have been killed by it (128+15), with no message.
 func Fail(env *Env, err error) int {
-	if env.Ctx.Err() != nil {
-		switch sig, _ := Received(env.Ctx); sig {
-		case syscall.SIGINT:
-			printf(env.Stderr, "KeyboardInterrupt\n")
-			return ExitInterrupt
-		case syscall.SIGTERM:
-			return ExitTerminated
-		case syscall.SIGHUP:
-			return ExitHangup
-		}
+	if code, ok := signalExit(env.Ctx, env.Stderr); ok {
+		return code
 	}
 	printf(env.Stderr, "%s\n", py.UncaughtText(err))
 	return ExitError
+}
+
+func signalExit(ctx context.Context, stderr io.Writer) (int, bool) {
+	if ctx.Err() == nil {
+		return 0, false
+	}
+	switch sig, _ := Received(ctx); sig {
+	case syscall.SIGINT:
+		printf(stderr, "KeyboardInterrupt\n")
+		return ExitInterrupt, true
+	case syscall.SIGTERM:
+		return ExitTerminated, true
+	case syscall.SIGHUP:
+		return ExitHangup, true
+	default:
+		return 0, false
+	}
 }
