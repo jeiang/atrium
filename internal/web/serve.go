@@ -52,9 +52,6 @@ func recoverEvery(ctx context.Context, d *db.DB, cfg config.Config) {
 			if err := recoverProposals(ctx, d); err != nil && ctx.Err() == nil {
 				log.Error("proposal recovery failed", logx.Err, err.Error())
 			}
-			if err := secrets.New(d, secrets.Plaintext{}).Load(ctx); err != nil {
-				return err
-			}
 			if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil && ctx.Err() == nil {
 				log.Error("draft recovery failed", logx.Err, err.Error())
 			}
