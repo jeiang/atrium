@@ -8,7 +8,7 @@
     <span>effort {{$p.effort}} · context {{int (fdiv $p.context_limit 1000)}}K</span>
     {{if $p.wiki_hub_id}}<a class="btn" data-size="sm" data-variant="ghost" href="https://www.notion.so/{{replace "-" "" $p.wiki_hub_id}}" target="_blank" rel="noopener">{{icon "book-open"}}Wiki hub</a>{{end}}
     <span class="ms-auto flex items-center gap-1">
-      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/projects/{{$p.id}}/edit" hx-target="#project-dialog" hx-swap="innerHTML">{{icon "pencil"}}Edit</button>
+      <button id="edit-project" type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/projects/{{$p.id}}/edit" hx-target="#project-dialog" hx-swap="innerHTML">{{icon "pencil"}}Edit</button>
       <form method="post" action="/projects/{{$p.id}}/archive">
         <input type="hidden" name="csrf_token" value="{{.CSRF}}">
         <input type="hidden" name="archived" value="{{if $p.archived}}0{{else}}1{{end}}">
@@ -45,5 +45,5 @@
   </form>
   {{end}}
 </div>
-<dialog id="project-dialog" class="dialog" aria-label="Project"></dialog>
+<dialog id="project-dialog" class="dialog" aria-labelledby="project-dialog-title"></dialog>
 {{end}}

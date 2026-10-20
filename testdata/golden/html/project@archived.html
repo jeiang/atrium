@@ -433,7 +433,7 @@
     <span>effort high · context 200K</span>
     
     <span class="ms-auto flex items-center gap-1">
-      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/projects/2/edit" hx-target="#project-dialog" hx-swap="innerHTML"><svg class="lucide lucide-pencil " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>Edit</button>
+      <button id="edit-project" type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/projects/2/edit" hx-target="#project-dialog" hx-swap="innerHTML"><svg class="lucide lucide-pencil " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>Edit</button>
       <form method="post" action="/projects/2/archive">
         <input type="hidden" name="csrf_token" value="csrf-golden-token">
         <input type="hidden" name="archived" value="0">
@@ -476,7 +476,7 @@
   </div>
   
 </div>
-<dialog id="project-dialog" class="dialog" aria-label="Project"></dialog>
+<dialog id="project-dialog" class="dialog" aria-labelledby="project-dialog-title"></dialog>
 
     </div>
   </main>

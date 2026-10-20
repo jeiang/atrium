@@ -4,7 +4,7 @@
 <form method="post" action="/projects" class="w-full sm:max-w-2xl" hx-post="/projects" hx-target="#project-dialog" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
   <input type="hidden" name="csrf_token" value="csrf-golden-token">
   <header class="flex-row items-center gap-2">
-    <h2 class="min-w-0 flex-1 truncate">New project</h2>
+    <h2 id="project-dialog-title" class="min-w-0 flex-1 truncate">New project</h2>
     <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close" data-action="close-dialog"><svg class="lucide lucide-x " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
   </header>
   <section class="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
@@ -20,15 +20,17 @@
     <div class="grid gap-3 sm:grid-cols-2">
       <div role="group" class="field">
         <label for="project-effort">Default effort</label>
-        <select id="project-effort" name="effort" class="select">
+        <select id="project-effort" name="effort" class="select" aria-describedby="project-effort-help">
           <option value="low">low</option><option value="medium" selected>medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option>
         </select>
+        <p id="project-effort-help">How hard the assistant thinks in new chats of this project: low is quick, max is the most thorough. Each chat can still change it.</p>
       </div>
       <div role="group" class="field">
         <label for="project-context">Default context limit</label>
-        <select id="project-context" name="context_limit" class="select">
+        <select id="project-context" name="context_limit" class="select" aria-describedby="project-context-help">
           <option value="90000" selected>90K</option><option value="200000">200K (5× price over 100K)</option><option value="500000">500K (5× price over 100K)</option><option value="1000000">1000K (5× price over 100K)</option>
         </select>
+        <p id="project-context-help">When a chat approaches this limit, older tool results are cleared and the conversation is compacted.</p>
       </div>
     </div>
     
