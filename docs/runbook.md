@@ -13,7 +13,7 @@ back up; `cache/` can be rebuilt.
 | Path | Content |
 | --- | --- |
 | `atrium.db` | SQLite index, rules, decisions, automatic-action log and proposals of the mail core |
-| `files/<thread id>/`, `files/p<project id>/` | originals of chat and project uploads and files the code sandbox produced; deleted with the thread |
+| `files/<thread id>/`, `files/p<project id>/` | originals of chat and project uploads; deleted with the thread |
 | `cache/models` | where a host may keep local model weights; not atrium's |
 | `cache/messages` | `ATRIUM_CACHE_DIR`: `raw/<account>/<mailbox id>/<uidvalidity>_<uid>.eml` (raw message store of the mail core) and `media/` (TMDB posters in `media/posters`, ffmpeg episode thumbnails in `media/thumbs`); not backed up |
 | `pause` | exists while automatic mailbox writes are paused |
@@ -45,10 +45,10 @@ credentials:
   (any long random string; unset means a key file in the state dir).
 
 The module sets the rest from its options: `ATRIUM_DB`, `ATRIUM_CACHE_DIR`,
-`ATRIUM_CODEMODE_SOCKET`, `ATRIUM_MODE` (`mode`), `ATRIUM_CHAT_URL` and
-`ATRIUM_EMBED_URL` (`chatUrl`, `embedUrl`), `ATRIUM_TZ` (`timeZone`),
-`ATRIUM_PUBLIC_URL` (`publicUrl`), `ATRIUM_PUBLIC_HOST` (`web.allowedHost`,
-public listener only), `GRAFANA_URL`
+`ATRIUM_CODEMODE_SOCKET` (set by the module but unused), `ATRIUM_MODE` (`mode`),
+`ATRIUM_CHAT_URL` and `ATRIUM_EMBED_URL` (`chatUrl`, `embedUrl`), `ATRIUM_TZ`
+(`timeZone`), `ATRIUM_PUBLIC_URL` (`publicUrl`), `ATRIUM_PUBLIC_HOST`
+(`web.allowedHost`, public listener only), `GRAFANA_URL`
 (`grafanaUrl`), `NTFY_URL`, `NTFY_TOPIC`, `NTFY_MEDIA_TOPIC` (`ntfy.*`),
 `ICLOUD_APPLE_ID`, `ATRIUM_CONTACTS_DIR` and `ATRIUM_CALENDAR_DIR`
 (`icloudAppleId`), `ATRIUM_MEDIA_ROOT`, `QBITTORRENT_URL`,
@@ -94,7 +94,7 @@ It runs in the `atrium-watch` and `atrium-sync` passes, right after routing.
 | `atrium-agent-scheduler` | `atrium agent scheduler`: scheduled and nightly agent jobs |
 | `atrium-web` | `atrium serve` on `web.host:web.port` (default `0.0.0.0:8480`) with `web.auth` |
 | `atrium-web-local` | `atrium serve` on `127.0.0.1:web.local.port` (default 8481) with `--auth local` |
-| `atrium-codemode@` | code-mode worker, one sandboxed instance per connection on `atrium-codemode.socket` |
+| `atrium-codemode@` | inert; its worker exits non-zero with "removed in v2" |
 | `atrium-vdirsyncer-sync` | timer every 15 minutes, iCloud CalDAV/CardDAV mirror (with `icloudAppleId`) |
 
 The chat and embedding servers behind `chatUrl` and `embedUrl` are the
@@ -207,7 +207,9 @@ hidden tombstone because `usage` and `agent_writes` reference it. Projects carry
 ahead of the first user turn of every request in the project's threads.
 
 Code execution is not available in v2. The Anthropic Files API and code execution
-container are not used. The replacement sandbox manager is deferred to issue #19.
+container are not used. The old `threads.code_sandbox` and `threads.container_id`
+columns remain unused; old code results still render. The replacement sandbox
+manager is deferred to issue #202.
 
 Context size is kept in check in layers, all scaled from the thread's context limit
 (never above the model's 1M). Requests go through the beta Messages API with
