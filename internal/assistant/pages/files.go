@@ -29,6 +29,7 @@ const (
 	sniffBytes   = 4096
 
 	badBodyDetail = "There was an error parsing the body"
+	fieldBytes    = 1 << 20
 )
 
 var (
@@ -44,28 +45,47 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 		return web.FormValues(r), nil, nil
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, files.MessageCapBytes+uploadSlack)
-	if err := r.ParseMultipartForm(1 << 20); err != nil {
-		if errors.As(err, new(*http.MaxBytesError)) {
-			return url.Values{}, nil, oversizeUpload
-		}
+	reader, err := r.MultipartReader()
+	if err != nil {
 		return url.Values{}, nil, errBadBody
 	}
-	defer func() { _ = r.MultipartForm.RemoveAll() }()
+	form := url.Values{}
 	var uploads []files.UploadedFile
-	for _, header := range r.MultipartForm.File["upload"] {
-		if header.Filename == "" {
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			return form, uploads, nil
+		}
+		if err != nil {
+			return form, nil, uploadReadError(err)
+		}
+		name, filename := part.FormName(), part.FileName()
+		if filename == "" {
+			value, err := io.ReadAll(io.LimitReader(part, fieldBytes+1))
+			if err != nil {
+				return form, nil, uploadReadError(err)
+			}
+			if len(value) > fieldBytes {
+				return form, nil, errBadBody
+			}
+			form.Add(name, string(value))
 			continue
 		}
-		f, err := header.Open()
-		check(err)
-		data, err := io.ReadAll(f)
-		_ = f.Close()
-		check(err)
-		if len(data) > 0 {
-			uploads = append(uploads, files.UploadedFile{Name: header.Filename, Data: data, Type: header.Header.Get("Content-Type")})
+		data, err := io.ReadAll(part)
+		if err != nil {
+			return form, nil, uploadReadError(err)
+		}
+		if name == "upload" && len(data) > 0 {
+			uploads = append(uploads, files.UploadedFile{Name: filename, Data: data, Type: part.Header.Get("Content-Type")})
 		}
 	}
-	return r.MultipartForm.Value, uploads, nil
+}
+
+func uploadReadError(err error) error {
+	if errors.As(err, new(*http.MaxBytesError)) {
+		return oversizeUpload
+	}
+	return errBadBody
 }
 
 func (p *pages) readUploads(w http.ResponseWriter, r *http.Request) (url.Values, []files.UploadedFile, bool) {
@@ -74,11 +94,21 @@ func (p *pages) readUploads(w http.ResponseWriter, r *http.Request) (url.Values,
 	case errors.Is(err, errBadBody):
 		p.fail(w, r, http.StatusBadRequest, badBodyDetail)
 		return nil, nil, false
+	case err != nil && py.Strip(web.FormString(form, "text", "")) == "":
+		p.failure(w, r, "Nothing sent", "Type a message to go with the files.")
+		return nil, nil, false
 	case err != nil:
 		p.failure(w, r, "Not attached", err.Error())
 		return nil, nil, false
 	}
 	return form, uploads, true
+}
+
+func archivedProject(project *projects.Project, verb string) (string, bool) {
+	if !bool(project.Archived) {
+		return "", false
+	}
+	return fmt.Sprintf("“%s” is archived. Restore it to %s.", project.Name, verb), true
 }
 
 func (p *pages) remote() files.RemoteDeleter {
@@ -228,6 +258,10 @@ func (p *pages) projectFilesUpload(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if problem, archived := archivedProject(project, "add files"); archived {
+		p.refuseProjectFiles(w, r, projectID, problem)
+		return
+	}
 	if err == nil && len(uploads) == 0 {
 		err = files.FileError("Choose at least one file.")
 	}
@@ -237,16 +271,19 @@ func (p *pages) projectFilesUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	var refused files.FileError
 	if errors.As(err, &refused) {
-		if web.IsPartial(r) {
-			problem := err.Error()
-			p.projectFiles(w, r, projectID, http.StatusUnprocessableEntity, &problem)
-			return
-		}
-		p.fail(w, r, http.StatusUnprocessableEntity, err.Error())
+		p.refuseProjectFiles(w, r, projectID, err.Error())
 		return
 	}
 	check(err)
 	p.projectFiles(w, r, projectID, http.StatusOK, nil)
+}
+
+func (p *pages) refuseProjectFiles(w http.ResponseWriter, r *http.Request, projectID int64, problem string) {
+	if web.IsPartial(r) {
+		p.projectFiles(w, r, projectID, http.StatusUnprocessableEntity, &problem)
+		return
+	}
+	p.fail(w, r, http.StatusUnprocessableEntity, problem)
 }
 
 func (p *pages) projectFile(w http.ResponseWriter, r *http.Request) (int64, *files.Row, bool) {
@@ -274,6 +311,14 @@ func (p *pages) projectFileDownload(w http.ResponseWriter, r *http.Request) {
 func (p *pages) projectFileDelete(w http.ResponseWriter, r *http.Request) {
 	projectID, found, ok := p.projectFile(w, r)
 	if !ok {
+		return
+	}
+	project, ok := p.loadProject(w, r, projectID)
+	if !ok {
+		return
+	}
+	if problem, archived := archivedProject(project, "remove files"); archived {
+		p.refuseProjectFiles(w, r, projectID, problem)
 		return
 	}
 	_, err := files.DeleteOne(detached(r), p.deps.DB.Write, p.remote(), found.ID)

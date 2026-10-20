@@ -163,6 +163,7 @@ func (p *pages) failure(w http.ResponseWriter, r *http.Request, title, descripti
 	f, err := p.deps.Render.Frame(r, "", nil)
 	check(err)
 	f.Toast = &tpl.Toast{Category: "error", Title: title, Description: description}
+	w.Header().Set("HX-Reswap", "none")
 	check(p.deps.Render.Fragment(w, r, http.StatusUnprocessableEntity, "_toast.gohtml", f))
 }
 
@@ -189,7 +190,8 @@ func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool 
 }
 
 func redirect(w http.ResponseWriter, r *http.Request, to string) {
-	http.Redirect(w, r, to, http.StatusSeeOther)
+	w.Header().Set("Location", to)
+	w.WriteHeader(http.StatusSeeOther)
 }
 
 func hxRedirect(w http.ResponseWriter, to string) {
