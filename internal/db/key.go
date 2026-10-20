@@ -10,16 +10,16 @@ type KeyError string
 func (e KeyError) Error() string { return string(e) }
 
 const (
-	KeyFileSetting = "db.key_file"
-	KeyCredential  = "db_key"
+	KeySetting    = "db.key_file or ATRIUM_DB_KEY"
+	KeyCredential = "db_key"
 )
 
 const (
-	ErrNoCipher    KeyError = "db: a database key is configured but this build has no SQLCipher engine; clear the " + KeyFileSetting + " setting or run a SQLCipher build"
+	ErrNoCipher    KeyError = "db: a database key is configured but this build has no SQLCipher engine; clear the " + KeySetting + " setting or run a SQLCipher build"
 	ErrInvalidKey  KeyError = "db: key must be 64 hex digits"
-	ErrPlaintextDB KeyError = "db: a database key is configured but the database file is plaintext; clear the " + KeyFileSetting + " setting or point it at an encrypted database"
-	ErrWrongKey    KeyError = "db: the configured database key does not open this database; fix the " + KeyFileSetting + " setting"
-	ErrKeyMissing  KeyError = "db: the database file is encrypted but no key is configured; set the " + KeyFileSetting + " setting or the " + KeyCredential + " credential"
+	ErrPlaintextDB KeyError = "db: a database key is configured but the database file is plaintext; clear the " + KeySetting + " setting or point it at an encrypted database"
+	ErrWrongKey    KeyError = "db: the configured database key does not open this database; fix the " + KeySetting + " setting"
+	ErrKeyMissing  KeyError = "db: the database file is encrypted but no key is configured; set the " + KeySetting + " setting or the " + KeyCredential + " credential"
 )
 
 type Key struct{ hex string }

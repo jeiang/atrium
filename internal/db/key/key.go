@@ -37,31 +37,31 @@ func Cookie(k db.Key) []byte { return derive(k, "atrium/cookie/v1", subkeyLen) }
 func Seal(k db.Key) []byte { return derive(k, "atrium/seal/v1", subkeyLen) }
 
 func Load(env config.Env, reg *settings.Registry) (db.Key, error) {
-	resolved, err := reg.Resolve(context.Background(), nil, fileKey, 0)
+	resolved, err := reg.Resolve(context.Background(), nil, settingKey, 0)
 	if err != nil {
 		return db.Key{}, err
 	}
 	if resolved.Pinned() {
-		return read(resolved.Value, db.KeyFileSetting)
-	}
-	if dir, _ := env("CREDENTIALS_DIRECTORY"); dir != "" {
-		k, err := read(filepath.Join(dir, db.KeyCredential), db.KeyCredential+" credential")
-		if errors.Is(err, fs.ErrNotExist) {
-			return db.Key{}, nil
+		k, err := db.ParseKey(resolved.Value)
+		if err != nil {
+			return db.Key{}, fmt.Errorf("db.key (%s): %w", resolved.PinSource, err)
 		}
-		return k, err
+		return k, nil
 	}
-	return db.Key{}, nil
-}
-
-func read(path, name string) (db.Key, error) {
-	raw, err := os.ReadFile(path)
+	dir, _ := env("CREDENTIALS_DIRECTORY")
+	if dir == "" {
+		return db.Key{}, nil
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, db.KeyCredential))
+	if errors.Is(err, fs.ErrNotExist) {
+		return db.Key{}, nil
+	}
 	if err != nil {
-		return db.Key{}, fmt.Errorf("db: %s: %w", name, err)
+		return db.Key{}, fmt.Errorf("%s credential: %w", db.KeyCredential, err)
 	}
 	k, err := db.ParseKey(strings.TrimSpace(string(raw)))
 	if err != nil {
-		return db.Key{}, fmt.Errorf("%s: %s: %w", name, path, err)
+		return db.Key{}, fmt.Errorf("%s credential: %w", db.KeyCredential, err)
 	}
 	return k, nil
 }

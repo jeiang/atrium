@@ -1,9 +1,20 @@
 package key
 
-import "github.com/jeiang/atrium/internal/settings"
+import (
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings"
+)
 
-const fileKey = "key_file"
+const settingKey = "key"
 
 func init() {
-	settings.MustRegister(settings.Def{Key: fileKey, Module: "db", Type: settings.String, Class: settings.Bootstrap})
+	settings.MustRegister(settings.Def{
+		Key: settingKey, Module: "db", Type: settings.String, Class: settings.Secret, Secret: true, PinOnly: true,
+		Check: func(value string) error {
+			if _, err := db.ParseKey(value); err != nil {
+				return settings.Invalid("must be 64 hex digits")
+			}
+			return nil
+		},
+	})
 }

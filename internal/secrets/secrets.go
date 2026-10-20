@@ -47,6 +47,12 @@ type NotGenerated string
 
 func (e NotGenerated) Error() string { return "secrets: " + string(e) + " is not a generated key" }
 
+type PinOnly string
+
+func (e PinOnly) Error() string {
+	return "secrets: " + string(e) + " can only be pinned by the deployment"
+}
+
 type EmptyValue string
 
 func (e EmptyValue) Error() string { return "secrets: " + string(e) + " needs a non-empty value" }
@@ -79,6 +85,9 @@ func (s *Store) def(name string) (settings.Def, error) {
 	}
 	if !d.Secret {
 		return d, NotSecret(name)
+	}
+	if d.PinOnly {
+		return d, PinOnly(name)
 	}
 	return d, nil
 }

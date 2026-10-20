@@ -46,6 +46,15 @@ func writeKey(t *testing.T, dir, name, hex string) string {
 	return path
 }
 
+func writeConfig(t *testing.T, dir, body string) string {
+	t.Helper()
+	path := filepath.Join(dir, "bad.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func isPlaintextSQLite(t *testing.T, path string) bool {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -58,7 +67,7 @@ func isPlaintextSQLite(t *testing.T, path string) bool {
 func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_DB_KEY_FILE", "")
+	t.Setenv("ATRIUM_DB_KEY", "")
 	t.Setenv("ATRIUM_CONFIG", "")
 	t.Setenv("CREDENTIALS_DIRECTORY", "")
 	vector := make([]float64, config.EmbedDim)
@@ -69,13 +78,12 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 	defer embedder.Close()
 	t.Setenv("ATRIUM_EMBED_URL", embedder.URL)
 	rightFile := writeKey(t, dir, "right.key", rightKeyHex)
-	otherFile := writeKey(t, dir, "other.key", otherKeyHex)
-	keyEnv := func(file string) string { return "ATRIUM_DB_KEY_FILE=" + file }
+	keyEnv := func(hex string) string { return "ATRIUM_DB_KEY=" + hex }
 	encrypted := filepath.Join(dir, "encrypted.db")
 	plain := filepath.Join(dir, "plain.db")
 	dbEnv := func(path string) string { return "ATRIUM_DB=" + path }
 
-	created := runProcess(t, "notion search alpha", dbEnv(encrypted), keyEnv(rightFile))
+	created := runProcess(t, "notion search alpha", dbEnv(encrypted), keyEnv(rightKeyHex))
 	if created.code != cli.ExitOK || isPlaintextSQLite(t, encrypted) {
 		t.Fatalf("keyed command on a fresh database exited %d, stderr %q, plaintext header %v; want 0 and an encrypted file", created.code, created.stderr, isPlaintextSQLite(t, encrypted))
 	}
@@ -104,11 +112,11 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 	}
 	const hit = "Alpha page\thttps://notion.example/p1\n"
 
-	knn := runProcess(t, "notion search zzz", dbEnv(encrypted), keyEnv(rightFile))
+	knn := runProcess(t, "notion search zzz", dbEnv(encrypted), keyEnv(rightKeyHex))
 	if knn.code != cli.ExitOK || knn.stdout != hit {
 		t.Errorf("KNN search on the keyed database exited %d with stdout %q, stderr %q; want 0 and %q", knn.code, knn.stdout, knn.stderr, hit)
 	}
-	fts := runProcess(t, "notion search alpha", dbEnv(encrypted), keyEnv(rightFile), "ATRIUM_EMBED_URL=http://127.0.0.1:1")
+	fts := runProcess(t, "notion search alpha", dbEnv(encrypted), keyEnv(rightKeyHex), "ATRIUM_EMBED_URL=http://127.0.0.1:1")
 	if fts.code != cli.ExitOK || fts.stdout != hit {
 		t.Errorf("FTS search on the keyed database exited %d with stdout %q, stderr %q; want 0 and %q", fts.code, fts.stdout, fts.stderr, hit)
 	}
@@ -126,7 +134,19 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := runProcess(t, "notion search zzz", dbEnv(encrypted), "ATRIUM_CONFIG="+configFile); got.code != cli.ExitOK || got.stdout != hit {
-		t.Errorf("key_file from ATRIUM_CONFIG exited %d with stdout %q, stderr %q; want 0 and %q", got.code, got.stdout, got.stderr, hit)
+		t.Errorf("db.key_file from ATRIUM_CONFIG exited %d with stdout %q, stderr %q; want 0 and %q", got.code, got.stdout, got.stderr, hit)
+	}
+
+	for name, env := range map[string][]string{
+		"key_file_file in ATRIUM_CONFIG": {"ATRIUM_CONFIG=" + writeConfig(t, dir, "[db]\nkey_file_file = \""+rightFile+"\"\n")},
+		"a path in ATRIUM_DB_KEY":        {keyEnv(rightFile)},
+		"a short key in ATRIUM_DB_KEY":   {keyEnv(rightKeyHex[:63])},
+		"a literal key in ATRIUM_CONFIG": {"ATRIUM_CONFIG=" + writeConfig(t, dir, "[db]\nkey = \""+rightKeyHex+"\"\n")},
+	} {
+		got := runProcess(t, "notion search zzz", append([]string{dbEnv(encrypted)}, env...)...)
+		if got.code != cli.ExitError || got.stdout != "" || strings.Contains(got.stderr, rightKeyHex) || strings.Contains(got.stderr, rightKeyHex[:63]) {
+			t.Errorf("%s: exited %d, stdout %q, stderr %q; want %d, empty stdout and no key material", name, got.code, got.stdout, got.stderr, cli.ExitError)
+		}
 	}
 
 	if got := runProcess(t, "notion search alpha", dbEnv(plain)); got.code != cli.ExitOK || !isPlaintextSQLite(t, plain) {
@@ -139,9 +159,9 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 		env  []string
 		want string
 	}{
-		{"wrong key", encrypted, []string{keyEnv(otherFile)}, string(db.ErrWrongKey)},
+		{"wrong key", encrypted, []string{keyEnv(otherKeyHex)}, string(db.ErrWrongKey)},
 		{"no key on an encrypted database", encrypted, nil, string(db.ErrKeyMissing)},
-		{"key on a plaintext database", plain, []string{keyEnv(rightFile)}, string(db.ErrPlaintextDB)},
+		{"key on a plaintext database", plain, []string{keyEnv(rightKeyHex)}, string(db.ErrPlaintextDB)},
 	} {
 		before, err := os.ReadFile(tc.path)
 		if err != nil {
