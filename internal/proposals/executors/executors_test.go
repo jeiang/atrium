@@ -634,6 +634,89 @@ func TestPartialMoveIsLoggedThenFails(t *testing.T) {
 	}
 }
 
+func (w *world) inFlight(pid int64) int {
+	w.t.Helper()
+	var n int
+	if err := w.db.Read.QueryRow("SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND ok = 0 AND error = ?", pid, proposals.InFlightText).Scan(&n); err != nil {
+		w.t.Fatal(err)
+	}
+	return n
+}
+
+func TestEveryWriteHasItsRowBeforeItStarts(t *testing.T) {
+	w := icloudWorld(t)
+	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
+	seen := map[string]int{}
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		seen[fw.Verb] = w.inFlight(pid)
+		return nil
+	}
+	done := w.apply(pid, nil)
+	if done.Status != proposals.Applied {
+		t.Fatalf("status = %s, %v", done.Status, done.Result)
+	}
+	for _, verb := range []string{"CREATE", "COPY"} {
+		if seen[verb] != 1 {
+			t.Fatalf("%s ran with %d in-flight rows, want its own", verb, seen[verb])
+		}
+	}
+	if n := w.inFlight(pid); n != 0 {
+		t.Fatalf("%d rows still in flight after the apply", n)
+	}
+	for _, a := range w.actions(pid) {
+		if !a.OK {
+			t.Fatalf("a failed row after a clean apply: %+v", a)
+		}
+	}
+}
+
+func TestInterruptedCopyIsLoggedAsUnknownAndHeld(t *testing.T) {
+	w := icloudWorld(t)
+	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			return &mail.WriteInterrupted{Command: "COPY", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	done := w.apply(pid, nil)
+	if done.Status != proposals.Failed {
+		t.Fatalf("status = %s", done.Status)
+	}
+	logged := w.actions(pid)
+	last := logged[len(logged)-1]
+	if last.OK || last.Error == nil || !mailops.Blocks(*last.Error) || w.inFlight(pid) != 0 {
+		t.Fatalf("last action = %+v", last)
+	}
+	if uids, _ := field(last.Action, "uids").([]any); len(uids) != 4 {
+		t.Fatalf("logged uids = %v", field(last.Action, "uids"))
+	}
+}
+
+func TestUndoHasItsRowBeforeTheUndoerRuns(t *testing.T) {
+	w := icloudWorld(t)
+	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
+	if done := w.apply(pid, nil); done.Status != proposals.Applied {
+		t.Fatalf("status = %s", done.Status)
+	}
+	var during int
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			during = w.inFlight(pid)
+		}
+		return nil
+	}
+	if out := w.undo(pid); !out.Undone {
+		t.Fatalf("undo = %+v", out)
+	}
+	if during == 0 {
+		t.Fatal("the undo's COPY ran before its row was recorded")
+	}
+	if n := w.inFlight(pid); n != 0 {
+		t.Fatalf("%d undo rows still in flight", n)
+	}
+}
+
 func TestPayloadSurvivesJSONRoundtrip(t *testing.T) {
 	w := icloudWorld(t)
 	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))

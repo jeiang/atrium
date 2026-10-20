@@ -347,8 +347,9 @@ S: + idling
 	}
 }
 
-func TestIdleIsNotReissuedWithinTheWatchLoopsIdle(t *testing.T) {
-	if got := newConn("imap.test", "u", "p").idleRestart; got <= config.IdleSeconds*time.Second {
-		t.Fatalf("go-imap re-issues IDLE after %v, within imaplib's single %ds IDLE", got, config.IdleSeconds)
+func TestIdleKeepaliveWindowFitsInsideTheWatchLoopsIdle(t *testing.T) {
+	c := newConn("imap.test", "u", "p")
+	if got := c.idleKeepalive + c.readTimeout; got >= config.IdleSeconds*time.Second {
+		t.Fatalf("a silent link is noticed after %v, not within the %ds IDLE", got, config.IdleSeconds)
 	}
 }

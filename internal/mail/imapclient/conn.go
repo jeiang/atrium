@@ -25,11 +25,12 @@ import (
 )
 
 const (
-	port         = "993"
-	bodyCapBytes = 65536
-	dialTimeout  = 30 * time.Second
-	readTimeout  = 2 * time.Minute
-	idleRestart  = config.IdleSeconds*time.Second + time.Minute
+	port          = "993"
+	bodyCapBytes  = 65536
+	dialTimeout   = 30 * time.Second
+	readTimeout   = 2 * time.Minute
+	writeTimeout  = 2 * time.Minute
+	idleKeepalive = 5 * time.Minute
 )
 
 var allowedVersions = []string{"IMAP4REV1", "IMAP4"}
@@ -54,13 +55,14 @@ func New(host, user, password string, env config.Env) mail.Client {
 
 func newConn(host, user, password string) *conn {
 	c := &conn{
-		user:        user,
-		password:    password,
-		addr:        net.JoinHostPort(host, port),
-		tlsConfig:   &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12},
-		dialTimeout: dialTimeout,
-		readTimeout: readTimeout,
-		idleRestart: idleRestart,
+		user:          user,
+		password:      password,
+		addr:          net.JoinHostPort(host, port),
+		tlsConfig:     &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12},
+		dialTimeout:   dialTimeout,
+		readTimeout:   readTimeout,
+		writeTimeout:  writeTimeout,
+		idleKeepalive: idleKeepalive,
 	}
 	c.dial = c.dialTLS
 	return c
@@ -81,31 +83,32 @@ type conn struct {
 	dial           func(context.Context) (net.Conn, error)
 	dialTimeout    time.Duration
 	readTimeout    time.Duration
+	writeTimeout   time.Duration
 
-	mu       sync.Mutex
-	cl       *imapclient.Client
-	tap      *tap
-	ur       store
-	caps     map[string]bool
-	state    string
-	readonly bool
-	idling   bool
-	idleQ    []idleResponse
-	lastCode string
-	sentPos  int
-	// idleRestart overrides go-imap's IDLE re-issue interval; zero keeps go-imap's.
-	idleRestart time.Duration
+	mu            sync.Mutex
+	cl            *imapclient.Client
+	tap           *tap
+	ur            store
+	caps          map[string]bool
+	state         string
+	readonly      bool
+	idling        bool
+	idleQ         []idleResponse
+	lastCode      string
+	sentPos       int
+	idleKeepalive time.Duration
 }
 
 var errNotConnected = errors.New("IMAP client is not connected")
 
-// await runs fn while a watchdog closes the connection when ctx ends or no byte arrives for readTimeout.
+// await runs fn while a watchdog closes the connection when ctx ends or no byte arrives for readTimeout, or for
+// the longer window an IDLE wait sets.
 func (c *conn) await(ctx context.Context, fn func() error) error {
 	if c.cl == nil {
 		return errNotConnected
 	}
 	t := c.tap
-	t.touch(false)
+	t.touch(0)
 	done := make(chan error, 1)
 	go func() {
 		defer func() {
@@ -124,20 +127,25 @@ func (c *conn) await(ctx context.Context, fn func() error) error {
 			return err
 		case <-ctx.Done():
 			t.kill(ctx.Err())
-			if err := <-done; err == nil {
+			err := <-done
+			if err == nil {
 				return nil
+			}
+			var interrupted *mail.WriteInterrupted
+			if errors.As(err, &interrupted) {
+				return &mail.WriteInterrupted{Command: interrupted.Command, Err: ctx.Err()}
 			}
 			return ctx.Err()
 		case <-timer.C:
-			idle, watching := t.idleFor()
-			if watching && idle >= c.readTimeout {
+			idle, watching, window := t.idleFor(c.readTimeout)
+			if watching && idle >= window {
 				t.kill(errTimedOut)
 				return <-done
 			}
 			if !watching {
 				idle = 0
 			}
-			timer.Reset(c.readTimeout - idle)
+			timer.Reset(window - idle)
 		}
 	}
 }
@@ -243,6 +251,17 @@ func wrapCommand(name string, err error) error {
 	var e *Error
 	if errors.As(err, &e) {
 		return &Error{Kind: e.Kind, Msg: fmt.Sprintf("command: %s => %s", name, e.Msg)}
+	}
+	return err
+}
+
+// interrupted marks a failed completion of a write as outcome-unknown when the connection broke after go-imap
+// wrote the command named name: its bytes may have been executed. A reply of NO or BAD is not a transport failure
+// and a command never written is provably not applied; both stay as they are.
+func (c *conn) interrupted(command, name string, err error) error {
+	var e *Error
+	if errors.As(err, &e) && e.Kind == "abort" && c.tap.target(name, c.sentPos) >= 0 {
+		return &mail.WriteInterrupted{Command: command, Err: err}
 	}
 	return err
 }
@@ -395,8 +414,8 @@ func (c *conn) Connect(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	c.tap = newTap(nc)
-	c.cl = imapclient.New(c.tap, &imapclient.Options{IdleRestartInterval: c.idleRestart})
+	c.tap = newTap(nc, c.writeTimeout)
+	c.cl = imapclient.New(c.tap, &imapclient.Options{IdleRestartInterval: c.idleKeepalive})
 	c.ur, c.caps, c.state, c.readonly, c.idling, c.idleQ, c.sentPos = store{}, nil, "LOGOUT", false, false, nil, 0
 	err = c.await(ctx, c.open)
 	if err != nil {
@@ -737,7 +756,7 @@ func (c *conn) mutate(command string, send func() error) ([]datum, error) {
 	werr := send()
 	typ, dat, err := c.complete("UID")
 	if err != nil {
-		return nil, err
+		return nil, c.interrupted(command, "UID", err)
 	}
 	data := c.untaggedResponse(typ, dat, "FETCH")
 	if err := okError(typ, data); err != nil {
@@ -869,7 +888,7 @@ func (c *conn) Append(ctx context.Context, imapName string, raw []byte, flags ..
 		}()
 		typ, dat, err := c.complete("APPEND")
 		if err != nil {
-			return err
+			return c.interrupted("APPEND", "APPEND", err)
 		}
 		if err := okError(typ, dat); err != nil {
 			return err
@@ -891,7 +910,7 @@ func (c *conn) mailboxCommand(ctx context.Context, command, imapName string, sen
 		werr := send(name)
 		typ, dat, err := c.complete(command)
 		if err != nil {
-			return err
+			return c.interrupted(command, command, err)
 		}
 		if err := okError(typ, dat); err != nil {
 			return err
@@ -926,8 +945,9 @@ func (c *conn) Noop(ctx context.Context) error {
 }
 
 // IdleChanges is ImapClient.idle_changes: IDLE until the server reports EXISTS, EXPUNGE, FETCH or RECENT
-// (true) or duration passes (false). imaplib sends one IDLE for the whole call; go-imap re-issues it only after
-// idleRestart, which is longer than the watch loop's IdleSeconds.
+// (true) or duration passes (false). go-imap ends and re-issues the IDLE every idleKeepalive; the tagged reply of
+// each is the server's proof of life, and a server silent for idleKeepalive plus readTimeout loses the
+// connection.
 func (c *conn) IdleChanges(ctx context.Context, duration time.Duration) (bool, error) {
 	var changed bool
 	err := c.run(ctx, func() error {
@@ -980,8 +1000,8 @@ func (c *conn) awaitIdleStart() error {
 
 // idleWait is the iteration over the Idler until a change or the deadline.
 func (c *conn) idleWait(deadline time.Time) (bool, error) {
-	c.tap.touch(true)
-	defer c.tap.touch(false)
+	c.tap.touch(c.idleKeepalive + c.readTimeout)
+	defer c.tap.touch(0)
 	timer := time.NewTimer(time.Until(deadline))
 	defer timer.Stop()
 	for {

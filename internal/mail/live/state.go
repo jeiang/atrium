@@ -463,8 +463,11 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	if _, isString := op.(string); !isString || undoer == nil {
 		return UndoResult{}, UndoError("no undo handler for " + py.ReprValue(op))
 	}
-	detail, err := undoer(safety.ApprovedWrites(ctx, fmt.Sprintf("undo-%d", id)), json.RawMessage(*plan))
 	settle := context.WithoutCancel(ctx)
+	if _, err := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET undone_error = ? WHERE id = ?", proposals.InFlightText, id); err != nil {
+		return UndoResult{}, err
+	}
+	detail, err := undoer(safety.ApprovedWrites(ctx, fmt.Sprintf("undo-%d", id)), json.RawMessage(*plan))
 	if err != nil {
 		text := py.ExceptionText(err)
 		if ctx.Err() != nil {

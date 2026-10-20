@@ -55,6 +55,8 @@ var ErrValidityChanged = Error("UIDVALIDITY changed")
 type PartialMove struct {
 	Copied *mail.CopyUID
 	Err    error
+	// Unconfirmed is a COPY whose reply never came: the destination may hold the copy.
+	Unconfirmed bool
 }
 
 // PartialPrefix is in the text of a PartialMove: a retry of the same move would copy the batch a second time.
@@ -68,7 +70,12 @@ func Blocks(text string) bool {
 
 const PartialPrefix = "copied but not expunged: "
 
-func (e *PartialMove) Error() string { return PartialPrefix + e.Err.Error() }
+func (e *PartialMove) Error() string {
+	if e.Unconfirmed {
+		return UnknownPrefix + ": " + e.Err.Error()
+	}
+	return PartialPrefix + e.Err.Error()
+}
 
 func (*PartialMove) PyClass() string { return "PartialMove" }
 
@@ -201,7 +208,7 @@ func Verify(ctx context.Context, q Querier, client mail.Client, account string, 
 			reason = ReasonGone
 		case err != nil:
 			return nil, nil, err
-		case uid != int64(snap.UID) || validity != int64(snap.UIDValidity) || imapName != snap.IMAPName:
+		case validity == 0 || uid != int64(snap.UID) || validity != int64(snap.UIDValidity) || imapName != snap.IMAPName:
 			reason = ReasonMoved
 		case digest != snap.Digest:
 			reason = ReasonChanged
@@ -223,7 +230,7 @@ func Verify(ctx context.Context, q Querier, client mail.Client, account string, 
 		if err != nil {
 			return nil, nil, err
 		}
-		if st.UIDValidity != key.validity {
+		if st.UIDValidity == 0 || st.UIDValidity != key.validity {
 			for _, s := range group {
 				skipped = append(skipped, Skip{s.ID, ReasonUIDValidity})
 			}
@@ -387,7 +394,8 @@ func CopyUIDs(ctx context.Context, client mail.Client, destIMAP string, uids []u
 
 // MoveUIDs is move_uids: per batch of Batch UIDs a COPY, STORE +FLAGS.SILENT \Deleted and UID EXPUNGE, then
 // moved with the batch and its COPYUID. A server without UIDPLUS is refused before anything is sent; a batch
-// copied but not expunged is a *PartialMove.
+// copied but not expunged is a *PartialMove, and so is a COPY whose reply never came (Copied is nil: the
+// destination may hold the copy, so it is never sent again).
 func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string, validity uint32, uids []uint32,
 	moved func(batch []uint32, copied *mail.CopyUID) error) error {
 	if !client.HasCapability("UIDPLUS") {
@@ -399,6 +407,9 @@ func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string,
 	for _, batch := range Chunks(uids, Batch) {
 		copied, err := CopyUIDs(ctx, client, destIMAP, batch)
 		if err != nil {
+			if _, unknown := errors.AsType[*mail.WriteInterrupted](err); unknown {
+				return &PartialMove{Err: err, Unconfirmed: true}
+			}
 			return err
 		}
 		set := mail.UIDs(batch...)

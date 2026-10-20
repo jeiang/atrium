@@ -248,6 +248,33 @@ func RecordAction(ctx context.Context, x Execer, proposalID int64, action, undo 
 	return res.LastInsertId()
 }
 
+// InFlightText is the error of an action row recorded before its write starts: until the write settles it, the
+// row says its outcome is unknown, and Blocks keeps an undo from being repeated.
+const InFlightText = mailops.UnknownPrefix + ": write in flight"
+
+// BeginAction records the row of a write about to start, so a process that dies mid-write leaves its mark.
+func BeginAction(ctx context.Context, x Execer, proposalID int64, action any, ts float64) (int64, error) {
+	text := InFlightText
+	return RecordAction(ctx, x, proposalID, action, nil, false, &text, ts)
+}
+
+// SettleAction turns the row BeginAction recorded into the write's outcome.
+func SettleAction(ctx context.Context, x Execer, id int64, action, undo any, ok bool, errText *string, ts float64) error {
+	var plan any
+	if undo != nil {
+		plan = py.JSONDumps(undo)
+	}
+	_, err := x.ExecContext(context.WithoutCancel(ctx), "UPDATE proposal_actions SET ts = ?, action = ?, undo = ?, ok = ?, error = ? WHERE id = ?",
+		ts, py.JSONDumps(action), plan, ok, errText, id)
+	return err
+}
+
+// DropAction removes a BeginAction row whose write provably never started or was recorded elsewhere.
+func DropAction(ctx context.Context, x Execer, id int64) error {
+	_, err := x.ExecContext(context.WithoutCancel(ctx), "DELETE FROM proposal_actions WHERE id = ? AND ok = 0 AND error = ?", id, InFlightText)
+	return err
+}
+
 // Action is one proposal_actions row; Action and Undo are decoded, Undo nil for NULL.
 type Action struct {
 	ID     int64
@@ -518,13 +545,18 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		if undoer == nil {
 			return UndoResult{}, ProposalError("no undo handler for " + py.ReprValue(op))
 		}
+		undoAction := py.Dict{{Key: "op", Value: UndoOp}, {Key: "of", Value: entry.ID}}
+		held, err := BeginAction(ctx, p.DB.Write, id, undoAction, p.now())
+		if err != nil {
+			return UndoResult{}, err
+		}
 		detail, err := undoer(approved, entry.Plan)
 		if err != nil {
 			text := py.ExceptionText(err)
 			if ctx.Err() != nil {
 				text = mailops.UnknownPrefix + ": " + text
 			}
-			if _, rerr := RecordAction(ctx, p.DB.Write, id, py.Dict{{Key: "op", Value: UndoOp}, {Key: "of", Value: entry.ID}}, nil, false, &text, p.now()); rerr != nil {
+			if rerr := SettleAction(ctx, p.DB.Write, held, undoAction, nil, false, &text, p.now()); rerr != nil {
 				return UndoResult{}, rerr
 			}
 			out.Outcomes = append(out.Outcomes, py.Dict{{Key: "action", Value: entry.ID}, {Key: "ok", Value: false}, {Key: "error", Value: err.Error()}})
@@ -534,7 +566,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		if detail != nil {
 			details = detail
 		}
-		if _, err := RecordAction(ctx, p.DB.Write, id, py.Dict{{Key: "op", Value: UndoOp}, {Key: "of", Value: entry.ID}, {Key: "detail", Value: details}}, nil, true, nil, p.now()); err != nil {
+		if err := SettleAction(ctx, p.DB.Write, held, py.Dict{{Key: "op", Value: UndoOp}, {Key: "of", Value: entry.ID}, {Key: "detail", Value: details}}, nil, true, nil, p.now()); err != nil {
 			return UndoResult{}, err
 		}
 		out.Outcomes = append(out.Outcomes, py.Dict{{Key: "action", Value: entry.ID}, {Key: "ok", Value: true}})

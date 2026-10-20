@@ -330,17 +330,19 @@ type tap struct {
 	err     error
 	killed  error
 	last    time.Time
-	paused  bool
+	window  time.Duration
 	writing int
 	sent    []sentCommand
 	wline   []byte
 	wskip   int
 	wcont   bool
 	limit   int
+
+	writeTimeout time.Duration
 }
 
-func newTap(c net.Conn) *tap {
-	return &tap{Conn: c, arrived: make(chan struct{}, 1), last: time.Now(), limit: maxBuffered}
+func newTap(c net.Conn, writeTimeout time.Duration) *tap {
+	return &tap{Conn: c, arrived: make(chan struct{}, 1), last: time.Now(), limit: maxBuffered, writeTimeout: writeTimeout}
 }
 
 func (t *tap) Read(p []byte) (int, error) {
@@ -370,11 +372,23 @@ func (t *tap) Write(p []byte) (int, error) {
 	t.writing++
 	t.mu.Unlock()
 	t.signal()
+	if t.writeTimeout > 0 {
+		_ = t.Conn.SetWriteDeadline(time.Now().Add(t.writeTimeout))
+	}
 	n, err := t.Conn.Write(p)
+	if t.writeTimeout > 0 {
+		_ = t.Conn.SetWriteDeadline(time.Time{})
+	}
 	t.mu.Lock()
 	t.writing--
-	t.last = time.Now()
+	if t.window == 0 {
+		t.last = time.Now()
+	}
 	t.mu.Unlock()
+	var timeout net.Error
+	if errors.As(err, &timeout) && timeout.Timeout() {
+		t.kill(errTimedOut)
+	}
 	return n, err
 }
 
@@ -477,18 +491,23 @@ func (t *tap) kill(reason error) {
 	t.signal()
 }
 
-func (t *tap) touch(paused bool) {
+// touch restarts the silence clock; window is how long the server may then stay silent, zero for the default.
+func (t *tap) touch(window time.Duration) {
 	t.mu.Lock()
-	t.last, t.paused = time.Now(), paused
+	t.last, t.window = time.Now(), window
 	t.mu.Unlock()
 }
 
-// idleFor reports how long the server has been silent while a reply is due: not while IDLE waits and not while a
-// command is still being written.
-func (t *tap) idleFor() (time.Duration, bool) {
+// idleFor reports how long the server has been silent while a reply is due, not while a command is still being
+// written, and the silence that ends the connection: the touched window, else def.
+func (t *tap) idleFor(def time.Duration) (idle time.Duration, watching bool, window time.Duration) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return time.Since(t.last), !t.paused && t.writing == 0
+	window = t.window
+	if window == 0 {
+		window = def
+	}
+	return time.Since(t.last), t.writing == 0, window
 }
 
 // failure is the connection's error, if it has failed.

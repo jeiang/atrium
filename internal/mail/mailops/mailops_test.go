@@ -429,3 +429,17 @@ func TestWritesRefuseWhenTheSelectedUIDValidityDiffers(t *testing.T) {
 		t.Fatalf("validity 0 = %v", err)
 	}
 }
+
+func TestVerifySkipsAMessageWhoseUIDValidityIsZero(t *testing.T) {
+	w := livetest.ICloud(t, "live")
+	w.Arrive("a")
+	if _, err := w.DB.Write.Exec("UPDATE messages SET uidvalidity = 0"); err != nil {
+		t.Fatal(err)
+	}
+	w.Fake.Boxes["INBOX"].Validity = 0
+	snaps := snapshots(t, w, "a")
+	ok, skipped, err := mailops.Verify(w.Automatic(), w.DB.Read, w.Fake, config.ICloud, snaps)
+	if err != nil || len(ok) != 0 || len(skipped) != 1 {
+		t.Fatalf("Verify = %v, %v, %v", ok, skipped, err)
+	}
+}
