@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/live/livetest"
@@ -235,6 +236,26 @@ func TestLiveUndoMarksTheActionInFlightBeforeTheUndoerRuns(t *testing.T) {
 	a, _ := live.Get(t.Context(), w.DB.Read, id)
 	if a.Status != live.Undone {
 		t.Fatalf("action = %+v", a)
+	}
+}
+
+func TestIdempotentUndoStaysRetryableAfterADrop(t *testing.T) {
+	w := livetest.ICloud(t, "live")
+	w.Arrive("friend")
+	id := w.Flag("friend")
+	w.Sync()
+	w.Fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "STORE" {
+			return &mail.WriteInterrupted{Command: "STORE", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	if _, err := w.Live.Undo(t.Context(), id); err == nil {
+		t.Fatal("undo succeeded through a drop")
+	}
+	w.Fake.FailWrite = nil
+	if _, err := w.Live.Undo(t.Context(), id); err != nil {
+		t.Fatalf("retry of an idempotent undo = %v", err)
 	}
 }
 

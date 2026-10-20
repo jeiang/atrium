@@ -405,8 +405,14 @@ func (p *Pipeline) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
+// unresolvedSQL matches a proposal that has a failed write whose outcome is unknown or half done, in the form of
+// mailops.Blocks over proposal_actions; an undo's own failure does not count.
+const unresolvedSQL = "EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.ok = 0 " +
+	"AND json_extract(a.action, '$.op') IS NOT 'undo' AND (instr(a.error, '" + mailops.UnknownPrefix + "') > 0 OR instr(a.error, '" +
+	mailops.PartialPrefix + "') > 0))"
+
 func (p *Pipeline) claim(ctx context.Context, id int64, status string) (bool, error) {
-	res, err := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, decided_ts = ? WHERE id = ? AND status IN ('pending', 'failed')",
+	res, err := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, decided_ts = ? WHERE id = ? AND status IN ('pending', 'failed') AND NOT "+unresolvedSQL,
 		status, p.now(), id)
 	if err != nil {
 		return false, err
@@ -455,16 +461,16 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any)
 	if executor == nil {
 		return nil, ProposalError(fmt.Sprintf("no executor for kind %s", py.Repr(prop.Kind)))
 	}
-	if prop.Status == Failed {
-		if err := p.refuseUnresolved(ctx, id); err != nil {
-			return nil, err
-		}
-	}
 	claimed, err := p.claim(ctx, id, Approved)
 	if err != nil {
 		return nil, err
 	}
 	if !claimed {
+		if open, err := Get(ctx, p.DB.Write, id); err == nil && open != nil && (open.Status == Pending || open.Status == Failed) {
+			if err := p.refuseUnresolved(ctx, id); err != nil {
+				return nil, err
+			}
+		}
 		return nil, ProposalError(fmt.Sprintf("proposal %d is not open", id))
 	}
 	settle := context.WithoutCancel(ctx)
@@ -573,7 +579,10 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		}
 		detail, err := undoer(approved, entry.Plan)
 		if err != nil {
-			text := mailops.UnknownText(err, py.ExceptionText(err))
+			text := py.ExceptionText(err)
+			if name == "move_back" {
+				text = mailops.UnknownText(err, text)
+			}
 			if rerr := SettleAction(ctx, p.DB.Write, held, undoAction, nil, false, &text, p.now()); rerr != nil {
 				return UndoResult{}, rerr
 			}

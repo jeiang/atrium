@@ -721,6 +721,37 @@ func TestReApprovingAFailedProposalWithAnUnknownCopyIsRefused(t *testing.T) {
 	}
 }
 
+func TestRescanNeverReopensAProposalWithAnUnknownCopy(t *testing.T) {
+	w := icloudWorld(t)
+	payload := w.splitPayload(w.messageIDs("Bills"), "Bills/Shop")
+	pid := w.propose(executors.RebalanceSplit, payload)
+	copies := 0
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			copies++
+			return &mail.WriteInterrupted{Command: "COPY", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	if done := w.apply(pid, nil); done.Status != proposals.Failed {
+		t.Fatalf("status = %s", done.Status)
+	}
+	account := w.account
+	if _, ok, err := proposals.Create(context.Background(), w.db, executors.RebalanceSplit, &account, "title", payload, py.Dict{}, "fp", w.clock); err != nil || ok {
+		t.Fatalf("rescan = %v, %v; want the failed proposal kept as known", ok, err)
+	}
+	if _, err := w.pipeline.ApproveAndApply(context.Background(), pid, nil); err == nil {
+		t.Fatal("approve after the rescan was accepted")
+	}
+	if _, err := w.db.Write.Exec("UPDATE proposals SET status = 'pending' WHERE id = ?", pid); err != nil {
+		t.Fatal(err)
+	}
+	_, err := w.pipeline.ApproveAndApply(context.Background(), pid, nil)
+	if !strings.Contains(fmt.Sprint(err), "resolve it in the mailbox") || copies != 1 {
+		t.Fatalf("approve of a pending proposal = %v, COPY sent %d times", err, copies)
+	}
+}
+
 func TestSecondChunkRowFailureReturnsTheErrorWithoutPanicking(t *testing.T) {
 	w := newWorld(t, config.ICloud, func(f *mailtest.FakeClient) {
 		f.AddBox(config.Inbox, mailtest.NewBox(1))

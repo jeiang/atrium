@@ -20,6 +20,7 @@ import (
 	"github.com/emersion/go-imap/v2/imapclient"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -32,6 +33,8 @@ const (
 	writeTimeout  = 2 * time.Minute
 	idleKeepalive = 5 * time.Minute
 )
+
+var log = logx.Logger("atrium.imap")
 
 var allowedVersions = []string{"IMAP4REV1", "IMAP4"}
 
@@ -97,7 +100,10 @@ type conn struct {
 	lastCode      string
 	sentPos       int
 	idleKeepalive time.Duration
+	inflight      *inflight
 }
+
+type inflight struct{ command, name string }
 
 var errNotConnected = errors.New("IMAP client is not connected")
 
@@ -114,10 +120,17 @@ func (c *conn) await(ctx context.Context, fn func() error) error {
 		defer func() {
 			if v := recover(); v != nil {
 				t.kill(fmt.Errorf("panic: %v", v))
-				done <- fmt.Errorf("imapclient: panic reading the server's reply: %v", v)
+				err := fmt.Errorf("imapclient: panic reading the server's reply: %v", v)
+				if w := c.inflight; w != nil && t.written(w.name, c.sentPos) {
+					err = &mail.WriteInterrupted{Command: w.command, Err: err}
+				}
+				c.inflight = nil
+				done <- err
 			}
 		}()
-		done <- fn()
+		err := fn()
+		c.inflight = nil
+		done <- err
 	}()
 	timer := time.NewTimer(c.readTimeout)
 	defer timer.Stop()
@@ -253,6 +266,18 @@ func wrapCommand(name string, err error) error {
 		return &Error{Kind: e.Kind, Msg: fmt.Sprintf("command: %s => %s", name, e.Msg)}
 	}
 	return err
+}
+
+// markWrite names the write command in flight, so a panic while its reply is read is reported as an unknown
+// outcome; await clears it when the command returns.
+func (c *conn) markWrite(command, name string) { c.inflight = &inflight{command, name} }
+
+// ignoreAfterReply drops go-imap's own error once the server's tagged OK has been parsed: the write ran, and an
+// error would make a caller retry it.
+func (c *conn) ignoreAfterReply(command string, werr error) {
+	if err := goErr(werr); err != nil {
+		log.Warn("go-imap failed after the server accepted "+command, logx.Err, err.Error())
+	}
 }
 
 // interrupted marks a failed completion of a write as outcome-unknown when the connection broke after go-imap
@@ -749,6 +774,7 @@ func (c *conn) UIDFetch(ctx context.Context, uids mail.UIDSet, items mail.FetchI
 
 // mutate is ImapClient.mutate after its write gate: the UID command's data, then every COPYUID code it got.
 func (c *conn) mutate(command string, send func() error) ([]datum, error) {
+	c.markWrite(command, "UID")
 	c.ur.pop("COPYUID")
 	if err := c.beginUID(command); err != nil {
 		return nil, err
@@ -766,7 +792,8 @@ func (c *conn) mutate(command string, send func() error) ([]datum, error) {
 	for _, d := range copied {
 		data = append(data, datum{text: append([]byte("COPYUID "), d.text...)})
 	}
-	return data, goErr(werr)
+	c.ignoreAfterReply(command, werr)
+	return data, nil
 }
 
 func (c *conn) Copy(ctx context.Context, uids mail.UIDSet, destIMAPName string) (*mail.CopyUID, error) {
@@ -874,6 +901,7 @@ func (c *conn) Append(ctx context.Context, imapName string, raw []byte, flags ..
 		if err := c.begin("APPEND"); err != nil {
 			return err
 		}
+		c.markWrite("APPEND", "APPEND")
 		werr := func() error {
 			cmd := c.cl.Append(name, int64(len(literal)), opts)
 			if _, err := cmd.Write(literal); err != nil {
@@ -893,7 +921,8 @@ func (c *conn) Append(ctx context.Context, imapName string, raw []byte, flags ..
 		if err := okError(typ, dat); err != nil {
 			return err
 		}
-		return goErr(werr)
+		c.ignoreAfterReply("APPEND", werr)
+		return nil
 	})
 }
 
@@ -907,6 +936,7 @@ func (c *conn) mailboxCommand(ctx context.Context, command, imapName string, sen
 		if err := c.begin(command); err != nil {
 			return err
 		}
+		c.markWrite(command, command)
 		werr := send(name)
 		typ, dat, err := c.complete(command)
 		if err != nil {
@@ -915,7 +945,8 @@ func (c *conn) mailboxCommand(ctx context.Context, command, imapName string, sen
 		if err := okError(typ, dat); err != nil {
 			return err
 		}
-		return goErr(werr)
+		c.ignoreAfterReply(command, werr)
+		return nil
 	})
 }
 
