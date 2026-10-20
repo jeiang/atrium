@@ -252,9 +252,6 @@ func startWireWatch(t *testing.T, script string, ctx context.Context, sleep func
 		for _, f := range tune {
 			f(c)
 		}
-		for _, f := range tune {
-			f(c)
-		}
 		client := mail.Gated(c, env)
 		if err := client.Connect(ctx); err != nil {
 			return nil, err

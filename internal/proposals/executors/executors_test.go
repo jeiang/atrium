@@ -747,6 +747,29 @@ func TestSecondChunkRowFailureReturnsTheErrorWithoutPanicking(t *testing.T) {
 	}
 }
 
+func TestInterruptedExpungeLogsOnePartialMoveRow(t *testing.T) {
+	w := icloudWorld(t)
+	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "EXPUNGE" {
+			return &mail.WriteInterrupted{Command: "EXPUNGE", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	if done := w.apply(pid, nil); done.Status != proposals.Failed {
+		t.Fatalf("status = %s", done.Status)
+	}
+	var failed int
+	if err := w.db.Read.QueryRow("SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND ok = 0", pid).Scan(&failed); err != nil || failed != 1 {
+		t.Fatalf("failed rows = %d, %v", failed, err)
+	}
+	logged := w.actions(pid)
+	last := logged[len(logged)-1]
+	if copied, _ := field(last.Action, "copied").(py.Dict); last.OK || len(copied) != 4 {
+		t.Fatalf("last action = %+v", last)
+	}
+}
+
 func TestUndoHasItsRowBeforeTheUndoerRuns(t *testing.T) {
 	w := icloudWorld(t)
 	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))

@@ -71,11 +71,11 @@ func Blocks(text string) bool {
 // OutcomeUnknown reports whether err is a write the server may or may not have executed: a command that was sent
 // and never answered, alone or as the COPY of a PartialMove.
 func OutcomeUnknown(err error) bool {
-	if _, ok := errors.AsType[*mail.WriteInterrupted](err); ok {
-		return true
+	if partial, ok := errors.AsType[*PartialMove](err); ok {
+		return partial.Unconfirmed
 	}
-	partial, ok := errors.AsType[*PartialMove](err)
-	return ok && partial.Unconfirmed
+	_, ok := errors.AsType[*mail.WriteInterrupted](err)
+	return ok
 }
 
 // UnknownText is the ledger text of a failed write: err's text, led by UnknownPrefix when its outcome is unknown

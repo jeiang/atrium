@@ -288,6 +288,9 @@ func TestProposalsApproveSigtermDuringExpungeLogsThePartialMove(t *testing.T) {
 	if got := w.text("SELECT action FROM proposal_actions WHERE proposal_id = ? AND ok = 0", id); got != want {
 		t.Fatalf("partial move logged as %s", got)
 	}
+	if n := w.text("SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND ok = 0", id); n != "1" {
+		t.Fatalf("failed rows = %s, want only the partial move", n)
+	}
 }
 
 func TestLiveUndoRefusesToRetryAPartialUndo(t *testing.T) {
