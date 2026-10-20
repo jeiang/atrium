@@ -139,10 +139,16 @@ func (p *pages) chatFileRaw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f, err := os.Open(found.Path)
-	check(err)
+	if err != nil {
+		p.fail(w, r, http.StatusNotFound, "file is missing from storage")
+		return
+	}
 	defer func() { _ = f.Close() }()
 	info, err := f.Stat()
-	check(err)
+	if err != nil || !info.Mode().IsRegular() {
+		p.fail(w, r, http.StatusNotFound, "file is missing from storage")
+		return
+	}
 	w.Header().Set("Content-Type", found.MediaType)
 	http.ServeContent(w, r, "", info.ModTime(), f)
 }

@@ -50,7 +50,10 @@ func (p *pages) chatEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	if header := r.Header.Get("Last-Event-ID"); header != "" {
 		n, err := py.IntString(header)
-		check(err)
+		if err != nil {
+			p.fail(w, r, http.StatusBadRequest, "invalid Last-Event-ID")
+			return
+		}
 		after = n.Int64()
 	}
 	if _, ok := p.loadRun(w, r, threadID, runID); !ok {

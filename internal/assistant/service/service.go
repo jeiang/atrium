@@ -300,7 +300,9 @@ func (s *Service) inBackground(runID int64) error {
 				log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, fmt.Sprintf("panic: %v\n%s", p, debug.Stack()))
 			}
 		}()
-		if _, err := s.Execute(s.base, runID, journal.Limits{}); err != nil {
+		if _, err := s.Execute(s.base, runID, journal.Limits{}); errors.Is(err, context.Canceled) {
+			log.Info(fmt.Sprintf("background run %d cancelled", runID), logx.RunID, runID)
+		} else if err != nil {
 			log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, err)
 		}
 	})
