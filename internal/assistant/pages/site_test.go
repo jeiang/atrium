@@ -108,7 +108,7 @@ type reply struct {
 
 var noRedirect = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 
-func (s *site) do(method, target string, body io.Reader, contentType string, headers ...string) *reply {
+func (s *site) request(method, target string, body io.Reader, contentType string, headers ...string) *http.Request {
 	s.t.Helper()
 	req, err := http.NewRequest(method, s.http.URL+target, body)
 	if err != nil {
@@ -124,7 +124,12 @@ func (s *site) do(method, target string, body io.Reader, contentType string, hea
 	for i := 0; i+1 < len(headers); i += 2 {
 		req.Header.Set(headers[i], headers[i+1])
 	}
-	resp, err := noRedirect.Do(req)
+	return req
+}
+
+func (s *site) do(method, target string, body io.Reader, contentType string, headers ...string) *reply {
+	s.t.Helper()
+	resp, err := noRedirect.Do(s.request(method, target, body, contentType, headers...))
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -134,6 +139,17 @@ func (s *site) do(method, target string, body io.Reader, contentType string, hea
 		s.t.Fatal(err)
 	}
 	return &reply{resp, string(b)}
+}
+
+// direct serves the request in-process, skipping the loopback socket: an upload over the body cap is refused
+// before it is read, and pushing tens of megabytes at a server that stopped reading stalls the socket for minutes.
+func (s *site) direct(method, target string, body io.Reader, contentType string, headers ...string) *reply {
+	s.t.Helper()
+	rec := httptest.NewRecorder()
+	s.srv.ServeHTTP(rec, s.request(method, target, body, contentType, headers...))
+	resp := rec.Result()
+	defer func() { _ = resp.Body.Close() }()
+	return &reply{resp, rec.Body.String()}
 }
 
 func (s *site) get(target string, headers ...string) *reply {
@@ -156,6 +172,13 @@ type upload struct {
 
 func (s *site) multipart(target string, fields map[string]string, uploads []upload, headers ...string) *reply {
 	s.t.Helper()
+	return s.multipartVia(s.do, target, fields, uploads, headers...)
+}
+
+type doer func(method, target string, body io.Reader, contentType string, headers ...string) *reply
+
+func (s *site) multipartVia(do doer, target string, fields map[string]string, uploads []upload, headers ...string) *reply {
+	s.t.Helper()
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
 	for k, v := range fields {
@@ -172,7 +195,7 @@ func (s *site) multipart(target string, fields map[string]string, uploads []uplo
 		_, _ = part.Write(u.data)
 	}
 	_ = w.Close()
-	return s.do(http.MethodPost, target, &b, w.FormDataContentType(), headers...)
+	return do(http.MethodPost, target, &b, w.FormDataContentType(), headers...)
 }
 
 func (s *site) exec(query string, args ...any) {
