@@ -11,13 +11,13 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
-	BudgetKey        = "monthly_budget_usd"
-	DefaultBudgetUSD = 75.0
-	UnattendedShare  = 0.8
-	ChatShare        = 1.0
+	BudgetKey     = "monthly_budget_usd"
+	UnattendedKey = "budget_unattended_share"
+	ChatShare     = 1.0
 )
 
 type BudgetExceeded string
@@ -54,11 +54,19 @@ func SetSetting(ctx context.Context, q db.Querier, key string, value any) error 
 }
 
 func MonthlyBudget(ctx context.Context, q db.Querier) (float64, error) {
-	value, ok, err := GetSetting(ctx, q, BudgetKey)
-	if err != nil || !ok {
-		return DefaultBudgetUSD, err
+	found, err := settings.Default.Resolve(ctx, q, BudgetKey, 0)
+	if err != nil {
+		return 0, err
 	}
-	return py.ParseFloat(value)
+	return found.Float()
+}
+
+func unattendedShare(ctx context.Context, q db.Querier) (float64, error) {
+	found, err := settings.Default.Resolve(ctx, q, UnattendedKey, 0)
+	if err != nil {
+		return 0, err
+	}
+	return found.Float()
 }
 
 type Status struct {
@@ -95,7 +103,11 @@ func Check(ctx context.Context, q db.Querier, now float64, loc *time.Location, u
 	}
 	threshold, who := ChatShare, "chat pauses at"
 	if unattended {
-		threshold, who = UnattendedShare, "unattended runs pause at"
+		share, err := unattendedShare(ctx, q)
+		if err != nil {
+			return Status{}, err
+		}
+		threshold, who = share, "unattended runs pause at"
 	}
 	if found.Share >= threshold {
 		return Status{}, BudgetExceeded(fmt.Sprintf("monthly budget: $%s of $%s spent (%s); %s %s",
@@ -103,4 +115,17 @@ func Check(ctx context.Context, q db.Querier, now float64, loc *time.Location, u
 			py.FormatPercent(threshold, 0)))
 	}
 	return found, nil
+}
+
+func init() {
+	settings.MustRegister(
+		settings.Def{
+			Key: BudgetKey, Module: "assistant", Type: settings.Float, Default: "75",
+			Check: settings.Above(0), Class: settings.UI, Scopes: []settings.Scope{settings.Instance},
+		},
+		settings.Def{
+			Key: UnattendedKey, Module: "assistant", Type: settings.Float, Default: "0.8",
+			Check: settings.Within(0, 1), Class: settings.Advanced, Scopes: []settings.Scope{settings.Instance},
+		},
+	)
 }
