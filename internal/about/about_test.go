@@ -30,12 +30,26 @@ func TestAboutPage(t *testing.T) {
 		t.Fatalf("GET /about = %d: %s", response.Code, response.Body.String())
 	}
 	body := html.UnescapeString(response.Body.String())
-	for _, want := range []string{"test-version", "Licence notices", "MIT License", "Developer Certificate of Origin"} {
+	for _, want := range []string{
+		`class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent bg-accent font-medium"`,
+		`href="/about"`,
+		`aria-current="page"`,
+		"About",
+		"Version:",
+		"test-version",
+		"Licence notices",
+		"MIT License",
+		"Developer Certificate of Origin",
+		"<details>",
+		"Third-party licences (0 packages)",
+		`role="region" aria-label="Third-party licence notices"`,
+		"max-h-[70vh] overflow-auto break-words whitespace-pre-wrap text-xs",
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /about does not contain %q", want)
 		}
 	}
-	if notices := strings.TrimSpace(string(mustNotices())); notices != "" && !strings.Contains(body, notices) {
+	if notices := strings.TrimSpace(thirdPartyNotices); notices != "" && !strings.Contains(body, notices) {
 		t.Error("GET /about does not include the embedded dependency notices")
 	}
 }

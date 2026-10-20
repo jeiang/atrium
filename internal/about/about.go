@@ -4,14 +4,18 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/web"
 )
 
-//go:embed templates/*.gohtml THIRD_PARTY_NOTICES
+//go:embed templates/*.gohtml
 var assets embed.FS
+
+//go:embed THIRD_PARTY_NOTICES
+var thirdPartyNotices string
 
 func Templates() fs.FS {
 	files, err := fs.Sub(assets, "templates")
@@ -25,9 +29,10 @@ func Module(version string) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		r.Get("/about", func(w http.ResponseWriter, r *http.Request) {
 			f, err := d.Render.Frame(r, "about", struct {
-				Version string `json:"version"`
-				Notices string `json:"notices"`
-			}{version, string(mustNotices())})
+				Version     string `json:"version"`
+				NoticeCount int    `json:"notice_count"`
+				Notices     string `json:"notices"`
+			}{version, strings.Count(thirdPartyNotices, "================================================================\n") / 2, thirdPartyNotices})
 			if err != nil {
 				panic(err)
 			}
@@ -36,12 +41,4 @@ func Module(version string) web.Module {
 			}
 		})
 	}
-}
-
-func mustNotices() []byte {
-	data, err := assets.ReadFile("THIRD_PARTY_NOTICES")
-	if err != nil {
-		panic(err)
-	}
-	return data
 }
