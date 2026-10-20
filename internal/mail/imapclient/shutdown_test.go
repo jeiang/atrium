@@ -61,11 +61,12 @@ func (c *terminating) UIDExpunge(ctx context.Context, uids mail.UIDSet) error {
 }
 
 type shutdownWorld struct {
-	on    string
-	t     *testing.T
-	db    *db.DB
-	opens int
-	srv   *imapscript.Server
+	on     string
+	signal syscall.Signal
+	t      *testing.T
+	db     *db.DB
+	opens  int
+	srv    *imapscript.Server
 }
 
 func newShutdownWorld(t *testing.T, on, script string) *shutdownWorld {
