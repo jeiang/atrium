@@ -68,25 +68,36 @@ type DB struct {
 	Read  *sql.DB
 }
 
-func Connect(path string) (*DB, error) { return connect(path, true) }
+func Connect(path string, opts ...Option) (*DB, error) { return connect(path, true, opts) }
 
-func ConnectNoForeignKeys(path string) (*DB, error) { return connect(path, false) }
+func ConnectNoForeignKeys(path string, opts ...Option) (*DB, error) {
+	return connect(path, false, opts)
+}
 
-func connect(path string, foreignKeys bool) (*DB, error) {
-	if strings.ContainsRune(path, '?') {
-		return nil, fmt.Errorf("db: path %q contains '?'", path)
+func connect(path string, foreignKeys bool, opts []Option) (*DB, error) {
+	if strings.ContainsAny(path, "?#") {
+		return nil, fmt.Errorf("db: path %q contains '?' or '#'", path)
+	}
+	key := applyOptions(opts).key
+	writeDSN, err := dsn(path, true, key)
+	if err != nil {
+		return nil, err
+	}
+	readDSN, err := dsn(path, false, key)
+	if err != nil {
+		return nil, err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		return nil, err
 	}
 	pragmas := connPragmas(foreignKeys)
-	w := Open(path+"?_txlock=immediate", pragmas...)
+	w := Open(writeDSN, pragmas...)
 	w.SetMaxOpenConns(1)
 	if err := setWAL(w); err != nil {
 		_ = w.Close()
 		return nil, fmt.Errorf("db: %s: %w", path, err)
 	}
-	r := Open(path, append(pragmas, "PRAGMA query_only = ON")...)
+	r := Open(readDSN, append(pragmas, "PRAGMA query_only = ON")...)
 	return &DB{Write: w, Read: r}, nil
 }
 
