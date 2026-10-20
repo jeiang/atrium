@@ -131,8 +131,6 @@ func scannable(ctx context.Context, q db.Querier, now float64, limit int) ([]Mes
 	return out, nil
 }
 
-// commitmentItems is (found or [])[:COMMITMENTS_PER_MESSAGE]: a falsy answer has none, a list its first items; a
-// string slices harmlessly (none of its characters is an object) and any other value raises TypeError.
 func commitmentItems(found any) ([]any, error) {
 	if !py.Truthy(found) {
 		return nil, nil

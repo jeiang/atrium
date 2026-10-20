@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/db/readpaths"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -262,39 +261,4 @@ func ListJobs(ctx context.Context, q db.Querier, includeCancelled bool) ([]Liste
 		out = append(out, j)
 	}
 	return out, rows.Err()
-}
-
-func bit(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
-}
-
-func (j ListedJob) row() map[string]any {
-	return map[string]any{
-		"id": j.ID, "name": j.Name, "prompt": j.Prompt, "schedule": j.Schedule, "tz": j.TZ, "effort": j.Effort, "kind": j.Kind,
-		"enabled": bit(j.Enabled), "cancelled": bit(j.Cancelled), "next_due": j.NextDue, "lease_owner": j.LeaseOwner,
-		"lease_until": j.LeaseUntil, "created_by": j.CreatedBy, "created_in_thread": j.CreatedInThread,
-		"created_at": j.CreatedAt, "last_run_id": j.LastRunID, "prompt_by": j.PromptBy, "last_status": j.LastStatus,
-		"last_thread_id": j.LastThreadID, "last_started": j.LastStarted, "last_error": j.LastError,
-	}
-}
-
-func init() {
-	readpaths.Register(readpaths.Path{
-		Name:   "scheduler.list_jobs",
-		Golden: "scheduler.list_jobs",
-		Run: func(ctx context.Context, d *db.DB) (any, error) {
-			jobs, err := ListJobs(ctx, d.Read, true)
-			if err != nil {
-				return nil, err
-			}
-			rows := make([]map[string]any, len(jobs))
-			for i, j := range jobs {
-				rows[i] = j.row()
-			}
-			return rows, nil
-		},
-	})
 }

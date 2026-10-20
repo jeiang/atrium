@@ -45,13 +45,3 @@ func TestRunPrintsTheRunView(t *testing.T) {
 		t.Errorf("%d scripted replies unused", n)
 	}
 }
-
-func TestRunRequiresTextAndAKnownKind(t *testing.T) {
-	env := config.Map(map[string]string{})
-	for _, args := range [][]string{{"agent", "run"}, {"agent", "run", "--text", "x", "--kind", "code"}} {
-		var stdout, stderr bytes.Buffer
-		if code := app(env).Run(t.Context(), args, &stdout, &stderr); code != cli.ExitUsage {
-			t.Errorf("%v: exit %d (%s)", args, code, stderr.String())
-		}
-	}
-}

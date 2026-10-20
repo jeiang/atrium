@@ -11,6 +11,12 @@ type SendError string
 
 func (e SendError) Error() string { return string(e) }
 
+type OutcomeUnknown struct{ Err error }
+
+func (e *OutcomeUnknown) Error() string { return e.Err.Error() }
+
+func (e *OutcomeUnknown) Unwrap() error { return e.Err }
+
 type ResponseError struct {
 	Kind string
 	Code int

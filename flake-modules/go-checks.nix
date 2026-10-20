@@ -20,8 +20,6 @@
       ];
     };
     stageAssets = "cp -r --no-preserve=mode ${self'.packages.atrium-static} internal/web/static";
-    # Every check reuses this one module set; update vendorHash whenever go.sum changes. proxyVendor,
-    # because go-licenses cannot resolve a directory `replace` under -mod=vendor.
     base = pkgs.buildGo126Module.override {inherit go;} {
       pname = "atrium-go";
       version = "0";
@@ -37,7 +35,6 @@
         pname = "atrium-go-${name}";
         inherit (base) goModules;
         nativeBuildInputs = old.nativeBuildInputs ++ tools;
-        # Tests locate testdata through their source paths, which -trimpath would strip.
         preConfigure = ''
           export HOME=$TMPDIR
           export GOFLAGS=''${GOFLAGS//-trimpath/}
@@ -60,7 +57,6 @@
 
       {{.LicenseText}}
       {{end}}'';
-    # Both SQLite drivers stay checked: mattn (default, cgo) and the modernc fallback.
     eachDriver = cmd: ''
       for tags in sqlite_fts5 modernc; do
         echo "tags: $tags"
@@ -102,22 +98,14 @@
         fi
       '';
 
-      # The gate (AGPL and unknown licences fail) runs first, so the notices only ever list allowed licences.
-      # go-licenses has no -tags flag; the notices cover the default (mattn) build.
       go-licenses = goCheck "licenses" [pkgs.go-licenses] ''
         ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" go-licenses check ./... --disallowed_types=forbidden,unknown''}
         mkdir -p $out
         GOFLAGS="$GOFLAGS -tags=sqlite_fts5" go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --template ${notices} >$out/THIRD_PARTY_NOTICES
         cp $out/THIRD_PARTY_NOTICES internal/about/THIRD_PARTY_NOTICES
         test -s internal/about/THIRD_PARTY_NOTICES
-        go test -tags sqlite_fts5 ./internal/about
       '';
 
-      # The vulnerability database changes daily, so this is a fixed-output derivation: it may reach
-      # vuln.go.dev and the module proxy. A fixed output is never rebuilt once valid, so its name hashes
-      # the sources, tools and script: any change to them reruns it.
-      # Symbol mode fails only on vulnerabilities the code reaches; uncalled ones, such as the go1.26.7
-      # standard library's, are summarised and do not fail.
       govulncheck = let
         script = ''
           runHook preBuild

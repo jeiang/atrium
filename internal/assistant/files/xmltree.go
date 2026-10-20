@@ -16,8 +16,6 @@ import (
 
 var maxTextBytes = int(4 * actx.CharsPerToken * actx.LimitsFor(actx.ModelContext).Compact)
 
-// readError carries the name of the Python exception the same failure raises in the frozen app; the operator sees
-// it after "could not read the Word file: ".
 type readError string
 
 func (e readError) Error() string { return string(e) }
@@ -30,8 +28,6 @@ func errorName(err error) string {
 	return "Exception"
 }
 
-// limitError is a document that goes past a Phase A resource cap (decompressed part size, Excel's grid, extracted
-// text); the frozen Python extractor has no such caps.
 type limitError string
 
 func (e limitError) Error() string { return string(e) }
@@ -100,7 +96,6 @@ func parseXML(data []byte) (*element, error) {
 
 var attrSpace = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ")
 
-// normalizeAttrs applies XML's attribute-value normalization, which encoding/xml leaves out.
 func normalizeAttrs(attrs []xml.Attr) []xml.Attr {
 	for i := range attrs {
 		attrs[i].Value = attrSpace.Replace(attrs[i].Value)

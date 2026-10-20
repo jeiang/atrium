@@ -32,7 +32,6 @@ const categorySQL = "CASE WHEN json_extract(w.undo_json, '$.op') = 'money_restor
 
 const writeColumns = "id, ts, thread_id, tool, target, before_json, after_json, undo_json, undone_at, thread_kind, category"
 
-// snippet is _snippet: the JSON text of a stored value, indented, cut at 800 characters.
 func snippet(raw *string) (string, error) {
 	if raw == nil || *raw == "" {
 		return "", nil
@@ -79,8 +78,6 @@ func getWrite(ctx context.Context, q db.Querier, id int64) (*ActivityEntry, erro
 	return &e, nil
 }
 
-// timeline is timeline: mailbox auto-actions and agent writes merged newest first; it returns the entries from
-// offset on, limit of them, and the offset of the next page (0 when there is none).
 func timeline(ctx context.Context, q db.Querier, category string, limit, offset int) ([]ActivityEntry, int, error) {
 	want := offset + limit + 1
 	var entries []ActivityEntry
@@ -163,7 +160,6 @@ func (s *service) activityPage(w http.ResponseWriter, r *http.Request) {
 	s.page(w, r, http.StatusOK, "activity", "activity.gohtml", data, nil)
 }
 
-// undone answers an undo: the activity page again for a plain post, the row's new state for htmx.
 func (s *service) undone(w http.ResponseWriter, r *http.Request, entry ActivityEntry, notice *tpl.Toast) {
 	if !web.IsPartial(r) {
 		http.Redirect(w, r, "/activity", http.StatusSeeOther)

@@ -47,7 +47,7 @@ func (r *Registry) Resolve(ctx context.Context, q db.Querier, key string, thread
 	if thread != 0 && !d.has(Thread) {
 		return Resolved{}, &ScopeError{Key: key, Scope: Thread}
 	}
-	if pins != nil {
+	if pins != nil && d.pinnable() {
 		if value, source, ok := pins.Pin(key); ok {
 			return Resolved{Key: key, Value: value, Origin: FromPin, PinSource: source, Secret: d.Secret}, nil
 		}
@@ -69,7 +69,7 @@ func (r *Registry) Resolve(ctx context.Context, q db.Querier, key string, thread
 	if err != nil || !ok {
 		return out, err
 	}
-	if d.Class == Cap {
+	if d.Class == Cap && out.Origin == FromInstance {
 		tighter, err := lower(key, value, out.Value)
 		if err != nil {
 			return Resolved{}, err
@@ -86,9 +86,6 @@ func lower(key, candidate, base string) (bool, error) {
 	c, err := py.ParseFloat(candidate)
 	if err != nil {
 		return false, fmt.Errorf("settings: %s: %w", key, err)
-	}
-	if base == "" {
-		return true, nil
 	}
 	b, err := py.ParseFloat(base)
 	if err != nil {
@@ -115,14 +112,14 @@ func threadValue(ctx context.Context, q db.Querier, column string, thread int64)
 	return value.String, value.Valid, err
 }
 
-func (r *Registry) Set(ctx context.Context, q db.Querier, key, value string, thread int64) error {
+func (r *Registry) writable(key string, thread int64) (Def, Scope, error) {
 	d, pins, err := r.lookup(key)
 	if err != nil {
-		return err
+		return Def{}, "", err
 	}
-	if pins != nil {
+	if pins != nil && d.pinnable() {
 		if _, source, ok := pins.Pin(key); ok {
-			return &PinnedError{Key: key, Source: source}
+			return Def{}, "", &PinnedError{Key: key, Source: source}
 		}
 	}
 	level := Instance
@@ -130,7 +127,15 @@ func (r *Registry) Set(ctx context.Context, q db.Querier, key, value string, thr
 		level = Thread
 	}
 	if !d.has(level) {
-		return &ScopeError{Key: key, Scope: level}
+		return Def{}, "", &ScopeError{Key: key, Scope: level}
+	}
+	return d, level, nil
+}
+
+func (r *Registry) Set(ctx context.Context, q db.Querier, key, value string, thread int64) error {
+	d, level, err := r.writable(key, thread)
+	if err != nil {
+		return err
 	}
 	if err := r.Validate(key, value); err != nil {
 		return err
@@ -139,14 +144,31 @@ func (r *Registry) Set(ctx context.Context, q db.Querier, key, value string, thr
 		_, err = q.ExecContext(ctx, "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value)
 		return err
 	}
-	res, err := q.ExecContext(ctx, "UPDATE threads SET "+d.ThreadColumn+" = ? WHERE id = ?", value, thread)
+	return updateThread(ctx, q, d.ThreadColumn, thread, value)
+}
+
+func (r *Registry) Unset(ctx context.Context, q db.Querier, key string, thread int64) error {
+	d, level, err := r.writable(key, thread)
 	if err != nil {
 		return err
 	}
-	if n, err := res.RowsAffected(); err != nil || n == 0 {
-		if err != nil {
-			return err
-		}
+	if level == Instance {
+		_, err = q.ExecContext(ctx, "DELETE FROM settings WHERE key = ?", key)
+		return err
+	}
+	return updateThread(ctx, q, d.ThreadColumn, thread, nil)
+}
+
+func updateThread(ctx context.Context, q db.Querier, column string, thread int64, value any) error {
+	res, err := q.ExecContext(ctx, "UPDATE threads SET "+column+" = ? WHERE id = ?", value, thread)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
 		return UnknownThread(thread)
 	}
 	return nil

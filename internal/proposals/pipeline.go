@@ -378,8 +378,6 @@ func (p *Pipeline) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-// unresolvedSQL matches a proposal that has a failed write whose outcome is unknown or half done, in the form of
-// mailops.Blocks over proposal_actions; an undo's own failure does not count.
 var unresolvedSQL = "EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND (" + mailops.BlockingActionSQL("a") + "))"
 
 func (p *Pipeline) claim(ctx context.Context, id int64, status string) (bool, error) {

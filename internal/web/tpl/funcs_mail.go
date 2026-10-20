@@ -53,8 +53,6 @@ func sumValues(m any) (int64, error) {
 	return total, nil
 }
 
-// queryVal is |urlencode of a value in the query of a URL attribute: html/template would percent-encode the "%" of
-// an encoded string there, and a template.URL is only normalized.
 func queryVal(v any) (template.URL, error) {
 	s, err := urlencode(v)
 	return template.URL(s), err

@@ -240,8 +240,6 @@ func moneyColumns(ctx context.Context, q Querier) error {
 	return err
 }
 
-// filedViewSQL is Python's filed_view_sql byte for byte, so either runtime
-// leaves the other's view in place.
 func filedViewSQL(ctx context.Context, q Querier) (string, error) {
 	cols, err := tableInfo(ctx, q, "messages")
 	if err != nil {

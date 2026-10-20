@@ -14,26 +14,10 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
-	"strings"
 	"testing"
 )
 
 const maxDiffs = 20
-
-type Manifest struct {
-	Slice        string          `json:"slice"`
-	FreezeCommit string          `json:"freeze_commit"`
-	Generator    string          `json:"generator"`
-	Scenarios    []ManifestEntry `json:"scenarios"`
-}
-
-type ManifestEntry struct {
-	Name        string   `json:"name"`
-	File        string   `json:"file"`
-	Description string   `json:"description"`
-	SourceTests []string `json:"source_tests"`
-	Requests    int      `json:"requests"`
-}
 
 type Request struct {
 	Method       string            `json:"method"`
@@ -77,55 +61,18 @@ func ReadFile(t testing.TB, slice, name string) []byte {
 	return data
 }
 
-func decodeFile(t testing.TB, slice, name string, into any, strict bool) {
-	t.Helper()
-	dec := json.NewDecoder(bytes.NewReader(ReadFile(t, slice, name)))
-	if strict {
-		dec.DisallowUnknownFields()
-	}
-	if err := dec.Decode(into); err != nil {
-		t.Fatalf("golden: %s/%s: %v", slice, name, err)
-	}
-}
-
-func LoadManifest(t testing.TB, slice string) Manifest {
-	t.Helper()
-	var m Manifest
-	decodeFile(t, slice, "manifest.json", &m, false)
-	return m
-}
-
 func LoadScenario(t testing.TB, slice, name string) Scenario {
 	t.Helper()
 	var s Scenario
-	decodeFile(t, slice, name+".json", &s, true)
+	dec := json.NewDecoder(bytes.NewReader(ReadFile(t, slice, name+".json")))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&s); err != nil {
+		t.Fatalf("golden: %s/%s.json: %v", slice, name, err)
+	}
 	if s.Name != name {
 		t.Fatalf("golden: %s/%s.json names scenario %q", slice, name, s.Name)
 	}
 	return s
-}
-
-func EqualJSON(t testing.TB, want, got []byte) {
-	t.Helper()
-	diffs, err := Diff(want, got)
-	if err != nil {
-		t.Fatalf("golden: %v", err)
-	}
-	if len(diffs) > 0 {
-		t.Errorf("JSON differs from the golden:\n%s", strings.Join(diffs, "\n"))
-	}
-}
-
-func Canonical(data []byte) ([]byte, error) {
-	v, err := decode(data)
-	if err != nil {
-		return nil, err
-	}
-	var buf bytes.Buffer
-	if err := encode(&buf, v); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
 }
 
 func Diff(want, got []byte) ([]string, error) {

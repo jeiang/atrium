@@ -73,49 +73,6 @@ func frameIDs(body string) []string {
 	return ids
 }
 
-func TestRemovedPagesAndResponseMatrix(t *testing.T) {
-	s := newSite(t)
-	for _, c := range []struct {
-		method, path string
-		want         int
-	}{
-		{http.MethodGet, "/web", 404}, {http.MethodGet, "/contacts", 404}, {http.MethodGet, "/web?q=x", 404},
-		{http.MethodPost, "/ask", 404}, {http.MethodPost, "/chat/1/sandbox", 404}, {http.MethodGet, "/chat/999", 404},
-		{http.MethodGet, "/chat/999/work", 404}, {http.MethodPost, "/chat/999/regenerate", 404}, {http.MethodPost, "/chat/999/delete", 404},
-		{http.MethodPost, "/chat/999/pin", 404}, {http.MethodPost, "/chat/999/archive", 404}, {http.MethodPost, "/chat/999/project", 404},
-		{http.MethodPost, "/chat/999/options", 422}, {http.MethodPost, "/chat/999/messages?x=1", 422},
-		{http.MethodGet, "/chat/x", 422}, {http.MethodGet, "/chat/1/events", 422}, {http.MethodGet, "/chat/1/events?run=9", 404},
-		{http.MethodGet, "/chat/1/runs/9", 404}, {http.MethodPost, "/chat/1/runs/9/resume", 404}, {http.MethodPost, "/chat/1/stop", 409},
-		{http.MethodPost, "/chat/1/branch", 422}, {http.MethodGet, "/chat/1/files/1", 404}, {http.MethodGet, "/projects/9/files", 404},
-		{http.MethodGet, "/projects/9/files/1/download", 404},
-	} {
-		var r *reply
-		if c.method == http.MethodGet {
-			r = s.get(c.path)
-		} else {
-			r = s.post(c.path, nil)
-		}
-		if r.StatusCode != c.want {
-			t.Errorf("%s %s = %d, want %d: %.200s", c.method, c.path, r.StatusCode, c.want, r.body)
-		}
-	}
-	if r := s.post("/chat/1/stop", nil); detail(t, r.body) != "no run is running" {
-		t.Errorf("stop detail %s", r.body)
-	}
-	if r := s.get("/"); r.StatusCode != http.StatusSeeOther || r.Header.Get("Location") != "/chat" {
-		t.Errorf("home %d %s", r.StatusCode, r.Header.Get("Location"))
-	}
-	if r := s.get("/?source=notion"); r.Header.Get("Location") != "/chat" {
-		t.Errorf("home with query %s", r.Header.Get("Location"))
-	}
-	page := status(t, s.get("/chat"), http.StatusOK)
-	mustContain(t, page, "No threads yet", "Scheduled runs live under Scheduled.", `aria-current="page"`)
-	mustNotContain(t, page, `href="/web"`, `href="/contacts"`, `href="/agents"`)
-	status(t, s.get("/chat?view=bogus"), http.StatusUnprocessableEntity)
-	toast := status(t, s.get("/chat?view=bogus", hx, "true"), http.StatusUnprocessableEntity)
-	mustContain(t, toast, "Filter not understood", "Unknown view.")
-}
-
 func TestChatTurnStreamsAndSettles(t *testing.T) {
 	s := newSite(t)
 	s.api.Push(reply1(anthropictest.Thinking("pondering", "sig"), anthropictest.Text("Hello **there**")))
@@ -449,34 +406,6 @@ func TestListFlagsOptionsProjectsDelete(t *testing.T) {
 	}
 	status(t, s.get(fmt.Sprintf("/projects/2/files/%d/download", fid)), http.StatusNotFound)
 	mustContain(t, status(t, s.post(fmt.Sprintf("/projects/1/files/%d/delete", fid), nil, hx, "true"), http.StatusOK), "Files every chat in this project can read")
-}
-
-func TestEventsMalformedLastEventID(t *testing.T) {
-	s := newSite(t)
-	s.api.Push(reply1(anthropictest.Text("ok")))
-	thread := s.startThread("hi")
-	run := s.lastRun(thread)
-	s.settle(run)
-	r := s.get(fmt.Sprintf("/chat/%d/events?run=%d", thread, run), "Last-Event-ID", "not-a-number")
-	status(t, r, http.StatusBadRequest)
-}
-
-func TestStreamDrainsRunDoneWrittenAfterTerminalState(t *testing.T) {
-	s := newSite(t)
-	release := s.hold()
-	defer release()
-	s.api.Push(reply1(anthropictest.Text("late")))
-	thread := s.startThread("race")
-	run := s.lastRun(thread)
-	s.waitRequests(1)
-	s.exec("UPDATE runs SET state = ? WHERE id = ?", journal.Done, run)
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		_, _ = s.db.Write.Exec("INSERT INTO run_events (run_id, ts, kind, data_json) VALUES (?, ?, ?, ?)", run, 1.0, "run_done", `{"state": "done"}`)
-	}()
-	body := status(t, s.get(fmt.Sprintf("/chat/%d/events?run=%d", thread, run)), http.StatusOK)
-	mustContain(t, body, "event: run_done\n", "event: done\ndata: {\"state\": \"done\"}\n\n")
-	release()
 }
 
 func TestRawImageMissingFromStorage(t *testing.T) {

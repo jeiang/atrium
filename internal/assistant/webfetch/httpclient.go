@@ -159,9 +159,6 @@ func splitKeepEnds(text string) []string {
 	return out
 }
 
-// parseHeaders is email.parser.Parser().parsestr over the header block with the compat32 policy: the block ends
-// at a blank line or a line that cannot be a header, a continuation line is appended to the header before it,
-// and an envelope "From " line or a line that starts with a colon is dropped.
 func parseHeaders(lines [][]byte) headers {
 	var text strings.Builder
 	for _, l := range lines {

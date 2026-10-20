@@ -140,6 +140,11 @@ func (s *service) draftSend(w http.ResponseWriter, r *http.Request) {
 	} else {
 		err = drafts.Error("draft changed, review again")
 	}
+	var unknown drafts.OutcomeUnknown
+	if errors.As(err, &unknown) {
+		s.reply(w, r, id, drafts.Unknown, http.StatusConflict, toast("error", "Send outcome unknown", err.Error()))
+		return
+	}
 	var refused drafts.Error
 	var failed smtp.SendError
 	if errors.As(err, &refused) || errors.As(err, &failed) {

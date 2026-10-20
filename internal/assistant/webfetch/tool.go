@@ -16,9 +16,6 @@ const TextDefault = 12000
 
 var defaultPorts = map[string]int{"http": 80, "https": 443}
 
-// NormalizeURL is normalize_url: the form two URLs are compared in, with the scheme and host lower-cased, the
-// userinfo, default port and fragment dropped and an empty path read as "/". Only an absolute http(s) URL with a
-// host passes. A URL urlsplit rejects is a ValueError, as in Python, where only the port is caught.
 func NormalizeURL(raw string) (string, error) {
 	parts, err := py.URLSplit(py.Strip(raw))
 	if err != nil {

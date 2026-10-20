@@ -1,3 +1,0 @@
-usage: atrium serve [-h] [--host HOST] --port PORT [--auth {proxy,local}]
-                    [--allowed-host ALLOWED_HOST]
-atrium serve: error: ambiguous option: --a could match --auth, --allowed-host

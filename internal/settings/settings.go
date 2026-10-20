@@ -2,11 +2,12 @@ package settings
 
 import (
 	"fmt"
-	"math"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/jeiang/atrium/internal/py"
 )
 
 type Scope string
@@ -96,6 +97,32 @@ func (r *Registry) SetPins(p PinSource) {
 	r.pins = p
 }
 
+func (r *Registry) Defs() []Def {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]Def, 0, len(r.defs))
+	for _, d := range r.defs {
+		out = append(out, d.clone())
+	}
+	slices.SortFunc(out, func(a, b Def) int { return strings.Compare(a.Key, b.Key) })
+	return out
+}
+
+func (r *Registry) Lookup(key string) (Def, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	d, ok := r.defs[key]
+	return d.clone(), ok
+}
+
+func (d Def) clone() Def {
+	d.Choices = slices.Clone(d.Choices)
+	d.Scopes = slices.Clone(d.Scopes)
+	return d
+}
+
+func (d Def) pinnable() bool { return d.Class != Fixed }
+
 func (r *Registry) lookup(key string) (Def, PinSource, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -111,8 +138,8 @@ func (d Def) valid() error {
 		return InvalidDef(fmt.Sprintf("settings: %q: %s", d.Key, fmt.Sprintf(format, a...)))
 	}
 	switch {
-	case d.Key == "" || d.Module == "":
-		return InvalidDef("settings: key and module are required")
+	case !snakeCase(d.Key) || !snakeCase(d.Module):
+		return InvalidDef(fmt.Sprintf("settings: key %q and module %q must be lowercase snake_case", d.Key, d.Module))
 	case !slices.Contains([]Type{String, Int, Float, Bool, Enum}, d.Type):
 		return bad("unknown type %q", d.Type)
 	case !slices.Contains([]Class{Bootstrap, Secret, UI, Advanced, Fixed, Cap}, d.Class):
@@ -143,6 +170,18 @@ func (d Def) valid() error {
 	return nil
 }
 
+func snakeCase(s string) bool {
+	if s == "" || s[0] < 'a' || s[0] > 'z' || s[len(s)-1] == '_' || strings.Contains(s, "__") {
+		return false
+	}
+	for _, c := range s {
+		if c != '_' && (c < 'a' || c > 'z') && (c < '0' || c > '9') {
+			return false
+		}
+	}
+	return true
+}
+
 func identifier(s string) bool {
 	for _, c := range s {
 		if c != '_' && (c < 'a' || c > 'z') {
@@ -155,12 +194,12 @@ func identifier(s string) bool {
 func (d Def) validate(value string) error {
 	switch d.Type {
 	case Int:
-		if _, err := strconv.ParseInt(value, 10, 64); err != nil {
+		if _, ok := py.ParseInt(value); !ok {
 			return Invalid("must be a whole number")
 		}
 	case Float:
-		if f, err := strconv.ParseFloat(value, 64); err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
-			return Invalid("must be a number")
+		if _, err := number(value); err != nil {
+			return err
 		}
 	case Bool:
 		if value != "true" && value != "false" {

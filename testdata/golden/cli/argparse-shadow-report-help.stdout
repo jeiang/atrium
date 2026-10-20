@@ -1,5 +1,0 @@
-usage: atrium shadow-report [-h] [--since SINCE]
-
-options:
-  -h, --help     show this help message and exit
-  --since SINCE

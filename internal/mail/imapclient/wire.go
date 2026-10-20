@@ -496,7 +496,6 @@ func (t *tap) kill(reason error) {
 	t.signal()
 }
 
-// touch restarts the silence clock; window is how long the server may then stay silent, zero for the default.
 func (t *tap) touch(window time.Duration) {
 	t.mu.Lock()
 	t.last, t.window = time.Now(), window

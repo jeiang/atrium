@@ -173,9 +173,6 @@ func (e *Executors) recordFailed(ctx context.Context, pid int64, action py.Dict,
 	return err
 }
 
-// slot is the ledger row of one mailbox write, recorded before the write starts and settled into the write's
-// outcome after it, so a process that dies mid-write leaves a row saying the outcome is unknown. A slot nothing
-// settled is dropped: its write provably never started or left nothing to log.
 type slot struct {
 	e    *Executors
 	pid  int64
@@ -223,8 +220,6 @@ func (s *slot) release(ctx context.Context) error {
 	return proposals.DropAction(ctx, s.e.DB.Write, id)
 }
 
-// fail ends a write that returned err: cancelled logs it when its outcome is unknown, and a slot left unsettled
-// is dropped.
 func (s *slot) fail(ctx context.Context, action py.Dict, err error) error {
 	out := s.cancelled(ctx, action, err)
 	if rerr := s.release(ctx); rerr != nil && out == nil {
@@ -233,9 +228,6 @@ func (s *slot) fail(ctx context.Context, action py.Dict, err error) error {
 	return out
 }
 
-// cancelled is the ledger row of a write whose reply never came, because a cancelled ctx or a broken connection
-// discarded it: the server may or may not have executed it, so the row names its messages and is failed, never
-// absent.
 func (s *slot) cancelled(ctx context.Context, action py.Dict, err error) error {
 	if err == nil {
 		return nil

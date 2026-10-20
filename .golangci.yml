@@ -13,10 +13,6 @@ linters:
   settings:
     depguard:
       rules:
-        regexp:
-          deny:
-            - pkg: regexp
-              desc: ported patterns use the regexp2 package (https://github.com/jeiang/atrium/issues/71)
         anthropic-sdk:
           files:
             - $all

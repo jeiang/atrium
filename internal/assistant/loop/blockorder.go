@@ -24,9 +24,6 @@ func (m blockModel) declares(key string) bool {
 
 var journalJSON = py.JSONOpts{Compact: true, NoEnsureASCII: true}
 
-// journalBlock is block_dict: a response block as the Python SDK's model_dump(mode="json", exclude_unset=True)
-// writes it, so the journal holds the blocks in the key order production Python stored (the client
-// compaction summary renders them in that order).
 func journalBlock(raw json.RawMessage) (json.RawMessage, error) {
 	v, err := py.JSONLoads(raw)
 	if err != nil {
@@ -47,9 +44,6 @@ func journalBlocks(content []json.RawMessage) ([]json.RawMessage, error) {
 	return out, nil
 }
 
-// modelDump orders v as the model among candidates it parses as: declared fields first, in declaration
-// order and each dumped as its own models, then the extra keys in wire order. A value no candidate matches
-// keeps its order.
 func modelDump(v any, candidates []string) any {
 	if len(candidates) == 0 {
 		return v

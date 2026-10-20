@@ -50,9 +50,6 @@ var errInvalidEW = errors.New("invalid encoded word")
 
 const hardCommentDepth = 1000
 
-// commentLimit is the deepest comment nesting CPython 3.14.7 parses before RecursionError, measured with
-// features.extract called four frames below a module: each comment level costs two Python frames and each MIME
-// level one. Positions in the grammar shift these by a frame or two; the values are those of the probed paths.
 func commentLimit(kind string, level int, all bool) int {
 	switch kind {
 	case "address":

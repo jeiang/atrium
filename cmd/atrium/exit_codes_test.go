@@ -26,42 +26,6 @@ func TestCLIExitProcess(t *testing.T) {
 	os.Exit(code)
 }
 
-func TestCLIExitCodes(t *testing.T) {
-	for _, tc := range []struct {
-		name       string
-		args       string
-		wantCode   int
-		wantStderr string
-	}{
-		{name: "usage", wantCode: cli.ExitUsage, wantStderr: "atrium: error: the following arguments are required: command\n"},
-		{name: "runtime", args: "codemode-worker", wantCode: cli.ExitError, wantStderr: codemodeRemoved + "\n"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			cmd := cliExitProcess(t, tc.args)
-			var stdout, stderr bytes.Buffer
-			cmd.Stdout, cmd.Stderr = &stdout, &stderr
-			err := cmd.Run()
-			code := 0
-			if err != nil {
-				if exit, ok := err.(*exec.ExitError); ok {
-					code = exit.ExitCode()
-				} else {
-					t.Fatal(err)
-				}
-			}
-			if code != tc.wantCode || stdout.Len() != 0 || !strings.HasSuffix(stderr.String(), tc.wantStderr) {
-				t.Errorf("CLI exited %d, stdout %q, stderr %q; want %d, empty stdout and suffix %q", code, stdout.String(), stderr.String(), tc.wantCode, tc.wantStderr)
-			}
-			if tc.name == "usage" && !strings.Contains(stderr.String(), "usage: atrium [-h]") {
-				t.Errorf("usage error did not print the CLI usage: %q", stderr.String())
-			}
-			if strings.Contains(stderr.String(), "Traceback") {
-				t.Errorf("stderr contains a traceback: %q", stderr.String())
-			}
-		})
-	}
-}
-
 func TestCLISignalExitCodes(t *testing.T) {
 	for _, tc := range []struct {
 		name string

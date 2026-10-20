@@ -20,13 +20,11 @@ var systemNames = [...][2]string{
 	{"spam", "junk"},
 }
 
-// IsSystemFlag is flag.lower() in sync.SYSTEM_FLAGS.
 func IsSystemFlag(flag string) bool {
 	_, ok := systemFlags[py.Lower(flag)]
 	return ok
 }
 
-// IsSystemName is name.casefold() in sync.SYSTEM_NAMES.
 func IsSystemName(name string) bool {
 	folded := py.Casefold(name)
 	for _, n := range systemNames {
@@ -37,8 +35,6 @@ func IsSystemName(name string) bool {
 	return false
 }
 
-// MailboxRole is sync.mailbox_role: Gmail has only its All Mail and system labels; an iCloud mailbox is a
-// system mailbox by its special-use flag or name, the Inbox, Misc, or a filed folder.
 func MailboxRole(name string, flags []string, account string) string {
 	if account == config.Gmail {
 		if name == config.GmailAllMail {
