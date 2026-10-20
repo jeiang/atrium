@@ -48,14 +48,15 @@ func guardEngine(w *sql.DB, key Key) error {
 		return ErrNoCipher
 	}
 	if err != nil {
-		return err
+		return wrongKey(err)
 	}
 	var n int
-	if err := w.QueryRow("SELECT count(*) FROM sqlite_master").Scan(&n); err != nil {
-		if strings.Contains(err.Error(), "not a database") {
-			return ErrWrongKey
-		}
-		return err
+	return wrongKey(w.QueryRow("SELECT count(*) FROM sqlite_master").Scan(&n))
+}
+
+func wrongKey(err error) error {
+	if err != nil && strings.Contains(err.Error(), "not a database") {
+		return ErrWrongKey
 	}
-	return nil
+	return err
 }
