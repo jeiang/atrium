@@ -40,7 +40,7 @@ func recoverProposals(ctx context.Context, d *db.DB) error {
 	return err
 }
 
-func recoverProposalsEvery(ctx context.Context, d *db.DB) {
+func recoverEvery(ctx context.Context, d *db.DB, cfg config.Config) {
 	t := time.NewTicker(recoverInterval)
 	defer t.Stop()
 	for {
@@ -50,6 +50,9 @@ func recoverProposalsEvery(ctx context.Context, d *db.DB) {
 		case <-t.C:
 			if err := recoverProposals(ctx, d); err != nil && ctx.Err() == nil {
 				log.Error("proposal recovery failed", logx.Err, err.Error())
+			}
+			if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil && ctx.Err() == nil {
+				log.Error("draft recovery failed", logx.Err, err.Error())
 			}
 		}
 	}
@@ -137,7 +140,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	recovered := make(chan struct{})
 	go func() {
 		defer close(recovered)
-		recoverProposalsEvery(recovering, d)
+		recoverEvery(recovering, d, cfg)
 	}()
 	defer func() {
 		stopRecovering()

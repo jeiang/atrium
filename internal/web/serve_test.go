@@ -198,3 +198,46 @@ func TestServeRecoversAStuckApprovedProposalOnlyOnceItIsOlderThanTheBound(t *tes
 		t.Fatal("serve did not stop on cancel")
 	}
 }
+
+func TestServeRecoversADraftThatGoesStaleWhileRunning(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "atrium.db")
+	t.Setenv("ATRIUM_DB", dbPath)
+	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	oldInterval := recoverInterval
+	recoverInterval = 50 * time.Millisecond
+	t.Cleanup(func() { recoverInterval = oldInterval })
+	ctx := context.Background()
+	d, err := db.Connect(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	if err := db.Migrate(ctx, d, dbPath); err != nil {
+		t.Fatal(err)
+	}
+	fresh := float64(time.Now().Unix()) - drafts.SendingStaleSeconds + 2
+	if _, err := d.Write.Exec("INSERT INTO drafts (thread_id, account, to_addrs, subject, body, status, created_at, updated_at) VALUES (NULL, 'gmail', 'a@x.test', 's', 'b', 'sending', ?, ?)", fresh, fresh); err != nil {
+		t.Fatal(err)
+	}
+	cancelCtx, cancel := context.WithCancel(ctx)
+	port := freePort(t)
+	done := make(chan struct{})
+	go func() {
+		runServe(t, cancelCtx, "--port", port, "--auth", "local")
+		close(done)
+	}()
+	status := ""
+	for range 200 {
+		if err := d.Read.QueryRow("SELECT status FROM drafts").Scan(&status); err == nil && status == drafts.Unknown {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if status != drafts.Unknown {
+		t.Errorf("draft status = %q, want %q", status, drafts.Unknown)
+	}
+}
