@@ -130,7 +130,6 @@ func NewFakeClient(env config.Env) *FakeClient {
 	return f
 }
 
-// SetEnv gates every later call with env instead of the one NewFakeClient got.
 func (f *FakeClient) SetEnv(env config.Env) { f.Client = mail.Gated(fakeConn{f}, env) }
 
 func (f *FakeClient) AddBox(imapName string, box *FakeBox, flags ...string) *FakeBox {

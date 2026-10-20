@@ -11,14 +11,12 @@ import (
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
-// Renderer builds the Frame of a request and writes pages and fragments, as the Python app's render().
 type Renderer struct {
 	engine *tpl.Engine
 	cfg    config.Config
 	db     *db.DB
 }
 
-// NewRenderer parses every template. Extra holds the page templates of the modules being served.
 func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, error) {
 	accounts := make([]string, len(config.Accounts))
 	for i, spec := range config.Accounts {
@@ -36,8 +34,6 @@ func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, erro
 	return &Renderer{engine: engine, cfg: cfg, db: d}, nil
 }
 
-// Frame is the root template value for r: the CSRF token the Guard issued, the mode, the pause state and the
-// pending proposal count.
 func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, error) {
 	pending, err := rd.pending(r.Context())
 	if err != nil {
@@ -62,7 +58,6 @@ func (rd *Renderer) pending(ctx context.Context) (int, error) {
 	return n, err
 }
 
-// Page writes the full page template name with status.
 func (rd *Renderer) Page(w http.ResponseWriter, r *http.Request, status int, name string, f *tpl.Frame) error {
 	var b bytes.Buffer
 	if err := rd.engine.Page(&b, name, f); err != nil {
@@ -71,7 +66,6 @@ func (rd *Renderer) Page(w http.ResponseWriter, r *http.Request, status int, nam
 	return write(w, status, &b)
 }
 
-// Fragment writes the underscore-prefixed fragment name with status.
 func (rd *Renderer) Fragment(w http.ResponseWriter, r *http.Request, status int, name string, f *tpl.Frame) error {
 	var b bytes.Buffer
 	if err := rd.engine.Fragment(&b, name, f); err != nil {
@@ -87,8 +81,6 @@ func write(w http.ResponseWriter, status int, b *bytes.Buffer) error {
 	return err
 }
 
-// ErrorPage is the 404/422 handler of http_error: error.gohtml, or _error.gohtml for an htmx request, which
-// carries a toast for a 422.
 func (rd *Renderer) ErrorPage(w http.ResponseWriter, r *http.Request, status int, problem string) {
 	view := tpl.ErrorView{Status: status, Problem: problem, Path: r.URL.Path}
 	f, err := rd.Frame(r, "", view)

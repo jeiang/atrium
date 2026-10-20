@@ -1,6 +1,3 @@
-// Package anthropic is the only package that talks to the Anthropic SDK: Messages create and stream on the
-// beta namespace, Files API delete, progress events from the stream and the SDK's errors in the classes the
-// Python loop saw. Request bodies are sent as encoded here, so they equal the Python requests as JSON values.
 package anthropic
 
 import (
@@ -21,8 +18,6 @@ const (
 	StopMaxTokens  = "max_tokens"
 )
 
-// Params is one Messages request. System, ContextManagement, every tool and every message are JSON values the
-// caller built (journal blocks stay raw JSON); they reach the wire unchanged.
 type Params struct {
 	Model             string            `json:"model"`
 	MaxTokens         int64             `json:"max_tokens"`

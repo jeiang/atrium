@@ -1,7 +1,3 @@
-// Package router is src/atrium/router.py: it decides where each eligible
-// inbox message belongs (correction, operator rule, learned rule, nearest
-// neighbours, the local model, then the account's fallback) and records the
-// decision. It never writes to a mailbox.
 package router
 
 import (
@@ -26,7 +22,6 @@ import (
 
 var Stages = [...]string{"correction", "operator", "learned", "knn", "llm", "fallback"}
 
-// Decision is one routing decision; Dest, Key and Confidence are nil where Python has None.
 type Decision struct {
 	Stage      string
 	Action     string
@@ -36,7 +31,6 @@ type Decision struct {
 	Detail     py.Dict
 }
 
-// LLMContext is router.LlmContext: the folders the local model may pick for one account in one pass.
 type LLMContext struct {
 	URL       string
 	Folders   []string
@@ -45,25 +39,19 @@ type LLMContext struct {
 	Down      bool
 }
 
-// Judge is llm.JudgeFolder.
 type Judge func(ctx context.Context, url string, folders []string, catalog string, neighbors []llm.Neighbor, m llm.Message, body string) (string, bool, error)
 
-// Querier is the read side of *sql.DB and *sql.Tx.
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// Router routes the eligible messages of an account.
 type Router struct {
 	DB      *db.DB
 	ChatURL string
-	// Judge defaults to llm.JudgeFolder.
-	Judge Judge
-	// Now defaults to the wall clock.
-	Now func() float64
-	// Log defaults to logx.Logger("atrium.router").
-	Log *slog.Logger
+	Judge   Judge
+	Now     func() float64
+	Log     *slog.Logger
 }
 
 func (r *Router) judge() Judge {
@@ -87,7 +75,6 @@ func (r *Router) log() *slog.Logger {
 	return logx.Logger("atrium.router")
 }
 
-// Eligible is router.eligible: the account's undecided, read, unflagged inbox messages by id.
 func Eligible(ctx context.Context, q Querier, account string) ([]rules.Message, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT "+rules.MessageColumns+" FROM messages m WHERE m.account = ? AND m.in_inbox = 1 AND m.seen = 1 "+
@@ -99,7 +86,6 @@ func Eligible(ctx context.Context, q Querier, account string) ([]rules.Message, 
 	return db.Collect(rows, func(r *sql.Rows) (rules.Message, error) { return rules.ScanMessage(r) })
 }
 
-// Neighbor is a filed message near the one being routed.
 type Neighbor struct {
 	ID         int64
 	Folder     string
@@ -108,8 +94,6 @@ type Neighbor struct {
 	Similarity float64
 }
 
-// NearestFiled is router.nearest_filed: up to count filed neighbours of the message in its account, nearest
-// first; none when the message has no embedding.
 func NearestFiled(ctx context.Context, q Querier, m *rules.Message, count int) ([]Neighbor, error) {
 	var blob []byte
 	err := q.QueryRowContext(ctx, "SELECT embedding FROM message_vec WHERE rowid = ?", m.ID).Scan(&blob)
@@ -186,7 +170,6 @@ func knn(ctx context.Context, q Querier, blob []byte, k int, account string) ([]
 	})
 }
 
-// Vote is router.vote: the folder with the most similarity among the neighbours and its share of the total.
 func Vote(neighbors []Neighbor) (folder string, share float64, ok bool) {
 	var order []string
 	scores := map[string]float64{}
@@ -212,7 +195,6 @@ func Vote(neighbors []Neighbor) (folder string, share float64, ok bool) {
 	return folder, scores[folder] / total, true
 }
 
-// NewLLMContext is router.llm_context: the folders with enough filed messages, which the model may pick from.
 func NewLLMContext(ctx context.Context, q Querier, account, url string) (LLMContext, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT folder FROM filed_messages WHERE account = ? GROUP BY folder HAVING COUNT(*) >= ? ORDER BY folder",
@@ -252,7 +234,6 @@ func NewLLMContext(ctx context.Context, q Querier, account, url string) (LLMCont
 	return LLMContext{URL: url, Folders: folders, Catalog: llm.FolderCatalog(senders), Available: true}, nil
 }
 
-// MessageBody is router.message_body: the indexed body, or "" without an index row.
 func MessageBody(ctx context.Context, q interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }, id int64) (string, error) {
@@ -264,7 +245,6 @@ func MessageBody(ctx context.Context, q interface {
 	return body.String, err
 }
 
-// Decide is router.decide; nil means the message stays undecided this pass.
 func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleList []rules.Rule, lc *LLMContext) (*Decision, error) {
 	spec, ok := config.Account(m.Account)
 	if !ok {
@@ -277,7 +257,7 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 	if corrected != nil {
 		return &Decision{Stage: "correction", Action: "file", Dest: new(corrected.Folder), Key: new(corrected.Source), Confidence: new(1.0)}, nil
 	}
-	rule, err := rules.FirstMatch(m, ruleList)
+	rule, err := rules.FirstMatch(m, ruleList, r.now())
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +309,6 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 	return &Decision{Stage: "fallback", Action: "none"}, nil
 }
 
-// Record is router.record: it appends the decision to the decisions table.
 func (r *Router) Record(ctx context.Context, m *rules.Message, d *Decision) error {
 	_, err := r.DB.Write.ExecContext(ctx,
 		"INSERT INTO decisions (message_id, account, ts, stage, key, action, dest, confidence, detail) "+
@@ -352,9 +331,6 @@ func derefFloat(f *float64) any {
 	return *f
 }
 
-// RouteAccount is router.route_account: it decides every eligible message of the account and returns how many
-// decisions it recorded. When the model is unavailable the account's model stage is skipped for the rest of the
-// pass and the messages that needed it are left for the next one; any other error ends the pass.
 func (r *Router) RouteAccount(ctx context.Context, account string) (int, error) {
 	pending, err := Eligible(ctx, r.DB.Read, account)
 	if err != nil || len(pending) == 0 {

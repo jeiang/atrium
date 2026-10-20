@@ -120,8 +120,6 @@ func TestIngestStubsLargeResults(t *testing.T) {
 	}
 }
 
-// TestServerCompactionMidToolLoopKeepsOnlyCompleteUnits: sent at compaction is [hello, tu1, tr1, tu2, tr2];
-// the last three would start at tr1, whose tool_use is gone, so the tail begins at the tu2 unit instead.
 func TestServerCompactionMidToolLoopKeepsOnlyCompleteUnits(t *testing.T) {
 	w := newWorld(t)
 	w.startRun()

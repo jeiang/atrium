@@ -10,8 +10,6 @@ import (
 
 var timeType = reflect.TypeOf(time.Time{})
 
-// View converts typed view structs to the map shape templates read: struct fields become keys named by their
-// json tag, so a template reads .thread.created_at for both a struct and a decoded JSON document.
 func View(v any) any {
 	return view(reflect.ValueOf(v))
 }

@@ -17,9 +17,6 @@ const (
 	gzipOn
 )
 
-// Gzip is Starlette's GZipMiddleware(minimum_size=1024): a response is
-// compressed when the client accepts gzip, and it is a stream or at least
-// 1024 bytes.
 func Gzip(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g := &gzipWriter{ResponseWriter: w, accept: strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")}

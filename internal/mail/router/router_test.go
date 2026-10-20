@@ -403,12 +403,6 @@ func TestMalformedChatReplyPropagates(t *testing.T) {
 	}
 }
 
-func TestStageOrder(t *testing.T) {
-	if router.Stages != [...]string{"correction", "operator", "learned", "knn", "llm", "fallback"} {
-		t.Errorf("Stages = %v", router.Stages)
-	}
-}
-
 func TestMessageBody(t *testing.T) {
 	d := rulestest.DB(t)
 	id := rulestest.Add(t, d, 1, nil, "the body", nil)
@@ -417,23 +411,6 @@ func TestMessageBody(t *testing.T) {
 	}
 	if got, err := router.MessageBody(t.Context(), d.Read, 999); err != nil || got != "" {
 		t.Errorf("MessageBody of nothing = %q, %v", got, err)
-	}
-}
-
-func TestVote(t *testing.T) {
-	folder, share, ok := router.Vote([]router.Neighbor{{Folder: "B", Similarity: 0.5}, {Folder: "A", Similarity: 0.5}, {Folder: "B", Similarity: 0.25}})
-	if !ok || folder != "B" || share != 0.75/1.25 {
-		t.Errorf("Vote = %q, %v, %v", folder, share, ok)
-	}
-	folder, _, ok = router.Vote([]router.Neighbor{{Folder: "A", Similarity: 0.5}, {Folder: "B", Similarity: 0.5}})
-	if !ok || folder != "B" {
-		t.Errorf("tie went to %q", folder)
-	}
-	if _, _, ok := router.Vote([]router.Neighbor{{Folder: "A", Similarity: 0}}); ok {
-		t.Error("zero similarity voted")
-	}
-	if _, _, ok := router.Vote(nil); ok {
-		t.Error("no neighbours voted")
 	}
 }
 
@@ -482,5 +459,28 @@ func TestGoldenPipelineDecisionDetails(t *testing.T) {
 		if !seen[stage] {
 			t.Errorf("pipeline golden has no %s decision", stage)
 		}
+	}
+}
+
+func TestStageOrder(t *testing.T) {
+	if router.Stages != [...]string{"correction", "operator", "learned", "knn", "llm", "fallback"} {
+		t.Errorf("Stages = %v", router.Stages)
+	}
+}
+
+func TestVote(t *testing.T) {
+	folder, share, ok := router.Vote([]router.Neighbor{{Folder: "B", Similarity: 0.5}, {Folder: "A", Similarity: 0.5}, {Folder: "B", Similarity: 0.25}})
+	if !ok || folder != "B" || share != 0.75/1.25 {
+		t.Errorf("Vote = %q, %v, %v", folder, share, ok)
+	}
+	folder, _, ok = router.Vote([]router.Neighbor{{Folder: "A", Similarity: 0.5}, {Folder: "B", Similarity: 0.5}})
+	if !ok || folder != "B" {
+		t.Errorf("tie went to %q", folder)
+	}
+	if _, _, ok := router.Vote([]router.Neighbor{{Folder: "A", Similarity: 0}}); ok {
+		t.Error("zero similarity voted")
+	}
+	if _, _, ok := router.Vote(nil); ok {
+		t.Error("no neighbours voted")
 	}
 }

@@ -1,7 +1,3 @@
-// Package rxtest runs rx patterns against the regex corpus generated from the frozen Python app
-// (testdata/corpora/regex_manifest.json and regex*.jsonl). A slice that ports patterns passes its compiled
-// patterns to Run keyed by manifest id; Run checks the pattern text and flags against the manifest and every
-// recorded search, match, fullmatch, finditer and call result.
 package rxtest
 
 import (
@@ -24,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/rx"
 )
 
-// Dir is the absolute path of testdata/corpora in this checkout.
 func Dir() string {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -33,7 +28,6 @@ func Dir() string {
 	return filepath.Join(filepath.Dir(file), "..", "..", "..", "testdata", "corpora")
 }
 
-// Pattern is one regex_manifest.json pattern.
 type Pattern struct {
 	ID         string         `json:"id"`
 	Site       string         `json:"site"`
@@ -48,7 +42,6 @@ type Pattern struct {
 	Warnings   []string       `json:"warnings"`
 }
 
-// Flags maps the manifest's Python flag names (and the bytes marker) to rx flags.
 func (p Pattern) Flags() (rx.Flags, error) {
 	var f rx.Flags
 	if p.Bytes {
@@ -73,20 +66,17 @@ func (p Pattern) Flags() (rx.Flags, error) {
 	return f, nil
 }
 
-// Group is a recorded group span; nil in Match.Groups when the group did not participate.
 type Group struct {
 	Span [2]int `json:"span"`
 	Text string `json:"text"`
 }
 
-// Match is a recorded Python match.
 type Match struct {
 	Span   [2]int   `json:"span"`
 	Text   string   `json:"text"`
 	Groups []*Group `json:"groups"`
 }
 
-// Call is a recorded call made with the pattern by the Python source at At.
 type Call struct {
 	At     string          `json:"at"`
 	Op     string          `json:"op"`
@@ -95,7 +85,6 @@ type Call struct {
 	N      *int            `json:"n"`
 }
 
-// Record is one regex.jsonl line: Python's results for one pattern on one input.
 type Record struct {
 	ID        string  `json:"id"`
 	Input     string  `json:"input"`
@@ -106,16 +95,13 @@ type Record struct {
 	Calls     []Call  `json:"calls"`
 }
 
-// Corpus is the loaded manifest and records.
 type Corpus struct {
 	Patterns []Pattern
 	byID     map[string]int
 	Records  map[string][]Record
-	// Lines is the number of records read from every regex*.jsonl.
-	Lines int
+	Lines    int
 }
 
-// Pattern returns the manifest pattern with id.
 func (c *Corpus) Pattern(id string) (Pattern, bool) {
 	i, ok := c.byID[id]
 	if !ok {
@@ -130,7 +116,6 @@ var (
 	loadErr  error
 )
 
-// Load reads the corpus once per test binary.
 func Load(tb testing.TB) *Corpus {
 	tb.Helper()
 	loadOnce.Do(func() { loaded, loadErr = load(Dir()) })
@@ -197,8 +182,6 @@ func (c *Corpus) loadRecords(name string) error {
 	return sc.Err()
 }
 
-// Check compares re with every record of the manifest pattern id. It returns the number of records that agree,
-// the number of records, and one message per disagreement.
 func (c *Corpus) Check(id string, re *rx.Regexp) (pass, total int, failures []string) {
 	p, ok := c.Pattern(id)
 	if !ok {
@@ -228,7 +211,6 @@ func (c *Corpus) Check(id string, re *rx.Regexp) (pass, total int, failures []st
 	return pass, total, failures
 }
 
-// Run checks each compiled pattern against its manifest id in a subtest and logs per-pattern pass counts.
 func Run(t *testing.T, patterns map[string]*rx.Regexp) {
 	t.Helper()
 	c := Load(t)

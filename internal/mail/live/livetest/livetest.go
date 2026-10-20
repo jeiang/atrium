@@ -1,5 +1,3 @@
-// Package livetest is tests/test_live.py's World: a synced FakeClient account past go-live, and the automatic
-// writes the applier makes, done with mailops and logged as it logs them.
 package livetest
 
 import (
@@ -26,7 +24,6 @@ const (
 	Flagged = mailops.Flagged
 )
 
-// Seed is a message present before go-live.
 type Seed struct {
 	Subject string
 	Flags   []string
@@ -84,7 +81,6 @@ func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClien
 	return w
 }
 
-// ICloud is icloud(): INBOX, Bills (validity 3), Misc (4), Deleted Messages (9) and Sent Messages (5).
 func ICloud(t *testing.T, mode string, seed ...Seed) *World {
 	return newWorld(t, config.ICloud, mode, func(f *mailtest.FakeClient) {
 		f.AddBox(config.Inbox, mailtest.NewBox(1))
@@ -99,7 +95,6 @@ func ICloud(t *testing.T, mode string, seed ...Seed) *World {
 	})
 }
 
-// Gmail is gmail(): [Gmail]/All Mail and [Gmail]/Trash (validity 5).
 func Gmail(t *testing.T, mode string, seed ...Seed) *World {
 	return newWorld(t, config.Gmail, mode, func(f *mailtest.FakeClient) {
 		f.Gmail = true
@@ -119,10 +114,8 @@ func (w *World) exec(query string, args ...any) {
 	}
 }
 
-// Exec runs one statement on the world's database.
 func (w *World) Exec(query string, args ...any) { w.T.Helper(); w.exec(query, args...) }
 
-// Open is the account opener every undo uses.
 func (w *World) Open(context.Context, string) (mail.Client, error) {
 	w.Opened++
 	return w.Fake, nil
@@ -133,7 +126,6 @@ func (w *World) add(box *mailtest.FakeBox, subject, sender string, flags, labels
 	return box.Add(header, text, flags, labels)
 }
 
-// InboxBox is the account's Inbox mailbox (Gmail: All Mail).
 func (w *World) InboxBox() *mailtest.FakeBox {
 	if w.Account == config.Gmail {
 		return w.Fake.Boxes[config.GmailAllMail]
@@ -141,7 +133,6 @@ func (w *World) InboxBox() *mailtest.FakeBox {
 	return w.Fake.Boxes[config.Inbox]
 }
 
-// Arrive is arrive(subject, flags=(SEEN,)) into the Inbox, Gmail with the \Inbox label, then a sync.
 func (w *World) Arrive(subject string, flags ...string) uint32 {
 	w.T.Helper()
 	var labels []string
@@ -163,7 +154,6 @@ func (w *World) Sync() {
 	}
 }
 
-// MID is mid: the newest live message with this subject.
 func (w *World) MID(subject string) int64 {
 	w.T.Helper()
 	var id int64
@@ -173,7 +163,6 @@ func (w *World) MID(subject string) int64 {
 	return id
 }
 
-// Decide is decide: a routing decision for the message.
 func (w *World) Decide(subject, action string, dest *string, stage string) int64 {
 	w.T.Helper()
 	mid := w.MID(subject)
@@ -182,7 +171,6 @@ func (w *World) Decide(subject, action string, dest *string, stage string) int64
 	return mid
 }
 
-// Actions is every auto_actions row, oldest first.
 func (w *World) Actions() []live.Action {
 	w.T.Helper()
 	rows, err := w.Live.DB.Read.Query("SELECT id FROM auto_actions ORDER BY id")
@@ -208,7 +196,6 @@ func (w *World) Actions() []live.Action {
 	return out
 }
 
-// Automatic is the scope the applier writes in.
 func (w *World) Automatic() context.Context {
 	return safety.AutomaticWrites(context.Background(), w.Cfg.PausePath())
 }
@@ -242,7 +229,6 @@ func (w *World) begin(v mailops.Verified, kind string, dest *string) int64 {
 	return id
 }
 
-// File is the applier's iCloud move of one verified message to dest, logged with its move_back undo plan.
 func (w *World) File(subject, kind, dest string) int64 {
 	w.T.Helper()
 	v := w.verified(subject)
@@ -270,7 +256,6 @@ func (w *World) File(subject, kind, dest string) int64 {
 	return id
 }
 
-// Relabel is the applier's Gmail filing: dest added, \Inbox removed, with its gmail_labels undo plan.
 func (w *World) Relabel(subject, dest string) int64 {
 	w.T.Helper()
 	v := w.verified(subject)
@@ -290,7 +275,6 @@ func (w *World) Relabel(subject, dest string) int64 {
 	return id
 }
 
-// Flag is the applier's contacts flag with its unflag undo plan.
 func (w *World) Flag(subject string) int64 {
 	w.T.Helper()
 	v := w.verified(subject)
@@ -309,7 +293,6 @@ func (w *World) Flag(subject string) int64 {
 	return id
 }
 
-// GmailTrash is the applier's Gmail trash copy with its gmail_untrash undo plan.
 func (w *World) GmailTrash(subject string) int64 {
 	w.T.Helper()
 	v := w.verified(subject)

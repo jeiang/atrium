@@ -1,5 +1,3 @@
-// Package agentcmd is cli.py's `agent` group: `agent run` runs one assistant turn in the foreground and
-// prints its run_view as indented JSON.
 package agentcmd
 
 import (
@@ -15,10 +13,8 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Kinds are the run kinds `--kind` accepts: Python's KINDS without the unported code kind.
 var Kinds = []string{threads.Chat, threads.Cron, threads.Nightly, threads.Sub}
 
-// Command is the `agent` group.
 func Command() *cli.Command {
 	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(config.OS), runCommand(config.OS)}}
 }

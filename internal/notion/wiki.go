@@ -34,7 +34,6 @@ var (
 	labelSchema = rx.MustCompile(`^[a-z][a-z0-9+.-]*://(www\.)?`, rx.IgnoreCase)
 )
 
-// WikiError is WikiError.
 type WikiError string
 
 func (e WikiError) Error() string { return string(e) }
@@ -43,7 +42,6 @@ func (WikiError) PyClass() string { return "WikiError" }
 
 func (WikiError) PyModule() string { return "atrium.notion_wiki" }
 
-// WikiRoot is wiki_root: the normalized id of the page ATRIUM_NOTION_WIKI_ROOT names.
 func WikiRoot(env config.Env) (string, error) {
 	value, err := config.NotionWikiRoot(env)
 	if err != nil {
@@ -52,7 +50,6 @@ func WikiRoot(env config.Env) (string, error) {
 	return notionid.Normalize(value), nil
 }
 
-// LocalDate is local_date: the ATRIUM_TZ calendar date of ts.
 func LocalDate(ts float64, env config.Env) (string, error) {
 	loc, err := config.Location(env)
 	if err != nil {
@@ -62,7 +59,6 @@ func LocalDate(ts float64, env config.Env) (string, error) {
 	return time.Unix(sec, us*1000).In(loc).Format("2006-01-02"), nil
 }
 
-// NormalizeKey is normalize_key.
 func NormalizeKey(value string) string {
 	return strings.Join(py.Split(py.Casefold(value)), " ")
 }
@@ -83,7 +79,6 @@ func stringList(values any, what string) ([]string, error) {
 	return out, nil
 }
 
-// CleanAliases is clean_aliases: values is a list of strings or one comma, semicolon or newline separated string.
 func CleanAliases(values any) ([]string, error) {
 	var raw []string
 	if s, ok := values.(string); ok {
@@ -110,7 +105,6 @@ func CleanAliases(values any) ([]string, error) {
 	return out[:min(len(out), MaxAliases)], nil
 }
 
-// CleanSources is clean_sources.
 func CleanSources(values any) ([]string, error) {
 	if values == nil {
 		return []string{}, nil
@@ -131,7 +125,6 @@ func CleanSources(values any) ([]string, error) {
 	return out[:min(len(out), MaxSources)], nil
 }
 
-// WikiPage is a wiki_pages row.
 type WikiPage struct {
 	PageID       string
 	Title        string
@@ -157,7 +150,6 @@ func decodeStrings(text string) ([]string, error) {
 	return out, nil
 }
 
-// GetWiki is get: the local row of a page id in any spelling, or nil.
 func GetWiki(ctx context.Context, q db.Querier, pageID string) (*WikiPage, error) {
 	var w WikiPage
 	var aliases, sources string
@@ -181,7 +173,6 @@ func GetWiki(ctx context.Context, q db.Querier, pageID string) (*WikiPage, error
 	return &w, nil
 }
 
-// WikiFields are the columns an upsert changes; nil leaves a column as it is.
 type WikiFields struct {
 	Title        *string
 	HubID        *string
@@ -193,7 +184,6 @@ type WikiFields struct {
 	InTrash      *bool
 }
 
-// UpsertWiki is upsert: the local row of the page is inserted or only the given columns are updated.
 func UpsertWiki(ctx context.Context, q db.Querier, pageID string, now float64, f WikiFields) error {
 	columns := []string{"page_id"}
 	args := []any{notionid.Normalize(pageID)}
@@ -238,8 +228,6 @@ func orEmpty(s []string) []string {
 	return s
 }
 
-// ParentOf is parent_of: the page's parent page id from whichever record is fresher, atrium's own writes or the
-// mirror.
 func ParentOf(ctx context.Context, q db.Querier, pageID string) (string, error) {
 	var parentType, parentID string
 	var syncedAt float64
@@ -267,7 +255,6 @@ func ParentOf(ctx context.Context, q db.Querier, pageID string) (string, error) 
 	return "", nil
 }
 
-// InTree is in_tree: whether the mirror or the local rows place pageID under root.
 func InTree(ctx context.Context, q db.Querier, pageID, root string) (bool, error) {
 	seen := map[string]bool{}
 	current := notionid.Normalize(pageID)
@@ -284,7 +271,6 @@ func InTree(ctx context.Context, q db.Querier, pageID, root string) (bool, error
 	return false, nil
 }
 
-// Existing is one page find_existing found.
 type Existing struct {
 	ID    string
 	Title string
@@ -292,8 +278,6 @@ type Existing struct {
 	Match string
 }
 
-// FindExisting is find_existing: pages whose title or alias equals the title or any alias, case and whitespace
-// insensitively. Local rows carry the aliases; every other live non-private mirror page matches by title only.
 func FindExisting(ctx context.Context, q db.Querier, title string, aliases []string) ([]Existing, error) {
 	wanted := map[string]bool{}
 	for _, k := range append([]string{NormalizeKey(title)}, mapKeys(aliases)...) {
@@ -384,7 +368,6 @@ func mapKeys(values []string) []string {
 	return out
 }
 
-// AliasMatches is alias_matches: the page ids of local rows whose title or an alias equals the query.
 func AliasMatches(ctx context.Context, q db.Querier, query string) ([]string, error) {
 	key := NormalizeKey(query)
 	if key == "" {
@@ -473,7 +456,6 @@ func dedupe(values []string) []string {
 	return out
 }
 
-// SplitFooter is split_footer: the body without the footer, the last reviewed date or "", and the sources.
 func SplitFooter(markdown string) (body, reviewed string, sources []string, err error) {
 	trimmed := rstrip(markdown)
 	lines := strings.Split(trimmed, "\n")
@@ -509,7 +491,6 @@ func footerLine(date string, sources []string) (string, error) {
 	return line, nil
 }
 
-// WithFooter is with_footer: the body with the footer rewritten, the previous sources kept and the new ones added.
 func WithFooter(markdown, date string, sources []string) (string, []string, error) {
 	body, _, previous, err := SplitFooter(markdown)
 	if err != nil {
@@ -553,7 +534,6 @@ func sectionSpan(markdown, heading string) (start, end int, ok bool, err error) 
 	return start, len(lines), true, nil
 }
 
-// ReplaceSection is replace_section: ok is false when the page has no such section.
 func ReplaceSection(markdown, heading, text string) (string, bool, error) {
 	start, end, ok, err := sectionSpan(markdown, heading)
 	if err != nil || !ok {
@@ -568,7 +548,6 @@ func ReplaceSection(markdown, heading, text string) (string, bool, error) {
 	return joined, true, nil
 }
 
-// AppendToSection is append_to_section: a missing section is added at the end.
 func AppendToSection(markdown, heading, text string) (string, error) {
 	_, end, ok, err := sectionSpan(markdown, heading)
 	if err != nil {
@@ -587,7 +566,6 @@ func AppendToSection(markdown, heading, text string) (string, error) {
 	return out, nil
 }
 
-// EscapeLinkText is escape_link_text.
 func EscapeLinkText(text string) string {
 	if text == "" {
 		text = "Untitled"
@@ -595,7 +573,6 @@ func EscapeLinkText(text string) string {
 	return strings.NewReplacer("[", "(", "]", ")").Replace(text)
 }
 
-// LogLine is log_line.
 func LogLine(date, action, title, url string) string {
 	if url != "" {
 		return "- " + date + " · " + action + " [" + EscapeLinkText(title) + "](" + url + ")"
@@ -603,7 +580,6 @@ func LogLine(date, action, title, url string) string {
 	return "- " + date + " · " + action + " " + EscapeLinkText(title)
 }
 
-// LogPageID is log_page_id: the Wiki Log page, found in notion_state or under the root, else created.
 func LogPageID(ctx context.Context, d *db.DB, client *Client, root string) (string, error) {
 	var id string
 	err := d.Read.QueryRowContext(ctx, "SELECT value FROM notion_state WHERE key = ?", logStateKey).Scan(&id)
@@ -634,7 +610,6 @@ func LogPageID(ctx context.Context, d *db.DB, client *Client, root string) (stri
 	return id, err
 }
 
-// PrependLog is prepend_log: the lines go first on the Wiki Log page; it returns the previous markdown for undo.
 func PrependLog(ctx context.Context, client *Client, logID string, lines []string) (string, error) {
 	current, err := client.PageMarkdown(ctx, logID)
 	if err != nil {

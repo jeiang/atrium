@@ -38,25 +38,17 @@ var (
 
 type csrfKey struct{}
 
-// CSRFToken is the request's CSRF token for templates and handlers; it is
-// empty on a request the Guard did not admit.
 func CSRFToken(ctx context.Context) string {
 	token, _ := ctx.Value(csrfKey{}).(string)
 	return token
 }
 
-// Guard is the Python auth.Guard: Host allowlist, Remote-Groups gate, CSRF,
-// same-origin and security headers.
 type Guard struct {
 	auth   string
 	hosts  map[string]struct{}
 	public func(*http.Request) bool
 }
 
-// NewGuard builds the Guard. A non-empty allowedHosts replaces the loopback
-// defaults of local mode; proxy mode has no default, so an unconfigured
-// proxy Guard answers 400 to every request. public admits a request without
-// Remote-Groups (the signed media links); the Host check still applies.
 func NewGuard(auth string, allowedHosts []string, public func(*http.Request) bool) *Guard {
 	hosts := map[string]struct{}{}
 	switch {
@@ -75,8 +67,6 @@ func NewGuard(auth string, allowedHosts []string, public func(*http.Request) boo
 	return &Guard{auth: auth, hosts: hosts, public: public}
 }
 
-// hostname is the Host header without its port; bracketed IPv6 literals stay
-// bracketed.
 func hostname(value string) string {
 	value = py.Lower(py.Strip(value))
 	if strings.HasPrefix(value, "[") {
@@ -142,8 +132,6 @@ func deny(w http.ResponseWriter, status int, text string) {
 	_, _ = io.WriteString(w, text)
 }
 
-// healthProbe is exempt from the Host and group checks: the unit and the
-// proxy probe it by address and carry no Remote-Groups.
 func healthProbe(r *http.Request) bool {
 	return r.Method == http.MethodGet && r.URL.EscapedPath() == HealthPath
 }

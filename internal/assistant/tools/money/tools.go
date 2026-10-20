@@ -1,6 +1,3 @@
-// Package moneytools is the spending ledger tools of agent/tools/money.py: four reads offered in every run kind
-// but nightly, and seven writes offered in chat only, each recorded in the writes log in the transaction that
-// changes the ledger so the operator can undo it.
 package moneytools
 
 import (
@@ -29,7 +26,6 @@ var (
 	writeKinds = tool.Kinds{tool.Chat}
 )
 
-// Tools is TOOLS of agent/tools/money.py.
 func Tools() []tool.Tool {
 	return append(readTools(), writeTools()...)
 }

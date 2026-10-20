@@ -37,7 +37,6 @@ var credentials = map[string]string{
 	"GMAIL_APP_PASSWORD":   "pw",
 }
 
-// site is the served pages over a migrated database, with the fakes of every outside service.
 type site struct {
 	t        *testing.T
 	db       *db.DB
@@ -115,7 +114,6 @@ func (s *site) fetchToken() string {
 	return ""
 }
 
-// do sends one request; headers are alternating names and values.
 func (s *site) do(method, target string, form url.Values, headers ...string) *httptest.ResponseRecorder {
 	s.t.Helper()
 	var body io.Reader
@@ -216,7 +214,6 @@ func group(name string, ids ...int) py.Dict {
 	}
 }
 
-// propose creates a pending proposal and returns its id.
 func (s *site) propose(kind, account, title string, preview any, fingerprint string) int64 {
 	s.t.Helper()
 	var acct *string
@@ -253,7 +250,6 @@ func jsonOf(t *testing.T, body string) map[string]any {
 	return out
 }
 
-// text is the visible text of a page: every tag replaced by a space, whitespace collapsed.
 func text(body string) string {
 	var b strings.Builder
 	inTag := false
@@ -272,14 +268,12 @@ func text(body string) string {
 	return strings.Join(strings.Fields(b.String()), " ")
 }
 
-// between is the part of s after the first start and before the next end.
 func between(s, start, end string) string {
 	_, rest, _ := strings.Cut(s, start)
 	out, _, _ := strings.Cut(rest, end)
 	return out
 }
 
-// optionValues are the value attributes of the options of an HTML fragment.
 func optionValues(s string) []string {
 	var out []string
 	for _, part := range strings.Split(s, `<option value="`)[1:] {

@@ -13,7 +13,6 @@ import (
 	"unicode/utf8"
 )
 
-// FloatRepr is repr(float).
 func FloatRepr(f float64) string {
 	switch {
 	case math.IsNaN(f):
@@ -36,8 +35,6 @@ func FloatRepr(f float64) string {
 	return s
 }
 
-// ReprValue is repr of a decoded JSON value: nil, bool, int, int64, *big.Int, float64, string, []string, []any,
-// Dict or map[string]any (in key order).
 func ReprValue(v any) string {
 	switch v := v.(type) {
 	case nil:
@@ -90,7 +87,6 @@ func ReprValue(v any) string {
 	panic(fmt.Sprintf("py: ReprValue of %T", v))
 }
 
-// TypeName is type(v).__name__ of a decoded JSON value or a Go value standing for one.
 func TypeName(v any) string {
 	switch v.(type) {
 	case nil:
@@ -111,7 +107,6 @@ func TypeName(v any) string {
 	panic(fmt.Sprintf("py: TypeName of %T", v))
 }
 
-// Get is d.get(key): the value of the last pair named key.
 func (d Dict) Get(key string) (any, bool) {
 	for i := len(d) - 1; i >= 0; i-- {
 		if d[i].Key == key {
@@ -121,7 +116,6 @@ func (d Dict) Get(key string) (any, bool) {
 	return nil, false
 }
 
-// Set is d[key] = value: it replaces the pair in place or appends one.
 func (d Dict) Set(key string, value any) Dict {
 	out := slices.Clone(d)
 	for i := range out {
@@ -133,8 +127,6 @@ func (d Dict) Set(key string, value any) Dict {
 	return append(out, Pair{key, value})
 }
 
-// JSONError is Python's json.JSONDecodeError: Msg is the bare message, Pos the offset of the error in code
-// points, Line and Col its 1-based line and column, as the C scanner of CPython 3.14 reports them.
 type JSONError struct {
 	Msg       string
 	Pos       int
@@ -145,13 +137,10 @@ func (e JSONError) Error() string {
 	return fmt.Sprintf("%s: line %d column %d (char %d)", e.Msg, e.Line, e.Col, e.Pos)
 }
 
-// PyClass is the exception class name Python reports.
 func (JSONError) PyClass() string { return "JSONDecodeError" }
 
-// PyModule is the module Python reports for the class.
 func (JSONError) PyModule() string { return "json.decoder" }
 
-// jsonFail builds the JSONError for the byte offset pos of doc.
 func jsonFail(msg, doc string, pos int) JSONError {
 	pos = min(pos, len(doc))
 	head := doc[:pos]
@@ -166,9 +155,6 @@ func jsonFail(msg, doc string, pos int) JSONError {
 
 func (p *jsonParser) fail(msg string, pos int) JSONError { return jsonFail(msg, p.s, pos) }
 
-// JSONLoads is json.loads: objects become Dict (a duplicate key keeps its first position and its last value),
-// arrays []any, integers int64 or *big.Int, other numbers float64 (NaN and the infinities included).
-// A lone surrogate escape becomes U+FFFD: a Go string cannot hold it.
 func JSONLoads(data []byte) (any, error) {
 	p := &jsonParser{s: string(data)}
 	if strings.HasPrefix(p.s, "\ufeff") {
@@ -440,7 +426,6 @@ func number(text string) (any, error) {
 	return f, nil
 }
 
-// Truthy is bool(v) of a decoded JSON value.
 func Truthy(v any) bool {
 	switch v := v.(type) {
 	case nil:

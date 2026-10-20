@@ -14,8 +14,6 @@ import (
 
 const wikiPlanNotPorted = "atrium notion wiki-plan is not ported in v2"
 
-// Options are the seams of the commands: Env is the environment (the process's when nil), NewClient builds the
-// Notion client from the token (NewClient when nil) and Embed is the embeddings call (embed.Texts when nil).
 type Options struct {
 	Env       config.Env
 	NewClient func(token string) *Client
@@ -36,7 +34,6 @@ func (o Options) client(token string) *Client {
 	return o.NewClient(token)
 }
 
-// Command is `atrium notion`: sync, search and wiki-plan, which this build does not carry.
 func Command(o Options) *cli.Command {
 	return &cli.Command{
 		Name: "notion",

@@ -1,6 +1,3 @@
-// Package calendarcmd is cli.py's `calendar` group: `calendar candidates` drafts event proposals from the queued
-// mail, and `calendar google-auth` is the one-time loopback consent flow that prints a Google refresh token (it
-// loads no configuration, as in Python).
 package calendarcmd
 
 import (
@@ -12,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 )
 
-// Command is the `calendar` group.
 func Command() *cli.Command {
 	return &cli.Command{Name: "calendar", Commands: []*cli.Command{candidatesCommand(config.OS, nil), googleAuth(config.OS)}}
 }

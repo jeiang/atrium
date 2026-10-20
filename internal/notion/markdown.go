@@ -203,12 +203,10 @@ func convert(s string, titles map[string]string, table func(*rx.Match) string) s
 	return b.String()
 }
 
-// Commonmark is commonmark: Notion's enhanced markdown as plain CommonMark.
 func Commonmark(s string, titles map[string]string) string {
 	return convert(s, titles, tableMarkdown)
 }
 
-// Plain is plain: the readable words of Notion markdown, with the search highlight markers kept balanced.
 func Plain(s string, titles map[string]string) string {
 	readable := convert(s, titles, tableWords)
 	for _, step := range []struct {

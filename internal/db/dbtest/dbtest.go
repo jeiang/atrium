@@ -9,28 +9,22 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
-// File connects to atrium.db in a fresh temp directory.
 func File(t testing.TB) *db.DB {
 	t.Helper()
 	return open(t, db.Connect)
 }
 
-// FileNoForeignKeys is File without foreign key enforcement, standing in
-// for Python's db.connect_memory.
 func FileNoForeignKeys(t testing.TB) *db.DB {
 	t.Helper()
 	return open(t, db.ConnectNoForeignKeys)
 }
 
-// Schema is File with the schema migrated, as Python's db.connect leaves it.
 func Schema(t testing.TB) *db.DB {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "atrium.db")
 	return migrate(t, path)
 }
 
-// Copy migrates a copy of the database file at src in a fresh temp
-// directory and returns it with the copy's path.
 func Copy(t testing.TB, src string) (*db.DB, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "atrium.db")

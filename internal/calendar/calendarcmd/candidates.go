@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Callables are the built-in jobs this module runs: calendar-candidates drafts proposals from the queued candidates.
 func Callables() map[string]worker.Callable {
 	return map[string]worker.Callable{
 		scheduler.CalendarCandidatesName: func(ctx context.Context, e worker.Env) (worker.Result, error) {

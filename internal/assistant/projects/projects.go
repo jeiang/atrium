@@ -1,5 +1,3 @@
-// Package projects is agent/projects.py: the operator's projects, which group chat threads, give them default
-// options and a standing brief, and name the wiki hub page their knowledge goes to.
 package projects
 
 import (
@@ -23,12 +21,10 @@ const (
 	InstructionChars = 20_000
 )
 
-// ProjectError is a refused project field.
 type ProjectError string
 
 func (e ProjectError) Error() string { return string(e) }
 
-// Project is a projects row with its thread count and last activity.
 type Project struct {
 	ID           int64      `json:"id"`
 	Name         string     `json:"name"`
@@ -55,7 +51,6 @@ func scan(r interface{ Scan(...any) error }) (Project, error) {
 	return p, err
 }
 
-// Fields are the editable fields of a project as the operator submitted them.
 type Fields struct {
 	Name         string
 	Instructions string
@@ -103,7 +98,6 @@ func clean(f Fields) (cleaned, error) {
 	return out, nil
 }
 
-// Create is create: it validates the fields and adds the project.
 func Create(ctx context.Context, q db.Querier, now float64, f Fields) (int64, error) {
 	v, err := clean(f)
 	if err != nil {
@@ -118,7 +112,6 @@ func Create(ctx context.Context, q db.Querier, now float64, f Fields) (int64, er
 	return res.LastInsertId()
 }
 
-// Update is update: false when there is no such project.
 func Update(ctx context.Context, q db.Querier, projectID int64, now float64, f Fields) (bool, error) {
 	v, err := clean(f)
 	if err != nil {
@@ -137,7 +130,6 @@ func changed(res sql.Result, err error) (bool, error) {
 	return n > 0, err
 }
 
-// Get is get: nil when there is no such project.
 func Get(ctx context.Context, q db.Querier, projectID int64) (*Project, error) {
 	p, err := scan(q.QueryRowContext(ctx, listSQL+" WHERE p.id = ?", projectID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -149,7 +141,6 @@ func Get(ctx context.Context, q db.Querier, projectID int64) (*Project, error) {
 	return &p, nil
 }
 
-// List is list_projects: the active (or archived) projects, most recently used first.
 func List(ctx context.Context, q db.Querier, archived bool) ([]Project, error) {
 	rows, err := q.QueryContext(ctx,
 		listSQL+" WHERE p.archived = ? ORDER BY COALESCE(last_activity, p.updated_at) DESC, p.id DESC", store.Bit(archived))
@@ -159,18 +150,14 @@ func List(ctx context.Context, q db.Querier, archived bool) ([]Project, error) {
 	return db.Collect(rows, func(r *sql.Rows) (Project, error) { return scan(r) })
 }
 
-// SetArchived is set_archived.
 func SetArchived(ctx context.Context, q db.Querier, projectID int64, value bool) (bool, error) {
 	return changed(q.ExecContext(ctx, "UPDATE projects SET archived = ? WHERE id = ?", store.Bit(value), projectID))
 }
 
-// SetHub is set_hub.
 func SetHub(ctx context.Context, q db.Querier, projectID int64, pageID string, now float64) (bool, error) {
 	return changed(q.ExecContext(ctx, "UPDATE projects SET wiki_hub_id = ?, updated_at = ? WHERE id = ?", pageID, now, projectID))
 }
 
-// MoveThread is move_thread: a nil projectID takes the thread out of its project; an archived or unknown
-// project is refused. False when the thread is not a chat.
 func MoveThread(ctx context.Context, q db.Querier, threadID int64, projectID *int64) (bool, error) {
 	if projectID != nil {
 		var one int
@@ -185,7 +172,6 @@ func MoveThread(ctx context.Context, q db.Querier, threadID int64, projectID *in
 	return changed(q.ExecContext(ctx, "UPDATE threads SET project_id = ? WHERE id = ? AND kind = 'chat'", projectID, threadID))
 }
 
-// HubMarkdown is hub_markdown: the first text of a new wiki hub page.
 func HubMarkdown(p Project) string {
 	lines := []string{fmt.Sprintf("Durable knowledge for the project “%s”: decisions, status, open questions and links.", p.Name)}
 	if p.Instructions != "" {
@@ -194,8 +180,6 @@ func HubMarkdown(p Project) string {
 	return strings.Join(lines, "\n")
 }
 
-// SystemBlock is system_block: the per-project prompt text, appended after the cached prefix. Nil when the
-// thread has no project or the project has nothing to say.
 func SystemBlock(ctx context.Context, q db.Querier, t threads.Thread) (*string, error) {
 	if t.ProjectID == nil || *t.ProjectID == 0 {
 		return nil, nil

@@ -1,5 +1,3 @@
-// Package features is the frozen Python app's features.py: per-message features extracted from the raw
-// header and text bytes that sync fetches, used by the mail classifier, rules and search.
 package features
 
 import (
@@ -69,12 +67,10 @@ var espPrefix = [...]struct{ prefix, esp string }{
 	{"x-shopify", "shopify"},
 }
 
-// Attachment is one (content type, filename) pair, as sync reads them from BODYSTRUCTURE.
 type Attachment struct {
 	Type, Name string
 }
 
-// Features is the dict features.extract returns.
 type Features struct {
 	MsgID       string   `json:"msgid"`
 	MsgIDDomain string   `json:"msgid_domain"`
@@ -126,8 +122,6 @@ func prefix(s string, n int) string {
 	return s
 }
 
-// SubjectTemplate is subject_template: the subject without reply prefixes, lowercased, with amounts, dates and
-// numbers replaced by placeholders.
 func SubjectTemplate(subject string) string {
 	s := mime.Strip(subject)
 	for {
@@ -147,7 +141,6 @@ func SubjectTemplate(subject string) string {
 	return mime.Strip(sub(spaceRE, " ", s))
 }
 
-// DomainOf is domain_of.
 func DomainOf(addr string) string {
 	i := strings.LastIndex(addr, "@")
 	if i < 0 {
@@ -156,20 +149,16 @@ func DomainOf(addr string) string {
 	return strings.Trim(mime.Lower(addr[i+1:]), "<>")
 }
 
-// StripMarkup is strip_markup: HTML reduced to its text.
 func StripMarkup(text string) string {
 	text = sub(scriptStyleRE, " ", text)
 	text = sub(tagRE, " ", text)
 	return mime.Strip(sub(spaceRE, " ", pyhtml.Unescape(text)))
 }
 
-// FilenamePattern is filename_pattern.
 func FilenamePattern(name string) string { return sub(digitsRE, "#", mime.Lower(name)) }
 
-// NormalizeMsgID is normalize_msgid.
 func NormalizeMsgID(value string) string { return sub(msgidStripRE, "", value) }
 
-// MsgIDList is msgid_list.
 func MsgIDList(value string) []string {
 	ids, _ := msgidRE.FindAll(value)
 	out := make([]string, len(ids))
@@ -179,7 +168,6 @@ func MsgIDList(value string) []string {
 	return out
 }
 
-// ContentDigest is content_digest.
 func ContentDigest(header, text []byte) string {
 	h := sha256.New()
 	h.Write(header)
@@ -188,11 +176,10 @@ func ContentDigest(header, text []byte) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// EmailTS is email_ts: the POSIX time of an RFC 5322 date, with no zone or -0000 read as UTC. ok is false
-// where Python raises.
+// EmailTS: ok is false where Python raises.
 func EmailTS(value string) (float64, bool) { return mime.ParseDate(value) }
 
-// Header is features.header: str(msg.get(name)), or "" when absent or when Python raises.
+// Header is "" when absent or when Python raises.
 func Header(msg *mime.Message, name string) string {
 	v, ok, err := msg.Get(name)
 	if !ok || err != nil {
@@ -290,9 +277,7 @@ func mimeAttachments(msg *mime.Message) []Attachment {
 	return out
 }
 
-// Extract is features.extract over the BODY[HEADER] and BODY[TEXT] bytes. attachments nil parses them from the
-// MIME tree; fallbackTS is used when the Date header is missing or unparseable. err is set where Python's
-// extract raises (a Content-Type value its header parser cannot handle).
+// Extract: err is set where Python's extract raises (a Content-Type value its header parser cannot handle).
 func Extract(header, text []byte, attachments []Attachment, fallbackTS float64) (f Features, err error) {
 	defer func() {
 		if r := recover(); r != nil {

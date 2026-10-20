@@ -1,5 +1,3 @@
-// Package report is report.py: the shadow-mode report of what the router proposed against where each message
-// ended up, and the counts the triage view shares.
 package report
 
 import (
@@ -41,7 +39,6 @@ type Querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// SinceError is the ValueError parse_since raises on a malformed value.
 type SinceError string
 
 func (e SinceError) Error() string { return string(e) }
@@ -52,8 +49,6 @@ func sinceError(value string) error {
 	return SinceError(fmt.Sprintf("time data %s does not match format '%%Y-%%m-%%d'", py.Repr(value)))
 }
 
-// ParseSince is parse_since: nil is the epoch, "<n>h" and "<n>d" count back from at, and a date is midnight in
-// the zone ATRIUM_TZ names.
 func ParseSince(env config.Env, value *string, at time.Time) (float64, error) {
 	now := float64(at.UnixNano()) / 1e9
 	if value == nil {
@@ -90,7 +85,6 @@ func ParseSince(env config.Env, value *string, at time.Time) (float64, error) {
 	return day.Timestamp(loc), nil
 }
 
-// Row is one OutcomeSQL row.
 type Row struct {
 	DecisionID  int64
 	Stage       string
@@ -116,7 +110,6 @@ func Outcomes(ctx context.Context, q Querier, account string, since float64) ([]
 	})
 }
 
-// Outcome is outcome: where the message's live copy is now.
 func (r Row) Outcome() string {
 	switch {
 	case !r.Actual.Valid:
@@ -127,12 +120,10 @@ func (r Row) Outcome() string {
 	return r.Actual.String
 }
 
-// Matches is matches: the proposed destination is one of the live copy's locations.
 func (r Row) Matches() bool {
 	return r.Dest.Valid && slices.Contains(strings.Split(r.Actual.String, "|"), r.Dest.String)
 }
 
-// Counter is collections.Counter's insertion order, which most_common keeps for ties.
 type Counter[K comparable] struct {
 	keys   []K
 	counts map[K]int
@@ -158,13 +149,11 @@ func (c *Counter[K]) Total() int {
 	return total
 }
 
-// Entry is one most_common pair.
 type Entry[K comparable] struct {
 	Key   K
 	Count int
 }
 
-// MostCommon is Counter.most_common(n): highest count first, ties in insertion order.
 func (c *Counter[K]) MostCommon(n int) []Entry[K] {
 	out := make([]Entry[K], len(c.keys))
 	for i, k := range c.keys {
@@ -174,7 +163,6 @@ func (c *Counter[K]) MostCommon(n int) []Entry[K] {
 	return out[:min(n, len(out))]
 }
 
-// Tally is what the report and the triage summary count from the outcome rows.
 type Tally struct {
 	Stages        Counter[string]
 	Dests         Counter[string]
@@ -247,7 +235,6 @@ func accountSection(ctx context.Context, q Querier, account string, since float6
 
 type disagreement struct{ domain, proposed, actual string }
 
-// DisagreementLines is disagreement_lines over moved rows whose proposal differs from where they are.
 func disagreementLines(title string, pairs []Row) []string {
 	out := []string{fmt.Sprintf("%s: %d", title, len(pairs))}
 	var grouped Counter[disagreement]
@@ -264,7 +251,6 @@ func disagreementLines(title string, pairs []Row) []string {
 	return out
 }
 
-// FlagCounts is flag_counts.
 type FlagCounts struct {
 	Considered   int `json:"considered"`
 	Contacts     int `json:"contacts"`
@@ -319,7 +305,6 @@ func flagSection(ctx context.Context, q Querier, account string, since float64) 
 		n.Considered, n.Contacts, n.LLM, n.Judged, n.Both, n.ContactsOnly, n.LLMOnly)}, err
 }
 
-// AccountExists is the "SELECT 1 FROM accounts" probe the report and the triage summaries make per account.
 func AccountExists(ctx context.Context, q Querier, name string) (bool, error) {
 	var one int
 	err := q.QueryRowContext(ctx, "SELECT 1 FROM accounts WHERE name = ?", name).Scan(&one)
@@ -329,7 +314,6 @@ func AccountExists(ctx context.Context, q Querier, name string) (bool, error) {
 	return err == nil, err
 }
 
-// Build is build: the report for every configured account that has a row in accounts.
 func Build(ctx context.Context, q Querier, env config.Env, since *string, at time.Time) (string, error) {
 	start, err := ParseSince(env, since, at)
 	if err != nil {

@@ -1,5 +1,3 @@
-// Package imapclient is mail.Conn over go-imap v2: go-imap drives the session and encodes the commands, and
-// every response is read again as Python's imaplib reads it, so the results are what imap.py returned.
 package imapclient
 
 import (
@@ -46,7 +44,6 @@ var (
 	idleChanges = []string{"EXISTS", "EXPUNGE", "FETCH", "RECENT"}
 )
 
-// New returns the IMAPS client for host, write-gated by env.
 func New(host, user, password string, env config.Env) mail.Client {
 	return mail.Gated(newConn(host, user, password), env)
 }
@@ -65,7 +62,6 @@ func newConn(host, user, password string) *conn {
 	return c
 }
 
-// dialTLS is IMAP4_SSL with ssl.create_default_context(): certificate and host name verified.
 func (c *conn) dialTLS(ctx context.Context) (net.Conn, error) {
 	d := tls.Dialer{NetDialer: &net.Dialer{Timeout: c.dialTimeout}, Config: c.tlsConfig}
 	ctx, cancel := context.WithTimeout(ctx, c.dialTimeout)
@@ -98,7 +94,6 @@ type conn struct {
 
 var errNotConnected = errors.New("IMAP client is not connected")
 
-// await runs fn while a watchdog closes the connection when ctx ends or no byte arrives for readTimeout.
 func (c *conn) await(ctx context.Context, fn func() error) error {
 	if c.cl == nil {
 		return errNotConnected
@@ -139,7 +134,6 @@ func (c *conn) await(ctx context.Context, fn func() error) error {
 	}
 }
 
-// read returns the next response, waiting for go-imap to receive it; failure is imaplib's socket error text.
 func (c *conn) read() (response, error) {
 	for {
 		r, ok, failure, err := c.tap.next()
@@ -162,7 +156,6 @@ func (c *conn) read() (response, error) {
 
 func socketError(failure error) *Error { return pyAbort("socket error: %s", failure.Error()) }
 
-// apply stores a response as imaplib's _get_response does.
 func (c *conn) apply(r response) {
 	if r.kind == continuation {
 		return
@@ -193,7 +186,6 @@ func (c *conn) appendUntagged(typ string, d datum) {
 	last.data = append(last.data, d)
 }
 
-// begin is imaplib's _command checks before a command is sent.
 func (c *conn) begin(name string) error {
 	if !slices.Contains(states[name], c.state) {
 		return pyError("command %s illegal in state %s, only allowed in states %s", name, c.state, strings.Join(states[name], ", "))
@@ -207,7 +199,6 @@ func (c *conn) begin(name string) error {
 	return nil
 }
 
-// beginUID is IMAP4.uid's state check, then _command's.
 func (c *conn) beginUID(command string) error {
 	if !slices.Contains(states[command], c.state) {
 		return pyError("command %s illegal in state %s, only allowed in states %s", command, c.state, strings.Join(states[command], ", "))
@@ -235,7 +226,6 @@ func decodeReplace(b []byte, ascii bool) string {
 	return s.String()
 }
 
-// complete is imaplib's _command_complete: the tagged response to the command just sent.
 func wrapCommand(name string, err error) error {
 	var e *Error
 	if errors.As(err, &e) {
@@ -244,7 +234,6 @@ func wrapCommand(name string, err error) error {
 	return err
 }
 
-// awaitSent waits until go-imap has written a command named name and returns its index in the tap's sent list.
 func (c *conn) awaitSent(name string) (int, error) {
 	for {
 		if i := c.tap.target(name, c.sentPos); i >= 0 {
@@ -264,9 +253,7 @@ func (c *conn) awaitSent(name string) (int, error) {
 	}
 }
 
-// complete is imaplib's _command_complete: the tagged response to the command named name that was just sent.
-// Tagged replies to commands go-imap sent by itself before it (IDLE re-issues) are skipped; a tag go-imap never
-// sent is imaplib's unexpected tagged response.
+// Tagged replies to commands go-imap sent by itself before this one (IDLE re-issues) are skipped.
 func (c *conn) complete(name string) (string, []datum, error) {
 	if err := c.checkBye(); err != nil {
 		return "", nil, err
@@ -333,7 +320,6 @@ func quoteName(name string) string {
 	return `"` + strings.ReplaceAll(strings.ReplaceAll(name, `\`, `\\`), `"`, `\"`) + `"`
 }
 
-// checkArg is the bytes(arg, "ascii") and control character checks imaplib applies to a command argument.
 func checkArg(arg string) error {
 	for i, r := range arg {
 		if r > 0x7f {
@@ -346,7 +332,6 @@ func checkArg(arg string) error {
 	return nil
 }
 
-// mailboxArg is the name go-imap needs to send imapName, which go-imap encodes to modified UTF-7 itself.
 func mailboxArg(imapName string) (string, error) {
 	if err := checkArg(imapName); err != nil {
 		return "", err
@@ -375,7 +360,6 @@ func uidSet(uids mail.UIDSet) (imap.UIDSet, error) {
 	return set, nil
 }
 
-// goErr keeps go-imap's error only when it is not a server reply, which complete already reported.
 func goErr(err error) error {
 	var e *imap.Error
 	if err == nil || errors.As(err, &e) {
@@ -402,7 +386,6 @@ func (c *conn) Connect(ctx context.Context) error {
 	return err
 }
 
-// open is IMAP4._connect, IMAP4.login and ImapClient.connect's capability read.
 func (c *conn) open() error {
 	welcome, err := c.read()
 	if err != nil {
@@ -446,8 +429,8 @@ func (c *conn) open() error {
 	return c.refreshCaps(c.lastCode != "CAPABILITY")
 }
 
-// refreshCaps is imaplib's _refresh_capabilities. goSent says go-imap sent CAPABILITY on its own, which it
-// does when the greeting or LOGIN reply carries no capability list.
+// goSent says go-imap sent CAPABILITY on its own, which it does when the greeting or LOGIN reply carries no
+// capability list.
 func (c *conn) refreshCaps(goSent bool) error {
 	data, had := c.ur.pop("CAPABILITY")
 	if !had {
@@ -516,7 +499,6 @@ func (c *conn) HasCapability(name string) bool {
 	return c.caps[strings.ToUpper(name)]
 }
 
-// run runs one command under the lock and the watchdog.
 func (c *conn) run(ctx context.Context, fn func() error) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -584,7 +566,6 @@ func (c *conn) SelectRW(ctx context.Context, imapName string) error {
 	return c.run(ctx, func() error { return c.selectBox(imapName, false) })
 }
 
-// selectBox is IMAP4.select as ImapClient.select and select_rw call it.
 func (c *conn) selectBox(imapName string, readonly bool) error {
 	name, err := mailboxArg(imapName)
 	if err != nil {
@@ -652,7 +633,6 @@ func (c *conn) UIDSearch(ctx context.Context, criteria mail.SearchCriteria) ([]u
 	return out, err
 }
 
-// fetchOptions is imap.fetch_items(gmail, with_body) with CHANGEDSINCE, or mailops.VERIFY_ITEMS(_GMAIL).
 func fetchOptions(items mail.FetchItems) *imap.FetchOptions {
 	opts := &imap.FetchOptions{UID: true, Flags: true, ChangedSince: items.ChangedSince}
 	opts.Gmail.Labels = items.Labels
@@ -701,7 +681,6 @@ func (c *conn) UIDFetch(ctx context.Context, uids mail.UIDSet, items mail.FetchI
 	return out, err
 }
 
-// mutate is ImapClient.mutate after its write gate: the UID command's data, then every COPYUID code it got.
 func (c *conn) mutate(command string, send func() error) ([]datum, error) {
 	c.ur.pop("COPYUID")
 	if err := c.beginUID(command); err != nil {
@@ -792,7 +771,6 @@ func (c *conn) UIDExpunge(ctx context.Context, uids mail.UIDSet) error {
 	})
 }
 
-// mapCRLF is imaplib's MapCRLF.sub(CRLF, message): every CR, LF and CRLF becomes CRLF.
 func mapCRLF(raw []byte) []byte {
 	out := make([]byte, 0, len(raw)+bytes.Count(raw, []byte("\n")))
 	for i := 0; i < len(raw); i++ {
@@ -851,7 +829,6 @@ func (c *conn) Append(ctx context.Context, imapName string, raw []byte, flags ..
 	})
 }
 
-// mailboxCommand is ImapClient.mutate_mailbox after its write gate.
 func (c *conn) mailboxCommand(ctx context.Context, command, imapName string, send func(name string) error) error {
 	return c.run(ctx, func() error {
 		name, err := mailboxArg(imapName)
@@ -898,9 +875,8 @@ func (c *conn) Noop(ctx context.Context) error {
 	})
 }
 
-// IdleChanges is ImapClient.idle_changes: IDLE until the server reports EXISTS, EXPUNGE, FETCH or RECENT
-// (true) or duration passes (false). imaplib sends one IDLE for the whole call; go-imap re-issues it only after
-// idleRestart, which is longer than the watch loop's IdleSeconds.
+// IdleChanges: go-imap re-issues IDLE only after idleRestart, which is longer than the watch loop's IdleSeconds,
+// where imaplib sends one IDLE for the whole call.
 func (c *conn) IdleChanges(ctx context.Context, duration time.Duration) (bool, error) {
 	var changed bool
 	err := c.run(ctx, func() error {
@@ -931,7 +907,6 @@ func (c *conn) IdleChanges(ctx context.Context, duration time.Duration) (bool, e
 	return changed, err
 }
 
-// awaitIdleStart is Idler.__enter__'s wait for the continuation request.
 func (c *conn) awaitIdleStart() error {
 	for {
 		r, err := c.read()
@@ -951,7 +926,6 @@ func (c *conn) awaitIdleStart() error {
 	}
 }
 
-// idleWait is the iteration over the Idler until a change or the deadline.
 func (c *conn) idleWait(deadline time.Time) (bool, error) {
 	c.tap.touch(true)
 	defer c.tap.touch(false)
@@ -996,7 +970,6 @@ func (c *conn) idleWait(deadline time.Time) (bool, error) {
 	}
 }
 
-// idleExit is Idler.__exit__: leftover responses go to the untagged responses, then DONE.
 func (c *conn) idleExit(idle *imapclient.IdleCommand, failure error) error {
 	c.idling = false
 	for _, resp := range c.idleQ {

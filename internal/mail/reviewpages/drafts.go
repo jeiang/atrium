@@ -45,7 +45,6 @@ func (s *service) draftCard(w http.ResponseWriter, r *http.Request, id int64, co
 	s.fragment(w, r, code, "_draft.gohtml", data, notice)
 }
 
-// reply answers a draft action: the card for htmx, the drafts page of status for a plain post.
 func (s *service) reply(w http.ResponseWriter, r *http.Request, id int64, status string, code int, notice *tpl.Toast) {
 	if web.IsPartial(r) {
 		s.draftCard(w, r, id, code, notice)

@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// Addr is one (realname, email address) pair from email.utils.parseaddr or getaddresses.
 type Addr struct {
 	Name, Address string
 }
@@ -365,7 +364,6 @@ func postParse(addrs []Addr) []Addr {
 	return addrs
 }
 
-// ParseAddr is email.utils.parseaddr(addr) with Python 3.14's strict parsing; err is Python's RecursionError.
 func ParseAddr(addr string) (Addr, error) {
 	if !checkParenthesis(addr) {
 		addr = "('', '')"
@@ -381,8 +379,6 @@ func ParseAddr(addr string) (Addr, error) {
 	return addrs[0], nil
 }
 
-// GetAddresses is email.utils.getaddresses(values) with Python 3.14's strict parsing; err is Python's
-// RecursionError.
 func GetAddresses(values []string) ([]Addr, error) {
 	checked := make([]string, len(values))
 	for i, v := range values {

@@ -109,7 +109,6 @@ func (w *world) message(uid int, fields map[string]any) int64 {
 	return id
 }
 
-// original is the Python tests' original(): a message from Friend without a cached raw file.
 func (w *world) original() int64 {
 	return w.message(1, map[string]any{"from_addr": "friend@x.test", "from_name": "Friend", "subject": "Lunch?", "msgid": "<orig@x.test>", "to_addrs": `["me@icloud.test"]`})
 }
@@ -458,25 +457,6 @@ func TestReplyContextReadsTheCachedOriginal(t *testing.T) {
 	}
 }
 
-func TestForMessage(t *testing.T) {
-	w := newWorld(t)
-	ctx := t.Context()
-	id := w.create(config.Gmail, "a@x.test", nil, "Hi", "body", nil)
-	if _, err := w.store.Send(ctx, id, w.get(id).UpdatedAt); err != nil {
-		t.Fatal(err)
-	}
-	msgid := *w.get(id).SentMsgID
-	copyID := w.message(5, map[string]any{"msgid": msgid})
-	got, err := w.store.ForMessage(ctx, copyID)
-	if err != nil || got == nil || got.ID != id {
-		t.Fatalf("for_message %+v %v", got, err)
-	}
-	w.exec("UPDATE drafts SET thread_id = NULL WHERE id = ?", id)
-	if got, err := w.store.ForMessage(ctx, copyID); err != nil || got != nil {
-		t.Fatalf("draft without a thread matched: %+v %v", got, err)
-	}
-}
-
 func insertSending(w *world, updatedAt float64) int64 {
 	w.t.Helper()
 	res, err := w.db.Write.Exec("INSERT INTO drafts (thread_id, account, to_addrs, subject, body, status, created_at, updated_at) "+
@@ -534,8 +514,6 @@ func TestResolveUnknownAsSent(t *testing.T) {
 	draftError(t, w.store.ResolveUnknown(ctx, id, drafts.Sent), "draft is not in the unknown state")
 }
 
-// TestDegradedStuckDraftOnGoldenDB is the degraded golden: on a copy of the Python-made atrium.db, a draft left
-// sending for more than 600 s becomes unknown at web start and is never resent.
 func TestDegradedStuckDraftOnGoldenDB(t *testing.T) {
 	d, _ := dbtest.Copy(t, filepath.Join(golden.Dir(), "atrium.db"))
 	w := newWorldOn(t, d, creds)
@@ -632,5 +610,24 @@ func TestCreateValidatesBeforeTheReplyIDOverflows(t *testing.T) {
 	var n int
 	if err := w.db.Read.QueryRow("SELECT COUNT(*) FROM drafts").Scan(&n); err != nil || n != 0 {
 		t.Errorf("%d drafts stored", n)
+	}
+}
+
+func TestForMessage(t *testing.T) {
+	w := newWorld(t)
+	ctx := t.Context()
+	id := w.create(config.Gmail, "a@x.test", nil, "Hi", "body", nil)
+	if _, err := w.store.Send(ctx, id, w.get(id).UpdatedAt); err != nil {
+		t.Fatal(err)
+	}
+	msgid := *w.get(id).SentMsgID
+	copyID := w.message(5, map[string]any{"msgid": msgid})
+	got, err := w.store.ForMessage(ctx, copyID)
+	if err != nil || got == nil || got.ID != id {
+		t.Fatalf("for_message %+v %v", got, err)
+	}
+	w.exec("UPDATE drafts SET thread_id = NULL WHERE id = ?", id)
+	if got, err := w.store.ForMessage(ctx, copyID); err != nil || got != nil {
+		t.Fatalf("draft without a thread matched: %+v %v", got, err)
 	}
 }

@@ -21,14 +21,10 @@ func decodeNamed(data []byte, charset string, mode errMode) (string, error) {
 	return string(out), nil
 }
 
-// DecodeReplace is data.decode(charset, errors="replace") for a codec Python ships: undecodable bytes become
-// U+FFFD, an unknown codec name is a LookupError and a name with a NUL a ValueError.
 func DecodeReplace(data []byte, charset string) (string, error) {
 	return decodeNamed(data, charset, errReplace)
 }
 
-// ContentCharset is Message.get_content_charset() for a Content-Type header value: the lower-cased charset
-// parameter, an RFC 2231 one decoded in the charset it names. ok is false when there is none or it is not ASCII.
 func ContentCharset(contentType string) (charset string, ok bool) {
 	for _, p := range decodeParams(parseParams(contentType)) {
 		if Lower(p.name) != "charset" {

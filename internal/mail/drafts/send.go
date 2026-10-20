@@ -13,14 +13,11 @@ import (
 	"github.com/jeiang/atrium/internal/safety"
 )
 
-// Result is what an operator send reports: the recipients the server refused and where the sent copy went.
 type Result struct {
 	Refused smtp.Refusals
 	Filed   string
 }
 
-// fileSentCopy is _file_sent_copy: Gmail files Sent itself; iCloud needs an APPEND to its Sent mailbox, the only
-// mailbox write the operator-send scope allows.
 func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Message) (string, error) {
 	if account != config.ICloud {
 		return "gmail files Sent itself", nil
@@ -62,9 +59,6 @@ func stripMsgID(id string) string {
 	return out
 }
 
-// Send is send: the operator sends the version they reviewed (reviewedAt is its updated_at). The claim comes
-// first so a double click cannot send twice. A SendError returns the draft to draft; once the server took the
-// mail the draft is sent whatever happens to the copy in Sent.
 func (s *Store) Send(ctx context.Context, id int64, reviewedAt float64) (Result, error) {
 	n, err := s.exec(ctx, "UPDATE drafts SET status = ?, updated_at = ? WHERE id = ? AND status = ? AND updated_at = ?",
 		Sending, s.now(), id, Draft, reviewedAt)
@@ -134,7 +128,6 @@ func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusal
 	return msg, refused, err
 }
 
-// refusalsJSON is json.dumps of the refusal map: ASCII-only, ", " and ": " separators, insertion order.
 func refusalsJSON(rs smtp.Refusals) string {
 	parts := make([]string, len(rs))
 	for i, r := range rs {

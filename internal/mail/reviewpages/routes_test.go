@@ -11,8 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/web"
 )
 
-// inventoryRoutes are the routes of slice 06 sections 3.6 (proposals), 3.7 (activity), 3.8 (drafts) and 3.13 (loops,
-// watches) of the parity inventory.
 var inventoryRoutes = []string{
 	"GET /proposals",
 	"POST /proposals/{proposal_id}/approve",

@@ -13,10 +13,8 @@ const (
 	webSearchType = "web_search_20260318"
 )
 
-// WebSearchKinds are the kinds that always get the server-side web_search tool.
 var WebSearchKinds = tool.Kinds{tool.Chat, tool.Cron}
 
-// webSearch is WEB_SEARCH; allowed_callers keeps the model from calling it through anything but itself.
 var webSearch = json.RawMessage(`{"type":"` + webSearchType + `","name":"` + WebSearchName + `","max_uses":5,"allowed_callers":["direct"]}`)
 
 type toolParam struct {
@@ -25,7 +23,6 @@ type toolParam struct {
 	InputSchema json.RawMessage `json:"input_schema"`
 }
 
-// Params is anthropic_tool_params: [{name, description, input_schema}] in the order given.
 func Params(tools []tool.Tool) ([]json.RawMessage, error) {
 	out := make([]json.RawMessage, 0, len(tools))
 	for _, t := range tools {
@@ -38,8 +35,6 @@ func Params(tools []tool.Tool) ([]json.RawMessage, error) {
 	return out, nil
 }
 
-// ServerTools is server_tools_for: web_search for chat and cron, and for a subagent only when its allowlist
-// names it; never for nightly.
 func ServerTools(kind tool.Kind, allow []string) []json.RawMessage {
 	if WebSearchKinds.Has(kind) || (kind == tool.Sub && allow != nil && slices.Contains(allow, WebSearchName)) {
 		return []json.RawMessage{slices.Clone(webSearch)}
@@ -47,8 +42,6 @@ func ServerTools(kind tool.Kind, allow []string) []json.RawMessage {
 	return nil
 }
 
-// RequestTools is the tools array of a request: the function tools, then the server tools, the last entry
-// carrying the one tools cache breakpoint cacheControl. Nil when the run has no tool at all.
 func RequestTools(tools []tool.Tool, kind tool.Kind, allow []string, cacheControl json.RawMessage) ([]json.RawMessage, error) {
 	params, err := Params(tools)
 	if err != nil {

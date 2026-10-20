@@ -1,7 +1,3 @@
-// Package applier is applier.py: in live mode, the automatic mailbox writes of each pass. Decided Inbox mail is
-// filed (iCloud moved, Gmail relabelled and archived) or trashed, corrected mail is moved, contacts' unread mail is
-// flagged, and the operator's delete rules trash matching mail once a day. Every write is verified against the
-// server first, logged in auto_actions with the data to undo it, and capped at WriteCap per account per pass.
 package applier
 
 import (
@@ -70,11 +66,8 @@ ORDER BY m.id`
 
 const alreadyThere = "already there"
 
-// check is one of the server-side conditions an intent re-checks on the verified message: "" when it still holds,
-// else the reason it is skipped.
 type check func(account string, item mailops.Verified) string
 
-// Intent is one automatic write a pass wants to make.
 type Intent struct {
 	ID         int64
 	Digest     string
@@ -85,7 +78,6 @@ type Intent struct {
 	Remove     []string
 }
 
-// Budget is the writes left in this pass and those deferred to a later one.
 type Budget struct {
 	Left     int
 	Deferred int
@@ -101,7 +93,6 @@ func take[T any](b *Budget, rows []T, what string) []T {
 	return kept
 }
 
-// Outcome is one pass: Ran is false when it did not start (shadow mode, paused, or not due).
 type Outcome struct {
 	Written int
 	Skipped int
@@ -115,7 +106,6 @@ func (o *Outcome) count(kind string, n int) {
 	o.ByKind = o.ByKind.Set(kind, o.Kind(kind)+n)
 }
 
-// Kind is by_kind.get(kind, 0).
 func (o Outcome) Kind(kind string) int {
 	n, _ := o.ByKind.Get(kind)
 	v, _ := n.(int)
@@ -196,9 +186,6 @@ func safeLabel(name string) bool {
 	return !mail.IsSystemName(name) && !strings.HasPrefix(name, "[Gmail]")
 }
 
-// Applier runs the automatic passes of one database. Resync syncs an account after a pass wrote to it; Cap is
-// WRITE_CAP (config.WriteCap when 0). As in Python's process(), a caller runs every pass under db.Exclusive and
-// after Live.EnsureGolive has taken the go-live baseline.
 type Applier struct {
 	Live   *live.Live
 	Open   mailops.Opener
@@ -206,7 +193,6 @@ type Applier struct {
 	Cap    int
 }
 
-// New is an Applier whose resync is sync_account on a fresh connection, as applier.resync.
 func New(l *live.Live, open mailops.Opener, syncer *mailsync.Syncer) *Applier {
 	return &Applier{Live: l, Open: open, Resync: func(ctx context.Context, account string) error {
 		return mailops.Session(ctx, open, account, func(client mail.Client) error {
@@ -259,7 +245,6 @@ func moveUndo(account string, item mailops.Verified, destIMAP string, destValidi
 	}
 }
 
-// copied is the destination UIDVALIDITY and UID COPYUID reported for uid, nil where it did not.
 func copied(c *mail.CopyUID, uid uint32) (validity, destUID any) {
 	if c == nil {
 		return nil, nil
@@ -270,7 +255,6 @@ func copied(c *mail.CopyUID, uid uint32) (validity, destUID any) {
 	return c.UIDValidity, nil
 }
 
-// unique is [*dict.fromkeys(lists...)]: every label once, in first-seen order.
 func unique(lists ...[]string) []string {
 	out := []string{}
 	for _, list := range lists {
@@ -289,8 +273,6 @@ type entry struct {
 	aid    int64
 }
 
-// group is the entries one write covers: a move (dest), a Gmail relabel (added, removed), a Gmail trash copy
-// (dest) or a flag store.
 type group struct {
 	run      func(context.Context, mail.Client, string, *group, *Outcome) error
 	imapName string
@@ -314,7 +296,6 @@ func (g *group) byUID() (map[uint32]entry, []uint32) {
 	return by, uids
 }
 
-// groups is one kind of group keyed in insertion order, as Python's dicts.
 type groups struct {
 	order []*group
 	index map[string]*group
@@ -333,7 +314,6 @@ func (gs *groups) add(key string, mk func() *group, e entry) {
 	g.entries = append(g.entries, e)
 }
 
-// ledgerError is a failed auto_actions update inside a mailbox write's callback, which is not the write's failure.
 type ledgerError struct{ err error }
 
 func (e ledgerError) Error() string { return e.err.Error() }
@@ -397,7 +377,6 @@ func (a *Applier) moveGroup(ctx context.Context, client mail.Client, account str
 	return nil
 }
 
-// observedLabels is observed_labels: the labels the server has now, nil when they could not be read.
 func observedLabels(ctx context.Context, client mail.Client, imapName string, uids []uint32) map[uint32][]string {
 	fail := func(err error) map[uint32][]string {
 		log.Error("could not re-read labels after a failed store", logx.Err, err.Error())
@@ -492,8 +471,6 @@ func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account st
 	return nil
 }
 
-// locateInTrash is locate_in_trash: the Trash UIDVALIDITY and the UID of the one message there with the item's
-// Message-ID and content digest; ok is false when there is not exactly one or the search failed.
 func locateInTrash(ctx context.Context, client mail.Client, trash string, item mailops.Verified) (validity, uid uint32, ok bool) {
 	fail := func(err error) (uint32, uint32, bool) {
 		log.Error("could not look for the message in Trash after a failed copy", logx.Err, err.Error())
@@ -634,9 +611,6 @@ func (a *Applier) flagGroup(ctx context.Context, client mail.Client, account str
 
 func boxKey(parts ...any) string { return py.JSONDumps(parts) }
 
-// execute is execute: the intents are verified against the server, re-checked, logged as held actions and
-// written per mailbox group; a group that fails unexpectedly leaves its actions held (or discarded when the gate
-// refused it) and the other groups still run.
 func (a *Applier) execute(ctx context.Context, client mail.Client, account string, intents []Intent, out *Outcome) error {
 	if len(intents) == 0 {
 		return nil
@@ -890,7 +864,6 @@ func hasAge(rule *rules.Rule) bool {
 	return slices.ContainsFunc(rule.Conditions, func(c rules.Condition) bool { return c.Field == rules.AgeField })
 }
 
-// withExtra scans MessageColumns and then seen and digest.
 type withExtra struct {
 	rows   *sql.Rows
 	seen   *bool
@@ -931,7 +904,7 @@ func (a *Applier) deletionIntents(ctx context.Context, account string, budget *B
 	}
 	var matched []match
 	for _, x := range all {
-		rule, err := rules.FirstMatch(&x.msg, ruleset)
+		rule, err := rules.FirstMatch(&x.msg, ruleset, a.now())
 		if err != nil {
 			return nil, err
 		}
@@ -964,11 +937,6 @@ func (a *Applier) deletionDue(ctx context.Context, account string) (bool, error)
 
 type builder func(ctx context.Context, budget *Budget) ([]Intent, error)
 
-// runPass is run_pass: nothing runs outside live mode or while paused (logged); otherwise interrupted actions
-// are recovered, the intents are built within the write cap and executed as automatic writes, which the gate
-// refuses again for every write once paused, and the account is resynced if anything was written. A pass that
-// has started runs to its end on a context that cannot be cancelled, so a shutdown or an abandoned request never
-// leaves a write half done or its ledger row in flight.
 func (a *Applier) runPass(ctx context.Context, account string, build builder, label string) (Outcome, error) {
 	var out Outcome
 	if a.Live.Cfg.Mode != config.Live {
@@ -1014,7 +982,6 @@ func (a *Applier) runPass(ctx context.Context, account string, build builder, la
 	return out, nil
 }
 
-// ApplyAccount is apply_account: corrections, then decided Inbox mail, then contacts flags.
 func (a *Applier) ApplyAccount(ctx context.Context, account string) (Outcome, error) {
 	return a.runPass(ctx, account, func(ctx context.Context, budget *Budget) ([]Intent, error) {
 		var out []Intent
@@ -1029,7 +996,6 @@ func (a *Applier) ApplyAccount(ctx context.Context, account string) (Outcome, er
 	}, "live pass")
 }
 
-// ApplyCorrections is apply_corrections: only the corrections of messageIDs, as the correction UI's move.
 func (a *Applier) ApplyCorrections(ctx context.Context, account string, messageIDs []int64) (Outcome, error) {
 	return a.runPass(ctx, account, func(ctx context.Context, budget *Budget) ([]Intent, error) {
 		intents, err := a.correctionIntents(ctx, account, &Budget{Left: budget.Left})
@@ -1040,8 +1006,6 @@ func (a *Applier) ApplyCorrections(ctx context.Context, account string, messageI
 	}, "corrections")
 }
 
-// DeletionPass is deletion_pass: the delete rules run once per DeletionIntervalSeconds per account unless forced
-// (`live deletions`), and a pass that ran records its time under deletion_pass_ts:<account>.
 func (a *Applier) DeletionPass(ctx context.Context, account string, force bool) (Outcome, error) {
 	ctx = context.WithoutCancel(ctx)
 	if !force {
@@ -1059,7 +1023,6 @@ func (a *Applier) DeletionPass(ctx context.Context, account string, force bool) 
 	return out, live.SetState(ctx, a.Live.DB.Write, live.DeletionKey+":"+account, py.FloatRepr(a.now()))
 }
 
-// ApplyAll is apply_all: the live pass, then the deletion pass when due.
 func (a *Applier) ApplyAll(ctx context.Context, account string) (applied, deleted Outcome, err error) {
 	if applied, err = a.ApplyAccount(ctx, account); err != nil {
 		return applied, deleted, err

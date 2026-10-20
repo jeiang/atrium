@@ -9,8 +9,6 @@ import (
 	"unicode"
 )
 
-// Exception is a Python built-in exception (ValueError, TypeError, ...) raised by an emulated builtin; its
-// text is the exception's str().
 type Exception struct{ Class, Msg string }
 
 func (e *Exception) Error() string { return e.Msg }
@@ -21,8 +19,6 @@ func raise(class, format string, args ...any) error {
 	return &Exception{class, fmt.Sprintf(format, args...)}
 }
 
-// Int is int(v) for a decoded JSON value or a Go integer: bools are 0 and 1, floats truncate, strings parse
-// as base 10 the way int(str) does.
 func Int(v any) (*big.Int, error) {
 	switch v := v.(type) {
 	case bool:
@@ -53,11 +49,8 @@ func Int(v any) (*big.Int, error) {
 	return nil, raise("TypeError", "int() argument must be a string, a bytes-like object or a real number, not '%s'", TypeName(v))
 }
 
-// MaxStrDigits is sys.get_int_max_str_digits()'s default.
 const MaxStrDigits = 4300
 
-// IntString is int(s) in base 10: surrounding whitespace, one sign, Unicode decimal digits and single
-// underscores between digits.
 func IntString(s string) (*big.Int, error) {
 	invalid := raise("ValueError", "invalid literal for int() with base 10: %s", Repr(s))
 	body := Strip(s)
@@ -94,7 +87,6 @@ func IntString(s string) (*big.Int, error) {
 	return n, nil
 }
 
-// Iter is list(v): the items of a list, the characters of a str, the keys of a dict.
 func Iter(v any) ([]any, error) {
 	switch v := v.(type) {
 	case []any:
@@ -138,18 +130,12 @@ func toAny[T any](items []T) []any {
 	return out
 }
 
-// AttributeError is the AttributeError of reading attr on v.
 func AttributeError(v any, attr string) error {
 	return raise("AttributeError", "'%s' object has no attribute '%s'", TypeName(v), attr)
 }
 
-// TypeError is a TypeError with the given text.
 func TypeError(format string, args ...any) error { return raise("TypeError", format, args...) }
 
-// LaxInt is how pydantic reads a str for an int field in lax mode, as FastAPI does for a query, path or form
-// value: surrounding whitespace is stripped, then one sign, ASCII digits with single underscores between digits,
-// and optionally "." followed by one or more zeros; anything else, including exponents and Unicode digits, is
-// refused (ok is false).
 func LaxInt(s string) (n *big.Int, ok bool) {
 	body := strings.TrimFunc(s, func(r rune) bool { return unicode.Is(unicode.White_Space, r) })
 	whole, fraction, hasFraction := strings.Cut(body, ".")
@@ -173,7 +159,6 @@ func LaxInt(s string) (n *big.Int, ok bool) {
 	return n, err == nil
 }
 
-// LaxInt64 is LaxInt as an int64; ok is also false when the value does not fit.
 func LaxInt64(s string) (int64, bool) {
 	n, ok := LaxInt(s)
 	if !ok || !n.IsInt64() {

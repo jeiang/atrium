@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/config"
@@ -33,7 +34,6 @@ var ruleProblems = map[string]string{
 
 var ruleIDPrefix = rx.MustCompile(`^[^:\s]+: `, 0)
 
-// ruleProblem is rule_problem: the rule id prefix of an error is dropped and the text made friendly.
 func ruleProblem(err error) string {
 	text := err.Error()
 	if loc, _ := ruleIDPrefix.Search(text); loc != nil {
@@ -170,7 +170,6 @@ type previewData struct {
 	Error   *string           `json:"error"`
 }
 
-// ruleForm is the fields a rule is edited with.
 type ruleForm struct {
 	account, action, dest string
 	fields, ops, values   []string
@@ -183,7 +182,6 @@ func readRuleForm(form url.Values) ruleForm {
 	}
 }
 
-// conditionList is condition_list: the conditions a rule form describes, each field, op and value zipped.
 func conditionList(fields, ops, values []string) []any {
 	out := []any{}
 	for i := range min(len(fields), len(ops)) {
@@ -220,7 +218,6 @@ func conditionList(fields, ops, values []string) []any {
 	return out
 }
 
-// raw is rule_raw: the rule dict the editor functions take, without its id.
 func (f ruleForm) raw() map[string]any {
 	var account, dest any
 	if f.account != "" {
@@ -235,7 +232,7 @@ func (f ruleForm) raw() map[string]any {
 func (s *service) rulePreview(w http.ResponseWriter, r *http.Request) {
 	raw := readRuleForm(web.FormValues(r)).raw()
 	raw["id"] = ruleedit.PreviewID
-	found, err := ruleedit.PreviewRule(r.Context(), s.deps.DB.Read, raw, ruleedit.DefaultLimit)
+	found, err := ruleedit.PreviewRule(r.Context(), s.deps.DB.Read, raw, ruleedit.DefaultLimit, float64(time.Now().UnixNano())/1e9)
 	var invalid rules.RuleError
 	if errors.As(err, &invalid) {
 		problem := ruleProblem(err)
@@ -246,7 +243,6 @@ func (s *service) rulePreview(w http.ResponseWriter, r *http.Request) {
 	s.fragment(w, r, "_rule_preview.gohtml", previewData{Preview: &found}, nil)
 }
 
-// shownRule is the rule dict of a form as the editor shows it again after an error.
 func shownRule(id string, raw map[string]any) ruleView {
 	view := ruleView{ID: id, Action: raw["action"].(string), When: []map[string]any{}}
 	if account, ok := raw["account"].(string); ok {

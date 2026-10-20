@@ -1,5 +1,3 @@
-// Package message is message.py: the view of one indexed message, parsed from its raw .eml in the cache when
-// that file lies inside the cache directory, otherwise from the index.
 package message
 
 import (
@@ -28,7 +26,6 @@ type Attachment struct {
 	Size        int    `json:"size"`
 }
 
-// View is what get_message returns. Decision and FlagDecision are the table rows by column name.
 type View struct {
 	ID           int64             `json:"id"`
 	Account      string            `json:"account"`
@@ -55,8 +52,6 @@ type Querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// RawFile is raw_file: the regular file raw_path names under cacheDir once symlinks and ".." are resolved, or
-// false when raw_path is empty, escapes cacheDir or is not a file.
 func RawFile(cacheDir, rawPath string) (string, bool) {
 	if rawPath == "" {
 		return "", false
@@ -145,7 +140,6 @@ func rowMap(rows *sql.Rows) (map[string]any, error) {
 	return out, rows.Err()
 }
 
-// LatestDecision is latest_decision: the newest decisions row of the message with its detail parsed.
 func LatestDecision(ctx context.Context, q Querier, messageID int64) (map[string]any, error) {
 	rows, err := q.QueryContext(ctx, "SELECT * FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1", messageID)
 	if err != nil {
@@ -178,7 +172,6 @@ func indexBody(ctx context.Context, q Querier, messageID int64) (string, error) 
 	return body, err
 }
 
-// Get is get_message; it returns nil when the message does not exist.
 func Get(ctx context.Context, q Querier, cacheDir string, messageID int64) (*View, error) {
 	var v View
 	var rawPath, folder, corrected sql.NullString

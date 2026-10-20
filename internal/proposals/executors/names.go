@@ -9,10 +9,8 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// MaxNameChars is MAX_NAME_CHARS.
 const MaxNameChars = 200
 
-// ValidName is valid_name: the stripped folder or label name, or a SelectionError.
 func ValidName(value string) (string, error) {
 	name := py.Strip(value)
 	if name == "" || utf8.RuneCountInString(name) > MaxNameChars || strings.Contains(name, "|") ||

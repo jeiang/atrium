@@ -24,7 +24,6 @@ S: * LIST (\HasNoChildren \Trash) "/" "Deleted Messages"
 S: {t} OK LIST completed
 `
 
-// pausing pauses atrium as soon as its first COPY has been sent.
 type pausing struct {
 	mail.Client
 	pause string
@@ -38,8 +37,6 @@ func (p pausing) Copy(ctx context.Context, uids mail.UIDSet, dest string) (*mail
 	return copied, err
 }
 
-// wireApplier is an applier over a database holding one decided Inbox message per (uid, dest) pair, on an
-// account whose client is the scripted session.
 func wireApplier(t *testing.T, account string, client mail.Client, wrap func(mail.Client, config.Config) mail.Client, msgs ...[2]any) (*applier.Applier, *db.DB, *[]string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -221,8 +218,6 @@ S: {t} OK Success
 	}
 }
 
-// TestApplierPausedMidPassSendsNoFurtherWriteWire: once paused after the first COPY, the gate stops the STORE and
-// EXPUNGE of that move and the whole second move before anything reaches the server.
 func TestApplierPausedMidPassSendsNoFurtherWriteWire(t *testing.T) {
 	ctx := context.Background()
 	client, _ := icloud(t, icloudLogin+`C/ ^{t} STATUS INBOX \((UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)( (UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)){3}\)$

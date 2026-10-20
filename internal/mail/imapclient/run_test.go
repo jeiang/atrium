@@ -26,7 +26,6 @@ S: * LIST (\HasNoChildren) "/" "Bills"
 S: {t} OK LIST completed
 `
 
-// runFetch is the full fetch of one message whose header names subject and msgid.
 func runFetch(seq, uid int, flags, subject, msgid string) string {
 	header := "From: a@x.test\r\nSubject: " + subject + "\r\nMessage-ID: <" + msgid + ">\r\n"
 	return fmt.Sprintf(fullFetch+"\n", fmt.Sprint(uid)) +
@@ -40,7 +39,6 @@ func runFlags(since int, lines ...string) string {
 	return fmt.Sprintf(flagFetch, since) + "\n" + strings.Join(lines, "\n") + "\nS: {t} OK FETCH completed\n"
 }
 
-// recorder is the watch loop's clock: it records each wait and ends the loop at the stopAt-th.
 type recorder struct {
 	mu     sync.Mutex
 	waits  []time.Duration
@@ -57,9 +55,6 @@ func (r *recorder) sleep(_ context.Context, d time.Duration) {
 	}
 }
 
-// TestWatchPassAndIdleCyclesWire is one watch loop on a live iCloud account: the first pass syncs, routes the
-// read Inbox message by an operator rule and files it (verify, COPY, STORE, EXPUNGE, resync); IDLE reports new
-// mail, the loop settles and passes again; the next IDLE ends in BYE and the loop backs off.
 func TestWatchPassAndIdleCyclesWire(t *testing.T) {
 	script := icloudLogin + runList +
 		syncStatus("Bills", 0, 1, 5, 1) + syncExamine("Bills", 0, 5) + syncSearch("ALL", "") +

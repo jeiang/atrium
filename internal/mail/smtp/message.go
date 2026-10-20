@@ -16,7 +16,6 @@ import (
 
 const maxLineLength = 78
 
-// Fields are the draft columns build_message reads.
 type Fields struct {
 	ToAddrs   string
 	CcAddrs   string
@@ -26,14 +25,11 @@ type Fields struct {
 	Refs      string
 }
 
-// Message is the EmailMessage build_message makes: headers in insertion order and a text/plain payload already
-// in its Content-Transfer-Encoding.
 type Message struct {
 	headers [][2]string
 	payload []byte
 }
 
-// BuildMessage is smtp.build_message with make_msgid's result passed in as msgid.
 func BuildMessage(sender string, d Fields, now float64, msgid string) *Message {
 	m := &Message{}
 	m.set("From", sender)
@@ -62,7 +58,6 @@ func BuildMessage(sender string, d Fields, now float64, msgid string) *Message {
 
 func (m *Message) set(name, value string) { m.headers = append(m.headers, [2]string{name, value}) }
 
-// Get is msg[name] for a header BuildMessage set; "" when absent.
 func (m *Message) Get(name string) string {
 	for _, h := range m.headers {
 		if strings.EqualFold(h[0], name) {
@@ -72,8 +67,6 @@ func (m *Message) Get(name string) string {
 	return ""
 }
 
-// Bytes is the message as email.generator.BytesGenerator writes it under the default policy with the given
-// line separator; utf8 is the policy's utf8 flag, which smtplib sets for an internationalized send.
 func (m *Message) Bytes(linesep string, utf8 bool) ([]byte, error) {
 	var b bytes.Buffer
 	for _, h := range m.headers {
@@ -94,7 +87,6 @@ func (m *Message) Bytes(linesep string, utf8 bool) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// splitNewlines is re.split(r"\r\n|\r|\n", b).
 func splitNewlines(b []byte) [][]byte {
 	var out [][]byte
 	start := 0
@@ -114,7 +106,6 @@ func splitNewlines(b []byte) [][]byte {
 	return append(out, b[start:])
 }
 
-// MakeMsgID is email.utils.make_msgid(domain=domain).
 func MakeMsgID(domain string) string {
 	var r [8]byte
 	_, _ = rand.Read(r[:])
@@ -122,14 +113,12 @@ func MakeMsgID(domain string) string {
 	return fmt.Sprintf("<%d.%d.%d@%s>", timeval, os.Getpid(), binary.BigEndian.Uint64(r[:]), domain)
 }
 
-// FormatDate is email.utils.formatdate(now, localtime=False): UTC with the -0000 zone of a naive datetime.
 func FormatDate(now float64) string {
 	sec := math.Floor(now)
 	t := time.Unix(int64(sec), 0).UTC()
 	return t.Format("Mon, 02 Jan 2006 15:04:05") + " -0000"
 }
 
-// splitLines is bytes.splitlines(): splitNewlines without the empty piece after a final line break.
 func splitLines(b []byte) [][]byte {
 	lines := splitNewlines(b)
 	if last := lines[len(lines)-1]; len(last) == 0 {
@@ -138,7 +127,6 @@ func splitLines(b []byte) [][]byte {
 	return lines
 }
 
-// joinLines is b"\n".join(lines) + b"\n".
 func joinLines(lines [][]byte) []byte {
 	return append(bytes.Join(lines, []byte("\n")), '\n')
 }
@@ -152,8 +140,6 @@ func isASCII(b []byte) bool {
 	return true
 }
 
-// encodeText is contentmanager._encode_text with charset utf-8, no cte and the default policy (cte_type 8bit,
-// max_line_length 78, linesep "\n").
 func encodeText(body []byte) (string, []byte) {
 	lines := splitLines(body)
 	longest := 0
@@ -194,7 +180,6 @@ func qpSafe(c byte) bool {
 	return c == '\t' || c == '\r' || c == '\n' || (c >= ' ' && c <= '~' && c != '=')
 }
 
-// qpBodyEncode is quoprimime.body_encode(body.decode('latin-1'), maxlen) with eol "\n".
 func qpBodyEncode(body []byte, maxlen int) []byte {
 	if len(body) == 0 {
 		return nil

@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
-// Record is one line of testdata/corpora/smtp.jsonl.
 type Record struct {
 	Fn          string          `json:"fn"`
 	Case        string          `json:"case"`
@@ -40,7 +39,6 @@ type PyError struct {
 	Message string `json:"message"`
 }
 
-// Failure is the stage a fake server fails at and the Python exception it raises there.
 type Failure struct {
 	Stage string            `json:"stage"`
 	Type  string            `json:"type"`
@@ -56,14 +54,12 @@ type draft struct {
 	ToAddrs   string `json:"to_addrs"`
 }
 
-// Corpus is the SMTP corpus with the draft of every case by name and the pinned clock.
 type Corpus struct {
 	Records []Record
 	Drafts  map[string]smtp.Fields
 	Now     float64
 }
 
-// LoadCorpus reads testdata/corpora/smtp.jsonl. The unconfigured cases send the drafts the generator gave them.
 func LoadCorpus(t testing.TB) Corpus {
 	t.Helper()
 	f, err := os.Open(filepath.Join(golden.Dir(), "..", "corpora", "smtp.jsonl"))
@@ -105,7 +101,6 @@ func LoadCorpus(t testing.TB) Corpus {
 	return c
 }
 
-// Refusals decodes a JSON object of addr -> [code, text], keeping its key order.
 func Refusals(t testing.TB, raw json.RawMessage) smtp.Refusals {
 	t.Helper()
 	if len(raw) == 0 || string(raw) == "null" {
@@ -137,7 +132,6 @@ func Refusals(t testing.TB, raw json.RawMessage) smtp.Refusals {
 	return out
 }
 
-// Exception is the Go error that stands in for the Python exception of a failure record.
 func Exception(t testing.TB, f *Failure) error {
 	t.Helper()
 	str := func(i int) string {
@@ -174,7 +168,6 @@ func Exception(t testing.TB, f *Failure) error {
 	return nil
 }
 
-// NewServer is the record's fake server: its refusal map and its failure, if any.
 func NewServer(t testing.TB, r Record) *Server {
 	t.Helper()
 	s := &Server{Refused: Refusals(t, r.Refused)}
@@ -191,13 +184,10 @@ func NewServer(t testing.TB, r Record) *Server {
 	return s
 }
 
-// PinnedMsgID is the generator's make_msgid: <golden.0001@domain> for the sender's domain.
 func PinnedMsgID(domain string) string { return "<golden.0001@" + domain + ">" }
 
-// SenderDomain is sender.rsplit("@", 1)[-1].
 func SenderDomain(sender string) string { return sender[strings.LastIndex(sender, "@")+1:] }
 
-// RefusalMap is the refusal dict as the corpus records it: addr -> str((code, reply)).
 func RefusalMap(rs smtp.Refusals) map[string]string {
 	out := map[string]string{}
 	for _, r := range rs {

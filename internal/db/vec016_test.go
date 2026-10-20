@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
-// vec016 is atrium-vec016.json, recorded by tools/golden/make_vec016.py under SQLite 3.51.2 and sqlite-vec 0.1.6.
 type vec016 struct {
 	SQLite       string                       `json:"sqlite"`
 	SQLiteVec    string                       `json:"sqlite_vec"`
@@ -71,7 +70,6 @@ func hits(t *testing.T, q *sql.DB, query string, args ...any) []vec016Hit {
 	return out
 }
 
-// vecShadowTables returns the vec0 storage tables of message_vec and notion_vec.
 func vecShadowTables(t *testing.T, q *sql.DB) map[string]string {
 	t.Helper()
 	rows, err := q.Query("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND sql IS NOT NULL AND (name LIKE 'message\\_vec\\_%' ESCAPE '\\' OR name LIKE 'notion\\_vec\\_%' ESCAPE '\\')")
@@ -159,7 +157,6 @@ func TestVec016DB(t *testing.T) {
 	}
 	quickCheck(t, d)
 
-	// 0001 skips shadow tables; 0.1.9 must keep the 0.1.6 set as is and create the same set itself.
 	after := vecShadowTables(t, d.Read)
 	if !maps.Equal(after, rec.ShadowTables) {
 		t.Errorf("migration changed the vec0 shadow tables:\nbefore %v\nafter  %v", rec.ShadowTables, after)

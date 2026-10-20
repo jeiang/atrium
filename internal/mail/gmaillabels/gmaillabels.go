@@ -1,5 +1,3 @@
-// Package gmaillabels is gmail_labels.py: the scanner that proposes merging a small Gmail label into its parent
-// label or into the label that shares most of its senders.
 package gmaillabels
 
 import (
@@ -29,7 +27,6 @@ const (
 	Hierarchy         = "/"
 )
 
-// mailbox is the live received Gmail mail: each user label's message ids and each message's row.
 type mailbox struct {
 	members map[string][]int64
 	rows    map[int64]scanutil.Message
@@ -44,7 +41,6 @@ func (m mailbox) labels() []string {
 	return out
 }
 
-// load is label_members, with the rows messages_by_ids would read for them.
 func load(ctx context.Context, q proposals.Querier) (mailbox, error) {
 	m := mailbox{members: map[string][]int64{}, rows: map[int64]scanutil.Message{}}
 	rows, err := q.QueryContext(ctx, "SELECT id, labels, subject, from_name, from_addr, date_ts FROM messages "+
@@ -79,12 +75,10 @@ func load(ctx context.Context, q proposals.Querier) (mailbox, error) {
 	return m, nil
 }
 
-// distinct is the ids as messages_by_ids reads them: each once, by id.
 func distinct(ids []int64) []int64 {
 	return slices.Compact(slices.Sorted(slices.Values(ids)))
 }
 
-// parentOf is parent_of: the label above, "" when label is top-level.
 func parentOf(label string) (string, bool) {
 	i := strings.LastIndex(label, Hierarchy)
 	if i < 0 {
@@ -93,8 +87,6 @@ func parentOf(label string) (string, bool) {
 	return label[:i], true
 }
 
-// bestSibling is best_sibling: the big top-level label holding the largest share of this label's mail by sender,
-// when that share is at least MinOverlap.
 func (m mailbox) bestSibling(label string) string {
 	senders := map[string]int{}
 	total := 0
@@ -138,7 +130,6 @@ type candidate struct {
 	ids         []int64
 }
 
-// candidates is candidates: every small label without children, to merge into its parent or best sibling.
 func (m mailbox) candidates() []candidate {
 	var found []candidate
 	labels := m.labels()
@@ -158,7 +149,6 @@ func (m mailbox) candidates() []candidate {
 	return found
 }
 
-// Scan is scan: each candidate with an unknown fingerprint becomes a proposal created at ts.
 func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
 	m, err := load(ctx, d.Read)
 	if err != nil {

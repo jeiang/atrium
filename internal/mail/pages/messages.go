@@ -182,8 +182,6 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// moveCorrection is move_correction: in live mode the corrected message is moved at once, and the suffix of the
-// toast says what became of it. A failure never fails the request.
 func (s *service) moveCorrection(r *http.Request, found *message.View, id int64) string {
 	if s.deps.Cfg.Mode != safety.Live {
 		return ""

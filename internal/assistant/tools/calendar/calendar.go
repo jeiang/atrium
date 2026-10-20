@@ -1,5 +1,3 @@
-// Package calendartools is agent/tools/calendar.py: calendar_list, calendar_create, calendar_delete and
-// event_propose, and the undoers of the two direct writes.
 package calendartools
 
 import (
@@ -27,8 +25,6 @@ var eventProperties = `"calendar":{"type":"string","enum":["icloud","google"]},"
 	`"end":{"type":"string","description":"Exclusive end, same format. Default: one hour (all-day: one day) after start."},` +
 	`"all_day":{"type":"boolean","description":"start/end are dates"},"location":{"type":"string"},"notes":{"type":"string"}`
 
-// wrap is _wrap: a missing provider is NotConfigured, a CalendarError a ToolError; any other failure is the
-// Python exception that raised it.
 func wrap(err error) error {
 	var missing calendar.NotConfigured
 	var failed calendar.Error
@@ -263,7 +259,6 @@ func undoRecreate(ctx context.Context, q db.Querier, info map[string]any) (any, 
 	return py.Dict{{Key: "created", Value: restored.UID}}, nil
 }
 
-// RegisterUndoers adds the undoers of calendar_create and calendar_delete.
 func RegisterUndoers(r *writes.Registry) {
 	r.Register("calendar_delete", undoDelete)
 	r.Register("calendar_recreate", undoRecreate)
@@ -273,7 +268,6 @@ func schema(properties string, required string) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(`{"type":"object","properties":{%s},"required":%s,"additionalProperties":false}`, properties, required))
 }
 
-// Tools is TOOLS of calendar.py.
 func Tools() []tool.Tool {
 	return []tool.Tool{
 		{

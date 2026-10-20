@@ -1,5 +1,3 @@
-// Package birthdays is birthdays.py: upcoming birthdays and anniversaries from the address book (every contact
-// with a date qualifies).
 package birthdays
 
 import (
@@ -24,7 +22,6 @@ const (
 	DismissKind = "birthday"
 )
 
-// Date is a calendar date at midnight UTC; only its year, month and day matter.
 func Date(year int, month time.Month, day int) time.Time {
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }
@@ -37,8 +34,6 @@ func validDate(year, month, day int) (time.Time, bool) {
 	return when, int(when.Month()) == month && when.Day() == day
 }
 
-// Occurrence is occurrence: the next date on or after today with this month and day; Feb 29 falls on Feb 28 in
-// common years.
 func Occurrence(month, day int, today time.Time) (time.Time, error) {
 	for _, year := range [...]int{today.Year(), today.Year() + 1} {
 		when, ok := validDate(year, month, day)
@@ -52,10 +47,8 @@ func Occurrence(month, day int, today time.Time) (time.Time, error) {
 	return time.Time{}, errors.New("AssertionError: unreachable")
 }
 
-// Dismissals is dismissed_keys: the occurrence each (kind, key) was dismissed for.
 type Dismissals map[[2]string]string
 
-// DismissedKeys is dismissed_keys.
 func DismissedKeys(ctx context.Context, q db.Querier) (Dismissals, error) {
 	rows, err := q.QueryContext(ctx, "SELECT kind, key, occurrence FROM watch_dismissed")
 	if err != nil {
@@ -71,12 +64,10 @@ func DismissedKeys(ctx context.Context, q db.Querier) (Dismissals, error) {
 	return out, err
 }
 
-// ItemKey is item_key.
 func ItemKey(name string, entry contacts.Date) string {
 	return fmt.Sprintf("%s|%s|%02d-%02d", py.Casefold(name), entry.Kind, entry.Month, entry.Day)
 }
 
-// Item is one upcoming date.
 type Item struct {
 	Name      string   `json:"name"`
 	Kind      string   `json:"kind"`
@@ -88,8 +79,6 @@ type Item struct {
 	Key       string   `json:"key"`
 }
 
-// Upcoming is upcoming: the dates within days of today, soonest first. A dismissal hides only the occurrence it
-// was made for.
 func Upcoming(cards []contacts.Card, today time.Time, days int, dismissed Dismissals) ([]Item, error) {
 	out := []Item{}
 	for _, card := range cards {
@@ -131,7 +120,6 @@ func Upcoming(cards []contacts.Card, today time.Time, days int, dismissed Dismis
 	return out, nil
 }
 
-// UpcomingFor is upcoming_for: ok is false when no contacts directory is configured.
 func UpcomingFor(ctx context.Context, q db.Querier, cfg config.Config, today time.Time, days int) (items []Item, ok bool, err error) {
 	if cfg.ContactsDir == "" {
 		return nil, false, nil
@@ -144,7 +132,6 @@ func UpcomingFor(ctx context.Context, q db.Querier, cfg config.Config, today tim
 	return items, err == nil, err
 }
 
-// Dismiss is dismiss: it hides the key's occurrence on occurrenceDate (an ISO date).
 func Dismiss(ctx context.Context, q db.Querier, key, occurrenceDate string, ts float64) error {
 	if _, _, _, ok := py.DateFromISOFormat(occurrenceDate); !ok {
 		return fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrValue, py.Repr(occurrenceDate))

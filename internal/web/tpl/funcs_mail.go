@@ -18,18 +18,15 @@ func init() {
 	})
 }
 
-// condID is the random id prefix of one condition row: cond-NNNNNN with six digits.
 func condID() string {
 	return fmt.Sprintf("cond-%d", 100000+rand.IntN(900000))
 }
 
-// percent is "%.0f%%" of a value that is already a percentage.
 func percent(v any) (string, error) {
 	f, err := toFloat(v)
 	return fmt.Sprintf("%.0f%%", f), err
 }
 
-// splitIn reports whether item is one of the sep-separated parts of s.
 func splitIn(sep string, s, item any) bool {
 	want := str(item)
 	for _, part := range strings.Split(str(s), sep) {
@@ -40,7 +37,6 @@ func splitIn(sep string, s, item any) bool {
 	return false
 }
 
-// sumValues is the sum of a mapping's integer values, Jinja's values() | sum.
 func sumValues(m any) (int64, error) {
 	var total int64
 	rv := reflect.ValueOf(m)

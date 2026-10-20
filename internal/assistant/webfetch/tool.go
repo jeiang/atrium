@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// TextDefault is the largest max_chars and its default.
 const TextDefault = 12000
 
 var defaultPorts = map[string]int{"http": 80, "https": 443}
@@ -62,12 +61,8 @@ var inputSchema = json.RawMessage(`{"type":"object","properties":{"url":{"type":
 	`"max_chars":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(TextDefault) + `}},` +
 	`"required":["url"],"additionalProperties":false}`)
 
-// Tools is TOOLS of web_fetch.py, fetching through the production Fetcher.
 func Tools() []tool.Tool { return []tool.Tool{Tool(&Fetcher{})} }
 
-// Tool is the web_fetch tool fetching through f. It fetches only a URL in the run's allowed set, which holds what
-// the operator typed in the thread and what web_search returned; page text, uploaded files and mail never add to
-// it.
 func Tool(f *Fetcher) tool.Tool {
 	return tool.Tool{
 		Name: "web_fetch",
@@ -124,8 +119,6 @@ func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args py.Dict) (an
 	}, nil
 }
 
-// fetchFailed is the except clause of web_fetch: a Blocked, FetchError or LookupError is the model's error,
-// anything else escapes as the exception it is.
 func fetchFailed(err error) error {
 	var (
 		blocked Blocked

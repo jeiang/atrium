@@ -20,7 +20,6 @@ func isBusy(err error) bool {
 	return errors.As(err, &e) && e.Code()&0xff == sqlite3.SQLITE_BUSY
 }
 
-// IsConstraint reports a constraint violation, Python's sqlite3.IntegrityError.
 func IsConstraint(err error) bool {
 	var e *sqlite.Error
 	return errors.As(err, &e) && e.Code()&0xff == sqlite3.SQLITE_CONSTRAINT

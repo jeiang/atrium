@@ -1,6 +1,3 @@
-// Package rules is src/atrium/rules.py: the operator's routing rules, their
-// validation and JSON import/export, and the learned rules derived from
-// what is already filed.
 package rules
 
 import (
@@ -10,7 +7,6 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
-	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -27,7 +23,6 @@ const (
 )
 
 var (
-	// ListFields maps a list-valued rule field to its messages column.
 	ListFields = map[string]string{
 		"to":       "to_addrs",
 		"dkim_d":   "dkim_d",
@@ -35,7 +30,6 @@ var (
 		"att_type": "att_types",
 		"att_name": "att_names",
 	}
-	// ScalarFields maps a scalar rule field to its messages column.
 	ScalarFields = map[string]string{
 		"from_addr":    "from_addr",
 		"from_domain":  "from_domain",
@@ -49,7 +43,6 @@ var (
 		"precedence":   "precedence",
 		"category":     "category",
 	}
-	// FieldNames is FIELDS in Python's iteration order: the scalar fields, then the list fields.
 	FieldNames = []string{
 		"from_addr", "from_domain", "from_name", "reply_to", "rpath_domain", "list_id", "subject", "subject_tmpl",
 		"msgid_domain", "precedence", "category", "to", "dkim_d", "esp", "att_type", "att_name",
@@ -59,7 +52,6 @@ var (
 	Actions      = []string{ActionFile, ActionDelete}
 )
 
-// LearnedLevel is one precision level of the learned rules.
 type LearnedLevel struct {
 	Name    string
 	Columns []string
@@ -71,7 +63,6 @@ var LearnedLevels = []LearnedLevel{
 	{"domain", []string{"from_domain"}},
 }
 
-// RuleError is Python's RuleError, a ValueError whose text is shown to the operator.
 type RuleError string
 
 func (e RuleError) Error() string { return string(e) }
@@ -82,8 +73,6 @@ func (RuleError) PyModule() string { return "atrium.rules" }
 
 func ruleErrorf(format string, args ...any) error { return RuleError(fmt.Sprintf(format, args...)) }
 
-// Condition is one `when` entry. Value is nil, a string, a []string, an int64, a *big.Int or a float64;
-// HasValue tells an absent value from a null one.
 type Condition struct {
 	Field    string
 	Op       string
@@ -91,7 +80,6 @@ type Condition struct {
 	HasValue bool
 }
 
-// Rule is one operator rule; Account and Dest are nil where Python has None.
 type Rule struct {
 	ID         string
 	Account    *string
@@ -100,7 +88,6 @@ type Rule struct {
 	Conditions []Condition
 }
 
-// Dict is the condition as the Python dict: field, op and, when present, value.
 func (c Condition) Dict() py.Dict {
 	d := py.Dict{{Key: "field", Value: c.Field}, {Key: "op", Value: c.Op}}
 	if c.HasValue {
@@ -109,14 +96,10 @@ func (c Condition) Dict() py.Dict {
 	return d
 }
 
-// JSON is json.dumps of the condition as the rules table stores it.
 func (c Condition) JSON() string { return py.JSONDumps(c.Dict()) }
 
-// MarshalJSON is JSON for encoding/json callers; it fails on a non-finite value, so serialize with py.JSONDumps
-// where one is possible.
 func (c Condition) MarshalJSON() ([]byte, error) { return []byte(c.JSON()), nil }
 
-// ConditionsJSON is json.dumps of a rule's conditions, the text of rules.conditions.
 func ConditionsJSON(conds []Condition) string {
 	parts := make([]string, len(conds))
 	for i, c := range conds {
@@ -125,8 +108,6 @@ func ConditionsJSON(conds []Condition) string {
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
-// Message is the columns of a messages row that rules, the router and the rule editor read. The list columns
-// keep the JSON text stored in the database.
 type Message struct {
 	ID          int64
 	Account     string
@@ -153,15 +134,12 @@ type Message struct {
 	Location    string
 }
 
-// MessageColumns is the SELECT list ScanMessage reads.
 const MessageColumns = "id, account, from_addr, from_domain, from_name, reply_to, rpath_domain, list_id, subject, " +
 	"subject_tmpl, msgid_domain, precedence, category, to_addrs, dkim_d, esp, att_types, att_names, date_ts, " +
 	"in_inbox, embedded, COALESCE(folder, ''), location"
 
-// Scanner is *sql.Row or *sql.Rows.
 type Scanner interface{ Scan(dest ...any) error }
 
-// ScanMessage reads one row selected with MessageColumns.
 func ScanMessage(s Scanner) (Message, error) {
 	var m Message
 	var dateTS sql.NullFloat64
@@ -215,7 +193,6 @@ func (m *Message) list(field string) string {
 	return m.AttNames
 }
 
-// FieldValues is rules.field_values: the values a condition on field looks at.
 func FieldValues(m *Message, field string) ([]string, error) {
 	if _, ok := ListFields[field]; ok {
 		raw, err := py.JSONLoads([]byte(m.list(field)))
@@ -244,14 +221,10 @@ var (
 	errNotStr  = errors.New("expected a list of strings")
 )
 
-// Now is the clock of age_days conditions, time.time().
-var Now = func() float64 { return float64(time.Now().UnixNano()) / 1e9 }
-
-func ageMatches(m *Message, days float64) bool {
-	return m.DateTS != 0 && (Now()-m.DateTS)/secondsPerDay >= days
+func ageMatches(m *Message, days, now float64) bool {
+	return m.DateTS != 0 && (now-m.DateTS)/secondsPerDay >= days
 }
 
-// DomainSuffix is rules.domain_suffix.
 func DomainSuffix(value, suffix string) bool {
 	return value == suffix || strings.HasSuffix(value, "."+suffix)
 }
@@ -291,21 +264,17 @@ func number(v any) (float64, bool) {
 	return 0, false
 }
 
-// Pattern compiles the pattern of a `re` condition as condition_matches does.
 func Pattern(value string) (*rx.Regexp, error) { return rx.Compile(value, rx.IgnoreCase) }
 
-// CheckPattern compiles value as validate_condition does.
 func CheckPattern(value string) (*rx.Regexp, error) { return rx.Compile(value, 0) }
 
-// Matches is rules.condition_matches. A match attempt that times out is a non-match; any other error is a stored
-// condition or message column that Python would also fail on.
-func (c Condition) Matches(m *Message) (bool, error) {
+func (c Condition) Matches(m *Message, now float64) (bool, error) {
 	if c.Field == AgeField {
 		days, ok := number(c.Value)
 		if !ok {
 			return false, fmt.Errorf("age_days value %s: not a number", py.ReprValue(c.Value))
 		}
-		return ageMatches(m, days), nil
+		return ageMatches(m, days, now), nil
 	}
 	values, err := FieldValues(m, c.Field)
 	if err != nil {
@@ -393,10 +362,9 @@ func anyNonEmpty(values []string) bool {
 	return false
 }
 
-// Matches is rules.rule_matches: every condition holds.
-func (r Rule) Matches(m *Message) (bool, error) {
+func (r Rule) Matches(m *Message, now float64) (bool, error) {
 	for _, c := range r.Conditions {
-		ok, err := c.Matches(m)
+		ok, err := c.Matches(m, now)
 		if err != nil || !ok {
 			return false, err
 		}
@@ -404,10 +372,9 @@ func (r Rule) Matches(m *Message) (bool, error) {
 	return true, nil
 }
 
-// FirstMatch is rules.first_match; nil when no rule matches.
-func FirstMatch(m *Message, rules []Rule) (*Rule, error) {
+func FirstMatch(m *Message, rules []Rule, now float64) (*Rule, error) {
 	for i := range rules {
-		ok, err := rules[i].Matches(m)
+		ok, err := rules[i].Matches(m, now)
 		if err != nil {
 			return nil, err
 		}
@@ -418,7 +385,6 @@ func FirstMatch(m *Message, rules []Rule) (*Rule, error) {
 	return nil, nil
 }
 
-// object reads a JSON object given as py.Dict or map[string]any.
 func object(v any) (get func(string) (any, bool), ok bool) {
 	switch v := v.(type) {
 	case py.Dict:
@@ -467,7 +433,6 @@ func inList(s string, list []string) bool {
 	return false
 }
 
-// ValidateCondition is rules.validate_condition for one decoded JSON value.
 func ValidateCondition(raw any) (Condition, error) {
 	get, ok := object(raw)
 	if !ok {
@@ -522,7 +487,6 @@ func ValidateCondition(raw any) (Condition, error) {
 	return Condition{field, op, value, true}, nil
 }
 
-// ValidateRule is rules.validate_rule for one decoded JSON value.
 func ValidateRule(raw any) (Rule, error) {
 	get, ok := object(raw)
 	if !ok {
@@ -584,7 +548,6 @@ func ValidateRule(raw any) (Rule, error) {
 	return rule, nil
 }
 
-// ParseRuleset is rules.parse_ruleset: a list of rules or {"rules": [...]}.
 func ParseRuleset(document any) ([]Rule, error) {
 	list := document
 	if get, ok := object(document); ok {
@@ -617,7 +580,6 @@ func nullable(s *string) any {
 	return *s
 }
 
-// ImportRules replaces the rules table with the document's rules in one transaction and returns their count.
 func ImportRules(ctx context.Context, d *db.DB, document any) (int, error) {
 	parsed, err := ParseRuleset(document)
 	if err != nil {
@@ -639,7 +601,6 @@ func ImportRules(ctx context.Context, d *db.DB, document any) (int, error) {
 	return len(parsed), err
 }
 
-// Querier is the read side of *sql.DB and *sql.Tx.
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
@@ -721,18 +682,14 @@ func valueListLoose(list []any) ([]string, bool) {
 	return out, true
 }
 
-// LoadRules is rules.load_rules(conn, account): the rules scoped to account or to every account, by position.
 func LoadRules(ctx context.Context, q Querier, account string) ([]Rule, error) {
 	return loadRules(ctx, q, func(a sql.NullString) bool { return !a.Valid || a.String == account })
 }
 
-// LoadAllRules is rules.load_rules(conn) without an account.
 func LoadAllRules(ctx context.Context, q Querier) ([]Rule, error) {
 	return loadRules(ctx, q, func(sql.NullString) bool { return true })
 }
 
-// ExportRules is rules.export_rules as the Python dict, to be serialized with py.JSONDumps: a condition value
-// may be a non-finite float, which encoding/json cannot write.
 func ExportRules(ctx context.Context, q Querier) (py.Dict, error) {
 	loaded, err := LoadAllRules(ctx, q)
 	if err != nil {
@@ -757,14 +714,12 @@ func ExportRules(ctx context.Context, q Querier) (py.Dict, error) {
 	return py.Dict{{Key: "rules", Value: out}}, nil
 }
 
-// Picked is a folder that cleared the learned-rule thresholds.
 type Picked struct {
 	Folder string
 	Purity float64
 	Total  int
 }
 
-// PickPure is rules.pick_pure with the configured thresholds.
 func PickPure(counts map[string]int) (Picked, bool) {
 	return pickPure(counts, config.RuleMinN, config.RuleMinPurity)
 }
@@ -790,8 +745,6 @@ func pickPure(counts map[string]int, minN int, minPurity float64) (Picked, bool)
 	return Picked{folder, purity, total}, true
 }
 
-// LearnedCounts is rules.learned_counts: filed messages of account per folder whose columns equal values,
-// leaving out message excludeID when it is not 0.
 func LearnedCounts(ctx context.Context, q Querier, account string, columns []string, values []string, excludeID int64) (map[string]int, error) {
 	where := make([]string, len(columns))
 	for i, c := range columns {
@@ -824,7 +777,6 @@ func LearnedCounts(ctx context.Context, q Querier, account string, columns []str
 	return counts, rows.Err()
 }
 
-// Learned is a learned rule that matched a message.
 type Learned struct {
 	Level  string
 	Dest   string
@@ -840,7 +792,6 @@ func levelValues(m *Message, columns []string) []string {
 	return out
 }
 
-// LearnedMatch is rules.learned_match; nil when no level clears the thresholds.
 func LearnedMatch(ctx context.Context, q Querier, m *Message) (*Learned, error) {
 	for _, level := range LearnedLevels {
 		values := levelValues(m, level.Columns)

@@ -38,63 +38,6 @@ func contactsDir(t *testing.T) string {
 	return filepath.Join(root, "contacts")
 }
 
-func sorted(c Contacts) []string {
-	out := make([]string, 0, len(c))
-	for k := range c {
-		out = append(out, k)
-	}
-	slices.Sort(out)
-	return out
-}
-
-func TestVCardEmailsHandlesGroupsParamsAndFolding(t *testing.T) {
-	if got := sorted(VCardEmails(vcard)); !slices.Equal(got, []string{"other@bar.test", "pal@friends.test"}) {
-		t.Errorf("got %v", got)
-	}
-}
-
-func TestVCardEmailsHandlesDottedParams(t *testing.T) {
-	text := "BEGIN:VCARD\r\nEMAIL;TYPE=a.b:x@y.test\r\nitem2.EMAIL;X-LABEL=v1.2:z@y.test\r\nEND:VCARD\r\n"
-	if got := sorted(VCardEmails(text)); !slices.Equal(got, []string{"x@y.test", "z@y.test"}) {
-		t.Errorf("got %v", got)
-	}
-}
-
-func TestLoadContactsMissingDirectory(t *testing.T) {
-	for _, dir := range []string{"", filepath.Join(t.TempDir(), "absent")} {
-		if got := LoadContacts(dir); len(got) != 0 {
-			t.Errorf("LoadContacts(%q) = %v", dir, got)
-		}
-	}
-}
-
-func TestContactsRuleConditions(t *testing.T) {
-	known := LoadContacts(contactsDir(t))
-	check := func(addr, listID string) bool {
-		got, err := ContactsFlag(Row{FromAddr: addr, ListID: listID}, known)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return got
-	}
-	if !check("pal@friends.test", "") {
-		t.Error("a contact is flagged")
-	}
-	if check("stranger@friends.test", "") {
-		t.Error("a stranger is not")
-	}
-	if check("other@bar.test", "<l>") {
-		t.Error("a list message is not")
-	}
-	known["noreply@shop.test"] = struct{}{}
-	known["notifications@shop.test"] = struct{}{}
-	for _, addr := range []string{"noreply@shop.test", "notifications@shop.test"} {
-		if check(addr, "") {
-			t.Errorf("%s is automated", addr)
-		}
-	}
-}
-
 type decisionRow struct {
 	contacts int
 	llm      *int
@@ -184,6 +127,63 @@ func TestFlagAccountPropagatesMalformedVerdict(t *testing.T) {
 	}
 	if got := readDecisions(t, d); len(got) != 0 {
 		t.Errorf("rows = %+v", got)
+	}
+}
+
+func sorted(c Contacts) []string {
+	out := make([]string, 0, len(c))
+	for k := range c {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
+}
+
+func TestVCardEmailsHandlesGroupsParamsAndFolding(t *testing.T) {
+	if got := sorted(VCardEmails(vcard)); !slices.Equal(got, []string{"other@bar.test", "pal@friends.test"}) {
+		t.Errorf("got %v", got)
+	}
+}
+
+func TestVCardEmailsHandlesDottedParams(t *testing.T) {
+	text := "BEGIN:VCARD\r\nEMAIL;TYPE=a.b:x@y.test\r\nitem2.EMAIL;X-LABEL=v1.2:z@y.test\r\nEND:VCARD\r\n"
+	if got := sorted(VCardEmails(text)); !slices.Equal(got, []string{"x@y.test", "z@y.test"}) {
+		t.Errorf("got %v", got)
+	}
+}
+
+func TestLoadContactsMissingDirectory(t *testing.T) {
+	for _, dir := range []string{"", filepath.Join(t.TempDir(), "absent")} {
+		if got := LoadContacts(dir); len(got) != 0 {
+			t.Errorf("LoadContacts(%q) = %v", dir, got)
+		}
+	}
+}
+
+func TestContactsRuleConditions(t *testing.T) {
+	known := LoadContacts(contactsDir(t))
+	check := func(addr, listID string) bool {
+		got, err := ContactsFlag(Row{FromAddr: addr, ListID: listID}, known)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	if !check("pal@friends.test", "") {
+		t.Error("a contact is flagged")
+	}
+	if check("stranger@friends.test", "") {
+		t.Error("a stranger is not")
+	}
+	if check("other@bar.test", "<l>") {
+		t.Error("a list message is not")
+	}
+	known["noreply@shop.test"] = struct{}{}
+	known["notifications@shop.test"] = struct{}{}
+	for _, addr := range []string{"noreply@shop.test", "notifications@shop.test"} {
+		if check(addr, "") {
+			t.Errorf("%s is automated", addr)
+		}
 	}
 }
 

@@ -44,31 +44,6 @@ func lines(texts ...string) []datum {
 	return out
 }
 
-func TestParseListQuotedAndAtomNames(t *testing.T) {
-	boxes, err := parseList(lines(
-		`(\HasNoChildren \Trash) "/" "Deleted Messages"`,
-		`(\HasNoChildren) "/" INBOX`,
-		`(\HasChildren \Noselect) "/" "[Gmail]"`,
-		`(\HasNoChildren) "/" "Caf&AOk-/Sub"`,
-	))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var names []string
-	for _, b := range boxes {
-		names = append(names, b.Name)
-	}
-	if want := []string{"Deleted Messages", "INBOX", "[Gmail]", "Café/Sub"}; !reflect.DeepEqual(names, want) {
-		t.Fatalf("names = %q, want %q", names, want)
-	}
-	if want := []string{`\HasNoChildren`, `\Trash`}; !reflect.DeepEqual(boxes[0].Flags, want) {
-		t.Errorf("flags = %q", boxes[0].Flags)
-	}
-	if boxes[3].IMAPName != "Caf&AOk-/Sub" || boxes[0].Delimiter != "/" {
-		t.Errorf("imap name %q, delimiter %q", boxes[3].IMAPName, boxes[0].Delimiter)
-	}
-}
-
 func TestParseListSkipsLiteralsAndKeepsNILDelimiter(t *testing.T) {
 	data := []datum{
 		{text: []byte(`(\HasNoChildren) "/" {5}`), lit: []byte("Odd\"x"), tuple: true},
@@ -90,13 +65,6 @@ func TestParseListSkipsLiteralsAndKeepsNILDelimiter(t *testing.T) {
 	}
 }
 
-func TestParseLabelsMixedQuoting(t *testing.T) {
-	got, err := parseLabels(`\Inbox "\\Important" "Personal/Friends" "Caf&AOk-"`)
-	if want := []string{`\Inbox`, `\Important`, "Personal/Friends", "Café"}; err != nil || !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %q, %v", got, err)
-	}
-}
-
 func TestParseStatus(t *testing.T) {
 	st, err := parseStatus(lines("INBOX (MESSAGES 3 UIDNEXT 9 UIDVALIDITY 77 HIGHESTMODSEQ 1234)"))
 	if err != nil || st.UIDValidity != 77 || st.UIDNext != 9 || st.Messages != 3 || st.HighestModSeq == nil || *st.HighestModSeq != 1234 {
@@ -108,57 +76,6 @@ func TestParseStatus(t *testing.T) {
 	}
 	if st, err = parseStatus([]datum{{none: true}}); err != nil || st != (mail.Status{}) {
 		t.Fatalf("no STATUS response: got %+v, %v", st, err)
-	}
-}
-
-func TestParseFetchFullGmailStyle(t *testing.T) {
-	data := []datum{
-		{
-			text: []byte(`1 (X-GM-MSGID 111 X-GM-THRID 222 UID 5 RFC822.SIZE 900 INTERNALDATE "05-Oct-2026 10:11:12 +0000" ` +
-				`BODYSTRUCTURE (("text" "plain" ("charset" "utf-8") NIL NIL "7bit" 10 1)` +
-				`("application" "pdf" ("name" "Bill 1.pdf") NIL NIL "base64" 5000 NIL ("attachment" ("filename" "Bill 1.pdf")))` +
-				` "mixed") BODY[HEADER] {9}`),
-			lit:   []byte("Subject: x"),
-			tuple: true,
-		},
-		{text: []byte(" BODY[TEXT]<0> {4}"), lit: []byte("body"), tuple: true},
-		{text: []byte(` X-GM-LABELS (\Inbox "\\Important" "Personal/Friends") FLAGS (\Seen $Junk))`)},
-	}
-	items, err := parseFetch(data)
-	if err != nil || len(items) != 1 {
-		t.Fatalf("got %d items, %v", len(items), err)
-	}
-	want := mail.Message{
-		UID: 5, Flags: []string{`\Seen`, "$Junk"}, Labels: []string{`\Inbox`, `\Important`, "Personal/Friends"},
-		Size: 900, GmMsgID: "111", GmThrID: "222", InternalDate: "05-Oct-2026 10:11:12 +0000",
-		Attachments: []mail.Attachment{{Kind: "application/pdf", Name: "Bill 1.pdf"}},
-		Header:      []byte("Subject: x"), Text: []byte("body"),
-	}
-	if !reflect.DeepEqual(items[0], want) {
-		t.Fatalf("got  %#v\nwant %#v", items[0], want)
-	}
-}
-
-func TestParseFetchFlagOnlyLinesAndModseq(t *testing.T) {
-	items, err := parseFetch(lines(`1 (UID 5 MODSEQ (900) FLAGS (\Seen \Flagged))`, `2 (UID 7 MODSEQ (901) FLAGS ())`))
-	if err != nil || len(items) != 2 {
-		t.Fatalf("got %d items, %v", len(items), err)
-	}
-	if items[0].UID != 5 || items[1].UID != 7 || items[0].ModSeq != 900 {
-		t.Fatalf("got %+v", items)
-	}
-	if !reflect.DeepEqual(items[0].Flags, []string{`\Seen`, `\Flagged`}) || !reflect.DeepEqual(items[1].Flags, []string{}) {
-		t.Fatalf("flags %q %q", items[0].Flags, items[1].Flags)
-	}
-	if items[1].Labels != nil || items[1].Attachments != nil || items[1].InternalDate != "" || items[1].Size != 0 {
-		t.Fatalf("absent items must stay None: %#v", items[1])
-	}
-}
-
-func TestParseFetchDropsGroupsWithoutUIDAndNone(t *testing.T) {
-	items, err := parseFetch([]datum{{none: true}, {text: []byte(`3 (FLAGS (\Seen))`)}, {text: []byte(`4 (UID 9 FLAGS ())`)}})
-	if err != nil || len(items) != 1 || items[0].UID != 9 {
-		t.Fatalf("got %+v, %v", items, err)
 	}
 }
 
@@ -252,5 +169,88 @@ func TestMailboxArg(t *testing.T) {
 		if got, err := mailboxArg(in); err == nil {
 			t.Errorf("mailboxArg(%q) = %q, want an error", in, got)
 		}
+	}
+}
+
+func TestParseListQuotedAndAtomNames(t *testing.T) {
+	boxes, err := parseList(lines(
+		`(\HasNoChildren \Trash) "/" "Deleted Messages"`,
+		`(\HasNoChildren) "/" INBOX`,
+		`(\HasChildren \Noselect) "/" "[Gmail]"`,
+		`(\HasNoChildren) "/" "Caf&AOk-/Sub"`,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, b := range boxes {
+		names = append(names, b.Name)
+	}
+	if want := []string{"Deleted Messages", "INBOX", "[Gmail]", "Café/Sub"}; !reflect.DeepEqual(names, want) {
+		t.Fatalf("names = %q, want %q", names, want)
+	}
+	if want := []string{`\HasNoChildren`, `\Trash`}; !reflect.DeepEqual(boxes[0].Flags, want) {
+		t.Errorf("flags = %q", boxes[0].Flags)
+	}
+	if boxes[3].IMAPName != "Caf&AOk-/Sub" || boxes[0].Delimiter != "/" {
+		t.Errorf("imap name %q, delimiter %q", boxes[3].IMAPName, boxes[0].Delimiter)
+	}
+}
+
+func TestParseLabelsMixedQuoting(t *testing.T) {
+	got, err := parseLabels(`\Inbox "\\Important" "Personal/Friends" "Caf&AOk-"`)
+	if want := []string{`\Inbox`, `\Important`, "Personal/Friends", "Café"}; err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestParseFetchFullGmailStyle(t *testing.T) {
+	data := []datum{
+		{
+			text: []byte(`1 (X-GM-MSGID 111 X-GM-THRID 222 UID 5 RFC822.SIZE 900 INTERNALDATE "05-Oct-2026 10:11:12 +0000" ` +
+				`BODYSTRUCTURE (("text" "plain" ("charset" "utf-8") NIL NIL "7bit" 10 1)` +
+				`("application" "pdf" ("name" "Bill 1.pdf") NIL NIL "base64" 5000 NIL ("attachment" ("filename" "Bill 1.pdf")))` +
+				` "mixed") BODY[HEADER] {9}`),
+			lit:   []byte("Subject: x"),
+			tuple: true,
+		},
+		{text: []byte(" BODY[TEXT]<0> {4}"), lit: []byte("body"), tuple: true},
+		{text: []byte(` X-GM-LABELS (\Inbox "\\Important" "Personal/Friends") FLAGS (\Seen $Junk))`)},
+	}
+	items, err := parseFetch(data)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("got %d items, %v", len(items), err)
+	}
+	want := mail.Message{
+		UID: 5, Flags: []string{`\Seen`, "$Junk"}, Labels: []string{`\Inbox`, `\Important`, "Personal/Friends"},
+		Size: 900, GmMsgID: "111", GmThrID: "222", InternalDate: "05-Oct-2026 10:11:12 +0000",
+		Attachments: []mail.Attachment{{Kind: "application/pdf", Name: "Bill 1.pdf"}},
+		Header:      []byte("Subject: x"), Text: []byte("body"),
+	}
+	if !reflect.DeepEqual(items[0], want) {
+		t.Fatalf("got  %#v\nwant %#v", items[0], want)
+	}
+}
+
+func TestParseFetchFlagOnlyLinesAndModseq(t *testing.T) {
+	items, err := parseFetch(lines(`1 (UID 5 MODSEQ (900) FLAGS (\Seen \Flagged))`, `2 (UID 7 MODSEQ (901) FLAGS ())`))
+	if err != nil || len(items) != 2 {
+		t.Fatalf("got %d items, %v", len(items), err)
+	}
+	if items[0].UID != 5 || items[1].UID != 7 || items[0].ModSeq != 900 {
+		t.Fatalf("got %+v", items)
+	}
+	if !reflect.DeepEqual(items[0].Flags, []string{`\Seen`, `\Flagged`}) || !reflect.DeepEqual(items[1].Flags, []string{}) {
+		t.Fatalf("flags %q %q", items[0].Flags, items[1].Flags)
+	}
+	if items[1].Labels != nil || items[1].Attachments != nil || items[1].InternalDate != "" || items[1].Size != 0 {
+		t.Fatalf("absent items must stay None: %#v", items[1])
+	}
+}
+
+func TestParseFetchDropsGroupsWithoutUIDAndNone(t *testing.T) {
+	items, err := parseFetch([]datum{{none: true}, {text: []byte(`3 (FLAGS (\Seen))`)}, {text: []byte(`4 (UID 9 FLAGS ())`)}})
+	if err != nil || len(items) != 1 || items[0].UID != 9 {
+		t.Fatalf("got %+v, %v", items, err)
 	}
 }

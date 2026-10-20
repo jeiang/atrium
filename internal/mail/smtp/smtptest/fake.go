@@ -1,5 +1,3 @@
-// Package smtptest is a scripted smtp.Factory in the shape of the Python tests' fake smtplib.SMTP: it records the
-// calls, fails at a chosen stage and returns a chosen per-recipient refusal map.
 package smtptest
 
 import (
@@ -9,7 +7,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/smtp"
 )
 
-// Call is one recorded call, as the corpus names them: connect, starttls, login, send_message and quit.
 type Call struct {
 	Call     string   `json:"call"`
 	Host     string   `json:"host,omitempty"`
@@ -21,7 +18,6 @@ type Call struct {
 	To       []string `json:"to_addrs,omitempty"`
 }
 
-// Sent is one accepted send_message.
 type Sent struct {
 	Host string
 	Msg  *smtp.Message
@@ -29,8 +25,6 @@ type Sent struct {
 	To   []string
 }
 
-// Server records every session it makes. Fail returns the error for a stage (connect, starttls, login, send, quit) or
-// nil; Refused is what send_message returns.
 type Server struct {
 	Fail    func(stage string) error
 	Refused smtp.Refusals
@@ -45,7 +39,6 @@ func (s *Server) fail(stage string) error {
 	return s.Fail(stage)
 }
 
-// Factory is the smtp.Factory over s.
 func (s *Server) Factory(_ context.Context, host string, port int, timeout time.Duration) (smtp.Session, error) {
 	s.Calls = append(s.Calls, Call{Call: "connect", Host: host, Port: port, Timeout: int(timeout / time.Second)})
 	if err := s.fail("connect"); err != nil {

@@ -1,5 +1,3 @@
-// Package smtp is the operator's draft send (src/atrium/smtp.py): STARTTLS submission on port 587 with the IMAP
-// credentials, smtplib's per-recipient refusal semantics and its error wording.
 package smtp
 
 import (
@@ -20,12 +18,10 @@ const (
 	ICloudDomain = "icloud.com"
 )
 
-// Hosts is SMTP_HOSTS.
 var Hosts = map[string]string{config.ICloud: "smtp.mail.me.com", config.Gmail: "smtp.gmail.com"}
 
 var log = logx.Logger("atrium.smtp")
 
-// Credentials is what smtp.send reads from the config: the IMAP login of an account.
 type Credentials interface {
 	Credential(account string) (user, password string, ok bool)
 }
@@ -39,8 +35,6 @@ func SenderAddress(account, user string) string {
 
 var commaRunRE = rx.MustCompile(`[\s,]*,[\s,]*`, 0)
 
-// SplitAddresses is smtp.split_addresses: the bare addresses of a To/Cc value, skipping empty list entries and
-// anything without an @ or with a space. The error is the RecursionError of a too deeply nested value.
 func SplitAddresses(text string) ([]string, error) {
 	text, _ = commaRunRE.Sub(", ", text, 0)
 	text = strings.Trim(mime.Strip(text), ",")
@@ -57,8 +51,6 @@ func SplitAddresses(text string) ([]string, error) {
 	return out, nil
 }
 
-// Send is smtp.send: it returns the recipients the server refused (empty on full success) and fails with a
-// SendError when nothing was sent.
 func Send(ctx context.Context, creds Credentials, account string, msg *Message, factory Factory) (Refusals, error) {
 	user, password, ok := creds.Credential(account)
 	if !ok {

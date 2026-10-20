@@ -53,8 +53,6 @@ func checkError(t *testing.T, want *smtptest.PyError, err error) {
 	}
 }
 
-// TestCorpusDrafts runs the drafts.py records of the SMTP corpus: normalize_addresses and the whole operator
-// send against the fake SMTP server and a fake iCloud mailbox in shadow mode.
 func TestCorpusDrafts(t *testing.T) {
 	c := smtptest.LoadCorpus(t)
 	n := 0

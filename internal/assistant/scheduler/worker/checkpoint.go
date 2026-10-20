@@ -6,7 +6,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 )
 
-// idle reports whether no claim of this worker is executing and no agent run is running in any process.
 func (w *Worker) idle(ctx context.Context) bool {
 	if w.active.Load() > 0 {
 		return false
@@ -18,9 +17,6 @@ func (w *Worker) idle(ctx context.Context) bool {
 	return running == 0
 }
 
-// checkpoint runs PRAGMA wal_checkpoint(TRUNCATE) at an idle point (nothing running since the last write),
-// so the WAL does not grow while the always-on web process holds a reader. A busy checkpoint is retried at
-// the next idle point.
 func (w *Worker) checkpoint(ctx context.Context) {
 	if ctx.Err() != nil || !w.dirty.Load() || !w.idle(ctx) {
 		return

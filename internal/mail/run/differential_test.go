@@ -3,18 +3,12 @@ package run_test
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -23,18 +17,14 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
-	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
-	"github.com/jeiang/atrium/internal/mail/openloops"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
-	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/mail/run"
-	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/testutil/golden"
+	"github.com/jeiang/atrium/internal/testutil/llmstub"
 )
 
 type scenarioStep struct {
@@ -98,50 +88,8 @@ type seeds struct {
 	ContactsVCF string                 `json:"contacts_vcf"`
 }
 
-type llmScript struct {
-	Defaults  map[string]json.RawMessage            `json:"defaults"`
-	BySubject map[string]map[string]json.RawMessage `json:"by_subject"`
-	Payees    map[string]json.RawMessage            `json:"payees"`
-}
-
-func loadPipeline(t *testing.T, file string, into any) {
+func recordedEvents(t *testing.T) func(feature string, body []byte) bool {
 	t.Helper()
-	if err := json.Unmarshal(golden.ReadFile(t, "pipeline", file), into); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func subjectOf(prompt string) (string, bool) {
-	for line := range strings.SplitSeq(prompt, "\n") {
-		if subject, ok := strings.CutPrefix(line, "Subject: "); ok {
-			return subject, true
-		}
-	}
-	return "", false
-}
-
-func sparseEmbedding(text string) []float64 {
-	v := make([]float64, config.EmbedDim)
-	for _, token := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
-		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
-	}) {
-		sum := sha256.Sum256([]byte(token))
-		v[binary.BigEndian.Uint32(sum[:4])%config.EmbedDim]++
-	}
-	return v
-}
-
-// models serves the generator's llama.cpp stand-in: embeddings are bucketed token counts and a chat reply is the
-// script's default for the feature the system prompt names, with the override of the message's subject.
-func models(t *testing.T) *httptest.Server {
-	t.Helper()
-	var script llmScript
-	loadPipeline(t, "llm_script.json", &script)
-	features := map[string]string{
-		llm.FolderSystem: "folder", llm.FlagSystem: "flag", llm.EventSystem: "event",
-		openloops.CommitmentSystem: "commitments", watches.PackageSystem: "package", rebalance.NameSystem: "folder_name",
-		money.ExtractSystem: "money", money.PayeeSystem: "payee",
-	}
 	var recorded []struct {
 		Feature string          `json:"feature"`
 		Request json.RawMessage `json:"request"`
@@ -167,67 +115,25 @@ func models(t *testing.T) *httptest.Server {
 			}
 		}
 	})
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Input    []string `json:"input"`
-			Messages []struct {
-				Content string `json:"content"`
-			} `json:"messages"`
+	return func(feature string, body []byte) bool {
+		if feature != "event" {
+			return true
 		}
-		body, _ := io.ReadAll(r.Body)
-		if err := json.Unmarshal(body, &req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+		key, err := golden.Canonical(body)
+		if err != nil || !wantEvents[string(key)] {
+			t.Errorf("event request body is not one Python sent:\n%s", body)
+			return false
 		}
-		if strings.HasSuffix(r.URL.Path, "/embeddings") {
-			data := make([]any, len(req.Input))
-			for i, text := range req.Input {
-				data[i] = map[string]any{"index": i, "embedding": sparseEmbedding(text)}
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
-			return
-		}
-		feature, known := features[req.Messages[0].Content]
-		if !known {
-			http.Error(w, "unknown system prompt", http.StatusBadRequest)
-			return
-		}
-		if feature == "event" {
-			key, err := golden.Canonical(body)
-			if err != nil || !wantEvents[string(key)] {
-				t.Errorf("event request body is not one Python sent:\n%s", body)
-				http.Error(w, "unexpected", http.StatusBadRequest)
-				return
-			}
-			sentEvents[string(key)] = true
-		}
-		if feature == "payee" {
-			content := req.Messages[1].Content
-			normalized := content[strings.Index(content, "\nNormalized: ")+len("\nNormalized: "):]
-			answer, known := script.Payees[normalized]
-			if !known {
-				answer = json.RawMessage(`{"name": ` + strconv.Quote(titleCase(normalized)) + `, "category": "Other"}`)
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": string(answer)}}}})
-			return
-		}
-		answer := script.Defaults[feature]
-		if subject, found := subjectOf(req.Messages[1].Content); found {
-			if override, ok := script.BySubject[subject][feature]; ok && feature != "folder_name" {
-				merged := map[string]json.RawMessage{}
-				_ = json.Unmarshal(answer, &merged)
-				over := map[string]json.RawMessage{}
-				_ = json.Unmarshal(override, &over)
-				for k, v := range over {
-					merged[k] = v
-				}
-				answer, _ = json.Marshal(merged)
-			}
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": string(answer)}}}})
-	}))
-	t.Cleanup(srv.Close)
-	return srv
+		sentEvents[string(key)] = true
+		return true
+	}
+}
+
+func loadPipeline(t *testing.T, file string, into any) {
+	t.Helper()
+	if err := json.Unmarshal(golden.ReadFile(t, "pipeline", file), into); err != nil {
+		t.Fatal(err)
+	}
 }
 
 type placed struct {
@@ -565,7 +471,7 @@ func TestGoldenPipelineDifferential(t *testing.T) {
 	loadPipeline(t, "scenario.json", &sc)
 	var seed seeds
 	loadPipeline(t, "mailboxes.json", &seed)
-	srv := models(t)
+	srv := llmstub.Server(t, recordedEvents(t))
 
 	dir := t.TempDir()
 	contacts := filepath.Join(dir, "contacts")
@@ -612,9 +518,6 @@ func TestGoldenPipelineDifferential(t *testing.T) {
 	for _, a := range sc.Money {
 		r.ledger = append(r.ledger, money.NewAccount{Bank: a.Bank, Name: a.Name, Kind: a.Kind, Currency: a.Currency, Last4: a.Last4, SenderPatterns: a.SenderPatterns, Forex: a.Forex})
 	}
-	rulesNow := rules.Now
-	rules.Now = r.now
-	t.Cleanup(func() { rules.Now = rulesNow })
 	r.accounts = seedReplay(t, seed, order)
 	clients := func(config.Config, config.Env) func(context.Context, string) (mail.Client, error) { return r.open }
 	opts := mailcmd.Options{Clients: clients, Now: r.now}
@@ -663,22 +566,4 @@ func TestGoldenPipelineDifferential(t *testing.T) {
 		}
 		compareTable(t, tb.name, want, r.tableRows(tb.name, tb.order))
 	}
-}
-
-func titleCase(s string) string {
-	var b strings.Builder
-	cased := false
-	for _, r := range s {
-		letter := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
-		switch {
-		case !letter:
-			b.WriteRune(r)
-		case cased:
-			b.WriteString(strings.ToLower(string(r)))
-		default:
-			b.WriteString(strings.ToUpper(string(r)))
-		}
-		cased = letter
-	}
-	return b.String()
 }

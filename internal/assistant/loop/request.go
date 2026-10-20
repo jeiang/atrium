@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// MaxTokensFor is max_tokens_for: thinking counts toward max_tokens, and xhigh and max think at length.
 func MaxTokensFor(effort string) int64 {
 	if effort == threads.XHigh || effort == threads.Max {
 		return MaxTokensDeep
@@ -27,7 +26,6 @@ func MaxTokensFor(effort string) int64 {
 	return MaxTokens
 }
 
-// TimeStamp is time_stamp: the date line each operator message carries, in the ATRIUM_TZ zone.
 func TimeStamp(startedAt float64, loc *time.Location) string {
 	sec, us := py.SplitTimestamp(startedAt)
 	return "Current date and time: " + time.Unix(sec, us*1000).In(loc).Format("Monday 2006-01-02 15:04 MST")
@@ -41,8 +39,6 @@ func cacheControlDict(cc prompts.CacheControl) py.Dict {
 	return d
 }
 
-// request is request_params without the messages, with what the loop derives from it once per run: the
-// system signature and the token estimate of the fixed part.
 type request struct {
 	params      anthropic.Params
 	cc          prompts.CacheControl
@@ -113,7 +109,6 @@ func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Threa
 	}, nil
 }
 
-// fixedPart is {system, tools} of the params as estimate reads them (tools only when the run has any).
 func fixedPart(system json.RawMessage, tools []json.RawMessage) (py.Dict, error) {
 	sys, err := py.JSONLoads(system)
 	if err != nil {
@@ -132,8 +127,6 @@ func fixedPart(system json.RawMessage, tools []json.RawMessage) (py.Dict, error)
 	return append(fixed, py.Pair{Key: "tools", Value: list}), nil
 }
 
-// stampMessages is stamp_messages: each operator message carries the date stamp of its own run, so earlier
-// turns never change.
 func stampMessages(active []actx.Message, runs []journal.Run, loc *time.Location) []actx.Message {
 	started := make(map[int64]float64, len(runs))
 	for _, r := range runs {
@@ -154,7 +147,6 @@ func stampMessages(active []actx.Message, runs []journal.Run, loc *time.Location
 	return out
 }
 
-// withProjectFiles is files.with_project_files: the project's files open the first user turn.
 func withProjectFiles(ctx context.Context, q db.Querier, thread threads.Thread, active []actx.Message) ([]actx.Message, error) {
 	if thread.ProjectID == nil || *thread.ProjectID == 0 {
 		return active, nil
@@ -171,7 +163,6 @@ func withProjectFiles(ctx context.Context, q db.Querier, thread threads.Thread, 
 	return append([]actx.Message{{Role: journal.User, Content: head}}, active...), nil
 }
 
-// anchor is the last response's conversation size and the seq it was journaled at.
 type anchor struct {
 	tokens int64
 	seq    int64
@@ -186,7 +177,6 @@ func messageTokens(m actx.Message) (int64, error) {
 	return shown + hidden, err
 }
 
-// estimate is estimate: the last response's usage plus everything appended since, else chars/4 of it all.
 func (req request) estimate(active []actx.Message, a *anchor) (int64, error) {
 	total := req.fixedTokens
 	if a != nil {
@@ -205,8 +195,6 @@ func (req request) estimate(active []actx.Message, a *anchor) (int64, error) {
 	return total, nil
 }
 
-// buildMessages is build_messages then files.expand: the request's messages, the last user block carrying the
-// history breakpoint, attachments expanded into their content blocks.
 func (req request) buildMessages(ctx context.Context, q db.Querier, scope files.Scope, messages []actx.Message) ([]json.RawMessage, error) {
 	out := make([]json.RawMessage, len(messages))
 	last := len(messages) - 1

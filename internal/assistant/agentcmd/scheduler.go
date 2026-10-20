@@ -18,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/sdnotify"
 )
 
-// Callables are the built-in jobs that run a function. A slice that ports one adds it here.
 func callables() map[string]worker.Callable {
 	out := map[string]worker.Callable{scheduler.FXRatesName: fxRates}
 	maps.Copy(out, calendarcmd.Callables())
@@ -35,8 +34,6 @@ func fxRates(ctx context.Context, e worker.Env) (worker.Result, error) {
 	return worker.Result{}, err
 }
 
-// schedulerCommand is `agent scheduler`: the worker loop until SIGTERM or SIGINT, which cancel the context and
-// exit 0 after the claims in flight returned. Their runs stay resumable.
 func schedulerCommand(cfgEnv config.Env) *cli.Command {
 	return &cli.Command{
 		Name: "scheduler",
