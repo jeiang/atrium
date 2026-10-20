@@ -75,7 +75,7 @@ func judge(stopReason string, blocks []json.RawMessage) (out []json.RawMessage, 
 }
 
 func callsKey(uses []ToolUse, results []json.RawMessage) (string, error) {
-	h := sha256.New()
+	var b strings.Builder
 	for _, u := range uses {
 		var input any
 		if len(bytes.TrimSpace(u.Input)) > 0 {
@@ -87,7 +87,7 @@ func callsKey(uses []ToolUse, results []json.RawMessage) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		fmt.Fprintf(h, "call %s %s\n", u.Name, canon)
+		fmt.Fprintf(&b, "call %s %s\n", u.Name, canon)
 	}
 	for _, raw := range results {
 		var r struct {
@@ -97,9 +97,10 @@ func callsKey(uses []ToolUse, results []json.RawMessage) (string, error) {
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return "", fmt.Errorf("loop: tool result: %w", err)
 		}
-		fmt.Fprintf(h, "result %t %s\n", r.IsError, r.Content)
+		fmt.Fprintf(&b, "result %t %s\n", r.IsError, r.Content)
 	}
-	return string(h.Sum(nil)), nil
+	sum := sha256.Sum256([]byte(b.String()))
+	return string(sum[:]), nil
 }
 
 func (s *state) repeat(uses []ToolUse, results []json.RawMessage) error {
