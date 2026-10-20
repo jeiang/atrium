@@ -232,6 +232,18 @@ func (p *pages) chatBranch(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
+	parent, err := threads.Get(detached(r), p.deps.DB.Read, threadID)
+	check(err)
+	if parent != nil && parent.ProjectID != nil && *parent.ProjectID != 0 {
+		project, err := projects.Get(detached(r), p.deps.DB.Read, *parent.ProjectID)
+		check(err)
+		if project != nil {
+			if problem, archived := archivedProject(project, "start chats in it"); archived {
+				p.failure(w, r, "Project archived", problem)
+				return
+			}
+		}
+	}
 	child, err := p.svc.Branch(detached(r), threadID, seq)
 	var unknown service.UnknownThread
 	var redo service.NothingToRedo

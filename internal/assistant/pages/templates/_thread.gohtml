@@ -3,7 +3,7 @@
 {{define "chat_thread"}}{{$d := .d}}{{$csrf := .csrf}}{{$v := $d.view}}{{$t := $v.thread}}{{$active := $v.active}}{{$busy := and $active (eq $active.state "running")}}
 <header class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
   <a href="/chat" class="btn" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Threads</a>
-  <span class="badge" data-variant="outline">{{$t.kind}}</span>
+  <span class="badge" data-variant="outline">{{lbl "thread_kind" $t.kind}}</span>
   <span class="tabular-nums">started {{template "when" (dict "epoch" $t.created_at "style" "datetime")}}</span>
   {{template "chat_meter" (dict "view" $v)}}
   {{if $t.project_id}}<a href="/projects/{{$t.project_id}}" class="btn" data-size="sm" data-variant="ghost">{{icon "folder"}}{{if $d.project}}{{$d.project.name}}{{else}}Project{{end}}</a>{{end}}
@@ -39,12 +39,13 @@
       <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{icon "trash-2"}}Delete</button>
     </form>
     {{end}}
-    <button type="button" class="btn md:hidden" data-size="sm" data-variant="outline" data-action="toggle-panel" aria-controls="panel" aria-expanded="false">{{icon "panel-right"}}Panel</button>
+    <button type="button" class="btn md:hidden" data-size="sm" data-variant="outline" id="panel-toggle" data-action="toggle-panel" aria-controls="panel" aria-expanded="false">{{icon "panel-right"}}Panel</button>
   </span>
 </header>
-<ol id="transcript" class="flex flex-col gap-4" aria-live="polite" aria-label="Conversation" data-thread="{{$t.id}}">
+<ol id="transcript" class="flex flex-col gap-4" aria-label="Conversation" data-thread="{{$t.id}}">
   {{template "chat_transcript" (dict "view" $v "csrf" $csrf)}}
 </ol>
+<p id="transcript-announcer" class="sr-only" role="status"></p>
 {{if ne $t.kind "subagent"}}
 <form id="composer" class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" method="post" action="/chat/{{$t.id}}/messages" enctype="multipart/form-data"
       hx-post="/chat/{{$t.id}}/messages" hx-encoding="multipart/form-data" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset data-attach>
