@@ -58,7 +58,6 @@ func certificate(t *testing.T, name string) (tls.Certificate, *x509.CertPool) {
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}, pool
 }
 
-// script is a scripted SMTP server: replies by verb, with the extensions it advertises before and after TLS.
 type script struct {
 	greeting string
 	ehlo     []string
@@ -233,7 +232,6 @@ func serve(t *testing.T, sc script) *server {
 	return s
 }
 
-// dialer connects to s whatever host smtp.Send asks for and verifies the certificate as smtp.test against roots.
 func (s *server) dialer(roots *x509.CertPool) smtp.Factory {
 	d := smtp.Dialer{
 		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {

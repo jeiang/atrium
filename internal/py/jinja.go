@@ -10,7 +10,6 @@ import (
 	"unicode/utf8"
 )
 
-// Truncate is Jinja's truncate(length, killwords=False, end="...", leeway=5) on a str.
 func Truncate(s string, length int) string {
 	const end, leeway = "...", 5
 	if utf8.RuneCountInString(s) <= length+leeway {
@@ -23,7 +22,6 @@ func Truncate(s string, length int) string {
 	return cut + end
 }
 
-// FileSizeFormat is Jinja's filesizeformat(value) with decimal units.
 func FileSizeFormat(value float64) string {
 	if value == 1 {
 		return "1 Byte"
@@ -42,7 +40,6 @@ func FileSizeFormat(value float64) string {
 	return ""
 }
 
-// URLQuote is urllib.parse.quote(s, safe="/") on UTF-8 bytes, which is Jinja's urlencode for a string.
 func URLQuote(s string) string { return quote(s, "/") }
 
 func quote(s, safe string) string {
@@ -62,7 +59,6 @@ func quote(s, safe string) string {
 	return b.String()
 }
 
-// Round is round(x, ndigits) on a float: half to even on the exact binary value.
 func Round(x float64, ndigits int) float64 {
 	if math.IsNaN(x) || math.IsInf(x, 0) {
 		return x
@@ -77,7 +73,6 @@ func Round(x float64, ndigits int) float64 {
 	return out
 }
 
-// JSONHTMLSafe is Jinja's tojson filter: json.dumps(sort_keys=True) with <, >, & and ' as \u escapes.
 func JSONHTMLSafe(value any) (string, error) {
 	var b strings.Builder
 	if err := dumpReflect(&b, reflect.ValueOf(value)); err != nil {
@@ -157,8 +152,6 @@ func dumpReflect(b *strings.Builder, v reflect.Value) error {
 	return nil
 }
 
-// URLQuotePlus is urllib.parse.quote_plus on UTF-8 bytes, the quoting Jinja's urlencode applies to mapping keys
-// and values.
 func URLQuotePlus(s string) string {
 	return strings.ReplaceAll(quote(s, ""), "%20", "+")
 }

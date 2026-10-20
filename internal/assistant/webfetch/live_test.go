@@ -219,8 +219,6 @@ func TestDefaultGuardRefusesNonPublicLiteralsWithoutConnecting(t *testing.T) {
 	}
 }
 
-// The first answer is vetted and then connected to without a second lookup; a later answer that would be
-// loopback or private never matters, and a redirect to the same name is looked up again and refused.
 func TestDNSRebindingIsDefeatedByPinning(t *testing.T) {
 	base, port := serve(t, nil)
 	_ = base

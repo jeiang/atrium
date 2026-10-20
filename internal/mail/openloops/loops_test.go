@@ -11,16 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/openloops"
 )
 
-func TestNormSubject(t *testing.T) {
-	for in, want := range map[string]string{
-		"Re: Fwd: AW:  Lunch   plans ": "lunch plans", "SV : RE:hello": "hello", "Resume": "resume", "": "", "Fw: x": "x",
-	} {
-		if got, err := openloops.NormSubject(in); err != nil || got != want {
-			t.Errorf("NormSubject(%q) = %q, %v; want %q", in, got, err, want)
-		}
-	}
-}
-
 func TestOweReplyWhenHumanWroteLast(t *testing.T) {
 	d := newDB(t)
 	mail(t, d, 1, 2, nil)
@@ -202,5 +192,15 @@ func TestListLoopsOrderAndDays(t *testing.T) {
 	}
 	if got, _ := openloops.ListLoops(ctx, d.Read, NOW(), "waiting_on_them", 50, true); len(got) != 0 {
 		t.Errorf("waiting = %+v", got)
+	}
+}
+
+func TestNormSubject(t *testing.T) {
+	for in, want := range map[string]string{
+		"Re: Fwd: AW:  Lunch   plans ": "lunch plans", "SV : RE:hello": "hello", "Resume": "resume", "": "", "Fw: x": "x",
+	} {
+		if got, err := openloops.NormSubject(in); err != nil || got != want {
+			t.Errorf("NormSubject(%q) = %q, %v; want %q", in, got, err, want)
+		}
 	}
 }

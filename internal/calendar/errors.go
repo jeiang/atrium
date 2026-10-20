@@ -10,25 +10,20 @@ import (
 	"google.golang.org/api/googleapi"
 )
 
-// Error is CalendarError.
 type Error string
 
 func (e Error) Error() string { return string(e) }
 
-// PyClass is the Python class name of the error.
 func (e Error) PyClass() string { return "CalendarError" }
 
-// NotConfigured is calendar.NotConfigured, a CalendarError: a provider whose settings are missing.
 type NotConfigured string
 
 func (e NotConfigured) Error() string { return string(e) }
 
 func (e NotConfigured) PyClass() string { return "NotConfigured" }
 
-// Unwrap makes a NotConfigured match as an Error, as the Python subclass does.
 func (e NotConfigured) Unwrap() error { return Error(string(e)) }
 
-// Remote is a failure of a provider's service, carrying the Python exception class that reported it.
 type Remote struct {
 	Class string
 	Text  string

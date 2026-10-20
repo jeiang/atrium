@@ -44,8 +44,6 @@ func BoundedInt(args py.Dict, name string, def, maximum, minimum int64) (int64, 
 	return max(minimum, min(n, maximum)), nil
 }
 
-// TextArg is text_arg: the stripped string of args[name]. ok is false where Python returns None (absent, null,
-// empty or blank); required turns an absent, null or empty value into "<name> is required".
 func TextArg(args py.Dict, name string, required bool) (text string, ok bool, err error) {
 	value, _ := args.Get(name)
 	if value == nil || value == "" {
@@ -62,7 +60,6 @@ func TextArg(args py.Dict, name string, required bool) (text string, ok bool, er
 	return s, s != "", nil
 }
 
-// Clip is clip: text cut to limit code points, the last of them "…" when it was cut.
 func Clip(text string, limit int) string {
 	if utf8.RuneCountInString(text) <= limit {
 		return text

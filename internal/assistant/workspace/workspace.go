@@ -1,5 +1,3 @@
-// Package workspace is agent/workspace.py without its view assembly: a thread's plan, its files, its
-// subagent threads and the sources its tools and searches read.
 package workspace
 
 import (
@@ -33,19 +31,15 @@ const (
 	KindNotion = "notion"
 )
 
-// PlanError is a refused plan.
 type PlanError string
 
 func (e PlanError) Error() string { return string(e) }
 
-// PlanItem is one step of a thread's plan.
 type PlanItem struct {
 	Text string `json:"text"`
 	Done bool   `json:"done"`
 }
 
-// CleanPlan is clean_plan: items is the decoded JSON list the model sent (py.JSONLoads or encoding/json), each
-// step an object with a text.
 func CleanPlan(items any) ([]PlanItem, error) {
 	list, ok := items.([]any)
 	if !ok || len(list) > PlanItems {
@@ -70,7 +64,6 @@ func CleanPlan(items any) ([]PlanItem, error) {
 	return out, nil
 }
 
-// SetPlan is set_plan: it replaces the thread's plan and returns the cleaned items.
 func SetPlan(ctx context.Context, q db.Querier, threadID int64, runID *int64, items any, now float64) ([]PlanItem, error) {
 	clean, err := CleanPlan(items)
 	if err != nil {
@@ -88,14 +81,12 @@ func SetPlan(ctx context.Context, q db.Querier, threadID int64, runID *int64, it
 	return clean, err
 }
 
-// Plan is a thread's plan.
 type Plan struct {
 	Items     []PlanItem `json:"items"`
 	UpdatedAt float64    `json:"updated_at"`
 	RunID     *int64     `json:"run_id"`
 }
 
-// PlanOf is plan_of: nil when the thread has no plan.
 func PlanOf(ctx context.Context, q db.Querier, threadID int64) (*Plan, error) {
 	var p Plan
 	var raw string
@@ -112,8 +103,6 @@ func PlanOf(ctx context.Context, q db.Querier, threadID int64) (*Plan, error) {
 	return &p, nil
 }
 
-// File is a thread_files row. The anthropic_file_id column is plain data; Phase A has no code execution
-// that reads it.
 type File struct {
 	ID              int64   `json:"id"`
 	ThreadID        int64   `json:"thread_id"`
@@ -139,7 +128,6 @@ func scanFile(r interface{ Scan(...any) error }) (File, error) {
 	return f, err
 }
 
-// FilesOf is files_of.
 func FilesOf(ctx context.Context, q db.Querier, threadID int64) ([]File, error) {
 	rows, err := q.QueryContext(ctx, "SELECT "+fileColumns+" FROM thread_files WHERE thread_id = ? ORDER BY id", threadID)
 	if err != nil {
@@ -148,7 +136,6 @@ func FilesOf(ctx context.Context, q db.Querier, threadID int64) ([]File, error) 
 	return db.Collect(rows, func(r *sql.Rows) (File, error) { return scanFile(r) })
 }
 
-// GetFile is get_file: nil when the thread has no such file.
 func GetFile(ctx context.Context, q db.Querier, threadID, fileID int64) (*File, error) {
 	f, err := scanFile(q.QueryRowContext(ctx, "SELECT "+fileColumns+" FROM thread_files WHERE id = ? AND thread_id = ?", fileID, threadID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -160,7 +147,6 @@ func GetFile(ctx context.Context, q db.Querier, threadID, fileID int64) (*File, 
 	return &f, nil
 }
 
-// ChildThreads is child_threads: the thread's live subagent threads.
 func ChildThreads(ctx context.Context, q db.Querier, threadID int64) ([]threads.Thread, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT "+threads.Columns+" FROM threads WHERE parent_thread_id = ? AND deleted_at IS NULL ORDER BY id", threadID)
@@ -170,7 +156,6 @@ func ChildThreads(ctx context.Context, q db.Querier, threadID int64) ([]threads.
 	return db.Collect(rows, func(r *sql.Rows) (threads.Thread, error) { return threads.Scan(r) })
 }
 
-// Source is something the thread read. Via names the subagent role that read it, nil for the thread itself.
 type Source struct {
 	Kind      string  `json:"kind"`
 	Key       string  `json:"key"`
@@ -209,8 +194,6 @@ type resultBlock struct {
 	Content   json.RawMessage `json:"content"`
 }
 
-// resultBodies is result_bodies: tool_use id to the full result text, the stored body for stubbed results,
-// else the journaled tool_result.
 func resultBodies(ctx context.Context, q db.Querier, threadIDs []int64) (map[string]string, error) {
 	bodies := map[string]string{}
 	for _, id := range threadIDs {
@@ -355,8 +338,6 @@ func sourceOf(c journal.ToolCall, result map[string]any) (*Source, error) {
 	return nil, nil
 }
 
-// SourcesOf is sources_of: what the thread (and its subagents) read, fetched pages, search hits, mail
-// messages and Notion pages, each once.
 func SourcesOf(ctx context.Context, q db.Querier, threadID int64) ([]Source, error) {
 	children, err := ChildThreads(ctx, q, threadID)
 	if err != nil {
@@ -365,7 +346,6 @@ func SourcesOf(ctx context.Context, q db.Querier, threadID int64) ([]Source, err
 	return SourcesWith(ctx, q, threadID, children)
 }
 
-// SourcesWith is sources_of with the subagent threads already loaded.
 func SourcesWith(ctx context.Context, q db.Querier, threadID int64, children []threads.Thread) ([]Source, error) {
 	ids := []int64{threadID}
 	for _, c := range children {

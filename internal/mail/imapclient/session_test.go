@@ -19,7 +19,6 @@ var (
 	shadow = config.Map(map[string]string{"ATRIUM_MODE": "shadow"})
 )
 
-// session connects a gated client to the script's server over plain TCP.
 func session(t *testing.T, s *imapscript.Script, user, password string, env config.Env) (mail.Client, *conn) {
 	t.Helper()
 	srv := imapscript.Serve(t, s)

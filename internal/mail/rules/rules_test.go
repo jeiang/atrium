@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/mail/rulestest"
@@ -13,6 +12,8 @@ import (
 	"github.com/jeiang/atrium/internal/rx"
 	"github.com/jeiang/atrium/internal/rx/rxtest"
 )
+
+const testNow = 1_800_000_000.0
 
 func row(edit func(*rules.Message)) *rules.Message {
 	m := &rules.Message{
@@ -73,7 +74,7 @@ func TestConditionOperators(t *testing.T) {
 		{"category", cond("category", "eq", "updates"), func(m *rules.Message) { m.Category = "updates" }, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := validate(t, c.cond).Matches(row(c.edit))
+			got, err := validate(t, c.cond).Matches(row(c.edit), testNow)
 			if err != nil || got != c.want {
 				t.Errorf("Matches = %v, %v; want %v", got, err, c.want)
 			}
@@ -98,7 +99,7 @@ func TestAndWithinRuleAndFirstMatchWins(t *testing.T) {
 		{func(m *rules.Message) { m.Subject = "hello" }, "B"},
 		{func(m *rules.Message) { m.FromDomain = "zzz.test" }, ""},
 	} {
-		got, err := rules.FirstMatch(row(c.edit), set)
+		got, err := rules.FirstMatch(row(c.edit), set, testNow)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -319,14 +320,14 @@ func TestLearnedExcludesInboxGoneAndUnfiled(t *testing.T) {
 
 func TestAgeDaysCondition(t *testing.T) {
 	at := func(ts float64) *rules.Message { return row(func(m *rules.Message) { m.DateTS = ts }) }
-	nowTS := float64(time.Now().UnixNano()) / 1e9
+	nowTS := testNow
 	c := validate(t, cond("age_days", "gte", int64(7)))
 	for _, tc := range []struct {
 		name string
 		m    *rules.Message
 		want bool
 	}{{"old", at(nowTS - 10*86400), true}, {"new", at(nowTS), false}, {"unknown", at(0), false}} {
-		if got, err := c.Matches(tc.m); err != nil || got != tc.want {
+		if got, err := c.Matches(tc.m, testNow); err != nil || got != tc.want {
 			t.Errorf("%s: %v, %v", tc.name, got, err)
 		}
 	}
@@ -419,7 +420,7 @@ func TestSpecialFloatsRoundTrip(t *testing.T) {
 	if got := loaded[0].Conditions[0].JSON(); got != `{"field": "age_days", "op": "gte", "value": Infinity}` {
 		t.Errorf("reloaded %s", got)
 	}
-	if ok, err := loaded[0].Conditions[0].Matches(row(func(m *rules.Message) { m.DateTS = 1 })); err != nil || ok {
+	if ok, err := loaded[0].Conditions[0].Matches(row(func(m *rules.Message) { m.DateTS = 1 }), testNow); err != nil || ok {
 		t.Errorf("Matches = %v, %v", ok, err)
 	}
 }

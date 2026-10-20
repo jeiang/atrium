@@ -1,5 +1,3 @@
-// Package proposals is proposals.py: the human-approved change pipeline, its executor and undo registry shared
-// with live mode, and the proposal rows the scanners create.
 package proposals
 
 import (
@@ -21,14 +19,10 @@ const (
 	Suppressed = "suppressed"
 )
 
-// Undoer reverses one logged write from its undo plan, the stored JSON object with its "op".
 type Undoer func(ctx context.Context, plan json.RawMessage) (py.Dict, error)
 
-// SyncHook is hooks["sync"]: the resync of an account after an applied proposal or an undo.
 type SyncHook func(ctx context.Context, account string) error
 
-// Registry is EXECUTORS, UNDOERS and hooks: the executor of each proposal kind, the undo handler for each plan op
-// and the post-write sync.
 type Registry struct {
 	Executors map[string]Executor
 	Undoers   map[string]Undoer
@@ -39,13 +33,11 @@ func NewRegistry() *Registry {
 	return &Registry{Executors: map[string]Executor{}, Undoers: map[string]Undoer{}}
 }
 
-// Querier is the read side of *sql.DB and *sql.Tx.
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// Known is known: a proposal with this fingerprint exists and has not failed.
 func Known(ctx context.Context, q Querier, fingerprint string) (bool, error) {
 	var status string
 	err := q.QueryRowContext(ctx, "SELECT status FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&status)
@@ -55,8 +47,6 @@ func Known(ctx context.Context, q Querier, fingerprint string) (bool, error) {
 	return err == nil && status != Failed, err
 }
 
-// Create is create: a pending proposal, or a failed one with the same fingerprint reopened, created at ts.
-// ok is false when the fingerprint is already known. account nil is NULL.
 func Create(ctx context.Context, d *db.DB, kind string, account *string, title string, payload, preview any,
 	fingerprint string, ts float64) (id int64, ok bool, err error) {
 	known, err := Known(ctx, d.Write, fingerprint)

@@ -48,7 +48,6 @@ var errHeaderParse = errors.New("header parse error")
 
 var errInvalidEW = errors.New("invalid encoded word")
 
-// hardCommentDepth bounds comment recursion for stack safety; it lies beyond every limit in commentLimit.
 const hardCommentDepth = 1000
 
 // commentLimit is the deepest comment nesting CPython 3.14.7 parses before RecursionError, measured with

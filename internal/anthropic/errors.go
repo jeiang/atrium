@@ -39,8 +39,6 @@ const (
 	ClassInternalServer  = "InternalServerError"
 )
 
-// APIError is a failed call in the shape of the Python SDK's exception: Class is its class name and Error()
-// its message, so `Class + ": " + Error()` is the text the Python loop stored for a failed run.
 type APIError struct {
 	Class      string
 	StatusCode int
@@ -53,7 +51,6 @@ func (e *APIError) Error() string { return e.Message }
 
 func (e *APIError) Unwrap() error { return e.err }
 
-// PyClass is the Python SDK exception class the error stands for.
 func (e *APIError) PyClass() string { return e.Class }
 
 func (e *APIError) RateLimited() bool {
@@ -108,8 +105,6 @@ func classify(err error) error {
 	return err
 }
 
-// statusError builds Python's message: "Error code: N - <repr of the JSON body>" for an HTTP status, the bare
-// repr for an SSE error event (which arrives on a 200 response).
 func statusError(apiErr *sdk.Error, err error) *APIError {
 	status := apiErr.StatusCode
 	text := strings.TrimSpace(apiErr.RawJSON())
@@ -128,8 +123,6 @@ func statusError(apiErr *sdk.Error, err error) *APIError {
 	return out
 }
 
-// pyRepr renders a JSON value as Python's f"{json.loads(data)}": a top-level string bare, anything else
-// as its repr.
 func pyRepr(data []byte) (string, bool) {
 	if !json.Valid(data) {
 		return "", false
@@ -242,8 +235,6 @@ func reprNumber(n json.Number) string {
 	return reprFloat(f)
 }
 
-// reprFloat is Python's repr(float): shortest round-trip digits, positional while the decimal exponent is
-// in [-4, 16), else scientific with a signed two-digit exponent.
 func reprFloat(f float64) string {
 	sci := strconv.FormatFloat(f, 'e', -1, 64)
 	mantissa, expText, _ := strings.Cut(sci, "e")

@@ -7,8 +7,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// The wanted text is what the Python SDK 1.6.0 model_dump(mode="json", exclude_unset=True) of each block,
-// parsed from the wire JSON on the left, dumps with separators=(",", ":").
 func TestJournalBlockIsPythonModelDump(t *testing.T) {
 	cases := []struct{ wire, want string }{
 		{`{"type":"tool_use","id":"t1","name":"probe","input":{"z":1,"a":2}}`, `{"id":"t1","input":{"z":1,"a":2},"name":"probe","type":"tool_use"}`},

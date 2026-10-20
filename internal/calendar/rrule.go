@@ -117,7 +117,6 @@ func parseByDay(value string) ([]rrule.Weekday, error) {
 	return out, nil
 }
 
-// parseRule is dateutil's rrulestr for one RRULE value: its parameter handlers and their errors.
 func parseRule(text string) (*parsedRule, error) {
 	text = strings.ToUpper(text)
 	if strings.TrimSpace(text) == "" {

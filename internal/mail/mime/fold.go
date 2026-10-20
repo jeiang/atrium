@@ -8,9 +8,6 @@ import (
 
 const foldMaxLen = 78
 
-// FoldHeader is how email.policy.default writes a header set from a str: the value parsed by its header class
-// (address, unstructured, date, message-id, references or MIME header) and refolded to 78 columns, joined with
-// linesep and ending with it. utf8 is the policy's utf8 flag, which leaves non-ASCII text unencoded.
 func FoldHeader(name, value, linesep string, utf8 bool) (folded string, err error) {
 	defer guard(&err)
 	v := []rune(value)
@@ -141,7 +138,6 @@ func makeParenthesisPairs(s []rune) []rune {
 
 var endEWNotAllowed = &token{class: cTermValue, typ: "wrap_as_ew_blocked"}
 
-// refold is _header_value_parser._refold_parse_tree with max_line_length 78.
 func refold(tree *token, linesep string, utf8 bool) string {
 	maxlen := foldMaxLen
 	encoding := "us-ascii"
@@ -278,7 +274,6 @@ func refold(tree *token, linesep string, utf8 bool) string {
 	return strings.Join(out, linesep) + linesep
 }
 
-// foldAsEW is _fold_as_ew; it returns the new last_ew, -1 for None.
 func foldAsEW(toEncode []rune, linesp *[][]rune, maxlen, lastEW int, combine bool, charset string, lastWordIsEW bool) int {
 	lines := *linesp
 	defer func() { *linesp = lines }()
@@ -365,7 +360,6 @@ func qByte(c byte) string {
 	return fmt.Sprintf("=%02X", c)
 }
 
-// encodeWord is _encoded_words.encode(word, charset): q unless b is at least 5 characters shorter.
 func encodeWord(word []rune, charset string) string {
 	b := []byte(string(word))
 	var q strings.Builder
@@ -394,8 +388,6 @@ func percentQuote(s []rune) string {
 	return b.String()
 }
 
-// foldMimeParameters is _fold_mime_parameters: each parameter from its decoded value, RFC 2231 encoded when the
-// value is not in the policy's encoding or does not fit.
 func foldMimeParameters(part *token, linesp *[][]rune, maxlen int, encoding string) {
 	lines := *linesp
 	defer func() { *linesp = lines }()

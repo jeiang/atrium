@@ -31,16 +31,13 @@ const (
 const hitSelect = "SELECT rid, id, title, path, url, last_edited_time, edited_ts, private FROM notion_pages " +
 	"WHERE in_trash = 0 AND rid IN (SELECT value FROM json_each(?))"
 
-// Querier is the read side of a connection.
 type Querier = search.Querier
 
-// PathPart is one ancestor in a page's path; the id is not known from the mirrored path.
 type PathPart struct {
 	ID    *string `json:"id"`
 	Title string  `json:"title"`
 }
 
-// PageRef is pageref.
 type PageRef struct {
 	ID      string     `json:"id"`
 	Title   string     `json:"title"`
@@ -63,7 +60,6 @@ func pageRef(id, title, url, path string, private bool) PageRef {
 	return PageRef{ID: id, Title: title, URL: url, Path: pathParts(path), Private: private}
 }
 
-// Page is a notion_pages row.
 type Page struct {
 	RID            int64   `json:"rid"`
 	ID             string  `json:"id"`
@@ -85,7 +81,6 @@ type Page struct {
 	SyncedAt       float64 `json:"synced_at"`
 }
 
-// GetPage is get_page: the mirrored row of a page id in any spelling, or nil.
 func GetPage(ctx context.Context, q Querier, pageID string) (*Page, error) {
 	var p Page
 	err := q.QueryRowContext(ctx,
@@ -100,7 +95,6 @@ func GetPage(ctx context.Context, q Querier, pageID string) (*Page, error) {
 	return &p, err
 }
 
-// PropertyRow is one shown property of a page.
 type PropertyRow struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
@@ -170,7 +164,6 @@ func propertyRows(properties string) ([]PropertyRow, error) {
 	return rows, nil
 }
 
-// View is page_view's result.
 type View struct {
 	PageRef
 	EditedTS   float64       `json:"edited_ts"`
@@ -179,7 +172,6 @@ type View struct {
 	InTrash    bool          `json:"in_trash"`
 }
 
-// PageView is page_view: a mirrored page as the page shows it, or nil.
 func PageView(ctx context.Context, q Querier, pageID string) (*View, error) {
 	page, err := GetPage(ctx, q, pageID)
 	if page == nil || err != nil {
@@ -312,7 +304,6 @@ func scanInfo(r *sql.Rows) (hitInfo, error) {
 	return i, err
 }
 
-// PageTitles is page_titles: the titles of the mirrored pages whose ids the texts mention.
 func PageTitles(ctx context.Context, q Querier, texts []string) (map[string]string, error) {
 	ids := notionid.IDsInText(strings.Join(texts, " "))
 	if len(ids) == 0 {
@@ -373,7 +364,6 @@ func heads(ctx context.Context, q Querier, rids []int64) (map[int64]string, erro
 	return out, nil
 }
 
-// Hit is one search result.
 type Hit struct {
 	PageRef
 	Account        string        `json:"account"`
@@ -440,13 +430,11 @@ func recent(ctx context.Context, q Querier, includePrivate bool, limit int) ([]H
 	return hits, nil
 }
 
-// Filters is the filters a search answers with.
 type Filters struct {
 	Account        string `json:"account"`
 	IncludePrivate bool   `json:"include_private"`
 }
 
-// Result is what Search returns; Error is the embeddings server's complaint when Semantic is false.
 type Result struct {
 	Hits     []Hit   `json:"hits"`
 	Semantic bool    `json:"semantic"`
@@ -462,8 +450,6 @@ func rank(list []int64) map[int64]int {
 	return out
 }
 
-// Search is search: lexical and semantic hits fused by reciprocal rank, the lexical branch alone when the
-// embeddings server is down. A nil embedTexts is embed.Texts.
 func Search(ctx context.Context, q Querier, cfg config.Config, query string, includePrivate bool, limit int, embedTexts embed.TextsFunc) (Result, error) {
 	if embedTexts == nil {
 		embedTexts = embed.Texts
@@ -565,14 +551,12 @@ func Search(ctx context.Context, q Querier, cfg config.Config, query string, inc
 	return Result{Hits: hits, Semantic: available, Error: failure, Filters: filters}, nil
 }
 
-// Related is one entry of related: a page the given one links to or is linked from, or a neighbour by vector.
 type Related struct {
 	PageRef
 	Linked bool    `json:"linked"`
 	Score  float64 `json:"score"`
 }
 
-// RelatedPages is related.
 func RelatedPages(ctx context.Context, q Querier, pageID string, limit int) ([]Related, error) {
 	page, err := GetPage(ctx, q, pageID)
 	if page == nil || err != nil {

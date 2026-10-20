@@ -17,7 +17,6 @@ var inputSchema = json.RawMessage(fmt.Sprintf(`{"type":"object","properties":{"t
 	`"body":{"type":"string","maxLength":%d},"thread_link":{"type":"string"}},"required":["title","body"],"additionalProperties":false}`,
 	TitleChars, BodyChars))
 
-// Tools is TOOLS of notify.py.
 func Tools() []tool.Tool {
 	return []tool.Tool{{
 		Name:        "notify",

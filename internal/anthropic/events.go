@@ -7,7 +7,6 @@ import (
 	sdk "github.com/anthropics/anthropic-sdk-go"
 )
 
-// Event kinds carry the progress journal's names (agent/progress.py).
 const (
 	EventThinking  = "thinking"
 	EventText      = "text"
@@ -20,8 +19,6 @@ const (
 	blockWebSearchResult = "web_search_tool_result"
 )
 
-// Event is what progress.Writer.observe made of one stream event: a thinking or text delta (Text), a server
-// tool starting (ID, Name, Input: the value short_args formats) or its result arriving (ID, OK, Preview).
 type Event struct {
 	Kind    string
 	Text    string

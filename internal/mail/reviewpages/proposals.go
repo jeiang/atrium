@@ -21,7 +21,6 @@ var proposalStatuses = []string{
 	proposals.Pending, proposals.Applied, proposals.Failed, proposals.Dismissed, proposals.Suppressed, allStatuses,
 }
 
-// proposalKinds is every kind the Kind filter offers.
 var proposalKinds = []string{
 	executors.RebalanceSplit, executors.RebalanceMerge, executors.InboxBacklog, executors.DeletionRule, executors.GmailLabelMerge,
 	"notion_link", "notion_edit", "calendar_event", "reminder", kindWikiPlan,
@@ -65,7 +64,6 @@ func (s *service) proposalsPage(w http.ResponseWriter, r *http.Request) {
 	s.page(w, r, http.StatusOK, "proposals", "proposals.gohtml", data, nil)
 }
 
-// card is the proposal's card with notice and the out-of-band pending count; a proposal that is not there is 404.
 func (s *service) card(w http.ResponseWriter, r *http.Request, id int64, notice *tpl.Toast) {
 	found, err := proposals.Get(r.Context(), s.deps.DB.Write, id)
 	check(err)
@@ -76,7 +74,6 @@ func (s *service) card(w http.ResponseWriter, r *http.Request, id int64, notice 
 	s.fragment(w, r, http.StatusOK, "_proposal.gohtml", proposalCardData{Proposal: proposalView(found), PendingOOB: true}, notice)
 }
 
-// picked is the message ids ticked for group index: nil (every message) when the group has none to choose from.
 func picked(form url.Values, index int, messages any) ([]any, error) {
 	if !py.Truthy(messages) {
 		return nil, nil
@@ -104,7 +101,6 @@ func previewGet(preview any, key string) any {
 	return nil
 }
 
-// selectionOf is selection_of: what the card's form picked, for the kinds that offer a choice.
 func selectionOf(p *proposals.Proposal, form url.Values) (py.Dict, error) {
 	switch {
 	case slices.Contains(splitKinds, p.Kind):

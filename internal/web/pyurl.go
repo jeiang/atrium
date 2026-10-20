@@ -7,8 +7,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// sameOrigin is the Python same_origin: no Origin header passes; a "null"
-// origin or one whose authority differs from the Host header fails.
 func sameOrigin(r *http.Request) bool {
 	values := r.Header["Origin"]
 	if len(values) == 0 {
@@ -34,7 +32,6 @@ func hexVal(c byte) int {
 	return -1
 }
 
-// unquotePlus is urllib.parse.unquote_plus on bytes: an invalid escape stays literal.
 func unquotePlus(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
@@ -51,8 +48,6 @@ func unquotePlus(s string) string {
 	return b.String()
 }
 
-// formField is the first non-blank value of name in an urlencoded body, as
-// parse_qs(body).get(name).
 func formField(body, name string) (string, bool) {
 	for pair := range strings.SplitSeq(body, "&") {
 		key, value, found := strings.Cut(pair, "=")

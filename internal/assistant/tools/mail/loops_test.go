@@ -89,7 +89,7 @@ func TestOpenLoopsAndCommitmentsTools(t *testing.T) {
 
 func TestOpenLoopsHidesSnoozedAndDismissedAndFollowsTZ(t *testing.T) {
 	d := newDB(t)
-	moment := 1793476800.0 // 2026-10-31T20:00:00Z
+	moment := 1793476800.0
 	loopMail(t, d, 1, 0, fields{"date_ts": moment})
 	compute(t, d, moment+day)
 	tc := ctxFor(d, config.Config{}, map[string]string{"ATRIUM_TZ": "Asia/Tokyo"})

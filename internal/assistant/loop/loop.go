@@ -1,7 +1,3 @@
-// Package loop is agent/loop.py: one assistant run, step by step. Each step rechecks the budget and the
-// run's lease, takes the operator's queued messages, compacts the context when the next request would not fit,
-// streams one model call into the progress journal, meters it, and runs the tools the model asked for. Only
-// the tools the registry offers the run's kind (and allowlist) are ever dispatched.
 package loop
 
 import (
@@ -44,24 +40,18 @@ const (
 	CompletedUncaptured = "This call completed before an interruption but its result was not captured. Check the current state."
 )
 
-// Owner is journal.OWNER: this process's identity in run leases.
 var Owner = journal.NewOwner()
 
 var log = logx.Logger("atrium.agent")
 
-// RunLimit is RunLimit: the run hit its step, cost or context ceiling.
 type RunLimit string
 
 func (e RunLimit) Error() string { return string(e) }
 
-// LeaseLost is LeaseLost: another process took the run over.
 type LeaseLost string
 
 func (e LeaseLost) Error() string { return string(e) }
 
-// Runner holds what a run needs beyond its journal: the tool registry and the parts other packages own (the
-// profile block, the skills index and /skill expansion, the parallel research batch). A nil part is absent.
-// CommitSavings is context.COMMIT_SAVINGS, the staged savings that commit mid-loop; 0 is the default.
 type Runner struct {
 	Registry      *registry.Registry
 	Profile       func(ctx context.Context, q db.Querier) (string, error)
@@ -71,7 +61,6 @@ type Runner struct {
 	CommitSavings int64
 }
 
-// Expand is skills.expand for operator text of the kinds that expand skills (chat, cron and nightly).
 func (r *Runner) Expand(ctx context.Context, q db.Querier, kind tool.Kind, text string) (string, []string, error) {
 	if r.ExpandSkills == nil || kind == tool.Sub {
 		return text, nil, nil
@@ -79,8 +68,6 @@ func (r *Runner) Expand(ctx context.Context, q db.Querier, kind tool.Kind, text 
 	return r.ExpandSkills(ctx, q, text)
 }
 
-// Options are loop.run's keyword arguments. Limits fields left nil take MaxSteps, MaxRunCostUSD, no role
-// addendum and no allowlist.
 type Options struct {
 	Now    func() float64
 	Embed  func(ctx context.Context, texts []string) ([][]float64, error)
@@ -116,9 +103,6 @@ func deref[T any](p *T) T {
 	return *p
 }
 
-// Run is run: it executes the run to its end and returns its row. A run that fails (budget, ceilings, a stop
-// request, a failed model call) is finished as failed with the reason and is not an error; a lost lease
-// leaves the run to its new owner, and a cancelled ctx leaves it running for the restart to resume.
 func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, client *anthropic.Client, runID int64, o Options) (*journal.Run, error) {
 	s, err := r.prepare(ctx, d, cfg, env, client, runID, o)
 	if err != nil {
@@ -251,7 +235,6 @@ func (s *state) runStart(ctx context.Context) error {
 	})
 }
 
-// freshTurn is fresh_turn: the run starts on a new operator message, a natural commit boundary.
 func (s *state) freshTurn(ctx context.Context) (bool, error) {
 	last, err := journal.LastMessage(ctx, s.d.Read, s.thread.ID)
 	if err != nil || last == nil {
@@ -260,8 +243,6 @@ func (s *state) freshTurn(ctx context.Context) (bool, error) {
 	return last.Role == journal.User && journal.HasText(last.Content), nil
 }
 
-// PendingUses is pending_uses: the tool_use blocks of the thread's last message when it is an assistant turn
-// still waiting for its results.
 func PendingUses(ctx context.Context, q db.Querier, threadID int64) (*journal.Message, []ToolUse, error) {
 	last, err := journal.LastMessage(ctx, q, threadID)
 	if err != nil || last == nil || last.Role != journal.Assistant {
@@ -271,7 +252,6 @@ func PendingUses(ctx context.Context, q db.Querier, threadID int64) (*journal.Me
 	return last, uses, err
 }
 
-// searchURLs is search_urls: the result URLs of web_search_tool_result blocks.
 func searchURLs(blocks []json.RawMessage) []string {
 	var urls []string
 	for _, raw := range blocks {
@@ -313,9 +293,6 @@ func (s *state) allowURLs(ctx context.Context, urls []string) error {
 	return threads.AddAllowedURLs(ctx, s.d, s.thread.ID, urls)
 }
 
-// injectQueued is inject_queued: messages the operator sent while the run was busy join the conversation as
-// user turns before the next model call. They are operator text: their URLs join the allowlist and their
-// /skill references expand.
 func (s *state) injectQueued(ctx context.Context) (bool, error) {
 	rows, err := journal.TakeQueued(ctx, s.d.Write, s.thread.ID, s.run.ID, s.now())
 	if err != nil {
@@ -389,7 +366,6 @@ func (s *state) settlePending(ctx context.Context) error {
 	return err
 }
 
-// body is the try block of run: nil once the run finished done.
 func (s *state) body(ctx context.Context) error {
 	if err := s.runStart(ctx); err != nil {
 		return err
@@ -428,7 +404,6 @@ func (s *state) unattended(ctx context.Context) (bool, error) {
 	return root == threads.Cron || root == threads.Nightly, err
 }
 
-// step is one iteration of the loop: done once the run finished, else the anchor for the next step.
 func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, last *anchor) (bool, *anchor, error) {
 	if _, err := budget.Check(ctx, s.d.Read, s.now(), loc, unattended); err != nil {
 		return false, nil, err
@@ -540,8 +515,6 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	return done, next, err
 }
 
-// answer runs the response's tool calls, journals their results and commits staged context edits once they
-// save enough (which invalidates the anchor).
 func (s *state) answer(ctx context.Context, uses []ToolUse, next **anchor) error {
 	results, err := s.x.executeAll(ctx, uses)
 	if err != nil {

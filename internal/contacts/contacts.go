@@ -57,7 +57,6 @@ type card struct {
 	labels         map[string]string
 }
 
-// Unfold is flags.py unfold and contacts.py unfold: it joins folded vCard lines.
 func Unfold(text string) string {
 	out, _ := unfoldRe.Sub("", text, 0)
 	return out
@@ -78,7 +77,6 @@ func split(value string) []string {
 	return parts
 }
 
-// ParseDate reads YYYYMMDD, YYYY-MM-DD, --MMDD and --MM-DD; year is nil when unknown.
 func ParseDate(value string) (month, day int, year *int, ok bool) {
 	m, _ := dateRe.Match(py.Strip(value))
 	if m == nil {
@@ -128,7 +126,6 @@ func cleanLabel(text string) string {
 	return py.Strip(text)
 }
 
-// Parse reads every BEGIN:VCARD … END:VCARD block in text.
 func Parse(text string) []Card {
 	cards := []Card{}
 	var c *card
@@ -246,8 +243,6 @@ func joinNonEmpty(sep string, parts ...string) string {
 	return strings.Join(kept, sep)
 }
 
-// Load reads every *.vcf under dir, recursively, and returns the named cards sorted by casefolded name. An
-// empty dir or one that is not a directory yields no cards.
 func Load(dir string) []Card {
 	found := []Card{}
 	if info, err := os.Stat(dir); dir == "" || err != nil || !info.IsDir() {
@@ -272,7 +267,6 @@ func Load(dir string) []Card {
 	return found
 }
 
-// VCFPaths lists the paths under dir that Path.rglob("*.vcf") yields, directories included.
 func VCFPaths(dir string) []string {
 	entries, _ := os.ReadDir(dir)
 	var out []string
@@ -288,13 +282,10 @@ func VCFPaths(dir string) []string {
 	return out
 }
 
-// Search is Filter over Load(dir).
 func Search(dir, query string, limit int) []Card {
 	return Filter(Load(dir), query, limit)
 }
 
-// Filter keeps the cards whose name, org, emails and phones contain every whitespace-separated term of query,
-// casefolded. A limit of 0 keeps every match.
 func Filter(cards []Card, query string, limit int) []Card {
 	terms := py.Split(py.Casefold(query))
 	out := []Card{}

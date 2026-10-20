@@ -10,7 +10,6 @@ import (
 	"syscall"
 )
 
-// ASCIIEncodeError is the UnicodeEncodeError s.encode("ascii") raises, nil when s is ASCII.
 func ASCIIEncodeError(s string) error {
 	ascii := true
 	for i := range len(s) {
@@ -48,7 +47,6 @@ func ASCIIEncodeError(s string) error {
 	return nil
 }
 
-// ASCIIEncode is s.encode("ascii").
 func ASCIIEncode(s string) ([]byte, error) {
 	if err := ASCIIEncodeError(s); err != nil {
 		return nil, err
@@ -56,8 +54,6 @@ func ASCIIEncode(s string) ([]byte, error) {
 	return []byte(s), nil
 }
 
-// OSError is Python's OSError family as a network call raises it: "[Errno N] text" with an errno, the bare text
-// without one (TimeoutError("timed out")). Kind is the class name: OSError, gaierror or TimeoutError.
 type OSError struct {
 	Kind     string
 	Errno    int
@@ -100,9 +96,6 @@ func linuxErrno(errno syscall.Errno) (int, string) {
 	return int(errno), text
 }
 
-// OSErrorOf renders a Go network error as the OSError Python raises for the same condition: the Linux errno
-// and glibc text for the common errnos, gaierror -2 and -3 for resolver failures, TimeoutError for a timeout.
-// ok is false for an error that has no such counterpart.
 func OSErrorOf(err error) (*OSError, bool) {
 	var dns *net.DNSError
 	var errno syscall.Errno
@@ -122,7 +115,6 @@ func OSErrorOf(err error) (*OSError, bool) {
 	return nil, false
 }
 
-// OSErrorText is str(e) of OSErrorOf.
 func OSErrorText(err error) (text string, ok bool) {
 	e, ok := OSErrorOf(err)
 	if !ok {

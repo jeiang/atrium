@@ -18,7 +18,6 @@ import (
 
 var extraFuncs = template.FuncMap{}
 
-// registerFuncs adds template functions from a page slice's own file; call it from an init function.
 func registerFuncs(funcs template.FuncMap) {
 	for name, fn := range funcs {
 		if _, taken := extraFuncs[name]; taken {

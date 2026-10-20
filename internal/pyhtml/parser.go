@@ -7,15 +7,11 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Attr is one attribute of a start tag; Value is nil where the attribute has no value.
 type Attr struct {
 	Name  string
 	Value *string
 }
 
-// Parser is CPython 3.14's html.parser.HTMLParser with convert_charrefs=True: Feed and Close drive the same
-// state machine and call the handler fields, which stay nil where a subclass would not override the method.
-// StartEndTag nil means the default: StartTag then EndTag.
 type Parser struct {
 	StartTag    func(tag string, attrs []Attr)
 	EndTag      func(tag string)
@@ -25,8 +21,7 @@ type Parser struct {
 	Decl        func(decl string)
 	PI          func(data string)
 	UnknownDecl func(data string)
-	// Scripting makes the content of noscript raw text, as HTMLParser(scripting=True).
-	Scripting bool
+	Scripting   bool
 
 	raw       []rune
 	cdataElem string
@@ -41,14 +36,12 @@ func (p *Parser) init() {
 	}
 }
 
-// Feed adds data and parses as far as it can; an incomplete construct waits for the next call or Close.
 func (p *Parser) Feed(data string) {
 	p.init()
 	p.raw = append(p.raw, []rune(data)...)
 	p.goahead(false)
 }
 
-// Close parses whatever Feed left, as if the input ended.
 func (p *Parser) Close() {
 	p.init()
 	p.goahead(true)
@@ -116,8 +109,6 @@ func indexRunes(raw []rune, sub string, from int) int {
 	return -1
 }
 
-// searchInteresting is self.interesting.search(rawdata, i) in a CDATA or RCDATA element: the offset of the end
-// tag that closes it, or -1.
 func (p *Parser) searchInteresting(i int) int {
 	raw := p.raw
 	if p.cdataElem == "plaintext" {
@@ -277,7 +268,6 @@ func (p *Parser) finishIncomplete(i int) {
 	}
 }
 
-// endsWithAt is rawdata.endswith(suffix, start): the text from start ends with suffix.
 func endsWithAt(raw []rune, suffix string, start int) bool {
 	s := []rune(suffix)
 	return len(raw)-start >= len(s) && hasPrefixAt(raw, len(raw)-len(s), suffix)
@@ -362,7 +352,6 @@ func (p *Parser) parsePI(i int) int {
 	return j + 1
 }
 
-// tagFind is tagfind_tolerant.match(rawdata, pos): the lower-cased name and where the match ends.
 func tagFind(raw []rune, pos int) (string, int) {
 	k := pos + 1
 	for k < len(raw) && !isWS(raw[k]) && raw[k] != '/' && raw[k] != '>' {
@@ -373,7 +362,6 @@ func tagFind(raw []rune, pos int) (string, int) {
 	return name, end
 }
 
-// skipSpaceOrSlash is (?:[\t\n\r\f ]|/(?!>))*.
 func skipSpaceOrSlash(raw []rune, k int) int {
 	for k < len(raw) {
 		switch {
@@ -397,8 +385,6 @@ func skipWS(raw []rune, k int) int {
 
 func isLookbehind(c rune) bool { return c == '\'' || c == '"' || isWS(c) || c == '/' }
 
-// attrMatch is a match of the attribute pattern shared by attrfind_tolerant and locatetagend: the name and
-// value bounds (hasValue false when the value group did not match) and where the attribute ends.
 type attrMatch struct {
 	name     [2]int
 	hasValue bool
@@ -450,7 +436,6 @@ func matchAttr(raw []rune, k int) (attrMatch, bool) {
 	return m, true
 }
 
-// locateTagEnd is locatetagend.match(rawdata, pos).end().
 func locateTagEnd(raw []rune, pos int) int {
 	k := pos + 1
 	for k < len(raw) && !isWS(raw[k]) && raw[k] != '/' && raw[k] != '>' {
@@ -558,8 +543,6 @@ func (p *Parser) parseEndTag(i int) int {
 	return j
 }
 
-// unescapeAttrValue is _unescape_attrvalue: numeric references always, named ones only on an exact match not
-// followed by "=".
 func unescapeAttrValue(s string) string {
 	rs := []rune(s)
 	var b strings.Builder

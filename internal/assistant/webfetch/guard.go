@@ -1,6 +1,3 @@
-// Package webfetch is webfetch.py and tools/web_fetch.py: the only outbound fetch of an arbitrary URL, an SSRF
-// guard that vets every address a host resolves to, pins the connection to the vetted address and vets every
-// redirect hop again, and the extraction of readable text from the page.
 package webfetch
 
 import (
@@ -24,8 +21,6 @@ func inAny(ip netip.Addr, nets []netip.Prefix) bool {
 	return false
 }
 
-// The ranges are the not-globally-reachable blocks of CPython 3.14's ipaddress module (the IANA special-purpose
-// registries), its exceptions to them, and the three prefixes webfetch.py unwraps to an IPv4 address.
 var (
 	cgnat = netip.MustParsePrefix("100.64.0.0/10")
 
@@ -46,9 +41,6 @@ var (
 	embeddedIPv4 = prefixes("64:ff9b::/96", "::/96", "::ffff:0:0:0/96")
 )
 
-// DefaultAllowed is default_allowed: whether ip is a public unicast address. An IPv6 address that carries an
-// IPv4 address (IPv4-mapped, NAT64 64:ff9b::/96, IPv4-compatible ::/96, SIIT ::ffff:0:0:0/96) is judged by the
-// IPv4 address it carries, and site-local fec0::/10 is refused. A zone is ignored.
 func DefaultAllowed(ip netip.Addr) bool {
 	ip = ip.WithZone("")
 	if ip.Is6() {
@@ -68,7 +60,6 @@ func DefaultAllowed(ip netip.Addr) bool {
 	return !notGlobal(ip, privateV6, privateV6Exceptions) && !multicastV6.Contains(ip)
 }
 
-// notGlobal is is_private: in one of the special-purpose ranges and in none of their exceptions.
 func notGlobal(ip netip.Addr, private, exceptions []netip.Prefix) bool {
 	return inAny(ip, private) && !inAny(ip, exceptions)
 }

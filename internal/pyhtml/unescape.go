@@ -1,12 +1,9 @@
-// Package pyhtml reproduces CPython 3.14's html.unescape, including its legacy entity prefixes and its
-// replacements for invalid numeric character references.
 package pyhtml
 
 import "strings"
 
 const maxCodepoint = 0x10FFFF
 
-// Unescape is Python's html.unescape.
 func Unescape(s string) string {
 	if !strings.Contains(s, "&") {
 		return s

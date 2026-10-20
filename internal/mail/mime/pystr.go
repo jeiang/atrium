@@ -154,7 +154,6 @@ func equalStr(s []rune, p string) bool {
 
 func inSet(set string, r rune) bool { return r < utf8.RuneSelf && strings.IndexByte(set, byte(r)) >= 0 }
 
-// Lower is Python's str.lower.
 func Lower(s string) string {
 	for i := range len(s) {
 		if s[i] >= utf8.RuneSelf {

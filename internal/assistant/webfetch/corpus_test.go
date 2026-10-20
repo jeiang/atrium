@@ -156,7 +156,6 @@ func hasHeader(headers [][2]string, name string) bool {
 	return false
 }
 
-// scriptConn answers one request with the scripted reply for its target, as the generator's fake connection does.
 type scriptConn struct {
 	dest      webfetch.Dest
 	responses map[string]scriptedResponse
@@ -206,7 +205,6 @@ func (c *scriptConn) SetDeadline(time.Time) error      { return nil }
 func (c *scriptConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *scriptConn) SetWriteDeadline(time.Time) error { return nil }
 
-// scenario is one fetch of the corpus: the fake DNS, the scripted connections and what both recorded.
 type scenario struct {
 	m           manifest
 	responses   map[string]scriptedResponse

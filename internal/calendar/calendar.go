@@ -1,7 +1,3 @@
-// Package calendar is calendar.py: the vdirsyncer iCloud mirror (read), Google Calendar (read and write) and iCloud
-// CalDAV (write), and the agent_events log of what atrium created. Events never carry attendees: specs hold
-// title, times, location and notes, and nothing here emits ATTENDEE, ORGANIZER or invitation mail (Google inserts
-// use sendUpdates="none").
 package calendar
 
 import (
@@ -34,13 +30,10 @@ const (
 	remoteTimeout  = 60 * time.Second
 )
 
-// Targets is TARGETS.
 var Targets = [...]string{ICloud, Google}
 
-// TargetsText is how errors list the targets.
 var TargetsText = strings.Join(Targets[:], ", ")
 
-// Endpoints are the services calendar talks to; tests point them at recorded exchanges.
 type Endpoints struct {
 	Token     string
 	GoogleAPI string
@@ -49,7 +42,6 @@ type Endpoints struct {
 
 var endpoints = Endpoints{Token: TokenURI, CalDAV: CalDAVURL}
 
-// UseEndpoints replaces the service endpoints (an empty field keeps the real one) and returns the restore func.
 func UseEndpoints(e Endpoints) func() {
 	saved := endpoints
 	if e.Token != "" {
@@ -64,18 +56,15 @@ func UseEndpoints(e Endpoints) func() {
 	return func() { endpoints = saved }
 }
 
-// Ref is the remote reference create_event returns.
 type Ref struct {
 	Calendar string
 	UID      string
 }
 
-// Dict is the reference as Python returns it.
 func (r Ref) Dict() py.Dict {
 	return py.Dict{{Key: "calendar", Value: r.Calendar}, {Key: "uid", Value: r.UID}}
 }
 
-// Zone is tz_of: the location of ATRIUM_TZ.
 func Zone(env config.Env) (*time.Location, error) { return config.Location(env) }
 
 func targetError() error { return Error("calendar must be one of " + TargetsText) }
@@ -115,7 +104,6 @@ func httpStatus(err error) int {
 	return 0
 }
 
-// CreateEvent is create_event: spec on calendar, returning the remote reference.
 func CreateEvent(ctx context.Context, env config.Env, target string, spec Spec, tz *time.Location) (Ref, error) {
 	switch target {
 	case Google:
@@ -148,7 +136,6 @@ func CreateEvent(ctx context.Context, env config.Env, target string, spec Spec, 
 	return Ref{Calendar: target, UID: spec.UID}, nil
 }
 
-// DeleteEvent is delete_event: the event with this uid is removed from calendar; one already gone is not an error.
 func DeleteEvent(ctx context.Context, env config.Env, target, uid string) error {
 	switch target {
 	case Google:
@@ -175,7 +162,6 @@ func DeleteEvent(ctx context.Context, env config.Env, target, uid string) error 
 	return nil
 }
 
-// Track is track: the log row of an event atrium created.
 func Track(ctx context.Context, q db.Querier, spec Spec, target string, proposalID *int64, now float64) error {
 	_, err := q.ExecContext(ctx,
 		"INSERT OR REPLACE INTO agent_events (uid, calendar, title, start, end, spec, created_ts, deleted_ts, proposal_id) "+
@@ -184,13 +170,11 @@ func Track(ctx context.Context, q db.Querier, spec Spec, target string, proposal
 	return err
 }
 
-// Tracked is a live agent_events row.
 type Tracked struct {
 	Calendar string
 	Spec     string
 }
 
-// FindTracked is tracked: the live row for uid, nil when atrium did not create it or it was deleted.
 func FindTracked(ctx context.Context, q db.Querier, uid string) (*Tracked, error) {
 	var row Tracked
 	err := q.QueryRowContext(ctx, "SELECT calendar, spec FROM agent_events WHERE uid = ? AND deleted_ts IS NULL", uid).Scan(&row.Calendar, &row.Spec)
@@ -203,20 +187,17 @@ func FindTracked(ctx context.Context, q db.Querier, uid string) (*Tracked, error
 	return &row, nil
 }
 
-// Untrack is untrack.
 func Untrack(ctx context.Context, q db.Querier, uid string, now float64) error {
 	_, err := q.ExecContext(ctx, "UPDATE agent_events SET deleted_ts = ? WHERE uid = ?", now, uid)
 	return err
 }
 
-// Listing is what list_events returns.
 type Listing struct {
 	Events    []Row
 	Truncated bool
 	Notes     []string
 }
 
-// Dict is the listing as the tool returns it.
 func (l Listing) Dict() py.Dict {
 	events := make([]any, len(l.Events))
 	for i, row := range l.Events {
@@ -229,8 +210,6 @@ func (l Listing) Dict() py.Dict {
 	return py.Dict{{Key: "events", Value: events}, {Key: "truncated", Value: l.Truncated}, {Key: "notes", Value: notes}}
 }
 
-// ListEvents is list_events: the events between start and end (end exclusive) from the mirror and the primary
-// Google calendar, merged and sorted. start, end and target are the tool's arguments, nil or "" when absent.
 func ListEvents(ctx context.Context, env config.Env, start, end any, target string) (*Listing, error) {
 	tz, err := Zone(env)
 	if err != nil {

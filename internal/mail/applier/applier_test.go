@@ -35,7 +35,6 @@ const (
 
 var ctx = context.Background()
 
-// hooked is the fake with SelectRW or Copy wrapped, as the Python tests monkeypatch select_rw and mutate.
 type hooked struct {
 	*mailtest.FakeClient
 	selectRW func(ctx context.Context, name string) (uint32, error)
@@ -516,12 +515,6 @@ func TestWriteCapDefersTheExcessAndWarns(t *testing.T) {
 	want(t, "bills", len(w.Fake.Boxes["Bills"].Messages), 2)
 	if out := w.apply(); out.Written != 2 {
 		t.Fatalf("second pass %+v", out)
-	}
-}
-
-func TestDefaultCapIsWriteCap(t *testing.T) {
-	if (&Applier{}).cap() != config.WriteCap || config.WriteCap != 100 || config.WriteAttempts != 3 {
-		t.Fatal("WRITE_CAP is 100 and WRITE_ATTEMPTS 3")
 	}
 }
 
@@ -1022,9 +1015,6 @@ func TestApplyAllRunsTheLivePassThenTheDueDeletionPass(t *testing.T) {
 	}
 }
 
-// TestModePauseApprovalMatrix asserts exactly when a mailbox write happens: automatic passes write only in live
-// mode when not paused, whatever approval the caller holds; an approved operator write always goes through; an
-// unapproved operator write only in live mode.
 func TestModePauseApprovalMatrix(t *testing.T) {
 	for _, mode := range []string{config.Shadow, config.Live} {
 		for _, paused := range []bool{false, true} {
@@ -1077,8 +1067,6 @@ func TestModePauseApprovalMatrix(t *testing.T) {
 	}
 }
 
-// TestPauseStopsAutomaticWritesButNotApprovalsOrUndo is the runbook: pausing stops the passes, approvals and undo
-// still write.
 func TestPauseStopsAutomaticWritesButNotApprovalsOrUndo(t *testing.T) {
 	w := icloud(t, "live")
 	w.arrive("friend", arrival{flags: []string{}})
@@ -1103,7 +1091,6 @@ func TestPauseStopsAutomaticWritesButNotApprovalsOrUndo(t *testing.T) {
 	want(t, "verbs", w.verbs(), []string{"STORE", "STORE"})
 }
 
-// TestPauseDuringAPassRefusesTheRemainingWrites: the gate checks the pause again for every write.
 func TestPauseDuringAPassRefusesTheRemainingWrites(t *testing.T) {
 	w := icloud(t, "live")
 	w.arrive("bills", arrival{})
@@ -1128,8 +1115,6 @@ func TestPauseDuringAPassRefusesTheRemainingWrites(t *testing.T) {
 		"WriteRefused: refusing automatic mailbox write 'IMAP SELECT read-write': atrium is paused"})
 }
 
-// TestOnlyTheUnflagUndoClearsAFlag: no automatic path issues STORE -FLAGS \Flagged; undoing atrium's own flag
-// is the one write that does.
 func TestOnlyTheUnflagUndoClearsAFlag(t *testing.T) {
 	clears := func(w *world) int {
 		n := 0
@@ -1220,8 +1205,6 @@ func TestNewResyncsTheAccountOnAFreshSession(t *testing.T) {
 	want(t, "bills", w.count("SELECT COUNT(*) FROM messages m JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE mb.name = 'Bills' AND m.gone_at IS NULL"), 1)
 }
 
-// TestGroupFailureHoldsEveryEntry: a group that fails unexpectedly (here an earlier partial's undo plan that
-// cannot be read) holds every one of its actions with the same error.
 func TestGroupFailureHoldsEveryEntry(t *testing.T) {
 	w := gmail(t, "live")
 	w.arrive("first", arrival{})
@@ -1239,5 +1222,11 @@ func TestGroupFailureHoldsEveryEntry(t *testing.T) {
 	held := w.Actions()[1:]
 	if len(held) != 2 || held[0].Error == nil || ok(held[0]) != "None" || ok(held[1]) != "None" || str(held[1].Error) != str(held[0].Error) {
 		t.Fatalf("held rows %+v", held)
+	}
+}
+
+func TestDefaultCapIsWriteCap(t *testing.T) {
+	if (&Applier{}).cap() != config.WriteCap || config.WriteCap != 100 || config.WriteAttempts != 3 {
+		t.Fatal("WRITE_CAP is 100 and WRITE_ATTEMPTS 3")
 	}
 }

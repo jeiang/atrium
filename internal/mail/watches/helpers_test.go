@@ -55,7 +55,6 @@ func count(t *testing.T, d *db.DB, query string, args ...any) int {
 	return n
 }
 
-// chat is fake_chat: it records each call and answers with answer.
 type chat struct {
 	answer any
 	calls  []string

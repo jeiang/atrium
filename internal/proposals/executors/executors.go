@@ -1,5 +1,3 @@
-// Package executors is executors.py: the executors of the mail proposal kinds, the undoers of what they write,
-// and the post-write resync.
 package executors
 
 import (
@@ -35,8 +33,6 @@ const (
 	OpRuleDelete   = "rule_delete"
 )
 
-// chosenSnapshots is chosen_snapshots: every message without a selection, else the selected ones, which must all
-// belong to the proposal.
 func chosenSnapshots(messages []mailops.Snapshot, wanted any) ([]mailops.Snapshot, error) {
 	if wanted == nil {
 		return slices.Clone(messages), nil
@@ -92,8 +88,6 @@ func get(d py.Dict, key string) any {
 	return v
 }
 
-// selected is (selection or {}).get(key): a falsy selection has no keys, and a truthy one that is not an object
-// fails as Python's .get does.
 func selected(selection any, key string) (any, error) {
 	if !py.Truthy(selection) {
 		return nil, nil
@@ -105,7 +99,6 @@ func selected(selection any, key string) (any, error) {
 	return get(d, key), nil
 }
 
-// resolveGroups is resolve_groups: each group under its chosen name with its chosen messages.
 func resolveGroups(groups []group, selection any) ([]planned, error) {
 	picksV, err := selected(selection, "groups")
 	if err != nil {
@@ -153,8 +146,6 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 	return plan, nil
 }
 
-// Executors runs the mail executors and undoers over one database; Open connects an account, Now is the clock of
-// the action log (time.Now when nil).
 type Executors struct {
 	DB   *db.DB
 	Open mailops.Opener
@@ -207,7 +198,6 @@ func skipList(skipped []mailops.Skip) []any {
 	return out
 }
 
-// logSkips is log_skips.
 func (e *Executors) logSkips(ctx context.Context, pid int64, skipped []mailops.Skip) error {
 	if len(skipped) == 0 {
 		return nil
@@ -245,8 +235,6 @@ func sortedUIDs(items []mailops.Verified) ([]uint32, map[uint32]mailops.Verified
 	return uids, byUID
 }
 
-// moveItems is move_items: per source mailbox and batch, a move logged with its move_back undo plan; a partial
-// move is logged as failed with what was copied, then returned.
 func (e *Executors) moveItems(ctx context.Context, client mail.Client, pid int64, account string, items []mailops.Verified, destIMAP string) (int, error) {
 	moved := 0
 	for _, g := range mailops.GroupByMailbox(items) {
@@ -315,7 +303,6 @@ func stringList(values []string) []any {
 	return out
 }
 
-// relabelItems is relabel_items: per label change and mailbox, one STORE logged with its gmail_labels undo plan.
 func (e *Executors) relabelItems(ctx context.Context, client mail.Client, pid int64, items []mailops.Verified, add, remove []string) (int, error) {
 	changed := 0
 	for _, r := range mailops.RelabelPlan(items, add, remove) {
@@ -349,8 +336,6 @@ func (e *Executors) relabelItems(ctx context.Context, client mail.Client, pid in
 	return changed, nil
 }
 
-// trashItems is trash_items: iCloud moves to Trash; Gmail copies to Trash, with a gmail_untrash undo plan only
-// when the server reported every copy's UID.
 func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int64, account string, items []mailops.Verified) (int, error) {
 	trash, err := mailops.TrashMailbox(ctx, client, account)
 	if err != nil {
@@ -426,9 +411,6 @@ func snapshotsOf(v any) ([]mailops.Snapshot, error) {
 	return out, err
 }
 
-// ExecuteMoves is execute_moves for rebalance_split, rebalance_merge and inbox_backlog: each chosen group is
-// verified, then Gmail relabels from the payload's folder to the group's label and iCloud moves into the group's
-// folder, created (with a delete_folder undo) when missing.
 func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
 	var payload struct {
 		Folder string  `json:"folder"`
@@ -493,8 +475,6 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 	}, nil
 }
 
-// ExecuteDeletion is execute_deletion: the proposed delete rule is created (with a rule_delete undo) unless it
-// exists, then the chosen backlog is verified and trashed.
 func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
 	payload, err := decode(p.Payload)
 	if err != nil {
@@ -577,8 +557,6 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 	}, nil
 }
 
-// ExecuteLabelMerge is execute_label_merge: the chosen messages move from the label to the target label, and
-// the label is deleted once no message carries it.
 func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
 	var payload struct {
 		Label    string             `json:"label"`
@@ -635,18 +613,15 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 	}, nil
 }
 
-// DeleteFolder is the delete_folder plan.
 type DeleteFolder struct {
 	Account  string `json:"account"`
 	IMAPName string `json:"imap_name"`
 }
 
-// RuleDelete is the rule_delete plan.
 type RuleDelete struct {
 	ID string `json:"id"`
 }
 
-// UndoDeleteFolder is undo_delete_folder: the folder an apply created goes again when it is empty.
 func (e *Executors) UndoDeleteFolder(ctx context.Context, raw json.RawMessage) (py.Dict, error) {
 	var plan DeleteFolder
 	if err := json.Unmarshal(raw, &plan); err != nil {
@@ -664,7 +639,6 @@ func (e *Executors) UndoDeleteFolder(ctx context.Context, raw json.RawMessage) (
 	return py.Dict{{Key: "deleted", Value: deleted}}, nil
 }
 
-// UndoRuleDelete is undo_rule_delete.
 func (e *Executors) UndoRuleDelete(ctx context.Context, raw json.RawMessage) (py.Dict, error) {
 	var plan RuleDelete
 	if err := json.Unmarshal(raw, &plan); err != nil {
@@ -677,7 +651,6 @@ func (e *Executors) UndoRuleDelete(ctx context.Context, raw json.RawMessage) (py
 	return py.Dict{{Key: "deleted", Value: deleted}}, nil
 }
 
-// SyncAfter is sync_after: the account's resync under the database's exclusive lock.
 func SyncAfter(syncer *mailsync.Syncer, open mailops.Opener) proposals.SyncHook {
 	return func(ctx context.Context, account string) error {
 		lock, err := db.Exclusive(ctx, syncer.Cfg.DBPath, db.ShortLockWait)
@@ -690,7 +663,6 @@ func SyncAfter(syncer *mailsync.Syncer, open mailops.Opener) proposals.SyncHook 
 	}
 }
 
-// Register is register: the mail executors, every mail undoer (live's four included) and the sync hook.
 func Register(r *proposals.Registry, e *Executors, syncer *mailsync.Syncer) {
 	r.Executors[RebalanceSplit] = e.ExecuteMoves
 	r.Executors[RebalanceMerge] = e.ExecuteMoves

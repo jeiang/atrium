@@ -41,7 +41,6 @@ func progressOf(t *testing.T, c *anthropic.Client) (*anthropic.Message, []anthro
 	return msg, events, calls
 }
 
-// The events progress.Writer.observe produces for the Python SDK's stream of the same response.
 func TestStreamProgressEvents(t *testing.T) {
 	search := anthropictest.WebSearch("srvtoolu_01", "carnival dates 2027", "https://carnival.test/2027")
 	failedSearch := json.RawMessage(`{"type":"web_search_tool_result","tool_use_id":"srvtoolu_02","content":{"type":"web_search_tool_result_error","error_code":"max_uses_exceeded"}}`)

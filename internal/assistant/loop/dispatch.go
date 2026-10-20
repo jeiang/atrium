@@ -18,14 +18,12 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// ToolUse is a tool_use block of a response.
 type ToolUse struct {
 	ID    string          `json:"id"`
 	Name  string          `json:"name"`
 	Input json.RawMessage `json:"input"`
 }
 
-// Args is `use.get("input") or {}`: the input as the journal stores it and as the handler gets it.
 func (u ToolUse) Args() (json.RawMessage, any, error) {
 	if len(u.Input) == 0 {
 		return json.RawMessage(`{}`), py.Dict{}, nil
@@ -40,14 +38,12 @@ func (u ToolUse) Args() (json.RawMessage, any, error) {
 	return u.Input, v, nil
 }
 
-// Outcome is one call of a parallel batch: Value when OK, else Error is the call's error text.
 type Outcome struct {
 	OK    bool
 	Value any
 	Error string
 }
 
-// Batch runs several calls of one tool concurrently (research.run_batch); it never touches the journal.
 type Batch func(ctx context.Context, tc *tool.Context, uses []ToolUse) (map[string]Outcome, error)
 
 func blockType(raw json.RawMessage) string {
@@ -73,7 +69,6 @@ func toolUses(blocks []json.RawMessage) ([]ToolUse, error) {
 	return uses, nil
 }
 
-// toolResult is tool_result.
 func toolResult(toolUseID, content string, isError bool) json.RawMessage {
 	block := py.Dict{{Key: "type", Value: actx.ToolResult}, {Key: "tool_use_id", Value: toolUseID}, {Key: "content", Value: content}}
 	if isError {
@@ -82,7 +77,6 @@ func toolResult(toolUseID, content string, isError bool) json.RawMessage {
 	return json.RawMessage(py.JSONDumps(block, journalJSON))
 }
 
-// replayClass is replay_class: an unknown tool or a read is safe to run again on resume.
 func replayClass(t *tool.Tool) string {
 	if t == nil || t.Effect == tool.Read {
 		return journal.Safe
@@ -90,7 +84,6 @@ func replayClass(t *tool.Tool) string {
 	return journal.Write
 }
 
-// className is type(e).__name__ of an error a tool raised.
 func className(err error) string {
 	var raised *tool.Raised
 	if errors.As(err, &raised) {
@@ -112,7 +105,6 @@ func className(err error) string {
 	return "RuntimeError"
 }
 
-// toolErrorText is `str(e) or type(e).__name__` for a ToolError (NotConfigured included).
 func toolErrorText(err error) (string, bool) {
 	if text, ok := tool.Message(err); ok {
 		return text, true
@@ -143,8 +135,6 @@ func (x *dispatcher) lookup(name string) *tool.Tool {
 	return &t
 }
 
-// invoke is invoke: the handler's value, or the error text the model sees. A tool the run does not offer is
-// refused here, whatever the model named.
 func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (errText *string, value any, err error) {
 	fail := func(text string) (*string, any, error) { return new(text), nil, nil }
 	if t == nil {
@@ -181,7 +171,6 @@ func (x *dispatcher) call(ctx context.Context, t *tool.Tool, args py.Dict) (valu
 	return t.Handler(ctx, x.tc, args)
 }
 
-// finish is finish: it records the outcome and returns the tool_result block.
 func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errText *string, value any) (json.RawMessage, error) {
 	if errText != nil {
 		if err := journal.FinishToolCall(ctx, x.d.Write, callID, journal.Error, x.now(), errText, nil); err != nil {
@@ -221,7 +210,6 @@ func (x *dispatcher) toolStart(ctx context.Context, use ToolUse, args json.RawMe
 	return x.tc.Progress.Event(ctx, progress.ToolStart, py.Dict{{Key: "id", Value: use.ID}, {Key: "name", Value: use.Name}, {Key: "args", Value: short}})
 }
 
-// startCall is start_call: the call is journaled before the tool runs.
 func (x *dispatcher) startCall(ctx context.Context, use ToolUse) (int64, error) {
 	args, _, err := use.Args()
 	if err != nil {
@@ -241,8 +229,6 @@ func (x *dispatcher) execute(ctx context.Context, use ToolUse) (json.RawMessage,
 	return x.perform(ctx, x.lookup(use.Name), callID, use)
 }
 
-// executeAll is execute_all: several research calls in one response run as a parallel batch; journal
-// writes stay on this goroutine.
 func (x *dispatcher) executeAll(ctx context.Context, uses []ToolUse) ([]json.RawMessage, error) {
 	var batch []ToolUse
 	if _, offered := x.byName[Research]; offered && x.batch != nil {
@@ -294,8 +280,6 @@ func (x *dispatcher) executeAll(ctx context.Context, uses []ToolUse) ([]json.Raw
 	return results, nil
 }
 
-// settle is settle: a pending call of an interrupted run. A safe call runs again; a write that may have
-// taken effect is answered with an instruction to check before retrying.
 func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.ToolCall) (json.RawMessage, error) {
 	if call == nil {
 		return x.execute(ctx, use)
@@ -331,5 +315,4 @@ func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.Tool
 	return toolResult(use.ID, Verify, true), nil
 }
 
-// ClassName is type(e).__name__ of an error a tool raised, for batch hooks that report errors like invoke.
 func ClassName(err error) string { return className(err) }

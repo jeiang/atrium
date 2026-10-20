@@ -1,5 +1,3 @@
-// Package refreshcmd is the shape shared by cli.py's `loops refresh` and `watches refresh`: connect, hold the
-// database's exclusive lock, run one refresh pass and print its result as indented JSON.
 package refreshcmd
 
 import (
@@ -12,10 +10,8 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Run is one refresh pass over the connected database.
 type Run func(ctx context.Context, d *db.DB, cfg config.Config) py.Dict
 
-// Command is the group command `<group> refresh`.
 func Command(group string, run Run) *cli.Command {
 	return &cli.Command{
 		Name: group,
@@ -28,8 +24,6 @@ func Command(group string, run Run) *cli.Command {
 	}
 }
 
-// Execute loads the configuration from cfgEnv and runs the pass under the exclusive lock; its exit code is the
-// handler's.
 func Execute(env *cli.Env, cfgEnv config.Env, run Run) int {
 	cfg, err := config.Load(cfgEnv)
 	if err != nil {

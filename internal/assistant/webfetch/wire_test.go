@@ -26,8 +26,6 @@ func (c *rawConn) SetDeadline(time.Time) error      { return nil }
 func (c *rawConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *rawConn) SetWriteDeadline(time.Time) error { return nil }
 
-// TestWireMatchesPython replays generated HTTP replies (testdata/wire.jsonl, from tools/webfetch/gen_wire_cases.py)
-// and compares the page or the error with what the frozen Python http.client path produced.
 func TestWireMatchesPython(t *testing.T) {
 	f, err := os.Open("testdata/wire.jsonl")
 	if err != nil {

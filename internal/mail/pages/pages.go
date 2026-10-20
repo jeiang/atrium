@@ -1,5 +1,3 @@
-// Package pages is the mail web pages: messages and corrections, the decisions page, live undo and pause, and the
-// rule editor.
 package pages
 
 import (
@@ -27,7 +25,6 @@ import (
 //go:embed templates/*.gohtml
 var templates embed.FS
 
-// Templates is the page templates of this package, for web.Page.Templates.
 func Templates() fs.FS {
 	sub, err := fs.Sub(templates, "templates")
 	if err != nil {
@@ -36,7 +33,6 @@ func Templates() fs.FS {
 	return sub
 }
 
-// Globals are the template globals the rule editor and the decisions page read, for web.Page.Globals.
 func Globals() map[string]any {
 	return map[string]any{
 		"stages":        slices.Clone(router.Stages[:]),
@@ -46,13 +42,9 @@ func Globals() map[string]any {
 	}
 }
 
-// Options configure Module. The zero value is the served app.
 type Options struct {
-	// Open connects an account's mail client for the move after a correction and for live undo; nil connects with
-	// the configured credentials.
 	Open mailops.Opener
-	// Now is the clock of corrections, the applier and live undo, in seconds; nil is the wall clock.
-	Now func() float64
+	Now  func() float64
 }
 
 type service struct {
@@ -63,14 +55,12 @@ type service struct {
 	drafts  *drafts.Store
 }
 
-// pageSize is the decisions per page and the flag judgments shown.
 var pageSize = 50
 
 const learnedLimit = 50
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
-// Module registers the mail pages' routes in the order the Python app registered them.
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		open := o.Open

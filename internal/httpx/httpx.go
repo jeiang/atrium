@@ -1,6 +1,3 @@
-// Package httpx is the plain HTTP client of src/atrium/http.py: JSON POSTs
-// to the local model servers and text GETs, with every transport failure
-// reported as ServiceUnavailable.
 package httpx
 
 import (
@@ -26,8 +23,6 @@ const (
 	UserAgent   = "atrium/1 (ledger rate fetch)"
 )
 
-// Python exception classes that ported except clauses tell apart; errors
-// from malformed replies wrap one of them.
 var (
 	ErrValue = errors.New("ValueError")
 	ErrKey   = errors.New("KeyError")
@@ -35,8 +30,6 @@ var (
 	ErrType  = errors.New("TypeError")
 )
 
-// ServiceUnavailable is Python's http.ServiceUnavailable: no URL, a
-// transport failure, a timeout or a non-2xx status.
 type ServiceUnavailable struct{ Msg string }
 
 func (e *ServiceUnavailable) Error() string { return e.Msg }
@@ -51,8 +44,6 @@ var client = &http.Client{CheckRedirect: func(req *http.Request, via []*http.Req
 	return nil
 }}
 
-// PostJSON posts payload as JSON and returns the JSON reply; a reply that
-// is not JSON is an ErrValue.
 func PostJSON(ctx context.Context, rawURL string, payload any) (json.RawMessage, error) {
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
 		return nil, &ServiceUnavailable{"no service URL configured for " + py.Repr(rawURL)}
@@ -77,8 +68,6 @@ func PostJSON(ctx context.Context, rawURL string, payload any) (json.RawMessage,
 	return reply, nil
 }
 
-// GetText fetches rawURL and decodes it as UTF-8 with Python's "replace"
-// error handler; timeout <= 0 means GetTimeout.
 func GetText(ctx context.Context, rawURL string, timeout time.Duration) (string, error) {
 	if timeout <= 0 {
 		timeout = GetTimeout
@@ -139,8 +128,6 @@ func reason(err error) string {
 	return err.Error()
 }
 
-// DecodeReplace is Python's bytes.decode("utf-8", "replace"): each maximal
-// invalid subpart becomes one U+FFFD.
 func DecodeReplace(b []byte) string {
 	if utf8.Valid(b) {
 		return string(b)

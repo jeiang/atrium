@@ -1,5 +1,3 @@
-// Package rulestest builds the databases of the routing tests: tests/helpers.py's prepare, add_message, filed and
-// inbox over a migrated temp-file atrium.db.
 package rulestest
 
 import (
@@ -13,10 +11,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail/rules"
 )
 
-// Fields are the messages columns a test sets besides the defaults of add_message; list columns take []string.
 type Fields map[string]any
 
-// DB is a migrated database with both accounts and one `filed` mailbox each (ids 1 and 2).
 func DB(t testing.TB) *db.DB {
 	t.Helper()
 	d := dbtest.Schema(t)
@@ -27,7 +23,6 @@ func DB(t testing.TB) *db.DB {
 	return d
 }
 
-// Exec runs a write statement.
 func Exec(t testing.TB, d *db.DB, query string, args ...any) {
 	t.Helper()
 	if _, err := d.Write.ExecContext(t.Context(), query, args...); err != nil {
@@ -35,7 +30,6 @@ func Exec(t testing.TB, d *db.DB, query string, args ...any) {
 	}
 }
 
-// Unit is a vector with 1.0 at index and weight at other (when other >= 0).
 func Unit(index int, other int, weight float32) []float32 {
 	v := make([]float32, config.EmbedDim)
 	v[index] = 1.0
@@ -45,11 +39,8 @@ func Unit(index int, other int, weight float32) []float32 {
 	return v
 }
 
-// Vector is Unit(index) alone.
 func Vector(index int) []float32 { return Unit(index, -1, 0) }
 
-// Add is add_message: it inserts a message with its search row and, when vector is not nil, its embedding, and
-// returns the message id.
 func Add(t testing.TB, d *db.DB, uid int, vector []float32, body string, fields Fields) int64 {
 	t.Helper()
 	row := Fields{
@@ -101,7 +92,6 @@ func itoa(n int) string {
 	return string(b)
 }
 
-// Filed is filed(): a message filed in folder.
 func Filed(t testing.TB, d *db.DB, uid int, folder, addr, domain string, vector []float32, fields Fields) int64 {
 	t.Helper()
 	row := Fields{"from_addr": addr, "from_domain": domain, "folder": folder, "location": folder, "in_inbox": 0}
@@ -111,7 +101,6 @@ func Filed(t testing.TB, d *db.DB, uid int, folder, addr, domain string, vector 
 	return Add(t, d, uid, vector, "", row)
 }
 
-// Inbox is inbox(): a read, unflagged message in the inbox.
 func Inbox(t testing.TB, d *db.DB, uid int, addr, domain string, vector []float32, fields Fields) int64 {
 	t.Helper()
 	row := Fields{"seen": 1, "flagged": 0, "in_inbox": 1, "location": "INBOX", "from_addr": addr, "from_domain": domain}
@@ -121,7 +110,6 @@ func Inbox(t testing.TB, d *db.DB, uid int, addr, domain string, vector []float3
 	return Add(t, d, uid, vector, "", row)
 }
 
-// Fetch is the messages row id as rules and the router read it.
 func Fetch(t testing.TB, d *db.DB, id int64) rules.Message {
 	t.Helper()
 	m, err := rules.ScanMessage(d.Read.QueryRowContext(t.Context(), "SELECT "+rules.MessageColumns+" FROM messages WHERE id = ?", id))
@@ -131,7 +119,6 @@ func Fetch(t testing.TB, d *db.DB, id int64) rules.Message {
 	return m
 }
 
-// Count runs a COUNT query.
 func Count(t testing.TB, d *db.DB, query string, args ...any) int {
 	t.Helper()
 	var n int

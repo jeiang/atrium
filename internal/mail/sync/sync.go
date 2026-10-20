@@ -1,6 +1,3 @@
-// Package sync is the read path of sync.py: mailbox discovery, UIDVALIDITY handling, new, gone and flag-change
-// detection, feature extraction into messages and message_fts, and the raw message cache. It never writes to a
-// mailbox.
 package sync
 
 import (
@@ -36,7 +33,6 @@ var (
 	runLog = logx.Logger("atrium.run")
 )
 
-// Stats is SyncStats.
 type Stats struct {
 	New         int
 	GoneIDs     []int64
@@ -44,7 +40,6 @@ type Stats struct {
 	Mailboxes   int
 }
 
-// Syncer syncs accounts into DB and the raw cache under Cfg.CacheDir. Now is the clock, time.Now when nil.
 type Syncer struct {
 	DB  *db.DB
 	Cfg config.Config
@@ -58,10 +53,8 @@ func (s *Syncer) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-// Opener connects an account's mail client.
 type Opener func(ctx context.Context, account string) (mail.Client, error)
 
-// One is run.sync_one: it opens the account's client, syncs it, closes it and logs the counts.
 func (s *Syncer) One(ctx context.Context, account string, open Opener) (Stats, error) {
 	client, err := open(ctx, account)
 	if err != nil {
@@ -86,7 +79,6 @@ type mailbox struct {
 	HighestModSeq *int64
 }
 
-// Account is sync_account.
 func (s *Syncer) Account(ctx context.Context, account string, client mail.Client) (Stats, error) {
 	var stats Stats
 	if _, err := s.DB.Write.ExecContext(ctx, "INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, account); err != nil {
@@ -342,11 +334,8 @@ func dayOf(ts float64) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-// IMAPDate is imap_date: the SEARCH date of a timestamp's UTC day.
 func IMAPDate(t time.Time) string { return t.UTC().Format("02-Jan-2006") }
 
-// SentSince is sent_since: the SINCE day of a Sent mailbox search, the backfill cutoff or two days before the
-// oldest indexed message when that is earlier, so that older indexed mail does not look vanished.
 func (s *Syncer) SentSince(ctx context.Context, mailboxID, validity int64, run float64) (time.Time, error) {
 	cutoff := run - SentBackfillDays*86400
 	var oldest sql.NullFloat64
@@ -357,6 +346,7 @@ func (s *Syncer) SentSince(ctx context.Context, mailboxID, validity int64, run f
 		return time.Time{}, err
 	}
 	if oldest.Valid {
+		// two days before the oldest indexed message, so older indexed mail does not look vanished
 		cutoff = min(cutoff, oldest.Float64-2*86400)
 	}
 	return dayOf(cutoff), nil
@@ -498,8 +488,6 @@ func (s *Syncer) refreshCategories(ctx context.Context, client mail.Client, mbx 
 	})
 }
 
-// RawLocation is raw_location: the cache-relative path (always with forward slashes, as stored in
-// messages.raw_path) and the absolute one.
 func RawLocation(cfg config.Config, account string, mailboxID, validity int64, uid uint32) (relative, absolute string) {
 	relative = path.Join("raw", account, strconv.FormatInt(mailboxID, 10), strconv.FormatInt(validity, 10)+"_"+strconv.FormatUint(uint64(uid), 10)+".eml")
 	return relative, filepath.Join(cfg.CacheDir, filepath.FromSlash(relative))

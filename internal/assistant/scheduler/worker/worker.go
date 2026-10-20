@@ -1,5 +1,3 @@
-// Package worker is the process half of scheduler.py: the tick that seeds, claims and runs due jobs, the
-// execution of one claim (a model run or a built-in function), and the loop that also resumes interrupted runs.
 package worker
 
 import (
@@ -28,7 +26,6 @@ import (
 
 var log = logx.Logger("atrium.agent.scheduler")
 
-// Env is what a built-in function runs against.
 type Env struct {
 	DB      *db.DB
 	Cfg     config.Config
@@ -37,14 +34,10 @@ type Env struct {
 	Now     func() float64
 }
 
-// Result is a built-in function's outcome; RunID is the agent run it started, 0 when it started none.
 type Result struct{ RunID int64 }
 
-// Callable is a built-in job that runs a function instead of a model prompt (builtin_jobs.CALLABLES).
 type Callable func(ctx context.Context, e Env) (Result, error)
 
-// Worker runs the scheduler against one Service. Callables holds the functions of the built-in jobs named in
-// scheduler.CallableNames; Spawn starts one claim's execution (a goroutine by default; tests run it inline).
 type Worker struct {
 	Service   *service.Service
 	Callables map[string]Callable
@@ -58,7 +51,6 @@ type Worker struct {
 	dirty  atomic.Bool
 }
 
-// New is a Worker with the production tick interval and a fresh lease owner.
 func New(svc *service.Service, callables map[string]Callable) *Worker {
 	return &Worker{Service: svc, Callables: callables, Interval: scheduler.TickSeconds * time.Second, Owner: journal.NewOwner()}
 }
@@ -78,14 +70,12 @@ func (w *Worker) spawn(name string, fn func()) {
 	w.wg.Go(fn)
 }
 
-// Wait blocks until every claim started so far has returned.
 func (w *Worker) Wait() { w.wg.Wait() }
 
 func interrupted(ctx context.Context, err error) bool {
 	return ctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded))
 }
 
-// Tick is tick: it seeds the nightly and built-in jobs, claims what is due and starts each claim.
 func (w *Worker) Tick(ctx context.Context) ([]scheduler.Claim, []scheduler.Skipped, error) {
 	d, env := w.Service.DB, w.Service.Env
 	stamp := w.now()
@@ -152,10 +142,6 @@ func (w *Worker) notifySkipped(ctx context.Context, skip scheduler.Skipped, now 
 	return err
 }
 
-// ExecuteClaim is execute_claim and execute_callable: it runs the claimed job and records the outcome on its
-// job run. A cancelled context (SIGTERM) leaves the job run and the agent run as they are: the run stays
-// resumable and is settled when it finishes, never recorded as a failure. A panic is logged and recorded as
-// an error, as Python's crashed job was.
 func (w *Worker) ExecuteClaim(ctx context.Context, claim scheduler.Claim) (status string) {
 	defer func() {
 		if p := recover(); p != nil {
@@ -305,7 +291,6 @@ func (w *Worker) executeCallable(ctx context.Context, claim scheduler.Claim, cal
 	return status
 }
 
-// Cycle is one pass of run_worker's loop: settle and release job runs, resume interrupted agent runs, tick.
 func (w *Worker) Cycle(ctx context.Context) error {
 	d := w.Service.DB
 	if err := scheduler.SettleResumed(ctx, d, w.now()); err != nil {
@@ -328,9 +313,6 @@ func (w *Worker) Cycle(ctx context.Context) error {
 	return nil
 }
 
-// Run is run_worker: the only process that resumes interrupted agent runs, at startup and then every tick, so
-// a web restart never takes over a run that is still executing elsewhere. It returns when ctx is cancelled,
-// after the claims it started have returned.
 func (w *Worker) Run(ctx context.Context) {
 	log.Info(fmt.Sprintf("scheduler %s started", w.Owner))
 	defer w.wg.Wait()

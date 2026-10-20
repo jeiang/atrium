@@ -10,8 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Command is `loops refresh`: one refresh pass under the database's exclusive lock, printed as JSON. The root
-// command adds it; clock is the pass's clock in seconds (the wall clock when nil).
 func Command(clock func() float64) *cli.Command {
 	if clock == nil {
 		clock = wallClock

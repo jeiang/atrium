@@ -37,7 +37,6 @@ func decode(t *testing.T, raw json.RawMessage, into any) {
 	}
 }
 
-// TestCorpus runs every smtp.py record of the corpus; the drafts.* records run in internal/mail/drafts.
 func TestCorpus(t *testing.T) {
 	c := smtptest.LoadCorpus(t)
 	counts := map[string]int{}

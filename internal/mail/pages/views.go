@@ -113,7 +113,6 @@ type conditionData struct {
 	Focus string         `json:"focus"`
 }
 
-// conditionView is the condition as the editor's dict: field, op and a value where there is one.
 func conditionView(c rules.Condition) map[string]any {
 	out := map[string]any{"field": c.Field, "op": c.Op}
 	if !c.HasValue {

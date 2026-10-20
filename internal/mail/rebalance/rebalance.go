@@ -1,5 +1,3 @@
-// Package rebalance is rebalance.py: the scanner that proposes splitting a mixed folder by sender or by
-// embedding cluster, and merging a sender's stray mail into the folder that holds the rest of it.
 package rebalance
 
 import (
@@ -59,7 +57,6 @@ const NameSystem = "You name a mail folder. You get the existing parent folder, 
 	"of a group of messages that will move into a new folder. Answer a short, plain folder name of one to three " +
 	"words that describes what the messages are, without the sender's name unless that is what they are about."
 
-// NameSchema is NAME_SCHEMA.
 var NameSchema = llm.Object{
 	{Key: "type", Value: "object"},
 	{Key: "properties", Value: llm.Object{{Key: "name", Value: llm.Object{{Key: "type", Value: "string"}, {Key: "maxLength", Value: NameMaxChars}}}}},
@@ -73,7 +70,6 @@ var (
 	spacesRE = rx.MustCompile(`\s+`, 0)
 )
 
-// row is a folder_rows message.
 type row struct {
 	scanutil.Message
 	Account     string
@@ -105,13 +101,11 @@ var (
 	mergeLevels = []level{{"addr", addrKey}, {"tmpl", tmplKey}}
 )
 
-// Group is one group of a candidate: its key and message ids.
 type Group struct {
 	Key string
 	IDs []int64
 }
 
-// Candidate is one split or merge the folder data suggests; Into is "" for a split.
 type Candidate struct {
 	Kind    string
 	Account string
@@ -121,7 +115,6 @@ type Candidate struct {
 	Into    string
 }
 
-// Fingerprint is the candidate's fingerprint: kind, account, folder, target, level and a digest of its group keys.
 func (c Candidate) Fingerprint() string {
 	keys := make([]string, len(c.Groups))
 	for i, g := range c.Groups {
@@ -146,7 +139,6 @@ func (f folders) sorted() []folderKey {
 	return keys
 }
 
-// folderRows is folder_rows: the live, received, filed messages by account and folder.
 func folderRows(ctx context.Context, q proposals.Querier) (folders, error) {
 	f := folders{rows: map[folderKey][]*row{}}
 	rows, err := q.QueryContext(ctx, "SELECT id, account, folder, from_addr, from_domain, from_name, subject, subject_tmpl, date_ts "+
@@ -202,7 +194,6 @@ func sortGroups(groups []Group) {
 	})
 }
 
-// bigGroups is big_groups.
 func bigGroups(rows []*row, key keyer, total int) []Group {
 	g := groupBy(rows, key)
 	var out []Group
@@ -215,7 +206,6 @@ func bigGroups(rows []*row, key keyer, total int) []Group {
 	return out
 }
 
-// senderSplit is sender_split: the first level with two big groups, all but the largest.
 func senderSplit(rows []*row) (string, []Group, bool) {
 	for _, lv := range levels {
 		groups := bigGroups(rows, lv.key, len(rows))
@@ -226,7 +216,6 @@ func senderSplit(rows []*row) (string, []Group, bool) {
 	return "", nil, false
 }
 
-// unitVectors is unit_vectors: the stored embeddings of ids, by id.
 func unitVectors(ctx context.Context, q proposals.Querier, ids []int64) (map[int64][]float32, error) {
 	found := map[int64][]float32{}
 	for _, chunk := range mailops.Chunks(ids, 500) {
@@ -261,10 +250,8 @@ func unitVectors(ctx context.Context, q proposals.Querier, ids []int64) (map[int
 	return found, nil
 }
 
-// clusterer runs kmeans with one scratch buffer for its sums.
 type clusterer struct{ terms []float64 }
 
-// dot is dot: sum(map(operator.mul, a, b)) over the widened float32 values.
 func (c *clusterer) dot(a, b []float32) float64 {
 	c.terms = c.terms[:0]
 	for i := range a {
@@ -273,7 +260,6 @@ func (c *clusterer) dot(a, b []float32) float64 {
 	return py.Sum(c.terms)
 }
 
-// centroid is centroid: the normalized column sums, stored as float32.
 func (c *clusterer) centroid(members [][]float32) []float32 {
 	total := make([]float64, len(members[0]))
 	for i := range total {
@@ -314,8 +300,6 @@ func maxOf(values []float64) int {
 	return best
 }
 
-// kmeans is kmeans: farthest-point seeding from the point least like the mean, then up to ClusterIterations
-// rounds; the assignment and the mean margin of each point's best similarity over its next best.
 func (c *clusterer) kmeans(vectors [][]float32, k int) ([]int, float64) {
 	mean := c.centroid(vectors)
 	centers := [][]float32{vectors[argmin(len(vectors), func(i int) float64 { return c.dot(vectors[i], mean) })]}
@@ -371,8 +355,6 @@ func (c *clusterer) kmeans(vectors [][]float32, k int) ([]int, float64) {
 	return assign, margin / float64(len(vectors))
 }
 
-// embeddingSplit is embedding_split: the best k-means clustering of the folder's embeddings, when enough of the
-// folder is embedded and the clusters separate.
 func embeddingSplit(ctx context.Context, q proposals.Querier, rows []*row) (string, []Group, bool, error) {
 	ids := make([]int64, len(rows))
 	for i, r := range rows {
@@ -444,7 +426,6 @@ func embeddingSplit(ctx context.Context, q proposals.Querier, rows []*row) (stri
 	return "embed", groups[1:], true, nil
 }
 
-// splitCandidates is split_candidates.
 func splitCandidates(ctx context.Context, q proposals.Querier, f folders) ([]Candidate, error) {
 	var found []Candidate
 	for _, key := range f.sorted() {
@@ -468,14 +449,11 @@ func splitCandidates(ctx context.Context, q proposals.Querier, f folders) ([]Can
 
 type placedKey struct{ account, key string }
 
-// counter is a Counter of folders in first-seen order.
 type counter struct {
 	order []string
 	n     map[string]int
 }
 
-// mergeCandidates is merge_candidates: a sender's mail in a big folder whose mail elsewhere sits almost all in one
-// other folder; each message is claimed by the first candidate that names it.
 func mergeCandidates(f folders) []Candidate {
 	var found []Candidate
 	for _, lv := range mergeLevels {
@@ -552,13 +530,11 @@ func mergeCandidates(f folders) []Candidate {
 	return unique
 }
 
-// Detect is detect: the merge candidates, then the split candidates.
 func Detect(ctx context.Context, q proposals.Querier) ([]Candidate, error) {
 	_, found, err := detect(ctx, q)
 	return found, err
 }
 
-// detect is detect with the folder rows it read, which build previews from.
 func detect(ctx context.Context, q proposals.Querier) (folders, []Candidate, error) {
 	f, err := folderRows(ctx, q)
 	if err != nil {
@@ -571,7 +547,6 @@ func detect(ctx context.Context, q proposals.Querier) (folders, []Candidate, err
 	return f, append(mergeCandidates(f), splits...), nil
 }
 
-// termsOf is terms_of: the commonest subject template words that are not stopwords, each counted once a message.
 func termsOf(rows []*row) []string {
 	counts := map[string]int{}
 	var words []string
@@ -593,18 +568,14 @@ func termsOf(rows []*row) []string {
 	return words[:min(len(words), TopTerms)]
 }
 
-// CleanName is clean_name.
 func CleanName(value string) string {
 	name, _ := junkRE.Sub(" ", value, 0)
 	name, _ = spacesRE.Sub(" ", name, 0)
 	return py.Strip(py.Clip(py.Strip(name), NameMaxChars))
 }
 
-// Namer names the new folder of a split group from its parent folder, top sender domains and subject terms.
 type Namer func(ctx context.Context, folder string, domains, terms []string) (string, error)
 
-// SuggestName is suggest_name on the chat model at chatURL: an unreachable model or an unusable answer falls back
-// to the top sender domain, then "Split".
 func SuggestName(chatURL string) Namer {
 	return func(ctx context.Context, folder string, domains, terms []string) (string, error) {
 		prompt := fmt.Sprintf("Parent folder: %s\nTop sender domains: %s\nCommon subject words: %s", folder,
@@ -676,7 +647,6 @@ func groupRows(byID map[int64]*row, ids []int64) []*row {
 	return rows
 }
 
-// build is build: the title, payload and preview of a candidate's proposal.
 func build(ctx context.Context, q proposals.Querier, byID map[int64]*row, cand Candidate, namer Namer) (built, error) {
 	if cand.Kind == Merge {
 		g := cand.Groups[0]
@@ -729,8 +699,6 @@ func build(ctx context.Context, q proposals.Querier, byID map[int64]*row, cand C
 	}, nil
 }
 
-// track is track: one run is counted per candidate at most every RunGapSeconds, and candidates that disappeared
-// are forgotten. It returns the runs of every tracked fingerprint.
 func track(ctx context.Context, d *db.DB, candidates []Candidate, ts float64) (map[string]int64, error) {
 	var order []string
 	live := map[string]Candidate{}
@@ -800,8 +768,6 @@ func track(ctx context.Context, d *db.DB, candidates []Candidate, ts float64) (m
 	return runs, err
 }
 
-// Scan is scan at ts: a candidate seen on RunsRequired runs at least RunGapSeconds apart becomes a proposal,
-// created at ts, unless its fingerprint is known.
 func Scan(ctx context.Context, d *db.DB, ts float64, namer Namer) (scanutil.Result, error) {
 	f, candidates, err := detect(ctx, d.Read)
 	if err != nil {

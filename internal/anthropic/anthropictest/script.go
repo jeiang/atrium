@@ -5,7 +5,6 @@ import (
 	"fmt"
 )
 
-// Usage mirrors fake_anthropic.usage; Default is its defaults (1000 input, 100 output tokens).
 type Usage struct {
 	Input         int64
 	CacheCreation int64
@@ -61,7 +60,6 @@ func (u Usage) JSON() json.RawMessage {
 	})
 }
 
-// Reply is fake_anthropic.response with the default usage.
 func Reply(stop string, content ...json.RawMessage) Response {
 	return Response{Content: content, StopReason: stop, Usage: Default.JSON()}
 }
@@ -76,19 +74,16 @@ func (r Response) WithContextManagement(cm json.RawMessage) Response {
 	return r
 }
 
-// FromGolden reads a golden exchange's `response`.
 func FromGolden(raw json.RawMessage) (Response, error) {
 	var r Response
 	err := json.Unmarshal(raw, &r)
 	return r, err
 }
 
-// Failure answers with an HTTP status and the API's error envelope.
 func Failure(status int, errType, message string) Response {
 	return Response{Status: status, ErrorBody: ErrorBody(errType, message)}
 }
 
-// StreamFailure sends the error envelope as an SSE error event mid-stream.
 func StreamFailure(errType, message string) Response {
 	return Response{ErrorBody: ErrorBody(errType, message)}
 }
@@ -126,7 +121,6 @@ func Compaction(summary, signature string) json.RawMessage {
 	return mustJSON(map[string]string{"type": "compaction", "content": summary, "encrypted_content": "enc", "signature": signature})
 }
 
-// WebSearch is the server_tool_use block and its web_search_tool_result with one result per URL.
 func WebSearch(id, query string, urls ...string) []json.RawMessage {
 	results := make([]map[string]any, len(urls))
 	for i, u := range urls {

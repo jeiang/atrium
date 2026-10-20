@@ -45,9 +45,6 @@ func goldenExchanges(t *testing.T, feature string) map[string]exchange {
 	return out
 }
 
-// TestCommitmentRequestsMatchTheGoldenBodies rescans the golden mail against a llama.cpp stand-in that accepts
-// only the request bodies Python sent, and expects every recorded commitment request to be sent. The clock is
-// one day after t0: the 14-day window then holds exactly the mail Python scanned (nothing before 2026-10-02) and every message counts as present, as it was when Python scanned.
 func TestCommitmentRequestsMatchTheGoldenBodies(t *testing.T) {
 	want := goldenExchanges(t, "commitments")
 	d, _ := dbtest.Copy(t, filepath.Join(golden.Dir(), "atrium.db"))
@@ -111,12 +108,8 @@ func loopRows(t *testing.T, d *db.DB) map[string]loopRow {
 	return out
 }
 
-// loopClock is the clock of the open-loop refresh that built the golden open_loops (sync4 in scenario.json).
 const loopClock = 1792094400.0
 
-// TestComputeRebuildsTheGoldenLoops recomputes open_loops from the golden mail as it stood at the refresh: mail
-// moved or deleted later is present again and mail that arrived later is absent. Row ids follow Python's history
-// of passes, so loops are compared by thread key.
 func TestComputeRebuildsTheGoldenLoops(t *testing.T) {
 	d, _ := dbtest.Copy(t, filepath.Join(golden.Dir(), "atrium.db"))
 	want := loopRows(t, d)
