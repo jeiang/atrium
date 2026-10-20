@@ -293,6 +293,9 @@ func (w *Worker) executeCallable(ctx context.Context, claim scheduler.Claim, cal
 
 func (w *Worker) Cycle(ctx context.Context) error {
 	d := w.Service.DB
+	if err := db.Ready(ctx, d); err != nil {
+		return err
+	}
 	if err := scheduler.SettleResumed(ctx, d, w.now()); err != nil {
 		return err
 	}

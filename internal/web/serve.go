@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/sdnotify"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
@@ -49,6 +48,9 @@ func recoverEvery(ctx context.Context, d *db.DB, cfg config.Config) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			if err := db.Ready(ctx, d); err != nil && ctx.Err() == nil {
+				log.Error("database refresh failed", logx.Err, err.Error())
+			}
 			if err := recoverProposals(ctx, d); err != nil && ctx.Err() == nil {
 				log.Error("proposal recovery failed", logx.Err, err.Error())
 			}
@@ -129,9 +131,6 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	}
 	defer func() { _ = d.Close() }()
 	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
-		return err
-	}
-	if err := secrets.New(d, secrets.Plaintext{}).Load(ctx); err != nil {
 		return err
 	}
 	if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil {

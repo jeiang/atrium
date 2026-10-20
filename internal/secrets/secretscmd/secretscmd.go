@@ -131,9 +131,5 @@ func (s *service) with(e *cli.Env, run func(*secrets.Store) int) int {
 	if err := db.Migrate(e.Ctx, d, cfg.DBPath); err != nil {
 		return cli.Fail(e, err)
 	}
-	st := secrets.New(d, secrets.Plaintext{})
-	if err := st.Load(e.Ctx); err != nil {
-		return cli.Fail(e, err)
-	}
-	return run(st)
+	return run(secrets.New(d, secrets.Plaintext{}))
 }

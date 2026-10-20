@@ -138,6 +138,9 @@ func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
 		w.migrated = true
 		w.Notify.Ready()
 		w.Notify.Status("watching")
+	} else if err := db.Ready(ctx, d); err != nil {
+		_ = d.Close()
+		return nil, nil, err
 	}
 	if w.Pass != nil {
 		return w.Pass(d), func() { _ = d.Close() }, nil

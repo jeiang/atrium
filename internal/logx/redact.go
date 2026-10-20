@@ -58,6 +58,12 @@ func forms(value string) []string {
 	return slices.DeleteFunc(out, func(f string) bool { return f == "" })
 }
 
+func active() bool {
+	redactor.mu.RLock()
+	defer redactor.mu.RUnlock()
+	return redactor.replacer != nil
+}
+
 func Scrub(s string) string {
 	redactor.mu.RLock()
 	r := redactor.replacer

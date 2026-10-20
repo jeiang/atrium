@@ -1,13 +1,19 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/secrets"
 )
 
@@ -124,4 +130,40 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func TestStoredSecretsAreRedactedFromLogsAndAgentWrites(t *testing.T) {
+	const secret = "sk-redact-money-0123456789"
+	extraction := `{"kind": "purchase", "payee_raw": "` + secret + `", "amount": 10, "currency": "TTD", "date": "", "bank": "", "account_last4": "", "account_amount": null, "account_currency": "", "statement_total": null, "description": "` + secret + `", "subscription": false, "cadence": "unknown"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		content := extraction
+		if strings.Contains(string(body), "Descriptor:") {
+			content = "not json"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": content}}}})
+	}))
+	t.Cleanup(srv.Close)
+	r := newMoneyRig(t, srv.URL+"/v1")
+
+	if set := runSecrets(t, secret+"\n", "set", secrets.ActionLinkKey); set.code != cli.ExitOK {
+		t.Fatalf("secrets set: exit %d stderr %q", set.code, set.stderr)
+	}
+	var out, logs bytes.Buffer
+	if code := r.app.Run(context.Background(), []string{"money", "refresh", "--limit", "1"}, &out, &logs); code != cli.ExitOK {
+		t.Fatalf("money refresh exited %d: %s", code, logs.String())
+	}
+	if !strings.Contains(logs.String(), "payee suggestion failed") || !strings.Contains(logs.String(), logx.Redacted) {
+		t.Errorf("log stream lacks the redacted payee warning: %q", logs.String())
+	}
+	if strings.Contains(logs.String(), secret) || strings.Contains(out.String(), secret) {
+		t.Errorf("the secret reached the log stream or stdout: %q", logs.String())
+	}
+	var after string
+	if err := r.d.Read.QueryRow("SELECT after_json FROM agent_writes WHERE tool = 'money_post'").Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(after, secret) || !strings.Contains(after, logx.Redacted) {
+		t.Errorf("agent_writes snapshot = %q, want the secret replaced by %s", after, logx.Redacted)
+	}
 }

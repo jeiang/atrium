@@ -29,6 +29,10 @@ func init() {
 	)
 }
 
+func init() {
+	db.OnReady(func(ctx context.Context, d *db.DB) error { return New(d, Plaintext{}).Load(ctx) })
+}
+
 type Cipher interface {
 	Encrypted() bool
 }

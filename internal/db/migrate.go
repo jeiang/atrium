@@ -71,7 +71,10 @@ func Migrate(ctx context.Context, d *DB, path string) error {
 			return err
 		}
 	}
-	return d.WithTx(ctx, func(tx *sql.Tx) error { return seed(ctx, tx, time.Now()) })
+	if err := d.WithTx(ctx, func(tx *sql.Tx) error { return seed(ctx, tx, time.Now()) }); err != nil {
+		return err
+	}
+	return Ready(ctx, d)
 }
 
 func pending(applied map[int]bool) bool {

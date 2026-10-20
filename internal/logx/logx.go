@@ -96,7 +96,7 @@ func flatten(dst []slog.Attr, prefix string, a slog.Attr) []slog.Attr {
 		key := Key(prefix + a.Key)
 		if IsSecret(key) {
 			a.Value = slog.StringValue(Redacted)
-		} else if k := a.Value.Kind(); k == slog.KindString || k == slog.KindAny {
+		} else if k := a.Value.Kind(); (k == slog.KindString || k == slog.KindAny) && active() {
 			text := a.Value.String()
 			if scrubbed := Scrub(text); scrubbed != text {
 				a.Value = slog.StringValue(scrubbed)
