@@ -2,6 +2,7 @@ package settingscmd
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -10,7 +11,10 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
+
+const actor = "operator"
 
 func Command() *cli.Command {
 	s := &service{env: config.OS, reg: settings.Default}
@@ -58,14 +62,20 @@ func (s *service) set(a *cli.Args) cli.Handler {
 	key := a.Arg("key", cli.Opt{})
 	value := a.Arg("value", cli.Opt{})
 	return func(e *cli.Env) int {
-		return s.keyed(e, *key, func(d *db.DB) error { return s.reg.Set(e.Ctx, d.Write, *key, *value, 0) })
+		return s.keyed(e, *key, func(d *db.DB) error {
+			ctx := audit.With(e.Ctx, actor, audit.CLI)
+			return d.WithTx(ctx, func(tx *sql.Tx) error { return s.reg.Set(ctx, tx, *key, *value, 0) })
+		})
 	}
 }
 
 func (s *service) unset(a *cli.Args) cli.Handler {
 	key := a.Arg("key", cli.Opt{})
 	return func(e *cli.Env) int {
-		return s.keyed(e, *key, func(d *db.DB) error { return s.reg.Unset(e.Ctx, d.Write, *key, 0) })
+		return s.keyed(e, *key, func(d *db.DB) error {
+			ctx := audit.With(e.Ctx, actor, audit.CLI)
+			return d.WithTx(ctx, func(tx *sql.Tx) error { return s.reg.Unset(ctx, tx, *key, 0) })
+		})
 	}
 }
 

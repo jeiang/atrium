@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 type Origin string
@@ -141,6 +142,28 @@ func (r *Registry) writable(key string, thread int64) (Def, Scope, error) {
 	return d, level, nil
 }
 
+func (r *Registry) stored(ctx context.Context, q db.Querier, d Def, level Scope, thread int64) (*string, error) {
+	var value string
+	var ok bool
+	var err error
+	if level == Instance {
+		value, ok, err = instanceValue(ctx, q, d.Key)
+	} else {
+		value, ok, err = threadValue(ctx, q, d.ThreadColumn, thread)
+	}
+	if err != nil || !ok {
+		return nil, err
+	}
+	return &value, nil
+}
+
+func (r *Registry) record(ctx context.Context, q db.Querier, key string, thread int64, old, next *string) error {
+	if old == nil && next == nil || old != nil && next != nil && *old == *next {
+		return nil
+	}
+	return audit.Record(ctx, q, audit.Entry{Key: key, Thread: thread, Old: old, New: next})
+}
+
 func (r *Registry) Set(ctx context.Context, q db.Querier, key, value string, thread int64) error {
 	d, level, err := r.writable(key, thread)
 	if err != nil {
@@ -149,11 +172,19 @@ func (r *Registry) Set(ctx context.Context, q db.Querier, key, value string, thr
 	if err := r.Validate(key, value); err != nil {
 		return err
 	}
-	if level == Instance {
-		_, err = q.ExecContext(ctx, "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value)
+	old, err := r.stored(ctx, q, d, level, thread)
+	if err != nil {
 		return err
 	}
-	return updateThread(ctx, q, d.ThreadColumn, thread, value)
+	if level == Instance {
+		_, err = q.ExecContext(ctx, "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value)
+	} else {
+		err = updateThread(ctx, q, d.ThreadColumn, thread, value)
+	}
+	if err != nil {
+		return err
+	}
+	return r.record(ctx, q, key, thread, old, &value)
 }
 
 func (r *Registry) Unset(ctx context.Context, q db.Querier, key string, thread int64) error {
@@ -161,11 +192,19 @@ func (r *Registry) Unset(ctx context.Context, q db.Querier, key string, thread i
 	if err != nil {
 		return err
 	}
-	if level == Instance {
-		_, err = q.ExecContext(ctx, "DELETE FROM settings WHERE key = ?", key)
+	old, err := r.stored(ctx, q, d, level, thread)
+	if err != nil {
 		return err
 	}
-	return updateThread(ctx, q, d.ThreadColumn, thread, nil)
+	if level == Instance {
+		_, err = q.ExecContext(ctx, "DELETE FROM settings WHERE key = ?", key)
+	} else {
+		err = updateThread(ctx, q, d.ThreadColumn, thread, nil)
+	}
+	if err != nil {
+		return err
+	}
+	return r.record(ctx, q, key, thread, old, nil)
 }
 
 func updateThread(ctx context.Context, q db.Querier, column string, thread int64, value any) error {

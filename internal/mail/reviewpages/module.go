@@ -28,9 +28,10 @@ import (
 var templates embed.FS
 
 const (
-	sourceMail   = "mail"
-	sourceWrite  = "write"
-	categoryMail = "mail"
+	sourceMail     = "mail"
+	sourceWrite    = "write"
+	sourceSettings = "settings"
+	categoryMail   = "mail"
 )
 
 func Templates() fs.FS {

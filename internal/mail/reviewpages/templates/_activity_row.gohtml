@@ -20,6 +20,14 @@
         {{if $e.error}}<span class="truncate" title="{{$e.error}}">{{$e.error}}</span>{{end}}
       </div>
     </div>
+    {{else if eq $e.source "settings"}}
+    <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
+      <div class="flex min-w-0 flex-wrap items-center gap-2">
+        <span class="badge" data-variant="outline">{{$e.tool}}</span>
+        {{if $e.thread_id}}<span class="text-xs text-muted-foreground">thread {{$e.thread_id}}</span>{{end}}
+      </div>
+      <p class="text-xs text-muted-foreground">by {{$e.actor}} via {{$e.origin}}</p>
+    </div>
     {{else}}
     <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
       <div class="flex min-w-0 flex-wrap items-center gap-2">
@@ -41,7 +49,7 @@
       {{end}}
     </div>
   </div>
-  {{if and (eq $e.source "write") (or $e.before $e.after)}}
+  {{if and (or (eq $e.source "write") (eq $e.source "settings")) (or $e.before $e.after)}}
   <details class="text-xs">
     <summary class="cursor-pointer text-muted-foreground">Before and after</summary>
     <div class="mt-2 grid gap-2 md:grid-cols-2">

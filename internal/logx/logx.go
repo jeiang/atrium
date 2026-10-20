@@ -96,6 +96,11 @@ func flatten(dst []slog.Attr, prefix string, a slog.Attr) []slog.Attr {
 		key := Key(prefix + a.Key)
 		if IsSecret(key) {
 			a.Value = slog.StringValue(Redacted)
+		} else if k := a.Value.Kind(); (k == slog.KindString || k == slog.KindAny) && active() {
+			text := a.Value.String()
+			if scrubbed := Scrub(text); scrubbed != text {
+				a.Value = slog.StringValue(scrubbed)
+			}
 		}
 		return append(dst, slog.Attr{Key: key, Value: a.Value})
 	}
@@ -133,7 +138,7 @@ func (h *flatHandler) Enabled(ctx context.Context, l slog.Level) bool {
 }
 
 func (h *flatHandler) Handle(ctx context.Context, r slog.Record) error {
-	out := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	out := slog.NewRecord(r.Time, r.Level, Scrub(r.Message), r.PC)
 	attrs := make([]slog.Attr, 0, r.NumAttrs())
 	r.Attrs(func(a slog.Attr) bool {
 		attrs = flatten(attrs, h.prefix, a)

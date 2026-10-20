@@ -21,11 +21,12 @@ const (
 	categoryMoney     = "money"
 	categoryWiki      = "wiki"
 	categoryMedia     = "media"
+	categorySettings  = "settings"
 	pageSize          = 50
 	snippetLimit      = 800
 )
 
-var categories = []string{categoryMail, categoryAssistant, categoryMoney, categoryWiki, categoryMedia}
+var categories = []string{categoryMail, categoryAssistant, categoryMoney, categoryWiki, categoryMedia, categorySettings}
 
 const categorySQL = "CASE WHEN json_extract(w.undo_json, '$.op') = 'money_restore' THEN 'money' WHEN w.tool LIKE 'notion%' THEN 'wiki' " +
 	"WHEN w.tool LIKE 'media%' THEN 'media' ELSE 'assistant' END"
@@ -78,6 +79,30 @@ func getWrite(ctx context.Context, q db.Querier, id int64) (*ActivityEntry, erro
 	return &e, nil
 }
 
+func settingsEntries(ctx context.Context, q db.Querier, limit int) ([]ActivityEntry, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT id, ts, key, thread_id, old_value, new_value, actor, source FROM settings_audit ORDER BY ts DESC, id DESC LIMIT ?", limit)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (ActivityEntry, error) {
+		e := ActivityEntry{Source: sourceSettings, Category: categorySettings}
+		var old, next *string
+		if err := r.Scan(&e.ID, &e.TS, &e.Tool, &e.ThreadID, &old, &next, &e.Actor, &e.Origin); err != nil {
+			return e, err
+		}
+		e.Before, e.After = deref(old), deref(next)
+		return e, nil
+	})
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 func timeline(ctx context.Context, q db.Querier, category string, limit, offset int) ([]ActivityEntry, int, error) {
 	want := offset + limit + 1
 	var entries []ActivityEntry
@@ -90,7 +115,14 @@ func timeline(ctx context.Context, q db.Querier, category string, limit, offset 
 			entries = append(entries, mailEntry(a))
 		}
 	}
-	if category != categoryMail {
+	if category == "" || category == categorySettings {
+		changes, err := settingsEntries(ctx, q, want)
+		if err != nil {
+			return nil, 0, err
+		}
+		entries = append(entries, changes...)
+	}
+	if category != categoryMail && category != categorySettings {
 		rows, err := q.QueryContext(ctx,
 			"SELECT "+writeColumns+" FROM (SELECT w.*, t.kind AS thread_kind, "+categorySQL+" AS category FROM agent_writes w "+
 				"LEFT JOIN threads t ON t.id = w.thread_id) WHERE (? = '' OR category = ?) ORDER BY ts DESC, id DESC LIMIT ?",

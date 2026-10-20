@@ -14,6 +14,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -70,6 +71,9 @@ func Configure(env config.Env, reg *settings.Registry) error {
 	k, err := Load(env, reg)
 	if err != nil {
 		return err
+	}
+	if !k.IsZero() {
+		logx.AddSecret(hex.EncodeToString(k.Raw()))
 	}
 	db.SetDefaultKey(k)
 	return nil
