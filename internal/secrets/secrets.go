@@ -31,10 +31,6 @@ type Cipher interface {
 	Encrypted() bool
 }
 
-type Plaintext struct{}
-
-func (Plaintext) Encrypted() bool { return false }
-
 type Status string
 
 const (

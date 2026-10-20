@@ -5,6 +5,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	dbkey "github.com/jeiang/atrium/internal/db/key"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -21,6 +22,10 @@ func pinned(cmds []*cli.Command) []*cli.Command {
 						return cli.ExitError
 					}
 					settings.Default.SetPins(pins)
+					if err := dbkey.Configure(config.OS, settings.Default); err != nil {
+						_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
+						return cli.ExitError
+					}
 					return run(e)
 				}
 			}

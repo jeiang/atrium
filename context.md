@@ -27,7 +27,10 @@ not claims about the running application.
   a general UI-managed configuration and module system is still planned.
   Secrets set through `atrium secrets` are stored write-only in the database
   and are never read back or shown; admin keys are refused on a plaintext
-  database.
+  database. A database key file (`db.key_file`, or the `db_key` systemd
+  credential) makes every command open the database encrypted; a fresh
+  database is created encrypted, and a plaintext or wrong-key mismatch
+  refuses to start. Without a key the database stays plaintext.
 - The host owns external services, reverse proxy authentication,
   persistence, and backups. Updating this repository does not update the
   host's pinned application input.
