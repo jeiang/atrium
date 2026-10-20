@@ -35,7 +35,7 @@ var (
 func recoverProposals(ctx context.Context, d *db.DB) error {
 	n, err := proposals.RecoverStuck(ctx, d, recoverClock())
 	if n > 0 {
-		log.Warn("failed approved proposals with a write in flight", "count", n)
+		log.Warn("recovered interrupted approved proposals", "count", n)
 	}
 	return err
 }
