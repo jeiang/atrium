@@ -433,7 +433,7 @@
       <a class="btn" data-size="sm" data-variant="outline" href="/projects">Active</a>
       <a class="btn" data-size="sm" data-variant="secondary" href="/projects?view=archived">Archived</a>
     </nav>
-    <button type="button" class="btn" data-size="sm" hx-get="/projects/new" hx-target="#project-dialog" hx-swap="innerHTML"><svg class="lucide lucide-plus " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="M12 5v14"/></svg>New project</button>
+    <button id="new-project" type="button" class="btn" data-size="sm" hx-get="/projects/new" hx-target="#project-dialog" hx-swap="innerHTML"><svg class="lucide lucide-plus " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="M12 5v14"/></svg>New project</button>
   </div>
 </div>
 
@@ -445,7 +445,7 @@
   </header>
 </div>
 
-<dialog id="project-dialog" class="dialog" aria-label="Project"></dialog>
+<dialog id="project-dialog" class="dialog" aria-labelledby="project-dialog-title"></dialog>
 
     </div>
   </main>

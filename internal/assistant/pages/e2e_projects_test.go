@@ -68,8 +68,9 @@ func (s *site) threadRow(id int64) (project *int64, effort string, limit int64) 
 
 func TestProjectsCrudAndListing(t *testing.T) {
 	s := newSite(t)
-	mustContain(t, status(t, s.get("/projects"), http.StatusOK), "No projects yet", `data-variant="secondary" href="/projects"`, `id="project-dialog"`)
-	mustContain(t, status(t, s.get("/projects?view=archived"), http.StatusOK), "Nothing archived", `data-variant="secondary" href="/projects?view=archived"`)
+	list := status(t, s.get("/projects"), http.StatusOK)
+	mustContain(t, list, "No projects yet", `data-variant="secondary" href="/projects"`, `id="new-project"`, `aria-labelledby="project-dialog-title"`)
+	mustNotContain(t, list, `aria-label="Project"`)
 	mustContain(t, status(t, s.get("/projects?view=bogus"), http.StatusUnprocessableEntity), "Filter not understood", "Unknown view")
 
 	blank := status(t, s.post("/projects", with(kitchen, "name", " ")), http.StatusUnprocessableEntity)
@@ -77,11 +78,11 @@ func TestProjectsCrudAndListing(t *testing.T) {
 	mustNotContain(t, s.get("/projects").body, "Kitchen")
 
 	bad := status(t, s.post("/projects", with(kitchen, "effort", "ultra"), hx, "true"), http.StatusUnprocessableEntity)
-	mustContain(t, bad, "effort must be one of", `role="alert"`, `value="Kitchen"`, "Always answer in metric units.", `hx-post="/projects"`)
-	mustNotContain(t, bad, "<html", `<option value="high" selected>`)
+	mustContain(t, bad, "effort must be one of", `role="alert" tabindex="-1" autofocus`, `value="Kitchen"`, "Always answer in metric units.", `hx-post="/projects"`, `<option value="high" selected>`)
+	mustNotContain(t, bad, "<html")
 
 	nameless := status(t, s.post("/projects", with(kitchen, "name", ""), hx, "true"), http.StatusUnprocessableEntity)
-	mustContain(t, nameless, "Give the project a name", `<option value="high" selected>`)
+	mustContain(t, nameless, "Give the project a name", `role="alert" tabindex="-1" autofocus`, `<option value="high" selected>`)
 
 	made := s.post("/projects", kitchen, hx, "true")
 	if made.StatusCode != http.StatusNoContent || made.Header.Get("HX-Redirect") != "/projects/1" || made.body != "" {
@@ -98,8 +99,7 @@ func TestProjectsCrudAndListing(t *testing.T) {
 	mustContain(t, cards, "Kitchen", "1 thread", "Always answer in metric units.", "0 threads", "No instructions.", "no activity yet", `href="/projects/1"`, "active <time")
 
 	edit := status(t, s.get("/projects/1/edit"), http.StatusOK)
-	mustContain(t, edit, "Always answer in metric units.", `value="Kitchen"`, `<option value="200000" selected>`, `<option value="high" selected>`, "Create wiki hub", `hx-post="/projects/1/archive"`)
-	mustNotContain(t, edit, "<html")
+	mustContain(t, edit, "Always answer in metric units.", `value="Kitchen"`, `<option value="200000" selected>`, `<option value="high" selected>`, "Create wiki hub", `hx-post="/projects/1/archive"`, `id="project-dialog-title"`, `aria-describedby="project-effort-help"`, `id="project-effort-help"`, `aria-describedby="project-context-help"`, `id="project-context-help"`)
 	newForm := status(t, s.get("/projects/new"), http.StatusOK)
 	mustContain(t, newForm, "New project", `action="/projects"`, `<option value="90000" selected>`, `<option value="medium" selected>`)
 	mustNotContain(t, newForm, "Create wiki hub", `hx-post="/projects/0/archive"`, "<html")
@@ -168,6 +168,7 @@ func TestProjectPageListsItsThreadsPinnedFirst(t *testing.T) {
 	s.newThread("Elsewhere", 0)
 	status(t, s.post(fmt.Sprintf("/chat/%d/pin", older), url.Values{"pinned": {"1"}}), http.StatusSeeOther)
 	page := status(t, s.get(fmt.Sprintf("/projects/%d", project)), http.StatusOK)
+	mustContain(t, page, fmt.Sprintf(`id="thread-%d-pin"`, older), fmt.Sprintf(`id="thread-%d-archive"`, older), fmt.Sprintf(`id="thread-%d-pin"`, older+1), fmt.Sprintf(`id="thread-%d-archive"`, older+1))
 	mustNotContain(t, page, "Elsewhere")
 	if strings.Index(page, "Older") > strings.Index(page, "Newer") || !strings.Contains(page, `aria-label="Pinned"`) {
 		t.Errorf("pinned thread is not first: %s", page)
@@ -180,8 +181,9 @@ func TestProjectPageListsItsThreadsPinnedFirst(t *testing.T) {
 		t.Errorf("chat list names the project %d times, want 2", n)
 	}
 	mustContain(t, listing, "Elsewhere", `href="/projects"`)
+	status(t, s.post(fmt.Sprintf("/chat/%d/archive", older), url.Values{"archived": {"1"}, "project_id": {strconv.FormatInt(project, 10)}}), http.StatusSeeOther)
 	archivedView := status(t, s.get(fmt.Sprintf("/projects/%d?view=archived", project)), http.StatusOK)
-	mustContain(t, archivedView, "Nothing archived", `name="view" value="archived"`)
+	mustContain(t, archivedView, "Older", fmt.Sprintf(`id="thread-%d-archive"`, older))
 }
 
 func TestThreadsMoveIntoAndOutOfAProjectAndTakeItsDefaults(t *testing.T) {
@@ -221,4 +223,45 @@ func TestThreadsMoveIntoAndOutOfAProjectAndTakeItsDefaults(t *testing.T) {
 	if _, effort, _ := s.threadRow(direct); effort != "xhigh" {
 		t.Errorf("created thread effort %s", effort)
 	}
+}
+func TestProjectFormRefusalsKeepValidSelectValues(t *testing.T) {
+	s := newSite(t)
+	id := s.newProject("effort", "xhigh", "context_limit", "500000")
+	path := fmt.Sprintf("/projects/%d", id)
+	for _, test := range []struct {
+		name, effort, limit, selected, selectedEffort string
+	}{
+		{name: "submitted context", effort: "high", limit: "200000", selected: `<option value="200000" selected>`, selectedEffort: `<option value="high" selected>`},
+		{name: "invalid context", effort: "high", limit: "abc", selected: `<option value="500000" selected>`, selectedEffort: `<option value="high" selected>`},
+		{name: "invalid effort", effort: "invalid", limit: "500000", selected: `<option value="500000" selected>`, selectedEffort: `<option value="xhigh" selected>`},
+	} {
+		body := status(t, s.post(path, with(kitchen, "name", "", "effort", test.effort, "context_limit", test.limit), hx, "true"), http.StatusUnprocessableEntity)
+		start := strings.Index(body, `id="project-context"`)
+		if start < 0 {
+			t.Fatalf("%s: missing context select: %s", test.name, body)
+		}
+		end := strings.Index(body[start:], `</select>`)
+		if end < 0 {
+			t.Fatalf("%s: missing context select end: %s", test.name, body)
+		}
+		contextSelect := body[start : start+end]
+		if count := strings.Count(contextSelect, " selected>"); count != 1 || !strings.Contains(contextSelect, test.selected) {
+			t.Errorf("%s: context select has %d selected options, want only %q: %s", test.name, count, test.selected, contextSelect)
+		}
+		effortStart := strings.Index(body, `id="project-effort"`)
+		if effortStart < 0 {
+			t.Fatalf("%s: missing effort select: %s", test.name, body)
+		}
+		effortEnd := strings.Index(body[effortStart:], `</select>`)
+		if effortEnd < 0 {
+			t.Fatalf("%s: missing effort select end: %s", test.name, body)
+		}
+		effortSelect := body[effortStart : effortStart+effortEnd]
+		if count := strings.Count(effortSelect, " selected>"); count != 1 || !strings.Contains(effortSelect, test.selectedEffort) {
+			t.Errorf("%s: effort select has %d selected options, want only %q: %s", test.name, count, test.selectedEffort, effortSelect)
+		}
+		mustContain(t, body, `role="alert" tabindex="-1" autofocus`)
+	}
+	newForm := status(t, s.post("/projects", with(kitchen, "name", "", "context_limit", "abc"), hx, "true"), http.StatusUnprocessableEntity)
+	mustContain(t, newForm, `<option value="90000" selected>`)
 }

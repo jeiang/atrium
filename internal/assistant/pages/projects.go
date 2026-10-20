@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -59,9 +60,25 @@ func submittedProject(form url.Values) projects.Fields {
 	}
 }
 
-func submittedValues(f projects.Fields) ProjectFormValues {
+func submittedValues(f projects.Fields, fallback ProjectFormValues) ProjectFormValues {
 	hub := f.WikiHubID
-	return ProjectFormValues{Name: f.Name, Instructions: f.Instructions, Effort: f.Effort, WikiHubID: &hub}
+	effort := fallback.Effort
+	for _, choice := range threads.Efforts {
+		if f.Effort == choice {
+			effort = f.Effort
+			break
+		}
+	}
+	limit := *fallback.ContextLimit
+	if submitted, ok := py.LaxInt64(f.ContextLimit); ok {
+		for _, choice := range threads.ContextLimits {
+			if submitted == choice {
+				limit = submitted
+				break
+			}
+		}
+	}
+	return ProjectFormValues{Name: f.Name, Instructions: f.Instructions, Effort: effort, ContextLimit: &limit, WikiHubID: &hub}
 }
 
 func validView(view string) bool { return view == "" || view == archived }
@@ -104,8 +121,17 @@ func (p *pages) projectRefused(w http.ResponseWriter, r *http.Request, project *
 		p.fail(w, r, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
+	fallback := ProjectFormValues{}
+	if project != nil {
+		fallback = projectValues(*project)
+	} else {
+		chosen, loadErr := threads.Defaults(r.Context(), p.deps.DB.Read)
+		check(loadErr)
+		limit := chosen.ContextLimit
+		fallback = ProjectFormValues{Effort: chosen.Effort, ContextLimit: &limit}
+	}
 	problem := err.Error()
-	p.projectForm(w, r, http.StatusUnprocessableEntity, project, submittedValues(fields), &problem)
+	p.projectForm(w, r, http.StatusUnprocessableEntity, project, submittedValues(fields, fallback), &problem)
 }
 
 func (p *pages) projectCreate(w http.ResponseWriter, r *http.Request) {

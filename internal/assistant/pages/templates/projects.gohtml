@@ -8,7 +8,7 @@
       <a class="btn" data-size="sm" data-variant="{{if $d.view}}outline{{else}}secondary{{end}}" href="/projects">Active</a>
       <a class="btn" data-size="sm" data-variant="{{if $d.view}}secondary{{else}}outline{{end}}" href="/projects?view=archived">Archived</a>
     </nav>
-    <button type="button" class="btn" data-size="sm" hx-get="/projects/new" hx-target="#project-dialog" hx-swap="innerHTML">{{icon "plus"}}New project</button>
+    <button id="new-project" type="button" class="btn" data-size="sm" hx-get="/projects/new" hx-target="#project-dialog" hx-swap="innerHTML">{{icon "plus"}}New project</button>
   </div>
 </div>
 {{if $d.projects}}
@@ -29,5 +29,5 @@
 {{else}}
 {{template "empty_state" (dict "icon_name" "folder" "title" "No projects yet" "body" "Create one to give a set of chats shared instructions and a wiki hub.")}}
 {{end}}
-<dialog id="project-dialog" class="dialog" aria-label="Project"></dialog>
+<dialog id="project-dialog" class="dialog" aria-labelledby="project-dialog-title"></dialog>
 {{end}}
