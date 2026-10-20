@@ -173,18 +173,82 @@ func (e *Executors) recordFailed(ctx context.Context, pid int64, action py.Dict,
 	return err
 }
 
-// cancelled is the ledger row of a write whose reply a cancelled ctx discarded: the server may or may not have
-// executed it, so the row names its messages and is failed, never absent.
-func (e *Executors) cancelled(ctx context.Context, pid int64, action py.Dict, uids []uint32, err error) error {
-	if err == nil || ctx.Err() == nil {
-		return err
-	}
-	var partial *mailops.PartialMove
-	if errors.As(err, &partial) {
-		return err
-	}
+// slot is the ledger row of one mailbox write, recorded before the write starts and settled into the write's
+// outcome after it, so a process that dies mid-write leaves a row saying the outcome is unknown. A slot nothing
+// settled is dropped: its write provably never started or left nothing to log.
+type slot struct {
+	e    *Executors
+	pid  int64
+	id   int64
+	uids []uint32
+}
+
+func (e *Executors) hold(ctx context.Context, pid int64, action py.Dict, uids []uint32) (*slot, error) {
 	logged := append(slices.Clone(action), py.Pair{Key: "uids", Value: uidList(uids)})
-	if rerr := e.recordFailed(ctx, pid, logged, mailops.UnknownPrefix+": "+err.Error()); rerr != nil {
+	id, err := proposals.BeginAction(ctx, e.DB.Write, pid, logged, e.now())
+	if err != nil {
+		return nil, err
+	}
+	return &slot{e: e, pid: pid, id: id, uids: uids}, nil
+}
+
+func (s *slot) settle(ctx context.Context, action, undo py.Dict, ok bool, text *string) error {
+	var plan any
+	if undo != nil {
+		plan = undo
+	}
+	if s.id == 0 {
+		_, err := proposals.RecordAction(ctx, s.e.DB.Write, s.pid, action, plan, ok, text, s.e.now())
+		return err
+	}
+	id := s.id
+	s.id = 0
+	return proposals.SettleAction(ctx, s.e.DB.Write, id, action, plan, ok, text, s.e.now())
+}
+
+func (s *slot) record(ctx context.Context, action, undo py.Dict) error {
+	return s.settle(ctx, action, undo, true, nil)
+}
+
+func (s *slot) recordFailed(ctx context.Context, action py.Dict, text string) error {
+	return s.settle(ctx, action, nil, false, &text)
+}
+
+func (s *slot) release(ctx context.Context) error {
+	if s.id == 0 {
+		return nil
+	}
+	id := s.id
+	s.id = 0
+	return proposals.DropAction(ctx, s.e.DB.Write, id)
+}
+
+// fail ends a write that returned err: cancelled logs it when its outcome is unknown, and a slot left unsettled
+// is dropped.
+func (s *slot) fail(ctx context.Context, action py.Dict, err error) error {
+	out := s.cancelled(ctx, action, err)
+	if rerr := s.release(ctx); rerr != nil && out == nil {
+		return rerr
+	}
+	return out
+}
+
+// cancelled is the ledger row of a write whose reply never came, because a cancelled ctx or a broken connection
+// discarded it: the server may or may not have executed it, so the row names its messages and is failed, never
+// absent.
+func (s *slot) cancelled(ctx context.Context, action py.Dict, err error) error {
+	if err == nil {
+		return nil
+	}
+	if !mailops.OutcomeUnknown(err) {
+		return err
+	}
+	text := err.Error()
+	if partial, ok := errors.AsType[*mailops.PartialMove](err); ok {
+		text = partial.Err.Error()
+	}
+	logged := append(slices.Clone(action), py.Pair{Key: "uids", Value: uidList(s.uids)})
+	if rerr := s.recordFailed(ctx, logged, mailops.UnknownPrefix+": "+text); rerr != nil {
 		return rerr
 	}
 	return err
@@ -238,51 +302,77 @@ func sortedUIDs(items []mailops.Verified) ([]uint32, map[uint32]mailops.Verified
 func (e *Executors) moveItems(ctx context.Context, client mail.Client, pid int64, account string, items []mailops.Verified, destIMAP string) (int, error) {
 	moved := 0
 	for _, g := range mailops.GroupByMailbox(items) {
-		uids, byUID := sortedUIDs(g.Items)
-		action := py.Dict{
-			{Key: "op", Value: "move"}, {Key: "account", Value: account}, {Key: "src_imap", Value: g.IMAPName},
-			{Key: "src_uidvalidity", Value: g.UIDValidity}, {Key: "dest_imap", Value: destIMAP},
+		n, err := e.moveGroup(ctx, client, pid, account, g, destIMAP)
+		moved += n
+		if err != nil {
+			return moved, err
 		}
-		err := mailops.MoveUIDs(ctx, client, g.IMAPName, destIMAP, g.UIDValidity, uids, func(batch []uint32, copied *mail.CopyUID) error {
-			entries := make([]any, len(batch))
-			for i, u := range batch {
-				entries[i] = py.Dict{
-					{Key: "id", Value: byUID[u].ID}, {Key: "msgid", Value: byUID[u].MsgID}, {Key: "uid", Value: u},
-					{Key: "dest_uid", Value: uidOrNil(copied, u)},
-				}
+	}
+	return moved, nil
+}
+
+func (e *Executors) moveGroup(ctx context.Context, client mail.Client, pid int64, account string, g mailops.Group, destIMAP string) (moved int, err error) {
+	uids, byUID := sortedUIDs(g.Items)
+	action := py.Dict{
+		{Key: "op", Value: "move"}, {Key: "account", Value: account}, {Key: "src_imap", Value: g.IMAPName},
+		{Key: "src_uidvalidity", Value: g.UIDValidity}, {Key: "dest_imap", Value: destIMAP},
+	}
+	chunks := mailops.Chunks(uids, mailops.Batch)
+	next := 0
+	s, err := e.hold(ctx, pid, action, chunks[next])
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if rerr := s.release(ctx); rerr != nil && err == nil {
+			err = rerr
+		}
+	}()
+	err = mailops.MoveUIDs(ctx, client, g.IMAPName, destIMAP, g.UIDValidity, uids, func(batch []uint32, copied *mail.CopyUID) error {
+		entries := make([]any, len(batch))
+		for i, u := range batch {
+			entries[i] = py.Dict{
+				{Key: "id", Value: byUID[u].ID}, {Key: "msgid", Value: byUID[u].MsgID}, {Key: "uid", Value: u},
+				{Key: "dest_uid", Value: uidOrNil(copied, u)},
 			}
-			undo := py.Dict{
-				{Key: "op", Value: live.OpMoveBack}, {Key: "account", Value: account}, {Key: "src_imap", Value: g.IMAPName},
-				{Key: "dest_imap", Value: destIMAP}, {Key: "dest_uidvalidity", Value: validityOrNil(copied)}, {Key: "items", Value: entries},
-			}
-			done := append(slices.Clone(action), py.Pair{Key: "dest_uidvalidity", Value: validityOrNil(copied)}, py.Pair{Key: "items", Value: entries})
-			if err := e.record(ctx, pid, done, undo); err != nil {
+		}
+		undo := py.Dict{
+			{Key: "op", Value: live.OpMoveBack}, {Key: "account", Value: account}, {Key: "src_imap", Value: g.IMAPName},
+			{Key: "dest_imap", Value: destIMAP}, {Key: "dest_uidvalidity", Value: validityOrNil(copied)}, {Key: "items", Value: entries},
+		}
+		done := append(slices.Clone(action), py.Pair{Key: "dest_uidvalidity", Value: validityOrNil(copied)}, py.Pair{Key: "items", Value: entries})
+		if err := s.record(ctx, done, undo); err != nil {
+			return err
+		}
+		moved += len(batch)
+		if next++; next < len(chunks) {
+			held, err := e.hold(ctx, pid, action, chunks[next])
+			if err != nil {
 				return err
 			}
-			moved += len(batch)
-			return nil
-		})
-		var partial *mailops.PartialMove
-		if errors.As(err, &partial) {
-			copied := py.Dict{}
-			if partial.Copied != nil {
-				keys := make([]uint32, 0, len(partial.Copied.Mapping))
-				for k := range partial.Copied.Mapping {
-					keys = append(keys, k)
-				}
-				slices.Sort(keys)
-				for _, k := range keys {
-					copied = append(copied, py.Pair{Key: strconv.FormatUint(uint64(k), 10), Value: partial.Copied.Mapping[k]})
-				}
+			s = held
+		}
+		return nil
+	})
+	if partial, ok := errors.AsType[*mailops.PartialMove](err); ok && !partial.Unconfirmed {
+		copied := py.Dict{}
+		if partial.Copied != nil {
+			keys := make([]uint32, 0, len(partial.Copied.Mapping))
+			for k := range partial.Copied.Mapping {
+				keys = append(keys, k)
 			}
-			failed := append(slices.Clone(action), py.Pair{Key: "dest_uidvalidity", Value: validityOrNil(partial.Copied)}, py.Pair{Key: "copied", Value: copied})
-			if rerr := e.recordFailed(ctx, pid, failed, partial.Error()); rerr != nil {
-				return moved, rerr
+			slices.Sort(keys)
+			for _, k := range keys {
+				copied = append(copied, py.Pair{Key: strconv.FormatUint(uint64(k), 10), Value: partial.Copied.Mapping[k]})
 			}
 		}
-		if err != nil {
-			return moved, e.cancelled(ctx, pid, action, uids, err)
+		failed := append(slices.Clone(action), py.Pair{Key: "dest_uidvalidity", Value: validityOrNil(partial.Copied)}, py.Pair{Key: "copied", Value: copied})
+		if rerr := s.recordFailed(ctx, failed, partial.Error()); rerr != nil {
+			return moved, rerr
 		}
+	}
+	if err != nil {
+		return moved, s.cancelled(ctx, action, err)
 	}
 	return moved, nil
 }
@@ -317,9 +407,14 @@ func (e *Executors) relabelItems(ctx context.Context, client mail.Client, pid in
 				ids[i] = item.ID
 			}
 			slices.Sort(uids)
+			attempt := py.Dict{{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.IMAPName},
+				{Key: "uidvalidity", Value: g.UIDValidity}, {Key: "add", Value: stringList(r.Add)}, {Key: "remove", Value: stringList(r.Remove)}}
+			s, err := e.hold(ctx, pid, attempt, uids)
+			if err != nil {
+				return changed, err
+			}
 			if err := mailops.StoreLabels(ctx, client, g.IMAPName, g.UIDValidity, uids, r.Add, r.Remove); err != nil {
-				return changed, e.cancelled(ctx, pid, py.Dict{{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.IMAPName},
-					{Key: "uidvalidity", Value: g.UIDValidity}, {Key: "add", Value: stringList(r.Add)}, {Key: "remove", Value: stringList(r.Remove)}}, uids, err)
+				return changed, s.fail(ctx, attempt, err)
 			}
 			base := py.Dict{
 				{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.IMAPName}, {Key: "uidvalidity", Value: g.UIDValidity},
@@ -327,7 +422,7 @@ func (e *Executors) relabelItems(ctx context.Context, client mail.Client, pid in
 			}
 			undo := append(slices.Clone(base), py.Pair{Key: "add", Value: stringList(r.Remove)}, py.Pair{Key: "remove", Value: stringList(r.Add)})
 			action := append(slices.Clone(base), py.Pair{Key: "add", Value: stringList(r.Add)}, py.Pair{Key: "remove", Value: stringList(r.Remove)})
-			if err := e.record(ctx, pid, action, undo); err != nil {
+			if err := s.record(ctx, action, undo); err != nil {
 				return changed, err
 			}
 			changed += len(g.Items)
@@ -351,10 +446,15 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 			return trashed, err
 		}
 		for _, batch := range mailops.Chunks(uids, mailops.Batch) {
+			attempt := py.Dict{{Key: "op", Value: "trash"}, {Key: "imap_name", Value: g.IMAPName},
+				{Key: "uidvalidity", Value: g.UIDValidity}, {Key: "dest_imap", Value: trash}}
+			s, err := e.hold(ctx, pid, attempt, batch)
+			if err != nil {
+				return trashed, err
+			}
 			copied, err := mailops.CopyUIDs(ctx, client, trash, batch)
 			if err != nil {
-				return trashed, e.cancelled(ctx, pid, py.Dict{{Key: "op", Value: "trash"}, {Key: "imap_name", Value: g.IMAPName},
-					{Key: "uidvalidity", Value: g.UIDValidity}, {Key: "dest_imap", Value: trash}}, batch, err)
+				return trashed, s.fail(ctx, attempt, err)
 			}
 			entries := make([]any, len(batch))
 			var known []any
@@ -376,7 +476,7 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 				{Key: "op", Value: "trash"}, {Key: "imap_name", Value: g.IMAPName}, {Key: "uidvalidity", Value: g.UIDValidity},
 				{Key: "dest_imap", Value: trash}, {Key: "items", Value: entries},
 			}
-			if err := e.record(ctx, pid, action, undo); err != nil {
+			if err := s.record(ctx, action, undo); err != nil {
 				return trashed, err
 			}
 			trashed += len(batch)
@@ -446,15 +546,23 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 				n, err = e.relabelItems(ctx, client, p.ID, items, []string{step.name}, []string{payload.Folder})
 			} else {
 				dest := mail.UTF7Encode(step.name)
+				create := py.Dict{{Key: "op", Value: "create_folder"}, {Key: "imap_name", Value: dest}}
+				s, herr := e.hold(ctx, p.ID, create, nil)
+				if herr != nil {
+					return herr
+				}
 				created, cerr := mailops.EnsureFolder(ctx, client, dest)
 				if cerr != nil {
-					return e.cancelled(ctx, p.ID, py.Dict{{Key: "op", Value: "create_folder"}, {Key: "imap_name", Value: dest}}, nil, cerr)
+					return s.fail(ctx, create, cerr)
 				}
 				if created {
-					if err := e.record(ctx, p.ID, py.Dict{{Key: "op", Value: "create_folder"}, {Key: "imap_name", Value: dest}},
+					if err := s.record(ctx, create,
 						py.Dict{{Key: "op", Value: OpDeleteFolder}, {Key: "account", Value: account}, {Key: "imap_name", Value: dest}}); err != nil {
 						return err
 					}
+				}
+				if err := s.release(ctx); err != nil {
+					return err
 				}
 				n, err = e.moveItems(ctx, client, p.ID, account, items, dest)
 			}
@@ -595,10 +703,15 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 		if err != nil || st.Messages != 0 {
 			return err
 		}
-		if deleted, err = mailops.DeleteFolderIfEmpty(ctx, client, label); err != nil || !deleted {
-			return e.cancelled(ctx, p.ID, py.Dict{{Key: "op", Value: "delete_label"}, {Key: "imap_name", Value: label}}, nil, err)
+		drop := py.Dict{{Key: "op", Value: "delete_label"}, {Key: "imap_name", Value: label}}
+		s, err := e.hold(ctx, p.ID, drop, nil)
+		if err != nil {
+			return err
 		}
-		return e.record(ctx, p.ID, py.Dict{{Key: "op", Value: "delete_label"}, {Key: "imap_name", Value: label}}, nil)
+		if deleted, err = mailops.DeleteFolderIfEmpty(ctx, client, label); err != nil || !deleted {
+			return s.fail(ctx, drop, err)
+		}
+		return s.record(ctx, drop, nil)
 	})
 	if err != nil {
 		return nil, err

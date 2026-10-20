@@ -539,12 +539,20 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 			text := py.ExceptionText(err)
 			_, refused := errors.AsType[safety.WriteRefused](err)
 			refused = refused || errors.Is(err, mailops.ErrValidityChanged)
+			_, unknown := errors.AsType[*mail.WriteInterrupted](err)
 			for _, uid := range chunk {
 				e := by[uid]
 				var validity, destUID uint32
 				found := false
 				if !refused {
 					validity, destUID, found = locateInTrash(ctx, client, g.dest, e.item)
+				}
+				if !found && unknown {
+					if err := a.Live.Hold(ctx, e.aid, text, nil); err != nil {
+						return err
+					}
+					out.Failed++
+					continue
 				}
 				if !found {
 					if err := a.Live.Fail(ctx, e.aid, text); err != nil {

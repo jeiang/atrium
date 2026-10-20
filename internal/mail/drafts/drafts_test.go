@@ -375,6 +375,22 @@ func TestOperatorSendAppendsOnlyToTheDiscoveredSentMailbox(t *testing.T) {
 	}
 }
 
+func TestInterruptedSentAppendIsReportedAsPossiblyFiledAndNeverRetried(t *testing.T) {
+	w := newWorld(t)
+	w.imap.FailWrite = func(mailtest.FakeWrite) error {
+		return &mail.WriteInterrupted{Command: "APPEND", Err: errors.New("socket error: EOF")}
+	}
+	id := w.create(config.ICloud, "a@x.test", nil, "Hi", "body", nil)
+	result, err := w.store.Send(t.Context(), id, w.get(id).UpdatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Sent copy failed: the copy in Sent may exist: check Sent before filing it again"
+	if result.Filed != want || w.get(id).Status != drafts.Sent || len(w.imap.Appended) != 0 {
+		t.Fatalf("result %+v appended %+v", result, w.imap.Appended)
+	}
+}
+
 func TestSentCopyFailureNeverFailsTheSend(t *testing.T) {
 	w := newWorld(t)
 	w.store.Open = func(context.Context, string) (mail.Client, error) {

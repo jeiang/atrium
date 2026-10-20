@@ -31,7 +31,7 @@ S: T4 OK IDLE terminated
 C: {t} EXAMINE "Missing"
 S: {t} NO [NONEXISTENT] Unknown
 `+logout, live)
-	c.idleRestart = 100 * time.Millisecond
+	c.idleKeepalive = 100 * time.Millisecond
 	must(t, client.Connect(ctx))
 	must(t, client.Select(ctx, "INBOX"))
 	changed, err := client.IdleChanges(ctx, time.Minute)
@@ -68,7 +68,7 @@ func TestHugeLiteralIsRefused(t *testing.T) {
 func TestTapBufferIsBounded(t *testing.T) {
 	server, clientSide := net.Pipe()
 	defer func() { _ = server.Close() }()
-	tp := newTap(clientSide)
+	tp := newTap(clientSide, 0)
 	tp.limit = 16
 	go func() { _, _ = server.Write(bytes.Repeat([]byte("x"), 32)) }()
 	buf := make([]byte, 64)

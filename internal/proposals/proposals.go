@@ -40,11 +40,12 @@ type Querier interface {
 
 func Known(ctx context.Context, q Querier, fingerprint string) (bool, error) {
 	var status string
-	err := q.QueryRowContext(ctx, "SELECT status FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&status)
+	var unresolved bool
+	err := q.QueryRowContext(ctx, "SELECT status, "+unresolvedSQL+" FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&status, &unresolved)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
-	return err == nil && status != Failed, err
+	return err == nil && (status != Failed || unresolved), err
 }
 
 func Create(ctx context.Context, d *db.DB, kind string, account *string, title string, payload, preview any,

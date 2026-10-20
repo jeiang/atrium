@@ -362,7 +362,11 @@ and backups; nothing of that lives here.
   the write SELECT reported; `mailops.SelectRW`, used by `MoveUIDs`,
   `StoreLabels`, `StoreFlag` and the Gmail trash copies, refuses with
   `UIDVALIDITY changed` when it differs from the verified value, before any
-  write command is sent. 0 means an undo plan recorded none. Errors carry their Python class
+  write command is sent. 0 means an undo plan recorded none; `move_back`
+  without one reads the live validity first. `Verify` skips a message whose
+  UIDVALIDITY is 0. A COPY whose reply never came is a
+  `*PartialMove{Unconfirmed}`, never sent again: the applier holds the row,
+  the executors log a `cancelled, write outcome unknown` row. Errors carry their Python class
   (`py.Classed`) so `py.ExceptionText` gives the stored `Class: message`.
 - `internal/mail/live/`: `live.py`. `TakeBaseline`/`EnsureGolive`/
   `Rebaseline`, the `auto_actions` ledger (`Begin` refuses a held or applied
@@ -493,9 +497,14 @@ and backups; nothing of that lives here.
 - `internal/mail/imapclient/`: `imap.py`'s client on go-imap v2; go-imap
   drives the session and the bytes it reads are parsed again as Python
   3.14's imaplib does, so results match what Python stored. Wire tests are
-  imapscript transcripts in its `testdata/`. `Opener` is `run.open_client`;
-  go-imap re-issues IDLE only after 30 minutes, so the watch loop's 29-minute
-  IDLE goes out once, as imaplib sends it.
+  imapscript transcripts in its `testdata/`. `Opener` is `run.open_client`.
+  go-imap ends and re-issues IDLE every 5 minutes (`idleKeepalive`); each
+  tagged reply proves the link, and a server silent for the keepalive plus
+  the 2-minute read timeout loses the connection, so the watch loop
+  reconnects. A write stalled for 2 minutes (`writeTimeout`) does too. A
+  write command that was sent and whose reply never came (drop, timeout,
+  cancel) returns `*mail.WriteInterrupted` (an imaplib abort); a server NO or
+  BAD, or a command never written, never does.
 - `internal/mail/run/`: `run.py` and `watch.py`. `Pass.Locked` is one pass
   under `db.Exclusive`: sync, then `Process` (go-live baseline in live mode,
   embedding, then per account route, flag, the `Events` hook of
@@ -512,7 +521,7 @@ and backups; nothing of that lives here.
   lock is acquired; expiry cancels remaining work while a started automatic
   write pass finishes. The `sync` and `scan` units, which wait for it, set
   `TimeoutStopSec` (45 min, `writeTimeout` in `nix/module.nix`) above the deadline plus a write cap's moves;
-  `watch` exits 30 s after a signal whatever its pass is doing and relies on held rows becoming `Interrupted`. `proposals approve`, `proposals undo` and `live undo` run on the signal context: SIGTERM
+  `watch` exits 30 s after a signal whatever its pass is doing and relies on held rows becoming `Interrupted`. Every proposal executor write and every undo records its `proposal_actions` row before the write starts (`proposals.BeginAction`, error `InFlightText`) and settles that row after, so SIGKILL, an OOM kill or the web server's exit leaves a row that `mailops.Blocks` treats as outcome-unknown; `live undo` marks `undone_error` the same way. Only a `WriteInterrupted` or unconfirmed `PartialMove` is outcome-unknown, never a mere cancelled context. The claim in `ApproveAndApply` itself refuses a proposal with a `Blocks` row (any status), and `Known` keeps such a failed proposal from being reopened by a rescan, until the operator resolves the mailbox. Only `move_back` undo failures are marked outcome-unknown; the other undos are idempotent and stay retryable. `mailops.Verify` also skips (`unresolved`) any message named by a blocking `proposal_actions` row of any proposal (`mailops.UnresolvedSQL`), and the backlog candidates exclude it. Once the server's tagged OK is parsed, a go-imap error is logged, not returned. `proposals approve`, `proposals undo` and `live undo` run on the signal context: SIGTERM
   kills the IMAP connection, the gate refuses a write on a done context, and the proposal ends `failed` with
   the partial move, or a `cancelled, write outcome unknown` row for the write in flight, in the ledger. A
   failed `move_back` (`mailops.PartialPrefix`) blocks a retry of that undo until the mailbox is resolved by hand, and ledger and status writes never run on a cancelled context. `sync` and `watch` are its commands and log as

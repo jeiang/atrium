@@ -12,11 +12,13 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/live/livetest"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
 )
@@ -193,6 +195,50 @@ func TestICloudFileUndoMovesBackAndIsNotUndoneTwice(t *testing.T) {
 	undoErr(t, err, "action "+strconv.FormatInt(id, 10)+" cannot be undone")
 	if _, ok, _ := w.Live.Begin(t.Context(), config.ICloud, a.MessageID, a.Digest, live.File, a.Src, a.Dest, py.Dict{}, nil); !ok {
 		t.Fatal("an undone action keeps blocking a new attempt of the same message id")
+	}
+}
+
+func TestLiveUndoMarksTheActionInFlightBeforeTheUndoerRuns(t *testing.T) {
+	w := livetest.ICloud(t, "live")
+	w.Arrive("oops")
+	id := w.File("oops", live.File, "Bills")
+	w.Sync()
+	var during string
+	w.Fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			_ = w.DB.Read.QueryRow("SELECT COALESCE(undone_error, '') FROM auto_actions WHERE id = ?", id).Scan(&during)
+		}
+		return nil
+	}
+	if _, err := w.Live.Undo(t.Context(), id); err != nil {
+		t.Fatal(err)
+	}
+	if during != proposals.InFlightText {
+		t.Fatalf("undone_error during the undo = %q", during)
+	}
+	a, _ := live.Get(t.Context(), w.DB.Read, id)
+	if a.Status != live.Undone {
+		t.Fatalf("action = %+v", a)
+	}
+}
+
+func TestIdempotentUndoStaysRetryableAfterADrop(t *testing.T) {
+	w := livetest.ICloud(t, "live")
+	w.Arrive("friend")
+	id := w.Flag("friend")
+	w.Sync()
+	w.Fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "STORE" {
+			return &mail.WriteInterrupted{Command: "STORE", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	if _, err := w.Live.Undo(t.Context(), id); err == nil {
+		t.Fatal("undo succeeded through a drop")
+	}
+	w.Fake.FailWrite = nil
+	if _, err := w.Live.Undo(t.Context(), id); err != nil {
+		t.Fatalf("retry of an idempotent undo = %v", err)
 	}
 }
 

@@ -34,7 +34,25 @@ const (
 	ReasonUIDValidity = "uidvalidity"
 	ReasonMissing     = "missing"
 	ReasonMsgID       = "msgid"
+	ReasonUnresolved  = "unresolved"
 )
+
+// BlockingActionSQL is the condition on a proposal_actions row aliased alias: a failed write, not an undo, whose
+// text Blocks.
+func BlockingActionSQL(alias string) string {
+	return alias + ".ok = 0 AND json_extract(" + alias + ".action, '$.op') IS NOT 'undo' AND (instr(" + alias + ".error, '" +
+		UnknownPrefix + "') > 0 OR instr(" + alias + ".error, '" + PartialPrefix + "') > 0)"
+}
+
+// UnresolvedSQL is true for a message (aliases m for messages and mb for its mailbox) named by a blocking
+// proposal_actions row of any proposal: by its uids, or by the copied mapping of a partial move. A write whose
+// outcome is unknown may have left a copy, and the untouched source would be copied again.
+var UnresolvedSQL = "(EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.uids') u WHERE " + BlockingActionSQL("pa") + " AND " +
+	"u.value = m.uid AND COALESCE(json_extract(pa.action, '$.src_uidvalidity'), json_extract(pa.action, '$.uidvalidity')) = m.uidvalidity " +
+	"AND COALESCE(json_extract(pa.action, '$.src_imap'), json_extract(pa.action, '$.imap_name')) = mb.imap_name) OR " +
+	"EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.copied') u WHERE " + BlockingActionSQL("pa") + " AND " +
+	"u.key = CAST(m.uid AS TEXT) AND json_extract(pa.action, '$.src_uidvalidity') = m.uidvalidity " +
+	"AND json_extract(pa.action, '$.src_imap') = mb.imap_name))"
 
 var trashNames = map[string]bool{"deleted messages": true, "deleted items": true, "trash": true, "bin": true}
 
@@ -55,6 +73,8 @@ var ErrValidityChanged = Error("UIDVALIDITY changed")
 type PartialMove struct {
 	Copied *mail.CopyUID
 	Err    error
+	// Unconfirmed is a COPY whose reply never came: the destination may hold the copy.
+	Unconfirmed bool
 }
 
 // PartialPrefix is in the text of a PartialMove: a retry of the same move would copy the batch a second time.
@@ -66,9 +86,33 @@ func Blocks(text string) bool {
 	return strings.Contains(text, PartialPrefix) || strings.Contains(text, UnknownPrefix)
 }
 
+// OutcomeUnknown reports whether err is a write the server may or may not have executed: a command that was sent
+// and never answered, alone or as the COPY of a PartialMove.
+func OutcomeUnknown(err error) bool {
+	if partial, ok := errors.AsType[*PartialMove](err); ok {
+		return partial.Unconfirmed
+	}
+	_, ok := errors.AsType[*mail.WriteInterrupted](err)
+	return ok
+}
+
+// UnknownText is the ledger text of a failed write: err's text, led by UnknownPrefix when its outcome is unknown
+// and the text does not already say so.
+func UnknownText(err error, text string) string {
+	if OutcomeUnknown(err) && !Blocks(text) {
+		return UnknownPrefix + ": " + text
+	}
+	return text
+}
+
 const PartialPrefix = "copied but not expunged: "
 
-func (e *PartialMove) Error() string { return PartialPrefix + e.Err.Error() }
+func (e *PartialMove) Error() string {
+	if e.Unconfirmed {
+		return UnknownPrefix + ": " + e.Err.Error()
+	}
+	return PartialPrefix + e.Err.Error()
+}
 
 func (*PartialMove) PyClass() string { return "PartialMove" }
 
@@ -193,18 +237,21 @@ func Verify(ctx context.Context, q Querier, client mail.Client, account string, 
 		var gone sql.NullFloat64
 		var uid, validity int64
 		var digest, imapName string
-		err := q.QueryRowContext(ctx, "SELECT m.gone_at, m.uid, m.uidvalidity, m.digest, mb.imap_name FROM messages m "+
-			"JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE m.id = ?", snap.ID).Scan(&gone, &uid, &validity, &digest, &imapName)
+		var unresolved bool
+		err := q.QueryRowContext(ctx, "SELECT m.gone_at, m.uid, m.uidvalidity, m.digest, mb.imap_name, "+UnresolvedSQL+" FROM messages m "+
+			"JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE m.id = ?", snap.ID).Scan(&gone, &uid, &validity, &digest, &imapName, &unresolved)
 		reason := ""
 		switch {
 		case errors.Is(err, sql.ErrNoRows) || err == nil && gone.Valid:
 			reason = ReasonGone
 		case err != nil:
 			return nil, nil, err
-		case uid != int64(snap.UID) || validity != int64(snap.UIDValidity) || imapName != snap.IMAPName:
+		case validity == 0 || uid != int64(snap.UID) || validity != int64(snap.UIDValidity) || imapName != snap.IMAPName:
 			reason = ReasonMoved
 		case digest != snap.Digest:
 			reason = ReasonChanged
+		case unresolved:
+			reason = ReasonUnresolved
 		}
 		if reason != "" {
 			skipped = append(skipped, Skip{snap.ID, reason})
@@ -223,7 +270,7 @@ func Verify(ctx context.Context, q Querier, client mail.Client, account string, 
 		if err != nil {
 			return nil, nil, err
 		}
-		if st.UIDValidity != key.validity {
+		if st.UIDValidity == 0 || st.UIDValidity != key.validity {
 			for _, s := range group {
 				skipped = append(skipped, Skip{s.ID, ReasonUIDValidity})
 			}
@@ -387,7 +434,8 @@ func CopyUIDs(ctx context.Context, client mail.Client, destIMAP string, uids []u
 
 // MoveUIDs is move_uids: per batch of Batch UIDs a COPY, STORE +FLAGS.SILENT \Deleted and UID EXPUNGE, then
 // moved with the batch and its COPYUID. A server without UIDPLUS is refused before anything is sent; a batch
-// copied but not expunged is a *PartialMove.
+// copied but not expunged is a *PartialMove, and so is a COPY whose reply never came (Copied is nil: the
+// destination may hold the copy, so it is never sent again).
 func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string, validity uint32, uids []uint32,
 	moved func(batch []uint32, copied *mail.CopyUID) error) error {
 	if !client.HasCapability("UIDPLUS") {
@@ -399,6 +447,9 @@ func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string,
 	for _, batch := range Chunks(uids, Batch) {
 		copied, err := CopyUIDs(ctx, client, destIMAP, batch)
 		if err != nil {
+			if _, unknown := errors.AsType[*mail.WriteInterrupted](err); unknown {
+				return &PartialMove{Err: err, Unconfirmed: true}
+			}
 			return err
 		}
 		set := mail.UIDs(batch...)

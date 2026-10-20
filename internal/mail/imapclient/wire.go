@@ -301,7 +301,10 @@ const maxBuffered = 256 << 20
 
 type sentCommand struct {
 	tag, name string
+	done      bool
 }
+
+type sentEnd struct{ index, end int }
 
 type tap struct {
 	net.Conn
@@ -312,17 +315,21 @@ type tap struct {
 	err     error
 	killed  error
 	last    time.Time
-	paused  bool
+	window  time.Duration
 	writing int
 	sent    []sentCommand
 	wline   []byte
 	wskip   int
 	wcont   bool
+	wcur    int
+	ends    []sentEnd
 	limit   int
+
+	writeTimeout time.Duration
 }
 
-func newTap(c net.Conn) *tap {
-	return &tap{Conn: c, arrived: make(chan struct{}, 1), last: time.Now(), limit: maxBuffered}
+func newTap(c net.Conn, writeTimeout time.Duration) *tap {
+	return &tap{Conn: c, arrived: make(chan struct{}, 1), last: time.Now(), limit: maxBuffered, writeTimeout: writeTimeout}
 }
 
 func (t *tap) Read(p []byte) (int, error) {
@@ -348,39 +355,64 @@ func (t *tap) Read(p []byte) (int, error) {
 
 func (t *tap) Write(p []byte) (int, error) {
 	t.mu.Lock()
+	t.ends = t.ends[:0]
 	t.record(p)
 	t.writing++
 	t.mu.Unlock()
 	t.signal()
+	if t.writeTimeout > 0 {
+		_ = t.SetWriteDeadline(time.Now().Add(t.writeTimeout))
+	}
 	n, err := t.Conn.Write(p)
+	if t.writeTimeout > 0 {
+		_ = t.SetWriteDeadline(time.Time{})
+	}
 	t.mu.Lock()
+	for _, e := range t.ends {
+		if e.end > n {
+			t.sent[e.index].done = false
+		}
+	}
 	t.writing--
-	t.last = time.Now()
+	if t.window == 0 {
+		t.last = time.Now()
+	}
 	t.mu.Unlock()
+	var timeout net.Error
+	if errors.As(err, &timeout) && timeout.Timeout() {
+		t.kill(errTimedOut)
+	}
 	return n, err
 }
 
 func (t *tap) record(p []byte) {
-	for len(p) > 0 {
+	off := 0
+	for off < len(p) {
 		if t.wskip > 0 {
-			k := min(t.wskip, len(p))
+			k := min(t.wskip, len(p)-off)
 			t.wskip -= k
-			p = p[k:]
+			off += k
 			continue
 		}
-		i := bytes.IndexByte(p, '\n')
+		i := bytes.IndexByte(p[off:], '\n')
 		if i < 0 {
-			t.wline = append(t.wline, p...)
+			t.wline = append(t.wline, p[off:]...)
 			return
 		}
-		line := bytes.TrimSuffix(append(t.wline, p[:i]...), []byte("\r"))
-		p = p[i+1:]
+		line := bytes.TrimSuffix(append(t.wline, p[off:off+i]...), []byte("\r"))
+		off += i + 1
 		if !t.wcont {
+			t.wcur = -1
 			if tag, name, ok := commandTag(line); ok {
-				t.sent = append(t.sent, sentCommand{tag, name})
+				t.sent = append(t.sent, sentCommand{tag: tag, name: name})
+				t.wcur = len(t.sent) - 1
 			}
 		}
 		t.wskip, t.wcont = clientLiteral(line)
+		if !t.wcont && t.wcur >= 0 {
+			t.sent[t.wcur].done = true
+			t.ends = append(t.ends, sentEnd{t.wcur, off})
+		}
 		t.wline = t.wline[:0]
 	}
 }
@@ -425,6 +457,17 @@ func (t *tap) target(name string, from int) int {
 	return -1
 }
 
+func (t *tap) written(name string, from int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for i := len(t.sent) - 1; i >= from; i-- {
+		if t.sent[i].name == name {
+			return t.sent[i].done
+		}
+	}
+	return false
+}
+
 func (t *tap) sentIndex(tag string, from int) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -453,16 +496,21 @@ func (t *tap) kill(reason error) {
 	t.signal()
 }
 
-func (t *tap) touch(paused bool) {
+// touch restarts the silence clock; window is how long the server may then stay silent, zero for the default.
+func (t *tap) touch(window time.Duration) {
 	t.mu.Lock()
-	t.last, t.paused = time.Now(), paused
+	t.last, t.window = time.Now(), window
 	t.mu.Unlock()
 }
 
-func (t *tap) idleFor() (time.Duration, bool) {
+func (t *tap) idleFor(def time.Duration) (idle time.Duration, watching bool, window time.Duration) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return time.Since(t.last), !t.paused && t.writing == 0
+	window = t.window
+	if window == 0 {
+		window = def
+	}
+	return time.Since(t.last), t.writing == 0, window
 }
 
 func (t *tap) failure() error {

@@ -221,7 +221,7 @@ func watchEmptyPass() string {
 		logout
 }
 
-func startWireWatch(t *testing.T, script string, ctx context.Context, sleep func(context.Context, time.Duration), afterConnect func(int)) <-chan struct{} {
+func startWireWatch(t *testing.T, script string, ctx context.Context, sleep func(context.Context, time.Duration), afterConnect func(int), tune ...func(*conn)) <-chan struct{} {
 	t.Helper()
 	srv := imapscript.Serve(t, imapscript.MustParse(t, script))
 	dir := t.TempDir()
@@ -244,6 +244,9 @@ func startWireWatch(t *testing.T, script string, ctx context.Context, sleep func
 			return dialer.DialContext(ctx, "tcp", srv.Addr())
 		}
 		c.readTimeout = 5 * time.Second
+		for _, f := range tune {
+			f(c)
+		}
 		client := mail.Gated(c, env)
 		if err := client.Connect(ctx); err != nil {
 			return nil, err
@@ -342,8 +345,9 @@ S: + idling
 	}
 }
 
-func TestIdleIsNotReissuedWithinTheWatchLoopsIdle(t *testing.T) {
-	if got := newConn("imap.test", "u", "p").idleRestart; got <= config.IdleSeconds*time.Second {
-		t.Fatalf("go-imap re-issues IDLE after %v, within imaplib's single %ds IDLE", got, config.IdleSeconds)
+func TestIdleKeepaliveWindowFitsInsideTheWatchLoopsIdle(t *testing.T) {
+	c := newConn("imap.test", "u", "p")
+	if got := c.idleKeepalive + c.readTimeout; got >= config.IdleSeconds*time.Second {
+		t.Fatalf("a silent link is noticed after %v, not within the %ds IDLE", got, config.IdleSeconds)
 	}
 }

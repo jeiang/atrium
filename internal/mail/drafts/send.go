@@ -49,6 +49,9 @@ func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Mess
 		return "", err
 	}
 	if err := client.Append(safety.OperatorSend(ctx, sent), sent, raw, `\Seen`); err != nil {
+		if _, unknown := errors.AsType[*mail.WriteInterrupted](err); unknown {
+			return "", errors.New("the copy in Sent may exist: check Sent before filing it again")
+		}
 		return "", err
 	}
 	return "copy filed in Sent", nil

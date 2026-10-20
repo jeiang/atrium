@@ -80,14 +80,12 @@ func validity(ctx context.Context, client mail.Client, imapName string) (uint32,
 func undoMoveBack(ctx context.Context, open mailops.Opener, p MoveBack) (py.Dict, error) {
 	var restored, missing int
 	err := mailops.Session(ctx, open, p.Account, func(client mail.Client) error {
-		if p.DestUIDValidity != nil {
-			v, err := validity(ctx, client, p.DestIMAP)
-			if err != nil {
-				return err
-			}
-			if v != *p.DestUIDValidity {
-				return mailops.Error("destination UIDVALIDITY changed")
-			}
+		current, err := validity(ctx, client, p.DestIMAP)
+		if err != nil {
+			return err
+		}
+		if p.DestUIDValidity != nil && current != *p.DestUIDValidity {
+			return mailops.Error("destination UIDVALIDITY changed")
 		}
 		if err := client.Select(ctx, p.DestIMAP); err != nil {
 			return err
@@ -133,7 +131,7 @@ func undoMoveBack(ctx context.Context, open mailops.Opener, p MoveBack) (py.Dict
 		if len(usable) == 0 {
 			return mailops.Error("no message left in the destination to move back")
 		}
-		return mailops.MoveUIDs(ctx, client, p.DestIMAP, p.SrcIMAP, derefOr0(p.DestUIDValidity), usable, func(batch []uint32, _ *mail.CopyUID) error {
+		return mailops.MoveUIDs(ctx, client, p.DestIMAP, p.SrcIMAP, current, usable, func(batch []uint32, _ *mail.CopyUID) error {
 			restored += len(batch)
 			return nil
 		})

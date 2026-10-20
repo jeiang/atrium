@@ -163,6 +163,10 @@ func TestUnapprovedExecutorSendsNoWrite(t *testing.T) {
 	}
 	account := config.ICloud
 	payload := backlogPayload("Receipts/Shop")(list)
+	if _, err := d.Write.Exec("INSERT INTO proposals (id, kind, account, status, created_ts, title, payload, preview, fingerprint) " +
+		"VALUES (1, 'inbox_backlog', 'icloud', 'approved', 0, 't', '{}', '{}', 'fp')"); err != nil {
+		t.Fatal(err)
+	}
 	e := &executors.Executors{DB: d, Open: sessions(t, client)}
 	_, err = e.ExecuteMoves(ctx, &proposals.Proposal{ID: 1, Kind: executors.InboxBacklog, Account: &account, Payload: []byte(py.JSONDumps(payload))}, nil)
 	var refused safety.WriteRefused

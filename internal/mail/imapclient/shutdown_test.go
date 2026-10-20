@@ -272,7 +272,7 @@ func TestProposalsApproveSigtermDuringCopyLogsTheUnknownOutcome(t *testing.T) {
 	if got := w.text("SELECT action FROM proposal_actions WHERE proposal_id = ? AND ok = 0", id); got != want {
 		t.Fatalf("interrupted COPY logged as %s", got)
 	}
-	if got := w.text("SELECT error FROM proposal_actions WHERE proposal_id = ? AND ok = 0", id); !strings.HasPrefix(got, "cancelled, write outcome unknown") {
+	if got := w.text("SELECT error FROM proposal_actions WHERE proposal_id = ? AND ok = 0", id); got != "cancelled, write outcome unknown: context canceled" {
 		t.Fatalf("error = %q", got)
 	}
 }
@@ -287,6 +287,9 @@ func TestProposalsApproveSigtermDuringExpungeLogsThePartialMove(t *testing.T) {
 	want := `{"op": "move", "account": "icloud", "src_imap": "INBOX", "src_uidvalidity": 7, "dest_imap": "Receipts/Shop", "dest_uidvalidity": 9, "copied": {"301": 1, "302": 2}}`
 	if got := w.text("SELECT action FROM proposal_actions WHERE proposal_id = ? AND ok = 0", id); got != want {
 		t.Fatalf("partial move logged as %s", got)
+	}
+	if n := w.text("SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND ok = 0", id); n != "1" {
+		t.Fatalf("failed rows = %s, want only the partial move", n)
 	}
 }
 
@@ -328,7 +331,7 @@ func TestUndoSigtermDuringCopyBlocksARetry(t *testing.T) {
 		if code, _, _ := w.run("live", "undo", "1"); code != cli.ExitTerminated {
 			t.Fatalf("first undo = %d", code)
 		}
-		if got := w.text("SELECT undone_error FROM auto_actions WHERE id = 1"); !strings.HasPrefix(got, mailops.UnknownPrefix) {
+		if got := w.text("SELECT undone_error FROM auto_actions WHERE id = 1"); got != "PartialMove: cancelled, write outcome unknown: context canceled" {
 			t.Fatalf("undone_error = %q", got)
 		}
 		opens := w.opens

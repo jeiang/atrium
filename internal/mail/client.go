@@ -96,6 +96,22 @@ type FetchItems struct {
 	ChangedSince uint64
 }
 
+// WriteInterrupted is a write command whose bytes were sent and whose reply never came: the connection failed,
+// timed out or was cancelled, so the server may or may not have executed it. A server NO or BAD is never one.
+// It is an imaplib abort, so a watch loop reconnects on it.
+type WriteInterrupted struct {
+	Command string
+	Err     error
+}
+
+func (e *WriteInterrupted) Error() string { return e.Err.Error() }
+
+func (e *WriteInterrupted) Unwrap() error { return e.Err }
+
+func (*WriteInterrupted) PyClass() string { return "abort" }
+
+func (*WriteInterrupted) PyModule() string { return "imaplib.IMAP4" }
+
 type CopyUID struct {
 	UIDValidity uint32
 	Mapping     map[uint32]uint32

@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/config"
@@ -631,6 +632,251 @@ func TestPartialMoveIsLoggedThenFails(t *testing.T) {
 	if last.OK || *last.Error != "copied but not expunged: try later" || len(copied) != 4 || copied[0].Key != "1" ||
 		field(last.Action, "dest_uidvalidity") != int64(4) {
 		t.Fatalf("partial action = %+v", last)
+	}
+}
+
+func (w *world) inFlight(pid int64) int {
+	w.t.Helper()
+	var n int
+	if err := w.db.Read.QueryRow("SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND ok = 0 AND error = ?", pid, proposals.InFlightText).Scan(&n); err != nil {
+		w.t.Fatal(err)
+	}
+	return n
+}
+
+func TestEveryWriteHasItsRowBeforeItStarts(t *testing.T) {
+	w := icloudWorld(t)
+	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
+	seen := map[string]int{}
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		seen[fw.Verb] = w.inFlight(pid)
+		return nil
+	}
+	done := w.apply(pid, nil)
+	if done.Status != proposals.Applied {
+		t.Fatalf("status = %s, %v", done.Status, done.Result)
+	}
+	for _, verb := range []string{"CREATE", "COPY"} {
+		if seen[verb] != 1 {
+			t.Fatalf("%s ran with %d in-flight rows, want its own", verb, seen[verb])
+		}
+	}
+	if n := w.inFlight(pid); n != 0 {
+		t.Fatalf("%d rows still in flight after the apply", n)
+	}
+	for _, a := range w.actions(pid) {
+		if !a.OK {
+			t.Fatalf("a failed row after a clean apply: %+v", a)
+		}
+	}
+}
+
+func TestInterruptedCopyIsLoggedAsUnknownAndHeld(t *testing.T) {
+	w := icloudWorld(t)
+	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			return &mail.WriteInterrupted{Command: "COPY", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	done := w.apply(pid, nil)
+	if done.Status != proposals.Failed {
+		t.Fatalf("status = %s", done.Status)
+	}
+	logged := w.actions(pid)
+	last := logged[len(logged)-1]
+	if last.OK || last.Error == nil || !mailops.Blocks(*last.Error) || w.inFlight(pid) != 0 {
+		t.Fatalf("last action = %+v", last)
+	}
+	if uids, _ := field(last.Action, "uids").([]any); len(uids) != 4 {
+		t.Fatalf("logged uids = %v", field(last.Action, "uids"))
+	}
+}
+
+func TestReApprovingAFailedProposalWithAnUnknownCopyIsRefused(t *testing.T) {
+	w := icloudWorld(t)
+	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
+	copies := 0
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			copies++
+			return &mail.WriteInterrupted{Command: "COPY", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	if done := w.apply(pid, nil); done.Status != proposals.Failed {
+		t.Fatalf("status = %s", done.Status)
+	}
+	_, err := w.pipeline.ApproveAndApply(context.Background(), pid, nil)
+	var refused proposals.ProposalError
+	if !errors.As(err, &refused) || !strings.Contains(err.Error(), "resolve it in the mailbox before approving again") {
+		t.Fatalf("second approve = %v", err)
+	}
+	if copies != 1 {
+		t.Fatalf("COPY sent %d times", copies)
+	}
+	if p, _ := proposals.Get(context.Background(), w.db.Read, pid); p.Status != proposals.Failed {
+		t.Fatalf("status after the refusal = %s", p.Status)
+	}
+}
+
+func TestRescanNeverReopensAProposalWithAnUnknownCopy(t *testing.T) {
+	w := icloudWorld(t)
+	payload := w.splitPayload(w.messageIDs("Bills"), "Bills/Shop")
+	pid := w.propose(executors.RebalanceSplit, payload)
+	copies := 0
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			copies++
+			return &mail.WriteInterrupted{Command: "COPY", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	if done := w.apply(pid, nil); done.Status != proposals.Failed {
+		t.Fatalf("status = %s", done.Status)
+	}
+	account := w.account
+	if _, ok, err := proposals.Create(context.Background(), w.db, executors.RebalanceSplit, &account, "title", payload, py.Dict{}, "fp", w.clock); err != nil || ok {
+		t.Fatalf("rescan = %v, %v; want the failed proposal kept as known", ok, err)
+	}
+	if _, err := w.pipeline.ApproveAndApply(context.Background(), pid, nil); err == nil {
+		t.Fatal("approve after the rescan was accepted")
+	}
+	if _, err := w.db.Write.Exec("UPDATE proposals SET status = 'pending' WHERE id = ?", pid); err != nil {
+		t.Fatal(err)
+	}
+	_, err := w.pipeline.ApproveAndApply(context.Background(), pid, nil)
+	if !strings.Contains(fmt.Sprint(err), "resolve it in the mailbox") || copies != 1 {
+		t.Fatalf("approve of a pending proposal = %v, COPY sent %d times", err, copies)
+	}
+}
+
+func TestANewProposalNeverRecopiesAMessageWithAnUnknownCopy(t *testing.T) {
+	w := icloudWorld(t)
+	ids := w.messageIDs("Bills")
+	payload := w.splitPayload(ids, "Bills/Shop")
+	pidA := w.propose(executors.RebalanceSplit, payload)
+	copies := 0
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			copies++
+			return &mail.WriteInterrupted{Command: "COPY", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	if done := w.apply(pidA, nil); done.Status != proposals.Failed {
+		t.Fatalf("status = %s", done.Status)
+	}
+	account := w.account
+	pidB, ok, err := proposals.Create(context.Background(), w.db, executors.RebalanceSplit, &account, "again", payload, py.Dict{}, "fp-b", w.clock)
+	if err != nil || !ok {
+		t.Fatalf("create B = %v, %v", ok, err)
+	}
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			copies++
+		}
+		return nil
+	}
+	done := w.apply(pidB, nil)
+	if copies != 1 {
+		t.Fatalf("COPY sent %d times across both proposals; B = %s %v", copies, done.Status, done.Result)
+	}
+	skipped, _ := field(done.Result, "skipped").([]any)
+	if len(skipped) != len(ids) {
+		t.Fatalf("skipped = %v", field(done.Result, "skipped"))
+	}
+}
+
+func TestASuccessfulRelabelDoesNotBlockALaterProposalForTheSameMessage(t *testing.T) {
+	w := gmailWorld(t, []string{"X"}, []string{"X"})
+	ids := w.ids("SELECT id FROM messages ORDER BY id")
+	first := w.propose(executors.RebalanceSplit, w.splitPayload(ids, "One"))
+	if done := w.apply(first, nil); done.Status != proposals.Applied {
+		t.Fatalf("first = %s %v", done.Status, done.Result)
+	}
+	account := w.account
+	second, ok, err := proposals.Create(context.Background(), w.db, executors.RebalanceSplit, &account, "again", w.splitPayload(ids, "Two"), py.Dict{}, "fp-b", w.clock)
+	if err != nil || !ok {
+		t.Fatalf("create = %v, %v", ok, err)
+	}
+	done := w.apply(second, nil)
+	if skipped, _ := field(done.Result, "skipped").([]any); done.Status != proposals.Applied || len(skipped) != 0 {
+		t.Fatalf("second = %s %v", done.Status, done.Result)
+	}
+}
+
+func TestSecondChunkRowFailureReturnsTheErrorWithoutPanicking(t *testing.T) {
+	w := newWorld(t, config.ICloud, func(f *mailtest.FakeClient) {
+		f.AddBox(config.Inbox, mailtest.NewBox(1))
+		bills := f.AddBox("Bills", mailtest.NewBox(3))
+		f.AddBox("Deleted Messages", mailtest.NewBox(9), `\Trash`)
+		for i := range mailops.Batch + 1 {
+			header, text := mailtest.RawWith(fmt.Sprintf("invoice %d", i), "shop@bills.test", fmt.Sprintf("m%d", i), "hello")
+			bills.Add(header, text, nil, nil)
+		}
+	})
+	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
+	if _, err := w.db.Write.Exec("CREATE TRIGGER second_chunk BEFORE INSERT ON proposal_actions WHEN NEW.error = '" + proposals.InFlightText +
+		"' AND (SELECT COUNT(*) FROM proposal_actions WHERE ok = 1 AND json_extract(action, '$.op') = 'move') >= 1 " +
+		"BEGIN SELECT RAISE(ABORT, 'ledger busy'); END"); err != nil {
+		t.Fatal(err)
+	}
+	done := w.apply(pid, nil)
+	if done.Status != proposals.Failed || !strings.Contains(fmt.Sprint(done.Result), "ledger busy") {
+		t.Fatalf("status = %s, result = %v", done.Status, done.Result)
+	}
+	var settled int
+	if err := w.db.Read.QueryRow("SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND ok = 1 AND json_extract(action, '$.op') = 'move'", pid).Scan(&settled); err != nil || settled != 1 {
+		t.Fatalf("settled move rows = %d, %v", settled, err)
+	}
+}
+
+func TestInterruptedExpungeLogsOnePartialMoveRow(t *testing.T) {
+	w := icloudWorld(t)
+	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "EXPUNGE" {
+			return &mail.WriteInterrupted{Command: "EXPUNGE", Err: errors.New("socket error: EOF")}
+		}
+		return nil
+	}
+	if done := w.apply(pid, nil); done.Status != proposals.Failed {
+		t.Fatalf("status = %s", done.Status)
+	}
+	var failed int
+	if err := w.db.Read.QueryRow("SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND ok = 0", pid).Scan(&failed); err != nil || failed != 1 {
+		t.Fatalf("failed rows = %d, %v", failed, err)
+	}
+	logged := w.actions(pid)
+	last := logged[len(logged)-1]
+	if copied, _ := field(last.Action, "copied").(py.Dict); last.OK || len(copied) != 4 {
+		t.Fatalf("last action = %+v", last)
+	}
+}
+
+func TestUndoHasItsRowBeforeTheUndoerRuns(t *testing.T) {
+	w := icloudWorld(t)
+	pid := w.propose(executors.RebalanceSplit, w.splitPayload(w.messageIDs("Bills"), "Bills/Shop"))
+	if done := w.apply(pid, nil); done.Status != proposals.Applied {
+		t.Fatalf("status = %s", done.Status)
+	}
+	var during int
+	w.fake.FailWrite = func(fw mailtest.FakeWrite) error {
+		if fw.Verb == "COPY" {
+			during = w.inFlight(pid)
+		}
+		return nil
+	}
+	if out := w.undo(pid); !out.Undone {
+		t.Fatalf("undo = %+v", out)
+	}
+	if during == 0 {
+		t.Fatal("the undo's COPY ran before its row was recorded")
+	}
+	if n := w.inFlight(pid); n != 0 {
+		t.Fatalf("%d undo rows still in flight", n)
 	}
 }
 

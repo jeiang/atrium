@@ -232,7 +232,10 @@ S: {t} OK [READ-WRITE] SELECT completed
 }
 
 func TestUndoMoveBackWithoutRecordedValidityStillMoves(t *testing.T) {
-	client, _ := icloud(t, icloudLogin+`C: {t} EXAMINE "Bills"
+	client, _ := icloud(t, icloudLogin+`C/ ^{t} STATUS "Bills" \((UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)( (UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)){3}\)$
+S: * STATUS "Bills" (MESSAGES 1 UIDNEXT 501 UIDVALIDITY 123 HIGHESTMODSEQ 9)
+S: {t} OK STATUS completed
+C: {t} EXAMINE "Bills"
 S: {t} OK [READ-ONLY] EXAMINE completed
 C: {t} UID SEARCH UID 500
 S: * SEARCH 500
