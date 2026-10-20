@@ -27,6 +27,36 @@ const (
 	shutdownTimeout = 10 * time.Second
 )
 
+var (
+	recoverInterval = time.Minute
+	recoverClock    = func() float64 { return float64(time.Now().UnixNano()) / 1e9 }
+)
+
+func recoverProposals(ctx context.Context, d *db.DB) error {
+	n, err := proposals.RecoverStuck(ctx, d, recoverClock())
+	if n > 0 {
+		log.Warn("failed approved proposals with a write in flight", "count", n)
+	}
+	return err
+}
+
+// recoverProposalsEvery repeats the start-up recovery: after a kill the unit restarts inside the proposals' idle
+// bound, so the stuck proposal only becomes recoverable while the server is already running.
+func recoverProposalsEvery(ctx context.Context, d *db.DB) {
+	t := time.NewTicker(recoverInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := recoverProposals(ctx, d); err != nil && ctx.Err() == nil {
+				log.Error("proposal recovery failed", logx.Err, err.Error())
+			}
+		}
+	}
+}
+
 type Page struct {
 	Module    Module
 	Templates fs.FS
@@ -102,11 +132,19 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil {
 		return err
 	}
-	if n, err := proposals.RecoverStuck(ctx, d, float64(time.Now().UnixNano())/1e9); err != nil {
+	if err := recoverProposals(ctx, d); err != nil {
 		return err
-	} else if n > 0 {
-		log.Warn("failed approved proposals with a write in flight", "count", n)
 	}
+	recovering, stopRecovering := context.WithCancel(ctx)
+	recovered := make(chan struct{})
+	go func() {
+		defer close(recovered)
+		recoverProposalsEvery(recovering, d)
+	}()
+	defer func() {
+		stopRecovering()
+		<-recovered
+	}()
 	var modules []Module
 	var templates []fs.FS
 	globals := map[string]any{}
