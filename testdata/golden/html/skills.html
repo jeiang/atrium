@@ -426,7 +426,7 @@
     </header>
     <div id="content" tabindex="-1" class="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 outline-none md:px-8 md:py-8">
       
-<nav aria-label="Settings sections" class="-mb-2 flex gap-1 overflow-x-auto border-b text-sm">
+<nav aria-label="Settings sections" class="-mb-2 flex flex-wrap gap-x-1 border-b text-sm">
   
   <a href="/settings/assistant" class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 font-medium border-transparent text-muted-foreground hover:text-foreground">Assistant</a>
   
@@ -466,6 +466,7 @@
     <form method="post" action="/settings/skills" class="mt-3 flex flex-col gap-3">
       <input type="hidden" name="csrf_token" value="csrf-golden-token">
       <input type="hidden" name="name" value="weekly-review">
+      <input type="hidden" name="from" value="edit">
       <div role="group" class="field"><label for="d-weekly-review">Description</label><input id="d-weekly-review" name="description" type="text" value="Review the week &lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;" maxlength="160"></div>
       <div role="group" class="field"><label for="b-weekly-review">Body</label><textarea id="b-weekly-review" name="body" rows="10" class="w-full font-mono text-xs"># Weekly
 
@@ -473,7 +474,7 @@
 - Fish &amp;amp; chips &amp;lt;3 &amp;#x27; &amp;copy;</textarea></div>
       <div class="flex gap-2">
         <button type="submit" class="btn" data-size="sm"><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Save</button>
-        <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/skills/weekly-review/delete"><svg class="lucide lucide-trash-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete</button>
+        <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/skills/weekly-review/delete" data-confirm-submit="Delete the skill “weekly-review”? daily references it and will show an unknown reference. This cannot be undone."><svg class="lucide lucide-trash-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2-2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete</button>
       </div>
     </form>
   </details>
@@ -494,11 +495,12 @@
     <form method="post" action="/settings/skills" class="mt-3 flex flex-col gap-3">
       <input type="hidden" name="csrf_token" value="csrf-golden-token">
       <input type="hidden" name="name" value="inbox-zero">
+      <input type="hidden" name="from" value="edit">
       <div role="group" class="field"><label for="d-inbox-zero">Description</label><input id="d-inbox-zero" name="description" type="text" value="This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised" maxlength="160"></div>
       <div role="group" class="field"><label for="b-inbox-zero">Body</label><textarea id="b-inbox-zero" name="body" rows="10" class="w-full font-mono text-xs"></textarea></div>
       <div class="flex gap-2">
         <button type="submit" class="btn" data-size="sm"><svg class="lucide lucide-check " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>Save</button>
-        <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/skills/inbox-zero/delete"><svg class="lucide lucide-trash-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete</button>
+        <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/skills/inbox-zero/delete" data-confirm-submit="Delete the skill “inbox-zero”? This cannot be undone."><svg class="lucide lucide-trash-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2-2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete</button>
       </div>
     </form>
   </details>

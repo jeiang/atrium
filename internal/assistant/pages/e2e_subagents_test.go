@@ -60,7 +60,7 @@ func (s *site) agentRow(name string) (description, prompt, effort string, tools 
 func TestBuiltinSubagentCardsKeepRecallOnSave(t *testing.T) {
 	s := newSite(t)
 	page := status(t, s.get("/settings/subagents"), http.StatusOK)
-	mustContain(t, page, `<code class="font-mono">recall</code>`, `data-confirm-submit="Delete the subagent`)
+	mustContain(t, page, `<code class="font-mono">recall</code>`)
 	for _, name := range []string{"mail", "web"} {
 		description, prompt, effort, stored := s.agentRow(name)
 		ticked := tickedTools(agentCard(t, page, name))

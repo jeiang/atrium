@@ -103,8 +103,9 @@ func TestSkillsEditor(t *testing.T) {
 	if savedResponse.StatusCode != http.StatusSeeOther || savedResponse.Header.Get("Location") != "/settings/skills?saved=a" || savedResponse.body != "" {
 		t.Fatalf("skill update: %d %q %q", savedResponse.StatusCode, savedResponse.Header.Get("Location"), savedResponse.body)
 	}
+	s.exec("INSERT INTO skills (name, description, body, updated_at) VALUES ('referrer', 'Refers to a', '/skill:a', 1)")
 	saved := status(t, s.get(savedResponse.Header.Get("Location")), http.StatusOK)
-	mustContain(t, saved, "references skills that do not exist: ghost", `data-category="warning"`, `data-skill="a" open`, "autofocus", `data-confirm-submit="Delete the skill “a”? a references it and will show an unknown reference. This cannot be undone."`)
+	mustContain(t, saved, "references skills that do not exist: ghost", `data-category="warning"`, `data-skill="a" open`, "autofocus", `data-confirm-submit="Delete the skill “a”? referrer references it and will show an unknown reference. This cannot be undone."`)
 
 	s.exec("INSERT INTO skills (name, description, body, updated_at) VALUES ('weekly-review', 'Review the week', 'check the calendar', 1), ('trip-plan', 'Plan trips', 'book flights', 1)")
 	byBody := status(t, s.get("/settings/skills?q=FLIGHTS"), http.StatusOK)
@@ -118,7 +119,7 @@ func TestSkillsEditor(t *testing.T) {
 	mustNotContain(t, none, `data-skill="`, `<script>alert`)
 
 	bad := status(t, s.post("/settings/skills", url.Values{"name": {"BAD"}, "description": {"d"}, "body": {"b"}}), http.StatusUnprocessableEntity)
-	mustContain(t, bad, "Not saved", "name must be lowercase letters, digits, - or _ (max 48 characters)", `data-category="error"`, `<input id="new-name" name="name" type="text" value="BAD"`, `<p class="text-sm text-destructive" role="alert">name must be lowercase`)
+	mustContain(t, bad, "Not saved", "name must be lowercase letters, digits, - or _ (max 48 characters)", `data-category="error"`, `<input id="new-name" name="name" type="text" value="BAD"`, `<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>name must be lowercase`)
 	editBad := status(t, s.post("/settings/skills", url.Values{"name": {"a"}, "description": {"Draft description"}, "body": {""}, "from": {"edit"}}), http.StatusUnprocessableEntity)
 	mustContain(t, editBad, `data-skill="a" open`, `value="Draft description"`, `<textarea id="b-a" name="body" rows="10" class="w-full font-mono text-xs"></textarea>`, `role="alert"`)
 	newBad := status(t, s.post("/settings/skills", url.Values{"name": {"a"}, "description": {"New draft"}, "body": {""}}), http.StatusUnprocessableEntity)
@@ -145,8 +146,7 @@ func TestSkillsEditor(t *testing.T) {
 func TestSubagentsSettings(t *testing.T) {
 	s := newSite(t)
 	page := status(t, s.get("/settings/subagents"), http.StatusOK)
-	mustContain(t, page, `<nav aria-label="Settings sections" class="-mb-2 flex flex-wrap gap-x-1 border-b text-sm">`, `data-confirm-submit="Delete the subagent “mail”? The assistant can no longer delegate to it. This cannot be undone."`)
-	mustNotContain(t, page, `formaction="/settings/subagents/mail/toggle" data-confirm-submit`)
+	mustContain(t, page, `<nav aria-label="Settings sections" class="-mb-2 flex flex-wrap gap-x-1 border-b text-sm">`)
 
 	form := url.Values{"name": {"finance"}, "description": {"Spending and bills"}, "prompt": {"Use the ledger."}, "effort": {"high"}, "tools": {"mail_search", "contacts_lookup"}}
 	madeResponse := s.post("/settings/subagents", form)
@@ -154,14 +154,14 @@ func TestSubagentsSettings(t *testing.T) {
 		t.Fatalf("subagent save: %d %q %q", madeResponse.StatusCode, madeResponse.Header.Get("Location"), madeResponse.body)
 	}
 	made := status(t, s.get(madeResponse.Header.Get("Location")), http.StatusOK)
-	mustContain(t, made, `data-agent="finance"`, "effort high", "Subagent saved", `data-enabled="true"`, `data-strip-params="saved,deleted,toggled"`, `data-agent="finance" data-enabled="true" open`, "autofocus")
+	mustContain(t, made, `data-agent="finance"`, "effort high", "Subagent saved", `data-enabled="true"`, `data-strip-params="saved,deleted,toggled"`, `data-agent="finance" data-enabled="true" open`, "autofocus", `data-confirm-submit="Delete the subagent “finance”? The assistant can no longer delegate to it. This cannot be undone."`)
 	var tools string
 	if err := s.db.Read.QueryRow("SELECT tools_json FROM subagents WHERE name = 'finance'").Scan(&tools); err != nil || tools != `["contacts_lookup", "mail_search"]` {
 		t.Errorf("stored tools %q (%v)", tools, err)
 	}
 	mustContain(t, status(t, s.get("/settings/subagents?saved=nope"), http.StatusOK), `New subagent`)
 	bad := status(t, s.post("/settings/subagents", url.Values{"name": {"evil"}, "description": {"d"}, "prompt": {"p"}, "effort": {"high"}, "tools": {"notion_create_page"}}), http.StatusUnprocessableEntity)
-	mustContain(t, bad, "Not saved", "not read-only tools open to subagents: notion_create_page", `<input id="new-name" name="name" type="text" value="evil"`, `<p class="text-sm text-destructive" role="alert">not read-only tools`)
+	mustContain(t, bad, "Not saved", "not read-only tools open to subagents: notion_create_page", `<input id="new-name" name="name" type="text" value="evil"`, `<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>not read-only tools`)
 	if n := s.count("SELECT COUNT(*) FROM subagents WHERE name = 'evil'"); n != 0 {
 		t.Errorf("refused agent was stored")
 	}
