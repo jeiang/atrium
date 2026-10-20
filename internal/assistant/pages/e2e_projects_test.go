@@ -78,7 +78,7 @@ func TestProjectsCrudAndListing(t *testing.T) {
 	mustNotContain(t, s.get("/projects").body, "Kitchen")
 
 	bad := status(t, s.post("/projects", with(kitchen, "effort", "ultra"), hx, "true"), http.StatusUnprocessableEntity)
-	mustContain(t, bad, "effort must be one of", `role="alert" tabindex="-1" autofocus`, `value="Kitchen"`, "Always answer in metric units.", `hx-post="/projects"`, `<option value="high" selected>`)
+	mustContain(t, bad, "effort must be one of", `role="alert" tabindex="-1" autofocus`, `value="Kitchen"`, "Always answer in metric units.", `hx-post="/projects"`, `<option value="medium" selected>`)
 	mustNotContain(t, bad, "<html")
 
 	nameless := status(t, s.post("/projects", with(kitchen, "name", ""), hx, "true"), http.StatusUnprocessableEntity)
