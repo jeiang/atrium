@@ -30,13 +30,18 @@ import (
 type terminating struct {
 	mail.Client
 	on   string
+	sig  syscall.Signal
 	sent bool
 }
 
 func (c *terminating) strike(op string) {
 	if c.on == op && !c.sent {
 		c.sent = true
-		time.AfterFunc(200*time.Millisecond, func() { _ = syscall.Kill(os.Getpid(), syscall.SIGTERM) })
+		sig := c.sig
+		if sig == 0 {
+			sig = syscall.SIGTERM
+		}
+		time.AfterFunc(200*time.Millisecond, func() { _ = syscall.Kill(os.Getpid(), sig) })
 	}
 }
 
@@ -119,7 +124,7 @@ func (w *shutdownWorld) clients(config.Config, config.Env) func(context.Context,
 		if err := client.Connect(ctx); err != nil {
 			return nil, err
 		}
-		return &terminating{Client: client, on: w.on}, nil
+		return &terminating{Client: client, on: w.on, sig: w.signal}, nil
 	}
 }
 
@@ -294,5 +299,60 @@ func TestLiveUndoRefusesToRetryAPartialUndo(t *testing.T) {
 	}
 	if w.opens != opens {
 		t.Fatalf("the retry opened a connection")
+	}
+}
+
+const shutdownMoveBackCopy = icloudLogin + `C/ ^{t} STATUS "Bills" \((UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)( (UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)){3}\)$
+S: * STATUS "Bills" (MESSAGES 1 UIDNEXT 501 UIDVALIDITY 99 HIGHESTMODSEQ 9)
+S: {t} OK STATUS completed
+C: {t} EXAMINE "Bills"
+S: {t} OK [READ-ONLY] EXAMINE completed
+C: {t} UID SEARCH UID 500
+S: * SEARCH 500
+S: {t} OK SEARCH completed
+C: {t} SELECT "Bills"
+S: {t} OK [READ-WRITE] SELECT completed
+C: {t} UID COPY 500 INBOX
+! sleep 1s
+`
+
+func TestUndoSigtermDuringCopyBlocksARetry(t *testing.T) {
+	t.Run("live undo", func(t *testing.T) {
+		w := newShutdownWorld(t, "copy", shutdownMoveBackCopy)
+		w.exec("INSERT INTO auto_actions (id, ts, account, message_id, kind, src, dest, undo, ok) VALUES (1, 1, 'icloud', 1, 'file', 'INBOX', 'Bills', ?, 1)", moveBackPlan)
+		if code, _, _ := w.run("live", "undo", "1"); code != cli.ExitTerminated {
+			t.Fatalf("first undo = %d", code)
+		}
+		if got := w.text("SELECT undone_error FROM auto_actions WHERE id = 1"); !strings.HasPrefix(got, mailops.UnknownPrefix) {
+			t.Fatalf("undone_error = %q", got)
+		}
+		opens := w.opens
+		code, _, stderr := w.run("live", "undo", "1")
+		if code != cli.ExitError || !strings.Contains(stderr, "partial undo") || w.opens != opens {
+			t.Fatalf("retried undo = %d, %q, opens %d -> %d", code, stderr, opens, w.opens)
+		}
+	})
+	t.Run("proposals undo", func(t *testing.T) {
+		w := newShutdownWorld(t, "copy", shutdownMoveBackCopy)
+		id := w.proposal(executors.InboxBacklog)
+		w.exec("UPDATE proposals SET status = 'applied', result = '{}' WHERE id = ?", id)
+		w.exec("INSERT INTO proposal_actions (proposal_id, ts, action, undo, ok) VALUES (?, 1, '{\"op\": \"move\"}', ?, 1)", id, moveBackPlan)
+		if code, _, _ := w.run("proposals", "undo", strconv.FormatInt(id, 10)); code != cli.ExitTerminated {
+			t.Fatalf("first undo = %d", code)
+		}
+		opens := w.opens
+		code, _, stderr := w.run("proposals", "undo", strconv.FormatInt(id, 10))
+		if code != cli.ExitError || !strings.Contains(stderr, "partial undo") || w.opens != opens {
+			t.Fatalf("retried undo = %d, %q, opens %d -> %d", code, stderr, opens, w.opens)
+		}
+	})
+}
+
+func TestSighupEndsACommandLikeSigtermWithItsOwnExitCode(t *testing.T) {
+	w := newShutdownWorld(t, "store", shutdownMoveBack)
+	w.signal = syscall.SIGHUP
+	w.exec("INSERT INTO auto_actions (id, ts, account, message_id, kind, src, dest, undo, ok) VALUES (1, 1, 'icloud', 1, 'file', 'INBOX', 'Bills', ?, 1)", moveBackPlan)
+	if code, _, stderr := w.run("live", "undo", "1"); code != cli.ExitHangup || stderr != "" {
+		t.Fatalf("undo after SIGHUP = %d, %q", code, stderr)
 	}
 }

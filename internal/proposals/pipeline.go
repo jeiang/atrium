@@ -315,7 +315,7 @@ func undoneIDs(logged []Action) map[int64]bool {
 
 func partialUndo(logged []Action, id int64) bool {
 	for _, a := range logged {
-		if op, _ := a.field("op"); op != UndoOp || a.OK || a.Error == nil || !strings.Contains(*a.Error, mailops.PartialPrefix) {
+		if op, _ := a.field("op"); op != UndoOp || a.OK || a.Error == nil || !mailops.Blocks(*a.Error) {
 			continue
 		}
 		if of, ok := a.field("of"); ok && of == id {
@@ -521,6 +521,9 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		detail, err := undoer(approved, entry.Plan)
 		if err != nil {
 			text := py.ExceptionText(err)
+			if ctx.Err() != nil {
+				text = mailops.UnknownPrefix + ": " + text
+			}
 			if _, rerr := RecordAction(ctx, p.DB.Write, id, py.Dict{{Key: "op", Value: UndoOp}, {Key: "of", Value: entry.ID}}, nil, false, &text, p.now()); rerr != nil {
 				return UndoResult{}, rerr
 			}

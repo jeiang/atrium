@@ -193,7 +193,7 @@ func (e *Executors) cancelled(ctx context.Context, pid int64, action py.Dict, ui
 		return err
 	}
 	logged := append(slices.Clone(action), py.Pair{Key: "uids", Value: uidList(uids)})
-	if rerr := e.recordFailed(ctx, pid, logged, "cancelled, write outcome unknown: "+err.Error()); rerr != nil {
+	if rerr := e.recordFailed(ctx, pid, logged, mailops.UnknownPrefix+": "+err.Error()); rerr != nil {
 		return rerr
 	}
 	return err

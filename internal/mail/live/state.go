@@ -443,7 +443,7 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	if ok == nil || (*ok != 0 && *ok != 1) || undoneTS != nil || plan == nil {
 		return UndoResult{}, UndoError(fmt.Sprintf("action %d cannot be undone", id))
 	}
-	if undoneError != nil && strings.Contains(*undoneError, mailops.PartialPrefix) {
+	if undoneError != nil && mailops.Blocks(*undoneError) {
 		return UndoResult{}, UndoError(fmt.Sprintf("action %d has a partial undo (%s); resolve it in the mailbox before undoing again", id, *undoneError))
 	}
 	parsed, err := py.JSONLoads([]byte(*plan))
@@ -467,6 +467,9 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	settle := context.WithoutCancel(ctx)
 	if err != nil {
 		text := py.ExceptionText(err)
+		if ctx.Err() != nil {
+			text = mailops.UnknownPrefix + ": " + text
+		}
 		if _, uerr := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET undone_error = ? WHERE id = ?", text, id); uerr != nil {
 			return UndoResult{}, uerr
 		}
