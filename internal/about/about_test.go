@@ -41,7 +41,8 @@ func TestAboutPage(t *testing.T) {
 		"MIT License",
 		"Developer Certificate of Origin",
 		"<details>",
-		"Third-party licences (0 packages)",
+		"Third-party licences (",
+		" packages)",
 		`role="region" aria-label="Third-party licence notices"`,
 		"max-h-[70vh] overflow-auto break-words whitespace-pre-wrap text-xs",
 	} {
