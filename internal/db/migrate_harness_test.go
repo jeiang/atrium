@@ -10,8 +10,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
 const harnessDBEnv = "ATRIUM_MIGRATION_HARNESS_DB"
@@ -128,7 +126,7 @@ func TestMigrationHarnessFreshDB(t *testing.T) {
 
 func TestMigrationHarnessGoldenDB(t *testing.T) {
 	withFutureMigration(t)
-	before, _ := harnessRun(t, filepath.Join(golden.Dir(), "atrium.db"))
+	before, _ := harnessRun(t, filepath.Join("..", "..", "testdata", "golden", "atrium.db"))
 	var populated int
 	for _, n := range before {
 		if n > 0 {
