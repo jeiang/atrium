@@ -1,12 +1,15 @@
 {{template "scheduled_list" (dict "jobs" .Data.jobs "runs" .Data.runs "toast" .Toast)}}
 
-{{define "scheduled_variant"}}{{if or (eq . "ok") (eq . "missed_coalesced")}}secondary{{else if eq . "error"}}destructive{{else}}outline{{end}}{{end}}
+{{define "scheduled_status"}}{{$status := .status}}{{$title := .title}}{{with badge "job_run" $status}}<span class="badge" data-variant="{{.Variant}}"{{if $title}} title="{{$title}}"{{end}}>{{.Label}}</span>{{else}}<span class="badge" data-variant="outline"{{if $title}} title="{{$title}}"{{end}}>{{$status}}</span>{{end}}{{end}}
+
+
+
 
 {{define "scheduled_list"}}
-{{with .toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
+{{with opt . "toast" nil}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
 <div id="scheduled-list" class="flex flex-col gap-8">
   <section class="flex flex-col gap-3" aria-labelledby="schedules-h">
-    <h2 id="schedules-h" class="text-sm font-medium">Schedules</h2>
+    <h2 id="schedules-h" class="text-sm font-medium" tabindex="-1" data-focus-fallback>Schedules</h2>
     {{if .jobs}}
     <ul class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" role="list">
       {{range .jobs}}
@@ -18,7 +21,7 @@
           </div>
           <label class="flex items-center gap-2 text-xs text-muted-foreground">
             <span class="sr-only">{{.name}} enabled</span>
-            <input type="checkbox" role="switch" class="input"{{if .enabled}} checked{{end}}
+            <input id="job-toggle-{{.id}}" type="checkbox" role="switch" class="input"{{if .enabled}} checked{{end}}
                     hx-post="/scheduled/{{.id}}/toggle" hx-trigger="change" hx-target="#scheduled-list" hx-swap="outerHTML">
           </label>
         </header>
@@ -28,13 +31,13 @@
           <div class="flex flex-wrap items-center gap-2">
             <dt class="w-16 shrink-0 text-muted-foreground">Last run</dt>
             <dd class="flex items-center gap-2">
-              {{if .last_status}}<span class="badge" data-variant="{{template "scheduled_variant" .last_status}}"{{if .last_error}} title="{{.last_error}}"{{end}}>{{.last_status}}</span>{{.last_started_text}}{{else}}Never{{end}}
+              {{if .last_status}}{{$status := .last_status}}{{$title := lbl "job_run_hint" $status ""}}{{if .last_error}}{{$title = .last_error}}{{end}}{{template "scheduled_status" (dict "status" $status "title" $title)}}{{.last_started_text}}{{else}}Never{{end}}
             </dd>
           </div>
         </dl>
         <footer class="mt-auto flex items-center gap-2">
-          <span class="badge" data-variant="outline">{{if has (list "nightly" "builtin") .kind}}{{.kind}}{{else}}{{.created_by}}{{end}}</span>
-          <button type="button" class="btn ms-auto" data-size="sm" data-variant="outline" hx-get="/scheduled/{{.id}}/edit" hx-target="#schedule-dialog" hx-swap="innerHTML">{{icon "pencil"}}Edit</button>
+          <span class="badge" data-variant="outline">{{if has (list "nightly" "builtin") .kind}}{{lbl "job_source" .kind}}{{else}}{{lbl "job_source" .created_by}}{{end}}</span>
+          <button id="job-edit-{{.id}}" type="button" class="btn ms-auto" data-size="sm" data-variant="outline" hx-get="/scheduled/{{.id}}/edit" hx-target="#schedule-dialog" hx-swap="innerHTML">{{icon "pencil"}}Edit</button>
         </footer>
       </li>
       {{end}}
