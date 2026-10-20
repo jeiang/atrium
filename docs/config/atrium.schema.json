@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assistant": {
+      "additionalProperties": false,
+      "properties": {
+        "budget_unattended_share": {
+          "default": 0.8,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "budget_unattended_share_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "cache_ttl_chat": {
+          "default": "5m",
+          "enum": [
+            "5m",
+            "1h"
+          ],
+          "type": "string"
+        },
+        "cache_ttl_chat_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "max_run_cost_usd": {
+          "default": 2,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "max_run_cost_usd_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "max_steps": {
+          "default": 24,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "max_steps_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "monthly_budget_usd": {
+          "default": 75,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "monthly_budget_usd_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "atrium configuration",
+  "type": "object"
+}
