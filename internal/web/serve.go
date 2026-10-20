@@ -82,6 +82,10 @@ func serve(env *cli.Env, a serveArgs) int {
 		_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
 		return cli.ExitError
 	}
+	if _, err := config.Location(a.env); err != nil {
+		_, _ = fmt.Fprintf(env.Stderr, "error: ATRIUM_TZ is not a time zone: %s. Use an IANA name such as America/Port_of_Spain.\n", py.Repr(config.TZName(a.env)))
+		return cli.ExitError
+	}
 	if err := run(env.Ctx, cfg, a, hosts); err != nil {
 		log.Error("serve failed", logx.Err, err.Error())
 		return cli.ExitError
