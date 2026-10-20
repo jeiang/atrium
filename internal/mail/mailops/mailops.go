@@ -53,7 +53,18 @@ type PartialMove struct {
 	Err    error
 }
 
-func (e *PartialMove) Error() string { return "copied but not expunged: " + e.Err.Error() }
+// PartialPrefix is in the text of a PartialMove: a retry of the same move would copy the batch a second time.
+// UnknownPrefix starts the ledger text of a write a cancelled context cut off: the server may have executed it.
+const UnknownPrefix = "cancelled, write outcome unknown"
+
+// Blocks reports whether an undo's recorded failure text forbids repeating the undo.
+func Blocks(text string) bool {
+	return strings.Contains(text, PartialPrefix) || strings.Contains(text, UnknownPrefix)
+}
+
+const PartialPrefix = "copied but not expunged: "
+
+func (e *PartialMove) Error() string { return PartialPrefix + e.Err.Error() }
 
 func (*PartialMove) PyClass() string { return "PartialMove" }
 

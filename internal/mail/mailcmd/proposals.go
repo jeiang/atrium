@@ -91,5 +91,8 @@ func approve(x *Exec, id int64, selection string) error {
 		return err
 	}
 	x.JSON(approved.Dict())
+	if approved.Status == proposals.Failed {
+		return x.Ctx.Err()
+	}
 	return nil
 }

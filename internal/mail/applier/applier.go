@@ -193,7 +193,7 @@ func safeLabel(name string) bool {
 	if _, err := executors.ValidName(name); err != nil {
 		return false
 	}
-	return !mail.IsSystemName(name) && !strings.HasPrefix(name, "[Gmail]")
+	return !strings.HasPrefix(name, "\\") && !mail.IsSystemName(name) && !strings.HasPrefix(name, "[Gmail]")
 }
 
 // Applier runs the automatic passes of one database. Resync syncs an account after a pass wrote to it; Cap is
@@ -968,7 +968,8 @@ type builder func(ctx context.Context, budget *Budget) ([]Intent, error)
 // are recovered, the intents are built within the write cap and executed as automatic writes, which the gate
 // refuses again for every write once paused, and the account is resynced if anything was written. A pass that
 // has started runs to its end on a context that cannot be cancelled, so a shutdown or an abandoned request never
-// leaves a write half done or its ledger row in flight.
+// leaves a write half done or its ledger row in flight. A pass whose ctx is already done does not
+// start.
 func (a *Applier) runPass(ctx context.Context, account string, build builder, label string) (Outcome, error) {
 	var out Outcome
 	if a.Live.Cfg.Mode != config.Live {
@@ -978,6 +979,9 @@ func (a *Applier) runPass(ctx context.Context, account string, build builder, la
 	if safety.IsPaused(pause) {
 		log.Info(account + ": paused, automatic writes skipped")
 		return out, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return out, err
 	}
 	out.Ran = true
 	ctx = context.WithoutCancel(ctx)
@@ -1043,7 +1047,6 @@ func (a *Applier) ApplyCorrections(ctx context.Context, account string, messageI
 // DeletionPass is deletion_pass: the delete rules run once per DeletionIntervalSeconds per account unless forced
 // (`live deletions`), and a pass that ran records its time under deletion_pass_ts:<account>.
 func (a *Applier) DeletionPass(ctx context.Context, account string, force bool) (Outcome, error) {
-	ctx = context.WithoutCancel(ctx)
 	if !force {
 		due, err := a.deletionDue(ctx, account)
 		if err != nil || !due {
@@ -1056,7 +1059,7 @@ func (a *Applier) DeletionPass(ctx context.Context, account string, force bool) 
 	if err != nil || !out.Ran {
 		return out, err
 	}
-	return out, live.SetState(ctx, a.Live.DB.Write, live.DeletionKey+":"+account, py.FloatRepr(a.now()))
+	return out, live.SetState(context.WithoutCancel(ctx), a.Live.DB.Write, live.DeletionKey+":"+account, py.FloatRepr(a.now()))
 }
 
 // ApplyAll is apply_all: the live pass, then the deletion pass when due.

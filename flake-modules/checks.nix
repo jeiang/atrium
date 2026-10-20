@@ -72,6 +72,9 @@
         grep -q -- '--host 0.0.0.0 --port 8480 --auth proxy --allowed-host atrium.example.org' "$units/atrium-web.service"
         grep -q -- '--host 127.0.0.1 --port 8481 --auth local' "$units/atrium-web-local.service"
         grep -q 'EnvironmentFile=/run/secrets/atrium.env' "$units/atrium-watch.service"
+        for name in atrium-watch atrium-sync atrium-scan; do
+          grep -q '^TimeoutStopSec=45min$' "$units/$name.service"
+        done
         grep -q 'After=.*llama.service' "$units/atrium-agent-scheduler.service"
         grep -q 'SupplementaryGroups=media' "$units/atrium-agent-scheduler.service"
         grep -q 'ATRIUM_PUBLIC_HOST=atrium.example.org' "$units/atrium-web.service"

@@ -130,6 +130,8 @@
 
   mediaPath = lib.optional cfg.media.enable pkgs.ffmpeg-headless;
 
+  writeTimeout = "45min";
+
   appService = args:
     lib.recursiveUpdate
     {
@@ -356,6 +358,7 @@ in {
             description = "Watch the atrium mailboxes for new mail";
             serviceConfig = {
               ExecStart = "${lib.getExe cfg.package} watch";
+              TimeoutStopSec = writeTimeout;
               Restart = "always";
               RestartSec = 10;
             };
@@ -385,6 +388,7 @@ in {
             serviceConfig = {
               Type = "oneshot";
               ExecStart = "${lib.getExe cfg.package} sync";
+              TimeoutStopSec = writeTimeout;
             };
           };
 
@@ -401,6 +405,7 @@ in {
             serviceConfig = {
               Type = "oneshot";
               ExecStart = "${lib.getExe cfg.package} proposals scan-all";
+              TimeoutStopSec = writeTimeout;
               TimeoutStartSec = "2h";
             };
           };

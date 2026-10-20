@@ -17,6 +17,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	maillive "github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/run"
+	"github.com/jeiang/atrium/internal/sdnotify"
+	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 	"github.com/jeiang/atrium/internal/testutil/imapscript"
 )
 
@@ -215,6 +217,134 @@ S: * BYE Server shutting down
 type writerFunc func(p []byte) (int, error)
 
 func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
+func watchEmptyPass() string {
+	return icloudLogin + runList +
+		syncStatus("Bills", 0, 1, 5, 1) + syncExamine("Bills", 0, 5) + syncSearch("ALL", "") +
+		syncStatus("INBOX", 0, 1, 7, 5) + syncExamine("INBOX", 0, 7) + syncSearch("ALL", "") +
+		logout
+}
+
+func startWireWatch(t *testing.T, script string, ctx context.Context, sleep func(context.Context, time.Duration), afterConnect func(int)) <-chan struct{} {
+	t.Helper()
+	srv := imapscript.Serve(t, imapscript.MustParse(t, script))
+	dir := t.TempDir()
+	env := config.Map(map[string]string{
+		"ATRIUM_MODE": "live", "ATRIUM_DB": filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"),
+		"ICLOUD_MAIL_USERNAME": "atrium.test@icloud.com", "ICLOUD_APP_PASSWORD": "app-specific password",
+	})
+	cfg, err := config.Load(env)
+	must(t, err)
+	d, err := db.Connect(cfg.DBPath)
+	must(t, err)
+	t.Cleanup(func() { _ = d.Close() })
+	must(t, db.Migrate(context.Background(), d, cfg.DBPath))
+	must(t, maillive.SetState(context.Background(), d.Write, maillive.GoliveKey, "1.0"))
+	opened := 0
+	open := func(ctx context.Context, _ string) (mail.Client, error) {
+		c := newConn("imap.test", "atrium.test@icloud.com", "app-specific password")
+		c.dial = func(ctx context.Context) (net.Conn, error) {
+			var dialer net.Dialer
+			return dialer.DialContext(ctx, "tcp", srv.Addr())
+		}
+		c.readTimeout = 5 * time.Second
+		client := mail.Gated(c, env)
+		if err := client.Connect(ctx); err != nil {
+			return nil, err
+		}
+		opened++
+		if afterConnect != nil {
+			afterConnect(opened)
+		}
+		return client, nil
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		(&run.Watcher{Cfg: cfg, Open: open, Sleep: sleep, Notify: sdnotify.FromEnv()}).Account(ctx, config.ICloud)
+	}()
+	return done
+}
+
+func TestWatchReconnectsAfterDropDuringIdle(t *testing.T) {
+	notify := sdnotifytest.Listen(t, 0)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	clock := &recorder{stopAt: -1}
+	script := watchEmptyPass() + "! accept\n" +
+		icloudLogin + `C: {t} EXAMINE INBOX
+S: * 0 EXISTS
+S: {t} OK [READ-ONLY] EXAMINE completed
+C: {t} IDLE
+S: + idling
+! close
+! accept
+` + watchEmptyPass() + "! accept\n" +
+		icloudLogin + `C: {t} LOGOUT
+S: * BYE Logging out
+S: {t} OK LOGOUT completed
+`
+	done := startWireWatch(t, script, ctx, clock.sleep, func(opened int) {
+		if opened == 4 {
+			cancel()
+		}
+	})
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		cancel()
+		t.Fatal("the watch loop did not stop")
+	}
+	if want := []time.Duration{5 * time.Second}; fmt.Sprint(clock.waits) != fmt.Sprint(want) {
+		t.Fatalf("waits = %v, want %v", clock.waits, want)
+	}
+	notify.Wait("STATUS=icloud: reconnecting in 5s (connection lost)")
+	watchingCount := func() int {
+		n := 0
+		for _, message := range notify.Messages() {
+			if message == "STATUS=watching" {
+				n++
+			}
+		}
+		return n
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for watchingCount() < 3 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := watchingCount(); n < 3 {
+		t.Fatalf("watching status count %d in %q", n, notify.Messages())
+	}
+}
+
+func TestWatchBackoffResetsAfterAGoodPass(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	clock := &recorder{stopAt: 4, cancel: cancel}
+	drop := `S: {icloud.greeting}
+C: {t} LOGIN "atrium.test@icloud.com" "app-specific password"
+! close
+`
+	script := drop + "! accept\n" + drop + "! accept\n" + drop + "! accept\n" +
+		watchEmptyPass() + "! accept\n" +
+		icloudLogin + `C: {t} EXAMINE INBOX
+S: * 0 EXISTS
+S: {t} OK [READ-ONLY] EXAMINE completed
+C: {t} IDLE
+S: + idling
+! close
+`
+	done := startWireWatch(t, script, ctx, clock.sleep, nil)
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		cancel()
+		t.Fatal("the watch loop did not stop")
+	}
+	if want := []time.Duration{5 * time.Second, 10 * time.Second, 20 * time.Second, 5 * time.Second}; fmt.Sprint(clock.waits) != fmt.Sprint(want) {
+		t.Fatalf("waits = %v, want %v", clock.waits, want)
+	}
+}
 
 func TestIdleIsNotReissuedWithinTheWatchLoopsIdle(t *testing.T) {
 	if got := newConn("imap.test", "u", "p").idleRestart; got <= config.IdleSeconds*time.Second {

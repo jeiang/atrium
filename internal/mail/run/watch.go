@@ -195,11 +195,14 @@ func (w *Watcher) Account(ctx context.Context, account string) {
 			continue
 		}
 		backoff = NextBackoff(backoff)
+		reason := "watch failed"
 		if ConnectionLost(err) {
+			reason = "connection lost"
 			watchLog.Warn(fmt.Sprintf("%s connection lost (%s), reconnecting in %ds", account, err, backoff))
 		} else {
 			watchLog.Error(fmt.Sprintf("%s watch failed, retrying in %ds", account, backoff), logx.Err, err.Error())
 		}
+		w.Notify.Status(fmt.Sprintf("%s: reconnecting in %ds (%s)", account, backoff, reason))
 		waiting(h, func() { w.sleep(ctx, time.Duration(backoff)*time.Second) })
 	}
 }
@@ -219,6 +222,7 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 	if err := pass.Locked(whole, []string{account}); err != nil {
 		return err
 	}
+	w.Notify.Status("watching")
 	h := w.heartbeat(account)
 	return mailops.Session(ctx, pass.Open, account, func(client mail.Client) error {
 		*backoff = 0
