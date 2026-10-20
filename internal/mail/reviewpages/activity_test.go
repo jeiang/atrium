@@ -7,13 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
+	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -137,6 +141,68 @@ func TestUndoingAWriteSwapsTheRowAndRefusesASecondTime(t *testing.T) {
 	mustContain(t, notice, "Not undone", "already undone")
 	status(t, s.post("/activity/write/999/undo", nil), http.StatusNotFound)
 	status(t, s.post("/activity/mail/999/undo", nil), http.StatusNotFound)
+}
+
+func TestAFailedWriteUndoLeavesTheTargetAndTheRowUnchanged(t *testing.T) {
+	s := newSite(t)
+	s.exec("INSERT INTO agent_profile (key, value, updated_at) VALUES ('tz', 'UTC', 0)")
+	s.writes.Register("half", func(ctx context.Context, q db.Querier, _ map[string]any) (any, error) {
+		if _, err := q.ExecContext(ctx, "UPDATE agent_profile SET value = 'AST' WHERE key = 'tz'"); err != nil {
+			return nil, err
+		}
+		return nil, writes.UndoError("gave up after writing")
+	})
+	id := s.write(100, "profile_set", "profile:tz", nil, nil, nil, `{"op":"half"}`)
+	body := status(t, s.post(fmt.Sprintf("/activity/write/%d/undo", id), nil), http.StatusConflict)
+	if jsonOf(t, body)["detail"] != "gave up after writing" {
+		t.Errorf("body = %s", body)
+	}
+	if s.profile("tz") != "UTC" {
+		t.Errorf("profile tz = %v after the failed undo", s.profile("tz"))
+	}
+	var undoneAt sql.NullFloat64
+	if err := s.db.Read.QueryRow("SELECT undone_at FROM agent_writes WHERE id = ?", id).Scan(&undoneAt); err != nil || undoneAt.Valid {
+		t.Errorf("undone_at = %v, %v", undoneAt, err)
+	}
+}
+
+func TestASlowUndoDoesNotBlockWritesAndRunsOncePerWrite(t *testing.T) {
+	s := newSite(t)
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	var runs atomic.Int32
+	s.writes.Register("slow", func(context.Context, db.Querier, map[string]any) (any, error) {
+		runs.Add(1)
+		started <- struct{}{}
+		<-release
+		return "done", nil
+	})
+	id := s.write(100, "profile_set", "profile:tz", nil, nil, nil, `{"op":"slow"}`)
+	target := fmt.Sprintf("/activity/write/%d/undo", id)
+	codes := make(chan int, 2)
+	for range 2 {
+		go func() { codes <- s.do(http.MethodPost, target, url.Values{}).Code }()
+	}
+	<-started
+	wrote := make(chan error, 1)
+	go func() {
+		_, err := s.db.Write.Exec("INSERT INTO agent_profile (key, value, updated_at) VALUES ('other', 'x', 0)")
+		wrote <- err
+	}()
+	select {
+	case err := <-wrote:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a concurrent write is blocked by the slow undo")
+	}
+	close(release)
+	got := []int{<-codes, <-codes}
+	slices.Sort(got)
+	if got[0] != http.StatusConflict && got[0] != http.StatusSeeOther || got[1] != http.StatusConflict && got[1] != http.StatusSeeOther || runs.Load() != 1 {
+		t.Errorf("codes = %v, runs = %d", got, runs.Load())
+	}
 }
 
 func TestUndoingAWriteWithoutARegisteredUndoerIsRefused(t *testing.T) {

@@ -424,7 +424,7 @@ func (r *runner) execute(tx *sql.Tx, op json.RawMessage) (any, error) {
 		if a.Of != "" {
 			id = r.labels[a.Of]
 		}
-		return r.undo.Undo(ctx, tx, id, func() float64 { return a.Now })
+		return r.undo.UndoIn(ctx, tx, id, func() float64 { return a.Now })
 	case "transaction_merge":
 		keep, change, err := TransactionMerge(ctx, tx, decode[struct{ IDs []int64 }](t, op).IDs)
 		return finish(change, keep, err)

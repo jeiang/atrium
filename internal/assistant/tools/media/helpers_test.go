@@ -385,7 +385,7 @@ func (w *world) call(name, args string) py.Dict {
 }
 
 func (w *world) undo(writeID int64) (any, error) {
-	return w.undoers.Undo(context.Background(), w.d.Write, writeID, func() float64 { return now })
+	return w.undoers.Undo(context.Background(), w.d, writeID, func() float64 { return now })
 }
 
 func get(t *testing.T, d py.Dict, key string) any {
