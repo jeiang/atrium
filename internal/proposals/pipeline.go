@@ -362,13 +362,20 @@ func CanUndo(ctx context.Context, q Querier, id int64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if status == Failed && !recovered(logged) {
+	if status == Failed && !recovered(logged, loaded) {
 		return false, nil
 	}
 	return len(pending(logged)) > 0, nil
 }
 
-func recovered(logged []Action) bool {
+const interruptedKey = "interrupted"
+
+func recovered(logged []Action, result any) bool {
+	if d, isDict := result.(py.Dict); isDict {
+		if v, _ := d.Get(interruptedKey); py.Truthy(v) {
+			return true
+		}
+	}
 	for _, a := range logged {
 		if op, _ := a.field("op"); op != UndoOp && !a.OK && a.Error != nil && *a.Error == InFlightText {
 			return true
@@ -377,18 +384,36 @@ func recovered(logged []Action) bool {
 	return false
 }
 
-const StuckSeconds = 600
+const (
+	StuckSeconds       = 600
+	StuckUnheldSeconds = 3600
+)
 
 func RecoverStuck(ctx context.Context, d *db.DB, now float64) (int64, error) {
-	failure := py.Dict{{Key: "error", Value: mailops.UnknownPrefix + ": approve interrupted; resolve the mailbox by hand before approving again"}}
+	held := py.Dict{{Key: "error", Value: mailops.UnknownPrefix + ": approve interrupted; resolve the mailbox by hand before approving again"}}
 	res, err := d.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, result = ? WHERE status = ? AND EXISTS "+
 		"(SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.ok = 0 AND a.error = ? AND json_extract(a.action, '$.op') IS NOT ?) "+
 		"AND NOT EXISTS (SELECT 1 FROM proposal_actions b WHERE b.proposal_id = proposals.id AND b.ts >= ?)",
-		Failed, py.JSONDumps(failure), Approved, InFlightText, UndoOp, now-StuckSeconds)
+		Failed, py.JSONDumps(held), Approved, InFlightText, UndoOp, now-StuckSeconds)
 	if err != nil {
 		return 0, err
 	}
-	return res.RowsAffected()
+	heldN, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	unheld := py.Dict{
+		{Key: "error", Value: "approve interrupted before any write was in flight; the settled batches can be undone and the proposal approved again"},
+		{Key: interruptedKey, Value: true},
+	}
+	res, err = d.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, result = ? WHERE status = ? AND decided_ts < ? "+
+		"AND NOT EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND ("+mailops.BlockingActionSQL("a")+" OR a.ts >= ?))",
+		Failed, py.JSONDumps(unheld), Approved, now-StuckUnheldSeconds, now-StuckUnheldSeconds)
+	if err != nil {
+		return heldN, err
+	}
+	unheldN, err := res.RowsAffected()
+	return heldN + unheldN, err
 }
 
 type Pipeline struct {
@@ -531,7 +556,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	if err != nil {
 		return UndoResult{}, err
 	}
-	if prop.Status == Failed && !recovered(logged) {
+	if prop.Status == Failed && !recovered(logged, prop.Result) {
 		return UndoResult{}, ProposalError(fmt.Sprintf("proposal %d is not applied", id))
 	}
 	approved := scope(ctx, id)
