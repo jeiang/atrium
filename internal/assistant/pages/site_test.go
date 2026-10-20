@@ -141,15 +141,12 @@ func (s *site) do(method, target string, body io.Reader, contentType string, hea
 	return &reply{resp, string(b)}
 }
 
-// direct serves the request in-process, skipping the loopback socket: an upload over the body cap is refused
-// before it is read, and pushing tens of megabytes at a server that stopped reading stalls the socket for minutes.
-func (s *site) direct(method, target string, body io.Reader, contentType string, headers ...string) *reply {
+// chunked sends the body without a Content-Length. A Go client pushing a 66 MB Content-Length body at this server
+// over loopback trickles on the artemis build host (about 100 KB/s, ten minutes for the refusal), while chunked
+// transfer, curl and a plain net/http server are all fast; see the over-limit upload test.
+func (s *site) chunked(method, target string, body io.Reader, contentType string, headers ...string) *reply {
 	s.t.Helper()
-	rec := httptest.NewRecorder()
-	s.srv.ServeHTTP(rec, s.request(method, target, body, contentType, headers...))
-	resp := rec.Result()
-	defer func() { _ = resp.Body.Close() }()
-	return &reply{resp, rec.Body.String()}
+	return s.do(method, target, struct{ io.Reader }{body}, contentType, headers...)
 }
 
 func (s *site) get(target string, headers ...string) *reply {
