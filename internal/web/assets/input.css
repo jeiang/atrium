@@ -169,3 +169,10 @@
     }
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin,
+  .skeleton {
+    animation: none;
+  }
+}
