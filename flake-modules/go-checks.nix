@@ -13,6 +13,8 @@
         (lib.fileset.maybeMissing (root + "/go.sum"))
         (root + "/cmd")
         (root + "/internal")
+        (root + "/tools/settingsgen")
+        (root + "/docs/config")
         (lib.fileset.maybeMissing (root + "/third_party"))
         (lib.fileset.maybeMissing (root + "/testdata"))
         (root + "/LICENSE")
@@ -79,6 +81,11 @@
           echo "$unformatted" >&2
           exit 1
         fi
+      '';
+
+      settingsgen = goCheck "settingsgen" [pkgs.diffutils] ''
+        go run -tags sqlite_fts5 ./tools/settingsgen $TMPDIR/config
+        diff -r docs/config $TMPDIR/config
       '';
 
       go-test = goCheck "test" [] ''
