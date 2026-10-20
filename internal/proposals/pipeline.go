@@ -239,7 +239,7 @@ func RecordAction(ctx context.Context, x Execer, proposalID int64, action, undo 
 	if undo != nil {
 		plan = py.JSONDumps(undo)
 	}
-	res, err := x.ExecContext(ctx, "INSERT INTO proposal_actions (proposal_id, ts, action, undo, ok, error) VALUES (?, ?, ?, ?, ?, ?)",
+	res, err := x.ExecContext(context.WithoutCancel(ctx), "INSERT INTO proposal_actions (proposal_id, ts, action, undo, ok, error) VALUES (?, ?, ?, ?, ?, ?)",
 		proposalID, ts, py.JSONDumps(action), plan, ok, errText)
 	if err != nil {
 		return 0, err
@@ -397,7 +397,9 @@ func scope(ctx context.Context, id int64) context.Context {
 
 // ApproveAndApply is approve_and_apply: the open proposal is claimed and its executor runs as approved proposal
 // id. A SelectionError puts it back to pending and is returned; any other failure marks it failed with the error
-// as its result. The account is resynced either way.
+// as its result. The account is resynced either way. The executor and the resync run on ctx, so a cancelled ctx
+// ends the IMAP connection; the ledger and the status updates never run on a cancelled ctx, so the proposal
+// ends failed with what was written logged.
 func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any) (*Proposal, error) {
 	prop, err := Get(ctx, p.DB.Write, id)
 	if err != nil {
@@ -420,31 +422,32 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any)
 	if !claimed {
 		return nil, ProposalError(fmt.Sprintf("proposal %d is not open", id))
 	}
+	settle := context.WithoutCancel(ctx)
 	result, err := executor(scope(ctx, id), prop, selection)
 	var selErr SelectionError
 	switch {
 	case errors.As(err, &selErr):
-		if _, uerr := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET status = 'pending', decided_ts = NULL WHERE id = ?", id); uerr != nil {
+		if _, uerr := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'pending', decided_ts = NULL WHERE id = ?", id); uerr != nil {
 			return nil, uerr
 		}
 		return nil, err
 	case err != nil:
 		log.Error(fmt.Sprintf("proposal %d failed", id), logx.Err, err.Error())
 		failure := py.Dict{{Key: "error", Value: py.ExceptionText(err)}}
-		if _, uerr := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET status = 'failed', result = ? WHERE id = ?", py.JSONDumps(failure), id); uerr != nil {
+		if _, uerr := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'failed', result = ? WHERE id = ?", py.JSONDumps(failure), id); uerr != nil {
 			return nil, uerr
 		}
 		p.sync(ctx, prop)
-		return Get(ctx, p.DB.Write, id)
+		return Get(settle, p.DB.Write, id)
 	}
 	if syncErr := p.sync(ctx, prop); syncErr != nil {
 		result = result.Set("sync_error", *syncErr)
 	}
-	if _, err := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET status = 'applied', applied_ts = ?, result = ? WHERE id = ?",
+	if _, err := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'applied', applied_ts = ?, result = ? WHERE id = ?",
 		p.now(), py.JSONDumps(result), id); err != nil {
 		return nil, err
 	}
-	return Get(ctx, p.DB.Write, id)
+	return Get(settle, p.DB.Write, id)
 }
 
 // UndoResult is undo's outcome: Undone when every replayed undo succeeded.
@@ -481,7 +484,11 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	}
 	approved := scope(ctx, id)
 	out := UndoResult{Outcomes: []py.Dict{}}
+	settle := context.WithoutCancel(ctx)
 	for _, entry := range pending(logged) {
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
 		plan, _ := entry.Undo.(py.Dict)
 		op, found := plan.Get("op")
 		if !found {
@@ -513,6 +520,9 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		}
 		out.Outcomes = append(out.Outcomes, py.Dict{{Key: "action", Value: entry.ID}, {Key: "ok", Value: true}})
 	}
+	if err := ctx.Err(); err != nil {
+		return out, err
+	}
 	out.SyncError = p.sync(ctx, prop)
 	out.Undone = true
 	for _, o := range out.Outcomes {
@@ -523,7 +533,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	if out.Undone {
 		result, _ := prop.Result.(py.Dict)
 		result = result.Set("undone_ts", p.now())
-		if _, err := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET result = ? WHERE id = ?", py.JSONDumps(result), id); err != nil {
+		if _, err := p.DB.Write.ExecContext(settle, "UPDATE proposals SET result = ? WHERE id = ?", py.JSONDumps(result), id); err != nil {
 			return UndoResult{}, err
 		}
 	}

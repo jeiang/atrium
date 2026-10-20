@@ -338,7 +338,8 @@ and backups; nothing of that lives here.
 - `internal/mail/`: the `Client` interface. Only `Gated` builds one, and
   every write method calls the gate before the connection;
   `mail/mailtest.FakeClient` runs the same gate. A move is COPY, STORE
-  `\Deleted`, UID EXPUNGE: nothing under `internal/mail` uses IMAP MOVE.
+  `\Deleted`, UID EXPUNGE: nothing under `internal/` or `cmd/` uses IMAP MOVE
+  (`TestNoMoveInGoSources`; the imapscript server profile is the one exception).
 - `internal/mail/mime/`: CPython 3.14.7's `email` package as `policy.default`
   applies it to bytes (feedparser, header registry and value parser,
   `parseaddr`/`getaddresses`, `parsedate_to_datetime`, codecs, transfer
@@ -503,7 +504,12 @@ and backups; nothing of that lives here.
   so shutdown never interrupts it; cancellation is seen only while waiting,
   and `watch` gives the loops 30 s. `sync` sees a signal between accounts and
   between extras (never inside a live pass) and exits 143 or 130 once the
-  running stage is complete. `sync` and `watch` are its commands and log as
+  running stage is complete. `Locked` also bounds a pass by `passDeadline` (20 min): the running stage
+  is abandoned, no further write pass starts and a started one finishes, so the `sync`, `watch` and
+  `scan` units set `TimeoutStopSec` (45 min, `writeTimeout` in `nix/module.nix`) above the deadline plus a write
+  cap's moves. `proposals approve`, `proposals undo` and `live undo` run on the signal context: SIGTERM
+  kills the IMAP connection, the proposal ends `failed` (or the undo is logged failed) with the partial move
+  in the ledger, and ledger and status writes never run on a cancelled context. `sync` and `watch` are its commands and log as
   `atrium.run` and `atrium.watch`. `run.New` takes the clock every stage
   shares; the pipeline differential (`TestGoldenPipelineDifferential`)
   replays `testdata/golden/pipeline/scenario.json` through it and the mail

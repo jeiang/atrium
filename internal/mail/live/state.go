@@ -459,18 +459,22 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		return UndoResult{}, UndoError("no undo handler for " + py.ReprValue(op))
 	}
 	detail, err := undoer(safety.ApprovedWrites(ctx, fmt.Sprintf("undo-%d", id)), json.RawMessage(*plan))
+	settle := context.WithoutCancel(ctx)
 	if err != nil {
 		text := py.ExceptionText(err)
-		if _, uerr := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET undone_error = ? WHERE id = ?", text, id); uerr != nil {
+		if _, uerr := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET undone_error = ? WHERE id = ?", text, id); uerr != nil {
 			return UndoResult{}, uerr
+		}
+		if ctx.Err() != nil {
+			return UndoResult{}, err
 		}
 		return UndoResult{}, UndoError(text)
 	}
-	if _, err := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET undone_ts = ?, undone_error = NULL WHERE id = ?", l.now(), id); err != nil {
+	if _, err := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET undone_ts = ?, undone_error = NULL WHERE id = ?", l.now(), id); err != nil {
 		return UndoResult{}, err
 	}
 	if kind == Correct {
-		if _, err := corrections.Clear(ctx, l.DB, messageID, dest); err != nil {
+		if _, err := corrections.Clear(settle, l.DB, messageID, dest); err != nil {
 			return UndoResult{}, err
 		}
 	}
