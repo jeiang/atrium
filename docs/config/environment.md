@@ -13,5 +13,5 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD` | `assistant.max_run_cost_usd` |
 | `ATRIUM_ASSISTANT_MAX_STEPS` | `assistant.max_steps` |
 | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` | `assistant.monthly_budget_usd` |
-| `ATRIUM_DB_KEY_FILE` | `db.key_file` |
+| `ATRIUM_DB_KEY` | `db.key` |
 | `ATRIUM_OPENAI_OPENAI_ADMIN_KEY` | `openai.openai_admin_key` |

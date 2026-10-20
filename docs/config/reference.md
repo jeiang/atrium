@@ -30,7 +30,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
-| `key_file` | string | none | bootstrap | `ATRIUM_DB_KEY_FILE` |
+| `key` | string | none | secret | `ATRIUM_DB_KEY` |
 
 ## openai
 

@@ -88,9 +88,6 @@
       "additionalProperties": false,
       "properties": {
         "key_file": {
-          "type": "string"
-        },
-        "key_file_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }

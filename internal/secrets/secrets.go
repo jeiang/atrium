@@ -86,9 +86,6 @@ func (s *Store) def(name string) (settings.Def, error) {
 	if !d.Secret {
 		return d, NotSecret(name)
 	}
-	if d.PinOnly {
-		return d, PinOnly(name)
-	}
 	return d, nil
 }
 
@@ -96,6 +93,9 @@ func (s *Store) writable(name string) (settings.Def, error) {
 	d, err := s.def(name)
 	if err != nil {
 		return d, err
+	}
+	if d.PinOnly {
+		return d, PinOnly(name)
 	}
 	source, pinned, err := s.reg.Pinned(name)
 	if err != nil {
@@ -126,8 +126,10 @@ func (s *Store) Set(ctx context.Context, name, value, by string) error {
 }
 
 func (s *Store) Delete(ctx context.Context, name string) error {
-	if _, err := s.def(name); err != nil {
+	if d, err := s.def(name); err != nil {
 		return err
+	} else if d.PinOnly {
+		return PinOnly(name)
 	}
 	_, err := s.q.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name)
 	return err
