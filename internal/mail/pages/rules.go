@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/config"
@@ -232,7 +231,7 @@ func (f ruleForm) raw() map[string]any {
 func (s *service) rulePreview(w http.ResponseWriter, r *http.Request) {
 	raw := readRuleForm(web.FormValues(r)).raw()
 	raw["id"] = ruleedit.PreviewID
-	found, err := ruleedit.PreviewRule(r.Context(), s.deps.DB.Read, raw, ruleedit.DefaultLimit, float64(time.Now().UnixNano())/1e9)
+	found, err := ruleedit.PreviewRule(r.Context(), s.deps.DB.Read, raw, ruleedit.DefaultLimit, s.now())
 	var invalid rules.RuleError
 	if errors.As(err, &invalid) {
 		problem := ruleProblem(err)

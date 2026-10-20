@@ -155,6 +155,7 @@ func jsonFail(msg, doc string, pos int) JSONError {
 
 func (p *jsonParser) fail(msg string, pos int) JSONError { return jsonFail(msg, p.s, pos) }
 
+// A lone surrogate escape becomes U+FFFD (Python keeps it): a Go string cannot hold it.
 func JSONLoads(data []byte) (any, error) {
 	p := &jsonParser{s: string(data)}
 	if strings.HasPrefix(p.s, "\ufeff") {
