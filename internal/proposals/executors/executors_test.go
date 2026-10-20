@@ -789,6 +789,24 @@ func TestANewProposalNeverRecopiesAMessageWithAnUnknownCopy(t *testing.T) {
 	}
 }
 
+func TestASuccessfulRelabelDoesNotBlockALaterProposalForTheSameMessage(t *testing.T) {
+	w := gmailWorld(t, []string{"X"}, []string{"X"})
+	ids := w.ids("SELECT id FROM messages ORDER BY id")
+	first := w.propose(executors.RebalanceSplit, w.splitPayload(ids, "One"))
+	if done := w.apply(first, nil); done.Status != proposals.Applied {
+		t.Fatalf("first = %s %v", done.Status, done.Result)
+	}
+	account := w.account
+	second, ok, err := proposals.Create(context.Background(), w.db, executors.RebalanceSplit, &account, "again", w.splitPayload(ids, "Two"), py.Dict{}, "fp-b", w.clock)
+	if err != nil || !ok {
+		t.Fatalf("create = %v, %v", ok, err)
+	}
+	done := w.apply(second, nil)
+	if skipped, _ := field(done.Result, "skipped").([]any); done.Status != proposals.Applied || len(skipped) != 0 {
+		t.Fatalf("second = %s %v", done.Status, done.Result)
+	}
+}
+
 func TestSecondChunkRowFailureReturnsTheErrorWithoutPanicking(t *testing.T) {
 	w := newWorld(t, config.ICloud, func(f *mailtest.FakeClient) {
 		f.AddBox(config.Inbox, mailtest.NewBox(1))

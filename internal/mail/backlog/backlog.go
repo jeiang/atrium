@@ -24,7 +24,7 @@ var log = logx.Logger("atrium.backlog")
 
 const Kind = "inbox_backlog"
 
-const candidates = "SELECT m.id, m.subject, m.from_name, m.from_addr, m.date_ts, d.dest " +
+var candidates = "SELECT m.id, m.subject, m.from_name, m.from_addr, m.date_ts, d.dest " +
 	"FROM messages m JOIN mailboxes mb ON mb.id = m.mailbox_id JOIN decisions d ON d.id = (SELECT MAX(x.id) FROM decisions x WHERE x.message_id = m.id) " +
 	"WHERE m.account = :account AND m.in_inbox = 1 AND m.seen = 1 AND m.flagged = 0 AND m.sent = 0 " +
 	"AND m.gone_at IS NULL AND d.action = 'file' AND d.dest IS NOT NULL " +

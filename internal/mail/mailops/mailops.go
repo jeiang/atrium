@@ -47,10 +47,10 @@ func BlockingActionSQL(alias string) string {
 // UnresolvedSQL is true for a message (aliases m for messages and mb for its mailbox) named by a blocking
 // proposal_actions row of any proposal: by its uids, or by the copied mapping of a partial move. A write whose
 // outcome is unknown may have left a copy, and the untouched source would be copied again.
-const UnresolvedSQL = "(EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.uids') u WHERE " +
+var UnresolvedSQL = "(EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.uids') u WHERE " + BlockingActionSQL("pa") + " AND " +
 	"u.value = m.uid AND COALESCE(json_extract(pa.action, '$.src_uidvalidity'), json_extract(pa.action, '$.uidvalidity')) = m.uidvalidity " +
 	"AND COALESCE(json_extract(pa.action, '$.src_imap'), json_extract(pa.action, '$.imap_name')) = mb.imap_name) OR " +
-	"EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.copied') u WHERE " +
+	"EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.copied') u WHERE " + BlockingActionSQL("pa") + " AND " +
 	"u.key = CAST(m.uid AS TEXT) AND json_extract(pa.action, '$.src_uidvalidity') = m.uidvalidity " +
 	"AND json_extract(pa.action, '$.src_imap') = mb.imap_name))"
 
