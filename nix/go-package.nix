@@ -31,7 +31,7 @@ in
         (root + "/testdata")
       ];
     };
-    vendorHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+    vendorHash = "sha256-6lVfSTy4LhejmYJ5Qh66nRgG82tWd880D32l0XmbkU8=";
     proxyVendor = true;
     excludedPackages = ["third_party"];
     tags = ["sqlite_fts5"];
