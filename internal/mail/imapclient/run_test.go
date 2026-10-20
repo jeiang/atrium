@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -300,11 +299,20 @@ S: {t} OK LOGOUT completed
 		t.Fatalf("waits = %v, want %v", clock.waits, want)
 	}
 	notify.Wait("STATUS=icloud: reconnecting in 5s (connection lost)")
+	watchingCount := func() int {
+		n := 0
+		for _, message := range notify.Messages() {
+			if message == "STATUS=watching" {
+				n++
+			}
+		}
+		return n
+	}
 	deadline := time.Now().Add(10 * time.Second)
-	for slices.Count(notify.Messages(), "STATUS=watching") < 3 && time.Now().Before(deadline) {
+	for watchingCount() < 3 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if n := slices.Count(notify.Messages(), "STATUS=watching"); n < 3 {
+	if n := watchingCount(); n < 3 {
 		t.Fatalf("watching status count %d in %q", n, notify.Messages())
 	}
 }
@@ -333,7 +341,7 @@ S: + idling
 		cancel()
 		t.Fatal("the watch loop did not stop")
 	}
-	if want := seconds(5, 10, 20, 5); fmt.Sprint(clock.waits) != fmt.Sprint(want) {
+	if want := []time.Duration{5 * time.Second, 10 * time.Second, 20 * time.Second, 5 * time.Second}; fmt.Sprint(clock.waits) != fmt.Sprint(want) {
 		t.Fatalf("waits = %v, want %v", clock.waits, want)
 	}
 }
