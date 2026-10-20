@@ -27,7 +27,10 @@ not claims about the running application.
   a general UI-managed configuration and module system is still planned.
   Secrets set through `atrium secrets` are stored write-only in the database
   and are never read back or shown; admin keys are refused on a plaintext
-  database.
+  database. Every settings write and secret change appends a row to the
+  append-only `settings_audit` table (old and new value, or only `changed`
+  for secrets; actor and source), listed read-only in `/activity`. Known
+  secret values are scrubbed from log output and `agent_writes` snapshots.
 - The host owns external services, reverse proxy authentication,
   persistence, and backups. Updating this repository does not update the
   host's pinned application input.

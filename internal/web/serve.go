@@ -48,6 +48,9 @@ func recoverEvery(ctx context.Context, d *db.DB, cfg config.Config) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			if err := db.Ready(ctx, d); err != nil && ctx.Err() == nil {
+				log.Error("database refresh failed", logx.Err, err.Error())
+			}
 			if err := recoverProposals(ctx, d); err != nil && ctx.Err() == nil {
 				log.Error("proposal recovery failed", logx.Err, err.Error())
 			}

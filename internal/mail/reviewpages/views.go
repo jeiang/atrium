@@ -100,6 +100,8 @@ type ActivityEntry struct {
 	ThreadID   *int64   `json:"thread_id"`
 	ThreadKind *string  `json:"thread_kind"`
 	UndoneAt   *float64 `json:"undone_at"`
+	Actor      string   `json:"actor"`
+	Origin     string   `json:"origin"`
 	Before     string   `json:"before"`
 	After      string   `json:"after"`
 }

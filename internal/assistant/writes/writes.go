@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -50,24 +51,27 @@ type New struct {
 	Undo     any
 }
 
-func dump(value any) (*string, error) {
+func dump(value any, scrub bool) (*string, error) {
 	if value == nil {
 		return nil, nil
 	}
 	text := py.JSONDumps(value, py.JSONOpts{SortKeys: true})
+	if scrub {
+		text = logx.Scrub(text)
+	}
 	return &text, nil
 }
 
 func Record(ctx context.Context, q db.Querier, w New) (int64, error) {
-	before, err := dump(w.Before)
+	before, err := dump(w.Before, true)
 	if err != nil {
 		return 0, err
 	}
-	after, err := dump(w.After)
+	after, err := dump(w.After, true)
 	if err != nil {
 		return 0, err
 	}
-	undo, err := dump(w.Undo)
+	undo, err := dump(w.Undo, false)
 	if err != nil {
 		return 0, err
 	}
