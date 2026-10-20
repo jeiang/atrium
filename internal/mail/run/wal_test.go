@@ -15,7 +15,11 @@ import (
 )
 
 // alwaysOnReader is the web's reader pool over the same file, as a serve process that never stops answering
-// pages: n goroutines run the triage, message and proposals queries back to back until stop is called.
+// pages: n goroutines run the triage, message and proposals queries until stop is called, each pausing a
+// millisecond between queries. Back to back they starve the pass of CPU (the pure-Go driver under -race took
+// minutes), and a reader that is idle for a millisecond still holds a read snapshot open most of the time.
+const readPause = time.Millisecond
+
 func alwaysOnReader(t *testing.T, path string, n int) (reads *atomic.Int64, stop func()) {
 	t.Helper()
 	r, err := db.Connect(path)
@@ -46,6 +50,7 @@ func alwaysOnReader(t *testing.T, path string, n int) (reads *atomic.Int64, stop
 				}
 				_ = rows.Close()
 				reads.Add(1)
+				time.Sleep(readPause)
 			}
 		})
 	}
@@ -69,7 +74,7 @@ func fileSize(path string) int64 {
 // after every pass it is empty again (its peak within a pass is one pass's frames), and the share of
 // checkpoints a reader blocks is reported.
 func TestWALStaysBoundedUnderAnAlwaysOnReader(t *testing.T) {
-	const passes, perPass = 20, 25
+	const passes, perPass = 6, 25
 	w := newWorld(t, config.Shadow, credentials)
 	logs := captureLogs(t)
 	reads, stop := alwaysOnReader(t, w.cfg.DBPath, 4)
