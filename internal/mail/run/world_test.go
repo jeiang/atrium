@@ -92,6 +92,9 @@ func (l loopbackOnly) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 func TestMain(m *testing.M) {
+	if path := os.Getenv(lockTestPathEnv); path != "" {
+		os.Exit(lockTestHolder(path))
+	}
 	http.DefaultTransport = loopbackOnly{http.DefaultTransport}
 	os.Exit(m.Run())
 }
