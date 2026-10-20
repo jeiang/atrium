@@ -18,6 +18,7 @@ type migration struct {
 
 var migrations = []migration{
 	{1, pythonSchema},
+	{2, usageIndexes},
 }
 
 type FutureSchemaError struct {
@@ -289,4 +290,19 @@ func (want schemaShape) missingFrom(got schemaShape) []string {
 	}
 	sort.Strings(missing)
 	return missing
+}
+
+func usageIndexes(ctx context.Context, tx *sql.Tx) error {
+	for _, stmt := range []string{
+		"CREATE INDEX IF NOT EXISTS usage_thread ON usage (thread_id)",
+		"CREATE INDEX IF NOT EXISTS usage_run ON usage (run_id)",
+		"CREATE INDEX IF NOT EXISTS runs_parent ON runs (parent_run_id)",
+		"CREATE INDEX IF NOT EXISTS tool_results_run ON tool_results (run_id)",
+		"CREATE INDEX IF NOT EXISTS threads_parent_thread ON threads (parent_thread_id)",
+	} {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
