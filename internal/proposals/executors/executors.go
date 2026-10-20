@@ -182,6 +182,23 @@ func (e *Executors) recordFailed(ctx context.Context, pid int64, action py.Dict,
 	return err
 }
 
+// cancelled is the ledger row of a write whose reply a cancelled ctx discarded: the server may or may not have
+// executed it, so the row names its messages and is failed, never absent.
+func (e *Executors) cancelled(ctx context.Context, pid int64, action py.Dict, uids []uint32, err error) error {
+	if err == nil || ctx.Err() == nil {
+		return err
+	}
+	var partial *mailops.PartialMove
+	if errors.As(err, &partial) {
+		return err
+	}
+	logged := append(slices.Clone(action), py.Pair{Key: "uids", Value: uidList(uids)})
+	if rerr := e.recordFailed(ctx, pid, logged, mailops.UnknownPrefix+": "+err.Error()); rerr != nil {
+		return rerr
+	}
+	return err
+}
+
 func skipList(skipped []mailops.Skip) []any {
 	out := make([]any, len(skipped))
 	for i, s := range skipped {
@@ -276,7 +293,7 @@ func (e *Executors) moveItems(ctx context.Context, client mail.Client, pid int64
 			}
 		}
 		if err != nil {
-			return moved, err
+			return moved, e.cancelled(ctx, pid, action, uids, err)
 		}
 	}
 	return moved, nil
@@ -314,7 +331,8 @@ func (e *Executors) relabelItems(ctx context.Context, client mail.Client, pid in
 			}
 			slices.Sort(uids)
 			if err := mailops.StoreLabels(ctx, client, g.IMAPName, uids, r.Add, r.Remove); err != nil {
-				return changed, err
+				return changed, e.cancelled(ctx, pid, py.Dict{{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.IMAPName},
+					{Key: "uidvalidity", Value: g.UIDValidity}, {Key: "add", Value: stringList(r.Add)}, {Key: "remove", Value: stringList(r.Remove)}}, uids, err)
 			}
 			base := py.Dict{
 				{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.IMAPName}, {Key: "uidvalidity", Value: g.UIDValidity},
@@ -350,7 +368,8 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 		for _, batch := range mailops.Chunks(uids, mailops.Batch) {
 			copied, err := mailops.CopyUIDs(ctx, client, trash, batch)
 			if err != nil {
-				return trashed, err
+				return trashed, e.cancelled(ctx, pid, py.Dict{{Key: "op", Value: "trash"}, {Key: "imap_name", Value: g.IMAPName},
+					{Key: "uidvalidity", Value: g.UIDValidity}, {Key: "dest_imap", Value: trash}}, batch, err)
 			}
 			entries := make([]any, len(batch))
 			var known []any
@@ -447,7 +466,7 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 				dest := mail.UTF7Encode(step.name)
 				created, cerr := mailops.EnsureFolder(ctx, client, dest)
 				if cerr != nil {
-					return cerr
+					return e.cancelled(ctx, p.ID, py.Dict{{Key: "op", Value: "create_folder"}, {Key: "imap_name", Value: dest}}, nil, cerr)
 				}
 				if created {
 					if err := e.record(ctx, p.ID, py.Dict{{Key: "op", Value: "create_folder"}, {Key: "imap_name", Value: dest}},
@@ -599,7 +618,7 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 			return err
 		}
 		if deleted, err = mailops.DeleteFolderIfEmpty(ctx, client, label); err != nil || !deleted {
-			return err
+			return e.cancelled(ctx, p.ID, py.Dict{{Key: "op", Value: "delete_label"}, {Key: "imap_name", Value: label}}, nil, err)
 		}
 		return e.record(ctx, p.ID, py.Dict{{Key: "op", Value: "delete_label"}, {Key: "imap_name", Value: label}}, nil)
 	})

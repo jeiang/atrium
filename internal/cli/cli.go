@@ -22,6 +22,7 @@ const (
 	ExitOK         = 0
 	ExitError      = 1
 	ExitUsage      = 2
+	ExitHangup     = 129
 	ExitInterrupt  = 130
 	ExitTerminated = 143
 )

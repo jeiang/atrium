@@ -272,9 +272,19 @@ func TestUIDSetString(t *testing.T) {
 	}
 }
 
-func TestNoMoveInMailPackages(t *testing.T) {
+func TestNoMoveInGoSources(t *testing.T) {
 	banned := map[string]bool{"Move": true, "UIDMove": true}
-	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+	for _, root := range []string{"..", filepath.Join("..", "..", "cmd")} {
+		scanForMove(t, root, banned)
+	}
+}
+
+func scanForMove(t *testing.T, root string, banned map[string]bool) {
+	t.Helper()
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() && path == filepath.Join("..", "testutil", "imapscript") {
+			return fs.SkipDir
+		}
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return err
 		}
