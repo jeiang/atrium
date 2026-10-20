@@ -112,6 +112,49 @@ tags `sqlite_fts5` and `modernc`).
   listed as a `tpltest.Rewrite`, which is where a slice documents its diffs;
   `tpltest.Load` keeps JSON key order.
 
+## Database migrations
+
+- `db.Migrate` runs once per process start. A migration is a numbered entry
+  in `internal/db/migrate.go`, applied in order inside one transaction under
+  the `atrium.db.lock` flock, and recorded in `schema_migrations`. Only a
+  pending migration takes the lock. Never edit or renumber a migration that
+  has shipped.
+- Additive by default: a migration adds tables, columns, indexes, views or
+  rows. None drops, renames or retypes a table or column, and tables of a
+  disabled module are still migrated and never dropped. The harness fails a
+  migration that removes a table, column or index.
+- Non-additive Phase B migrations are the ones that rewrite existing rows.
+  Each one is tested on a copy of the real database before it ships:
+  the money rate back-fill (#184, per-transaction rate taken from
+  `fx_rates`, which is kept), the usage ledger v2 (#166, request and
+  iterations columns back-filled so monthly totals do not change) and the
+  embed-dimension row (#173, the recorded embedding dimension and the
+  reindex it triggers). A migration that joins this list is added here in the
+  pull request that adds it.
+- A newer binary migrates; an older binary exits non-zero before any write
+  when `schema_migrations` holds a version it does not know
+  (`*db.FutureSchemaError`), so a restore of a newer database under an older
+  release fails loudly instead of corrupting it.
+- Rollback point: the first release that carries migration 0002 (the settings
+  registry, #437). From the first start of that release the database holds a
+  version a Phase A binary does not know, so pinning the earlier cornn-flaek
+  atrium stops working. The only way back is to restore the database file
+  copied before that first start, and everything written afterwards is lost.
+  Take that copy first (`sqlite3 atrium.db ".backup pre-upgrade.db"`).
+- Support starts at the live Phase A schema: the harness has no case for
+  shapes older than it.
+- Harness: `internal/db/migrate_harness_test.go`, run by `go test
+  ./internal/db`. It applies every migration plus a fake future one to a
+  fresh database and to a copy of `testdata/golden/atrium.db`, runs `Migrate`
+  a second time and fails when the FTS5 or vec0 row counts change, a table,
+  column or index disappears, `schema_migrations` lacks a row or
+  `quick_check` fails. To run it on a real database, take a copy
+  (`sqlite3 atrium.db ".backup copy.db"`) and run
+  `ATRIUM_MIGRATION_HARNESS_DB=$PWD/copy.db go test -run
+  TestMigrationHarnessRealDBCopy -v ./internal/db`; the harness copies the
+  file again and never writes to the path it is given. `cmd/realdb-gate`
+  checks the read paths and the web and CLI on a copy.
+
 ## Branches and pull requests
 
 - Never commit to `main`. Use a branch and a pull request.

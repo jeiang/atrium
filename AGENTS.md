@@ -103,7 +103,12 @@ and backups; nothing of that lives here.
   schema's tables, columns, indexes, FTS5 and vec0 tables exist. Later
   schema changes are new additive migrations; Phase A adds only
   `schema_migrations`, and no migration drops, renames or retypes a
-  column. Only a pending migration takes the `atrium.db.lock` flock. The
+  column. The Phase B exceptions that rewrite rows, and the rollback point,
+  are listed in `docs/CONTRIBUTING.md` (Database migrations). A DB whose
+  `schema_migrations` holds a version this binary does not know is refused
+  with `*db.FutureSchemaError` before any write (a newer binary migrates,
+  an older one never starts on it). Only a pending migration takes the
+  `atrium.db.lock` flock. The
   built-in skills, subagents and categories are seeded on every start
   (https://github.com/jeiang/atrium/issues/102).
 - Go packaging: `nix/go-package.nix` builds `atrium-go-x86_64-v3`
@@ -163,7 +168,11 @@ and backups; nothing of that lives here.
   and the schema, vec0 and FTS5 tests, tests against the golden DBs;
   `internal/db/dbtest` connects to a temp-file DB, with or without foreign
   keys (Python's `connect_memory` has them off), migrated (`Schema`) or a
-  migrated copy of a DB file (`Copy`).
+  migrated copy of a DB file (`Copy`). `migrate_harness_test.go` runs every
+  migration plus a fake future one on a fresh DB and a copy of the golden
+  DB, and fails when an FTS5 or vec0 row count drifts or a table or column
+  disappears; `ATRIUM_MIGRATION_HARNESS_DB=<copy of a real DB>` runs the
+  same on it.
 - `internal/db/readpaths/`: the registry of every module's read-path
   queries; its test runs them on migrated copies of `atrium.db` and
   `atrium-legacy.db` against the Python results in

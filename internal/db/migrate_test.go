@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -342,4 +343,39 @@ func TestConcurrentStartProcesses(t *testing.T) {
 		t.Errorf("schema_migrations: %d rows, want 1", n)
 	}
 	diffLines(t, "schema.sql", readText(t, "db/schema.sql"), withoutMigrations(t, schemaSQL(t, d)))
+}
+
+func TestNewerSchemaRefusedBeforeAnyWrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atrium.db")
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	ctx := t.Context()
+	if err := db.Migrate(ctx, d, path); err != nil {
+		t.Fatal(err)
+	}
+	var before int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (9999, 1.0); DELETE FROM skills WHERE name = 'wiki-query'"); err != nil {
+		t.Fatal(err)
+	}
+	err = db.Migrate(ctx, d, path)
+	var future *db.FutureSchemaError
+	if !errors.As(err, &future) || len(future.Versions) != 1 || future.Versions[0] != 9999 {
+		t.Fatalf("Migrate on a newer schema = %v, want *FutureSchemaError for 9999", err)
+	}
+	if !strings.Contains(err.Error(), "9999") {
+		t.Errorf("message does not name the unknown version: %v", err)
+	}
+	var skills, after int
+	if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM skills WHERE name = 'wiki-query'), (SELECT COUNT(*) FROM schema_migrations)").Scan(&skills, &after); err != nil {
+		t.Fatal(err)
+	}
+	if skills != 0 || after != before+1 {
+		t.Errorf("refused Migrate wrote: wiki-query rows %d (want 0), schema_migrations rows %d (want %d)", skills, after, before+1)
+	}
 }
