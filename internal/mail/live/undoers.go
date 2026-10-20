@@ -141,7 +141,7 @@ func undoMoveBack(ctx context.Context, open mailops.Opener, p MoveBack) (py.Dict
 		if len(usable) == 0 {
 			return mailops.Error("no message left in the destination to move back")
 		}
-		return mailops.MoveUIDs(ctx, client, p.DestIMAP, p.SrcIMAP, usable, func(batch []uint32, _ *mail.CopyUID) error {
+		return mailops.MoveUIDs(ctx, client, p.DestIMAP, p.SrcIMAP, derefOr0(p.DestUIDValidity), usable, func(batch []uint32, _ *mail.CopyUID) error {
 			restored += len(batch)
 			return nil
 		})
@@ -161,7 +161,7 @@ func undoGmailLabels(ctx context.Context, open mailops.Opener, p GmailLabels) (p
 		if v != p.UIDValidity {
 			return mailops.Error("UIDVALIDITY changed")
 		}
-		return mailops.StoreLabels(ctx, client, p.IMAPName, p.UIDs, p.Add, p.Remove)
+		return mailops.StoreLabels(ctx, client, p.IMAPName, p.UIDValidity, p.UIDs, p.Add, p.Remove)
 	})
 	if err != nil {
 		return nil, err
@@ -180,7 +180,7 @@ func undoGmailUntrash(ctx context.Context, open mailops.Opener, p GmailUntrash) 
 				return mailops.Error("Trash UIDVALIDITY changed")
 			}
 		}
-		return mailops.StoreLabels(ctx, client, p.TrashIMAP, p.UIDs, nil, []string{mailops.TrashLabel})
+		return mailops.StoreLabels(ctx, client, p.TrashIMAP, derefOr0(p.DestUIDValidity), p.UIDs, nil, []string{mailops.TrashLabel})
 	})
 	if err != nil {
 		return nil, err
@@ -198,10 +198,17 @@ func undoUnflag(ctx context.Context, open mailops.Opener, p Unflag) (py.Dict, er
 		if v != p.UIDValidity {
 			return mailops.Error("UIDVALIDITY changed")
 		}
-		return mailops.StoreFlag(ctx, client, p.IMAPName, p.UIDs, mailops.Flagged, false)
+		return mailops.StoreFlag(ctx, client, p.IMAPName, p.UIDValidity, p.UIDs, mailops.Flagged, false)
 	})
 	if err != nil {
 		return nil, err
 	}
 	return py.Dict{{Key: "messages", Value: len(p.UIDs)}}, nil
+}
+
+func derefOr0(v *uint32) uint32 {
+	if v == nil {
+		return 0
+	}
+	return *v
 }

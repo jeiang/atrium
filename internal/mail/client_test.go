@@ -73,8 +73,11 @@ func (r *recorder) IdleChanges(context.Context, time.Duration) (bool, error) {
 	r.touch("IdleChanges")
 	return false, nil
 }
-func (r *recorder) Noop(context.Context) error             { r.touch("Noop"); return nil }
-func (r *recorder) SelectRW(context.Context, string) error { r.touch("SelectRW"); return nil }
+func (r *recorder) Noop(context.Context) error { r.touch("Noop"); return nil }
+func (r *recorder) SelectRW(context.Context, string) (uint32, error) {
+	r.touch("SelectRW")
+	return 1, nil
+}
 func (r *recorder) Copy(context.Context, UIDSet, string) (*CopyUID, error) {
 	r.touch("Copy")
 	return nil, nil
@@ -245,7 +248,7 @@ func TestOperatorSendOnlyAppendsToSent(t *testing.T) {
 	if err := c.Append(ctx, "INBOX", []byte("raw"), `\Seen`); err == nil {
 		t.Fatal("append to INBOX allowed under operator send")
 	}
-	if err := c.SelectRW(ctx, "Sent Messages"); err == nil {
+	if _, err := c.SelectRW(ctx, "Sent Messages"); err == nil {
 		t.Fatal("read-write select allowed under operator send")
 	}
 	if err := c.StoreFlags(ctx, UIDs(1), true, `\Seen`); err == nil {
