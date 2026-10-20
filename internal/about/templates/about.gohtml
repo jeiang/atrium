@@ -1,0 +1,19 @@
+{{define "title"}}About Atrium{{end}}
+{{define "heading"}}About Atrium{{end}}
+{{define "content"}}
+<section class="flex flex-col gap-4">
+  <p><span class="text-muted-foreground">Version:</span> <span class="font-medium">{{.Data.version}}</span></p>
+  <h2 class="text-sm font-medium">Licence notices</h2>
+  <p>Atrium is licensed under the MIT License. Contributions are provided under the Developer Certificate of Origin (DCO) 1.1.</p>
+  <h3 class="text-sm font-medium">UI assets</h3>
+  <ul class="list-disc ps-6">
+    <li>Basecoat CSS — MIT License</li>
+    <li>Tailwind CSS — MIT License</li>
+    <li>htmx — 0BSD License</li>
+  </ul>
+  <details class="group">
+    <summary class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{{icon "chevron-down" "size-4 shrink-0 transition-transform group-open:rotate-180"}}Third-party licences ({{.Data.notice_count}} packages)</summary>
+    <pre class="max-h-[70vh] overflow-auto break-words whitespace-pre-wrap rounded-lg border bg-card p-4 text-xs" tabindex="0" role="region" aria-label="Third-party licence notices">{{.Data.notices}}</pre>
+  </details>
+</section>
+{{end}}

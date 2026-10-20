@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
@@ -68,6 +69,7 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 		mediacmd.Command(now),
 		web.ServeCommand(
 			web.Page{Module: chatpages.Module(chatpages.Options{}), Templates: chatpages.Templates()},
+			web.Page{Module: about.Module(version), Templates: about.Templates()},
 			web.Page{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
 			web.Page{Module: mediapages.Module(mediapages.Options{}), Templates: mediapages.Templates(), Public: mediapages.PublicCheck},
 			web.Page{Module: notify.Module, Templates: notify.Templates()},
