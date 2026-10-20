@@ -26,6 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/notion"
 	notionpages "github.com/jeiang/atrium/internal/notion/pages"
+	"github.com/jeiang/atrium/internal/settings/settingscmd"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -65,6 +66,7 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 		agentcmd.Command(),
 		calendarcmd.Command(),
 		mediacmd.Command(now),
+		settingscmd.Command(),
 		web.ServeCommand(
 			web.Page{Module: chatpages.Module(chatpages.Options{}), Templates: chatpages.Templates()},
 			web.Page{Module: about.Module(version), Templates: about.Templates()},
