@@ -30,7 +30,6 @@ const (
 	workerLost          = "worker lost"
 )
 
-// Claim is a due job taken under a lease; Missed is set when the run is more than the grace period late.
 type Claim struct {
 	Job      Job
 	JobRunID int64
@@ -38,7 +37,6 @@ type Claim struct {
 	Missed   bool
 }
 
-// Skipped is a due job that was recorded as skipped instead of claimed.
 type Skipped struct {
 	Job      Job
 	JobRunID int64
@@ -49,8 +47,6 @@ func isNoRows(err error) bool { return errors.Is(err, sql.ErrNoRows) }
 
 type sqlRows = sql.Rows
 
-// ClaimDue is claim_due: every due job without a live lease is claimed, or recorded as skipped while the pause
-// file exists or the unattended budget is spent, in one write transaction. loc is the budget month's zone.
 func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Location, now float64, owner string) ([]Claim, []Skipped, error) {
 	paused := safety.IsPaused(cfg.PausePath())
 	overBudget := false
@@ -137,7 +133,6 @@ func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Locati
 	return claims, skipped, nil
 }
 
-// Outcome is what finish_run records about a job run.
 type Outcome struct {
 	Status   string
 	ThreadID *int64
@@ -146,7 +141,6 @@ type Outcome struct {
 	Cost     float64
 }
 
-// FinishRun is finish_run: the job run is closed with its outcome and the job's lease is released.
 func FinishRun(ctx context.Context, q db.Querier, c Claim, now float64, o Outcome) error {
 	if _, err := q.ExecContext(ctx, "UPDATE job_runs SET status = ?, ended_at = ?, thread_id = COALESCE(?, thread_id), error = ?, tokens = ?, cost = ? WHERE id = ?",
 		o.Status, now, o.ThreadID, o.Error, o.Tokens, o.Cost, c.JobRunID); err != nil {
@@ -156,7 +150,6 @@ func FinishRun(ctx context.Context, q db.Querier, c Claim, now float64, o Outcom
 	return err
 }
 
-// RunTokens is run_tokens: every billed token of an agent run.
 func RunTokens(ctx context.Context, q db.Querier, runID int64) (int64, error) {
 	var n int64
 	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(input_tokens + cache_write_5m + cache_write_1h + cache_read + output_tokens), 0) AS n "+
@@ -164,8 +157,6 @@ func RunTokens(ctx context.Context, q db.Querier, runID int64) (int64, error) {
 	return n, err
 }
 
-// ReleaseStale is release_stale: runs a crashed worker left running are marked failed once their lease lapsed.
-// A job run whose agent run is still running or interrupted is left to SettleResumed.
 func ReleaseStale(ctx context.Context, d *db.DB, now float64) error {
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, "SELECT r.id AS run_id, j.id AS job_id FROM job_runs r JOIN jobs j ON j.id = r.job_id "+
@@ -195,9 +186,6 @@ func ReleaseStale(ctx context.Context, d *db.DB, now float64) error {
 	})
 }
 
-// SettleResumed closes job runs left running whose agent run has since finished: a run interrupted by a
-// restart is resumed by the worker, and the job run follows it instead of waiting for its lease to lapse as
-// "worker lost". Runs still running or interrupted are left alone.
 func SettleResumed(ctx context.Context, d *db.DB, now float64) error {
 	type settled struct {
 		jobRun, job  int64

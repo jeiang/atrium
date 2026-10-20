@@ -18,6 +18,7 @@ import (
 func TestMoveUIDsWire(t *testing.T) {
 	ctx := context.Background()
 	client, _ := icloud(t, icloudLogin+`C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 10:11 "Bills"
 S: {t} OK [COPYUID 99 10:11 500:501] Done
@@ -28,6 +29,7 @@ S: * 3 EXPUNGE
 S: * 3 EXPUNGE
 S: {t} OK EXPUNGE completed
 C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 12 "Bills"
 S: {t} OK [COPYUID 99 12 502] Done
@@ -38,7 +40,7 @@ S: {t} NO try later
 `+logout, live)
 	must(t, client.Connect(ctx))
 	var got []*mail.CopyUID
-	err := mailops.MoveUIDs(ctx, client, "INBOX", "Bills", []uint32{10, 11}, func(batch []uint32, copied *mail.CopyUID) error {
+	err := mailops.MoveUIDs(ctx, client, "INBOX", "Bills", 7, []uint32{10, 11}, func(batch []uint32, copied *mail.CopyUID) error {
 		got = append(got, copied)
 		return nil
 	})
@@ -46,7 +48,7 @@ S: {t} NO try later
 	if len(got) != 1 || !reflect.DeepEqual(got[0], &mail.CopyUID{UIDValidity: 99, Mapping: map[uint32]uint32{10: 500, 11: 501}}) {
 		t.Fatalf("moved = %+v", got)
 	}
-	err = mailops.MoveUIDs(ctx, client, "INBOX", "Bills", []uint32{12}, func([]uint32, *mail.CopyUID) error {
+	err = mailops.MoveUIDs(ctx, client, "INBOX", "Bills", 7, []uint32{12}, func([]uint32, *mail.CopyUID) error {
 		t.Fatal("a batch that was not expunged was reported moved")
 		return nil
 	})
@@ -65,7 +67,7 @@ C: {t} LOGIN "atrium.test@icloud.com" "app-specific password"
 S: {t} OK [CAPABILITY IMAP4rev1 CONDSTORE] logged in
 `+logout, live)
 	must(t, client.Connect(ctx))
-	err := mailops.MoveUIDs(ctx, client, "INBOX", "Bills", []uint32{1}, nil)
+	err := mailops.MoveUIDs(ctx, client, "INBOX", "Bills", 0, []uint32{1}, nil)
 	if py.ExceptionText(err) != "MailOpError: server lacks UIDPLUS: refusing to move" {
 		t.Fatalf("MoveUIDs = %v", err)
 	}
@@ -127,6 +129,7 @@ C: {t} UID SEARCH UID 500:501,503
 S: * SEARCH 500 503
 S: {t} OK SEARCH completed
 C: {t} SELECT "Bills"
+S: * OK [UIDVALIDITY 99] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 500,503 INBOX
 S: {t} OK [COPYUID 7 500,503 40:41] Done
@@ -168,5 +171,91 @@ S: {t} OK STATUS completed
 	var refused safety.WriteRefused
 	if !errors.As(err, &refused) {
 		t.Fatalf("unapproved unflag = %v", err)
+	}
+}
+
+func TestMoveUIDsRefusesWhenSelectedUIDValidityDiffers(t *testing.T) {
+	ctx := context.Background()
+	client, _ := icloud(t, icloudLogin+`C: {t} SELECT "Bills"
+S: * OK [UIDVALIDITY 8] UIDs valid
+S: {t} OK [READ-WRITE] SELECT completed
+`+logout, live)
+	must(t, client.Connect(ctx))
+	err := mailops.MoveUIDs(ctx, client, "Bills", "INBOX", 7, []uint32{10}, func([]uint32, *mail.CopyUID) error {
+		t.Fatal("a refused move reported a batch")
+		return nil
+	})
+	var partial *mailops.PartialMove
+	if py.ExceptionText(err) != "MailOpError: UIDVALIDITY changed" || errors.As(err, &partial) {
+		t.Fatalf("MoveUIDs = %v", err)
+	}
+	client.Close()
+}
+
+func TestStoreLabelsRefusesWhenSelectedUIDValidityDiffers(t *testing.T) {
+	ctx := context.Background()
+	client := gmail(t, gmailLogin+`C: {t} SELECT "[Gmail]/All Mail"
+S: * OK [UIDVALIDITY 2] UIDs valid
+S: {t} OK [READ-WRITE] [Gmail]/All Mail selected. (Success)
+`+gmailLogout, live)
+	must(t, client.Connect(ctx))
+	err := mailops.StoreLabels(ctx, client, "[Gmail]/All Mail", 1, []uint32{101}, []string{"Receipts"}, []string{mailops.InboxLabel})
+	if py.ExceptionText(err) != "MailOpError: UIDVALIDITY changed" {
+		t.Fatalf("StoreLabels = %v", err)
+	}
+	client.Close()
+}
+
+func TestStoreFlagRefusesWhenSelectedUIDValidityDiffers(t *testing.T) {
+	ctx := context.Background()
+	client, _ := icloud(t, icloudLogin+`C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 8] UIDs valid
+S: {t} OK [READ-WRITE] SELECT completed
+`+logout, live)
+	must(t, client.Connect(ctx))
+	err := mailops.StoreFlag(ctx, client, "INBOX", 7, []uint32{303}, mailops.Flagged, true)
+	if py.ExceptionText(err) != "MailOpError: UIDVALIDITY changed" {
+		t.Fatalf("StoreFlag = %v", err)
+	}
+	client.Close()
+}
+
+func TestSelectRWWithoutUIDValidityIsRefusedBeforeAnyWrite(t *testing.T) {
+	ctx := context.Background()
+	client, _ := icloud(t, icloudLogin+`C: {t} SELECT INBOX
+S: {t} OK [READ-WRITE] SELECT completed
+`+logout, live)
+	must(t, client.Connect(ctx))
+	err := mailops.StoreFlag(ctx, client, "INBOX", 0, []uint32{303}, mailops.Flagged, true)
+	wantError(t, err, "abort", "SELECT did not report UIDVALIDITY")
+	client.Close()
+}
+
+func TestUndoMoveBackWithoutRecordedValidityStillMoves(t *testing.T) {
+	client, _ := icloud(t, icloudLogin+`C: {t} EXAMINE "Bills"
+S: {t} OK [READ-ONLY] EXAMINE completed
+C: {t} UID SEARCH UID 500
+S: * SEARCH 500
+S: {t} OK SEARCH completed
+C: {t} SELECT "Bills"
+S: * OK [UIDVALIDITY 123] UIDs valid
+S: {t} OK [READ-WRITE] SELECT completed
+C: {t} UID COPY 500 INBOX
+S: {t} OK [COPYUID 7 500 40] Done
+C: {t} UID STORE 500 +FLAGS.SILENT (\Deleted)
+S: {t} OK STORE completed
+C: {t} UID EXPUNGE 500
+S: * 1 EXPUNGE
+S: {t} OK EXPUNGE completed
+`+logout, shadow)
+	r := proposals.NewRegistry()
+	maillive.RegisterUndoers(r, func(ctx context.Context, _ string) (mail.Client, error) { return client, client.Connect(ctx) })
+	plan := `{"op": "move_back", "account": "icloud", "src_imap": "INBOX", "dest_imap": "Bills", "dest_uidvalidity": null, ` +
+		`"items": [{"id": 1, "msgid": "m1@x.test", "uid": 10, "dest_uid": 500}]}`
+	ctx := safety.ApprovedWrites(context.Background(), "undo-1")
+	detail, err := r.Undoers[maillive.OpMoveBack](ctx, []byte(plan))
+	must(t, err)
+	if !reflect.DeepEqual(detail, py.Dict{{Key: "restored", Value: 1}, {Key: "missing", Value: 0}}) {
+		t.Fatalf("detail = %v", detail)
 	}
 }

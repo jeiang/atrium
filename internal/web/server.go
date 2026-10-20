@@ -1,5 +1,3 @@
-// Package web is the HTTP server: the Guard security layer, static assets,
-// error handling and the registry of page modules.
 package web
 
 import (
@@ -23,41 +21,31 @@ import (
 
 var log = logx.Logger("atrium.web")
 
-// ErrorPage renders the 404 and 422 error page; problem is the capitalised
-// detail with a trailing period.
 type ErrorPage func(w http.ResponseWriter, r *http.Request, status int, problem string)
 
-// Deps is what a Module registers its routes with.
 type Deps struct {
-	Cfg config.Config
-	Env config.Env
-	DB  *db.DB
-	// Render writes pages and fragments; nil when the server was built without a Renderer.
-	Render *Renderer
-	// Error answers with the app's error handling: the error page for 404 and
-	// 422, a JSON {"detail": ...} body for every other status.
+	Cfg      config.Config
+	Env      config.Env
+	DB       *db.DB
+	Render   *Renderer
 	Error    func(w http.ResponseWriter, r *http.Request, status int, detail string)
 	Stopping <-chan struct{}
 	OnClose  func(func())
 }
 
-// Module registers one page set's routes on the shared router, in the order
-// the Python app registered them: a static path before its {id} sibling.
 type Module func(r chi.Router, d *Deps)
 
 type Options struct {
-	Cfg config.Config
-	Env config.Env
-	DB  *db.DB
-	// Auth is AuthProxy or AuthLocal.
+	Cfg          config.Config
+	Env          config.Env
+	DB           *db.DB
 	Auth         string
 	AllowedHosts []string
-	// Public admits a request without Remote-Groups, see NewGuard.
-	Public    func(*http.Request) bool
-	ErrorPage ErrorPage
-	Render    *Renderer
-	Static    fs.FS
-	Modules   []Module
+	Public       func(*http.Request) bool
+	ErrorPage    ErrorPage
+	Render       *Renderer
+	Static       fs.FS
+	Modules      []Module
 }
 
 type Server struct {
@@ -127,7 +115,6 @@ func (s *Server) stopped() bool {
 	}
 }
 
-// Hold makes /healthz answer 503 until Release, the state READY=1 is sent on.
 func (s *Server) Hold() { s.starting.Store(true) }
 
 func (s *Server) Release() { s.starting.Store(false) }
@@ -142,8 +129,6 @@ func (s *Server) Close() {
 	s.closers = nil
 }
 
-// IsPartial is deps.is_partial: an htmx request that is not a history restore,
-// which wants the fragment rather than the full page.
 func IsPartial(r *http.Request) bool {
 	_, hx := r.Header["Hx-Request"]
 	_, restore := r.Header["Hx-History-Restore-Request"]
@@ -162,9 +147,6 @@ func (s *Server) allowed(path string) []string {
 	return allow
 }
 
-// notFound is Starlette's redirect_slashes: a path no route matches gets a
-// 307 to its sibling with or without the trailing slash when that matches any
-// method.
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	alt := path + "/"
@@ -190,8 +172,6 @@ func (s *Server) methodNotAllowed(w http.ResponseWriter, r *http.Request) {
 	s.Error(w, r, http.StatusMethodNotAllowed, "Method Not Allowed")
 }
 
-// Error is the app's HTTPException handler: 404 and 422 render the error
-// page, every other status answers FastAPI's default {"detail": ...} JSON.
 func (s *Server) Error(w http.ResponseWriter, r *http.Request, status int, detail string) {
 	if status == http.StatusNotFound || status == http.StatusUnprocessableEntity {
 		s.errPage(w, r, status, problem(detail))

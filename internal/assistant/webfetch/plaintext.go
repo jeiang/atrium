@@ -22,8 +22,6 @@ func setOf(names ...string) map[string]bool {
 
 func collapse(s string) string { return strings.Join(py.Split(s), " ") }
 
-// PlainText is plain_text: the title and the text of the page with the content of SkipTags dropped, a line break
-// around each block tag and every line's whitespace collapsed; empty lines are dropped.
 func PlainText(markup string) (title, text string) {
 	var (
 		titleText strings.Builder

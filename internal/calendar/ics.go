@@ -9,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Row is one listed event.
 type Row struct {
 	UID      string
 	Calendar string
@@ -19,7 +18,6 @@ type Row struct {
 	Location string
 }
 
-// Dict is the row as Python lists it.
 func (r Row) Dict() py.Dict {
 	return py.Dict{
 		{Key: "uid", Value: r.UID}, {Key: "calendar", Value: r.Calendar}, {Key: "start", Value: r.Start},
@@ -409,8 +407,6 @@ func (ev *icsEvent) row(calendar string, start, end Value, tz *time.Location) Ro
 	return Row{UID: ev.uidKey(), Calendar: calendar, Start: fmtValue(start, tz), End: fmtValue(end, tz), Title: ev.summary, Location: ev.location}
 }
 
-// EventsInICS is events_in_ics: the events of one iCalendar file that overlap the window, recurrences expanded.
-// Notes collects what could not be expanded.
 func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Location, notes *[]string) ([]Row, error) {
 	events, err := parseICS(data)
 	if err != nil {

@@ -1,6 +1,3 @@
-// Package golden loads the request fixtures generated from the frozen Python app (testdata/golden, made by
-// `just golden`) and compares JSON by canonical form: object key order, string escaping and number spelling
-// do not matter, values do.
 package golden
 
 import (
@@ -21,10 +18,8 @@ import (
 	"testing"
 )
 
-// maxDiffs caps the differences one comparison reports.
 const maxDiffs = 20
 
-// Manifest is a slice's manifest.json: its scenarios and the Python commit they were generated from.
 type Manifest struct {
 	Slice        string          `json:"slice"`
 	FreezeCommit string          `json:"freeze_commit"`
@@ -32,7 +27,6 @@ type Manifest struct {
 	Scenarios    []ManifestEntry `json:"scenarios"`
 }
 
-// ManifestEntry names one scenario file and the Python tests it mirrors.
 type ManifestEntry struct {
 	Name        string   `json:"name"`
 	File        string   `json:"file"`
@@ -41,9 +35,6 @@ type ManifestEntry struct {
 	Requests    int      `json:"requests"`
 }
 
-// Request is one recorded HTTP request; Body is what the Python client sent, as JSON. The integration goldens
-// also record the URL (scheme, host and path) and BodyEncoding: json (Body is the parsed body), form (ordered
-// [name, value] pairs), multipart (parts), text, base64 or none; the Anthropic goldens leave both empty.
 type Request struct {
 	Method       string            `json:"method"`
 	URL          string            `json:"url"`
@@ -54,13 +45,11 @@ type Request struct {
 	Body         json.RawMessage   `json:"body"`
 }
 
-// Exchange is a recorded request and the response the Python code received for it.
 type Exchange struct {
 	Request  Request         `json:"request"`
 	Response json.RawMessage `json:"response"`
 }
 
-// Scenario is one <scenario>.json: its requests in order plus the rows the run left behind.
 type Scenario struct {
 	Name         string            `json:"scenario"`
 	Description  string            `json:"description"`
@@ -71,7 +60,6 @@ type Scenario struct {
 	Usage        []json.RawMessage `json:"usage"`
 }
 
-// Dir is the absolute path of testdata/golden in this checkout.
 func Dir() string {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -80,7 +68,6 @@ func Dir() string {
 	return filepath.Join(filepath.Dir(file), "..", "..", "..", "testdata", "golden")
 }
 
-// ReadFile returns testdata/golden/<slice>/<name>.
 func ReadFile(t testing.TB, slice, name string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(Dir(), slice, name))
@@ -101,7 +88,6 @@ func decodeFile(t testing.TB, slice, name string, into any, strict bool) {
 	}
 }
 
-// LoadManifest reads testdata/golden/<slice>/manifest.json.
 func LoadManifest(t testing.TB, slice string) Manifest {
 	t.Helper()
 	var m Manifest
@@ -109,7 +95,6 @@ func LoadManifest(t testing.TB, slice string) Manifest {
 	return m
 }
 
-// LoadScenario reads testdata/golden/<slice>/<name>.json.
 func LoadScenario(t testing.TB, slice, name string) Scenario {
 	t.Helper()
 	var s Scenario
@@ -120,7 +105,6 @@ func LoadScenario(t testing.TB, slice, name string) Scenario {
 	return s
 }
 
-// EqualJSON fails t when want and got differ as JSON values, listing each differing path.
 func EqualJSON(t testing.TB, want, got []byte) {
 	t.Helper()
 	diffs, err := Diff(want, got)
@@ -132,8 +116,6 @@ func EqualJSON(t testing.TB, want, got []byte) {
 	}
 }
 
-// Canonical re-encodes JSON with sorted object keys, no HTML escaping, no insignificant whitespace and
-// numbers in one spelling (integers exactly, other numbers as the shortest float64 form).
 func Canonical(data []byte) ([]byte, error) {
 	v, err := decode(data)
 	if err != nil {
@@ -146,7 +128,6 @@ func Canonical(data []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Diff lists the paths at which want and got differ as JSON values (at most maxDiffs); nil when equal.
 func Diff(want, got []byte) ([]string, error) {
 	w, err := decode(want)
 	if err != nil {
@@ -198,7 +179,6 @@ func normalize(v any) (any, error) {
 	return v, nil
 }
 
-// num is a JSON number in canonical spelling.
 type num string
 
 func number(n json.Number) (num, error) {

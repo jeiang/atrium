@@ -10,8 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Error is a pattern or replacement template Python's re module rejects. Msg follows Python's wording where the
-// parser mirrors it; only "compiles or not" is guaranteed to agree with Python.
 type Error struct {
 	Msg     string
 	Pattern string
@@ -311,7 +309,6 @@ var atEscapes = map[rune]atKind{'A': atBeginningString, 'b': atBoundary, 'B': at
 
 func isASCIILetter(c rune) bool { return c < 128 && unicode.IsLetter(c) }
 
-// numericEscape handles \x, \u, \U and \N, shared by both escape contexts. ok is false when esc is none of them.
 func (p *parser) numericEscape(esc string) (rune, bool, error) {
 	c := []rune(esc)[1]
 	switch {
@@ -705,7 +702,6 @@ func (p *parser) parseRepeat(seq *node, this string, flags Flags) error {
 	return nil
 }
 
-// parseGroup parses everything after "(". It returns nil for constructs that add no node (comments, global flags).
 func (p *parser) parseGroup(seq *node, flags Flags, verbose bool, nested int, first bool) (*node, error) {
 	start := p.tell() - 1
 	capture := true

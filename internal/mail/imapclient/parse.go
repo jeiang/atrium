@@ -182,7 +182,6 @@ func parseLabels(text string) ([]string, error) {
 	return labels, nil
 }
 
-// balanced is imap._balanced over code points: the parenthesised block opening at start, or ok false.
 func balanced(text []rune, start int) ([]rune, bool) {
 	depth := 0
 	inQuote := false

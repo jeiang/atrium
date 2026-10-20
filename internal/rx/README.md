@@ -58,7 +58,7 @@ Each rule has a case in `rx_test.go` with CPython's result.
 | `x*+`, `x++`, `x?+`, `x{m,n}+` | `(?>(?:x)*)` | .NET has no possessive quantifiers. |
 | `(?i)` etc. at the start, `(?i:…)`, `(?-i:…)` | flags applied per node | Global flags elsewhere are an error, as in Python 3.11+. |
 | `VERBOSE` | whitespace and comments dropped by the parser | |
-| `IGNORECASE` (Unicode) literals and sets | explicit sets of every code point CPython matches (`LITERAL_UNI_IGNORE`, `IN_UNI_IGNORE`, `RANGE_UNI_IGNORE`, `re._casefix`); regexp2 never folds | regexp2 folds ranges with stale .NET tables (`(?i)[Ș-Ț]` misses U+021A). `casetable.go` is generated from CPython by `tools/rx/gen_casetable.py`. |
+| `IGNORECASE` (Unicode) literals and sets | explicit sets of every code point CPython matches (`LITERAL_UNI_IGNORE`, `IN_UNI_IGNORE`, `RANGE_UNI_IGNORE`, `re._casefix`); regexp2 never folds | regexp2 folds ranges with stale .NET tables (`(?i)[Ș-Ț]` misses U+021A). `casetable.go` is generated from the frozen Python app and not regenerable. |
 | `IGNORECASE` backreference | `(?i:\N)` | |
 | `IGNORECASE` with `ASCII` or `Bytes` | `[kK]`-style sets | Only ASCII letters fold. |
 | `[^c]` with `c` ≥ U+FFFF | `(?!c)[\s\S]` | regexp2's first-character filter for `[^c]` drops every character above `c`. |

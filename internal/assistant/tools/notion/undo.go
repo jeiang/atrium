@@ -114,7 +114,6 @@ func undoAliasList(ctx context.Context, q db.Querier, info map[string]any) (any,
 	return py.Dict{{Key: "aliases", Value: strs(previous)}}, nil
 }
 
-// RegisterUndoers registers the undoers of the Notion write tools.
 func RegisterUndoers(r *writes.Registry, env config.Env) {
 	r.Register(undoRestore, guarded(env, undoRestorePage))
 	r.Register(undoTrash, guarded(env, trashing(true, "trashed")))
@@ -169,7 +168,6 @@ func proposeLink(ctx context.Context, tc *tool.Context, payload py.Dict) (*int64
 	return id, proposed(err)
 }
 
-// RegisterProposalKinds fills the propose tool's KINDS registry with the Notion kinds.
 func RegisterProposalKinds() {
 	proposetools.Register(notion.KindEdit, proposeEdit)
 	proposetools.Register(notion.KindLink, proposeLink)

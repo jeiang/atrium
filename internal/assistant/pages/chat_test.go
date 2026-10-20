@@ -276,8 +276,15 @@ func TestUploadsLimitsAndFileServing(t *testing.T) {
 	big := upload{"big.txt", "text/plain", make([]byte, files.FileCapBytes+1)}
 	refused = status(t, s.multipart("/chat", map[string]string{"text": "take this"}, []upload{big}, hx, "true"), http.StatusUnprocessableEntity)
 	mustContain(t, refused, "Not attached", "big.txt is over the 32 MB limit")
-	if n := s.count("SELECT COUNT(*) FROM thread_files"); n != 0 {
+	if n := s.count("SELECT COUNT(*) FROM thread_files") + s.count("SELECT COUNT(*) FROM threads WHERE deleted_at IS NULL"); n != 0 {
 		t.Errorf("a refused file left %d rows", n)
+	}
+	unnamed := s.multipartVia(s.chunked, "/chat", map[string]string{"text": " "}, []upload{huge}, hx, "true")
+	mustContain(t, status(t, unnamed, http.StatusUnprocessableEntity), "Nothing sent", "Type a message to go with the files.")
+	mustNotContain(t, unnamed.body, "Not attached")
+	status(t, s.do(http.MethodPost, "/chat", strings.NewReader("--x\r\nbroken"), "multipart/form-data; boundary=x"), http.StatusBadRequest)
+	if r := s.get("/settings"); r.StatusCode != http.StatusSeeOther || r.Header.Get("Location") != "/settings/assistant" || r.body != "" {
+		t.Errorf("GET /settings: %d %q %q", r.StatusCode, r.Header.Get("Location"), r.body)
 	}
 	small := upload{"a.txt", "text/plain", []byte("hi")}
 	mustContain(t, status(t, s.multipart("/chat", nil, []upload{small}, hx, "true"), http.StatusUnprocessableEntity), "Nothing sent", "Type a message to go with the files.")
@@ -411,7 +418,11 @@ func TestListFlagsOptionsProjectsDelete(t *testing.T) {
 	status(t, s.post(fmt.Sprintf("/chat/%d/pin", thread), url.Values{"pinned": {"x"}}), http.StatusUnprocessableEntity)
 	meter := status(t, s.post(fmt.Sprintf("/chat/%d/options", thread), url.Values{"effort": {"low"}, "context_limit": {"500000"}}, hx, "true"), http.StatusOK)
 	mustContain(t, meter, `id="meter"`, "effort low", "0.0K / ")
-	mustContain(t, status(t, s.post(fmt.Sprintf("/chat/%d/options", thread), url.Values{"effort": {"huge"}}, hx, "true"), http.StatusUnprocessableEntity), "Not saved")
+	refusedOptions := s.post(fmt.Sprintf("/chat/%d/options", thread), url.Values{"effort": {"bogus"}}, hx, "true")
+	mustContain(t, status(t, refusedOptions, http.StatusUnprocessableEntity), "Not saved")
+	if got := refusedOptions.Header.Get("HX-Reswap"); got != "none" {
+		t.Errorf("options HX-Reswap %q, want none", got)
+	}
 	page := status(t, s.get(fmt.Sprintf("/chat/%d", thread)), http.StatusOK)
 	mustContain(t, page, `<option value="500000" selected>500K (5× price over 100K)</option>`, `<option value="low" selected>low</option>`, `id="move-project"`)
 	if r := s.post(fmt.Sprintf("/chat/%d/project", thread), url.Values{"project_id": {"1"}}); r.StatusCode != http.StatusSeeOther {

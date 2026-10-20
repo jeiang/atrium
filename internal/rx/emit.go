@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// Python's \w, \d and \s for str patterns; \w and \d are exactly these Unicode categories in Python 3.14.
 const (
 	uniWord  = `\p{L}\p{N}_`
 	uniDigit = `\p{Nd}`

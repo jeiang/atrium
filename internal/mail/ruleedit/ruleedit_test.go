@@ -126,7 +126,7 @@ func TestPreviewRuleCountsAndSample(t *testing.T) {
 	rulestest.Filed(t, d, 30, "Other", "o@other.test", "other.test", nil, nil)
 	rulestest.Add(t, d, 31, nil, "", rulestest.Fields{"account": "gmail", "mailbox_id": 2, "from_addr": "g@shop.test", "from_domain": "shop.test"})
 	got, err := ruleedit.PreviewRule(ctx, d.Read,
-		raw("account", "icloud", "dest", "Shop", "when", []any{when("from_domain", "suffix", "shop.test")}), 3)
+		raw("account", "icloud", "dest", "Shop", "when", []any{when("from_domain", "suffix", "shop.test")}), 3, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,9 +141,9 @@ func TestPreviewRuleCountsAndSample(t *testing.T) {
 	if got.Sample[0].Folder != "INBOX" || got.Sample[1].Folder != "Shop" {
 		t.Errorf("sample folders %q %q", got.Sample[0].Folder, got.Sample[1].Folder)
 	}
-	_, err = ruleedit.PreviewRule(ctx, d.Read, raw("dest", "X", "when", []any{when("subject", "re", "(")}), ruleedit.DefaultLimit)
+	_, err = ruleedit.PreviewRule(ctx, d.Read, raw("dest", "X", "when", []any{when("subject", "re", "(")}), ruleedit.DefaultLimit, 0)
 	wantRuleError(t, err, "invalid regex '(': missing ), unterminated subpattern at position 0")
-	all, err := ruleedit.PreviewRule(ctx, d.Read, raw("dest", "X", "when", []any{when("from_domain", "suffix", "shop.test")}), 0)
+	all, err := ruleedit.PreviewRule(ctx, d.Read, raw("dest", "X", "when", []any{when("from_domain", "suffix", "shop.test")}), 0, 0)
 	if err != nil || all.Count != 7 || all.Total != 8 || len(all.Sample) != 0 {
 		t.Errorf("unscoped preview %+v, %v", all, err)
 	}

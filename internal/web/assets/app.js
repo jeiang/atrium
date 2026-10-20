@@ -114,6 +114,11 @@ document.addEventListener("htmx:afterRequest", (event) => {
   const status = event.detail.xhr.status;
   const succeeded = status >= 200 && status < 400;
   if (form.matches && form.matches("form[data-reset]") && succeeded) form.reset();
+  if (form.id === "composer") {
+    setTimeout(() => {
+      if (document.activeElement === document.body) document.getElementById("composer-text")?.focus();
+    });
+  }
   if (form.matches && form.matches("button[data-suggestion]") && succeeded) {
     const item = form.closest("li");
     const next = item.nextElementSibling || item.previousElementSibling;

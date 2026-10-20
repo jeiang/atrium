@@ -169,18 +169,6 @@ func TestTriageSummaryAndFlags(t *testing.T) {
 	}
 }
 
-func TestFolders(t *testing.T) {
-	d := rulestest.DB(t)
-	filed(t, d, 1, "Fresh", "a@x.test", "d1")
-	got, err := Folders(t.Context(), d.Read, "icloud")
-	if err != nil || fmt.Sprint(got) != "[{Fresh 1}]" {
-		t.Errorf("Folders = %v, %v", got, err)
-	}
-	if got, err := Folders(t.Context(), d.Read, "gmail"); err != nil || got == nil || strings.TrimSpace(fmt.Sprint(got)) != "[]" {
-		t.Errorf("empty Folders = %v, %v", got, err)
-	}
-}
-
 func TestUnknownFilterIsAFilterError(t *testing.T) {
 	d := rulestest.DB(t)
 	for _, f := range []Filter{{Stage: "nonsense"}, {Agreement: "nonsense"}} {
@@ -192,5 +180,17 @@ func TestUnknownFilterIsAFilterError(t *testing.T) {
 	}
 	if _, err := Triage(t.Context(), d.Read, Filter{Stage: "llm", Agreement: "gone"}); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestFolders(t *testing.T) {
+	d := rulestest.DB(t)
+	filed(t, d, 1, "Fresh", "a@x.test", "d1")
+	got, err := Folders(t.Context(), d.Read, "icloud")
+	if err != nil || fmt.Sprint(got) != "[{Fresh 1}]" {
+		t.Errorf("Folders = %v, %v", got, err)
+	}
+	if got, err := Folders(t.Context(), d.Read, "gmail"); err != nil || got == nil || strings.TrimSpace(fmt.Sprint(got)) != "[]" {
+		t.Errorf("empty Folders = %v, %v", got, err)
 	}
 }

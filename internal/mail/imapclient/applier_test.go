@@ -113,6 +113,7 @@ S: Message-ID: <m1@x.test>
 S: )
 S: {t} OK FETCH completed
 `+appliedList+appliedList+`C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 301 "Bills"
 S: {t} OK [COPYUID 99 301 500] Done
@@ -152,6 +153,7 @@ S: Message-ID: <m1@x.test>
 S: )
 S: {t} OK FETCH completed
 `+appliedList+appliedList+`C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 301 "Bills"
 S: {t} OK [COPYUID 99 301 500] Done
@@ -198,6 +200,7 @@ S: * LIST (\All \HasNoChildren) "/" "[Gmail]/All Mail"
 S: * LIST (\HasNoChildren \Trash) "/" "[Gmail]/Trash"
 S: {t} OK Success
 C: {t} SELECT "[Gmail]/All Mail"
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] [Gmail]/All Mail selected. (Success)
 C: {t} UID STORE 101 +X-GM-LABELS ("Receipts")
 S: * 1 FETCH (UID 101 X-GM-LABELS (\Inbox "Receipts"))
@@ -216,6 +219,89 @@ S: {t} OK Success
 	got := actionRows(t, d)
 	want := `1||{"add": ["Receipts"], "remove": ["\\Inbox"]}|{"op": "gmail_labels", "imap_name": "[Gmail]/All Mail", "uidvalidity": 7, ` +
 		`"uids": [101], "add": ["\\Inbox"], "remove": ["Receipts"]}`
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("auto_actions = %q", got)
+	}
+}
+
+func TestApplierRelabelRefusesWhenUIDValidityDiffersWire(t *testing.T) {
+	ctx := context.Background()
+	script := gmailLogin + `C/ ^{t} STATUS "\[Gmail\]/All Mail" \((UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)( (UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)){3}\)$
+S: * STATUS "[Gmail]/All Mail" (MESSAGES 1 UIDNEXT 102 UIDVALIDITY 7 HIGHESTMODSEQ 9)
+S: {t} OK Success
+C: {t} EXAMINE "[Gmail]/All Mail"
+S: {t} OK [READ-ONLY] [Gmail]/All Mail selected. (Success)
+C: {t} UID SEARCH UID 101
+S: * SEARCH 101
+S: {t} OK SEARCH completed (Success)
+C/ ^{t} UID FETCH 101 \((UID|FLAGS|BODY\.PEEK\[HEADER\]|X-GM-LABELS)( (UID|FLAGS|BODY\.PEEK\[HEADER\]|X-GM-LABELS)){3}\)$
+S: * 1 FETCH (UID 101 X-GM-LABELS (\Inbox) FLAGS (\Seen) BODY[HEADER] {25}
+S: Message-ID: <m1@x.test>
+S: )
+S: {t} OK Success
+C: {t} LIST "" "*"
+S: * LIST (\HasNoChildren) "/" "INBOX"
+S: * LIST (\All \HasNoChildren) "/" "[Gmail]/All Mail"
+S: * LIST (\HasNoChildren \Trash) "/" "[Gmail]/Trash"
+S: {t} OK Success
+C: {t} SELECT "[Gmail]/All Mail"
+S: * OK [UIDVALIDITY 8] UIDs valid
+S: {t} OK [READ-WRITE] [Gmail]/All Mail selected. (Success)
+` + logout
+	client, _ := session(t, imapscript.MustParse(t, script), "atrium.test@gmail.com", "app password", live)
+	a, d, _ := wireApplier(t, config.Gmail, client, nil, [2]any{101, "Receipts"})
+	out, err := a.ApplyAccount(ctx, config.Gmail)
+	must(t, err)
+	if out.Written != 0 || out.Failed != 1 {
+		t.Fatalf("outcome %+v", out)
+	}
+	got := actionRows(t, d)
+	want := "0|MailOpError: UIDVALIDITY changed||"
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("auto_actions = %q", got)
+	}
+}
+
+func TestApplierGmailTrashRefusesWhenUIDValidityDiffersWire(t *testing.T) {
+	ctx := context.Background()
+	script := gmailLogin + `C/ ^{t} STATUS "\[Gmail\]/All Mail" \((UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)( (UIDVALIDITY|UIDNEXT|MESSAGES|HIGHESTMODSEQ)){3}\)$
+S: * STATUS "[Gmail]/All Mail" (MESSAGES 1 UIDNEXT 102 UIDVALIDITY 7 HIGHESTMODSEQ 9)
+S: {t} OK Success
+C: {t} EXAMINE "[Gmail]/All Mail"
+S: {t} OK [READ-ONLY] [Gmail]/All Mail selected. (Success)
+C: {t} UID SEARCH UID 101
+S: * SEARCH 101
+S: {t} OK SEARCH completed (Success)
+C/ ^{t} UID FETCH 101 \((UID|FLAGS|BODY\.PEEK\[HEADER\]|X-GM-LABELS)( (UID|FLAGS|BODY\.PEEK\[HEADER\]|X-GM-LABELS)){3}\)$
+S: * 1 FETCH (UID 101 X-GM-LABELS (\Inbox) FLAGS (\Seen) BODY[HEADER] {25}
+S: Message-ID: <m1@x.test>
+S: )
+S: {t} OK Success
+C: {t} LIST "" "*"
+S: * LIST (\HasNoChildren) "/" "INBOX"
+S: * LIST (\All \HasNoChildren) "/" "[Gmail]/All Mail"
+S: * LIST (\HasNoChildren \Trash) "/" "[Gmail]/Trash"
+S: {t} OK Success
+C: {t} LIST "" "*"
+S: * LIST (\HasNoChildren) "/" "INBOX"
+S: * LIST (\All \HasNoChildren) "/" "[Gmail]/All Mail"
+S: * LIST (\HasNoChildren \Trash) "/" "[Gmail]/Trash"
+S: {t} OK Success
+C: {t} SELECT "[Gmail]/All Mail"
+S: * OK [UIDVALIDITY 8] UIDs valid
+S: {t} OK [READ-WRITE] [Gmail]/All Mail selected. (Success)
+` + logout
+	client, _ := session(t, imapscript.MustParse(t, script), "atrium.test@gmail.com", "app password", live)
+	a, d, _ := wireApplier(t, config.Gmail, client, nil, [2]any{101, "Receipts"})
+	_, err := d.Write.Exec("UPDATE decisions SET action = 'delete', dest = NULL")
+	must(t, err)
+	out, aerr := a.ApplyAccount(ctx, config.Gmail)
+	must(t, aerr)
+	if out.Written != 0 || out.Failed != 1 {
+		t.Fatalf("outcome %+v", out)
+	}
+	got := actionRows(t, d)
+	want := "0|MailOpError: UIDVALIDITY changed||"
 	if len(got) != 1 || got[0] != want {
 		t.Fatalf("auto_actions = %q", got)
 	}
@@ -242,6 +328,7 @@ S: Message-ID: <m2@x.test>
 S: )
 S: {t} OK FETCH completed
 `+appliedList+appliedList+`C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 301 "Bills"
 S: {t} OK [COPYUID 99 301 500] Done

@@ -437,12 +437,12 @@
 
 <header class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
   <a href="/chat" class="btn" data-size="sm" data-variant="ghost"><svg class="lucide lucide-arrow-left " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>Threads</a>
-  <span class="badge" data-variant="outline">chat</span>
+  <span class="badge" data-variant="outline">Chat</span>
   <span class="tabular-nums">started <time datetime="2025-10-07T08:53:20+00:00">2025-10-07 08:53</time></span>
   
 <span id="meter" class="flex items-center gap-2 tabular-nums" title="Prompt tokens of the last request against the point where the context is compacted (80000 of the 90000 limit)">
   <span class="badge" data-variant="outline">effort high</span>
-  <span class="flex items-center gap-1.5" aria-label="Context used">
+  <span class="flex items-center gap-1.5" role="img" aria-label="Context used: 1.0K of 80K">
     <span class="h-1.5 w-16 overflow-hidden rounded-full bg-muted" aria-hidden="true"><span class="block h-full rounded-full bg-chart-3" style="width: 1%"></span></span>
     <span>1.0K / 80K</span>
   </span>
@@ -481,10 +481,10 @@
       <button type="submit" class="btn" data-size="sm" data-variant="ghost"><svg class="lucide lucide-trash-2 " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete</button>
     </form>
     
-    <button type="button" class="btn md:hidden" data-size="sm" data-variant="outline" data-action="toggle-panel" aria-controls="panel" aria-expanded="false"><svg class="lucide lucide-panel-right " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>Panel</button>
+    <button type="button" class="btn md:hidden" data-size="sm" data-variant="outline" id="panel-toggle" data-action="toggle-panel" aria-controls="panel" aria-expanded="false"><svg class="lucide lucide-panel-right " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>Panel</button>
   </span>
 </header>
-<ol id="transcript" class="flex flex-col gap-4" aria-live="polite" aria-label="Conversation" data-thread="7">
+<ol id="transcript" class="flex flex-col gap-4" aria-label="Conversation" data-thread="7">
   
 
 
@@ -551,15 +551,15 @@ second line Fish &amp;amp; chips &amp;lt;3 &amp;#x27; &amp;copy;</div>
     <ol class="flex flex-wrap gap-2 text-xs" aria-label="Sources">
       
       
-      <li><a class="badge" data-variant="secondary" href="https://example.com/x?y=1&amp;z=2" target="_blank" rel="noopener noreferrer">[1] <svg class="lucide lucide-external-link size-3" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>This deliberately long text keeps going so truncation,...</a></li>
+      <li class="min-w-0 max-w-full"><a class="badge max-w-full" data-variant="secondary" href="https://example.com/x?y=1&amp;z=2" target="_blank" rel="noopener noreferrer" title="This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised"><span class="shrink-0">[1]</span> <svg class="lucide lucide-external-link size-3" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg><span class="truncate">This deliberately long text keeps going so truncation,...</span></a></li>
       
       
       
-      <li><span class="badge" data-variant="secondary" title="He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt; This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised">[2] <svg class="lucide lucide-file-text size-3" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>Local note about something quite...: “He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt; This deliberately long...”</span></li>
+      <li class="min-w-0 max-w-full"><span class="badge max-w-full" data-variant="secondary" title="He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt; This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised This deliberately long text keeps going so truncation, wrapping and line clamping all get exercised"><span class="shrink-0">[2]</span> <svg class="lucide lucide-file-text size-3" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg><span class="truncate">Local note about something quite...: “He said &#34;hi&#34; &amp; &#39;bye&#39; &lt;b&gt;bold&lt;/b&gt; This deliberately long...”</span></span></li>
       
       
       
-      <li><a class="badge" data-variant="secondary" href="javascript:alert(document.cookie)" target="_blank" rel="noopener noreferrer">[3] <svg class="lucide lucide-external-link size-3" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</a></li>
+      <li class="min-w-0 max-w-full"><a class="badge max-w-full" data-variant="secondary" href="javascript:alert(document.cookie)" target="_blank" rel="noopener noreferrer" title="&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;"><span class="shrink-0">[3]</span> <svg class="lucide lucide-external-link size-3" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg><span class="truncate">&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;</span></a></li>
       
       
     </ol>
@@ -761,6 +761,7 @@ line2 Café naïve — 東京 🎉 مرحبا</div></li>
 </li>
 
 </ol>
+<p id="transcript-announcer" class="sr-only" role="status"></p>
 
 <form id="composer" class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" method="post" action="/chat/7/messages" enctype="multipart/form-data"
       hx-post="/chat/7/messages" hx-encoding="multipart/form-data" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset data-attach>
@@ -800,7 +801,7 @@ line2 Café naïve — 東京 🎉 مرحبا</div></li>
 </form>
 
   </div>
-  <div id="panel-handle" class="hidden h-full w-1.5 cursor-col-resize rounded-full bg-border transition-colors hover:bg-ring md:block" role="separator" aria-orientation="vertical" aria-label="Resize panel" tabindex="0"></div>
+  <div id="panel-handle" class="hidden h-full w-1.5 cursor-col-resize rounded-full bg-border transition-colors hover:bg-ring md:block" role="separator" aria-orientation="vertical" aria-label="Resize panel" aria-valuemin="260" aria-valuenow="384" tabindex="0"></div>
   <div id="panel-backdrop" class="fixed inset-0 z-30 hidden bg-black/40 md:hidden" data-action="toggle-panel"></div>
   <aside id="panel" class="tabs flex-col gap-3 rounded-lg border bg-card p-3 max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-40 max-md:w-[88vw] max-md:max-w-sm max-md:overflow-y-auto max-md:rounded-none max-md:shadow-xl max-md:hidden max-md:data-open:flex md:sticky md:top-20 md:flex md:max-h-[calc(100dvh-6rem)] md:overflow-y-auto" aria-label="Thread workspace">
     <nav role="tablist" aria-orientation="horizontal" class="w-full">

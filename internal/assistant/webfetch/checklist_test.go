@@ -11,8 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 )
 
-// refusedWithoutConnecting runs every URL through a fetcher whose connections are scripted and expects Blocked
-// before any connection is opened.
 func refusedWithoutConnecting(t *testing.T, dns map[string][]string, urls ...string) {
 	t.Helper()
 	for _, url := range urls {
@@ -28,7 +26,6 @@ func refusedWithoutConnecting(t *testing.T, dns map[string][]string, urls ...str
 	}
 }
 
-// The checklist of the #130 acceptance, one subtest per case.
 func TestSSRFChecklist(t *testing.T) {
 	dns := map[string][]string{
 		"example.test":          {"93.184.216.34"},

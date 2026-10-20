@@ -1,7 +1,3 @@
-// Package readpaths is the registry of the queries each module's read paths
-// issue, so one harness can run them all against a copy of any atrium.db
-// and compare them with what the frozen Python app returned
-// (testdata/golden/db/readpaths.json).
 package readpaths
 
 import (
@@ -15,9 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
-// Path is one read path. Golden names its entry in readpaths.json; Want
-// turns that entry into the value Run must return, or is nil when Run
-// returns the entry itself.
 type Path struct {
 	Name   string
 	Golden string
@@ -30,7 +23,6 @@ var (
 	paths = map[string]Path{}
 )
 
-// Register adds p; a module calls it from init. A duplicate name panics.
 func Register(p Path) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -43,7 +35,6 @@ func Register(p Path) {
 	paths[p.Name] = p
 }
 
-// All returns every registered path by name.
 func All() []Path {
 	mu.Lock()
 	defer mu.Unlock()
@@ -55,7 +46,6 @@ func All() []Path {
 	return out
 }
 
-// Expected is p's wanted value for the recorded readpaths.json entries.
 func (p Path) Expected(recorded map[string]json.RawMessage) ([]byte, error) {
 	raw, ok := recorded[p.Golden]
 	if !ok {
@@ -71,7 +61,6 @@ func (p Path) Expected(recorded map[string]json.RawMessage) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-// Result runs p and encodes what it returned.
 func (p Path) Result(ctx context.Context, d *db.DB) ([]byte, error) {
 	v, err := p.Run(ctx, d)
 	if err != nil {

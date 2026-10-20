@@ -4,7 +4,6 @@ import "time"
 
 func ascii(r rune, lo, hi rune) bool { return r >= lo && r <= hi }
 
-// monthTexts are the prefixes of s the alternatives 1[0-2]|0[1-9]|[1-9] match, in that order.
 func monthTexts(s []rune) [][]rune {
 	var out [][]rune
 	if len(s) >= 2 && (s[0] == '1' && ascii(s[1], '0', '2') || s[0] == '0' && ascii(s[1], '1', '9')) {
@@ -16,7 +15,6 @@ func monthTexts(s []rune) [][]rune {
 	return out
 }
 
-// dayText reports whether s is one of 3[0-1]|[1-2]\d|0[1-9]|[1-9]| [1-9] and its value.
 func dayText(s []rune) (int, bool) {
 	switch len(s) {
 	case 1:
@@ -34,8 +32,6 @@ func dayText(s []rune) (int, bool) {
 	return 0, false
 }
 
-// StrptimeDate is datetime.strptime(value, "%Y-%m-%d"): a four-digit year (\d, so any Unicode decimal digit), a
-// one- or two-digit month and day, and nothing after; a day the month lacks fails as ValueError does.
 func StrptimeDate(value string) (DateTime, bool) {
 	r := []rune(value)
 	if len(r) < 6 || r[4] != '-' {

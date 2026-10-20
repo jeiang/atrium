@@ -22,10 +22,6 @@ var migrations = []migration{
 
 const schemaMigrationsDDL = "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at REAL NOT NULL)"
 
-// Migrate applies the pending schema migrations of the database at path,
-// then seeds the built-in rows. Call it once at process start. Only a
-// pending migration takes the atrium.db.lock flock; each one is applied in
-// its own transaction and recorded in schema_migrations.
 func Migrate(ctx context.Context, d *DB, path string) error {
 	applied, err := appliedVersions(ctx, d.Read)
 	if err != nil {
@@ -104,10 +100,6 @@ func applyPending(ctx context.Context, d *DB, path string) error {
 	return nil
 }
 
-// pythonSchema is migration 0001: Python's schema pass, which creates the
-// frozen schema on an empty database and brings a Python-made one, legacy
-// shapes included, to it; then the result must hold every table, column,
-// index, FTS5 and vec0 table a fresh database has.
 func pythonSchema(ctx context.Context, tx *sql.Tx) error {
 	if err := initSchema(ctx, tx); err != nil {
 		return err

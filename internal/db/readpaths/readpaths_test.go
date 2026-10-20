@@ -10,8 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/db/readpaths"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 
-	_ "github.com/jeiang/atrium/internal/assistant/pages"
-	_ "github.com/jeiang/atrium/internal/mail/drafts"
+	_ "github.com/jeiang/atrium/internal/db/readpaths/goldenpaths"
 )
 
 func TestGoldenReadPaths(t *testing.T) {
@@ -35,6 +34,7 @@ func TestGoldenReadPaths(t *testing.T) {
 			d, path := dbtest.Copy(t, filepath.Join(golden.Dir(), c.db))
 			t.Setenv("ATRIUM_DB", path)
 			t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(golden.Dir(), "state", "cache"))
+			t.Setenv("ATRIUM_CONTACTS_DIR", filepath.Join(golden.Dir(), "state", "contacts"))
 			for _, p := range paths {
 				t.Run(p.Name, func(t *testing.T) {
 					want, err := p.Expected(recorded)

@@ -43,7 +43,6 @@ func (s *service) notFound(w http.ResponseWriter, r *http.Request, found bool, w
 
 func (s *service) loopsPage(w http.ResponseWriter, r *http.Request) { s.showLoops(w, r, nil) }
 
-// clampDays is max(1, min(days, 60)) on an integer of any size.
 func clampDays(n *big.Int) int64 {
 	switch {
 	case n.Cmp(big.NewInt(1)) < 0:

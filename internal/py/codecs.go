@@ -9,13 +9,10 @@ import (
 
 const b64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
-// BinasciiError is binascii.Error.
 type BinasciiError string
 
 func (e BinasciiError) Error() string { return string(e) }
 
-// B64Decode is base64.b64decode(s) for a str: binascii's non-strict a2b_base64, which skips characters outside
-// the alphabet and stops at complete padding.
 func B64Decode(s string) ([]byte, error) {
 	for _, r := range s {
 		if r > 0x7f {
@@ -64,7 +61,6 @@ func B64Decode(s string) ([]byte, error) {
 	return nil, BinasciiError("Incorrect padding")
 }
 
-// DecodeUTF16BE is bytes.decode("utf-16-be") with strict errors.
 func DecodeUTF16BE(b []byte) (string, error) {
 	if len(b)%2 != 0 {
 		return "", fmt.Errorf("'utf-16-be' codec can't decode byte 0x%02x in position %d: truncated data", b[len(b)-1], len(b)-1)

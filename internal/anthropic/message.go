@@ -5,7 +5,6 @@ import (
 	"fmt"
 )
 
-// Message is a response as the wire carried it; Content holds each block's JSON for the journal.
 type Message struct {
 	ID                string             `json:"id"`
 	Model             string             `json:"model"`

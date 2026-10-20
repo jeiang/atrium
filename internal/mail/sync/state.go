@@ -13,7 +13,6 @@ var systemRoles = map[string]bool{"trash": true, "sent": true, "drafts": true, "
 
 var indexedSystemRoles = map[string]bool{"sent": true}
 
-// State is message_state: the columns a message's flags and labels determine.
 type State struct {
 	Seen, Flagged, InInbox, Sent int
 	Location                     string
@@ -28,7 +27,6 @@ func bit(b bool) int {
 	return 0
 }
 
-// MessageState is sync.message_state. A nil labels is Python's None.
 func MessageState(account, role, mailboxName string, flags, labels []string) State {
 	var st State
 	st.Seen = bit(slices.Contains(flags, `\Seen`))

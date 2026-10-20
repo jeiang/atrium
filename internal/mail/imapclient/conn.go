@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -579,18 +580,23 @@ func (c *conn) Status(ctx context.Context, imapName string) (mail.Status, error)
 }
 
 func (c *conn) Select(ctx context.Context, imapName string) error {
-	return c.run(ctx, func() error { return c.selectBox(imapName, true) })
+	return c.run(ctx, func() error { _, err := c.selectBox(imapName, true); return err })
 }
 
-func (c *conn) SelectRW(ctx context.Context, imapName string) error {
-	return c.run(ctx, func() error { return c.selectBox(imapName, false) })
+func (c *conn) SelectRW(ctx context.Context, imapName string) (uint32, error) {
+	var validity uint32
+	err := c.run(ctx, func() (err error) {
+		validity, err = c.selectBox(imapName, false)
+		return err
+	})
+	return validity, err
 }
 
 // selectBox is IMAP4.select as ImapClient.select and select_rw call it.
-func (c *conn) selectBox(imapName string, readonly bool) error {
+func (c *conn) selectBox(imapName string, readonly bool) (uint32, error) {
 	name, err := mailboxArg(imapName)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	c.ur, c.readonly = store{}, readonly
 	command := "SELECT"
@@ -598,22 +604,41 @@ func (c *conn) selectBox(imapName string, readonly bool) error {
 		command = "EXAMINE"
 	}
 	if err := c.begin(command); err != nil {
-		return err
+		return 0, err
 	}
-	_, werr := c.cl.Select(name, &imap.SelectOptions{ReadOnly: readonly}).Wait()
+	data, werr := c.cl.Select(name, &imap.SelectOptions{ReadOnly: readonly}).Wait()
 	typ, dat, err := c.complete(command)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if typ != "OK" {
 		c.state = "AUTH"
-		return okError(typ, dat)
+		return 0, okError(typ, dat)
 	}
 	c.state = "SELECTED"
 	if _, ok := c.ur["READ-ONLY"]; ok && !readonly {
-		return pyReadonly("%s is not writable", py.Repr(quoteName(imapName)))
+		return 0, pyReadonly("%s is not writable", py.Repr(quoteName(imapName)))
 	}
-	return goErr(werr)
+	if err := goErr(werr); err != nil || readonly {
+		return 0, err
+	}
+	validity := selectedValidity(data, c.ur)
+	if validity == 0 {
+		return 0, pyAbort("SELECT did not report UIDVALIDITY")
+	}
+	return validity, nil
+}
+
+func selectedValidity(data *imap.SelectData, ur store) uint32 {
+	if data != nil && data.UIDValidity != 0 {
+		return data.UIDValidity
+	}
+	for _, d := range ur["UIDVALIDITY"] {
+		if n, err := strconv.ParseUint(strings.TrimSpace(string(d.text)), 10, 32); err == nil {
+			return uint32(n)
+		}
+	}
+	return 0
 }
 
 func (c *conn) UIDSearch(ctx context.Context, criteria mail.SearchCriteria) ([]uint32, error) {

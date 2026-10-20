@@ -1,5 +1,3 @@
-// Package usage is agent/usage.py: the usage ledger, one row per billed model call, priced from the price
-// table, and the month-to-date sums the budget reads.
 package usage
 
 import (
@@ -14,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Entry is the call a usage row describes; Record adds the tokens, searches, tier and cost.
 type Entry struct {
 	TS            float64
 	ThreadID      int64
@@ -35,12 +32,10 @@ func tokensOf(input, creation, read, output int64, split *anthropic.CacheCreatio
 	return t
 }
 
-// TokensOf is tokens_of for a response's top-level usage.
 func TokensOf(u anthropic.Usage) pricing.Tokens {
 	return tokensOf(u.InputTokens, u.CacheCreationInputTokens, u.CacheReadInputTokens, u.OutputTokens, u.CacheCreation)
 }
 
-// SearchesOf is searches_of: the web searches the response ran.
 func SearchesOf(u anthropic.Usage) int64 {
 	if u.ServerToolUse == nil {
 		return 0
@@ -48,8 +43,6 @@ func SearchesOf(u anthropic.Usage) int64 {
 	return u.ServerToolUse.WebSearchRequests
 }
 
-// BilledEntries is billed_entries: one entry per usage.iterations item (a compaction response bills its
-// summarising iteration separately from the message itself), else the top-level usage.
 func BilledEntries(u anthropic.Usage) []pricing.Tokens {
 	if len(u.Iterations) == 0 {
 		return []pricing.Tokens{TokensOf(u)}
@@ -61,7 +54,6 @@ func BilledEntries(u anthropic.Usage) []pricing.Tokens {
 	return out
 }
 
-// Record is record: it prices every billed entry on its own tier, writes the summed row and returns its cost.
 func Record(ctx context.Context, q db.Querier, e Entry, u anthropic.Usage) (float64, error) {
 	entries := BilledEntries(u)
 	var sum pricing.Tokens
@@ -94,8 +86,6 @@ func Record(ctx context.Context, q db.Querier, e Entry, u anthropic.Usage) (floa
 	return cost, nil
 }
 
-// MonthStart is month_start: local midnight on the first of the month that now falls in, in loc (the
-// ATRIUM_TZ zone), as a timestamp.
 func MonthStart(now float64, loc *time.Location) float64 {
 	sec, us := py.SplitTimestamp(now)
 	year, month, _ := time.Unix(sec, us*1000).In(loc).Date()
@@ -103,21 +93,18 @@ func MonthStart(now float64, loc *time.Location) float64 {
 	return float64(py.WallToUnix(loc, wall))
 }
 
-// MonthToDate is month_to_date: what the month has cost so far.
 func MonthToDate(ctx context.Context, q db.Querier, now float64, loc *time.Location) (float64, error) {
 	var cost float64
 	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE ts >= ?", MonthStart(now, loc)).Scan(&cost)
 	return cost, err
 }
 
-// RunCost is run_cost: what one run has cost.
 func RunCost(ctx context.Context, q db.Querier, runID int64) (float64, error) {
 	var cost float64
 	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE run_id = ?", runID).Scan(&cost)
 	return cost, err
 }
 
-// Summary is the month's usage totals.
 type Summary struct {
 	Calls          int64   `json:"calls"`
 	Cost           float64 `json:"cost"`
@@ -135,7 +122,6 @@ const summarySQL = "SELECT COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost
 	"COALESCE(SUM(output_tokens), 0) AS output_tokens, COALESCE(SUM(searches), 0) AS searches, " +
 	"COALESCE(SUM(tier = ?), 0) AS high_tier FROM usage WHERE ts >= ?"
 
-// MonthSummary is summary.
 func MonthSummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
 	var s Summary
 	err := q.QueryRowContext(ctx, summarySQL, pricing.TierHigh, MonthStart(now, loc)).Scan(
@@ -149,7 +135,6 @@ func MonthSummary(ctx context.Context, q db.Querier, now float64, loc *time.Loca
 	return s, nil
 }
 
-// KindRow is one run kind's month.
 type KindRow struct {
 	Kind     string  `json:"kind"`
 	Calls    int64   `json:"calls"`
@@ -157,7 +142,6 @@ type KindRow struct {
 	Searches int64   `json:"searches"`
 }
 
-// ByKind is by_kind: the month grouped by run kind, dearest first.
 func ByKind(ctx context.Context, q db.Querier, now float64, loc *time.Location) ([]KindRow, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT kind, COUNT(*) AS calls, SUM(cost_usd) AS cost, SUM(searches) AS searches FROM usage "+
@@ -171,7 +155,6 @@ func ByKind(ctx context.Context, q db.Querier, now float64, loc *time.Location) 
 	})
 }
 
-// ThreadRow is one thread's month.
 type ThreadRow struct {
 	ThreadID        int64   `json:"thread_id"`
 	Title           *string `json:"title"`
@@ -184,7 +167,6 @@ type ThreadRow struct {
 	Searches        int64   `json:"searches"`
 }
 
-// ByThread is by_thread: the month grouped by thread, dearest first, at most limit threads (Python's default is 50).
 func ByThread(ctx context.Context, q db.Querier, now float64, loc *time.Location, limit int) ([]ThreadRow, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT u.thread_id, t.title, t.kind, COUNT(*) AS calls, SUM(u.cost_usd) AS cost, "+
@@ -202,5 +184,4 @@ func ByThread(ctx context.Context, q db.Querier, now float64, loc *time.Location
 	})
 }
 
-// DefaultThreadLimit is by_thread's default limit.
 const DefaultThreadLimit = 50

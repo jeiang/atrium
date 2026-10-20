@@ -146,6 +146,7 @@ S: {t} OK CREATE completed
 C: {t} SUBSCRIBE "Receipts/Shop"
 S: {t} OK SUBSCRIBE completed
 C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 301:302 "Receipts/Shop"
 S: {t} OK [COPYUID 9 301:302 1:2] Done
@@ -162,6 +163,7 @@ C: {t} UID SEARCH UID 500
 S: * SEARCH 500
 S: {t} OK SEARCH completed
 C: {t} SELECT "Bills"
+S: * OK [UIDVALIDITY 99] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 500 INBOX
 S: {t} OK [COPYUID 7 500 40] Done
@@ -240,6 +242,7 @@ S: {t} OK CREATE completed
 C: {t} SUBSCRIBE "Receipts/Shop"
 S: {t} OK SUBSCRIBE completed
 C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 `
 
@@ -312,6 +315,7 @@ C: {t} UID SEARCH UID 500
 S: * SEARCH 500
 S: {t} OK SEARCH completed
 C: {t} SELECT "Bills"
+S: * OK [UIDVALIDITY 99] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 500 INBOX
 ! sleep 1s

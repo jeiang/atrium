@@ -13,11 +13,9 @@ import (
 	"github.com/jeiang/atrium/internal/mail/deletions"
 	"github.com/jeiang/atrium/internal/mail/gmaillabels"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
-	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
-// The clocks of make_db_mail.py's scan_all steps (manifest.json clock.steps scan1 and scan2).
 const (
 	scan1 = 1_792_096_200.0
 	scan2 = 1_793_392_200.0
@@ -50,9 +48,6 @@ func storedProposals(t *testing.T, d *db.DB) map[string]stored {
 	return out
 }
 
-// TestScannersRebuildTheGoldenProposals deletes the proposals make_db.py's scans created and runs the scanners
-// again at the clocks Python ran them: deletions and Gmail labels at scan1, rebalance (on its second run) at
-// scan2 with the scripted folder name.
 func TestScannersRebuildTheGoldenProposals(t *testing.T) {
 	d, _ := dbtest.Copy(t, filepath.Join(golden.Dir(), "atrium.db"))
 	want := storedProposals(t, d)
@@ -63,9 +58,6 @@ func TestScannersRebuildTheGoldenProposals(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	saved := rules.Now
-	rules.Now = func() float64 { return scan1 }
-	defer func() { rules.Now = saved }()
 	if _, err := deletions.Scan(ctx, d, scan1); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +68,6 @@ func TestScannersRebuildTheGoldenProposals(t *testing.T) {
 		_, _ = w.Write([]byte(`{"choices": [{"message": {"content": "{\"name\": \"Shop B\"}"}}]}`))
 	}))
 	defer model.Close()
-	rules.Now = func() float64 { return scan2 }
 	if _, err := rebalance.Scan(ctx, d, scan2, rebalance.SuggestName(model.URL)); err != nil {
 		t.Fatal(err)
 	}

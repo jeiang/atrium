@@ -23,7 +23,6 @@ func html(title, body string) string {
 	return "<html><head><title>" + title + "</title></head><body><p>" + body + "</p></body></html>"
 }
 
-// siteFetcher serves each page at "<scheme> <host> <port> <target>" through a scripted connection.
 func siteFetcher(pages map[string]string, connections *[]connectionRecord) *webfetch.Fetcher {
 	responses := map[string]scriptedResponse{}
 	for key, markup := range pages {
@@ -147,8 +146,6 @@ func TestNonHTTPSchemeIsRefusedEvenIfListed(t *testing.T) {
 	}
 }
 
-// Operator-written cron prompts put their URLs in the thread's allowed set; the tool fetches those and nothing a
-// fetched page, a file or a mail names.
 func TestCronThreadFetchesOnlyTheOperatorsURLs(t *testing.T) {
 	d := dbtest.Schema(t)
 	ctx := t.Context()

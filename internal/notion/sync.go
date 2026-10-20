@@ -30,7 +30,6 @@ const (
 
 var noMarkdownStatuses = [...]int{400, 403, 404}
 
-// Stats is SyncStats, in the order the command prints it.
 type Stats struct {
 	Sources   int
 	Pages     int
@@ -43,7 +42,6 @@ type Stats struct {
 	Seconds   float64
 }
 
-// Counts is counts: the mirror's totals.
 type Counts struct {
 	Pages    int64 `json:"pages"`
 	Live     int64 `json:"live"`
@@ -52,7 +50,6 @@ type Counts struct {
 	Sources  int64 `json:"sources"`
 }
 
-// PageTitle is page_title.
 func PageTitle(page py.Dict) string {
 	for _, p := range asDict(field(page, "properties")) {
 		prop := asDict(p.Value)
@@ -65,7 +62,6 @@ func PageTitle(page py.Dict) string {
 
 func sourceTitle(source py.Dict) string { return py.Strip(richText(list(source, "title"))) }
 
-// SensitivityOf is sensitivity_of.
 func SensitivityOf(properties py.Dict) string {
 	for _, p := range properties {
 		if py.Lower(py.Strip(p.Key)) != sensitivityProperty {
@@ -92,7 +88,6 @@ func SensitivityOf(properties py.Dict) string {
 	return ""
 }
 
-// IsPrivateValue is is_private_value.
 func IsPrivateValue(value string) bool {
 	for _, v := range strings.Split(value, ",") {
 		if py.Lower(py.Strip(v)) == privateValue {
@@ -175,8 +170,6 @@ func upsertSource(ctx context.Context, q db.Querier, source py.Dict) error {
 	return err
 }
 
-// FetchMarkdown is fetch_markdown: the page text from the markdown endpoint, or from its blocks when the
-// endpoint refuses the page.
 func FetchMarkdown(ctx context.Context, client *Client, pageID string) (string, error) {
 	reply, err := client.PageMarkdown(ctx, pageID)
 	if err == nil {
@@ -430,8 +423,6 @@ func orUntitled(title string) string {
 
 func now() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
-// Sync is sync: the workspace's data sources and pages into the mirror tables, paths and privacy resolved, and
-// the pages that changed embedded. An embeddings server that is down leaves them for the next run.
 func Sync(ctx context.Context, d *db.DB, cfg config.Config, client *Client, embedTexts embed.TextsFunc) (Stats, error) {
 	if embedTexts == nil {
 		embedTexts = embed.Texts
@@ -521,7 +512,6 @@ func Sync(ctx context.Context, d *db.DB, cfg config.Config, client *Client, embe
 	return stats, nil
 }
 
-// Totals is counts.
 func Totals(ctx context.Context, q db.Querier) (Counts, error) {
 	var c Counts
 	err := q.QueryRowContext(ctx,
@@ -534,7 +524,6 @@ func Totals(ctx context.Context, q db.Querier) (Counts, error) {
 	return c, err
 }
 
-// Pending is pending_count: the live pages not embedded yet.
 func Pending(ctx context.Context, q db.Querier) (int64, error) {
 	var n int64
 	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM notion_pages WHERE embedded = 0 AND in_trash = 0").Scan(&n)

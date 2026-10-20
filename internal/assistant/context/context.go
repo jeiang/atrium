@@ -1,10 +1,3 @@
-// Package context is agent/context.py: what of a thread the model sees. Large tool results are stored and
-// stubbed, every request carries the server-side context-management edits (tool-result clearing and
-// compaction), the active message list is a projection of the journal (which is never rewritten) with the
-// agent's pins, drops and folds applied, and compaction rebuilds that projection on the server's pause or on
-// the client before a request would overflow.
-//
-// The package shares its name with the standard library's; importers alias it.
 package context
 
 import (
@@ -28,9 +21,6 @@ const (
 	StubNote      = "Result stored; call recall(result_id, offset, limit) to read it in pages."
 )
 
-// Thresholds are shares of the thread's context limit (operator choice; ModelContext caps it): tool-result
-// clearing from ClearShare, server compaction at CompactShare, client preflight compaction at PreflightShare,
-// and nothing is sent over the limit itself.
 const (
 	ModelContext          = 1_000_000
 	ClearShare            = 0.1875
@@ -60,7 +50,6 @@ const (
 	compactionTruncate    = " [truncated for compaction]"
 )
 
-// Ledger item kinds and states (active is implicit: no ledger row), and projection kinds.
 const (
 	ItemResult = "result"
 	ItemFold   = "fold"
@@ -90,14 +79,12 @@ const (
 	SummaryRequest = "The conversation above must be compacted. " + CompactionInstructions + "\nWrite the summary now."
 )
 
-// ContextError is context.ContextError: a refused context operation, shown to the model as the tool's error.
 type ContextError string
 
 func (e ContextError) Error() string { return string(e) }
 
 func (ContextError) PyClass() string { return "ContextError" }
 
-// Betas is list(BETAS): the beta flags every assistant request carries.
 func Betas() []string { return []string{BetaContextManagement, BetaCompaction} }
 
 var (
@@ -105,15 +92,12 @@ var (
 	valueJSON   = py.JSONOpts{NoEnsureASCII: true}
 )
 
-// EstimateTokens is estimate_tokens: four code points to a token, rounded up.
 func EstimateTokens(text string) int64 {
 	return (int64(utf8.RuneCountInString(text)) + CharsPerToken - 1) / CharsPerToken
 }
 
-// EstimateValue is estimate_value: the token estimate of v (a decoded JSON value) as json.dumps writes it.
 func EstimateValue(v any) int64 { return EstimateTokens(py.JSONDumps(v, valueJSON)) }
 
-// EstimateContent is estimate_value of a message's content blocks.
 func EstimateContent(content []json.RawMessage) (int64, error) {
 	values, err := decodeAll(content)
 	if err != nil {
@@ -122,8 +106,6 @@ func EstimateContent(content []json.RawMessage) (int64, error) {
 	return EstimateValue(values), nil
 }
 
-// Serialize is serialize: a string as is, anything else (a value py.JSONDumps encodes) as JSON with ", " and
-// ": " separators and non-ASCII kept.
 func Serialize(value any) string {
 	if s, ok := value.(string); ok {
 		return s
@@ -131,7 +113,6 @@ func Serialize(value any) string {
 	return py.JSONDumps(value, valueJSON)
 }
 
-// Store is store: it keeps body in tool_results and returns its result_id and token estimate.
 func Store(ctx gocontext.Context, q db.Querier, runID, callID int64, tool, body string, now float64) (int64, int64, error) {
 	tokens := EstimateTokens(body)
 	sum := sha256.Sum256([]byte(body))
@@ -145,8 +126,6 @@ func Store(ctx gocontext.Context, q db.Querier, runID, callID int64, tool, body 
 	return id, tokens, err
 }
 
-// Ingest is ingest: the tool_result content for a handler's value. Up to StubTokens it is the serialized
-// value itself; above, the body is stored and the content is a stub naming its result_id, which is returned.
 func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool string, value any, now float64) (string, *int64, error) {
 	body := Serialize(value)
 	if EstimateTokens(body) <= StubTokens {
@@ -166,7 +145,6 @@ func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool strin
 	return py.JSONDumps(stub, valueJSON), &resultID, nil
 }
 
-// Limits is limits_for's result: token thresholds for one thread.
 type Limits struct {
 	Hard         int64
 	Preflight    int64
@@ -175,7 +153,6 @@ type Limits struct {
 	ClearAtLeast int64
 }
 
-// LimitsFor is limits_for: the thresholds as shares of the thread's context limit, capped at ModelContext.
 func LimitsFor(contextLimit int64) Limits {
 	hard := min(contextLimit, ModelContext)
 	share := func(s float64) int64 { return int64(float64(hard) * s) }
@@ -192,7 +169,6 @@ func typed(kind string, value int64) py.Dict {
 	return py.Dict{{Key: "type", Value: kind}, {Key: "value", Value: value}}
 }
 
-// ContextManagement is context_management: the request's server-side edits, as the JSON value Python sends.
 func ContextManagement(l Limits) json.RawMessage {
 	edits := []any{
 		py.Dict{
@@ -213,8 +189,6 @@ func ContextManagement(l Limits) json.RawMessage {
 	return json.RawMessage(py.JSONDumps(py.Dict{{Key: "edits", Value: edits}}, compactJSON))
 }
 
-// ClearsOf is clears_of: how many clear_tool_uses edits the server applied to the response's request and
-// the input tokens they cleared.
 func ClearsOf(m *anthropic.Message) (int64, int64) {
 	if m == nil || m.ContextManagement == nil {
 		return 0, 0
@@ -229,8 +203,6 @@ func ClearsOf(m *anthropic.Message) (int64, int64) {
 	return count, cleared
 }
 
-// HistoryTokens is history_tokens: the size of the conversation after a response (its prompt plus its
-// output), from the response's top-level usage.
 func HistoryTokens(u anthropic.Usage) int64 {
 	t := usage.TokensOf(u)
 	return t.Input + t.CacheRead + t.CacheWrite5m + t.CacheWrite1h + t.Output
@@ -250,7 +222,6 @@ func decodeAll(content []json.RawMessage) ([]any, error) {
 
 func encode(v any) json.RawMessage { return json.RawMessage(py.JSONDumps(v, compactJSON)) }
 
-// str is str(v) of a decoded JSON value.
 func str(v any) string {
 	if s, ok := v.(string); ok {
 		return s

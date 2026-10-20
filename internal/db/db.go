@@ -38,16 +38,12 @@ func busyPragma(d time.Duration) string {
 	return fmt.Sprintf("PRAGMA busy_timeout = %d", d.Milliseconds())
 }
 
-// Checkpoint is the result of PRAGMA wal_checkpoint: Busy is true when a reader or writer kept it from finishing,
-// Frames is the WAL's length in frames and Done how many of them are in the database file.
 type Checkpoint struct {
 	Busy   bool
 	Frames int64
 	Done   int64
 }
 
-// Checkpoint runs PRAGMA wal_checkpoint(TRUNCATE) on the writer, waiting at most wait for readers, so a caller
-// holding a lock is not kept for the full busy timeout.
 func (d *DB) Checkpoint(ctx context.Context, wait time.Duration) (Checkpoint, error) {
 	conn, err := d.Write.Conn(ctx)
 	if err != nil {
@@ -67,19 +63,13 @@ func (d *DB) Checkpoint(ctx context.Context, wait time.Duration) (Checkpoint, er
 	return c, err
 }
 
-// DB is atrium.db: Write is the single writer connection, whose
-// transactions begin IMMEDIATE; Read is the reader pool and cannot write.
 type DB struct {
 	Write *sql.DB
 	Read  *sql.DB
 }
 
-// Connect opens the SQLite file at path, creating its directory, and sets
-// WAL once.
 func Connect(path string) (*DB, error) { return connect(path, true) }
 
-// ConnectNoForeignKeys is Connect without foreign key enforcement, as
-// Python's db.connect_memory; only tests that need that use it.
 func ConnectNoForeignKeys(path string) (*DB, error) { return connect(path, false) }
 
 func connect(path string, foreignKeys bool) (*DB, error) {
@@ -118,8 +108,6 @@ func setWAL(w *sql.DB) error {
 	}
 }
 
-// WithTx runs fn in an IMMEDIATE transaction on the writer, committing when
-// fn returns nil and rolling back on an error or panic.
 func (d *DB) WithTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	tx, err := d.Write.BeginTx(ctx, nil)
 	if err != nil {
@@ -132,7 +120,6 @@ func (d *DB) WithTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return tx.Commit()
 }
 
-// Lock is an advisory flock held until Close or process exit.
 type Lock struct{ f *os.File }
 
 type LockTimeout struct {
@@ -203,9 +190,6 @@ func Exclusive(ctx context.Context, path string, wait time.Duration) (*Lock, err
 
 func (l *Lock) Close() error { return l.f.Close() }
 
-// Open returns a pool on the SQLite file at path through the driver selected
-// at build time (open_cgo.go or open_modernc.go). Each pragma statement runs
-// on every new connection.
 func Open(path string, pragmas ...string) *sql.DB {
 	return sql.OpenDB(connector{drv: openDriver(), dsn: path, pragmas: pragmas})
 }
@@ -240,8 +224,6 @@ func (c connector) Connect(ctx context.Context) (driver.Conn, error) {
 	return conn, nil
 }
 
-// SerializeFloat32 encodes v as the little-endian float32 blob vec0 stores,
-// like sqlite_vec.serialize_float32.
 func SerializeFloat32(v []float32) []byte {
 	b := make([]byte, 4*len(v))
 	for i, f := range v {
@@ -250,15 +232,12 @@ func SerializeFloat32(v []float32) []byte {
 	return b
 }
 
-// Querier is what a *sql.DB, a *sql.Tx or a *sql.Conn offers: callers take it to run in the caller's transaction.
 type Querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// Collect scans every row of rows with scan, closes rows and returns the scanned values. Like a Python list
-// the result is never nil, so it encodes as [] when there are no rows.
 func Collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
 	defer func() { _ = rows.Close() }()
 	out := []T{}

@@ -1,5 +1,3 @@
-// Package backlog is backlog.py: the read Inbox mail that was already eligible at go-live becomes one
-// inbox_backlog proposal per account, since it is never filed automatically.
 package backlog
 
 import (
@@ -31,7 +29,6 @@ const candidates = "SELECT m.id, m.subject, m.from_name, m.from_addr, m.date_ts,
 	"AND m.id IN (SELECT message_id FROM live_baseline) " +
 	"AND " + live.NoNewCorrection + " AND " + live.NotBlocked + " ORDER BY m.id"
 
-// Error is BacklogError.
 type Error string
 
 func (e Error) Error() string { return string(e) }
@@ -40,7 +37,6 @@ func (Error) PyClass() string { return "BacklogError" }
 
 func (Error) PyModule() string { return "atrium.backlog" }
 
-// Proposal is what build returns: the inbox_backlog proposal for one account.
 type Proposal struct {
 	Fingerprint string
 	Account     string
@@ -54,7 +50,6 @@ type group struct {
 	rows []scanutil.Message
 }
 
-// Build is build: nil when the account has no backlog.
 func Build(ctx context.Context, q live.Querier, account string) (*Proposal, error) {
 	params, err := live.QueryParams(ctx, q, account)
 	if err != nil {
@@ -141,14 +136,11 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 	}, nil
 }
 
-// Result is backlog's outcome: the ids created and, per known account, its proposal id or nil.
 type Result struct {
 	Created  []int64 `json:"created"`
 	Accounts py.Dict `json:"accounts"`
 }
 
-// Backlog is backlog: one proposal per account in the accounts table, created at ts, the caller's clock (Python's
-// now()). It fails before go-live.
 func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 	out := Result{Created: []int64{}, Accounts: py.Dict{}}
 	golive, err := live.GetState(ctx, d.Write, live.GoliveKey)
@@ -198,8 +190,6 @@ func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 	return out, nil
 }
 
-// Refresh is refresh: the pending backlog proposals are dismissed at ts and the backlog is built again with the
-// same ts; the caller passes its clock once, where Python read now() for each.
 func Refresh(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 	if _, err := d.Write.ExecContext(ctx, "UPDATE proposals SET status = 'dismissed', decided_ts = ? WHERE kind = ? AND status = 'pending'",
 		ts, Kind); err != nil {

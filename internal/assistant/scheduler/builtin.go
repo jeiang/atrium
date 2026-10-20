@@ -20,7 +20,6 @@ const (
 	MediaThumbnailsName    = "media-thumbnails"
 )
 
-// Builtin is one seeded built-in job. A job in Callables runs a function instead of a model prompt.
 type Builtin struct {
 	Name, Schedule, Prompt string
 }
@@ -46,7 +45,6 @@ const dailyNudgesPrompt = "Daily nudges for the operator. " + prompts.Untrusted 
 	"a plain list (one line per item: who or what, the date, and the source message id when there is one), " +
 	"then reply with the same list."
 
-// BuiltinJobs is BUILTIN_JOBS.
 var BuiltinJobs = []Builtin{
 	{"weekly-review", "weekly sun 18:00", weeklyReviewPrompt},
 	{"daily-nudges", "daily 08:00", dailyNudgesPrompt},
@@ -57,10 +55,8 @@ var BuiltinJobs = []Builtin{
 	{MediaThumbnailsName, "daily 04:00", "Daily: generate missing episode thumbnails for the media library (no model run)."},
 }
 
-// CallableNames are the built-in jobs that run a function (CALLABLES' keys).
 var CallableNames = []string{CalendarCandidatesName, FXRatesName, MediaChannelsName, MediaSweepName, MediaThumbnailsName}
 
-// BuiltinPrompt is the prompt a built-in prompt job runs: it lives in code so an upgrade reaches existing jobs.
 func BuiltinPrompt(name string) (string, bool) {
 	for _, b := range BuiltinJobs {
 		if b.Name == name {
@@ -70,7 +66,6 @@ func BuiltinPrompt(name string) (string, bool) {
 	return "", false
 }
 
-// EnsureNightly is ensure_nightly: it seeds the nightly job once.
 func EnsureNightly(ctx context.Context, q db.Querier, tz string, now float64) error {
 	var one int
 	err := q.QueryRowContext(ctx, "SELECT 1 FROM jobs WHERE kind = ?", JobNightly).Scan(&one)
@@ -87,7 +82,6 @@ func EnsureNightly(ctx context.Context, q db.Querier, tz string, now float64) er
 	return err
 }
 
-// EnsureBuiltins is ensure_builtins: each built-in job is seeded once, so an operator who disables one keeps it disabled.
 func EnsureBuiltins(ctx context.Context, q db.Querier, tz string, now float64) error {
 	rows, err := q.QueryContext(ctx, "SELECT name FROM jobs WHERE kind = ?", JobBuiltin)
 	if err != nil {

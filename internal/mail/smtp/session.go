@@ -23,21 +23,15 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Session is the part of smtplib.SMTP smtp.send drives, after the connect the Factory made.
 type Session interface {
 	StartTLS() error
 	Login(user, password string) error
 	SendMessage(msg *Message, from string, to []string) (Refusals, error)
-	// Quit is the context manager's exit: QUIT, an error for a reply other than 221 unless the server is
-	// already gone, and the connection closed in every case.
 	Quit() error
 }
 
-// Factory is SMTP_FACTORY: it connects and reads the greeting.
 type Factory func(ctx context.Context, host string, port int, timeout time.Duration) (Session, error)
 
-// Dialer makes real sessions. Zero values use the system resolver, the system roots with the SMTP host as the
-// verified name, and the host's FQDN for EHLO.
 type Dialer struct {
 	DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 	TLSConfig   *tls.Config
@@ -49,7 +43,6 @@ const (
 	maxChallenge = 5
 )
 
-// Dial is the Factory over TCP.
 func (d Dialer) Dial(ctx context.Context, host string, port int, timeout time.Duration) (Session, error) {
 	dial := d.DialContext
 	if dial == nil {
@@ -75,8 +68,6 @@ func (d Dialer) Dial(ctx context.Context, host string, port int, timeout time.Du
 	return s, nil
 }
 
-// localHostname is the EHLO name smtplib picks: socket.getfqdn(), or a domain literal of the host's address
-// when that has no dot.
 func localHostname(ctx context.Context) string {
 	name, _ := os.Hostname()
 	fqdn := name
@@ -433,7 +424,6 @@ func (s *session) auth(mech, user, password string) error {
 	return &ResponseError{Kind: "SMTPAuthenticationError", Code: code, Msg: resp}
 }
 
-// decodeChallenge is base64.decodebytes: characters outside the alphabet are skipped, padding is required.
 func decodeChallenge(s string) ([]byte, error) {
 	var clean []byte
 	pads := 0

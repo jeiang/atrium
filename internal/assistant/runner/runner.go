@@ -1,7 +1,3 @@
-// Package runner is the one place the production *loop.Runner is composed: the tool registry (toolset plus the
-// research tool bound to the runner that executes its children) and the hooks the loop calls (the skills index,
-// /skill expansion and the parallel research batch). Every process that runs the assistant (serve, the
-// scheduler, `agent run`) builds its Runner here and nowhere else.
 package runner
 
 import (
@@ -12,7 +8,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 )
 
-// New is the production Runner.
 func New() (*loop.Runner, error) {
 	reg, err := toolset.Registry()
 	if err != nil {

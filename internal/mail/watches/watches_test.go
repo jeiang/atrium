@@ -16,27 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-func TestFindTrackingCarriers(t *testing.T) {
-	for text, want := range map[string][]watches.Tracking{
-		"Tracking 1Z999AA10123456784 shipped": {{Carrier: "UPS", Number: "1Z999AA10123456784"}},
-		"USPS 9400111899223197428490":         {{Carrier: "USPS", Number: "9400111899223197428490"}},
-		"EE123456789US":                       {{Carrier: "USPS", Number: "EE123456789US"}},
-		"FedEx tracking 123456789012":         {{Carrier: "FedEx", Number: "123456789012"}},
-		"tracking 123456789012":               nil,
-		"DHL waybill 1234567890":              {{Carrier: "DHL", Number: "1234567890"}},
-		"JD014600003456789012":                {{Carrier: "DHL", Number: "JD014600003456789012"}},
-	} {
-		got, err := watches.FindTracking(text)
-		if err != nil || !slices.Equal(got, want) {
-			t.Errorf("FindTracking(%q) = %v, %v; want %v", text, got, err, want)
-		}
-	}
-	many, _ := watches.FindTracking("1Z999AA10123456784 1Z999AA10123456785 1Z999AA10123456786 1Z999AA10123456787 1Z999AA10123456788 1Z999AA10123456789 1Z999AA10123456780 1Z999AA10123456784")
-	if len(many) != 5 {
-		t.Errorf("tracking numbers kept = %d, want 5", len(many))
-	}
-}
-
 func TestStatusAndOrderRef(t *testing.T) {
 	for _, c := range []struct{ subject, body, want string }{
 		{"Out for delivery today", "", watches.OutForDelivery},
@@ -204,12 +183,6 @@ func TestCleanPackage(t *testing.T) {
 	}
 }
 
-func TestMerchantKey(t *testing.T) {
-	if got, err := watches.MerchantKey("  Shop—B & Co.  "); err != nil || got != "shop b co" {
-		t.Errorf("MerchantKey = %q, %v", got, err)
-	}
-}
-
 func TestDismissAndTools(t *testing.T) {
 	d := dbtest.Mail(t)
 	mail(t, d, 1, 1, "1Z999AA10123456784", fields{"subject": "Shipped", "k_order": 1})
@@ -248,16 +221,6 @@ func TestRefreshSwallowsScanFailures(t *testing.T) {
 	}
 }
 
-func TestPackageSchemaAndHint(t *testing.T) {
-	if !strings.HasPrefix(watches.PackageHint, "m.k_order = 1 OR lower(m.subject) LIKE '%shipped%' OR") || !strings.HasSuffix(watches.PackageHint, "LIKE '%your package%'") {
-		t.Errorf("hint = %s", watches.PackageHint)
-	}
-	raw, err := json.Marshal(watches.PackageSchema)
-	if err != nil || !strings.Contains(string(raw), `"enum":["ordered","shipped","in_transit","out_for_delivery","delivered","delayed","exception"]`) {
-		t.Errorf("schema = %s, %v", raw, err)
-	}
-}
-
 func TestListPackagesReadsTheZoneOnlyForRows(t *testing.T) {
 	d := dbtest.Mail(t)
 	bad := config.Map(map[string]string{"ATRIUM_TZ": "Not/AZone"})
@@ -270,5 +233,42 @@ func TestListPackagesReadsTheZoneOnlyForRows(t *testing.T) {
 	var classed py.Classed
 	if !errors.As(err, &classed) || classed.PyClass() != "ZoneInfoNotFoundError" || err.Error() != "'No time zone found with key Not/AZone'" {
 		t.Errorf("an unknown zone must fail once a package is listed as ZoneInfoNotFoundError: %v", err)
+	}
+}
+
+func TestFindTrackingCarriers(t *testing.T) {
+	for text, want := range map[string][]watches.Tracking{
+		"Tracking 1Z999AA10123456784 shipped": {{Carrier: "UPS", Number: "1Z999AA10123456784"}},
+		"USPS 9400111899223197428490":         {{Carrier: "USPS", Number: "9400111899223197428490"}},
+		"EE123456789US":                       {{Carrier: "USPS", Number: "EE123456789US"}},
+		"FedEx tracking 123456789012":         {{Carrier: "FedEx", Number: "123456789012"}},
+		"tracking 123456789012":               nil,
+		"DHL waybill 1234567890":              {{Carrier: "DHL", Number: "1234567890"}},
+		"JD014600003456789012":                {{Carrier: "DHL", Number: "JD014600003456789012"}},
+	} {
+		got, err := watches.FindTracking(text)
+		if err != nil || !slices.Equal(got, want) {
+			t.Errorf("FindTracking(%q) = %v, %v; want %v", text, got, err, want)
+		}
+	}
+	many, _ := watches.FindTracking("1Z999AA10123456784 1Z999AA10123456785 1Z999AA10123456786 1Z999AA10123456787 1Z999AA10123456788 1Z999AA10123456789 1Z999AA10123456780 1Z999AA10123456784")
+	if len(many) != 5 {
+		t.Errorf("tracking numbers kept = %d, want 5", len(many))
+	}
+}
+
+func TestMerchantKey(t *testing.T) {
+	if got, err := watches.MerchantKey("  Shop—B & Co.  "); err != nil || got != "shop b co" {
+		t.Errorf("MerchantKey = %q, %v", got, err)
+	}
+}
+
+func TestPackageSchemaAndHint(t *testing.T) {
+	if !strings.HasPrefix(watches.PackageHint, "m.k_order = 1 OR lower(m.subject) LIKE '%shipped%' OR") || !strings.HasSuffix(watches.PackageHint, "LIKE '%your package%'") {
+		t.Errorf("hint = %s", watches.PackageHint)
+	}
+	raw, err := json.Marshal(watches.PackageSchema)
+	if err != nil || !strings.Contains(string(raw), `"enum":["ordered","shipped","in_transit","out_for_delivery","delivered","delayed","exception"]`) {
+		t.Errorf("schema = %s, %v", raw, err)
 	}
 }

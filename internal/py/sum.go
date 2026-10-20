@@ -2,7 +2,6 @@ package py
 
 import "math"
 
-// Sum is sum() of floats: CPython 3.12+ adds with Neumaier compensation, so the result matches Python's bits.
 func Sum(values []float64) float64 {
 	var s, c float64
 	for _, x := range values {
@@ -11,7 +10,6 @@ func Sum(values []float64) float64 {
 	return finish(s, c)
 }
 
-// SumSq is sum(x * x for x in values).
 func SumSq(values []float64) float64 {
 	var s, c float64
 	for _, x := range values {

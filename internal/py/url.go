@@ -11,8 +11,6 @@ import (
 
 func valueError(msg string) error { return &Exception{"ValueError", msg} }
 
-// URLParts is the result of urlsplit; the Has fields tell an absent component (None) from an empty one, which
-// urljoin and urlunsplit distinguish.
 type URLParts struct {
 	Scheme, Netloc, Path, Query, Fragment       string
 	HasScheme, HasNetloc, HasQuery, HasFragment bool
@@ -106,7 +104,6 @@ func checkBracketedHost(host string) error {
 	return nil
 }
 
-// ipvFuture is re.match(r"\A[vV][a-fA-F0-9]+\..+\z", host).
 func ipvFuture(host string) bool {
 	i := 1
 	for i < len(host) && isHex(host[i]) {
@@ -117,7 +114,6 @@ func ipvFuture(host string) bool {
 
 func isHex(c byte) bool { return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F' }
 
-// URLSplit is urllib.parse.urlsplit(url); the Has fields keep what _urlsplit leaves None.
 func URLSplit(url string) (URLParts, error) {
 	var p URLParts
 	url = strings.TrimLeft(url, whatwgControlOrSpace)
@@ -172,7 +168,6 @@ func (p URLParts) hostinfo() (host, port string, hasPort bool) {
 	return host, port, port != ""
 }
 
-// Hostname is SplitResult.hostname: lower-cased, a zone kept as written; ok is false where Python returns None.
 func (p URLParts) Hostname() (string, bool) {
 	host, _, _ := p.hostinfo()
 	if host == "" {
@@ -186,7 +181,6 @@ func (p URLParts) Hostname() (string, bool) {
 	return name, true
 }
 
-// Port is SplitResult.port: ok is false where Python returns None; a non-numeric or out-of-range port is a ValueError.
 func (p URLParts) Port() (port int, ok bool, err error) {
 	_, text, has := p.hostinfo()
 	if !has {
@@ -204,7 +198,6 @@ func (p URLParts) Port() (port int, ok bool, err error) {
 	return n, true, nil
 }
 
-// URLUnsplit is urlunsplit((scheme, netloc, path, query, fragment)) for a plain split result.
 func URLUnsplit(scheme, netloc, path, query, fragment string) string {
 	hasNetloc := netloc != ""
 	if !hasNetloc && scheme != "" && slices.Contains(usesNetloc, scheme) && (path == "" || path[0] == '/') {
@@ -234,7 +227,6 @@ func unsplit(scheme, netloc string, hasNetloc bool, path, query string, hasQuery
 	return path
 }
 
-// URLJoin is urllib.parse.urljoin(base, url).
 func URLJoin(base, url string) (string, error) {
 	if base == "" {
 		return url, nil

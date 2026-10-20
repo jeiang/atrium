@@ -1,6 +1,3 @@
-// Package notion is the Notion mirror: the API client of notion_api.py, the page text conversion of
-// notion_markdown.py, the sync of notion_sync.py, the hybrid search of notion_search.py and the `notion sync` and
-// `notion search` commands.
 package notion
 
 import (
@@ -34,8 +31,6 @@ const (
 
 var retryStatuses = [...]int{429, 500, 502, 503, 504}
 
-// Error is NotionError: a refusal from Notion, or with Status 0 and Code "unavailable" (NotionUnavailable) a
-// request that never got an answer.
 type Error struct {
 	Status  int
 	Code    string
@@ -60,8 +55,6 @@ func unavailable(message string) *Error {
 	return &Error{Status: 0, Code: "unavailable", Message: message, class: "NotionUnavailable"}
 }
 
-// Client is NotionClient. Sleep and Clock are the seams of the pacing and the retry waits; the zero values are
-// the real ones.
 type Client struct {
 	token   string
 	BaseURL string
@@ -72,7 +65,6 @@ type Client struct {
 	paced   bool
 }
 
-// NewClient is NotionClient(token).
 func NewClient(token string) *Client {
 	return &Client{
 		token:   token,
@@ -193,7 +185,6 @@ func pyStr(v any) string {
 	return py.ReprValue(v)
 }
 
-// Query is a query string in the order urlencode writes it.
 type Query []py.Pair
 
 func (q Query) encode() string {
@@ -207,8 +198,6 @@ func (q Query) encode() string {
 	return strings.Join(parts, "&")
 }
 
-// Request is request: one call with pacing and the retries of rate limits and server errors; the reply is the
-// decoded JSON object.
 func (c *Client) Request(ctx context.Context, method, path string, body any, query Query) (py.Dict, error) {
 	target := c.BaseURL + path
 	if enc := query.encode(); enc != "" {
@@ -248,8 +237,6 @@ func (c *Client) Request(ctx context.Context, method, path string, body any, que
 	}
 }
 
-// Each is paginate: fn gets every result of every page, and the next page is requested only after fn has seen the
-// last result of the one before.
 func (c *Client) Each(ctx context.Context, method, path string, body py.Dict, query Query, fn func(py.Dict) error) error {
 	cursor := ""
 	for {
@@ -284,7 +271,6 @@ func (c *Client) Each(ctx context.Context, method, path string, body py.Dict, qu
 	}
 }
 
-// Search is search: every page, or every data source, of the workspace, trashed ones when inTrash.
 func (c *Client) Search(ctx context.Context, object string, inTrash bool, fn func(py.Dict) error) error {
 	filter := py.Dict{{Key: "property", Value: "object"}, {Key: "value", Value: object}}
 	if inTrash {
@@ -378,7 +364,6 @@ func richText(items []any) string {
 	return b.String()
 }
 
-// BlocksMarkdown is blocks_markdown: the text of a block's children, nested ones indented, to BlockDepth levels.
 func (c *Client) BlocksMarkdown(ctx context.Context, blockID string, depth int) (string, error) {
 	var lines []string
 	number := 0

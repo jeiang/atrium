@@ -540,7 +540,6 @@ func searchDashboards(ctx context.Context, tc *tool.Context, args py.Dict) (any,
 
 const emptySchema = `{"type": "object", "properties": {}, "required": [], "additionalProperties": false}`
 
-// Tools is TOOLS of grafana.py.
 func Tools() []tool.Tool {
 	return []tool.Tool{
 		{

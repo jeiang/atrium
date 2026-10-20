@@ -1,4 +1,3 @@
-// Package scanutil is scanutil.py: the fingerprint digest and preview helpers the proposal scanners share.
 package scanutil
 
 import (
@@ -17,7 +16,6 @@ const (
 	TopLabels      = 5
 )
 
-// Digest is digest(*parts) for str and int parts: sha256 of each str(part) and a NUL, 16 hex digits.
 func Digest(parts ...any) string {
 	h := sha256.New()
 	for _, part := range parts {
@@ -34,7 +32,6 @@ func Digest(parts ...any) string {
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
-// Message is the message columns the previews show.
 type Message struct {
 	ID       int64
 	Subject  string
@@ -43,7 +40,6 @@ type Message struct {
 	DateTS   float64
 }
 
-// View is message_view.
 func (m Message) View() py.Dict {
 	return py.Dict{
 		{Key: "id", Value: m.ID}, {Key: "subject", Value: m.Subject}, {Key: "from_name", Value: m.FromName},
@@ -51,7 +47,6 @@ func (m Message) View() py.Dict {
 	}
 }
 
-// TopCounts is top_counts(values, TopLabels): the most common non-empty values, ties by value.
 func TopCounts(values []string) []any {
 	counts := map[string]int{}
 	var order []string
@@ -74,8 +69,6 @@ func TopCounts(values []string) []any {
 	return out
 }
 
-// SampleSubjectsOf is sample_subjects(rows, SampleSubjects): distinct stripped subjects, newest first, clipped to
-// 120 characters.
 func SampleSubjectsOf(rows []Message) []string {
 	sorted := slices.Clone(rows)
 	slices.SortStableFunc(sorted, func(a, b Message) int {
@@ -96,7 +89,6 @@ func SampleSubjectsOf(rows []Message) []string {
 	return out
 }
 
-// Result is a scanner's {"candidates": n, "created": n}.
 type Result struct {
 	Candidates int
 	Created    int
@@ -108,7 +100,6 @@ func (r Result) Dict() py.Dict {
 
 func (r Result) MarshalJSON() ([]byte, error) { return []byte(py.JSONDumps(r.Dict())), nil }
 
-// SnapshotList is the snapshots as a payload stores them.
 func SnapshotList(snaps []mailops.Snapshot) []any {
 	out := make([]any, len(snaps))
 	for i, s := range snaps {

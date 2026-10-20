@@ -8,8 +8,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 )
 
-// Opener is run.open_client: the connected, write-gated client of an account from the configured credentials. It
-// is assignable to the mailops, sync and drafts Opener types.
 func Opener(cfg config.Config, env config.Env) func(ctx context.Context, account string) (mail.Client, error) {
 	return func(ctx context.Context, account string) (mail.Client, error) {
 		user, password, ok := cfg.Credential(account)

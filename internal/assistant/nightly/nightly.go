@@ -1,4 +1,3 @@
-// Package nightly is nightly.py: the prompt of the nightly consolidation run and its one tool, threads_today.
 package nightly
 
 import (
@@ -15,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Prompt is NIGHTLY_PROMPT, the text of every nightly run.
 const Prompt = "Nightly consolidation. Call threads_today (no date) to read the last 24 hours of chat and scheduled threads. " +
 	"1) Summarize what happened and what is still open. 2) Follow /skill:wiki-capture for the durable facts in " +
 	"those threads: search first, update the existing page, create one only when none fits, never duplicate, and " +
@@ -35,7 +33,6 @@ const description = "Read the text of chat and scheduled threads that had messag
 
 var inputSchema = json.RawMessage(`{"type":"object","properties":{"date":{"type":"string"}},"additionalProperties":false}`)
 
-// Tools is TOOLS of nightly.py.
 func Tools() []tool.Tool {
 	return []tool.Tool{{
 		Name:        "threads_today",
@@ -47,7 +44,6 @@ func Tools() []tool.Tool {
 	}}
 }
 
-// Window is window: the instants [start, end) of the local date, or the 24 hours before now when date is nil.
 func Window(date *string, loc *time.Location, now float64) (float64, float64, error) {
 	if date == nil {
 		return now - DaySeconds, now, nil
@@ -62,7 +58,6 @@ func Window(date *string, loc *time.Location, now float64) (float64, float64, er
 	return start, end + 1, nil
 }
 
-// TextsOf is texts_of: the text of each text block of a message's content.
 func TextsOf(contentJSON string) []string {
 	blocks, ok := py.JSONLoads([]byte(contentJSON))
 	list, isList := blocks.([]any)

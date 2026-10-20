@@ -16,8 +16,7 @@ import (
 )
 
 const (
-	BaseURLEnv = "ANTHROPIC_BASE_URL"
-	// The Python SDK's httpx defaults: 5 s to connect, 600 s for everything else.
+	BaseURLEnv     = "ANTHROPIC_BASE_URL"
 	connectTimeout = 5 * time.Second
 	readTimeout    = 10 * time.Minute
 )
@@ -38,8 +37,6 @@ func HTTPClient(c *http.Client) Option {
 	return func(s *settings) { s.httpClient = c }
 }
 
-// New is make_client: the key comes from ANTHROPIC_API_KEY (config.NotConfigured when unset) and the base
-// URL from ANTHROPIC_BASE_URL, as the Python SDK read it; nothing else in the environment is consulted.
 func New(env config.Env, opts ...Option) (*Client, error) {
 	key, err := config.AnthropicKey(env)
 	if err != nil {
@@ -75,7 +72,6 @@ func (p Params) sdkParams() sdk.BetaMessageNewParams {
 	return sdk.BetaMessageNewParams{Model: sdk.Model(p.Model), MaxTokens: p.MaxTokens, Betas: betas}
 }
 
-// Create is client.beta.messages.create: one non-streaming request.
 func (c *Client) Create(ctx context.Context, p Params) (*Message, error) {
 	body, err := p.body()
 	if err != nil {
@@ -88,8 +84,6 @@ func (c *Client) Create(ctx context.Context, p Params) (*Message, error) {
 	return decodeMessage(res.RawJSON())
 }
 
-// Stream is client.beta.messages.stream through get_final_message. observe sees every stream event in order
-// (Kind empty for those that carry no progress); its error aborts the call and is returned as is.
 func (c *Client) Stream(ctx context.Context, p Params, observe func(Event) error) (*Message, error) {
 	body, err := p.body()
 	if err != nil {
@@ -125,7 +119,6 @@ func (c *Client) Stream(ctx context.Context, p Params, observe func(Event) error
 	return decodeMessage(acc.RawJSON())
 }
 
-// DeleteFile is files.remote_delete: best effort, a failure is logged as a warning.
 func (c *Client) DeleteFile(ctx context.Context, fileID string) {
 	if c == nil || fileID == "" {
 		return

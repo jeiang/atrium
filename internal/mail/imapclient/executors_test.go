@@ -36,7 +36,6 @@ func gmail(t *testing.T, script string, env config.Env) mail.Client {
 	return client
 }
 
-// sessions opens each scripted client in turn, one per mailops.Session.
 func sessions(t *testing.T, clients ...mail.Client) mailops.Opener {
 	return func(ctx context.Context, _ string) (mail.Client, error) {
 		if len(clients) == 0 {
@@ -129,6 +128,7 @@ S: {t} OK CREATE completed
 C: {t} SUBSCRIBE "Receipts/Shop"
 S: {t} OK SUBSCRIBE completed
 C: {t} SELECT INBOX
+S: * OK [UIDVALIDITY 7] UIDs valid
 S: {t} OK [READ-WRITE] SELECT completed
 C: {t} UID COPY 301:302 "Receipts/Shop"
 S: {t} OK [COPYUID 9 301:302 1:2] Done
@@ -204,6 +204,7 @@ S: {t} OK Success
 func TestLabelMergeDeletesTheEmptyLabelWire(t *testing.T) {
 	d := seeded(t, config.Gmail, config.GmailAllMail, 1, [2]any{101, "a@x.test"})
 	client := gmail(t, gmailLogin+verifyAllMail+`C: {t} SELECT "[Gmail]/All Mail"
+S: * OK [UIDVALIDITY 1] UIDs valid
 S: {t} OK [READ-WRITE] [Gmail]/All Mail selected. (Success)
 C: {t} UID STORE 101 +X-GM-LABELS ("Parent")
 S: {t} OK Success
@@ -241,6 +242,7 @@ S: * LIST (\All \HasNoChildren) "/" "[Gmail]/All Mail"
 S: * LIST (\HasNoChildren \Trash) "/" "[Gmail]/Trash"
 S: {t} OK Success
 C: {t} SELECT "[Gmail]/All Mail"
+S: * OK [UIDVALIDITY 1] UIDs valid
 S: {t} OK [READ-WRITE] [Gmail]/All Mail selected. (Success)
 C: {t} UID COPY 101 "[Gmail]/Trash"
 S: {t} OK [COPYUID 5 101 900] (Success)
@@ -249,6 +251,7 @@ S: {t} OK [COPYUID 5 101 900] (Success)
 S: * STATUS "[Gmail]/Trash" (MESSAGES 1 UIDNEXT 901 UIDVALIDITY 5 HIGHESTMODSEQ 9)
 S: {t} OK Success
 C: {t} SELECT "[Gmail]/Trash"
+S: * OK [UIDVALIDITY 5] UIDs valid
 S: {t} OK [READ-WRITE] [Gmail]/Trash selected. (Success)
 C: {t} UID STORE 900 -X-GM-LABELS (\Trash)
 S: {t} OK Success

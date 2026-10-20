@@ -26,8 +26,6 @@ const (
 	shutdownTimeout = 10 * time.Second
 )
 
-// Page is one page set: its routes, the template files they render (nil when it brings none) and the template
-// globals its templates read through the global function.
 type Page struct {
 	Module    Module
 	Templates fs.FS
@@ -35,8 +33,6 @@ type Page struct {
 	Public    func(config.Config, config.Env) func(*http.Request) bool
 }
 
-// ServeCommand is `atrium serve`; pages are the page sets the server
-// registers, in route order.
 func ServeCommand(pages ...Page) *cli.Command {
 	return &cli.Command{
 		Name: "serve",

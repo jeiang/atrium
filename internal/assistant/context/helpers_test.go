@@ -22,7 +22,6 @@ const (
 
 var compact = py.JSONOpts{Compact: true, NoEnsureASCII: true}
 
-// world is one chat thread and the journal writes a run makes, standing in for the loop (#126).
 type world struct {
 	t      *testing.T
 	d      *db.DB
@@ -74,7 +73,6 @@ func (w *world) assistant(blocks ...json.RawMessage) int64 {
 	return w.appendMessage(journal.Assistant, &s, blocks...)
 }
 
-// call journals a finished tool call, as the loop does before answering the tool_use.
 func (w *world) call(useID, name string) int64 {
 	w.t.Helper()
 	ctx := w.t.Context()
@@ -88,7 +86,6 @@ func (w *world) call(useID, name string) int64 {
 	return id
 }
 
-// answer journals the call and its result message.
 func (w *world) answer(useID, name, content string) int64 {
 	w.call(useID, name)
 	return w.user(toolResult(useID, content))
@@ -196,8 +193,6 @@ func withoutCacheControl(t *testing.T, raw json.RawMessage) json.RawMessage {
 	return json.RawMessage(py.JSONDumps(out, compact))
 }
 
-// asJournaled orders a golden response block's keys (the goldens store them sorted) as Python's block_dict
-// journaled them: type, id, name, input, then the rest. The summary request flattens blocks in that order.
 func asJournaled(t *testing.T, blocks []json.RawMessage) []json.RawMessage {
 	t.Helper()
 	out := make([]json.RawMessage, len(blocks))
@@ -221,7 +216,6 @@ func asJournaled(t *testing.T, blocks []json.RawMessage) []json.RawMessage {
 	return out
 }
 
-// plain is the messages as role + content without cache_control, the shape tests compare.
 func plain(t *testing.T, messages []actx.Message) []byte {
 	t.Helper()
 	parts := make([]string, len(messages))
@@ -267,9 +261,6 @@ func contentOf(t *testing.T, d py.Dict) string {
 	return actx.Serialize(s)
 }
 
-// validRequest is assert_valid_request: roles alternate from a user message (or an assistant message holding
-// only the compaction block), every tool_use is answered by the tool_results of the next message and nothing
-// else, tool blocks need `tools`, thinking blocks need `thinking`.
 func validRequest(t *testing.T, messages []actx.Message, tools, thinks bool) {
 	t.Helper()
 	if len(messages) == 0 || messages[len(messages)-1].Role != journal.User {
@@ -320,7 +311,6 @@ func validRequest(t *testing.T, messages []actx.Message, tools, thinks bool) {
 	}
 }
 
-// stamp appends the operator date stamp to each operator message of a run, as loop.stamp_messages does.
 func stamp(t *testing.T, messages []actx.Message, block json.RawMessage) []actx.Message {
 	t.Helper()
 	out := make([]actx.Message, len(messages))

@@ -15,7 +15,6 @@ import (
 
 const slice = "anthropic"
 
-// limitOf is the thread context limit each golden scenario ran under.
 var limitOf = map[string]int64{"context_limit_1m_clear_edits": 1_000_000, "project_thread": 200_000}
 
 type goldenUsage struct {
@@ -86,9 +85,6 @@ func TestContextManagementMatchesPythonBytes(t *testing.T) {
 	}
 }
 
-// TestServerCompactionGolden replays server_compaction: the request after the compaction pause is the
-// compaction block, the manifest with the operator's stamped message, then the last complete unit without
-// thinking.
 func TestServerCompactionGolden(t *testing.T) {
 	s := golden.LoadScenario(t, slice, "server_compaction")
 	w := newWorld(t)
@@ -123,9 +119,6 @@ func TestServerCompactionGolden(t *testing.T) {
 	}
 }
 
-// TestClientCompactionGolden replays client_compaction: the tool-free, thinking-free summary request is the
-// golden body byte for byte as JSON, it is metered as a compaction, and the next request is the summary,
-// the manifest and the operator's stamped message.
 func TestClientCompactionGolden(t *testing.T) {
 	s := golden.LoadScenario(t, slice, "client_compaction")
 	w := newWorld(t)

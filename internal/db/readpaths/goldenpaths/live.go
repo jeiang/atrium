@@ -1,4 +1,4 @@
-package readpaths_test
+package goldenpaths
 
 import (
 	"context"
@@ -18,7 +18,6 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			// make_db.py's config runs in live mode.
 			cfg.Mode = config.Live
 			return (&live.Live{DB: d, Cfg: cfg}).Status(ctx)
 		},

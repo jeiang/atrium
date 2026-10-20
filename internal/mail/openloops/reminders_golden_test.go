@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
-// The clocks of make_db.py's runs: the open-loop refresh at t0, the reminder's approval a day later.
 const (
 	proposeClock = 1_792_080_000.0
 	approveClock = 1_792_166_400.0
@@ -52,6 +51,36 @@ func TestProposeRebuildsTheGoldenReminder(t *testing.T) {
 	}
 	if got != want || created != proposeClock {
 		t.Errorf("proposal = %+v at %v\nwant %+v", got, created, want)
+	}
+}
+
+func TestDismissedReminderIsNeverReproposed(t *testing.T) {
+	for _, suppress := range []bool{false, true} {
+		t.Run(fmt.Sprint("suppress=", suppress), func(t *testing.T) {
+			d, _ := dbtest.Copy(t, filepath.Join(golden.Dir(), "atrium.db"))
+			id, _ := goldenReminder(t, d)
+			exec(t, d, "UPDATE proposals SET status = 'pending', decided_ts = NULL WHERE id = ?", id)
+			if err := proposals.Dismiss(ctx, d.Write, id, suppress, approveClock); err != nil {
+				t.Fatal(err)
+			}
+			exec(t, d, "UPDATE commitments SET proposal_id = NULL")
+			r := &openloops.Reminders{DB: d, Now: atClock(proposeClock), Env: env()}
+			n, err := r.Propose(ctx, proposeClock, tz)
+			if err != nil || n != 0 {
+				t.Fatalf("Propose = %d, %v; want no new proposal", n, err)
+			}
+			var pending, total int
+			if err := d.Read.QueryRow("SELECT COALESCE(SUM(status = 'pending'), 0), COUNT(*) FROM proposals WHERE kind = 'reminder'").Scan(&pending, &total); err != nil {
+				t.Fatal(err)
+			}
+			if pending != 0 || total != 1 {
+				t.Errorf("reminder proposals: %d pending of %d", pending, total)
+			}
+			var linked int64
+			if err := d.Read.QueryRow("SELECT proposal_id FROM commitments WHERE proposal_id IS NOT NULL").Scan(&linked); err != nil || linked != id {
+				t.Errorf("commitment links proposal %d, %v; want %d", linked, err, id)
+			}
+		})
 	}
 }
 

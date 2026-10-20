@@ -5,7 +5,6 @@ import (
 	"sort"
 )
 
-// Opcode is one difflib opcode: Tag is "replace", "delete", "insert" or "equal" over a[I1:I2] and b[J1:J2].
 type Opcode struct {
 	Tag            string
 	I1, I2, J1, J2 int
@@ -117,7 +116,6 @@ func (m *matcher) opcodes() []Opcode {
 	return out
 }
 
-// GroupedOpcodes is difflib.SequenceMatcher(None, a, b, autojunk=False).get_grouped_opcodes(n).
 func GroupedOpcodes(a, b []string, n int) [][]Opcode {
 	codes := newMatcher(a, b).opcodes()
 	if len(codes) == 0 {

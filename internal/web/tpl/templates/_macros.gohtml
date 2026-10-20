@@ -177,9 +177,9 @@ Shadow mode: nothing is changed automatically. Proposals you approve still run.
     <ol class="flex flex-wrap gap-2 text-xs" aria-label="Sources">
       {{range $i, $c := .}}
       {{if opt $c "url" nil}}
-      <li><a class="badge" data-variant="secondary" {{template "external" $c.url}}>[{{inc $i}}] {{icon "external-link" "size-3"}}{{truncate 60 $c.title}}</a></li>
+      <li class="min-w-0 max-w-full"><a class="badge max-w-full" data-variant="secondary" {{template "external" $c.url}} title="{{$c.title}}"><span class="shrink-0">[{{inc $i}}]</span> {{icon "external-link" "size-3"}}<span class="truncate">{{truncate 60 $c.title}}</span></a></li>
       {{else}}
-      <li><span class="badge" data-variant="secondary" title="{{$c.cited}}">[{{inc $i}}] {{icon "file-text" "size-3"}}{{truncate 40 $c.title}}: “{{truncate 60 $c.cited}}”</span></li>
+      <li class="min-w-0 max-w-full"><span class="badge max-w-full" data-variant="secondary" title="{{$c.cited}}"><span class="shrink-0">[{{inc $i}}]</span> {{icon "file-text" "size-3"}}<span class="truncate">{{truncate 40 $c.title}}: “{{truncate 60 $c.cited}}”</span></span></li>
       {{end}}
       {{end}}
     </ol>

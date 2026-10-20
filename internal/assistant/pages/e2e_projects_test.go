@@ -210,7 +210,7 @@ func TestThreadsMoveIntoAndOutOfAProjectAndTakeItsDefaults(t *testing.T) {
 	}
 	status(t, s.post("/chat/"+id+"/project", url.Values{"project_id": {"999"}}), http.StatusNotFound)
 	status(t, s.post(fmt.Sprintf("/projects/%d/archive", project), url.Values{"archived": {"1"}}), http.StatusSeeOther)
-	status(t, s.post("/chat/"+id+"/project", url.Values{"project_id": {strconv.FormatInt(project, 10)}}), http.StatusNotFound)
+	status(t, s.post("/chat/"+id+"/project", url.Values{"project_id": {strconv.FormatInt(project, 10)}}), http.StatusUnprocessableEntity)
 	status(t, s.post(fmt.Sprintf("/projects/%d/archive", project), url.Values{"archived": {"0"}}), http.StatusSeeOther)
 
 	created := s.multipart("/chat", map[string]string{"text": "", "project_id": strconv.FormatInt(project, 10)}, nil)

@@ -6,7 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-// IsSpace is str.isspace for one code point.
 func IsSpace(r rune) bool {
 	if r < utf8.RuneSelf {
 		return r >= '\t' && r <= '\r' || r >= 0x1C && r <= ' '
@@ -14,10 +13,8 @@ func IsSpace(r rune) bool {
 	return spaceTable[r]
 }
 
-// Strip is str.strip().
 func Strip(s string) string { return strings.TrimFunc(s, IsSpace) }
 
-// Split is str.split() with no separator.
 func Split(s string) []string { return strings.FieldsFunc(s, IsSpace) }
 
 func isLineBreak(r rune) bool {
@@ -28,7 +25,6 @@ func isLineBreak(r rune) bool {
 	return false
 }
 
-// SplitLines is str.splitlines().
 func SplitLines(s string) []string {
 	var out []string
 	start := 0
@@ -48,7 +44,6 @@ func SplitLines(s string) []string {
 	return out
 }
 
-// Clip is s[:n] counted in code points.
 func Clip(s string, n int) string {
 	for i := range s {
 		if n == 0 {
@@ -59,10 +54,8 @@ func Clip(s string, n int) string {
 	return s
 }
 
-// Lower is str.lower() up to final-sigma context: U+0130 expands to "i" plus a combining dot as in CPython.
 func Lower(s string) string { return strings.ToLower(strings.ReplaceAll(s, "\u0130", "i\u0307")) }
 
-// Casefold is str.casefold.
 func Casefold(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
@@ -83,8 +76,6 @@ func Casefold(s string) string {
 	return b.String()
 }
 
-// Upper is str.upper: ASCII letters, then the generated table of every other code point whose uppercase differs
-// (including the multi-character SpecialCasing forms such as "ß" to "SS").
 func Upper(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
@@ -106,7 +97,6 @@ func Upper(s string) string {
 	return b.String()
 }
 
-// IsDigit is str.isdigit for one code point.
 func IsDigit(r rune) bool {
 	if r < utf8.RuneSelf {
 		return r >= '0' && r <= '9'
@@ -114,7 +104,6 @@ func IsDigit(r rune) bool {
 	return unicode.Is(DigitTable, r)
 }
 
-// IsDigits is str.isdigit(): a non-empty string of digit code points.
 func IsDigits(s string) bool {
 	return s != "" && strings.IndexFunc(s, func(r rune) bool { return !IsDigit(r) }) < 0
 }

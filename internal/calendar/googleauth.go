@@ -32,15 +32,12 @@ var tokenURLSafe = func(n int) string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-// UseTokens replaces secrets.token_urlsafe, the source of the PKCE verifier and the state, and returns the
-// restore func.
 func UseTokens(f func(n int) string) func() {
 	saved := tokenURLSafe
 	tokenURLSafe = f
 	return func() { tokenURLSafe = saved }
 }
 
-// AuthURL is auth_url: the consent URL, its query in Python's urlencode order.
 func AuthURL(clientID, redirectURI, state, challenge string) string {
 	pairs := [][2]string{
 		{"client_id", clientID}, {"redirect_uri", redirectURI}, {"response_type", "code"}, {"scope", Scope},
@@ -69,8 +66,6 @@ func queryParams(query string) map[string]string {
 	return out
 }
 
-// AuthOptions are authorize's arguments: Port 0 picks one, Out receives the consent URL text and Timeout counts
-// waits of one second (AuthTimeout when 0).
 type AuthOptions struct {
 	ClientID     string
 	ClientSecret string
@@ -79,8 +74,6 @@ type AuthOptions struct {
 	Timeout      int
 }
 
-// Authorize is google_auth.authorize: it prints the consent URL, waits for the redirect on 127.0.0.1, exchanges
-// the code and returns the refresh token.
 func Authorize(ctx context.Context, o AuthOptions) (string, error) {
 	if o.ClientID == "" || o.ClientSecret == "" {
 		return "", Error("GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are required")
