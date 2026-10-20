@@ -135,12 +135,14 @@ tags `sqlite_fts5` and `modernc`).
   when `schema_migrations` holds a version it does not know
   (`*db.FutureSchemaError`), so a restore of a newer database under an older
   release fails loudly instead of corrupting it.
-- Rollback point: the first release that carries migration 0002 (the settings
-  registry, #437). From the first start of that release the database holds a
-  version a Phase A binary does not know, so pinning the earlier cornn-flaek
-  atrium stops working. The only way back is to restore the database file
-  copied before that first start, and everything written afterwards is lost.
-  Take that copy first (`sqlite3 atrium.db ".backup pre-upgrade.db"`).
+- Rollback point: the first release that applies a numbered migration after
+  0001. From the first start of that release the database holds a version a
+  Phase A binary does not know, so pinning the earlier cornn-flaek atrium
+  stops working. The only way back is to restore the database file copied
+  before that first start, and everything written afterwards is lost. Take
+  that copy first (`sqlite3 atrium.db ".backup pre-upgrade.db"`). The slice
+  that adds that migration records the release in its pull request and in
+  the changelog or runbook.
 - Support starts at the live Phase A schema: the harness has no case for
   shapes older than it.
 - Harness: `internal/db/migrate_harness_test.go`, run by `go test

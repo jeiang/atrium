@@ -46,6 +46,13 @@ func unknownVersions(applied map[int]bool) []int {
 	return out
 }
 
+func refuseFuture(applied map[int]bool) error {
+	if future := unknownVersions(applied); len(future) > 0 {
+		return &FutureSchemaError{Versions: future, Known: migrations[len(migrations)-1].version}
+	}
+	return nil
+}
+
 const schemaMigrationsDDL = "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at REAL NOT NULL)"
 
 func Migrate(ctx context.Context, d *DB, path string) error {
@@ -53,8 +60,8 @@ func Migrate(ctx context.Context, d *DB, path string) error {
 	if err != nil {
 		return err
 	}
-	if future := unknownVersions(applied); len(future) > 0 {
-		return &FutureSchemaError{Versions: future, Known: migrations[len(migrations)-1].version}
+	if err := refuseFuture(applied); err != nil {
+		return err
 	}
 	if pending(applied) {
 		if err := applyPending(ctx, d, path); err != nil {
@@ -103,6 +110,13 @@ func applyPending(ctx context.Context, d *DB, path string) error {
 		return err
 	}
 	defer func() { _ = lock.Close() }()
+	applied, err := appliedVersions(ctx, d.Read)
+	if err != nil {
+		return err
+	}
+	if err := refuseFuture(applied); err != nil {
+		return err
+	}
 	for _, m := range migrations {
 		err := d.WithTx(ctx, func(tx *sql.Tx) error {
 			if _, err := tx.ExecContext(ctx, schemaMigrationsDDL); err != nil {

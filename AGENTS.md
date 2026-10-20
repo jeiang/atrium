@@ -107,9 +107,10 @@ and backups; nothing of that lives here.
   are listed in `docs/CONTRIBUTING.md` (Database migrations). A DB whose
   `schema_migrations` holds a version this binary does not know is refused
   with `*db.FutureSchemaError` before any write (a newer binary migrates,
-  an older one never starts on it). Only a pending migration takes the
-  `atrium.db.lock` flock. The
-  built-in skills, subagents and categories are seeded on every start
+  an older one never starts on it; the check runs again after the flock is
+  taken, so an older binary cannot apply after a newer one migrated). Only
+  a pending migration takes the `atrium.db.lock` flock. The built-in
+  skills, subagents and categories are seeded on every start
   (https://github.com/jeiang/atrium/issues/102).
 - Go packaging: `nix/go-package.nix` builds `atrium-go-x86_64-v3`
   (`GOAMD64=v3`, `-mavx2`) and `atrium-go-aarch64`, both musl-static cgo

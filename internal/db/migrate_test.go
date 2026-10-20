@@ -379,3 +379,44 @@ func TestNewerSchemaRefusedBeforeAnyWrite(t *testing.T) {
 		t.Errorf("refused Migrate wrote: wiki-query rows %d (want 0), schema_migrations rows %d (want %d)", skills, after, before+1)
 	}
 }
+
+func TestNewerSchemaRefusedAfterWaitingForFlock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atrium.db")
+	lock, err := db.Exclusive(context.Background(), path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := migrateAsync(path)
+	select {
+	case err := <-done:
+		t.Fatalf("Migrate finished (%v) while another holder had atrium.db.lock", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	newer, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = newer.Close() }()
+	if _, err := newer.Write.Exec("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at REAL NOT NULL); INSERT INTO schema_migrations VALUES (9999, 1.0)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		var future *db.FutureSchemaError
+		if !errors.As(err, &future) {
+			t.Fatalf("Migrate after the lock was released = %v, want *FutureSchemaError", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("Migrate did not finish after the lock was released")
+	}
+	var n int
+	if err := newer.Read.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("the older binary created tables on a newer schema: %d tables, want 1", n)
+	}
+}
