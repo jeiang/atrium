@@ -23,13 +23,66 @@ document.addEventListener("htmx:historyRestore", () => {
   window.basecoat.initAll({ force: true });
 });
 
+const dialogOpeners = new WeakMap();
+let panelOpener = null;
+
+const loadingForm = () => {
+  const status = document.createElement("div");
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-label", "Loading form");
+  status.className = "flex flex-col gap-3";
+  ["skeleton h-6 w-3/4 rounded-md bg-muted", "skeleton h-4 w-1/2 rounded-md bg-muted", "skeleton h-10 w-full rounded-md bg-muted"].forEach((className) => {
+    const bar = document.createElement("div");
+    bar.className = className;
+    status.appendChild(bar);
+  });
+  return status;
+};
+
+const focusDialog = (dialog) => {
+  dialog.removeAttribute("aria-busy");
+  const focusTarget = dialog.querySelector("[autofocus]") ||
+    dialog.querySelector('[role="alert"][tabindex="-1"]') ||
+    dialog.querySelector("form input:not([type=hidden]), form textarea, form select") ||
+    dialog.querySelector("h2");
+  if (!focusTarget) return;
+  if (focusTarget.tagName === "H2") focusTarget.setAttribute("tabindex", "-1");
+  focusTarget.focus();
+};
+
 document.addEventListener("htmx:beforeRequest", (event) => {
   const target = event.detail.target;
   const loading = target && target.dataset.loading && document.getElementById(target.dataset.loading);
   if (loading) target.replaceChildren(loading.content.cloneNode(true));
   const dialog = target && target.closest("dialog");
-  if (dialog && !dialog.open) dialog.showModal();
+  if (dialog) {
+    const opener = event.detail.elt;
+    if (!dialog.open) dialog.showModal();
+    if (opener && opener.id) dialogOpeners.set(dialog, opener.id);
+    dialog.setAttribute("aria-busy", "true");
+    dialog.replaceChildren(loadingForm());
+  } else if (event.detail.boosted) {
+    document.querySelectorAll("dialog[open]").forEach((openDialog) => openDialog.close());
+  }
 });
+
+document.addEventListener("htmx:afterSwap", (event) => {
+  const target = event.detail.target || event.target;
+  if (target && target.id === "conditions") htmx.trigger("#rule-form", "change");
+  const dialog = target && (target.matches("dialog") ? target : target.closest("dialog"));
+  if (dialog) focusDialog(dialog);
+});
+
+document.addEventListener("close", (event) => {
+  const dialog = event.target;
+  if (!dialog.matches || !dialog.matches("dialog")) return;
+  const opener = dialogOpeners.get(dialog);
+  dialogOpeners.delete(dialog);
+  const returnTarget = (opener && document.getElementById(opener)) ||
+    document.querySelector("[data-focus-fallback]") ||
+    document.getElementById("content");
+  if (returnTarget) returnTarget.focus();
+}, true);
 
 document.addEventListener("close-dialogs", () => {
   document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
@@ -42,11 +95,18 @@ document.addEventListener("htmx:beforeSwap", (event) => {
     event.detail.isError = false;
   }
 });
+const focusFallback = (target) => {
+  if (document.activeElement !== document.body || !target) return;
+  const fallback = target.matches("[data-focus-fallback]") ? target : target.querySelector("[data-focus-fallback]");
+  if (fallback) fallback.focus();
+};
+
 
 document.addEventListener("htmx:afterRequest", (event) => {
   const form = event.detail.elt;
-  if (form.matches && form.matches("form[data-reset]") && event.detail.successful) form.reset();
-  if (form.matches && form.matches("button[data-suggestion]") && event.detail.successful) {
+  const succeeded = event.detail.xhr.status < 400;
+  if (form.matches && form.matches("form[data-reset]") && succeeded) form.reset();
+  if (form.matches && form.matches("button[data-suggestion]") && succeeded) {
     const item = form.closest("li");
     const next = item.nextElementSibling || item.previousElementSibling;
     item.remove();
@@ -54,13 +114,8 @@ document.addEventListener("htmx:afterRequest", (event) => {
   }
 });
 
-document.addEventListener("htmx:afterSwap", (event) => {
-  const target = event.detail.target || event.target;
-  if (target && target.id === "conditions") htmx.trigger("#rule-form", "change");
-});
-
 document.addEventListener("submit", (event) => {
-  const question = event.target.dataset && event.target.dataset.confirmSubmit;
+  const question = event.submitter?.dataset.confirmSubmit ?? event.target.dataset.confirmSubmit;
   if (question && !window.confirm(question)) event.preventDefault();
 });
 
@@ -91,13 +146,18 @@ document.addEventListener("keydown", (event) => {
   const nav = document.getElementById("sidebar");
   if (event.key === "Escape" && nav && nav.close && window.innerWidth < 768 && nav.getAttribute("aria-hidden") === "false") {
     nav.close();
-    document.getElementById("nav-toggle").focus();
+    document.getElementById("nav-toggle")?.focus();
   }
 });
 
 const actions = {
-  "toggle-sidebar": () => document.getElementById("sidebar").toggle(),
-  "close-dialog": (button) => button.closest("dialog").close(),
+  "toggle-sidebar": () => {
+    const sidebar = document.getElementById("sidebar");
+    if (!sidebar || !sidebar.toggle) return;
+    sidebar.toggle();
+    if (sidebar.getAttribute("aria-hidden") === "false") sidebar.querySelector("a")?.focus();
+  },
+  "close-dialog": (button) => button.closest("dialog")?.close(),
   "remove-condition": (button) => {
     const form = button.form;
     const row = button.closest("li");
@@ -206,7 +266,7 @@ const renderChips = (form) => {
     const chip = document.createElement("li");
     chip.className = "badge gap-1 max-w-64";
     chip.dataset.variant = "secondary";
-    chip.innerHTML = `<span class="truncate"></span><span class="text-muted-foreground tabular-nums"></span><button type="button" class="rounded-sm hover:text-destructive" data-action="remove-file" data-index="${index}" aria-label="Remove"><span aria-hidden="true">×</span></button>`;
+    chip.innerHTML = `<span class="truncate"></span><span class="text-muted-foreground tabular-nums"></span><button type="button" class="rounded-sm hover:text-destructive" data-action="remove-file" data-index="${index}" aria-label="Remove ${escapeHtml(file.name)}"><span aria-hidden="true">×</span></button>`;
     chip.children[0].textContent = file.name;
     chip.children[1].textContent = formatBytes(file.size);
     return chip;
@@ -265,15 +325,37 @@ const PANEL_WIDTH_KEY = "atrium.panel.width";
 const PANEL_MIN = 260;
 
 const workspace = () => document.getElementById("workspace");
-const panelOpen = (open) => {
+const panelOpen = (open, opener = document.activeElement, restoreFocus = true) => {
   const panel = document.getElementById("panel");
   if (!panel) return;
+  const mobile = window.innerWidth < 768;
+  if (open && mobile && !panel.hasAttribute("data-open")) panelOpener = opener;
   panel.toggleAttribute("data-open", open);
-  document.getElementById("panel-backdrop").classList.toggle("hidden", !open);
+  document.getElementById("panel-backdrop")?.classList.toggle("hidden", !open);
   document.querySelectorAll('[data-action="toggle-panel"][aria-controls]').forEach((button) => button.setAttribute("aria-expanded", String(open)));
+  if (open && mobile) {
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-modal", "true");
+    ["#thread", "#panel-handle", "main > header", "#sidebar"].forEach((selector) => {
+      document.querySelector(selector)?.setAttribute("inert", "");
+    });
+    panel.querySelector('[role="tab"][aria-selected="true"]')?.focus();
+  } else {
+    panel.removeAttribute("role");
+    panel.removeAttribute("aria-modal");
+    ["#thread", "#panel-handle", "main > header", "#sidebar"].forEach((selector) => {
+      document.querySelector(selector)?.removeAttribute("inert");
+    });
+    const returnTo = panelOpener?.isConnected ? panelOpener : document.getElementById("panel-toggle");
+    panelOpener = null;
+    if (restoreFocus && returnTo) returnTo.focus();
+  }
 };
 
-actions["toggle-panel"] = () => panelOpen(!document.getElementById("panel").hasAttribute("data-open"));
+actions["toggle-panel"] = (button) => {
+  const panel = document.getElementById("panel");
+  if (panel) panelOpen(!panel.hasAttribute("data-open"), button);
+};
 actions["edit-message"] = (button) => {
   const form = document.getElementById("composer");
   form.elements.text.value = button.closest("li").querySelector("[data-text]").textContent;
@@ -288,16 +370,21 @@ actions["cancel-edit"] = () => {
   document.getElementById("composer-editing").hidden = true;
 };
 
-const showPreview = () => {
+const showPreview = (opener) => {
   const tab = document.getElementById("panel-tab-preview");
   if (!tab) return;
   if (tab.getAttribute("aria-selected") !== "true") tab.click();
-  if (window.innerWidth < 768) panelOpen(true);
+  if (window.innerWidth < 768) panelOpen(true, opener);
 };
 
 document.addEventListener("htmx:beforeRequest", (event) => {
   const target = event.detail.target;
-  if (target && target.id === "preview-body") showPreview();
+  if (target && target.id === "preview-body") showPreview(event.detail.elt);
+});
+
+window.matchMedia("(min-width: 768px)").addEventListener("change", (event) => {
+  const panel = document.getElementById("panel");
+  if (event.matches && panel?.hasAttribute("data-open")) panelOpen(false, null, false);
 });
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -306,11 +393,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const stored = Number(localStorage.getItem(PANEL_WIDTH_KEY));
   if (stored >= PANEL_MIN) root.style.setProperty("--panel-w", `${stored}px`);
   const handle = document.getElementById("panel-handle");
+  if (!handle) return;
   const apply = (width) => {
-    const clamped = Math.min(Math.max(width, PANEL_MIN), Math.floor(root.getBoundingClientRect().width * 0.6));
+    const max = Math.floor(root.getBoundingClientRect().width * 0.6);
+    const clamped = Math.min(Math.max(width, PANEL_MIN), max);
     root.style.setProperty("--panel-w", `${clamped}px`);
+    handle.setAttribute("aria-valuemax", String(max));
+    handle.setAttribute("aria-valuenow", String(clamped));
+    handle.setAttribute("aria-valuetext", `${clamped} pixels`);
     return clamped;
   };
+  apply(parseFloat(getComputedStyle(root).getPropertyValue("--panel-w")) || 384);
   handle.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     handle.setPointerCapture(event.pointerId);
@@ -340,6 +433,8 @@ document.addEventListener("keydown", (event) => {
 });
 
 const setBusy = (busy) => {
+  const announcer = document.getElementById("transcript-announcer");
+  if (announcer && busy) announcer.textContent = "Working. Stop is available.";
   const form = document.getElementById("composer");
   if (!form) return;
   form.querySelector("[data-stop]").hidden = !busy;
@@ -462,7 +557,10 @@ const connectLive = (li) => {
     setBusy(false);
     refreshWork();
     document.querySelectorAll(`[data-live-user="${runId}"]`).forEach((bubble) => bubble.remove());
-    if (li.isConnected) htmx.trigger(li, "run-done");
+    if (li.isConnected) {
+      li.dataset.announceReady = "true";
+      htmx.trigger(li, "run-done");
+    }
   };
   on("done", settle);
   source.onerror = () => setTimeout(settle, RETRY_MS);
@@ -481,4 +579,9 @@ document.addEventListener("htmx:afterSettle", (event) => {
   }
   const transcript = document.getElementById("transcript");
   if (transcript && transcript.contains(event.detail.target)) transcript.lastElementChild?.scrollIntoView({ block: "end" });
+  focusFallback(event.detail.target);
+  if (event.detail.elt?.dataset.announceReady === "true") {
+    const announcer = document.getElementById("transcript-announcer");
+    if (announcer) announcer.textContent = "Reply ready.";
+  }
 });
