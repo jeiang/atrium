@@ -257,8 +257,11 @@ C: {t} IDLE
 S: * BYE Logging out
 S: {t} OK LOGOUT completed
 `
-	start := time.Now()
+	var start time.Time
 	done := startWireWatch(t, script, ctx, clock.sleep, func(opened int) {
+		if opened == 2 {
+			start = time.Now()
+		}
 		if opened == 4 {
 			cancel()
 		}
