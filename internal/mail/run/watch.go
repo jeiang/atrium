@@ -183,8 +183,7 @@ func (w *Watcher) waitForChange(ctx context.Context, client mail.Client) (bool, 
 }
 
 // Account is watch_account: a locked pass, then a pass after every change the Inbox reports, until ctx ends. A
-// failure closes the connection and reconnects after the backoff, which a successful first pass resets. A pass that
-// has started runs to its end: ctx is seen only between passes and while waiting.
+// failure closes the connection and reconnects after the backoff, which a successful first pass resets.
 func (w *Watcher) Account(ctx context.Context, account string) {
 	backoff := 0
 	h := w.heartbeat(account)
@@ -218,8 +217,8 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 		return err
 	}
 	defer closeDB()
-	whole := context.WithoutCancel(ctx)
-	if err := pass.Locked(whole, []string{account}); err != nil {
+	workCtx := context.WithoutCancel(ctx)
+	if err := pass.Locked(ctx, workCtx, []string{account}); err != nil {
 		return err
 	}
 	w.Notify.Status("watching")
@@ -243,7 +242,7 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 					break
 				}
 			}
-			if err := pass.Locked(whole, []string{account}); err != nil {
+			if err := pass.Locked(ctx, workCtx, []string{account}); err != nil {
 				return err
 			}
 		}

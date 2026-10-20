@@ -500,12 +500,13 @@ and backups; nothing of that lives here.
   blocked one is logged) before the lock is released. `Watcher` is the
   per-account loop: each cycle connects (a failure backs off like a lost
   connection), passes, then IDLEs (or 58 s + NOOP), 2 s settle, backoff 5 s
-  doubling to 300 s. In `watch` a started pass runs on `context.WithoutCancel`,
-  so shutdown never interrupts it; cancellation is seen only while waiting,
-  and `watch` gives the loops 30 s. `sync` sees a signal between accounts and
-  between extras (never inside a live pass) and exits 143 or 130 once the
-  running stage is complete. `Locked` also bounds a pass by `passDeadline` (20 min): the running stage
-  is abandoned, no further write pass starts and a started one finishes, so the `sync` and `scan` units, which wait for it, set
+  doubling to 300 s. In `watch`, lock acquisition uses the signal context and
+  a started pass runs on `context.WithoutCancel`, so shutdown cancels a pending
+  wait but not the pass; `watch` gives the loops 30 s. `sync` uses its signal
+  context for lock acquisition and work, observing cancellation between
+  accounts and extras. `Locked` applies `passDeadline` (20 min) only after the
+  lock is acquired; expiry cancels remaining work while a started automatic
+  write pass finishes. The `sync` and `scan` units, which wait for it, set
   `TimeoutStopSec` (45 min, `writeTimeout` in `nix/module.nix`) above the deadline plus a write cap's moves;
   `watch` exits 30 s after a signal whatever its pass is doing and relies on held rows becoming `Interrupted`. `proposals approve`, `proposals undo` and `live undo` run on the signal context: SIGTERM
   kills the IMAP connection, the gate refuses a write on a done context, and the proposal ends `failed` with

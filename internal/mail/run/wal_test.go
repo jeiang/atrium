@@ -90,7 +90,7 @@ func TestWALStaysBoundedUnderAnAlwaysOnReader(t *testing.T) {
 		for j := range perPass {
 			w.arrive(config.ICloud, fmt.Sprintf("Pass %d mail %d", i, j), fmt.Sprintf("s%d@x.test", j))
 		}
-		if err := w.pass.Locked(ctx, []string{config.ICloud}); err != nil {
+		if err := w.pass.Locked(ctx, ctx, []string{config.ICloud}); err != nil {
 			t.Fatal(err)
 		}
 		afterPass = append(afterPass, fileSize(wal))

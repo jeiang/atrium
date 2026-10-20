@@ -107,7 +107,7 @@ func (o Options) sync(ctx context.Context, d *db.DB, cfg config.Config, env *cli
 }
 
 func (o Options) locked(ctx context.Context, d *db.DB, cfg config.Config, client *Client) (Stats, error) {
-	lock, err := db.Exclusive(filepath.Join(filepath.Dir(cfg.DBPath), config.NotionLockName))
+	lock, err := db.Exclusive(ctx, filepath.Join(filepath.Dir(cfg.DBPath), config.NotionLockName), db.ShortLockWait)
 	if err != nil {
 		return Stats{}, err
 	}

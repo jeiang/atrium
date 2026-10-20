@@ -52,7 +52,7 @@ func locked(ctx context.Context, cfg config.Config, run Run) (py.Dict, error) {
 	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
 		return nil, err
 	}
-	lock, err := db.Exclusive(cfg.DBPath)
+	lock, err := db.Exclusive(ctx, cfg.DBPath, db.ShortLockWait)
 	if err != nil {
 		return nil, err
 	}

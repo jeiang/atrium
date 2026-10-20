@@ -278,7 +278,7 @@ func TestNoFlockWhenNothingPending(t *testing.T) {
 
 func TestPendingWaitsForFlock(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "atrium.db")
-	lock, err := db.Exclusive(path)
+	lock, err := db.Exclusive(context.Background(), path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
