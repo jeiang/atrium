@@ -5,32 +5,23 @@
     withGo1269,
     ...
   }: let
-    inherit (pkgs.stdenv) hostPlatform;
-    staticPkgs = system: crossName:
-      if hostPlatform.system == system
-      then pkgs.pkgsStatic
-      else pkgs.pkgsCross.${crossName}.pkgsStatic;
-    goPackage = system: crossName: let
-      set = staticPkgs system crossName;
-    in
-      set.callPackage ../nix/go-package.nix {
-        inherit (self'.packages) atrium-static;
-        inherit (pkgs) go-licenses;
-        buildGo126Module = set.buildGo126Module.override {go = withGo1269 set.buildPackages.go_1_26;};
-      };
-    targets = lib.optionalAttrs hostPlatform.isLinux {
-      atrium-go-x86_64-v3 = goPackage "x86_64-linux" "musl64";
-      atrium-go-aarch64 = goPackage "aarch64-linux" "aarch64-multiplatform-musl";
+    isX86Linux = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
+    static = pkgs.pkgsStatic;
+    sqlcipherLib = static.callPackage ../nix/sqlcipher.nix {};
+    goPackage = static.callPackage ../nix/go-package.nix {
+      inherit (self'.packages) atrium-static;
+      inherit (pkgs) go-licenses;
+      inherit sqlcipherLib;
+      buildGo126Module = static.buildGo126Module.override {go = withGo1269 static.buildPackages.go_1_26;};
     };
+    targets = lib.optionalAttrs isX86Linux {atrium-go-x86_64-v3 = goPackage;};
   in {
     packages =
       targets
-      // lib.optionalAttrs hostPlatform.isLinux {
-        atrium =
-          if hostPlatform.isx86_64
-          then targets.atrium-go-x86_64-v3
-          else targets.atrium-go-aarch64;
+      // lib.optionalAttrs isX86Linux {
+        atrium = targets.atrium-go-x86_64-v3;
         default = self'.packages.atrium;
+        sqlcipher = sqlcipherLib;
       };
     checks = targets;
   };

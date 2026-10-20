@@ -59,7 +59,7 @@ func migrate(t testing.TB, path string) *db.DB {
 	return d
 }
 
-func open(t testing.TB, connect func(string) (*db.DB, error)) *db.DB {
+func open(t testing.TB, connect func(string, ...db.Option) (*db.DB, error)) *db.DB {
 	t.Helper()
 	d, err := connect(filepath.Join(t.TempDir(), "atrium.db"))
 	if err != nil {

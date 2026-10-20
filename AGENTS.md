@@ -69,6 +69,7 @@ external services, reverse proxy, persistence, and backups.
   existing error classes rather than recreating them.
 - SQLite writes use `DB.Write` and `WithTx`. `DB.Read` is query-only; queries
   inside a transaction use that transaction.
+- The shipped database engine is SQLCipher selected by the `libsqlite3` build tag; the dev shell sets it through `GOFLAGS`. Builds without that tag or `modernc` fail on purpose. Keys travel only in the `key=x'<hex>'` URI parameter built by `internal/db`; the `modernc` driver has no cipher and must refuse a key.
 - Application calendar boundaries use `config.Location`, not process
   `time.Local`.
 - Stage web assets through the existing build. Do not commit
