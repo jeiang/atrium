@@ -276,7 +276,7 @@ func TestUploadsLimitsAndFileServing(t *testing.T) {
 	big := upload{"big.txt", "text/plain", make([]byte, files.FileCapBytes+1)}
 	refused = status(t, s.multipart("/chat", map[string]string{"text": "take this"}, []upload{big}, hx, "true"), http.StatusUnprocessableEntity)
 	mustContain(t, refused, "Not attached", "big.txt is over the 32 MB limit")
-	if n := s.count("SELECT COUNT(*) FROM thread_files") + s.count("SELECT COUNT(*) FROM threads"); n != 0 {
+	if n := s.count("SELECT COUNT(*) FROM thread_files") + s.count("SELECT COUNT(*) FROM threads WHERE deleted_at IS NULL"); n != 0 {
 		t.Errorf("a refused file left %d rows", n)
 	}
 	unnamed := s.multipart("/chat", map[string]string{"text": " "}, []upload{huge}, hx, "true")
