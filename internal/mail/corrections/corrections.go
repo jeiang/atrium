@@ -1,5 +1,3 @@
-// Package corrections is src/atrium/corrections.py: the operator's
-// destination for a message, which outranks every other routing stage.
 package corrections
 
 import (
@@ -20,14 +18,12 @@ const (
 	MaxFolderChars = 200
 )
 
-// Error is Python's CorrectionError; its text is shown to the operator.
 type Error string
 
 func (e Error) Error() string { return string(e) }
 
 func errorf(format string, args ...any) error { return Error(fmt.Sprintf(format, args...)) }
 
-// Correction is one corrections row.
 type Correction struct {
 	MessageID int64   `json:"message_id"`
 	Account   string  `json:"account"`
@@ -36,13 +32,11 @@ type Correction struct {
 	Source    string  `json:"source"`
 }
 
-// Querier is the read side of *sql.DB and *sql.Tx.
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// Get is get_correction: nil when the message has no correction.
 func Get(ctx context.Context, q Querier, messageID int64) (*Correction, error) {
 	var c Correction
 	err := q.QueryRowContext(ctx, "SELECT message_id, account, folder, ts, source FROM corrections WHERE message_id = ?",
@@ -56,8 +50,6 @@ func Get(ctx context.Context, q Querier, messageID int64) (*Correction, error) {
 	return &c, nil
 }
 
-// Record is record_correction: it stores the correction and logs it as a decision in one transaction. ts is
-// the time of the correction. source is Source unless the caller is another actor.
 func Record(ctx context.Context, d *db.DB, messageID int64, folder, source string, ts float64) (Correction, error) {
 	folder = py.Strip(folder)
 	if folder == "" || utf8.RuneCountInString(folder) > MaxFolderChars || strings.Contains(folder, "|") || folder == config.Inbox {
@@ -94,8 +86,6 @@ func Record(ctx context.Context, d *db.DB, messageID int64, folder, source strin
 	return out, err
 }
 
-// Clear is clear_correction: whether a correction was removed. A non-empty folder only removes a correction to
-// that folder.
 func Clear(ctx context.Context, d *db.DB, messageID int64, folder *string) (bool, error) {
 	query, args := "DELETE FROM corrections WHERE message_id = ?", []any{messageID}
 	if folder != nil {
@@ -110,7 +100,6 @@ func Clear(ctx context.Context, d *db.DB, messageID int64, folder *string) (bool
 	return n > 0, err
 }
 
-// List is list_corrections: the newest corrections first; account "" lists every account.
 func List(ctx context.Context, q Querier, account string, limit int) ([]Correction, error) {
 	query, args := "SELECT message_id, account, folder, ts, source FROM corrections", []any{}
 	if account != "" {
@@ -134,5 +123,4 @@ func List(ctx context.Context, q Querier, account string, limit int) ([]Correcti
 	return out, err
 }
 
-// DefaultListLimit is list_corrections' default limit.
 const DefaultListLimit = 100

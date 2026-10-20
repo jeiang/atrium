@@ -102,6 +102,10 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 			p.fail(w, r, http.StatusNotFound, "unknown project")
 			return
 		}
+		if problem, archived := archivedProject(found, "start chats in it"); archived {
+			p.failure(w, r, "Project archived", problem)
+			return
+		}
 		project = &projectID
 	}
 	threadID, err := service.CreateThread(ctx, p.deps.DB.Write, p.now(), threads.NewThread{Kind: threads.Chat, ProjectID: project})
@@ -110,6 +114,7 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 	check(err)
 	attached, ok := p.attach(w, r, thread, uploads)
 	if !ok {
+		check(p.svc.DeleteThread(ctx, threadID))
 		return
 	}
 	if text != "" {
@@ -165,6 +170,16 @@ func (p *pages) chatProject(w http.ResponseWriter, r *http.Request) {
 	}
 	var target *int64
 	if projectID != 0 {
+		found, err := projects.Get(detached(r), p.deps.DB.Read, projectID)
+		check(err)
+		if found == nil {
+			p.fail(w, r, http.StatusNotFound, "unknown project")
+			return
+		}
+		if problem, archived := archivedProject(found, "move chats into it"); archived {
+			p.failure(w, r, "Project archived", problem)
+			return
+		}
 		target = &projectID
 	}
 	moved, err := projects.MoveThread(detached(r), p.deps.DB.Write, threadID, target)

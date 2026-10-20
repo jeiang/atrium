@@ -1,4 +1,3 @@
-// Package scans is scans.py: every proposal scanner, run in order by `proposals scan-all` (atrium-scan.service).
 package scans
 
 import (
@@ -11,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Names is SCANNERS' names in run order.
 var Names = [...]string{"rebalance", "deletions", "gmail_labels"}
 
 // ScanAll is scan_all: each scanner's result by name; namer names rebalance's split folders. Every scanner gets

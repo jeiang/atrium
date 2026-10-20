@@ -239,8 +239,6 @@ func TestFailedBacklogProposalIsReopened(t *testing.T) {
 	}
 }
 
-// TestBacklogMatchesPython compares with backlog.backlog on the same mailbox, recorded from the frozen app
-// (golive_ts "1792080000.0").
 func TestBacklogMatchesPython(t *testing.T) {
 	w := livetest.ICloud(t, "live",
 		livetest.Seed{Subject: "a1", Flags: []string{seen}}, livetest.Seed{Subject: "a2", Flags: []string{seen}},

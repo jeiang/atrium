@@ -16,8 +16,6 @@ const (
 	kindAware
 )
 
-// Value is what icalendar and datetime hand the Python code: a date, a naive datetime (wall fields held as
-// UTC) or an aware datetime (an instant carrying its zone).
 type Value struct {
 	kind kind
 	t    time.Time
@@ -112,8 +110,6 @@ func fmtValue(v Value, tz *time.Location) string {
 	return v.iso()
 }
 
-// ParseWhen is parse_when: an ISO date or datetime string as a date (all day) or an aware datetime, a naive
-// input read in tz.
 func ParseWhen(raw any, tz *time.Location, allDay bool) (Value, error) {
 	text, ok := raw.(string)
 	if !ok || py.Strip(text) == "" {

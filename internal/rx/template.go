@@ -27,7 +27,6 @@ func (t *template) expand(m *Match) string {
 	return b.String()
 }
 
-// parseTemplate is Python's re._parser.parse_template.
 func parseTemplate(repl string, re *Regexp) (*template, error) {
 	s := &parser{src: []rune(repl), pattern: repl, text: re.flags&Bytes == 0}
 	if err := s.advance(); err != nil {

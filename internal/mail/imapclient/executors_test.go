@@ -36,7 +36,6 @@ func gmail(t *testing.T, script string, env config.Env) mail.Client {
 	return client
 }
 
-// sessions opens each scripted client in turn, one per mailops.Session.
 func sessions(t *testing.T, clients ...mail.Client) mailops.Opener {
 	return func(ctx context.Context, _ string) (mail.Client, error) {
 		if len(clients) == 0 {

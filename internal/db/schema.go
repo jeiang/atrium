@@ -37,8 +37,6 @@ var (
 	fileThreadColumns = []column{{"code_sandbox", "INTEGER NOT NULL DEFAULT 0"}, {"container_id", "TEXT"}, {"deleted_at", "REAL"}}
 )
 
-// initSchema is Python's db.connect schema pass (db.SCHEMA,
-// init_extra_schemas, refresh_views) in its order, without the seeds.
 func initSchema(ctx context.Context, q Querier) error {
 	steps := []func() error{
 		script(ctx, q, "core"),
@@ -149,8 +147,6 @@ func tableInfo(ctx context.Context, q Querier, table string) ([]tableColumn, err
 	return out, rows.Err()
 }
 
-// addColumn adds the column unless the table has it; the caller holds the
-// write transaction, so Python's duplicate-column race cannot happen.
 func addColumn(ctx context.Context, q Querier, table string, c column) (bool, error) {
 	cols, err := tableInfo(ctx, q, table)
 	if err != nil {
@@ -301,8 +297,6 @@ type seeds struct {
 	Categories []string `json:"categories"`
 }
 
-// seed inserts the built-in skills, subagents and starter categories that
-// are missing, as Python's skills/subagents/money init do.
 func seed(ctx context.Context, q Querier, now time.Time) error {
 	raw, err := schemaFS.ReadFile("schema/seeds.json")
 	if err != nil {

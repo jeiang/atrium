@@ -1,6 +1,3 @@
-// Package llm is src/atrium/llm.py: JSON-schema chat completions against
-// the local OpenAI-compatible model server and the mail judgments built on
-// them.
 package llm
 
 import (
@@ -43,7 +40,6 @@ const EventSystem = "You scan the mailbox owner's email for calendar events. has
 
 var FlagFields = [...]string{"person_asking", "deadline_or_payment_due", "security_event", "flag"}
 
-// Field is one member of an Object.
 type Field struct {
 	Key   string
 	Value any
@@ -113,13 +109,10 @@ func FolderSchema(folders []string) Object {
 	}
 }
 
-// FolderSender is one filed message's folder and sender domain.
 type FolderSender struct{ Folder, FromDomain string }
 
-// Neighbor is one similar filed message.
 type Neighbor struct{ Folder, FromDomain, Subject string }
 
-// Message is the message being judged.
 type Message struct{ Subject, FromName, FromAddr string }
 
 func FolderCatalog(rows []FolderSender) string {
@@ -180,8 +173,6 @@ type chatMessage struct {
 	Content string `json:"content"`
 }
 
-// ChatJSON asks for a reply matching schema and returns the reply's JSON
-// content; maxTokens <= 0 means MaxTokens.
 func ChatJSON(ctx context.Context, url, system, user string, schema any, maxTokens int) (json.RawMessage, error) {
 	if maxTokens <= 0 {
 		maxTokens = MaxTokens
@@ -243,8 +234,6 @@ func field(a any, k string) (bool, error) {
 	return httpx.Truthy(v), err
 }
 
-// JudgeFolder returns the folder the model picked and whether it is
-// confident.
 func JudgeFolder(ctx context.Context, url string, folders []string, catalog string, neighbors []Neighbor, m Message, body string) (string, bool, error) {
 	raw, err := ChatJSON(ctx, url, FolderSystem, FolderPrompt(catalog, neighbors, m, body), FolderSchema(folders), MaxTokens)
 	if err != nil {
@@ -266,7 +255,6 @@ func JudgeFolder(ctx context.Context, url string, folders []string, catalog stri
 	return folder, confident, err
 }
 
-// Flags is judge_flag's verdict, one bool per FlagFields entry.
 type Flags struct {
 	PersonAsking         bool `json:"person_asking"`
 	DeadlineOrPaymentDue bool `json:"deadline_or_payment_due"`

@@ -39,7 +39,6 @@ var (
 	listItemRe = rx.MustCompile(`^\s*(?:[-*+]|\d+\.)\s`, 0)
 )
 
-// ProposalError is notion_proposals.ProposalError; its text is shown to the operator.
 type ProposalError string
 
 func (e ProposalError) Error() string { return string(e) }
@@ -48,7 +47,6 @@ func (ProposalError) PyClass() string { return "ProposalError" }
 
 func (ProposalError) PyModule() string { return "atrium.notion_proposals" }
 
-// StaleError is StaleError: the page changed after the proposal was drafted.
 type StaleError string
 
 func (e StaleError) Error() string { return string(e) }
@@ -57,13 +55,10 @@ func (StaleError) PyClass() string { return "StaleError" }
 
 func (StaleError) PyModule() string { return "atrium.notion_proposals" }
 
-// ChatFunc is llm.chat_json.
 type ChatFunc func(ctx context.Context, url, system, user string, schema any, maxTokens int) (json.RawMessage, error)
 
-// Ref is pageref of a mirrored page.
 func (p *Page) Ref() PageRef { return pageRef(p.ID, p.Title, p.URL, p.Path, p.Private != 0) }
 
-// Dict is the JSON shape of a page reference.
 func (r PageRef) Dict() py.Dict {
 	path := make([]any, len(r.Path))
 	for i, part := range r.Path {
@@ -76,7 +71,6 @@ func (r PageRef) Dict() py.Dict {
 	return py.Dict{{Key: "id", Value: r.ID}, {Key: "title", Value: r.Title}, {Key: "url", Value: r.URL}, {Key: "path", Value: path}, {Key: "private", Value: r.Private}}
 }
 
-// Proposer drafts the Notion proposals: the LLM call and the proposal row.
 type Proposer struct {
 	DB   *db.DB
 	Cfg  config.Config
@@ -143,8 +137,6 @@ func (p *Proposer) create(ctx context.Context, kind, title string, payload, prev
 	return &id, nil
 }
 
-// ProposeLink is propose_link: nil when the pages are already linked, the model sees no reason to link them or
-// an identical proposal exists.
 func (p *Proposer) ProposeLink(ctx context.Context, sourceID, targetID string) (*int64, error) {
 	source, err := p.load(ctx, sourceID)
 	if err != nil {
@@ -258,7 +250,6 @@ func diffLines(before, after string) []any {
 	return out
 }
 
-// ProposeEdit is propose_edit.
 func (p *Proposer) ProposeEdit(ctx context.Context, pageID, instruction string) (*int64, error) {
 	page, err := p.load(ctx, pageID)
 	if err != nil {
@@ -296,7 +287,6 @@ func (p *Proposer) ProposeEdit(ctx context.Context, pageID, instruction string) 
 		fingerprint(KindEdit, page.ID, instruction, page.LastEditedTime, updateDicts(updates)))
 }
 
-// Applier runs approved Notion proposals and their undo.
 type Applier struct {
 	DB        *db.DB
 	Env       config.Env
@@ -431,7 +421,6 @@ func (a *Applier) failed(ctx context.Context, p *proposals.Proposal, action any,
 	return nil, err
 }
 
-// ExecuteLink is execute_link.
 func (a *Applier) ExecuteLink(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
 	client, err := a.client()
 	if err != nil {
@@ -488,7 +477,6 @@ func (a *Applier) applyLink(ctx context.Context, client *Client, payload py.Dict
 	return previous, after, err
 }
 
-// ExecuteEdit is execute_edit.
 func (a *Applier) ExecuteEdit(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
 	client, err := a.client()
 	if err != nil {
@@ -544,7 +532,6 @@ func validPayloadUpdates(raw []any) []update {
 	return out
 }
 
-// UndoRestore is undo_restore.
 func (a *Applier) UndoRestore(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
 	v, err := py.JSONLoads(plan)
 	if err != nil {
@@ -568,7 +555,6 @@ func (a *Applier) UndoRestore(ctx context.Context, plan json.RawMessage) (py.Dic
 	return py.Dict{{Key: "restored", Value: pageID}}, nil
 }
 
-// Register is notion_proposals.register.
 func (a *Applier) Register(r *proposals.Registry) {
 	r.Executors[KindLink] = a.ExecuteLink
 	r.Executors[KindEdit] = a.ExecuteEdit

@@ -30,7 +30,6 @@ func pyUpper(c rune) rune {
 	return c
 }
 
-// lowerPreimage maps a lowercase form to the other code points re lowers to it.
 var lowerPreimage = func() map[rune][]rune {
 	m := map[rune][]rune{}
 	for _, c := range pyCased {
@@ -41,8 +40,6 @@ var lowerPreimage = func() map[rune][]rune {
 	return m
 }()
 
-// foldLiteral is the set of code points matching literal r under Unicode IGNORECASE: those whose lowercase form
-// is r's or one of its re._casefix equivalents (CPython's LITERAL_UNI_IGNORE and its casefix IN form).
 func foldLiteral(r rune) []rune {
 	if !pyIsCased(r) {
 		return []rune{r}

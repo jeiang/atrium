@@ -10,9 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// ExtractText is extract_text: the page title and its readable text, at most PageTextChars characters. The text
-// is what go-trafilatura finds as the main content, and the title is its metadata title; a page it finds no
-// content in falls back to PlainText. testdata/corpora/README.md lists where this differs from trafilatura.
 func ExtractText(markup, pageURL string) (title, text string) {
 	title, fallback := PlainText(markup)
 	if t, body, ok := readable(markup, pageURL); ok {
@@ -121,8 +118,6 @@ func collectText(n *html.Node, b *strings.Builder) {
 	}
 }
 
-// renderText turns the extracted content tree into one line per block, a list item as "- item" and the lines of
-// a pre element as written, the layout trafilatura's plain-text output has.
 func renderText(root *html.Node) string {
 	if root == nil {
 		return ""
@@ -133,8 +128,6 @@ func renderText(root *html.Node) string {
 	return strings.Join(w.lines, "\n")
 }
 
-// blockContainer reports whether a code element inside n is a block of its own, as trafilatura writes a pre
-// element, rather than inline text.
 func blockContainer(n *html.Node) bool {
 	if n == nil || n.Type != html.ElementNode {
 		return true

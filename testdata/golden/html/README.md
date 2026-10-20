@@ -5,15 +5,10 @@ the frozen Python app. The Go page slices canonical-diff their output against
 these files.
 
 - Freeze commit: `cfd9dc1e9a5e653a48863c7e71370ba2ea1aac40`
-- Regenerated from main after each post-freeze Python fix; the provenance is the git history of testdata.
+- Not regenerable; the provenance is the git history of testdata.
 - Constant now: `1760000000` (2025-10-09T08:53:20Z); every timestamp in the
   contexts is derived from it and the `ts` filter renders in UTC.
-- Generator: `tools/golden/render_pages.py` with the fixed contexts in
-  `tools/golden/page_contexts.py`. Regenerate with
-  `nix develop --impure -c python tools/golden/render_pages.py` whenever a
-  Python fix touches a template; `--check` renders twice into temporary
-  directories, requires both runs and this directory to be byte-identical, and
-  cross-checks the template listing against `index.json`.
+- Generated from the frozen Python app with fixed contexts; not regenerable.
 
 ## Files
 

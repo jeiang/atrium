@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -22,17 +19,13 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
-	"github.com/jeiang/atrium/internal/mail/openloops"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
-	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/testutil/golden"
+	"github.com/jeiang/atrium/internal/testutil/llmstub"
 )
 
 type cliGolden struct {
@@ -80,7 +73,6 @@ func loadWorld(t *testing.T) goldenWorld {
 	return w
 }
 
-// fakes rebuilds the IMAP servers the frozen app talked to when it recorded the goldens.
 func (w goldenWorld) fakes(env config.Env) map[string]*mailtest.FakeClient {
 	out := map[string]*mailtest.FakeClient{}
 	for name, spec := range w.Accounts {
@@ -99,99 +91,6 @@ func (w goldenWorld) fakes(env config.Env) map[string]*mailtest.FakeClient {
 		out[name] = fake
 	}
 	return out
-}
-
-type llmScript struct {
-	Defaults  map[string]json.RawMessage            `json:"defaults"`
-	BySubject map[string]map[string]json.RawMessage `json:"by_subject"`
-	Payees    map[string]json.RawMessage            `json:"payees"`
-}
-
-func subjectOf(prompt string) (string, bool) {
-	for line := range strings.SplitSeq(prompt, "\n") {
-		if subject, ok := strings.CutPrefix(line, "Subject: "); ok {
-			return subject, true
-		}
-	}
-	return "", false
-}
-
-func sparseEmbedding(text string) []float64 {
-	v := make([]float64, config.EmbedDim)
-	for _, token := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
-		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
-	}) {
-		sum := sha256.Sum256([]byte(token))
-		v[binary.BigEndian.Uint32(sum[:4])%config.EmbedDim]++
-	}
-	return v
-}
-
-// models serves the llama.cpp stand-in of the generator: embeddings are bucketed token counts and a chat reply is
-// the script's default for the feature the system prompt names, with the override of the message's subject.
-func models(t *testing.T) *httptest.Server {
-	t.Helper()
-	var script llmScript
-	if err := json.Unmarshal(golden.ReadFile(t, "pipeline", "llm_script.json"), &script); err != nil {
-		t.Fatal(err)
-	}
-	features := map[string]string{
-		llm.FolderSystem: "folder", llm.FlagSystem: "flag", llm.EventSystem: "event",
-		openloops.CommitmentSystem: "commitments", watches.PackageSystem: "package", rebalance.NameSystem: "folder_name",
-		money.ExtractSystem: "money", money.PayeeSystem: "payee",
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Input    []string `json:"input"`
-			Messages []struct {
-				Content string `json:"content"`
-			} `json:"messages"`
-		}
-		body, _ := io.ReadAll(r.Body)
-		if err := json.Unmarshal(body, &req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if strings.HasSuffix(r.URL.Path, "/embeddings") {
-			data := make([]any, len(req.Input))
-			for i, text := range req.Input {
-				data[i] = map[string]any{"index": i, "embedding": sparseEmbedding(text)}
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
-			return
-		}
-		feature, known := features[req.Messages[0].Content]
-		if !known {
-			http.Error(w, "unknown system prompt", http.StatusBadRequest)
-			return
-		}
-		if feature == "payee" {
-			content := req.Messages[1].Content
-			normalized := content[strings.Index(content, "\nNormalized: ")+len("\nNormalized: "):]
-			answer, known := script.Payees[normalized]
-			if !known {
-				answer = json.RawMessage(`{"name": ` + strconv.Quote(titleCase(normalized)) + `, "category": "Other"}`)
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": string(answer)}}}})
-			return
-		}
-		answer := script.Defaults[feature]
-		if subject, found := subjectOf(req.Messages[1].Content); found {
-			if override, ok := script.BySubject[subject][feature]; ok && feature != "folder_name" {
-				merged := map[string]json.RawMessage{}
-				_ = json.Unmarshal(answer, &merged)
-				over := map[string]json.RawMessage{}
-				_ = json.Unmarshal(override, &over)
-				for k, v := range over {
-					merged[k] = v
-				}
-				answer, _ = json.Marshal(merged)
-			}
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": string(answer)}}}})
-	}))
-	t.Cleanup(srv.Close)
-	return srv
 }
 
 func copyTree(t *testing.T, from, to string) {
@@ -299,8 +198,6 @@ func loadGoldenData(t *testing.T) goldenData {
 	return goldenData{world: loadWorld(t), environment: scenario.Environment}
 }
 
-// rig is the app over a copy of the golden database in a fresh directory, with the generator's IMAP and
-// llama.cpp stand-ins behind it and the clock the goldens were recorded at.
 type rig struct {
 	dir string
 	app *cli.App
@@ -311,7 +208,7 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 	dir := t.TempDir()
 	copyGoldenFile(t, filepath.Join(golden.Dir(), "atrium.db"), filepath.Join(dir, "atrium.db"))
 	copyTree(t, filepath.Join(golden.Dir(), "state", "cache"), filepath.Join(dir, "cache"))
-	srv := models(t)
+	srv := llmstub.Server(t, nil)
 	t.Cleanup(calendar.UseEndpoints(calendar.Endpoints{CalDAV: caldav.New(t, data.environment["ICLOUD_APPLE_ID"], data.environment["ICLOUD_APP_PASSWORD"]).URL + "/"}))
 	vars := map[string]string{}
 	for k, v := range data.environment {
@@ -345,8 +242,6 @@ func (r *rig) run(ctx context.Context, argv ...string) (code int, stdout, stderr
 	return code, out.String(), errs.String()
 }
 
-// TestCLIGoldens runs the recorded mail commands on a copy of the golden database and compares exit code and
-// stdout, the last stderr line of a failure and, for argument errors and help, the complete stderr.
 func TestCLIGoldens(t *testing.T) {
 	var index []cliGolden
 	if err := json.Unmarshal(golden.ReadFile(t, "cli", "index.json"), &index); err != nil {
@@ -420,8 +315,6 @@ func TestCLIGoldens(t *testing.T) {
 	}
 }
 
-// TestWritingCommandsTakeTheDatabaseLock holds atrium.db.lock and expects every command that holds it in
-// Python (the rebaseline and deletion passes and the loops, watches and money refreshes) to wait for it.
 func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
 	data := loadGoldenData(t)
 	for _, argv := range [][]string{{"live", "rebaseline"}, {"live", "deletions"}, {"loops", "refresh"}, {"watches", "refresh"}, {"money", "refresh"}} {
@@ -467,9 +360,6 @@ func copyGoldenFile(t *testing.T, from, to string) {
 	}
 }
 
-// TestCLIParity checks the generated parity table (parity.json) against the production binary's command set:
-// every ported row answers -h, every excluded row is refused as the production parser refuses an unknown command,
-// every table case is a recorded golden, and the Go-only rows work.
 func TestCLIParity(t *testing.T) {
 	rows := loadParity(t)
 	var index []cliGolden
@@ -564,24 +454,6 @@ func TestCLIParity(t *testing.T) {
 			t.Errorf("status %d", resp.StatusCode)
 		}
 	})
-}
-
-func titleCase(s string) string {
-	var b strings.Builder
-	cased := false
-	for _, r := range s {
-		letter := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
-		switch {
-		case !letter:
-			b.WriteRune(r)
-		case cased:
-			b.WriteString(strings.ToLower(string(r)))
-		default:
-			b.WriteString(strings.ToUpper(string(r)))
-		}
-		cased = letter
-	}
-	return b.String()
 }
 
 func goldenEnv(t *testing.T, g cliGolden) map[string]string {

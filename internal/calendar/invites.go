@@ -7,8 +7,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Invite is one upcoming event of an invitation, as event_candidates.invites_in builds it. End is nil without a
-// DTEND. Attendees are never read.
 type Invite struct {
 	UID      string
 	Title    string
@@ -19,7 +17,6 @@ type Invite struct {
 	Notes    string
 }
 
-// Raw is the invite as the proposal input of calendar_proposals.propose, aimed at target.
 func (i Invite) Raw(target string) py.Dict {
 	var end any
 	if i.End != nil {
@@ -34,9 +31,6 @@ func (i Invite) Raw(target string) py.Dict {
 
 var skippedMethods = map[string]bool{"CANCEL": true, "REPLY": true, "COUNTER": true, "DECLINECOUNTER": true, "REFRESH": true}
 
-// InvitesIn is the part of invites_in for one text/calendar payload: its VEVENTs that are not cancelled and not
-// over at now, one per UID. methodParam is the part's Content-Type method parameter, used when the calendar has
-// no METHOD. A payload icalendar cannot parse has none.
 func InvitesIn(data []byte, methodParam string, now time.Time) []Invite {
 	cal, err := decodeICS(data)
 	if err != nil {

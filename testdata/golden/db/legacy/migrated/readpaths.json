@@ -19,6 +19,10 @@
     "share": 0.002488572,
     "spent_usd": 0.1866429
   },
+  "calendar.find_tracked": {
+    "Calendar": "icloud",
+    "Spec": "{\"uid\": \"dentist-20261020@clinic.example\", \"title\": \"Dentist appointment\", \"start\": \"2026-10-20T14:00:00+00:00\", \"end\": \"2026-10-20T15:00:00+00:00\", \"all_day\": false, \"location\": \"Clinic Room 2\", \"notes\": \"Routine check-up\"}"
+  },
   "channels.list_channels": [
     {
       "case_sensitive": false,
@@ -45,6 +49,121 @@
     "errors": [],
     "last_check": 1792166400.0
   },
+  "context.ledger_rows": [
+    {
+      "rows": [
+        {
+          "CommittedAt": 1792166400,
+          "FromSeq": null,
+          "ID": 1,
+          "ItemID": "tu-search",
+          "Kind": "result",
+          "ResultID": null,
+          "RunID": 2,
+          "SourceIDsJSON": "[]",
+          "StagedAt": 1792166400,
+          "State": "pinned",
+          "Synopsis": null,
+          "ToSeq": null,
+          "Tokens": 640
+        },
+        {
+          "CommittedAt": 1792166400,
+          "FromSeq": null,
+          "ID": 2,
+          "ItemID": "tu-report",
+          "Kind": "result",
+          "ResultID": 1,
+          "RunID": 2,
+          "SourceIDsJSON": "[]",
+          "StagedAt": 1792166400,
+          "State": "pinned",
+          "Synopsis": null,
+          "ToSeq": null,
+          "Tokens": 199
+        }
+      ],
+      "thread_id": 2
+    }
+  ],
+  "context.projection": [
+    {
+      "projection": {
+        "BaseSeq": 5,
+        "Head": [
+          {
+            "Content": [
+              {
+                "content": "Goal: compare flights. Pending: none.",
+                "encrypted_content": "enc",
+                "signature": "sig-compaction",
+                "type": "compaction"
+              }
+            ],
+            "Role": "assistant",
+            "RunID": null,
+            "Seq": null
+          },
+          {
+            "Content": [
+              {
+                "text": "Context manifest (maintained by atrium; ids are exact):\ncontext_status() shows the live dashboard; context_pin/context_drop/context_fold manage it.",
+                "type": "text"
+              }
+            ],
+            "Role": "user",
+            "RunID": null,
+            "Seq": null
+          },
+          {
+            "Content": [
+              {
+                "text": "Compare flights to Tobago.",
+                "type": "text"
+              },
+              {
+                "text": "Current date and time: Friday 2026-10-16 12:01 AST",
+                "type": "text"
+              }
+            ],
+            "Role": "user",
+            "RunID": null,
+            "Seq": null
+          },
+          {
+            "Content": [
+              {
+                "id": "tu-c1",
+                "input": {},
+                "name": "context_status",
+                "type": "tool_use"
+              }
+            ],
+            "Role": "assistant",
+            "RunID": null,
+            "Seq": null
+          },
+          {
+            "Content": [
+              {
+                "content": "{\"approx_tokens\": 33, \"turn_start_seq\": 1, \"staged_savings\": 0, \"commit_at_savings\": 20000, \"items\": [], \"omitted_items\": 0, \"folds\": []}",
+                "tool_use_id": "tu-c1",
+                "type": "tool_result"
+              }
+            ],
+            "Role": "user",
+            "RunID": null,
+            "Seq": null
+          }
+        ],
+        "ID": 1,
+        "Kind": "server",
+        "StripBeforeSeq": 5,
+        "StripFromSeq": 5
+      },
+      "thread_id": 4
+    }
+  ],
   "context.status": {
     "approx_tokens": 1743,
     "commit_at_savings": 20000,
@@ -435,6 +554,10 @@
     "mode": "live",
     "paused": false
   },
+  "media.seen": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": true,
+    "cccccccccccccccccccccccccccccccccccccccc": true
+  },
   "message.get_message dentist": {
     "account": "icloud",
     "attachments": [
@@ -814,6 +937,24 @@
     }
   },
   "money.tracked_since": "2026-07-01",
+  "money.unscanned": [
+    {
+      "DateTS": 1783008000,
+      "FromAddr": "statements@water.example",
+      "FromDomain": "water.example",
+      "FromName": "Water Authority",
+      "ID": 12,
+      "Subject": "Water statement 6"
+    },
+    {
+      "DateTS": 1784217600,
+      "FromAddr": "statements@water.example",
+      "FromDomain": "water.example",
+      "FromName": "Water Authority",
+      "ID": 11,
+      "Subject": "Water statement 5"
+    }
+  ],
   "notify.recent": [
     {
       "body": "Nothing due tomorrow.",
@@ -1348,6 +1489,21 @@
     "title": "Alpha plan",
     "updated_at": 1792166400.0
   },
+  "notion_wiki.get_local": {
+    "Aliases": [
+      "Project Alpha"
+    ],
+    "HubID": "00000000-0000-0000-0000-000000000900",
+    "InTrash": false,
+    "LastReviewed": "2026-10-15",
+    "PageID": "00000000-0000-0000-0000-000000000001",
+    "Sources": [
+      "mail #1"
+    ],
+    "Title": "Alpha plan",
+    "UpdatedAt": 1792166400
+  },
+  "notion_wiki.log_page_id": "00000000-0000-0000-0000-000000000101",
   "openloops.list_commitments": [
     {
       "due": "2026-10-16",
@@ -2044,6 +2200,265 @@
       "state": "owe_reply",
       "subject": "Dinner on Saturday",
       "thread_key": "t:dinner@golden.example"
+    }
+  ],
+  "profile.entries": [
+    {
+      "Key": "preferred_airline",
+      "UpdatedAt": 1792166400,
+      "Value": "Island Air"
+    }
+  ],
+  "progress.since": [
+    {
+      "events": [
+        {
+          "data": {
+            "effort": "high",
+            "role": null,
+            "thread_id": 1,
+            "thread_kind": "cron",
+            "title": "Event candidates"
+          },
+          "id": 1,
+          "kind": "run_start",
+          "run_id": 1
+        },
+        {
+          "data": {
+            "args": "{\"message_id\": 90}",
+            "id": "tu-read",
+            "name": "mail_read"
+          },
+          "id": 2,
+          "kind": "tool_start",
+          "run_id": 1
+        },
+        {
+          "data": {
+            "id": "tu-read",
+            "ok": true,
+            "preview": "{\"untrusted\": true, \"message_id\": 90, \"account\": \"icloud\", \"folder\": \"INBOX\", \"date\": \"2026-10-15T06:24:00+00:00\", \"headers\": {\"From\": \"Friend Two <friend2@people.example>\", \"To\": \"operator@icloud.example\", \"Date\": \"Thu, 15 Oct 2026 06:24:…"
+          },
+          "id": 3,
+          "kind": "tool_done",
+          "run_id": 1
+        },
+        {
+          "data": {
+            "args": "{\"calendar\": \"icloud\", \"title\": \"Dinner with Friend Two\", \"start\": \"2026-10-17T19:00\", \"end\": \"2026-10-17T21:00\", \"sour…",
+            "id": "tu-event",
+            "name": "event_propose"
+          },
+          "id": 4,
+          "kind": "tool_start",
+          "run_id": 1
+        },
+        {
+          "data": {
+            "id": "tu-event",
+            "ok": true,
+            "preview": "{\"proposed\": true, \"proposal_id\": 10}"
+          },
+          "id": 5,
+          "kind": "tool_done",
+          "run_id": 1
+        },
+        {
+          "data": {
+            "text": "90: proposed dinner."
+          },
+          "id": 6,
+          "kind": "text",
+          "run_id": 1
+        },
+        {
+          "data": {
+            "error": null,
+            "state": "done"
+          },
+          "id": 7,
+          "kind": "run_done",
+          "run_id": 1
+        }
+      ],
+      "run_id": 1
+    },
+    {
+      "events": [
+        {
+          "data": {
+            "effort": "medium",
+            "role": null,
+            "thread_id": 2,
+            "thread_kind": "chat",
+            "title": "Plan my week"
+          },
+          "id": 8,
+          "kind": "run_start",
+          "run_id": 4
+        },
+        {
+          "data": {
+            "text": "Nothing else is due this week."
+          },
+          "id": 9,
+          "kind": "text",
+          "run_id": 4
+        },
+        {
+          "data": {
+            "error": null,
+            "state": "done"
+          },
+          "id": 10,
+          "kind": "run_done",
+          "run_id": 4
+        }
+      ],
+      "run_id": 4
+    },
+    {
+      "events": [
+        {
+          "data": {
+            "effort": "medium",
+            "role": null,
+            "thread_id": 4,
+            "thread_kind": "chat",
+            "title": "Long research"
+          },
+          "id": 11,
+          "kind": "run_start",
+          "run_id": 5
+        },
+        {
+          "data": {
+            "args": "{}",
+            "id": "tu-c1",
+            "name": "context_status"
+          },
+          "id": 12,
+          "kind": "tool_start",
+          "run_id": 5
+        },
+        {
+          "data": {
+            "id": "tu-c1",
+            "ok": true,
+            "preview": "{\"approx_tokens\": 33, \"turn_start_seq\": 1, \"staged_savings\": 0, \"commit_at_savings\": 20000, \"items\": [], \"omitted_items\": 0, \"folds\": []}"
+          },
+          "id": 13,
+          "kind": "tool_done",
+          "run_id": 5
+        },
+        {
+          "data": {
+            "text": "Island Air is cheapest."
+          },
+          "id": 14,
+          "kind": "text",
+          "run_id": 5
+        },
+        {
+          "data": {
+            "error": null,
+            "state": "done"
+          },
+          "id": 15,
+          "kind": "run_done",
+          "run_id": 5
+        }
+      ],
+      "run_id": 5
+    },
+    {
+      "events": [
+        {
+          "data": {
+            "effort": "high",
+            "role": null,
+            "thread_id": 8,
+            "thread_kind": "cron",
+            "title": "Reminder: Send the itinerary to Friend"
+          },
+          "id": 16,
+          "kind": "run_start",
+          "run_id": 7
+        },
+        {
+          "data": {
+            "text": "Reminder delivered: send the itinerary to Friend."
+          },
+          "id": 17,
+          "kind": "text",
+          "run_id": 7
+        },
+        {
+          "data": {
+            "error": null,
+            "state": "done"
+          },
+          "id": 18,
+          "kind": "run_done",
+          "run_id": 7
+        }
+      ],
+      "run_id": 7
+    },
+    {
+      "events": [
+        {
+          "data": {
+            "effort": "high",
+            "role": null,
+            "thread_id": 9,
+            "thread_kind": "cron",
+            "title": "Bills check"
+          },
+          "id": 19,
+          "kind": "run_start",
+          "run_id": 8
+        },
+        {
+          "data": {
+            "args": "{\"title\": \"Bills\", \"body\": \"Nothing due tomorrow.\"}",
+            "id": "tu-cron-notify",
+            "name": "notify"
+          },
+          "id": 20,
+          "kind": "tool_start",
+          "run_id": 8
+        },
+        {
+          "data": {
+            "id": "tu-cron-notify",
+            "ok": true,
+            "preview": "{\"recorded\": true, \"delivered\": true, \"note\": null}"
+          },
+          "id": 21,
+          "kind": "tool_done",
+          "run_id": 8
+        },
+        {
+          "data": {
+            "text": "Checked."
+          },
+          "id": 22,
+          "kind": "text",
+          "run_id": 8
+        },
+        {
+          "data": {
+            "error": null,
+            "state": "done"
+          },
+          "id": 23,
+          "kind": "run_done",
+          "run_id": 8
+        }
+      ],
+      "run_id": 8
     }
   ],
   "projects.list_projects": [

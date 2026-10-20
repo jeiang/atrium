@@ -1,5 +1,3 @@
-// Package triage is triage.py: the router's latest decision per message with how it compares to where the
-// message is now, the per-account summaries and the unread-inbox flag judgments.
 package triage
 
 import (
@@ -40,7 +38,6 @@ var latestSQL = "SELECT d.id AS decision_id, d.ts, d.stage, d.key, d.action, d.d
 
 var base = "SELECT *, " + agreementSQL + " AS agreement FROM (" + latestSQL + ")"
 
-// Applied is the auto_actions row behind a decision.
 type Applied struct {
 	ID       int64   `json:"id"`
 	Kind     string  `json:"kind"`
@@ -49,7 +46,6 @@ type Applied struct {
 	Undoable bool    `json:"undoable"`
 }
 
-// Row is one latest-decision row, the columns of latestSQL by name plus agreement, current and applied.
 type Row struct {
 	DecisionID     int64    `json:"decision_id"`
 	TS             float64  `json:"ts"`
@@ -119,7 +115,6 @@ func applied(r Row) *Applied {
 	return a
 }
 
-// Filter is triage's keyword arguments; an empty string or a nil Agreement filters nothing.
 type Filter struct {
 	Account   string
 	Stage     string
@@ -129,20 +124,17 @@ type Filter struct {
 	Q         string
 }
 
-// FilterError is the ValueError of a stage or agreement filter that names none.
 type FilterError string
 
 func (e FilterError) Error() string { return string(e) }
 
 func (FilterError) PyClass() string { return "ValueError" }
 
-// Page is what triage returns.
 type Page struct {
 	Total int   `json:"total"`
 	Rows  []Row `json:"rows"`
 }
 
-// Triage is triage. A zero Limit is Python's default 50. An unknown stage or agreement is an error.
 func Triage(ctx context.Context, q report.Querier, f Filter) (Page, error) {
 	if f.Stage != "" && !slices.Contains(router.Stages[:], f.Stage) {
 		return Page{}, FilterError("unknown stage " + py.Repr(f.Stage))
@@ -194,7 +186,6 @@ func Triage(ctx context.Context, q report.Querier, f Filter) (Page, error) {
 	return page, err
 }
 
-// Get is row: the latest-decision row of a message, nil when it has none.
 func Get(ctx context.Context, q report.Querier, messageID int64) (*Row, error) {
 	rows, err := q.QueryContext(ctx, "SELECT * FROM ("+base+") WHERE message_id = ?", messageID)
 	if err != nil {
@@ -207,7 +198,6 @@ func Get(ctx context.Context, q report.Querier, messageID int64) (*Row, error) {
 	return &found[0], nil
 }
 
-// Destination is one top_destinations pair, encoded as [dest, n].
 type Destination struct {
 	Dest  string
 	Count int
@@ -217,7 +207,6 @@ func (d Destination) MarshalJSON() ([]byte, error) {
 	return fmt.Appendf(nil, "[%s,%d]", jsonString(d.Dest), d.Count), nil
 }
 
-// Summary is summary: one account's decision counts.
 type Summary struct {
 	Account         string            `json:"account"`
 	Decisions       int               `json:"decisions"`
@@ -234,7 +223,6 @@ type Summary struct {
 	Flags           report.FlagCounts `json:"flags"`
 }
 
-// Summarize is summary.
 func Summarize(ctx context.Context, q report.Querier, env config.Env, account string, since *string, at time.Time) (Summary, error) {
 	start, err := report.ParseSince(env, since, at)
 	if err != nil {
@@ -264,7 +252,6 @@ func Summarize(ctx context.Context, q report.Querier, env config.Env, account st
 	return s, err
 }
 
-// Summaries is summaries: Summarize for every configured account that has a row in accounts.
 func Summaries(ctx context.Context, q report.Querier, env config.Env, since *string, at time.Time) ([]Summary, error) {
 	out := []Summary{}
 	for _, spec := range config.Accounts {
@@ -284,7 +271,6 @@ func Summaries(ctx context.Context, q report.Querier, env config.Env, since *str
 	return out, nil
 }
 
-// Judgment is one flag_judgments row.
 type Judgment struct {
 	MessageID            int64   `json:"message_id"`
 	Account              string  `json:"account"`
@@ -300,7 +286,6 @@ type Judgment struct {
 	DateTS               float64 `json:"date_ts"`
 }
 
-// FlagJudgments is flag_judgments; a zero limit is Python's default 50.
 func FlagJudgments(ctx context.Context, q report.Querier, account string, limit, offset int) ([]Judgment, error) {
 	if limit == 0 {
 		limit = 50
@@ -331,13 +316,11 @@ func FlagJudgments(ctx context.Context, q report.Querier, account string, limit,
 	return out, err
 }
 
-// Folder is one folders row.
 type Folder struct {
 	Folder string `json:"folder"`
 	Count  int    `json:"count"`
 }
 
-// Folders is folders: the filed messages per folder of account.
 func Folders(ctx context.Context, q report.Querier, account string) ([]Folder, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT folder, COUNT(*) AS n FROM filed_messages WHERE account = ? GROUP BY folder ORDER BY folder", account)

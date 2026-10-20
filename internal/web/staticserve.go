@@ -11,9 +11,6 @@ import (
 	"time"
 )
 
-// staticHandler serves files from fsys under /static/ like Starlette's
-// StaticFiles(html=False): GET and HEAD only, no directory listings, an
-// ETag per file and Range support.
 type staticHandler struct {
 	fsys  fs.FS
 	etags sync.Map

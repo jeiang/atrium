@@ -18,7 +18,6 @@ func TestKNNOnAVXPath(t *testing.T) {
 	if !strings.Contains(debug, "Build flags: avx") {
 		t.Fatalf("sqlite-vec is built without AVX:\n%s", debug)
 	}
-	// l2_sqr_float_avx handles L2 over float vectors whose dimension is a multiple of 16.
 	const dim, rows, k = 32, 200, 10
 	if _, err := db.Exec("CREATE VIRTUAL TABLE v USING vec0(embedding FLOAT[32])"); err != nil {
 		t.Fatal(err)

@@ -79,7 +79,6 @@ func selfSigned(t *testing.T, host string) (tls.Certificate, *x509.CertPool) {
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}, pool
 }
 
-// serveTLS answers every connection with a BYE greeting over TLS.
 func serveTLS(t *testing.T, cert tls.Certificate) string {
 	t.Helper()
 	ln := listen(t)

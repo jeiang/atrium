@@ -2,7 +2,6 @@ package anthropic
 
 import "testing"
 
-// Expected values are Python's f"{json.loads(text)}".
 func TestPyRepr(t *testing.T) {
 	cases := map[string]string{
 		`{"a": [1, -0, 2.5, 1.0, 1e16, 1.5e-5, 0.0001, 123456789012345678901234567890, -0.0, 1E2]}`: `{'a': [1, 0, 2.5, 1.0, 1e+16, 1.5e-05, 0.0001, 123456789012345678901234567890, -0.0, 100.0]}`,

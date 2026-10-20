@@ -1,6 +1,3 @@
-// Package journal is agent/journal.py: the record of what the assistant did. Runs with their leases, the
-// messages of a thread as the raw JSON content blocks the model exchanged, the queue of messages typed
-// while a run is going, and the tool calls a run made.
 package journal
 
 import (
@@ -20,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Run states.
 const (
 	Running     = "running"
 	Interrupted = "interrupted"
@@ -28,7 +24,6 @@ const (
 	Failed      = "failed"
 )
 
-// Tool call states.
 const (
 	Started = "started"
 	OK      = "done"
@@ -36,24 +31,18 @@ const (
 	Unknown = "unknown"
 )
 
-// Replay classes of a tool: a safe call may be run again when a run resumes, a write may not.
 const (
 	Safe  = "safe"
 	Write = "write"
 )
 
-// Message roles.
 const (
 	User      = "user"
 	Assistant = "assistant"
 )
 
-// LeaseSeconds is how long a running run belongs to one process: the loop renews the lease each step, only
-// a run whose lease lapsed can be marked interrupted, and resuming claims it atomically, so two processes
-// never execute the same run.
 const LeaseSeconds = 1800
 
-// NewOwner is the identity of this process in run leases: host, pid and a random suffix.
 func NewOwner() string {
 	host, _ := os.Hostname()
 	suffix := make([]byte, 4)
@@ -63,7 +52,6 @@ func NewOwner() string {
 
 var jsonCompact = py.JSONOpts{Compact: true, NoEnsureASCII: true}
 
-// Run is a runs row.
 type Run struct {
 	ID            int64      `json:"id"`
 	ThreadID      int64      `json:"thread_id"`
@@ -109,7 +97,6 @@ func changed(res sql.Result, err error) (bool, error) {
 	return n > 0, err
 }
 
-// StartRun is start_run: a running run holding its lease for LeaseSeconds. owner is nil for a run no process owns.
 func StartRun(ctx context.Context, q db.Querier, threadID int64, kind, model, effort string, now float64, parentRunID *int64, owner *string) (int64, error) {
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO runs (thread_id, parent_run_id, kind, model, effort, state, started_at, owner, lease_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -120,7 +107,6 @@ func StartRun(ctx context.Context, q db.Querier, threadID int64, kind, model, ef
 	return res.LastInsertId()
 }
 
-// Limits are the per-run overrides loop.run takes, stored at start so a resumed run keeps them.
 type Limits struct {
 	MaxSteps     *int64
 	MaxCostUSD   *float64
@@ -145,13 +131,11 @@ func (l Limits) object() py.Dict {
 	return o
 }
 
-// SetLimits is set_limits.
 func SetLimits(ctx context.Context, q db.Querier, runID int64, l Limits) error {
 	_, err := q.ExecContext(ctx, "UPDATE runs SET limits_json = ? WHERE id = ?", py.JSONDumps(l.object()), runID)
 	return err
 }
 
-// LimitsOf is limits_of: the overrides stored at start, none for an unknown run.
 func LimitsOf(ctx context.Context, q db.Querier, runID int64) (Limits, error) {
 	var raw *string
 	err := q.QueryRowContext(ctx, "SELECT limits_json FROM runs WHERE id = ?", runID).Scan(&raw)
@@ -173,13 +157,11 @@ func LimitsOf(ctx context.Context, q db.Querier, runID int64) (Limits, error) {
 	return Limits{stored.MaxSteps, stored.MaxCostUSD, stored.SystemExtra, stored.AllowedTools}, nil
 }
 
-// SetSkills is set_skills: the skills expanded into the run's operator message.
 func SetSkills(ctx context.Context, q db.Querier, runID int64, names []string) error {
 	_, err := q.ExecContext(ctx, "UPDATE runs SET skills_json = ? WHERE id = ?", py.JSONDumps(append([]string{}, names...)), runID)
 	return err
 }
 
-// SkillsOf is skills_of.
 func SkillsOf(r Run) ([]string, error) {
 	if r.SkillsJSON == nil || *r.SkillsJSON == "" {
 		return []string{}, nil
@@ -191,7 +173,6 @@ func SkillsOf(r Run) ([]string, error) {
 	return names, nil
 }
 
-// GetRun is get_run: nil when there is no such run.
 func GetRun(ctx context.Context, q db.Querier, runID int64) (*Run, error) {
 	r, err := scanRun(q.QueryRowContext(ctx, "SELECT "+runColumns+" FROM runs WHERE id = ?", runID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -203,26 +184,20 @@ func GetRun(ctx context.Context, q db.Querier, runID int64) (*Run, error) {
 	return &r, nil
 }
 
-// FinishRun is finish_run.
 func FinishRun(ctx context.Context, q db.Querier, runID int64, state string, now float64, errText *string) error {
 	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, error = ?, ended_at = ? WHERE id = ?", state, errText, now, runID)
 	return err
 }
 
-// SetRunState is set_run_state.
 func SetRunState(ctx context.Context, q db.Querier, runID int64, state string) error {
 	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ? WHERE id = ?", state, runID)
 	return err
 }
 
-// RequestStop is request_stop: true when a running run was asked to stop.
 func RequestStop(ctx context.Context, q db.Querier, runID int64) (bool, error) {
 	return changed(q.ExecContext(ctx, "UPDATE runs SET stop_requested = 1 WHERE id = ? AND state = ?", runID, Running))
 }
 
-// FinishUnlessQueued is finish_unless_queued: it finishes the run unless the operator queued a message
-// meanwhile. The queue insert and this check are both write transactions, so a message is either consumed
-// by the run or starts the next one, never lost.
 func FinishUnlessQueued(ctx context.Context, d *db.DB, runID, threadID int64, state string, now float64) (bool, error) {
 	finished := false
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
@@ -236,20 +211,16 @@ func FinishUnlessQueued(ctx context.Context, d *db.DB, runID, threadID int64, st
 	return finished && err == nil, err
 }
 
-// BumpSteps is bump_steps.
 func BumpSteps(ctx context.Context, q db.Querier, runID int64) error {
 	_, err := q.ExecContext(ctx, "UPDATE runs SET steps = steps + 1 WHERE id = ?", runID)
 	return err
 }
 
-// RenewLease is renew_lease: false when another process has taken the run over (it lapsed and was resumed
-// elsewhere).
 func RenewLease(ctx context.Context, q db.Querier, runID int64, owner string, now float64) (bool, error) {
 	return changed(q.ExecContext(ctx, "UPDATE runs SET lease_until = ? WHERE id = ? AND owner = ? AND state = ?",
 		now+LeaseSeconds, runID, owner, Running))
 }
 
-// MarkInterrupted is mark_interrupted: running runs whose lease lapsed become interrupted; it returns how many.
 func MarkInterrupted(ctx context.Context, q db.Querier, now float64) (int64, error) {
 	res, err := q.ExecContext(ctx,
 		"UPDATE runs SET state = ?, owner = NULL, lease_until = NULL WHERE state = ? AND (lease_until IS NULL OR lease_until < ?)",
@@ -260,19 +231,15 @@ func MarkInterrupted(ctx context.Context, q db.Querier, now float64) (int64, err
 	return res.RowsAffected()
 }
 
-// ClaimResume is claim_resume: it atomically takes an interrupted run back to running under owner; false if
-// it was not interrupted.
 func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, now float64) (bool, error) {
 	return changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state = ?",
 		Running, owner, now+LeaseSeconds, runID, Interrupted))
 }
 
-// InterruptedRuns is interrupted_runs.
 func InterruptedRuns(ctx context.Context, q db.Querier) ([]Run, error) {
 	return runs(q.QueryContext(ctx, "SELECT "+runColumns+" FROM runs WHERE state = ? ORDER BY id", Interrupted))
 }
 
-// ActiveRun is active_run: the thread's latest running or interrupted run, nil when it has none.
 func ActiveRun(ctx context.Context, q db.Querier, threadID int64) (*Run, error) {
 	r, err := scanRun(q.QueryRowContext(ctx,
 		"SELECT "+runColumns+" FROM runs WHERE thread_id = ? AND state IN (?, ?) ORDER BY id DESC LIMIT 1", threadID, Running, Interrupted))
@@ -285,13 +252,10 @@ func ActiveRun(ctx context.Context, q db.Querier, threadID int64) (*Run, error) 
 	return &r, nil
 }
 
-// RunsOf is runs_of.
 func RunsOf(ctx context.Context, q db.Querier, threadID int64) ([]Run, error) {
 	return runs(q.QueryContext(ctx, "SELECT "+runColumns+" FROM runs WHERE thread_id = ? ORDER BY id", threadID))
 }
 
-// Message is a thread_messages row. Content holds each block as the JSON the model exchanged, so a block's
-// fields the loop never reads (signatures, encrypted content) survive a round trip unchanged.
 type Message struct {
 	ID         int64             `json:"id"`
 	RunID      *int64            `json:"run_id"`
@@ -303,7 +267,6 @@ type Message struct {
 	Superseded bool              `json:"superseded"`
 }
 
-// Dumps is dumps: the journal's JSON text of a block list, compact with non-ASCII text kept as is.
 func Dumps(content []json.RawMessage) (string, error) {
 	items := make([]any, len(content))
 	for i, b := range content {
@@ -321,9 +284,6 @@ type textBlock struct {
 	Text *string `json:"text"`
 }
 
-// AppendMessage is append_message: it adds the message to the thread with the next seq, indexes its text
-// blocks for search and touches the thread, all in one write transaction (parallel subagent runs append to
-// the same journal). It returns the seq.
 func AppendMessage(ctx context.Context, d *db.DB, threadID int64, runID *int64, role string, content []json.RawMessage, now float64, systemSig *string) (int64, error) {
 	body, err := Dumps(content)
 	if err != nil {
@@ -373,7 +333,6 @@ func decodeContent(id int64, raw string) ([]json.RawMessage, error) {
 	return content, nil
 }
 
-// MessagesOf is messages_of: the thread's messages in order, without the superseded ones unless asked.
 func MessagesOf(ctx context.Context, q db.Querier, threadID int64, includeSuperseded bool) ([]Message, error) {
 	query := "SELECT id, run_id, seq, role, content_json, created_at, system_sig, superseded FROM thread_messages WHERE thread_id = ?"
 	if !includeSuperseded {
@@ -397,7 +356,6 @@ func MessagesOf(ctx context.Context, q db.Querier, threadID int64, includeSupers
 	})
 }
 
-// LastMessage is last_message: the newest live message, nil for an empty thread.
 func LastMessage(ctx context.Context, q db.Querier, threadID int64) (*Message, error) {
 	var m Message
 	var raw string
@@ -416,7 +374,6 @@ func LastMessage(ctx context.Context, q db.Querier, threadID int64) (*Message, e
 	return &m, nil
 }
 
-// HasText reports whether any block of content is a text block.
 func HasText(content []json.RawMessage) bool {
 	for _, raw := range content {
 		var b textBlock
@@ -427,8 +384,6 @@ func HasText(content []json.RawMessage) bool {
 	return false
 }
 
-// LastOperatorMessage is last_operator_message: the latest live operator (text) user message, the only one
-// that can be edited or regenerated.
 func LastOperatorMessage(ctx context.Context, q db.Querier, threadID int64) (*Message, error) {
 	all, err := MessagesOf(ctx, q, threadID, false)
 	if err != nil {
@@ -442,9 +397,6 @@ func LastOperatorMessage(ctx context.Context, q db.Querier, threadID int64) (*Me
 	return nil, nil
 }
 
-// Supersede is supersede: it retires the tail of the conversation from fromSeq (the message itself stays when
-// keepMessage). Messages and their runs are kept for audit but leave the active history, together with the
-// context projections and staged ledger entries those runs made.
 func Supersede(ctx context.Context, d *db.DB, threadID, fromSeq int64, keepMessage bool) error {
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
 		first := fromSeq
@@ -474,7 +426,6 @@ func Supersede(ctx context.Context, d *db.DB, threadID, fromSeq int64, keepMessa
 	})
 }
 
-// QueuedMessage is a thread_queue row; Files are the attachment blocks stored with the text.
 type QueuedMessage struct {
 	ID         int64             `json:"id"`
 	ThreadID   int64             `json:"thread_id"`
@@ -486,8 +437,6 @@ type QueuedMessage struct {
 	Files      []json.RawMessage `json:"files"`
 }
 
-// QueueMessage is queue_message: it stores a message (text plus attachment blocks) for the running run to
-// pick up at its next step. queued is false when no run is running (the caller starts a run instead).
 func QueueMessage(ctx context.Context, d *db.DB, threadID int64, text string, now float64, files []json.RawMessage) (id int64, queued bool, err error) {
 	body, err := Dumps(append([]json.RawMessage{}, files...))
 	if err != nil {
@@ -509,7 +458,6 @@ func QueueMessage(ctx context.Context, d *db.DB, threadID int64, text string, no
 	return id, queued && err == nil, err
 }
 
-// Queued is queued: the thread's messages no run has consumed yet, oldest first.
 func Queued(ctx context.Context, q db.Querier, threadID int64) ([]QueuedMessage, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT id, thread_id, text, created_at, consumed_at, run_id, files_json FROM thread_queue WHERE thread_id = ? AND consumed_at IS NULL ORDER BY id",
@@ -532,7 +480,6 @@ func Queued(ctx context.Context, q db.Querier, threadID int64) ([]QueuedMessage,
 	})
 }
 
-// TakeQueued is take_queued: it marks the queued messages consumed by the run and returns them.
 func TakeQueued(ctx context.Context, q db.Querier, threadID, runID int64, now float64) ([]QueuedMessage, error) {
 	rows, err := Queued(ctx, q, threadID)
 	if err != nil {
@@ -546,7 +493,6 @@ func TakeQueued(ctx context.Context, q db.Querier, threadID, runID int64, now fl
 	return rows, nil
 }
 
-// ToolCall is a tool_calls row.
 type ToolCall struct {
 	ID          int64    `json:"id"`
 	RunID       int64    `json:"run_id"`
@@ -571,8 +517,6 @@ func scanCall(row interface{ Scan(...any) error }) (ToolCall, error) {
 	return c, err
 }
 
-// StartToolCall is start_tool_call: it journals the call before the tool runs. args is the tool input as
-// the model sent it; the row keeps it compact and hashes that text.
 func StartToolCall(ctx context.Context, q db.Querier, runID int64, toolUseID, name string, args json.RawMessage, replayClass string, now float64) (int64, error) {
 	body, err := py.JSONRedump(args, jsonCompact)
 	if err != nil {
@@ -588,14 +532,12 @@ func StartToolCall(ctx context.Context, q db.Querier, runID int64, toolUseID, na
 	return res.LastInsertId()
 }
 
-// FinishToolCall is finish_tool_call.
 func FinishToolCall(ctx context.Context, q db.Querier, callID int64, state string, now float64, errText *string, resultID *int64) error {
 	_, err := q.ExecContext(ctx, "UPDATE tool_calls SET state = ?, error = ?, result_id = ?, finished_at = ? WHERE id = ?",
 		state, errText, resultID, now, callID)
 	return err
 }
 
-// GetToolCall is tool_call: nil when the run made no such call.
 func GetToolCall(ctx context.Context, q db.Querier, runID int64, toolUseID string) (*ToolCall, error) {
 	c, err := scanCall(q.QueryRowContext(ctx, "SELECT "+callColumns+" FROM tool_calls WHERE run_id = ? AND tool_use_id = ?", runID, toolUseID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -614,18 +556,15 @@ func calls(rows *sql.Rows, err error) ([]ToolCall, error) {
 	return db.Collect(rows, func(r *sql.Rows) (ToolCall, error) { return scanCall(r) })
 }
 
-// ToolCallsOf is tool_calls_of.
 func ToolCallsOf(ctx context.Context, q db.Querier, runID int64) ([]ToolCall, error) {
 	return calls(q.QueryContext(ctx, "SELECT "+callColumns+" FROM tool_calls WHERE run_id = ? ORDER BY id", runID))
 }
 
-// CallKey identifies a tool call within a thread.
 type CallKey struct {
 	RunID     int64
 	ToolUseID string
 }
 
-// ToolCallsForThread is tool_calls_for_thread: every call the thread's runs made, by run and tool_use id.
 func ToolCallsForThread(ctx context.Context, q db.Querier, threadID int64) (map[CallKey]ToolCall, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT c.id, c.run_id, c.tool_use_id, c.name, c.args_json, c.args_sha256, c.replay_class, c.state, c.error, c.result_id, c.started_at, c.finished_at "+

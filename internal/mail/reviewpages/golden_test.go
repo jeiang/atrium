@@ -92,8 +92,6 @@ func inum(m map[string]any, key string) int64 {
 	return 0
 }
 
-// decoded is a schemaless subtree decoded as production decodes the stored text: through py.JSONLoads, so numbers
-// keep Python's int and float kinds.
 func decoded(t testing.TB, v any) any {
 	t.Helper()
 	if v == nil {

@@ -18,7 +18,6 @@ import (
 	"unicode/utf8"
 )
 
-// Response is the recorded reply of an Exchange.
 type Response struct {
 	Status       int               `json:"status"`
 	Headers      map[string]string `json:"headers"`
@@ -26,18 +25,11 @@ type Response struct {
 	Body         json.RawMessage   `json:"body"`
 }
 
-// Replay serves exchanges in order: each request must match the recorded
-// method, path, query, recorded headers and body (json canonically, form as
-// ordered pairs, multipart as decoded parts, text and base64 as bytes, none as
-// empty; any other encoding is an error), and gets the recorded response. Requests beyond the recording
-// get 599; t fails at cleanup unless every exchange was served.
 func Replay(t testing.TB, exchanges []Exchange) *httptest.Server {
 	t.Helper()
 	return ReplayWith(t, exchanges, nil)
 }
 
-// ReplayWith is Replay for a client that spells a query differently from the recorded one: query, when not nil,
-// normalizes the recorded and the received raw query before they are compared.
 func ReplayWith(t testing.TB, exchanges []Exchange, query func(string) string) *httptest.Server {
 	t.Helper()
 	var mu sync.Mutex

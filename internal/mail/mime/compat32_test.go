@@ -2,7 +2,6 @@ package mime
 
 import "testing"
 
-// The wants are str(email.message_from_bytes(header).get("Message-ID")) from CPython 3.14.7.
 func TestCompat32Header(t *testing.T) {
 	for _, c := range []struct {
 		header string

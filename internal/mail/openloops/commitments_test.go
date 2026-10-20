@@ -36,18 +36,6 @@ func (f *fakeJudge) judge(_ context.Context, _ config.Env, _ string, m openloops
 	return []any{}, nil
 }
 
-func TestDueDate(t *testing.T) {
-	for in, want := range map[any]string{
-		"2026-10-20": "2026-10-20", " 2026-10-20T09:00 ": "2026-10-20", "20261020": "2026-10-20", "next friday": "", "": "",
-		nil: "", 7: "", "2026-02-30": "", "2026-W42-5": "2026-10-16",
-	} {
-		got, ok := openloops.DueDate(in)
-		if got != want || ok != (want != "") {
-			t.Errorf("DueDate(%v) = %q, %v; want %q", in, got, ok, want)
-		}
-	}
-}
-
 func TestCommitmentExtractionStoresValidItemsOnce(t *testing.T) {
 	d := newDB(t)
 	a := mail(t, d, 1, 1, fields{"subject": "Report"})
@@ -292,4 +280,16 @@ func loadMessage(t *testing.T, d *db.DB, id int64) openloops.Message {
 		t.Fatal(err)
 	}
 	return m
+}
+
+func TestDueDate(t *testing.T) {
+	for in, want := range map[any]string{
+		"2026-10-20": "2026-10-20", " 2026-10-20T09:00 ": "2026-10-20", "20261020": "2026-10-20", "next friday": "", "": "",
+		nil: "", 7: "", "2026-02-30": "", "2026-W42-5": "2026-10-16",
+	} {
+		got, ok := openloops.DueDate(in)
+		if got != want || ok != (want != "") {
+			t.Errorf("DueDate(%v) = %q, %v; want %q", in, got, ok, want)
+		}
+	}
 }

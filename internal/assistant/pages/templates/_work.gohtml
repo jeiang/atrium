@@ -41,7 +41,7 @@
       <span class="flex flex-wrap items-center gap-1.5">
         <span class="badge" data-variant="secondary">{{or .role .kind}}</span>
         <span class="badge" data-variant="outline">effort {{.effort}}</span>
-        <span class="badge" data-variant="{{if or (eq .status "error") (eq .status "interrupted")}}destructive{{else}}outline{{end}}">{{if eq .status "running"}}{{icon "loader-circle" "animate-spin"}}{{end}}{{.status}}</span>
+        {{$st := .status}}{{with badge "subagent_status" $st}}<span class="badge" data-variant="{{.Variant}}">{{if eq $st "running"}}{{icon "loader-circle" "animate-spin"}}{{end}}{{.Label}}</span>{{else}}<span class="badge" data-variant="outline">{{$st}}</span>{{end}}
         {{if .current}}<code class="font-mono">{{.current}}</code>{{end}}
       </span>
       <a class="truncate underline-offset-4 hover:underline" href="/chat/{{.thread_id}}">{{or .title "Untitled"}}</a>
@@ -60,12 +60,12 @@
   <ul class="flex flex-col gap-1 text-sm" data-files>
     {{range $w.files}}
     <li class="flex items-center gap-1 rounded-md border px-3 py-2 hover:bg-accent" data-file="{{.id}}">
-      <a class="flex min-w-0 flex-1 items-center gap-2" {{template "preview_attrs" (printf "/chat/%v/files/%v" .thread_id .id)}}>{{template "file_icon" (dict "media_type" .media_type)}}<span class="truncate">{{.name}}</span><span class="badge shrink-0" data-variant="{{if eq .origin "generated"}}secondary{{else}}outline{{end}}">{{.origin}}</span><span class="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{filesizeformat .bytes}}</span></a>
+      <a class="flex min-w-0 flex-1 items-center gap-2" {{template "preview_attrs" (printf "/chat/%v/files/%v" .thread_id .id)}}>{{template "file_icon" (dict "media_type" .media_type)}}<span class="truncate">{{.name}}</span><span class="badge shrink-0" data-variant="{{if eq .origin "generated"}}secondary{{else}}outline{{end}}">{{lbl "file_origin" .origin}}</span><span class="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{filesizeformat .bytes}}</span></a>
       <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/chat/{{.thread_id}}/files/{{.id}}/download" download aria-label="Download {{.name}}">{{icon "download" "size-3.5"}}</a>
     </li>
     {{end}}
     {{range $w.drafts}}
-    <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{template "preview_attrs" (printf "/drafts/%v" .id)}}>{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}<span class="truncate">{{or .subject "(no subject)"}}</span><span class="badge ms-auto shrink-0" data-variant="{{if eq .status "sent"}}secondary{{else}}outline{{end}}">{{.status}}</span></a></li>
+    <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{template "preview_attrs" (printf "/drafts/%v" .id)}}>{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}<span class="truncate">{{or .subject "(no subject)"}}</span>{{$ds := .status}}{{with badge "draft_status" $ds}}<span class="badge ms-auto shrink-0" data-variant="{{.Variant}}">{{.Label}}</span>{{else}}<span class="badge ms-auto shrink-0" data-variant="outline">{{$ds}}</span>{{end}}</a></li>
     {{end}}
   </ul>
   {{else}}

@@ -1,6 +1,3 @@
-// Package embed is src/atrium/embed.py and the notion_vec writes of
-// notion_sync.embed_pending: embeddings from the local OpenAI-compatible
-// server, L2-normalised and stored in the vec0 tables.
 package embed
 
 import (
@@ -31,7 +28,6 @@ const (
 
 var log = logx.Logger("atrium.embed")
 
-// TextsFunc embeds texts against the server at url.
 type TextsFunc func(ctx context.Context, url string, texts []string) ([][]float64, error)
 
 func DocumentText(subject, name, addr, body string) string {
@@ -57,8 +53,6 @@ type embeddingsRequest struct {
 	Input []string `json:"input"`
 }
 
-// Texts returns one normalised vector per text; a reply of the wrong shape
-// is an httpx.ErrValue.
 func Texts(ctx context.Context, url string, texts []string) ([][]float64, error) {
 	raw, err := httpx.PostJSON(ctx, url+"/embeddings", embeddingsRequest{Model, texts})
 	if err != nil {
@@ -158,7 +152,6 @@ func Normalize(vector []float64) []float64 {
 	return out
 }
 
-// Serialize is sqlite_vec.serialize_float32.
 func Serialize(vector []float64) []byte {
 	f := make([]float32, len(vector))
 	for i, x := range vector {
@@ -178,7 +171,6 @@ func pyStr(s sql.NullString) string {
 	return s.String
 }
 
-// MessageDocument is the embedding text of message id.
 func MessageDocument(ctx context.Context, q querier, id int64) (string, error) {
 	var subject, name, addr, body sql.NullString
 	err := q.QueryRowContext(ctx,
@@ -198,9 +190,6 @@ type pendingMessage struct {
 	account string
 }
 
-// Pending embeds every unembedded live message in batches of
-// config.EmbedBatch, one transaction per batch, and returns how many it
-// embedded.
 func Pending(ctx context.Context, d *db.DB, url string) (int, error) {
 	done := 0
 	for {
@@ -253,9 +242,6 @@ func Pending(ctx context.Context, d *db.DB, url string) (int, error) {
 	}
 }
 
-// PendingOrWarn is the embedding step of a processing pass: an unavailable
-// embeddings server is logged on passLog and the pass goes on; any other
-// error is returned.
 func PendingOrWarn(ctx context.Context, d *db.DB, url string, passLog *slog.Logger) error {
 	_, err := Pending(ctx, d, url)
 	var unavailable *httpx.ServiceUnavailable
@@ -266,8 +252,6 @@ func PendingOrWarn(ctx context.Context, d *db.DB, url string, passLog *slog.Logg
 	return err
 }
 
-// Reindex drops every message vector, marks all messages unembedded and
-// embeds them again.
 func Reindex(ctx context.Context, d *db.DB, url string) (int, error) {
 	if _, err := d.Write.ExecContext(ctx, "DELETE FROM message_vec"); err != nil {
 		return 0, err
@@ -284,8 +268,6 @@ type pendingPage struct {
 	private               int64
 }
 
-// NotionPending embeds every unembedded live Notion page into notion_vec
-// with texts, as notion_sync.embed_pending.
 func NotionPending(ctx context.Context, d *db.DB, url string, texts TextsFunc) (int, error) {
 	done := 0
 	for {

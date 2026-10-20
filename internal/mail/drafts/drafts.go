@@ -1,6 +1,3 @@
-// Package drafts is the draft lifecycle (src/atrium/drafts.py): the agent and the operator write drafts, and
-// only the operator's Send sends one, through internal/mail/smtp, filing the iCloud copy in Sent under the
-// operator-send write scope.
 package drafts
 
 import (
@@ -46,12 +43,10 @@ var Statuses = [...]string{Draft, Sending, Sent, Discarded, Unknown}
 
 var log = logx.Logger("atrium.drafts")
 
-// Error is DraftError: a refused draft operation, worded for the operator.
 type Error string
 
 func (e Error) Error() string { return string(e) }
 
-// Row is one drafts row.
 type Row struct {
 	ID                 int64    `json:"id"`
 	ThreadID           *int64   `json:"thread_id"`
@@ -71,11 +66,8 @@ type Row struct {
 	SentMsgID          *string  `json:"sent_msgid"`
 }
 
-// Opener connects a write-gated IMAP client for an account (run.open_client).
 type Opener func(ctx context.Context, account string) (mail.Client, error)
 
-// Store runs the draft operations on atrium.db. Open files the iCloud sent copy; SMTP, MsgID and Now default to
-// the real SMTP dialer, email.utils.make_msgid and the wall clock.
 type Store struct {
 	DB    *db.DB
 	Cfg   config.Config
@@ -142,7 +134,6 @@ func (s *Store) queryRows(ctx context.Context, query string, args ...any) ([]Row
 	return out, rows.Err()
 }
 
-// Get is the draft with id, or nil when there is none.
 func (s *Store) Get(ctx context.Context, id int64) (*Row, error) {
 	r, err := scanRow(s.DB.Read.QueryRowContext(ctx, "SELECT "+columns+" FROM drafts WHERE id = ?", id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -154,7 +145,6 @@ func (s *Store) Get(ctx context.Context, id int64) (*Row, error) {
 	return &r, nil
 }
 
-// ForMessage is the thread-made draft a mailbox message is the sent copy of (by Message-ID), or nil.
 func (s *Store) ForMessage(ctx context.Context, messageID int64) (*Row, error) {
 	r, err := scanRow(s.DB.Read.QueryRowContext(ctx,
 		"SELECT d.id, d.thread_id, d.account, d.to_addrs, d.cc_addrs, d.subject, d.body, d.in_reply_to_message_id, "+
@@ -170,7 +160,6 @@ func (s *Store) ForMessage(ctx context.Context, messageID int64) (*Row, error) {
 	return &r, nil
 }
 
-// List is list_drafts: the newest-updated drafts first, of one status or all when status is "".
 func (s *Store) List(ctx context.Context, status string, limit int) ([]Row, error) {
 	if status != "" {
 		return s.queryRows(ctx, "SELECT "+columns+" FROM drafts WHERE status = ? ORDER BY updated_at DESC LIMIT ?", status, limit)
@@ -211,8 +200,6 @@ func cleanLine(name, value string, limit int) (string, error) {
 	return value, nil
 }
 
-// NormalizeAddresses is normalize_addresses: a list or one comma-separated string becomes "a@x, B <b@y>"; every
-// entry must parse to an address with an @ and no space.
 func NormalizeAddresses(name string, value any) (string, error) {
 	var items []string
 	switch v := value.(type) {
@@ -270,7 +257,6 @@ func NormalizeAddresses(name string, value any) (string, error) {
 	return strings.Join(out, ", "), nil
 }
 
-// formatAddr is email.utils.formataddr((name, address)) with a non-empty name.
 func formatAddr(name, address string) (string, error) {
 	if err := py.ASCIIEncodeError(address); err != nil {
 		return "", err
@@ -296,8 +282,6 @@ func qpHeaderByte(c byte) string {
 	return fmt.Sprintf("=%02X", c)
 }
 
-// headerEncode is Charset('utf-8').header_encode: base64 when it is strictly shorter than the header Q encoding,
-// Q otherwise.
 func headerEncode(b []byte) string {
 	var q strings.Builder
 	for _, c := range b {
@@ -316,7 +300,6 @@ type reply struct {
 	account      string
 }
 
-// rawFile is message.raw_file: the cached .eml under the cache directory, or "" when absent or outside it.
 func rawFile(cacheDir, rawPath string) string {
 	if rawPath == "" {
 		return ""
@@ -354,8 +337,6 @@ func header(m *mime.Message, name string) string {
 	return v
 }
 
-// replyContext is reply_context: In-Reply-To, References and the thread participants from the indexed
-// original.
 func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error) {
 	var account, fromAddr, fromName string
 	var msgid, toAddrs, rawPath sql.NullString
@@ -430,7 +411,6 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 	return reply{inReplyTo: id, refs: strings.Join(chain, " "), participants: participants, account: account}, nil
 }
 
-// Create is create: a new draft in status draft, threaded to replyTo when it is set.
 func (s *Store) Create(ctx context.Context, threadID *int64, account string, to, cc any, subject string, body any, replyTo any) (int64, error) {
 	if _, ok := validAccount(account); !ok {
 		return 0, accountError()
@@ -477,10 +457,9 @@ func (s *Store) Create(ctx context.Context, threadID *int64, account string, to,
 	return res.LastInsertId()
 }
 
-// replyFor is reply_context for the value a caller passed as in_reply_to_message_id. The value is bound to
-// SQLite as Python's sqlite3 binds it: an int, a bool, a whole float or a numeric string finds the message of
-// that id, any other float or string finds none, and a list or dict is a ProgrammingError. It returns the id
-// the draft stores.
+// replyFor binds in_reply_to_message_id to SQLite as Python's sqlite3 does: an int, a bool, a whole float or a
+// numeric string finds the message of that id, any other float or string finds none, and a list or dict is a
+// ProgrammingError.
 func (s *Store) replyFor(ctx context.Context, v any) (int64, reply, error) {
 	var id int64
 	shown := ""
@@ -517,8 +496,6 @@ func (s *Store) replyFor(ctx context.Context, v any) (int64, reply, error) {
 	return id, r, err
 }
 
-// Update is update: changes holds any of account, to, cc, subject, body and in_reply_to_message_id; only a
-// draft in status draft changes.
 func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*Row, error) {
 	row, err := s.Get(ctx, id)
 	if err != nil {
@@ -610,7 +587,6 @@ func (s *Store) exec(ctx context.Context, query string, args ...any) (int64, err
 	return res.RowsAffected()
 }
 
-// Discard is discard: only a draft in status draft can be discarded.
 func (s *Store) Discard(ctx context.Context, id int64) error {
 	n, err := s.exec(ctx, "UPDATE drafts SET status = ?, updated_at = ? WHERE id = ? AND status = ?", Discarded, s.now(), id, Draft)
 	if err != nil {
@@ -622,14 +598,11 @@ func (s *Store) Discard(ctx context.Context, id int64) error {
 	return nil
 }
 
-// RecoverStuck is recover_stuck, run at web start: a draft left sending for more than SendingStaleSeconds
-// may or may not have gone out, so it becomes unknown for the operator and is never resent.
 func (s *Store) RecoverStuck(ctx context.Context) (int64, error) {
 	return s.exec(ctx, "UPDATE drafts SET status = ?, smtp_result = ?, updated_at = ? WHERE status = ? AND updated_at < ?",
 		Unknown, "send interrupted; outcome unknown", s.now(), Sending, s.now()-SendingStaleSeconds)
 }
 
-// ResolveUnknown is resolve_unknown: the operator's verdict on an unknown draft after checking the Sent folder.
 func (s *Store) ResolveUnknown(ctx context.Context, id int64, status string) error {
 	if status != Sent && status != Draft {
 		return Error("an unknown draft can only be marked sent or returned to draft")
@@ -651,7 +624,6 @@ func (s *Store) ResolveUnknown(ctx context.Context, id int64, status string) err
 	return nil
 }
 
-// UnexpectedRecipients is unexpected_recipients: the To/Cc addresses of a reply that were not on the original.
 func (s *Store) UnexpectedRecipients(ctx context.Context, d Row) ([]string, error) {
 	out := []string{}
 	if d.InReplyToMessageID == nil {
@@ -686,8 +658,8 @@ func (s *Store) UnexpectedRecipients(ctx context.Context, d Row) ([]string, erro
 	return out, nil
 }
 
-// sqliteInteger is how SQLite compares text with an INTEGER PRIMARY KEY: numeric text, with ASCII blanks around it,
-// that converts to an integer without loss is that integer.
+// sqliteInteger: SQLite compares text with an INTEGER PRIMARY KEY as that integer when it is numeric text, with
+// ASCII blanks around it, that converts to an integer without loss.
 func sqliteInteger(text string) (int64, bool) {
 	text = strings.Trim(text, " \t\n\v\f\r")
 	if text == "" || strings.Trim(text, "0123456789+-.eE") != "" {

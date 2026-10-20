@@ -1,4 +1,3 @@
-// Package pricing is agent/pricing.py: the price table of the Haiku model and the cost of one billed call.
 package pricing
 
 import "github.com/jeiang/atrium/internal/py"
@@ -12,22 +11,17 @@ const (
 	million       = 1_000_000
 )
 
-// Rates are US dollars per million tokens.
 type Rates struct{ Input, Output, CacheWrite5m, CacheWrite1h, CacheRead float64 }
 
-// RatesPerMTok is the price table by tier.
 var RatesPerMTok = map[string]Rates{
 	TierLow:  {Input: 0.10, Output: 0.50, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01},
 	TierHigh: {Input: 0.50, Output: 2.50, CacheWrite5m: 0.625, CacheWrite1h: 1.00, CacheRead: 0.05},
 }
 
-// Tokens is one billed call's token counts.
 type Tokens struct{ Input, CacheWrite5m, CacheWrite1h, CacheRead, Output int64 }
 
-// Prompt is every token the model read: fresh, cache-written and cache-read input.
 func (t Tokens) Prompt() int64 { return t.Input + t.CacheWrite5m + t.CacheWrite1h + t.CacheRead }
 
-// TierOf is tier_of: a prompt over the threshold bills at the high rates.
 func TierOf(t Tokens) string {
 	if t.Prompt() > TierThreshold {
 		return TierHigh

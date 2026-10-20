@@ -9,7 +9,6 @@ import (
 
 var mediaSrcRe = rx.MustCompile(`(?<!\\)<(?:img|image|audio|video|file|pdf|embed|iframe)\b[^>]*?\bsrc=\"([^\"]*)\"`, rx.IgnoreCase|rx.DotAll)
 
-// ExternalURLs is external_urls: the URLs a renderer would fetch on view, markdown images and media or embed tags.
 func ExternalURLs(markdown string) ([]string, error) {
 	var found []string
 	images, err := imageRe.FindIter(markdown)
@@ -54,5 +53,4 @@ func ExternalURLs(markdown string) ([]string, error) {
 	return out, nil
 }
 
-// ParentRef is parent_ref.
 func ParentRef(parent py.Dict) (kind, id string) { return parentRef(parent) }

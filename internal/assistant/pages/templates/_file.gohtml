@@ -6,7 +6,7 @@
       <span class="badge" data-variant="outline">{{$f.media_type}}</span>
       <span class="tabular-nums">{{filesizeformat $f.bytes}}</span>
       <span class="tabular-nums">{{template "when" (dict "epoch" $f.created_at "style" "datetime")}}</span>
-      <span class="badge" data-variant="secondary">{{$f.origin}}</span>
+      <span class="badge" data-variant="secondary">{{lbl "file_origin" $f.origin}}</span>
       <a class="btn ms-auto" data-size="sm" data-variant="outline" href="{{$d.file_url}}/download" download>{{icon "download" "size-3.5"}}Download</a>
     </div>
   </header>

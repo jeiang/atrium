@@ -18,9 +18,6 @@ var builtin embed.FS
 
 const layout = "base.gohtml"
 
-// Config configures an Engine. Extra holds additional template files at its root, classified like the
-// built-in ones: pages are plain names, shared files start with an underscore. Modules holds the template
-// files of each page module being served.
 type Config struct {
 	AssetVersion string
 	Globals      map[string]any
@@ -28,14 +25,12 @@ type Config struct {
 	Modules      []fs.FS
 }
 
-// Toast is the notification the layout and _toast.gohtml render.
 type Toast struct {
 	Category    string
 	Title       string
 	Description string
 }
 
-// Frame is the root value of every template: request state the layout needs plus the page's own data.
 type Frame struct {
 	CSRF         string
 	Mode         string
@@ -46,14 +41,12 @@ type Frame struct {
 	Data         any
 }
 
-// ErrorView is the Data of error.gohtml and _error.gohtml.
 type ErrorView struct {
 	Status  int    `json:"status"`
 	Problem string `json:"problem"`
 	Path    string `json:"path"`
 }
 
-// Engine renders full pages and fragments from the embedded templates.
 type Engine struct {
 	globals      map[string]any
 	assetVersion string
@@ -61,12 +54,10 @@ type Engine struct {
 	pages        map[string]*template.Template
 }
 
-// AssetURL is the cache-busted URL of a file under /static/.
 func AssetURL(version, path string) string {
 	return "/static/" + path + "?v=" + version
 }
 
-// New parses every shared file and every page set.
 func New(cfg Config) (*Engine, error) {
 	e := &Engine{
 		globals:      maps.Clone(cfg.Globals),
@@ -90,12 +81,10 @@ func New(cfg Config) (*Engine, error) {
 	return e, nil
 }
 
-// Pages lists the page template names in sorted order.
 func (e *Engine) Pages() []string {
 	return slices.Sorted(maps.Keys(e.pages))
 }
 
-// Fragments lists the standalone partial template names in sorted order.
 func (e *Engine) Fragments() []string {
 	var names []string
 	for _, t := range e.shared.Templates() {
@@ -107,7 +96,6 @@ func (e *Engine) Fragments() []string {
 	return names
 }
 
-// Page renders the layout around the named page template.
 func (e *Engine) Page(w io.Writer, name string, f *Frame) error {
 	set, ok := e.pages[name]
 	if !ok {
@@ -116,7 +104,6 @@ func (e *Engine) Page(w io.Writer, name string, f *Frame) error {
 	return execute(w, set, layout, f)
 }
 
-// Fragment renders one underscore-prefixed partial on its own.
 func (e *Engine) Fragment(w io.Writer, name string, f *Frame) error {
 	if !strings.HasPrefix(name, "_") || e.shared.Lookup(name) == nil {
 		return fmt.Errorf("tpl: no fragment %q", name)

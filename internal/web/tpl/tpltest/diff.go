@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// Rewrite maps a substring of the Jinja side's canonical tokens to the Go spelling it is documented to take.
 type Rewrite struct {
 	From string
 	To   string
@@ -15,7 +14,6 @@ type Rewrite struct {
 	Drop bool
 }
 
-// Diff is the line diff of two canonical forms, empty when they are equal.
 func Diff(want, got []string) string {
 	if len(want) == len(got) {
 		same := true
@@ -59,8 +57,6 @@ func Diff(want, got []string) string {
 	return b.String()
 }
 
-// Compare fails t unless the Go render equals the Jinja render once the documented rewrites are applied to the
-// Jinja side.
 func Compare(t testing.TB, want, got string, documented ...Rewrite) {
 	t.Helper()
 	wantTokens := drop(Canonical(want), documented)

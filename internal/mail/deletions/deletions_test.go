@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/deletions"
@@ -112,7 +111,7 @@ func TestDeletionThresholdAndBacklog(t *testing.T) {
 
 func TestOTPTemplatesProposeAgeLimitedRule(t *testing.T) {
 	d := rulestest.DB(t)
-	now := float64(time.Now().Unix())
+	const now = 1_792_080_000.0
 	codes := group(t, d, 1, "no@otp.test", "your code is <n>", 6, rulestest.Fields{"k_otp6": 1})
 	for _, id := range codes[:5] {
 		rulestest.Exec(t, d, "UPDATE messages SET date_ts = ? WHERE id = ?", now-10*day, id)

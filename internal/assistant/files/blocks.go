@@ -143,8 +143,6 @@ func apiBlocks(ctx context.Context, q db.Querier, scope Scope, d py.Dict) ([]jso
 	return []json.RawMessage{b}, err
 }
 
-// Expand is expand for one message's content: attachment blocks become their request blocks, every other block
-// stays as it is.
 func Expand(ctx context.Context, q db.Querier, scope Scope, content []json.RawMessage) ([]json.RawMessage, error) {
 	out := make([]json.RawMessage, 0, len(content))
 	for _, raw := range content {
@@ -165,8 +163,6 @@ func Expand(ctx context.Context, q db.Querier, scope Scope, content []json.RawMe
 	return out, nil
 }
 
-// CloneContent is clone_content: a branch's copy of each attachment in content, as new rows and bytes under the
-// new thread. An attachment whose file is gone stays as it is.
 func CloneContent(ctx context.Context, q db.Querier, from Scope, content []json.RawMessage, threadID int64, now float64) ([]json.RawMessage, error) {
 	out := make([]json.RawMessage, 0, len(content))
 	for _, raw := range content {
@@ -195,7 +191,6 @@ func CloneContent(ctx context.Context, q db.Querier, from Scope, content []json.
 	return out, nil
 }
 
-// HiddenTokens is hidden_tokens: the estimate of the attachments in content, which the journal holds as stubs.
 func HiddenTokens(content []json.RawMessage) (int64, error) {
 	var total int64
 	for _, raw := range content {
@@ -216,8 +211,6 @@ func HiddenTokens(content []json.RawMessage) (int64, error) {
 	return total, nil
 }
 
-// ProjectBlocks is project_message: the blocks that open every request of a project's threads, one attachment per
-// project file and a notice that they are untrusted data. Nil when the project has no files.
 func ProjectBlocks(ctx context.Context, q db.Querier, projectID int64) ([]json.RawMessage, error) {
 	rows, err := OfProject(ctx, q, projectID)
 	if err != nil || len(rows) == 0 {

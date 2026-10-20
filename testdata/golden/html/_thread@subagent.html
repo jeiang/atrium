@@ -5,12 +5,12 @@
 
 <header class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
   <a href="/chat" class="btn" data-size="sm" data-variant="ghost"><svg class="lucide lucide-arrow-left " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>Threads</a>
-  <span class="badge" data-variant="outline">subagent</span>
+  <span class="badge" data-variant="outline">Subagent</span>
   <span class="tabular-nums">started <time datetime="2025-10-07T08:53:20+00:00">2025-10-07 08:53</time></span>
   
 <span id="meter" class="flex items-center gap-2 tabular-nums" title="Prompt tokens of the last request against the point where the context is compacted (150000 of the 200000 limit)">
   <span class="badge" data-variant="outline">effort medium</span>
-  <span class="flex items-center gap-1.5" aria-label="Context used">
+  <span class="flex items-center gap-1.5" role="img" aria-label="Context used: 123.5K of 150K">
     <span class="h-1.5 w-16 overflow-hidden rounded-full bg-muted" aria-hidden="true"><span class="block h-full rounded-full bg-warning" style="width: 82%"></span></span>
     <span>123.5K / 150K</span>
   </span>
@@ -21,10 +21,10 @@
   
   <span class="ms-auto flex flex-wrap items-center gap-1">
     
-    <button type="button" class="btn md:hidden" data-size="sm" data-variant="outline" data-action="toggle-panel" aria-controls="panel" aria-expanded="false"><svg class="lucide lucide-panel-right " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>Panel</button>
+    <button type="button" class="btn md:hidden" data-size="sm" data-variant="outline" id="panel-toggle" data-action="toggle-panel" aria-controls="panel" aria-expanded="false"><svg class="lucide lucide-panel-right " xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>Panel</button>
   </span>
 </header>
-<ol id="transcript" class="flex flex-col gap-4" aria-live="polite" aria-label="Conversation" data-thread="9">
+<ol id="transcript" class="flex flex-col gap-4" aria-label="Conversation" data-thread="9">
   
 
 
@@ -44,3 +44,4 @@
 
 
 </ol>
+<p id="transcript-announcer" class="sr-only" role="status"></p>

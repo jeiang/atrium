@@ -1,7 +1,3 @@
-// Package files is agent/files.py: operator uploads attached to chat threads and projects, their storage under the
-// state dir's files/ directory, the text the model reads from them and the content blocks that carry them in a
-// request. Phase A does not port the Files API upload or the code execution container; the anthropic_file_id
-// column stays and thread deletion still removes the remote copy of a legacy row.
 package files
 
 import (
@@ -66,15 +62,12 @@ var suffixTypes = map[string]string{
 	".docx": DOCXType, ".xlsx": XLSXType, ".pdf": PDFType, ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
 }
 
-// FileError is a refused upload; its text is shown to the operator.
 type FileError string
 
 func (e FileError) Error() string { return string(e) }
 
-// IsImageType reports whether the media type is one of the image types the model reads.
 func IsImageType(mediaType string) bool { return imageTypes[mediaType] }
 
-// SafeName is safe_name: the file name a stored copy is saved under.
 func SafeName(name string) string {
 	cleaned, _ := nameRe.Sub("_", py.PathName(name), 0)
 	cleaned = strings.TrimLeft(cleaned, "._")
@@ -87,8 +80,6 @@ func SafeName(name string) string {
 	return cleaned
 }
 
-// MediaTypeOf is media_type_of: the suffix table first, then the operator's declared type, then the built-in
-// mimetypes table.
 func MediaTypeOf(name, supplied string) string {
 	if media, ok := suffixTypes[py.Lower(py.PathSuffix(py.PathName(name)))]; ok {
 		return media
@@ -104,7 +95,6 @@ func MediaTypeOf(name, supplied string) string {
 	return "application/octet-stream"
 }
 
-// KindOf is kind_of: "pdf", "image", "text", or "" when atrium cannot read the type.
 func KindOf(mediaType string) string {
 	switch {
 	case mediaType == PDFType:
@@ -118,7 +108,6 @@ func KindOf(mediaType string) string {
 	return ""
 }
 
-// Info is what Inspect found in one file. Text is nil for a PDF or an image.
 type Info struct {
 	Kind      string
 	MediaType string
@@ -136,7 +125,6 @@ func pdfPages(data []byte) int64 {
 	return max(int64(len(found)), 1)
 }
 
-// ExtractText is extract_text: the text of a docx, an xlsx or any other text file.
 func ExtractText(data []byte, mediaType string) (string, error) {
 	switch mediaType {
 	case DOCXType:
@@ -172,8 +160,6 @@ func indexZero(b []byte) bool {
 	return false
 }
 
-// Inspect is inspect: the kind, canonical media type, extracted text and token estimate of one file, or a
-// FileError when atrium cannot read it.
 func Inspect(name string, data []byte, supplied string) (Info, error) {
 	mediaType := MediaTypeOf(name, supplied)
 	kind := KindOf(mediaType)
@@ -203,14 +189,11 @@ func Inspect(name string, data []byte, supplied string) (Info, error) {
 	return info, nil
 }
 
-// nameTokens is one attachment of a message with its token estimate.
 type nameTokens struct {
 	Name   string
 	Tokens int64
 }
 
-// checkBudget is check_budget: the attachments of one message must fit under the thread's compaction point, or
-// the request could never be sent.
 func checkBudget(items []nameTokens, contextLimit int64) error {
 	budget := actx.LimitsFor(contextLimit).Compact
 	var total int64

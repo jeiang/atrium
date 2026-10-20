@@ -9,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// Key is Python's v[k] on a decoded JSON reply.
 func Key(v any, k string) (any, error) {
 	if m, ok := v.(map[string]any); ok {
 		found, ok := m[k]
@@ -21,7 +20,6 @@ func Key(v any, k string) (any, error) {
 	return nil, subscriptError(v, "str")
 }
 
-// Index is Python's v[i] on a decoded JSON reply.
 func Index(v any, i int) (any, error) {
 	switch t := v.(type) {
 	case []any:
@@ -51,7 +49,6 @@ func subscriptError(v any, index string) error {
 	return fmt.Errorf("%w: '%s' object is not subscriptable", ErrType, TypeName(v))
 }
 
-// TypeName is the Python type name of a decoded JSON value.
 func TypeName(v any) string {
 	switch t := v.(type) {
 	case nil:
@@ -73,7 +70,6 @@ func TypeName(v any) string {
 	return fmt.Sprintf("%T", v)
 }
 
-// Truthy is Python's bool() of a decoded JSON value.
 func Truthy(v any) bool {
 	switch t := v.(type) {
 	case nil:
@@ -92,7 +88,6 @@ func Truthy(v any) bool {
 	return true
 }
 
-// Float is Python's float() of a decoded JSON number.
 func Float(v any) (float64, error) {
 	switch t := v.(type) {
 	case float64:
@@ -106,7 +101,6 @@ func Float(v any) (float64, error) {
 	return 0, fmt.Errorf("%w: unsupported operand type(s) for *: '%s' and '%s'", ErrType, TypeName(v), TypeName(v))
 }
 
-// Message is str(e) for an error a malformed reply produced: the text without its Python class name.
 func Message(err error) string {
 	text := err.Error()
 	for _, class := range []error{ErrValue, ErrKey, ErrIndex, ErrType} {

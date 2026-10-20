@@ -1,5 +1,3 @@
-// Package reviewpages is the review pages of the mail side: proposals, activity, drafts, open loops and
-// watches, with their htmx fragments.
 package reviewpages
 
 import (
@@ -35,7 +33,6 @@ const (
 	categoryMail = "mail"
 )
 
-// Templates is the page templates of this package, for web.Page.Templates.
 func Templates() fs.FS {
 	sub, err := fs.Sub(templates, "templates")
 	if err != nil {
@@ -44,20 +41,12 @@ func Templates() fs.FS {
 	return sub
 }
 
-// Options configure Module. The zero value is the served app.
 type Options struct {
-	// Open connects an account's mail client for approved proposals, undo and the sent copy of a draft; nil
-	// connects with the configured credentials.
-	Open mailops.Opener
-	// Now is the clock of approvals, dismissals and undo, in seconds; nil is the wall clock.
-	Now func() float64
-	// Writes undoes the agent's direct writes; nil is an empty registry, so every write undo is refused until
-	// the write tools have registered their undoers.
-	Writes *writes.Registry
-	// Registry runs approved proposals and undoes live actions; nil registers every kind and undoer.
+	Open     mailops.Opener
+	Now      func() float64
+	Writes   *writes.Registry
 	Registry *proposals.Registry
-	// SMTP connects for a send; nil dials the real server.
-	SMTP smtp.Factory
+	SMTP     smtp.Factory
 }
 
 type service struct {
@@ -71,7 +60,6 @@ type service struct {
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
-// Module registers the review pages' routes in the order the Python app registered them.
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		open := o.Open
@@ -165,7 +153,6 @@ func (s *service) fail(w http.ResponseWriter, r *http.Request, status int, detai
 // the browser goes away, as the Python app's worker thread did.
 func detached(r *http.Request) context.Context { return context.WithoutCancel(r.Context()) }
 
-// pathInt reads an integer path parameter; a segment that is not one is a validation error.
 func pathInt(r *http.Request, name string) (int64, []web.FieldError) {
 	raw := web.PathParam(r, name)
 	id, ok := py.LaxInt64(raw)
@@ -175,7 +162,6 @@ func pathInt(r *http.Request, name string) (int64, []web.FieldError) {
 	return id, nil
 }
 
-// pathID is pathInt for a handler with no body parameters: it answers FastAPI's validation error itself.
 func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 	id, errs := pathInt(r, name)
 	if len(errs) > 0 {

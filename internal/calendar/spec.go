@@ -13,7 +13,6 @@ import (
 	gcal "google.golang.org/api/calendar/v3"
 )
 
-// Spec is a validated event: ISO-string times, no attendees.
 type Spec struct {
 	UID      string
 	Title    string
@@ -24,7 +23,6 @@ type Spec struct {
 	Notes    string
 }
 
-// Dict is the spec as Python holds it, in its key order.
 func (s Spec) Dict() py.Dict {
 	return py.Dict{
 		{Key: "uid", Value: s.UID}, {Key: "title", Value: s.Title}, {Key: "start", Value: s.Start}, {Key: "end", Value: s.End},
@@ -32,7 +30,6 @@ func (s Spec) Dict() py.Dict {
 	}
 }
 
-// SpecOf reads a spec back from its stored or journaled form.
 func SpecOf(v any) (Spec, error) {
 	d, ok := v.(py.Dict)
 	if !ok {
@@ -73,7 +70,6 @@ func SpecOf(v any) (Spec, error) {
 	return s, nil
 }
 
-// NewUID is uuid.uuid4().hex.
 func NewUID() string {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
@@ -94,8 +90,6 @@ func textField(raw py.Dict, key string) (string, error) {
 	return py.Strip(s), nil
 }
 
-// NormalizeSpec is normalize_spec: the validated spec of raw, whose attendees and unknown keys are dropped. uid
-// "" generates one.
 func NormalizeSpec(raw py.Dict, tz *time.Location, uid string) (Spec, error) {
 	title, err := textField(raw, "title")
 	if err != nil {
@@ -155,7 +149,6 @@ func (s Spec) bounds(tz *time.Location) (Value, Value, error) {
 	return start, end, err
 }
 
-// GoogleBody is google_body: the Calendar API event of a spec.
 func GoogleBody(s Spec, tz *time.Location) (*gcal.Event, error) {
 	start, end, err := s.bounds(tz)
 	if err != nil {
@@ -175,7 +168,6 @@ func GoogleBody(s Spec, tz *time.Location) (*gcal.Event, error) {
 	return body, nil
 }
 
-// BuildICS is build_ics: the iCalendar text of a spec, stamped dtstamp.
 func BuildICS(s Spec, tz *time.Location, dtstamp time.Time) (string, error) {
 	cal, err := buildCalendar(s, tz, dtstamp)
 	if err != nil {

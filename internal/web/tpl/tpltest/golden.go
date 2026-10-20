@@ -14,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
-// Call is one macro call of a macro-library golden.
 type Call struct {
 	Macro  string         `json:"macro"`
 	Args   []any          `json:"args"`
@@ -22,7 +21,6 @@ type Call struct {
 	Caller *string        `json:"caller"`
 }
 
-// Case is a golden context file: the Jinja environment globals, the render context and the macro calls.
 type Case struct {
 	Globals map[string]any `json:"globals"`
 	Context map[string]any `json:"context"`
@@ -31,9 +29,6 @@ type Case struct {
 	orders map[string][]string
 }
 
-// Ordered is the object at a dotted path of the context (array elements by index, "decision.detail",
-// "items.0.counts") as a py.Dict in the key order of the JSON document, which is the Python dict insertion order
-// templates iterate over. Values below it stay plain maps; hand it to a view as the ordered value of that key.
 func (c Case) Ordered(t testing.TB, path string) py.Dict {
 	t.Helper()
 	var node any = c.Context
@@ -62,7 +57,6 @@ func (c Case) Ordered(t testing.TB, path string) py.Dict {
 	return out
 }
 
-// Want is the golden render of name ("thread.html", "basecoat/toast.html").
 func Want(t testing.TB, name string) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(golden.Dir(), "html", name))
@@ -72,8 +66,6 @@ func Want(t testing.TB, name string) string {
 	return string(b)
 }
 
-// Load reads the context file next to a golden render ("thread.context.json"). Numbers are int64 or float64,
-// and {"$safe": "<html>"} objects are template.HTML.
 func Load(t testing.TB, name string) Case {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(golden.Dir(), "html", name))

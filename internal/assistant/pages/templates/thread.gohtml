@@ -6,7 +6,7 @@
   <div id="thread" class="flex min-h-full min-w-0 flex-col gap-6">
     {{template "chat_thread" (dict "d" $d "csrf" .CSRF)}}
   </div>
-  <div id="panel-handle" class="hidden h-full w-1.5 cursor-col-resize rounded-full bg-border transition-colors hover:bg-ring md:block" role="separator" aria-orientation="vertical" aria-label="Resize panel" tabindex="0"></div>
+  <div id="panel-handle" class="hidden h-full w-1.5 cursor-col-resize rounded-full bg-border transition-colors hover:bg-ring md:block" role="separator" aria-orientation="vertical" aria-label="Resize panel" aria-valuemin="260" aria-valuenow="384" tabindex="0"></div>
   <div id="panel-backdrop" class="fixed inset-0 z-30 hidden bg-black/40 md:hidden" data-action="toggle-panel"></div>
   <aside id="panel" class="tabs flex-col gap-3 rounded-lg border bg-card p-3 max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-40 max-md:w-[88vw] max-md:max-w-sm max-md:overflow-y-auto max-md:rounded-none max-md:shadow-xl max-md:hidden max-md:data-open:flex md:sticky md:top-20 md:flex md:max-h-[calc(100dvh-6rem)] md:overflow-y-auto" aria-label="Thread workspace">
     <nav role="tablist" aria-orientation="horizontal" class="w-full">

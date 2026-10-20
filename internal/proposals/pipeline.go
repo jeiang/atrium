@@ -22,22 +22,16 @@ import (
 
 var log = logx.Logger("atrium.proposals")
 
-// Statuses is STATUSES, the choices of `proposals list --status`.
 var Statuses = [...]string{Pending, Approved, Dismissed, Applied, Failed, Suppressed}
 
-// UndoOp is UNDO_OP: the op of the action that records an undo of an earlier action.
 const UndoOp = "undo"
 
-// Executor applies an approved proposal under the operator's selection (nil: everything) and returns its result.
 type Executor func(ctx context.Context, p *Proposal, selection any) (py.Dict, error)
 
-// Execer is the write side of *sql.DB and *sql.Tx.
 type Execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// Proposal is one proposals row as _row shapes it. Payload is the stored JSON text, nil when the row was listed
-// rather than read in full; Preview and Result are decoded (py.JSONLoads values, nil for NULL).
 type Proposal struct {
 	ID          int64
 	Kind        string
@@ -54,7 +48,6 @@ type Proposal struct {
 	Undoable    bool
 }
 
-// AccountName is the account, "" for NULL.
 func (p *Proposal) AccountName() string {
 	if p.Account == nil {
 		return ""
@@ -62,7 +55,6 @@ func (p *Proposal) AccountName() string {
 	return *p.Account
 }
 
-// Dict is the proposal as list and get return it.
 func (p *Proposal) Dict() py.Dict {
 	out := py.Dict{
 		{Key: "id", Value: p.ID}, {Key: "kind", Value: p.Kind}, {Key: "account", Value: nullable(p.Account)},
@@ -122,7 +114,6 @@ func scanProposal(s scanner, full bool) (*Proposal, error) {
 	return &p, nil
 }
 
-// List is list: newest first, status and kind "" do not filter.
 func List(ctx context.Context, q Querier, status, kind string) ([]*Proposal, error) {
 	var where []string
 	var args []any
@@ -154,7 +145,6 @@ func List(ctx context.Context, q Querier, status, kind string) ([]*Proposal, err
 	return out, nil
 }
 
-// Get is get: nil for an unknown id.
 func Get(ctx context.Context, q Querier, id int64) (*Proposal, error) {
 	p, err := scanProposal(q.QueryRowContext(ctx, "SELECT "+columns+" FROM proposals WHERE id = ?", id), true)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -174,14 +164,12 @@ func undoable(ctx context.Context, q Querier, p *Proposal) (bool, error) {
 	return CanUndo(ctx, q, p.ID)
 }
 
-// PendingCount is pending_count.
 func PendingCount(ctx context.Context, q Querier) (int64, error) {
 	var n int64
 	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE status = 'pending'").Scan(&n)
 	return n, err
 }
 
-// CountsByStatus is counts_by_status: the count of each status present, then "all".
 func CountsByStatus(ctx context.Context, q Querier) (py.Dict, error) {
 	out, err := counts(ctx, q, "SELECT status, COUNT(*) AS n FROM proposals GROUP BY status")
 	if err != nil {
@@ -194,7 +182,6 @@ func CountsByStatus(ctx context.Context, q Querier) (py.Dict, error) {
 	return append(out, py.Pair{Key: "all", Value: all}), nil
 }
 
-// CountsByKind is counts_by_kind: the count of each kind with status.
 func CountsByKind(ctx context.Context, q Querier, status string) (py.Dict, error) {
 	return counts(ctx, q, "SELECT kind, COUNT(*) AS n FROM proposals WHERE status = ? GROUP BY kind", status)
 }
@@ -213,7 +200,6 @@ func counts(ctx context.Context, q Querier, query string, args ...any) (py.Dict,
 	return py.Dict(pairs), err
 }
 
-// Dismiss is dismiss: an open proposal becomes dismissed, or suppressed when it must never come back.
 func Dismiss(ctx context.Context, x Execer, id int64, suppress bool, ts float64) error {
 	status := Dismissed
 	if suppress {
@@ -233,8 +219,6 @@ func Dismiss(ctx context.Context, x Execer, id int64, suppress bool, ts float64)
 	return nil
 }
 
-// RecordAction is record_action: action and undo are py.JSONDumps values, undo nil for none; errText nil for
-// NULL.
 func RecordAction(ctx context.Context, x Execer, proposalID int64, action, undo any, ok bool, errText *string, ts float64) (int64, error) {
 	var plan any
 	if undo != nil {
@@ -248,17 +232,13 @@ func RecordAction(ctx context.Context, x Execer, proposalID int64, action, undo 
 	return res.LastInsertId()
 }
 
-// InFlightText is the error of an action row recorded before its write starts: until the write settles it, the
-// row says its outcome is unknown, and Blocks keeps an undo from being repeated.
 const InFlightText = mailops.UnknownPrefix + ": write in flight"
 
-// BeginAction records the row of a write about to start, so a process that dies mid-write leaves its mark.
 func BeginAction(ctx context.Context, x Execer, proposalID int64, action any, ts float64) (int64, error) {
 	text := InFlightText
 	return RecordAction(ctx, x, proposalID, action, nil, false, &text, ts)
 }
 
-// SettleAction turns the row BeginAction recorded into the write's outcome.
 func SettleAction(ctx context.Context, x Execer, id int64, action, undo any, ok bool, errText *string, ts float64) error {
 	var plan any
 	if undo != nil {
@@ -269,13 +249,11 @@ func SettleAction(ctx context.Context, x Execer, id int64, action, undo any, ok 
 	return err
 }
 
-// DropAction removes a BeginAction row whose write provably never started or was recorded elsewhere.
 func DropAction(ctx context.Context, x Execer, id int64) error {
 	_, err := x.ExecContext(context.WithoutCancel(ctx), "DELETE FROM proposal_actions WHERE id = ? AND ok = 0 AND error = ?", id, InFlightText)
 	return err
 }
 
-// Action is one proposal_actions row; Action and Undo are decoded, Undo nil for NULL.
 type Action struct {
 	ID     int64
 	TS     float64
@@ -300,7 +278,6 @@ func (a Action) field(name string) (any, bool) {
 	return d.Get(name)
 }
 
-// Actions is actions: the proposal's actions in the order they were recorded.
 func Actions(ctx context.Context, q Querier, proposalID int64) ([]Action, error) {
 	rows, err := q.QueryContext(ctx, "SELECT id, ts, action, undo, ok, error FROM proposal_actions WHERE proposal_id = ? ORDER BY id", proposalID)
 	if err != nil {
@@ -325,7 +302,6 @@ func Actions(ctx context.Context, q Querier, proposalID int64) ([]Action, error)
 	})
 }
 
-// undoneIDs is undone_ids: the actions an ok undo action names.
 func undoneIDs(logged []Action) map[int64]bool {
 	done := map[int64]bool{}
 	for _, a := range logged {
@@ -363,7 +339,6 @@ func pending(logged []Action) []Action {
 	return todo
 }
 
-// CanUndo is can_undo: the proposal is applied, not undone, and has an ok action with an undo plan not yet undone.
 func CanUndo(ctx context.Context, q Querier, id int64) (bool, error) {
 	var status string
 	var result *string
@@ -390,8 +365,6 @@ func CanUndo(ctx context.Context, q Querier, id int64) (bool, error) {
 	return len(pending(logged)) > 0, nil
 }
 
-// Pipeline is approve_and_apply and undo over one database with the registered executors, undoers and sync hook.
-// Now is the clock (time.Now when nil).
 type Pipeline struct {
 	DB       *db.DB
 	Registry *Registry
@@ -419,7 +392,6 @@ func (p *Pipeline) claim(ctx context.Context, id int64, status string) (bool, er
 	return n == 1, err
 }
 
-// sync is _sync: the account's post-write resync; its failure is returned as text, never raised.
 func (p *Pipeline) sync(ctx context.Context, prop *Proposal) *string {
 	if p.Registry == nil || p.Registry.Sync == nil || prop.Account == nil {
 		return nil
@@ -439,11 +411,6 @@ func scope(ctx context.Context, id int64) context.Context {
 	return safety.ApprovedWrites(ctx, strconv.FormatInt(id, 10))
 }
 
-// ApproveAndApply is approve_and_apply: the open proposal is claimed and its executor runs as approved proposal
-// id. A SelectionError puts it back to pending and is returned; any other failure marks it failed with the error
-// as its result. The account is resynced either way. The executor and the resync run on ctx, so a cancelled ctx
-// ends the IMAP connection; the ledger and the status updates never run on a cancelled ctx, so the proposal
-// ends failed with what was written logged.
 func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any) (*Proposal, error) {
 	prop, err := Get(ctx, p.DB.Write, id)
 	if err != nil {
@@ -499,9 +466,6 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any)
 	return Get(settle, p.DB.Write, id)
 }
 
-// refuseUnresolved is the guard of an approval of a failed proposal: a write it logged as outcome-unknown or
-// half done may have left a copy in the mailbox, and Verify would admit the untouched source again, so the
-// operator resolves the mailbox first.
 func (p *Pipeline) refuseUnresolved(ctx context.Context, id int64) error {
 	logged, err := Actions(ctx, p.DB.Write, id)
 	if err != nil {
@@ -515,7 +479,6 @@ func (p *Pipeline) refuseUnresolved(ctx context.Context, id int64) error {
 	return nil
 }
 
-// UndoResult is undo's outcome: Undone when every replayed undo succeeded.
 type UndoResult struct {
 	Undone    bool
 	Outcomes  []py.Dict
@@ -532,9 +495,6 @@ func (r UndoResult) Dict() py.Dict {
 
 func (r UndoResult) MarshalJSON() ([]byte, error) { return []byte(py.JSONDumps(r.Dict())), nil }
 
-// Undo is undo: newest first, every ok action with an undo plan not yet undone is replayed by its undoer as
-// approved proposal id and logged as an undo action. A failing undoer is logged and the rest still run; the
-// proposal is marked undone only when all succeeded. The account is resynced after.
 func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	prop, err := Get(ctx, p.DB.Write, id)
 	if err != nil {

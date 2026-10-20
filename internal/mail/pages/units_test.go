@@ -1,7 +1,6 @@
 package pages
 
 import (
-	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/rx"
 	"github.com/jeiang/atrium/internal/rx/rxtest"
 	"github.com/jeiang/atrium/internal/web"
@@ -75,26 +73,6 @@ func TestEveryInventoryRouteAnswers(t *testing.T) {
 		if rec.Code == http.StatusForbidden || rec.Code == http.StatusMethodNotAllowed || rec.Code >= 500 {
 			t.Errorf("%s %s = %d", route[0], path, rec.Code)
 		}
-	}
-}
-
-func TestRuleProblem(t *testing.T) {
-	for in, want := range map[string]string{
-		"r1: file rule needs dest":                   "Choose a destination, or set the action to Delete.",
-		"file rule needs dest":                       "Choose a destination, or set the action to Delete.",
-		"when must be a non-empty list":              "Add at least one condition.",
-		"x: op in needs a non-empty list of strings": "“is one of” needs at least one value.",
-		"unknown field 'nope'":                       "Unknown field 'nope'",
-		"a b: odd":                                   "A b: odd",
-		"éclair":                                     "Éclair",
-		"":                                           "",
-	} {
-		if got := ruleProblem(rules.RuleError(in)); got != want {
-			t.Errorf("ruleProblem(%q) = %q, want %q", in, got, want)
-		}
-	}
-	if got := ruleProblem(errors.New("a:b: c")); got != "A:b: c" {
-		t.Errorf("only a prefix without colons or spaces is dropped, got %q", got)
 	}
 }
 

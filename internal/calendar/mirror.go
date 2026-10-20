@@ -85,8 +85,6 @@ func collectionName(root, file string) (string, error) {
 	return rootParts[len(rootParts)-1], nil
 }
 
-// MirrorEvents is mirror_events: the events of every .ics file under directory that overlap the window, with the
-// notes of what could not be read or expanded. A non-directory is NotConfigured.
 func MirrorEvents(directory string, ws, we time.Time, tz *time.Location, target string) ([]Row, []string, error) {
 	root := pathText(directory)
 	if info, err := os.Stat(root); err != nil || !info.IsDir() {

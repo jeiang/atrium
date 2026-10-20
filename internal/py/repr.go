@@ -1,4 +1,3 @@
-// Package py holds the CPython behaviours the Go port reproduces: str methods, repr, sum, datetime.
 package py
 
 import (
@@ -8,7 +7,6 @@ import (
 	"unicode/utf8"
 )
 
-// Repr is Python's repr of a str.
 func Repr(s string) string {
 	quote := byte('\'')
 	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
@@ -41,7 +39,6 @@ func Repr(s string) string {
 	return b.String()
 }
 
-// ReprBytes is Python's repr of a bytes object.
 func ReprBytes(b []byte) string {
 	quote := byte('\'')
 	if strings.IndexByte(string(b), '\'') >= 0 && strings.IndexByte(string(b), '"') < 0 {

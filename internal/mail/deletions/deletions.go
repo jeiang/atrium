@@ -1,5 +1,3 @@
-// Package deletions is deletions.py: the scanner that proposes a delete rule for mail the operator keeps
-// deleting, or for one-time codes, with the matching backlog to trash.
 package deletions
 
 import (
@@ -35,7 +33,6 @@ type level struct {
 
 var levels = []level{{"addr", "from_addr", "eq"}, {"domain", "from_domain", "suffix"}}
 
-// row is a received messages row.
 type row struct {
 	rules.Message
 	Seen, Flagged, OTP6, VCode, Gone bool
@@ -59,7 +56,6 @@ type withExtra struct {
 
 func (w withExtra) Scan(dest ...any) error { return w.s.Scan(append(dest, w.extra...)...) }
 
-// received is every message that was not sent, by id; live_rows is its subset without gone_at.
 func received(ctx context.Context, q proposals.Querier) ([]*row, error) {
 	rows, err := q.QueryContext(ctx, "SELECT "+rules.MessageColumns+", seen, flagged, k_otp6, k_vcode, gone_at IS NOT NULL "+
 		"FROM messages WHERE sent = 0 ORDER BY id")
@@ -93,7 +89,6 @@ func deletedIDs(ctx context.Context, q proposals.Querier) (map[int64]bool, error
 	return out, err
 }
 
-// Candidate is one group a delete rule is proposed for: hits are its deleted (or one-time code) messages.
 type Candidate struct {
 	Reason  string
 	Level   level
@@ -145,8 +140,6 @@ func compare(a, b string) int {
 	return 0
 }
 
-// candidates is candidates: sender groups mostly deleted by the operator (an address group claims its messages
-// before the domain level sees them), then domain groups that are mostly one-time codes.
 func candidates(everyone []*row, deleted map[int64]bool) []Candidate {
 	var found []Candidate
 	claimed := map[int64]bool{}
@@ -195,7 +188,6 @@ func candidates(everyone []*row, deleted map[int64]bool) []Candidate {
 	return found
 }
 
-// BuildRule is build_rule: the delete rule for one group, age-limited for one-time codes.
 func BuildRule(account, levelName, key, tmpl string, olderThanDays int) py.Dict {
 	lv := levels[0]
 	for _, l := range levels {
@@ -224,8 +216,7 @@ type proposal struct {
 	payload, preview py.Dict
 }
 
-// build is build: nil when an existing rule already has the id or already matches the group.
-func build(ctx context.Context, q proposals.Querier, everyone []*row, c Candidate) (*proposal, error) {
+func build(ctx context.Context, q proposals.Querier, everyone []*row, c Candidate, now float64) (*proposal, error) {
 	otp := c.Reason == ReasonOTP
 	days := 0
 	if otp {
@@ -245,7 +236,7 @@ func build(ctx context.Context, q proposals.Querier, everyone []*row, c Candidat
 			return nil, nil
 		}
 	}
-	if match, err := rules.FirstMatch(&c.Rows[0].Message, existing); err != nil || match != nil {
+	if match, err := rules.FirstMatch(&c.Rows[0].Message, existing, now); err != nil || match != nil {
 		return nil, err
 	}
 	var backlog []*row
@@ -253,7 +244,7 @@ func build(ctx context.Context, q proposals.Querier, everyone []*row, c Candidat
 		if r.Gone || r.Account != c.Account || r.Flagged || !otp && !r.Seen {
 			continue
 		}
-		ok, err := parsed.Matches(&r.Message)
+		ok, err := parsed.Matches(&r.Message, now)
 		if err != nil {
 			return nil, err
 		}
@@ -297,8 +288,6 @@ func build(ctx context.Context, q proposals.Querier, everyone []*row, c Candidat
 	}, nil
 }
 
-// Scan is scan: every candidate group without an equivalent rule or a known fingerprint becomes a proposal
-// created at ts.
 func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
 	everyone, err := received(ctx, d.Read)
 	if err != nil {
@@ -311,7 +300,7 @@ func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
 	found := candidates(everyone, deleted)
 	created := 0
 	for _, c := range found {
-		b, err := build(ctx, d.Read, everyone, c)
+		b, err := build(ctx, d.Read, everyone, c, ts)
 		if err != nil {
 			return scanutil.Result{}, err
 		}

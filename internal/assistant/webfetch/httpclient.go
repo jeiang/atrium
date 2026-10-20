@@ -24,7 +24,6 @@ const (
 	lengthNone          = int64(-1)
 )
 
-// httpException is an http.client.HTTPException: a response the client cannot read.
 type httpException string
 
 func (e httpException) Error() string { return string(e) }
@@ -40,7 +39,6 @@ func incompleteRead(read, expected int) error {
 	return httpException(fmt.Sprintf("IncompleteRead(%d bytes read, %d more expected)", read, expected))
 }
 
-// latin1 decodes bytes as ISO-8859-1, which is how http.client reads the status line and the headers.
 func latin1(b []byte) string {
 	ascii := true
 	for _, c := range b {
@@ -63,7 +61,6 @@ type headerField struct{ name, value string }
 
 type headers []headerField
 
-// first is Message.get: the first value of the header.
 func (h headers) first(name string) (string, bool) {
 	for _, f := range h {
 		if strings.EqualFold(f.name, name) {
@@ -73,7 +70,6 @@ func (h headers) first(name string) (string, bool) {
 	return "", false
 }
 
-// joined is HTTPResponse.getheader: every value, joined with ", ".
 func (h headers) joined(name string) (string, bool) {
 	var values []string
 	for _, f := range h {
@@ -87,7 +83,6 @@ func (h headers) joined(name string) (string, bool) {
 	return strings.Join(values, ", "), true
 }
 
-// readLine is fp.readline(_MAXLINE + 1): up to a newline, EOF or maxLine+1 bytes.
 func readLine(br *bufio.Reader) ([]byte, error) {
 	var line []byte
 	for len(line) < maxLine+1 {
@@ -111,7 +106,6 @@ func isBlankLine(line []byte) bool {
 	return s == "\r\n" || s == "\n" || s == ""
 }
 
-// readHeaderLines is http.client._read_headers.
 func readHeaderLines(br *bufio.Reader) ([][]byte, error) {
 	var lines [][]byte
 	for {
@@ -134,7 +128,6 @@ func readHeaderLines(br *bufio.Reader) ([][]byte, error) {
 
 func isHeaderNameChar(c byte) bool { return c >= 0x21 && c <= 0x39 || c >= 0x3b && c <= 0x7e }
 
-// isHeaderLine is feedparser's headerRE: a line that can belong to a header block.
 func isHeaderLine(line string) bool {
 	if strings.HasPrefix(line, "From ") || line[0] == ' ' || line[0] == '\t' {
 		return true
@@ -146,7 +139,6 @@ func isHeaderLine(line string) bool {
 	return j < len(line) && line[j] == ':'
 }
 
-// splitKeepEnds splits text after every "\r\n", "\r" and "\n".
 func splitKeepEnds(text string) []string {
 	var out []string
 	start := 0
@@ -210,7 +202,6 @@ func parseHeaders(lines [][]byte) headers {
 	return out
 }
 
-// splitFields is str.split(None, maxsplit).
 func splitFields(s string, maxsplit int) []string {
 	var out []string
 	rest := strings.TrimLeftFunc(s, py.IsSpace)
@@ -229,7 +220,6 @@ func splitFields(s string, maxsplit int) []string {
 	return out
 }
 
-// pyInt is int(text, base) for a decimal or hexadecimal text; ok is false where Python raises ValueError.
 func pyInt(text string, base int) (value int64, ok bool) {
 	text = py.Strip(text)
 	neg := false
@@ -270,7 +260,6 @@ type response struct {
 	done      bool
 }
 
-// readResponse is HTTPResponse.begin: the status line, interim 100 responses skipped, and the headers.
 func readResponse(br *bufio.Reader) (*response, error) {
 	var status int
 	var version string
@@ -333,7 +322,6 @@ func readResponse(br *bufio.Reader) (*response, error) {
 	return r, nil
 }
 
-// pyHexChunkSize is int(line, 16) of a chunk-size line without its extension.
 func pyHexChunkSize(line []byte) (int64, bool) { return pyInt(latin1(line), 16) }
 
 func (r *response) readFull(n int) ([]byte, error) {
@@ -366,8 +354,6 @@ func (r *response) discardTrailer() error {
 	}
 }
 
-// getChunkLeft is _get_chunk_left: the bytes left in the current chunk, reading the next chunk header when the
-// current one is used up; -1 once the last chunk has been read.
 func (r *response) getChunkLeft() (int64, error) {
 	if r.chunkLeft > 0 {
 		return r.chunkLeft, nil
@@ -404,7 +390,6 @@ func (r *response) getChunkLeft() (int64, error) {
 	return size, nil
 }
 
-// read is HTTPResponse.read1: at most one read of the connection; 0 bytes and a nil error is the end of the body.
 func (r *response) read(p []byte) (int, error) {
 	if r.done {
 		return 0, nil
@@ -449,7 +434,6 @@ func (r *response) read(p []byte) (int, error) {
 	return got, nil
 }
 
-// osText renders a connection error as the text of the Python exception it stands for.
 func osText(err error) string {
 	if text, ok := py.OSErrorText(err); ok {
 		return text

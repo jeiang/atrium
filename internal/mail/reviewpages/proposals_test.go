@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// recorder is an executor that notes the selection it ran with.
 func (s *site) recording(kind string, seen map[string]string) {
 	s.registry.Executors[kind] = func(_ context.Context, _ *proposals.Proposal, selection any) (py.Dict, error) {
 		if selection == nil {
@@ -346,4 +345,11 @@ func TestEmptyStates(t *testing.T) {
 	s := newSite(t)
 	mustContain(t, status(t, s.get("/proposals"), http.StatusOK), "Nothing to review", "0 pending proposals")
 	mustContain(t, status(t, s.get("/proposals?status=failed"), http.StatusOK), "No proposals match", "Choose another status or kind.")
+}
+
+func TestUndoOfAProposalThatIsNotAppliedReportsNotUndone(t *testing.T) {
+	s := newSite(t)
+	id := s.splitProposal("a")
+	body := status(t, s.post("/proposals/"+itoa(int(id))+"/undo", nil, hx, "true"), http.StatusOK)
+	mustContain(t, body, "Not undone", "is not applied")
 }
