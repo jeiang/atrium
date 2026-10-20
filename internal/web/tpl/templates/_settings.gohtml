@@ -1,5 +1,5 @@
 {{define "settings_tabs"}}{{$tab := .}}
-<nav aria-label="Settings sections" class="-mb-2 flex gap-1 overflow-x-auto border-b text-sm">
+<nav aria-label="Settings sections" class="-mb-2 flex flex-wrap gap-x-1 border-b text-sm">
   {{range (list (list "assistant" "Assistant" "/settings/assistant") (list "skills" "Skills" "/settings/skills") (list "subagents" "Subagents" "/settings/subagents") (list "notifications" "Notifications" "/settings/notifications") (list "usage" "Usage" "/settings/usage"))}}
   <a href="{{index . 2}}" class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 font-medium {{if eq $tab (index . 0)}}border-primary text-foreground{{else}}border-transparent text-muted-foreground hover:text-foreground{{end}}"{{if eq $tab (index . 0)}} aria-current="page"{{end}}>{{index . 1}}</a>
   {{end}}

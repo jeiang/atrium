@@ -60,7 +60,7 @@ func (s *site) agentRow(name string) (description, prompt, effort string, tools 
 func TestBuiltinSubagentCardsKeepRecallOnSave(t *testing.T) {
 	s := newSite(t)
 	page := status(t, s.get("/settings/subagents"), http.StatusOK)
-	mustContain(t, page, `<code class="font-mono">recall</code>`)
+	mustContain(t, page, `<code class="font-mono">recall</code>`, `data-confirm-submit="Delete the subagent`)
 	for _, name := range []string{"mail", "web"} {
 		description, prompt, effort, stored := s.agentRow(name)
 		ticked := tickedTools(agentCard(t, page, name))
@@ -68,7 +68,12 @@ func TestBuiltinSubagentCardsKeepRecallOnSave(t *testing.T) {
 			t.Errorf("%s card ticks %v, stored %v", name, ticked, stored)
 		}
 		form := url.Values{"name": {name}, "description": {description}, "prompt": {prompt}, "effort": {effort}, "tools": ticked}
-		mustContain(t, status(t, s.post("/settings/subagents", form), http.StatusOK), "Subagent saved")
+		response := s.post("/settings/subagents", form)
+		location := "/settings/subagents?saved=" + url.QueryEscape(name)
+		if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != location || response.body != "" {
+			t.Fatalf("%s save: %d %q %q", name, response.StatusCode, response.Header.Get("Location"), response.body)
+		}
+		mustContain(t, status(t, s.get(location), http.StatusOK), "Subagent saved")
 		if _, _, _, saved := s.agentRow(name); !slices.Equal(saved, stored) {
 			t.Errorf("%s tools after save %v, before %v", name, saved, stored)
 		}

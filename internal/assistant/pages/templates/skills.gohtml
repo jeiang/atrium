@@ -1,5 +1,6 @@
 {{define "title"}}Skills · Settings{{end}}
 {{define "heading"}}Settings · Skills{{end}}
+{{define "body_attrs"}}{{if .Data.strip_params}} data-strip-params="saved,deleted"{{end}}{{end}}
 
 {{define "skills_refs"}}{{range $i, $r := .}}{{if $i}}, {{end}}<code class="font-mono">{{$r}}</code>{{end}}{{end}}
 
@@ -15,8 +16,8 @@
 {{if $d.skills}}
 <div class="flex flex-col gap-4">
   {{range $d.skills}}
-  <details class="rounded-lg border bg-card p-4" data-skill="{{.name}}">
-    <summary class="flex cursor-pointer flex-col items-start gap-1 text-sm">
+  <details class="rounded-lg border bg-card p-4" data-skill="{{.name}}"{{if or (eq $d.editing .name) (eq $d.focus .name)}} open{{end}}>
+    <summary class="flex cursor-pointer flex-col items-start gap-1 text-sm"{{if eq $d.focus .name}} autofocus{{end}}>
       <span class="flex flex-wrap items-center gap-2">
         <span class="font-mono font-medium">{{.name}}</span>
         {{if .references.unknown}}<span class="badge" data-variant="destructive" title="References skills that do not exist: {{join ", " .references.unknown}}">{{icon "circle-alert"}}unknown reference</span>{{end}}
@@ -31,11 +32,13 @@
     <form method="post" action="/settings/skills" class="mt-3 flex flex-col gap-3">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <input type="hidden" name="name" value="{{.name}}">
-      <div role="group" class="field"><label for="d-{{.name}}">Description</label><input id="d-{{.name}}" name="description" type="text" value="{{.description}}" maxlength="160"></div>
-      <div role="group" class="field"><label for="b-{{.name}}">Body</label><textarea id="b-{{.name}}" name="body" rows="10" class="w-full font-mono text-xs">{{.body}}</textarea></div>
+      <input type="hidden" name="from" value="edit">
+      {{if and (eq $d.editing .name) $d.error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.error}}</p>{{end}}
+      <div role="group" class="field"><label for="d-{{.name}}">Description</label><input id="d-{{.name}}" name="description" type="text" value="{{if eq $d.editing .name}}{{$d.draft.description}}{{else}}{{.description}}{{end}}" maxlength="160"></div>
+      <div role="group" class="field"><label for="b-{{.name}}">Body</label><textarea id="b-{{.name}}" name="body" rows="10" class="w-full font-mono text-xs">{{if eq $d.editing .name}}{{$d.draft.body}}{{else}}{{.body}}{{end}}</textarea></div>
       <div class="flex gap-2">
         <button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button>
-        <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/skills/{{.name}}/delete">{{icon "trash-2"}}Delete</button>
+        <button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/skills/{{.name}}/delete" data-confirm-submit="Delete the skill “{{.name}}”?{{if .referenced_by}} {{join ", " .referenced_by}} reference{{if eq (len .referenced_by) 1}}s{{end}} it and will show an unknown reference.{{end}} This cannot be undone.">{{icon "trash-2"}}Delete</button>
       </div>
     </form>
   </details>
@@ -48,11 +51,12 @@
 <form method="post" action="/settings/skills" class="flex flex-col gap-3 rounded-lg border p-4">
   <input type="hidden" name="csrf_token" value="{{$csrf}}">
   <h2 class="text-sm font-medium">New skill</h2>
+  {{if and (not $d.editing) $d.error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.error}}</p>{{end}}
   <div class="grid gap-3 sm:grid-cols-2">
-    <div role="group" class="field"><label for="new-name">Name</label><input id="new-name" name="name" type="text" value="{{$d.draft.name}}" class="font-mono" placeholder="weekly-review" required></div>
-    <div role="group" class="field"><label for="new-description">One-line description</label><input id="new-description" name="description" type="text" value="{{$d.draft.description}}" maxlength="160" required></div>
+    <div role="group" class="field"><label for="new-name">Name</label><input id="new-name" name="name" type="text" value="{{if not $d.editing}}{{$d.draft.name}}{{end}}" class="font-mono" placeholder="weekly-review" required></div>
+    <div role="group" class="field"><label for="new-description">One-line description</label><input id="new-description" name="description" type="text" value="{{if not $d.editing}}{{$d.draft.description}}{{end}}" maxlength="160" required></div>
   </div>
-  <div role="group" class="field"><label for="new-body">Body (Markdown)</label><textarea id="new-body" name="body" rows="8" class="w-full font-mono text-xs" required>{{$d.draft.body}}</textarea></div>
+  <div role="group" class="field"><label for="new-body">Body (Markdown)</label><textarea id="new-body" name="body" rows="8" class="w-full font-mono text-xs" required>{{if not $d.editing}}{{$d.draft.body}}{{end}}</textarea></div>
   <button type="submit" class="btn self-start" data-size="sm">{{icon "plus"}}Save skill</button>
 </form>
 {{end}}

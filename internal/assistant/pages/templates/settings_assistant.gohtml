@@ -1,9 +1,11 @@
 {{define "title"}}Assistant · Settings{{end}}
 {{define "heading"}}Settings · Assistant{{end}}
+{{define "body_attrs"}}{{if .Data.saved}} data-strip-params="saved"{{end}}{{end}}
 {{define "content"}}{{$d := .Data}}
 {{template "settings_tabs" "assistant"}}
 <form method="post" action="/settings/assistant" class="flex max-w-xl flex-col gap-4">
   <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  {{with $d.error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
   <p class="text-sm text-muted-foreground">Defaults for new chat threads. Each thread keeps its own effort and context limit, changeable from its composer.</p>
   <div role="group" class="field">
     <label for="default-effort">Default effort</label>
