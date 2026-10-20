@@ -108,6 +108,9 @@
         ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" go-licenses check ./... --disallowed_types=forbidden,unknown''}
         mkdir -p $out
         GOFLAGS="$GOFLAGS -tags=sqlite_fts5" go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --template ${notices} >$out/THIRD_PARTY_NOTICES
+        cp $out/THIRD_PARTY_NOTICES internal/about/THIRD_PARTY_NOTICES
+        test -s internal/about/THIRD_PARTY_NOTICES
+        go test -tags sqlite_fts5 ./internal/about
       '';
 
       # The vulnerability database changes daily, so this is a fixed-output derivation: it may reach
