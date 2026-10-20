@@ -15,7 +15,11 @@ import (
 	"time"
 )
 
-const busyTimeout = 30 * time.Second
+const (
+	busyTimeout      = 30 * time.Second
+	exclusiveTimeout = 5 * time.Second
+	lockPollInterval = 10 * time.Millisecond
+)
 
 func connPragmas(foreignKeys bool) []string {
 	fk := "PRAGMA foreign_keys = OFF"
@@ -126,6 +130,15 @@ func (d *DB) WithTx(ctx context.Context, fn func(*sql.Tx) error) error {
 // Lock is an advisory flock held until Close or process exit.
 type Lock struct{ f *os.File }
 
+type LockTimeout struct {
+	Path    string
+	Timeout time.Duration
+}
+
+func (e *LockTimeout) Error() string {
+	return fmt.Sprintf("db: timed out after %s waiting for exclusive lock on %s", e.Timeout, e.Path)
+}
+
 // Exclusive blocks until it holds flock(LOCK_EX) on path+".lock", which is
 // opened in append mode and never deleted.
 func Exclusive(path string) (*Lock, error) {
@@ -137,17 +150,24 @@ func Exclusive(path string) (*Lock, error) {
 	if err != nil {
 		return nil, err
 	}
+	deadline := time.Now().Add(exclusiveTimeout)
 	for {
-		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
-		if !errors.Is(err, syscall.EINTR) {
-			break
+		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		switch {
+		case err == nil:
+			return &Lock{f: f}, nil
+		case errors.Is(err, syscall.EINTR):
+			continue
+		case !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN):
+			_ = f.Close()
+			return nil, fmt.Errorf("db: flock %s: %w", lock, err)
+		case !time.Now().Before(deadline):
+			_ = f.Close()
+			return nil, &LockTimeout{Path: lock, Timeout: exclusiveTimeout}
+		default:
+			time.Sleep(min(lockPollInterval, time.Until(deadline)))
 		}
 	}
-	if err != nil {
-		_ = f.Close()
-		return nil, fmt.Errorf("db: flock %s: %w", lock, err)
-	}
-	return &Lock{f: f}, nil
 }
 
 func (l *Lock) Close() error { return l.f.Close() }
