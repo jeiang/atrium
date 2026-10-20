@@ -81,10 +81,14 @@ document.addEventListener("close", (event) => {
   const opener = dialogOpeners.get(dialog);
   dialogOpeners.delete(dialog);
   if (!opener) return;
-  const returnTarget = document.getElementById(opener) ||
-    document.querySelector("[data-focus-fallback]") ||
-    document.getElementById("content");
-  if (returnTarget) returnTarget.focus();
+  const openerTarget = document.getElementById(opener);
+  if (openerTarget) {
+    openerTarget.focus();
+    return;
+  }
+  if (document.activeElement !== document.body) return;
+  const fallback = document.querySelector("[data-focus-fallback]") || document.getElementById("content");
+  if (fallback) fallback.focus();
 }, true);
 
 document.addEventListener("close-dialogs", () => {
@@ -159,7 +163,7 @@ const actions = {
     const sidebar = document.getElementById("sidebar");
     if (!sidebar || !sidebar.toggle) return;
     sidebar.toggle();
-    if (sidebar.getAttribute("aria-hidden") === "false") sidebar.querySelector("a")?.focus();
+    if (window.innerWidth < 768 && sidebar.getAttribute("aria-hidden") === "false") sidebar.querySelector("a")?.focus();
   },
   "close-dialog": (button) => button.closest("dialog")?.close(),
   "remove-condition": (button) => {
@@ -572,10 +576,9 @@ const connectLive = (li) => {
     setBusy(false);
     refreshWork();
     document.querySelectorAll(`[data-live-user="${runId}"]`).forEach((bubble) => bubble.remove());
-    if (li.isConnected) {
-      if (completed) li.dataset.announceReady = "true";
-      htmx.trigger(li, "run-done");
-    }
+    const announcer = document.getElementById("transcript-announcer");
+    if (completed && announcer) announcer.textContent = "Reply ready.";
+    if (li.isConnected) htmx.trigger(li, "run-done");
   };
   on("done", () => settle(true));
   source.onerror = () => setTimeout(settle, RETRY_MS);
@@ -595,8 +598,4 @@ document.addEventListener("htmx:afterSettle", (event) => {
   const transcript = document.getElementById("transcript");
   if (transcript && transcript.contains(event.detail.target)) transcript.lastElementChild?.scrollIntoView({ block: "end" });
   focusFallback(event.detail.target);
-  if (event.detail.elt?.dataset.announceReady === "true") {
-    const announcer = document.getElementById("transcript-announcer");
-    if (announcer) announcer.textContent = "Reply ready.";
-  }
 });
