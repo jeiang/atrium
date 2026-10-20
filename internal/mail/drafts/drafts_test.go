@@ -355,8 +355,8 @@ func TestSMTPFailureAfterDataIsUnknownNeverResent(t *testing.T) {
 				}
 				return
 			}
-			var derr drafts.Error
-			if !errors.As(err, &derr) || !strings.Contains(err.Error(), "mark it sent or back to draft") {
+			var unknown drafts.OutcomeUnknown
+			if !errors.As(err, &unknown) {
 				t.Fatalf("got %v (%T)", err, err)
 			}
 			_, err = w.store.Send(ctx, id, row.UpdatedAt)

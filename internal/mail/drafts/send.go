@@ -89,7 +89,7 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedAt float64) (Result,
 			Unknown, "send outcome unknown: "+unknown.Error(), s.now(), id); uerr != nil {
 			return Result{}, uerr
 		}
-		return Result{}, Error("send outcome unknown: " + unknown.Error() + "; check whether the recipient got it, then mark it sent or back to draft")
+		return Result{}, OutcomeUnknown("the mail may have been sent (" + unknown.Error() + "); check before you choose Back to draft")
 	}
 	var serr smtp.SendError
 	if errors.As(err, &serr) {
