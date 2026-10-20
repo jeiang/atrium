@@ -132,6 +132,8 @@ func (p *pages) scheduledRoutes(r chi.Router) {
 func (p *pages) scheduledData(r *http.Request) ScheduledData {
 	ctx := detached(r)
 	tz := config.TZName(p.deps.Env)
+	zone, err := scheduler.Zone(tz)
+	check(err)
 	now := p.now()
 	check(p.deps.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		if err := scheduler.EnsureNightly(ctx, tx, tz, now); err != nil {
@@ -139,8 +141,6 @@ func (p *pages) scheduledData(r *http.Request) ScheduledData {
 		}
 		return scheduler.EnsureBuiltins(ctx, tx, tz, now)
 	}))
-	zone, err := scheduler.Zone(tz)
-	check(err)
 	jobs, err := scheduler.ListJobs(ctx, p.deps.DB.Read, false)
 	check(err)
 	runs, err := scheduler.ListRuns(ctx, p.deps.DB.Read, 0, scheduleHistory)

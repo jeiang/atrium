@@ -57,6 +57,7 @@ public listener only), `GRAFANA_URL`
 
 A missing value disables only the tools that need it; they answer "not
 configured". A changed file reaches a running unit only through a restart.
+A value for `ATRIUM_TZ` that is not an IANA time zone stops `atrium serve` at startup.
 
 ## Calendar and contacts sync
 

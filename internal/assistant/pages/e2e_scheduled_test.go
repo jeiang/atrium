@@ -39,7 +39,9 @@ func TestScheduledCreateEditToggleCancel(t *testing.T) {
 	s := newSite(t)
 	page := status(t, s.get("/scheduled"), http.StatusOK)
 	mustContain(t, page, "nightly", "Every day at 02:30", "Fri 29 May 02:30", "weekly-review", "Sun 31 May 18:00", "No runs yet.", "Times are America/Port_of_Spain",
-		`id="schedule-dialog"`, `hx-get="/scheduled/new"`, `id="scheduled-list"`, "Never")
+		`aria-labelledby="schedule-dialog-title"`, `id="new-schedule"`, `id="schedule-dialog"`, `hx-get="/scheduled/new"`, `id="scheduled-list"`, "Never")
+	nightlyID := fmt.Sprint(s.job("nightly").id)
+	mustContain(t, page, `id="job-toggle-`+nightlyID+`"`, `id="job-edit-`+nightlyID+`"`, `id="schedules-h"`, `data-focus-fallback`)
 	if n := s.count("SELECT COUNT(*) FROM jobs WHERE kind = 'nightly'"); n != 1 {
 		t.Errorf("nightly jobs %d", n)
 	}
@@ -52,8 +54,7 @@ func TestScheduledCreateEditToggleCancel(t *testing.T) {
 	mustContain(t, partial, `id="scheduled-list"`, "Every day at 02:30")
 	mustNotContain(t, partial, "<html", `id="schedule-dialog"`)
 	form := status(t, s.get("/scheduled/new"), http.StatusOK)
-	mustContain(t, form, `name="schedule"`, "New schedule", `placeholder="daily 08:00"`, "Create")
-	mustNotContain(t, form, "<html", "Recent runs", "Delete")
+	mustContain(t, form, `name="schedule"`, "New schedule", `id="schedule-dialog-title"`, "Times are", `placeholder="daily 08:00"`, "Create")
 
 	created := s.post("/scheduled", schedule("Digest", "Summarize mail.", "weekly mon 08:00"), hx, "true")
 	body := status(t, created, http.StatusOK)
@@ -62,7 +63,7 @@ func TestScheduledCreateEditToggleCancel(t *testing.T) {
 	wantListHeaders(t, created, "close-dialogs")
 
 	bad := s.post("/scheduled", schedule("Bad", "p", "nonsense"), hx, "true")
-	mustContain(t, status(t, bad, http.StatusUnprocessableEntity), "unrecognised schedule", `value="Bad"`, `role="alert"`, "New schedule")
+	mustContain(t, status(t, bad, http.StatusUnprocessableEntity), "unrecognised schedule", `value="Bad"`, `role="alert" tabindex="-1" autofocus`, `id="schedule-dialog-title"`, "New schedule")
 	if bad.Header.Get("HX-Retarget") != "" || bad.Header.Get("HX-Trigger") != "" {
 		t.Errorf("a refused form carries list headers: %v", bad.Header)
 	}
@@ -153,18 +154,20 @@ func TestScheduledShowsRunsInThePageZone(t *testing.T) {
 	}
 	last, _ := res.LastInsertId()
 	s.exec("INSERT INTO job_runs (job_id, due_at, status, error) VALUES (?, 1780003600, 'error', 'Budget <exceeded>')", nightly.id)
-	for _, state := range []string{"missed_coalesced", "skipped_pause", "skipped_budget", "running"} {
+	for _, state := range []string{"missed_coalesced", "skipped_pause", "skipped_budget", "running", "weird"} {
 		s.exec("INSERT INTO job_runs (job_id, due_at, status) VALUES (?, 1780007200, ?)", nightly.id, state)
 	}
 	s.exec("UPDATE jobs SET last_run_id = ? WHERE id = ?", last, nightly.id)
 	s.exec("INSERT INTO jobs (name, prompt, schedule, tz, next_due, created_by, created_at) VALUES ('Once', 'p', '2030-01-01T10:00', 'UTC', 1893492000, 'agent', 1)")
+	s.exec("INSERT INTO jobs (name, prompt, schedule, tz, next_due, kind, created_by, created_at) VALUES ('Operator', 'p', '2030-01-01T10:00', 'UTC', 1893492000, 'scheduled', 'operator', 1)")
 
 	page := status(t, s.get("/scheduled"), http.StatusOK)
 	mustContain(t, page, "Thu 28 May 16:26", "Thu 28 May 17:26", "$0.123", fmt.Sprintf(`href="/chat/%d"`, thread), "Budget &lt;exceeded&gt;",
-		`data-variant="destructive" title="Budget &lt;exceeded&gt;">error`, "Once on Tue 01 Jan 2030 at 10:00", "Tue 01 Jan 06:00", "agent",
-		`data-variant="secondary">ok</span>`, `data-variant="secondary">missed_coalesced</span>`, `data-variant="outline">skipped_pause</span>`,
-		`data-variant="outline">skipped_budget</span>`, `data-variant="outline">running</span>`)
-	mustNotContain(t, page, "Budget <exceeded>")
+		`data-variant="destructive" title="Budget &lt;exceeded&gt;">Failed</span>`, "Completed", "Ran late", "Skipped (paused)", "Skipped (budget)", "Running",
+		`title="The run was due while atrium was down; missed runs were merged into one."`, `title="Live mode was paused, so this run did not start."`,
+		`title="The monthly budget was reached, so this run did not start."`, "Once on Tue 01 Jan 2030 at 10:00", "Tue 01 Jan 06:00",
+		"Nightly", "Built-in", "Created by you", "Created by the assistant", `data-variant="outline">weird</span>`)
+	mustNotContain(t, page, "Budget <exceeded>", `>ok</span>`, `>error</span>`, `>missed_coalesced</span>`, `>skipped_pause</span>`, `>skipped_budget</span>`, `>running</span>`)
 
 	edit := status(t, s.get(fmt.Sprintf("/scheduled/%d/edit", nightly.id)), http.StatusOK)
 	mustContain(t, edit, "Recent runs", "Thu 28 May 16:26", "$0.123")
@@ -193,7 +196,7 @@ func TestScheduledWithoutScriptAnswersWholePages(t *testing.T) {
 	if refused.Header.Get("HX-Retarget") != "" {
 		t.Errorf("a full page carries list headers: %v", refused.Header)
 	}
-	if strings.Count(body, `id="toaster"`) < 1 {
-		t.Error("no toast on the refused full page")
+	if got := strings.Count(body, `id="toaster"`); got != 1 {
+		t.Errorf("toaster count %d, want 1", got)
 	}
 }
