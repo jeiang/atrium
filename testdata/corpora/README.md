@@ -32,7 +32,7 @@ files (mail, calendars, Office documents) also have them under
 pattern those sites compile and every call made with each pattern (the `re`
 function call itself and the methods called on the compiled pattern).
 `regex.jsonl` holds, per pattern and input, what Python `re` returned. The
-`golden-regex` flake check fails when:
+manifest was built from the frozen Python app, which is not regenerable; when it was built it flagged:
 
 - `src/atrium` has a `re.<call>(` site the manifest does not list (a text scan
   and an AST scan, cross-checked);
