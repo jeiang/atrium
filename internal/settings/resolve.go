@@ -82,6 +82,15 @@ func (r *Registry) Resolve(ctx context.Context, q db.Querier, key string, thread
 	return out, nil
 }
 
+func (r *Registry) Pinned(key string) (source string, pinned bool, err error) {
+	d, pins, err := r.lookup(key)
+	if err != nil || pins == nil || !d.pinnable() {
+		return "", false, err
+	}
+	_, source, pinned = pins.Pin(key)
+	return source, pinned, nil
+}
+
 func lower(key, candidate, base string) (bool, error) {
 	c, err := py.ParseFloat(candidate)
 	if err != nil {

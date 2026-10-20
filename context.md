@@ -25,6 +25,9 @@ not claims about the running application.
 - Deployment configuration and credentials come from the host and its
   environment files. Some settings are editable through the application;
   a general UI-managed configuration and module system is still planned.
+  Secrets set through `atrium secrets` are stored write-only in the database
+  and are never read back or shown; admin keys are refused on a plaintext
+  database.
 - The host owns external services, reverse proxy authentication,
   persistence, and backups. Updating this repository does not update the
   host's pinned application input.
