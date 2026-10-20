@@ -90,7 +90,7 @@
       '';
 
       settingsgen = goCheck "settingsgen" [pkgs.diffutils] ''
-        go run -tags sqlite_fts5 ./tools/settingsgen $TMPDIR/config
+        go run -tags modernc ./tools/settingsgen $TMPDIR/config
         diff -r docs/config $TMPDIR/config
       '';
 
