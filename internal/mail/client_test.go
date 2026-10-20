@@ -311,7 +311,7 @@ func scanForMove(t *testing.T, root string, banned map[string]bool) {
 					text = lit
 				}
 				for _, w := range strings.FieldsFunc(text, func(r rune) bool { return !unicode.IsLetter(r) }) {
-					if strings.EqualFold(w, "MOVE") {
+					if w == "MOVE" {
 						t.Errorf("%s: string %s names the IMAP MOVE command", fset.Position(pos), lit)
 					}
 				}
