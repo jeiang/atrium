@@ -20,11 +20,47 @@ var migrations = []migration{
 	{1, pythonSchema},
 }
 
+type FutureSchemaError struct {
+	Versions []int
+	Known    int
+}
+
+func (e *FutureSchemaError) Error() string {
+	versions := make([]string, len(e.Versions))
+	for i, v := range e.Versions {
+		versions[i] = fmt.Sprintf("%04d", v)
+	}
+	return fmt.Sprintf("db: schema_migrations holds migration %s that this atrium does not know (newest known: %04d); "+
+		"the database was migrated by a newer atrium: run that release or restore a backup taken before the upgrade; nothing was changed",
+		strings.Join(versions, ", "), e.Known)
+}
+
+func unknownVersions(applied map[int]bool) []int {
+	var out []int
+	for v := range applied {
+		if !slices.ContainsFunc(migrations, func(m migration) bool { return m.version == v }) {
+			out = append(out, v)
+		}
+	}
+	sort.Ints(out)
+	return out
+}
+
+func refuseFuture(applied map[int]bool) error {
+	if future := unknownVersions(applied); len(future) > 0 {
+		return &FutureSchemaError{Versions: future, Known: migrations[len(migrations)-1].version}
+	}
+	return nil
+}
+
 const schemaMigrationsDDL = "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at REAL NOT NULL)"
 
 func Migrate(ctx context.Context, d *DB, path string) error {
 	applied, err := appliedVersions(ctx, d.Read)
 	if err != nil {
+		return err
+	}
+	if err := refuseFuture(applied); err != nil {
 		return err
 	}
 	if pending(applied) {
@@ -74,6 +110,13 @@ func applyPending(ctx context.Context, d *DB, path string) error {
 		return err
 	}
 	defer func() { _ = lock.Close() }()
+	applied, err := appliedVersions(ctx, d.Read)
+	if err != nil {
+		return err
+	}
+	if err := refuseFuture(applied); err != nil {
+		return err
+	}
 	for _, m := range migrations {
 		err := d.WithTx(ctx, func(tx *sql.Tx) error {
 			if _, err := tx.ExecContext(ctx, schemaMigrationsDDL); err != nil {

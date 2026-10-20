@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -342,4 +343,80 @@ func TestConcurrentStartProcesses(t *testing.T) {
 		t.Errorf("schema_migrations: %d rows, want 1", n)
 	}
 	diffLines(t, "schema.sql", readText(t, "db/schema.sql"), withoutMigrations(t, schemaSQL(t, d)))
+}
+
+func TestNewerSchemaRefusedBeforeAnyWrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atrium.db")
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	ctx := t.Context()
+	if err := db.Migrate(ctx, d, path); err != nil {
+		t.Fatal(err)
+	}
+	var before int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (9999, 1.0); DELETE FROM skills WHERE name = 'wiki-query'"); err != nil {
+		t.Fatal(err)
+	}
+	err = db.Migrate(ctx, d, path)
+	var future *db.FutureSchemaError
+	if !errors.As(err, &future) || len(future.Versions) != 1 || future.Versions[0] != 9999 {
+		t.Fatalf("Migrate on a newer schema = %v, want *FutureSchemaError for 9999", err)
+	}
+	if !strings.Contains(err.Error(), "9999") {
+		t.Errorf("message does not name the unknown version: %v", err)
+	}
+	var skills, after int
+	if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM skills WHERE name = 'wiki-query'), (SELECT COUNT(*) FROM schema_migrations)").Scan(&skills, &after); err != nil {
+		t.Fatal(err)
+	}
+	if skills != 0 || after != before+1 {
+		t.Errorf("refused Migrate wrote: wiki-query rows %d (want 0), schema_migrations rows %d (want %d)", skills, after, before+1)
+	}
+}
+
+func TestNewerSchemaRefusedAfterWaitingForFlock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atrium.db")
+	lock, err := db.Exclusive(context.Background(), path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := migrateAsync(path)
+	select {
+	case err := <-done:
+		t.Fatalf("Migrate finished (%v) while another holder had atrium.db.lock", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	newer, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = newer.Close() }()
+	if _, err := newer.Write.Exec("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at REAL NOT NULL); INSERT INTO schema_migrations VALUES (9999, 1.0)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		var future *db.FutureSchemaError
+		if !errors.As(err, &future) {
+			t.Fatalf("Migrate after the lock was released = %v, want *FutureSchemaError", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("Migrate did not finish after the lock was released")
+	}
+	var n int
+	if err := newer.Read.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("the older binary created tables on a newer schema: %d tables, want 1", n)
+	}
 }
