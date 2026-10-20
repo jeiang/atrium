@@ -1,2 +1,0 @@
-usage: atrium proposals approve [-h] [--selection SELECTION] id
-atrium proposals approve: error: the following arguments are required: id

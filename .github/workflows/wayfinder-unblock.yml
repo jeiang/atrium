@@ -1,6 +1,5 @@
 name: Wayfinder unblock
 
-# GitHub has no workflow event for dependency edits, so the schedule catches those.
 on:
   issues:
     types:
@@ -30,7 +29,6 @@ jobs:
       ACTION: ${{ github.event.action }}
       ISSUE: ${{ github.event.issue.number }}
     steps:
-      # Labels the open ticket `wayfinder:blocked` iff it has an open native blocker.
       - name: Sync wayfinder:blocked
         shell: bash
         run: |

@@ -1,9 +1,0 @@
-usage: atrium proposals approve [-h] [--selection SELECTION] id
-
-positional arguments:
-  id
-
-options:
-  -h, --help            show this help message and exit
-  --selection SELECTION
-                        JSON selection document

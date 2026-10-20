@@ -13,9 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// BranchMessages is branch_messages: the history up to and including seq. A tool_use turn at the cut takes
-// its results along, or loses its tool_use blocks when no results exist yet, so the copy never ends on an
-// unanswered call.
 func BranchMessages(messages []journal.Message, seq int64) []journal.Message {
 	var kept []journal.Message
 	var following *journal.Message
@@ -42,8 +39,6 @@ func BranchMessages(messages []journal.Message, seq int64) []journal.Message {
 	return kept
 }
 
-// Branch is branch: a new chat thread whose history is this thread's conversation up to and including message
-// seq, with its options, allowlist, project and attachments (copied, so either thread can be deleted).
 func (s *Service) Branch(ctx context.Context, threadID, seq int64) (int64, error) {
 	source, err := threads.Get(ctx, s.DB.Read, threadID)
 	if err != nil {

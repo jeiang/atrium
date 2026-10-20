@@ -368,8 +368,6 @@ func CanUndo(ctx context.Context, q Querier, id int64) (bool, error) {
 	return len(pending(logged)) > 0, nil
 }
 
-// recovered reports a proposal that still has a write in flight: a kill, or a ledger write that failed, leaves a row
-// nothing settled or dropped, and the batches settled before it stay undoable.
 func recovered(logged []Action) bool {
 	for _, a := range logged {
 		if op, _ := a.field("op"); op != UndoOp && !a.OK && a.Error != nil && *a.Error == InFlightText {
@@ -379,14 +377,8 @@ func recovered(logged []Action) bool {
 	return false
 }
 
-// StuckSeconds is how long a proposal's newest ledger row must be idle before RecoverStuck treats its in-flight
-// write as dead: one IMAP write is bounded by the client's write timeout (2 min), and a live approve touches the
-// ledger between its writes. The same bound as drafts.SendingStaleSeconds.
 const StuckSeconds = 600
 
-// RecoverStuck fails every approved proposal that has a write in flight and no ledger row newer than StuckSeconds
-// before now. The in-flight row stays, so refuseUnresolved and Known keep blocking a retry; the settled batches
-// stay undoable.
 func RecoverStuck(ctx context.Context, d *db.DB, now float64) (int64, error) {
 	failure := py.Dict{{Key: "error", Value: mailops.UnknownPrefix + ": approve interrupted; resolve the mailbox by hand before approving again"}}
 	res, err := d.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, result = ? WHERE status = ? AND EXISTS "+
@@ -412,8 +404,6 @@ func (p *Pipeline) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-// unresolvedSQL matches a proposal that has a failed write whose outcome is unknown or half done, in the form of
-// mailops.Blocks over proposal_actions; an undo's own failure does not count.
 var unresolvedSQL = "EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND (" + mailops.BlockingActionSQL("a") + "))"
 
 func (p *Pipeline) claim(ctx context.Context, id int64, status string) (bool, error) {

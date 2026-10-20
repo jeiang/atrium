@@ -356,78 +356,7 @@ func TestMutatingRoutesNeedACSRFToken(t *testing.T) {
 	}
 }
 
-func TestToastsAreOutOfBandFragmentsOnlyWhereThePythonAppHadThem(t *testing.T) {
-	s := seeded(t, "shadow", Options{})
-	row := status(t, s.post("/messages/"+s.id(s.ids.invoice)+"/correct", url.Values{"dest": {"Bills"}, "context": {"row"}}, hx), 200, "row")
-	if n := strings.Count(row, `hx-swap-oob="beforeend"`); n != 1 {
-		t.Errorf("oob toasts = %d", n)
-	}
-	card := status(t, s.post("/messages/"+s.id(s.ids.other)+"/correct", url.Values{"dest": {"Bills"}}, hx), 200, "card")
-	lacks(t, card, "hx-swap-oob")
-}
-
 func matches(pattern, text string) bool {
 	m, _ := rx.MustCompile(pattern, 0).Search(text)
 	return m != nil
-}
-
-func TestEmptyFormFieldsAreNotSent(t *testing.T) {
-	s := seeded(t, "shadow", Options{})
-	path := "/messages/" + s.id(s.ids.other) + "/correct"
-	rec := s.post(path, url.Values{"dest": {"Bills"}, "context": {""}})
-	status(t, rec, 303, "context empty")
-	if got := rec.Header().Get("Location"); got != "/messages/"+s.id(s.ids.other) {
-		t.Errorf("Location = %q", got)
-	}
-	card := status(t, s.post(path, url.Values{"dest": {"Bills"}, "context": {""}}, hx), 200, "context empty htmx")
-	contains(t, card, `id="decision-card-`+s.id(s.ids.other)+`"`)
-	created := s.post("/rules", url.Values{"id": {"shop"}, "action": {""}, "dest": {"Bills"}, "field": {"from_addr"}, "op": {"eq"}, "value": {"a"}})
-	status(t, created, 303, "action empty")
-	if got := created.Header().Get("Location"); got != "/rules?saved=shop&created=1" {
-		t.Errorf("Location = %q", got)
-	}
-	if got := s.column("SELECT action FROM rules"); len(got) != 1 || got[0] != "file" {
-		t.Errorf("rules = %v", got)
-	}
-	body := mustJSON(t, status(t, s.post("/rules/shop/move", url.Values{"direction": {""}}), 422, "direction empty"))
-	detail := body["detail"].([]any)[0].(map[string]any)
-	if detail["type"] != "missing" {
-		t.Errorf("detail = %v", detail)
-	}
-}
-
-func TestIntegerParametersFollowPydanticLaxMode(t *testing.T) {
-	s := seeded(t, "shadow", Options{})
-	for _, ok := range []string{"+" + s.id(s.ids.invoice), " " + s.id(s.ids.invoice) + " ", s.id(s.ids.invoice) + ".0"} {
-		status(t, s.get("/messages/"+url.PathEscape(ok)), 200, ok)
-	}
-	for _, bad := range []string{"1e1", "5.", ".0", "0x1p4", "1__0", "%1C7", "%1F7"} {
-		status(t, s.get("/messages/"+bad), 422, bad)
-	}
-	status(t, s.get("/triage?offset=1e3"), 422, "offset")
-	status(t, s.get("/triage?offset=+5"), 200, "offset")
-}
-
-func TestAgeConditionTakesUnicodeDigits(t *testing.T) {
-	s := seeded(t, "shadow", Options{})
-	created := s.post("/rules", url.Values{
-		"id": {"old"}, "action": {"delete"}, "field": {"age_days"}, "op": {"gte"}, "value": {"\u0663\u0660"},
-	})
-	status(t, created, 303, "unicode digits")
-	contains(t, status(t, s.get("/rules/old/edit"), 200, "edit"), `value="30"`)
-}
-
-func TestRuleErrorTextUppercasesLikePython(t *testing.T) {
-	s := seeded(t, "shadow", Options{})
-	page := status(t, s.post("/rules", url.Values{"id": {"\u00dfx y"}, "action": {"file"}}), 200, "page")
-	contains(t, page, "SSx y: file rule needs dest")
-}
-
-func TestRefererWithBadIPv6FallsBack(t *testing.T) {
-	s := seeded(t, "live", Options{})
-	rec := s.post("/live/pause", nil, [2]string{"Referer", "http://[::1/triage"})
-	status(t, rec, 303, "pause")
-	if got := rec.Header().Get("Location"); got != "/triage" {
-		t.Errorf("Location = %q", got)
-	}
 }

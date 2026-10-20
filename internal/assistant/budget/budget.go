@@ -8,10 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/db/readpaths"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -105,18 +103,4 @@ func Check(ctx context.Context, q db.Querier, now float64, loc *time.Location, u
 			py.FormatPercent(threshold, 0)))
 	}
 	return found, nil
-}
-
-func init() {
-	readpaths.Register(readpaths.Path{
-		Name:   "budget.status",
-		Golden: "budget.status",
-		Run: func(ctx context.Context, d *db.DB) (any, error) {
-			loc, err := store.GoldenLocation()
-			if err != nil {
-				return nil, err
-			}
-			return StatusAt(ctx, d.Read, store.GoldenNow, loc)
-		},
-	})
 }

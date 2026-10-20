@@ -1,142 +1,79 @@
-# atrium: what it is for
+# Vision
 
-This page says what atrium is for and where v2 is heading. The wayfinder map
-([issue #15](https://github.com/jeiang/atrium/issues/15)) holds the detail
-and the decisions. Owner answers are recorded in
-[Owner answers on the vision](https://github.com/jeiang/atrium/issues/89).
+atrium should be my agentic personal assistant: something that understands
+my circumstances, helps with day-to-day tasks, and can do useful work on
+my behalf.
 
-## Goal
+## Bring my information and actions together
 
-atrium is a private assistant service that one person runs on their own
-host. It keeps a local index of that person's mail, calendar, contacts,
-Notion wiki, spending and media library. It does routine work on that data
-in plain code, with no model in the loop. A Claude-based agent sits on top
-for anything that needs judgment. v2 adds a coding harness: an isolated
-microVM per chat thread, where the agent or a coding agent it calls can run
-scripts and change a repository.
+I should be able to work with information from the tools and services I
+use without repeatedly opening each application or explaining the same
+context. atrium should bring those capabilities into one place, while
+leaving me free to use the original applications.
 
-Others running their own instance is a v2 goal. At least two other people
-intend to use and extend it. That is part of why there is a Go port and a
-separate repo. Nothing in v2 may assume the owner's country, bank or
-hardware.
+The point is not to collect integrations. Each integration should help
+the assistant understand something important to me or act on it.
 
-## Who it serves
+## Build lasting knowledge about my life
 
-One operator per instance: the person whose mail, calendar and money it
-reads. More people means more instances, not more users. The operator is
-also the admin. In v2 those roles split into the `atrium_access` and
-`atrium_admin` OIDC groups.
+atrium should maintain a useful wiki of knowledge about me: my tasks,
+interests, friends, work, preferences, and the relationships between them.
 
-## Jobs
+That knowledge should persist beyond individual conversations and remain
+inspectable and correctable. I should not have to keep rebuilding the
+assistant's understanding of my life.
 
-- Mail secretary. Sync iCloud and Gmail, decide a folder per message in
-  code (rules, embedding neighbors, a model judgment, fallback), verify
-  every write, log it with an undo. Shadow mode records decisions without
-  writing.
-- Follow-up tracking: open loops, commitments, packages, birthdays and
-  event candidates from mail.
-- Drafting, never sending. Only the operator's Send click sends.
-- Knowledge keeping: a Notion wiki, a nightly run that records stable
-  preferences, weekly reviews and daily nudges.
-- Calendar, money and media, with undoable agent edits.
-- Read-only Grafana access.
-- A chat workspace with threads, plans, files, projects, skills and
-  research subagents.
-- v2 adds a sandbox per thread, environments, GitHub, pi and Claude Code as
-  callable coding agents, model and effort choice per thread, settings
-  editable in the UI, OIDC login, module toggles and an encrypted database.
+## Help proactively and act on my behalf
 
-## Principles
+With the right knowledge, the assistant should recognize useful work
+without waiting for me to spell out every step. It should help me notice
+what needs attention, prepare for what is coming, and carry out tasks
+within the authority I give it.
 
-- Policy lives in code, not in the prompt. The tool registry decides what
-  each run kind may use.
-- A ladder of autonomy by effect: read freely, propose when the operator's
-  judgment is needed, write directly only with a logged undo, and leave
-  irreversible or outward-facing acts (send, invite, merge, delete) to a
-  click. v2 writes this ladder down as the tool contract, so a new tool's
-  place follows from its effect.
-- Mail routing is never an agent decision.
-- Everything the model reads is untrusted data.
-- Data stays home by default, and what leaves is named.
-- Spend is bounded and visible.
-- Boundaries are real: a microVM with an egress proxy, not an interpreter.
-- Journaled, resumable, idempotent.
-- Degrade, do not crash: a missing credential disables only what needs it.
-- Deterministic jobs stay model-free.
-- No personal literal in the repo.
+I should be able to ask it to download a show, email a friend about
+something discussed earlier, or check on a package, without supplying
+information it already knows or manually coordinating the underlying
+tools.
 
-## Decisions from the owner
+Proactive assistance should reduce my workload, not create another stream
+of information that I have to manage.
 
-- Memory precedence is profile, then nightly, then wiki. The profile is the
-  source of truth. The nightly run updates the wiki, weighted by confidence.
-  If the wiki says the operator usually uses tool X and the nightly saw them
-  use Y once, the wiki keeps X and gains a note that they sometimes use Y.
-  The mechanism is a ticket: Memory model.
-- Money is not specific to one country. Currencies are configurable, with
-  USD as the base. Every other currency has a conversion rate that the
-  operator sets as a fixed value. There is no rate fetcher. Changing a rate
-  never changes older transactions, because each transaction stores the rate
-  it used.
-- Mail does not need a local model. Classification and embeddings use any
-  OpenAI-compatible endpoint, local or hosted. The operator chooses, and the
-  privacy consequence of a hosted endpoint is shown where it is chosen.
-- Scripts in the sandbox may call atrium's own read tools. This replaces
-  the tool calling that `run_code` does today. Write-class tools are not
-  callable that way.
-- There is no fixed cost target yet. Measurements come first.
+## Adapt to different people
 
-## Direction accepted
+atrium is built around my needs, but it should not depend on my identity,
+accounts, location, or particular set of services.
 
-- A per-job token and cost table (weekly review, nudge, nightly, a typical
-  chat answer), plus a replay harness that runs journaled threads against a
-  new build or model. It also serves as parity evidence for the port.
-- One attention view across open loops, commitments, proposals, plans,
-  event candidates, unassigned transactions and drafts, used by the operator
-  and by the daily nudge.
-- A data-driven money module: currencies, rates and bank profiles as
-  settings and data, not code constants.
-- A stated memory model for profile, wiki, skills, projects, nightly
-  capture and thread folds: what goes where, what the system prompt loads
-  and how stale facts expire.
+Its capabilities should be modular. Other people should be able to use
+the parts they need, leave out those they do not, and configure the
+assistant for their own circumstances.
 
-## What success looks like
+## Keep configuration and state independent of the program
 
-- The inbox holds nothing that has a rule or a confident decision, and
-  nothing is misfiled that the operator did not correct once.
-- Weekly reviews and daily nudges replace scanning mail for deadlines,
-  bills, birthdays and packages, and each item links to its source.
-- Questions about the operator's own data are answered from tools, with ids
-  the operator can open, inside the budget.
-- The agent never sends, invites, merges or deletes. Every automatic write
-  shows on `/activity` with a working Undo.
-- Monthly spend stays under budget, and the budget page says where tokens
-  went.
-- v2: the operator opens a thread bound to a repo, asks for a change, and
-  gets a draft PR without a terminal. The token never enters the VM.
-- v2: a second person stands up their own instance from the NixOS module and
-  the docs, and connects each integration from the web UI.
-- The Go port passed the parity inventory against the Python app it replaced.
+Behavior should be configurable rather than requiring source changes.
+Mutable state should live outside the program and its source tree, in
+systems such as SQLite and Notion, with other backends possible later.
 
-## Still open
+Updating or replacing the program should not mean losing the knowledge,
+configuration, or history that makes the assistant useful.
 
-- Whether a branch push or draft PR counts as undoable or needs a proposal
-  on the first push per repo. It stays open in the GitHub module and tool
-  interface tickets.
-- Whether and how the operator reaches atrium from a phone: ntfy action
-  buttons, a PWA with web push, or a chat bridge, and what it may do
-  (approve or dismiss a proposal, send a short message). Ticket: Inbound
-  phone channel.
+## Protect private information
 
-## Non-goals
+The assistant will hold information about my life and have access to
+important services. Security and privacy must shape its design, including
+what it can access, what it can change, and what information leaves the
+systems I control.
 
-- The agent never sends mail, invites attendees, pays, merges or deletes.
-- No multiple users in one instance, no untrusted tenants, no shared
-  sandbox manager.
-- No general shell on the atrium host for the model. Code runs only in the
-  sandbox.
-- Not an email client, a Notion replacement, a budgeting app or a torrent
-  client. The operator keeps using the originals.
-- Not an IDE. Scripts, small changes and draft PRs; long refactors go to pi
-  or Claude Code in the sandbox.
-- No CDN, no inline script, no third-party frontend at runtime.
-- No Nix inside the sandbox, no macOS sandbox host, no OCI image.
+Useful autonomy depends on permissions I can understand and control.
+
+## Get the best outcome for the lowest practical cost
+
+Efficiency means reducing the cost of useful outcomes, not simply choosing
+the cheapest model or minimizing one request.
+
+The harness should make effective use of caching. Agents should have
+purpose-built tools for routine work rather than needing to write scripts
+to reach ordinary capabilities.
+
+Delegation should divide work where that improves results, avoid
+overloading one context window, and preserve useful context and cache
+reuse for each agent.

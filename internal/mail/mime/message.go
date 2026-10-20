@@ -11,9 +11,6 @@ import (
 
 var log = logx.Logger("atrium.mime")
 
-// MaxDepth is the deepest message nesting (multipart and message/* containers) CPython 3.14.7 parses before
-// RecursionError, measured with features.extract called four frames below a module; Parse fails deeper, as
-// Python raises.
 const MaxDepth = 970
 
 var errTooDeep = errors.New("message nesting exceeds Python's recursion limit")

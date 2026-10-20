@@ -47,6 +47,10 @@ type Error string
 
 func (e Error) Error() string { return string(e) }
 
+type OutcomeUnknown string
+
+func (e OutcomeUnknown) Error() string { return string(e) }
+
 type Row struct {
 	ID                 int64    `json:"id"`
 	ThreadID           *int64   `json:"thread_id"`
@@ -457,9 +461,6 @@ func (s *Store) Create(ctx context.Context, threadID *int64, account string, to,
 	return res.LastInsertId()
 }
 
-// replyFor binds in_reply_to_message_id to SQLite as Python's sqlite3 does: an int, a bool, a whole float or a
-// numeric string finds the message of that id, any other float or string finds none, and a list or dict is a
-// ProgrammingError.
 func (s *Store) replyFor(ctx context.Context, v any) (int64, reply, error) {
 	var id int64
 	shown := ""
@@ -658,8 +659,6 @@ func (s *Store) UnexpectedRecipients(ctx context.Context, d Row) ([]string, erro
 	return out, nil
 }
 
-// sqliteInteger: SQLite compares text with an INTEGER PRIMARY KEY as that integer when it is numeric text, with
-// ASCII blanks around it, that converts to an integer without loss.
 func sqliteInteger(text string) (int64, bool) {
 	text = strings.Trim(text, " \t\n\v\f\r")
 	if text == "" || strings.Trim(text, "0123456789+-.eE") != "" {

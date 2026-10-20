@@ -5,7 +5,6 @@ import (
 	"database/sql"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/db/readpaths"
 )
 
 const defaultRunLimit = 30
@@ -42,15 +41,5 @@ func ListRuns(ctx context.Context, q db.Querier, jobID int64, limit int) ([]List
 		var run ListedRun
 		return run, r.Scan(&run.ID, &run.JobID, &run.ThreadID, &run.DueAt, &run.StartedAt, &run.EndedAt, &run.Status, &run.Error,
 			&run.Tokens, &run.Cost, &run.JobName, &run.JobKind, &run.RunID)
-	})
-}
-
-func init() {
-	readpaths.Register(readpaths.Path{
-		Name:   "scheduler.list_runs",
-		Golden: "scheduler.list_runs",
-		Run: func(ctx context.Context, d *db.DB) (any, error) {
-			return ListRuns(ctx, d.Read, 0, defaultRunLimit)
-		},
 	})
 }

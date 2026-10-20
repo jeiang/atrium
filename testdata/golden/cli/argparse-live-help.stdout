@@ -1,8 +1,0 @@
-usage: atrium live [-h]
-                   {backlog,rebaseline,pause,resume,status,deletions,actions,undo} ...
-
-positional arguments:
-  {backlog,rebaseline,pause,resume,status,deletions,actions,undo}
-
-options:
-  -h, --help            show this help message and exit

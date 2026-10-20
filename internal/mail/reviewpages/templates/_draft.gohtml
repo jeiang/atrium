@@ -44,8 +44,8 @@
   {{if eq $d.status "unknown"}}
   <div class="alert" data-variant="destructive" role="alert">
     {{icon "circle-alert"}}
-    <h2>Check the Sent folder</h2>
-    <section><p>The send was interrupted, so it is unknown whether this mail went out. Look in the account's Sent folder, then record what you found. It is never resent automatically.</p></section>
+    <h2>Check if the mail went out</h2>
+    <section><p>The send was interrupted, so it is unknown whether this mail went out. The Sent folder can be empty even if the mail was delivered. Ask the recipient or look in the web mail of the account before you choose Back to draft. If you send it again, the recipient can get it twice. It is never resent automatically.</p></section>
   </div>
   <div class="flex gap-2">
     <form method="post" action="/drafts/{{$d.id}}/resolve" hx-post="/drafts/{{$d.id}}/resolve" hx-target="#draft-{{$d.id}}" hx-swap="outerHTML">

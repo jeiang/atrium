@@ -61,8 +61,6 @@ func draftFailed(err error) error {
 	return raised(err)
 }
 
-// replyID is _reply_id: nil or an int, which may exceed int64; the store raises OverflowError for that only
-// after it has validated everything else, as create does.
 func replyID(args py.Dict) (any, error) {
 	value, _ := args.Get("in_reply_to_message_id")
 	switch value.(type) {

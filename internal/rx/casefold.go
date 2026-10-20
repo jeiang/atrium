@@ -61,10 +61,6 @@ func casedIn(r [2]rune) bool {
 	return i < len(pyCased) && pyCased[i].r <= r[1]
 }
 
-// foldSet is CPython's IN_UNI_IGNORE for a set's characters and ranges, expanded so regexp2 matches it without
-// case folding: a code point matches when its lowercase form is the lowercase form of a BMP member (or a
-// re._casefix equivalent), equals a lowercased non-BMP literal, or lies, lowercased or lowercased then
-// uppercased, in a range reaching past the BMP (RANGE_UNI_IGNORE).
 func foldSet(ranges [][2]rune) [][2]rune {
 	hasCased := false
 	for _, r := range ranges {

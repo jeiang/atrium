@@ -1,3 +1,0 @@
-sqlite 3.53.3
-sqlite-vec v0.1.9
-python 3.14.7

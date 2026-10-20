@@ -383,8 +383,6 @@ const (
 	none         = -1
 )
 
-// sheetParser is openpyxl's read-only worksheet iteration written as CSV: rows are padded to the dimension
-// element's columns and missing rows are filled in; maxRow and maxCol are none when the dimension leaves them out.
 type sheetParser struct {
 	shared   []string
 	formats  styleFormats
@@ -582,8 +580,6 @@ func takeRangePart(s string) (rangePart, string) {
 	return part, s[n:]
 }
 
-// rangeBoundaries is openpyxl's range_boundaries(ref) for the (min_col, min_row, max_col, max_row) of a worksheet
-// dimension; a bound the reference leaves out is none.
 func rangeBoundaries(ref string) (minCol, minRow, maxCol, maxRow int, err error) {
 	first, rest := takeRangePart(ref)
 	var second rangePart

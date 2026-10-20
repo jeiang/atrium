@@ -1,7 +1,3 @@
-// Package service is agent/service.py: the assistant API the web pages, the CLI and the scheduler call.
-// It creates threads, prepares runs (the operator's message, its allowlisted URLs and expanded skills) and
-// executes them in the caller or in the background, queues messages for a running run, edits, regenerates,
-// branches and deletes conversations, and resumes runs a restart interrupted.
 package service
 
 import (
@@ -32,33 +28,26 @@ import (
 
 var log = logx.Logger("atrium.agent.service")
 
-// RunActive is RunActive: the thread already has a run in progress.
 type RunActive string
 
 func (e RunActive) Error() string { return string(e) }
 func (RunActive) PyClass() string { return "RunActive" }
 
-// UnknownThread is UnknownThread(KeyError): there is no such thread (or run of it).
 type UnknownThread int64
 
 func (e UnknownThread) Error() string { return strconv.FormatInt(int64(e), 10) }
 func (UnknownThread) PyClass() string { return "UnknownThread" }
 
-// NothingToRedo is NothingToRedo(ValueError): no operator message to edit, regenerate or branch from.
 type NothingToRedo string
 
 func (e NothingToRedo) Error() string { return string(e) }
 func (NothingToRedo) PyClass() string { return "NothingToRedo" }
 
-// NotInterrupted is claim's ValueError: the run cannot be resumed because it is not interrupted.
 type NotInterrupted int64
 
 func (e NotInterrupted) Error() string { return fmt.Sprintf("run %d is not interrupted", int64(e)) }
 func (NotInterrupted) PyClass() string { return "ValueError" }
 
-// Service runs assistant turns against one database. Client nil makes a client from Env for each run
-// (make_client); Now nil is the wall clock. Background runs use the context New was given. A request's
-// cancellation never splits a start: the run row and the goroutine that executes it come together.
 type Service struct {
 	DB     *db.DB
 	Cfg    config.Config
@@ -73,22 +62,18 @@ type Service struct {
 	closed bool
 }
 
-// ErrClosed refuses a background run after Close.
 var ErrClosed = errors.New("service: closed")
 
-// New is a Service whose background runs live until ctx is cancelled.
 func New(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, runner *loop.Runner) *Service {
 	return &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: ctx, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}}
 }
 
-// Wait blocks until every background run started so far has returned; a run started meanwhile waits for it.
 func (s *Service) Wait() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.wg.Wait()
 }
 
-// Close stops accepting background runs (they fail with ErrClosed) and waits for the running ones.
 func (s *Service) Close() {
 	s.mu.Lock()
 	s.closed = true
@@ -103,9 +88,6 @@ func (s *Service) now() float64 {
 	return float64(time.Now().UnixMicro()) / 1e6
 }
 
-// Start are the options of a new run: its kind (empty is chat), whether the text is the operator's (only
-// operator text may add URLs to the thread's web_fetch allowlist), the parent run of a subagent run, limits
-// stored with the run so a resume keeps them, and attachment blocks journaled ahead of the text.
 type Start struct {
 	Kind        string
 	Operator    bool
@@ -125,7 +107,6 @@ func emptyLimits(l journal.Limits) bool {
 	return l.MaxSteps == nil && l.MaxCostUSD == nil && l.SystemExtra == nil && l.AllowedTools == nil
 }
 
-// CreateThread is create_thread: a titled thread is indexed for search by its title.
 func CreateThread(ctx context.Context, q db.Querier, now float64, n threads.NewThread) (int64, error) {
 	id, err := threads.Create(ctx, q, now, n)
 	if err != nil {
@@ -139,8 +120,6 @@ func CreateThread(ctx context.Context, q db.Querier, now float64, n threads.NewT
 	return id, nil
 }
 
-// Load is load: the thread, refused when it has a run in progress or the budget does not allow its kind of
-// run (BudgetExceeded is returned before any run exists).
 func Load(ctx context.Context, q db.Querier, env config.Env, threadID int64, now float64) (*threads.Thread, error) {
 	thread, err := threads.Get(ctx, q, threadID)
 	if err != nil {
@@ -170,9 +149,6 @@ func Load(ctx context.Context, q db.Querier, env config.Env, threadID int64, now
 	return thread, nil
 }
 
-// Prepare is prepare: it journals the operator's message under a new run owned by this process. `/skill:name`
-// references in chat, cron and nightly text are expanded first; the run's progress replaces the thread's
-// earlier progress unless it is a subagent run.
 func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now float64, o Start) (int64, error) {
 	thread, err := Load(ctx, s.DB.Read, s.Env, threadID, now)
 	if err != nil {
@@ -216,8 +192,6 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 	return runID, nil
 }
 
-// PrepareRerun is prepare_rerun: a run that answers the thread's last operator message again; no message is
-// journaled.
 func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64) (int64, error) {
 	thread, err := Load(ctx, s.DB.Read, s.Env, threadID, now)
 	if err != nil {
@@ -245,8 +219,6 @@ func merged(stored, override journal.Limits) journal.Limits {
 	return stored
 }
 
-// Execute is execute: it runs the prepared run with its stored limits (override wins). Without an API key the
-// run fails with NotConfigured's text before any request.
 func (s *Service) Execute(ctx context.Context, runID int64, override journal.Limits) (*journal.Run, error) {
 	client := s.Client
 	if client == nil {
@@ -274,7 +246,6 @@ func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error
 	return embed.Texts(ctx, s.Cfg.EmbedURL, texts)
 }
 
-// RunOnce is run_once: prepare and execute in the caller.
 func (s *Service) RunOnce(ctx context.Context, threadID int64, text string, o Start) (int64, error) {
 	runID, err := s.Prepare(ctx, threadID, text, s.now(), o)
 	if err != nil {
@@ -286,8 +257,6 @@ func (s *Service) RunOnce(ctx context.Context, threadID int64, text string, o St
 	return runID, nil
 }
 
-// inBackground is in_background: a run that fails or panics outside the loop's own handling is logged and
-// left to the lease, as Python's crashed thread was.
 func (s *Service) inBackground(runID int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -309,7 +278,6 @@ func (s *Service) inBackground(runID int64) error {
 	return nil
 }
 
-// StartRun is start_run: prepare here, execute in the background.
 func (s *Service) StartRun(ctx context.Context, threadID int64, text string, o Start) (int64, error) {
 	ctx = context.WithoutCancel(ctx)
 	runID, err := s.Prepare(ctx, threadID, text, s.now(), o)
@@ -319,14 +287,11 @@ func (s *Service) StartRun(ctx context.Context, threadID int64, text string, o S
 	return runID, s.inBackground(runID)
 }
 
-// Sent is send's result: the queue row when a run was going, else the new run.
 type Sent struct {
 	Queued bool
 	ID     int64
 }
 
-// Send is send: operator text (with attachments) for a chat thread, queued for the running run to take at
-// its next step, else a new run.
 func (s *Service) Send(ctx context.Context, threadID int64, text string, attachments []json.RawMessage) (Sent, error) {
 	ctx = context.WithoutCancel(ctx)
 	thread, err := threads.Get(ctx, s.DB.Read, threadID)
@@ -361,8 +326,6 @@ func (s *Service) lastOperator(ctx context.Context, threadID int64, refusal stri
 	return last, nil
 }
 
-// EditLast is edit_last: the last operator message is replaced and answered again; the old tail stays
-// journaled as superseded.
 func (s *Service) EditLast(ctx context.Context, threadID int64, text string, attachments []json.RawMessage) (int64, error) {
 	ctx = context.WithoutCancel(ctx)
 	last, err := s.lastOperator(ctx, threadID, "no operator message to edit")
@@ -375,7 +338,6 @@ func (s *Service) EditLast(ctx context.Context, threadID int64, text string, att
 	return s.StartRun(ctx, threadID, text, Start{Kind: threads.Chat, Operator: true, Files: attachments})
 }
 
-// Regenerate is regenerate: the last operator message is answered again; everything after it is superseded.
 func (s *Service) Regenerate(ctx context.Context, threadID int64) (int64, error) {
 	ctx = context.WithoutCancel(ctx)
 	last, err := s.lastOperator(ctx, threadID, "no operator message to answer again")
@@ -392,7 +354,6 @@ func (s *Service) Regenerate(ctx context.Context, threadID int64) (int64, error)
 	return runID, s.inBackground(runID)
 }
 
-// StopRun is stop_run: true when the thread's running run was asked to stop.
 func (s *Service) StopRun(ctx context.Context, threadID, runID int64) (bool, error) {
 	found, err := journal.GetRun(ctx, s.DB.Read, runID)
 	if err != nil {
@@ -404,8 +365,6 @@ func (s *Service) StopRun(ctx context.Context, threadID, runID int64) (bool, err
 	return journal.RequestStop(ctx, s.DB.Write, runID)
 }
 
-// DeleteThread is delete_thread: a chat thread and its subagent threads are purged (files, messages, tool
-// records); refused while any of them has a run in progress.
 func (s *Service) DeleteThread(ctx context.Context, threadID int64) error {
 	thread, err := threads.Get(ctx, s.DB.Read, threadID)
 	if err != nil {
@@ -446,7 +405,6 @@ func (s *Service) DeleteThread(ctx context.Context, threadID int64) error {
 	return nil
 }
 
-// NeedsOperator is needs_operator: the interrupted run left a write call that may or may not have happened.
 func NeedsOperator(ctx context.Context, q db.Querier, run journal.Run) (bool, error) {
 	last, pending, err := loop.PendingUses(ctx, q, run.ThreadID)
 	if err != nil {
@@ -479,7 +437,6 @@ func (s *Service) claim(ctx context.Context, runID int64) error {
 	return nil
 }
 
-// ResumeRun is resume_run: the operator continues an interrupted run here.
 func (s *Service) ResumeRun(ctx context.Context, runID int64) (*journal.Run, error) {
 	if err := s.claim(ctx, runID); err != nil {
 		return nil, err
@@ -487,7 +444,6 @@ func (s *Service) ResumeRun(ctx context.Context, runID int64) (*journal.Run, err
 	return s.Execute(ctx, runID, journal.Limits{})
 }
 
-// StartResume is start_resume: claim here, continue in the background.
 func (s *Service) StartResume(ctx context.Context, runID int64) error {
 	if err := s.claim(context.WithoutCancel(ctx), runID); err != nil {
 		return err
@@ -495,7 +451,6 @@ func (s *Service) StartResume(ctx context.Context, runID int64) error {
 	return s.inBackground(runID)
 }
 
-// Resumed is one entry of resume_interrupted's outcome.
 type Resumed struct {
 	RunID  int64  `json:"run_id"`
 	Action string `json:"action"`
@@ -506,9 +461,6 @@ const (
 	ActionResumed    = "resumed"
 )
 
-// ResumeInterrupted is resume_interrupted, called only by the scheduler worker: runs whose owner's lease
-// lapsed are marked interrupted, and each interrupted run that needs no operator decision is claimed and
-// continued, in the background or (background false) here.
 func (s *Service) ResumeInterrupted(ctx context.Context, background bool) ([]Resumed, error) {
 	if _, err := journal.MarkInterrupted(ctx, s.DB.Write, s.now()); err != nil {
 		return nil, err

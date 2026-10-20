@@ -24,7 +24,6 @@ var (
 	appleLabel = rx.MustCompile(`^_\$!<(.*)>!\$_$`, 0)
 )
 
-// Apple Contacts stores a placeholder year when none was entered.
 var unknownYears = map[int]bool{1604: true, 1900: true}
 
 var dateKinds = map[string]string{"BDAY": Birthday, "ANNIVERSARY": Anniversary, "X-ANNIVERSARY": Anniversary, "X-ABDATE": ""}

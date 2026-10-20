@@ -40,8 +40,6 @@ func recoverProposals(ctx context.Context, d *db.DB) error {
 	return err
 }
 
-// recoverProposalsEvery repeats the start-up recovery: after a kill the unit restarts inside the proposals' idle
-// bound, so the stuck proposal only becomes recoverable while the server is already running.
 func recoverProposalsEvery(ctx context.Context, d *db.DB) {
 	t := time.NewTicker(recoverInterval)
 	defer t.Stop()

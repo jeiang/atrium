@@ -94,9 +94,6 @@ func (d *DB) Close() error {
 	return errors.Join(d.Read.Close(), d.Write.Close())
 }
 
-// SQLite skips the busy handler when switching a new file to WAL, so
-// concurrent first connects get SQLITE_BUSY at once; retry for the
-// busy_timeout instead.
 func setWAL(w *sql.DB) error {
 	deadline := time.Now().Add(30 * time.Second)
 	for {
