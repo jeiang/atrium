@@ -85,7 +85,11 @@ func (o Options) sync(ctx context.Context, d *db.DB, cfg config.Config, env *cli
 	if err != nil {
 		return err
 	}
-	stats, err := o.locked(ctx, d, cfg, o.client(token))
+	client := o.client(token)
+	if err := client.Configure(ctx, d.Read); err != nil {
+		return err
+	}
+	stats, err := o.locked(ctx, d, cfg, client)
 	if err != nil {
 		return err
 	}

@@ -68,7 +68,7 @@ func flNew(t *testing.T, vars map[string]string, o Options) *flWorld {
 	flWrite(t, filepath.Join(root, episodeRel), []byte("episode-bytes"))
 	all := map[string]string{
 		"ATRIUM_MEDIA_ROOT":       root,
-		"ATRIUM_PUBLIC_URL":       "https://atrium.test",
+		"ATRIUM_CORE_PUBLIC_URL":  "https://atrium.test",
 		"ATRIUM_MEDIA_MOVIES_URL": "http://artemis.vpn:8084",
 		"ATRIUM_MEDIA_TV_URL":     "http://artemis.vpn:8085",
 		"TMDB_API_KEY":            "k",

@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/run"
@@ -64,7 +65,7 @@ func (x *Exec) JSON(value any) {
 }
 
 func (x *Exec) Open() mailops.Opener {
-	return mailops.Opener(x.opts.Clients(x.Cfg, config.OS))
+	return mailops.Opener(mail.BindMode(x.opts.Clients(x.Cfg), x.DB.Read))
 }
 
 func (x *Exec) Syncer() *mailsync.Syncer {

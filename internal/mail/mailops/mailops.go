@@ -24,6 +24,20 @@ const (
 	TrashLabel = `\Trash`
 )
 
+func batchFrom(ctx context.Context, q mail.Querier) (int, error) {
+	r := mail.Read(ctx, q)
+	n := r.Int(mail.KeyMailopsBatch)
+	return n, r.Err()
+}
+
+func BatchSize(ctx context.Context, client mail.Client) (int, error) {
+	q := client.Settings()
+	if q == nil {
+		return Batch, nil
+	}
+	return batchFrom(ctx, q)
+}
+
 const (
 	ReasonGone        = "gone"
 	ReasonMoved       = "moved"
@@ -199,6 +213,10 @@ type boxKey struct {
 }
 
 func Verify(ctx context.Context, q Querier, client mail.Client, account string, snaps []Snapshot) (ok []Verified, skipped []Skip, err error) {
+	batch, err := batchFrom(ctx, q)
+	if err != nil {
+		return nil, nil, err
+	}
 	var order []boxKey
 	survivors := map[boxKey][]Snapshot{}
 	for _, snap := range snaps {
@@ -252,7 +270,7 @@ func Verify(ctx context.Context, q Querier, client mail.Client, account string, 
 			uids[i] = s.UID
 		}
 		present := map[uint32]bool{}
-		for _, chunk := range Chunks(uids, Batch) {
+		for _, chunk := range Chunks(uids, batch) {
 			set := mail.UIDs(chunk...)
 			found, err := client.UIDSearch(ctx, mail.SearchCriteria{UID: &set})
 			if err != nil {
@@ -273,7 +291,7 @@ func Verify(ctx context.Context, q Querier, client mail.Client, account string, 
 			}
 		}
 		fetched := map[uint32]mail.Message{}
-		for _, chunk := range Chunks(liveUIDs, Batch) {
+		for _, chunk := range Chunks(liveUIDs, batch) {
 			msgs, err := client.UIDFetch(ctx, mail.UIDs(chunk...), items)
 			if err != nil {
 				return nil, nil, err
@@ -391,7 +409,7 @@ func CopyUIDs(ctx context.Context, client mail.Client, destIMAP string, uids []u
 	return client.Copy(ctx, mail.UIDs(uids...), destIMAP)
 }
 
-func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string, validity uint32, uids []uint32,
+func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string, validity uint32, uids []uint32, size int,
 	moved func(batch []uint32, copied *mail.CopyUID) error) error {
 	if !client.HasCapability("UIDPLUS") {
 		return Error("server lacks UIDPLUS: refusing to move")
@@ -399,7 +417,7 @@ func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string,
 	if err := SelectRW(ctx, client, srcIMAP, validity); err != nil {
 		return err
 	}
-	for _, batch := range Chunks(uids, Batch) {
+	for _, batch := range Chunks(uids, size) {
 		copied, err := CopyUIDs(ctx, client, destIMAP, batch)
 		if err != nil {
 			if _, unknown := errors.AsType[*mail.WriteInterrupted](err); unknown {
@@ -421,11 +439,11 @@ func MoveUIDs(ctx context.Context, client mail.Client, srcIMAP, destIMAP string,
 	return nil
 }
 
-func StoreLabels(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32, add, remove []string) error {
+func StoreLabels(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32, size int, add, remove []string) error {
 	if err := SelectRW(ctx, client, imapName, validity); err != nil {
 		return err
 	}
-	for _, batch := range Chunks(uids, Batch) {
+	for _, batch := range Chunks(uids, size) {
 		set := mail.UIDs(batch...)
 		if len(add) > 0 {
 			if err := client.StoreLabels(ctx, set, true, add...); err != nil {
@@ -441,11 +459,11 @@ func StoreLabels(ctx context.Context, client mail.Client, imapName string, valid
 	return nil
 }
 
-func StoreFlag(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32, flag string, add bool) error {
+func StoreFlag(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32, size int, flag string, add bool) error {
 	if err := SelectRW(ctx, client, imapName, validity); err != nil {
 		return err
 	}
-	for _, batch := range Chunks(uids, Batch) {
+	for _, batch := range Chunks(uids, size) {
 		if err := client.StoreFlags(ctx, mail.UIDs(batch...), add, flag); err != nil {
 			return err
 		}
@@ -453,8 +471,8 @@ func StoreFlag(ctx context.Context, client mail.Client, imapName string, validit
 	return nil
 }
 
-func ArchiveUIDs(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32) error {
-	return StoreLabels(ctx, client, imapName, validity, uids, nil, []string{InboxLabel})
+func ArchiveUIDs(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32, size int) error {
+	return StoreLabels(ctx, client, imapName, validity, uids, size, nil, []string{InboxLabel})
 }
 
 type Relabel struct {

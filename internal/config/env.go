@@ -42,26 +42,6 @@ func stripped(env Env, name string) string { return py.Strip(get(env, name)) }
 
 func cleanURL(env Env, name string) string { return strings.TrimRight(stripped(env, name), "/") }
 
-func Mode(env Env) (string, error) {
-	value, ok := env("ATRIUM_MODE")
-	if !ok {
-		value = Shadow
-	}
-	for _, m := range Modes {
-		if value == m {
-			return value, nil
-		}
-	}
-	return "", fmt.Errorf("ATRIUM_MODE must be one of (%s, %s), got %s", py.Repr(Shadow), py.Repr(Live), py.Repr(value))
-}
-
-func TZName(env Env) string {
-	if name := stripped(env, "ATRIUM_TZ"); name != "" {
-		return name
-	}
-	return Timezone
-}
-
 func Zone(name string) (*time.Location, error) {
 	if name != "" && name != "Local" {
 		if loc, err := time.LoadLocation(name); err == nil {
@@ -176,7 +156,7 @@ func Media(env Env) MediaSettings {
 	return MediaSettings{
 		Root:      cleanURL(env, "ATRIUM_MEDIA_ROOT"),
 		QbitURL:   cleanURL(env, "QBITTORRENT_URL"),
-		PublicURL: cleanURL(env, "ATRIUM_PUBLIC_URL"),
+		PublicURL: PublicURL(env),
 		MoviesURL: cleanURL(env, "ATRIUM_MEDIA_MOVIES_URL"),
 		TVURL:     cleanURL(env, "ATRIUM_MEDIA_TV_URL"),
 		NtfyTopic: stripped(env, "NTFY_MEDIA_TOPIC"),

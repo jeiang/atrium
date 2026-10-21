@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/pyhtml"
@@ -275,7 +274,7 @@ func mimeAttachments(msg *mime.Message) []Attachment {
 	return out
 }
 
-func Extract(header, text []byte, attachments []Attachment, fallbackTS float64) (f Features, err error) {
+func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, ftsBodyChars int) (f Features, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error("features: recovered from a panic in extract", logx.Err, fmt.Sprint(r))
@@ -362,7 +361,7 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64) 
 		KVCode:      found(vcodeRE, low),
 		KOTP6:       found(otpRE, prefix(body, 600)),
 		BodyLen:     len([]rune(body)),
-		Body:        prefix(body, config.FTSBodyChars),
+		Body:        prefix(body, ftsBodyChars),
 	}
 	if len(replyTo) > 0 {
 		f.ReplyTo = replyTo[0]

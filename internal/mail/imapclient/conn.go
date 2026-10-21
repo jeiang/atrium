@@ -17,7 +17,6 @@ import (
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
@@ -49,8 +48,8 @@ var (
 	idleChanges = []string{"EXISTS", "EXPUNGE", "FETCH", "RECENT"}
 )
 
-func New(host, user, password string, env config.Env) mail.Client {
-	return mail.Gated(newConn(host, user, password), env)
+func New(host, user, password string) mail.Client {
+	return mail.Gated(newConn(host, user, password))
 }
 
 func newConn(host, user, password string) *conn {
@@ -699,6 +698,10 @@ func (c *conn) UIDSearch(ctx context.Context, criteria mail.SearchCriteria) ([]u
 func fetchOptions(items mail.FetchItems) *imap.FetchOptions {
 	opts := &imap.FetchOptions{UID: true, Flags: true, ChangedSince: items.ChangedSince}
 	opts.Gmail.Labels = items.Labels
+	bodyCap := int64(bodyCapBytes)
+	if items.BodyCap > 0 {
+		bodyCap = int64(items.BodyCap)
+	}
 	switch {
 	case items.Header || items.Body:
 		opts.InternalDate = true
@@ -708,7 +711,7 @@ func fetchOptions(items mail.FetchItems) *imap.FetchOptions {
 		opts.Gmail.ThrID = items.Labels
 		opts.BodySection = []*imap.FetchItemBodySection{
 			{Specifier: imap.PartSpecifierHeader, Peek: true},
-			{Specifier: imap.PartSpecifierText, Peek: true, Partial: &imap.SectionPartial{Offset: 0, Size: bodyCapBytes}},
+			{Specifier: imap.PartSpecifierText, Peek: true, Partial: &imap.SectionPartial{Offset: 0, Size: bodyCap}},
 		}
 	case items.HeaderOnly:
 		opts.BodySection = []*imap.FetchItemBodySection{{Specifier: imap.PartSpecifierHeader, Peek: true}}

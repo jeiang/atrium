@@ -105,6 +105,10 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 	}
 	payloadGroups := make([]any, len(groups))
 	previewGroups := make([]any, len(groups))
+	lim, err := scanutil.ReadLimits(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	for i, g := range groups {
 		groupIDs := make([]int64, len(g.rows))
 		views := make([]any, len(g.rows))
@@ -123,7 +127,7 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 		payloadGroups[i] = py.Dict{{Key: "dest", Value: g.dest}, {Key: "messages", Value: messages}}
 		previewGroups[i] = py.Dict{
 			{Key: "name", Value: g.dest}, {Key: "count", Value: len(g.rows)}, {Key: "terms", Value: []any{}},
-			{Key: "senders", Value: scanutil.TopCounts(senders)}, {Key: "subjects", Value: scanutil.SampleSubjectsOf(g.rows)},
+			{Key: "senders", Value: lim.TopCounts(senders)}, {Key: "subjects", Value: lim.SampleSubjectsOf(g.rows)},
 			{Key: "messages", Value: views},
 		}
 	}

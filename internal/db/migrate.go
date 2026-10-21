@@ -21,6 +21,7 @@ var migrations = []migration{
 	{2, usageIndexes},
 	{3, secretsTable},
 	{4, settingsAudit},
+	{5, keyHistory},
 }
 
 type FutureSchemaError struct {
@@ -54,6 +55,14 @@ func refuseFuture(applied map[int]bool) error {
 		return &FutureSchemaError{Versions: future, Known: migrations[len(migrations)-1].version}
 	}
 	return nil
+}
+
+func RefuseFutureSchema(ctx context.Context, q Querier) error {
+	applied, err := appliedVersions(ctx, q)
+	if err != nil {
+		return err
+	}
+	return refuseFuture(applied)
 }
 
 const schemaMigrationsDDL = "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at REAL NOT NULL)"
@@ -335,4 +344,12 @@ func settingsAudit(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+const KeyHistoryDDL = "CREATE TABLE IF NOT EXISTS db_key_history (" +
+	"id INTEGER PRIMARY KEY AUTOINCREMENT, key_id TEXT NOT NULL, replaced_by TEXT NOT NULL, retired_at REAL NOT NULL)"
+
+func keyHistory(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, KeyHistoryDDL)
+	return err
 }

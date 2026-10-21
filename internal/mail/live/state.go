@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -94,7 +95,11 @@ func (p Params) Args() []any {
 }
 
 func QueryParams(ctx context.Context, q Querier, account string) (Params, error) {
-	p := Params{Account: account, Attempts: config.WriteAttempts, Golive: math.Inf(1)}
+	r := mail.Read(ctx, q)
+	p := Params{Account: account, Attempts: r.Int(mail.KeyWriteAttempts), Golive: math.Inf(1)}
+	if err := r.Err(); err != nil {
+		return Params{}, err
+	}
 	golive, err := GetState(ctx, q, GoliveKey)
 	if err != nil || golive == nil || *golive == "" {
 		return p, err
@@ -507,8 +512,12 @@ func (l *Live) Status(ctx context.Context) (py.Dict, error) {
 	if err := l.DB.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM live_baseline").Scan(&baseline); err != nil {
 		return nil, err
 	}
+	mode, err := mail.Mode(ctx, l.DB.Read)
+	if err != nil {
+		return nil, err
+	}
 	return py.Dict{
-		{Key: "mode", Value: l.Cfg.Mode}, {Key: "paused", Value: l.Paused()}, {Key: "golive_ts", Value: nullable(golive)},
+		{Key: "mode", Value: mode}, {Key: "paused", Value: l.Paused()}, {Key: "golive_ts", Value: nullable(golive)},
 		{Key: "baseline", Value: baseline}, {Key: "actions", Value: counts},
 	}, nil
 }

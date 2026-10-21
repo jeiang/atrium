@@ -72,10 +72,10 @@ func homeSetURL(ctx context.Context, client webdav.HTTPClient, principal *url.UR
 	return nil, errors.New("caldav: no calendar-home-set")
 }
 
-func openICloud(ctx context.Context, env config.Env) (*icloudCalendar, error) {
-	login, err := config.ICloudCalDAV(env)
+func openICloud(ctx context.Context, env config.Env, set Settings) (*icloudCalendar, error) {
+	login, err := icloudLogin(env, set)
 	if err != nil {
-		return nil, NotConfigured(err.Error())
+		return nil, err
 	}
 	httpClient := webdav.HTTPClientWithBasicAuth(&http.Client{Timeout: remoteTimeout}, login.AppleID, login.Password)
 	base, err := url.Parse(endpoints.CalDAV)
@@ -103,7 +103,7 @@ func openICloud(ctx context.Context, env config.Env) (*icloudCalendar, error) {
 	if err != nil {
 		return nil, remote(err)
 	}
-	named := config.ICloudCalendar(env)
+	named := set.ICloudCalendar
 	for _, cal := range calendars {
 		if named != "" && py.Lower(cal.Name) == named {
 			return &icloudCalendar{client, cal.Path}, nil

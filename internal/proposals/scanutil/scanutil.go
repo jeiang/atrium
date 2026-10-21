@@ -2,19 +2,27 @@ package scanutil
 
 import (
 	"cmp"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
 	"strconv"
 
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const (
-	SampleSubjects = 5
-	TopLabels      = 5
-)
+type Limits struct {
+	SampleSubjects int
+	TopLabels      int
+}
+
+func ReadLimits(ctx context.Context, q mail.Querier) (Limits, error) {
+	r := mail.Read(ctx, q)
+	l := Limits{SampleSubjects: r.Int(mail.KeyScanSampleSubjects), TopLabels: r.Int(mail.KeyScanTopLabels)}
+	return l, r.Err()
+}
 
 func Digest(parts ...any) string {
 	h := sha256.New()
@@ -47,7 +55,7 @@ func (m Message) View() py.Dict {
 	}
 }
 
-func TopCounts(values []string) []any {
+func (l Limits) TopCounts(values []string) []any {
 	counts := map[string]int{}
 	var order []string
 	for _, v := range values {
@@ -63,13 +71,13 @@ func TopCounts(values []string) []any {
 		return cmp.Or(cmp.Compare(counts[b], counts[a]), cmp.Compare(a, b))
 	})
 	out := []any{}
-	for _, label := range order[:min(len(order), TopLabels)] {
+	for _, label := range order[:min(len(order), l.TopLabels)] {
 		out = append(out, py.Dict{{Key: "label", Value: label}, {Key: "count", Value: counts[label]}})
 	}
 	return out
 }
 
-func SampleSubjectsOf(rows []Message) []string {
+func (l Limits) SampleSubjectsOf(rows []Message) []string {
 	sorted := slices.Clone(rows)
 	slices.SortStableFunc(sorted, func(a, b Message) int {
 		return cmp.Or(cmp.Compare(b.DateTS, a.DateTS), cmp.Compare(a.ID, b.ID))
@@ -82,7 +90,7 @@ func SampleSubjectsOf(rows []Message) []string {
 			seen[subject] = true
 			out = append(out, py.Clip(subject, 120))
 		}
-		if len(out) >= SampleSubjects {
+		if len(out) >= l.SampleSubjects {
 			break
 		}
 	}

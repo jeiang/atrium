@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
 )
 
@@ -119,7 +118,7 @@ type FakeClient struct {
 	Appended  []FakeAppend
 }
 
-func NewFakeClient(env config.Env) *FakeClient {
+func NewFakeClient() *FakeClient {
 	f := &FakeClient{
 		Boxes:        map[string]*FakeBox{},
 		Names:        map[string]string{},
@@ -127,11 +126,14 @@ func NewFakeClient(env config.Env) *FakeClient {
 		Caps:         map[string]bool{"IDLE": true, "CONDSTORE": true, "UIDPLUS": true},
 		CategoryUIDs: map[string][]uint32{},
 	}
-	f.Client = mail.Gated(fakeConn{f}, env)
+	f.Client = mail.Gated(fakeConn{f})
 	return f
 }
 
-func (f *FakeClient) SetEnv(env config.Env) { f.Client = mail.Gated(fakeConn{f}, env) }
+func (f *FakeClient) BindMode(q mail.Querier) mail.Client {
+	f.Client = f.Client.BindMode(q)
+	return f
+}
 
 func (f *FakeClient) AddBox(imapName string, box *FakeBox, flags ...string) *FakeBox {
 	if _, ok := f.Boxes[imapName]; !ok {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -39,6 +40,7 @@ func newSite(t *testing.T, vars map[string]string, o Options) *site {
 	for k, v := range vars {
 		all[k] = v
 	}
+	mailtest.PinMode(t, all["ATRIUM_MODE"])
 	env := config.Map(all)
 	cfg, err := config.Load(env)
 	if err != nil {

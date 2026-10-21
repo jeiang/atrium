@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
 )
@@ -72,10 +73,10 @@ func loadWorld(t *testing.T) goldenWorld {
 	return w
 }
 
-func (w goldenWorld) fakes(env config.Env) map[string]*mailtest.FakeClient {
+func (w goldenWorld) fakes() map[string]*mailtest.FakeClient {
 	out := map[string]*mailtest.FakeClient{}
 	for name, spec := range w.Accounts {
-		fake := mailtest.NewFakeClient(env)
+		fake := mailtest.NewFakeClient()
 		fake.Gmail = spec.Gmail
 		for _, box := range spec.Order {
 			fb := &mailtest.FakeBox{Validity: spec.Validity, ModSeq: spec.ModSeq[box], NextUID: spec.NextUID[box], Messages: map[uint32]*mailtest.FakeMessage{}}
@@ -179,6 +180,7 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 	for k, v := range data.environment {
 		vars[k] = v
 	}
+	vars["ATRIUM_CALENDAR_ICLOUD_APPLE_ID"] = vars["ICLOUD_APPLE_ID"]
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(golden.Dir(), "state", "contacts")
@@ -188,11 +190,24 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 	for k, v := range extraEnv {
 		vars[k] = v
 	}
+	for phaseA, canonical := range map[string]string{
+		"ATRIUM_MODE": "ATRIUM_MAIL_MAIL_MODE", "ATRIUM_CHAT_URL": "ATRIUM_MAIL_MAIL_CHAT_URL", "ATRIUM_EMBED_URL": "ATRIUM_MAIL_MAIL_EMBED_URL",
+	} {
+		if v, ok := vars[phaseA]; ok {
+			vars[canonical] = v
+		}
+	}
 	for k, v := range vars {
 		t.Setenv(k, v)
 	}
-	fakes := data.world.fakes(config.Map(vars))
-	clients := func(config.Config, config.Env) func(context.Context, string) (mail.Client, error) {
+	pins, err := config.LoadPins(config.OS, settings.Default)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Default.SetPins(pins)
+	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	fakes := data.world.fakes()
+	clients := func(config.Config) mail.OpenFunc {
 		return func(_ context.Context, account string) (mail.Client, error) { return fakes[account], nil }
 	}
 	app := cli.New("atrium", logx.Setup)

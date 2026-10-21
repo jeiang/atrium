@@ -24,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 )
 
 var log = logx.Logger("atrium.agent.service")
@@ -243,7 +244,15 @@ func (s *Service) Execute(ctx context.Context, runID int64, override journal.Lim
 }
 
 func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error) {
-	return embed.Texts(ctx, s.Cfg.EmbedURL, texts)
+	url, err := mail.EmbedURL(ctx, s.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	ctx, err = mail.WithModels(ctx, s.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	return embed.Texts(ctx, url, texts)
 }
 
 func (s *Service) RunOnce(ctx context.Context, threadID int64, text string, o Start) (int64, error) {

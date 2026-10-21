@@ -90,7 +90,7 @@ func textField(raw py.Dict, key string) (string, error) {
 	return py.Strip(s), nil
 }
 
-func NormalizeSpec(raw py.Dict, tz *time.Location, uid string) (Spec, error) {
+func NormalizeSpec(raw py.Dict, tz *time.Location, uid string, defaultMinutes int) (Spec, error) {
 	title, err := textField(raw, "title")
 	if err != nil {
 		return Spec{}, err
@@ -115,7 +115,7 @@ func NormalizeSpec(raw py.Dict, tz *time.Location, uid string) (Spec, error) {
 	case allDay:
 		end = dateValue(start.t.Year(), start.t.Month(), start.t.Day()+1)
 	default:
-		end = awareValue(after(start, DefaultMinutes*time.Minute, tz, 0).t.In(start.t.Location()))
+		end = awareValue(after(start, time.Duration(defaultMinutes)*time.Minute, tz, 0).t.In(start.t.Location()))
 	}
 	if !end.t.After(start.t) {
 		return Spec{}, Error("end must be after start")

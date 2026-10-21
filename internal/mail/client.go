@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -92,6 +91,7 @@ type FetchItems struct {
 	Body         bool
 	HeaderOnly   bool
 	ChangedSince uint64
+	BodyCap      int
 }
 
 type WriteInterrupted struct {
@@ -138,13 +138,34 @@ type Conn interface {
 type Client interface {
 	Conn
 	gated()
+	BindMode(q Querier) Client
+	Settings() Querier
 }
 
-func Gated(conn Conn, env config.Env) Client { return gate{conn, env} }
+type OpenFunc = func(ctx context.Context, account string) (Client, error)
+
+func BindMode(open OpenFunc, q Querier) OpenFunc {
+	return func(ctx context.Context, account string) (Client, error) {
+		client, err := open(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+		return client.BindMode(q), nil
+	}
+}
+
+func Gated(conn Conn) Client { return gate{conn: conn} }
+
+func (g gate) BindMode(q Querier) Client {
+	g.q = q
+	return g
+}
+
+func (g gate) Settings() Querier { return g.q }
 
 type gate struct {
 	conn Conn
-	env  config.Env
+	q    Querier
 }
 
 func (gate) gated() {}
@@ -153,7 +174,11 @@ func (g gate) check(ctx context.Context, action, target string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return safety.WriteGate(ctx, g.env, action, target)
+	var mode safety.ModeFunc
+	if g.q != nil {
+		mode = func(ctx context.Context) (string, error) { return Mode(ctx, g.q) }
+	}
+	return safety.WriteGate(ctx, mode, action, target)
 }
 
 func (g gate) Connect(ctx context.Context) error { return g.conn.Connect(ctx) }
@@ -177,6 +202,13 @@ func (g gate) UIDSearch(ctx context.Context, criteria SearchCriteria) ([]uint32,
 }
 
 func (g gate) UIDFetch(ctx context.Context, uids UIDSet, items FetchItems) ([]Message, error) {
+	if g.q != nil && (items.Header || items.Body) {
+		r := Read(ctx, g.q)
+		items.BodyCap = r.Int(KeyBodyCapBytes)
+		if err := r.Err(); err != nil {
+			return nil, err
+		}
+	}
 	return g.conn.UIDFetch(ctx, uids, items)
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -74,7 +75,7 @@ func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message
 	sec, _ := py.SplitTimestamp(m.DateTS)
 	sentOn := time.Unix(sec, 0).In(zone).Format("2006-01-02")
 	user := fmt.Sprintf("This message was %s on %s.\nFrom: %s <%s>\nTo: %s\nSubject: %s\nBody:\n%s",
-		direction, sentOn, m.FromName, m.FromAddr, strings.Join(to, ", "), m.Subject, py.Clip(body, config.LLMBodyChars))
+		direction, sentOn, m.FromName, m.FromAddr, strings.Join(to, ", "), m.Subject, py.Clip(body, llm.BodyChars(ctx)))
 	raw, err := llm.ChatJSON(ctx, url, CommitmentSystem, user, CommitmentSchema, 500)
 	if err != nil {
 		return nil, err
@@ -93,12 +94,12 @@ func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message
 	return httpx.Key(answer, "commitments")
 }
 
-func scannable(ctx context.Context, q db.Querier, now float64, limit int) ([]Message, error) {
+func scannable(ctx context.Context, q db.Querier, now float64, window, limit int) ([]Message, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT m."+strings.ReplaceAll(messageColumns, ", ", ", m.")+" FROM messages m WHERE m.gone_at IS NULL AND m.date_ts >= ? "+
 			"AND NOT EXISTS (SELECT 1 FROM messages o JOIN commitment_scans s ON s.message_id = o.id "+
 			"WHERE o.account = m.account AND o.digest = m.digest) ORDER BY m.date_ts DESC LIMIT ?",
-		now-CommitmentWindowDays*Day, limit*4)
+		now-float64(window)*Day, limit*4)
 	if err != nil {
 		return nil, err
 	}
@@ -131,13 +132,13 @@ func scannable(ctx context.Context, q db.Querier, now float64, limit int) ([]Mes
 	return out, nil
 }
 
-func commitmentItems(found any) ([]any, error) {
+func commitmentItems(found any, perMail int) ([]any, error) {
 	if !py.Truthy(found) {
 		return nil, nil
 	}
 	switch v := found.(type) {
 	case []any:
-		return v[:min(len(v), CommitmentsPerMail)], nil
+		return v[:min(len(v), perMail)], nil
 	case string:
 		return nil, nil
 	case py.Dict, map[string]any:
@@ -146,11 +147,26 @@ func commitmentItems(found any) ([]any, error) {
 	return nil, fmt.Errorf("%w: '%s' object is not subscriptable", httpx.ErrType, py.TypeName(found))
 }
 
-func ScanCommitments(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, now float64, judge Judge, limit int) (int64, error) {
+func ScanCommitments(ctx context.Context, d *db.DB, env config.Env, now float64, judge Judge) (int64, error) {
 	if judge == nil {
 		judge = JudgeCommitments
 	}
-	rows, err := scannable(ctx, d.Read, now, limit)
+	r := mail.Read(ctx, d.Read)
+	window := r.Int(mail.KeyLoopsCommitWindowDays)
+	perMail := r.Int(mail.KeyLoopsCommitsPerMail)
+	limit := r.Int(mail.KeyLoopsCommitScanLimit)
+	if err := r.Err(); err != nil {
+		return 0, err
+	}
+	chatURL, err := mail.ChatURL(ctx, d.Read)
+	if err != nil {
+		return 0, err
+	}
+	ctx, err = mail.WithModels(ctx, d.Read)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := scannable(ctx, d.Read, now, window, limit)
 	if err != nil {
 		return 0, err
 	}
@@ -161,7 +177,7 @@ rows:
 		if err != nil {
 			return stored, err
 		}
-		found, err := judge(ctx, env, cfg.ChatURL, row, body)
+		found, err := judge(ctx, env, chatURL, row, body)
 		var unavailable *httpx.ServiceUnavailable
 		switch {
 		case errors.As(err, &unavailable):
@@ -173,7 +189,7 @@ rows:
 		case err != nil:
 			return stored, err
 		}
-		items, err := commitmentItems(found)
+		items, err := commitmentItems(found, perMail)
 		if err != nil {
 			return stored, err
 		}

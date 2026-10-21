@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/message"
@@ -183,10 +184,15 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) moveCorrection(r *http.Request, found *message.View, id int64) string {
-	if s.deps.Cfg.Mode != safety.Live {
+	ctx := context.WithoutCancel(r.Context())
+	mode, err := mail.Mode(ctx, s.deps.DB.Read)
+	if err != nil {
+		log.Error(fmt.Sprintf("reading mail mode for corrected message %d failed", id), logx.Err, err.Error())
 		return ""
 	}
-	ctx := context.WithoutCancel(r.Context())
+	if mode != safety.Live {
+		return ""
+	}
 	out, err := func() (out appliedOutcome, err error) {
 		lock, err := db.Exclusive(ctx, s.deps.Cfg.DBPath, db.ShortLockWait)
 		if err != nil {

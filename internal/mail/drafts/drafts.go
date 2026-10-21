@@ -34,8 +34,6 @@ const (
 	Unknown   = "unknown"
 
 	SendingStaleSeconds = 600
-	MaxBody             = 100_000
-	MaxSubject          = 300
 	maxAddresses        = 2000
 )
 
@@ -415,7 +413,18 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 	return reply{inReplyTo: id, refs: strings.Join(chain, " "), participants: participants, account: account}, nil
 }
 
+func (s *Store) limits(ctx context.Context) (maxBody, maxSubject int, err error) {
+	r := mail.Read(ctx, s.DB.Read)
+	maxBody = r.Int(mail.KeyDraftsMaxBody)
+	maxSubject = r.Int(mail.KeyDraftsMaxSubject)
+	return maxBody, maxSubject, r.Err()
+}
+
 func (s *Store) Create(ctx context.Context, threadID *int64, account string, to, cc any, subject string, body any, replyTo any) (int64, error) {
+	maxBody, maxSubject, err := s.limits(ctx)
+	if err != nil {
+		return 0, err
+	}
 	if _, ok := validAccount(account); !ok {
 		return 0, accountError()
 	}
@@ -430,7 +439,7 @@ func (s *Store) Create(ctx context.Context, threadID *int64, account string, to,
 	if err != nil {
 		return 0, err
 	}
-	subject, err = cleanLine("subject", subject, MaxSubject)
+	subject, err = cleanLine("subject", subject, maxSubject)
 	if err != nil {
 		return 0, err
 	}
@@ -438,8 +447,8 @@ func (s *Store) Create(ctx context.Context, threadID *int64, account string, to,
 	if py.Strip(text) == "" {
 		return 0, Error("body is required")
 	}
-	if utf8.RuneCountInString(text) > MaxBody {
-		return 0, Error(fmt.Sprintf("body is limited to %d characters", MaxBody))
+	if utf8.RuneCountInString(text) > maxBody {
+		return 0, Error(fmt.Sprintf("body is limited to %d characters", maxBody))
 	}
 	var r reply
 	var replyID any
@@ -508,6 +517,10 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 	if row.Status != Draft {
 		return nil, Error(fmt.Sprintf("draft is %s, only drafts can be edited", row.Status))
 	}
+	maxBody, maxSubject, err := s.limits(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var sets []string
 	var args []any
 	set := func(col string, v any) {
@@ -547,7 +560,7 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 		if !isText && py.Truthy(v) {
 			return nil, &py.Exception{Class: "AttributeError", Msg: "'" + py.TypeName(v) + "' object has no attribute 'strip'"}
 		}
-		subject, err := cleanLine("subject", text, MaxSubject)
+		subject, err := cleanLine("subject", text, maxSubject)
 		if err != nil {
 			return nil, err
 		}
@@ -555,8 +568,8 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 	}
 	if v, ok := changes["body"]; ok {
 		body, isText := v.(string)
-		if !isText || py.Strip(body) == "" || utf8.RuneCountInString(body) > MaxBody {
-			return nil, Error(fmt.Sprintf("body must be 1..%d characters", MaxBody))
+		if !isText || py.Strip(body) == "" || utf8.RuneCountInString(body) > maxBody {
+			return nil, Error(fmt.Sprintf("body must be 1..%d characters", maxBody))
 		}
 		set("body", body)
 	}

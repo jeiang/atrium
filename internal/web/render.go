@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -39,14 +40,25 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 	if err != nil {
 		return nil, err
 	}
+	mode, err := rd.mode(r.Context())
+	if err != nil {
+		return nil, err
+	}
 	return &tpl.Frame{
 		CSRF:         CSRFToken(r.Context()),
-		Mode:         rd.cfg.Mode,
+		Mode:         mode,
 		Paused:       safety.IsPaused(rd.cfg.PausePath()),
 		PendingCount: pending,
 		Page:         page,
 		Data:         data,
 	}, nil
+}
+
+func (rd *Renderer) mode(ctx context.Context) (string, error) {
+	if rd.db == nil {
+		return config.Shadow, nil
+	}
+	return mail.Mode(ctx, rd.db.Read)
 }
 
 func (rd *Renderer) pending(ctx context.Context) (int, error) {

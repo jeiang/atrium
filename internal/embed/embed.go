@@ -30,11 +30,37 @@ var log = logx.Logger("atrium.embed")
 
 type TextsFunc func(ctx context.Context, url string, texts []string) ([][]float64, error)
 
-func DocumentText(subject, name, addr, body string) string {
+type Options struct {
+	Model     string
+	BodyChars int
+	Batch     int
+}
+
+type optionsKey struct{}
+
+func WithOptions(ctx context.Context, o Options) context.Context {
+	return context.WithValue(ctx, optionsKey{}, o)
+}
+
+func options(ctx context.Context) Options {
+	o, _ := ctx.Value(optionsKey{}).(Options)
+	if o.Model == "" {
+		o.Model = Model
+	}
+	if o.BodyChars <= 0 {
+		o.BodyChars = config.EmbedBodyChars
+	}
+	if o.Batch <= 0 {
+		o.Batch = config.EmbedBatch
+	}
+	return o
+}
+
+func DocumentText(ctx context.Context, subject, name, addr, body string) string {
 	if subject == "" {
 		subject = "none"
 	}
-	return "title: " + subject + " | text: From: " + name + " <" + addr + ">\n\n" + py.Clip(body, config.EmbedBodyChars)
+	return "title: " + subject + " | text: From: " + name + " <" + addr + ">\n\n" + py.Clip(body, options(ctx).BodyChars)
 }
 
 func NotionDocumentText(title, path, markdown string) string {
@@ -54,7 +80,7 @@ type embeddingsRequest struct {
 }
 
 func Texts(ctx context.Context, url string, texts []string) ([][]float64, error) {
-	raw, err := httpx.PostJSON(ctx, url+"/embeddings", embeddingsRequest{Model, texts})
+	raw, err := httpx.PostJSON(ctx, url+"/embeddings", embeddingsRequest{options(ctx).Model, texts})
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +206,7 @@ func MessageDocument(ctx context.Context, q querier, id int64) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return DocumentText(subject.String, pyStr(name), pyStr(addr), body.String), nil
+	return DocumentText(ctx, subject.String, pyStr(name), pyStr(addr), body.String), nil
 }
 
 type pendingMessage struct {
@@ -189,10 +215,11 @@ type pendingMessage struct {
 }
 
 func Pending(ctx context.Context, d *db.DB, url string) (int, error) {
+	batchLimit := options(ctx).Batch
 	done := 0
 	for {
 		rows, err := d.Read.QueryContext(ctx,
-			"SELECT id, account FROM messages WHERE embedded = 0 AND gone_at IS NULL ORDER BY id LIMIT ?", config.EmbedBatch)
+			"SELECT id, account FROM messages WHERE embedded = 0 AND gone_at IS NULL ORDER BY id LIMIT ?", batchLimit)
 		if err != nil {
 			return done, err
 		}
@@ -267,11 +294,12 @@ type pendingPage struct {
 }
 
 func NotionPending(ctx context.Context, d *db.DB, url string, texts TextsFunc) (int, error) {
+	batchLimit := options(ctx).Batch
 	done := 0
 	for {
 		rows, err := d.Read.QueryContext(ctx,
 			"SELECT rid, title, path, markdown, private FROM notion_pages WHERE embedded = 0 AND in_trash = 0 ORDER BY rid LIMIT ?",
-			config.EmbedBatch)
+			batchLimit)
 		if err != nil {
 			return done, err
 		}

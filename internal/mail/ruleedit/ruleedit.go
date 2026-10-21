@@ -365,6 +365,10 @@ type LearnedRule struct {
 const DefaultLearnedLimit = 50
 
 func LearnedRulesSummary(ctx context.Context, q rules.Querier, account string, limit int) ([]LearnedRule, error) {
+	thresholds, err := rules.ReadThresholds(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	found := []LearnedRule{}
 	for _, level := range rules.LearnedLevels {
 		nonblank := make([]string, len(level.Columns))
@@ -414,7 +418,7 @@ func LearnedRulesSummary(ctx context.Context, q rules.Querier, account string, l
 		}
 		for _, k := range order {
 			g := groups[k]
-			if p, ok := rules.PickPure(g.counts); ok {
+			if p, ok := rules.PickPure(g.counts, thresholds); ok {
 				found = append(found, LearnedRule{level.Name, g.key, p.Folder, p.Purity, p.Total})
 			}
 		}

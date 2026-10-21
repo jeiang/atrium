@@ -67,7 +67,11 @@ func (p *Proposals) Propose(ctx context.Context, raw py.Dict, source py.Dict, ke
 	if err != nil {
 		return 0, false, err
 	}
-	spec, err := NormalizeSpec(raw, tz, "")
+	set, err := LoadSettings(ctx, p.DB.Read)
+	if err != nil {
+		return 0, false, err
+	}
+	spec, err := NormalizeSpec(raw, tz, "", set.DefaultMinutes)
 	if err != nil {
 		if _, ok := err.(Error); ok {
 			return 0, false, ProposalError(err.Error())
@@ -131,7 +135,11 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 	if err != nil {
 		return nil, err
 	}
-	ref, err := CreateEvent(ctx, env, target, spec, tz)
+	set, err := LoadSettings(ctx, p.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := CreateEvent(ctx, env, set, target, spec, tz)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +162,11 @@ func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, er
 	if err := json.Unmarshal(plan, &info); err != nil {
 		return nil, err
 	}
-	if err := DeleteEvent(ctx, p.env(), info.Calendar, info.UID); err != nil {
+	set, err := LoadSettings(ctx, p.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	if err := DeleteEvent(ctx, p.env(), set, info.Calendar, info.UID); err != nil {
 		return nil, err
 	}
 	if err := Untrack(ctx, p.DB.Write, info.UID, p.now()); err != nil {

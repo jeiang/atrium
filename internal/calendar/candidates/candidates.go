@@ -30,8 +30,6 @@ const (
 	Reviewed     = "reviewed"
 	Proposed     = "proposed"
 	None         = "none"
-	ScanLimit    = 50
-	DraftLimit   = 10
 )
 
 var calendarTypes = map[string]bool{"text/calendar": true, "application/ics": true}
@@ -96,10 +94,14 @@ type row struct {
 }
 
 func pending(ctx context.Context, d *db.DB, account string) ([]row, error) {
+	scan, _, err := calendar.CandidateLimits(ctx, d.Read)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := d.Read.QueryContext(ctx,
 		"SELECT m.id, m.account, m.subject, m.from_name, m.from_addr, m.raw_path FROM messages m WHERE m.account = ? AND m.in_inbox = 1 "+
 			"AND m.seen = 0 AND m.sent = 0 AND m.gone_at IS NULL AND NOT EXISTS (SELECT 1 FROM event_candidates e WHERE e.message_id = m.id) "+
-			"ORDER BY m.id LIMIT ?", account, ScanLimit)
+			"ORDER BY m.id LIMIT ?", account, scan)
 	if err != nil {
 		return nil, err
 	}

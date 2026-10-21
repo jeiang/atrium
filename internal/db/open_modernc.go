@@ -3,8 +3,11 @@
 package db
 
 import (
+	"context"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"strings"
 
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
@@ -33,4 +36,9 @@ func isBusy(err error) bool {
 func IsConstraint(err error) bool {
 	var e *sqlite.Error
 	return errors.As(err, &e) && e.Code()&0xff == sqlite3.SQLITE_CONSTRAINT
+}
+
+func backupConns(ctx context.Context, src, _ *sql.DB, dest string) error {
+	_, err := src.ExecContext(ctx, "VACUUM INTO '"+strings.ReplaceAll(dest, "'", "''")+"'")
+	return err
 }

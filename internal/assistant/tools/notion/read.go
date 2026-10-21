@@ -44,6 +44,10 @@ func aliasHits(ctx context.Context, tc *tool.Context, query string) ([]py.Dict, 
 	if err != nil {
 		return nil, err
 	}
+	limits, err := notion.LoadSearch(ctx, tc.DB.Read)
+	if err != nil {
+		return nil, err
+	}
 	hits := []py.Dict{}
 	for _, id := range ids {
 		row, err := notion.GetPage(ctx, tc.DB.Read, id)
@@ -59,7 +63,7 @@ func aliasHits(ctx context.Context, tc *tool.Context, query string) ([]py.Dict, 
 		}
 		hit := py.Dict{{Key: "page_id", Value: id}}
 		if row != nil {
-			head := py.Clip(row.Markdown, notion.HeadSourceChars)
+			head := py.Clip(row.Markdown, limits.HeadSource)
 			hit = append(hit, py.Pair{Key: "title", Value: row.Title}, py.Pair{Key: "path", Value: row.Path}, py.Pair{Key: "url", Value: row.URL},
 				py.Pair{Key: "snippet", Value: tool.Clip(notion.Plain(head, map[string]string{}), snippetChars)})
 		} else {
@@ -126,7 +130,7 @@ func searchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 }
 
 func livePage(ctx context.Context, tc *tool.Context, pageID string) (py.Dict, error) {
-	client, err := makeClient(tc.Env)
+	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +139,11 @@ func livePage(ctx context.Context, tc *tool.Context, pageID string) (py.Dict, er
 		return nil, notionError(err)
 	}
 	properties, _ := dictGet(page, "properties").(py.Dict)
-	if notion.IsPrivateValue(notion.SensitivityOf(properties)) {
+	sensitivity, err := notion.LoadSensitivity(ctx, tc.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	if sensitivity.IsPrivate(sensitivity.Of(properties)) {
 		return nil, tool.Error("page is private")
 	}
 	markdown, err := notion.FetchMarkdown(ctx, client, pageID)

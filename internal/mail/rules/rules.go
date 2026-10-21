@@ -8,8 +8,8 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
@@ -720,11 +720,19 @@ type Picked struct {
 	Total  int
 }
 
-func PickPure(counts map[string]int) (Picked, bool) {
-	return pickPure(counts, config.RuleMinN, config.RuleMinPurity)
+type Thresholds struct {
+	MinN      int
+	MinPurity float64
 }
 
-func pickPure(counts map[string]int, minN int, minPurity float64) (Picked, bool) {
+func ReadThresholds(ctx context.Context, q Querier) (Thresholds, error) {
+	r := mail.Read(ctx, q)
+	t := Thresholds{MinN: r.Int(mail.KeyRuleMinN), MinPurity: r.Float(mail.KeyRuleMinPurity)}
+	return t, r.Err()
+}
+
+func PickPure(counts map[string]int, t Thresholds) (Picked, bool) {
+	minN, minPurity := t.MinN, t.MinPurity
 	total := 0
 	for _, n := range counts {
 		total += n
@@ -792,7 +800,7 @@ func levelValues(m *Message, columns []string) []string {
 	return out
 }
 
-func LearnedMatch(ctx context.Context, q Querier, m *Message) (*Learned, error) {
+func LearnedMatch(ctx context.Context, q Querier, m *Message, t Thresholds) (*Learned, error) {
 	for _, level := range LearnedLevels {
 		values := levelValues(m, level.Columns)
 		if !allNonEmpty(values) {
@@ -802,7 +810,7 @@ func LearnedMatch(ctx context.Context, q Querier, m *Message) (*Learned, error) 
 		if err != nil {
 			return nil, err
 		}
-		if p, ok := PickPure(counts); ok {
+		if p, ok := PickPure(counts, t); ok {
 			return &Learned{level.Name, p.Folder, p.Purity, p.Total}, nil
 		}
 	}
