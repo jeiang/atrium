@@ -821,7 +821,7 @@ func Scan(ctx context.Context, d *db.DB, ts float64, namer Namer) (scanutil.Resu
 	created := 0
 	for _, cand := range candidates {
 		fp := cand.Fingerprint()
-		if runs[fp] < p.runsRequired {
+		if runs[fp] < int64(p.runsRequired) {
 			continue
 		}
 		known, err := proposals.Known(ctx, d.Write, fp)

@@ -272,7 +272,7 @@ func MessageBody(ctx context.Context, q interface {
 }
 
 func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleList []rules.Rule, lc *LLMContext, t Tuning) (*Decision, error) {
-	spec, ok := config.Account(m.Account)
+	_, ok := config.Account(m.Account)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", httpx.ErrKey, py.Repr(m.Account))
 	}
