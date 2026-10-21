@@ -63,7 +63,7 @@ func lockedRefresh(ctx context.Context, cfg config.Config, limit *int, clock fun
 	} else if scan, err = CLIScanLimit(ctx, d.Read); err != nil {
 		return nil, err
 	}
-	return Refresh(ctx, d, cfg, scan, clockNow(clock), o)
+	return Refresh(ctx, d, scan, clockNow(clock), o)
 }
 
 func clockNow(clock func() float64) float64 {

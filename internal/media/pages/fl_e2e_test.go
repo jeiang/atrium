@@ -320,7 +320,7 @@ func TestFlRotatedAndGeneratedKeys(t *testing.T) {
 		if _, err := os.Stat(keyPath); !os.IsNotExist(err) {
 			t.Fatalf("key exists before first use: %v", err)
 		}
-		links := media.NewLinks(config.Media(w.env).LinkKey, keyPath)
+		links := media.NewLinks(config.MediaLinkKey(w.env), keyPath)
 		now := float64(time.Now().Unix())
 		url, err := links.PublicURL("https://atrium.test", w.movieRel, now, 43200)
 		if err != nil {
@@ -339,7 +339,7 @@ func TestFlRotatedAndGeneratedKeys(t *testing.T) {
 		}
 		path := strings.TrimPrefix(url, "https://atrium.test")
 		status(t, w.get(path), 200, "link signed with the generated key")
-		again, err := media.NewLinks(config.Media(w.env).LinkKey, keyPath).PublicURL("https://atrium.test", w.movieRel, now, 43200)
+		again, err := media.NewLinks(config.MediaLinkKey(w.env), keyPath).PublicURL("https://atrium.test", w.movieRel, now, 43200)
 		if err != nil || again != url {
 			t.Fatalf("second Links built %q (%v), want %q", again, err, url)
 		}
