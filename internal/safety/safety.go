@@ -96,7 +96,7 @@ func WriteGate(ctx context.Context, current ModeFunc, action, target string) err
 		}
 	}
 	if mode != Live {
-		return WriteRefused(fmt.Sprintf("refusing mailbox write %s: ATRIUM_MODE is not %s", py.Repr(action), Live))
+		return WriteRefused(fmt.Sprintf("refusing mailbox write %s: mail_mode (ATRIUM_MAIL_MAIL_MODE) is not %s", py.Repr(action), Live))
 	}
 	return nil
 }
