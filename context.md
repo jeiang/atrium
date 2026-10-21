@@ -31,7 +31,12 @@ not claims about the running application.
   `ATRIUM_DB_KEY`, `ATRIUM_DB_KEY_FILE`, or the `db_key` systemd credential) makes every command
   open the database encrypted; a fresh database is created encrypted, and a
   plaintext or wrong-key mismatch refuses to start. Without a key the
-  database stays plaintext. Every settings write and secret change appends
+  database stays plaintext. `atrium db` rekeys an encrypted database from a
+  key read from a file or standard input (after a verified re-encrypted copy,
+  recording the retired key id in `db_key_history`; it refuses unless it can
+  take exclusive access, so the atrium units and timers using the database must be stopped), writes encrypted
+  DB-only backups through the SQLite backup API, runs SQL from standard
+  input, and checks integrity with FTS5 and vec0 counts. Every settings write and secret change appends
   a row to the append-only `settings_audit` table (old and new value, or
   only `changed` for secrets; actor and source), listed read-only in
   `/activity`. Known secret values are scrubbed from log output and
