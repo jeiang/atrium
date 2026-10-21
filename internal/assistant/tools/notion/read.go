@@ -87,7 +87,7 @@ func searchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 5, maxResults, 1)
+	limit, err := tool.BoundedInt(args, "limit", 5, int64(maxResults), 1)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func fetchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, e
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	maxChars, err := tool.BoundedInt(args, "max_chars", pageChars, pageChars, 1)
+	maxChars, err := tool.BoundedInt(args, "max_chars", int64(pageChars), int64(pageChars), 1)
 	if err != nil {
 		return nil, err
 	}

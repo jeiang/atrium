@@ -81,7 +81,7 @@ func openLoops(ctx context.Context, tc *tool.Context, args py.Dict) (any, error)
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 20, maxLimit, 1)
+	limit, err := tool.BoundedInt(args, "limit", 20, int64(maxLimit), 1)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func commitments(ctx context.Context, tc *tool.Context, args py.Dict) (any, erro
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 20, maxLimit, 1)
+	limit, err := tool.BoundedInt(args, "limit", 20, int64(maxLimit), 1)
 	if err != nil {
 		return nil, err
 	}

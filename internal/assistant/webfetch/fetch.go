@@ -279,7 +279,7 @@ func (f *Fetcher) hop(ctx context.Context, deadline time.Time, url string, parts
 		return "", Page{}, FetchError("content type " + kind)
 	}
 	if declared, ok := resp.headers.joined("content-length"); ok && declared != "" && isDigits(declared) {
-		if n, _ := pyInt(declared, 10); n > lim.MaxBytes {
+		if n, _ := pyInt(declared, 10); n > int64(lim.MaxBytes) {
 			return "", Page{}, FetchError("too large")
 		}
 	}

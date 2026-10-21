@@ -125,7 +125,7 @@ func mailSearch(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 10, maxResults, 1)
+	limit, err := tool.BoundedInt(args, "limit", 10, int64(maxResults), 1)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func mailRead(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	maxChars, err := tool.BoundedInt(args, "max_chars", bodyChars, bodyChars, 1)
+	maxChars, err := tool.BoundedInt(args, "max_chars", int64(bodyChars), int64(bodyChars), 1)
 	if err != nil {
 		return nil, err
 	}

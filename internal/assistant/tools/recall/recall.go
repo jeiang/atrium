@@ -54,7 +54,7 @@ func recall(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", pageChars, maxPageChars, 1)
+	limit, err := tool.BoundedInt(args, "limit", int64(pageChars), int64(maxPageChars), 1)
 	if err != nil {
 		return nil, err
 	}

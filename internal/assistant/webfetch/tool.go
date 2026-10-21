@@ -87,7 +87,7 @@ func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args py.Dict) (an
 	if err != nil {
 		return nil, err
 	}
-	maxChars, err := tool.BoundedInt(args, "max_chars", lim.TextDefault, lim.TextDefault, 1)
+	maxChars, err := tool.BoundedInt(args, "max_chars", int64(lim.TextDefault), int64(lim.TextDefault), 1)
 	if err != nil {
 		return nil, err
 	}

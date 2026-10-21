@@ -38,7 +38,7 @@ func contactsLookup(ctx context.Context, tc *tool.Context, args py.Dict) (any, e
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 5, maxContacts, 1)
+	limit, err := tool.BoundedInt(args, "limit", 5, int64(maxContacts), 1)
 	if err != nil {
 		return nil, err
 	}

@@ -100,7 +100,7 @@ func transactions(ctx context.Context, tc *tool.Context, args py.Dict) (any, err
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 50, maxLimit, 1)
+	limit, err := tool.BoundedInt(args, "limit", 50, int64(maxLimit), 1)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func bills(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		if err := r.Err(); err != nil {
 			return nil, err
 		}
-		n, err := tool.BoundedInt(args, "upcoming_days", 30, maxDays, 0)
+		n, err := tool.BoundedInt(args, "upcoming_days", 30, int64(maxDays), 0)
 		if err != nil {
 			return nil, err
 		}
@@ -214,7 +214,7 @@ func payees(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 50, maxLimit, 1)
+	limit, err := tool.BoundedInt(args, "limit", 50, int64(maxLimit), 1)
 	if err != nil {
 		return nil, err
 	}
