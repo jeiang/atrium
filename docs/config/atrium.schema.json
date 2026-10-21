@@ -84,6 +84,38 @@
       },
       "type": "object"
     },
+    "core": {
+      "additionalProperties": false,
+      "properties": {
+        "http_timeout_seconds": {
+          "default": 600,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "http_timeout_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "public_url": {
+          "type": "string"
+        },
+        "public_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tz": {
+          "default": "America/Port_of_Spain",
+          "type": "string"
+        },
+        "tz_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "db": {
       "additionalProperties": false,
       "properties": {
@@ -98,6 +130,141 @@
       "additionalProperties": false,
       "properties": {
         "openai_admin_key_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "web": {
+      "additionalProperties": false,
+      "properties": {
+        "activity_page_size": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "activity_page_size_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "activity_snippet_chars": {
+          "default": 800,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "activity_snippet_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "body_cap_bytes": {
+          "default": 1048576,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "body_cap_bytes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "chat_thread_limit": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "chat_thread_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "job_history": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "job_history_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "learned_limit": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "learned_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "loop_limit": {
+          "default": 100,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "loop_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "page_size": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "page_size_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "preview_bytes": {
+          "default": 200000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "preview_bytes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "project_thread_limit": {
+          "default": 100,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "project_thread_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "run_history": {
+          "default": 30,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "run_history_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "snooze_choices": {
+          "default": "1,3,7,14",
+          "type": "string"
+        },
+        "snooze_choices_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }

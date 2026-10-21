@@ -25,6 +25,7 @@ import (
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/notion"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -54,7 +55,7 @@ func newSite(t *testing.T, extra map[string]string) *site {
 	dir := t.TempDir()
 	vars := map[string]string{
 		"ATRIUM_DB": filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow",
-		"ATRIUM_TZ": "America/Port_of_Spain",
+		"ATRIUM_CORE_TZ": "America/Port_of_Spain",
 	}
 	for k, v := range extra {
 		vars[k] = v
@@ -64,6 +65,12 @@ func newSite(t *testing.T, extra map[string]string) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
+	pins, err := config.LoadPins(env, settings.Default)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Default.SetPins(pins)
+	t.Cleanup(func() { settings.Default.SetPins(nil) })
 	s := &site{t: t, db: d, cfg: cfg, clock: 1_780_000_000}
 	render, err := web.NewRenderer(cfg, d, tpl.Config{Modules: []fs.FS{Templates(), assistantpages.Templates()}})
 	if err != nil {

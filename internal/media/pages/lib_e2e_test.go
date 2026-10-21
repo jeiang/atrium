@@ -29,7 +29,7 @@ func libVars(t *testing.T, extra map[string]string) (map[string]string, string) 
 	t.Helper()
 	root := t.TempDir()
 	vars := map[string]string{
-		"ATRIUM_MEDIA_ROOT": root, "ATRIUM_PUBLIC_URL": "https://atrium.test", "ATRIUM_MEDIA_MOVIES_URL": "http://artemis.vpn:8084",
+		"ATRIUM_MEDIA_ROOT": root, "ATRIUM_CORE_PUBLIC_URL": "https://atrium.test", "ATRIUM_MEDIA_MOVIES_URL": "http://artemis.vpn:8084",
 		"ATRIUM_MEDIA_TV_URL": "http://artemis.vpn:8085", "ATRIUM_MEDIA_LINK_KEY": "secret-key",
 	}
 	for k, v := range extra {
@@ -89,7 +89,7 @@ func TestLibE2EPagesLinksAndMissing(t *testing.T) {
 }
 
 func TestLibE2ELinksFollowSettingsAndEmptyLibrary(t *testing.T) {
-	vars, root := libVars(t, map[string]string{"ATRIUM_PUBLIC_URL": "", "ATRIUM_MEDIA_MOVIES_URL": ""})
+	vars, root := libVars(t, map[string]string{"ATRIUM_CORE_PUBLIC_URL": "", "ATRIUM_MEDIA_MOVIES_URL": ""})
 	libWrite(t, root, "movies/Dune (2021)/Dune (2021).mkv", 10)
 	s := newSite(t, vars, Options{})
 	movie := status(t, s.get("/media/library/movie/Dune%20%282021%29"), 200, "movie without links")

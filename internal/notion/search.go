@@ -20,13 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const (
-	Account         = "notion"
-	BranchLimit     = 50
-	RelatedLimit    = 10
-	SnippetChars    = 220
-	HeadSourceChars = 1000
-)
+const Account = "notion"
 
 const hitSelect = "SELECT rid, id, title, path, url, last_edited_time, edited_ts, private FROM notion_pages " +
 	"WHERE in_trash = 0 AND rid IN (SELECT value FROM json_each(?))"
@@ -327,14 +321,14 @@ func PageTitles(ctx context.Context, q Querier, texts []string) (map[string]stri
 	return out, err
 }
 
-func heads(ctx context.Context, q Querier, rids []int64) (map[int64]string, error) {
+func heads(ctx context.Context, q Querier, limits SearchLimits, rids []int64) (map[int64]string, error) {
 	out := map[int64]string{}
 	if len(rids) == 0 {
 		return out, nil
 	}
 	rows, err := q.QueryContext(ctx,
 		"SELECT rid, substr(markdown, 1, ?) AS head FROM notion_pages WHERE rid IN (SELECT value FROM json_each(?))",
-		HeadSourceChars, idsJSON(rids))
+		limits.HeadSource, idsJSON(rids))
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +353,7 @@ func heads(ctx context.Context, q Querier, rids []int64) (map[int64]string, erro
 		return nil, err
 	}
 	for _, h := range list {
-		out[h.rid] = py.Clip(Plain(h.text, titles), SnippetChars)
+		out[h.rid] = py.Clip(Plain(h.text, titles), limits.Snippet)
 	}
 	return out, nil
 }
@@ -403,7 +397,7 @@ func newHit(info hitInfo, score *float64, lexRank, semRank *int, head string, ma
 	}
 }
 
-func recent(ctx context.Context, q Querier, includePrivate bool, limit int) ([]Hit, error) {
+func recent(ctx context.Context, q Querier, limits SearchLimits, includePrivate bool, limit int) ([]Hit, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT rid, id, title, path, url, last_edited_time, edited_ts, private FROM notion_pages "+
 			"WHERE in_trash = 0 AND (? = 1 OR private = 0) ORDER BY edited_ts DESC, rid DESC LIMIT ?",
@@ -419,7 +413,7 @@ func recent(ctx context.Context, q Querier, includePrivate bool, limit int) ([]H
 	for i, info := range infos {
 		rids[i] = info.rid
 	}
-	head, err := heads(ctx, q, rids)
+	head, err := heads(ctx, q, limits, rids)
 	if err != nil {
 		return nil, err
 	}
@@ -450,14 +444,18 @@ func rank(list []int64) map[int64]int {
 	return out
 }
 
-func Search(ctx context.Context, q Querier, cfg config.Config, query string, includePrivate bool, limit int, embedTexts embed.TextsFunc) (Result, error) {
+func Search(ctx context.Context, q db.Querier, cfg config.Config, query string, includePrivate bool, limit int, embedTexts embed.TextsFunc) (Result, error) {
 	if embedTexts == nil {
 		embedTexts = embed.Texts
+	}
+	limits, err := LoadSearch(ctx, q)
+	if err != nil {
+		return Result{}, err
 	}
 	query = py.Strip(query)
 	filters := Filters{Account: Account, IncludePrivate: includePrivate}
 	if query == "" {
-		hits, err := recent(ctx, q, includePrivate, limit)
+		hits, err := recent(ctx, q, limits, includePrivate, limit)
 		return Result{Hits: hits, Filters: filters}, err
 	}
 	match, err := search.FTSQuery(query)
@@ -466,7 +464,7 @@ func Search(ctx context.Context, q Querier, cfg config.Config, query string, inc
 	}
 	var lex []lexicalHit
 	if match != "" {
-		if lex, err = lexical(ctx, q, match, includePrivate, BranchLimit); err != nil {
+		if lex, err = lexical(ctx, q, match, includePrivate, limits.Branch); err != nil {
 			return Result{}, err
 		}
 	}
@@ -478,7 +476,7 @@ func Search(ctx context.Context, q Querier, cfg config.Config, query string, inc
 		if len(vectors) == 0 {
 			err = fmt.Errorf("%w: list index out of range", httpx.ErrIndex)
 		} else {
-			sem, err = semantic(ctx, q, vectors[0], includePrivate, BranchLimit)
+			sem, err = semantic(ctx, q, vectors[0], includePrivate, limits.Branch)
 		}
 	}
 	if err != nil {
@@ -524,7 +522,7 @@ func Search(ctx context.Context, q Querier, cfg config.Config, query string, inc
 			unmarked = append(unmarked, rid)
 		}
 	}
-	head, err := heads(ctx, q, unmarked)
+	head, err := heads(ctx, q, limits, unmarked)
 	if err != nil {
 		return Result{}, err
 	}

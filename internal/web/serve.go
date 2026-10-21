@@ -114,7 +114,7 @@ func serve(env *cli.Env, a serveArgs) int {
 		return cli.ExitError
 	}
 	if _, err := config.Location(a.env); err != nil {
-		_, _ = fmt.Fprintf(env.Stderr, "error: ATRIUM_TZ is not a time zone: %s. Use an IANA name such as America/Port_of_Spain.\n", py.Repr(config.TZName(a.env)))
+		_, _ = fmt.Fprintf(env.Stderr, "error: the tz setting is not a time zone: %s. Use an IANA name such as America/Port_of_Spain.\n", py.Repr(config.TZName(a.env)))
 		return cli.ExitError
 	}
 	if err := run(env.Ctx, cfg, a, hosts); err != nil {
@@ -132,6 +132,12 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	defer func() { _ = d.Close() }()
 	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
 		return err
+	}
+	if err := config.LoadCore(ctx, d.Read); err != nil {
+		return err
+	}
+	if _, err := config.Location(a.env); err != nil {
+		return fmt.Errorf("the tz setting is not a time zone: %w", err)
 	}
 	if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil {
 		return err

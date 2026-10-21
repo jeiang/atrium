@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -19,12 +20,6 @@ const (
 	BaseURL         = "https://api.notion.com"
 	Version         = "2026-03-11"
 	MinInterval     = 1.0 / 3
-	RetryAfterBase  = 1.0
-	RetryAfterMax   = 60.0
-	MaxRetries      = 5
-	Timeout         = 60 * time.Second
-	PageSize        = 100
-	BlockDepth      = 5
 	pagedKeyCursor  = "start_cursor"
 	pagedKeyPerPage = "page_size"
 )
@@ -59,6 +54,7 @@ type Client struct {
 	token   string
 	BaseURL string
 	HTTP    *http.Client
+	API     APILimits
 	Sleep   func(ctx context.Context, seconds float64) error
 	Clock   func() float64
 	last    float64
@@ -66,13 +62,25 @@ type Client struct {
 }
 
 func NewClient(token string) *Client {
+	api := defaultAPI()
 	return &Client{
 		token:   token,
 		BaseURL: BaseURL,
-		HTTP:    &http.Client{Timeout: Timeout},
+		HTTP:    &http.Client{Timeout: api.Timeout},
+		API:     api,
 		Sleep:   sleep,
 		Clock:   monotonic,
 	}
+}
+
+func (c *Client) Configure(ctx context.Context, q db.Querier) error {
+	limits, err := LoadAPI(ctx, q)
+	if err != nil {
+		return err
+	}
+	c.API = limits
+	c.HTTP.Timeout = limits.Timeout
+	return nil
 }
 
 func (c *Client) String() string { return "NotionClient()" }
@@ -145,15 +153,15 @@ func retryable(status int) bool {
 	return false
 }
 
-func retryDelay(status int, headers http.Header, attempt int) float64 {
+func (c *Client) retryDelay(status int, headers http.Header, attempt int) float64 {
 	delay, err := py.ParseFloat(headers.Get("Retry-After"))
 	if err != nil {
-		delay = RetryAfterBase
+		delay = c.API.RetryAfterBase
 		if status != http.StatusTooManyRequests {
-			delay = RetryAfterBase * math.Pow(2, float64(attempt))
+			delay = c.API.RetryAfterBase * math.Pow(2, float64(attempt))
 		}
 	}
-	return math.Min(math.Max(delay, 0), RetryAfterMax)
+	return math.Min(math.Max(delay, 0), c.API.RetryAfterMax)
 }
 
 func refusal(status int, raw []byte) *Error {
@@ -226,8 +234,8 @@ func (c *Client) Request(ctx context.Context, method, path string, body any, que
 			d, _ := v.(py.Dict)
 			return d, nil
 		}
-		if retryable(status) && attempt < MaxRetries {
-			if err := c.Sleep(ctx, retryDelay(status, headers, attempt)); err != nil {
+		if retryable(status) && attempt < c.API.MaxRetries {
+			if err := c.Sleep(ctx, c.retryDelay(status, headers, attempt)); err != nil {
 				return nil, err
 			}
 			c.last = c.Clock()
@@ -243,13 +251,13 @@ func (c *Client) Each(ctx context.Context, method, path string, body py.Dict, qu
 		var reply py.Dict
 		var err error
 		if method == http.MethodPost {
-			paged := append(append(py.Dict{}, body...), py.Pair{Key: pagedKeyPerPage, Value: PageSize})
+			paged := append(append(py.Dict{}, body...), py.Pair{Key: pagedKeyPerPage, Value: c.API.PageSize})
 			if cursor != "" {
 				paged = append(paged, py.Pair{Key: pagedKeyCursor, Value: cursor})
 			}
 			reply, err = c.Request(ctx, method, path, paged, nil)
 		} else {
-			paged := append(append(Query{}, query...), py.Pair{Key: pagedKeyPerPage, Value: PageSize})
+			paged := append(append(Query{}, query...), py.Pair{Key: pagedKeyPerPage, Value: c.API.PageSize})
 			if cursor != "" {
 				paged = append(paged, py.Pair{Key: pagedKeyCursor, Value: cursor})
 			}
@@ -402,7 +410,7 @@ func (c *Client) BlocksMarkdown(ctx context.Context, blockID string, depth int) 
 		if line != "" {
 			lines = append(lines, strings.Repeat("  ", depth)+line)
 		}
-		if py.Truthy(field(block, "has_children")) && depth < BlockDepth && kind != "child_page" {
+		if py.Truthy(field(block, "has_children")) && depth < c.API.BlockDepth && kind != "child_page" {
 			nested, err := c.BlocksMarkdown(ctx, text(block, "id"), depth+1)
 			if err != nil {
 				return err

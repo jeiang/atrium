@@ -29,7 +29,9 @@ func (s *service) view(w http.ResponseWriter, r *http.Request) {
 		s.fragment(w, r, http.StatusOK, "_notion_page.gohtml", articleData{NotionPage: article})
 		return
 	}
-	near, err := notion.RelatedPages(ctx, s.deps.DB.Read, found.ID, notion.RelatedLimit)
+	limits, err := notion.LoadSearch(ctx, s.deps.DB.Read)
+	check(err)
+	near, err := notion.RelatedPages(ctx, s.deps.DB.Read, found.ID, limits.Related)
 	check(err)
 	s.page(w, r, "notion_page.gohtml", pageData{NotionPage: article, Related: newRelated(near), Back: backTo(r)})
 }

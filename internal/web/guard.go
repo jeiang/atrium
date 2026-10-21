@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -24,7 +25,6 @@ const (
 
 	StaticPrefix = "/static/"
 	HealthPath   = "/healthz"
-	BodyCap      = 1 << 20
 
 	CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; form-action 'self'"
 
@@ -43,10 +43,22 @@ func CSRFToken(ctx context.Context) string {
 	return token
 }
 
+type bodyCapKey struct{}
+
+const defaultBodyCap = 1 << 20
+
+func bodyCap(ctx context.Context) int {
+	if n, ok := ctx.Value(bodyCapKey{}).(int); ok {
+		return n
+	}
+	return defaultBodyCap
+}
+
 type Guard struct {
-	auth   string
-	hosts  map[string]struct{}
-	public func(*http.Request) bool
+	auth    string
+	hosts   map[string]struct{}
+	public  func(*http.Request) bool
+	bodyCap func(context.Context) (int, error)
 }
 
 func NewGuard(auth string, allowedHosts []string, public func(*http.Request) bool) *Guard {
@@ -163,6 +175,16 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			token = newToken()
 		}
 		if isUnsafe(r.Method) {
+			limit := defaultBodyCap
+			if g.bodyCap != nil {
+				var err error
+				if limit, err = g.bodyCap(r.Context()); err != nil {
+					log.Error("body cap setting failed", logx.Err, err.Error())
+					deny(w, http.StatusInternalServerError, "Internal Server Error")
+					return
+				}
+			}
+			r = r.WithContext(context.WithValue(r.Context(), bodyCapKey{}, limit))
 			if fresh || !sameOrigin(r) {
 				deny(w, http.StatusForbidden, "Forbidden: cross-site request")
 				return
@@ -171,8 +193,8 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			if values := r.Header.Values(CSRFHeader); len(values) > 0 {
 				supplied, has = values[0], true
 			} else if mediaType, _, _ := strings.Cut(r.Header.Get("Content-Type"), ";"); py.Lower(py.Strip(mediaType)) == formType {
-				body, err := io.ReadAll(io.LimitReader(r.Body, BodyCap+1))
-				if err != nil || len(body) > BodyCap {
+				body, err := io.ReadAll(io.LimitReader(r.Body, int64(limit)+1))
+				if err != nil || len(body) > limit {
 					deny(w, http.StatusRequestEntityTooLarge, "Request too large")
 					return
 				}
