@@ -54,15 +54,15 @@ var moduleCases = []moduleCase{
 	{module: module.Grafana, tool: "grafana_datasources"},
 }
 
-type cliRun struct {
+type appRun struct {
 	code           int
 	stdout, stderr string
 }
 
-func runApp(args ...string) cliRun {
+func runApp(args ...string) appRun {
 	var out, errs bytes.Buffer
 	code := newApp().Run(context.Background(), args, &out, &errs)
-	return cliRun{code, out.String(), errs.String()}
+	return appRun{code, out.String(), errs.String()}
 }
 
 func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *anthropictest.Server) {
