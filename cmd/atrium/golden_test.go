@@ -190,7 +190,7 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 		vars[k] = v
 	}
 	for phaseA, canonical := range map[string]string{
-		"ATRIUM_MODE": "ATRIUM_MAIL_MODE", "ATRIUM_CHAT_URL": "ATRIUM_MAIL_CHAT_URL", "ATRIUM_EMBED_URL": "ATRIUM_MAIL_EMBED_URL",
+		"ATRIUM_MODE": "ATRIUM_MAIL_MAIL_MODE", "ATRIUM_CHAT_URL": "ATRIUM_MAIL_MAIL_CHAT_URL", "ATRIUM_EMBED_URL": "ATRIUM_MAIL_MAIL_EMBED_URL",
 	} {
 		if v, ok := vars[phaseA]; ok {
 			vars[canonical] = v
