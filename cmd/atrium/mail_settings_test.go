@@ -44,26 +44,23 @@ func TestMailModeAndWriteCapFollowTheRegistryLive(t *testing.T) {
 	if r := runSettings(t, "set", "write_cap", "1001"); r.code != cli.ExitError || !strings.Contains(r.stderr, "write_cap must be between 1 and 1000") {
 		t.Errorf("write_cap 1001: exit %d stderr %q", r.code, r.stderr)
 	}
-	if r := runSettings(t, "set", "mail_mode", "bogus"); r.code != cli.ExitError || !strings.Contains(r.stderr, "must be one of ('shadow', 'live'), got 'bogus'") {
-		t.Errorf("mode bogus: exit %d stderr %q", r.code, r.stderr)
+	if r := runSettings(t, "set", "mail_mode", "live"); r.code != cli.ExitError {
+		t.Errorf("set mail_mode live: exit %d stderr %q, want a refusal", r.code, r.stderr)
 	}
 	if mode, _, _ := liveMode(t); mode != "shadow" {
-		t.Errorf("a rejected value changed the mode to %q", mode)
+		t.Errorf("a refused write changed the mode to %q", mode)
 	}
 
-	if r := runSettings(t, "set", "mail_mode", "live"); r.code != cli.ExitOK {
-		t.Fatalf("set mode live: exit %d stderr %q", r.code, r.stderr)
-	}
+	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "live")
 	if mode, _, _ := liveMode(t); mode != "live" {
-		t.Errorf("stored mode live not read: %q", mode)
+		t.Errorf("env pin live not read: %q", mode)
 	}
-
 	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "shadow")
 	if mode, _, _ := liveMode(t); mode != "shadow" {
-		t.Errorf("env pin did not win: %q", mode)
+		t.Errorf("env pin shadow not read: %q", mode)
 	}
-	if r := runSettings(t, "set", "mail_mode", "live"); r.code != cli.ExitError || !strings.Contains(r.stderr, "ATRIUM_MAIL_MAIL_MODE") {
-		t.Errorf("set under a pin: exit %d stderr %q", r.code, r.stderr)
+	if r := runSettings(t, "unset", "mail_mode"); r.code != cli.ExitError {
+		t.Errorf("unset mail_mode: exit %d, want a refusal", r.code)
 	}
 
 	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "bogus")

@@ -70,9 +70,7 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", mail.KeyMode, vars["ATRIUM_MODE"]); err != nil {
-		t.Fatal(err)
-	}
+	mailtest.PinMode(t, vars["ATRIUM_MODE"])
 	s := &site{
 		t: t, db: d, cfg: cfg, env: env, registry: proposals.NewRegistry(), writes: toolset.Undoers(env), smtp: &smtptest.Server{},
 		imap: mailtest.NewFakeClient(), clock: 1_000_000,

@@ -49,7 +49,6 @@ func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClien
 	t.Helper()
 	dir := t.TempDir()
 	env := config.Map(map[string]string{
-		"ATRIUM_MODE":      mode,
 		"ATRIUM_DB":        filepath.Join(dir, "atrium.db"),
 		"ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"),
 	})
@@ -59,7 +58,7 @@ func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClien
 	}
 	w := &World{T: t, Account: account, Mode: mode, DB: dbtest.Schema(t), Cfg: cfg, Fake: mailtest.NewFakeClient(), Clock: 1_792_080_000}
 	w.Fake.BindMode(w.DB.Read)
-	w.exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", mail.KeyMode, mode)
+	mailtest.PinMode(t, mode)
 	for _, a := range [...]string{config.ICloud, config.Gmail} {
 		w.exec("INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", a, a)
 	}
@@ -236,7 +235,7 @@ func (w *World) File(subject, kind, dest string) int64 {
 	v := w.verified(subject)
 	id := w.begin(v, kind, &dest)
 	ctx := w.Automatic()
-	err := mailops.MoveUIDs(ctx, w.Fake, v.IMAPName, dest, v.UIDValidity, []uint32{v.UID}, func(_ []uint32, copied *mail.CopyUID) error {
+	err := mailops.MoveUIDs(ctx, w.Fake, v.IMAPName, dest, v.UIDValidity, []uint32{v.UID}, mailops.Batch, func(_ []uint32, copied *mail.CopyUID) error {
 		var validity, destUID any
 		if copied != nil {
 			validity = copied.UIDValidity
@@ -263,7 +262,7 @@ func (w *World) Relabel(subject, dest string) int64 {
 	v := w.verified(subject)
 	id := w.begin(v, live.File, &dest)
 	ctx := w.Automatic()
-	if err := mailops.StoreLabels(ctx, w.Fake, v.IMAPName, v.UIDValidity, []uint32{v.UID}, []string{dest}, []string{mailops.InboxLabel}); err != nil {
+	if err := mailops.StoreLabels(ctx, w.Fake, v.IMAPName, v.UIDValidity, []uint32{v.UID}, mailops.Batch, []string{dest}, []string{mailops.InboxLabel}); err != nil {
 		w.T.Fatal(err)
 	}
 	undo := py.Dict{
@@ -282,7 +281,7 @@ func (w *World) Flag(subject string) int64 {
 	v := w.verified(subject)
 	id := w.begin(v, live.Flag, nil)
 	ctx := w.Automatic()
-	if err := mailops.StoreFlag(ctx, w.Fake, v.IMAPName, v.UIDValidity, []uint32{v.UID}, mailops.Flagged, true); err != nil {
+	if err := mailops.StoreFlag(ctx, w.Fake, v.IMAPName, v.UIDValidity, []uint32{v.UID}, mailops.Batch, mailops.Flagged, true); err != nil {
 		w.T.Fatal(err)
 	}
 	undo := py.Dict{

@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/live/livetest"
+	"github.com/jeiang/atrium/internal/mail/mailtest"
 )
 
 func liveSite(t *testing.T, w *livetest.World, open func(context.Context, string) (mail.Client, error)) *site {
@@ -100,4 +101,21 @@ func TestUICorrectionWhenTheMailboxIsDownStillRecords(t *testing.T) {
 	if got := s.column("SELECT folder FROM corrections WHERE message_id = ?", id); len(got) != 1 || got[0] != "Bills" {
 		t.Errorf("corrections = %v", got)
 	}
+}
+
+func TestPageFrameFollowsTheMailModePin(t *testing.T) {
+	w := liveWorld(t)
+	s := liveSite(t, w, nil)
+	live := status(t, s.get("/triage?account=icloud"), 200, "live")
+	contains(t, live, "Live", "/live/pause")
+	lacks(t, live, "Shadow")
+
+	mailtest.PinMode(t, "shadow")
+	shadow := status(t, s.get("/triage?account=icloud"), 200, "shadow")
+	contains(t, shadow, "Shadow")
+	lacks(t, shadow, "/live/pause", "/live/resume")
+
+	mailtest.PinMode(t, "live")
+	again := status(t, s.get("/triage?account=icloud"), 200, "live again")
+	contains(t, again, "/live/pause")
 }

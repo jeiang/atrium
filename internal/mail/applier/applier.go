@@ -331,7 +331,7 @@ func (a *Applier) discard(ctx context.Context, by map[uint32]entry, uids []uint3
 
 func (a *Applier) moveGroup(ctx context.Context, client mail.Client, account string, g *group, out *Outcome) error {
 	by, remaining := g.byUID()
-	err := mailops.MoveUIDs(ctx, client, g.imapName, g.dest, g.validity, remaining, func(batch []uint32, c *mail.CopyUID) error {
+	err := mailops.MoveUIDs(ctx, client, g.imapName, g.dest, g.validity, remaining, batchSize(ctx), func(batch []uint32, c *mail.CopyUID) error {
 		for _, uid := range batch {
 			e := by[uid]
 			validity, destUID := copied(c, uid)
@@ -350,10 +350,7 @@ func (a *Applier) moveGroup(ctx context.Context, client mail.Client, account str
 	if le, ok := errors.AsType[ledgerError](err); ok {
 		return le.err
 	}
-	size, sizeErr := mailops.BatchSize(ctx, client)
-	if sizeErr != nil {
-		return sizeErr
-	}
+	size := batchSize(ctx)
 	failing, rest := remaining[:min(size, len(remaining))], remaining[min(size, len(remaining)):]
 	if partial, ok := errors.AsType[*mailops.PartialMove](err); ok {
 		for _, uid := range failing {
@@ -411,12 +408,9 @@ func labelUndo(g *group, uid uint32, add, remove []string) py.Dict {
 
 func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account string, g *group, out *Outcome) error {
 	by, uids := g.byUID()
-	size, err := mailops.BatchSize(ctx, client)
-	if err != nil {
-		return err
-	}
+	size := batchSize(ctx)
 	for _, chunk := range mailops.Chunks(uids, size) {
-		if err := mailops.StoreLabels(ctx, client, g.imapName, g.validity, chunk, g.added, g.removed); err != nil {
+		if err := mailops.StoreLabels(ctx, client, g.imapName, g.validity, chunk, size, g.added, g.removed); err != nil {
 			text := py.ExceptionText(err)
 			if errors.Is(err, mailops.ErrValidityChanged) {
 				for _, uid := range chunk {
@@ -539,10 +533,7 @@ func untrashUndo(trash string, validity, uid any) py.Dict {
 
 func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, account string, g *group, out *Outcome) error {
 	by, uids := g.byUID()
-	size, err := mailops.BatchSize(ctx, client)
-	if err != nil {
-		return err
-	}
+	size := batchSize(ctx)
 	for _, chunk := range mailops.Chunks(uids, size) {
 		var c *mail.CopyUID
 		err := mailops.SelectRW(ctx, client, g.imapName, g.validity)
@@ -616,12 +607,9 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 
 func (a *Applier) flagGroup(ctx context.Context, client mail.Client, account string, g *group, out *Outcome) error {
 	by, uids := g.byUID()
-	size, err := mailops.BatchSize(ctx, client)
-	if err != nil {
-		return err
-	}
+	size := batchSize(ctx)
 	for _, chunk := range mailops.Chunks(uids, size) {
-		if err := mailops.StoreFlag(ctx, client, g.imapName, g.validity, chunk, mailops.Flagged, true); err != nil {
+		if err := mailops.StoreFlag(ctx, client, g.imapName, g.validity, chunk, size, mailops.Flagged, true); err != nil {
 			for _, uid := range chunk {
 				if err := a.Live.Fail(ctx, by[uid].aid, py.ExceptionText(err)); err != nil {
 					return err
@@ -651,7 +639,19 @@ func (a *Applier) flagGroup(ctx context.Context, client mail.Client, account str
 
 func boxKey(parts ...any) string { return py.JSONDumps(parts) }
 
+type batchKey struct{}
+
+func batchSize(ctx context.Context) int {
+	n, _ := ctx.Value(batchKey{}).(int)
+	return n
+}
+
 func (a *Applier) execute(ctx context.Context, client mail.Client, account string, intents []Intent, out *Outcome) error {
+	size, err := mailops.BatchSize(ctx, client)
+	if err != nil {
+		return err
+	}
+	ctx = context.WithValue(ctx, batchKey{}, size)
 	if len(intents) == 0 {
 		return nil
 	}

@@ -120,12 +120,12 @@ func init() {
 		return adv(key, settings.Float, def, settings.Within(0, 1))
 	}
 	settings.MustRegister(
-		ui(KeyMode, settings.String, modeDefault, modeCheck),
+		settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck, Class: settings.Bootstrap},
 		ui(KeyChatURL, settings.String, "", nil),
 		ui(KeyEmbedURL, settings.String, "", nil),
 		ui(KeyChatModel, settings.String, "qwen", nonBlank),
 		adv(KeyChatMaxTokens, settings.Int, "80", atLeast(1)),
-		ui(KeyEmbedModel, settings.String, "embeddinggemma", nonBlank),
+		adv(KeyEmbedModel, settings.String, "embeddinggemma", nonBlank),
 		settings.Def{
 			Key: KeyWriteCap, Module: module, Type: settings.Int, Default: "100",
 			Check: settings.Between(1, 1000), Class: settings.Cap, Scopes: instance,
@@ -133,7 +133,7 @@ func init() {
 		adv(KeyWriteAttempts, settings.Int, "3", settings.Between(1, 10)),
 		adv(KeyDeletionInterval, settings.Int, "86400", atLeast(3600)),
 		ui(KeyUncertainDest, settings.String, "Misc", nonBlank),
-		count(KeyBodyCapBytes, 65536),
+		adv(KeyBodyCapBytes, settings.Int, "65536", settings.Between(1024, 1048576)),
 		count(KeyFetchBatch, 40),
 		count(KeyEmbedBatch, 16),
 		count(KeyFlagBatch, 500),
