@@ -33,7 +33,8 @@ not claims about the running application.
   plaintext or wrong-key mismatch refuses to start. Without a key the
   database stays plaintext. `atrium db` rekeys an encrypted database from a
   key read from a file or standard input (after a verified re-encrypted copy,
-  recording the retired key id in `db_key_history`), writes encrypted
+  recording the retired key id in `db_key_history`; it refuses unless it can
+  take exclusive access, so every unit using the database must be stopped), writes encrypted
   DB-only backups through the SQLite backup API, runs SQL from standard
   input, and checks integrity with FTS5 and vec0 counts. Every settings write and secret change appends
   a row to the append-only `settings_audit` table (old and new value, or

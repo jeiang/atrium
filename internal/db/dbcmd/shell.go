@@ -157,12 +157,33 @@ func splitStatements(text string) ([]string, string) {
 				return stmts, text[start:]
 			}
 			i += j
+		case c == '/' && i+1 < len(text) && text[i+1] == '*':
+			j := strings.Index(text[i+2:], "*/")
+			if j < 0 {
+				return stmts, text[start:]
+			}
+			i += j + 3
 		case c == ';':
-			if stmt := strings.TrimSpace(text[start : i+1]); stmt != ";" {
+			stmt := strings.TrimSpace(text[start : i+1])
+			if openTrigger(stmt) {
+				continue
+			}
+			if stmt != ";" {
 				stmts = append(stmts, stmt)
 			}
 			start = i + 1
 		}
 	}
 	return stmts, text[start:]
+}
+
+func openTrigger(stmt string) bool {
+	words := strings.Fields(strings.ToUpper(strings.TrimSuffix(stmt, ";")))
+	if len(words) < 2 || words[0] != "CREATE" {
+		return false
+	}
+	if words[1] == "TEMP" || words[1] == "TEMPORARY" {
+		words = words[1:]
+	}
+	return len(words) > 1 && words[1] == "TRIGGER" && words[len(words)-1] != "END"
 }

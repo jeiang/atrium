@@ -143,6 +143,10 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 	if shell.code != cli.ExitOK || !strings.HasPrefix(shell.stdout, "1\nAlpha page\ta;b\n") || !strings.Contains(shell.stdout, "notion_pages\n") {
 		t.Errorf("db shell exited %d with stdout %q, stderr %q", shell.code, shell.stdout, shell.stderr)
 	}
+	trigger := runProcessStdin(t, "/* a; b */ CREATE TEMP TABLE t (a);\nCREATE TEMP TRIGGER tt AFTER INSERT ON t BEGIN\n  UPDATE t SET a = a + 1;\nEND;\nINSERT INTO t VALUES (7); SELECT a FROM t;\n", "db shell", dbEnv(live), keyEnv(rightKeyHex))
+	if trigger.code != cli.ExitOK || trigger.stdout != "8\n" {
+		t.Errorf("db shell with a block comment and a trigger exited %d with stdout %q, stderr %q; want 8", trigger.code, trigger.stdout, trigger.stderr)
+	}
 	if bad := runProcessStdin(t, "SELECT * FROM nope;\nSELECT 1;\n", "db shell", dbEnv(live), keyEnv(rightKeyHex)); bad.code != cli.ExitError || bad.stdout != "1\n" || !strings.Contains(bad.stderr, "nope") {
 		t.Errorf("db shell with a failing statement exited %d, stdout %q, stderr %q; want %d, the later statement still run", bad.code, bad.stdout, bad.stderr, cli.ExitError)
 	}
@@ -175,11 +179,46 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 		t.Errorf("refused rekeys left %v", left)
 	}
 
-	next := writeKey(t, dir, "next.key", otherKeyHex)
 	other, err := db.ParseKey(otherKeyHex)
 	if err != nil {
 		t.Fatal(err)
 	}
+	next := writeKey(t, dir, "next.key", otherKeyHex)
+	holder, err := db.Connect(live, db.WithKey(k))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := holder.Write.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec("UPDATE notion_pages SET title = 'Alpha page' WHERE rid = 1"); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name    string
+		release func()
+	}{{"an open write transaction", func() {}}, {"an idle connection", func() { _ = tx.Rollback() }}} {
+		name, release := tc.name, tc.release
+		busy := runProcess(t, "db rekey --new-key-file "+next, dbEnv(live), keyEnv(rightKeyHex))
+		if busy.code != cli.ExitError || !strings.Contains(busy.stderr, "stop the atrium units") || strings.Contains(busy.stderr+busy.stdout, otherKeyHex) {
+			t.Errorf("rekey with %s exited %d, stdout %q, stderr %q; want %d and a stop-the-units refusal", name, busy.code, busy.stdout, busy.stderr, cli.ExitError)
+		}
+		release()
+	}
+	if err := holder.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if left, _ := filepath.Glob(live + ".rekey*"); len(left) != 0 {
+		t.Errorf("refused rekeys left %v", left)
+	}
+	if still := runProcess(t, "db check", dbEnv(live), keyEnv(rightKeyHex)); still.code != cli.ExitOK || still.stdout != check.stdout {
+		t.Errorf("db check after refused rekeys exited %d with stdout %q, stderr %q; want the original report %q", still.code, still.stdout, still.stderr, check.stdout)
+	}
+	if moved := runProcess(t, "db check", dbEnv(live), keyEnv(otherKeyHex)); moved.code != cli.ExitError || !strings.Contains(moved.stderr, string(db.ErrWrongKey)) {
+		t.Errorf("new key after refused rekeys exited %d, stderr %q; want %d and %q", moved.code, moved.stderr, cli.ExitError, db.ErrWrongKey)
+	}
+
 	rekey := runProcess(t, "db rekey --new-key-file "+next, dbEnv(live), keyEnv(rightKeyHex))
 	wantLine := "key id " + dbkey.ID(k) + " -> " + dbkey.ID(other) + "\n"
 	if rekey.code != cli.ExitOK || !strings.HasSuffix(rekey.stdout, wantLine) || strings.Contains(rekey.stdout+rekey.stderr, otherKeyHex) {

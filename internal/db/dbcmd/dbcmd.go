@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/cli"
@@ -25,7 +26,7 @@ func Command() *cli.Command {
 	return &cli.Command{
 		Name: "db",
 		Commands: []*cli.Command{
-			{Name: "rekey", Help: "re-encrypt the database under a new key read from a file or standard input", Setup: s.rekey},
+			{Name: "rekey", Help: "re-encrypt the database under a new key read from a file or standard input; stop every atrium unit that uses the database first", Setup: s.rekey},
 			{Name: "backup", Help: "write a consistent copy of the database, encrypted like the source", Setup: s.backup},
 			{Name: "shell", Help: "run SQL statements from standard input against the database", Setup: s.shell},
 			{Name: "check", Help: "verify database integrity and report FTS5 and vec0 table counts", Setup: s.check},
@@ -291,24 +292,22 @@ func (s *service) rekey(a *cli.Args) cli.Handler {
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		d, err := db.Connect(path)
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		closed := false
-		defer func() {
-			if !closed {
-				_ = d.Close()
-			}
-		}()
-		if err := db.Migrate(e.Ctx, d, path); err != nil {
-			return cli.Fail(e, err)
-		}
 		lock, err := db.Exclusive(e.Ctx, path, db.ShortLockWait)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
 		defer func() { _ = lock.Close() }()
+		held, err := db.OpenFile(path, old)
+		if err != nil {
+			return cli.Fail(e, err)
+		}
+		defer func() { _ = held.Close() }()
+		if err := db.HoldExclusive(e.Ctx, held); err != nil {
+			if errors.Is(err, db.ErrInUse) {
+				return cli.Fail(e, fmt.Errorf("db rekey: %w; the database is unchanged", err))
+			}
+			return cli.Fail(e, err)
+		}
 		info, err := os.Stat(path)
 		if err != nil {
 			return cli.Fail(e, err)
@@ -321,10 +320,10 @@ func (s *service) rekey(a *cli.Args) cli.Handler {
 		if err := chownLike(tmp, info); err != nil {
 			return cli.Fail(e, err)
 		}
-		if err := d.BackupTo(e.Ctx, tmp, next); err != nil {
+		if err := db.Backup(e.Ctx, held, tmp, next); err != nil {
 			return cli.Fail(e, err)
 		}
-		want, err := tableCounts(e.Ctx, d.Read)
+		want, err := tableCounts(e.Ctx, held)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
@@ -334,19 +333,23 @@ func (s *service) rekey(a *cli.Args) cli.Handler {
 		if err := verifyCopy(e.Ctx, tmp, next, want, "db_key_history"); err != nil {
 			return cli.Fail(e, fmt.Errorf("db rekey: verification of the re-encrypted copy failed, the database is unchanged: %w", err))
 		}
-		closed = true
-		if err := d.Close(); err != nil {
+		if err := os.Rename(tmp, path); err != nil {
 			return cli.Fail(e, err)
 		}
-		for _, suffix := range []string{"-wal", "-shm"} {
-			_ = os.Remove(path + suffix)
-		}
-		if err := os.Rename(tmp, path); err != nil {
+		if err := syncDir(filepath.Dir(path)); err != nil {
 			return cli.Fail(e, err)
 		}
 		_, _ = fmt.Fprintf(e.Stdout, "rekeyed %s: key id %s -> %s\n", path, oldID, newID)
 		return cli.ExitOK
 	}
+}
+
+func syncDir(dir string) error {
+	f, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	return errors.Join(f.Sync(), f.Close())
 }
 
 func recordRetired(ctx context.Context, path string, key db.Key, oldID, newID string) error {
@@ -355,6 +358,9 @@ func recordRetired(ctx context.Context, path string, key db.Key, oldID, newID st
 		return err
 	}
 	defer func() { _ = c.Close() }()
+	if _, err := c.ExecContext(ctx, db.KeyHistoryDDL); err != nil {
+		return err
+	}
 	_, err = c.ExecContext(ctx, "INSERT INTO db_key_history (key_id, replaced_by, retired_at) VALUES (?, ?, CAST(strftime('%s','now') AS REAL))", oldID, newID)
 	return err
 }

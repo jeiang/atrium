@@ -338,8 +338,10 @@ func settingsAudit(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
+const KeyHistoryDDL = "CREATE TABLE IF NOT EXISTS db_key_history (" +
+	"id INTEGER PRIMARY KEY AUTOINCREMENT, key_id TEXT NOT NULL, replaced_by TEXT NOT NULL, retired_at REAL NOT NULL)"
+
 func keyHistory(ctx context.Context, tx *sql.Tx) error {
-	_, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS db_key_history ("+
-		"id INTEGER PRIMARY KEY AUTOINCREMENT, key_id TEXT NOT NULL, replaced_by TEXT NOT NULL, retired_at REAL NOT NULL)")
+	_, err := tx.ExecContext(ctx, KeyHistoryDDL)
 	return err
 }
