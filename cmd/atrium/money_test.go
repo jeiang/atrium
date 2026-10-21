@@ -57,7 +57,7 @@ func newMoneyRig(t *testing.T, chatURL string) *moneyRig {
 	})
 	t.Setenv("ATRIUM_DB", path)
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(filepath.Dir(path), "cache"))
-	t.Setenv("ATRIUM_CHAT_URL", chatURL)
+	t.Setenv("ATRIUM_MAIL_MAIL_CHAT_URL", chatURL)
 	t.Setenv("ATRIUM_CORE_TZ", "America/Port_of_Spain")
 	app := cli.New("atrium", logx.Setup)
 	app.Add(commands(nil, func() float64 { return moneyClock })...)

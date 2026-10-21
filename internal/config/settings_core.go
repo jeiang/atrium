@@ -213,3 +213,10 @@ func SnoozeChoices(ctx context.Context, q db.Querier) ([]int, error) {
 	}
 	return days, nil
 }
+
+func Migrate(ctx context.Context, d *db.DB, cfg Config) error {
+	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
+		return err
+	}
+	return LoadCore(ctx, d.Read)
+}

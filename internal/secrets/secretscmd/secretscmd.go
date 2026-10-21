@@ -129,7 +129,7 @@ func (s *service) with(e *cli.Env, run func(*secrets.Store) int) int {
 		return cli.Fail(e, err)
 	}
 	defer func() { _ = d.Close() }()
-	if err := db.Migrate(e.Ctx, d, cfg.DBPath); err != nil {
+	if err := config.Migrate(e.Ctx, d, cfg); err != nil {
 		return cli.Fail(e, err)
 	}
 	return run(secrets.New(d, d))

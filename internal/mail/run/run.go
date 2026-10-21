@@ -97,7 +97,7 @@ func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *
 			if err != nil {
 				return nil, err
 			}
-			return money.Refresh(ctx, d, cfg, limit, now(), p.Money)
+			return money.Refresh(ctx, d, limit, now(), p.Money)
 		}},
 	}
 	return p
@@ -152,7 +152,7 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		if err != nil {
 			return err
 		}
-		flagged, err := flags.FlagAccount(ctx, p.DB, p.Cfg, account, p.Judge, p.Now)
+		flagged, err := flags.FlagAccount(ctx, p.DB, account, p.Judge, p.Now)
 		if err != nil {
 			return err
 		}
@@ -222,7 +222,7 @@ func Sync(ctx context.Context, cfg config.Config, requested string, open mailops
 		return nil, err
 	}
 	defer func() { _ = d.Close() }()
-	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
+	if err := config.Migrate(ctx, d, cfg); err != nil {
 		return nil, err
 	}
 	accounts, err := SelectAccounts(cfg, requested)

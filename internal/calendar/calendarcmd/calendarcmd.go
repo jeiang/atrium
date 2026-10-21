@@ -29,7 +29,7 @@ func googleAuth(env config.Env) *cli.Command {
 					return cli.Fail(e, err)
 				}
 				defer func() { _ = d.Close() }()
-				if err := db.Migrate(e.Ctx, d, cfg.DBPath); err != nil {
+				if err := config.Migrate(e.Ctx, d, cfg); err != nil {
 					return cli.Fail(e, err)
 				}
 				set, err := calendar.LoadSettings(e.Ctx, d.Read)
@@ -37,7 +37,7 @@ func googleAuth(env config.Env) *cli.Command {
 					return cli.Fail(e, err)
 				}
 				token, err := calendar.Authorize(e.Ctx, calendar.AuthOptions{
-					ClientID: set.GoogleClientID, ClientSecret: config.GoogleOAuthClient(env).Secret, Port: *port, Out: e.Stdout,
+					ClientID: set.GoogleClientID, ClientSecret: config.GoogleOAuthSecret(env), Port: *port, Out: e.Stdout,
 				})
 				var failed calendar.Error
 				if errors.As(err, &failed) {

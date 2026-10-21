@@ -105,7 +105,7 @@ func searchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 		}
 		return tc.Embed(ctx, texts)
 	}
-	found, err := notion.Search(ctx, tc.DB.Read, tc.Cfg, query, false, int(limit), embedTexts)
+	found, err := notion.Search(ctx, tc.DB.Read, query, false, int(limit), embedTexts)
 	if err != nil {
 		return nil, err
 	}

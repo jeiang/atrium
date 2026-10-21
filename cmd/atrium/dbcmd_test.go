@@ -43,7 +43,7 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{"index": 0, "embedding": vector}}})
 	}))
 	defer embedder.Close()
-	t.Setenv("ATRIUM_EMBED_URL", embedder.URL)
+	t.Setenv("ATRIUM_MAIL_MAIL_EMBED_URL", embedder.URL)
 	keyEnv := func(hex string) string { return "ATRIUM_DB_KEY=" + hex }
 	dbEnv := func(path string) string { return "ATRIUM_DB=" + path }
 	const hit = "Alpha page\thttps://notion.example/p1\n"

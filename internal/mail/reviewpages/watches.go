@@ -30,7 +30,7 @@ func (s *service) showWatches(w http.ResponseWriter, r *http.Request, notice *tp
 	check(err)
 	sec, _ := py.SplitTimestamp(now)
 	year, month, day := time.Unix(sec, 0).In(zone).Date()
-	items, configured, err := birthdays.UpcomingFor(ctx, s.deps.DB.Read, s.deps.Cfg, birthdays.Date(year, month, day), birthdayWindowDays)
+	items, configured, err := birthdays.UpcomingFor(ctx, s.deps.DB.Read, birthdays.Date(year, month, day), birthdayWindowDays)
 	check(err)
 	data := watchesPage{Packages: packages}
 	if configured {

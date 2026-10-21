@@ -82,12 +82,12 @@ func upcomingBirthdays(ctx context.Context, tc *tool.Context, args py.Dict) (any
 	}
 	now := localTime(tc.Now(), loc)
 	today := birthdays.Date(now.Year(), now.Month(), now.Day())
-	found, ok, err := birthdays.UpcomingFor(ctx, tc.DB.Read, tc.Cfg, today, int(days))
+	found, ok, err := birthdays.UpcomingFor(ctx, tc.DB.Read, today, int(days))
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		return nil, tool.NotConfigured("ATRIUM_CONTACTS_DIR is not set")
+		return nil, tool.NotConfigured("ATRIUM_CONTACTS_CONTACTS_DIR is not set")
 	}
 	out := make([]any, len(found))
 	for i, item := range found {

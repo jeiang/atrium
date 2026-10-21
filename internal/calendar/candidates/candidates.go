@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/mail/router"
@@ -215,6 +216,14 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 	if err != nil {
 		return 0, 0, err
 	}
+	chatURL, err := mail.ChatURL(ctx, d.Read)
+	if err != nil {
+		return 0, 0, err
+	}
+	ctx, err = mail.WithModels(ctx, d.Read)
+	if err != nil {
+		return 0, 0, err
+	}
 	proposals := &calendar.Proposals{DB: d, Now: now, Env: env}
 	available := true
 	for _, r := range rows {
@@ -240,7 +249,7 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 		if err != nil {
 			return proposed, flagged, err
 		}
-		hasEvent, err := judge(ctx, cfg.ChatURL, llm.Message{Subject: r.subject, FromName: r.fromName, FromAddr: r.fromAddr}, body)
+		hasEvent, err := judge(ctx, chatURL, llm.Message{Subject: r.subject, FromName: r.fromName, FromAddr: r.fromAddr}, body)
 		var unavailable *httpx.ServiceUnavailable
 		if errors.As(err, &unavailable) {
 			log.Warn(fmt.Sprintf("chat unavailable, deferring event scan: %s", unavailable))

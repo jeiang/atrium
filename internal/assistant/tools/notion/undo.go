@@ -139,7 +139,7 @@ func proposed(err error) error {
 }
 
 func proposer(tc *tool.Context) *notion.Proposer {
-	return &notion.Proposer{DB: tc.DB, Cfg: tc.Cfg, Now: tc.Now}
+	return &notion.Proposer{DB: tc.DB, Now: tc.Now}
 }
 
 func proposeEdit(ctx context.Context, tc *tool.Context, payload py.Dict) (*int64, error) {

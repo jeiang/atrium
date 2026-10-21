@@ -72,10 +72,6 @@ func Account(name string) (AccountSpec, bool) {
 type Config struct {
 	DBPath      string
 	CacheDir    string
-	ChatURL     string
-	EmbedURL    string
-	ContactsDir string
-	StaticDir   string
 	credentials map[string]string
 }
 
@@ -111,18 +107,13 @@ func (c Config) Credential(account string) (user, password string, ok bool) {
 }
 
 func (c Config) String() string {
-	return fmt.Sprintf("Config(db_path=%s, cache_dir=%s, chat_url=%s, embed_url=%s, contacts_dir=%s, static_dir=%s)",
-		c.DBPath, c.CacheDir, c.ChatURL, c.EmbedURL, c.ContactsDir, c.StaticDir)
+	return fmt.Sprintf("Config(db_path=%s, cache_dir=%s)", c.DBPath, c.CacheDir)
 }
 
 func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("DB_PATH", c.DBPath),
 		slog.String("CACHE_DIR", c.CacheDir),
-		slog.String("CHAT_URL", c.ChatURL),
-		slog.String("EMBED_URL", c.EmbedURL),
-		slog.String("CONTACTS_DIR", c.ContactsDir),
-		slog.String("STATIC_DIR", c.StaticDir),
 	)
 }
 
@@ -154,17 +145,6 @@ func Load(env Env) (Config, error) {
 	return Config{
 		DBPath:      filepath.Clean(db),
 		CacheDir:    filepath.Clean(cache),
-		ChatURL:     strings.TrimRight(get(env, "ATRIUM_CHAT_URL"), "/"),
-		EmbedURL:    strings.TrimRight(get(env, "ATRIUM_EMBED_URL"), "/"),
-		ContactsDir: optPath(get(env, "ATRIUM_CONTACTS_DIR")),
-		StaticDir:   optPath(get(env, "ATRIUM_STATIC_DIR")),
 		credentials: creds,
 	}, nil
-}
-
-func optPath(v string) string {
-	if v == "" {
-		return ""
-	}
-	return filepath.Clean(v)
 }

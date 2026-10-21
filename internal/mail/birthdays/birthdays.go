@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
@@ -128,15 +127,19 @@ func Upcoming(cards []contacts.Card, today time.Time, days int, dismissed Dismis
 	return out, nil
 }
 
-func UpcomingFor(ctx context.Context, q db.Querier, cfg config.Config, today time.Time, days int) (items []Item, ok bool, err error) {
-	if cfg.ContactsDir == "" {
+func UpcomingFor(ctx context.Context, q db.Querier, today time.Time, days int) (items []Item, ok bool, err error) {
+	dir, err := contacts.Dir(ctx, q)
+	if err != nil {
+		return nil, false, err
+	}
+	if dir == "" {
 		return nil, false, nil
 	}
 	dismissed, err := DismissedKeys(ctx, q)
 	if err != nil {
 		return nil, false, err
 	}
-	items, err = Upcoming(contacts.Load(cfg.ContactsDir), today, days, dismissed)
+	items, err = Upcoming(contacts.Load(dir), today, days, dismissed)
 	return items, err == nil, err
 }
 

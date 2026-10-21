@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -421,7 +422,7 @@ func orUntitled(title string) string {
 
 func now() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
-func Sync(ctx context.Context, d *db.DB, cfg config.Config, client *Client, embedTexts embed.TextsFunc) (Stats, error) {
+func Sync(ctx context.Context, d *db.DB, client *Client, embedTexts embed.TextsFunc) (Stats, error) {
 	if embedTexts == nil {
 		embedTexts = embed.Texts
 	}
@@ -500,7 +501,15 @@ func Sync(ctx context.Context, d *db.DB, cfg config.Config, client *Client, embe
 		py.FloatRepr(stamp)); err != nil {
 		return stats, err
 	}
-	embedded, err := embed.NotionPending(ctx, d, cfg.EmbedURL, embedTexts)
+	embedURL, err := mail.EmbedURL(ctx, d.Read)
+	if err != nil {
+		return stats, err
+	}
+	modelCtx, err := mail.WithModels(ctx, d.Read)
+	if err != nil {
+		return stats, err
+	}
+	embedded, err := embed.NotionPending(modelCtx, d, embedURL, embedTexts)
 	if err != nil {
 		var unavailable *httpx.ServiceUnavailable
 		if !errors.As(err, &unavailable) && !errors.Is(err, httpx.ErrValue) && !errors.Is(err, httpx.ErrKey) {
