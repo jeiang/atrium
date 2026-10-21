@@ -55,8 +55,8 @@ func init() {
 	adv := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
 		return settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check, Class: settings.Advanced, Scopes: instance}
 	}
-	between := func(key string, def string, lo, hi float64) settings.Def {
-		return adv(key, settings.Int, def, settings.Between(lo, hi))
+	between := func(key string, def string, lo, hi int64) settings.Def {
+		return adv(key, settings.Int, def, wholeBetween(lo, hi))
 	}
 	settings.MustRegister(
 		settings.Def{Key: KeyRoot, Module: module, Type: settings.String, Class: settings.Bootstrap},
@@ -86,6 +86,19 @@ func init() {
 		adv(KeySubtitleExts, settings.String, defaultSubtitleExt, extensionsCheck),
 		between(KeyTorrentUploadCap, "1048576", 1024, 32<<20),
 	)
+}
+
+func wholeBetween(lo, hi int64) func(string) error {
+	return func(value string) error {
+		n, ok := py.ParseInt(value)
+		if !ok {
+			return settings.Invalid("must be a whole number")
+		}
+		if n < lo || n > hi {
+			return settings.Invalid("must be between " + strconv.FormatInt(lo, 10) + " and " + strconv.FormatInt(hi, 10))
+		}
+		return nil
+	}
 }
 
 func httpURL(value string) error {

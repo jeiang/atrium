@@ -68,7 +68,7 @@ func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) dlAdd(r *http.Request, magnet, name string, data []byte, present bool, tags string) (string, error) {
 	ctx := r.Context()
-	client, err := s.dlQbit()
+	client, err := s.dlQbit(ctx)
 	if err != nil {
 		return "", err
 	}
