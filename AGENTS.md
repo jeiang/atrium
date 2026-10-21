@@ -14,6 +14,9 @@ external services, reverse proxy, persistence, and backups.
 - Update `context.md` when a change alters the behavior, boundaries, or
   decisions it records. Distinguish implemented behavior from planned
   capabilities; remove superseded statements.
+- Update `docs/operator/behavior.md` and `docs/operator/nixos.md` when a change
+  alters the operator-visible behavior or the `services.atrium` options they
+  state.
 - Update `docs/vision.md` only when the operator changes the product goals,
   not whenever a feature ships.
 
