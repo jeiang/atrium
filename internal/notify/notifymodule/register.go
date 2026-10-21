@@ -4,13 +4,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
-
-func init() {
-	settings.MustRegister(module.FlagDef(module.Notifications))
-}
 
 type Module struct{}
 
