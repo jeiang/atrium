@@ -11,11 +11,10 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 )
-
-const projectThreadLimit = 100
 
 type ProjectsData struct {
 	Projects []projects.Project `json:"projects"`
@@ -162,7 +161,9 @@ func (p *pages) projectShow(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	listed, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Limit: projectThreadLimit, Archived: view == archived, ProjectID: id})
+	limit, err := config.Limit(r.Context(), p.deps.DB.Read, config.KeyProjectThreads)
+	check(err)
+	listed, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Limit: limit, Archived: view == archived, ProjectID: id})
 	check(err)
 	attached, err := files.OfProject(r.Context(), p.deps.DB.Read, id)
 	check(err)

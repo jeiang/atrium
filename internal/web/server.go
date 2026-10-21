@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -100,6 +101,9 @@ func New(o Options) (*Server, error) {
 		register(s.mux, deps)
 	}
 	guard := NewGuard(o.Auth, o.AllowedHosts, o.Public)
+	if o.DB != nil {
+		guard.bodyCap = func(ctx context.Context) (int, error) { return config.Limit(ctx, o.DB.Read, config.KeyBodyCap) }
+	}
 	s.handler = guard.Middleware(Gzip(recoverer(s.mux)))
 	return s, nil
 }

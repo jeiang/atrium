@@ -54,7 +54,7 @@ func newSite(t *testing.T, extra map[string]string) *site {
 	dir := t.TempDir()
 	vars := map[string]string{
 		"ATRIUM_DB": filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow",
-		"ATRIUM_TZ": "America/Port_of_Spain",
+		"ATRIUM_CORE_TZ": "America/Port_of_Spain",
 	}
 	for k, v := range extra {
 		vars[k] = v

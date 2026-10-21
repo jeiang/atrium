@@ -59,6 +59,7 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 		}
 		pins.m[d.Key] = pin{value, "env " + name}
 	}
+	livePins.Store(pins)
 	return pins, nil
 }
 
