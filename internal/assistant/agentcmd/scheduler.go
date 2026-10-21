@@ -21,19 +21,21 @@ import (
 
 func callables(enabled func(module string) bool) map[string]worker.Callable {
 	out := map[string]worker.Callable{}
-	gate := func(owner string, calls map[string]worker.Callable) {
+	gate := func(calls map[string]worker.Callable, owners ...string) {
 		for name, call := range calls {
 			out[name] = func(ctx context.Context, e worker.Env) (worker.Result, error) {
-				if !enabled(owner) {
-					return worker.Result{}, nil
+				for _, owner := range owners {
+					if !enabled(owner) {
+						return worker.Result{}, nil
+					}
 				}
 				return call(ctx, e)
 			}
 		}
 	}
-	gate(module.Money, map[string]worker.Callable{scheduler.FXRatesName: fxRates})
-	gate(module.Calendar, calendarcmd.Callables())
-	gate(module.Media, mediacmd.Callables())
+	gate(map[string]worker.Callable{scheduler.FXRatesName: fxRates}, module.Money)
+	gate(calendarcmd.Callables(), module.Calendar, module.Mail)
+	gate(mediacmd.Callables(), module.Media)
 	return out
 }
 

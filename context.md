@@ -50,8 +50,8 @@ not claims about the running application.
   and its required settings are met (an `needs-settings` state otherwise);
   grafana needs the assistant, and money and calendar candidates need mail
   for their pipeline stages. A disabled module registers no pages, tools or
-  nav entries, its commands exit 0 without doing work, its scheduler jobs and
-  notification sends are skipped, and its tables remain. The first start
+  nav entries, its commands exit 0 without doing work, its scheduler jobs, the mail pass's money and calendar-candidate stages and
+  notification sends are skipped (the mail pause controls stay available), and its tables remain. The first start
   after the module wiring adopts a database that already holds operator data
   (settings, secrets, accounts, threads or usage rows): every module whose
   required settings are met is enabled, so a Phase A installation keeps every

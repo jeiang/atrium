@@ -44,6 +44,11 @@ func (m Module) Register(module.Context) module.Registration {
 			openloops.Command(m.Now),
 			watches.Command(m.Now),
 		},
+		Leaves: map[string]module.Leaf{
+			"live pause":  {Always: true},
+			"live resume": {Always: true},
+			"live status": {Always: true},
+		},
 		Tools: func(r *registry.Registry) error { return r.Add(mailtools.Tools()...) },
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
@@ -358,4 +359,56 @@ func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 			t.Errorf("GET /proposals = %d, want the core review page", status)
 		}
 	})
+}
+
+func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
+	data := loadGoldenData(t)
+	candidates := func(flag string) int {
+		r := newRig(t, data, map[string]string{flagEnv(module.Calendar): flag}, "")
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		if code, _, stderr := r.run(ctx, "watch", "--account", "icloud"); code != cli.ExitOK {
+			t.Fatalf("watch with calendar %s: exit %d %q", flag, code, stderr)
+		}
+		d, err := db.Connect(filepath.Join(r.dir, "atrium.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = d.Close() }()
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM event_candidates").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if off, on := candidates("false"), candidates("true"); off != 4 || on <= off {
+		t.Errorf("event candidates after a mail pass: %d with calendar off (want the 4 seeded), %d with it on (want more)", off, on)
+	}
+}
+
+func TestMailPauseStaysAvailableWhileMailIsOff(t *testing.T) {
+	dir, _ := moduleFixture(t, flagsExcept(module.Mail, "false"))
+	paused := func() bool {
+		got := runApp("live", "status")
+		return got.code == cli.ExitOK && strings.Contains(got.stdout, `"paused": true`)
+	}
+	if got := runApp("live", "pause"); got.code != cli.ExitOK || !paused() {
+		t.Fatalf("live pause while mail is off: exit %d stderr %q, paused %v", got.code, got.stderr, paused())
+	}
+	if got := runApp("live", "resume"); got.code != cli.ExitOK || paused() {
+		t.Fatalf("live resume while mail is off: exit %d stderr %q", got.code, got.stderr)
+	}
+	base := startServeIn(t, dir)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	fetch(t, client, "GET", base+"/about", nil)
+	if status, _, _ := fetch(t, client, "POST", base+"/live/pause", url.Values{}); status != http.StatusSeeOther || !paused() {
+		t.Errorf("POST /live/pause while mail is off = %d, paused %v", status, paused())
+	}
+	if status, _, _ := fetch(t, client, "POST", base+"/live/resume", url.Values{}); status != http.StatusSeeOther || paused() {
+		t.Errorf("POST /live/resume while mail is off = %d, paused %v", status, paused())
+	}
 }

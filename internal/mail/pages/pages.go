@@ -34,6 +34,12 @@ func Templates() fs.FS {
 	return sub
 }
 
+func PauseModule(r chi.Router, d *web.Deps) {
+	s := &service{deps: d, live: &live.Live{DB: d.DB, Cfg: d.Cfg}}
+	r.Post("/live/pause", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, true) })
+	r.Post("/live/resume", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })
+}
+
 func Globals() map[string]any {
 	return map[string]any{
 		"stages":        slices.Clone(router.Stages[:]),
@@ -82,8 +88,6 @@ func Module(o Options) web.Module {
 		r.Get("/messages/{message_id}", s.messagePage)
 		r.Get("/messages/{message_id}/correct", s.correctForm)
 		r.Post("/messages/{message_id}/correct", s.correctSubmit)
-		r.Post("/live/pause", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, true) })
-		r.Post("/live/resume", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })
 		r.Post("/live/actions/{action_id}/undo", s.liveUndo)
 		r.Get("/triage", s.triagePage)
 		r.Get("/rules", s.rulesPage)
