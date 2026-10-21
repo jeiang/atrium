@@ -600,8 +600,12 @@ func TransactionSetCurrency(ctx context.Context, q db.Querier, txID int64, curre
 		return nil, LedgerError("an FX adjustment is always in the card's currency")
 	}
 	currency = py.Upper(py.Strip(currency))
-	if !contains(TxCurrencies, currency) {
-		return nil, LedgerError("currency must be one of " + joinList(TxCurrencies))
+	_, txCurrencies, err := LoadCurrencies(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	if !contains(txCurrencies, currency) {
+		return nil, LedgerError("currency must be one of " + joinList(txCurrencies))
 	}
 	change := NewChange()
 	if err := change.TouchTransaction(ctx, q, txID); err != nil {

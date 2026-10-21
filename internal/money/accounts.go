@@ -43,18 +43,23 @@ func scanAccount(r interface{ Scan(...any) error }) (Account, error) {
 	}
 	a.Forex = forex != 0
 	a.BankLabel = a.Bank
-	if label, ok := BankLabels[a.Bank]; ok {
-		a.BankLabel = label
-	}
 	return a, nil
 }
 
 func ListAccounts(ctx context.Context, q db.Querier) ([]Account, error) {
+	banks, err := LoadBanks(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := q.QueryContext(ctx, "SELECT "+accountColumns+" FROM money_accounts ORDER BY bank, name")
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Account, error) { return scanAccount(r) })
+	accounts, err := db.Collect(rows, func(r *sql.Rows) (Account, error) { return scanAccount(r) })
+	for i := range accounts {
+		accounts[i].labelFrom(banks)
+	}
+	return accounts, err
 }
 
 func GetAccount(ctx context.Context, q db.Querier, id int64) (*Account, error) {
@@ -65,6 +70,11 @@ func GetAccount(ctx context.Context, q db.Querier, id int64) (*Account, error) {
 	if err != nil {
 		return nil, err
 	}
+	banks, err := LoadBanks(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	a.labelFrom(banks)
 	return &a, nil
 }
 
@@ -96,14 +106,23 @@ type NewAccount struct {
 }
 
 func AddAccount(ctx context.Context, q db.Querier, in NewAccount, now float64) (int64, error) {
-	if !contains(Banks, in.Bank) {
-		return 0, LedgerError("bank must be one of " + joinList(Banks))
+	banks, err := LoadBanks(ctx, q)
+	if err != nil {
+		return 0, err
+	}
+	bankIDs := BankIDs(banks)
+	if !contains(bankIDs, in.Bank) {
+		return 0, LedgerError("bank must be one of " + joinList(bankIDs))
 	}
 	if !contains(AccountKinds, in.Kind) {
 		return 0, LedgerError("kind must be one of " + joinList(AccountKinds))
 	}
-	if !contains(Currencies, in.Currency) {
-		return 0, LedgerError("currency must be one of " + joinList(Currencies))
+	currencies, _, err := LoadCurrencies(ctx, q)
+	if err != nil {
+		return 0, err
+	}
+	if !contains(currencies, in.Currency) {
+		return 0, LedgerError("currency must be one of " + joinList(currencies))
 	}
 	name := clip(in.Name, 60)
 	if name == "" {
@@ -115,7 +134,7 @@ func AddAccount(ctx context.Context, q db.Querier, in NewAccount, now float64) (
 	}
 	senders := in.SenderPatterns
 	if senders == nil {
-		senders = DefaultSenders[in.Bank]
+		senders = senderDefaults(banks, in.Bank)
 	}
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO money_accounts (bank, name, kind, currency, last4, sender_patterns, forex, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

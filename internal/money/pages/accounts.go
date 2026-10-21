@@ -28,9 +28,13 @@ func (s *service) showAccounts(w http.ResponseWriter, r *http.Request, notice *t
 	if since != "" {
 		sincePtr = &since
 	}
-	banks, senders := bankDicts()
+	loaded, err := money.LoadBanks(ctx, q)
+	check(err)
+	currencies, _, err := money.LoadCurrencies(ctx, q)
+	check(err)
+	banks, senders := bankDicts(loaded)
 	s.page(w, r, status, "money_accounts.gohtml", accountsPage{
-		Accounts: accountViews(accounts), Banks: banks, Kinds: money.AccountKinds, Currencies: money.Currencies,
+		Accounts: accountViews(accounts), Banks: banks, Kinds: money.AccountKinds, Currencies: currencies,
 		DefaultSenders: senders, Rates: rateViews(rates), Since: sincePtr,
 	}, notice)
 }

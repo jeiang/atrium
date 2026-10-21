@@ -93,7 +93,11 @@ func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *
 			return watches.Refresh(ctx, d, now(), watches.Options{Clock: now}), nil
 		}},
 		{"money", func(ctx context.Context) (any, error) {
-			return money.Refresh(ctx, d, cfg, money.ScanLimit, now(), p.Money)
+			limit, err := money.ScanLimit(ctx, d.Read)
+			if err != nil {
+				return nil, err
+			}
+			return money.Refresh(ctx, d, cfg, limit, now(), p.Money)
 		}},
 	}
 	return p

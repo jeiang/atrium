@@ -17,14 +17,20 @@ func Command(clock func() float64) *cli.Command {
 		Commands: []*cli.Command{{
 			Name: "refresh",
 			Setup: func(args *cli.Args) cli.Handler {
-				limit := args.Int("limit", CLIScanLimit, cli.Opt{Help: "messages to extract in this run"})
-				return func(env *cli.Env) int { return execute(env, config.OS, Options{}, clock, *limit) }
+				limit := args.Int("limit", 0, cli.Opt{Help: "messages to extract in this run (default: the money_cli_scan_limit setting)"})
+				return func(env *cli.Env) int {
+					var given *int
+					if args.Has("limit") {
+						given = limit
+					}
+					return execute(env, config.OS, Options{}, clock, given)
+				}
 			},
 		}},
 	}
 }
 
-func execute(env *cli.Env, cfgEnv config.Env, o Options, clock func() float64, limit int) int {
+func execute(env *cli.Env, cfgEnv config.Env, o Options, clock func() float64, limit *int) int {
 	cfg, err := config.Load(cfgEnv)
 	if err != nil {
 		return cli.Fail(env, err)
@@ -37,7 +43,7 @@ func execute(env *cli.Env, cfgEnv config.Env, o Options, clock func() float64, l
 	return cli.ExitOK
 }
 
-func lockedRefresh(ctx context.Context, cfg config.Config, limit int, clock func() float64, o Options) (py.Dict, error) {
+func lockedRefresh(ctx context.Context, cfg config.Config, limit *int, clock func() float64, o Options) (py.Dict, error) {
 	d, err := db.Connect(cfg.DBPath)
 	if err != nil {
 		return nil, err
@@ -51,7 +57,13 @@ func lockedRefresh(ctx context.Context, cfg config.Config, limit int, clock func
 		return nil, err
 	}
 	defer func() { _ = lock.Close() }()
-	return Refresh(ctx, d, cfg, limit, clockNow(clock), o)
+	scan := 0
+	if limit != nil {
+		scan = *limit
+	} else if scan, err = CLIScanLimit(ctx, d.Read); err != nil {
+		return nil, err
+	}
+	return Refresh(ctx, d, cfg, scan, clockNow(clock), o)
 }
 
 func clockNow(clock func() float64) float64 {
