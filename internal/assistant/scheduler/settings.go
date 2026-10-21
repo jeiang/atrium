@@ -53,12 +53,13 @@ func init() {
 		d.Peers = minimumGap
 		return d
 	}
+	minimum := timing(KeyMinInterval, "3600", 60, 604800)
+	minimum.Peers = minimumIntervals
 	settings.MustRegister(
 		tick,
 		timing(KeyLeaseSeconds, "1800", 60, 86400),
 		timing(KeyMissedGrace, "120", 0, 86400),
-		timing(KeyMinInterval, "3600", 60, 604800),
-		adv(KeyMaxActiveJobs, settings.Int, settings.Cap, "20", settings.Between(1, 200)),
+		minimum,
 		modelRun(KeyNightlySchedule, "daily 02:30"),
 		modelRun(KeyWeeklyReview, "weekly sun 18:00"),
 		modelRun(KeyDailyNudges, "daily 08:00"),
@@ -96,6 +97,26 @@ func minimumGap(value string, peer func(string) (string, error)) error {
 	}
 	if gap, ok := spec.MinGap(float64(time.Now().Unix())); ok && gap < floor {
 		return settings.Invalid(fmt.Sprintf("must run at least %s seconds apart (%s)", text, KeyMinInterval))
+	}
+	return nil
+}
+func minimumIntervals(value string, peer func(string) (string, error)) error {
+	floor, err := py.ParseFloat(value)
+	if err != nil {
+		return settings.Invalid("must be a number")
+	}
+	for _, key := range []string{KeyNightlySchedule, KeyWeeklyReview, KeyDailyNudges} {
+		text, err := peer(key)
+		if err != nil {
+			return err
+		}
+		spec, err := Parse(text, "UTC")
+		if err != nil {
+			return settings.Invalid(err.Error())
+		}
+		if gap, ok := spec.MinGap(float64(time.Now().Unix())); ok && gap < floor {
+			return settings.Invalid(fmt.Sprintf("%s must run at least %s seconds apart", key, value))
+		}
 	}
 	return nil
 }

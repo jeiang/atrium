@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/nightly"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
@@ -58,16 +58,17 @@ var BuiltinJobs = []Builtin{
 	{MediaThumbnailsName, "Daily: generate missing episode thumbnails for the media library (no model run)."},
 }
 
-func builtinSchedule(ctx context.Context, q db.Querier, name string) (string, bool, error) {
-	found, err := settings.Default.Resolve(ctx, q, scheduleKeys[name], 0)
-	return found.Value, found.Origin != settings.FromDefault, err
+func builtinSchedule(ctx context.Context, q db.Querier, name string) (string, error) {
+	r := assistant.Read(ctx, q)
+	schedule := r.Text(scheduleKeys[name])
+	return schedule, r.Err()
 }
 
 var modelRuns = map[string]bool{NightlyName: true, "weekly-review": true, "daily-nudges": true}
 
 func syncSchedule(ctx context.Context, q db.Querier, job Job, now float64) error {
-	schedule, explicit, err := builtinSchedule(ctx, q, job.Name)
-	if err != nil || !explicit || schedule == job.Schedule {
+	schedule, err := builtinSchedule(ctx, q, job.Name)
+	if err != nil || schedule == job.Schedule {
 		return err
 	}
 	_, err = UpdateJob(ctx, q, job.ID, now, JobUpdate{Schedule: &schedule, SkipLimits: !modelRuns[job.Name]})
@@ -103,7 +104,7 @@ func EnsureNightly(ctx context.Context, q db.Querier, tz string, now float64) er
 	if !isNoRows(err) {
 		return err
 	}
-	schedule, _, err := builtinSchedule(ctx, q, NightlyName)
+	schedule, err := builtinSchedule(ctx, q, NightlyName)
 	if err != nil {
 		return err
 	}
@@ -143,7 +144,7 @@ func EnsureBuiltins(ctx context.Context, q db.Querier, tz string, now float64) e
 			}
 			continue
 		}
-		schedule, _, err := builtinSchedule(ctx, q, spec.Name)
+		schedule, err := builtinSchedule(ctx, q, spec.Name)
 		if err != nil {
 			return err
 		}
