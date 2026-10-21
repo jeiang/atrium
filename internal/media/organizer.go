@@ -102,14 +102,14 @@ func Items(ctx context.Context, qb *Qbit, root string) ([]Item, string, error) {
 		if !t.HasTag(TagMedia) || t.HasTag(TagFiled) || t.HasTag(TagIgnored) {
 			continue
 		}
-		found = append(found, Item{ID: t.Hash, Name: t.Name, Torrent: true, Root: t.ContentPath, Files: qb.Tuning.VideosUnder(t.ContentPath)})
+		found = append(found, Item{ID: t.Hash, Name: t.Name, Torrent: true, Root: t.ContentPath, Files: qb.VideosUnder(t.ContentPath)})
 	}
 	importDir := filepath.Join(root, Import)
 	if info, err := os.Stat(importDir); err == nil && info.IsDir() {
 		entries, _ := os.ReadDir(importDir)
 		for _, entry := range entries {
 			entryRoot := filepath.Join(importDir, entry.Name())
-			if files := qb.Tuning.VideosUnder(entryRoot); len(files) > 0 {
+			if files := qb.VideosUnder(entryRoot); len(files) > 0 {
 				found = append(found, Item{ID: importPref + entry.Name(), Name: entry.Name(), Root: entryRoot, Files: files})
 			}
 		}
@@ -402,13 +402,13 @@ func selectOne(ctx context.Context, qb *Qbit, t Torrent) (bool, error) {
 	if err != nil || len(files) == 0 {
 		return false, err
 	}
-	if slices.ContainsFunc(files, func(f TorrentFile) bool { return qb.Tuning.wanted(f.Name) }) {
+	if slices.ContainsFunc(files, func(f TorrentFile) bool { return qb.wanted(f.Name) }) {
 		var keep, skip []int
 		for _, f := range files {
 			switch {
-			case qb.Tuning.wanted(f.Name) && f.Priority == PrioritySkip:
+			case qb.wanted(f.Name) && f.Priority == PrioritySkip:
 				keep = append(keep, f.Index)
-			case !qb.Tuning.wanted(f.Name) && f.Priority != PrioritySkip:
+			case !qb.wanted(f.Name) && f.Priority != PrioritySkip:
 				skip = append(skip, f.Index)
 			}
 		}
