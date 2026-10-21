@@ -347,5 +347,5 @@ func mediaServices(t *testing.T) map[string]string {
 	previous := media.EZTVAPI
 	media.EZTVAPI = srv.URL + "/api/get-torrents"
 	t.Cleanup(func() { media.EZTVAPI = previous })
-	return map[string]string{"QBITTORRENT_URL": srv.URL, "NTFY_URL": srv.URL}
+	return map[string]string{"QBITTORRENT_URL": srv.URL, "ATRIUM_NOTIFY_NTFY_URL": srv.URL}
 }
