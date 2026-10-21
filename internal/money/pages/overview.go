@@ -18,11 +18,13 @@ func (s *service) showOverview(w http.ResponseWriter, r *http.Request, notice *t
 	check(err)
 	spend, err := money.Spending(ctx, q, start, end, "category", "", day)
 	check(err)
-	unassigned, err := money.Unassigned(ctx, q, unassignedLimit, day)
+	limits, err := money.LoadPageLimits(ctx, q)
+	check(err)
+	unassigned, err := money.Unassigned(ctx, q, limits.Unassigned, day)
 	check(err)
 	accounts, err := money.ListAccounts(ctx, q)
 	check(err)
-	soon := billsSoonDays
+	soon := limits.BillsSoon
 	bills, err := money.Bills(ctx, q, day, &soon)
 	check(err)
 	rates, err := money.ListRates(ctx, q, 1)

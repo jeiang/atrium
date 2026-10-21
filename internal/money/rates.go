@@ -158,7 +158,11 @@ func FetchRates(ctx context.Context, q db.Querier, now float64, loc *time.Locati
 	if fetch == nil {
 		fetch = getText
 	}
-	markup, err := fetch(ctx, CBTTURL)
+	endpoint, err := LoadCBTTURL(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	markup, err := fetch(ctx, endpoint)
 	if err != nil {
 		return nil, err
 	}

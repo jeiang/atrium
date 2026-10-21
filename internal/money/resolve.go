@@ -19,11 +19,19 @@ func Resolve(ctx context.Context, q db.Querier, account *Account, amount float64
 	if currency == held {
 		return Resolved{Amount: roundPtr(&amount)}, nil
 	}
-	if !account.Forex || !contains(TxCurrencies, currency) {
+	_, txCurrencies, err := LoadCurrencies(ctx, q)
+	if err != nil {
+		return Resolved{}, err
+	}
+	if !account.Forex || !contains(txCurrencies, currency) {
 		return Resolved{Review: fmt.Sprintf("%s charge on a %s account", currency, held)}, nil
 	}
+	fx, err := LoadFX(ctx, q)
+	if err != nil {
+		return Resolved{}, err
+	}
 	if held == BBD && currency == USD {
-		rate := bbdPerUSD * bbdForexFee
+		rate := fx.BBDPerUSD * fx.BBDForexFee
 		converted := round2(amount * rate)
 		return Resolved{Amount: &converted, Rate: &rate}, nil
 	}
@@ -37,11 +45,11 @@ func Resolve(ctx context.Context, q db.Querier, account *Account, amount float64
 	var rate float64
 	switch {
 	case held != TTD:
-		rate = bbdPerUSD * bbdForexFee / found.selling
+		rate = fx.BBDPerUSD * fx.BBDForexFee / found.selling
 	case currency == USD:
 		rate = found.selling
 	default:
-		rate = found.selling / bbdPerUSD
+		rate = found.selling / fx.BBDPerUSD
 	}
 	converted := round2(amount * rate)
 	date := found.date

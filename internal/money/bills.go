@@ -26,7 +26,7 @@ type Bill struct {
 	Charges          int                `json:"charges"`
 }
 
-func inferCadence(days []time.Time) string {
+func (r BillRules) inferCadence(days []time.Time) string {
 	if len(days) < 2 {
 		return ""
 	}
@@ -35,8 +35,8 @@ func inferCadence(days []time.Time) string {
 		gaps = append(gaps, daysBetween(days[i-1], days[i]))
 	}
 	for _, name := range cadenceOrder {
-		length := cadenceDays[name]
-		if !slices.ContainsFunc(gaps, func(g int) bool { return abs(g-length) > cadenceSlack[name] }) {
+		length := r.Days[name]
+		if !slices.ContainsFunc(gaps, func(g int) bool { return abs(g-length) > r.Slack[name] }) {
 			return name
 		}
 	}
@@ -60,13 +60,13 @@ func median(values []float64) float64 {
 	return (sorted[n/2-1] + sorted[n/2]) / 2
 }
 
-func similar(amounts []float64) bool {
+func (r BillRules) similar(amounts []float64) bool {
 	middle := median(amounts)
 	if !(middle > 0) {
 		return false
 	}
 	for _, a := range amounts {
-		if math.Abs(a-middle) > billAmountTolerance*middle {
+		if math.Abs(a-middle) > r.Tolerance*middle {
 			return false
 		}
 	}
@@ -79,6 +79,10 @@ type charge struct {
 }
 
 func Bills(ctx context.Context, q db.Querier, today time.Time, upcomingDays *int) ([]Bill, error) {
+	rules, err := LoadBillRules(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	payees, err := ListPayees(ctx, q, "", AllRows)
 	if err != nil {
 		return nil, err
@@ -133,8 +137,8 @@ func Bills(ctx context.Context, q db.Querier, today time.Time, upcomingDays *int
 			dates = slices.CompactFunc(dates, func(a, b time.Time) bool { return a.Equal(b) })
 			typical[currency] = round2(median(amounts))
 			found := ""
-			if len(dates) >= 2 && similar(amounts) {
-				found = inferCadence(dates)
+			if len(dates) >= 2 && rules.similar(amounts) {
+				found = rules.inferCadence(dates)
 			}
 			if cadence == "" {
 				cadence = found
@@ -149,14 +153,14 @@ func Bills(ctx context.Context, q db.Querier, today time.Time, upcomingDays *int
 		}
 		if cadence == "" {
 			cadence = Unknown
-			if _, known := cadenceDays[p.Cadence]; known {
+			if _, known := rules.Days[p.Cadence]; known {
 				cadence = p.Cadence
 			}
 		}
 		var next *time.Time
 		var nextISO *string
 		var daysUntil *int
-		if length, known := cadenceDays[cadence]; known {
+		if length, known := rules.Days[cadence]; known {
 			n := addDays(last, length)
 			next = &n
 			iso := isoDate(n)

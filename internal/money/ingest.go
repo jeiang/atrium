@@ -16,14 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const (
-	MergeTolerance = 0.03
-	BackfillDays   = 90
-	ScanLimit      = 50
-	CLIScanLimit   = 1000
-	BodyChars      = 3000
-	Day            = 86400.0
-)
+const Day = 86400.0
 
 type Naming func(raw, normalized string, categories []string) (name, category string, err error)
 
@@ -101,11 +94,11 @@ func loadTransaction(ctx context.Context, q db.Querier, id int64) (*TransactionR
 	return &t, nil
 }
 
-func near(a, b *float64) bool {
+func (m Merge) near(a, b *float64) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	return math.Abs(*a-*b) <= MergeTolerance*max(math.Abs(*a), math.Abs(*b), 0.01)
+	return math.Abs(*a-*b) <= m.Tolerance*max(math.Abs(*a), math.Abs(*b), 0.01)
 }
 
 func amountIn(ctx context.Context, q db.Querier, account *Account, tx *TransactionRow) (*float64, error) {
@@ -131,6 +124,10 @@ func FindMergeTarget(ctx context.Context, q db.Querier, tx *TransactionRow) (*Tr
 	if tx.PayeeID == nil || (tx.Kind != Purchase && tx.Kind != Refund) {
 		return nil, nil
 	}
+	merge, err := LoadMerge(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	own, err := sourcesOf(ctx, q, tx.ID)
 	if err != nil {
 		return nil, err
@@ -138,7 +135,7 @@ func FindMergeTarget(ctx context.Context, q db.Querier, tx *TransactionRow) (*Tr
 	roles := roleSet(own)
 	rows, err := q.QueryContext(ctx,
 		"SELECT "+transactionColumns+" FROM transactions t WHERE t.id != ? AND t.payee_id = ? AND t.kind = ? AND "+
-			"abs(julianday(t.date) - julianday(?)) <= ? ORDER BY t.id", tx.ID, *tx.PayeeID, tx.Kind, tx.Date, MergeDays)
+			"abs(julianday(t.date) - julianday(?)) <= ? ORDER BY t.id", tx.ID, *tx.PayeeID, tx.Kind, tx.Date, merge.Days)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +170,7 @@ func FindMergeTarget(ctx context.Context, q db.Querier, tx *TransactionRow) (*Tr
 			}
 		}
 		if account == nil {
-			if other.OriginalCurrency == tx.OriginalCurrency && near(&other.OriginalAmount, &tx.OriginalAmount) {
+			if other.OriginalCurrency == tx.OriginalCurrency && merge.near(&other.OriginalAmount, &tx.OriginalAmount) {
 				return other, nil
 			}
 			continue
@@ -186,7 +183,7 @@ func FindMergeTarget(ctx context.Context, q db.Querier, tx *TransactionRow) (*Tr
 		if err != nil {
 			return nil, err
 		}
-		if near(theirAmount, ourAmount) {
+		if merge.near(theirAmount, ourAmount) {
 			return other, nil
 		}
 	}
@@ -197,10 +194,14 @@ func LinkTransfer(ctx context.Context, q db.Querier, tx *TransactionRow, change 
 	if tx.AccountID == nil || tx.Amount == nil {
 		return nil, nil
 	}
+	merge, err := LoadMerge(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := q.QueryContext(ctx,
 		"SELECT t.id, t.amount FROM transactions t WHERE t.id != ? AND t.kind IN (?, ?) AND t.transfer_id IS NULL AND "+
 			"t.account_id IS NOT NULL AND t.account_id != ? AND t.currency = ? AND abs(julianday(t.date) - julianday(?)) <= ? ORDER BY t.id",
-		tx.ID, Transfer, CardPayment, *tx.AccountID, tx.Currency, tx.Date, MergeDays)
+		tx.ID, Transfer, CardPayment, *tx.AccountID, tx.Currency, tx.Date, merge.Days)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +217,7 @@ func LinkTransfer(ctx context.Context, q db.Querier, tx *TransactionRow, change 
 		return nil, err
 	}
 	for _, c := range candidates {
-		if !near(c.amount, tx.Amount) {
+		if !merge.near(c.amount, tx.Amount) {
 			continue
 		}
 		if err := change.Touch(ctx, q, "transactions", c.id); err != nil {
@@ -464,8 +465,18 @@ func Scan(ctx context.Context, d *db.DB, cfg config.Config, limit int, now float
 	if err != nil {
 		return ScanResult{}, err
 	}
+	scanning, err := LoadScanning(ctx, d.Read)
+	if err != nil {
+		return ScanResult{}, err
+	}
+	banks, err := LoadBanks(ctx, d.Read)
+	if err != nil {
+		return ScanResult{}, err
+	}
+	bankIDs := BankIDs(banks)
+	schema := ExtractSchema(bankIDs)
 	source := o.source()
-	rows, err := source.Unscanned(ctx, d.Read, now, BackfillDays, limit)
+	rows, err := source.Unscanned(ctx, d.Read, now, scanning.BackfillDays, limit)
 	if err != nil {
 		return ScanResult{}, err
 	}
@@ -477,8 +488,8 @@ scan:
 		if err != nil {
 			return result, err
 		}
-		text := fmt.Sprintf("From: %s <%s>\nSubject: %s\nBody:\n%s", row.FromName, row.FromAddr, row.Subject, py.Clip(body, BodyChars))
-		answer, err := o.chat()(ctx, cfg.ChatURL, ExtractSystem, text, ExtractSchema, 400)
+		text := fmt.Sprintf("From: %s <%s>\nSubject: %s\nBody:\n%s", row.FromName, row.FromAddr, row.Subject, py.Clip(body, scanning.BodyChars))
+		answer, err := o.chat()(ctx, cfg.ChatURL, ExtractSystem, text, schema, 400)
 		switch down, isDown := unavailable(err); {
 		case isDown:
 			log.Warn(fmt.Sprintf("chat unavailable, deferring money scan: %s", down))
@@ -492,7 +503,7 @@ scan:
 		case err != nil:
 			return result, err
 		}
-		item, err := CleanExtraction(answer, isoDate(LocalDate(row.DateTS, loc)))
+		item, err := CleanExtraction(answer, bankIDs, isoDate(LocalDate(row.DateTS, loc)))
 		if err != nil {
 			return result, err
 		}

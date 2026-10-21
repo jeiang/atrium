@@ -17,17 +17,21 @@ import (
 func (s *service) showTransactions(w http.ResponseWriter, r *http.Request, notice *tpl.Toast, f filters, status int) {
 	ctx := r.Context()
 	q := s.deps.DB.Read
+	limits, err := money.LoadPageLimits(ctx, q)
+	check(err)
 	rows, err := money.ListTransactions(ctx, q, money.Filter{
 		Start: f.Start, End: f.End, AccountID: f.AccountID, Payee: f.Payee, Category: f.Category, Kind: f.Kind, Currency: f.Currency,
-	}, f.Unassigned, transactionLimit, f.Dismissed, s.today())
+	}, f.Unassigned, limits.Transactions, f.Dismissed, s.today())
 	check(err)
 	accounts, err := money.ListAccounts(ctx, q)
 	check(err)
 	categories, err := money.Categories(ctx, q)
 	check(err)
+	_, txCurrencies, err := money.LoadCurrencies(ctx, q)
+	check(err)
 	s.page(w, r, status, "money_transactions.gohtml", transactionsPage{
 		Transactions: txViews(rows), Filters: f, Accounts: accountViews(accounts), Categories: categoryViews(categories),
-		Kinds: pageKinds, Currencies: money.TxCurrencies,
+		Kinds: pageKinds, Currencies: txCurrencies,
 	}, notice)
 }
 
