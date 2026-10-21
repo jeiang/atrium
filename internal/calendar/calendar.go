@@ -19,15 +19,12 @@ import (
 )
 
 const (
-	ICloud         = "icloud"
-	Google         = "google"
-	CalDAVURL      = "https://caldav.icloud.com/"
-	TokenURI       = "https://oauth2.googleapis.com/token"
-	Scope          = "https://www.googleapis.com/auth/calendar.events"
-	MaxEvents      = 200
-	MaxOccurrences = 2000
-	DefaultMinutes = 60
-	remoteTimeout  = 60 * time.Second
+	ICloud        = "icloud"
+	Google        = "google"
+	CalDAVURL     = "https://caldav.icloud.com/"
+	TokenURI      = "https://oauth2.googleapis.com/token"
+	Scope         = "https://www.googleapis.com/auth/calendar.events"
+	remoteTimeout = 60 * time.Second
 )
 
 var Targets = [...]string{ICloud, Google}
@@ -79,10 +76,10 @@ func (a acceptJSON) RoundTrip(r *http.Request) (*http.Response, error) {
 	return a.base.RoundTrip(r)
 }
 
-func googleService(ctx context.Context, env config.Env) (*gcal.Service, error) {
-	creds, err := config.Google(env)
+func googleService(ctx context.Context, env config.Env, set Settings) (*gcal.Service, error) {
+	creds, err := googleCredentials(env, set)
 	if err != nil {
-		return nil, NotConfigured(err.Error())
+		return nil, err
 	}
 	source := oauth2.ReuseTokenSource(nil, &refresher{ctx: ctx, creds: creds, tokenURL: endpoints.Token})
 	client := &http.Client{
@@ -104,10 +101,10 @@ func httpStatus(err error) int {
 	return 0
 }
 
-func CreateEvent(ctx context.Context, env config.Env, target string, spec Spec, tz *time.Location) (Ref, error) {
+func CreateEvent(ctx context.Context, env config.Env, set Settings, target string, spec Spec, tz *time.Location) (Ref, error) {
 	switch target {
 	case Google:
-		svc, err := googleService(ctx, env)
+		svc, err := googleService(ctx, env, set)
 		if err != nil {
 			return Ref{}, err
 		}
@@ -119,7 +116,7 @@ func CreateEvent(ctx context.Context, env config.Env, target string, spec Spec, 
 			return Ref{}, remote(err)
 		}
 	case ICloud:
-		cal, err := openICloud(ctx, env)
+		cal, err := openICloud(ctx, env, set)
 		if err != nil {
 			return Ref{}, err
 		}
@@ -136,10 +133,10 @@ func CreateEvent(ctx context.Context, env config.Env, target string, spec Spec, 
 	return Ref{Calendar: target, UID: spec.UID}, nil
 }
 
-func DeleteEvent(ctx context.Context, env config.Env, target, uid string) error {
+func DeleteEvent(ctx context.Context, env config.Env, set Settings, target, uid string) error {
 	switch target {
 	case Google:
-		svc, err := googleService(ctx, env)
+		svc, err := googleService(ctx, env, set)
 		if err != nil {
 			return err
 		}
@@ -149,7 +146,7 @@ func DeleteEvent(ctx context.Context, env config.Env, target, uid string) error 
 			}
 		}
 	case ICloud:
-		cal, err := openICloud(ctx, env)
+		cal, err := openICloud(ctx, env, set)
 		if err != nil {
 			return err
 		}
@@ -210,7 +207,7 @@ func (l Listing) Dict() py.Dict {
 	return py.Dict{{Key: "events", Value: events}, {Key: "truncated", Value: l.Truncated}, {Key: "notes", Value: notes}}
 }
 
-func ListEvents(ctx context.Context, env config.Env, start, end any, target string) (*Listing, error) {
+func ListEvents(ctx context.Context, env config.Env, set Settings, start, end any, target string) (*Listing, error) {
 	tz, err := Zone(env)
 	if err != nil {
 		return nil, err
@@ -231,8 +228,8 @@ func ListEvents(ctx context.Context, env config.Env, start, end any, target stri
 	events, notes := []Row{}, []string{}
 	reached := 0
 	if wanted != Google {
-		if dir := config.CalendarDir(env); dir != "" {
-			found, extra, err := MirrorEvents(dir, ws, we, tz, wanted)
+		if dir := set.CalendarDir; dir != "" {
+			found, extra, err := MirrorEvents(dir, ws, we, tz, wanted, set.MaxOccurrences)
 			var missing NotConfigured
 			switch {
 			case errors.As(err, &missing):
@@ -245,11 +242,11 @@ func ListEvents(ctx context.Context, env config.Env, start, end any, target stri
 				reached++
 			}
 		} else {
-			notes = append(notes, "ATRIUM_CALENDAR_DIR not set: iCloud mirror skipped")
+			notes = append(notes, "ATRIUM_CALENDAR_CALENDAR_DIR not set: iCloud mirror skipped")
 		}
 	}
 	if wanted == "" || wanted == Google {
-		found, err := googleEvents(ctx, env, ws, we, tz)
+		found, err := googleEvents(ctx, env, set, ws, we, tz)
 		var missing NotConfigured
 		switch {
 		case errors.As(err, &missing):
@@ -271,9 +268,9 @@ func ListEvents(ctx context.Context, env config.Env, start, end any, target stri
 	if err := sortEvents(events, tz); err != nil {
 		return nil, err
 	}
-	truncated := len(events) > MaxEvents
+	truncated := len(events) > set.MaxEvents
 	if truncated {
-		events = events[:MaxEvents]
+		events = events[:set.MaxEvents]
 	}
 	return &Listing{Events: events, Truncated: truncated, Notes: notes}, nil
 }
