@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const day = 86400.0
@@ -152,7 +153,7 @@ func TestWatchesPageListsAndDismissesBirthdays(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := newSite(t)
-	if err := settings.Default.Set(t.Context(), s.db.Write, contacts.DirKey, cards, 0); err != nil {
+	if err := settings.Default.Set(audit.With(t.Context(), "test", audit.CLI), s.db.Write, contacts.DirKey, cards, 0); err != nil {
 		t.Fatal(err)
 	}
 	s.clock = float64(time.Now().Unix())
@@ -175,7 +176,7 @@ func TestWatchesPageListsAndDismissesBirthdays(t *testing.T) {
 func TestWatchesWithAnEmptyAddressBook(t *testing.T) {
 	cards := t.TempDir()
 	s := newSite(t)
-	if err := settings.Default.Set(t.Context(), s.db.Write, contacts.DirKey, cards, 0); err != nil {
+	if err := settings.Default.Set(audit.With(t.Context(), "test", audit.CLI), s.db.Write, contacts.DirKey, cards, 0); err != nil {
 		t.Fatal(err)
 	}
 	mustContain(t, status(t, s.get("/watches"), http.StatusOK), "Nothing coming up", "(0)")
