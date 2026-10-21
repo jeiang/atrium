@@ -23,8 +23,10 @@ not claims about the running application.
   `files/`; the Notion wiki also has external state. The database alone is
   not a complete backup. Rebuildable message and media caches are separate.
 - Deployment configuration and credentials come from the host and its
-  environment files. Some settings are editable through the application;
-  a general UI-managed configuration and module system is still planned.
+  environment files. Settings live in a registry: an `ATRIUM_<MODULE>_<KEY>`
+  variable or configuration-file value pins a setting, otherwise a value
+  stored in the database applies, and every command reads the same stored
+  values. Some settings are editable through the application.
   Secrets set through `atrium secrets` are stored write-only in the database
   and are never read back or shown; admin keys are refused on a plaintext
   database. A database key (`db.key_file` in the configuration file,
