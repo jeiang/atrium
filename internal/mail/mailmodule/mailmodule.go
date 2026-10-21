@@ -1,0 +1,49 @@
+package mailmodule
+
+import (
+	"github.com/jeiang/atrium/internal/assistant/registry"
+	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
+	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/mailcmd"
+	"github.com/jeiang/atrium/internal/mail/openloops"
+	"github.com/jeiang/atrium/internal/mail/pages"
+	"github.com/jeiang/atrium/internal/mail/run"
+	"github.com/jeiang/atrium/internal/mail/watches"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/web"
+)
+
+type Module struct {
+	Clients run.Clients
+	Now     func() float64
+}
+
+func (m Module) Register(module.Context) module.Registration {
+	mailCmds := mailcmd.Options{Clients: m.Clients, Now: m.Now}
+	return module.Registration{
+		Name: module.Mail,
+		Requires: []module.Requirement{
+			module.Setting(mail.KeyChatURL),
+			module.Setting(mail.KeyEmbedURL),
+		},
+		Pages: []web.Page{
+			{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
+		},
+		Commands: []*cli.Command{
+			run.SyncCommand(m.Clients),
+			run.WatchCommand(m.Clients),
+			mailCmds.RulesCommand(),
+			mailCmds.ShadowReportCommand(),
+			mailCmds.ReindexCommand(),
+			mailCmds.RebalanceCommand(),
+			mailCmds.DeletionsCommand(),
+			mailCmds.GmailLabelsCommand(),
+			mailCmds.LiveCommand(),
+			mailCmds.ProposalsCommand(),
+			openloops.Command(m.Now),
+			watches.Command(m.Now),
+		},
+		Tools: func(r *registry.Registry) error { return r.Add(mailtools.Tools()...) },
+	}
+}
