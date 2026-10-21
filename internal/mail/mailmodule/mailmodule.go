@@ -3,13 +3,11 @@ package mailmodule
 import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
-	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
-	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/module"
@@ -19,7 +17,6 @@ import (
 type Module struct {
 	Clients run.Clients
 	Now     func() float64
-	Writes  *writes.Registry
 }
 
 func (m Module) Register(module.Context) module.Registration {
@@ -32,7 +29,6 @@ func (m Module) Register(module.Context) module.Registration {
 		},
 		Pages: []web.Page{
 			{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
-			{Module: reviewpages.Module(reviewpages.Options{Writes: m.Writes}), Templates: reviewpages.Templates()},
 		},
 		Commands: []*cli.Command{
 			run.SyncCommand(m.Clients),
