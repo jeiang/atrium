@@ -6,6 +6,7 @@
   perSystem = {pkgs, ...}: {
     packages = {
       atrium-static = pkgs.callPackage ../nix/static.nix {};
+      atrium-docs = pkgs.callPackage ../nix/docs.nix {};
     };
   };
 
