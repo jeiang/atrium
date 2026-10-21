@@ -21,9 +21,6 @@ var (
 	sampleRe  = rx.MustCompile(`\bsample\b`, rx.IgnoreCase|rx.ASCII)
 
 	unsafe = strings.NewReplacer("/", "", "\\", "", ":", " -", "*", "", "?", "", `"`, "", "<", "", ">", "", "|", "")
-
-	videoExts    = map[string]bool{".mkv": true, ".mp4": true, ".m4v": true, ".avi": true, ".mov": true, ".ts": true, ".wmv": true}
-	subtitleExts = map[string]bool{".srt": true, ".sub": true, ".idx": true, ".ass": true, ".ssa": true, ".vtt": true}
 )
 
 type ParseError string
@@ -51,14 +48,14 @@ func Ext(name string) string {
 	return ""
 }
 
-func IsVideo(name string) bool {
-	return videoExts[py.Lower(Ext(name))] && matched(sampleRe.Search(name)) == nil
+func (t Tuning) IsVideo(name string) bool {
+	return t.VideoExts[py.Lower(Ext(name))] && matched(sampleRe.Search(name)) == nil
 }
 
-func IsSubtitle(name string) bool { return subtitleExts[py.Lower(Ext(name))] }
+func (t Tuning) IsSubtitle(name string) bool { return t.SubtitleExts[py.Lower(Ext(name))] }
 
-func ParseRelease(name string) Parsed {
-	if videoExts[py.Lower(Ext(name))] {
+func (t Tuning) ParseRelease(name string) Parsed {
+	if t.VideoExts[py.Lower(Ext(name))] {
 		name = name[:len(name)-len(Ext(name))]
 	}
 	if stripped, err := leadTagRe.Sub("", name, 1); err == nil {

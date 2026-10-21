@@ -10,11 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/rx"
 )
 
-const (
-	SearchLimit = 50
-	childLimit  = 500
-)
-
 var (
 	seasonDir   = rx.MustCompile(`^Season (\d{1,3})$`, 0)
 	episodeMark = rx.MustCompile(` - S(\d{2})E(\d{2,3})$`, 0)
@@ -91,22 +86,22 @@ func dirsOf(path string) []string {
 	return out
 }
 
-func videosOf(path string) []string {
+func (t Tuning) videosOf(path string) []string {
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return []string{}
 	}
 	out := []string{}
 	for _, e := range entries {
-		if IsVideo(e.Name()) && isFile(filepath.Join(path, e.Name())) {
+		if t.IsVideo(e.Name()) && isFile(filepath.Join(path, e.Name())) {
 			out = append(out, e.Name())
 		}
 	}
 	return out
 }
 
-func entryOf(kind, name string) Entry {
-	r := ParseRelease(name)
+func (t Tuning) entryOf(kind, name string) Entry {
+	r := t.ParseRelease(name)
 	title := r.Title
 	if title == "" {
 		title = name
@@ -134,20 +129,20 @@ func SafeRel(root, rel string) (string, bool) {
 	return full, true
 }
 
-func MovieEntries(root string) []Entry {
+func (t Tuning) MovieEntries(root string) []Entry {
 	dirs := dirsOf(filepath.Join(root, Movies))
 	out := []Entry{}
-	for _, d := range dirs[:min(childLimit, len(dirs))] {
-		out = append(out, entryOf(Movies, d))
+	for _, d := range dirs[:min(t.ChildLimit, len(dirs))] {
+		out = append(out, t.entryOf(Movies, d))
 	}
 	return out
 }
 
-func ShowEntries(root string) []Entry {
+func (t Tuning) ShowEntries(root string) []Entry {
 	dirs := dirsOf(filepath.Join(root, TV))
 	out := []Entry{}
-	for _, d := range dirs[:min(childLimit, len(dirs))] {
-		out = append(out, entryOf(TV, d))
+	for _, d := range dirs[:min(t.ChildLimit, len(dirs))] {
+		out = append(out, t.entryOf(TV, d))
 	}
 	return out
 }
@@ -163,13 +158,13 @@ func fileOf(root, rel string) File {
 
 func badName(name string) bool { return strings.Contains(name, "/") || name == "." || name == ".." }
 
-func Movie(root, name string) (MovieView, error) {
+func (t Tuning) Movie(root, name string) (MovieView, error) {
 	path := filepath.Join(root, Movies, name)
 	if badName(name) || !isDir(path) {
 		return MovieView{}, NotFound(name)
 	}
-	view := MovieView{Entry: entryOf(Movies, name), Files: []File{}}
-	for _, f := range videosOf(path) {
+	view := MovieView{Entry: t.entryOf(Movies, name), Files: []File{}}
+	for _, f := range t.videosOf(path) {
 		view.Files = append(view.Files, fileOf(root, Movies+"/"+name+"/"+f))
 	}
 	return view, nil
@@ -189,12 +184,12 @@ func episodeNumber(name string) (*int, *int) {
 	return &s, &e
 }
 
-func Show(root, name string) (ShowView, error) {
+func (t Tuning) Show(root, name string) (ShowView, error) {
 	path := filepath.Join(root, TV, name)
 	if badName(name) || !isDir(path) {
 		return ShowView{}, NotFound(name)
 	}
-	view := ShowView{Entry: entryOf(TV, name), Seasons: []Season{}}
+	view := ShowView{Entry: t.entryOf(TV, name), Seasons: []Season{}}
 	for _, d := range dirsOf(path) {
 		season := Season{Dir: d, Episodes: []Episode{}}
 		if m := matched(seasonDir.Match(d)); m != nil {
@@ -203,7 +198,7 @@ func Show(root, name string) (ShowView, error) {
 				season.Number = &v
 			}
 		}
-		for _, f := range videosOf(filepath.Join(path, d)) {
+		for _, f := range t.videosOf(filepath.Join(path, d)) {
 			s, e := episodeNumber(f)
 			season.Episodes = append(season.Episodes, Episode{File: fileOf(root, TV+"/"+name+"/"+d+"/"+f), Season: s, Episode: e})
 		}
@@ -212,21 +207,21 @@ func Show(root, name string) (ShowView, error) {
 	return view, nil
 }
 
-func EpisodeFilesOf(root, name string) []string {
+func (t Tuning) EpisodeFilesOf(root, name string) []string {
 	tv := filepath.Join(root, TV, name)
 	out := []string{}
 	for _, d := range dirsOf(tv) {
-		for _, f := range videosOf(filepath.Join(tv, d)) {
+		for _, f := range t.videosOf(filepath.Join(tv, d)) {
 			out = append(out, TV+"/"+name+"/"+d+"/"+f)
 		}
 	}
 	return out
 }
 
-func EpisodeFiles(root string) []string {
+func (t Tuning) EpisodeFiles(root string) []string {
 	out := []string{}
 	for _, name := range dirsOf(filepath.Join(root, TV)) {
-		out = append(out, EpisodeFilesOf(root, name)...)
+		out = append(out, t.EpisodeFilesOf(root, name)...)
 	}
 	return out
 }
@@ -240,7 +235,7 @@ func containsAll(hay string, words []string) bool {
 	return true
 }
 
-func Search(root, query string, limit int) []SearchResult {
+func (t Tuning) Search(root, query string, limit int) []SearchResult {
 	var words []string
 	for _, w := range py.Split(query) {
 		words = append(words, py.Casefold(w))
@@ -249,19 +244,19 @@ func Search(root, query string, limit int) []SearchResult {
 	if len(words) == 0 {
 		return out
 	}
-	for _, m := range MovieEntries(root) {
+	for _, m := range t.MovieEntries(root) {
 		if !containsAll(py.Casefold(m.Dir), words) {
 			continue
 		}
-		view, _ := Movie(root, m.Dir)
+		view, _ := t.Movie(root, m.Dir)
 		files := []string{}
 		for _, f := range view.Files {
 			files = append(files, f.Rel)
 		}
 		out = append(out, SearchResult{Kind: KindMovie, Title: m.Title, Year: m.Year, Dir: m.Dir, Files: files})
 	}
-	for _, s := range ShowEntries(root) {
-		for _, rel := range EpisodeFilesOf(root, s.Dir) {
+	for _, s := range t.ShowEntries(root) {
+		for _, rel := range t.EpisodeFilesOf(root, s.Dir) {
 			if containsAll(py.Casefold(s.Dir+" "+filepath.Base(rel)), words) {
 				out = append(out, SearchResult{Kind: "episode", Title: s.Title, Year: s.Year, Dir: s.Dir, Files: []string{rel}})
 			}

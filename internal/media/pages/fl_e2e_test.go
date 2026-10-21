@@ -67,12 +67,12 @@ func flNew(t *testing.T, vars map[string]string, o Options) *flWorld {
 	flWrite(t, filepath.Join(root, movieRel), flMovieBody)
 	flWrite(t, filepath.Join(root, episodeRel), []byte("episode-bytes"))
 	all := map[string]string{
-		"ATRIUM_MEDIA_ROOT":       root,
-		"ATRIUM_CORE_PUBLIC_URL":  "https://atrium.test",
-		"ATRIUM_MEDIA_MOVIES_URL": "http://artemis.vpn:8084",
-		"ATRIUM_MEDIA_TV_URL":     "http://artemis.vpn:8085",
-		"TMDB_API_KEY":            "k",
-		"ATRIUM_MEDIA_LINK_KEY":   flKey,
+		"ATRIUM_MEDIA_MEDIA_ROOT":       root,
+		"ATRIUM_CORE_PUBLIC_URL":        "https://atrium.test",
+		"ATRIUM_MEDIA_MEDIA_MOVIES_URL": "http://artemis.vpn:8084",
+		"ATRIUM_MEDIA_MEDIA_TV_URL":     "http://artemis.vpn:8085",
+		"TMDB_API_KEY":                  "k",
+		"ATRIUM_MEDIA_LINK_KEY":         flKey,
 	}
 	for k, v := range vars {
 		all[k] = v
@@ -299,7 +299,7 @@ func TestFlPathTraversalAndRoot(t *testing.T) {
 	})
 
 	t.Run("root not configured", func(t *testing.T) {
-		bare := flNew(t, map[string]string{"ATRIUM_MEDIA_ROOT": ""}, Options{})
+		bare := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_ROOT": ""}, Options{})
 		status(t, bare.get(flSigned(flKey, bare.movieRel, flFar)), 404, "no root")
 		status(t, bare.get(flSigned("wrong", bare.movieRel, flFar)), 403, "no root, bad signature")
 	})
@@ -320,9 +320,9 @@ func TestFlRotatedAndGeneratedKeys(t *testing.T) {
 		if _, err := os.Stat(keyPath); !os.IsNotExist(err) {
 			t.Fatalf("key exists before first use: %v", err)
 		}
-		links := media.NewLinks(config.Media(w.env), keyPath)
+		links := media.NewLinks(config.Media(w.env).LinkKey, keyPath)
 		now := float64(time.Now().Unix())
-		url, err := links.PublicURL(w.movieRel, now)
+		url, err := links.PublicURL("https://atrium.test", w.movieRel, now, 43200)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -339,7 +339,7 @@ func TestFlRotatedAndGeneratedKeys(t *testing.T) {
 		}
 		path := strings.TrimPrefix(url, "https://atrium.test")
 		status(t, w.get(path), 200, "link signed with the generated key")
-		again, err := media.NewLinks(config.Media(w.env), keyPath).PublicURL(w.movieRel, now)
+		again, err := media.NewLinks(config.Media(w.env).LinkKey, keyPath).PublicURL("https://atrium.test", w.movieRel, now, 43200)
 		if err != nil || again != url {
 			t.Fatalf("second Links built %q (%v), want %q", again, err, url)
 		}
@@ -643,7 +643,7 @@ func TestFlThumbnailsRunOneAtATime(t *testing.T) {
 func TestFlWithoutTMDBOrRoot(t *testing.T) {
 	tmdb := flServeTMDB(t)
 	ff := &flFFmpeg{duration: "10"}
-	w := flNew(t, map[string]string{"TMDB_API_KEY": "", "ATRIUM_MEDIA_ROOT": ""}, Options{Exec: ff.run})
+	w := flNew(t, map[string]string{"TMDB_API_KEY": "", "ATRIUM_MEDIA_MEDIA_ROOT": ""}, Options{Exec: ff.run})
 	flPlaceholderCheck(t, w.get("/media/art/movie/"+py.URLQuote("Dune (2021)")), "poster without a TMDB key")
 	flPlaceholderCheck(t, w.get("/media/thumb/"+py.URLQuote("tv/Lanterns (2026)/Season 01/x.mkv")), "thumbnail without a root")
 	if tmdb.hitCount() != 0 || ff.count() != 0 {

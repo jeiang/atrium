@@ -10,23 +10,19 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const (
-	tmdbTimeout     = 15 * time.Second
-	TMDBSearchLimit = 8
-)
-
 var (
 	TMDBAPI    = "https://api.themoviedb.org/3"
 	TMDBImages = "https://image.tmdb.org/t/p/w342"
-
-	tmdbClient = newClient(tmdbTimeout)
 )
 
 type TmdbError string
 
 func (e TmdbError) Error() string { return string(e) }
 
-type TMDB struct{ key string }
+type TMDB struct {
+	key     string
+	timeout time.Duration
+}
 
 type TVResult struct {
 	TmdbID     int64
@@ -39,11 +35,11 @@ type MovieResult struct {
 	PosterPath string
 }
 
-func NewTMDB(key string) *TMDB {
+func NewTMDB(key string, timeout time.Duration) *TMDB {
 	if key == "" {
 		return nil
 	}
-	return &TMDB{key: key}
+	return &TMDB{key: key, timeout: timeout}
 }
 
 func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, error) {
@@ -52,7 +48,7 @@ func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, erro
 	if err != nil {
 		return nil, TmdbError("TMDB unreachable: InvalidURL")
 	}
-	res, err := send(ctx, tmdbClient, req)
+	res, err := send(ctx, clientFor(t.timeout), req)
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {
@@ -197,7 +193,7 @@ func (t *TMDB) Image(ctx context.Context, posterPath string) ([]byte, error) {
 	if err != nil {
 		return nil, TmdbError("TMDB images unreachable: InvalidURL")
 	}
-	res, err := send(ctx, tmdbClient, req)
+	res, err := send(ctx, clientFor(t.timeout), req)
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {

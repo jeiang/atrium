@@ -59,9 +59,9 @@ func (v View) ID() string { return v.Item.ID }
 
 type Op struct{ Src, Dst string }
 
-func VideosUnder(root string) []string {
+func (t Tuning) VideosUnder(root string) []string {
 	if info, err := os.Stat(root); err == nil && info.Mode().IsRegular() {
-		if link, err := os.Lstat(root); err == nil && link.Mode()&fs.ModeSymlink == 0 && IsVideo(filepath.Base(root)) {
+		if link, err := os.Lstat(root); err == nil && link.Mode()&fs.ModeSymlink == 0 && t.IsVideo(filepath.Base(root)) {
 			return []string{root}
 		}
 		return []string{}
@@ -78,7 +78,7 @@ func VideosUnder(root string) []string {
 			}
 			return nil
 		}
-		if d.Type().IsRegular() && IsVideo(d.Name()) {
+		if d.Type().IsRegular() && t.IsVideo(d.Name()) {
 			out = append(out, path)
 		}
 		return nil
@@ -102,14 +102,14 @@ func Items(ctx context.Context, qb *Qbit, root string) ([]Item, string, error) {
 		if !t.HasTag(TagMedia) || t.HasTag(TagFiled) || t.HasTag(TagIgnored) {
 			continue
 		}
-		found = append(found, Item{ID: t.Hash, Name: t.Name, Torrent: true, Root: t.ContentPath, Files: VideosUnder(t.ContentPath)})
+		found = append(found, Item{ID: t.Hash, Name: t.Name, Torrent: true, Root: t.ContentPath, Files: qb.Tuning.VideosUnder(t.ContentPath)})
 	}
 	importDir := filepath.Join(root, Import)
 	if info, err := os.Stat(importDir); err == nil && info.IsDir() {
 		entries, _ := os.ReadDir(importDir)
 		for _, entry := range entries {
 			entryRoot := filepath.Join(importDir, entry.Name())
-			if files := VideosUnder(entryRoot); len(files) > 0 {
+			if files := qb.Tuning.VideosUnder(entryRoot); len(files) > 0 {
 				found = append(found, Item{ID: importPref + entry.Name(), Name: entry.Name(), Root: entryRoot, Files: files})
 			}
 		}
@@ -133,14 +133,14 @@ func Find(ctx context.Context, qb *Qbit, root, itemID string) (Item, error) {
 	return Item{}, PlanError(itemID + " is no longer waiting")
 }
 
-func showYear(root, title string) string {
+func (t Tuning) showYear(root, title string) string {
 	tv := filepath.Join(root, TV)
 	entries, err := os.ReadDir(tv)
 	if err != nil {
 		return ""
 	}
 	for _, entry := range entries {
-		r := ParseRelease(entry.Name())
+		r := t.ParseRelease(entry.Name())
 		info, err := os.Stat(filepath.Join(tv, entry.Name()))
 		if err == nil && info.IsDir() && r.Year != "" && py.Casefold(r.Title) == py.Casefold(title) {
 			return r.Year
@@ -177,11 +177,11 @@ func relTo(item Item, path string) string {
 	return filepath.Base(path)
 }
 
-func Defaults(item Item, root string) View {
-	r := ParseRelease(item.Name)
+func (t Tuning) Defaults(item Item, root string) View {
+	r := t.ParseRelease(item.Name)
 	view := View{Item: item, Kind: KindMovie, Title: r.Title, Year: r.Year}
 	for _, f := range item.Files {
-		fr := ParseRelease(filepath.Base(f))
+		fr := t.ParseRelease(filepath.Base(f))
 		fv := FileView{Rel: relTo(item, f)}
 		if fr.Episode > 0 {
 			if view.Kind == KindMovie && fr.Title != "" {
@@ -193,7 +193,7 @@ func Defaults(item Item, root string) View {
 		view.Files = append(view.Files, fv)
 	}
 	if view.Kind == KindTV && view.Year == "" {
-		view.Year = showYear(root, view.Title)
+		view.Year = t.showYear(root, view.Title)
 	}
 	return view
 }
@@ -268,7 +268,7 @@ func makeDirs(path string, mode os.FileMode) error {
 	return nil
 }
 
-func Apply(ctx context.Context, qb *Qbit, item Item, ops []Op, root string) error {
+func (t Tuning) Apply(ctx context.Context, qb *Qbit, item Item, ops []Op, root string) error {
 	for _, op := range ops {
 		full := filepath.Join(root, op.Dst)
 		if err := makeDirs(filepath.Dir(full), dirMode); err != nil {
@@ -285,13 +285,13 @@ func Apply(ctx context.Context, qb *Qbit, item Item, ops []Op, root string) erro
 	if item.Torrent {
 		return qb.AddTags(ctx, item.ID, TagFiled)
 	}
-	if len(VideosUnder(item.Root)) == 0 {
+	if len(t.VideosUnder(item.Root)) == 0 {
 		return os.RemoveAll(item.Root)
 	}
 	return nil
 }
 
-func Planned(view View, root string) View {
+func (t Tuning) Planned(view View, root string) View {
 	shown := view
 	shown.Files = slices.Clone(view.Files)
 	if _, err := Plan(&shown, root); err != nil {
@@ -303,8 +303,8 @@ func Planned(view View, root string) View {
 	return shown
 }
 
-func Edited(item Item, root string, form map[string]string) View {
-	view := Defaults(item, root)
+func (t Tuning) Edited(item Item, root string, form map[string]string) View {
+	view := t.Defaults(item, root)
 	view.Kind = KindMovie
 	if k := form["kind"]; slices.Contains(Kinds, k) {
 		view.Kind = k
@@ -362,7 +362,7 @@ func Sweep(ctx context.Context, qb *Qbit) (SweepResult, error) {
 	return out, nil
 }
 
-func wanted(name string) bool { return IsVideo(name) || IsSubtitle(name) }
+func (t Tuning) wanted(name string) bool { return t.IsVideo(name) || t.IsSubtitle(name) }
 
 func SelectFiles(ctx context.Context, qb *Qbit, torrents []Torrent) ([]string, error) {
 	done := []string{}
@@ -402,13 +402,13 @@ func selectOne(ctx context.Context, qb *Qbit, t Torrent) (bool, error) {
 	if err != nil || len(files) == 0 {
 		return false, err
 	}
-	if slices.ContainsFunc(files, func(f TorrentFile) bool { return wanted(f.Name) }) {
+	if slices.ContainsFunc(files, func(f TorrentFile) bool { return qb.Tuning.wanted(f.Name) }) {
 		var keep, skip []int
 		for _, f := range files {
 			switch {
-			case wanted(f.Name) && f.Priority == PrioritySkip:
+			case qb.Tuning.wanted(f.Name) && f.Priority == PrioritySkip:
 				keep = append(keep, f.Index)
-			case !wanted(f.Name) && f.Priority != PrioritySkip:
+			case !qb.Tuning.wanted(f.Name) && f.Priority != PrioritySkip:
 				skip = append(skip, f.Index)
 			}
 		}

@@ -12,13 +12,16 @@ import (
 )
 
 func undoTorrent(env config.Env) writes.Undoer {
-	return func(ctx context.Context, _ db.Querier, info map[string]any) (any, error) {
+	return func(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
 		hash, _ := info["hash"].(string)
-		url, err := config.Media(env).NeedQbit()
+		settings, err := media.Load(ctx, q, env)
+		if err != nil {
+			return nil, err
+		}
+		qb, err := settings.Qbit()
 		if err != nil {
 			return nil, writes.UndoError(err.Error())
 		}
-		qb := media.NewQbit(url)
 		found, err := qb.Torrent(ctx, hash)
 		if err == nil {
 			switch {

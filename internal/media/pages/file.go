@@ -34,7 +34,7 @@ func (s *service) serveFile(w http.ResponseWriter, r *http.Request) {
 		s.deps.Error(w, r, http.StatusForbidden, "the link is invalid or has expired")
 		return
 	}
-	root, err := s.settings().NeedRoot()
+	root, err := s.settings(r.Context()).NeedRoot()
 	if err != nil {
 		s.deps.Error(w, r, http.StatusNotFound, err.Error())
 		return

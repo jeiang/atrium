@@ -21,11 +21,8 @@ const (
 	DownloadsPage = "/media/downloads"
 	Import        = "import"
 
-	seenTTL      = 90 * 86400
-	nameChars    = 120
-	patternChars = 300
-	lastCheck    = "last_check"
-	lastErrors   = "last_errors"
+	lastCheck  = "last_check"
+	lastErrors = "last_errors"
 )
 
 var log = logx.Logger("atrium.media")
@@ -70,13 +67,13 @@ type PollOptions struct {
 
 func Now() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
 
-func CompilePattern(pattern string, caseSensitive bool) (*rx.Regexp, error) {
+func (t Tuning) CompilePattern(pattern string, caseSensitive bool) (*rx.Regexp, error) {
 	pattern = py.Strip(pattern)
 	if pattern == "" {
 		return nil, ChannelError("pattern is empty")
 	}
-	if utf8.RuneCountInString(pattern) > patternChars {
-		return nil, ChannelError(fmt.Sprintf("pattern is longer than %d characters", patternChars))
+	if utf8.RuneCountInString(pattern) > t.PatternChars {
+		return nil, ChannelError(fmt.Sprintf("pattern is longer than %d characters", t.PatternChars))
 	}
 	var flags rx.Flags
 	if !caseSensitive {
@@ -131,10 +128,10 @@ func flag(b bool) int {
 	return 0
 }
 
-func AddChannel(ctx context.Context, q db.Querier, name, imdb, pattern string, caseSensitive bool, tmdbID *int64, now func() float64, primed bool) (*Channel, error) {
+func (t Tuning) AddChannel(ctx context.Context, q db.Querier, name, imdb, pattern string, caseSensitive bool, tmdbID *int64, now func() float64, primed bool) (*Channel, error) {
 	name = strings.Join(py.Split(name), " ")
-	if runes := []rune(name); len(runes) > nameChars {
-		name = string(runes[:nameChars])
+	if runes := []rune(name); len(runes) > t.NameChars {
+		name = string(runes[:t.NameChars])
 	}
 	digits, ok := IMDBDigits(imdb)
 	if name == "" {
@@ -143,7 +140,7 @@ func AddChannel(ctx context.Context, q db.Querier, name, imdb, pattern string, c
 	if !ok {
 		return nil, ChannelError(fmt.Sprintf("IMDb ID %s is not tt followed by 7 to 9 digits", py.Repr(imdb)))
 	}
-	if _, err := CompilePattern(pattern, caseSensitive); err != nil {
+	if _, err := t.CompilePattern(pattern, caseSensitive); err != nil {
 		return nil, err
 	}
 	if now == nil {
@@ -205,18 +202,18 @@ type PreviewRow struct {
 	Match bool
 }
 
-func Preview(releases []Release, pattern string, caseSensitive bool) ([]PreviewRow, error) {
-	re, err := CompilePattern(pattern, caseSensitive)
+func (t Tuning) Preview(releases []Release, pattern string, caseSensitive bool) ([]PreviewRow, error) {
+	re, err := t.CompilePattern(pattern, caseSensitive)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]PreviewRow, 0, len(releases))
-	for _, t := range releases {
-		m, err := re.Search(t.Title)
+	for _, r := range releases {
+		m, err := re.Search(r.Title)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, PreviewRow{Release: t, Match: m != nil})
+		out = append(out, PreviewRow{Release: r, Match: m != nil})
 	}
 	return out, nil
 }
@@ -235,8 +232,8 @@ func markSeen(ctx context.Context, q db.Querier, hash string, ts float64) error 
 	return err
 }
 
-func expireSeen(ctx context.Context, q db.Querier, now float64) error {
-	_, err := q.ExecContext(ctx, "DELETE FROM media_seen WHERE ts < ?", now-seenTTL)
+func (t Tuning) expireSeen(ctx context.Context, q db.Querier, now float64) error {
+	_, err := q.ExecContext(ctx, "DELETE FROM media_seen WHERE ts < ?", now-t.SeenTTL)
 	return err
 }
 
@@ -296,7 +293,7 @@ func (r PollResult) Dict() py.Dict {
 	return py.Dict{{Key: "added", Value: added}, {Key: "errors", Value: errs}}
 }
 
-func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings config.MediaSettings, opts PollOptions) (PollResult, error) {
+func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings Settings, opts PollOptions) (PollResult, error) {
 	now := opts.Now
 	if now == nil {
 		now = Now
@@ -311,10 +308,10 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings 
 		if opts.Only != nil && rule.ID != *opts.Only {
 			continue
 		}
-		regex, err := CompilePattern(rule.Pattern, rule.CaseSensitive)
+		regex, err := settings.CompilePattern(rule.Pattern, rule.CaseSensitive)
 		var releases []Release
 		if err == nil {
-			releases, err = FetchReleases(ctx, rule.IMDB, eztvLimit)
+			releases, err = settings.FetchReleases(ctx, rule.IMDB)
 		}
 		if err != nil {
 			var channelErr ChannelError
@@ -360,7 +357,7 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings 
 			return result, err
 		}
 	}
-	if err := expireSeen(ctx, q, stamp); err != nil {
+	if err := settings.expireSeen(ctx, q, stamp); err != nil {
 		return result, err
 	}
 	if len(result.Added) > 0 {

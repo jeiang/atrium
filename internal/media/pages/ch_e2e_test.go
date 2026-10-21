@@ -23,6 +23,7 @@ type chEztv struct {
 	mu       sync.Mutex
 	releases map[string][]map[string]any
 	fail     int
+	url      string
 }
 
 func chNewEztv(t *testing.T) *chEztv {
@@ -42,9 +43,7 @@ func chNewEztv(t *testing.T) *chEztv {
 		_ = json.NewEncoder(w).Encode(map[string]any{"torrents": list})
 	}))
 	t.Cleanup(srv.Close)
-	previous := media.EZTVAPI
-	media.EZTVAPI = srv.URL + "/api/get-torrents"
-	t.Cleanup(func() { media.EZTVAPI = previous })
+	f.url = srv.URL + "/api/get-torrents"
 	return f
 }
 
@@ -129,7 +128,7 @@ func chNewNtfy(t *testing.T) string {
 func chVars(t *testing.T, extra map[string]string) map[string]string {
 	t.Helper()
 	vars := map[string]string{
-		"ATRIUM_MEDIA_ROOT": t.TempDir(), "ATRIUM_MEDIA_LINK_KEY": "secret-key", "NTFY_TOKEN": "tok", "NTFY_MEDIA_TOPIC": "media-releases",
+		"ATRIUM_MEDIA_MEDIA_ROOT": t.TempDir(), "ATRIUM_MEDIA_LINK_KEY": "secret-key", "NTFY_TOKEN": "tok", "NTFY_MEDIA_TOPIC": "media-releases",
 	}
 	for k, v := range extra {
 		vars[k] = v
@@ -161,7 +160,7 @@ func TestChE2EChannelsSearchPreviewAddRemovePoll(t *testing.T) {
 	qb := chNewQbit(t)
 	ez.release("1234567", chHashA, "Lanterns S01E01 1080p WEB")
 	ez.release("1234567", chHashB, "lanterns s01e01 720p")
-	s := newSite(t, chVars(t, map[string]string{"QBITTORRENT_URL": qb.URL, "NTFY_URL": chNewNtfy(t), "TMDB_API_KEY": "k"}), Options{})
+	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": qb.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "NTFY_URL": chNewNtfy(t), "TMDB_API_KEY": "k"}), Options{})
 
 	empty := status(t, s.get("/media/channels"), 200, "channels page")
 	contains(t, empty, "No channels", "Not checked yet.", `name="backfill" value="1" checked`, "Watching (0)")
@@ -220,8 +219,8 @@ func TestChE2EChannelsSearchPreviewAddRemovePoll(t *testing.T) {
 
 func TestChE2ETmdbFailuresAndMissingBackends(t *testing.T) {
 	tm := chNewTmdb(t)
-	chNewEztv(t)
-	s := newSite(t, chVars(t, map[string]string{"TMDB_API_KEY": "k"}), Options{})
+	ez := chNewEztv(t)
+	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "TMDB_API_KEY": "k"}), Options{})
 
 	missing := status(t, s.get("/media/channels?tmdb_id=7"), 200, "no imdb id")
 	contains(t, missing, "No IMDb id on TMDB", "Enter it by hand.")
@@ -234,12 +233,12 @@ func TestChE2ETmdbFailuresAndMissingBackends(t *testing.T) {
 	contains(t, failed, "TMDB failed", "TMDB: 500")
 
 	added := status(t, s.post("/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "pattern": {"1080p"}, "backfill": {"1"}}), 200, "backfill without qBittorrent")
-	contains(t, added, "Watching Lanterns", "Nothing downloaded: QBITTORRENT_URL is not set")
+	contains(t, added, "Watching Lanterns", "Nothing downloaded: media_qbittorrent_url is not set")
 	if len(chChannels(t, s)) != 1 {
 		t.Fatal("the channel must be kept when nothing could be downloaded")
 	}
 	unpolled := status(t, s.post("/media/channels/poll", nil), 422, "poll without qBittorrent")
-	contains(t, unpolled, "Not polled", "QBITTORRENT_URL is not set")
+	contains(t, unpolled, "Not polled", "media_qbittorrent_url is not set")
 
 	plain := newSite(t, chVars(t, nil), Options{})
 	page := status(t, plain.get("/media/channels?q=x"), 200, "no TMDB key")

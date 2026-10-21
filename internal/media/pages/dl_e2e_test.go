@@ -229,7 +229,7 @@ func dlWorld(t *testing.T, extra map[string]string) (*site, *dlQbitFake, string)
 			t.Fatal(err)
 		}
 	}
-	vars := map[string]string{"ATRIUM_MEDIA_ROOT": root, "QBITTORRENT_URL": qb.URL}
+	vars := map[string]string{"ATRIUM_MEDIA_MEDIA_ROOT": root, "ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": qb.URL}
 	for k, v := range extra {
 		vars[k] = v
 	}
@@ -360,9 +360,9 @@ func TestDlDownloadsPageListsTorrentsQueueAndFiles(t *testing.T) {
 }
 
 func TestDlDownloadsPageWithoutQbittorrent(t *testing.T) {
-	s, _, _ := dlWorld(t, map[string]string{"QBITTORRENT_URL": ""})
+	s, _, _ := dlWorld(t, map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": ""})
 	page := status(t, s.get("/media/downloads"), 200, "downloads")
-	contains(t, page, "QBITTORRENT_URL is not set", "Ready to file (0)")
+	contains(t, page, "media_qbittorrent_url is not set", "Ready to file (0)")
 	lacks(t, page, "Nothing is waiting", "No torrents")
 	status(t, s.get("/media/torrents"), 200, "torrents partial")
 	status(t, s.get("/media/torrents/"+dlHashA+"/files"), 502, "files")

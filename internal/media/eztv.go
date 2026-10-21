@@ -6,23 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
-const (
-	eztvLimit   = 100
-	eztvTimeout = 30 * time.Second
-)
-
 var (
-	EZTVAPI = "https://eztvx.to/api/get-torrents"
-
 	imdbRe = rx.MustCompile(`^(?:tt)?(\d{7,9})$`, 0)
-
-	eztvClient = newClient(eztvTimeout)
 )
 
 type EztvError string
@@ -98,13 +88,13 @@ func orEmpty(v any) string {
 	return pyText(v)
 }
 
-func FetchReleases(ctx context.Context, imdb string, limit int) ([]Release, error) {
-	target := EZTVAPI + "?" + encodeParams([]param{{"imdb_id", imdb}, {"limit", strconv.Itoa(limit)}})
+func (t Tuning) FetchReleases(ctx context.Context, imdb string) ([]Release, error) {
+	target := t.EZTVURL + "?" + encodeParams([]param{{"imdb_id", imdb}, {"limit", strconv.Itoa(t.EZTVLimit)}})
 	req, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
 		return nil, EztvError("EZTV unreachable: InvalidURL")
 	}
-	res, err := send(ctx, eztvClient, req)
+	res, err := send(ctx, clientFor(t.EZTVTimeout), req)
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {

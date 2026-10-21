@@ -21,6 +21,7 @@ const (
 	UndoChannelDelete  = "media_channel_delete"
 	UndoChannelRestore = "media_channel_restore"
 	TorrentLimit       = 50
+	searchLimitCeiling = 500
 )
 
 var (
@@ -41,7 +42,7 @@ func Tools() []tool.Tool {
 		{
 			Name:        "media_library_search",
 			Description: "Search the media library (movies and TV episodes) by words in the title or file name; returns paths and VPN URLs.",
-			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": %d}}, "required": ["query"], "additionalProperties": false}`, media.SearchLimit)),
+			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": %d}}, "required": ["query"], "additionalProperties": false}`, searchLimitCeiling)),
 			Handler:     mediaLibrarySearch,
 			Effect:      tool.Read,
 			Contexts:    readKinds,
@@ -95,15 +96,15 @@ func qbitFailed(err error) error {
 	return err
 }
 
-func qbitOf(settings config.MediaSettings) (*media.Qbit, error) {
-	url, err := settings.NeedQbit()
+func qbitOf(settings media.Settings) (*media.Qbit, error) {
+	qb, err := settings.Qbit()
 	if err != nil {
 		return nil, tool.NotConfigured(err.Error())
 	}
-	return media.NewQbit(url), nil
+	return qb, nil
 }
 
-func rootOf(settings config.MediaSettings) (string, error) {
+func rootOf(settings media.Settings) (string, error) {
 	root, err := settings.NeedRoot()
 	if err != nil {
 		return "", tool.NotConfigured(err.Error())
@@ -174,7 +175,10 @@ func torrentDict(t media.Torrent) py.Dict {
 }
 
 func mediaDownloads(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
-	settings := config.Media(tc.Env)
+	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
+	if err != nil {
+		return nil, err
+	}
 	qb, err := qbitOf(settings)
 	if err != nil {
 		return nil, err
@@ -204,8 +208,11 @@ func mediaDownloads(ctx context.Context, tc *tool.Context, _ py.Dict) (any, erro
 	}, nil
 }
 
-func mediaLibrarySearch(_ context.Context, tc *tool.Context, args py.Dict) (any, error) {
-	settings := config.Media(tc.Env)
+func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
+	if err != nil {
+		return nil, err
+	}
 	root, err := rootOf(settings)
 	if err != nil {
 		return nil, err
@@ -214,16 +221,15 @@ func mediaLibrarySearch(_ context.Context, tc *tool.Context, args py.Dict) (any,
 	if err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 20, media.SearchLimit, 1)
+	limit, err := tool.BoundedInt(args, "limit", 20, int64(settings.SearchLimit), 1)
 	if err != nil {
 		return nil, err
 	}
-	links := media.NewLinks(settings, tc.Cfg.MediaLinkKeyPath())
 	results := []any{}
-	for _, r := range media.Search(root, query, int(limit)) {
+	for _, r := range settings.Search(root, query, int(limit)) {
 		files, urls := make([]any, len(r.Files)), make([]any, len(r.Files))
 		for i, f := range r.Files {
-			files[i], urls[i] = f, links.VPNURL(f)
+			files[i], urls[i] = f, settings.VPNURL(f)
 		}
 		results = append(results, py.Dict{
 			{Key: "kind", Value: r.Kind}, {Key: "title", Value: r.Title}, {Key: "year", Value: r.Year}, {Key: "dir", Value: r.Dir},
@@ -272,7 +278,11 @@ func mediaAddMagnet(ctx context.Context, tc *tool.Context, args py.Dict) (any, e
 	if !ok {
 		return nil, tool.Error("the magnet link has no v1 info hash (xt=urn:btih:...)")
 	}
-	qb, err := qbitOf(config.Media(tc.Env))
+	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
+	if err != nil {
+		return nil, err
+	}
+	qb, err := qbitOf(settings)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +363,11 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 	if err != nil {
 		return nil, err
 	}
-	client := media.NewTMDB(config.Media(tc.Env).TMDBKey)
+	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
+	if err != nil {
+		return nil, err
+	}
+	client := media.NewTMDB(settings.TMDBKey, settings.TMDBTimeout)
 	tmdbID, _ := args.Get("tmdb_id")
 	imdbText, _, err := tool.TextArg(args, "imdb_id", false)
 	if err != nil {
@@ -395,7 +409,7 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 	var writeID int64
 	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		var err error
-		if row, err = media.AddChannel(ctx, tx, name, imdb, pattern, caseSensitive, stored, tc.Now, false); err != nil {
+		if row, err = settings.AddChannel(ctx, tx, name, imdb, pattern, caseSensitive, stored, tc.Now, false); err != nil {
 			return err
 		}
 		writeID, err = writes.Record(ctx, tx, writes.New{

@@ -51,15 +51,9 @@ func dlLastValues(form url.Values) map[string]string {
 	return out
 }
 
-func (s *service) dlQbit() (*media.Qbit, error) {
-	base, err := s.settings().NeedQbit()
-	if err != nil {
-		return nil, err
-	}
-	return media.NewQbit(base), nil
-}
+func (s *service) dlQbit(ctx context.Context) (*media.Qbit, error) { return s.settings(ctx).Qbit() }
 
-func (s *service) dlRoot() (string, error) { return s.settings().NeedRoot() }
+func (s *service) dlRoot(ctx context.Context) (string, error) { return s.settings(ctx).NeedRoot() }
 
 func (s *service) dlPageOut(w http.ResponseWriter, r *http.Request, status int, page, name string, data any, toast *tpl.Toast) {
 	f, err := s.deps.Render.Frame(r, page, data)
@@ -77,7 +71,7 @@ func (s *service) dlFragmentOut(w http.ResponseWriter, r *http.Request, status i
 
 func (s *service) dlTorrents(ctx context.Context) ([]TorrentView, string) {
 	rows := []TorrentView{}
-	client, err := s.dlQbit()
+	client, err := s.dlQbit(ctx)
 	if err == nil {
 		_, err = media.SelectFiles(ctx, client, nil)
 	}
@@ -100,11 +94,11 @@ func (s *service) dlTorrents(ctx context.Context) ([]TorrentView, string) {
 
 func (s *service) dlQueue(ctx context.Context, edited *media.View) ([]QueueView, string) {
 	views := []QueueView{}
-	client, err := s.dlQbit()
+	client, err := s.dlQbit(ctx)
 	if err != nil {
 		return views, err.Error()
 	}
-	root, err := s.dlRoot()
+	root, err := s.dlRoot(ctx)
 	if err != nil {
 		return views, err.Error()
 	}
@@ -114,7 +108,7 @@ func (s *service) dlQueue(ctx context.Context, edited *media.View) ([]QueueView,
 		if edited != nil && edited.ID() == it.ID {
 			views = append(views, queueView(*edited))
 		} else {
-			views = append(views, queueView(media.Planned(media.Defaults(it, root), root)))
+			views = append(views, queueView(client.Planned(client.Defaults(it, root), root)))
 		}
 	}
 	return views, errText
@@ -161,7 +155,7 @@ func (s *service) dlFilesError(w http.ResponseWriter, r *http.Request, hash, tex
 
 func (s *service) dlFiles(w http.ResponseWriter, r *http.Request, hash string, toast *tpl.Toast) {
 	ctx := r.Context()
-	client, err := s.dlQbit()
+	client, err := s.dlQbit(ctx)
 	var found *media.Torrent
 	if err == nil {
 		found, err = client.Torrent(ctx, hash)
@@ -195,6 +189,7 @@ func (s *service) dlFilesGet(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 	hash := web.PathParam(r, "hash")
+	ctx := r.Context()
 	form := web.FormValues(r)
 	var errs []web.FieldError
 	var index int64
@@ -221,9 +216,9 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 	if wanted != 0 {
 		priority = media.PriorityNormal
 	}
-	client, err := s.dlQbit()
+	client, err := s.dlQbit(ctx)
 	if err == nil {
-		err = client.SetPriority(r.Context(), hash, []int{int(index)}, priority)
+		err = client.SetPriority(ctx, hash, []int{int(index)}, priority)
 	}
 	if err != nil {
 		text, soft := dlSoft(err)
@@ -248,7 +243,7 @@ func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {
 		s.dlDownloads(w, r, &tpl.Toast{Category: "error", Title: "Not filed", Description: text}, http.StatusUnprocessableEntity, nil)
 		return
 	}
-	view := media.Edited(item, root, form)
+	view := client.Edited(item, root, form)
 	ops, err := media.Plan(&view, root)
 	if err != nil {
 		var planErr media.PlanError
@@ -263,7 +258,7 @@ func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {
 		s.dlDownloads(w, r, nil, http.StatusOK, &view)
 		return
 	}
-	if err := media.Apply(ctx, client, item, ops, root); err != nil {
+	if err := client.Apply(ctx, client, item, ops, root); err != nil {
 		view.Error = err.Error()
 		s.dlDownloads(w, r, nil, http.StatusBadGateway, &view)
 		return
@@ -284,11 +279,11 @@ func dlSoftPlan(err error) (string, bool) {
 }
 
 func (s *service) dlFind(ctx context.Context, id string) (*media.Qbit, string, media.Item, error) {
-	client, err := s.dlQbit()
+	client, err := s.dlQbit(ctx)
 	if err != nil {
 		return nil, "", media.Item{}, err
 	}
-	root, err := s.dlRoot()
+	root, err := s.dlRoot(ctx)
 	if err != nil {
 		return nil, "", media.Item{}, err
 	}

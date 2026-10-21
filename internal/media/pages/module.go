@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"net/http"
@@ -33,15 +34,27 @@ type service struct {
 	deps  *web.Deps
 	now   func() float64
 	links *media.Links
-	art   *media.Artwork
+	exec  media.Runner
 }
 
-func (s *service) settings() config.MediaSettings { return config.Media(s.deps.Env) }
+func (s *service) settings(ctx context.Context) media.Settings {
+	set, err := media.Load(ctx, s.deps.DB.Read, s.deps.Env)
+	if err != nil {
+		panic(err)
+	}
+	return set
+}
+
+func (s *service) artwork(set media.Settings) *media.Artwork {
+	art := media.NewArtwork(s.deps.Cfg.MediaCacheDir(), media.NewTMDB(set.TMDBKey, set.TMDBTimeout), set.Tuning)
+	art.Run = s.exec
+	return art
+}
 
 func wallClock() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
 
 func PublicCheck(cfg config.Config, env config.Env) func(*http.Request) bool {
-	return media.NewLinks(config.Media(env), cfg.MediaLinkKeyPath()).Verifier()
+	return media.NewLinks(config.Media(env).LinkKey, cfg.MediaLinkKeyPath()).Verifier()
 }
 
 func Module(o Options) web.Module {
@@ -50,10 +63,7 @@ func Module(o Options) web.Module {
 		if now == nil {
 			now = wallClock
 		}
-		settings := config.Media(d.Env)
-		art := media.NewArtwork(d.Cfg.MediaCacheDir(), media.NewTMDB(settings.TMDBKey))
-		art.Run = o.Exec
-		s := &service{deps: d, now: now, links: media.NewLinks(settings, d.Cfg.MediaLinkKeyPath()), art: art}
+		s := &service{deps: d, now: now, links: media.NewLinks(config.Media(d.Env).LinkKey, d.Cfg.MediaLinkKeyPath()), exec: o.Exec}
 		s.registerDownloads(r)
 		s.registerChannels(r)
 		s.registerLibrary(r)
