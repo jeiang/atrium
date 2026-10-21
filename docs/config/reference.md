@@ -26,6 +26,14 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `max_steps` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS` |
 | `monthly_budget_usd` | float | `75` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
 
+## core
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `http_timeout_seconds` | int | `600` | advanced | `ATRIUM_CORE_HTTP_TIMEOUT_SECONDS` |
+| `public_url` | string | none | ui | `ATRIUM_CORE_PUBLIC_URL` |
+| `tz` | string | `America/Port_of_Spain` | ui | `ATRIUM_CORE_TZ` |
+
 ## db
 
 | Key | Type | Default | Class | Environment variable |
@@ -37,3 +45,20 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
 | `openai_admin_key` | string | none | secret | `ATRIUM_OPENAI_OPENAI_ADMIN_KEY` |
+
+## web
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `activity_page_size` | int | `50` | advanced | `ATRIUM_WEB_ACTIVITY_PAGE_SIZE` |
+| `activity_snippet_chars` | int | `800` | advanced | `ATRIUM_WEB_ACTIVITY_SNIPPET_CHARS` |
+| `body_cap_bytes` | int | `1048576` | advanced | `ATRIUM_WEB_BODY_CAP_BYTES` |
+| `chat_thread_limit` | int | `50` | advanced | `ATRIUM_WEB_CHAT_THREAD_LIMIT` |
+| `job_history` | int | `10` | advanced | `ATRIUM_WEB_JOB_HISTORY` |
+| `learned_limit` | int | `50` | advanced | `ATRIUM_WEB_LEARNED_LIMIT` |
+| `loop_limit` | int | `100` | advanced | `ATRIUM_WEB_LOOP_LIMIT` |
+| `page_size` | int | `50` | advanced | `ATRIUM_WEB_PAGE_SIZE` |
+| `preview_bytes` | int | `200000` | advanced | `ATRIUM_WEB_PREVIEW_BYTES` |
+| `project_thread_limit` | int | `100` | advanced | `ATRIUM_WEB_PROJECT_THREAD_LIMIT` |
+| `run_history` | int | `30` | advanced | `ATRIUM_WEB_RUN_HISTORY` |
+| `snooze_choices` | string | `1,3,7,14` | advanced | `ATRIUM_WEB_SNOOZE_CHOICES` |

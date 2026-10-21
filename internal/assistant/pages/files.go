@@ -3,6 +3,7 @@ package pages
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	mailmime "github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
@@ -26,9 +29,8 @@ import (
 )
 
 const (
-	previewBytes = 200_000
-	uploadSlack  = 1 << 20
-	sniffBytes   = 4096
+	uploadSlack = 1 << 20
+	sniffBytes  = 4096
 
 	badBodyDetail   = "There was an error parsing the body"
 	fieldBytes      = 1 << 20
@@ -158,7 +160,7 @@ func (p *pages) chatFile(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	preview, err := filePreview(*found)
+	preview, err := filePreview(r.Context(), p.deps.DB.Read, *found)
 	check(err)
 	p.fragment(w, r, http.StatusOK, "_file.gohtml", map[string]any{"file": preview, "file_url": fileURL})
 }
@@ -336,9 +338,13 @@ func (p *pages) projectFileDelete(w http.ResponseWriter, r *http.Request) {
 	p.projectFiles(w, r, projectID, http.StatusOK, nil)
 }
 
-func filePreview(found files.Row) (map[string]any, error) {
+func filePreview(ctx context.Context, q db.Querier, found files.Row) (map[string]any, error) {
+	limit, err := config.Limit(ctx, q, config.KeyPreviewBytes)
+	if err != nil {
+		return nil, err
+	}
 	out := tpl.View(found).(map[string]any)
-	render, text, rows, truncated, err := previewOf(found)
+	render, text, rows, truncated, err := previewOf(found, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +352,7 @@ func filePreview(found files.Row) (map[string]any, error) {
 	return out, nil
 }
 
-func previewOf(found files.Row) (render any, text string, rows [][]string, truncated bool, err error) {
+func previewOf(found files.Row, previewBytes int) (render any, text string, rows [][]string, truncated bool, err error) {
 	rows = [][]string{}
 	media := found.MediaType
 	if files.IsImageType(media) {
