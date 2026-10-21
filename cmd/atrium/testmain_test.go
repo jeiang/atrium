@@ -2,7 +2,7 @@ package main
 
 import (
 	"os"
-	"testing"
+	"path/filepath"
 
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
@@ -42,18 +42,11 @@ func requirementEnv(mediaRoot string) map[string]string {
 	}
 }
 
-func TestMain(m *testing.M) {
-	root, err := os.MkdirTemp("", "atrium-media-")
-	if err != nil {
-		panic(err)
-	}
-	for name, value := range requirementEnv(root) {
+func init() {
+	for name, value := range requirementEnv(filepath.Join(os.TempDir(), "atrium-test-media")) {
 		_ = os.Setenv(name, value)
 	}
 	for _, name := range moduleNames {
 		_ = os.Setenv(flagEnv(name), "true")
 	}
-	code := m.Run()
-	_ = os.RemoveAll(root)
-	os.Exit(code)
 }

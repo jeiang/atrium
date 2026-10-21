@@ -15,9 +15,11 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 )
 
+func noTools() (*registry.Registry, error) { return registry.New(), nil }
+
 func app(env config.Env) *cli.App {
 	a := cli.New("atrium", func(io.Writer) {})
-	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(env, registry.New)}})
+	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(env, noTools)}})
 	return a
 }
 

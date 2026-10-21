@@ -23,11 +23,13 @@ const consentURL = "https://accounts.google.com/o/oauth2/v2/auth?client_id=golde
 	"&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.events&access_type=offline&prompt=consent" +
 	"&state=golden-token-urlsafe-16&code_challenge=0rnfdO8zLHbPYynUP5e9BxvYBwHL12yVVJTRDlfzAis&code_challenge_method=S256"
 
+func noTools() (*registry.Registry, error) { return registry.New(), nil }
+
 func pinnedTokens(n int) string { return fmt.Sprintf("golden-token-urlsafe-%d", n) }
 
 func googleAuthApp() *cli.App {
 	app := cli.New("atrium", logx.Setup)
-	app.Add(pinned([]*cli.Command{calendarcmd.Command(registry.New)})...)
+	app.Add(pinned([]*cli.Command{calendarcmd.Command(noTools)})...)
 	return app
 }
 
