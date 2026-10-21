@@ -489,7 +489,7 @@ func movePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	page, previous, edited, err := relocate(ctx, client, pageID, parent)
+	page, previous, edited, err := relocate(ctx, tc.DB.Read, client, pageID, parent)
 	if err != nil {
 		return nil, notionError(err)
 	}
@@ -508,8 +508,8 @@ func movePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	return append(s.dict(), py.Pair{Key: "parent_page_id", Value: parent}, py.Pair{Key: "write_id", Value: id}), nil
 }
 
-func relocate(ctx context.Context, client *notion.Client, pageID, parent string) (page py.Dict, previous string, edited any, err error) {
-	if page, err = livePageOf(ctx, tc.DB.Read, client, pageID); err != nil {
+func relocate(ctx context.Context, q db.Querier, client *notion.Client, pageID, parent string) (page py.Dict, previous string, edited any, err error) {
+	if page, err = livePageOf(ctx, q, client, pageID); err != nil {
 		return
 	}
 	if previous = parentID(page); previous == "" {
@@ -544,7 +544,7 @@ func archivePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, erro
 	if err != nil {
 		return nil, err
 	}
-	page, previous, edited, err := trash(ctx, client, pageID)
+	page, previous, edited, err := trash(ctx, tc.DB.Read, client, pageID)
 	if err != nil {
 		return nil, notionError(err)
 	}
@@ -563,8 +563,8 @@ func archivePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, erro
 	return append(s.dict(), py.Pair{Key: "archived", Value: true}, py.Pair{Key: "write_id", Value: id}), nil
 }
 
-func trash(ctx context.Context, client *notion.Client, pageID string) (page, previous py.Dict, edited any, err error) {
-	if page, err = livePageOf(ctx, tc.DB.Read, client, pageID); err != nil {
+func trash(ctx context.Context, q db.Querier, client *notion.Client, pageID string) (page, previous py.Dict, edited any, err error) {
+	if page, err = livePageOf(ctx, q, client, pageID); err != nil {
 		return
 	}
 	if previous, err = client.PageMarkdown(ctx, pageID); err != nil {
