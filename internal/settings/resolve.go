@@ -172,6 +172,9 @@ func (r *Registry) Set(ctx context.Context, q db.Querier, key, value string, thr
 	if err := r.Validate(key, value); err != nil {
 		return err
 	}
+	if err := r.checkPeers(ctx, q, d, value); err != nil {
+		return err
+	}
 	old, err := r.stored(ctx, q, d, level, thread)
 	if err != nil {
 		return err
@@ -191,6 +194,11 @@ func (r *Registry) Unset(ctx context.Context, q db.Querier, key string, thread i
 	d, level, err := r.writable(key, thread)
 	if err != nil {
 		return err
+	}
+	if level == Instance && d.Default != "" {
+		if err := r.checkPeers(ctx, q, d, d.Default); err != nil {
+			return err
+		}
 	}
 	old, err := r.stored(ctx, q, d, level, thread)
 	if err != nil {
@@ -218,6 +226,24 @@ func updateThread(ctx context.Context, q db.Querier, column string, thread int64
 	}
 	if n == 0 {
 		return UnknownThread(thread)
+	}
+	return nil
+}
+
+func (r *Registry) checkPeers(ctx context.Context, q db.Querier, d Def, value string) error {
+	if d.Peers == nil {
+		return nil
+	}
+	peer := func(key string) (string, error) {
+		found, err := r.Resolve(ctx, q, key, 0)
+		return found.Value, err
+	}
+	if err := d.Peers(value, peer); err != nil {
+		var invalid Invalid
+		if errors.As(err, &invalid) {
+			return Invalid(d.Key + " " + invalid.Error())
+		}
+		return err
 	}
 	return nil
 }

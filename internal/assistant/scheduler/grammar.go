@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strconv"
@@ -8,14 +9,14 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
-	MinIntervalSeconds  = 3600
-	MaxActiveJobs       = 20
 	checkedOccurrences  = 64
 	searchDays          = 366 * 5
 	KindDaily           = "daily"
@@ -351,7 +352,7 @@ func Describe(text, tz string) string {
 	return "Cron " + text
 }
 
-func Validate(text, tz string, now float64, enforceMin bool) (Spec, float64, error) {
+func Validate(ctx context.Context, q db.Querier, text, tz string, now float64, enforceMin bool) (Spec, float64, error) {
 	s, err := Parse(text, tz)
 	if err != nil {
 		return Spec{}, 0, err
@@ -361,9 +362,24 @@ func Validate(text, tz string, now float64, enforceMin bool) (Spec, float64, err
 		return Spec{}, 0, Error(errNeverFires)
 	}
 	if enforceMin && s.Recurring() {
-		if gap, ok := s.MinGap(now); ok && gap < MinIntervalSeconds {
-			return Spec{}, 0, Error(fmt.Sprintf("recurring schedules must be at least %d hour apart", MinIntervalSeconds/3600))
+		r := assistant.Read(ctx, q)
+		minInterval := r.Int(KeyMinInterval)
+		if err := r.Err(); err != nil {
+			return Spec{}, 0, err
+		}
+		if gap, ok := s.MinGap(now); ok && gap < float64(minInterval) {
+			return Spec{}, 0, Error("recurring schedules must be at least " + describeInterval(minInterval) + " apart")
 		}
 	}
 	return s, due, nil
+}
+
+func describeInterval(seconds int) string {
+	switch {
+	case seconds%3600 == 0:
+		return fmt.Sprintf("%d hour", seconds/3600)
+	case seconds%60 == 0:
+		return fmt.Sprintf("%d minutes", seconds/60)
+	}
+	return fmt.Sprintf("%d seconds", seconds)
 }

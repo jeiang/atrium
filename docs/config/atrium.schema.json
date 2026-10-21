@@ -25,6 +25,833 @@
     "assistant": {
       "additionalProperties": false,
       "properties": {
+        "agent_clear_at_least_share": {
+          "default": 0.05,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "agent_clear_at_least_share_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_clear_keep": {
+          "default": 3,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_clear_keep_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_clear_share": {
+          "default": 0.1875,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "agent_clear_share_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_commit_savings": {
+          "default": 20000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_commit_savings_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_compact_share": {
+          "default": 0.875,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "agent_compact_share_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_context_max_ids": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_context_max_ids_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_context_max_sources": {
+          "default": 100,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_context_max_sources_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_context_summary_chars": {
+          "default": 4000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_context_summary_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_dashboard_items": {
+          "default": 60,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_dashboard_items_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_effort_cron": {
+          "default": "high",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "type": "string"
+        },
+        "agent_effort_cron_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_effort_nightly": {
+          "default": "high",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "type": "string"
+        },
+        "agent_effort_nightly_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_effort_sub": {
+          "default": "medium",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "type": "string"
+        },
+        "agent_effort_sub_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_effort_subagent": {
+          "default": "medium",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "type": "string"
+        },
+        "agent_effort_subagent_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_file_cap_bytes": {
+          "default": 33554432,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_file_cap_bytes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_file_name_chars": {
+          "default": 80,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_file_name_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_grafana_cell_chars": {
+          "default": 300,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_grafana_cell_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_grafana_max_alerts": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_grafana_max_alerts_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_grafana_max_dashboards": {
+          "default": 20,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_grafana_max_dashboards_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_grafana_max_log_rows": {
+          "default": 200,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_grafana_max_log_rows_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_grafana_max_metric_rows": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_grafana_max_metric_rows_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_grafana_max_series": {
+          "default": 20,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_grafana_max_series_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_grafana_timeout_seconds": {
+          "default": 15,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_grafana_timeout_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_journal_lease_seconds": {
+          "default": 1800,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_journal_lease_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_mail_body_chars": {
+          "default": 8000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_mail_body_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_mail_max_contacts": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_mail_max_contacts_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_mail_max_loops_limit": {
+          "default": 100,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_mail_max_loops_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_mail_max_results": {
+          "default": 20,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_mail_max_results_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_mail_snippet_chars": {
+          "default": 300,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_mail_snippet_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_manifest_results": {
+          "default": 30,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_manifest_results_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_media_torrent_limit": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_media_torrent_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_message_cap_bytes": {
+          "default": 67108864,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_message_cap_bytes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_money_max_days": {
+          "default": 365,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_money_max_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_money_max_limit": {
+          "default": 200,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_money_max_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_nightly_max_threads": {
+          "default": 30,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_nightly_max_threads_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_nightly_thread_chars": {
+          "default": 3000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_nightly_thread_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_nightly_total_chars": {
+          "default": 40000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_nightly_total_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_notion_max_markdown_chars": {
+          "default": 100000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_notion_max_markdown_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_notion_max_results": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_notion_max_results_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_notion_page_chars": {
+          "default": 12000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_notion_page_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_notion_snippet_chars": {
+          "default": 300,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_notion_snippet_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_notion_stale_seconds": {
+          "default": 86400,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_notion_stale_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_preflight_share": {
+          "default": 0.95,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "agent_preflight_share_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_preserve_messages": {
+          "default": 3,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_preserve_messages_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_preview_chars": {
+          "default": 600,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_preview_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_profile_key_chars": {
+          "default": 64,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_profile_key_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_profile_value_chars": {
+          "default": 500,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_profile_value_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_project_instruction_chars": {
+          "default": 20000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_project_instruction_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_project_name_chars": {
+          "default": 80,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_project_name_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_recall_max_page_chars": {
+          "default": 16000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_recall_max_page_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_recall_page_chars": {
+          "default": 8000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_recall_page_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_skill_body_chars": {
+          "default": 20000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_skill_body_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_skill_description_chars": {
+          "default": 160,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_skill_description_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_skill_expand_chars": {
+          "default": 20000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_skill_expand_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_skill_expand_max": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_skill_expand_max_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_stub_tokens": {
+          "default": 2000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_stub_tokens_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_subagent_context_ids": {
+          "default": 20,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_subagent_context_ids_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_subagent_description_chars": {
+          "default": 160,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_subagent_description_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_subagent_digest_chars": {
+          "default": 6000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_subagent_digest_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_subagent_max_concurrent": {
+          "default": 2,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_subagent_max_concurrent_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_subagent_max_cost_usd": {
+          "default": 0.25,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "agent_subagent_max_cost_usd_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_subagent_max_steps": {
+          "default": 12,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_subagent_max_steps_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_subagent_prompt_chars": {
+          "default": 4000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_subagent_prompt_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_subagent_task_chars": {
+          "default": 4000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_subagent_task_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_summary_max_tokens": {
+          "default": 8192,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_summary_max_tokens_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_web_search_max_uses": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_web_search_max_uses_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_webfetch_max_bytes": {
+          "default": 2097152,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_webfetch_max_bytes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_webfetch_max_redirects": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_webfetch_max_redirects_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_webfetch_page_text_chars": {
+          "default": 60000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_webfetch_page_text_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_webfetch_text_default": {
+          "default": 12000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_webfetch_text_default_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_webfetch_timeout_seconds": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_webfetch_timeout_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_webfetch_user_agent": {
+          "default": "atrium-webfetch/1",
+          "type": "string"
+        },
+        "agent_webfetch_user_agent_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_workspace_plan_item_chars": {
+          "default": 200,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_workspace_plan_item_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_workspace_plan_items": {
+          "default": 20,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_workspace_plan_items_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "budget_chat_share": {
+          "default": 1,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "budget_chat_share_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "budget_unattended_share": {
           "default": 0.8,
           "type": [
@@ -45,6 +872,35 @@
           "type": "string"
         },
         "cache_ttl_chat_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "default_context_limit": {
+          "default": "90000",
+          "enum": [
+            "90000",
+            "200000",
+            "500000",
+            "1000000"
+          ],
+          "type": "string"
+        },
+        "default_context_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "default_effort": {
+          "default": "medium",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "type": "string"
+        },
+        "default_effort_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

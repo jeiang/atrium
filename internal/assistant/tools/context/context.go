@@ -7,15 +7,10 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/py"
-)
-
-const (
-	MaxIDs       = 50
-	SummaryChars = 4000
-	MaxSources   = 100
 )
 
 var contexts = tool.Kinds{tool.Chat, tool.Cron, tool.Nightly}
@@ -28,10 +23,15 @@ func guarded(v any, err error) (any, error) {
 	return v, err
 }
 
-func idsOf(args py.Dict) (any, error) {
+func idsOf(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+	r := assistant.Read(ctx, tc.DB.Read)
+	limit := r.Int(assistant.KeyContextMaxIDs)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
 	ids, _ := args.Get("ids")
-	if list, ok := ids.([]any); ok && len(list) > MaxIDs {
-		return nil, tool.Error(fmt.Sprintf("at most %d ids per call", MaxIDs))
+	if list, ok := ids.([]any); ok && len(list) > limit {
+		return nil, tool.Error(fmt.Sprintf("at most %d ids per call", limit))
 	}
 	return ids, nil
 }
@@ -41,7 +41,7 @@ func status(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
 }
 
 func pin(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
-	ids, err := idsOf(args)
+	ids, err := idsOf(ctx, tc, args)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func pin(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 }
 
 func drop(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
-	ids, err := idsOf(args)
+	ids, err := idsOf(ctx, tc, args)
 	if err != nil {
 		return nil, err
 	}
@@ -57,16 +57,22 @@ func drop(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 }
 
 func fold(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+	r := assistant.Read(ctx, tc.DB.Read)
+	summaryChars := r.Int(assistant.KeyContextSummaryChars)
+	maxSources := r.Int(assistant.KeyContextMaxSources)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
 	summary, _ := args.Get("summary")
-	if s, ok := summary.(string); ok && utf8.RuneCountInString(s) > SummaryChars {
-		return nil, tool.Error(fmt.Sprintf("summary is limited to %d characters", SummaryChars))
+	if s, ok := summary.(string); ok && utf8.RuneCountInString(s) > summaryChars {
+		return nil, tool.Error(fmt.Sprintf("summary is limited to %d characters", summaryChars))
 	}
 	raw, _ := args.Get("source_ids")
 	sources := []any{}
 	if py.Truthy(raw) {
 		list, ok := raw.([]any)
-		if !ok || len(list) > MaxSources {
-			return nil, tool.Error(fmt.Sprintf("source_ids must be a list of at most %d ids", MaxSources))
+		if !ok || len(list) > maxSources {
+			return nil, tool.Error(fmt.Sprintf("source_ids must be a list of at most %d ids", maxSources))
 		}
 		sources = list
 	}

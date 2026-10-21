@@ -10,15 +10,11 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/py"
-)
-
-const (
-	NameChars        = 80
-	InstructionChars = 20_000
 )
 
 type ProjectError string
@@ -67,17 +63,22 @@ type cleaned struct {
 	WikiHubID    *string
 }
 
-func clean(f Fields) (cleaned, error) {
+func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
 	name := py.Strip(f.Name)
 	if name == "" {
 		return cleaned{}, ProjectError("Give the project a name.")
 	}
-	if utf8.RuneCountInString(name) > NameChars {
-		return cleaned{}, ProjectError(fmt.Sprintf("The name is limited to %d characters.", NameChars))
+	r := assistant.Read(ctx, q)
+	maxName, maxInstructions := r.Int(assistant.KeyProjectNameChars), r.Int(assistant.KeyProjectInstructionChars)
+	if err := r.Err(); err != nil {
+		return cleaned{}, err
+	}
+	if utf8.RuneCountInString(name) > maxName {
+		return cleaned{}, ProjectError(fmt.Sprintf("The name is limited to %d characters.", maxName))
 	}
 	instructions := py.Strip(f.Instructions)
-	if utf8.RuneCountInString(instructions) > InstructionChars {
-		return cleaned{}, ProjectError(fmt.Sprintf("Instructions are limited to %d characters.", InstructionChars))
+	if utf8.RuneCountInString(instructions) > maxInstructions {
+		return cleaned{}, ProjectError(fmt.Sprintf("Instructions are limited to %d characters.", maxInstructions))
 	}
 	effort, err := threads.CleanEffort(f.Effort)
 	if err != nil {
@@ -99,7 +100,7 @@ func clean(f Fields) (cleaned, error) {
 }
 
 func Create(ctx context.Context, q db.Querier, now float64, f Fields) (int64, error) {
-	v, err := clean(f)
+	v, err := clean(ctx, q, f)
 	if err != nil {
 		return 0, err
 	}
@@ -113,7 +114,7 @@ func Create(ctx context.Context, q db.Querier, now float64, f Fields) (int64, er
 }
 
 func Update(ctx context.Context, q db.Querier, projectID int64, now float64, f Fields) (bool, error) {
-	v, err := clean(f)
+	v, err := clean(ctx, q, f)
 	if err != nil {
 		return false, err
 	}

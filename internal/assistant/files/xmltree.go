@@ -10,11 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/py"
 )
-
-var maxTextBytes = int(4 * actx.CharsPerToken * actx.LimitsFor(actx.ModelContext).Compact)
 
 type readError string
 
@@ -34,7 +31,7 @@ func (e limitError) Error() string { return string(e) }
 
 const (
 	treePartCap   = 16 << 20
-	streamPartCap = FileCapBytes
+	streamPartCap = 32 << 20
 	archiveCap    = 128 << 20
 	tableCellCap  = 1 << 20
 	errTooLarge   = limitError("the document is too large to read")

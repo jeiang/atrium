@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -16,8 +17,8 @@ import (
 
 const (
 	BudgetKey     = "monthly_budget_usd"
-	UnattendedKey = "budget_unattended_share"
-	ChatShare     = 1.0
+	UnattendedKey = assistant.KeyBudgetUnattended
+	ChatKey       = assistant.KeyBudgetChat
 )
 
 type BudgetExceeded string
@@ -55,6 +56,14 @@ func SetSetting(ctx context.Context, q db.Querier, key string, value any) error 
 
 func MonthlyBudget(ctx context.Context, q db.Querier) (float64, error) {
 	found, err := settings.Default.Resolve(ctx, q, BudgetKey, 0)
+	if err != nil {
+		return 0, err
+	}
+	return found.Float()
+}
+
+func chatShare(ctx context.Context, q db.Querier) (float64, error) {
+	found, err := settings.Default.Resolve(ctx, q, ChatKey, 0)
 	if err != nil {
 		return 0, err
 	}
@@ -101,13 +110,13 @@ func Check(ctx context.Context, q db.Querier, now float64, loc *time.Location, u
 	if err != nil {
 		return Status{}, err
 	}
-	threshold, who := ChatShare, "chat pauses at"
+	read, who := chatShare, "chat pauses at"
 	if unattended {
-		share, err := unattendedShare(ctx, q)
-		if err != nil {
-			return Status{}, err
-		}
-		threshold, who = share, "unattended runs pause at"
+		read, who = unattendedShare, "unattended runs pause at"
+	}
+	threshold, err := read(ctx, q)
+	if err != nil {
+		return Status{}, err
 	}
 	if found.Share >= threshold {
 		return Status{}, BudgetExceeded(fmt.Sprintf("monthly budget: $%s of $%s spent (%s); %s %s",
@@ -125,7 +134,8 @@ func init() {
 		},
 		settings.Def{
 			Key: UnattendedKey, Module: "assistant", Type: settings.Float, Default: "0.8",
-			Check: settings.Within(0, 1), Class: settings.Advanced, Scopes: []settings.Scope{settings.Instance},
+			Check: settings.Within(0, 1), Peers: assistant.Ordered(false, nil, []string{ChatKey}),
+			Class: settings.Advanced, Scopes: []settings.Scope{settings.Instance},
 		},
 	)
 }

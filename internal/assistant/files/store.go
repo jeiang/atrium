@@ -95,8 +95,8 @@ type NewFile struct {
 	Tokens    int64
 }
 
-func writeStored(dir string, owner Owner, fileID int64, name string, data []byte) (string, error) {
-	path := filepath.Join(dir, owner.dirName(), strconv.FormatInt(fileID, 10)+"-"+SafeName(name))
+func writeStored(dir string, owner Owner, fileID int64, name string, data []byte, chars int) (string, error) {
+	path := filepath.Join(dir, owner.dirName(), strconv.FormatInt(fileID, 10)+"-"+SafeName(name, chars))
 	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		return "", err
 	}
@@ -104,6 +104,10 @@ func writeStored(dir string, owner Owner, fileID int64, name string, data []byte
 }
 
 func Store(ctx context.Context, q db.Querier, dir string, f NewFile, now float64) (int64, error) {
+	chars, err := nameChars(ctx, q)
+	if err != nil {
+		return 0, err
+	}
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO thread_files (thread_id, project_id, run_id, name, media_type, bytes, path, origin, created_at, anthropic_file_id, text, tokens) "+
 			"VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, NULL, ?, ?)",
@@ -115,7 +119,7 @@ func Store(ctx context.Context, q db.Querier, dir string, f NewFile, now float64
 	if err != nil {
 		return 0, err
 	}
-	path, err := writeStored(dir, f.Owner, id, f.Name, f.Data)
+	path, err := writeStored(dir, f.Owner, id, f.Name, f.Data, chars)
 	if err != nil {
 		return 0, err
 	}
@@ -150,12 +154,16 @@ func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []Uplo
 	if len(uploads) == 0 {
 		return nil, nil
 	}
+	limits, err := ReadLimits(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	total := 0
 	for _, u := range uploads {
 		total += len(u.Data)
 	}
-	if total > MessageCapBytes {
-		return nil, FileError(fmt.Sprintf("files in one message must total under %d MB", MessageCapBytes>>20))
+	if total > limits.MessageCap {
+		return nil, FileError(fmt.Sprintf("files in one message must total under %d MB", limits.MessageCap>>20))
 	}
 	type inspected struct {
 		name string
@@ -164,7 +172,7 @@ func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []Uplo
 	}
 	found := make([]inspected, 0, len(uploads))
 	for _, u := range uploads {
-		info, err := Inspect(u.Name, u.Data, u.Type)
+		info, err := Inspect(u.Name, u.Data, u.Type, limits)
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +187,7 @@ func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []Uplo
 		for i, f := range found {
 			items[i] = nameTokens{f.name, f.info.Tokens}
 		}
-		if err := checkBudget(items, *contextLimit); err != nil {
+		if err := checkBudget(items, *contextLimit, limits); err != nil {
 			return nil, err
 		}
 	}
@@ -197,6 +205,10 @@ func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []Uplo
 }
 
 func clone(ctx context.Context, q db.Querier, from Scope, fileID, threadID int64, now float64) (int64, bool, error) {
+	chars, err := nameChars(ctx, q)
+	if err != nil {
+		return 0, false, err
+	}
 	found, err := Get(ctx, q, fileID)
 	if err != nil || found == nil || !from.owns(found) {
 		return 0, false, err
@@ -211,7 +223,7 @@ func clone(ctx context.Context, q db.Querier, from Scope, fileID, threadID int64
 	if err != nil {
 		return 0, false, err
 	}
-	path := filepath.Join(filepath.Dir(filepath.Dir(found.Path)), strconv.FormatInt(threadID, 10), strconv.FormatInt(id, 10)+"-"+SafeName(found.Name))
+	path := filepath.Join(filepath.Dir(filepath.Dir(found.Path)), strconv.FormatInt(threadID, 10), strconv.FormatInt(id, 10)+"-"+SafeName(found.Name, chars))
 	if info, err := os.Stat(found.Path); err == nil && info.Mode().IsRegular() {
 		if err := copyFile(found.Path, path); err != nil {
 			return 0, false, err

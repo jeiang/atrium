@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"slices"
+	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 )
@@ -15,7 +16,9 @@ const (
 
 var WebSearchKinds = tool.Kinds{tool.Chat, tool.Cron}
 
-var webSearch = json.RawMessage(`{"type":"` + webSearchType + `","name":"` + WebSearchName + `","max_uses":5,"allowed_callers":["direct"]}`)
+func webSearch(maxUses int) json.RawMessage {
+	return json.RawMessage(`{"type":"` + webSearchType + `","name":"` + WebSearchName + `","max_uses":` + strconv.Itoa(maxUses) + `,"allowed_callers":["direct"]}`)
+}
 
 type toolParam struct {
 	Name        string          `json:"name"`
@@ -35,19 +38,19 @@ func Params(tools []tool.Tool) ([]json.RawMessage, error) {
 	return out, nil
 }
 
-func ServerTools(kind tool.Kind, allow []string) []json.RawMessage {
+func ServerTools(kind tool.Kind, allow []string, webSearchMaxUses int) []json.RawMessage {
 	if WebSearchKinds.Has(kind) || (kind == tool.Sub && allow != nil && slices.Contains(allow, WebSearchName)) {
-		return []json.RawMessage{slices.Clone(webSearch)}
+		return []json.RawMessage{webSearch(webSearchMaxUses)}
 	}
 	return nil
 }
 
-func RequestTools(tools []tool.Tool, kind tool.Kind, allow []string, cacheControl json.RawMessage) ([]json.RawMessage, error) {
+func RequestTools(tools []tool.Tool, kind tool.Kind, allow []string, cacheControl json.RawMessage, webSearchMaxUses int) ([]json.RawMessage, error) {
 	params, err := Params(tools)
 	if err != nil {
 		return nil, err
 	}
-	params = append(params, ServerTools(kind, allow)...)
+	params = append(params, ServerTools(kind, allow, webSearchMaxUses)...)
 	if len(params) == 0 {
 		return nil, nil
 	}

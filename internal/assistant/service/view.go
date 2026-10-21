@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/progress"
@@ -364,7 +365,17 @@ type Meter struct {
 }
 
 func MeterOf(ctx context.Context, q db.Querier, thread threads.Thread) (Meter, error) {
-	limits := actx.LimitsFor(threads.ContextLimitOf(thread))
+	r := assistant.Read(ctx, q)
+	shares := actx.Tuning{
+		ClearShare:        r.Float(assistant.KeyClearShare),
+		ClearAtLeastShare: r.Float(assistant.KeyClearAtLeastShare),
+		CompactShare:      r.Float(assistant.KeyCompactShare),
+		PreflightShare:    r.Float(assistant.KeyPreflightShare),
+	}
+	if err := r.Err(); err != nil {
+		return Meter{}, err
+	}
+	limits := actx.LimitsFor(threads.ContextLimitOf(thread), shares)
 	var tokens int64
 	err := q.QueryRowContext(ctx,
 		"SELECT input_tokens + cache_write_5m + cache_write_1h + cache_read AS prompt FROM usage WHERE thread_id = ? ORDER BY id DESC LIMIT 1",

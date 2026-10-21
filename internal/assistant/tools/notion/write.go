@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
@@ -18,21 +19,25 @@ import (
 )
 
 const (
-	maxMarkdownChars = 100_000
-	undoRestore      = "notion_page_restore"
-	undoTrash        = "notion_page_trash"
-	undoUntrash      = "notion_page_untrash"
-	undoMove         = "notion_page_move"
-	undoAliases      = "notion_aliases_restore"
+	undoRestore = "notion_page_restore"
+	undoTrash   = "notion_page_trash"
+	undoUntrash = "notion_page_untrash"
+	undoMove    = "notion_page_move"
+	undoAliases = "notion_aliases_restore"
 )
 
 var writeKinds = tool.Kinds{tool.Chat, tool.Nightly}
 
 func normalize(id string) string { return notionid.Normalize(id) }
 
-func checkMarkdown(tc *tool.Context, markdown string) error {
-	if len([]rune(markdown)) > maxMarkdownChars {
-		return tool.Error("markdown is limited to " + strconv.Itoa(maxMarkdownChars) + " characters")
+func checkMarkdown(ctx context.Context, tc *tool.Context, markdown string) error {
+	r := assistant.Read(ctx, tc.DB.Read)
+	maxMarkdown := r.Int(assistant.KeyNotionMaxMarkdown)
+	if err := r.Err(); err != nil {
+		return err
+	}
+	if len([]rune(markdown)) > maxMarkdown {
+		return tool.Error("markdown is limited to " + strconv.Itoa(maxMarkdown) + " characters")
 	}
 	urls, err := notion.ExternalURLs(markdown)
 	if err != nil {
@@ -241,7 +246,7 @@ func createPage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 		}
 		allowDuplicate = b
 	}
-	if err := checkMarkdown(tc, markdown); err != nil {
+	if err := checkMarkdown(ctx, tc, markdown); err != nil {
 		return nil, err
 	}
 	wiki, err := wikiOf(ctx, tc)
@@ -377,7 +382,7 @@ func updatePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 	if checked == nil {
 		checked = appendText
 	}
-	if err := checkMarkdown(tc, *checked); err != nil {
+	if err := checkMarkdown(ctx, tc, *checked); err != nil {
 		return nil, err
 	}
 	wiki, err := wikiOf(ctx, tc)
@@ -442,8 +447,13 @@ func rewrite(ctx context.Context, q db.Querier, wiki notion.Wiki, client *notion
 	if updated, merged, err = wiki.WithFooter(next, date, append(append([]string{}, prior...), sources...)); err != nil {
 		return
 	}
-	if len([]rune(updated)) > maxMarkdownChars {
-		err = tool.Error("page would exceed " + strconv.Itoa(maxMarkdownChars) + " characters")
+	limits := assistant.Read(ctx, q)
+	maxMarkdown := limits.Int(assistant.KeyNotionMaxMarkdown)
+	if err = limits.Err(); err != nil {
+		return
+	}
+	if len([]rune(updated)) > maxMarkdown {
+		err = tool.Error("page would exceed " + strconv.Itoa(maxMarkdown) + " characters")
 		return
 	}
 	if _, err = client.UpdateMarkdown(ctx, pageID, replaceContent(updated)); err != nil {

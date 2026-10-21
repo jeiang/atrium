@@ -189,7 +189,11 @@ func Status(ctx gocontext.Context, q db.Querier, threadID int64) (py.Dict, error
 	if err != nil {
 		return nil, err
 	}
-	shown := found[max(len(found)-DashboardItems, 0):]
+	t, err := ReadTuning(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	shown := found[max(len(found)-t.DashboardItems, 0):]
 	items := make([]any, len(shown))
 	for i, it := range shown {
 		items[i] = it.Dict()
@@ -198,7 +202,7 @@ func Status(ctx gocontext.Context, q db.Querier, threadID int64) (py.Dict, error
 		{Key: "approx_tokens", Value: approx},
 		{Key: "turn_start_seq", Value: TurnStart(messages)},
 		{Key: "staged_savings", Value: stagedOf(ledger)},
-		{Key: "commit_at_savings", Value: int64(CommitSavings)},
+		{Key: "commit_at_savings", Value: int64(t.CommitSavings)},
 		{Key: "items", Value: items},
 		{Key: "omitted_items", Value: int64(len(found) - len(shown))},
 		{Key: "folds", Value: folds},
@@ -325,10 +329,14 @@ func Drop(ctx gocontext.Context, q db.Querier, threadID, runID int64, ids any, n
 	if err != nil {
 		return nil, err
 	}
+	t, err := ReadTuning(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	return py.Dict{
 		{Key: "staged_drop", Value: clean},
 		{Key: "staged_savings", Value: staged},
-		{Key: "commit_at_savings", Value: int64(CommitSavings)},
+		{Key: "commit_at_savings", Value: int64(t.CommitSavings)},
 	}, nil
 }
 
@@ -434,11 +442,15 @@ func Fold(ctx gocontext.Context, q db.Querier, threadID, runID int64, fromSeq, t
 	if err != nil {
 		return nil, err
 	}
+	t, err := ReadTuning(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	return py.Dict{
 		{Key: "staged_fold", Value: itemID},
 		{Key: "tokens_saved", Value: savings},
 		{Key: "staged_savings", Value: staged},
-		{Key: "commit_at_savings", Value: int64(CommitSavings)},
+		{Key: "commit_at_savings", Value: int64(t.CommitSavings)},
 	}, nil
 }
 

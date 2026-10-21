@@ -10,7 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-func ExtractText(markup, pageURL string) (title, text string) {
+func ExtractText(markup, pageURL string, pageChars int) (title, text string) {
 	title, fallback := PlainText(markup)
 	if t, body, ok := readable(markup, pageURL); ok {
 		if t != "" {
@@ -21,7 +21,7 @@ func ExtractText(markup, pageURL string) (title, text string) {
 	if text == "" {
 		text = fallback
 	}
-	return collapse(title), py.Clip(text, PageTextChars)
+	return collapse(title), py.Clip(text, pageChars)
 }
 
 func readable(markup, pageURL string) (title, text string, ok bool) {

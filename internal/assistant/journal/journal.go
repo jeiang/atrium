@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -41,7 +42,11 @@ const (
 	Assistant = "assistant"
 )
 
-const LeaseSeconds = 1800
+func leaseSeconds(ctx context.Context, q db.Querier) (float64, error) {
+	r := assistant.Read(ctx, q)
+	n := r.Int(assistant.KeyJournalLeaseSeconds)
+	return float64(n), r.Err()
+}
 
 func NewOwner() string {
 	host, _ := os.Hostname()
@@ -98,9 +103,13 @@ func changed(res sql.Result, err error) (bool, error) {
 }
 
 func StartRun(ctx context.Context, q db.Querier, threadID int64, kind, model, effort string, now float64, parentRunID *int64, owner *string) (int64, error) {
+	lease, err := leaseSeconds(ctx, q)
+	if err != nil {
+		return 0, err
+	}
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO runs (thread_id, parent_run_id, kind, model, effort, state, started_at, owner, lease_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		threadID, parentRunID, kind, model, effort, Running, now, owner, now+LeaseSeconds)
+		threadID, parentRunID, kind, model, effort, Running, now, owner, now+lease)
 	if err != nil {
 		return 0, err
 	}
@@ -217,8 +226,12 @@ func BumpSteps(ctx context.Context, q db.Querier, runID int64) error {
 }
 
 func RenewLease(ctx context.Context, q db.Querier, runID int64, owner string, now float64) (bool, error) {
+	lease, err := leaseSeconds(ctx, q)
+	if err != nil {
+		return false, err
+	}
 	return changed(q.ExecContext(ctx, "UPDATE runs SET lease_until = ? WHERE id = ? AND owner = ? AND state = ?",
-		now+LeaseSeconds, runID, owner, Running))
+		now+lease, runID, owner, Running))
 }
 
 func MarkInterrupted(ctx context.Context, q db.Querier, now float64) (int64, error) {
@@ -232,8 +245,12 @@ func MarkInterrupted(ctx context.Context, q db.Querier, now float64) (int64, err
 }
 
 func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, now float64) (bool, error) {
+	lease, err := leaseSeconds(ctx, q)
+	if err != nil {
+		return false, err
+	}
 	return changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state = ?",
-		Running, owner, now+LeaseSeconds, runID, Interrupted))
+		Running, owner, now+lease, runID, Interrupted))
 }
 
 func InterruptedRuns(ctx context.Context, q db.Querier) ([]Run, error) {

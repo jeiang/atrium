@@ -2,16 +2,19 @@ package scheduler
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 
 	"github.com/jeiang/atrium/internal/assistant/nightly"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
-	NightlySchedule = "daily 02:30"
-	NightlyName     = "nightly"
+	NightlyName = "nightly"
 
 	CalendarCandidatesName = "calendar-candidates"
 	FXRatesName            = "fx-rates"
@@ -21,7 +24,7 @@ const (
 )
 
 type Builtin struct {
-	Name, Schedule, Prompt string
+	Name, Prompt string
 }
 
 const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untrusted + " Gather, then write the review as your reply, with these " +
@@ -46,13 +49,34 @@ const dailyNudgesPrompt = "Daily nudges for the operator. " + prompts.Untrusted 
 	"then reply with the same list."
 
 var BuiltinJobs = []Builtin{
-	{"weekly-review", "weekly sun 18:00", weeklyReviewPrompt},
-	{"daily-nudges", "daily 08:00", dailyNudgesPrompt},
-	{CalendarCandidatesName, "0 * * * *", "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty)."},
-	{FXRatesName, "weekly mon 06:00", "Weekly: fetch the CBTT USD selling rate for the spending ledger (no model run)."},
-	{MediaChannelsName, "*/30 * * * *", "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run)."},
-	{MediaSweepName, "*/10 * * * *", "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run)."},
-	{MediaThumbnailsName, "daily 04:00", "Daily: generate missing episode thumbnails for the media library (no model run)."},
+	{"weekly-review", weeklyReviewPrompt},
+	{"daily-nudges", dailyNudgesPrompt},
+	{CalendarCandidatesName, "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty)."},
+	{FXRatesName, "Weekly: fetch the CBTT USD selling rate for the spending ledger (no model run)."},
+	{MediaChannelsName, "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run)."},
+	{MediaSweepName, "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run)."},
+	{MediaThumbnailsName, "Daily: generate missing episode thumbnails for the media library (no model run)."},
+}
+
+func builtinSchedule(ctx context.Context, q db.Querier, name string) (string, bool, error) {
+	found, err := settings.Default.Resolve(ctx, q, scheduleKeys[name], 0)
+	return found.Value, found.Origin != settings.FromDefault, err
+}
+
+var modelRuns = map[string]bool{NightlyName: true, "weekly-review": true, "daily-nudges": true}
+
+func syncSchedule(ctx context.Context, q db.Querier, job Job, now float64) error {
+	schedule, explicit, err := builtinSchedule(ctx, q, job.Name)
+	if err != nil || !explicit || schedule == job.Schedule {
+		return err
+	}
+	_, err = UpdateJob(ctx, q, job.ID, now, JobUpdate{Schedule: &schedule, SkipLimits: !modelRuns[job.Name]})
+	var refused Error
+	if errors.As(err, &refused) {
+		log.Warn(fmt.Sprintf("schedule setting for %s not applied: %s", job.Name, refused), logx.Job, job.ID)
+		return nil
+	}
+	return err
 }
 
 var CallableNames = []string{CalendarCandidatesName, FXRatesName, MediaChannelsName, MediaSweepName, MediaThumbnailsName}
@@ -67,39 +91,64 @@ func BuiltinPrompt(name string) (string, bool) {
 }
 
 func EnsureNightly(ctx context.Context, q db.Querier, tz string, now float64) error {
-	var one int
-	err := q.QueryRowContext(ctx, "SELECT 1 FROM jobs WHERE kind = ?", JobNightly).Scan(&one)
+	var id int64
+	err := q.QueryRowContext(ctx, "SELECT id FROM jobs WHERE kind = ?", JobNightly).Scan(&id)
 	if err == nil {
-		return nil
+		job, err := GetJob(ctx, q, id)
+		if err != nil || job == nil {
+			return err
+		}
+		return syncSchedule(ctx, q, *job, now)
 	}
 	if !isNoRows(err) {
 		return err
 	}
+	schedule, _, err := builtinSchedule(ctx, q, NightlyName)
+	if err != nil {
+		return err
+	}
 	_, err = CreateJob(ctx, q, NewJob{
-		Name: NightlyName, Prompt: nightly.Prompt, Schedule: NightlySchedule, TZ: tz, Now: now,
+		Name: NightlyName, Prompt: nightly.Prompt, Schedule: schedule, TZ: tz, Now: now,
 		CreatedBy: Operator, Kind: JobNightly, SkipLimits: true,
 	})
 	return err
 }
 
 func EnsureBuiltins(ctx context.Context, q db.Querier, tz string, now float64) error {
-	rows, err := q.QueryContext(ctx, "SELECT name FROM jobs WHERE kind = ?", JobBuiltin)
+	rows, err := q.QueryContext(ctx, "SELECT id, name FROM jobs WHERE kind = ?", JobBuiltin)
 	if err != nil {
 		return err
 	}
-	have, err := db.Collect(rows, func(r *sqlRows) (string, error) {
-		var name string
-		return name, r.Scan(&name)
+	type have struct {
+		id   int64
+		name string
+	}
+	existing, err := db.Collect(rows, func(r *sqlRows) (have, error) {
+		var h have
+		return h, r.Scan(&h.id, &h.name)
 	})
 	if err != nil {
 		return err
 	}
 	for _, spec := range BuiltinJobs {
-		if slices.Contains(have, spec.Name) {
+		if i := slices.IndexFunc(existing, func(h have) bool { return h.name == spec.Name }); i >= 0 {
+			job, err := GetJob(ctx, q, existing[i].id)
+			if err != nil {
+				return err
+			}
+			if job != nil {
+				if err := syncSchedule(ctx, q, *job, now); err != nil {
+					return err
+				}
+			}
 			continue
 		}
+		schedule, _, err := builtinSchedule(ctx, q, spec.Name)
+		if err != nil {
+			return err
+		}
 		if _, err := CreateJob(ctx, q, NewJob{
-			Name: spec.Name, Prompt: spec.Prompt, Schedule: spec.Schedule, TZ: tz, Now: now,
+			Name: spec.Name, Prompt: spec.Prompt, Schedule: schedule, TZ: tz, Now: now,
 			CreatedBy: Operator, Kind: JobBuiltin, SkipLimits: true,
 		}); err != nil {
 			return err

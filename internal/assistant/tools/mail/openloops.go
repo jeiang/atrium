@@ -6,12 +6,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const maxLimit = 100
+const schemaMaxLoops = 100
 
 var loopKinds = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
 
@@ -24,11 +25,11 @@ func enum(values ...string) string {
 }
 
 var openLoopsSchema = json.RawMessage(`{"type":"object","properties":{"state":{"type":"string","enum":` +
-	enum(openloops.States[:]...) + `},"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(maxLimit) + `}},` +
+	enum(openloops.States[:]...) + `},"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxLoops) + `}},` +
 	`"additionalProperties":false}`)
 
 var commitmentsSchema = json.RawMessage(`{"type":"object","properties":{"status":{"type":"string","enum":` +
-	enum(openloops.CommitmentStatuses[:]...) + `},"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(maxLimit) + `}},` +
+	enum(openloops.CommitmentStatuses[:]...) + `},"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxLoops) + `}},` +
 	`"additionalProperties":false}`)
 
 func openLoopTools() []tool.Tool {
@@ -75,7 +76,12 @@ func openLoops(ctx context.Context, tc *tool.Context, args py.Dict) (any, error)
 	if err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 20, maxLimit, 1)
+	r := assistant.Read(ctx, tc.DB.Read)
+	maxLimit := r.Int(assistant.KeyMailMaxLoopsLimit)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	limit, err := tool.BoundedInt(args, "limit", 20, int64(maxLimit), 1)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +117,12 @@ func commitments(ctx context.Context, tc *tool.Context, args py.Dict) (any, erro
 	if err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 20, maxLimit, 1)
+	r := assistant.Read(ctx, tc.DB.Read)
+	maxLimit := r.Int(assistant.KeyMailMaxLoopsLimit)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	limit, err := tool.BoundedInt(args, "limit", 20, int64(maxLimit), 1)
 	if err != nil {
 		return nil, err
 	}

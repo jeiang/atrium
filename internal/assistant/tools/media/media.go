@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
@@ -20,7 +21,6 @@ const (
 	UndoTorrent        = "media_torrent_delete"
 	UndoChannelDelete  = "media_channel_delete"
 	UndoChannelRestore = "media_channel_restore"
-	TorrentLimit       = 50
 )
 
 var (
@@ -189,8 +189,13 @@ func mediaDownloads(ctx context.Context, tc *tool.Context, _ py.Dict) (any, erro
 			return nil, err
 		}
 	}
+	r := assistant.Read(ctx, tc.DB.Read)
+	torrentLimit := r.Int(assistant.KeyMediaTorrentLimit)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
 	shown := []any{}
-	for _, t := range torrents[:min(TorrentLimit, len(torrents))] {
+	for _, t := range torrents[:min(torrentLimit, len(torrents))] {
 		shown = append(shown, torrentDict(t))
 	}
 	queue := []any{}

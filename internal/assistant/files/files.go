@@ -1,22 +1,22 @@
 package files
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
-	FileCapBytes    = 32 << 20
-	MessageCapBytes = 64 << 20
-	ImageCapBytes   = 5 << 20
-	NameChars       = 80
+	ImageCapBytes = 5 << 20
 
 	PDFTokensPerPage = 2000
 	ImageTokens      = 1600
@@ -68,14 +68,44 @@ func (e FileError) Error() string { return string(e) }
 
 func IsImageType(mediaType string) bool { return imageTypes[mediaType] }
 
-func SafeName(name string) string {
+type Limits struct {
+	FileCap      int
+	MessageCap   int
+	NameChars    int
+	CompactShare float64
+}
+
+func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
+	r := assistant.Read(ctx, q)
+	l := Limits{
+		FileCap:      r.Int(assistant.KeyFileCapBytes),
+		MessageCap:   r.Int(assistant.KeyMessageCapBytes),
+		NameChars:    r.Int(assistant.KeyFileNameChars),
+		CompactShare: r.Float(assistant.KeyCompactShare),
+	}
+	return l, r.Err()
+}
+
+func (l Limits) tuning() actx.Tuning { return actx.Tuning{CompactShare: l.CompactShare} }
+
+func (l Limits) textBytes() int {
+	return int(4 * actx.CharsPerToken * actx.LimitsFor(actx.ModelContext, l.tuning()).Compact)
+}
+
+func nameChars(ctx context.Context, q db.Querier) (int, error) {
+	r := assistant.Read(ctx, q)
+	n := r.Int(assistant.KeyFileNameChars)
+	return n, r.Err()
+}
+
+func SafeName(name string, chars int) string {
 	cleaned, _ := nameRe.Sub("_", py.PathName(name), 0)
 	cleaned = strings.TrimLeft(cleaned, "._")
 	if cleaned == "" {
 		cleaned = "file"
 	}
-	if utf8.RuneCountInString(cleaned) > NameChars {
-		return string([]rune(cleaned)[:NameChars])
+	if utf8.RuneCountInString(cleaned) > chars {
+		return string([]rune(cleaned)[:chars])
 	}
 	return cleaned
 }
@@ -125,13 +155,13 @@ func pdfPages(data []byte) int64 {
 	return max(int64(len(found)), 1)
 }
 
-func ExtractText(data []byte, mediaType string) (string, error) {
+func ExtractText(data []byte, mediaType string, l Limits) (string, error) {
 	switch mediaType {
 	case DOCXType:
-		text, err := docxText(data)
+		text, err := docxText(data, l.textBytes())
 		return text, extractFailure("Word", err)
 	case XLSXType:
-		text, err := xlsxText(data)
+		text, err := xlsxText(data, l.textBytes())
 		return text, extractFailure("Excel", err)
 	}
 	if indexZero(data[:min(len(data), binarySniffBytes)]) {
@@ -160,14 +190,14 @@ func indexZero(b []byte) bool {
 	return false
 }
 
-func Inspect(name string, data []byte, supplied string) (Info, error) {
+func Inspect(name string, data []byte, supplied string, l Limits) (Info, error) {
 	mediaType := MediaTypeOf(name, supplied)
 	kind := KindOf(mediaType)
 	if kind == "" {
 		return Info{}, FileError(name + ": atrium reads " + Supported)
 	}
-	if len(data) > FileCapBytes {
-		return Info{}, FileError(fmt.Sprintf("%s is over the %d MB limit", name, FileCapBytes>>20))
+	if len(data) > l.FileCap {
+		return Info{}, FileError(fmt.Sprintf("%s is over the %d MB limit", name, l.FileCap>>20))
 	}
 	if kind == KindImage && len(data) > ImageCapBytes {
 		return Info{}, FileError(fmt.Sprintf("%s is over the %d MB image limit", name, ImageCapBytes>>20))
@@ -179,7 +209,7 @@ func Inspect(name string, data []byte, supplied string) (Info, error) {
 	case KindImage:
 		info.Tokens = ImageTokens
 	default:
-		text, err := ExtractText(data, mediaType)
+		text, err := ExtractText(data, mediaType, l)
 		if err != nil {
 			return Info{}, FileError(name + ": " + err.Error())
 		}
@@ -194,8 +224,8 @@ type nameTokens struct {
 	Tokens int64
 }
 
-func checkBudget(items []nameTokens, contextLimit int64) error {
-	budget := actx.LimitsFor(contextLimit).Compact
+func checkBudget(items []nameTokens, contextLimit int64, l Limits) error {
+	budget := actx.LimitsFor(contextLimit, l.tuning()).Compact
 	var total int64
 	for _, it := range items {
 		total += it.Tokens

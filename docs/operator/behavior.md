@@ -33,9 +33,9 @@ Every mailbox write goes through one safety gate.
 - **Scheduled runs** (cron) cannot call any tool whose effect is a write. They can read, and they can create proposals for the operator to approve.
 - **Nightly runs** have the same read access and may in addition create, update, move, archive and alias Notion pages, and update the profile. Profile changes are logged and undoable.
 - **Chat** is the only run kind that can create calendar events, edit drafts, or change money, media or schedule records.
-- **Research subagents** are limited to read-only tools, at most 12 steps and at most $0.25 of spend per run, with at most two running at once. They cannot write, notify, schedule or start other agents.
+- **Research subagents** are limited to read-only tools, by default at most 12 steps and $0.25 of spend per run, with at most two running at once (`agent_subagent_max_steps`, `agent_subagent_max_cost_usd`, `agent_subagent_max_concurrent`). They cannot write, notify, schedule or start other agents.
 - **Per-run limits.** Each run stops after the configured maximum number of steps (default 24) and maximum cost (default $2); both are settings.
-- **Monthly budget.** Spend for the calendar month in the operator's time zone is compared with the monthly budget. Chat stops starting new work at 100% of the budget. Scheduled and nightly runs stop at the configured unattended share of the budget (default 80%). A research subagent does not start once a budget limit has been reached.
+- **Monthly budget.** Spend for the calendar month in the operator's time zone is compared with the monthly budget. Chat stops starting new work at the chat share of the budget (`budget_chat_share`, default and ceiling 100%). Scheduled and nightly runs stop at the unattended share (`budget_unattended_share`, default 80%), which cannot exceed the chat share. A research subagent does not start once a budget limit has been reached.
 - **Sending mail** is an operator action only; see [Mail safety](#mail-safety).
 - Tool permissions, run-kind restrictions and spending limits are enforced in code, not in prompts. Mail, files, pages and tool results are treated as untrusted data and cannot grant URL access or extend skills. Arbitrary web fetches use an allowlist and SSRF protection on every redirect.
 - Code execution is unavailable.

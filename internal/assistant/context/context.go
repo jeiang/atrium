@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -16,24 +17,12 @@ import (
 
 const (
 	CharsPerToken = 4
-	StubTokens    = 2000
-	PreviewChars  = 600
 	StubNote      = "Result stored; call recall(result_id, offset, limit) to read it in pages."
 )
 
 const (
 	ModelContext          = 1_000_000
-	ClearShare            = 0.1875
-	ClearKeep             = 3
-	ClearAtLeastShare     = 0.05
-	CompactShare          = 0.875
-	PreflightShare        = 0.95
-	CommitSavings         = 20_000
-	PreserveMessages      = 3
-	SummaryMaxTokens      = 8192
 	SummaryEffort         = "low"
-	DashboardItems        = 60
-	ManifestResults       = 30
 	BetaContextManagement = anthropic.BetaContextManagement
 	BetaCompaction        = anthropic.BetaCompaction
 	ClearToolUses         = "clear_tool_uses_20250919"
@@ -126,9 +115,43 @@ func Store(ctx gocontext.Context, q db.Querier, runID, callID int64, tool, body 
 	return id, tokens, err
 }
 
-func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool string, value any, now float64) (string, *int64, error) {
+type Tuning struct {
+	ClearShare        float64
+	ClearAtLeastShare float64
+	CompactShare      float64
+	PreflightShare    float64
+	ClearKeep         int
+	CommitSavings     int
+	PreserveMessages  int
+	SummaryMaxTokens  int
+	StubTokens        int
+	PreviewChars      int
+	DashboardItems    int
+	ManifestResults   int
+}
+
+func ReadTuning(ctx gocontext.Context, q db.Querier) (Tuning, error) {
+	r := assistant.Read(ctx, q)
+	t := Tuning{
+		ClearShare:        r.Float(assistant.KeyClearShare),
+		ClearAtLeastShare: r.Float(assistant.KeyClearAtLeastShare),
+		CompactShare:      r.Float(assistant.KeyCompactShare),
+		PreflightShare:    r.Float(assistant.KeyPreflightShare),
+		ClearKeep:         r.Int(assistant.KeyClearKeep),
+		CommitSavings:     r.Int(assistant.KeyCommitSavings),
+		PreserveMessages:  r.Int(assistant.KeyPreserveMessages),
+		SummaryMaxTokens:  r.Int(assistant.KeySummaryMaxTokens),
+		StubTokens:        r.Int(assistant.KeyStubTokens),
+		PreviewChars:      r.Int(assistant.KeyPreviewChars),
+		DashboardItems:    r.Int(assistant.KeyDashboardItems),
+		ManifestResults:   r.Int(assistant.KeyManifestResults),
+	}
+	return t, r.Err()
+}
+
+func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool string, value any, now float64, t Tuning) (string, *int64, error) {
 	body := Serialize(value)
-	if EstimateTokens(body) <= StubTokens {
+	if EstimateTokens(body) <= int64(t.StubTokens) {
 		return body, nil, nil
 	}
 	resultID, tokens, err := Store(ctx, q, runID, callID, tool, body, now)
@@ -139,7 +162,7 @@ func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool strin
 		{Key: "result_id", Value: resultID},
 		{Key: "tool", Value: tool},
 		{Key: "tokens", Value: tokens},
-		{Key: "preview", Value: py.Clip(body, PreviewChars)},
+		{Key: "preview", Value: py.Clip(body, t.PreviewChars)},
 		{Key: "note", Value: StubNote},
 	}
 	return py.JSONDumps(stub, valueJSON), &resultID, nil
@@ -151,17 +174,19 @@ type Limits struct {
 	Compact      int64
 	Clear        int64
 	ClearAtLeast int64
+	Tuning       Tuning
 }
 
-func LimitsFor(contextLimit int64) Limits {
+func LimitsFor(contextLimit int64, t Tuning) Limits {
 	hard := min(contextLimit, ModelContext)
 	share := func(s float64) int64 { return int64(float64(hard) * s) }
 	return Limits{
 		Hard:         hard,
-		Preflight:    share(PreflightShare),
-		Compact:      share(CompactShare),
-		Clear:        share(ClearShare),
-		ClearAtLeast: share(ClearAtLeastShare),
+		Preflight:    share(t.PreflightShare),
+		Compact:      share(t.CompactShare),
+		Clear:        share(t.ClearShare),
+		ClearAtLeast: share(t.ClearAtLeastShare),
+		Tuning:       t,
 	}
 }
 
@@ -174,7 +199,7 @@ func ContextManagement(l Limits) json.RawMessage {
 		py.Dict{
 			{Key: "type", Value: ClearToolUses},
 			{Key: "trigger", Value: typed(inputTokens, l.Clear)},
-			{Key: "keep", Value: typed("tool_uses", ClearKeep)},
+			{Key: "keep", Value: typed("tool_uses", int64(l.Tuning.ClearKeep))},
 			{Key: "clear_at_least", Value: typed(inputTokens, l.ClearAtLeast)},
 			{Key: "clear_tool_inputs", Value: false},
 			{Key: "exclude_tools", Value: []string{recallTool}},
