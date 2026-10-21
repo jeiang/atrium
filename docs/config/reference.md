@@ -70,6 +70,18 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_project_name_chars` | int | `80` | cap | `ATRIUM_ASSISTANT_AGENT_PROJECT_NAME_CHARS` |
 | `agent_recall_max_page_chars` | int | `16000` | cap | `ATRIUM_ASSISTANT_AGENT_RECALL_MAX_PAGE_CHARS` |
 | `agent_recall_page_chars` | int | `8000` | cap | `ATRIUM_ASSISTANT_AGENT_RECALL_PAGE_CHARS` |
+| `agent_schedule_calendar_candidates` | string | `0 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_CALENDAR_CANDIDATES` |
+| `agent_schedule_daily_nudges` | string | `daily 08:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_DAILY_NUDGES` |
+| `agent_schedule_fx_rates` | string | `weekly mon 06:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_FX_RATES` |
+| `agent_schedule_media_channels` | string | `*/30 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_CHANNELS` |
+| `agent_schedule_media_sweep` | string | `*/10 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_SWEEP` |
+| `agent_schedule_media_thumbnails` | string | `daily 04:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_THUMBNAILS` |
+| `agent_schedule_min_interval_seconds` | int | `3600` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MIN_INTERVAL_SECONDS` |
+| `agent_schedule_nightly` | string | `daily 02:30` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_NIGHTLY` |
+| `agent_schedule_weekly_review` | string | `weekly sun 18:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_WEEKLY_REVIEW` |
+| `agent_scheduler_lease_seconds` | int | `1800` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_LEASE_SECONDS` |
+| `agent_scheduler_missed_grace_seconds` | int | `120` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_MISSED_GRACE_SECONDS` |
+| `agent_scheduler_tick_seconds` | int | `30` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_TICK_SECONDS` |
 | `agent_skill_body_chars` | int | `20000` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_BODY_CHARS` |
 | `agent_skill_description_chars` | int | `160` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_DESCRIPTION_CHARS` |
 | `agent_skill_expand_chars` | int | `20000` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_CHARS` |
@@ -102,6 +114,26 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `max_steps` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS` |
 | `monthly_budget_usd` | float | `75` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
 
+## calendar
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `calendar_dir` | string | none | advanced | `ATRIUM_CALENDAR_CALENDAR_DIR` |
+| `candidate_draft_limit` | int | `10` | advanced | `ATRIUM_CALENDAR_CANDIDATE_DRAFT_LIMIT` |
+| `candidate_scan_limit` | int | `50` | advanced | `ATRIUM_CALENDAR_CANDIDATE_SCAN_LIMIT` |
+| `default_event_minutes` | int | `60` | ui | `ATRIUM_CALENDAR_DEFAULT_EVENT_MINUTES` |
+| `google_client_id` | string | none | ui | `ATRIUM_CALENDAR_GOOGLE_CLIENT_ID` |
+| `icloud_apple_id` | string | none | ui | `ATRIUM_CALENDAR_ICLOUD_APPLE_ID` |
+| `icloud_calendar` | string | none | ui | `ATRIUM_CALENDAR_ICLOUD_CALENDAR` |
+| `max_events` | int | `200` | advanced | `ATRIUM_CALENDAR_MAX_EVENTS` |
+| `max_occurrences` | int | `2000` | advanced | `ATRIUM_CALENDAR_MAX_OCCURRENCES` |
+
+## contacts
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `contacts_dir` | string | none | advanced | `ATRIUM_CONTACTS_CONTACTS_DIR` |
+
 ## core
 
 | Key | Type | Default | Class | Environment variable |
@@ -115,6 +147,191 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
 | `key` | string | none | secret | `ATRIUM_DB_KEY` |
+
+## mail
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `birthdays_default_days` | int | `14` | advanced | `ATRIUM_MAIL_BIRTHDAYS_DEFAULT_DAYS` |
+| `birthdays_max_days` | int | `366` | advanced | `ATRIUM_MAIL_BIRTHDAYS_MAX_DAYS` |
+| `deletion_interval_seconds` | int | `86400` | advanced | `ATRIUM_MAIL_DELETION_INTERVAL_SECONDS` |
+| `deletions_min_deleted_share` | float | `0.7` | advanced | `ATRIUM_MAIL_DELETIONS_MIN_DELETED_SHARE` |
+| `deletions_min_group` | int | `5` | advanced | `ATRIUM_MAIL_DELETIONS_MIN_GROUP` |
+| `deletions_otp_min_share` | float | `0.8` | advanced | `ATRIUM_MAIL_DELETIONS_OTP_MIN_SHARE` |
+| `deletions_otp_older_than_days` | int | `7` | advanced | `ATRIUM_MAIL_DELETIONS_OTP_OLDER_THAN_DAYS` |
+| `drafts_max_body` | int | `100000` | advanced | `ATRIUM_MAIL_DRAFTS_MAX_BODY` |
+| `drafts_max_subject` | int | `300` | advanced | `ATRIUM_MAIL_DRAFTS_MAX_SUBJECT` |
+| `folder_min_messages` | int | `10` | advanced | `ATRIUM_MAIL_FOLDER_MIN_MESSAGES` |
+| `gmail_labels_max_messages` | int | `10` | advanced | `ATRIUM_MAIL_GMAIL_LABELS_MAX_MESSAGES` |
+| `gmail_labels_min_overlap` | float | `0.5` | advanced | `ATRIUM_MAIL_GMAIL_LABELS_MIN_OVERLAP` |
+| `gmail_labels_min_target_messages` | int | `10` | advanced | `ATRIUM_MAIL_GMAIL_LABELS_MIN_TARGET_MESSAGES` |
+| `knn_k` | int | `7` | advanced | `ATRIUM_MAIL_KNN_K` |
+| `knn_max` | int | `4096` | advanced | `ATRIUM_MAIL_KNN_MAX` |
+| `knn_min_share` | float | `0.9` | advanced | `ATRIUM_MAIL_KNN_MIN_SHARE` |
+| `llm_body_chars` | int | `1500` | advanced | `ATRIUM_MAIL_LLM_BODY_CHARS` |
+| `llm_neighbors` | int | `10` | advanced | `ATRIUM_MAIL_LLM_NEIGHBORS` |
+| `llm_top_senders` | int | `3` | advanced | `ATRIUM_MAIL_LLM_TOP_SENDERS` |
+| `mail_backoff_max_seconds` | int | `300` | advanced | `ATRIUM_MAIL_MAIL_BACKOFF_MAX_SECONDS` |
+| `mail_backoff_start_seconds` | int | `5` | advanced | `ATRIUM_MAIL_MAIL_BACKOFF_START_SECONDS` |
+| `mail_body_cap_bytes` | int | `65536` | advanced | `ATRIUM_MAIL_MAIL_BODY_CAP_BYTES` |
+| `mail_chat_max_tokens` | int | `80` | advanced | `ATRIUM_MAIL_MAIL_CHAT_MAX_TOKENS` |
+| `mail_chat_model` | string | `qwen` | ui | `ATRIUM_MAIL_MAIL_CHAT_MODEL` |
+| `mail_chat_url` | string | none | ui | `ATRIUM_MAIL_MAIL_CHAT_URL` |
+| `mail_embed_batch` | int | `16` | advanced | `ATRIUM_MAIL_MAIL_EMBED_BATCH` |
+| `mail_embed_body_chars` | int | `1500` | advanced | `ATRIUM_MAIL_MAIL_EMBED_BODY_CHARS` |
+| `mail_embed_model` | string | `embeddinggemma` | advanced | `ATRIUM_MAIL_MAIL_EMBED_MODEL` |
+| `mail_embed_url` | string | none | ui | `ATRIUM_MAIL_MAIL_EMBED_URL` |
+| `mail_fetch_batch` | int | `40` | advanced | `ATRIUM_MAIL_MAIL_FETCH_BATCH` |
+| `mail_flag_batch` | int | `500` | advanced | `ATRIUM_MAIL_MAIL_FLAG_BATCH` |
+| `mail_fts_body_chars` | int | `20000` | advanced | `ATRIUM_MAIL_MAIL_FTS_BODY_CHARS` |
+| `mail_idle_settle_seconds` | int | `2` | advanced | `ATRIUM_MAIL_MAIL_IDLE_SETTLE_SECONDS` |
+| `mail_mode` | string | `shadow` | bootstrap | `ATRIUM_MAIL_MAIL_MODE` |
+| `mail_scan_sample_subjects` | int | `5` | advanced | `ATRIUM_MAIL_MAIL_SCAN_SAMPLE_SUBJECTS` |
+| `mail_scan_top_labels` | int | `5` | advanced | `ATRIUM_MAIL_MAIL_SCAN_TOP_LABELS` |
+| `mail_search_branch_limit` | int | `50` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_BRANCH_LIMIT` |
+| `mail_search_max_terms` | int | `12` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_MAX_TERMS` |
+| `mail_search_rrf_k` | int | `60` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_RRF_K` |
+| `mail_search_snippet_chars` | int | `220` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_CHARS` |
+| `mail_search_snippet_tokens` | int | `24` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_TOKENS` |
+| `mailops_batch` | int | `100` | advanced | `ATRIUM_MAIL_MAILOPS_BATCH` |
+| `openloops_backfill_limit` | int | `2000` | advanced | `ATRIUM_MAIL_OPENLOOPS_BACKFILL_LIMIT` |
+| `openloops_commitment_scan_limit` | int | `20` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_SCAN_LIMIT` |
+| `openloops_commitment_window_days` | int | `14` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_WINDOW_DAYS` |
+| `openloops_commitments_per_message` | int | `5` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENTS_PER_MESSAGE` |
+| `openloops_owe_max_age_days` | int | `45` | advanced | `ATRIUM_MAIL_OPENLOOPS_OWE_MAX_AGE_DAYS` |
+| `openloops_remind_ahead_days` | int | `1` | advanced | `ATRIUM_MAIL_OPENLOOPS_REMIND_AHEAD_DAYS` |
+| `openloops_remind_hour` | int | `9` | ui | `ATRIUM_MAIL_OPENLOOPS_REMIND_HOUR` |
+| `openloops_remind_overdue_days` | int | `14` | advanced | `ATRIUM_MAIL_OPENLOOPS_REMIND_OVERDUE_DAYS` |
+| `openloops_snooze_default_days` | int | `3` | advanced | `ATRIUM_MAIL_OPENLOOPS_SNOOZE_DEFAULT_DAYS` |
+| `openloops_waiting_after_days` | int | `3` | advanced | `ATRIUM_MAIL_OPENLOOPS_WAITING_AFTER_DAYS` |
+| `openloops_waiting_max_age_days` | int | `60` | advanced | `ATRIUM_MAIL_OPENLOOPS_WAITING_MAX_AGE_DAYS` |
+| `openloops_window_days` | int | `120` | advanced | `ATRIUM_MAIL_OPENLOOPS_WINDOW_DAYS` |
+| `rebalance_cluster_iterations` | int | `15` | advanced | `ATRIUM_MAIL_REBALANCE_CLUSTER_ITERATIONS` |
+| `rebalance_cluster_ks` | string | `2,3,4` | advanced | `ATRIUM_MAIL_REBALANCE_CLUSTER_KS` |
+| `rebalance_cluster_margin` | float | `0.04` | advanced | `ATRIUM_MAIL_REBALANCE_CLUSTER_MARGIN` |
+| `rebalance_cluster_min_embedded` | float | `0.8` | advanced | `ATRIUM_MAIL_REBALANCE_CLUSTER_MIN_EMBEDDED` |
+| `rebalance_merge_min_group` | int | `3` | advanced | `ATRIUM_MAIL_REBALANCE_MERGE_MIN_GROUP` |
+| `rebalance_merge_min_others` | int | `10` | advanced | `ATRIUM_MAIL_REBALANCE_MERGE_MIN_OTHERS` |
+| `rebalance_merge_min_share` | float | `0.9` | advanced | `ATRIUM_MAIL_REBALANCE_MERGE_MIN_SHARE` |
+| `rebalance_min_folder` | int | `40` | advanced | `ATRIUM_MAIL_REBALANCE_MIN_FOLDER` |
+| `rebalance_min_group` | int | `20` | advanced | `ATRIUM_MAIL_REBALANCE_MIN_GROUP` |
+| `rebalance_min_share` | float | `0.1` | advanced | `ATRIUM_MAIL_REBALANCE_MIN_SHARE` |
+| `rebalance_name_max_chars` | int | `40` | advanced | `ATRIUM_MAIL_REBALANCE_NAME_MAX_CHARS` |
+| `rebalance_run_gap_seconds` | int | `1209600` | advanced | `ATRIUM_MAIL_REBALANCE_RUN_GAP_SECONDS` |
+| `rebalance_runs_required` | int | `2` | advanced | `ATRIUM_MAIL_REBALANCE_RUNS_REQUIRED` |
+| `rebalance_top_terms` | int | `5` | advanced | `ATRIUM_MAIL_REBALANCE_TOP_TERMS` |
+| `report_disagreement_lines` | int | `40` | advanced | `ATRIUM_MAIL_REPORT_DISAGREEMENT_LINES` |
+| `report_top_dests` | int | `15` | advanced | `ATRIUM_MAIL_REPORT_TOP_DESTS` |
+| `rule_min_n` | int | `3` | advanced | `ATRIUM_MAIL_RULE_MIN_N` |
+| `rule_min_purity` | float | `0.9` | advanced | `ATRIUM_MAIL_RULE_MIN_PURITY` |
+| `sent_backfill_days` | int | `90` | advanced | `ATRIUM_MAIL_SENT_BACKFILL_DAYS` |
+| `triage_top_dests` | int | `15` | advanced | `ATRIUM_MAIL_TRIAGE_TOP_DESTS` |
+| `uncertain_dest` | string | `Misc` | ui | `ATRIUM_MAIL_UNCERTAIN_DEST` |
+| `watches_body_chars` | int | `3000` | advanced | `ATRIUM_MAIL_WATCHES_BODY_CHARS` |
+| `watches_carrier_domains` | string | `ups.com,fedex.com,usps.com,dhl.com,usps.gov,dhl.de` | ui | `ATRIUM_MAIL_WATCHES_CARRIER_DOMAINS` |
+| `watches_package_window_days` | int | `60` | advanced | `ATRIUM_MAIL_WATCHES_PACKAGE_WINDOW_DAYS` |
+| `watches_scan_limit` | int | `25` | advanced | `ATRIUM_MAIL_WATCHES_SCAN_LIMIT` |
+| `watches_stale_package_days` | int | `60` | advanced | `ATRIUM_MAIL_WATCHES_STALE_PACKAGE_DAYS` |
+| `write_attempts` | int | `3` | advanced | `ATRIUM_MAIL_WRITE_ATTEMPTS` |
+| `write_cap` | int | `100` | cap | `ATRIUM_MAIL_WRITE_CAP` |
+
+## media
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `media_artwork_miss_ttl_seconds` | int | `604800` | advanced | `ATRIUM_MEDIA_MEDIA_ARTWORK_MISS_TTL_SECONDS` |
+| `media_artwork_show_search_limit` | int | `5` | advanced | `ATRIUM_MEDIA_MEDIA_ARTWORK_SHOW_SEARCH_LIMIT` |
+| `media_channel_name_chars` | int | `120` | advanced | `ATRIUM_MEDIA_MEDIA_CHANNEL_NAME_CHARS` |
+| `media_channel_pattern_chars` | int | `300` | advanced | `ATRIUM_MEDIA_MEDIA_CHANNEL_PATTERN_CHARS` |
+| `media_channel_seen_ttl_seconds` | int | `7776000` | advanced | `ATRIUM_MEDIA_MEDIA_CHANNEL_SEEN_TTL_SECONDS` |
+| `media_child_limit` | int | `500` | advanced | `ATRIUM_MEDIA_MEDIA_CHILD_LIMIT` |
+| `media_eztv_limit` | int | `100` | advanced | `ATRIUM_MEDIA_MEDIA_EZTV_LIMIT` |
+| `media_eztv_timeout_seconds` | int | `30` | advanced | `ATRIUM_MEDIA_MEDIA_EZTV_TIMEOUT_SECONDS` |
+| `media_eztv_url` | string | `https://eztvx.to/api/get-torrents` | advanced | `ATRIUM_MEDIA_MEDIA_EZTV_URL` |
+| `media_ffmpeg_nice` | int | `10` | advanced | `ATRIUM_MEDIA_MEDIA_FFMPEG_NICE` |
+| `media_ffmpeg_timeout_seconds` | int | `120` | advanced | `ATRIUM_MEDIA_MEDIA_FFMPEG_TIMEOUT_SECONDS` |
+| `media_link_ttl_seconds` | int | `43200` | advanced | `ATRIUM_MEDIA_MEDIA_LINK_TTL_SECONDS` |
+| `media_movies_url` | string | none | ui | `ATRIUM_MEDIA_MEDIA_MOVIES_URL` |
+| `media_qbittorrent_timeout_seconds` | int | `15` | advanced | `ATRIUM_MEDIA_MEDIA_QBITTORRENT_TIMEOUT_SECONDS` |
+| `media_qbittorrent_url` | string | none | bootstrap | `ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL` |
+| `media_root` | string | none | bootstrap | `ATRIUM_MEDIA_MEDIA_ROOT` |
+| `media_search_limit` | int | `50` | advanced | `ATRIUM_MEDIA_MEDIA_SEARCH_LIMIT` |
+| `media_subtitle_extensions` | string | `.srt,.sub,.idx,.ass,.ssa,.vtt` | advanced | `ATRIUM_MEDIA_MEDIA_SUBTITLE_EXTENSIONS` |
+| `media_thumbnail_pass_limit` | int | `200` | advanced | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_PASS_LIMIT` |
+| `media_thumbnail_position` | float | `0.1` | advanced | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_POSITION` |
+| `media_thumbnail_width` | int | `480` | advanced | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_WIDTH` |
+| `media_tmdb_search_limit` | int | `8` | advanced | `ATRIUM_MEDIA_MEDIA_TMDB_SEARCH_LIMIT` |
+| `media_tmdb_timeout_seconds` | int | `15` | advanced | `ATRIUM_MEDIA_MEDIA_TMDB_TIMEOUT_SECONDS` |
+| `media_torrent_upload_bytes` | int | `1048576` | advanced | `ATRIUM_MEDIA_MEDIA_TORRENT_UPLOAD_BYTES` |
+| `media_tv_url` | string | none | ui | `ATRIUM_MEDIA_MEDIA_TV_URL` |
+| `media_video_extensions` | string | `.mkv,.mp4,.m4v,.avi,.mov,.ts,.wmv` | advanced | `ATRIUM_MEDIA_MEDIA_VIDEO_EXTENSIONS` |
+
+## money
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `money_backfill_days` | int | `90` | advanced | `ATRIUM_MONEY_MONEY_BACKFILL_DAYS` |
+| `money_bank_senders` | string | `first_citizens=firstcitizenstt.com;scotiabank=scotiabank.com;republic=republictt.com,rfhl.com;cibc=cibcfcib.com,cibc.com` | advanced | `ATRIUM_MONEY_MONEY_BANK_SENDERS` |
+| `money_banks` | string | `first_citizens=First Citizens;scotiabank=Scotiabank;republic=Republic;cibc=CIBC` | advanced | `ATRIUM_MONEY_MONEY_BANKS` |
+| `money_bbd_forex_fee` | float | `1.02` | advanced | `ATRIUM_MONEY_MONEY_BBD_FOREX_FEE` |
+| `money_bbd_per_usd` | float | `2.0` | advanced | `ATRIUM_MONEY_MONEY_BBD_PER_USD` |
+| `money_bill_amount_tolerance` | float | `0.15` | advanced | `ATRIUM_MONEY_MONEY_BILL_AMOUNT_TOLERANCE` |
+| `money_bill_monthly_days` | int | `30` | advanced | `ATRIUM_MONEY_MONEY_BILL_MONTHLY_DAYS` |
+| `money_bill_monthly_slack` | int | `5` | advanced | `ATRIUM_MONEY_MONEY_BILL_MONTHLY_SLACK` |
+| `money_bill_weekly_days` | int | `7` | advanced | `ATRIUM_MONEY_MONEY_BILL_WEEKLY_DAYS` |
+| `money_bill_weekly_slack` | int | `2` | advanced | `ATRIUM_MONEY_MONEY_BILL_WEEKLY_SLACK` |
+| `money_bill_yearly_days` | int | `365` | advanced | `ATRIUM_MONEY_MONEY_BILL_YEARLY_DAYS` |
+| `money_bill_yearly_slack` | int | `20` | advanced | `ATRIUM_MONEY_MONEY_BILL_YEARLY_SLACK` |
+| `money_bills_soon_days` | int | `14` | advanced | `ATRIUM_MONEY_MONEY_BILLS_SOON_DAYS` |
+| `money_body_chars` | int | `3000` | advanced | `ATRIUM_MONEY_MONEY_BODY_CHARS` |
+| `money_cbtt_url` | string | `https://www.central-bank.org.tt/` | bootstrap | `ATRIUM_MONEY_MONEY_CBTT_URL` |
+| `money_cli_scan_limit` | int | `1000` | advanced | `ATRIUM_MONEY_MONEY_CLI_SCAN_LIMIT` |
+| `money_currencies` | string | `TTD,BBD` | advanced | `ATRIUM_MONEY_MONEY_CURRENCIES` |
+| `money_merge_days` | int | `3` | advanced | `ATRIUM_MONEY_MONEY_MERGE_DAYS` |
+| `money_merge_tolerance` | float | `0.03` | advanced | `ATRIUM_MONEY_MONEY_MERGE_TOLERANCE` |
+| `money_scan_limit` | int | `50` | advanced | `ATRIUM_MONEY_MONEY_SCAN_LIMIT` |
+| `money_transaction_limit` | int | `200` | advanced | `ATRIUM_MONEY_MONEY_TRANSACTION_LIMIT` |
+| `money_tx_currencies` | string | `TTD,BBD,USD` | advanced | `ATRIUM_MONEY_MONEY_TX_CURRENCIES` |
+| `money_unassigned_limit` | int | `50` | advanced | `ATRIUM_MONEY_MONEY_UNASSIGNED_LIMIT` |
+
+## notify
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `notify_body_chars` | int | `1000` | advanced | `ATRIUM_NOTIFY_NOTIFY_BODY_CHARS` |
+| `notify_nightly_cap` | int | `1` | cap | `ATRIUM_NOTIFY_NOTIFY_NIGHTLY_CAP` |
+| `notify_per_run_cap` | int | `3` | cap | `ATRIUM_NOTIFY_NOTIFY_PER_RUN_CAP` |
+| `notify_title_chars` | int | `120` | advanced | `ATRIUM_NOTIFY_NOTIFY_TITLE_CHARS` |
+| `ntfy_media_topic` | string | none | ui | `ATRIUM_NOTIFY_NTFY_MEDIA_TOPIC` |
+| `ntfy_timeout_seconds` | int | `10` | advanced | `ATRIUM_NOTIFY_NTFY_TIMEOUT_SECONDS` |
+| `ntfy_topic` | string | none | ui | `ATRIUM_NOTIFY_NTFY_TOPIC` |
+| `ntfy_url` | string | none | ui | `ATRIUM_NOTIFY_NTFY_URL` |
+
+## notion
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `notion_block_depth` | int | `5` | advanced | `ATRIUM_NOTION_NOTION_BLOCK_DEPTH` |
+| `notion_branch_limit` | int | `50` | advanced | `ATRIUM_NOTION_NOTION_BRANCH_LIMIT` |
+| `notion_edit_max_tokens` | int | `1500` | advanced | `ATRIUM_NOTION_NOTION_EDIT_MAX_TOKENS` |
+| `notion_edit_page_chars` | int | `12000` | advanced | `ATRIUM_NOTION_NOTION_EDIT_PAGE_CHARS` |
+| `notion_head_source_chars` | int | `1000` | advanced | `ATRIUM_NOTION_NOTION_HEAD_SOURCE_CHARS` |
+| `notion_label_chars` | int | `48` | advanced | `ATRIUM_NOTION_NOTION_LABEL_CHARS` |
+| `notion_link_max_tokens` | int | `160` | advanced | `ATRIUM_NOTION_NOTION_LINK_MAX_TOKENS` |
+| `notion_link_page_chars` | int | `2500` | advanced | `ATRIUM_NOTION_NOTION_LINK_PAGE_CHARS` |
+| `notion_max_aliases` | int | `20` | advanced | `ATRIUM_NOTION_NOTION_MAX_ALIASES` |
+| `notion_max_retries` | int | `5` | advanced | `ATRIUM_NOTION_NOTION_MAX_RETRIES` |
+| `notion_max_sources` | int | `12` | advanced | `ATRIUM_NOTION_NOTION_MAX_SOURCES` |
+| `notion_page_size` | int | `100` | advanced | `ATRIUM_NOTION_NOTION_PAGE_SIZE` |
+| `notion_private_value` | string | `private` | ui | `ATRIUM_NOTION_NOTION_PRIVATE_VALUE` |
+| `notion_related_limit` | int | `10` | advanced | `ATRIUM_NOTION_NOTION_RELATED_LIMIT` |
+| `notion_retry_after_default_seconds` | float | `1` | advanced | `ATRIUM_NOTION_NOTION_RETRY_AFTER_DEFAULT_SECONDS` |
+| `notion_retry_after_max_seconds` | float | `60` | advanced | `ATRIUM_NOTION_NOTION_RETRY_AFTER_MAX_SECONDS` |
+| `notion_snippet_chars` | int | `220` | advanced | `ATRIUM_NOTION_NOTION_SNIPPET_CHARS` |
+| `notion_timeout_seconds` | int | `60` | advanced | `ATRIUM_NOTION_NOTION_TIMEOUT_SECONDS` |
+| `sensitivity_property` | string | `sensitivity` | ui | `ATRIUM_NOTION_SENSITIVITY_PROPERTY` |
+| `wiki_log_title` | string | `Wiki Log` | ui | `ATRIUM_NOTION_WIKI_LOG_TITLE` |
+| `wiki_root` | string | none | ui | `ATRIUM_NOTION_WIKI_ROOT` |
 
 ## openai
 

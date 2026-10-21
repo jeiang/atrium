@@ -591,6 +591,114 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_schedule_calendar_candidates": {
+          "default": "0 * * * *",
+          "type": "string"
+        },
+        "agent_schedule_calendar_candidates_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_schedule_daily_nudges": {
+          "default": "daily 08:00",
+          "type": "string"
+        },
+        "agent_schedule_daily_nudges_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_schedule_fx_rates": {
+          "default": "weekly mon 06:00",
+          "type": "string"
+        },
+        "agent_schedule_fx_rates_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_schedule_media_channels": {
+          "default": "*/30 * * * *",
+          "type": "string"
+        },
+        "agent_schedule_media_channels_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_schedule_media_sweep": {
+          "default": "*/10 * * * *",
+          "type": "string"
+        },
+        "agent_schedule_media_sweep_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_schedule_media_thumbnails": {
+          "default": "daily 04:00",
+          "type": "string"
+        },
+        "agent_schedule_media_thumbnails_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_schedule_min_interval_seconds": {
+          "default": 3600,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_schedule_min_interval_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_schedule_nightly": {
+          "default": "daily 02:30",
+          "type": "string"
+        },
+        "agent_schedule_nightly_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_schedule_weekly_review": {
+          "default": "weekly sun 18:00",
+          "type": "string"
+        },
+        "agent_schedule_weekly_review_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_scheduler_lease_seconds": {
+          "default": 1800,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_scheduler_lease_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_scheduler_missed_grace_seconds": {
+          "default": 120,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_scheduler_missed_grace_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_scheduler_tick_seconds": {
+          "default": 30,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_scheduler_tick_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_skill_body_chars": {
           "default": 20000,
           "type": [
@@ -940,6 +1048,108 @@
       },
       "type": "object"
     },
+    "calendar": {
+      "additionalProperties": false,
+      "properties": {
+        "calendar_dir": {
+          "type": "string"
+        },
+        "calendar_dir_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "candidate_draft_limit": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "candidate_draft_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "candidate_scan_limit": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "candidate_scan_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "default_event_minutes": {
+          "default": 60,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "default_event_minutes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "google_client_id": {
+          "type": "string"
+        },
+        "google_client_id_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "icloud_apple_id": {
+          "type": "string"
+        },
+        "icloud_apple_id_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "icloud_calendar": {
+          "type": "string"
+        },
+        "icloud_calendar_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "max_events": {
+          "default": 200,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "max_events_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "max_occurrences": {
+          "default": 2000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "max_occurrences_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "contacts": {
+      "additionalProperties": false,
+      "properties": {
+        "contacts_dir": {
+          "type": "string"
+        },
+        "contacts_dir_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "core": {
       "additionalProperties": false,
       "properties": {
@@ -976,6 +1186,1705 @@
       "additionalProperties": false,
       "properties": {
         "key_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "mail": {
+      "additionalProperties": false,
+      "properties": {
+        "birthdays_default_days": {
+          "default": 14,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "birthdays_default_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "birthdays_max_days": {
+          "default": 366,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "birthdays_max_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "deletion_interval_seconds": {
+          "default": 86400,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "deletion_interval_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "deletions_min_deleted_share": {
+          "default": 0.7,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "deletions_min_deleted_share_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "deletions_min_group": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "deletions_min_group_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "deletions_otp_min_share": {
+          "default": 0.8,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "deletions_otp_min_share_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "deletions_otp_older_than_days": {
+          "default": 7,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "deletions_otp_older_than_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "drafts_max_body": {
+          "default": 100000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "drafts_max_body_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "drafts_max_subject": {
+          "default": 300,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "drafts_max_subject_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "folder_min_messages": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "folder_min_messages_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "gmail_labels_max_messages": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "gmail_labels_max_messages_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "gmail_labels_min_overlap": {
+          "default": 0.5,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "gmail_labels_min_overlap_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "gmail_labels_min_target_messages": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "gmail_labels_min_target_messages_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "knn_k": {
+          "default": 7,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "knn_k_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "knn_max": {
+          "default": 4096,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "knn_max_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "knn_min_share": {
+          "default": 0.9,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "knn_min_share_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "llm_body_chars": {
+          "default": 1500,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "llm_body_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "llm_neighbors": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "llm_neighbors_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "llm_top_senders": {
+          "default": 3,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "llm_top_senders_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_backoff_max_seconds": {
+          "default": 300,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_backoff_max_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_backoff_start_seconds": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_backoff_start_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_body_cap_bytes": {
+          "default": 65536,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_body_cap_bytes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_chat_max_tokens": {
+          "default": 80,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_chat_max_tokens_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_chat_model": {
+          "default": "qwen",
+          "type": "string"
+        },
+        "mail_chat_model_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_chat_url": {
+          "type": "string"
+        },
+        "mail_chat_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_embed_batch": {
+          "default": 16,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_embed_batch_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_embed_body_chars": {
+          "default": 1500,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_embed_body_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_embed_model": {
+          "default": "embeddinggemma",
+          "type": "string"
+        },
+        "mail_embed_model_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_embed_url": {
+          "type": "string"
+        },
+        "mail_embed_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_fetch_batch": {
+          "default": 40,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_fetch_batch_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_flag_batch": {
+          "default": 500,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_flag_batch_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_fts_body_chars": {
+          "default": 20000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_fts_body_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_idle_settle_seconds": {
+          "default": 2,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_idle_settle_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_mode": {
+          "default": "shadow",
+          "type": "string"
+        },
+        "mail_mode_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_scan_sample_subjects": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_scan_sample_subjects_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_scan_top_labels": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_scan_top_labels_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_search_branch_limit": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_search_branch_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_search_max_terms": {
+          "default": 12,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_search_max_terms_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_search_rrf_k": {
+          "default": 60,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_search_rrf_k_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_search_snippet_chars": {
+          "default": 220,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_search_snippet_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_search_snippet_tokens": {
+          "default": 24,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_search_snippet_tokens_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mailops_batch": {
+          "default": 100,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mailops_batch_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "openloops_backfill_limit": {
+          "default": 2000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "openloops_backfill_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "openloops_commitment_scan_limit": {
+          "default": 20,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "openloops_commitment_scan_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "openloops_commitment_window_days": {
+          "default": 14,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "openloops_commitment_window_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "openloops_commitments_per_message": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "openloops_commitments_per_message_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "openloops_owe_max_age_days": {
+          "default": 45,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "openloops_owe_max_age_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "openloops_remind_ahead_days": {
+          "default": 1,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "openloops_remind_ahead_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "openloops_remind_hour": {
+          "default": 9,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "openloops_remind_hour_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "openloops_remind_overdue_days": {
+          "default": 14,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "openloops_remind_overdue_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "openloops_snooze_default_days": {
+          "default": 3,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "openloops_snooze_default_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "openloops_waiting_after_days": {
+          "default": 3,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "openloops_waiting_after_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "openloops_waiting_max_age_days": {
+          "default": 60,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "openloops_waiting_max_age_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "openloops_window_days": {
+          "default": 120,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "openloops_window_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_cluster_iterations": {
+          "default": 15,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "rebalance_cluster_iterations_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_cluster_ks": {
+          "default": "2,3,4",
+          "type": "string"
+        },
+        "rebalance_cluster_ks_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_cluster_margin": {
+          "default": 0.04,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "rebalance_cluster_margin_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_cluster_min_embedded": {
+          "default": 0.8,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "rebalance_cluster_min_embedded_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_merge_min_group": {
+          "default": 3,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "rebalance_merge_min_group_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_merge_min_others": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "rebalance_merge_min_others_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_merge_min_share": {
+          "default": 0.9,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "rebalance_merge_min_share_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_min_folder": {
+          "default": 40,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "rebalance_min_folder_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_min_group": {
+          "default": 20,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "rebalance_min_group_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_min_share": {
+          "default": 0.1,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "rebalance_min_share_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_name_max_chars": {
+          "default": 40,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "rebalance_name_max_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_run_gap_seconds": {
+          "default": 1209600,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "rebalance_run_gap_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_runs_required": {
+          "default": 2,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "rebalance_runs_required_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rebalance_top_terms": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "rebalance_top_terms_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "report_disagreement_lines": {
+          "default": 40,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "report_disagreement_lines_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "report_top_dests": {
+          "default": 15,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "report_top_dests_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rule_min_n": {
+          "default": 3,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "rule_min_n_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "rule_min_purity": {
+          "default": 0.9,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "rule_min_purity_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "sent_backfill_days": {
+          "default": 90,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "sent_backfill_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "triage_top_dests": {
+          "default": 15,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "triage_top_dests_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "uncertain_dest": {
+          "default": "Misc",
+          "type": "string"
+        },
+        "uncertain_dest_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "watches_body_chars": {
+          "default": 3000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "watches_body_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "watches_carrier_domains": {
+          "default": "ups.com,fedex.com,usps.com,dhl.com,usps.gov,dhl.de",
+          "type": "string"
+        },
+        "watches_carrier_domains_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "watches_package_window_days": {
+          "default": 60,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "watches_package_window_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "watches_scan_limit": {
+          "default": 25,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "watches_scan_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "watches_stale_package_days": {
+          "default": 60,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "watches_stale_package_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "write_attempts": {
+          "default": 3,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "write_attempts_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "write_cap": {
+          "default": 100,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "write_cap_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "media": {
+      "additionalProperties": false,
+      "properties": {
+        "media_artwork_miss_ttl_seconds": {
+          "default": 604800,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_artwork_miss_ttl_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_artwork_show_search_limit": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_artwork_show_search_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_channel_name_chars": {
+          "default": 120,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_channel_name_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_channel_pattern_chars": {
+          "default": 300,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_channel_pattern_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_channel_seen_ttl_seconds": {
+          "default": 7776000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_channel_seen_ttl_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_child_limit": {
+          "default": 500,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_child_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_eztv_limit": {
+          "default": 100,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_eztv_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_eztv_timeout_seconds": {
+          "default": 30,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_eztv_timeout_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_eztv_url": {
+          "default": "https://eztvx.to/api/get-torrents",
+          "type": "string"
+        },
+        "media_eztv_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_ffmpeg_nice": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_ffmpeg_nice_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_ffmpeg_timeout_seconds": {
+          "default": 120,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_ffmpeg_timeout_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_link_ttl_seconds": {
+          "default": 43200,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_link_ttl_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_movies_url": {
+          "type": "string"
+        },
+        "media_movies_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_qbittorrent_timeout_seconds": {
+          "default": 15,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_qbittorrent_timeout_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_qbittorrent_url": {
+          "type": "string"
+        },
+        "media_qbittorrent_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_root": {
+          "type": "string"
+        },
+        "media_root_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_search_limit": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_search_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_subtitle_extensions": {
+          "default": ".srt,.sub,.idx,.ass,.ssa,.vtt",
+          "type": "string"
+        },
+        "media_subtitle_extensions_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_thumbnail_pass_limit": {
+          "default": 200,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_thumbnail_pass_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_thumbnail_position": {
+          "default": 0.1,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "media_thumbnail_position_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_thumbnail_width": {
+          "default": 480,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_thumbnail_width_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_tmdb_search_limit": {
+          "default": 8,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_tmdb_search_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_tmdb_timeout_seconds": {
+          "default": 15,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_tmdb_timeout_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_torrent_upload_bytes": {
+          "default": 1048576,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "media_torrent_upload_bytes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_tv_url": {
+          "type": "string"
+        },
+        "media_tv_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_video_extensions": {
+          "default": ".mkv,.mp4,.m4v,.avi,.mov,.ts,.wmv",
+          "type": "string"
+        },
+        "media_video_extensions_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "money": {
+      "additionalProperties": false,
+      "properties": {
+        "money_backfill_days": {
+          "default": 90,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_backfill_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_bank_senders": {
+          "default": "first_citizens=firstcitizenstt.com;scotiabank=scotiabank.com;republic=republictt.com,rfhl.com;cibc=cibcfcib.com,cibc.com",
+          "type": "string"
+        },
+        "money_bank_senders_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_banks": {
+          "default": "first_citizens=First Citizens;scotiabank=Scotiabank;republic=Republic;cibc=CIBC",
+          "type": "string"
+        },
+        "money_banks_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_bbd_forex_fee": {
+          "default": 1.02,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "money_bbd_forex_fee_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_bbd_per_usd": {
+          "default": 2,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "money_bbd_per_usd_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_bill_amount_tolerance": {
+          "default": 0.15,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "money_bill_amount_tolerance_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_bill_monthly_days": {
+          "default": 30,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_bill_monthly_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_bill_monthly_slack": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_bill_monthly_slack_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_bill_weekly_days": {
+          "default": 7,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_bill_weekly_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_bill_weekly_slack": {
+          "default": 2,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_bill_weekly_slack_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_bill_yearly_days": {
+          "default": 365,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_bill_yearly_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_bill_yearly_slack": {
+          "default": 20,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_bill_yearly_slack_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_bills_soon_days": {
+          "default": 14,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_bills_soon_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_body_chars": {
+          "default": 3000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_body_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_cbtt_url": {
+          "default": "https://www.central-bank.org.tt/",
+          "type": "string"
+        },
+        "money_cbtt_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_cli_scan_limit": {
+          "default": 1000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_cli_scan_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_currencies": {
+          "default": "TTD,BBD",
+          "type": "string"
+        },
+        "money_currencies_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_merge_days": {
+          "default": 3,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_merge_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_merge_tolerance": {
+          "default": 0.03,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "money_merge_tolerance_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_scan_limit": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_scan_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_transaction_limit": {
+          "default": 200,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_transaction_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_tx_currencies": {
+          "default": "TTD,BBD,USD",
+          "type": "string"
+        },
+        "money_tx_currencies_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_unassigned_limit": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "money_unassigned_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "notify": {
+      "additionalProperties": false,
+      "properties": {
+        "notify_body_chars": {
+          "default": 1000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notify_body_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notify_nightly_cap": {
+          "default": 1,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notify_nightly_cap_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notify_per_run_cap": {
+          "default": 3,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notify_per_run_cap_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notify_title_chars": {
+          "default": 120,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notify_title_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ntfy_media_topic": {
+          "type": "string"
+        },
+        "ntfy_media_topic_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ntfy_timeout_seconds": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "ntfy_timeout_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ntfy_topic": {
+          "type": "string"
+        },
+        "ntfy_topic_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ntfy_url": {
+          "type": "string"
+        },
+        "ntfy_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "notion": {
+      "additionalProperties": false,
+      "properties": {
+        "notion_block_depth": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_block_depth_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_branch_limit": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_branch_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_edit_max_tokens": {
+          "default": 1500,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_edit_max_tokens_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_edit_page_chars": {
+          "default": 12000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_edit_page_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_head_source_chars": {
+          "default": 1000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_head_source_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_label_chars": {
+          "default": 48,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_label_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_link_max_tokens": {
+          "default": 160,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_link_max_tokens_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_link_page_chars": {
+          "default": 2500,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_link_page_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_max_aliases": {
+          "default": 20,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_max_aliases_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_max_retries": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_max_retries_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_max_sources": {
+          "default": 12,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_max_sources_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_page_size": {
+          "default": 100,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_page_size_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_private_value": {
+          "default": "private",
+          "type": "string"
+        },
+        "notion_private_value_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_related_limit": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_related_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_retry_after_default_seconds": {
+          "default": 1,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "notion_retry_after_default_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_retry_after_max_seconds": {
+          "default": 60,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "notion_retry_after_max_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_snippet_chars": {
+          "default": 220,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_snippet_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_timeout_seconds": {
+          "default": 60,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "notion_timeout_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "sensitivity_property": {
+          "default": "sensitivity",
+          "type": "string"
+        },
+        "sensitivity_property_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "wiki_log_title": {
+          "default": "Wiki Log",
+          "type": "string"
+        },
+        "wiki_log_title_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "wiki_root": {
+          "type": "string"
+        },
+        "wiki_root_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }

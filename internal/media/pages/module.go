@@ -54,7 +54,7 @@ func (s *service) artwork(set media.Settings) *media.Artwork {
 func wallClock() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
 
 func PublicCheck(cfg config.Config, env config.Env) func(*http.Request) bool {
-	return media.NewLinks(config.Media(env).LinkKey, cfg.MediaLinkKeyPath()).Verifier()
+	return media.NewLinks(config.MediaLinkKey(env), cfg.MediaLinkKeyPath()).Verifier()
 }
 
 func Module(o Options) web.Module {
@@ -63,7 +63,7 @@ func Module(o Options) web.Module {
 		if now == nil {
 			now = wallClock
 		}
-		s := &service{deps: d, now: now, links: media.NewLinks(config.Media(d.Env).LinkKey, d.Cfg.MediaLinkKeyPath()), exec: o.Exec}
+		s := &service{deps: d, now: now, links: media.NewLinks(config.MediaLinkKey(d.Env), d.Cfg.MediaLinkKeyPath()), exec: o.Exec}
 		s.registerDownloads(r)
 		s.registerChannels(r)
 		s.registerLibrary(r)

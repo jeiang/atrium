@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/llm"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
@@ -69,7 +70,6 @@ func (r PageRef) Dict() py.Dict {
 
 type Proposer struct {
 	DB   *db.DB
-	Cfg  config.Config
 	Chat ChatFunc
 	Now  func() float64
 }
@@ -86,7 +86,15 @@ func (p *Proposer) chat(ctx context.Context, system, user, schema string, maxTok
 	if call == nil {
 		call = llm.ChatJSON
 	}
-	raw, err := call(ctx, p.Cfg.ChatURL, system, user, json.RawMessage(schema), maxTokens)
+	chatURL, err := mail.ChatURL(ctx, p.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	ctx, err = mail.WithModels(ctx, p.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := call(ctx, chatURL, system, user, json.RawMessage(schema), maxTokens)
 	if err != nil {
 		return nil, err
 	}

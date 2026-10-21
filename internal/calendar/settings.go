@@ -136,18 +136,18 @@ func icloudLogin(env config.Env, set Settings) (config.CalDAVLogin, error) {
 }
 
 func googleCredentials(env config.Env, set Settings) (config.GoogleCredentials, error) {
-	client := config.GoogleOAuthClient(env)
+	secret := config.GoogleOAuthSecret(env)
 	refresh, _ := env("GOOGLE_REFRESH_TOKEN")
 	var missing []string
 	if set.GoogleClientID == "" {
 		missing = append(missing, "ATRIUM_CALENDAR_GOOGLE_CLIENT_ID")
 	}
-	if client.Secret == "" {
+	if secret == "" {
 		missing = append(missing, "GOOGLE_OAUTH_CLIENT_SECRET")
 	}
 	if refresh == "" {
 		missing = append(missing, "GOOGLE_REFRESH_TOKEN")
 	}
-	creds := config.GoogleCredentials{GoogleClient: config.GoogleClient{ID: set.GoogleClientID, Secret: client.Secret}, RefreshToken: refresh}
+	creds := config.GoogleCredentials{GoogleClient: config.GoogleClient{ID: set.GoogleClientID, Secret: secret}, RefreshToken: refresh}
 	return creds, missingCredentials(missing)
 }

@@ -76,7 +76,7 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{"index": 0, "embedding": vector}}})
 	}))
 	defer embedder.Close()
-	t.Setenv("ATRIUM_EMBED_URL", embedder.URL)
+	t.Setenv("ATRIUM_MAIL_MAIL_EMBED_URL", embedder.URL)
 	rightFile := writeKey(t, dir, "right.key", rightKeyHex)
 	keyEnv := func(hex string) string { return "ATRIUM_DB_KEY=" + hex }
 	encrypted := filepath.Join(dir, "encrypted.db")
@@ -116,7 +116,7 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 	if knn.code != cli.ExitOK || knn.stdout != hit {
 		t.Errorf("KNN search on the keyed database exited %d with stdout %q, stderr %q; want 0 and %q", knn.code, knn.stdout, knn.stderr, hit)
 	}
-	fts := runProcess(t, "notion search alpha", dbEnv(encrypted), keyEnv(rightKeyHex), "ATRIUM_EMBED_URL=http://127.0.0.1:1")
+	fts := runProcess(t, "notion search alpha", dbEnv(encrypted), keyEnv(rightKeyHex), "ATRIUM_MAIL_MAIL_EMBED_URL=http://127.0.0.1:1")
 	if fts.code != cli.ExitOK || fts.stdout != hit {
 		t.Errorf("FTS search on the keyed database exited %d with stdout %q, stderr %q; want 0 and %q", fts.code, fts.stdout, fts.stderr, hit)
 	}

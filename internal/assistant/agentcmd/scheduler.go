@@ -60,7 +60,7 @@ func runScheduler(env *cli.Env, cfgEnv config.Env) error {
 		return err
 	}
 	defer func() { _ = d.Close() }()
-	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
+	if err := config.Migrate(ctx, d, cfg); err != nil {
 		return err
 	}
 	r, err := runner.New()

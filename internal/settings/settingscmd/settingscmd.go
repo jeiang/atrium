@@ -124,7 +124,7 @@ func (s *service) with(e *cli.Env, run func(*db.DB) (int, error)) int {
 		return cli.Fail(e, err)
 	}
 	defer func() { _ = d.Close() }()
-	if err := db.Migrate(e.Ctx, d, cfg.DBPath); err != nil {
+	if err := config.Migrate(e.Ctx, d, cfg); err != nil {
 		return cli.Fail(e, err)
 	}
 	code, err := run(d)

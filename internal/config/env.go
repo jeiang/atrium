@@ -68,20 +68,9 @@ func Require(env Env, names ...string) error {
 
 func PublicHost(env Env) string { return stripped(env, "ATRIUM_PUBLIC_HOST") }
 
-func CalendarDir(env Env) string { return get(env, "ATRIUM_CALENDAR_DIR") }
-
-func ICloudCalendar(env Env) string { return strings.ToLower(stripped(env, "ATRIUM_ICLOUD_CALENDAR")) }
-
 type CalDAVLogin struct {
 	AppleID  string
 	Password string
-}
-
-func ICloudCalDAV(env Env) (CalDAVLogin, error) {
-	if err := Require(env, "ICLOUD_APPLE_ID", "ICLOUD_APP_PASSWORD"); err != nil {
-		return CalDAVLogin{}, err
-	}
-	return CalDAVLogin{get(env, "ICLOUD_APPLE_ID"), get(env, "ICLOUD_APP_PASSWORD")}, nil
 }
 
 type GoogleClient struct {
@@ -89,21 +78,12 @@ type GoogleClient struct {
 	Secret string
 }
 
-func GoogleOAuthClient(env Env) GoogleClient {
-	return GoogleClient{get(env, "GOOGLE_OAUTH_CLIENT_ID"), get(env, "GOOGLE_OAUTH_CLIENT_SECRET")}
-}
-
 type GoogleCredentials struct {
 	GoogleClient
 	RefreshToken string
 }
 
-func Google(env Env) (GoogleCredentials, error) {
-	if err := Require(env, "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"); err != nil {
-		return GoogleCredentials{}, err
-	}
-	return GoogleCredentials{GoogleOAuthClient(env), get(env, "GOOGLE_REFRESH_TOKEN")}, nil
-}
+func GoogleOAuthSecret(env Env) string { return get(env, "GOOGLE_OAUTH_CLIENT_SECRET") }
 
 func requireStripped(env Env, name string) (string, error) {
 	if v := stripped(env, name); v != "" {
@@ -131,50 +111,8 @@ func Grafana(env Env) (GrafanaAccess, error) {
 	return g, nil
 }
 
-type NtfySettings struct {
-	URL   string
-	Topic string
-	Token string
-}
+func NtfyToken(env Env) string { return stripped(env, "NTFY_TOKEN") }
 
-func Ntfy(env Env) NtfySettings {
-	return NtfySettings{stripped(env, "NTFY_URL"), stripped(env, "NTFY_TOPIC"), stripped(env, "NTFY_TOKEN")}
-}
+func TMDBKey(env Env) string { return stripped(env, "TMDB_API_KEY") }
 
-type MediaSettings struct {
-	Root      string
-	QbitURL   string
-	PublicURL string
-	MoviesURL string
-	TVURL     string
-	NtfyTopic string
-	TMDBKey   string
-	LinkKey   string
-}
-
-func Media(env Env) MediaSettings {
-	return MediaSettings{
-		Root:      cleanURL(env, "ATRIUM_MEDIA_ROOT"),
-		QbitURL:   cleanURL(env, "QBITTORRENT_URL"),
-		PublicURL: PublicURL(env),
-		MoviesURL: cleanURL(env, "ATRIUM_MEDIA_MOVIES_URL"),
-		TVURL:     cleanURL(env, "ATRIUM_MEDIA_TV_URL"),
-		NtfyTopic: stripped(env, "NTFY_MEDIA_TOPIC"),
-		TMDBKey:   stripped(env, "TMDB_API_KEY"),
-		LinkKey:   stripped(env, "ATRIUM_MEDIA_LINK_KEY"),
-	}
-}
-
-func (m MediaSettings) NeedRoot() (string, error) {
-	if m.Root == "" {
-		return "", NotConfigured("ATRIUM_MEDIA_ROOT is not set")
-	}
-	return m.Root, nil
-}
-
-func (m MediaSettings) NeedQbit() (string, error) {
-	if m.QbitURL == "" {
-		return "", NotConfigured("QBITTORRENT_URL is not set")
-	}
-	return m.QbitURL, nil
-}
+func MediaLinkKey(env Env) string { return stripped(env, "ATRIUM_MEDIA_LINK_KEY") }

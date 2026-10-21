@@ -43,7 +43,7 @@ func Module(o Options) web.Module {
 		if now == nil {
 			now = wallClock
 		}
-		s := &service{deps: d, now: now, proposer: &notion.Proposer{DB: d.DB, Cfg: d.Cfg, Chat: o.Chat, Now: o.Now}}
+		s := &service{deps: d, now: now, proposer: &notion.Proposer{DB: d.DB, Chat: o.Chat, Now: o.Now}}
 
 		r.Get("/notion/{page_id}", s.view)
 		r.Post("/notion/{page_id}/link", s.link)

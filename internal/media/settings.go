@@ -179,8 +179,7 @@ type Settings struct {
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
-	legacy := config.Media(env)
-	out := Settings{PublicURL: legacy.PublicURL, TMDBKey: legacy.TMDBKey, LinkKey: legacy.LinkKey}
+	out := Settings{PublicURL: config.PublicURL(env), TMDBKey: config.TMDBKey(env), LinkKey: config.MediaLinkKey(env)}
 	var failure error
 	resolve := func(key string) settings.Resolved {
 		if failure != nil {

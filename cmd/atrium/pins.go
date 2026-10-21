@@ -6,8 +6,11 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
 )
+
+var log = logx.Logger("atrium.config")
 
 func pinned(cmds []*cli.Command) []*cli.Command {
 	for _, c := range cmds {
@@ -26,6 +29,7 @@ func pinned(cmds []*cli.Command) []*cli.Command {
 						_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
 						return cli.ExitError
 					}
+					warnDropped(config.OS)
 					return run(e)
 				}
 			}
@@ -33,4 +37,14 @@ func pinned(cmds []*cli.Command) []*cli.Command {
 		pinned(c.Commands)
 	}
 	return cmds
+}
+
+func warnDropped(env config.Env) {
+	for _, d := range config.DroppedEnv(env, settings.Default) {
+		if d.New == "" {
+			log.Warn("environment variable is no longer read and is ignored", logx.EnvName, d.Old)
+			continue
+		}
+		log.Warn("environment variable is no longer read and is ignored", logx.EnvName, d.Old, logx.UseInstead, d.New)
+	}
 }

@@ -43,7 +43,7 @@ func candidatesCommand(env config.Env, now func() float64) *cli.Command {
 					return cli.Fail(e, err)
 				}
 				defer func() { _ = d.Close() }()
-				if err := db.Migrate(e.Ctx, d, cfg.DBPath); err != nil {
+				if err := config.Migrate(e.Ctx, d, cfg); err != nil {
 					return cli.Fail(e, err)
 				}
 				r, err := runner.New()

@@ -130,10 +130,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 		return err
 	}
 	defer func() { _ = d.Close() }()
-	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
-		return err
-	}
-	if err := config.LoadCore(ctx, d.Read); err != nil {
+	if err := config.Migrate(ctx, d, cfg); err != nil {
 		return err
 	}
 	if _, err := config.Location(a.env); err != nil {

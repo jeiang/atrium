@@ -71,7 +71,7 @@ func run(env *cli.Env, o Options, fn func(context.Context, *db.DB, config.Config
 		return cli.Fail(env, err)
 	}
 	defer func() { _ = d.Close() }()
-	if err := db.Migrate(env.Ctx, d, cfg.DBPath); err != nil {
+	if err := config.Migrate(env.Ctx, d, cfg); err != nil {
 		return cli.Fail(env, err)
 	}
 	if err := fn(env.Ctx, d, cfg, env); err != nil {
@@ -113,11 +113,11 @@ func (o Options) locked(ctx context.Context, d *db.DB, cfg config.Config, client
 		return Stats{}, err
 	}
 	defer func() { _ = lock.Close() }()
-	return Sync(ctx, d, cfg, client, o.Embed)
+	return Sync(ctx, d, client, o.Embed)
 }
 
 func (o Options) search(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env, query string, private bool, limit int) error {
-	result, err := Search(ctx, d.Read, cfg, query, private, limit, o.Embed)
+	result, err := Search(ctx, d.Read, query, private, limit, o.Embed)
 	if err != nil {
 		return err
 	}

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
@@ -118,7 +117,7 @@ func b2i(v bool) int {
 	return 0
 }
 
-func FlagAccount(ctx context.Context, d *db.DB, cfg config.Config, account string, judge Judge, now func() float64) (int, error) {
+func FlagAccount(ctx context.Context, d *db.DB, account string, judge Judge, now func() float64) (int, error) {
 	if judge == nil {
 		judge = llm.JudgeFlag
 	}
@@ -129,6 +128,10 @@ func FlagAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 	if err != nil || len(rows) == 0 {
 		return 0, err
 	}
+	contactsDir, err := contacts.Dir(ctx, d.Read)
+	if err != nil {
+		return 0, err
+	}
 	chatURL, err := mail.ChatURL(ctx, d.Read)
 	if err != nil {
 		return 0, err
@@ -137,7 +140,7 @@ func FlagAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 	if err != nil {
 		return 0, err
 	}
-	known := LoadContacts(cfg.ContactsDir)
+	known := LoadContacts(contactsDir)
 	available := true
 	done := 0
 	for _, row := range rows {

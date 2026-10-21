@@ -104,7 +104,7 @@ func Deliver(ctx context.Context, q db.Querier, env config.Env, title, body, top
 	if err != nil {
 		return false, "", err
 	}
-	token := config.Ntfy(env).Token
+	token := config.NtfyToken(env)
 	payload := py.Dict{{Key: "topic", Value: topic}, {Key: "title", Value: title}, {Key: "message", Value: body}}
 	if click != "" {
 		payload = append(payload, py.Pair{Key: "click", Value: click})

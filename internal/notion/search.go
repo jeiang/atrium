@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/search"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/py"
@@ -444,7 +444,7 @@ func rank(list []int64) map[int64]int {
 	return out
 }
 
-func Search(ctx context.Context, q db.Querier, cfg config.Config, query string, includePrivate bool, limit int, embedTexts embed.TextsFunc) (Result, error) {
+func Search(ctx context.Context, q db.Querier, query string, includePrivate bool, limit int, embedTexts embed.TextsFunc) (Result, error) {
 	if embedTexts == nil {
 		embedTexts = embed.Texts
 	}
@@ -471,7 +471,15 @@ func Search(ctx context.Context, q db.Querier, cfg config.Config, query string, 
 	var sem []int64
 	var failure *string
 	available := true
-	vectors, err := embedTexts(ctx, cfg.EmbedURL, []string{embed.QueryText(query)})
+	embedURL, err := mail.EmbedURL(ctx, q)
+	if err != nil {
+		return Result{}, err
+	}
+	modelCtx, err := mail.WithModels(ctx, q)
+	if err != nil {
+		return Result{}, err
+	}
+	vectors, err := embedTexts(modelCtx, embedURL, []string{embed.QueryText(query)})
 	if err == nil {
 		if len(vectors) == 0 {
 			err = fmt.Errorf("%w: list index out of range", httpx.ErrIndex)

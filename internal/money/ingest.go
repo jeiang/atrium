@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -429,9 +430,9 @@ func markScanned(ctx context.Context, q db.Querier, messageID int64, found bool,
 	return err
 }
 
-func (o Options) namingFor(ctx context.Context, d *db.DB, cfg config.Config, item Item) Naming {
+func (o Options) namingFor(ctx context.Context, d *db.DB, chatURL string, item Item) Naming {
 	live := func(raw, normalized string, names []string) (string, string, error) {
-		return SuggestPayee(ctx, o.chat(), cfg.ChatURL, raw, normalized, names)
+		return SuggestPayee(ctx, o.chat(), chatURL, raw, normalized, names)
 	}
 	if item.Kind != Purchase && item.Kind != Refund {
 		return live
@@ -460,12 +461,20 @@ func (o Options) namingFor(ctx context.Context, d *db.DB, cfg config.Config, ite
 	}
 }
 
-func Scan(ctx context.Context, d *db.DB, cfg config.Config, limit int, now float64, o Options) (ScanResult, error) {
+func Scan(ctx context.Context, d *db.DB, limit int, now float64, o Options) (ScanResult, error) {
 	loc, err := o.location()
 	if err != nil {
 		return ScanResult{}, err
 	}
 	scanning, err := LoadScanning(ctx, d.Read)
+	if err != nil {
+		return ScanResult{}, err
+	}
+	chatURL, err := mail.ChatURL(ctx, d.Read)
+	if err != nil {
+		return ScanResult{}, err
+	}
+	ctx, err = mail.WithModels(ctx, d.Read)
 	if err != nil {
 		return ScanResult{}, err
 	}
@@ -489,7 +498,7 @@ scan:
 			return result, err
 		}
 		text := fmt.Sprintf("From: %s <%s>\nSubject: %s\nBody:\n%s", row.FromName, row.FromAddr, row.Subject, py.Clip(body, scanning.BodyChars))
-		answer, err := o.chat()(ctx, cfg.ChatURL, ExtractSystem, text, schema, 400)
+		answer, err := o.chat()(ctx, chatURL, ExtractSystem, text, schema, 400)
 		switch down, isDown := unavailable(err); {
 		case isDown:
 			log.Warn(fmt.Sprintf("chat unavailable, deferring money scan: %s", down))
@@ -511,7 +520,7 @@ scan:
 		var txID *int64
 		if item != nil {
 			change := NewChange()
-			naming := o.namingFor(ctx, d, cfg, *item)
+			naming := o.namingFor(ctx, d, chatURL, *item)
 			postErr := d.WithTx(ctx, func(tx *sql.Tx) error {
 				var err error
 				txID, err = PostItem(ctx, tx, *item, row, naming, now, change)
@@ -574,13 +583,13 @@ func (r *FetchedRate) Dict() any {
 	return py.Dict{{Key: "date", Value: r.Date}, {Key: "selling", Value: r.Selling}, {Key: "as_of", Value: r.AsOf}}
 }
 
-func Refresh(ctx context.Context, d *db.DB, cfg config.Config, limit int, now float64, o Options) (py.Dict, error) {
+func Refresh(ctx context.Context, d *db.DB, limit int, now float64, o Options) (py.Dict, error) {
 	rates, err := EnsureRates(ctx, d, now, o)
 	if err != nil {
 		return nil, err
 	}
 	out := py.Dict{{Key: "rates", Value: rates.Dict()}}
-	result, err := Scan(ctx, d, cfg, limit, now, o)
+	result, err := Scan(ctx, d, limit, now, o)
 	if err != nil {
 		log.Error("money scan failed", logx.Err, err.Error())
 		return append(out, py.Pair{Key: "error", Value: true}), nil

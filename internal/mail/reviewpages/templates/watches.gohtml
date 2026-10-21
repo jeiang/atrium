@@ -37,7 +37,7 @@
 <section class="flex flex-col gap-3" aria-labelledby="birthdays-h">
   <h2 id="birthdays-h" class="text-sm font-medium">Birthdays and anniversaries, next 60 days{{if not (isnil $d.birthdays)}} ({{len $d.birthdays}}){{end}}</h2>
   {{if isnil $d.birthdays}}
-  {{template "empty_state" (dict "icon_name" "book-user" "title" "Address book not configured" "body" "ATRIUM_CONTACTS_DIR is not set.")}}
+  {{template "empty_state" (dict "icon_name" "book-user" "title" "Address book not configured" "body" "ATRIUM_CONTACTS_CONTACTS_DIR is not set.")}}
   {{else if $d.birthdays}}
   <ul class="flex flex-col gap-3" role="list" aria-label="Birthdays">
     {{range $d.birthdays}}

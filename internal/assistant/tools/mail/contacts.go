@@ -42,10 +42,14 @@ func contactsLookup(ctx context.Context, tc *tool.Context, args py.Dict) (any, e
 	if err != nil {
 		return nil, err
 	}
-	if tc.Cfg.ContactsDir == "" {
-		return nil, tool.NotConfigured("ATRIUM_CONTACTS_DIR is not set")
+	dir, err := contacts.Dir(ctx, tc.DB.Read)
+	if err != nil {
+		return nil, err
 	}
-	found := contacts.Search(tc.Cfg.ContactsDir, query, int(limit))
+	if dir == "" {
+		return nil, tool.NotConfigured("ATRIUM_CONTACTS_CONTACTS_DIR is not set")
+	}
+	found := contacts.Search(dir, query, int(limit))
 	results := make([]any, len(found))
 	for i, c := range found {
 		card := py.Dict{}

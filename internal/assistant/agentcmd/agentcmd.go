@@ -53,7 +53,7 @@ func run(env *cli.Env, cfgEnv config.Env, threadID *int64, text, kind string) er
 		return err
 	}
 	defer func() { _ = d.Close() }()
-	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
+	if err := config.Migrate(ctx, d, cfg); err != nil {
 		return err
 	}
 	r, err := runner.New()

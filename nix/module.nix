@@ -60,32 +60,31 @@
     lib.filterAttrs (_: value: value != null) {
       ATRIUM_DB = "${stateDir}/atrium.db";
       ATRIUM_CACHE_DIR = "${cacheDir}/messages";
-      ATRIUM_MODE = cfg.mode;
-      ATRIUM_CHAT_URL = cfg.chatUrl;
-      ATRIUM_EMBED_URL = cfg.embedUrl;
-      ATRIUM_CONTACTS_DIR =
+      ATRIUM_MAIL_MAIL_MODE = cfg.mode;
+      ATRIUM_MAIL_MAIL_CHAT_URL = cfg.chatUrl;
+      ATRIUM_MAIL_MAIL_EMBED_URL = cfg.embedUrl;
+      ATRIUM_CONTACTS_CONTACTS_DIR =
         if icloud
         then contactsDir
         else null;
-      ATRIUM_CALENDAR_DIR =
+      ATRIUM_CALENDAR_CALENDAR_DIR =
         if icloud
         then calendarDir
         else null;
-      ATRIUM_TZ = cfg.timeZone;
+      ATRIUM_CORE_TZ = cfg.timeZone;
       GRAFANA_URL = cfg.grafanaUrl;
-      NTFY_URL = cfg.ntfy.url;
-      NTFY_TOPIC = cfg.ntfy.topic;
-      NTFY_MEDIA_TOPIC = cfg.ntfy.mediaTopic;
-      ATRIUM_MEDIA_ROOT =
+      ATRIUM_NOTIFY_NTFY_URL = cfg.ntfy.url;
+      ATRIUM_NOTIFY_NTFY_TOPIC = cfg.ntfy.topic;
+      ATRIUM_NOTIFY_NTFY_MEDIA_TOPIC = cfg.ntfy.mediaTopic;
+      ATRIUM_MEDIA_MEDIA_ROOT =
         if cfg.media.enable
         then cfg.media.root
         else null;
-      QBITTORRENT_URL = cfg.media.qbittorrentUrl;
-      ATRIUM_PUBLIC_URL = cfg.publicUrl;
-      ATRIUM_MEDIA_MOVIES_URL = cfg.media.moviesUrl;
-      ATRIUM_MEDIA_TV_URL = cfg.media.tvUrl;
-      ATRIUM_CODEMODE_SOCKET = "/run/${codemodeDirName}/codemode.sock";
-      ICLOUD_APPLE_ID = cfg.icloudAppleId;
+      ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL = cfg.media.qbittorrentUrl;
+      ATRIUM_CORE_PUBLIC_URL = cfg.publicUrl;
+      ATRIUM_MEDIA_MEDIA_MOVIES_URL = cfg.media.moviesUrl;
+      ATRIUM_MEDIA_MEDIA_TV_URL = cfg.media.tvUrl;
+      ATRIUM_CALENDAR_ICLOUD_APPLE_ID = cfg.icloudAppleId;
     }
     // cfg.extraEnvironment;
 
@@ -186,7 +185,7 @@ in {
     mode = mkOption {
       type = types.enum ["shadow" "live"];
       default = "shadow";
-      description = "ATRIUM_MODE: only live changes the mailboxes.";
+      description = "ATRIUM_MAIL_MAIL_MODE: only live changes the mailboxes.";
     };
 
     environmentFiles = mkOption {
@@ -202,9 +201,9 @@ in {
       description = "Units serving chatUrl and embedUrl; the app units start after and want them.";
     };
 
-    chatUrl = nullableStr "OpenAI-compatible chat completions base URL of the local model (ATRIUM_CHAT_URL).";
-    embedUrl = nullableStr "OpenAI-compatible embeddings base URL of the local model (ATRIUM_EMBED_URL).";
-    publicUrl = nullableStr "URL the operator reaches the web UI at; used in notifications and signed media links (ATRIUM_PUBLIC_URL).";
+    chatUrl = nullableStr "OpenAI-compatible chat completions base URL of the local model (ATRIUM_MAIL_MAIL_CHAT_URL).";
+    embedUrl = nullableStr "OpenAI-compatible embeddings base URL of the local model (ATRIUM_MAIL_MAIL_EMBED_URL).";
+    publicUrl = nullableStr "URL the operator reaches the web UI at; used in notifications and signed media links (ATRIUM_CORE_PUBLIC_URL).";
     grafanaUrl = nullableStr "Grafana base URL for the observability tools (GRAFANA_URL).";
     icloudAppleId = nullableStr "Apple ID for iCloud CalDAV and CardDAV; also runs the vdirsyncer mirror of the calendars and contacts.";
 
@@ -212,7 +211,7 @@ in {
       type = types.nullOr types.str;
       default = config.time.timeZone;
       defaultText = lib.literalExpression "config.time.timeZone";
-      description = "Time zone of the operator (ATRIUM_TZ).";
+      description = "Time zone of the operator (ATRIUM_CORE_TZ).";
     };
 
     web = {
@@ -252,9 +251,9 @@ in {
     };
 
     ntfy = {
-      url = nullableStr "ntfy server base URL (NTFY_URL).";
-      topic = nullableStr "Topic for the assistant's notifications (NTFY_TOPIC).";
-      mediaTopic = nullableStr "Topic for media release notifications (NTFY_MEDIA_TOPIC).";
+      url = nullableStr "ntfy server base URL (ATRIUM_NOTIFY_NTFY_URL).";
+      topic = nullableStr "Topic for the assistant's notifications (ATRIUM_NOTIFY_NTFY_TOPIC).";
+      mediaTopic = nullableStr "Topic for media release notifications (ATRIUM_NOTIFY_NTFY_MEDIA_TOPIC).";
     };
 
     media = {
@@ -269,12 +268,12 @@ in {
       root = mkOption {
         type = types.str;
         default = "/var/lib/media";
-        description = "Media tree with downloads/, import/, movies/ and tv/ (ATRIUM_MEDIA_ROOT).";
+        description = "Media tree with downloads/, import/, movies/ and tv/ (ATRIUM_MEDIA_MEDIA_ROOT).";
       };
 
-      qbittorrentUrl = nullableStr "qBittorrent Web UI URL, reachable without login (QBITTORRENT_URL).";
-      moviesUrl = nullableStr "URL serving root/movies read-only on the private network (ATRIUM_MEDIA_MOVIES_URL).";
-      tvUrl = nullableStr "URL serving root/tv read-only on the private network (ATRIUM_MEDIA_TV_URL).";
+      qbittorrentUrl = nullableStr "qBittorrent Web UI URL, reachable without login (ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL).";
+      moviesUrl = nullableStr "URL serving root/movies read-only on the private network (ATRIUM_MEDIA_MEDIA_MOVIES_URL).";
+      tvUrl = nullableStr "URL serving root/tv read-only on the private network (ATRIUM_MEDIA_MEDIA_TV_URL).";
     };
 
     extraEnvironment = mkOption {

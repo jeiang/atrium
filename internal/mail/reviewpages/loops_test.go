@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/contacts"
+	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const day = 86400.0
@@ -124,7 +127,7 @@ func TestWatchesPageAndPackageDismissal(t *testing.T) {
 	s.package_("1Z999AA10123456784", "in_transit", s.clock-3600, 0)
 	s.package_("DELIVERED1", "delivered", s.clock-3600, 0)
 	page := status(t, s.get("/watches"), http.StatusOK)
-	mustContain(t, page, "1Z999AA10123456784", "Address book not configured", "ATRIUM_CONTACTS_DIR is not set.", `href="/money/bills"`,
+	mustContain(t, page, "1Z999AA10123456784", "Address book not configured", "ATRIUM_CONTACTS_CONTACTS_DIR is not set.", `href="/money/bills"`,
 		"Packages in transit (1)", "in transit", `href="/messages/2"`, "Birthdays and anniversaries, next 60 days</h2>")
 	mustNotContain(t, page, "DELIVERED1", "Renewals")
 	body := status(t, s.post("/watches/packages/1/dismiss", nil), http.StatusOK)
@@ -149,7 +152,10 @@ func TestWatchesPageListsAndDismissesBirthdays(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cards, "a.vcf"), []byte(card), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := newSite(t, func(env map[string]string) { env["ATRIUM_CONTACTS_DIR"] = cards })
+	s := newSite(t)
+	if err := settings.Default.Set(audit.With(t.Context(), "test", audit.CLI), s.db.Write, contacts.DirKey, cards, 0); err != nil {
+		t.Fatal(err)
+	}
 	s.clock = float64(time.Now().Unix())
 	page := status(t, s.get("/watches"), http.StatusOK)
 	mustContain(t, page, "Ada Lovelace", "(today)", "(1)")
@@ -169,7 +175,10 @@ func TestWatchesPageListsAndDismissesBirthdays(t *testing.T) {
 
 func TestWatchesWithAnEmptyAddressBook(t *testing.T) {
 	cards := t.TempDir()
-	s := newSite(t, func(env map[string]string) { env["ATRIUM_CONTACTS_DIR"] = cards })
+	s := newSite(t)
+	if err := settings.Default.Set(audit.With(t.Context(), "test", audit.CLI), s.db.Write, contacts.DirKey, cards, 0); err != nil {
+		t.Fatal(err)
+	}
 	mustContain(t, status(t, s.get("/watches"), http.StatusOK), "Nothing coming up", "(0)")
 }
 
