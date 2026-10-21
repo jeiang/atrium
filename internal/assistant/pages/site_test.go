@@ -52,7 +52,7 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	d := dbtest.Schema(t)
 	dir := t.TempDir()
 	env := config.Map(map[string]string{
-		"ATRIUM_DB": filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow", "ATRIUM_TZ": zone,
+		"ATRIUM_DB": filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow", "ATRIUM_CORE_TZ": zone,
 	})
 	cfg, err := config.Load(env)
 	if err != nil {

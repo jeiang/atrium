@@ -48,7 +48,7 @@ func fresh(ctx context.Context, client *notion.Client, info map[string]any) erro
 
 func guarded(env config.Env, fn func(ctx context.Context, q db.Querier, client *notion.Client, info map[string]any) (any, error)) writes.Undoer {
 	return func(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
-		client, err := makeClient(env)
+		client, err := makeClient(ctx, q, env)
 		if err != nil {
 			return nil, refuse(err)
 		}

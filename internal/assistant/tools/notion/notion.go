@@ -1,22 +1,25 @@
 package notiontools
 
 import (
+	"context"
 	"errors"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/py"
 )
 
 var NewClient = notion.NewClient
 
-func makeClient(env config.Env) (*notion.Client, error) {
+func makeClient(ctx context.Context, q db.Querier, env config.Env) (*notion.Client, error) {
 	token, err := config.NotionToken(env)
 	if err != nil {
 		return nil, tool.NotConfigured(err.Error())
 	}
-	return NewClient(token), nil
+	client := NewClient(token)
+	return client, client.Configure(ctx, q)
 }
 
 func notionError(err error) error {

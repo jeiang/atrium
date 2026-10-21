@@ -14,13 +14,13 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
-	PostTimeout = 600 * time.Second
-	GetTimeout  = 30 * time.Second
-	UserAgent   = "atrium/1 (ledger rate fetch)"
+	GetTimeout = 30 * time.Second
+	UserAgent  = "atrium/1 (ledger rate fetch)"
 )
 
 var (
@@ -52,7 +52,7 @@ func PostJSON(ctx context.Context, rawURL string, payload any) (json.RawMessage,
 	if err != nil {
 		return nil, err
 	}
-	reply, err := do(ctx, rawURL, PostTimeout, func(ctx context.Context) (*http.Request, error) {
+	reply, err := do(ctx, rawURL, config.HTTPTimeout(config.OS), func(ctx context.Context) (*http.Request, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
