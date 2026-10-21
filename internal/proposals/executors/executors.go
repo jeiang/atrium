@@ -310,7 +310,11 @@ func (e *Executors) moveGroup(ctx context.Context, client mail.Client, pid int64
 		{Key: "op", Value: "move"}, {Key: "account", Value: account}, {Key: "src_imap", Value: g.IMAPName},
 		{Key: "src_uidvalidity", Value: g.UIDValidity}, {Key: "dest_imap", Value: destIMAP},
 	}
-	chunks := mailops.Chunks(uids, mailops.Batch)
+	size, err := mailops.BatchSize(ctx, client)
+	if err != nil {
+		return 0, err
+	}
+	chunks := mailops.Chunks(uids, size)
 	next := 0
 	s, err := e.hold(ctx, pid, action, chunks[next])
 	if err != nil {
@@ -321,7 +325,7 @@ func (e *Executors) moveGroup(ctx context.Context, client mail.Client, pid int64
 			err = rerr
 		}
 	}()
-	err = mailops.MoveUIDs(ctx, client, g.IMAPName, destIMAP, g.UIDValidity, uids, func(batch []uint32, copied *mail.CopyUID) error {
+	err = mailops.MoveUIDs(ctx, client, g.IMAPName, destIMAP, g.UIDValidity, uids, size, func(batch []uint32, copied *mail.CopyUID) error {
 		entries := make([]any, len(batch))
 		for i, u := range batch {
 			entries[i] = py.Dict{
@@ -388,13 +392,17 @@ func stringList(values []string) []any {
 
 func (e *Executors) relabelItems(ctx context.Context, client mail.Client, pid int64, items []mailops.Verified, add, remove []string) (int, error) {
 	changed := 0
+	size, err := mailops.BatchSize(ctx, client)
+	if err != nil {
+		return 0, err
+	}
 	for _, r := range mailops.RelabelPlan(items, add, remove) {
 		if len(r.Add) == 0 && len(r.Remove) == 0 {
 			continue
 		}
 		for _, g := range mailops.GroupByMailbox(r.Items) {
-			for _, chunk := range mailops.Chunks(sortedItems(g.Items), mailops.Batch) {
-				n, err := e.relabelChunk(ctx, client, pid, g, chunk, r)
+			for _, chunk := range mailops.Chunks(sortedItems(g.Items), size) {
+				n, err := e.relabelChunk(ctx, client, pid, g, chunk, size, r)
 				changed += n
 				if err != nil {
 					return changed, err
@@ -411,7 +419,7 @@ func sortedItems(items []mailops.Verified) []mailops.Verified {
 	return sorted
 }
 
-func (e *Executors) relabelChunk(ctx context.Context, client mail.Client, pid int64, g mailops.Group, chunk []mailops.Verified, r mailops.Relabel) (int, error) {
+func (e *Executors) relabelChunk(ctx context.Context, client mail.Client, pid int64, g mailops.Group, chunk []mailops.Verified, size int, r mailops.Relabel) (int, error) {
 	uids := make([]uint32, len(chunk))
 	ids := make([]any, len(chunk))
 	for i, item := range chunk {
@@ -424,7 +432,7 @@ func (e *Executors) relabelChunk(ctx context.Context, client mail.Client, pid in
 	if err != nil {
 		return 0, err
 	}
-	if err := mailops.StoreLabels(ctx, client, g.IMAPName, g.UIDValidity, uids, r.Add, r.Remove); err != nil {
+	if err := mailops.StoreLabels(ctx, client, g.IMAPName, g.UIDValidity, uids, size, r.Add, r.Remove); err != nil {
 		return 0, s.fail(ctx, attempt, err)
 	}
 	base := py.Dict{
@@ -448,12 +456,16 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 		return e.moveItems(ctx, client, pid, account, items, trash)
 	}
 	trashed := 0
+	size, err := mailops.BatchSize(ctx, client)
+	if err != nil {
+		return 0, err
+	}
 	for _, g := range mailops.GroupByMailbox(items) {
 		uids, byUID := sortedUIDs(g.Items)
 		if err := mailops.SelectRW(ctx, client, g.IMAPName, g.UIDValidity); err != nil {
 			return trashed, err
 		}
-		for _, batch := range mailops.Chunks(uids, mailops.Batch) {
+		for _, batch := range mailops.Chunks(uids, size) {
 			attempt := py.Dict{{Key: "op", Value: "trash"}, {Key: "imap_name", Value: g.IMAPName},
 				{Key: "uidvalidity", Value: g.UIDValidity}, {Key: "dest_imap", Value: trash}}
 			s, err := e.hold(ctx, pid, attempt, batch)

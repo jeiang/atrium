@@ -13,16 +13,13 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
-const (
-	maxDisagreementLines = 40
-	TopDests             = 15
-	Gone                 = "(gone)"
-)
+const Gone = "(gone)"
 
 var sinceRe = rx.MustCompile(`^(\d+)([hd])$`, 0)
 
@@ -200,7 +197,7 @@ func Count(rows []Row) Tally {
 	return t
 }
 
-func accountSection(ctx context.Context, q Querier, account string, since float64) ([]string, error) {
+func accountSection(ctx context.Context, q Querier, account string, since float64, topDests, disagreeLines int) ([]string, error) {
 	rows, err := Outcomes(ctx, q, account, since)
 	if err != nil {
 		return nil, err
@@ -213,7 +210,7 @@ func accountSection(ctx context.Context, q Querier, account string, since float6
 	}
 	out = append(out, "by stage: "+strings.Join(stages, ", "))
 	out = append(out, fmt.Sprintf("proposed moves: %d, proposed deletes: %d, no label: %d", t.Dests.Total(), t.Deletes, t.NoLabel))
-	for _, e := range t.Dests.MostCommon(TopDests) {
+	for _, e := range t.Dests.MostCommon(topDests) {
 		out = append(out, fmt.Sprintf("  %5d  %s", e.Count, e.Key))
 	}
 	line := fmt.Sprintf("outcome: still in inbox=%d, gone=%d, moved=%d, proposal equals actual=%d",
@@ -228,14 +225,14 @@ func accountSection(ctx context.Context, q Querier, account string, since float6
 			pairs = append(pairs, r)
 		}
 	}
-	out = append(out, disagreementLines("disagreements (proposed -> actual)", pairs)...)
+	out = append(out, disagreementLines("disagreements (proposed -> actual)", pairs, disagreeLines)...)
 	section, err := flagSection(ctx, q, account, since)
 	return append(out, section...), err
 }
 
 type disagreement struct{ domain, proposed, actual string }
 
-func disagreementLines(title string, pairs []Row) []string {
+func disagreementLines(title string, pairs []Row, limit int) []string {
 	out := []string{fmt.Sprintf("%s: %d", title, len(pairs))}
 	var grouped Counter[disagreement]
 	for _, r := range pairs {
@@ -245,7 +242,7 @@ func disagreementLines(title string, pairs []Row) []string {
 		}
 		grouped.Add(disagreement{r.FromDomain, proposed, r.Actual.String})
 	}
-	for _, e := range grouped.MostCommon(maxDisagreementLines) {
+	for _, e := range grouped.MostCommon(limit) {
 		out = append(out, fmt.Sprintf("  %4d  %s: %s -> %s", e.Count, e.Key.domain, e.Key.proposed, e.Key.actual))
 	}
 	return out
@@ -315,6 +312,12 @@ func AccountExists(ctx context.Context, q Querier, name string) (bool, error) {
 }
 
 func Build(ctx context.Context, q Querier, env config.Env, since *string, at time.Time) (string, error) {
+	r := mail.Read(ctx, q)
+	topDests := r.Int(mail.KeyReportTopDests)
+	disagreeLines := r.Int(mail.KeyReportDisagreeLines)
+	if err := r.Err(); err != nil {
+		return "", err
+	}
 	start, err := ParseSince(env, since, at)
 	if err != nil {
 		return "", err
@@ -328,7 +331,7 @@ func Build(ctx context.Context, q Querier, env config.Env, since *string, at tim
 		if !ok {
 			continue
 		}
-		section, err := accountSection(ctx, q, spec.Name, start)
+		section, err := accountSection(ctx, q, spec.Name, start, topDests, disagreeLines)
 		if err != nil {
 			return "", err
 		}

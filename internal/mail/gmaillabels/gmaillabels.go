@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
@@ -20,16 +21,16 @@ import (
 var log = logx.Logger("atrium.gmail_labels")
 
 const (
-	Kind              = "gmail_label_merge"
-	MaxMessages       = 10
-	MinTargetMessages = 10
-	MinOverlap        = 0.5
-	Hierarchy         = "/"
+	Kind      = "gmail_label_merge"
+	Hierarchy = "/"
 )
 
 type mailbox struct {
-	members map[string][]int64
-	rows    map[int64]scanutil.Message
+	members     map[string][]int64
+	rows        map[int64]scanutil.Message
+	maxMessages int
+	minTarget   int
+	minOverlap  float64
 }
 
 func (m mailbox) labels() []string {
@@ -43,6 +44,13 @@ func (m mailbox) labels() []string {
 
 func load(ctx context.Context, q proposals.Querier) (mailbox, error) {
 	m := mailbox{members: map[string][]int64{}, rows: map[int64]scanutil.Message{}}
+	r := mail.Read(ctx, q)
+	m.maxMessages = r.Int(mail.KeyGmailLabelsMaxMessages)
+	m.minTarget = r.Int(mail.KeyGmailLabelsMinTarget)
+	m.minOverlap = r.Float(mail.KeyGmailLabelsMinOverlap)
+	if err := r.Err(); err != nil {
+		return m, err
+	}
 	rows, err := q.QueryContext(ctx, "SELECT id, labels, subject, from_name, from_addr, date_ts FROM messages "+
 		"WHERE account = ? AND gone_at IS NULL AND sent = 0", config.Gmail)
 	if err != nil {
@@ -102,7 +110,7 @@ func (m mailbox) bestSibling(label string) string {
 	best, bestShare := "", 0.0
 	for _, other := range m.labels() {
 		ids := m.members[other]
-		if _, nested := parentOf(other); other == label || nested || len(ids) < MinTargetMessages {
+		if _, nested := parentOf(other); other == label || nested || len(ids) < m.minTarget {
 			continue
 		}
 		theirs := map[string]bool{}
@@ -119,7 +127,7 @@ func (m mailbox) bestSibling(label string) string {
 			best, bestShare = other, share
 		}
 	}
-	if bestShare >= MinOverlap {
+	if bestShare >= m.minOverlap {
 		return best
 	}
 	return ""
@@ -135,7 +143,7 @@ func (m mailbox) candidates() []candidate {
 	labels := m.labels()
 	for _, label := range labels {
 		ids := m.members[label]
-		if len(ids) >= MaxMessages || slices.ContainsFunc(labels, func(o string) bool { return strings.HasPrefix(o, label+Hierarchy) }) {
+		if len(ids) >= m.maxMessages || slices.ContainsFunc(labels, func(o string) bool { return strings.HasPrefix(o, label+Hierarchy) }) {
 			continue
 		}
 		into, _ := parentOf(label)

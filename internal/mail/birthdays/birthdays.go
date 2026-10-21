@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -24,6 +25,13 @@ const (
 
 func Date(year int, month time.Month, day int) time.Time {
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+}
+
+func Limits(ctx context.Context, q db.Querier) (defaultDays, maxDays int, err error) {
+	r := mail.Read(ctx, q)
+	defaultDays = r.Int(mail.KeyBirthdaysDefaultDays)
+	maxDays = r.Int(mail.KeyBirthdaysMaxDays)
+	return defaultDays, maxDays, r.Err()
 }
 
 func validDate(year, month, day int) (time.Time, bool) {

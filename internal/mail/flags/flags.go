@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
@@ -128,6 +129,14 @@ func FlagAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 	if err != nil || len(rows) == 0 {
 		return 0, err
 	}
+	chatURL, err := mail.ChatURL(ctx, d.Read)
+	if err != nil {
+		return 0, err
+	}
+	ctx, err = mail.WithModels(ctx, d.Read)
+	if err != nil {
+		return 0, err
+	}
 	known := LoadContacts(cfg.ContactsDir)
 	available := true
 	done := 0
@@ -139,7 +148,7 @@ func FlagAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 			if err != nil {
 				return done, err
 			}
-			verdict, err = judge(ctx, cfg.ChatURL, llm.Message{Subject: row.Subject, FromName: row.FromName, FromAddr: row.FromAddr}, body)
+			verdict, err = judge(ctx, chatURL, llm.Message{Subject: row.Subject, FromName: row.FromName, FromAddr: row.FromAddr}, body)
 			var unavailable *httpx.ServiceUnavailable
 			switch {
 			case errors.As(err, &unavailable):

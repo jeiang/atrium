@@ -70,9 +70,10 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
+	mailtest.PinMode(t, vars["ATRIUM_MODE"])
 	s := &site{
 		t: t, db: d, cfg: cfg, env: env, registry: proposals.NewRegistry(), writes: toolset.Undoers(env), smtp: &smtptest.Server{},
-		imap: mailtest.NewFakeClient(env), clock: 1_000_000,
+		imap: mailtest.NewFakeClient(), clock: 1_000_000,
 	}
 	s.imap.AddBox("INBOX", mailtest.NewBox(1))
 	s.imap.AddBox("Sent Messages", mailtest.NewBox(1), `\Sent`)

@@ -42,19 +42,6 @@ func stripped(env Env, name string) string { return py.Strip(get(env, name)) }
 
 func cleanURL(env Env, name string) string { return strings.TrimRight(stripped(env, name), "/") }
 
-func Mode(env Env) (string, error) {
-	value, ok := env("ATRIUM_MODE")
-	if !ok {
-		value = Shadow
-	}
-	for _, m := range Modes {
-		if value == m {
-			return value, nil
-		}
-	}
-	return "", fmt.Errorf("ATRIUM_MODE must be one of (%s, %s), got %s", py.Repr(Shadow), py.Repr(Live), py.Repr(value))
-}
-
 func Zone(name string) (*time.Location, error) {
 	if name != "" && name != "Local" {
 		if loc, err := time.LoadLocation(name); err == nil {

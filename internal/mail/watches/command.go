@@ -12,7 +12,7 @@ import (
 
 func Command(clock func() float64) *cli.Command {
 	o := Options{Clock: clock}
-	return refreshcmd.Command("watches", func(ctx context.Context, d *db.DB, cfg config.Config) py.Dict {
-		return Refresh(ctx, d, cfg, ScanLimit, o.clock(), o)
+	return refreshcmd.Command("watches", func(ctx context.Context, d *db.DB, _ config.Config) py.Dict {
+		return Refresh(ctx, d, o.clock(), o)
 	})
 }

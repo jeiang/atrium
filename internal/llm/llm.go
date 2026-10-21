@@ -113,7 +113,40 @@ type Neighbor struct{ Folder, FromDomain, Subject string }
 
 type Message struct{ Subject, FromName, FromAddr string }
 
-func FolderCatalog(rows []FolderSender) string {
+type Options struct {
+	Model      string
+	MaxTokens  int
+	BodyChars  int
+	TopSenders int
+}
+
+type optionsKey struct{}
+
+func WithOptions(ctx context.Context, o Options) context.Context {
+	return context.WithValue(ctx, optionsKey{}, o)
+}
+
+func options(ctx context.Context) Options {
+	o, _ := ctx.Value(optionsKey{}).(Options)
+	if o.Model == "" {
+		o.Model = Model
+	}
+	if o.MaxTokens <= 0 {
+		o.MaxTokens = MaxTokens
+	}
+	if o.BodyChars <= 0 {
+		o.BodyChars = config.LLMBodyChars
+	}
+	if o.TopSenders <= 0 {
+		o.TopSenders = config.LLMTopSenders
+	}
+	return o
+}
+
+func BodyChars(ctx context.Context) int { return options(ctx).BodyChars }
+
+func FolderCatalog(ctx context.Context, rows []FolderSender) string {
+	topSenders := options(ctx).TopSenders
 	byFolder := map[string]map[string]int{}
 	for _, r := range rows {
 		if byFolder[r.Folder] == nil {
@@ -127,24 +160,24 @@ func FolderCatalog(rows []FolderSender) string {
 		top := slices.SortedFunc(maps.Keys(counts), func(a, b string) int {
 			return cmp.Or(cmp.Compare(counts[b], counts[a]), strings.Compare(a, b))
 		})
-		top = top[:min(len(top), config.LLMTopSenders)]
+		top = top[:min(len(top), topSenders)]
 		lines = append(lines, fmt.Sprintf("- %s (top senders: %s)", folder, strings.Join(top, ", ")))
 	}
 	return strings.Join(lines, "\n")
 }
 
-func FolderPrompt(catalog string, neighbors []Neighbor, m Message, body string) string {
+func FolderPrompt(ctx context.Context, catalog string, neighbors []Neighbor, m Message, body string) string {
 	similar := make([]string, len(neighbors))
 	for i, n := range neighbors {
 		similar[i] = fmt.Sprintf("%d. [%s] from %s: %s", i+1, n.Folder, n.FromDomain, py.Clip(n.Subject, 100))
 	}
 	return "Allowed folders:\n" + catalog + "\n\nSimilar filed messages (folder in brackets):\n" + strings.Join(similar, "\n") + "\n\n" +
 		"Message to file:\nSubject: " + m.Subject + "\nFrom: " + m.FromName + " <" + m.FromAddr + ">\n" +
-		"Body:\n" + py.Clip(body, config.LLMBodyChars)
+		"Body:\n" + py.Clip(body, options(ctx).BodyChars)
 }
 
-func messagePrompt(m Message, body string) string {
-	return "From: " + m.FromName + " <" + m.FromAddr + ">\nSubject: " + m.Subject + "\nBody:\n" + py.Clip(body, config.LLMBodyChars)
+func messagePrompt(ctx context.Context, m Message, body string) string {
+	return "From: " + m.FromName + " <" + m.FromAddr + ">\nSubject: " + m.Subject + "\nBody:\n" + py.Clip(body, options(ctx).BodyChars)
 }
 
 type chatRequest struct {
@@ -172,11 +205,12 @@ type chatMessage struct {
 }
 
 func ChatJSON(ctx context.Context, url, system, user string, schema any, maxTokens int) (json.RawMessage, error) {
+	o := options(ctx)
 	if maxTokens <= 0 {
-		maxTokens = MaxTokens
+		maxTokens = o.MaxTokens
 	}
 	req := chatRequest{
-		Model:       Model,
+		Model:       o.Model,
 		Messages:    []chatMessage{{"system", system}, {"user", user}},
 		MaxTokens:   maxTokens,
 		CachePrompt: true,
@@ -233,7 +267,7 @@ func field(a any, k string) (bool, error) {
 }
 
 func JudgeFolder(ctx context.Context, url string, folders []string, catalog string, neighbors []Neighbor, m Message, body string) (string, bool, error) {
-	raw, err := ChatJSON(ctx, url, FolderSystem, FolderPrompt(catalog, neighbors, m, body), FolderSchema(folders), MaxTokens)
+	raw, err := ChatJSON(ctx, url, FolderSystem, FolderPrompt(ctx, catalog, neighbors, m, body), FolderSchema(folders), 0)
 	if err != nil {
 		return "", false, err
 	}
@@ -261,7 +295,7 @@ type Flags struct {
 }
 
 func JudgeFlag(ctx context.Context, url string, m Message, body string) (Flags, error) {
-	raw, err := ChatJSON(ctx, url, FlagSystem, messagePrompt(m, body), FlagSchema, MaxTokens)
+	raw, err := ChatJSON(ctx, url, FlagSystem, messagePrompt(ctx, m, body), FlagSchema, 0)
 	if err != nil {
 		return Flags{}, err
 	}
@@ -279,7 +313,7 @@ func JudgeFlag(ctx context.Context, url string, m Message, body string) (Flags, 
 }
 
 func JudgeEvent(ctx context.Context, url string, m Message, body string) (bool, error) {
-	raw, err := ChatJSON(ctx, url, EventSystem, messagePrompt(m, body), EventSchema, MaxTokens)
+	raw, err := ChatJSON(ctx, url, EventSystem, messagePrompt(ctx, m, body), EventSchema, 0)
 	if err != nil {
 		return false, err
 	}

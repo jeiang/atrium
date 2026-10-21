@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -45,7 +46,7 @@ func local(ts float64, loc *time.Location) time.Time {
 	return time.Unix(sec, 0).In(loc)
 }
 
-func ReminderTime(due, tz string, now float64) (float64, error) {
+func ReminderTime(due, tz string, hour int, now float64) (float64, error) {
 	loc, err := scheduler.Zone(tz)
 	if err != nil {
 		return 0, err
@@ -54,7 +55,7 @@ func ReminderTime(due, tz string, now float64) (float64, error) {
 	if !ok {
 		return 0, fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrValue, py.Repr(due))
 	}
-	wall := time.Date(year, time.Month(month), day, RemindHour, 0, 0, 0, time.UTC).Unix()
+	wall := time.Date(year, time.Month(month), day, hour, 0, 0, 0, time.UTC).Unix()
 	return max(float64(py.WallToUnix(loc, wall)), now+300), nil
 }
 
@@ -70,10 +71,17 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 	if err != nil {
 		return 0, err
 	}
+	set := mail.Read(ctx, r.DB.Read)
+	ahead := set.Int(mail.KeyLoopsRemindAheadDays)
+	overdue := set.Int(mail.KeyLoopsRemindOverdueDays)
+	hour := set.Int(mail.KeyLoopsRemindHour)
+	if err := set.Err(); err != nil {
+		return 0, err
+	}
 	at := local(now, loc)
 	today := time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, time.UTC)
-	latest := today.AddDate(0, 0, RemindAheadDays).Format("2006-01-02")
-	earliest := today.AddDate(0, 0, -RemindOverdueDays).Format("2006-01-02")
+	latest := today.AddDate(0, 0, ahead).Format("2006-01-02")
+	earliest := today.AddDate(0, 0, -overdue).Format("2006-01-02")
 	rows, err := r.DB.Read.QueryContext(ctx,
 		"SELECT c.id, c.message_id, c.text, c.owner, c.due, m.subject FROM commitments c LEFT JOIN messages m ON m.id = c.message_id "+
 			"WHERE c.status = 'open' AND c.proposal_id IS NULL AND c.due IS NOT NULL AND c.due <= ? AND c.due >= ? ORDER BY c.due, c.id",
@@ -96,7 +104,7 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 	}
 	made := 0
 	for _, c := range commitments {
-		remindAt, err := ReminderTime(c.due, tz, now)
+		remindAt, err := ReminderTime(c.due, tz, hour, now)
 		if err != nil {
 			return made, err
 		}
@@ -179,7 +187,12 @@ func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (
 		return nil, err
 	}
 	current := r.now()
-	remindAt, err := ReminderTime(due, tz, current)
+	set := mail.Read(ctx, r.DB.Read)
+	hour := set.Int(mail.KeyLoopsRemindHour)
+	if err := set.Err(); err != nil {
+		return nil, err
+	}
+	remindAt, err := ReminderTime(due, tz, hour, current)
 	if err != nil {
 		return nil, err
 	}

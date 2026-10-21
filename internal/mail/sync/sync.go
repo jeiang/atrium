@@ -23,10 +23,15 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const (
-	SentBackfillDays = 90
-	FlagBatch        = 500
-)
+type limits struct {
+	fetchBatch, flagBatch, sentBackfillDays, ftsBodyChars int
+}
+
+func readLimits(ctx context.Context, q mail.Querier) (limits, error) {
+	r := mail.Read(ctx, q)
+	l := limits{fetchBatch: r.Int(mail.KeyFetchBatch), flagBatch: r.Int(mail.KeyFlagBatch), sentBackfillDays: r.Int(mail.KeySentBackfillDays), ftsBodyChars: r.Int(mail.KeyFTSBodyChars)}
+	return l, r.Err()
+}
 
 var (
 	log    = logx.Logger("atrium.sync")
@@ -84,13 +89,17 @@ func (s *Syncer) Account(ctx context.Context, account string, client mail.Client
 	if _, err := s.DB.Write.ExecContext(ctx, "INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, account); err != nil {
 		return stats, err
 	}
+	lim, err := readLimits(ctx, s.DB.Read)
+	if err != nil {
+		return stats, err
+	}
 	run := s.now()
 	mailboxes, err := s.upsertMailboxes(ctx, account, client)
 	if err != nil {
 		return stats, err
 	}
 	for _, mbx := range mailboxes {
-		if err := s.syncMailbox(ctx, client, account, mbx, run, &stats); err != nil {
+		if err := s.syncMailbox(ctx, client, account, mbx, run, lim, &stats); err != nil {
 			return stats, err
 		}
 		stats.Mailboxes++
@@ -177,7 +186,7 @@ type stored struct {
 	InInbox  int
 }
 
-func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account string, mbx mailbox, run float64, stats *Stats) error {
+func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account string, mbx mailbox, run float64, lim limits, stats *Stats) error {
 	gmail := account == config.Gmail
 	status, err := client.Status(ctx, mbx.IMAPName)
 	if err != nil {
@@ -205,7 +214,7 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 	}
 	var serverUIDs []uint32
 	if mbx.Role == "sent" {
-		since, err := s.SentSince(ctx, mbx.ID, validity, run)
+		since, err := s.SentSince(ctx, mbx.ID, validity, run, lim.sentBackfillDays)
 		if err != nil {
 			return err
 		}
@@ -262,7 +271,7 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 			survivors[u] = r
 		}
 	}
-	if err := s.refreshFlags(ctx, client, account, mbx, survivors, storedModseq, modseq, stats); err != nil {
+	if err := s.refreshFlags(ctx, client, account, mbx, survivors, storedModseq, modseq, lim, stats); err != nil {
 		return err
 	}
 	var fresh []uint32
@@ -272,15 +281,15 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 		}
 	}
 	slices.Sort(fresh)
-	for start := 0; start < len(fresh); start += config.FetchBatch {
-		batch := fresh[start:min(start+config.FetchBatch, len(fresh))]
+	for start := 0; start < len(fresh); start += lim.fetchBatch {
+		batch := fresh[start:min(start+lim.fetchBatch, len(fresh))]
 		fetched, err := client.UIDFetch(ctx, mail.UIDs(batch...), mail.FetchItems{Labels: gmail, Header: true, Body: true})
 		if err != nil {
 			return err
 		}
 		err = s.DB.WithTx(ctx, func(tx *sql.Tx) error {
 			for _, item := range fetched {
-				if err := s.ingest(ctx, tx, account, mbx, validity, item); err != nil {
+				if err := s.ingest(ctx, tx, account, mbx, validity, lim.ftsBodyChars, item); err != nil {
 					return err
 				}
 				stats.New++
@@ -290,7 +299,7 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 		if err != nil {
 			return err
 		}
-		log.Info(fmt.Sprintf("%s/%s fetched %d/%d", account, mbx.Name, min(start+config.FetchBatch, len(fresh)), len(fresh)))
+		log.Info(fmt.Sprintf("%s/%s fetched %d/%d", account, mbx.Name, min(start+lim.fetchBatch, len(fresh)), len(fresh)))
 	}
 	if gmail {
 		if err := s.refreshCategories(ctx, client, mbx); err != nil {
@@ -336,8 +345,8 @@ func dayOf(ts float64) time.Time {
 
 func IMAPDate(t time.Time) string { return t.UTC().Format("02-Jan-2006") }
 
-func (s *Syncer) SentSince(ctx context.Context, mailboxID, validity int64, run float64) (time.Time, error) {
-	cutoff := run - SentBackfillDays*86400
+func (s *Syncer) SentSince(ctx context.Context, mailboxID, validity int64, run float64, backfillDays int) (time.Time, error) {
+	cutoff := run - float64(backfillDays)*86400
 	var oldest sql.NullFloat64
 	err := s.DB.Read.QueryRowContext(ctx,
 		"SELECT MIN(date_ts) FROM messages WHERE mailbox_id = ? AND uidvalidity = ? AND gone_at IS NULL AND date_ts > 0",
@@ -352,7 +361,7 @@ func (s *Syncer) SentSince(ctx context.Context, mailboxID, validity int64, run f
 }
 
 func (s *Syncer) refreshFlags(ctx context.Context, client mail.Client, account string, mbx mailbox,
-	survivors map[uint32]stored, storedModseq, modseq *int64, stats *Stats) error {
+	survivors map[uint32]stored, storedModseq, modseq *int64, lim limits, stats *Stats) error {
 	if len(survivors) == 0 {
 		return nil
 	}
@@ -374,8 +383,8 @@ func (s *Syncer) refreshFlags(ctx context.Context, client mail.Client, account s
 			uids = append(uids, u)
 		}
 		slices.Sort(uids)
-		for start := 0; start < len(uids); start += FlagBatch {
-			got, err := client.UIDFetch(ctx, mail.UIDs(uids[start:min(start+FlagBatch, len(uids))]...), items)
+		for start := 0; start < len(uids); start += lim.flagBatch {
+			got, err := client.UIDFetch(ctx, mail.UIDs(uids[start:min(start+lim.flagBatch, len(uids))]...), items)
 			if err != nil {
 				return err
 			}
@@ -525,7 +534,7 @@ func nullable(s string) any {
 	return s
 }
 
-func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mailbox, validity int64, item mail.Message) error {
+func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mailbox, validity int64, ftsBodyChars int, item mail.Message) error {
 	var attachments []features.Attachment
 	if item.Attachments != nil {
 		attachments = make([]features.Attachment, len(item.Attachments))
@@ -533,7 +542,7 @@ func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mai
 			attachments[i] = features.Attachment{Type: a.Kind, Name: a.Name}
 		}
 	}
-	feats, err := features.Extract(item.Header, item.Text, attachments, internalTS(item.InternalDate))
+	feats, err := features.Extract(item.Header, item.Text, attachments, internalTS(item.InternalDate), ftsBodyChars)
 	if err != nil {
 		return err
 	}

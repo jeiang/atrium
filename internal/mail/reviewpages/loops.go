@@ -62,7 +62,9 @@ func plural(n int64, noun string) string {
 
 func (s *service) loopSnooze(w http.ResponseWriter, r *http.Request) {
 	id, errs := pathInt(r, "loop_id")
-	days := int64(openloops.SnoozeDefaultDays)
+	snooze, err := openloops.SnoozeDefault(r.Context(), s.deps.DB.Read)
+	check(err)
+	days := int64(snooze)
 	if raw, given := web.FormField(web.FormValues(r), "days"); given {
 		n, valid := py.LaxInt(raw)
 		if !valid {

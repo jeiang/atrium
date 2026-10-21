@@ -11,6 +11,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
@@ -65,8 +66,9 @@ func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		open := o.Open
 		if open == nil {
-			open = imapclient.Opener(d.Cfg, d.Env)
+			open = imapclient.Opener(d.Cfg)
 		}
+		open = mailops.Opener(mail.BindMode(open, d.DB.Read))
 		now := o.Now
 		if now == nil {
 			now = wallClock

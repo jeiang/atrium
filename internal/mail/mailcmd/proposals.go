@@ -2,6 +2,7 @@ package mailcmd
 
 import (
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/scans"
@@ -12,7 +13,11 @@ func (o Options) ProposalsCommand() *cli.Command {
 	return group("proposals",
 		o.leaf("scan-all", func(*cli.Args) body {
 			return func(x *Exec) error {
-				out, err := scans.ScanAll(x.Ctx, x.DB, x.Now(), rebalance.SuggestName(x.Cfg.ChatURL))
+				url, err := mail.ChatURL(x.Ctx, x.DB.Read)
+				if err != nil {
+					return err
+				}
+				out, err := scans.ScanAll(x.Ctx, x.DB, x.Now(), rebalance.SuggestName(url))
 				if err != nil {
 					return err
 				}

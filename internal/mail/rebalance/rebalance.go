@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
@@ -25,24 +26,45 @@ import (
 var log = logx.Logger("atrium.rebalance")
 
 const (
-	Split              = "rebalance_split"
-	Merge              = "rebalance_merge"
-	MinFolder          = 40
-	MinGroup           = 20
-	MinShare           = 0.10
-	MergeMinGroup      = 3
-	MergeMinOthers     = 10
-	MergeMinShare      = 0.9
-	RunsRequired       = 2
-	RunGapSeconds      = 14 * 86400
-	ClusterIterations  = 15
-	ClusterMargin      = 0.04
-	ClusterMinEmbedded = 0.8
-	TopTerms           = 5
-	NameMaxChars       = 40
+	Split = "rebalance_split"
+	Merge = "rebalance_merge"
 )
 
-var ClusterKs = [...]int{2, 3, 4}
+type params struct {
+	minFolder, minGroup, mergeMinGroup, mergeMinOthers int
+	minShare, mergeMinShare                            float64
+	runsRequired, runGapSeconds                        int
+	clusterKs                                          []int
+	clusterIterations, topTerms, nameMax               int
+	clusterMargin, clusterMinEmbedded                  float64
+	limits                                             scanutil.Limits
+}
+
+func readParams(ctx context.Context, q mail.Querier) (params, error) {
+	r := mail.Read(ctx, q)
+	p := params{
+		minFolder:          r.Int(mail.KeyRebalanceMinFolder),
+		minGroup:           r.Int(mail.KeyRebalanceMinGroup),
+		minShare:           r.Float(mail.KeyRebalanceMinShare),
+		mergeMinGroup:      r.Int(mail.KeyRebalanceMergeMinGroup),
+		mergeMinOthers:     r.Int(mail.KeyRebalanceMergeMinOther),
+		mergeMinShare:      r.Float(mail.KeyRebalanceMergeMinShare),
+		runsRequired:       r.Int(mail.KeyRebalanceRunsRequired),
+		runGapSeconds:      r.Int(mail.KeyRebalanceRunGapSeconds),
+		clusterKs:          r.Ints(mail.KeyRebalanceClusterKs),
+		clusterIterations:  r.Int(mail.KeyRebalanceClusterIters),
+		clusterMargin:      r.Float(mail.KeyRebalanceClusterMargin),
+		clusterMinEmbedded: r.Float(mail.KeyRebalanceClusterMinEmb),
+		topTerms:           r.Int(mail.KeyRebalanceTopTerms),
+		nameMax:            r.Int(mail.KeyRebalanceNameMaxChars),
+	}
+	if err := r.Err(); err != nil {
+		return params{}, err
+	}
+	var err error
+	p.limits, err = scanutil.ReadLimits(ctx, q)
+	return p, err
+}
 
 var stopwords = map[string]bool{}
 
@@ -57,11 +79,13 @@ const NameSystem = "You name a mail folder. You get the existing parent folder, 
 	"of a group of messages that will move into a new folder. Answer a short, plain folder name of one to three " +
 	"words that describes what the messages are, without the sender's name unless that is what they are about."
 
-var NameSchema = llm.Object{
-	{Key: "type", Value: "object"},
-	{Key: "properties", Value: llm.Object{{Key: "name", Value: llm.Object{{Key: "type", Value: "string"}, {Key: "maxLength", Value: NameMaxChars}}}}},
-	{Key: "required", Value: []string{"name"}},
-	{Key: "additionalProperties", Value: false},
+func nameSchema(maxChars int) llm.Object {
+	return llm.Object{
+		{Key: "type", Value: "object"},
+		{Key: "properties", Value: llm.Object{{Key: "name", Value: llm.Object{{Key: "type", Value: "string"}, {Key: "maxLength", Value: maxChars}}}}},
+		{Key: "required", Value: []string{"name"}},
+		{Key: "additionalProperties", Value: false},
+	}
 }
 
 var (
@@ -184,8 +208,8 @@ func groupBy(rows []*row, key keyer) grouped {
 	return g
 }
 
-func big(size, total int) bool {
-	return size >= MinGroup && float64(size) >= MinShare*float64(total)
+func (p params) big(size, total int) bool {
+	return size >= p.minGroup && float64(size) >= p.minShare*float64(total)
 }
 
 func sortGroups(groups []Group) {
@@ -194,11 +218,11 @@ func sortGroups(groups []Group) {
 	})
 }
 
-func bigGroups(rows []*row, key keyer, total int) []Group {
+func (p params) bigGroups(rows []*row, key keyer, total int) []Group {
 	g := groupBy(rows, key)
 	var out []Group
 	for _, k := range g.order {
-		if big(len(g.ids[k]), total) {
+		if p.big(len(g.ids[k]), total) {
 			out = append(out, Group{k, g.ids[k]})
 		}
 	}
@@ -206,9 +230,9 @@ func bigGroups(rows []*row, key keyer, total int) []Group {
 	return out
 }
 
-func senderSplit(rows []*row) (string, []Group, bool) {
+func (p params) senderSplit(rows []*row) (string, []Group, bool) {
 	for _, lv := range levels {
-		groups := bigGroups(rows, lv.key, len(rows))
+		groups := p.bigGroups(rows, lv.key, len(rows))
 		if len(groups) >= 2 {
 			return lv.name, groups[1:], true
 		}
@@ -300,7 +324,7 @@ func maxOf(values []float64) int {
 	return best
 }
 
-func (c *clusterer) kmeans(vectors [][]float32, k int) ([]int, float64) {
+func (c *clusterer) kmeans(vectors [][]float32, k, iterations int) ([]int, float64) {
 	mean := c.centroid(vectors)
 	centers := [][]float32{vectors[argmin(len(vectors), func(i int) float64 { return c.dot(vectors[i], mean) })]}
 	for len(centers) < k {
@@ -315,7 +339,7 @@ func (c *clusterer) kmeans(vectors [][]float32, k int) ([]int, float64) {
 	}
 	var assign []int
 	var sims [][]float64
-	for range ClusterIterations {
+	for range iterations {
 		sims = make([][]float64, len(vectors))
 		fresh := make([]int, len(vectors))
 		for i, v := range vectors {
@@ -355,7 +379,7 @@ func (c *clusterer) kmeans(vectors [][]float32, k int) ([]int, float64) {
 	return assign, margin / float64(len(vectors))
 }
 
-func embeddingSplit(ctx context.Context, q proposals.Querier, rows []*row) (string, []Group, bool, error) {
+func (p params) embeddingSplit(ctx context.Context, q proposals.Querier, rows []*row) (string, []Group, bool, error) {
 	ids := make([]int64, len(rows))
 	for i, r := range rows {
 		ids[i] = r.ID
@@ -364,7 +388,7 @@ func embeddingSplit(ctx context.Context, q proposals.Querier, rows []*row) (stri
 	if err != nil {
 		return "", nil, false, err
 	}
-	if float64(len(vectors)) < ClusterMinEmbedded*float64(len(rows)) {
+	if float64(len(vectors)) < p.clusterMinEmbedded*float64(len(rows)) {
 		return "", nil, false, nil
 	}
 	var order []int64
@@ -378,13 +402,13 @@ func embeddingSplit(ctx context.Context, q proposals.Querier, rows []*row) (stri
 	var c clusterer
 	var assign []int
 	margin := 0.0
-	for i, k := range ClusterKs {
-		a, m := c.kmeans(points, k)
+	for i, k := range p.clusterKs {
+		a, m := c.kmeans(points, k, p.clusterIterations)
 		if i == 0 || m > margin {
 			assign, margin = a, m
 		}
 	}
-	if margin < ClusterMargin {
+	if margin < p.clusterMargin {
 		return "", nil, false, nil
 	}
 	var labels []int
@@ -403,14 +427,14 @@ func embeddingSplit(ctx context.Context, q proposals.Querier, rows []*row) (stri
 	var groups []Group
 	for _, a := range labels {
 		members := clusters[a]
-		if !big(len(members), len(rows)) {
+		if !p.big(len(members), len(rows)) {
 			continue
 		}
 		domains := make([]string, len(members))
 		for i, id := range members {
 			domains[i] = byID[id].FromDomain
 		}
-		top := scanutil.TopCounts(domains)
+		top := p.limits.TopCounts(domains)
 		names := make([]string, 0, 3)
 		for _, d := range top[:min(len(top), 3)] {
 			label, _ := d.(py.Dict).Get("label")
@@ -426,17 +450,17 @@ func embeddingSplit(ctx context.Context, q proposals.Querier, rows []*row) (stri
 	return "embed", groups[1:], true, nil
 }
 
-func splitCandidates(ctx context.Context, q proposals.Querier, f folders) ([]Candidate, error) {
+func (p params) splitCandidates(ctx context.Context, q proposals.Querier, f folders) ([]Candidate, error) {
 	var found []Candidate
 	for _, key := range f.sorted() {
 		rows := f.rows[key]
-		if len(rows) < MinFolder {
+		if len(rows) < p.minFolder {
 			continue
 		}
-		lv, groups, ok := senderSplit(rows)
+		lv, groups, ok := p.senderSplit(rows)
 		if !ok {
 			var err error
-			if lv, groups, ok, err = embeddingSplit(ctx, q, rows); err != nil {
+			if lv, groups, ok, err = p.embeddingSplit(ctx, q, rows); err != nil {
 				return nil, err
 			}
 		}
@@ -454,7 +478,7 @@ type counter struct {
 	n     map[string]int
 }
 
-func mergeCandidates(f folders) []Candidate {
+func (p params) mergeCandidates(f folders) []Candidate {
 	var found []Candidate
 	for _, lv := range mergeLevels {
 		placed := map[placedKey]*counter{}
@@ -478,7 +502,7 @@ func mergeCandidates(f folders) []Candidate {
 		}
 		for _, fk := range f.sorted() {
 			rows := f.rows[fk]
-			if len(rows) < MinFolder {
+			if len(rows) < p.minFolder {
 				continue
 			}
 			g := groupBy(rows, lv.key)
@@ -498,10 +522,10 @@ func mergeCandidates(f folders) []Candidate {
 						into, top = folder, n
 					}
 				}
-				if len(ids) < MergeMinGroup || total < MergeMinOthers {
+				if len(ids) < p.mergeMinGroup || total < p.mergeMinOthers {
 					continue
 				}
-				if float64(top)/float64(total) >= MergeMinShare {
+				if float64(top)/float64(total) >= p.mergeMinShare {
 					found = append(found, Candidate{Kind: Merge, Account: fk.account, Folder: fk.folder, Level: lv.name,
 						Groups: []Group{{k, ids}}, Into: into})
 				}
@@ -531,23 +555,27 @@ func mergeCandidates(f folders) []Candidate {
 }
 
 func Detect(ctx context.Context, q proposals.Querier) ([]Candidate, error) {
-	_, found, err := detect(ctx, q)
+	p, err := readParams(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	_, found, err := p.detect(ctx, q)
 	return found, err
 }
 
-func detect(ctx context.Context, q proposals.Querier) (folders, []Candidate, error) {
+func (p params) detect(ctx context.Context, q proposals.Querier) (folders, []Candidate, error) {
 	f, err := folderRows(ctx, q)
 	if err != nil {
 		return f, nil, err
 	}
-	splits, err := splitCandidates(ctx, q, f)
+	splits, err := p.splitCandidates(ctx, q, f)
 	if err != nil {
 		return f, nil, err
 	}
-	return f, append(mergeCandidates(f), splits...), nil
+	return f, append(p.mergeCandidates(f), splits...), nil
 }
 
-func termsOf(rows []*row) []string {
+func (p params) termsOf(rows []*row) []string {
 	counts := map[string]int{}
 	var words []string
 	for _, r := range rows {
@@ -565,23 +593,23 @@ func termsOf(rows []*row) []string {
 		}
 	}
 	slices.SortFunc(words, func(a, b string) int { return cmp.Or(cmp.Compare(counts[b], counts[a]), cmp.Compare(a, b)) })
-	return words[:min(len(words), TopTerms)]
+	return words[:min(len(words), p.topTerms)]
 }
 
-func CleanName(value string) string {
+func CleanName(value string, maxChars int) string {
 	name, _ := junkRE.Sub(" ", value, 0)
 	name, _ = spacesRE.Sub(" ", name, 0)
-	return py.Strip(py.Clip(py.Strip(name), NameMaxChars))
+	return py.Strip(py.Clip(py.Strip(name), maxChars))
 }
 
-type Namer func(ctx context.Context, folder string, domains, terms []string) (string, error)
+type Namer func(ctx context.Context, folder string, domains, terms []string, maxChars int) (string, error)
 
 func SuggestName(chatURL string) Namer {
-	return func(ctx context.Context, folder string, domains, terms []string) (string, error) {
+	return func(ctx context.Context, folder string, domains, terms []string, maxChars int) (string, error) {
 		prompt := fmt.Sprintf("Parent folder: %s\nTop sender domains: %s\nCommon subject words: %s", folder,
 			strings.Join(domains, ", "), strings.Join(terms, ", "))
 		name := ""
-		raw, err := llm.ChatJSON(ctx, chatURL, NameSystem, prompt, NameSchema, 0)
+		raw, err := llm.ChatJSON(ctx, chatURL, NameSystem, prompt, nameSchema(maxChars), 0)
 		var down *httpx.ServiceUnavailable
 		switch {
 		case errors.As(err, &down) || errors.Is(err, httpx.ErrValue) || errors.Is(err, httpx.ErrKey) ||
@@ -593,13 +621,13 @@ func SuggestName(chatURL string) Namer {
 			if fields, ok := answer.(py.Dict); ok {
 				if value, _ := fields.Get("name"); value != nil {
 					if s, isString := value.(string); isString {
-						name = CleanName(s)
+						name = CleanName(s, maxChars)
 					}
 				}
 			}
 		}
 		if name == "" && len(domains) > 0 {
-			name = CleanName(domains[0])
+			name = CleanName(domains[0], maxChars)
 		}
 		if name == "" {
 			name = "Split"
@@ -608,7 +636,7 @@ func SuggestName(chatURL string) Namer {
 	}
 }
 
-func groupPreview(rows []*row, name string) py.Dict {
+func (p params) groupPreview(rows []*row, name string) py.Dict {
 	domains := make([]string, len(rows))
 	addrs := make([]string, len(rows))
 	messages := make([]scanutil.Message, len(rows))
@@ -620,9 +648,9 @@ func groupPreview(rows []*row, name string) py.Dict {
 		views[i] = r.View()
 	}
 	return py.Dict{
-		{Key: "name", Value: name}, {Key: "count", Value: len(rows)}, {Key: "senders", Value: scanutil.TopCounts(domains)},
-		{Key: "addresses", Value: scanutil.TopCounts(addrs)}, {Key: "terms", Value: termsOf(rows)},
-		{Key: "subjects", Value: scanutil.SampleSubjectsOf(messages)}, {Key: "messages", Value: views},
+		{Key: "name", Value: name}, {Key: "count", Value: len(rows)}, {Key: "senders", Value: p.limits.TopCounts(domains)},
+		{Key: "addresses", Value: p.limits.TopCounts(addrs)}, {Key: "terms", Value: p.termsOf(rows)},
+		{Key: "subjects", Value: p.limits.SampleSubjectsOf(messages)}, {Key: "messages", Value: views},
 	}
 }
 
@@ -647,7 +675,7 @@ func groupRows(byID map[int64]*row, ids []int64) []*row {
 	return rows
 }
 
-func build(ctx context.Context, q proposals.Querier, byID map[int64]*row, cand Candidate, namer Namer) (built, error) {
+func (p params) build(ctx context.Context, q proposals.Querier, byID map[int64]*row, cand Candidate, namer Namer) (built, error) {
 	if cand.Kind == Merge {
 		g := cand.Groups[0]
 		rows := groupRows(byID, g.IDs)
@@ -663,7 +691,7 @@ func build(ctx context.Context, q proposals.Querier, byID map[int64]*row, cand C
 			preview: py.Dict{
 				{Key: "folder", Value: cand.Folder},
 				{Key: "sources", Value: []any{py.Dict{{Key: "folder", Value: cand.Folder}, {Key: "count", Value: len(rows)}}}},
-				{Key: "into", Value: cand.Into}, {Key: "into_exists", Value: true}, {Key: "group", Value: groupPreview(rows, cand.Into)},
+				{Key: "into", Value: cand.Into}, {Key: "into_exists", Value: true}, {Key: "group", Value: p.groupPreview(rows, cand.Into)},
 			},
 		}, nil
 	}
@@ -671,7 +699,7 @@ func build(ctx context.Context, q proposals.Querier, byID map[int64]*row, cand C
 	count := 0
 	for _, g := range cand.Groups {
 		rows := groupRows(byID, g.IDs)
-		info := groupPreview(rows, "")
+		info := p.groupPreview(rows, "")
 		var domains []string
 		senders, _ := info.Get("senders")
 		for _, d := range senders.([]any) {
@@ -679,7 +707,7 @@ func build(ctx context.Context, q proposals.Querier, byID map[int64]*row, cand C
 			domains = append(domains, label.(string))
 		}
 		terms, _ := info.Get("terms")
-		short, err := namer(ctx, cand.Folder, domains, terms.([]string))
+		short, err := namer(ctx, cand.Folder, domains, terms.([]string), p.nameMax)
 		if err != nil {
 			return built{}, err
 		}
@@ -699,7 +727,7 @@ func build(ctx context.Context, q proposals.Querier, byID map[int64]*row, cand C
 	}, nil
 }
 
-func track(ctx context.Context, d *db.DB, candidates []Candidate, ts float64) (map[string]int64, error) {
+func (p params) track(ctx context.Context, d *db.DB, candidates []Candidate, ts float64) (map[string]int64, error) {
 	var order []string
 	live := map[string]Candidate{}
 	for _, c := range candidates {
@@ -743,7 +771,7 @@ func track(ctx context.Context, d *db.DB, candidates []Candidate, ts float64) (m
 			case !ok:
 				_, err = tx.ExecContext(ctx, "INSERT INTO rebalance_candidates (fingerprint, kind, account, folder, first_ts, last_ts, runs) "+
 					"VALUES (?, ?, ?, ?, ?, ?, 1)", fp, c.Kind, c.Account, c.Folder, ts, ts)
-			case ts-prev >= RunGapSeconds:
+			case ts-prev >= float64(p.runGapSeconds):
 				_, err = tx.ExecContext(ctx, "UPDATE rebalance_candidates SET runs = runs + 1, last_ts = ? WHERE fingerprint = ?", ts, fp)
 			}
 			if err != nil {
@@ -769,11 +797,18 @@ func track(ctx context.Context, d *db.DB, candidates []Candidate, ts float64) (m
 }
 
 func Scan(ctx context.Context, d *db.DB, ts float64, namer Namer) (scanutil.Result, error) {
-	f, candidates, err := detect(ctx, d.Read)
+	p, err := readParams(ctx, d.Read)
 	if err != nil {
 		return scanutil.Result{}, err
 	}
-	runs, err := track(ctx, d, candidates, ts)
+	if ctx, err = mail.WithModels(ctx, d.Read); err != nil {
+		return scanutil.Result{}, err
+	}
+	f, candidates, err := p.detect(ctx, d.Read)
+	if err != nil {
+		return scanutil.Result{}, err
+	}
+	runs, err := p.track(ctx, d, candidates, ts)
 	if err != nil {
 		return scanutil.Result{}, err
 	}
@@ -786,7 +821,7 @@ func Scan(ctx context.Context, d *db.DB, ts float64, namer Namer) (scanutil.Resu
 	created := 0
 	for _, cand := range candidates {
 		fp := cand.Fingerprint()
-		if runs[fp] < RunsRequired {
+		if runs[fp] < int64(p.runsRequired) {
 			continue
 		}
 		known, err := proposals.Known(ctx, d.Write, fp)
@@ -796,7 +831,7 @@ func Scan(ctx context.Context, d *db.DB, ts float64, namer Namer) (scanutil.Resu
 		if known {
 			continue
 		}
-		b, err := build(ctx, d.Read, byID, cand, namer)
+		b, err := p.build(ctx, d.Read, byID, cand, namer)
 		if err != nil {
 			return scanutil.Result{}, err
 		}

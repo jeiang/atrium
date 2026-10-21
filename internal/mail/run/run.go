@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/flags"
 	"github.com/jeiang/atrium/internal/mail/live"
@@ -68,6 +69,7 @@ func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *
 	if now == nil {
 		now = wallClock
 	}
+	open = mailops.Opener(mail.BindMode(mail.OpenFunc(open), d.Read))
 	syncer := &mailsync.Syncer{DB: d, Cfg: cfg, Now: now}
 	l := &live.Live{DB: d, Cfg: cfg, Now: now}
 	p := &Pass{
@@ -77,7 +79,7 @@ func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *
 		Now:     now,
 		Syncer:  syncer,
 		Live:    l,
-		Router:  &router.Router{DB: d, ChatURL: cfg.ChatURL, Now: now},
+		Router:  &router.Router{DB: d, Now: now},
 		Applier: applier.New(l, open, syncer),
 		Events: func(ctx context.Context, account string) (int, int, error) {
 			return candidates.ScanAccount(ctx, d, cfg, account, nil, config.OS, now)
@@ -88,7 +90,7 @@ func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *
 			return openloops.Refresh(ctx, d, cfg, now(), openloops.Options{Clock: now}), nil
 		}},
 		{"watches", func(ctx context.Context) (any, error) {
-			return watches.Refresh(ctx, d, cfg, watches.ScanLimit, now(), watches.Options{Clock: now}), nil
+			return watches.Refresh(ctx, d, now(), watches.Options{Clock: now}), nil
 		}},
 		{"money", func(ctx context.Context) (any, error) {
 			return money.Refresh(ctx, d, cfg, money.ScanLimit, now(), p.Money)
@@ -118,12 +120,24 @@ func (p *Pass) SyncAll(ctx context.Context) error {
 }
 
 func (p *Pass) Process(ctx context.Context, accounts []string) error {
-	if p.Cfg.Mode == config.Live {
+	mode, err := mail.Mode(ctx, p.DB.Read)
+	if err != nil {
+		return err
+	}
+	if mode == config.Live {
 		if _, err := p.Live.EnsureGolive(ctx, func() error { return p.SyncAll(ctx) }); err != nil {
 			return err
 		}
 	}
-	if err := embed.PendingOrWarn(ctx, p.DB, p.Cfg.EmbedURL, log); err != nil {
+	embedURL, err := mail.EmbedURL(ctx, p.DB.Read)
+	if err != nil {
+		return err
+	}
+	ctx, err = mail.WithModels(ctx, p.DB.Read)
+	if err != nil {
+		return err
+	}
+	if err := embed.PendingOrWarn(ctx, p.DB, embedURL, log); err != nil {
 		return err
 	}
 	for _, account := range accounts {
