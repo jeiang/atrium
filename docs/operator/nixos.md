@@ -6,12 +6,14 @@ These are deployment options. They produce systemd units and environment variabl
 
 ## Core
 
+The module still passes several deployment values under their Phase A variable names. A value whose setting has moved into the registry, such as the mail mode and the time zone, takes effect only through that setting's `ATRIUM_<MODULE>_<KEY>` pin, which `environmentFiles` or `extraEnvironment` can supply.
+
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `enable` | bool | `false` | Enables the module. |
 | `package` | package | the flake's static Go build for the host platform | The atrium application used by every unit and by `atrium-run`. |
 | `id` | int | `880` | uid and gid of the static `atrium` user and group that own `/var/lib/atrium`. |
-| `mode` | `"shadow"` or `"live"` | `"shadow"` | Mail mode passed to atrium. Only `live` lets atrium change mailboxes on its own. |
+| `mode` | `"shadow"` or `"live"` | `"shadow"` | Mail mode. Only `live` lets atrium change mailboxes on its own. The module passes it as the Phase A variable `ATRIUM_MODE`, which atrium no longer reads: the mail mode is the `mail_mode` setting, set only through its `ATRIUM_<MODULE>_<KEY>` pin or the configuration file. |
 | `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`. They hold credentials and any pinned settings. |
 | `extraEnvironment` | attribute set of string | `{}` | Environment added to every unit and to `atrium-run`. It is merged after the module's own variables, so an entry replaces a module-set variable of the same name. |
 | `modelServerUnits` | list of string | `[]` | Units that serve `chatUrl` and `embedUrl`. The application units start after them and want them. |
