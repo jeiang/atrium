@@ -38,8 +38,8 @@ func TestMailModeAndWriteCapFollowTheRegistryLive(t *testing.T) {
 	if mode, code, stderr := liveMode(t); code != cli.ExitOK || mode != "shadow" {
 		t.Fatalf("default: mode %q exit %d %q", mode, code, stderr)
 	}
-	if got := runSettings(t, "get", "write_cap").row(t); got.Value != "100" {
-		t.Errorf("write_cap default = %q, want 100", got.Value)
+	if got := runSettings(t, "get", "write_cap").row(t); got.Value == nil || *got.Value != "100" {
+		t.Errorf("write_cap default = %v, want 100", got.Value)
 	}
 	if r := runSettings(t, "set", "write_cap", "1001"); r.code != cli.ExitError || !strings.Contains(r.stderr, "write_cap must be between 1 and 1000") {
 		t.Errorf("write_cap 1001: exit %d stderr %q", r.code, r.stderr)
