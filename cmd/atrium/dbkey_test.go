@@ -160,10 +160,19 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 	}{
 		{[]string{"ATRIUM_DB_KEY_FILE=" + filepath.Join(dir, "missing.key")}, "ATRIUM_DB_KEY_FILE"},
 		{[]string{keyEnv(rightKeyHex), "ATRIUM_DB_KEY_FILE=" + rightFile}, "ATRIUM_DB_KEY and ATRIUM_DB_KEY_FILE"},
+		{[]string{"ATRIUM_DB_KEY_FILE=" + writeKey(t, dir, "empty.key", "")}, "ATRIUM_DB_KEY_FILE"},
 	} {
 		if got := runProcess(t, "notion search zzz", append([]string{dbEnv(encrypted)}, tc.env...)...); !strings.Contains(got.stderr, tc.want) {
 			t.Errorf("stderr %q does not name %q", got.stderr, tc.want)
 		}
+	}
+
+	fresh := filepath.Join(dir, "fresh.db")
+	if got := runProcess(t, "notion search alpha", dbEnv(fresh), "ATRIUM_DB_KEY_FILE="+writeKey(t, dir, "blank.key", "")); got.code != cli.ExitError {
+		t.Errorf("empty ATRIUM_DB_KEY_FILE on a fresh database exited %d, stderr %q; want %d", got.code, got.stderr, cli.ExitError)
+	}
+	if _, err := os.Stat(fresh); err == nil {
+		t.Errorf("empty ATRIUM_DB_KEY_FILE created a database file")
 	}
 
 	if got := runProcess(t, "notion search alpha", dbEnv(plain)); got.code != cli.ExitOK || !isPlaintextSQLite(t, plain) {

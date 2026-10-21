@@ -53,7 +53,7 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 		value := get(env, name)
 		if d.Secret {
 			fileName := name + strings.ToUpper(fileSuffix)
-			if path := get(env, fileName); path != "" {
+			if path, set := env(fileName); set {
 				if value != "" {
 					return nil, fmt.Errorf("config: %s and %s are both set; set only one", name, fileName)
 				}
@@ -62,6 +62,11 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 					return nil, fmt.Errorf("config: %s: %w", fileName, err)
 				}
 				value, name = py.Strip(string(secret)), fileName
+				if err := reg.Validate(d.Key, value); err != nil {
+					return nil, fmt.Errorf("config: %s: %w", name, err)
+				}
+				pins.m[d.Key] = pin{value, "env " + name}
+				continue
 			}
 		}
 		if value == "" {
