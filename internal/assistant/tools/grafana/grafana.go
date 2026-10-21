@@ -14,22 +14,38 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const (
-	timeout       = 15 * time.Second
-	maxSeries     = 20
-	maxMetricRows = 50
-	maxLogRows    = 200
-	maxAlerts     = 50
-	maxDashboards = 20
-	cellChars     = 300
-)
+type limits struct {
+	timeout    time.Duration
+	series     int
+	metricRows int
+	logRows    int
+	alerts     int
+	dashboards int
+	cellChars  int
+}
+
+func readLimits(ctx context.Context, tc *tool.Context) (limits, error) {
+	r := assistant.Read(ctx, tc.DB.Read)
+	lim := limits{
+		timeout:    time.Duration(r.Int(assistant.KeyGrafanaTimeout)) * time.Second,
+		series:     r.Int(assistant.KeyGrafanaSeries),
+		metricRows: r.Int(assistant.KeyGrafanaMetricRows),
+		logRows:    r.Int(assistant.KeyGrafanaLogRows),
+		alerts:     r.Int(assistant.KeyGrafanaAlerts),
+		dashboards: r.Int(assistant.KeyGrafanaDashboards),
+		cellChars:  r.Int(assistant.KeyGrafanaCellChars),
+	}
+	return lim, r.Err()
+}
 
 var (
 	kinds      = []string{"prometheus", "logs"}
@@ -37,15 +53,29 @@ var (
 	contexts   = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
 )
 
-var client = &http.Client{
-	Timeout: timeout,
-	Transport: &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           (&net.Dialer{Timeout: timeout}).DialContext,
-		TLSHandshakeTimeout:   timeout,
-		ResponseHeaderTimeout: timeout,
-	},
-	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+var (
+	clientsMu sync.Mutex
+	clients   = map[time.Duration]*http.Client{}
+)
+
+func clientFor(timeout time.Duration) *http.Client {
+	clientsMu.Lock()
+	defer clientsMu.Unlock()
+	if c, ok := clients[timeout]; ok {
+		return c
+	}
+	c := &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           (&net.Dialer{Timeout: timeout}).DialContext,
+			TLSHandshakeTimeout:   timeout,
+			ResponseHeaderTimeout: timeout,
+		},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	clients[timeout] = c
+	return c
 }
 
 func errorClass(err error) string {
@@ -85,7 +115,7 @@ func urlClass(target string) string {
 	return ""
 }
 
-func request(ctx context.Context, tc *tool.Context, method, path, rawQuery string, body any) (any, error) {
+func request(ctx context.Context, tc *tool.Context, lim limits, method, path, rawQuery string, body any) (any, error) {
 	if method != http.MethodGet && (method != http.MethodPost || path != "/api/ds/query") {
 		return nil, tool.Error("grafana tools are read-only")
 	}
@@ -113,7 +143,7 @@ func request(ctx context.Context, tc *tool.Context, method, path, rawQuery strin
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := client.Do(req)
+	resp, err := clientFor(lim.timeout).Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -129,7 +159,7 @@ func request(ctx context.Context, tc *tool.Context, method, path, rawQuery strin
 		return nil, tool.Error("grafana unreachable: " + errorClass(err))
 	}
 	if resp.StatusCode >= 400 {
-		return nil, tool.Error("grafana " + strconv.Itoa(resp.StatusCode) + ": " + tool.Clip(strings.ToValidUTF8(string(raw), "\ufffd"), cellChars))
+		return nil, tool.Error("grafana " + strconv.Itoa(resp.StatusCode) + ": " + tool.Clip(strings.ToValidUTF8(string(raw), "\ufffd"), lim.cellChars))
 	}
 	value, err := py.JSONLoads(raw)
 	if err != nil {
@@ -195,7 +225,7 @@ func pyStr(v any) string {
 	return py.ReprValue(v)
 }
 
-func cell(v any) any {
+func cell(v any, cellChars int) any {
 	switch v := v.(type) {
 	case float64:
 		return py.Round(v, 6)
@@ -207,7 +237,7 @@ func cell(v any) any {
 	return v
 }
 
-func timeCell(v any) any {
+func timeCell(v any, cellChars int) any {
 	var ms float64
 	switch n := v.(type) {
 	case int64:
@@ -217,10 +247,10 @@ func timeCell(v any) any {
 	case float64:
 		ms = n
 	default:
-		return cell(v)
+		return cell(v, cellChars)
 	}
 	if !(ms > 1e11) {
-		return cell(v)
+		return cell(v, cellChars)
 	}
 	sec, us := py.SplitTimestamp(ms / 1000)
 	return py.ISOFormat(time.Unix(sec, us*1000).UTC(), "seconds")
@@ -244,7 +274,7 @@ func sample(count, limit int) ([]int, error) {
 	return slices.Compact(out), nil
 }
 
-func compactFrame(frameValue any, rowCap int) (py.Dict, error) {
+func compactFrame(frameValue any, rowCap, cellChars int) (py.Dict, error) {
 	frame, err := attr(frameValue)
 	if err != nil {
 		return nil, err
@@ -300,9 +330,9 @@ func compactFrame(frameValue any, rowCap int) (py.Dict, error) {
 				return nil, &tool.Raised{Class: "IndexError"}
 			}
 			if get(fields[i], "type") == "time" {
-				row = append(row, timeCell(column[r]))
+				row = append(row, timeCell(column[r], cellChars))
 			} else {
-				row = append(row, cell(column[r]))
+				row = append(row, cell(column[r], cellChars))
 			}
 		}
 		rows = append(rows, row)
@@ -331,7 +361,7 @@ func compactFrame(frameValue any, rowCap int) (py.Dict, error) {
 	return out, nil
 }
 
-func compactResults(payloadValue any, rowCap int) (any, error) {
+func compactResults(payloadValue any, rowCap int, lim limits) (any, error) {
 	payload, err := attr(payloadValue)
 	if err != nil {
 		return nil, err
@@ -348,7 +378,7 @@ func compactResults(payloadValue any, rowCap int) (any, error) {
 				return nil, err
 			}
 			if e := get(result, "error"); truthy(e) {
-				return nil, tool.Error("query error: " + tool.Clip(pyStr(e), cellChars))
+				return nil, tool.Error("query error: " + tool.Clip(pyStr(e), lim.cellChars))
 			}
 			if f := get(result, "frames"); truthy(f) {
 				list, err := items(f)
@@ -359,9 +389,9 @@ func compactResults(payloadValue any, rowCap int) (any, error) {
 			}
 		}
 	}
-	series := make([]any, 0, min(len(frames), maxSeries))
-	for _, f := range frames[:min(len(frames), maxSeries)] {
-		c, err := compactFrame(f, rowCap)
+	series := make([]any, 0, min(len(frames), lim.series))
+	for _, f := range frames[:min(len(frames), lim.series)] {
+		c, err := compactFrame(f, rowCap, lim.cellChars)
 		if err != nil {
 			return nil, err
 		}
@@ -371,7 +401,11 @@ func compactResults(payloadValue any, rowCap int) (any, error) {
 }
 
 func datasources(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
-	found, err := request(ctx, tc, http.MethodGet, "/api/datasources", "", nil)
+	lim, err := readLimits(ctx, tc)
+	if err != nil {
+		return nil, err
+	}
+	found, err := request(ctx, tc, lim, http.MethodGet, "/api/datasources", "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -409,6 +443,10 @@ func query(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if !slices.Contains(kinds, kind) {
 		return nil, tool.Error("kind must be one of " + strings.Join(kinds, ", "))
 	}
+	lim, err := readLimits(ctx, tc)
+	if err != nil {
+		return nil, err
+	}
 	limit, err := tool.BoundedInt(args, "limit", 100, 200, 1)
 	if err != nil {
 		return nil, err
@@ -417,7 +455,7 @@ func query(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		{Key: "refId", Value: "A"},
 		{Key: "datasource", Value: py.Dict{{Key: "uid", Value: uid}}},
 		{Key: "expr", Value: expr},
-		{Key: "maxDataPoints", Value: int64(maxMetricRows)},
+		{Key: "maxDataPoints", Value: int64(lim.metricRows)},
 	}
 	var rowCap int
 	if kind == "prometheus" {
@@ -427,10 +465,10 @@ func query(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		} else if ok {
 			q = q.Set("interval", step)
 		}
-		rowCap = int(min(limit, maxMetricRows))
+		rowCap = int(min(limit, int64(lim.metricRows)))
 	} else {
 		q = q.Set("queryType", "range").Set("maxLines", limit)
-		rowCap = int(min(limit, maxLogRows))
+		rowCap = int(min(limit, int64(lim.logRows)))
 	}
 	start, ok, err := tool.TextArg(args, "start", false)
 	if err != nil {
@@ -447,15 +485,19 @@ func query(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		end = "now"
 	}
 	body := py.Dict{{Key: "queries", Value: []any{q}}, {Key: "from", Value: start}, {Key: "to", Value: end}}
-	payload, err := request(ctx, tc, http.MethodPost, "/api/ds/query", "", body)
+	payload, err := request(ctx, tc, lim, http.MethodPost, "/api/ds/query", "", body)
 	if err != nil {
 		return nil, err
 	}
-	return compactResults(payload, rowCap)
+	return compactResults(payload, rowCap, lim)
 }
 
 func alerts(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
-	foundValue, err := request(ctx, tc, http.MethodGet, "/api/prometheus/grafana/api/v1/alerts", "", nil)
+	lim, err := readLimits(ctx, tc)
+	if err != nil {
+		return nil, err
+	}
+	foundValue, err := request(ctx, tc, lim, http.MethodGet, "/api/prometheus/grafana/api/v1/alerts", "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -483,8 +525,8 @@ func alerts(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
 			firing = append(firing, a)
 		}
 	}
-	out := make([]any, 0, min(len(firing), maxAlerts))
-	for _, a := range firing[:min(len(firing), maxAlerts)] {
+	out := make([]any, 0, min(len(firing), lim.alerts))
+	for _, a := range firing[:min(len(firing), lim.alerts)] {
 		var summary any = ""
 		if ann := get(a, "annotations"); truthy(ann) {
 			ad, err := attr(ann)
@@ -499,7 +541,7 @@ func alerts(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
 		}
 		out = append(out, py.Dict{
 			{Key: "labels", Value: orDefault(a, "labels", py.Dict{})},
-			{Key: "summary", Value: tool.Clip(text, cellChars)},
+			{Key: "summary", Value: tool.Clip(text, lim.cellChars)},
 			{Key: "active_at", Value: get(a, "activeAt")},
 			{Key: "value", Value: get(a, "value")},
 		})
@@ -512,8 +554,12 @@ func searchDashboards(ctx context.Context, tc *tool.Context, args py.Dict) (any,
 	if err != nil {
 		return nil, err
 	}
-	rawQuery := "query=" + url.QueryEscape(text) + "&type=dash-db&limit=" + strconv.Itoa(maxDashboards)
-	found, err := request(ctx, tc, http.MethodGet, "/api/search", rawQuery, nil)
+	lim, err := readLimits(ctx, tc)
+	if err != nil {
+		return nil, err
+	}
+	rawQuery := "query=" + url.QueryEscape(text) + "&type=dash-db&limit=" + strconv.Itoa(lim.dashboards)
+	found, err := request(ctx, tc, lim, http.MethodGet, "/api/search", rawQuery, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -521,8 +567,8 @@ func searchDashboards(ctx context.Context, tc *tool.Context, args py.Dict) (any,
 	if err != nil {
 		return nil, err
 	}
-	out := make([]any, 0, min(len(list), maxDashboards))
-	for _, v := range list[:min(len(list), maxDashboards)] {
+	out := make([]any, 0, min(len(list), lim.dashboards))
+	for _, v := range list[:min(len(list), lim.dashboards)] {
 		d, err := attr(v)
 		if err != nil {
 			return nil, err

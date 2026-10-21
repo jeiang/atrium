@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/py"
@@ -94,6 +95,11 @@ func spending(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 }
 
 func transactions(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+	r := assistant.Read(ctx, tc.DB.Read)
+	maxLimit := r.Int(assistant.KeyMoneyMaxLimit)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
 	limit, err := tool.BoundedInt(args, "limit", 50, maxLimit, 1)
 	if err != nil {
 		return nil, err
@@ -152,6 +158,11 @@ func transactions(ctx context.Context, tc *tool.Context, args py.Dict) (any, err
 func bills(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	var days *int
 	if v, _ := args.Get("upcoming_days"); v != nil {
+		r := assistant.Read(ctx, tc.DB.Read)
+		maxDays := r.Int(assistant.KeyMoneyMaxDays)
+		if err := r.Err(); err != nil {
+			return nil, err
+		}
 		n, err := tool.BoundedInt(args, "upcoming_days", 30, maxDays, 0)
 		if err != nil {
 			return nil, err
@@ -196,6 +207,11 @@ func bills(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 func payees(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	query, _, err := tool.TextArg(args, "query", false)
 	if err != nil {
+		return nil, err
+	}
+	r := assistant.Read(ctx, tc.DB.Read)
+	maxLimit := r.Int(assistant.KeyMoneyMaxLimit)
+	if err := r.Err(); err != nil {
 		return nil, err
 	}
 	limit, err := tool.BoundedInt(args, "limit", 50, maxLimit, 1)

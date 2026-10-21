@@ -40,10 +40,9 @@ const (
 )
 
 var (
-	errBadBody     = errors.New("unparseable multipart body")
-	markdownTypes  = []string{"text/markdown", "text/x-markdown"}
-	tableTypes     = []string{"text/csv", "application/csv", files.XLSXType}
-	oversizeUpload = files.FileError(fmt.Sprintf("files in one message must total under %d MB", files.MessageCapBytes>>20))
+	errBadBody    = errors.New("unparseable multipart body")
+	markdownTypes = []string{"text/markdown", "text/x-markdown"}
+	tableTypes    = []string{"text/csv", "application/csv", files.XLSXType}
 )
 
 func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values, []files.UploadedFile, error) {
@@ -51,7 +50,9 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 	if err != nil || !strings.HasPrefix(media, "multipart/") {
 		return web.FormValues(r), nil, nil
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, files.MessageCapBytes+uploadSlack)
+	limits, err := files.ReadLimits(r.Context(), p.deps.DB.Read)
+	check(err)
+	r.Body = http.MaxBytesReader(w, r.Body, int64(limits.MessageCap)+uploadSlack)
 	boundary := params["boundary"]
 	if boundary == "" {
 		return url.Values{}, nil, errBadBody
@@ -66,7 +67,7 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 			return form, uploads, nil
 		}
 		if err != nil {
-			return form, nil, uploadReadError(err)
+			return form, nil, uploadReadError(err, limits.MessageCap)
 		}
 		if parts++; parts > maxParts {
 			return form, nil, errBadBody
@@ -75,7 +76,7 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 		if filename == "" {
 			value, err := io.ReadAll(io.LimitReader(part, fieldBytes+1))
 			if err != nil {
-				return form, nil, uploadReadError(err)
+				return form, nil, uploadReadError(err, limits.MessageCap)
 			}
 			if text += len(name) + len(value); len(value) > fieldBytes || text > formBytes {
 				return form, nil, errBadBody
@@ -85,7 +86,7 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 		}
 		data, err := io.ReadAll(part)
 		if err != nil {
-			return form, nil, uploadReadError(err)
+			return form, nil, uploadReadError(err, limits.MessageCap)
 		}
 		if name == "upload" && len(data) > 0 {
 			uploads = append(uploads, files.UploadedFile{Name: filename, Data: data, Type: part.Header.Get("Content-Type")})
@@ -93,9 +94,9 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 	}
 }
 
-func uploadReadError(err error) error {
+func uploadReadError(err error, messageCap int) error {
 	if errors.As(err, new(*http.MaxBytesError)) {
-		return oversizeUpload
+		return files.FileError(fmt.Sprintf("files in one message must total under %d MB", messageCap>>20))
 	}
 	return errBadBody
 }

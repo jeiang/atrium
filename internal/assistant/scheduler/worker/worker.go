@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/nightly"
@@ -51,8 +52,13 @@ type Worker struct {
 	dirty  atomic.Bool
 }
 
-func New(svc *service.Service, callables map[string]Callable) *Worker {
-	return &Worker{Service: svc, Callables: callables, Interval: scheduler.TickSeconds * time.Second, Owner: journal.NewOwner()}
+func New(ctx context.Context, svc *service.Service, callables map[string]Callable) (*Worker, error) {
+	r := assistant.Read(ctx, svc.DB.Read)
+	tick := r.Int(scheduler.KeyTickSeconds)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	return &Worker{Service: svc, Callables: callables, Interval: time.Duration(tick) * time.Second, Owner: journal.NewOwner()}, nil
 }
 
 func (w *Worker) now() float64 {

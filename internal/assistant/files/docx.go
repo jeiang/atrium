@@ -335,7 +335,7 @@ func (r *docxReader) texts(tc *element) ([]string, error) {
 	return out, nil
 }
 
-func docxText(data []byte) (string, error) {
+func docxText(data []byte, maxText int) (string, error) {
 	a, err := openArchive(data)
 	if err != nil {
 		return "", err
@@ -355,7 +355,7 @@ func docxText(data []byte) (string, error) {
 	var lines []string
 	add := func(line string) error {
 		size += len(line) + 1
-		if size > maxTextBytes {
+		if size > maxText {
 			return errTooLarge
 		}
 		lines = append(lines, line)
@@ -389,7 +389,7 @@ func docxText(data []byte) (string, error) {
 				for _, t := range texts {
 					stripped := py.Strip(t)
 					rowBytes += len(stripped) + 1
-					if size+rowBytes > maxTextBytes {
+					if size+rowBytes > maxText {
 						return "", errTooLarge
 					}
 					cells = append(cells, stripped)

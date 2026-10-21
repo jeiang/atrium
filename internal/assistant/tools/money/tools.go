@@ -15,11 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const (
-	maxLimit = 200
-	maxDays  = 365
-	note     = "Amounts come from mail read by a local model; TTD and BBD are reported separately and never summed."
-)
+const note = "Amounts come from mail read by a local model; TTD and BBD are reported separately and never summed."
 
 var (
 	readKinds  = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}

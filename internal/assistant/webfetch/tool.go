@@ -12,7 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const TextDefault = 12000
+const schemaTextDefault = 12000
 
 var defaultPorts = map[string]int{"http": 80, "https": 443}
 
@@ -55,7 +55,7 @@ func containsColon(s string) bool {
 }
 
 var inputSchema = json.RawMessage(`{"type":"object","properties":{"url":{"type":"string"},` +
-	`"max_chars":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(TextDefault) + `}},` +
+	`"max_chars":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaTextDefault) + `}},` +
 	`"required":["url"],"additionalProperties":false}`)
 
 func Tools() []tool.Tool { return []tool.Tool{Tool(&Fetcher{})} }
@@ -83,7 +83,11 @@ func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args py.Dict) (an
 	if err != nil {
 		return nil, raised(err)
 	}
-	maxChars, err := tool.BoundedInt(args, "max_chars", TextDefault, TextDefault, 1)
+	lim, err := ReadLimits(ctx, tc.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	maxChars, err := tool.BoundedInt(args, "max_chars", lim.TextDefault, lim.TextDefault, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +102,7 @@ func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args py.Dict) (an
 	if _, ok := allowed[url]; !ok {
 		return nil, tool.Error("url is not allowed: only URLs the operator typed or web_search returned in this thread can be fetched")
 	}
-	page, err := f.FetchPage(ctx, url)
+	page, err := f.FetchPage(ctx, url, lim)
 	if err != nil {
 		return nil, fetchFailed(err)
 	}
@@ -106,7 +110,7 @@ func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args py.Dict) (an
 	if err != nil {
 		return nil, fetchFailed(err)
 	}
-	title, body := ExtractText(markup, page.URL)
+	title, body := ExtractText(markup, page.URL, lim.PageChars)
 	return py.Dict{
 		{Key: "untrusted", Value: true},
 		{Key: "url", Value: page.URL},

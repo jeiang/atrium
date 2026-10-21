@@ -4,14 +4,14 @@ import (
 	"context"
 	"slices"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/nightly"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/db"
 )
 
 const (
-	NightlySchedule = "daily 02:30"
-	NightlyName     = "nightly"
+	NightlyName = "nightly"
 
 	CalendarCandidatesName = "calendar-candidates"
 	FXRatesName            = "fx-rates"
@@ -21,7 +21,7 @@ const (
 )
 
 type Builtin struct {
-	Name, Schedule, Prompt string
+	Name, Prompt string
 }
 
 const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untrusted + " Gather, then write the review as your reply, with these " +
@@ -46,13 +46,19 @@ const dailyNudgesPrompt = "Daily nudges for the operator. " + prompts.Untrusted 
 	"then reply with the same list."
 
 var BuiltinJobs = []Builtin{
-	{"weekly-review", "weekly sun 18:00", weeklyReviewPrompt},
-	{"daily-nudges", "daily 08:00", dailyNudgesPrompt},
-	{CalendarCandidatesName, "0 * * * *", "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty)."},
-	{FXRatesName, "weekly mon 06:00", "Weekly: fetch the CBTT USD selling rate for the spending ledger (no model run)."},
-	{MediaChannelsName, "*/30 * * * *", "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run)."},
-	{MediaSweepName, "*/10 * * * *", "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run)."},
-	{MediaThumbnailsName, "daily 04:00", "Daily: generate missing episode thumbnails for the media library (no model run)."},
+	{"weekly-review", weeklyReviewPrompt},
+	{"daily-nudges", dailyNudgesPrompt},
+	{CalendarCandidatesName, "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty)."},
+	{FXRatesName, "Weekly: fetch the CBTT USD selling rate for the spending ledger (no model run)."},
+	{MediaChannelsName, "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run)."},
+	{MediaSweepName, "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run)."},
+	{MediaThumbnailsName, "Daily: generate missing episode thumbnails for the media library (no model run)."},
+}
+
+func builtinSchedule(ctx context.Context, q db.Querier, name string) (string, error) {
+	r := assistant.Read(ctx, q)
+	schedule := r.Text(scheduleKeys[name])
+	return schedule, r.Err()
 }
 
 var CallableNames = []string{CalendarCandidatesName, FXRatesName, MediaChannelsName, MediaSweepName, MediaThumbnailsName}
@@ -75,8 +81,12 @@ func EnsureNightly(ctx context.Context, q db.Querier, tz string, now float64) er
 	if !isNoRows(err) {
 		return err
 	}
+	schedule, err := builtinSchedule(ctx, q, NightlyName)
+	if err != nil {
+		return err
+	}
 	_, err = CreateJob(ctx, q, NewJob{
-		Name: NightlyName, Prompt: nightly.Prompt, Schedule: NightlySchedule, TZ: tz, Now: now,
+		Name: NightlyName, Prompt: nightly.Prompt, Schedule: schedule, TZ: tz, Now: now,
 		CreatedBy: Operator, Kind: JobNightly, SkipLimits: true,
 	})
 	return err
@@ -98,8 +108,12 @@ func EnsureBuiltins(ctx context.Context, q db.Querier, tz string, now float64) e
 		if slices.Contains(have, spec.Name) {
 			continue
 		}
+		schedule, err := builtinSchedule(ctx, q, spec.Name)
+		if err != nil {
+			return err
+		}
 		if _, err := CreateJob(ctx, q, NewJob{
-			Name: spec.Name, Prompt: spec.Prompt, Schedule: spec.Schedule, TZ: tz, Now: now,
+			Name: spec.Name, Prompt: spec.Prompt, Schedule: schedule, TZ: tz, Now: now,
 			CreatedBy: Operator, Kind: JobBuiltin, SkipLimits: true,
 		}); err != nil {
 			return err

@@ -18,17 +18,12 @@ import (
 
 	"golang.org/x/net/idna"
 
+	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const (
-	MaxBytes      = 2 * 1024 * 1024
-	FetchTimeout  = 10 * time.Second
-	MaxRedirects  = 5
-	ReadBlock     = 65536
-	UserAgent     = "atrium-webfetch/1"
-	PageTextChars = 60000
-)
+const ReadBlock = 65536
 
 var (
 	textTypes        = []string{"text/html", "application/xhtml+xml", "text/plain"}
@@ -52,14 +47,30 @@ type Fetcher struct {
 	Allowed func(netip.Addr) bool
 	Lookup  func(ctx context.Context, host string) ([]netip.Addr, error)
 	Connect func(ctx context.Context, dest Dest) (net.Conn, error)
-	Timeout time.Duration
 
 	tlsRoots *x509.CertPool
 }
 
-func FetchPage(ctx context.Context, url string) (Page, error) {
-	var f Fetcher
-	return f.FetchPage(ctx, url)
+type Limits struct {
+	MaxBytes     int
+	Timeout      time.Duration
+	MaxRedirects int
+	PageChars    int
+	TextDefault  int
+	UserAgent    string
+}
+
+func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
+	r := assistant.Read(ctx, q)
+	lim := Limits{
+		MaxBytes:     r.Int(assistant.KeyWebfetchMaxBytes),
+		Timeout:      time.Duration(r.Int(assistant.KeyWebfetchTimeout)) * time.Second,
+		MaxRedirects: r.Int(assistant.KeyWebfetchMaxRedirects),
+		PageChars:    r.Int(assistant.KeyWebfetchPageChars),
+		TextDefault:  r.Int(assistant.KeyWebfetchTextDefault),
+		UserAgent:    r.Text(assistant.KeyWebfetchUserAgent),
+	}
+	return lim, r.Err()
 }
 
 func (f *Fetcher) allowed(ip netip.Addr) bool {
@@ -69,13 +80,9 @@ func (f *Fetcher) allowed(ip netip.Addr) bool {
 	return DefaultAllowed(ip)
 }
 
-func (f *Fetcher) FetchPage(ctx context.Context, url string) (Page, error) {
-	timeout := f.Timeout
-	if timeout == 0 {
-		timeout = FetchTimeout
-	}
-	deadline := time.Now().Add(timeout)
-	for range MaxRedirects + 1 {
+func (f *Fetcher) FetchPage(ctx context.Context, url string, lim Limits) (Page, error) {
+	deadline := time.Now().Add(lim.Timeout)
+	for range lim.MaxRedirects + 1 {
 		parts, err := py.URLSplit(url)
 		if err != nil {
 			return Page{}, err
@@ -104,7 +111,7 @@ func (f *Fetcher) FetchPage(ctx context.Context, url string) (Page, error) {
 		if err != nil {
 			return Page{}, connectError(ctx, err)
 		}
-		next, page, err := f.hop(ctx, deadline, url, parts, Dest{Scheme: parts.Scheme, Host: ascii, Port: port, Address: address})
+		next, page, err := f.hop(ctx, deadline, url, parts, Dest{Scheme: parts.Scheme, Host: ascii, Port: port, Address: address}, lim)
 		if err != nil {
 			return Page{}, err
 		}
@@ -210,7 +217,7 @@ func hostHeader(d Dest) (string, error) {
 	return host, nil
 }
 
-func (f *Fetcher) hop(ctx context.Context, deadline time.Time, url string, parts py.URLParts, dest Dest) (next string, page Page, err error) {
+func (f *Fetcher) hop(ctx context.Context, deadline time.Time, url string, parts py.URLParts, dest Dest, lim Limits) (next string, page Page, err error) {
 	path := parts.Path
 	if path == "" {
 		path = "/"
@@ -243,7 +250,7 @@ func (f *Fetcher) hop(ctx context.Context, deadline time.Time, url string, parts
 	stop := context.AfterFunc(ctx, func() { _ = raw.Close() })
 	defer stop()
 	conn := &opConn{Conn: raw, timeout: opTimeout}
-	request := requestLine + "\r\nHost: " + host + "\r\nuser-agent: " + UserAgent + "\r\naccept: " + strings.Join(textTypes, ", ") +
+	request := requestLine + "\r\nHost: " + host + "\r\nuser-agent: " + lim.UserAgent + "\r\naccept: " + strings.Join(textTypes, ", ") +
 		"\r\naccept-encoding: identity\r\n\r\n"
 	if _, err := conn.Write([]byte(request)); err != nil {
 		return "", Page{}, connectError(ctx, err)
@@ -272,11 +279,11 @@ func (f *Fetcher) hop(ctx context.Context, deadline time.Time, url string, parts
 		return "", Page{}, FetchError("content type " + kind)
 	}
 	if declared, ok := resp.headers.joined("content-length"); ok && declared != "" && isDigits(declared) {
-		if n, _ := pyInt(declared, 10); n > MaxBytes {
+		if n, _ := pyInt(declared, 10); n > lim.MaxBytes {
 			return "", Page{}, FetchError("too large")
 		}
 	}
-	body, err := readBody(resp, deadline)
+	body, err := readBody(resp, deadline, lim.MaxBytes)
 	if err != nil {
 		return "", Page{}, connectError(ctx, err)
 	}
@@ -325,7 +332,7 @@ func (c *opConn) Write(p []byte) (int, error) {
 	return c.Conn.Write(p)
 }
 
-func readBody(resp *response, deadline time.Time) ([]byte, error) {
+func readBody(resp *response, deadline time.Time, maxBytes int) ([]byte, error) {
 	var body []byte
 	block := make([]byte, ReadBlock)
 	for {
@@ -340,7 +347,7 @@ func readBody(resp *response, deadline time.Time) ([]byte, error) {
 			return body, nil
 		}
 		body = append(body, block[:n]...)
-		if len(body) > MaxBytes {
+		if len(body) > maxBytes {
 			return nil, FetchError("too large")
 		}
 	}

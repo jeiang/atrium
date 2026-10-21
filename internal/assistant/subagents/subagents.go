@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/store"
@@ -17,15 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
-)
-
-const (
-	ChildMaxCostUSD  = 0.25
-	ChildMaxSteps    = 12
-	MaxConcurrent    = 2
-	DigestChars      = 6000
-	DescriptionChars = 160
-	PromptChars      = 4000
 )
 
 const (
@@ -166,11 +158,16 @@ func Save(ctx context.Context, q db.Querier, reg *registry.Registry, d Definitio
 	if m, _ := name.Match(agent); m == nil {
 		return nil, Error("name must be lowercase letters, digits, - or _ (max 32 characters)")
 	}
-	if n := utf8.RuneCountInString(description); n == 0 || n > DescriptionChars {
-		return nil, Error(fmt.Sprintf("description is required, one line, at most %d characters", DescriptionChars))
+	r := assistant.Read(ctx, q)
+	maxDescription, maxPrompt := r.Int(assistant.KeySubagentDescChars), r.Int(assistant.KeySubagentPromptChars)
+	if err := r.Err(); err != nil {
+		return nil, err
 	}
-	if n := utf8.RuneCountInString(prompt); n == 0 || n > PromptChars {
-		return nil, Error(fmt.Sprintf("prompt is required, at most %d characters", PromptChars))
+	if n := utf8.RuneCountInString(description); n == 0 || n > maxDescription {
+		return nil, Error(fmt.Sprintf("description is required, one line, at most %d characters", maxDescription))
+	}
+	if n := utf8.RuneCountInString(prompt); n == 0 || n > maxPrompt {
+		return nil, Error(fmt.Sprintf("prompt is required, at most %d characters", maxPrompt))
 	}
 	if !slices.Contains(threads.Efforts[:], d.Effort) {
 		return nil, Error("effort must be one of " + strings.Join(threads.Efforts[:], ", "))
@@ -251,7 +248,12 @@ func DigestOf(ctx context.Context, q db.Querier, threadID int64) (string, error)
 			}
 		}
 		if text := py.Strip(strings.Join(texts, "\n")); text != "" {
-			return py.Clip(text, DigestChars), nil
+			r := assistant.Read(ctx, q)
+			limit := r.Int(assistant.KeySubagentDigestChars)
+			if err := r.Err(); err != nil {
+				return "", err
+			}
+			return py.Clip(text, limit), nil
 		}
 	}
 	return "", nil

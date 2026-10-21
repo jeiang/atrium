@@ -9,16 +9,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
-)
-
-const (
-	DescriptionChars = 160
-	BodyChars        = 20000
-	ExpandMaxSkills  = 5
-	ExpandMaxChars   = 20000
 )
 
 var (
@@ -89,11 +83,16 @@ func Save(ctx context.Context, q db.Querier, skill, description, body string, no
 	if !matches(name, skill) {
 		return Error("name must be lowercase letters, digits, - or _ (max 48 characters)")
 	}
-	if n := utf8.RuneCountInString(description); n == 0 || n > DescriptionChars {
-		return Error(fmt.Sprintf("description is required, one line, at most %d characters", DescriptionChars))
+	r := assistant.Read(ctx, q)
+	maxDescription, maxBody := r.Int(assistant.KeySkillDescChars), r.Int(assistant.KeySkillBodyChars)
+	if err := r.Err(); err != nil {
+		return err
 	}
-	if n := utf8.RuneCountInString(body); n == 0 || n > BodyChars {
-		return Error(fmt.Sprintf("body is required, at most %d characters", BodyChars))
+	if n := utf8.RuneCountInString(description); n == 0 || n > maxDescription {
+		return Error(fmt.Sprintf("description is required, one line, at most %d characters", maxDescription))
+	}
+	if n := utf8.RuneCountInString(body); n == 0 || n > maxBody {
+		return Error(fmt.Sprintf("body is required, at most %d characters", maxBody))
 	}
 	_, err := q.ExecContext(ctx,
 		"INSERT INTO skills (name, description, body, updated_at) VALUES (?, ?, ?, ?) "+
@@ -357,7 +356,12 @@ func Expand(ctx context.Context, q db.Querier, text string) (string, []string, [
 	if len(names) == 0 {
 		return text, []string{}, []string{}, nil
 	}
-	chosen, unknown, skipped, err := Closure(ctx, q, names, ExpandMaxSkills, ExpandMaxChars)
+	r := assistant.Read(ctx, q)
+	maxSkills, maxChars := r.Int(assistant.KeySkillExpandMax), r.Int(assistant.KeySkillExpandChars)
+	if err := r.Err(); err != nil {
+		return "", nil, nil, err
+	}
+	chosen, unknown, skipped, err := Closure(ctx, q, names, maxSkills, maxChars)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -367,7 +371,7 @@ func Expand(ctx context.Context, q db.Querier, text string) (string, []string, [
 	}
 	if len(skipped) > 0 {
 		notes = append(notes, fmt.Sprintf("Not expanded (at most %d skills / %d characters per message; use load_skill): %s",
-			ExpandMaxSkills, ExpandMaxChars, strings.Join(skipped, ", ")))
+			maxSkills, maxChars, strings.Join(skipped, ", ")))
 	}
 	parts := []string{text}
 	used := make([]string, 0, len(chosen))

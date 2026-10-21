@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"strconv"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const maxContacts = 10
+const schemaMaxContacts = 10
 
 var contactsSchema = json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"},` +
-	`"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(maxContacts) + `}},` +
+	`"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxContacts) + `}},` +
 	`"required":["query"],"additionalProperties":false}`)
 
 func contactTools() []tool.Tool {
@@ -27,9 +28,14 @@ func contactTools() []tool.Tool {
 	}}
 }
 
-func contactsLookup(_ context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func contactsLookup(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	query, _, err := tool.TextArg(args, "query", true)
 	if err != nil {
+		return nil, err
+	}
+	r := assistant.Read(ctx, tc.DB.Read)
+	maxContacts := r.Int(assistant.KeyMailMaxContacts)
+	if err := r.Err(); err != nil {
 		return nil, err
 	}
 	limit, err := tool.BoundedInt(args, "limit", 5, maxContacts, 1)

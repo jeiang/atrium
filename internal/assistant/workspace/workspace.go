@@ -10,15 +10,13 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
-	PlanItems     = 20
-	PlanItemChars = 200
-
 	WebFetch       = "web_fetch"
 	MailRead       = "mail_read"
 	FetchKnowledge = "fetch_knowledge"
@@ -40,10 +38,15 @@ type PlanItem struct {
 	Done bool   `json:"done"`
 }
 
-func CleanPlan(items any) ([]PlanItem, error) {
+func CleanPlan(ctx context.Context, q db.Querier, items any) ([]PlanItem, error) {
+	r := assistant.Read(ctx, q)
+	maxItems, maxChars := r.Int(assistant.KeyPlanItems), r.Int(assistant.KeyPlanItemChars)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
 	list, ok := items.([]any)
-	if !ok || len(list) > PlanItems {
-		return nil, PlanError(fmt.Sprintf("items must be a list of at most %d steps", PlanItems))
+	if !ok || len(list) > maxItems {
+		return nil, PlanError(fmt.Sprintf("items must be a list of at most %d steps", maxItems))
 	}
 	out := make([]PlanItem, 0, len(list))
 	for _, item := range list {
@@ -59,13 +62,13 @@ func CleanPlan(items any) ([]PlanItem, error) {
 		if !isText || py.Strip(text) == "" {
 			return nil, PlanError("each step needs a non-empty text")
 		}
-		out = append(out, PlanItem{Text: py.Clip(py.Strip(text), PlanItemChars), Done: py.Truthy(done)})
+		out = append(out, PlanItem{Text: py.Clip(py.Strip(text), maxChars), Done: py.Truthy(done)})
 	}
 	return out, nil
 }
 
 func SetPlan(ctx context.Context, q db.Querier, threadID int64, runID *int64, items any, now float64) ([]PlanItem, error) {
-	clean, err := CleanPlan(items)
+	clean, err := CleanPlan(ctx, q, items)
 	if err != nil {
 		return nil, err
 	}

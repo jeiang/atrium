@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
@@ -21,9 +22,8 @@ import (
 )
 
 const (
-	MaxResults   = 20
-	SnippetChars = 300
-	BodyDefault  = 8000
+	schemaMaxResults = 20
+	schemaBodyChars  = 8000
 )
 
 var mailKinds = tool.AllKinds
@@ -32,11 +32,11 @@ var mailSearchSchema = json.RawMessage(`{"type":"object","properties":{"query":{
 	`"account":{"type":"string","enum":["icloud","gmail"]},"folder":{"type":"string"},` +
 	`"since":{"type":"string","description":"YYYY-MM-DD, inclusive"},` +
 	`"until":{"type":"string","description":"YYYY-MM-DD, inclusive"},` +
-	`"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(MaxResults) + `}},` +
+	`"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxResults) + `}},` +
 	`"required":["query"],"additionalProperties":false}`)
 
 var mailReadSchema = json.RawMessage(`{"type":"object","properties":{"message_id":{"type":"integer"},` +
-	`"max_chars":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(BodyDefault) + `}},` +
+	`"max_chars":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaBodyChars) + `}},` +
 	`"required":["message_id"],"additionalProperties":false}`)
 
 func mailTools() []tool.Tool {
@@ -119,7 +119,13 @@ func mailSearch(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 	if err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 10, MaxResults, 1)
+	r := assistant.Read(ctx, tc.DB.Read)
+	maxResults := r.Int(assistant.KeyMailMaxResults)
+	snippetChars := r.Int(assistant.KeyMailSnippetChars)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	limit, err := tool.BoundedInt(args, "limit", 10, maxResults, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +176,7 @@ func mailSearch(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 			{Key: "from", Value: from},
 			{Key: "to", Value: recips},
 			{Key: "subject", Value: h.Subject},
-			{Key: "snippet", Value: tool.Clip(h.Snippet, SnippetChars)},
+			{Key: "snippet", Value: tool.Clip(h.Snippet, snippetChars)},
 		}
 	}
 	return py.Dict{{Key: "semantic", Value: found.Semantic}, {Key: "results", Value: results}}, nil
@@ -186,7 +192,12 @@ func mailRead(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	default:
 		return nil, tool.Error("message_id must be an integer")
 	}
-	maxChars, err := tool.BoundedInt(args, "max_chars", BodyDefault, BodyDefault, 1)
+	r := assistant.Read(ctx, tc.DB.Read)
+	bodyChars := r.Int(assistant.KeyMailBodyChars)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	maxChars, err := tool.BoundedInt(args, "max_chars", bodyChars, bodyChars, 1)
 	if err != nil {
 		return nil, err
 	}

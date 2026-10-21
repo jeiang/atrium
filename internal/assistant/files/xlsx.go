@@ -305,7 +305,7 @@ func readStyles(a *archive) (styleFormats, error) {
 	return formats, nil
 }
 
-func xlsxText(data []byte) (string, error) {
+func xlsxText(data []byte, maxText int) (string, error) {
 	a, err := openArchive(data)
 	if err != nil {
 		return "", err
@@ -333,7 +333,7 @@ func xlsxText(data []byte) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		sp := &sheetParser{shared: shared, formats: formats, date1904: date1904, out: &out}
+		sp := &sheetParser{shared: shared, formats: formats, date1904: date1904, out: &out, maxText: maxText}
 		err = sp.run(rc)
 		_ = rc.Close()
 		if err != nil {
@@ -344,11 +344,11 @@ func xlsxText(data []byte) (string, error) {
 	return py.Strip(out.String()), nil
 }
 
-func writeCSVRow(out *strings.Builder, fields []string) error {
+func writeCSVRow(out *strings.Builder, fields []string, maxText int) error {
 	size := out.Len() + len(fields) + 1
 	for _, f := range fields {
 		size += len(f)
-		if size > maxTextBytes {
+		if size > maxText {
 			return errTooLarge
 		}
 	}
@@ -388,6 +388,7 @@ type sheetParser struct {
 	formats  styleFormats
 	date1904 bool
 	out      *strings.Builder
+	maxText  int
 
 	maxCol, maxRow int
 	rowCounter     int
@@ -436,7 +437,7 @@ func (p *sheetParser) setDimension(e *element) error {
 }
 
 func (p *sheetParser) emit(cells []cell) error {
-	if p.out.Len() > maxTextBytes {
+	if p.out.Len() > p.maxText {
 		return errTooLarge
 	}
 	width := p.maxCol
@@ -447,7 +448,7 @@ func (p *sheetParser) emit(cells []cell) error {
 		}
 	}
 	if len(cells) == 0 && p.maxCol == none {
-		return writeCSVRow(p.out, nil)
+		return writeCSVRow(p.out, nil, p.maxText)
 	}
 	fields := make([]string, width)
 	for _, c := range cells {
@@ -455,7 +456,7 @@ func (p *sheetParser) emit(cells []cell) error {
 			fields[c.column-1] = c.value
 		}
 	}
-	return writeCSVRow(p.out, fields)
+	return writeCSVRow(p.out, fields, p.maxText)
 }
 
 func (p *sheetParser) row(e *element) error {

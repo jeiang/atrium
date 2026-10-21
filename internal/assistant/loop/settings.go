@@ -3,6 +3,7 @@ package loop
 import (
 	"context"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
@@ -52,4 +53,10 @@ func maxRunCost(ctx context.Context, q db.Querier) (float64, error) {
 		return 0, err
 	}
 	return found.Float()
+}
+
+func readWebSearchMaxUses(ctx context.Context, q db.Querier) (int, error) {
+	r := assistant.Read(ctx, q)
+	n := r.Int(assistant.KeyWebSearchMaxUses)
+	return n, r.Err()
 }

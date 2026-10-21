@@ -9,13 +9,9 @@ import (
 	"math/big"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/py"
-)
-
-const (
-	PageChars    = 8000
-	MaxPageChars = 16000
 )
 
 func slice(s string, offset, limit int64) string {
@@ -52,7 +48,13 @@ func recall(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", PageChars, MaxPageChars, 1)
+	r := assistant.Read(ctx, tc.DB.Read)
+	pageChars := r.Int(assistant.KeyRecallPageChars)
+	maxPageChars := r.Int(assistant.KeyRecallMaxPageChars)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	limit, err := tool.BoundedInt(args, "limit", pageChars, maxPageChars, 1)
 	if err != nil {
 		return nil, err
 	}

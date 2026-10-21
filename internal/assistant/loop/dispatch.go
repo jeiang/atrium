@@ -125,6 +125,7 @@ type dispatcher struct {
 	byName map[string]tool.Tool
 	now    func() float64
 	batch  Batch
+	tuning actx.Tuning
 }
 
 func (x *dispatcher) lookup(name string) *tool.Tool {
@@ -181,7 +182,7 @@ func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errT
 		}
 		return toolResult(use.ID, *errText, true), nil
 	}
-	content, resultID, err := actx.Ingest(ctx, x.d.Write, x.tc.RunID, callID, use.Name, value, x.now())
+	content, resultID, err := actx.Ingest(ctx, x.d.Write, x.tc.RunID, callID, use.Name, value, x.now(), x.tuning)
 	if err != nil {
 		return nil, err
 	}

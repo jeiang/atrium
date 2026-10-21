@@ -15,7 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-func Manifest(ctx gocontext.Context, q db.Querier, threadID int64) (string, error) {
+func Manifest(ctx gocontext.Context, q db.Querier, threadID int64, t Tuning) (string, error) {
 	ledger, err := LedgerRows(ctx, q, threadID)
 	if err != nil {
 		return "", err
@@ -59,7 +59,7 @@ func Manifest(ctx gocontext.Context, q db.Querier, threadID int64) (string, erro
 	}
 	rows, err := q.QueryContext(ctx,
 		"SELECT r.result_id, r.tool, r.tokens FROM tool_results r JOIN runs ON runs.id = r.run_id WHERE runs.thread_id = ? ORDER BY r.result_id DESC LIMIT ?",
-		threadID, ManifestResults)
+		threadID, t.ManifestResults)
 	if err != nil {
 		return "", err
 	}
@@ -79,8 +79,8 @@ func Manifest(ctx gocontext.Context, q db.Querier, threadID int64) (string, erro
 	return strings.Join(lines, "\n"), nil
 }
 
-func ManifestBlock(ctx gocontext.Context, q db.Querier, threadID int64) (json.RawMessage, error) {
-	text, err := Manifest(ctx, q, threadID)
+func ManifestBlock(ctx gocontext.Context, q db.Querier, threadID int64, t Tuning) (json.RawMessage, error) {
+	text, err := Manifest(ctx, q, threadID, t)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +91,8 @@ func unitStart(m Message) bool {
 	return m.Role == journal.Assistant || !hasType(m.Content, ToolResult)
 }
 
-func Preserved(sent []Message) []Message {
-	start := max(len(sent)-PreserveMessages, 0)
+func Preserved(sent []Message, t Tuning) []Message {
+	start := max(len(sent)-t.PreserveMessages, 0)
 	for start < len(sent) && !unitStart(sent[start]) {
 		start++
 	}
@@ -111,18 +111,18 @@ func Preserved(sent []Message) []Message {
 	return kept
 }
 
-func ServerCompacted(ctx gocontext.Context, q db.Querier, threadID, runID int64, blocks []json.RawMessage, sent []Message, now float64) (int64, error) {
+func ServerCompacted(ctx gocontext.Context, q db.Querier, threadID, runID int64, blocks []json.RawMessage, sent []Message, now float64, t Tuning) (int64, error) {
 	if _, err := Commit(ctx, q, threadID, runID, now, true); err != nil {
 		return 0, err
 	}
-	manifest, err := ManifestBlock(ctx, q, threadID)
+	manifest, err := ManifestBlock(ctx, q, threadID, t)
 	if err != nil {
 		return 0, err
 	}
 	head := append([]Message{
 		{Role: journal.Assistant, Content: blocks},
 		{Role: journal.User, Content: []json.RawMessage{manifest}},
-	}, Preserved(sent)...)
+	}, Preserved(sent, t)...)
 	base, err := nextSeq(ctx, q, threadID)
 	if err != nil {
 		return 0, err
@@ -190,7 +190,7 @@ func dictValues(content []py.Dict) []any {
 	return out
 }
 
-func Shrink(messages []Message, limit int64) ([]Message, error) {
+func Shrink(messages []Message, limit int64, previewChars int) ([]Message, error) {
 	var out []shrunk
 	for _, m := range messages {
 		var content []py.Dict
@@ -226,10 +226,10 @@ func Shrink(messages []Message, limit int64) ([]Message, error) {
 				continue
 			}
 			body, ok := getOr(b, "content", nil).(string)
-			if !ok || utf8.RuneCountInString(body) <= PreviewChars {
+			if !ok || utf8.RuneCountInString(body) <= previewChars {
 				continue
 			}
-			cut := py.Clip(body, PreviewChars) + compactionTruncate
+			cut := py.Clip(body, previewChars) + compactionTruncate
 			total -= EstimateTokens(body) - EstimateTokens(cut)
 			m.content[i] = b.Set("content", cut)
 		}
@@ -266,8 +266,8 @@ func lastOperatorBlocks(sent []Message) []json.RawMessage {
 	return nil
 }
 
-func SummaryParams(model string, active []Message, hardLimit int64) (anthropic.Params, error) {
-	messages, err := Shrink(active, hardLimit-SummaryMaxTokens-EstimateTokens(SummaryRequest)-1000)
+func SummaryParams(model string, active []Message, hardLimit int64, t Tuning) (anthropic.Params, error) {
+	messages, err := Shrink(active, hardLimit-int64(t.SummaryMaxTokens)-EstimateTokens(SummaryRequest)-1000, t.PreviewChars)
 	if err != nil {
 		return anthropic.Params{}, err
 	}
@@ -283,15 +283,15 @@ func SummaryParams(model string, active []Message, hardLimit int64) (anthropic.P
 	}
 	return anthropic.Params{
 		Model:        model,
-		MaxTokens:    SummaryMaxTokens,
+		MaxTokens:    int64(t.SummaryMaxTokens),
 		OutputConfig: &anthropic.OutputConfig{Effort: SummaryEffort},
 		System:       encode(SummarySystem),
 		Messages:     wire,
 	}, nil
 }
 
-func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client, model string, active []Message, threadID, runID int64, kind string, hardLimit int64, now float64) (int64, error) {
-	params, err := SummaryParams(model, active, hardLimit)
+func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client, model string, active []Message, threadID, runID int64, kind string, hardLimit int64, now float64, t Tuning) (int64, error) {
+	params, err := SummaryParams(model, active, hardLimit, t)
 	if err != nil {
 		return 0, err
 	}
@@ -321,7 +321,7 @@ func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client
 	if summary == "" {
 		return 0, ContextError("compaction summary was empty")
 	}
-	manifest, err := ManifestBlock(ctx, q, threadID)
+	manifest, err := ManifestBlock(ctx, q, threadID, t)
 	if err != nil {
 		return 0, err
 	}

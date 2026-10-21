@@ -71,12 +71,12 @@ func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.
 }
 
 func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Thread, kind tool.Kind, effort string, tools []tool.Tool,
-	cc prompts.CacheControl, extra string, allow []string, limits actx.Limits) (request, error) {
+	cc prompts.CacheControl, extra string, allow []string, limits actx.Limits, webSearchMaxUses int) (request, error) {
 	system, err := r.systemBlocks(ctx, q, thread, cc, extra)
 	if err != nil {
 		return request{}, err
 	}
-	toolParams, err := registry.RequestTools(tools, kind, allow, cc.JSON())
+	toolParams, err := registry.RequestTools(tools, kind, allow, cc.JSON(), webSearchMaxUses)
 	if err != nil {
 		return request{}, err
 	}
