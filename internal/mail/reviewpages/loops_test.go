@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/mail/openloops"
 )
 
 const day = 86400.0
@@ -68,7 +67,7 @@ func TestSnoozeClampsItsDays(t *testing.T) {
 	if want := s.clock + 60*day; until < want-100 || until > want+100 {
 		t.Errorf("snoozed_until = %v, want about %v", until, want)
 	}
-	mustContain(t, status(t, s.post(target, nil), http.StatusOK), fmt.Sprintf("Hidden for %d days.", openloops.SnoozeDefaultDays))
+	mustContain(t, status(t, s.post(target, nil), http.StatusOK), "Hidden for 3 days.")
 	bad := s.post(target, form("days", "soon"))
 	body := status(t, bad, http.StatusUnprocessableEntity)
 	if detail := jsonOf(t, body)["detail"].([]any)[0].(map[string]any); detail["loc"].([]any)[0] != "body" {
@@ -178,7 +177,7 @@ func TestEmptyFormFieldsAreAbsent(t *testing.T) {
 	s := newSite(t)
 	s.loop("a", "owe_reply", 2, "Dinner?", "pat@person.test", 1)
 	target := fmt.Sprintf("/loops/%d/snooze", s.loopID("a"))
-	mustContain(t, status(t, s.post(target, form("days", "")), http.StatusOK), fmt.Sprintf("Hidden for %d days.", openloops.SnoozeDefaultDays))
+	mustContain(t, status(t, s.post(target, form("days", "")), http.StatusOK), "Hidden for 3 days.")
 	status(t, s.post("/loops/dismiss-all", form("state", "")), http.StatusUnprocessableEntity)
 }
 

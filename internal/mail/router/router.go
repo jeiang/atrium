@@ -11,10 +11,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/py"
@@ -46,12 +46,38 @@ type Querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
+type Tuning struct {
+	Learned      rules.Thresholds
+	KNNK         int
+	KNNMinShare  float64
+	KNNMax       int
+	LLMNeighbors int
+	FolderMin    int
+	Uncertain    string
+}
+
+func ReadTuning(ctx context.Context, q Querier, account string) (Tuning, error) {
+	r := mail.Read(ctx, q)
+	t := Tuning{
+		KNNK: r.Int(mail.KeyKNNK), KNNMinShare: r.Float(mail.KeyKNNMinShare), KNNMax: r.Int(mail.KeyKNNMax),
+		LLMNeighbors: r.Int(mail.KeyLLMNeighbors), FolderMin: r.Int(mail.KeyFolderMinMessages),
+	}
+	if err := r.Err(); err != nil {
+		return Tuning{}, err
+	}
+	var err error
+	if t.Learned, err = rules.ReadThresholds(ctx, q); err != nil {
+		return Tuning{}, err
+	}
+	t.Uncertain, err = mail.UncertainDest(ctx, q, account)
+	return t, err
+}
+
 type Router struct {
-	DB      *db.DB
-	ChatURL string
-	Judge   Judge
-	Now     func() float64
-	Log     *slog.Logger
+	DB    *db.DB
+	Judge Judge
+	Now   func() float64
+	Log   *slog.Logger
 }
 
 func (r *Router) judge() Judge {
@@ -94,7 +120,7 @@ type Neighbor struct {
 	Similarity float64
 }
 
-func NearestFiled(ctx context.Context, q Querier, m *rules.Message, count int) ([]Neighbor, error) {
+func NearestFiled(ctx context.Context, q Querier, m *rules.Message, count, knnMax int) ([]Neighbor, error) {
 	var blob []byte
 	err := q.QueryRowContext(ctx, "SELECT embedding FROM message_vec WHERE rowid = ?", m.ID).Scan(&blob)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -109,7 +135,7 @@ func NearestFiled(ctx context.Context, q Querier, m *rules.Message, count int) (
 	}
 	k := max(count*4, 32)
 	for {
-		hits, err := knn(ctx, q, blob, min(k, max(total, 1), embed.KNNMax), m.Account)
+		hits, err := knn(ctx, q, blob, min(k, max(total, 1), knnMax), m.Account)
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +171,7 @@ func NearestFiled(ctx context.Context, q Querier, m *rules.Message, count int) (
 				neighbors = append(neighbors, n)
 			}
 		}
-		if len(neighbors) >= count || k >= min(total, embed.KNNMax) {
+		if len(neighbors) >= count || k >= min(total, knnMax) {
 			return neighbors[:min(count, len(neighbors))], nil
 		}
 		k *= 4
@@ -195,10 +221,10 @@ func Vote(neighbors []Neighbor) (folder string, share float64, ok bool) {
 	return folder, scores[folder] / total, true
 }
 
-func NewLLMContext(ctx context.Context, q Querier, account, url string) (LLMContext, error) {
+func NewLLMContext(ctx context.Context, q Querier, account, url string, folderMin int) (LLMContext, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT folder FROM filed_messages WHERE account = ? GROUP BY folder HAVING COUNT(*) >= ? ORDER BY folder",
-		account, config.FolderMinMessages)
+		account, folderMin)
 	if err != nil {
 		return LLMContext{}, err
 	}
@@ -231,7 +257,7 @@ func NewLLMContext(ctx context.Context, q Querier, account, url string) (LLMCont
 	if err != nil {
 		return LLMContext{}, err
 	}
-	return LLMContext{URL: url, Folders: folders, Catalog: llm.FolderCatalog(senders), Available: true}, nil
+	return LLMContext{URL: url, Folders: folders, Catalog: llm.FolderCatalog(ctx, senders), Available: true}, nil
 }
 
 func MessageBody(ctx context.Context, q interface {
@@ -245,7 +271,7 @@ func MessageBody(ctx context.Context, q interface {
 	return body.String, err
 }
 
-func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleList []rules.Rule, lc *LLMContext) (*Decision, error) {
+func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleList []rules.Rule, lc *LLMContext, t Tuning) (*Decision, error) {
 	spec, ok := config.Account(m.Account)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", httpx.ErrKey, py.Repr(m.Account))
@@ -264,7 +290,7 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 	if rule != nil {
 		return &Decision{Stage: "operator", Action: rule.Action, Dest: rule.Dest, Key: new(rule.ID)}, nil
 	}
-	learned, err := rules.LearnedMatch(ctx, q, m)
+	learned, err := rules.LearnedMatch(ctx, q, m, t.Learned)
 	if err != nil {
 		return nil, err
 	}
@@ -275,11 +301,11 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 	if !m.Embedded {
 		return nil, nil
 	}
-	neighbors, err := NearestFiled(ctx, q, m, max(config.KNNK, config.LLMNeighbors))
+	neighbors, err := NearestFiled(ctx, q, m, max(t.KNNK, t.LLMNeighbors), t.KNNMax)
 	if err != nil {
 		return nil, err
 	}
-	if folder, share, ok := Vote(neighbors[:min(config.KNNK, len(neighbors))]); ok && share >= config.KNNMinShare {
+	if folder, share, ok := Vote(neighbors[:min(t.KNNK, len(neighbors))]); ok && share >= t.KNNMinShare {
 		return &Decision{Stage: "knn", Action: "file", Dest: new(folder), Key: new("vote"), Confidence: new(share)}, nil
 	}
 	if len(neighbors) > 0 && lc.Available {
@@ -290,7 +316,7 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		if err != nil {
 			return nil, err
 		}
-		near := make([]llm.Neighbor, min(config.LLMNeighbors, len(neighbors)))
+		near := make([]llm.Neighbor, min(t.LLMNeighbors, len(neighbors)))
 		for i := range near {
 			near[i] = llm.Neighbor{Folder: neighbors[i].Folder, FromDomain: neighbors[i].FromDomain, Subject: neighbors[i].Subject}
 		}
@@ -303,8 +329,8 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 			return &Decision{Stage: "llm", Action: "file", Dest: new(folder), Key: new("chat"), Detail: py.Dict{{Key: "confident", Value: confident}}}, nil
 		}
 	}
-	if spec.UncertainDest != "" {
-		return &Decision{Stage: "fallback", Action: "file", Dest: new(spec.UncertainDest)}, nil
+	if t.Uncertain != "" {
+		return &Decision{Stage: "fallback", Action: "file", Dest: new(t.Uncertain)}, nil
 	}
 	return &Decision{Stage: "fallback", Action: "none"}, nil
 }
@@ -340,14 +366,26 @@ func (r *Router) RouteAccount(ctx context.Context, account string) (int, error) 
 	if err != nil {
 		return 0, err
 	}
-	lc, err := NewLLMContext(ctx, r.DB.Read, account, r.ChatURL)
+	ctx, err = mail.WithModels(ctx, r.DB.Read)
+	if err != nil {
+		return 0, err
+	}
+	chatURL, err := mail.ChatURL(ctx, r.DB.Read)
+	if err != nil {
+		return 0, err
+	}
+	tune, err := ReadTuning(ctx, r.DB.Read, account)
+	if err != nil {
+		return 0, err
+	}
+	lc, err := NewLLMContext(ctx, r.DB.Read, account, chatURL, tune.FolderMin)
 	if err != nil {
 		return 0, err
 	}
 	decided := 0
 	for i := range pending {
 		m := &pending[i]
-		d, err := r.Decide(ctx, r.DB.Read, m, ruleList, &lc)
+		d, err := r.Decide(ctx, r.DB.Read, m, ruleList, &lc, tune)
 		var unavailable *httpx.ServiceUnavailable
 		if errors.As(err, &unavailable) {
 			r.log().Warn(fmt.Sprintf("chat unavailable, deferring %s: %s", account, unavailable))

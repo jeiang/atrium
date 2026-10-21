@@ -21,7 +21,7 @@ func accountChoices() []string {
 
 type runner func(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) error
 
-type Clients = func(cfg config.Config, env config.Env) func(ctx context.Context, account string) (mail.Client, error)
+type Clients = func(cfg config.Config) mail.OpenFunc
 
 func SyncCommand(clients Clients) *cli.Command {
 	return command("sync", clients, func(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) error {
@@ -49,7 +49,7 @@ func command(name string, clients Clients, run runner) *cli.Command {
 func execute(env *cli.Env, requested string, run runner, clients Clients) int {
 	cfg, err := config.Load(config.OS)
 	if err == nil {
-		err = run(env.Ctx, cfg, requested, clients(cfg, config.OS))
+		err = run(env.Ctx, cfg, requested, clients(cfg))
 	}
 	if err != nil {
 		return cli.Fail(env, err)

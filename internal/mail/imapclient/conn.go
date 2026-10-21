@@ -17,7 +17,6 @@ import (
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
@@ -49,8 +48,8 @@ var (
 	idleChanges = []string{"EXISTS", "EXPUNGE", "FETCH", "RECENT"}
 )
 
-func New(host, user, password string, env config.Env) mail.Client {
-	return mail.Gated(newConn(host, user, password), env)
+func New(host, user, password string) mail.Client {
+	return mail.Gated(newConn(host, user, password))
 }
 
 func newConn(host, user, password string) *conn {

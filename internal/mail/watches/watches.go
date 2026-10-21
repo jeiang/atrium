@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
@@ -33,11 +34,7 @@ const (
 	Delayed        = "delayed"
 	Exception      = "exception"
 
-	ScanLimit         = 25
-	PackageWindowDays = 60
-	StalePackageDays  = 60
-	BodyChars         = 3000
-	Day               = 86400.0
+	Day = 86400.0
 )
 
 var Statuses = [...]string{Ordered, Shipped, InTransit, OutForDelivery, Delivered, Delayed, Exception}
@@ -65,8 +62,6 @@ var (
 		{InTransit, rx.MustCompile(`in transit|on its way|on the way|arriving|arrives`, rx.IgnoreCase)},
 		{Shipped, rx.MustCompile(`\bshipped\b|has shipped|shipment|label created|picked up`, rx.IgnoreCase)},
 	}
-
-	carrierDomains = [...]string{"ups.com", "fedex.com", "usps.com", "dhl.com", "usps.gov", "dhl.de"}
 )
 
 var PackageHint = "m.k_order = 1 OR " + strings.Join(func() []string {
@@ -122,8 +117,8 @@ type Row struct {
 	FromDomain string
 }
 
-func rowText(row Row, body string) string {
-	return fmt.Sprintf("From: %s <%s>\nSubject: %s\nBody:\n%s", row.FromName, row.FromAddr, row.Subject, py.Clip(body, BodyChars))
+func rowText(row Row, body string, bodyChars int) string {
+	return fmt.Sprintf("From: %s <%s>\nSubject: %s\nBody:\n%s", row.FromName, row.FromAddr, row.Subject, py.Clip(body, bodyChars))
 }
 
 type Options struct {
@@ -257,7 +252,7 @@ func ClassifyStatus(subject, body string) (string, error) {
 	return Ordered, nil
 }
 
-func senderMerchant(row Row) string {
+func senderMerchant(row Row, carrierDomains []string) string {
 	domain := py.Casefold(row.FromDomain)
 	for _, d := range carrierDomains {
 		if domain == d || strings.HasSuffix(domain, "."+d) {
@@ -276,7 +271,7 @@ type Item struct {
 	StatusText     string
 }
 
-func RegexPackages(row Row, body string) ([]Item, error) {
+func RegexPackages(row Row, body string, carrierDomains []string) ([]Item, error) {
 	text := row.Subject + "\n" + body
 	numbers, err := FindTracking(text)
 	if err != nil || len(numbers) == 0 {
@@ -290,7 +285,7 @@ func RegexPackages(row Row, body string) ([]Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	merchant := senderMerchant(row)
+	merchant := senderMerchant(row, carrierDomains)
 	out := make([]Item, len(numbers))
 	for i, n := range numbers {
 		out[i] = Item{n.Carrier, n.Number, merchant, orderRef, status, clip(row.Subject, 120)}
@@ -457,8 +452,24 @@ type ScanResult struct {
 	Found   int `json:"found"`
 }
 
-func ScanPackages(ctx context.Context, d *db.DB, cfg config.Config, limit int, now float64, o Options) (ScanResult, error) {
-	rows, err := unscanned(ctx, d.Read, Packages, PackageHint, PackageWindowDays, limit, now)
+func ScanPackages(ctx context.Context, d *db.DB, now float64, o Options) (ScanResult, error) {
+	r := mail.Read(ctx, d.Read)
+	limit := r.Int(mail.KeyWatchesScanLimit)
+	window := r.Int(mail.KeyWatchesPackageWindow)
+	bodyChars := r.Int(mail.KeyWatchesBodyChars)
+	carrierDomains := r.List(mail.KeyWatchesCarrierDomains)
+	if err := r.Err(); err != nil {
+		return ScanResult{}, err
+	}
+	chatURL, err := mail.ChatURL(ctx, d.Read)
+	if err != nil {
+		return ScanResult{}, err
+	}
+	ctx, err = mail.WithModels(ctx, d.Read)
+	if err != nil {
+		return ScanResult{}, err
+	}
+	rows, err := unscanned(ctx, d.Read, Packages, PackageHint, window, limit, now)
 	if err != nil {
 		return ScanResult{}, err
 	}
@@ -469,12 +480,12 @@ scan:
 		if err != nil {
 			return result, err
 		}
-		items, err := RegexPackages(row, body)
+		items, err := RegexPackages(row, body, carrierDomains)
 		if err != nil {
 			return result, err
 		}
 		if len(items) == 0 {
-			answer, err := o.chat()(ctx, cfg.ChatURL, PackageSystem, rowText(row, body), PackageSchema, 200)
+			answer, err := o.chat()(ctx, chatURL, PackageSystem, rowText(row, body, bodyChars), PackageSchema, 200)
 			var unavailable *httpx.ServiceUnavailable
 			switch {
 			case errors.As(err, &unavailable):
@@ -532,6 +543,14 @@ type Package struct {
 }
 
 func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64, activeOnly, includeDismissed bool) ([]Package, error) {
+	stale := 0
+	if activeOnly {
+		r := mail.Read(ctx, q)
+		stale = r.Int(mail.KeyWatchesStalePackage)
+		if err := r.Err(); err != nil {
+			return nil, err
+		}
+	}
 	where := " WHERE dismissed = 0"
 	if includeDismissed {
 		where = ""
@@ -553,7 +572,7 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 	}
 	out := all
 	if activeOnly {
-		cutoff := now - StalePackageDays*Day
+		cutoff := now - float64(stale)*Day
 		out = out[:0:0]
 		for _, p := range all {
 			if p.Status != Delivered && p.UpdatedTS >= cutoff {
@@ -584,8 +603,8 @@ func DismissPackage(ctx context.Context, q db.Querier, id int64) (bool, error) {
 	return n == 1, err
 }
 
-func Refresh(ctx context.Context, d *db.DB, cfg config.Config, limit int, now float64, o Options) py.Dict {
-	result, err := ScanPackages(ctx, d, cfg, limit, now, o)
+func Refresh(ctx context.Context, d *db.DB, now float64, o Options) py.Dict {
+	result, err := ScanPackages(ctx, d, now, o)
 	if err != nil {
 		log.Error(Packages+" scan failed", logx.Err, err.Error())
 		return py.Dict{{Key: Packages, Value: py.Dict{{Key: "error", Value: true}}}}

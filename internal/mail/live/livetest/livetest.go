@@ -49,7 +49,6 @@ func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClien
 	t.Helper()
 	dir := t.TempDir()
 	env := config.Map(map[string]string{
-		"ATRIUM_MODE":      mode,
 		"ATRIUM_DB":        filepath.Join(dir, "atrium.db"),
 		"ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"),
 	})
@@ -57,7 +56,9 @@ func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClien
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &World{T: t, Account: account, Mode: mode, DB: dbtest.Schema(t), Cfg: cfg, Fake: mailtest.NewFakeClient(env), Clock: 1_792_080_000}
+	w := &World{T: t, Account: account, Mode: mode, DB: dbtest.Schema(t), Cfg: cfg, Fake: mailtest.NewFakeClient(), Clock: 1_792_080_000}
+	w.Fake.BindMode(w.DB.Read)
+	w.exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", mail.KeyMode, mode)
 	for _, a := range [...]string{config.ICloud, config.Gmail} {
 		w.exec("INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", a, a)
 	}

@@ -76,7 +76,9 @@ func SetPaused(pausePath string, paused bool) error {
 	return f.Close()
 }
 
-func WriteGate(ctx context.Context, env config.Env, action, target string) error {
+type ModeFunc func(ctx context.Context) (string, error)
+
+func WriteGate(ctx context.Context, current ModeFunc, action, target string) error {
 	if pausePath, ok := ctx.Value(automaticKey{}).(string); ok && IsPaused(pausePath) {
 		return WriteRefused(fmt.Sprintf("refusing automatic mailbox write %s: atrium is paused", py.Repr(action)))
 	}
@@ -86,9 +88,12 @@ func WriteGate(ctx context.Context, env config.Env, action, target string) error
 	if sent, ok := ctx.Value(operatorSendKey{}).(string); ok && action == AppendAction && target == sent {
 		return nil
 	}
-	mode, err := config.Mode(env)
-	if err != nil {
-		return err
+	mode := ""
+	if current != nil {
+		var err error
+		if mode, err = current(ctx); err != nil {
+			return err
+		}
 	}
 	if mode != Live {
 		return WriteRefused(fmt.Sprintf("refusing mailbox write %s: ATRIUM_MODE is not %s", py.Repr(action), Live))

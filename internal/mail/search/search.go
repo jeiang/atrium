@@ -14,21 +14,31 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
 	RRFK          = 60
-	BranchLimit   = 50
 	MaxTerms      = 12
 	SnippetTokens = 24
-	SnippetChars  = 220
 	DefaultLimit  = 20
 	start, end    = "\x02", "\x03"
 )
 
-var knnMax = embed.KNNMax
+type limits struct {
+	rrfK, branchLimit, maxTerms, snippetTokens, snippetChars, knnMax int
+}
+
+func readLimits(ctx context.Context, q Querier) (limits, error) {
+	r := mail.Read(ctx, q)
+	l := limits{
+		rrfK: r.Int(mail.KeySearchRRFK), branchLimit: r.Int(mail.KeySearchBranchLimit), maxTerms: r.Int(mail.KeySearchMaxTerms),
+		snippetTokens: r.Int(mail.KeySearchSnippetTokens), snippetChars: r.Int(mail.KeySearchSnippetChars), knnMax: r.Int(mail.KeyKNNMax),
+	}
+	return l, r.Err()
+}
 
 var (
 	tokenRe = rx.MustCompile(`"([^"]*)"|([^\W_]+)`, 0)
@@ -45,7 +55,9 @@ type Querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-func FTSQuery(text string) (string, error) {
+func FTSQuery(text string) (string, error) { return FTSQueryLimit(text, MaxTerms) }
+
+func FTSQueryLimit(text string, maxTerms int) (string, error) {
 	var terms []string
 	matches, err := tokenRe.FindIter(text)
 	if err != nil {
@@ -65,7 +77,7 @@ func FTSQuery(text string) (string, error) {
 			terms = append(terms, `"`+strings.Join(words, " ")+`"`)
 		}
 	}
-	return strings.Join(terms[:min(len(terms), MaxTerms)], " "), nil
+	return strings.Join(terms[:min(len(terms), maxTerms)], " "), nil
 }
 
 type Scored struct {
@@ -73,7 +85,9 @@ type Scored struct {
 	Score float64
 }
 
-func RRF(rankings ...[]int64) []Scored {
+func RRF(rankings ...[]int64) []Scored { return RRFWith(RRFK, rankings...) }
+
+func RRFWith(k int, rankings ...[]int64) []Scored {
 	scores := map[int64]float64{}
 	best := map[int64]int{}
 	var order []int64
@@ -84,7 +98,7 @@ func RRF(rankings ...[]int64) []Scored {
 				order = append(order, item)
 				best[item] = rank
 			}
-			scores[item] = scores[item] + 1.0/float64(RRFK+rank)
+			scores[item] = scores[item] + 1.0/float64(k+rank)
 			best[item] = min(best[item], rank)
 		}
 	}
@@ -286,10 +300,10 @@ type lexicalHit struct {
 	snippet string
 }
 
-func lexical(ctx context.Context, q Querier, match string, f Filters, limit int) ([]lexicalHit, error) {
+func lexical(ctx context.Context, q Querier, match string, f Filters, limit, snippetTokens int) ([]lexicalHit, error) {
 	where, params := filterSQL(f)
 	rows, err := q.QueryContext(ctx,
-		fmt.Sprintf("SELECT m.id, snippet(message_fts, 2, '%s', '%s', '…', %d) AS snip ", start, end, SnippetTokens)+
+		fmt.Sprintf("SELECT m.id, snippet(message_fts, 2, '%s', '%s', '…', %d) AS snip ", start, end, snippetTokens)+
 			"FROM message_fts JOIN messages m ON m.id = message_fts.rowid "+
 			"LEFT JOIN corrections c ON c.message_id = m.id WHERE message_fts MATCH ? AND "+where+
 			" ORDER BY bm25(message_fts, 5.0, 2.0, 1.0) LIMIT ?",
@@ -324,7 +338,7 @@ func narrow(f Filters) bool {
 	return f.Folder != nil || f.From != nil || f.HasAttachment || f.Unread || f.Flagged || f.DateFrom != nil || f.DateTo != nil
 }
 
-func semantic(ctx context.Context, q Querier, vector []float64, f Filters, limit int) ([]int64, error) {
+func semantic(ctx context.Context, q Querier, vector []float64, f Filters, limit, knnMax int) ([]int64, error) {
 	where, params := filterSQL(f)
 	var total int
 	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM message_vec").Scan(&total); err != nil {
@@ -383,14 +397,14 @@ func exactSemantic(ctx context.Context, q Querier, blob []byte, where string, pa
 		slices.Concat(params, []any{blob, limit})...))
 }
 
-func bodyHead(ctx context.Context, q Querier, list []int64) (map[int64]string, error) {
+func bodyHead(ctx context.Context, q Querier, list []int64, snippetChars int) (map[int64]string, error) {
 	heads := map[int64]string{}
 	if len(list) == 0 {
 		return heads, nil
 	}
 	rows, err := q.QueryContext(ctx,
 		"SELECT rowid, substr(body, 1, ?) AS head FROM message_fts WHERE rowid IN (SELECT value FROM json_each(?))",
-		SnippetChars, jsonIDs(list))
+		snippetChars, jsonIDs(list))
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +485,7 @@ func newHit(info Info, score *float64, lexRank, semRank *int, head string, marke
 	return Hit{info, score, lexRank, semRank, snippet.String(), parts}
 }
 
-func recent(ctx context.Context, q Querier, f Filters, limit int) ([]Hit, error) {
+func recent(ctx context.Context, q Querier, f Filters, limit, snippetChars int) ([]Hit, error) {
 	where, params := filterSQL(f)
 	infos, err := infoRows(q.QueryContext(ctx, baseSelect+" WHERE "+where+" ORDER BY m.date_ts DESC, m.id DESC LIMIT ?",
 		slices.Concat(params, []any{limit})...))
@@ -482,7 +496,7 @@ func recent(ctx context.Context, q Querier, f Filters, limit int) ([]Hit, error)
 	for i, info := range infos {
 		list[i] = info.ID
 	}
-	heads, err := bodyHead(ctx, q, list)
+	heads, err := bodyHead(ctx, q, list, snippetChars)
 	if err != nil {
 		return nil, err
 	}
@@ -508,7 +522,7 @@ func rank(list []int64) map[int64]int {
 	return out
 }
 
-func Search(ctx context.Context, q Querier, cfg config.Config, query string, filters map[string]any, limit int, embedTexts embed.TextsFunc) (Result, error) {
+func Search(ctx context.Context, q Querier, _ config.Config, query string, filters map[string]any, limit int, embedTexts embed.TextsFunc) (Result, error) {
 	if embedTexts == nil {
 		embedTexts = embed.Texts
 	}
@@ -516,30 +530,42 @@ func Search(ctx context.Context, q Querier, cfg config.Config, query string, fil
 	if err != nil {
 		return Result{}, err
 	}
+	lim, err := readLimits(ctx, q)
+	if err != nil {
+		return Result{}, err
+	}
+	embedURL, err := mail.EmbedURL(ctx, q)
+	if err != nil {
+		return Result{}, err
+	}
+	ctx, err = mail.WithModels(ctx, q)
+	if err != nil {
+		return Result{}, err
+	}
 	query = py.Strip(query)
 	if query == "" {
-		hits, err := recent(ctx, q, f, limit)
+		hits, err := recent(ctx, q, f, limit, lim.snippetChars)
 		return Result{Hits: hits, Filters: f}, err
 	}
-	match, err := FTSQuery(query)
+	match, err := FTSQueryLimit(query, lim.maxTerms)
 	if err != nil {
 		return Result{}, err
 	}
 	var lex []lexicalHit
 	if match != "" {
-		if lex, err = lexical(ctx, q, match, f, BranchLimit); err != nil {
+		if lex, err = lexical(ctx, q, match, f, lim.branchLimit, lim.snippetTokens); err != nil {
 			return Result{}, err
 		}
 	}
 	var sem []int64
 	var failure *string
 	available := true
-	vectors, err := embedTexts(ctx, cfg.EmbedURL, []string{embed.QueryText(query)})
+	vectors, err := embedTexts(ctx, embedURL, []string{embed.QueryText(query)})
 	if err == nil {
 		if len(vectors) == 0 {
 			err = fmt.Errorf("%w: list index out of range", httpx.ErrIndex)
 		} else {
-			sem, err = semantic(ctx, q, vectors[0], f, BranchLimit)
+			sem, err = semantic(ctx, q, vectors[0], f, lim.branchLimit, lim.knnMax)
 		}
 	}
 	if err != nil {
@@ -563,7 +589,7 @@ func Search(ctx context.Context, q Querier, cfg config.Config, query string, fil
 		marked[h.id] = h.snippet
 	}
 	semRank := rank(sem)
-	fused := RRF(lexIDs, sem)
+	fused := RRFWith(lim.rrfK, lexIDs, sem)
 	fused = fused[:min(len(fused), max(limit, 0))]
 	fusedIDs := make([]int64, len(fused))
 	for i, s := range fused {
@@ -579,7 +605,7 @@ func Search(ctx context.Context, q Querier, cfg config.Config, query string, fil
 			unmarked = append(unmarked, id)
 		}
 	}
-	heads, err := bodyHead(ctx, q, unmarked)
+	heads, err := bodyHead(ctx, q, unmarked, lim.snippetChars)
 	if err != nil {
 		return Result{}, err
 	}

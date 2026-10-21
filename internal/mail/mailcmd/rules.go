@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/report"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/py"
@@ -86,7 +87,15 @@ func clockTime(ts float64) time.Time {
 func (o Options) ReindexCommand() *cli.Command {
 	return o.leaf("reindex", func(*cli.Args) body {
 		return func(x *Exec) error {
-			n, err := embed.Reindex(x.Ctx, x.DB, x.Cfg.EmbedURL)
+			url, err := mail.EmbedURL(x.Ctx, x.DB.Read)
+			if err != nil {
+				return err
+			}
+			ctx, err := mail.WithModels(x.Ctx, x.DB.Read)
+			if err != nil {
+				return err
+			}
+			n, err := embed.Reindex(ctx, x.DB, url)
 			if err != nil {
 				return err
 			}

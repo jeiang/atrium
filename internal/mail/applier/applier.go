@@ -209,11 +209,13 @@ func (a *Applier) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-func (a *Applier) cap() int {
+func (a *Applier) cap(ctx context.Context) (int, error) {
 	if a.Cap != 0 {
-		return a.Cap
+		return a.Cap, nil
 	}
-	return config.WriteCap
+	r := mail.Read(ctx, a.Live.DB.Read)
+	n := r.Int(mail.KeyWriteCap)
+	return n, r.Err()
 }
 
 func (a *Applier) query(ctx context.Context, account, query string) (*sql.Rows, error) {
@@ -348,7 +350,11 @@ func (a *Applier) moveGroup(ctx context.Context, client mail.Client, account str
 	if le, ok := errors.AsType[ledgerError](err); ok {
 		return le.err
 	}
-	failing, rest := remaining[:min(mailops.Batch, len(remaining))], remaining[min(mailops.Batch, len(remaining)):]
+	size, sizeErr := mailops.BatchSize(ctx, client)
+	if sizeErr != nil {
+		return sizeErr
+	}
+	failing, rest := remaining[:min(size, len(remaining))], remaining[min(size, len(remaining)):]
 	if partial, ok := errors.AsType[*mailops.PartialMove](err); ok {
 		for _, uid := range failing {
 			validity, destUID := copied(partial.Copied, uid)
@@ -405,7 +411,11 @@ func labelUndo(g *group, uid uint32, add, remove []string) py.Dict {
 
 func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account string, g *group, out *Outcome) error {
 	by, uids := g.byUID()
-	for _, chunk := range mailops.Chunks(uids, mailops.Batch) {
+	size, err := mailops.BatchSize(ctx, client)
+	if err != nil {
+		return err
+	}
+	for _, chunk := range mailops.Chunks(uids, size) {
 		if err := mailops.StoreLabels(ctx, client, g.imapName, g.validity, chunk, g.added, g.removed); err != nil {
 			text := py.ExceptionText(err)
 			if errors.Is(err, mailops.ErrValidityChanged) {
@@ -529,7 +539,11 @@ func untrashUndo(trash string, validity, uid any) py.Dict {
 
 func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, account string, g *group, out *Outcome) error {
 	by, uids := g.byUID()
-	for _, chunk := range mailops.Chunks(uids, mailops.Batch) {
+	size, err := mailops.BatchSize(ctx, client)
+	if err != nil {
+		return err
+	}
+	for _, chunk := range mailops.Chunks(uids, size) {
 		var c *mail.CopyUID
 		err := mailops.SelectRW(ctx, client, g.imapName, g.validity)
 		if err == nil {
@@ -602,7 +616,11 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 
 func (a *Applier) flagGroup(ctx context.Context, client mail.Client, account string, g *group, out *Outcome) error {
 	by, uids := g.byUID()
-	for _, chunk := range mailops.Chunks(uids, mailops.Batch) {
+	size, err := mailops.BatchSize(ctx, client)
+	if err != nil {
+		return err
+	}
+	for _, chunk := range mailops.Chunks(uids, size) {
 		if err := mailops.StoreFlag(ctx, client, g.imapName, g.validity, chunk, mailops.Flagged, true); err != nil {
 			for _, uid := range chunk {
 				if err := a.Live.Fail(ctx, by[uid].aid, py.ExceptionText(err)); err != nil {
@@ -954,14 +972,23 @@ func (a *Applier) deletionDue(ctx context.Context, account string) (bool, error)
 	if err != nil {
 		return false, err
 	}
-	return a.now()-ts >= config.DeletionIntervalSeconds, nil
+	r := mail.Read(ctx, a.Live.DB.Read)
+	interval := r.Int(mail.KeyDeletionInterval)
+	if err := r.Err(); err != nil {
+		return false, err
+	}
+	return a.now()-ts >= float64(interval), nil
 }
 
 type builder func(ctx context.Context, budget *Budget) ([]Intent, error)
 
 func (a *Applier) runPass(ctx context.Context, account string, build builder, label string) (Outcome, error) {
 	var out Outcome
-	if a.Live.Cfg.Mode != config.Live {
+	mode, err := mail.Mode(ctx, a.Live.DB.Read)
+	if err != nil {
+		return out, err
+	}
+	if mode != config.Live {
 		return out, nil
 	}
 	pause := a.Live.Cfg.PausePath()
@@ -974,7 +1001,11 @@ func (a *Applier) runPass(ctx context.Context, account string, build builder, la
 	}
 	out.Ran = true
 	ctx = context.WithoutCancel(ctx)
-	budget := &Budget{Left: a.cap()}
+	writeCap, err := a.cap(ctx)
+	if err != nil {
+		return out, err
+	}
+	budget := &Budget{Left: writeCap}
 	auto := safety.AutomaticWrites(ctx, pause)
 	if _, err := a.Live.Recover(auto); err != nil {
 		return out, err

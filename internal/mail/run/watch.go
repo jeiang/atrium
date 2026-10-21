@@ -28,15 +28,34 @@ var watchLog = logx.Logger("atrium.watch")
 const (
 	idleWait       = config.IdleSeconds * time.Second
 	noIdleWait     = config.IdleSeconds * time.Second / 30
-	settle         = config.IdleSettleSeconds * time.Second
 	shutdownWindow = 30 * time.Second
 )
 
-func NextBackoff(current int) int {
-	if current == 0 {
-		return config.BackoffStart
+type retryBackoff struct {
+	current, start, ceiling int
+}
+
+func newBackoff() *retryBackoff {
+	return &retryBackoff{start: config.BackoffStart, ceiling: config.BackoffMax}
+}
+
+func (b *retryBackoff) refresh(ctx context.Context, q mail.Querier) error {
+	r := mail.Read(ctx, q)
+	start, ceiling := r.Int(mail.KeyBackoffStartSeconds), r.Int(mail.KeyBackoffMaxSeconds)
+	if err := r.Err(); err != nil {
+		return err
 	}
-	return min(current*2, config.BackoffMax)
+	b.start, b.ceiling = start, ceiling
+	return nil
+}
+
+func (b *retryBackoff) next() int {
+	if b.current == 0 {
+		b.current = b.start
+	} else {
+		b.current = min(b.current*2, b.ceiling)
+	}
+	return b.current
 }
 
 func ConnectionLost(err error) bool {
@@ -148,6 +167,12 @@ func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
 	return New(d, w.Cfg, w.Open, nil), func() { _ = d.Close() }, nil
 }
 
+func settleFor(ctx context.Context, q mail.Querier) (time.Duration, error) {
+	r := mail.Read(ctx, q)
+	seconds := r.Int(mail.KeyIdleSettleSeconds)
+	return time.Duration(seconds) * time.Second, r.Err()
+}
+
 func (w *Watcher) sleep(ctx context.Context, d time.Duration) {
 	if w.Sleep != nil {
 		w.Sleep(ctx, d)
@@ -177,15 +202,15 @@ func (w *Watcher) waitForChange(ctx context.Context, client mail.Client) (bool, 
 }
 
 func (w *Watcher) Account(ctx context.Context, account string) {
-	backoff := 0
+	wait := newBackoff()
 	h := w.heartbeat(account)
 	for ctx.Err() == nil {
 		h.Beat()
-		err := w.cycle(ctx, account, &backoff)
+		err := w.cycle(ctx, account, wait)
 		if err == nil || ctx.Err() != nil {
 			continue
 		}
-		backoff = NextBackoff(backoff)
+		backoff := wait.next()
 		reason := "watch failed"
 		if ConnectionLost(err) {
 			reason = "connection lost"
@@ -198,7 +223,7 @@ func (w *Watcher) Account(ctx context.Context, account string) {
 	}
 }
 
-func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err error) {
+func (w *Watcher) cycle(ctx context.Context, account string, wait *retryBackoff) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic: %v", r)
@@ -209,6 +234,9 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 		return err
 	}
 	defer closeDB()
+	if err := wait.refresh(ctx, pass.DB.Read); err != nil {
+		return err
+	}
 	workCtx := context.WithoutCancel(ctx)
 	if err := pass.Locked(ctx, workCtx, []string{account}); err != nil {
 		return err
@@ -216,7 +244,7 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 	w.Notify.Status("watching")
 	h := w.heartbeat(account)
 	return mailops.Session(ctx, pass.Open, account, func(client mail.Client) error {
-		*backoff = 0
+		wait.current = 0
 		for ctx.Err() == nil {
 			h.Beat()
 			var changed bool
@@ -229,6 +257,10 @@ func (w *Watcher) cycle(ctx context.Context, account string, backoff *int) (err 
 				return err
 			}
 			if changed {
+				settle, err := settleFor(ctx, pass.DB.Read)
+				if err != nil {
+					return err
+				}
 				waiting(h, func() { w.sleep(ctx, settle) })
 				if ctx.Err() != nil {
 					break

@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/flags"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
@@ -29,20 +30,8 @@ const (
 	KindReminder = "reminder"
 	UndoReminder = "reminder_cancel"
 
-	Day                  = 86400.0
-	WindowDays           = 120
-	OweMaxAgeDays        = 45
-	WaitingAfterDays     = 3
-	WaitingMaxAgeDays    = 60
-	CommitmentWindowDays = 14
-	CommitmentScanLimit  = 20
-	CommitmentsPerMail   = 5
-	RemindAheadDays      = 1
-	RemindOverdueDays    = 14
-	RemindHour           = 9
-	BackfillLimit        = 2000
-	SnoozeDefaultDays    = 3
-	DefaultListLimit     = 50
+	Day              = 86400.0
+	DefaultListLimit = 50
 )
 
 var States = [...]string{OweReply, Waiting}
@@ -249,11 +238,15 @@ func pendingFlag(ctx context.Context, q db.Querier, id int64) (sql.NullInt64, er
 	return asking, err
 }
 
-func classify(ctx context.Context, q db.Querier, thread []Message, selves map[string]bool, now float64) (state, counterpart string, ok bool, err error) {
+type thresholds struct {
+	oweMaxAge, waitingAfter, waitingMaxAge int
+}
+
+func classify(ctx context.Context, q db.Querier, thread []Message, selves map[string]bool, now float64, t thresholds) (state, counterpart string, ok bool, err error) {
 	last := &thread[len(thread)-1]
 	age := now - last.DateTS
 	if !last.Sent {
-		if age > OweMaxAgeDays*Day || selves[last.FromAddr] {
+		if age > float64(t.oweMaxAge)*Day || selves[last.FromAddr] {
 			return "", "", false, nil
 		}
 		asking, err := pendingFlag(ctx, q, last.ID)
@@ -271,7 +264,7 @@ func classify(ctx context.Context, q db.Querier, thread []Message, selves map[st
 		}
 		return OweReply, last.FromAddr, true, nil
 	}
-	if age < WaitingAfterDays*Day || age > WaitingMaxAgeDays*Day {
+	if age < float64(t.waitingAfter)*Day || age > float64(t.waitingMaxAge)*Day {
 		return "", "", false, nil
 	}
 	to, err := last.Recipients()
@@ -302,11 +295,27 @@ type previousLoop struct {
 	dismissed     int64
 }
 
+func SnoozeDefault(ctx context.Context, q db.Querier) (int, error) {
+	r := mail.Read(ctx, q)
+	days := r.Int(mail.KeyLoopsSnoozeDefaultDays)
+	return days, r.Err()
+}
+
 func Compute(ctx context.Context, d *db.DB, now float64) (Counts, error) {
 	var counts Counts
+	r := mail.Read(ctx, d.Read)
+	window := r.Int(mail.KeyLoopsWindowDays)
+	limits := thresholds{
+		oweMaxAge:     r.Int(mail.KeyLoopsOweMaxAgeDays),
+		waitingAfter:  r.Int(mail.KeyLoopsWaitingAfterDays),
+		waitingMaxAge: r.Int(mail.KeyLoopsWaitingMaxAgeDays),
+	}
+	if err := r.Err(); err != nil {
+		return counts, err
+	}
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, "SELECT "+messageColumns+" FROM messages WHERE gone_at IS NULL AND date_ts >= ? ORDER BY date_ts, id",
-			now-WindowDays*Day)
+			now-float64(window)*Day)
 		if err != nil {
 			return err
 		}
@@ -359,7 +368,7 @@ func Compute(ctx context.Context, d *db.DB, now float64) (Counts, error) {
 				}
 				return cmpInt(a.ID, b.ID)
 			})
-			state, counterpart, ok, err := classify(ctx, tx, thread, selves, now)
+			state, counterpart, ok, err := classify(ctx, tx, thread, selves, now, limits)
 			if err != nil {
 				return err
 			}

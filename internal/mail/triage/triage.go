@@ -11,6 +11,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/report"
 	"github.com/jeiang/atrium/internal/mail/router"
@@ -18,8 +19,6 @@ import (
 )
 
 var Agreements = [...]string{"agree", "disagree", "pending", "gone"}
-
-const TopDests = 15
 
 const agreementSQL = "CASE WHEN actual IS NULL THEN 'gone' WHEN actual_inbox = 1 THEN 'pending' " +
 	"WHEN dest IS NOT NULL AND instr('|' || actual || '|', '|' || dest || '|') > 0 THEN 'agree' " +
@@ -224,6 +223,11 @@ type Summary struct {
 }
 
 func Summarize(ctx context.Context, q report.Querier, env config.Env, account string, since *string, at time.Time) (Summary, error) {
+	r := mail.Read(ctx, q)
+	topDests := r.Int(mail.KeyTriageTopDests)
+	if err := r.Err(); err != nil {
+		return Summary{}, err
+	}
 	start, err := report.ParseSince(env, since, at)
 	if err != nil {
 		return Summary{}, err
@@ -241,7 +245,7 @@ func Summarize(ctx context.Context, q report.Querier, env config.Env, account st
 	for _, stage := range router.Stages {
 		s.ByStage[stage] = t.Stages.Get(stage)
 	}
-	for _, e := range t.Dests.MostCommon(TopDests) {
+	for _, e := range t.Dests.MostCommon(topDests) {
 		s.TopDestinations = append(s.TopDestinations, Destination{e.Key, e.Count})
 	}
 	if len(t.Moved) > 0 {

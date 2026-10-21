@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -18,14 +19,33 @@ import (
 var log = logx.Logger("atrium.deletions")
 
 const (
-	Kind             = "deletion_rule"
-	MinGroup         = 5
-	MinDeletedShare  = 0.7
-	OTPMinShare      = 0.8
-	OTPOlderThanDays = 7
-	ReasonDeleted    = "operator_deleted"
-	ReasonOTP        = "otp"
+	Kind          = "deletion_rule"
+	ReasonDeleted = "operator_deleted"
+	ReasonOTP     = "otp"
 )
+
+type params struct {
+	minGroup                     int
+	minDeletedShare, otpMinShare float64
+	otpOlderThanDays             int
+	limits                       scanutil.Limits
+}
+
+func readParams(ctx context.Context, q mail.Querier) (params, error) {
+	r := mail.Read(ctx, q)
+	p := params{
+		minGroup:         r.Int(mail.KeyDeletionsMinGroup),
+		minDeletedShare:  r.Float(mail.KeyDeletionsMinShare),
+		otpMinShare:      r.Float(mail.KeyDeletionsOTPMinShare),
+		otpOlderThanDays: r.Int(mail.KeyDeletionsOTPOlderDays),
+	}
+	if err := r.Err(); err != nil {
+		return params{}, err
+	}
+	var err error
+	p.limits, err = scanutil.ReadLimits(ctx, q)
+	return p, err
+}
 
 type level struct {
 	name, column, op string
@@ -140,7 +160,7 @@ func compare(a, b string) int {
 	return 0
 }
 
-func candidates(everyone []*row, deleted map[int64]bool) []Candidate {
+func (p params) candidates(everyone []*row, deleted map[int64]bool) []Candidate {
 	var found []Candidate
 	claimed := map[int64]bool{}
 	for _, lv := range levels {
@@ -158,7 +178,7 @@ func candidates(everyone []*row, deleted map[int64]bool) []Candidate {
 					gone++
 				}
 			}
-			if len(rows) >= MinGroup && float64(gone)/float64(len(rows)) >= MinDeletedShare {
+			if len(rows) >= p.minGroup && float64(gone)/float64(len(rows)) >= p.minDeletedShare {
 				for _, r := range rows {
 					claimed[r.ID] = true
 				}
@@ -181,7 +201,7 @@ func candidates(everyone []*row, deleted map[int64]bool) []Candidate {
 			}
 			all = all && claimed[r.ID]
 		}
-		if len(rows) >= MinGroup && float64(codes)/float64(len(rows)) >= OTPMinShare && !all {
+		if len(rows) >= p.minGroup && float64(codes)/float64(len(rows)) >= p.otpMinShare && !all {
 			found = append(found, Candidate{ReasonOTP, levels[1], k.account, k.key, k.tmpl, rows, codes})
 		}
 	}
@@ -216,11 +236,11 @@ type proposal struct {
 	payload, preview py.Dict
 }
 
-func build(ctx context.Context, q proposals.Querier, everyone []*row, c Candidate, now float64) (*proposal, error) {
+func (p params) build(ctx context.Context, q proposals.Querier, everyone []*row, c Candidate, now float64) (*proposal, error) {
 	otp := c.Reason == ReasonOTP
 	days := 0
 	if otp {
-		days = OTPOlderThanDays
+		days = p.otpOlderThanDays
 	}
 	rule := BuildRule(c.Account, c.Level.name, c.Key, c.Tmpl, days)
 	parsed, err := rules.ValidateRule(rule)
@@ -268,7 +288,7 @@ func build(ctx context.Context, q proposals.Querier, everyone []*row, c Candidat
 	}
 	var older any
 	if otp {
-		older = OTPOlderThanDays
+		older = p.otpOlderThanDays
 	}
 	when, _ := rule.Get("when")
 	return &proposal{
@@ -282,13 +302,17 @@ func build(ctx context.Context, q proposals.Querier, everyone []*row, c Candidat
 			{Key: "rule", Value: py.Dict{{Key: "account", Value: c.Account}, {Key: "when", Value: when}}},
 			{Key: "stats", Value: py.Dict{{Key: "messages", Value: len(c.Rows)}, {Key: "matched", Value: c.Hits}}},
 			{Key: "older_than_days", Value: older}, {Key: "backlog", Value: len(ids)},
-			{Key: "sample", Value: views[:min(len(views), 10)]}, {Key: "subjects", Value: scanutil.SampleSubjectsOf(messages)},
-			{Key: "senders", Value: scanutil.TopCounts(senders)}, {Key: "messages", Value: views},
+			{Key: "sample", Value: views[:min(len(views), 10)]}, {Key: "subjects", Value: p.limits.SampleSubjectsOf(messages)},
+			{Key: "senders", Value: p.limits.TopCounts(senders)}, {Key: "messages", Value: views},
 		},
 	}, nil
 }
 
 func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
+	p, err := readParams(ctx, d.Read)
+	if err != nil {
+		return scanutil.Result{}, err
+	}
 	everyone, err := received(ctx, d.Read)
 	if err != nil {
 		return scanutil.Result{}, err
@@ -297,10 +321,10 @@ func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
 	if err != nil {
 		return scanutil.Result{}, err
 	}
-	found := candidates(everyone, deleted)
+	found := p.candidates(everyone, deleted)
 	created := 0
 	for _, c := range found {
-		b, err := build(ctx, d.Read, everyone, c, ts)
+		b, err := p.build(ctx, d.Read, everyone, c, ts)
 		if err != nil {
 			return scanutil.Result{}, err
 		}

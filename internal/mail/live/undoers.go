@@ -109,8 +109,12 @@ func undoMoveBack(ctx context.Context, open mailops.Opener, p MoveBack) (py.Dict
 				missing++
 			}
 		}
+		size, sizeErr := mailops.BatchSize(ctx, client)
+		if sizeErr != nil {
+			return sizeErr
+		}
 		present := map[uint32]bool{}
-		for _, chunk := range mailops.Chunks(uids, mailops.Batch) {
+		for _, chunk := range mailops.Chunks(uids, size) {
 			set := mail.UIDs(chunk...)
 			found, err := client.UIDSearch(ctx, mail.SearchCriteria{UID: &set})
 			if err != nil {

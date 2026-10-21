@@ -14,6 +14,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/rulestest"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -53,6 +54,7 @@ func newEnv(t *testing.T, mode string) (config.Config, config.Env, *db.DB) {
 	if err := db.Migrate(context.Background(), d, path); err != nil {
 		t.Fatal(err)
 	}
+	rulestest.Exec(t, d, "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", mail.KeyMode, mode)
 	for i, account := range []string{"icloud", "gmail"} {
 		rulestest.Exec(t, d, "INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, account)
 		rulestest.Exec(t, d, "INSERT INTO mailboxes (id, account, name, imap_name, role) VALUES (?, ?, 'box', 'box', 'filed')", i+1, account)

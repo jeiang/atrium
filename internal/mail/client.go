@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -138,13 +137,34 @@ type Conn interface {
 type Client interface {
 	Conn
 	gated()
+	BindMode(q Querier) Client
+	Settings() Querier
 }
 
-func Gated(conn Conn, env config.Env) Client { return gate{conn, env} }
+type OpenFunc = func(ctx context.Context, account string) (Client, error)
+
+func BindMode(open OpenFunc, q Querier) OpenFunc {
+	return func(ctx context.Context, account string) (Client, error) {
+		client, err := open(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+		return client.BindMode(q), nil
+	}
+}
+
+func Gated(conn Conn) Client { return gate{conn: conn} }
+
+func (g gate) BindMode(q Querier) Client {
+	g.q = q
+	return g
+}
+
+func (g gate) Settings() Querier { return g.q }
 
 type gate struct {
 	conn Conn
-	env  config.Env
+	q    Querier
 }
 
 func (gate) gated() {}
@@ -153,7 +173,11 @@ func (g gate) check(ctx context.Context, action, target string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return safety.WriteGate(ctx, g.env, action, target)
+	var mode safety.ModeFunc
+	if g.q != nil {
+		mode = func(ctx context.Context) (string, error) { return Mode(ctx, g.q) }
+	}
+	return safety.WriteGate(ctx, mode, action, target)
 }
 
 func (g gate) Connect(ctx context.Context) error { return g.conn.Connect(ctx) }
