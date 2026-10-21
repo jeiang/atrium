@@ -65,13 +65,13 @@ func (r *refresher) Token() (*oauth2.Token, error) {
 	return token, nil
 }
 
-func googleEvents(ctx context.Context, env config.Env, ws, we time.Time, tz *time.Location) ([]Row, error) {
-	svc, err := googleService(ctx, env)
+func googleEvents(ctx context.Context, env config.Env, set Settings, ws, we time.Time, tz *time.Location) ([]Row, error) {
+	svc, err := googleService(ctx, env, set)
 	if err != nil {
 		return nil, err
 	}
 	out, token := []Row{}, ""
-	for len(out) < MaxEvents*2 {
+	for len(out) < set.MaxEvents*2 {
 		call := svc.Events.List("primary").TimeMin(isoAuto(ws)).TimeMax(isoAuto(we)).SingleEvents(true).
 			OrderBy("startTime").MaxResults(250).Context(ctx)
 		if token != "" {
