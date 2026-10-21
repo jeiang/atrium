@@ -129,6 +129,9 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 	if got := runProcess(t, "notion search zzz", dbEnv(encrypted), "CREDENTIALS_DIRECTORY="+credentials); got.code != cli.ExitOK || got.stdout != hit {
 		t.Errorf("LoadCredential key exited %d with stdout %q, stderr %q; want 0 and %q", got.code, got.stdout, got.stderr, hit)
 	}
+	if got := runProcess(t, "notion search zzz", dbEnv(encrypted), "ATRIUM_DB_KEY_FILE="+rightFile); got.code != cli.ExitOK || got.stdout != hit {
+		t.Errorf("ATRIUM_DB_KEY_FILE exited %d with stdout %q, stderr %q; want 0 and %q", got.code, got.stdout, got.stderr, hit)
+	}
 	configFile := filepath.Join(dir, "atrium.toml")
 	if err := os.WriteFile(configFile, []byte("[db]\nkey_file = \""+rightFile+"\"\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -138,6 +141,8 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 	}
 
 	for name, env := range map[string][]string{
+		"a missing ATRIUM_DB_KEY_FILE":   {"ATRIUM_DB_KEY_FILE=" + filepath.Join(dir, "missing.key")},
+		"ATRIUM_DB_KEY and its _FILE":    {keyEnv(rightKeyHex), "ATRIUM_DB_KEY_FILE=" + rightFile},
 		"key_file_file in ATRIUM_CONFIG": {"ATRIUM_CONFIG=" + writeConfig(t, dir, "[db]\nkey_file_file = \""+rightFile+"\"\n")},
 		"a path in ATRIUM_DB_KEY":        {keyEnv(rightFile)},
 		"a short key in ATRIUM_DB_KEY":   {keyEnv(rightKeyHex[:63])},
@@ -146,6 +151,18 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 		got := runProcess(t, "notion search zzz", append([]string{dbEnv(encrypted)}, env...)...)
 		if got.code != cli.ExitError || got.stdout != "" || strings.Contains(got.stderr, rightKeyHex) || strings.Contains(got.stderr, rightKeyHex[:63]) {
 			t.Errorf("%s: exited %d, stdout %q, stderr %q; want %d, empty stdout and no key material", name, got.code, got.stdout, got.stderr, cli.ExitError)
+		}
+	}
+
+	for _, tc := range []struct {
+		env  []string
+		want string
+	}{
+		{[]string{"ATRIUM_DB_KEY_FILE=" + filepath.Join(dir, "missing.key")}, "ATRIUM_DB_KEY_FILE"},
+		{[]string{keyEnv(rightKeyHex), "ATRIUM_DB_KEY_FILE=" + rightFile}, "ATRIUM_DB_KEY and ATRIUM_DB_KEY_FILE"},
+	} {
+		if got := runProcess(t, "notion search zzz", append([]string{dbEnv(encrypted)}, tc.env...)...); !strings.Contains(got.stderr, tc.want) {
+			t.Errorf("stderr %q does not name %q", got.stderr, tc.want)
 		}
 	}
 
