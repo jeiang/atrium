@@ -157,8 +157,8 @@ func codes(value string) ([]string, error) {
 	seen := map[string]bool{}
 	for _, c := range strings.Split(value, ",") {
 		c = strings.TrimSpace(c)
-		if len(c) != 3 || strings.Trim(c, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") != "" {
-			return nil, settings.Invalid(fmt.Sprintf("currency codes are three capital letters separated by commas, got %q", c))
+		if c != TTD && c != BBD && c != USD {
+			return nil, settings.Invalid(fmt.Sprintf("currency must be one of %s, %s, %s, got %q", TTD, BBD, USD, c))
 		}
 		if seen[c] {
 			return nil, settings.Invalid(fmt.Sprintf("currency %q appears twice", c))
