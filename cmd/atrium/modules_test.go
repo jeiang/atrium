@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic"
@@ -65,10 +66,27 @@ func runApp(args ...string) appRun {
 	return appRun{code, out.String(), errs.String()}
 }
 
-func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *anthropictest.Server) {
+type modelLog struct {
+	*anthropictest.Server
+	mu   sync.Mutex
+	seen []anthropictest.Request
+}
+
+func (m *modelLog) Requests() []anthropictest.Request {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.seen)
+}
+
+func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *modelLog) {
 	t.Helper()
 	dir = t.TempDir()
-	api = anthropictest.New(t, anthropictest.Reply("end_turn", anthropictest.Text("hi")))
+	api = &modelLog{Server: anthropictest.New(t, anthropictest.Reply("end_turn", anthropictest.Text("hi")))}
+	api.OnRequest = func(r anthropictest.Request) {
+		api.mu.Lock()
+		defer api.mu.Unlock()
+		api.seen = append(api.seen, r)
+	}
 	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	t.Setenv("ATRIUM_PUBLIC_HOST", "")
@@ -94,7 +112,7 @@ func flagsExcept(name string, value string) map[string]string {
 	return flags
 }
 
-func offeredTools(t *testing.T, api *anthropictest.Server, ran appRun) []string {
+func offeredTools(t *testing.T, api *modelLog, ran appRun) []string {
 	t.Helper()
 	requests := api.Requests()
 	if ran.code != cli.ExitOK || len(requests) == 0 {
