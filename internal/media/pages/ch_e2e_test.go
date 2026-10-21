@@ -129,7 +129,7 @@ func chNewNtfy(t *testing.T) string {
 func chVars(t *testing.T, extra map[string]string) map[string]string {
 	t.Helper()
 	vars := map[string]string{
-		"ATRIUM_MEDIA_ROOT": t.TempDir(), "ATRIUM_MEDIA_LINK_KEY": "secret-key", "NTFY_TOKEN": "tok", "NTFY_MEDIA_TOPIC": "media-releases",
+		"ATRIUM_MEDIA_ROOT": t.TempDir(), "ATRIUM_MEDIA_LINK_KEY": "secret-key", "NTFY_TOKEN": "tok", "ATRIUM_NOTIFY_NTFY_MEDIA_TOPIC": "media-releases",
 	}
 	for k, v := range extra {
 		vars[k] = v
@@ -161,7 +161,7 @@ func TestChE2EChannelsSearchPreviewAddRemovePoll(t *testing.T) {
 	qb := chNewQbit(t)
 	ez.release("1234567", chHashA, "Lanterns S01E01 1080p WEB")
 	ez.release("1234567", chHashB, "lanterns s01e01 720p")
-	s := newSite(t, chVars(t, map[string]string{"QBITTORRENT_URL": qb.URL, "NTFY_URL": chNewNtfy(t), "TMDB_API_KEY": "k"}), Options{})
+	s := newSite(t, chVars(t, map[string]string{"QBITTORRENT_URL": qb.URL, "ATRIUM_NOTIFY_NTFY_URL": chNewNtfy(t), "TMDB_API_KEY": "k"}), Options{})
 
 	empty := status(t, s.get("/media/channels"), 200, "channels page")
 	contains(t, empty, "No channels", "Not checked yet.", `name="backfill" value="1" checked`, "Watching (0)")

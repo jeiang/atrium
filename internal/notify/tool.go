@@ -9,13 +9,13 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-var description = fmt.Sprintf("Send the operator a short plain-text notification (phone push plus the Notifications page). "+
-	"At most %d per run (%d in the nightly run: its summary); use only for things that need the operator's attention. "+
-	"thread_link is a thread id or /chat/<id>; defaults to this thread.", PerRunCap, NightlyCap)
+const description = "Send the operator a short plain-text notification (phone push plus the Notifications page). " +
+	"Each run has a small notification limit (smaller in the nightly run: its summary) and the tool reports when it is reached; " +
+	"use only for things that need the operator's attention. " +
+	"thread_link is a thread id or /chat/<id>; defaults to this thread."
 
-var inputSchema = json.RawMessage(fmt.Sprintf(`{"type":"object","properties":{"title":{"type":"string","maxLength":%d},`+
-	`"body":{"type":"string","maxLength":%d},"thread_link":{"type":"string"}},"required":["title","body"],"additionalProperties":false}`,
-	TitleChars, BodyChars))
+var inputSchema = json.RawMessage(`{"type":"object","properties":{"title":{"type":"string"},` +
+	`"body":{"type":"string"},"thread_link":{"type":"string"}},"required":["title","body"],"additionalProperties":false}`)
 
 func Tools() []tool.Tool {
 	return []tool.Tool{{
@@ -41,9 +41,13 @@ func handle(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if err := tc.DB.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications WHERE run_id = ?", nullID(tc.RunID)).Scan(&used); err != nil {
 		return nil, err
 	}
-	limit := PerRunCap
+	capKey := KeyPerRunCap
 	if tc.Kind == tool.Nightly {
-		limit = NightlyCap
+		capKey = KeyNightlyCap
+	}
+	limit, err := whole(ctx, tc.DB.Read, capKey)
+	if err != nil {
+		return nil, err
 	}
 	if used >= limit {
 		plural := "s"

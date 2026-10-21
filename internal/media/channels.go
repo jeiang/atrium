@@ -372,7 +372,11 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings 
 		if len(result.Added) != 1 {
 			title = fmt.Sprintf("Added %d releases", len(result.Added))
 		}
-		message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Topic: settings.NtfyTopic}
+		topic, err := notify.MediaTopic(ctx, q)
+		if err != nil {
+			return result, err
+		}
+		message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Topic: topic}
 		if settings.PublicURL != "" {
 			message.Click = settings.PublicURL + DownloadsPage
 		}
