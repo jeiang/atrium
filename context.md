@@ -28,7 +28,7 @@ not claims about the running application.
   Secrets set through `atrium secrets` are stored write-only in the database
   and are never read back or shown; admin keys are refused on a plaintext
   database. A database key (`db.key_file` in the configuration file,
-  `ATRIUM_DB_KEY`, or the `db_key` systemd credential) makes every command
+  `ATRIUM_DB_KEY`, `ATRIUM_DB_KEY_FILE`, or the `db_key` systemd credential) makes every command
   open the database encrypted; a fresh database is created encrypted, and a
   plaintext or wrong-key mismatch refuses to start. Without a key the
   database stays plaintext. `atrium db` rekeys an encrypted database from a
