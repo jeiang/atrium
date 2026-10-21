@@ -18,7 +18,11 @@ var log = logx.Logger("atrium.module")
 
 func (s *Set) Pages() []web.Page {
 	pages := []web.Page{{Module: func(_ chi.Router, d *web.Deps) {
-		snap, err := s.Evaluate(context.Background(), d.DB.Read)
+		err := s.Seed(context.Background(), d.DB)
+		var snap *Snapshot
+		if err == nil {
+			snap, err = s.Evaluate(context.Background(), d.DB.Read)
+		}
 		if err != nil {
 			log.Error("module evaluation failed, serving core only", logx.Err, err.Error())
 			snap = s.coreOnly()
@@ -125,6 +129,9 @@ func (s *Set) load(ctx context.Context) (*Snapshot, error) {
 	}
 	defer func() { _ = d.Close() }()
 	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
+		return nil, err
+	}
+	if err := s.Seed(ctx, d); err != nil {
 		return nil, err
 	}
 	snap, err := s.Evaluate(ctx, d.Read)
