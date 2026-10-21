@@ -111,7 +111,15 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_CALENDAR_MAX_EVENTS` | `calendar.max_events` |
 | `ATRIUM_CALENDAR_MAX_OCCURRENCES` | `calendar.max_occurrences` |
 | `ATRIUM_CONTACTS_CONTACTS_DIR` | `contacts.contacts_dir` |
+| `ATRIUM_CORE_ASSISTANT_ENABLED` | `core.assistant_enabled` |
+| `ATRIUM_CORE_CALENDAR_ENABLED` | `core.calendar_enabled` |
+| `ATRIUM_CORE_GRAFANA_ENABLED` | `core.grafana_enabled` |
 | `ATRIUM_CORE_HTTP_TIMEOUT_SECONDS` | `core.http_timeout_seconds` |
+| `ATRIUM_CORE_MAIL_ENABLED` | `core.mail_enabled` |
+| `ATRIUM_CORE_MEDIA_ENABLED` | `core.media_enabled` |
+| `ATRIUM_CORE_MONEY_ENABLED` | `core.money_enabled` |
+| `ATRIUM_CORE_NOTIFICATIONS_ENABLED` | `core.notifications_enabled` |
+| `ATRIUM_CORE_NOTION_ENABLED` | `core.notion_enabled` |
 | `ATRIUM_CORE_PUBLIC_URL` | `core.public_url` |
 | `ATRIUM_CORE_TZ` | `core.tz` |
 | `ATRIUM_DB_KEY` | `db.key` |

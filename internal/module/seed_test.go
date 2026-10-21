@@ -16,9 +16,12 @@ import (
 
 type stub struct{ name, key string }
 
+func (s stub) core() bool { return s.name == "core" }
+
 func (s stub) Register(module.Context) module.Registration {
 	r := module.Registration{
 		Name: s.name,
+		Core: s.core(),
 		Commands: []*cli.Command{{Name: s.name, Setup: func(*cli.Args) cli.Handler {
 			return func(env *cli.Env) int {
 				_, _ = env.Stdout.Write([]byte("ran " + s.name + "\n"))
