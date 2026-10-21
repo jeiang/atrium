@@ -365,7 +365,7 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 	data := loadGoldenData(t)
 	candidates := func(flag string) int {
 		r := newRig(t, data, map[string]string{flagEnv(module.Calendar): flag}, "")
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if code, _, stderr := r.run(ctx, "watch", "--account", "icloud"); code != cli.ExitOK {
 			t.Fatalf("watch with calendar %s: exit %d %q", flag, code, stderr)
