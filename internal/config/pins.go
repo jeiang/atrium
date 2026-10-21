@@ -51,6 +51,24 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 		}
 		name := EnvName(d)
 		value := get(env, name)
+		if d.Secret {
+			fileName := name + strings.ToUpper(fileSuffix)
+			if path, set := env(fileName); set {
+				if value != "" {
+					return nil, fmt.Errorf("config: %s and %s are both set; set only one", name, fileName)
+				}
+				secret, err := os.ReadFile(path)
+				if err != nil {
+					return nil, fmt.Errorf("config: %s: %w", fileName, err)
+				}
+				value, name = py.Strip(string(secret)), fileName
+				if err := reg.Validate(d.Key, value); err != nil {
+					return nil, fmt.Errorf("config: %s: %w", name, err)
+				}
+				pins.m[d.Key] = pin{value, "env " + name}
+				continue
+			}
+		}
 		if value == "" {
 			continue
 		}
@@ -114,7 +132,7 @@ func (p *Pins) add(env Env, reg *settings.Registry, d settings.Def, path, dotted
 		return fmt.Errorf("config: %s: %q is fixed and cannot be set", path, dotted)
 	}
 	if d.Secret && !isFile {
-		return fmt.Errorf("config: %s: %q is a secret; set %s%s or %s", path, dotted, TOMLName(d), fileSuffix, EnvName(d))
+		return fmt.Errorf("config: %s: %q is a secret; set %s%s, %s or %s%s", path, dotted, TOMLName(d), fileSuffix, EnvName(d), EnvName(d), strings.ToUpper(fileSuffix))
 	}
 	if _, dup := p.m[d.Key]; dup {
 		return fmt.Errorf("config: %s: %q is set both directly and through %s%s", path, TOMLName(d), TOMLName(d), fileSuffix)
