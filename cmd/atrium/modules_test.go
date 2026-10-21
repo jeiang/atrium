@@ -365,6 +365,21 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 	data := loadGoldenData(t)
 	candidates := func(flag string) int {
 		r := newRig(t, data, map[string]string{flagEnv(module.Calendar): flag}, "")
+		seed, err := db.Connect(filepath.Join(r.dir, "atrium.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, q := range []string{
+			"DELETE FROM event_candidates",
+			"UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL WHERE account = 'icloud' AND id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 3)",
+		} {
+			if _, err := seed.Write.Exec(q); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := seed.Close(); err != nil {
+			t.Fatal(err)
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if code, _, stderr := r.run(ctx, "watch", "--account", "icloud"); code != cli.ExitOK {
@@ -381,8 +396,8 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 		}
 		return n
 	}
-	if off, on := candidates("false"), candidates("true"); off != 4 || on <= off {
-		t.Errorf("event candidates after a mail pass: %d with calendar off (want the 4 seeded), %d with it on (want more)", off, on)
+	if off, on := candidates("false"), candidates("true"); off != 0 || on == 0 {
+		t.Errorf("event candidates after a mail pass: %d with calendar off (want none), %d with it on (want more)", off, on)
 	}
 }
 
