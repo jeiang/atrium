@@ -45,17 +45,22 @@ func (s *Set) unmet(ctx context.Context, p Probe, r Registration, states map[str
 	return out, nil
 }
 
+func seeded(ctx context.Context, q db.Querier) (bool, error) {
+	var n int
+	err := q.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM settings_audit WHERE key = ? AND source = ?", seedKey, string(audit.Migration)).Scan(&n)
+	return n > 0, err
+}
+
 func (s *Set) Seed(ctx context.Context, d *db.DB) error {
-	var seeded int
-	if err := d.Read.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM settings_audit WHERE key = ? AND source = ?", seedKey, string(audit.Migration)).Scan(&seeded); err != nil {
+	if done, err := seeded(ctx, d.Read); err != nil || done {
 		return err
-	}
-	if seeded > 0 {
-		return nil
 	}
 	ctx = audit.With(ctx, seedActor, audit.Migration)
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
+		if done, err := seeded(ctx, tx); err != nil || done {
+			return err
+		}
 		phaseA, err := hasOperatorData(ctx, tx)
 		if err != nil {
 			return err
