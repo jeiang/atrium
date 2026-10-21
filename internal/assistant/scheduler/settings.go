@@ -1,6 +1,10 @@
 package scheduler
 
 import (
+	"fmt"
+	"time"
+
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -44,15 +48,20 @@ func init() {
 	recurring := func(key, value string) settings.Def {
 		return adv(key, settings.String, settings.Advanced, value, recurringSchedule)
 	}
+	modelRun := func(key, value string) settings.Def {
+		d := recurring(key, value)
+		d.Peers = minimumGap
+		return d
+	}
 	settings.MustRegister(
 		tick,
 		timing(KeyLeaseSeconds, "1800", 60, 86400),
 		timing(KeyMissedGrace, "120", 0, 86400),
 		timing(KeyMinInterval, "3600", 60, 604800),
 		adv(KeyMaxActiveJobs, settings.Int, settings.Cap, "20", settings.Between(1, 200)),
-		recurring(KeyNightlySchedule, "daily 02:30"),
-		recurring(KeyWeeklyReview, "weekly sun 18:00"),
-		recurring(KeyDailyNudges, "daily 08:00"),
+		modelRun(KeyNightlySchedule, "daily 02:30"),
+		modelRun(KeyWeeklyReview, "weekly sun 18:00"),
+		modelRun(KeyDailyNudges, "daily 08:00"),
 		recurring(KeyCalendarCands, "0 * * * *"),
 		recurring(KeyFXRates, "weekly mon 06:00"),
 		recurring(KeyMediaChannels, "*/30 * * * *"),
@@ -68,6 +77,25 @@ func recurringSchedule(value string) error {
 	}
 	if !spec.Recurring() {
 		return settings.Invalid("must be a recurring schedule")
+	}
+	return nil
+}
+
+func minimumGap(value string, peer func(string) (string, error)) error {
+	spec, err := Parse(value, "UTC")
+	if err != nil {
+		return settings.Invalid(err.Error())
+	}
+	text, err := peer(KeyMinInterval)
+	if err != nil {
+		return err
+	}
+	floor, err := py.ParseFloat(text)
+	if err != nil {
+		return nil
+	}
+	if gap, ok := spec.MinGap(float64(time.Now().Unix())); ok && gap < floor {
+		return settings.Invalid(fmt.Sprintf("must run at least %s seconds apart (%s)", text, KeyMinInterval))
 	}
 	return nil
 }

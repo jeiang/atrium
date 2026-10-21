@@ -172,10 +172,10 @@ func init() {
 		count(KeyDashboardItems, 60, 1, 500),
 		count(KeyManifestResults, 30, 1, 500),
 
-		adv(KeyJournalLeaseSeconds, settings.Int, "1800", settings.Between(300, 86400)),
+		adv(KeyJournalLeaseSeconds, settings.Int, "1800", settings.Between(1800, 86400)),
 
-		capped(KeySubagentMaxCostUSD, settings.Float, "0.25", settings.Within(0, 50)),
-		count(KeySubagentMaxSteps, 12, 1, 200),
+		capped(KeySubagentMaxCostUSD, settings.Float, "0.25", settings.Within(0, 2)),
+		count(KeySubagentMaxSteps, 12, 1, 24),
 		count(KeySubagentMaxConcurrent, 2, 1, 16),
 		count(KeySubagentDigestChars, 6000, 100, 100000),
 		count(KeySubagentDescChars, 160, 20, 2000),
@@ -189,7 +189,7 @@ func init() {
 
 		fileCap,
 		messageCap,
-		count(KeyFileNameChars, 80, 8, 255),
+		count(KeyFileNameChars, 80, 8, 200),
 
 		count(KeySkillDescChars, 160, 20, 2000),
 		count(KeySkillBodyChars, 20000, 100, 200000),
