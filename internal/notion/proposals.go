@@ -23,10 +23,6 @@ const (
 	KindEdit       = "notion_edit"
 	UndoRestoreOp  = "notion_restore"
 	relatedHeading = "Related"
-	linkPageChars  = 2500
-	editPageChars  = 12000
-	linkMaxTokens  = 160
-	editMaxTokens  = 1500
 	diffContext    = 2
 	linkSystem     = "You maintain cross-links between pages of the owner's personal notes workspace. You get page A and page B (title, location, opening text). Answer link=true only when the pages are clearly about the same subject, project, person or task so that a reader of A would want to open B. Similar vocabulary alone is not enough. reason is one short sentence naming what connects them."
 	editSystem     = "You draft a small, targeted edit to one page of the owner's notes, written in Markdown. You get the page Markdown and an instruction. Return the minimal list of replacements: each old_str must be copied verbatim from the page and occur exactly once in it; new_str is its replacement. Change only what the instruction asks for. summary is one short sentence describing the edit. If the instruction cannot be applied as a replacement of existing text, return an empty updates list."
@@ -159,10 +155,14 @@ func (p *Proposer) ProposeLink(ctx context.Context, sourceID, targetID string) (
 	if items, _ := links.([]any); slices.Contains(items, any(target.ID)) {
 		return nil, nil
 	}
-	block := func(label string, page *Page) string {
-		return label + ":\nTitle: " + page.Title + "\nLocation: " + page.Path + "\nText:\n" + py.Clip(page.Markdown, linkPageChars)
+	limits, err := LoadProposals(ctx, p.DB.Read)
+	if err != nil {
+		return nil, err
 	}
-	answer, err := p.chat(ctx, linkSystem, block("Page A", source)+"\n\n"+block("Page B", target), linkSchemaJSON, linkMaxTokens)
+	block := func(label string, page *Page) string {
+		return label + ":\nTitle: " + page.Title + "\nLocation: " + page.Path + "\nText:\n" + py.Clip(page.Markdown, limits.LinkPageChars)
+	}
+	answer, err := p.chat(ctx, linkSystem, block("Page A", source)+"\n\n"+block("Page B", target), linkSchemaJSON, limits.LinkMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -259,9 +259,13 @@ func (p *Proposer) ProposeEdit(ctx context.Context, pageID, instruction string) 
 	if instruction == "" {
 		return nil, ProposalError("empty instruction")
 	}
+	limits, err := LoadProposals(ctx, p.DB.Read)
+	if err != nil {
+		return nil, err
+	}
 	markdown := page.Markdown
-	user := "Instruction: " + instruction + "\n\nPage title: " + page.Title + "\nPage Markdown:\n" + py.Clip(markdown, editPageChars)
-	answer, err := p.chat(ctx, editSystem, user, editSchemaJSON, editMaxTokens)
+	user := "Instruction: " + instruction + "\n\nPage title: " + page.Title + "\nPage Markdown:\n" + py.Clip(markdown, limits.EditPageChars)
+	answer, err := p.chat(ctx, editSystem, user, editSchemaJSON, limits.EditMaxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -301,15 +305,16 @@ func (a *Applier) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-func (a *Applier) client() (*Client, error) {
+func (a *Applier) client(ctx context.Context) (*Client, error) {
 	token, err := config.NotionToken(a.Env)
 	if err != nil {
 		return nil, err
 	}
+	client := NewClient(token)
 	if a.NewClient != nil {
-		return a.NewClient(token), nil
+		client = a.NewClient(token)
 	}
-	return NewClient(token), nil
+	return client, client.Configure(ctx, a.DB.Read)
 }
 
 func freshPage(ctx context.Context, client *Client, pageID, snapshot string) error {
@@ -422,7 +427,7 @@ func (a *Applier) failed(ctx context.Context, p *proposals.Proposal, action any,
 }
 
 func (a *Applier) ExecuteLink(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
-	client, err := a.client()
+	client, err := a.client(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -478,7 +483,7 @@ func (a *Applier) applyLink(ctx context.Context, client *Client, payload py.Dict
 }
 
 func (a *Applier) ExecuteEdit(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
-	client, err := a.client()
+	client, err := a.client(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +543,7 @@ func (a *Applier) UndoRestore(ctx context.Context, plan json.RawMessage) (py.Dic
 		return nil, err
 	}
 	info := asDict(v)
-	client, err := a.client()
+	client, err := a.client(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/py"
@@ -49,15 +50,18 @@ func checkMarkdown(tc *tool.Context, markdown string) error {
 	return nil
 }
 
-func wikiRoot(tc *tool.Context) (string, error) {
-	root, err := notion.WikiRoot(tc.Env)
+func wikiOf(ctx context.Context, tc *tool.Context) (notion.Wiki, error) {
+	wiki, err := notion.LoadWiki(ctx, tc.DB.Read)
 	if err != nil {
-		return "", tool.NotConfigured(err.Error())
+		return notion.Wiki{}, err
 	}
-	return root, nil
+	if _, err := wiki.RootID(); err != nil {
+		return notion.Wiki{}, tool.NotConfigured(err.Error())
+	}
+	return wiki, nil
 }
 
-func livePageOf(ctx context.Context, client *notion.Client, pageID string) (py.Dict, error) {
+func livePageOf(ctx context.Context, q db.Querier, client *notion.Client, pageID string) (py.Dict, error) {
 	page, err := client.GetPage(ctx, pageID)
 	if err != nil {
 		return nil, err
@@ -66,7 +70,11 @@ func livePageOf(ctx context.Context, client *notion.Client, pageID string) (py.D
 		return nil, tool.Error("page is in the trash")
 	}
 	properties, _ := dictGet(page, "properties").(py.Dict)
-	if notion.IsPrivateValue(notion.SensitivityOf(properties)) {
+	sensitivity, err := notion.LoadSensitivity(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	if sensitivity.IsPrivate(sensitivity.Of(properties)) {
 		return nil, tool.Error("page is private")
 	}
 	return page, nil
@@ -113,17 +121,17 @@ func hubOf(ctx context.Context, tc *tool.Context, root, value string, defaultRoo
 	return parent, nil
 }
 
-func cleanArgs(args py.Dict) (aliases, sources []string, err error) {
+func cleanArgs(wiki notion.Wiki, args py.Dict) (aliases, sources []string, err error) {
 	raw := dictGet(args, "aliases")
 	if !py.Truthy(raw) {
 		raw = []any{}
 	}
-	if aliases, err = notion.CleanAliases(raw); err == nil {
-		sources, err = notion.CleanSources(dictGet(args, "sources"))
+	if aliases, err = wiki.CleanAliases(raw); err == nil {
+		sources, err = wiki.CleanSources(dictGet(args, "sources"))
 	}
-	var wiki notion.WikiError
-	if errors.As(err, &wiki) {
-		return nil, nil, tool.Error(string(wiki))
+	var failure notion.WikiError
+	if errors.As(err, &failure) {
+		return nil, nil, tool.Error(string(failure))
 	}
 	return aliases, sources, err
 }
@@ -165,7 +173,7 @@ func (w write) commit(ctx context.Context, tc *tool.Context, upsert func(*sql.Tx
 	return id, err
 }
 
-func (w write) finish(ctx context.Context, tc *tool.Context, client *notion.Client, root string, upsert func(*sql.Tx) error, action string, s summary) (int64, error) {
+func (w write) finish(ctx context.Context, tc *tool.Context, client *notion.Client, wiki notion.Wiki, upsert func(*sql.Tx) error, action string, s summary) (int64, error) {
 	id, err := w.commit(ctx, tc, upsert)
 	if err != nil {
 		return 0, err
@@ -175,7 +183,7 @@ func (w write) finish(ctx context.Context, tc *tool.Context, client *notion.Clie
 		return 0, err
 	}
 	logged := func() error {
-		logID, err := notion.LogPageID(ctx, tc.DB, client, root)
+		logID, err := wiki.LogPageID(ctx, tc.DB, client, wiki.Root)
 		if err != nil {
 			return err
 		}
@@ -183,8 +191,8 @@ func (w write) finish(ctx context.Context, tc *tool.Context, client *notion.Clie
 		return err
 	}
 	if err := logged(); err != nil {
-		var wiki notion.WikiError
-		if errors.As(err, &wiki) || notionOnly(err) {
+		var failure notion.WikiError
+		if errors.As(err, &failure) || notionOnly(err) {
 			return 0, tool.Error("the page was written (write_id " + strconv.FormatInt(id, 10) + ") but the Wiki Log could not be updated: " + err.Error())
 		}
 		return 0, err
@@ -236,7 +244,7 @@ func createPage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 	if err := checkMarkdown(tc, markdown); err != nil {
 		return nil, err
 	}
-	root, err := wikiRoot(tc)
+	wiki, err := wikiOf(ctx, tc)
 	if err != nil {
 		return nil, err
 	}
@@ -244,11 +252,11 @@ func createPage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 	if err != nil {
 		return nil, err
 	}
-	parent, err := hubOf(ctx, tc, root, hubArg, true)
+	parent, err := hubOf(ctx, tc, wiki.Root, hubArg, true)
 	if err != nil {
 		return nil, err
 	}
-	aliases, sources, err := cleanArgs(args)
+	aliases, sources, err := cleanArgs(wiki, args)
 	if err != nil {
 		return nil, err
 	}
@@ -270,11 +278,11 @@ func createPage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 	if err != nil {
 		return nil, err
 	}
-	body, merged, err := notion.WithFooter(markdown, date, sources)
+	body, merged, err := wiki.WithFooter(markdown, date, sources)
 	if err != nil {
 		return nil, err
 	}
-	client, err := makeClient(tc.Env)
+	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +305,7 @@ func createPage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 		after: append(s.dict(), py.Pair{Key: "parent_page_id", Value: parent}, py.Pair{Key: "markdown", Value: body}, py.Pair{Key: "aliases", Value: aliases}),
 		undo:  py.Dict{{Key: "op", Value: undoTrash}, {Key: "page_id", Value: s.pageID}, {Key: "applied_edited_time", Value: edited}},
 	}
-	id, err := w.finish(ctx, tc, client, root, func(tx *sql.Tx) error {
+	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, s.pageID, tc.Now(), notion.WikiFields{
 			Title: new(title), HubID: new(parent), Aliases: aliases, SetAliases: true, LastReviewed: new(date),
 			Sources: merged, SetSources: true, InTrash: new(false),
@@ -372,11 +380,11 @@ func updatePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 	if err := checkMarkdown(tc, *checked); err != nil {
 		return nil, err
 	}
-	root, err := wikiRoot(tc)
+	wiki, err := wikiOf(ctx, tc)
 	if err != nil {
 		return nil, err
 	}
-	_, sources, err := cleanArgs(args)
+	_, sources, err := cleanArgs(wiki, args)
 	if err != nil {
 		return nil, err
 	}
@@ -384,11 +392,11 @@ func updatePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 	if err != nil {
 		return nil, err
 	}
-	client, err := makeClient(tc.Env)
+	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
 	if err != nil {
 		return nil, err
 	}
-	page, previous, updated, merged, edited, err := rewrite(ctx, client, pageID, replace, appendText, section, date, sources)
+	page, previous, updated, merged, edited, err := rewrite(ctx, tc.DB.Read, wiki, client, pageID, replace, appendText, section, date, sources)
 	if err != nil {
 		return nil, notionError(err)
 	}
@@ -398,7 +406,7 @@ func updatePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 		before: py.Dict{{Key: "markdown", Value: previous}}, after: py.Dict{{Key: "markdown", Value: updated}},
 		undo: py.Dict{{Key: "op", Value: undoRestore}, {Key: "page_id", Value: pageID}, {Key: "previous_markdown", Value: previous}, {Key: "applied_edited_time", Value: edited}},
 	}
-	id, err := w.finish(ctx, tc, client, root, func(tx *sql.Tx) error {
+	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, pageID, tc.Now(), notion.WikiFields{
 			Title: new(s.title), HubID: new(parentID(page)), LastReviewed: new(date), Sources: merged, SetSources: true, InTrash: new(false),
 		})
@@ -409,9 +417,9 @@ func updatePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 	return append(s.dict(), py.Pair{Key: "write_id", Value: id}, py.Pair{Key: "changed", Value: []any{"markdown"}}), nil
 }
 
-func rewrite(ctx context.Context, client *notion.Client, pageID string, replace, appendText *string, section, date string, sources []string) (
+func rewrite(ctx context.Context, q db.Querier, wiki notion.Wiki, client *notion.Client, pageID string, replace, appendText *string, section, date string, sources []string) (
 	page py.Dict, previous, updated string, merged []string, edited any, err error) {
-	if page, err = livePageOf(ctx, client, pageID); err != nil {
+	if page, err = livePageOf(ctx, q, client, pageID); err != nil {
 		return
 	}
 	current, err := client.PageMarkdown(ctx, pageID)
@@ -431,7 +439,7 @@ func rewrite(ctx context.Context, client *notion.Client, pageID string, replace,
 	if err != nil {
 		return
 	}
-	if updated, merged, err = notion.WithFooter(next, date, append(append([]string{}, prior...), sources...)); err != nil {
+	if updated, merged, err = wiki.WithFooter(next, date, append(append([]string{}, prior...), sources...)); err != nil {
 		return
 	}
 	if len([]rune(updated)) > maxMarkdownChars {
@@ -455,18 +463,18 @@ func movePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 		return nil, err
 	}
 	pageID := normalize(raw)
-	root, err := wikiRoot(tc)
+	wiki, err := wikiOf(ctx, tc)
 	if err != nil {
 		return nil, err
 	}
-	if pageID == root {
+	if pageID == wiki.Root {
 		return nil, tool.Error("Wiki Home itself cannot be moved")
 	}
 	parentArg, err := required(args, "parent_page_id")
 	if err != nil {
 		return nil, err
 	}
-	parent, err := hubOf(ctx, tc, root, parentArg, false)
+	parent, err := hubOf(ctx, tc, wiki.Root, parentArg, false)
 	if err != nil {
 		return nil, err
 	}
@@ -477,7 +485,7 @@ func movePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	if parent == pageID || under {
 		return nil, tool.Error("a page cannot be moved under itself")
 	}
-	client, err := makeClient(tc.Env)
+	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
 	if err != nil {
 		return nil, err
 	}
@@ -491,7 +499,7 @@ func movePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 		before: py.Dict{{Key: "parent_page_id", Value: previous}}, after: py.Dict{{Key: "parent_page_id", Value: parent}},
 		undo: py.Dict{{Key: "op", Value: undoMove}, {Key: "page_id", Value: pageID}, {Key: "previous_parent_id", Value: previous}, {Key: "applied_edited_time", Value: edited}},
 	}
-	id, err := w.finish(ctx, tc, client, root, func(tx *sql.Tx) error {
+	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, pageID, tc.Now(), notion.WikiFields{Title: new(s.title), HubID: new(parent), InTrash: new(false)})
 	}, "moved", s)
 	if err != nil {
@@ -501,7 +509,7 @@ func movePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 }
 
 func relocate(ctx context.Context, client *notion.Client, pageID, parent string) (page py.Dict, previous string, edited any, err error) {
-	if page, err = livePageOf(ctx, client, pageID); err != nil {
+	if page, err = livePageOf(ctx, tc.DB.Read, client, pageID); err != nil {
 		return
 	}
 	if previous = parentID(page); previous == "" {
@@ -525,14 +533,14 @@ func archivePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, erro
 		return nil, err
 	}
 	pageID := normalize(raw)
-	root, err := wikiRoot(tc)
+	wiki, err := wikiOf(ctx, tc)
 	if err != nil {
 		return nil, err
 	}
-	if pageID == root {
+	if pageID == wiki.Root {
 		return nil, tool.Error("Wiki Home itself cannot be archived")
 	}
-	client, err := makeClient(tc.Env)
+	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
 	if err != nil {
 		return nil, err
 	}
@@ -546,7 +554,7 @@ func archivePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, erro
 		before: py.Dict{{Key: "title", Value: s.title}, {Key: "markdown", Value: str(previous, "markdown")}}, after: py.Dict{{Key: "in_trash", Value: true}},
 		undo: py.Dict{{Key: "op", Value: undoUntrash}, {Key: "page_id", Value: pageID}, {Key: "applied_edited_time", Value: edited}},
 	}
-	id, err := w.finish(ctx, tc, client, root, func(tx *sql.Tx) error {
+	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, pageID, tc.Now(), notion.WikiFields{Title: new(s.title), InTrash: new(true)})
 	}, "archived", s)
 	if err != nil {
@@ -556,7 +564,7 @@ func archivePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, erro
 }
 
 func trash(ctx context.Context, client *notion.Client, pageID string) (page, previous py.Dict, edited any, err error) {
-	if page, err = livePageOf(ctx, client, pageID); err != nil {
+	if page, err = livePageOf(ctx, tc.DB.Read, client, pageID); err != nil {
 		return
 	}
 	if previous, err = client.PageMarkdown(ctx, pageID); err != nil {
@@ -575,15 +583,15 @@ func addAlias(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 		return nil, err
 	}
 	pageID := normalize(raw)
-	root, err := wikiRoot(tc)
+	wiki, err := wikiOf(ctx, tc)
 	if err != nil {
 		return nil, err
 	}
-	added, err := notion.CleanAliases(dictGet(args, "aliases"))
+	added, err := wiki.CleanAliases(dictGet(args, "aliases"))
 	if err != nil {
-		var wiki notion.WikiError
-		if errors.As(err, &wiki) {
-			return nil, tool.Error(string(wiki))
+		var failure notion.WikiError
+		if errors.As(err, &failure) {
+			return nil, tool.Error(string(failure))
 		}
 		return nil, err
 	}
@@ -603,11 +611,11 @@ func addAlias(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	if len(taken) > 0 {
 		return nil, tool.Error("alias already names another page: " + strings.Join(taken, ", "))
 	}
-	client, err := makeClient(tc.Env)
+	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
 	if err != nil {
 		return nil, err
 	}
-	page, err := livePageOf(ctx, client, pageID)
+	page, err := livePageOf(ctx, tc.DB.Read, client, pageID)
 	if err != nil {
 		return nil, notionError(err)
 	}
@@ -620,7 +628,7 @@ func addAlias(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	if local != nil {
 		previous = local.Aliases
 	}
-	aliases, err := notion.CleanAliases(strs(append(append([]string{}, previous...), added...)))
+	aliases, err := wiki.CleanAliases(strs(append(append([]string{}, previous...), added...)))
 	if err != nil {
 		return nil, err
 	}
@@ -629,7 +637,7 @@ func addAlias(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 		before: py.Dict{{Key: "aliases", Value: previous}}, after: py.Dict{{Key: "aliases", Value: aliases}},
 		undo: py.Dict{{Key: "op", Value: undoAliases}, {Key: "page_id", Value: pageID}, {Key: "previous_aliases", Value: previous}},
 	}
-	id, err := w.finish(ctx, tc, client, root, func(tx *sql.Tx) error {
+	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, pageID, tc.Now(), notion.WikiFields{
 			Title: new(s.title), HubID: new(parentID(page)), Aliases: aliases, SetAliases: true, InTrash: new(false),
 		})
