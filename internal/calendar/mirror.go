@@ -85,7 +85,7 @@ func collectionName(root, file string) (string, error) {
 	return rootParts[len(rootParts)-1], nil
 }
 
-func MirrorEvents(directory string, ws, we time.Time, tz *time.Location, target string) ([]Row, []string, error) {
+func MirrorEvents(directory string, ws, we time.Time, tz *time.Location, target string, maxOccurrences int) ([]Row, []string, error) {
 	root := pathText(directory)
 	if info, err := os.Stat(root); err != nil || !info.IsDir() {
 		return nil, nil, NotConfigured(fmt.Sprintf("calendar mirror %s is not a directory", root))
@@ -116,7 +116,7 @@ func MirrorEvents(directory string, ws, we time.Time, tz *time.Location, target 
 			notes = append(notes, fmt.Sprintf("%s: unreadable (%s)", filepath.Base(file), osClass(err)))
 			continue
 		}
-		rows, err := EventsInICS(data, name, ws, we, tz, &notes)
+		rows, err := EventsInICS(data, name, ws, we, tz, &notes, maxOccurrences)
 		var bad valueError
 		if errors.As(err, &bad) {
 			notes = append(notes, fmt.Sprintf("%s: unreadable (ValueError)", filepath.Base(file)))

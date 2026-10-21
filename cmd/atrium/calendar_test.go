@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -25,7 +26,7 @@ func pinnedTokens(n int) string { return fmt.Sprintf("golden-token-urlsafe-%d", 
 
 func googleAuthApp() *cli.App {
 	app := cli.New("atrium", logx.Setup)
-	app.Add(calendarcmd.Command())
+	app.Add(pinned([]*cli.Command{calendarcmd.Command()})...)
 	return app
 }
 
@@ -36,6 +37,10 @@ type authRun struct {
 
 func runGoogleAuth(t *testing.T, redirect string, args ...string) authRun {
 	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	t.Setenv("ATRIUM_CONFIG", "")
 	done := make(chan authRun, 1)
 	go func() {
 		var out, errs bytes.Buffer
@@ -66,7 +71,7 @@ func runGoogleAuth(t *testing.T, redirect string, args ...string) authRun {
 }
 
 func TestGoogleAuthGolden(t *testing.T) {
-	t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "golden-google-client-id")
+	t.Setenv("ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "golden-google-client-id")
 	t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "golden-google-client-secret")
 	t.Cleanup(calendar.UseTokens(pinnedTokens))
 	srv := golden.Replay(t, golden.LoadScenario(t, "google_auth", "code_exchange").Exchanges)
@@ -80,15 +85,15 @@ func TestGoogleAuthGolden(t *testing.T) {
 
 func TestGoogleAuthRefusals(t *testing.T) {
 	t.Run("client not set", func(t *testing.T) {
-		t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "")
+		t.Setenv("ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "")
 		t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
 		run := runGoogleAuth(t, "")
-		if run.code != cli.ExitError || run.stdout != "" || run.stderr != "error: GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are required\n" {
+		if run.code != cli.ExitError || run.stdout != "" || run.stderr != "error: ATRIUM_CALENDAR_GOOGLE_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are required\n" {
 			t.Errorf("%+v", run)
 		}
 	})
 	t.Run("provider error", func(t *testing.T) {
-		t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "id")
+		t.Setenv("ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "id")
 		t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "secret")
 		t.Cleanup(calendar.UseTokens(pinnedTokens))
 		run := runGoogleAuth(t, "?error=access_denied", "--port", "8765")
@@ -97,7 +102,7 @@ func TestGoogleAuthRefusals(t *testing.T) {
 		}
 	})
 	t.Run("state mismatch", func(t *testing.T) {
-		t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "id")
+		t.Setenv("ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "id")
 		t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "secret")
 		t.Cleanup(calendar.UseTokens(pinnedTokens))
 		run := runGoogleAuth(t, "?state=other&code=x", "--port", "8765")
@@ -106,7 +111,7 @@ func TestGoogleAuthRefusals(t *testing.T) {
 		}
 	})
 	t.Run("token exchange failed", func(t *testing.T) {
-		t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "id")
+		t.Setenv("ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "id")
 		t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "secret")
 		t.Cleanup(calendar.UseTokens(pinnedTokens))
 		srv := httptestServer(t, http.StatusBadRequest, `{"error":"invalid_grant"}`)
@@ -117,7 +122,7 @@ func TestGoogleAuthRefusals(t *testing.T) {
 		}
 	})
 	t.Run("no refresh token", func(t *testing.T) {
-		t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "id")
+		t.Setenv("ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "id")
 		t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "secret")
 		t.Cleanup(calendar.UseTokens(pinnedTokens))
 		srv := httptestServer(t, http.StatusOK, `{"access_token":"a","expires_in":3599,"token_type":"Bearer"}`)

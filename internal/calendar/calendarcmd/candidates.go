@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
+	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -18,7 +19,11 @@ import (
 func Callables() map[string]worker.Callable {
 	return map[string]worker.Callable{
 		scheduler.CalendarCandidatesName: func(ctx context.Context, e worker.Env) (worker.Result, error) {
-			out, err := candidates.DraftEventProposals(ctx, e.Service, candidates.DraftLimit, e.Now)
+			_, limit, err := calendar.CandidateLimits(ctx, e.Service.DB.Read)
+			if err != nil {
+				return worker.Result{}, err
+			}
+			out, err := candidates.DraftEventProposals(ctx, e.Service, limit, e.Now)
 			return worker.Result{RunID: out.RunID}, err
 		},
 	}
@@ -47,7 +52,11 @@ func candidatesCommand(env config.Env, now func() float64) *cli.Command {
 				}
 				svc := service.New(e.Ctx, d, cfg, env, r)
 				defer svc.Close()
-				out, err := candidates.DraftEventProposals(e.Ctx, svc, candidates.DraftLimit, now)
+				_, limit, err := calendar.CandidateLimits(e.Ctx, d.Read)
+				if err != nil {
+					return cli.Fail(e, err)
+				}
+				out, err := candidates.DraftEventProposals(e.Ctx, svc, limit, now)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
