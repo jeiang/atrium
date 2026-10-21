@@ -35,6 +35,7 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 
 	accepted("set", "budget_unattended_share", "0.4")
 	accepted("set", "budget_chat_share", "0.5")
+	refused("budget_unattended_share must be at most budget_chat_share (0.5)", "set", "budget_unattended_share", "0.9")
 	refused("budget_unattended_share must be at most budget_chat_share (0.5)", "unset", "budget_unattended_share")
 
 	t.Setenv("ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE", "0.3")
