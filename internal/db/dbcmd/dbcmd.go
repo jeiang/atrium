@@ -26,7 +26,7 @@ func Command() *cli.Command {
 	return &cli.Command{
 		Name: "db",
 		Commands: []*cli.Command{
-			{Name: "rekey", Help: "re-encrypt the database under a new key read from a file or standard input; stop every atrium unit that uses the database first", Setup: s.rekey},
+			{Name: "rekey", Help: "re-encrypt the database under a new key read from a file or standard input; stop the atrium units and timers that use the database first", Setup: s.rekey},
 			{Name: "backup", Help: "write a consistent copy of the database, encrypted like the source", Setup: s.backup},
 			{Name: "shell", Help: "run SQL statements from standard input against the database", Setup: s.shell},
 			{Name: "check", Help: "verify database integrity and report FTS5 and vec0 table counts", Setup: s.check},
@@ -68,7 +68,7 @@ func readKey(path string, stdin io.Reader) (db.Key, error) {
 	if path != "" {
 		f, err := os.Open(path)
 		if err != nil {
-			return db.Key{}, fmt.Errorf("new key file: %w", err)
+			return db.Key{}, errors.New("--new-key-file could not be opened")
 		}
 		defer func() { _ = f.Close() }()
 		r = f
@@ -306,6 +306,9 @@ func (s *service) rekey(a *cli.Args) cli.Handler {
 			if errors.Is(err, db.ErrInUse) {
 				return cli.Fail(e, fmt.Errorf("db rekey: %w; the database is unchanged", err))
 			}
+			return cli.Fail(e, err)
+		}
+		if err := db.RefuseFutureSchema(e.Ctx, held); err != nil {
 			return cli.Fail(e, err)
 		}
 		info, err := os.Stat(path)

@@ -32,7 +32,7 @@ func (d *DB) BackupTo(ctx context.Context, dest string, key Key) error {
 	return Backup(ctx, d.Read, dest, key)
 }
 
-var ErrInUse = errors.New("db: another process has the database open; stop the atrium units that use it first")
+var ErrInUse = errors.New("db: another process has the database open; stop the atrium units and timers that use it first")
 
 func HoldExclusive(ctx context.Context, w *sql.DB) error {
 	if _, err := w.ExecContext(ctx, "PRAGMA locking_mode = EXCLUSIVE"); err != nil {

@@ -57,6 +57,14 @@ func refuseFuture(applied map[int]bool) error {
 	return nil
 }
 
+func RefuseFutureSchema(ctx context.Context, q Querier) error {
+	applied, err := appliedVersions(ctx, q)
+	if err != nil {
+		return err
+	}
+	return refuseFuture(applied)
+}
+
 const schemaMigrationsDDL = "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at REAL NOT NULL)"
 
 func Migrate(ctx context.Context, d *DB, path string) error {
