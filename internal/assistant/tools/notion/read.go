@@ -4,17 +4,11 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/py"
-)
-
-const (
-	maxResults   = 10
-	pageDefault  = 12000
-	staleSeconds = 24 * 3600
-	snippetChars = 300
 )
 
 var readKinds = tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub}
@@ -39,7 +33,7 @@ func withMeta(ctx context.Context, tc *tool.Context, d py.Dict, pageID string) (
 	return append(d, py.Pair{Key: "aliases", Value: aliases}, py.Pair{Key: "last_reviewed", Value: reviewed}), nil
 }
 
-func aliasHits(ctx context.Context, tc *tool.Context, query string) ([]py.Dict, error) {
+func aliasHits(ctx context.Context, tc *tool.Context, query string, snippetChars int) ([]py.Dict, error) {
 	ids, err := notion.AliasMatches(ctx, tc.DB.Read, query)
 	if err != nil {
 		return nil, err
@@ -87,11 +81,17 @@ func searchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 	if err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 5, maxResults, 1)
+	r := assistant.Read(ctx, tc.DB.Read)
+	maxResults := r.Int(assistant.KeyNotionMaxResults)
+	snippetChars := r.Int(assistant.KeyNotionSnippet)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	limit, err := tool.BoundedInt(args, "limit", 5, int64(maxResults), 1)
 	if err != nil {
 		return nil, err
 	}
-	results, err := aliasHits(ctx, tc, query)
+	results, err := aliasHits(ctx, tc, query, snippetChars)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,13 @@ func fetchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, e
 		return nil, err
 	}
 	pageID := normalize(raw)
-	maxChars, err := tool.BoundedInt(args, "max_chars", pageDefault, pageDefault, 1)
+	r := assistant.Read(ctx, tc.DB.Read)
+	pageChars := r.Int(assistant.KeyNotionPageChars)
+	staleSecs := r.Int(assistant.KeyNotionStaleSecs)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	maxChars, err := tool.BoundedInt(args, "max_chars", int64(pageChars), int64(pageChars), 1)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +181,7 @@ func fetchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, e
 	}
 	var page py.Dict
 	source := "live"
-	if row != nil && row.InTrash == 0 && tc.Now()-row.SyncedAt < staleSeconds && row.Markdown != "" {
+	if row != nil && row.InTrash == 0 && tc.Now()-row.SyncedAt < float64(staleSecs) && row.Markdown != "" {
 		page = py.Dict{{Key: "page_id", Value: row.ID}, {Key: "title", Value: row.Title}, {Key: "url", Value: row.URL}, {Key: "markdown", Value: row.Markdown}}
 		source = "mirror"
 	} else if page, err = livePage(ctx, tc, pageID); err != nil {

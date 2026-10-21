@@ -9,14 +9,16 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jeiang/atrium/internal/assistant/budget"
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
@@ -37,14 +39,33 @@ const (
 
 var Efforts = [...]string{Low, Medium, High, XHigh, Max}
 
-var EffortOf = map[string]string{Chat: Medium, Subagent: Medium, Cron: High, Nightly: High, Sub: Medium}
+var effortKeys = map[string]string{
+	Cron:     assistant.KeyEffortCron,
+	Nightly:  assistant.KeyEffortNightly,
+	Subagent: assistant.KeyEffortSubagent,
+	Sub:      assistant.KeyEffortSub,
+}
+
+func EffortOf(ctx context.Context, q db.Querier, kind string) (string, bool, error) {
+	if kind == Chat {
+		return Medium, true, nil
+	}
+	key, ok := effortKeys[kind]
+	if !ok {
+		return "", false, nil
+	}
+	found, err := settings.Default.Resolve(ctx, q, key, 0)
+	if err != nil {
+		return "", true, err
+	}
+	effort, err := CleanEffort(found.Value)
+	return effort, true, err
+}
 
 var ContextLimits = [...]int64{90_000, 200_000, 500_000, 1_000_000}
 
 const (
 	DefaultContextLimit = 90_000
-	EffortKey           = "default_effort"
-	ContextLimitKey     = "default_context_limit"
 	TitleChars          = 80
 	DefaultListLimit    = 50
 )
@@ -94,17 +115,22 @@ type Options struct {
 }
 
 func Defaults(ctx context.Context, q db.Querier) (Options, error) {
-	effort, ok, err := budget.GetSetting(ctx, q, EffortKey)
+	found, err := settings.Default.Resolve(ctx, q, assistant.KeyDefaultEffort, 0)
 	if err != nil {
 		return Options{}, err
 	}
-	if !ok || !slices.Contains(Efforts[:], effort) {
-		effort = EffortOf[Chat]
+	effort := found.Value
+	if !slices.Contains(Efforts[:], effort) {
+		effort = Medium
 	}
 	out := Options{Effort: effort, ContextLimit: DefaultContextLimit}
-	limit, ok, err := budget.GetSetting(ctx, q, ContextLimitKey)
-	if err != nil || !ok || limit == "" || strings.Trim(limit, "0123456789") != "" {
+	found, err = settings.Default.Resolve(ctx, q, assistant.KeyDefaultContextLimit, 0)
+	if err != nil {
 		return out, err
+	}
+	limit := found.Value
+	if limit == "" || strings.Trim(limit, "0123456789") != "" {
+		return out, nil
 	}
 	if n, ok := py.ParseInt(limit); ok && slices.Contains(ContextLimits[:], n) {
 		out.ContextLimit = n
@@ -117,14 +143,23 @@ func SetDefaults(ctx context.Context, q db.Querier, effort string, contextLimit 
 	if err != nil {
 		return err
 	}
-	if err := budget.SetSetting(ctx, q, EffortKey, e); err != nil {
+	if err := setPinSafe(ctx, q, assistant.KeyDefaultEffort, e); err != nil {
 		return err
 	}
 	limit, err := CleanContextLimit(contextLimit)
 	if err != nil {
 		return err
 	}
-	return budget.SetSetting(ctx, q, ContextLimitKey, limit)
+	return setPinSafe(ctx, q, assistant.KeyDefaultContextLimit, strconv.FormatInt(limit, 10))
+}
+
+func setPinSafe(ctx context.Context, q db.Querier, key, value string) error {
+	err := settings.Default.Set(ctx, q, key, value, 0)
+	var pinned *settings.PinnedError
+	if errors.As(err, &pinned) {
+		return OptionError(pinned.Error())
+	}
+	return err
 }
 
 func TitleFrom(text string) string {
@@ -166,7 +201,10 @@ func Create(ctx context.Context, q db.Querier, now float64, n NewThread) (int64,
 	effort := chosen.Effort
 	if n.Kind != Chat {
 		var ok bool
-		if effort, ok = EffortOf[n.Kind]; !ok {
+		if effort, ok, err = EffortOf(ctx, q, n.Kind); err != nil {
+			return 0, err
+		}
+		if !ok {
 			return 0, fmt.Errorf("threads: no effort for kind %s", py.Repr(n.Kind))
 		}
 	}

@@ -9,17 +9,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const (
-	KeyMax   = 64
-	ValueMax = 500
-	UndoOp   = "profile_restore"
-)
+const UndoOp = "profile_restore"
 
 type Entry struct {
 	Key       string
@@ -101,8 +98,14 @@ func set(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if !keyOK || !valueOK {
 		return nil, &tool.Raised{Class: "TypeError"}
 	}
-	if utf8.RuneCountInString(key) > KeyMax || utf8.RuneCountInString(value) > ValueMax {
-		return nil, tool.Error(fmt.Sprintf("key is limited to %d characters and value to %d", KeyMax, ValueMax))
+	r := assistant.Read(ctx, tc.DB.Read)
+	keyChars := r.Int(assistant.KeyProfileKeyChars)
+	valueChars := r.Int(assistant.KeyProfileValueChars)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	if utf8.RuneCountInString(key) > keyChars || utf8.RuneCountInString(value) > valueChars {
+		return nil, tool.Error(fmt.Sprintf("key is limited to %d characters and value to %d", keyChars, valueChars))
 	}
 	var previous *string
 	var writeID int64

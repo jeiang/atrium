@@ -48,6 +48,7 @@ type Def struct {
 	Default             string
 	Choices             []string
 	Check               func(value string) error
+	Peers               func(value string, peer func(key string) (string, error)) error
 	Class               Class
 	Secret              bool
 	RequiresEncryptedDB bool

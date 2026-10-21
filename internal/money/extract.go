@@ -42,28 +42,30 @@ func enumOf(values []string) llm.Object {
 	return llm.Object{{Key: "type", Value: "string"}, {Key: "enum", Value: values}}
 }
 
-var ExtractSchema = llm.Object{
-	{Key: "type", Value: "object"},
-	{Key: "properties", Value: llm.Object{
-		{Key: "kind", Value: enumOf(ExtractKinds)},
-		{Key: "payee_raw", Value: schemaType("string")},
-		{Key: "amount", Value: nullableNumber()},
-		{Key: "currency", Value: schemaType("string")},
-		{Key: "date", Value: schemaType("string")},
-		{Key: "bank", Value: enumOf(append([]string{""}, Banks...))},
-		{Key: "account_last4", Value: schemaType("string")},
-		{Key: "account_amount", Value: nullableNumber()},
-		{Key: "account_currency", Value: schemaType("string")},
-		{Key: "statement_total", Value: nullableNumber()},
-		{Key: "description", Value: schemaType("string")},
-		{Key: "subscription", Value: schemaType("boolean")},
-		{Key: "cadence", Value: enumOf(Cadences)},
-	}},
-	{Key: "required", Value: []string{
-		"kind", "payee_raw", "amount", "currency", "date", "bank", "account_last4", "account_amount",
-		"account_currency", "statement_total", "description", "subscription", "cadence",
-	}},
-	{Key: "additionalProperties", Value: false},
+func ExtractSchema(banks []string) llm.Object {
+	return llm.Object{
+		{Key: "type", Value: "object"},
+		{Key: "properties", Value: llm.Object{
+			{Key: "kind", Value: enumOf(ExtractKinds)},
+			{Key: "payee_raw", Value: schemaType("string")},
+			{Key: "amount", Value: nullableNumber()},
+			{Key: "currency", Value: schemaType("string")},
+			{Key: "date", Value: schemaType("string")},
+			{Key: "bank", Value: enumOf(append([]string{""}, banks...))},
+			{Key: "account_last4", Value: schemaType("string")},
+			{Key: "account_amount", Value: nullableNumber()},
+			{Key: "account_currency", Value: schemaType("string")},
+			{Key: "statement_total", Value: nullableNumber()},
+			{Key: "description", Value: schemaType("string")},
+			{Key: "subscription", Value: schemaType("boolean")},
+			{Key: "cadence", Value: enumOf(Cadences)},
+		}},
+		{Key: "required", Value: []string{
+			"kind", "payee_raw", "amount", "currency", "date", "bank", "account_last4", "account_amount",
+			"account_currency", "statement_total", "description", "subscription", "cadence",
+		}},
+		{Key: "additionalProperties", Value: false},
+	}
 }
 
 func PayeeSchema(names []string) llm.Object {
@@ -158,7 +160,7 @@ func titleCase(s string) string {
 
 var currencyRE = rx.MustCompile(`[A-Z]{3}`, 0)
 
-func CleanExtraction(answer any, messageDate string) (*Item, error) {
+func CleanExtraction(answer any, banks []string, messageDate string) (*Item, error) {
 	reply, ok := answer.(py.Dict)
 	if !ok {
 		return nil, nil
@@ -198,7 +200,7 @@ func CleanExtraction(answer any, messageDate string) (*Item, error) {
 		accountAmount, accountCurrency = nil, ""
 	}
 	bank, _ := field("bank").(string)
-	if !contains(Banks, bank) {
+	if !contains(banks, bank) {
 		bank = ""
 	}
 	last4, err := lastDigits(pyStr(field("account_last4")), 4)

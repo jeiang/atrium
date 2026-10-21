@@ -8,23 +8,7 @@ import (
 
 var log = logx.Logger("atrium.money")
 
-const (
-	FirstCitizens = "first_citizens"
-	Scotiabank    = "scotiabank"
-	Republic      = "republic"
-	CIBC          = "cibc"
-)
-
-var Banks = []string{FirstCitizens, Scotiabank, Republic, CIBC}
-
-var BankLabels = map[string]string{FirstCitizens: "First Citizens", Scotiabank: "Scotiabank", Republic: "Republic", CIBC: "CIBC"}
-
-var DefaultSenders = map[string][]string{
-	FirstCitizens: {"firstcitizenstt.com"},
-	Scotiabank:    {"scotiabank.com"},
-	Republic:      {"republictt.com", "rfhl.com"},
-	CIBC:          {"cibcfcib.com", "cibc.com"},
-}
+const Republic = "republic"
 
 const (
 	BankAccount = "bank"
@@ -37,16 +21,6 @@ const (
 	TTD = "TTD"
 	BBD = "BBD"
 	USD = "USD"
-)
-
-var (
-	Currencies   = []string{TTD, BBD}
-	TxCurrencies = []string{TTD, BBD, USD}
-)
-
-var (
-	bbdPerUSD   float64 = 2.0
-	bbdForexFee float64 = 1.02
 )
 
 const (
@@ -98,13 +72,6 @@ var Cadences = []string{Weekly, Monthly, Yearly, Unknown}
 
 var cadenceOrder = []string{Weekly, Monthly, Yearly}
 
-var (
-	cadenceDays  = map[string]int{Weekly: 7, Monthly: 30, Yearly: 365}
-	cadenceSlack = map[string]int{Weekly: 2, Monthly: 5, Yearly: 20}
-)
-
-const billAmountTolerance = 0.15
-
 const (
 	Cash             = "Cash"
 	Fees             = "Fees"
@@ -115,8 +82,6 @@ const (
 )
 
 const (
-	MergeDays   = 3
-	CBTTURL     = "https://www.central-bank.org.tt/"
 	UndoOp      = "money_restore"
 	SinceKey    = "money_since"
 	AllRows     = 100000

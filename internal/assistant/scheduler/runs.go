@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
@@ -18,9 +19,6 @@ import (
 var log = logx.Logger("atrium.agent.scheduler")
 
 const (
-	TickSeconds         = 30
-	LeaseSeconds        = 1800
-	MissedGraceSeconds  = 120
 	StatusRunning       = "running"
 	StatusOK            = "ok"
 	StatusError         = "error"
@@ -60,6 +58,11 @@ func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Locati
 	var skipped []Skipped
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		claims, skipped = nil, nil
+		r := assistant.Read(ctx, tx)
+		lease, grace := r.Int(KeyLeaseSeconds), r.Int(KeyMissedGrace)
+		if err := r.Err(); err != nil {
+			return err
+		}
 		rows, err := tx.QueryContext(ctx, "SELECT "+jobColumns+" FROM jobs WHERE enabled = 1 AND cancelled = 0 AND next_due IS NOT NULL "+
 			"AND next_due <= ? AND (lease_until IS NULL OR lease_until < ?) ORDER BY next_due, id", now, now)
 		if err != nil {
@@ -120,10 +123,10 @@ func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Locati
 				return err
 			}
 			if _, err := tx.ExecContext(ctx, "UPDATE jobs SET next_due = ?, enabled = ?, lease_owner = ?, lease_until = ?, last_run_id = ? WHERE id = ?",
-				following, following != nil, owner, now+LeaseSeconds, runID, job.ID); err != nil {
+				following, following != nil, owner, now+float64(lease), runID, job.ID); err != nil {
 				return err
 			}
-			claims = append(claims, Claim{Job: job, JobRunID: runID, DueAt: dueAt, Missed: now-dueAt > MissedGraceSeconds})
+			claims = append(claims, Claim{Job: job, JobRunID: runID, DueAt: dueAt, Missed: now-dueAt > float64(grace)})
 		}
 		return nil
 	})
@@ -209,6 +212,11 @@ func SettleResumed(ctx context.Context, d *db.DB, now float64) error {
 	if err != nil {
 		return err
 	}
+	r := assistant.Read(ctx, d.Read)
+	grace := r.Int(KeyMissedGrace)
+	if err := r.Err(); err != nil {
+		return err
+	}
 	for _, s := range found {
 		tokens, err := RunTokens(ctx, d.Read, s.run)
 		if err != nil {
@@ -227,7 +235,7 @@ func SettleResumed(ctx context.Context, d *db.DB, now float64) error {
 			} else {
 				text = &s.state
 			}
-		case s.started-s.due > MissedGraceSeconds:
+		case s.started-s.due > float64(grace):
 			status = StatusMissed
 		}
 		ended := now

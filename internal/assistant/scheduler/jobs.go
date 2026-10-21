@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -64,8 +65,8 @@ func nullable(s string) *string {
 
 func errNoActive(id int64) error { return Error(fmt.Sprintf("no active schedule %d", id)) }
 
-func errTooMany() error {
-	return Error(fmt.Sprintf("at most %d active schedules; cancel one first", MaxActiveJobs))
+func errTooMany(limit int) error {
+	return Error(fmt.Sprintf("at most %d active schedules; cancel one first", limit))
 }
 
 func GetJob(ctx context.Context, q db.Querier, id int64) (*Job, error) {
@@ -91,8 +92,13 @@ func atCap(ctx context.Context, q db.Querier) error {
 	if err != nil {
 		return err
 	}
-	if n >= MaxActiveJobs {
-		return errTooMany()
+	r := assistant.Read(ctx, q)
+	limit := r.Int(KeyMaxActiveJobs)
+	if err := r.Err(); err != nil {
+		return err
+	}
+	if n >= limit {
+		return errTooMany(limit)
 	}
 	return nil
 }
@@ -121,7 +127,7 @@ func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
 	if n.Kind == "" {
 		n.Kind = JobCron
 	}
-	_, due, err := Validate(n.Schedule, n.TZ, n.Now, !n.SkipLimits)
+	_, due, err := Validate(ctx, q, n.Schedule, n.TZ, n.Now, !n.SkipLimits)
 	if err != nil {
 		return 0, err
 	}
@@ -189,7 +195,7 @@ func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUp
 	nextDue := job.NextDue
 	setNextDue := false
 	if u.Schedule != nil {
-		_, due, err := Validate(*u.Schedule, job.TZ, now, !u.SkipLimits)
+		_, due, err := Validate(ctx, q, *u.Schedule, job.TZ, now, !u.SkipLimits)
 		if err != nil {
 			return nil, err
 		}
@@ -207,7 +213,7 @@ func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUp
 					return nil, err
 				}
 			}
-			_, due, err := Validate(schedule, job.TZ, now, false)
+			_, due, err := Validate(ctx, q, schedule, job.TZ, now, false)
 			if err != nil {
 				return nil, err
 			}

@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -66,7 +67,7 @@ func (p *pages) assistantSettings(w http.ResponseWriter, r *http.Request) {
 
 func (p *pages) assistantSave(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	err := threads.SetDefaults(detached(r), p.deps.DB.Write, web.FormString(form, "effort", ""), web.FormString(form, "context_limit", ""))
+	err := threads.SetDefaults(audit.With(detached(r), "operator", audit.UI), p.deps.DB.Write, web.FormString(form, "effort", ""), web.FormString(form, "context_limit", ""))
 	var refused threads.OptionError
 	if errors.As(err, &refused) {
 		p.assistantPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()), false, err.Error())

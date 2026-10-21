@@ -345,5 +345,5 @@ func mediaServices(t *testing.T) map[string]string {
 	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return map[string]string{"QBITTORRENT_URL": srv.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": srv.URL + "/api/get-torrents", "NTFY_URL": srv.URL}
+	return map[string]string{"QBITTORRENT_URL": srv.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": srv.URL + "/api/get-torrents", "ATRIUM_NOTIFY_NTFY_URL": srv.URL}
 }

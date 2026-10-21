@@ -25,12 +25,6 @@ import (
 //go:embed templates/*.gohtml
 var templates embed.FS
 
-const (
-	unassignedLimit  = 50
-	transactionLimit = 200
-	billsSoonDays    = 14
-)
-
 func Templates() fs.FS {
 	sub, err := fs.Sub(templates, "templates")
 	if err != nil {

@@ -178,8 +178,16 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if err != nil {
 		return nil, err
 	}
-	limits := actx.LimitsFor(threads.ContextLimitOf(*thread))
-	req, err := r.request(ctx, d.Read, *thread, kind, found.Effort, tools, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), allow, limits)
+	tuning, err := actx.ReadTuning(ctx, d.Read)
+	if err != nil {
+		return nil, err
+	}
+	webSearchMaxUses, err := readWebSearchMaxUses(ctx, d.Read)
+	if err != nil {
+		return nil, err
+	}
+	limits := actx.LimitsFor(threads.ContextLimitOf(*thread), tuning)
+	req, err := r.request(ctx, d.Read, *thread, kind, found.Effort, tools, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), allow, limits, webSearchMaxUses)
 	if err != nil {
 		return nil, err
 	}
@@ -202,8 +210,8 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
-		writer: writer, env: env, steps: steps, maxCost: maxCost, savings: actx.CommitSavings,
-		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch},
+		writer: writer, env: env, steps: steps, maxCost: maxCost, savings: int64(tuning.CommitSavings),
+		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning},
 	}
 	if o.Limits.MaxSteps != nil {
 		s.steps = int(*o.Limits.MaxSteps)
@@ -442,7 +450,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	}
 	if size > s.limits.Preflight {
 		log.Info(fmt.Sprintf("run %d: next request ~%d tokens, compacting on the client", s.run.ID, size), logx.RunID, s.run.ID)
-		if _, err := actx.ClientCompact(ctx, s.d.Write, s.client, Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now()); err != nil {
+		if _, err := actx.ClientCompact(ctx, s.d.Write, s.client, Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now(), s.limits.Tuning); err != nil {
 			return false, nil, err
 		}
 		last = nil
@@ -496,7 +504,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, stop
 	}
 	if compacted {
-		_, err := actx.ServerCompacted(ctx, s.d.Write, s.thread.ID, s.run.ID, blocks, active, s.now())
+		_, err := actx.ServerCompacted(ctx, s.d.Write, s.thread.ID, s.run.ID, blocks, active, s.now(), s.limits.Tuning)
 		return false, nil, err
 	}
 	next := &anchor{tokens: actx.HistoryTokens(response.Usage), seq: seq}

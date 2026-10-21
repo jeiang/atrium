@@ -174,14 +174,13 @@ type Settings struct {
 	MoviesURL string
 	TVURL     string
 	PublicURL string
-	NtfyTopic string
 	TMDBKey   string
 	LinkKey   string
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 	legacy := config.Media(env)
-	out := Settings{PublicURL: legacy.PublicURL, NtfyTopic: legacy.NtfyTopic, TMDBKey: legacy.TMDBKey, LinkKey: legacy.LinkKey}
+	out := Settings{PublicURL: legacy.PublicURL, TMDBKey: legacy.TMDBKey, LinkKey: legacy.LinkKey}
 	var failure error
 	resolve := func(key string) settings.Resolved {
 		if failure != nil {

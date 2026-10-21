@@ -252,12 +252,12 @@ func spendingDict(spend map[string]money.SpendBucket) py.Dict {
 	return out
 }
 
-func bankDicts() (banks, senders py.Dict) {
-	banks = make(py.Dict, 0, len(money.Banks))
-	senders = make(py.Dict, 0, len(money.Banks))
-	for _, b := range money.Banks {
-		banks = append(banks, py.Pair{Key: b, Value: money.BankLabels[b]})
-		senders = append(senders, py.Pair{Key: b, Value: money.DefaultSenders[b]})
+func bankDicts(banks []money.Bank) (labels, senders py.Dict) {
+	labels = make(py.Dict, 0, len(banks))
+	senders = make(py.Dict, 0, len(banks))
+	for _, b := range banks {
+		labels = append(labels, py.Pair{Key: b.ID, Value: b.Label})
+		senders = append(senders, py.Pair{Key: b.ID, Value: b.Senders})
 	}
-	return banks, senders
+	return labels, senders
 }

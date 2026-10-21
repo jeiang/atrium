@@ -71,7 +71,10 @@ func runScheduler(env *cli.Env, cfgEnv config.Env) error {
 	defer svc.Close()
 	notifier := sdnotify.FromEnv()
 	beat := sdnotify.NewHeartbeat()
-	w := worker.New(svc, callables())
+	w, err := worker.New(ctx, svc, callables())
+	if err != nil {
+		return err
+	}
 	w.Beat = beat.Beat
 	notifier.Ready()
 	notifier.Status("scheduling")
