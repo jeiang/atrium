@@ -43,6 +43,21 @@ not claims about the running application.
   only `changed` for secrets; actor and source), listed read-only in
   `/activity`. Known secret values are scrubbed from log output and
   `agent_writes` snapshots.
+- Modules are toggled at runtime, all compiled in. Core (settings, secrets,
+  `db`, `serve`, the About, review and activity pages) is always on; mail,
+  calendar, Notion, money, media, assistant, notifications and Grafana each
+  have a `<name>_enabled` setting. A module is on only when its flag is true
+  and its required settings are met (an `needs-settings` state otherwise);
+  grafana needs the assistant, and money and calendar candidates need mail
+  for their pipeline stages. A disabled module registers no pages, tools or
+  nav entries, its commands exit 0 without doing work, its scheduler jobs and
+  notification sends are skipped, and its tables remain. The first start
+  after the module wiring adopts a database that already holds operator data
+  (settings, secrets, accounts, threads or usage rows): every module whose
+  required settings are met is enabled, so a Phase A installation keeps every
+  feature; an empty database starts core only. `atrium settings set
+  <name>_enabled true` is refused with the unmet reasons. The assistant tool
+  registry is built from the enabled modules' tools.
 - The host owns external services, reverse proxy authentication,
   persistence, and backups. Updating this repository does not update the
   host's pinned application input.
@@ -88,11 +103,9 @@ not claims about the running application.
 
 ## Planned capabilities
 
-- UI-managed integrations and settings, deployment-pinned settings, runtime
-  module toggles, and model and effort selection per thread.
-  The notifications registration requires `ntfy_url` and `ntfy_topic`, but not
-  the optional `NTFY_TOKEN`; its toggle is `notifications_enabled`. The
-  registration is available for module wiring, not yet used by the CLI.
+- UI-managed integrations and settings, and model and effort selection per
+  thread. The notifications module requires `ntfy_url` and `ntfy_topic`, but
+  not the optional `NTFY_TOKEN`; its toggle is `notifications_enabled`.
 - OIDC access with separate operator and administrator permissions, and
   encrypted database storage.
 - Isolated coding workspaces, repository integration, and delegation to

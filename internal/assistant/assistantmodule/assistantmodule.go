@@ -26,12 +26,14 @@ type Module struct {
 	Chat chatpages.Options
 }
 
-func (m Module) Register(module.Context) module.Registration {
+func (m Module) Register(mc module.Context) module.Registration {
+	chat := m.Chat
+	chat.Tools = mc.Tools
 	return module.Registration{
 		Name:     module.Assistant,
 		Requires: []module.Requirement{{Name: "ANTHROPIC_API_KEY", Check: anthropicKey}},
-		Pages:    []web.Page{{Module: chatpages.Module(m.Chat), Templates: chatpages.Templates()}},
-		Commands: []*cli.Command{agentcmd.Command()},
+		Pages:    []web.Page{{Module: chatpages.Module(chat), Templates: chatpages.Templates()}},
+		Commands: []*cli.Command{agentcmd.Command(mc.Tools, mc.Enabled)},
 		Tools:    addTools,
 	}
 }

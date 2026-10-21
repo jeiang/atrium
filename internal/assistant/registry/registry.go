@@ -25,6 +25,8 @@ type Registry struct {
 	binders map[string]Binder
 }
 
+type Source func() (*Registry, error)
+
 func New() *Registry { return &Registry{binders: map[string]Binder{}} }
 
 func (r *Registry) Add(tools ...tool.Tool) error {

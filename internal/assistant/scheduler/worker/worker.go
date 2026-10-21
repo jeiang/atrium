@@ -140,6 +140,9 @@ func (w *Worker) notifySkipped(ctx context.Context, skip scheduler.Skipped, now 
 	if previous == scheduler.StatusSkippedBudget {
 		return nil
 	}
+	if on, err := notify.Enabled(ctx, w.Service.DB.Read); err != nil || !on {
+		return err
+	}
 	_, err = notify.Send(ctx, w.Service.DB.Write, w.Service.Env, notify.Message{
 		Title: "Skipped: " + skip.Job.Name,
 		Body:  "Monthly budget is above 80%, so this scheduled run did not start.",

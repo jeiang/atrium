@@ -1,0 +1,59 @@
+package main
+
+import (
+	"os"
+	"testing"
+
+	"github.com/jeiang/atrium/internal/calendar"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/settings"
+)
+
+var moduleNames = []string{module.Mail, module.Calendar, module.Notion, module.Money, module.Media, module.Assistant, module.Notifications, module.Grafana}
+
+func settingEnv(key string) string {
+	d, ok := settings.Default.Lookup(key)
+	if !ok {
+		panic("unregistered setting " + key)
+	}
+	return config.EnvName(d)
+}
+
+func flagEnv(name string) string { return settingEnv(module.FlagKey(name)) }
+
+func requirementEnv(mediaRoot string) map[string]string {
+	return map[string]string{
+		settingEnv(mail.KeyChatURL):     "http://chat.invalid/v1",
+		settingEnv(mail.KeyEmbedURL):    "http://embed.invalid/v1",
+		settingEnv(media.KeyRoot):       mediaRoot,
+		settingEnv(media.KeyQbitURL):    "http://qbittorrent.invalid",
+		settingEnv(notify.KeyURL):       "http://ntfy.invalid",
+		settingEnv(notify.KeyTopic):     "atrium",
+		settingEnv(calendar.AppleIDKey): "operator@icloud.invalid",
+		"ICLOUD_APP_PASSWORD":           "dummy-icloud-password",
+		"ANTHROPIC_API_KEY":             "dummy-anthropic-key",
+		"NOTION_TOKEN":                  "dummy-notion-token",
+		"GRAFANA_URL":                   "http://grafana.invalid",
+		"GRAFANA_VIEWER_TOKEN":          "dummy-grafana-token",
+	}
+}
+
+func TestMain(m *testing.M) {
+	root, err := os.MkdirTemp("", "atrium-media-")
+	if err != nil {
+		panic(err)
+	}
+	for name, value := range requirementEnv(root) {
+		_ = os.Setenv(name, value)
+	}
+	for _, name := range moduleNames {
+		_ = os.Setenv(flagEnv(name), "true")
+	}
+	code := m.Run()
+	_ = os.RemoveAll(root)
+	os.Exit(code)
+}

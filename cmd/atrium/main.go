@@ -4,31 +4,23 @@ import (
 	"context"
 	"os"
 
-	"github.com/jeiang/atrium/internal/about"
-	"github.com/jeiang/atrium/internal/assistant/agentcmd"
-	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
-	"github.com/jeiang/atrium/internal/assistant/toolset"
-	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
+	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
+	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
+	"github.com/jeiang/atrium/internal/calendar/calendarmodule"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db/dbcmd"
+	"github.com/jeiang/atrium/internal/core/coremodule"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/mail/mailcmd"
-	"github.com/jeiang/atrium/internal/mail/openloops"
-	"github.com/jeiang/atrium/internal/mail/pages"
-	"github.com/jeiang/atrium/internal/mail/reviewpages"
+	"github.com/jeiang/atrium/internal/mail/mailmodule"
 	"github.com/jeiang/atrium/internal/mail/run"
-	"github.com/jeiang/atrium/internal/mail/watches"
-	"github.com/jeiang/atrium/internal/media/mediacmd"
-	mediapages "github.com/jeiang/atrium/internal/media/pages"
-	"github.com/jeiang/atrium/internal/money"
-	moneypages "github.com/jeiang/atrium/internal/money/pages"
-	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/notion"
-	notionpages "github.com/jeiang/atrium/internal/notion/pages"
-	"github.com/jeiang/atrium/internal/secrets/secretscmd"
-	"github.com/jeiang/atrium/internal/settings/settingscmd"
+	"github.com/jeiang/atrium/internal/media/mediamodule"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/money/moneymodule"
+	"github.com/jeiang/atrium/internal/notify/notifymodule"
+	"github.com/jeiang/atrium/internal/notion/notionmodule"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -48,39 +40,30 @@ func newApp() *cli.App {
 	return app
 }
 
+func newSet(clients run.Clients, now func() float64) *module.Set {
+	var set *module.Set
+	guard := func(ctx context.Context, q db.Querier, key, value string) error {
+		return set.Guard(ctx, q, key, value)
+	}
+	set, err := module.NewSet(settings.Default, config.OS,
+		coremodule.Module{Version: version, Guard: guard},
+		mailmodule.Module{Clients: clients, Now: now},
+		calendarmodule.Module{},
+		notionmodule.Module{},
+		moneymodule.Module{Now: now},
+		mediamodule.Module{Now: now},
+		assistantmodule.Module{},
+		notifymodule.Module{},
+		grafanamodule.Module{},
+	)
+	if err != nil {
+		panic(err)
+	}
+	return set
+}
+
 func commands(clients run.Clients, now func() float64) []*cli.Command {
-	mailCmds := mailcmd.Options{Clients: clients, Now: now}
-	return pinned([]*cli.Command{
-		run.SyncCommand(clients),
-		run.WatchCommand(clients),
-		mailCmds.RulesCommand(),
-		mailCmds.ShadowReportCommand(),
-		mailCmds.ReindexCommand(),
-		mailCmds.RebalanceCommand(),
-		mailCmds.DeletionsCommand(),
-		mailCmds.GmailLabelsCommand(),
-		mailCmds.LiveCommand(),
-		mailCmds.ProposalsCommand(),
-		notion.Command(notion.Options{}),
-		openloops.Command(now),
-		watches.Command(now),
-		money.Command(now),
-		agentcmd.Command(),
-		calendarcmd.Command(),
-		mediacmd.Command(now),
-		settingscmd.Command(),
-		secretscmd.Command(),
-		dbcmd.Command(),
-		web.ServeCommand(
-			web.Page{Module: chatpages.Module(chatpages.Options{}), Templates: chatpages.Templates()},
-			web.Page{Module: about.Module(version), Templates: about.Templates()},
-			web.Page{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
-			web.Page{Module: mediapages.Module(mediapages.Options{}), Templates: mediapages.Templates(), Public: mediapages.PublicCheck},
-			web.Page{Module: notify.Module, Templates: notify.Templates()},
-			web.Page{Module: notionpages.Module(notionpages.Options{}), Templates: notionpages.Templates()},
-			web.Page{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(config.OS)}), Templates: reviewpages.Templates()},
-			web.Page{Module: moneypages.Module(moneypages.Options{}), Templates: moneypages.Templates()},
-		),
-		codemodeWorkerCommand(),
-	})
+	set := newSet(clients, now)
+	cmds := append(set.Commands(), web.ServeCommand(set.Pages()...), codemodeWorkerCommand())
+	return pinned(cmds)
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -15,11 +16,11 @@ import (
 
 var Kinds = []string{threads.Chat, threads.Cron, threads.Nightly, threads.Sub}
 
-func Command() *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(config.OS), runCommand(config.OS)}}
+func Command(tools registry.Source, enabled func(module string) bool) *cli.Command {
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(config.OS, tools, enabled), runCommand(config.OS, tools)}}
 }
 
-func runCommand(cfgEnv config.Env) *cli.Command {
+func runCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {
 	return &cli.Command{
 		Name: "run",
 		Setup: func(args *cli.Args) cli.Handler {
@@ -32,7 +33,7 @@ func runCommand(cfgEnv config.Env) *cli.Command {
 					id := int64(*thread)
 					threadID = &id
 				}
-				if err := run(env, cfgEnv, threadID, *text, *kind); err != nil {
+				if err := run(env, cfgEnv, tools, threadID, *text, *kind); err != nil {
 					_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
 					return cli.ExitError
 				}
@@ -42,7 +43,7 @@ func runCommand(cfgEnv config.Env) *cli.Command {
 	}
 }
 
-func run(env *cli.Env, cfgEnv config.Env, threadID *int64, text, kind string) error {
+func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64, text, kind string) error {
 	ctx := env.Ctx
 	cfg, err := config.Load(cfgEnv)
 	if err != nil {
@@ -56,7 +57,7 @@ func run(env *cli.Env, cfgEnv config.Env, threadID *int64, text, kind string) er
 	if err := config.Migrate(ctx, d, cfg); err != nil {
 		return err
 	}
-	r, err := runner.New()
+	r, err := runner.New(tools)
 	if err != nil {
 		return err
 	}

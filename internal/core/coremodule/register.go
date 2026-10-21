@@ -15,6 +15,7 @@ import (
 
 type Module struct {
 	Version string
+	Guard   settingscmd.Guard
 }
 
 func (m Module) Register(module.Context) module.Registration {
@@ -26,7 +27,7 @@ func (m Module) Register(module.Context) module.Registration {
 			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(config.OS)}), Templates: reviewpages.Templates()},
 		},
 		Commands: []*cli.Command{
-			settingscmd.Command(),
+			settingscmd.Command(m.Guard),
 			secretscmd.Command(),
 			dbcmd.Command(),
 		},

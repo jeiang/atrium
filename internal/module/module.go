@@ -33,6 +33,19 @@ type Context struct {
 	Current func() *Snapshot
 }
 
+func (c Context) Enabled(name string) bool {
+	snap := c.Current()
+	return snap != nil && snap.Enabled(name)
+}
+
+func (c Context) Tools() (*registry.Registry, error) {
+	snap := c.Current()
+	if snap == nil {
+		return nil, ErrNotEvaluated
+	}
+	return snap.Registry()
+}
+
 type Registration struct {
 	Name     string
 	Core     bool
@@ -115,6 +128,8 @@ type Status struct {
 	Reason string
 	Unmet  []Unmet
 }
+
+var ErrNotEvaluated = errors.New("module: states are not evaluated yet")
 
 type DuplicateModule string
 

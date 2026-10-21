@@ -16,8 +16,16 @@ import (
 
 const actor = "operator"
 
-func Command() *cli.Command {
-	s := &service{env: config.OS, reg: settings.Default}
+type Guard func(ctx context.Context, q db.Querier, key, value string) error
+
+type Refused struct{ Err error }
+
+func (r *Refused) Error() string { return r.Err.Error() }
+
+func (r *Refused) Unwrap() error { return r.Err }
+
+func Command(guard Guard) *cli.Command {
+	s := &service{env: config.OS, reg: settings.Default, guard: guard}
 	return &cli.Command{
 		Name: "settings",
 		Commands: []*cli.Command{
@@ -30,8 +38,9 @@ func Command() *cli.Command {
 }
 
 type service struct {
-	env config.Env
-	reg *settings.Registry
+	env   config.Env
+	reg   *settings.Registry
+	guard Guard
 }
 
 func (s *service) list(*cli.Args) cli.Handler {
@@ -64,7 +73,14 @@ func (s *service) set(a *cli.Args) cli.Handler {
 	return func(e *cli.Env) int {
 		return s.keyed(e, *key, func(d *db.DB) error {
 			ctx := audit.With(e.Ctx, actor, audit.CLI)
-			return d.WithTx(ctx, func(tx *sql.Tx) error { return s.reg.Set(ctx, tx, *key, *value, 0) })
+			return d.WithTx(ctx, func(tx *sql.Tx) error {
+				if s.guard != nil {
+					if err := s.guard(ctx, tx, *key, *value); err != nil {
+						return &Refused{Err: err}
+					}
+				}
+				return s.reg.Set(ctx, tx, *key, *value, 0)
+			})
 		})
 	}
 }
@@ -107,7 +123,8 @@ func failure(e *cli.Env, err error) int {
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError
 	var scope *settings.ScopeError
-	if errors.As(err, &invalid) || errors.As(err, &pinned) || errors.As(err, &scope) {
+	var refused *Refused
+	if errors.As(err, &invalid) || errors.As(err, &pinned) || errors.As(err, &scope) || errors.As(err, &refused) {
 		_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
 		return cli.ExitError
 	}

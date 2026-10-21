@@ -79,7 +79,7 @@ func newSite(t *testing.T, extra map[string]string) *site {
 	chat := func(_ context.Context, _, system, user string, _ any, _ int) (json.RawMessage, error) {
 		return s.chat(system, user)
 	}
-	assistant := assistantpages.Module(assistantpages.Options{Runner: &loop.Runner{Registry: registry.New()}, Now: s.now})
+	assistant := assistantpages.Module(assistantpages.Options{Runner: &loop.Runner{Registry: registry.New()}, Registry: registry.New(), Now: s.now})
 	s.srv, err = web.New(web.Options{
 		Cfg: cfg, Env: env, DB: d, Auth: web.AuthLocal, AllowedHosts: []string{"testserver"}, Render: render,
 		Modules: []web.Module{Module(Options{Chat: chat, Now: s.now}), assistant},

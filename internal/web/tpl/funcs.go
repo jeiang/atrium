@@ -111,6 +111,15 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 			}
 			return n
 		},
+		"compact": func(items []any) []any {
+			out := make([]any, 0, len(items))
+			for _, item := range items {
+				if item != nil {
+					out = append(out, item)
+				}
+			}
+			return out
+		},
 		"ternary": func(c any, a, b any) any {
 			if ok, _ := ttemplate.IsTrue(c); ok {
 				return a
