@@ -63,7 +63,7 @@ func (s *service) currentKey() (db.Key, error) {
 }
 
 func readKey(path string, stdin io.Reader) (db.Key, error) {
-	var r io.Reader = stdin
+	r := stdin
 	if path != "" {
 		f, err := os.Open(path)
 		if err != nil {
