@@ -19,6 +19,7 @@ stdenvNoCC.mkDerivation {
   buildPhase = ''
     runHook preBuild
     mdbook build . --dest-dir "$out"
+    rm "$out/book.toml"
     runHook postBuild
   '';
   dontInstall = true;

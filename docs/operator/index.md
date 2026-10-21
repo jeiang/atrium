@@ -6,8 +6,8 @@ This reference covers two things: how an instance is configured, and the behavio
 
 ## Configuration
 
-- [Environment variables](../config/environment.md) lists every setting pinned through the environment.
-- [Setting reference and TOML semantics](../config/reference.md) lists every setting with its type, default and class, and describes the TOML file, `<key>_file` secrets, `${NAME}` interpolation and precedence.
+- [Configuration reference](../config/reference.md) lists every setting with its type, default and class, and describes the TOML file, `<key>_file` secrets, `${NAME}` interpolation and precedence. [Settings and secrets](behavior.md#settings-and-secrets) summarizes how they behave.
+- [Environment variables](../config/environment.md) lists every setting pinned through the environment; the database section of the behavior page covers [the database key](behavior.md#database).
 - The same settings are described as a JSON Schema in [`atrium.schema.json`](../config/atrium.schema.json).
 - [NixOS module options](nixos.md) lists the `services.atrium` options. They configure the deployment (units, listeners, deployment variables), not the settings registry.
 
@@ -15,4 +15,4 @@ The two config pages and the schema are generated from the settings registry and
 
 ## Current behavior
 
-[Operator-visible behavior and boundaries](behavior.md) states what the running application does and refuses to do: access control, mail safety, assistant limits, settings and secrets, and the database.
+[Operator-visible behavior and boundaries](behavior.md) states what the running application does and refuses to do: [access](behavior.md#access), [mail safety](behavior.md#mail-safety), [assistant limits](behavior.md#assistant-limits), [settings and secrets](behavior.md#settings-and-secrets) and the [database](behavior.md#database).

@@ -4,8 +4,8 @@
 
 # Configuration
 
+- [Configuration reference](config/reference.md)
 - [Environment variables](config/environment.md)
-- [Setting reference and TOML semantics](config/reference.md)
 - [NixOS module options](operator/nixos.md)
 
 # Current behavior
