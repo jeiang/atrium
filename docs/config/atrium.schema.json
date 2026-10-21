@@ -1153,6 +1153,39 @@
     "core": {
       "additionalProperties": false,
       "properties": {
+        "assistant_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "assistant_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "calendar_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "calendar_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "grafana_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "grafana_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "http_timeout_seconds": {
           "default": 600,
           "type": [
@@ -1161,6 +1194,61 @@
           ]
         },
         "http_timeout_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "mail_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "media_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "money_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "money_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notifications_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "notifications_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "notion_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "notion_enabled_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

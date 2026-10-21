@@ -90,6 +90,9 @@ not claims about the running application.
 
 - UI-managed integrations and settings, deployment-pinned settings, runtime
   module toggles, and model and effort selection per thread.
+  The notifications registration requires `ntfy_url` and `ntfy_topic`, but not
+  the optional `NTFY_TOKEN`; its toggle is `notifications_enabled`. The
+  registration is available for module wiring, not yet used by the CLI.
 - OIDC access with separate operator and administrator permissions, and
   encrypted database storage.
 - Isolated coding workspaces, repository integration, and delegation to
