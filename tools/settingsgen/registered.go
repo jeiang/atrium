@@ -11,6 +11,7 @@ import (
 	_ "github.com/jeiang/atrium/internal/db/key"
 	_ "github.com/jeiang/atrium/internal/mail"
 	_ "github.com/jeiang/atrium/internal/media"
+	_ "github.com/jeiang/atrium/internal/module"
 	_ "github.com/jeiang/atrium/internal/money"
 	_ "github.com/jeiang/atrium/internal/notify"
 	_ "github.com/jeiang/atrium/internal/notion"

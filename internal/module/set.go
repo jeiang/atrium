@@ -114,20 +114,11 @@ func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
 	for _, r := range s.regs {
 		st := Status{Name: r.Name, State: Enabled}
 		if !r.Core {
-			for _, rq := range r.Requires {
-				reason, err := rq.Check(ctx, probe)
-				if err != nil {
-					return nil, err
-				}
-				if reason != "" {
-					st.Unmet = append(st.Unmet, Unmet{Name: rq.Name, Reason: reason})
-				}
+			unmet, err := s.unmet(ctx, probe, r, states)
+			if err != nil {
+				return nil, err
 			}
-			for _, dep := range r.Needs {
-				if states[dep] != Enabled {
-					st.Unmet = append(st.Unmet, Unmet{Name: dep, Reason: "needs " + dep + " (" + string(states[dep]) + ")"})
-				}
-			}
+			st.Unmet = unmet
 			on, err := s.reg.Resolve(ctx, q, FlagKey(r.Name), 0)
 			if err != nil {
 				return nil, err
