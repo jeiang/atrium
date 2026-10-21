@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/contacts"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const day = 86400.0
@@ -149,7 +151,10 @@ func TestWatchesPageListsAndDismissesBirthdays(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cards, "a.vcf"), []byte(card), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := newSite(t, func(env map[string]string) { env["ATRIUM_CONTACTS_CONTACTS_DIR"] = cards })
+	s := newSite(t)
+	if err := settings.Default.Set(t.Context(), s.db.Write, contacts.DirKey, cards, 0); err != nil {
+		t.Fatal(err)
+	}
 	s.clock = float64(time.Now().Unix())
 	page := status(t, s.get("/watches"), http.StatusOK)
 	mustContain(t, page, "Ada Lovelace", "(today)", "(1)")
@@ -169,7 +174,10 @@ func TestWatchesPageListsAndDismissesBirthdays(t *testing.T) {
 
 func TestWatchesWithAnEmptyAddressBook(t *testing.T) {
 	cards := t.TempDir()
-	s := newSite(t, func(env map[string]string) { env["ATRIUM_CONTACTS_CONTACTS_DIR"] = cards })
+	s := newSite(t)
+	if err := settings.Default.Set(t.Context(), s.db.Write, contacts.DirKey, cards, 0); err != nil {
+		t.Fatal(err)
+	}
 	mustContain(t, status(t, s.get("/watches"), http.StatusOK), "Nothing coming up", "(0)")
 }
 
