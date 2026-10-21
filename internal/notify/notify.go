@@ -22,14 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/rx"
 )
 
-const (
-	PerRunCap     = 3
-	NightlyCap    = 1
-	TitleChars    = 120
-	BodyChars     = 1000
-	timeout       = 10 * time.Second
-	notConfigured = "ntfy not configured (NTFY_URL and NTFY_TOPIC)"
-)
+const notConfigured = "ntfy not configured (" + KeyURL + " and " + KeyTopic + ")"
 
 var (
 	control    = rx.MustCompile(`[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]`, 0)
@@ -94,33 +87,45 @@ func isDigits(s string) bool {
 	return s != "" && strings.IndexFunc(s, func(r rune) bool { return !unicode.Is(unicode.Nd, r) }) < 0
 }
 
-func Deliver(ctx context.Context, env config.Env, title, body, topic, click string) (bool, string, error) {
-	settings := config.Ntfy(env)
-	if topic == "" {
-		topic = settings.Topic
+func Deliver(ctx context.Context, q db.Querier, env config.Env, title, body, topic, click string) (bool, string, error) {
+	base, err := text(ctx, q, KeyURL)
+	if err != nil {
+		return false, "", err
 	}
-	if settings.URL == "" || topic == "" {
+	if topic == "" {
+		if topic, err = text(ctx, q, KeyTopic); err != nil {
+			return false, "", err
+		}
+	}
+	if base == "" || topic == "" {
 		return false, notConfigured, nil
 	}
+	timeout, err := timeoutOf(ctx, q)
+	if err != nil {
+		return false, "", err
+	}
+	token := config.Ntfy(env).Token
 	payload := py.Dict{{Key: "topic", Value: topic}, {Key: "title", Value: title}, {Key: "message", Value: body}}
 	if click != "" {
 		payload = append(payload, py.Pair{Key: "click", Value: click})
 	}
-	target, err := url.Parse(settings.URL)
+	target, err := url.Parse(base)
 	if err != nil {
 		return false, "", &tool.Raised{Class: "InvalidURL"}
 	}
 	if target.Scheme != "http" && target.Scheme != "https" {
 		return false, "ntfy unreachable: UnsupportedProtocol", nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, settings.URL, strings.NewReader(py.JSONDumps(payload, py.JSONOpts{NoEnsureASCII: true, Compact: true})))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base, strings.NewReader(py.JSONDumps(payload, py.JSONOpts{NoEnsureASCII: true, Compact: true})))
 	if err != nil {
 		return false, "", &tool.Raised{Class: "InvalidURL"}
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if settings.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+settings.Token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
+	client := newClient(timeout)
+	defer client.CloseIdleConnections()
 	resp, err := client.Do(req)
 	if err == nil {
 		_, err = io.Copy(io.Discard, resp.Body)
@@ -138,14 +143,17 @@ func Deliver(ctx context.Context, env config.Env, title, body, topic, click stri
 	return true, "", nil
 }
 
-var client = &http.Client{
-	Transport: &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           (&net.Dialer{Timeout: timeout}).DialContext,
-		TLSHandshakeTimeout:   timeout,
-		ResponseHeaderTimeout: timeout,
-	},
-	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+func newClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           (&net.Dialer{Timeout: timeout}).DialContext,
+			TLSHandshakeTimeout:   timeout,
+			ResponseHeaderTimeout: timeout,
+			DisableKeepAlives:     true,
+		},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 }
 
 func errorClass(err error) string {
@@ -175,7 +183,15 @@ func errorClass(err error) string {
 }
 
 func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, error) {
-	title, body := Plain(m.Title, TitleChars), Plain(m.Body, BodyChars)
+	titleChars, err := whole(ctx, q, KeyTitleChars)
+	if err != nil {
+		return Sent{}, err
+	}
+	bodyChars, err := whole(ctx, q, KeyBodyChars)
+	if err != nil {
+		return Sent{}, err
+	}
+	title, body := Plain(m.Title, titleChars), Plain(m.Body, bodyChars)
 	if title == "" {
 		return Sent{}, tool.Error("title is required")
 	}
@@ -202,7 +218,7 @@ func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, e
 	if err != nil {
 		return Sent{}, err
 	}
-	delivered, failure, err := Deliver(ctx, env, title, message, m.Topic, m.Click)
+	delivered, failure, err := Deliver(ctx, q, env, title, message, m.Topic, m.Click)
 	if err != nil {
 		return Sent{}, err
 	}
