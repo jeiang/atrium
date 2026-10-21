@@ -2,14 +2,14 @@ package runner
 
 import (
 	"github.com/jeiang/atrium/internal/assistant/loop"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/skills"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
-	"github.com/jeiang/atrium/internal/assistant/toolset"
 )
 
-func New() (*loop.Runner, error) {
-	reg, err := toolset.Registry()
+func New(tools registry.Source) (*loop.Runner, error) {
+	reg, err := tools()
 	if err != nil {
 		return nil, err
 	}

@@ -69,7 +69,7 @@ func newServer(t *testing.T, cfg config.Config, env config.Env, d *db.DB, o Opti
 		t.Fatal(err)
 	}
 	srv, err := web.New(web.Options{
-		Cfg: cfg, Env: env, DB: d, Auth: web.AuthLocal, AllowedHosts: []string{host}, Render: render, Modules: []web.Module{Module(o)},
+		Cfg: cfg, Env: env, DB: d, Auth: web.AuthLocal, AllowedHosts: []string{host}, Render: render, Modules: []web.Module{Module(o), PauseModule},
 	})
 	if err != nil {
 		t.Fatal(err)

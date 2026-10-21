@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	modules "github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -49,6 +50,10 @@ func init() {
 			Check: settings.Between(1, 4000), Class: settings.Advanced, Scopes: instance,
 		},
 	)
+}
+
+func Enabled(ctx context.Context, q db.Querier) (bool, error) {
+	return modules.FlagOn(ctx, q, modules.Notifications)
 }
 
 func text(ctx context.Context, q db.Querier, key string) (string, error) {

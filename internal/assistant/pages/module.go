@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/service"
-	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -39,6 +38,7 @@ type Options struct {
 	Now       func() float64
 	Poll      time.Duration
 	KeepAlive time.Duration
+	Tools     registry.Source
 	Registry  *registry.Registry
 }
 
@@ -62,7 +62,7 @@ func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		run := o.Runner
 		if run == nil {
-			made, err := runner.New()
+			made, err := runner.New(o.Tools)
 			if err != nil {
 				panic(err)
 			}
@@ -93,7 +93,7 @@ func Module(o Options) web.Module {
 		}
 		reg := o.Registry
 		if reg == nil {
-			made, err := toolset.Registry()
+			made, err := o.Tools()
 			if err != nil {
 				panic(err)
 			}

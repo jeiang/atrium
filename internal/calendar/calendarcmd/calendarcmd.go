@@ -4,14 +4,15 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 )
 
-func Command() *cli.Command {
-	return &cli.Command{Name: "calendar", Commands: []*cli.Command{candidatesCommand(config.OS, nil), googleAuth(config.OS)}}
+func Command(tools registry.Source) *cli.Command {
+	return &cli.Command{Name: "calendar", Commands: []*cli.Command{candidatesCommand(config.OS, tools, nil), googleAuth(config.OS)}}
 }
 
 func googleAuth(env config.Env) *cli.Command {

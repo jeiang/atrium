@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/router"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/mail/watches"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -82,6 +83,9 @@ func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *
 		Router:  &router.Router{DB: d, Now: now},
 		Applier: applier.New(l, open, syncer),
 		Events: func(ctx context.Context, account string) (int, int, error) {
+			if on, err := module.FlagOn(ctx, d.Read, module.Calendar); err != nil || !on {
+				return 0, 0, err
+			}
 			return candidates.ScanAccount(ctx, d, cfg, account, nil, config.OS, now)
 		},
 	}
@@ -93,6 +97,9 @@ func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *
 			return watches.Refresh(ctx, d, now(), watches.Options{Clock: now}), nil
 		}},
 		{"money", func(ctx context.Context) (any, error) {
+			if on, err := module.FlagOn(ctx, d.Read, module.Money); err != nil || !on {
+				return py.Dict{{Key: "skipped", Value: "money module is not enabled"}}, err
+			}
 			limit, err := money.ScanLimit(ctx, d.Read)
 			if err != nil {
 				return nil, err

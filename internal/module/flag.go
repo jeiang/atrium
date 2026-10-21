@@ -24,6 +24,11 @@ func init() {
 	}
 }
 
+func FlagOn(ctx context.Context, q db.Querier, name string) (bool, error) {
+	got, err := settings.Default.Resolve(ctx, q, FlagKey(name), 0)
+	return got.Value == "true", err
+}
+
 var operatorTables = []string{"settings", "secrets", "accounts", "threads", "usage"}
 
 func (s *Set) unmet(ctx context.Context, p Probe, r Registration, states map[string]State) ([]Unmet, error) {

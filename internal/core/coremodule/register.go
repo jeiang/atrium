@@ -6,6 +6,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
+	mailpages "github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
@@ -15,6 +16,7 @@ import (
 
 type Module struct {
 	Version string
+	Guard   settingscmd.Guard
 }
 
 func (m Module) Register(module.Context) module.Registration {
@@ -23,10 +25,11 @@ func (m Module) Register(module.Context) module.Registration {
 		Core: true,
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates()},
+			{Module: mailpages.PauseModule},
 			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(config.OS)}), Templates: reviewpages.Templates()},
 		},
 		Commands: []*cli.Command{
-			settingscmd.Command(),
+			settingscmd.Command(m.Guard),
 			secretscmd.Command(),
 			dbcmd.Command(),
 		},

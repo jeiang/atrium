@@ -16,38 +16,40 @@
   <a href="#content" class="sr-only rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50">Skip to content</a>
   {{$page := partial "page" .}}
   {{$state := dict "mode" .Mode "paused" .Paused}}
+  {{$on := global "module_enabled"}}
   {{template "sidebar" (dict
     "id" "sidebar"
     "label" "Primary"
     "header" (partial "base_brand" .)
     "footer" (partial "base_footer" .)
-    "menu" (list
-      (dict "type" "group" "label" "Assistant" "items" (list
+    "menu" (compact (list
+      (ternary (call $on "assistant") (dict "type" "group" "label" "Assistant" "items" (list
         (dict "label" "Chat" "url" "/chat" "icon" (icon "messages-square") "current" (eq $page "chat"))
         (dict "label" "Scheduled" "url" "/scheduled" "icon" (icon "clock") "current" (eq $page "scheduled"))
-        (dict "label" "Projects" "url" "/projects" "icon" (icon "folder") "current" (eq $page "projects"))))
+        (dict "label" "Projects" "url" "/projects" "icon" (icon "folder") "current" (eq $page "projects")))) nil)
       (dict "type" "group" "label" "Review" "items" (list
         (dict "label" (partial "base_proposals_label" .) "url" "/proposals" "icon" (icon "list-checks") "current" (eq $page "proposals") "class" "[&>span:last-child]:flex-1")
         (dict "label" "Activity" "url" "/activity" "icon" (icon "history") "current" (eq $page "activity"))))
-      (dict "type" "group" "label" "Mail" "items" (list
-        (dict "label" "Decisions" "url" "/triage" "icon" (icon "route") "current" (eq $page "triage"))
-        (dict "label" "Rules" "url" "/rules" "icon" (icon "scroll-text") "current" (eq $page "rules"))
-        (dict "label" "Drafts" "url" "/drafts" "icon" (icon "mail") "current" (eq $page "drafts"))))
-      (dict "type" "group" "label" "Life" "items" (list
-        (dict "label" "Money" "url" "/money" "icon" (icon "wallet") "current" (eq $page "money"))
+      (dict "type" "group" "label" "Mail" "items" (compact (list
+        (ternary (call $on "mail") (dict "label" "Decisions" "url" "/triage" "icon" (icon "route") "current" (eq $page "triage")) nil)
+        (ternary (call $on "mail") (dict "label" "Rules" "url" "/rules" "icon" (icon "scroll-text") "current" (eq $page "rules")) nil)
+        (dict "label" "Drafts" "url" "/drafts" "icon" (icon "mail") "current" (eq $page "drafts")))))
+      (dict "type" "group" "label" "Life" "items" (compact (list
+        (ternary (call $on "money") (dict "label" "Money" "url" "/money" "icon" (icon "wallet") "current" (eq $page "money")) nil)
         (dict "label" "Loops" "url" "/loops" "icon" (icon "list-checks") "current" (eq $page "loops"))
-        (dict "label" "Watches" "url" "/watches" "icon" (icon "package") "current" (eq $page "watches"))))
-      (dict "type" "group" "label" "Media" "items" (list
+        (dict "label" "Watches" "url" "/watches" "icon" (icon "package") "current" (eq $page "watches")))))
+      (ternary (call $on "media") (dict "type" "group" "label" "Media" "items" (list
         (dict "label" "Downloads" "url" "/media/downloads" "icon" (icon "download") "current" (or (eq $page "media_downloads") (eq $page "media_add")))
         (dict "label" "Channels" "url" "/media/channels" "icon" (icon "tv") "current" (eq $page "media_channels"))
-        (dict "label" "Library" "url" "/media/library" "icon" (icon "film") "current" (eq $page "media_library"))))))}}
+        (dict "label" "Library" "url" "/media/library" "icon" (icon "film") "current" (eq $page "media_library")))) nil))))}}
   <main class="flex min-w-0 flex-col">
     <header class="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-3 md:px-6">
       <button id="nav-toggle" type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Toggle navigation" aria-controls="sidebar" data-action="toggle-sidebar">{{icon "panel-left"}}</button>
       <hr role="separator" aria-orientation="vertical" class="h-4 w-px border-0 bg-border">
       <h1 class="truncate px-1 text-sm font-medium">{{block "heading" .}}{{end}}</h1>
       <div class="ml-auto flex items-center gap-3">
-        <a href="/settings" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{{if eq $page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}</a>
+        {{if call $on "assistant"}}<a href="/settings" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{{if eq $page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}</a>
+        {{- else if call $on "notifications"}}<a href="/settings/notifications" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{{if eq $page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}</a>{{end}}
         {{template "mode_badge" $state}}
         {{if eq .Mode "live"}}
         <form method="post" action="/live/{{if .Paused}}resume{{else}}pause{{end}}">

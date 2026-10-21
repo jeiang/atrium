@@ -369,20 +369,26 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings 
 		if len(result.Added) != 1 {
 			title = fmt.Sprintf("Added %d releases", len(result.Added))
 		}
-		topic, err := notify.MediaTopic(ctx, q)
+		on, err := notify.Enabled(ctx, q)
 		if err != nil {
 			return result, err
 		}
-		message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Topic: topic}
-		if settings.PublicURL != "" {
-			message.Click = settings.PublicURL + DownloadsPage
-		}
-		sent, err := notify.Send(ctx, q, env, message)
-		if err != nil {
-			return result, err
-		}
-		if !sent.Delivered {
-			result.Errors = append(result.Errors, "ntfy: "+sent.Error)
+		if on {
+			topic, err := notify.MediaTopic(ctx, q)
+			if err != nil {
+				return result, err
+			}
+			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Topic: topic}
+			if settings.PublicURL != "" {
+				message.Click = settings.PublicURL + DownloadsPage
+			}
+			sent, err := notify.Send(ctx, q, env, message)
+			if err != nil {
+				return result, err
+			}
+			if !sent.Delivered {
+				result.Errors = append(result.Errors, "ntfy: "+sent.Error)
+			}
 		}
 		if _, err := SelectFiles(ctx, qb, nil); err != nil {
 			return result, err

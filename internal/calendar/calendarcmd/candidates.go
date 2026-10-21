@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
@@ -29,7 +30,7 @@ func Callables() map[string]worker.Callable {
 	}
 }
 
-func candidatesCommand(env config.Env, now func() float64) *cli.Command {
+func candidatesCommand(env config.Env, tools registry.Source, now func() float64) *cli.Command {
 	return &cli.Command{
 		Name: "candidates",
 		Setup: func(*cli.Args) cli.Handler {
@@ -46,7 +47,7 @@ func candidatesCommand(env config.Env, now func() float64) *cli.Command {
 				if err := config.Migrate(e.Ctx, d, cfg); err != nil {
 					return cli.Fail(e, err)
 				}
-				r, err := runner.New()
+				r, err := runner.New(tools)
 				if err != nil {
 					return cli.Fail(e, err)
 				}

@@ -20,7 +20,7 @@ func TestSchedulerRunsUntilCancelledAndExitsZero(t *testing.T) {
 	env := config.Map(map[string]string{"ATRIUM_DB": path, "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow"})
 	notify := sdnotifytest.Listen(t, 2*time.Second)
 	a := cli.New("atrium", func(io.Writer) {})
-	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env)}})
+	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, noTools, func(string) bool { return true })}})
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan int)
 	var stdout, stderr bytes.Buffer

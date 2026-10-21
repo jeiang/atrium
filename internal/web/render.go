@@ -28,6 +28,9 @@ func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, erro
 		extra.Globals = map[string]any{}
 	}
 	extra.Globals["accounts"] = accounts
+	if _, ok := extra.Globals["module_enabled"]; !ok {
+		extra.Globals["module_enabled"] = func(string) bool { return true }
+	}
 	engine, err := tpl.New(extra)
 	if err != nil {
 		return nil, err

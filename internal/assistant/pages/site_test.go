@@ -20,10 +20,27 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/loop"
+	"github.com/jeiang/atrium/internal/assistant/nightly"
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/assistant/tool"
+	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
+	contexttools "github.com/jeiang/atrium/internal/assistant/tools/context"
+	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
+	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
+	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
+	moneytools "github.com/jeiang/atrium/internal/assistant/tools/money"
+	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
+	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
+	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
+	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
+	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
+	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
+	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
+	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
+	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -41,6 +58,22 @@ type site struct {
 	mu     sync.Mutex
 	clock  float64
 	runner *loop.Runner
+}
+
+func allTools(t *testing.T) *registry.Registry {
+	t.Helper()
+	r := registry.New()
+	for _, tools := range [][]tool.Tool{
+		mailtools.Tools(), mediatools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
+		contexttools.Tools(), recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
+		scheduletools.Tools(), skillstools.Tools(), moneytools.Tools(), notiontools.Tools(),
+		grafanatools.Tools(), calendartools.Tools(),
+	} {
+		if err := r.Add(tools...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return r
 }
 
 type siteOption func(*site)
@@ -66,7 +99,7 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
-	module := Module(Options{Runner: s.runner, Client: s.api.Client(), Now: s.now, Poll: 10 * time.Millisecond, KeepAlive: 200 * time.Millisecond})
+	module := Module(Options{Runner: s.runner, Registry: allTools(t), Client: s.api.Client(), Now: s.now, Poll: 10 * time.Millisecond, KeepAlive: 200 * time.Millisecond})
 	s.srv, err = web.New(web.Options{Cfg: cfg, Env: env, DB: d, Auth: web.AuthLocal, Render: render, Modules: []web.Module{module}})
 	if err != nil {
 		t.Fatal(err)

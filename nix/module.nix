@@ -353,7 +353,7 @@ in {
             serviceConfig = {
               ExecStart = "${lib.getExe cfg.package} watch";
               TimeoutStopSec = writeTimeout;
-              Restart = "always";
+              Restart = "on-failure";
               RestartSec = 10;
             };
             wantedBy = ["multi-user.target"];
@@ -366,7 +366,7 @@ in {
               mediaWriter
               // {
                 ExecStart = "${lib.getExe cfg.package} agent scheduler";
-                Restart = "always";
+                Restart = "on-failure";
                 RestartSec = 10;
               };
             wantedBy = ["multi-user.target"];

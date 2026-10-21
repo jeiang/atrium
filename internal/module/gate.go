@@ -16,8 +16,13 @@ import (
 
 var log = logx.Logger("atrium.module")
 
+func (s *Set) enabled(name string) bool {
+	snap := s.Current()
+	return snap != nil && snap.Enabled(name)
+}
+
 func (s *Set) Pages() []web.Page {
-	pages := []web.Page{{Module: func(_ chi.Router, d *web.Deps) {
+	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}, Module: func(_ chi.Router, d *web.Deps) {
 		err := s.Seed(context.Background(), d.DB)
 		var snap *Snapshot
 		if err == nil {
