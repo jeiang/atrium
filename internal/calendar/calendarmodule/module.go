@@ -24,7 +24,8 @@ func (Module) Register(module.Context) module.Registration {
 		Requires: []module.Requirement{{Name: "calendar credentials", Check: credentials}},
 		Commands: []*cli.Command{command},
 		Leaves: map[string]module.Leaf{
-			"calendar candidates": {Needs: []string{module.Mail}},
+			"calendar candidates":  {Needs: []string{module.Mail}},
+			"calendar google-auth": {Always: true},
 		},
 		Tools: func(r *registry.Registry) error { return r.Add(calendartools.Tools()...) },
 	}
