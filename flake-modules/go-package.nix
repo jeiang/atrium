@@ -2,7 +2,7 @@
   perSystem = {
     pkgs,
     self',
-    withGo1269,
+    withGo12610,
     ...
   }: let
     isX86Linux = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
@@ -12,7 +12,7 @@
       inherit (self'.packages) atrium-static;
       inherit (pkgs) go-licenses;
       inherit sqlcipherLib;
-      buildGo126Module = static.buildGo126Module.override {go = withGo1269 static.buildPackages.go_1_26;};
+      buildGo126Module = static.buildGo126Module.override {go = withGo12610 static.buildPackages.go_1_26;};
     };
     targets = lib.optionalAttrs isX86Linux {atrium-go-x86_64-v3 = goPackage;};
   in {
