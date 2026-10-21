@@ -94,11 +94,11 @@ func flagsExcept(name string, value string) map[string]string {
 	return flags
 }
 
-func toolNames(t *testing.T, api *anthropictest.Server) []string {
+func offeredTools(t *testing.T, api *anthropictest.Server, ran appRun) []string {
 	t.Helper()
 	requests := api.Requests()
-	if len(requests) == 0 {
-		t.Fatal("the agent sent no request")
+	if ran.code != cli.ExitOK || len(requests) == 0 {
+		t.Fatalf("agent run: exit %d, %d model requests, stdout %q stderr %q", ran.code, len(requests), ran.stdout, ran.stderr)
 	}
 	var names []string
 	tools, _ := requests[len(requests)-1].JSON(t)["tools"].([]any)
@@ -155,10 +155,7 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 				}
 			}
 			if c.module != module.Assistant {
-				if got := runApp("agent", "run", "--text", "hello", "--kind", "chat"); got.code != cli.ExitOK {
-					t.Fatalf("agent run: exit %d: %s", got.code, got.stderr)
-				}
-				if names := toolNames(t, api); slices.Contains(names, c.tool) {
+				if names := offeredTools(t, api, runApp("agent", "run", "--text", "hello", "--kind", "chat")); slices.Contains(names, c.tool) {
 					t.Errorf("tool %s is offered while %s is off", c.tool, c.module)
 				}
 			} else if n := len(api.Requests()); n != 0 {
@@ -175,17 +172,17 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 					t.Errorf("%s %s = %d, want %d", c.method, c.path, status, c.status)
 				}
 			}
+			ran := appRun{}
 			if c.output != nil {
-				if got := runApp(c.command...); !c.output(got.stdout, got.stderr, got.code) {
-					t.Errorf("%v: exit %d stdout %q stderr %q", c.command, got.code, got.stdout, got.stderr)
+				ran = runApp(c.command...)
+				if !c.output(ran.stdout, ran.stderr, ran.code) {
+					t.Errorf("%v: exit %d stdout %q stderr %q", c.command, ran.code, ran.stdout, ran.stderr)
 				}
 			}
-			if c.module != module.Assistant || c.output == nil {
-				if got := runApp("agent", "run", "--text", "hello", "--kind", "chat"); got.code != cli.ExitOK {
-					t.Fatalf("agent run: exit %d: %s", got.code, got.stderr)
-				}
+			if c.module != module.Assistant {
+				ran = runApp("agent", "run", "--text", "hello", "--kind", "chat")
 			}
-			if names := toolNames(t, api); !slices.Contains(names, c.tool) {
+			if names := offeredTools(t, api, ran); !slices.Contains(names, c.tool) {
 				t.Errorf("tool %s is missing while %s is on: %v", c.tool, c.module, names)
 			}
 			if c.table != "" && !tableExists(t, dir, c.table) {

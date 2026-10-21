@@ -750,6 +750,9 @@
       "--text",
       "hello"
     ],
+    "env": {
+      "ANTHROPIC_API_KEY": ""
+    },
     "exit_code": 0,
     "name": "agent-run-not-configured",
     "stderr": "agent-run-not-configured.stderr",

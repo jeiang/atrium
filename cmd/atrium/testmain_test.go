@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
@@ -43,10 +44,14 @@ func requirementEnv(mediaRoot string) map[string]string {
 }
 
 func init() {
-	for name, value := range requirementEnv(filepath.Join(os.TempDir(), "atrium-test-media")) {
-		_ = os.Setenv(name, value)
-	}
+	defaults := requirementEnv(filepath.Join(os.TempDir(), "atrium-test-media"))
+	defaults[anthropic.BaseURLEnv] = "http://127.0.0.1:9"
 	for _, name := range moduleNames {
-		_ = os.Setenv(flagEnv(name), "true")
+		defaults[flagEnv(name)] = "true"
+	}
+	for name, value := range defaults {
+		if _, set := os.LookupEnv(name); !set {
+			_ = os.Setenv(name, value)
+		}
 	}
 }
