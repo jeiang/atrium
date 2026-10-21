@@ -20,8 +20,84 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
+| `agent_clear_at_least_share` | float | `0.05` | advanced | `ATRIUM_ASSISTANT_AGENT_CLEAR_AT_LEAST_SHARE` |
+| `agent_clear_keep` | int | `3` | advanced | `ATRIUM_ASSISTANT_AGENT_CLEAR_KEEP` |
+| `agent_clear_share` | float | `0.1875` | advanced | `ATRIUM_ASSISTANT_AGENT_CLEAR_SHARE` |
+| `agent_commit_savings` | int | `20000` | advanced | `ATRIUM_ASSISTANT_AGENT_COMMIT_SAVINGS` |
+| `agent_compact_share` | float | `0.875` | advanced | `ATRIUM_ASSISTANT_AGENT_COMPACT_SHARE` |
+| `agent_context_max_ids` | int | `50` | cap | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_IDS` |
+| `agent_context_max_sources` | int | `100` | cap | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_SOURCES` |
+| `agent_context_summary_chars` | int | `4000` | cap | `ATRIUM_ASSISTANT_AGENT_CONTEXT_SUMMARY_CHARS` |
+| `agent_dashboard_items` | int | `60` | cap | `ATRIUM_ASSISTANT_AGENT_DASHBOARD_ITEMS` |
+| `agent_effort_cron` | enum (low, medium, high, xhigh, max) | `high` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_CRON` |
+| `agent_effort_nightly` | enum (low, medium, high, xhigh, max) | `high` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_NIGHTLY` |
+| `agent_effort_sub` | enum (low, medium, high, xhigh, max) | `medium` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_SUB` |
+| `agent_effort_subagent` | enum (low, medium, high, xhigh, max) | `medium` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_SUBAGENT` |
+| `agent_file_cap_bytes` | int | `33554432` | cap | `ATRIUM_ASSISTANT_AGENT_FILE_CAP_BYTES` |
+| `agent_file_name_chars` | int | `80` | cap | `ATRIUM_ASSISTANT_AGENT_FILE_NAME_CHARS` |
+| `agent_grafana_cell_chars` | int | `300` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_CELL_CHARS` |
+| `agent_grafana_max_alerts` | int | `50` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_ALERTS` |
+| `agent_grafana_max_dashboards` | int | `20` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_DASHBOARDS` |
+| `agent_grafana_max_log_rows` | int | `200` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_LOG_ROWS` |
+| `agent_grafana_max_metric_rows` | int | `50` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_METRIC_ROWS` |
+| `agent_grafana_max_series` | int | `20` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_SERIES` |
+| `agent_grafana_timeout_seconds` | int | `15` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_TIMEOUT_SECONDS` |
+| `agent_journal_lease_seconds` | int | `1800` | advanced | `ATRIUM_ASSISTANT_AGENT_JOURNAL_LEASE_SECONDS` |
+| `agent_mail_body_chars` | int | `8000` | cap | `ATRIUM_ASSISTANT_AGENT_MAIL_BODY_CHARS` |
+| `agent_mail_max_contacts` | int | `10` | cap | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_CONTACTS` |
+| `agent_mail_max_loops_limit` | int | `100` | cap | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_LOOPS_LIMIT` |
+| `agent_mail_max_results` | int | `20` | cap | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_RESULTS` |
+| `agent_mail_snippet_chars` | int | `300` | cap | `ATRIUM_ASSISTANT_AGENT_MAIL_SNIPPET_CHARS` |
+| `agent_manifest_results` | int | `30` | cap | `ATRIUM_ASSISTANT_AGENT_MANIFEST_RESULTS` |
+| `agent_media_torrent_limit` | int | `50` | cap | `ATRIUM_ASSISTANT_AGENT_MEDIA_TORRENT_LIMIT` |
+| `agent_message_cap_bytes` | int | `67108864` | cap | `ATRIUM_ASSISTANT_AGENT_MESSAGE_CAP_BYTES` |
+| `agent_money_max_days` | int | `365` | cap | `ATRIUM_ASSISTANT_AGENT_MONEY_MAX_DAYS` |
+| `agent_money_max_limit` | int | `200` | cap | `ATRIUM_ASSISTANT_AGENT_MONEY_MAX_LIMIT` |
+| `agent_nightly_max_threads` | int | `30` | cap | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_MAX_THREADS` |
+| `agent_nightly_thread_chars` | int | `3000` | cap | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_THREAD_CHARS` |
+| `agent_nightly_total_chars` | int | `40000` | cap | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_TOTAL_CHARS` |
+| `agent_notion_max_markdown_chars` | int | `100000` | cap | `ATRIUM_ASSISTANT_AGENT_NOTION_MAX_MARKDOWN_CHARS` |
+| `agent_notion_max_results` | int | `10` | cap | `ATRIUM_ASSISTANT_AGENT_NOTION_MAX_RESULTS` |
+| `agent_notion_page_chars` | int | `12000` | cap | `ATRIUM_ASSISTANT_AGENT_NOTION_PAGE_CHARS` |
+| `agent_notion_snippet_chars` | int | `300` | cap | `ATRIUM_ASSISTANT_AGENT_NOTION_SNIPPET_CHARS` |
+| `agent_notion_stale_seconds` | int | `86400` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_STALE_SECONDS` |
+| `agent_preflight_share` | float | `0.95` | advanced | `ATRIUM_ASSISTANT_AGENT_PREFLIGHT_SHARE` |
+| `agent_preserve_messages` | int | `3` | advanced | `ATRIUM_ASSISTANT_AGENT_PRESERVE_MESSAGES` |
+| `agent_preview_chars` | int | `600` | advanced | `ATRIUM_ASSISTANT_AGENT_PREVIEW_CHARS` |
+| `agent_profile_key_chars` | int | `64` | cap | `ATRIUM_ASSISTANT_AGENT_PROFILE_KEY_CHARS` |
+| `agent_profile_value_chars` | int | `500` | cap | `ATRIUM_ASSISTANT_AGENT_PROFILE_VALUE_CHARS` |
+| `agent_project_instruction_chars` | int | `20000` | cap | `ATRIUM_ASSISTANT_AGENT_PROJECT_INSTRUCTION_CHARS` |
+| `agent_project_name_chars` | int | `80` | cap | `ATRIUM_ASSISTANT_AGENT_PROJECT_NAME_CHARS` |
+| `agent_recall_max_page_chars` | int | `16000` | cap | `ATRIUM_ASSISTANT_AGENT_RECALL_MAX_PAGE_CHARS` |
+| `agent_recall_page_chars` | int | `8000` | cap | `ATRIUM_ASSISTANT_AGENT_RECALL_PAGE_CHARS` |
+| `agent_skill_body_chars` | int | `20000` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_BODY_CHARS` |
+| `agent_skill_description_chars` | int | `160` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_DESCRIPTION_CHARS` |
+| `agent_skill_expand_chars` | int | `20000` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_CHARS` |
+| `agent_skill_expand_max` | int | `5` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_MAX` |
+| `agent_stub_tokens` | int | `2000` | advanced | `ATRIUM_ASSISTANT_AGENT_STUB_TOKENS` |
+| `agent_subagent_context_ids` | int | `20` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_CONTEXT_IDS` |
+| `agent_subagent_description_chars` | int | `160` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_DESCRIPTION_CHARS` |
+| `agent_subagent_digest_chars` | int | `6000` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_DIGEST_CHARS` |
+| `agent_subagent_max_concurrent` | int | `2` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_CONCURRENT` |
+| `agent_subagent_max_cost_usd` | float | `0.25` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_COST_USD` |
+| `agent_subagent_max_steps` | int | `12` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_STEPS` |
+| `agent_subagent_prompt_chars` | int | `4000` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_PROMPT_CHARS` |
+| `agent_subagent_task_chars` | int | `4000` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_TASK_CHARS` |
+| `agent_summary_max_tokens` | int | `8192` | advanced | `ATRIUM_ASSISTANT_AGENT_SUMMARY_MAX_TOKENS` |
+| `agent_web_search_max_uses` | int | `5` | cap | `ATRIUM_ASSISTANT_AGENT_WEB_SEARCH_MAX_USES` |
+| `agent_webfetch_max_bytes` | int | `2097152` | cap | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_MAX_BYTES` |
+| `agent_webfetch_max_redirects` | int | `5` | cap | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_MAX_REDIRECTS` |
+| `agent_webfetch_page_text_chars` | int | `60000` | cap | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_PAGE_TEXT_CHARS` |
+| `agent_webfetch_text_default` | int | `12000` | cap | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_TEXT_DEFAULT` |
+| `agent_webfetch_timeout_seconds` | int | `10` | cap | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_TIMEOUT_SECONDS` |
+| `agent_webfetch_user_agent` | string | `atrium-webfetch/1` | advanced | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_USER_AGENT` |
+| `agent_workspace_plan_item_chars` | int | `200` | cap | `ATRIUM_ASSISTANT_AGENT_WORKSPACE_PLAN_ITEM_CHARS` |
+| `agent_workspace_plan_items` | int | `20` | cap | `ATRIUM_ASSISTANT_AGENT_WORKSPACE_PLAN_ITEMS` |
+| `budget_chat_share` | float | `1` | cap | `ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE` |
 | `budget_unattended_share` | float | `0.8` | advanced | `ATRIUM_ASSISTANT_BUDGET_UNATTENDED_SHARE` |
 | `cache_ttl_chat` | enum (5m, 1h) | `5m` | ui | `ATRIUM_ASSISTANT_CACHE_TTL_CHAT` |
+| `default_context_limit` | enum (90000, 200000, 500000, 1000000) | `90000` | ui | `ATRIUM_ASSISTANT_DEFAULT_CONTEXT_LIMIT` |
+| `default_effort` | enum (low, medium, high, xhigh, max) | `medium` | ui | `ATRIUM_ASSISTANT_DEFAULT_EFFORT` |
 | `max_run_cost_usd` | float | `2` | cap | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD` |
 | `max_steps` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS` |
 | `monthly_budget_usd` | float | `75` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
