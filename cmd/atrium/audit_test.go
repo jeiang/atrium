@@ -146,8 +146,12 @@ func TestStoredSecretsAreRedactedFromLogsAndAgentWrites(t *testing.T) {
 	t.Cleanup(srv.Close)
 	r := newMoneyRig(t, srv.URL+"/v1")
 
-	if set := runSecrets(t, secret+"\n", "set", secrets.ActionLinkKey); set.code != cli.ExitOK {
-		t.Fatalf("secrets set: exit %d stderr %q", set.code, set.stderr)
+	setCmd := cliExitProcess(t, "secrets set "+secrets.ActionLinkKey)
+	setCmd.Stdin = strings.NewReader(secret + "\n")
+	var setErr bytes.Buffer
+	setCmd.Stderr = &setErr
+	if err := setCmd.Run(); err != nil {
+		t.Fatalf("secrets set subprocess: %v, stderr %q", err, setErr.String())
 	}
 	var out, logs bytes.Buffer
 	if code := r.app.Run(context.Background(), []string{"money", "refresh", "--limit", "1"}, &out, &logs); code != cli.ExitOK {

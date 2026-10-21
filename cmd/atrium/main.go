@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db/dbcmd"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
@@ -69,6 +70,7 @@ func commands(clients run.Clients, now func() float64) []*cli.Command {
 		mediacmd.Command(now),
 		settingscmd.Command(),
 		secretscmd.Command(),
+		dbcmd.Command(),
 		web.ServeCommand(
 			web.Page{Module: chatpages.Module(chatpages.Options{}), Templates: chatpages.Templates()},
 			web.Page{Module: about.Module(version), Templates: about.Templates()},
