@@ -180,6 +180,7 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 	for k, v := range data.environment {
 		vars[k] = v
 	}
+	vars["ATRIUM_CALENDAR_ICLOUD_APPLE_ID"] = vars["ICLOUD_APPLE_ID"]
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(golden.Dir(), "state", "contacts")

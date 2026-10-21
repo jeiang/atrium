@@ -407,7 +407,7 @@ func (ev *icsEvent) row(calendar string, start, end Value, tz *time.Location) Ro
 	return Row{UID: ev.uidKey(), Calendar: calendar, Start: fmtValue(start, tz), End: fmtValue(end, tz), Title: ev.summary, Location: ev.location}
 }
 
-func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Location, notes *[]string) ([]Row, error) {
+func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Location, notes *[]string, maxOccurrences int) ([]Row, error) {
 	events, err := parseICS(data)
 	if err != nil {
 		return nil, err
@@ -445,7 +445,7 @@ func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Locati
 		for _, o := range overrides[uid] {
 			skip[asDT(*o.recurrenceID, tz).Unix()] = struct{}{}
 		}
-		occs, err := occurrences(comp, start, ws, we, tz, notes)
+		occs, err := occurrences(comp, start, ws, we, tz, notes, maxOccurrences)
 		if err != nil {
 			return nil, err
 		}

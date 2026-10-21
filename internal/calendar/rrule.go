@@ -233,7 +233,7 @@ func mixError(dts, v Value) error {
 	return ruleError("can't compare datetime.datetime to datetime.date")
 }
 
-func occurrences(m *icsEvent, start Value, ws, we time.Time, tz *time.Location, notes *[]string) ([]Value, error) {
+func occurrences(m *icsEvent, start Value, ws, we time.Time, tz *time.Location, notes *[]string, maxOccurrences int) ([]Value, error) {
 	if len(m.rrules) == 0 && !m.hasRDate {
 		return []Value{start}, nil
 	}
@@ -254,9 +254,9 @@ func occurrences(m *icsEvent, start Value, ws, we time.Time, tz *time.Location, 
 	if err != nil {
 		return nil, err
 	}
-	if len(found) > MaxOccurrences {
-		*notes = append(*notes, fmt.Sprintf("%s: more than %d occurrences in window", m.uidText(), MaxOccurrences))
-		found = found[:MaxOccurrences]
+	if len(found) > maxOccurrences {
+		*notes = append(*notes, fmt.Sprintf("%s: more than %d occurrences in window", m.uidText(), maxOccurrences))
+		found = found[:maxOccurrences]
 	}
 	if start.isDatetime() {
 		return found, nil
