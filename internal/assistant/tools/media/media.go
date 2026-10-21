@@ -41,7 +41,7 @@ func Tools() []tool.Tool {
 		},
 		{
 			Name:        "media_library_search",
-			Description: "Search the media library (movies and TV episodes) by words in the title or file name; returns paths and VPN URLs.",
+			Description: "Search the media library (movies and TV episodes) by words in the title or file name; returns paths and VPN URLs. The limit is capped by media_search_limit.",
 			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": %d}}, "required": ["query"], "additionalProperties": false}`, searchLimitCeiling)),
 			Handler:     mediaLibrarySearch,
 			Effect:      tool.Read,

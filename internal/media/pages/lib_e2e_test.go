@@ -131,6 +131,8 @@ func TestLibE2ELinkTTLFollowsTheRegistry(t *testing.T) {
 	}
 	movie := status(t, s.get("/media/library/movie/Dune%20%282021%29"), 200, "movie")
 	contains(t, movie, "expire after 2 hours")
+	show := status(t, s.get("/media/library/tv/Lanterns%20%282026%29"), 200, "show")
+	contains(t, show, "expire after 2 hours")
 	link, err := url.Parse(libHref(t, movie, "https://atrium.test/media/file/"))
 	if err != nil {
 		t.Fatal(err)
@@ -141,5 +143,21 @@ func TestLibE2ELinkTTLFollowsTheRegistry(t *testing.T) {
 	}
 	if ahead := exp - time.Now().Unix(); ahead < 7100 || ahead > 7205 {
 		t.Errorf("link expires in %d s, want about 7200", ahead)
+	}
+}
+
+func TestLibE2ELinkTTLReadsAsAHumanDuration(t *testing.T) {
+	vars, root := libVars(t, nil)
+	libTree(t, root)
+	s := newSite(t, vars, Options{})
+	ctx := audit.With(context.Background(), "test", audit.CLI)
+	for ttl, want := range map[string]string{
+		"1800": "expire after 30 minutes", "3540": "expire after 59 minutes", "5400": "expire after 90 minutes",
+		"60": "expire after 1 minute;", "3600": "expire after 1 hour;", "172800": "expire after 2 days",
+	} {
+		if err := settings.Default.Set(ctx, s.db.Write, media.KeyLinkTTL, ttl, 0); err != nil {
+			t.Fatal(err)
+		}
+		contains(t, status(t, s.get("/media/library/movie/Dune%20%282021%29"), 200, "movie "+ttl), want)
 	}
 }

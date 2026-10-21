@@ -73,7 +73,7 @@ func (s *service) libraryMovie(w http.ResponseWriter, r *http.Request) {
 		files[i] = FileLink{Rel: f.Rel, Name: f.Name, Size: f.Size, Public: public, VPN: vpn}
 	}
 	view := MovieView{Dir: found.Dir, Title: found.Title, Year: found.Year, Files: files}
-	s.libRender(w, r, "media_movie.gohtml", MoviePage{Movie: view, TTLHours: set.LinkTTL / 3600})
+	s.libRender(w, r, "media_movie.gohtml", MoviePage{Movie: view, TTL: linkSpan(set.LinkTTL)})
 }
 
 func libNumber(n *int) *int64 {
@@ -108,7 +108,7 @@ func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
 		seasons[i] = SeasonView{Number: libNumber(season.Number), Dir: season.Dir, Episodes: episodes}
 	}
 	view := ShowView{Dir: found.Dir, Title: found.Title, Year: found.Year, Seasons: seasons}
-	s.libRender(w, r, "media_show.gohtml", ShowPage{Show: view, TTLHours: set.LinkTTL / 3600})
+	s.libRender(w, r, "media_show.gohtml", ShowPage{Show: view, TTL: linkSpan(set.LinkTTL)})
 }
 
 func (s *service) libMissing(w http.ResponseWriter, r *http.Request, err error) {

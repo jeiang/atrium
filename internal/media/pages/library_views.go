@@ -1,5 +1,7 @@
 package pages
 
+import "strconv"
+
 type LibraryEntry struct {
 	Kind  string `json:"kind"`
 	Dir   string `json:"dir"`
@@ -52,11 +54,28 @@ type MovieView struct {
 }
 
 type MoviePage struct {
-	Movie    MovieView `json:"movie"`
-	TTLHours int64     `json:"ttl_hours"`
+	Movie MovieView `json:"movie"`
+	TTL   string    `json:"ttl"`
 }
 
 type ShowPage struct {
-	Show     ShowView `json:"show"`
-	TTLHours int64    `json:"ttl_hours"`
+	Show ShowView `json:"show"`
+	TTL  string   `json:"ttl"`
+}
+
+func linkSpan(seconds int64) string {
+	unit, size := "second", int64(1)
+	switch {
+	case seconds%86400 == 0:
+		unit, size = "day", 86400
+	case seconds%3600 == 0:
+		unit, size = "hour", 3600
+	case seconds%60 == 0:
+		unit, size = "minute", 60
+	}
+	n := seconds / size
+	if n == 1 {
+		return "1 " + unit
+	}
+	return strconv.FormatInt(n, 10) + " " + unit + "s"
 }
