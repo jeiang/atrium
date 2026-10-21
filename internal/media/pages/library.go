@@ -11,8 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/web"
 )
 
-const libraryTTLHours = media.LinkTTLSeconds / 3600
-
 func (s *service) registerLibrary(r chi.Router) {
 	r.Get("/media/library", s.libraryIndex)
 	r.Get("/media/library/movie/{name}", s.libraryMovie)
@@ -38,30 +36,32 @@ func libEntries(found []media.Entry) []LibraryEntry {
 }
 
 func (s *service) libraryIndex(w http.ResponseWriter, r *http.Request) {
-	root, err := s.settings().NeedRoot()
+	set := s.settings(r.Context())
+	root, err := set.NeedRoot()
 	if err != nil {
 		s.libRender(w, r, "media_library.gohtml", LibraryPage{Error: err.Error(), Movies: []LibraryEntry{}, Shows: []LibraryEntry{}})
 		return
 	}
-	s.libRender(w, r, "media_library.gohtml", LibraryPage{Movies: libEntries(media.MovieEntries(root)), Shows: libEntries(media.ShowEntries(root))})
+	s.libRender(w, r, "media_library.gohtml", LibraryPage{Movies: libEntries(set.MovieEntries(root)), Shows: libEntries(set.ShowEntries(root))})
 }
 
-func (s *service) libLinks(rel string) (public, vpn string) {
-	if s.settings().PublicURL != "" {
-		url, err := s.links.PublicURL(rel, s.now())
+func (s *service) libLinks(set media.Settings, rel string) (public, vpn string) {
+	if set.PublicURL != "" {
+		url, err := s.links.PublicURL(set.PublicURL, rel, s.now(), set.LinkTTL)
 		if err != nil {
 			panic(err)
 		}
 		public = url
 	}
-	return public, s.links.VPNURL(rel)
+	return public, set.VPNURL(rel)
 }
 
 func (s *service) libraryMovie(w http.ResponseWriter, r *http.Request) {
-	root, err := s.settings().NeedRoot()
+	set := s.settings(r.Context())
+	root, err := set.NeedRoot()
 	var found media.MovieView
 	if err == nil {
-		found, err = media.Movie(root, web.PathParam(r, "name"))
+		found, err = set.Movie(root, web.PathParam(r, "name"))
 	}
 	if err != nil {
 		s.libMissing(w, r, err)
@@ -69,11 +69,11 @@ func (s *service) libraryMovie(w http.ResponseWriter, r *http.Request) {
 	}
 	files := make([]FileLink, len(found.Files))
 	for i, f := range found.Files {
-		public, vpn := s.libLinks(f.Rel)
+		public, vpn := s.libLinks(set, f.Rel)
 		files[i] = FileLink{Rel: f.Rel, Name: f.Name, Size: f.Size, Public: public, VPN: vpn}
 	}
 	view := MovieView{Dir: found.Dir, Title: found.Title, Year: found.Year, Files: files}
-	s.libRender(w, r, "media_movie.gohtml", MoviePage{Movie: view, TTLHours: libraryTTLHours})
+	s.libRender(w, r, "media_movie.gohtml", MoviePage{Movie: view, TTL: linkSpan(set.LinkTTL)})
 }
 
 func libNumber(n *int) *int64 {
@@ -85,10 +85,11 @@ func libNumber(n *int) *int64 {
 }
 
 func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
-	root, err := s.settings().NeedRoot()
+	set := s.settings(r.Context())
+	root, err := set.NeedRoot()
 	var found media.ShowView
 	if err == nil {
-		found, err = media.Show(root, web.PathParam(r, "name"))
+		found, err = set.Show(root, web.PathParam(r, "name"))
 	}
 	if err != nil {
 		s.libMissing(w, r, err)
@@ -98,7 +99,7 @@ func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
 	for i, season := range found.Seasons {
 		episodes := make([]EpisodeView, len(season.Episodes))
 		for j, e := range season.Episodes {
-			public, vpn := s.libLinks(e.Rel)
+			public, vpn := s.libLinks(set, e.Rel)
 			episodes[j] = EpisodeView{
 				Rel: e.Rel, Name: e.Name, Size: e.Size, Public: public, VPN: vpn,
 				Season: libNumber(e.Season), Episode: libNumber(e.Episode),
@@ -107,7 +108,7 @@ func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
 		seasons[i] = SeasonView{Number: libNumber(season.Number), Dir: season.Dir, Episodes: episodes}
 	}
 	view := ShowView{Dir: found.Dir, Title: found.Title, Year: found.Year, Seasons: seasons}
-	s.libRender(w, r, "media_show.gohtml", ShowPage{Show: view, TTLHours: libraryTTLHours})
+	s.libRender(w, r, "media_show.gohtml", ShowPage{Show: view, TTL: linkSpan(set.LinkTTL)})
 }
 
 func (s *service) libMissing(w http.ResponseWriter, r *http.Request, err error) {

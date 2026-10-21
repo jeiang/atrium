@@ -16,7 +16,6 @@ const (
 	dlModePlain     = "plain"
 	dlPollSeconds   = 5
 	dlInfiniteETA   = 8640000
-	dlTorrentB64Cap = 1 << 20
 	dlDownloadsPage = "/media/downloads"
 )
 
@@ -188,13 +187,13 @@ func queueView(v media.View) QueueView {
 	}
 }
 
-func dlDecodeTorrent(b64 string) (data []byte, present bool, err error) {
+func dlDecodeTorrent(b64 string, limit int) (data []byte, present bool, err error) {
 	b64 = strings.Join(py.Split(b64), "")
 	if b64 == "" {
 		return nil, false, nil
 	}
 	n := utf8.RuneCountInString(b64)
-	if n > dlTorrentB64Cap {
+	if n > limit {
 		return nil, false, dlTorrentError("the torrent file is too large")
 	}
 	b64 = strings.NewReplacer("-", "+", "_", "/").Replace(b64)

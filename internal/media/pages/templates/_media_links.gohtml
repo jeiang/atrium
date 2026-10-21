@@ -1,6 +1,6 @@
-{{define "media_file_links"}}{{$f := .f}}{{$ttl := .ttl_hours -}}
+{{define "media_file_links"}}{{$f := .f}}{{$ttl := .ttl -}}
 <span class="flex flex-wrap gap-2">
-  {{if $f.public}}<a class="btn" data-size="sm" data-variant="outline" href="{{$f.public}}" title="Signed public link, valid {{$ttl}} h">{{icon "globe" "size-3.5"}}Public link</a>{{end}}
+  {{if $f.public}}<a class="btn" data-size="sm" data-variant="outline" href="{{$f.public}}" title="Signed public link, valid {{$ttl}}">{{icon "globe" "size-3.5"}}Public link</a>{{end}}
   {{if $f.vpn}}<a class="btn" data-size="sm" data-variant="outline" href="{{$f.vpn}}" title="Direct over the VPN">{{icon "link" "size-3.5"}}VPN link</a>{{end}}
 </span>
 {{- end}}

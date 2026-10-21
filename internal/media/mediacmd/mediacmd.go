@@ -32,12 +32,15 @@ var channels = skippable(func(ctx context.Context, d *db.DB, env config.Env, now
 	if err != nil || len(found) == 0 {
 		return py.Dict{}, err
 	}
-	settings := config.Media(env)
-	url, err := settings.NeedQbit()
+	settings, err := media.Load(ctx, d.Read, env)
 	if err != nil {
 		return nil, err
 	}
-	result, err := media.Poll(ctx, d.Write, env, media.NewQbit(url), settings, media.PollOptions{Now: now})
+	qb, err := settings.Qbit()
+	if err != nil {
+		return nil, err
+	}
+	result, err := media.Poll(ctx, d.Write, env, qb, settings, media.PollOptions{Now: now})
 	if err != nil {
 		return nil, err
 	}
@@ -45,11 +48,14 @@ var channels = skippable(func(ctx context.Context, d *db.DB, env config.Env, now
 })
 
 var sweep = skippable(func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (py.Dict, error) {
-	url, err := config.Media(env).NeedQbit()
+	settings, err := media.Load(ctx, d.Read, env)
 	if err != nil {
 		return nil, err
 	}
-	qb := media.NewQbit(url)
+	qb, err := settings.Qbit()
+	if err != nil {
+		return nil, err
+	}
 	selected, err := media.SelectFiles(ctx, qb, nil)
 	if err != nil {
 		return nil, err
@@ -77,12 +83,16 @@ func callable(run job) worker.Callable {
 }
 
 func thumbnails(cfg config.Config) job {
-	return skippable(func(ctx context.Context, _ *db.DB, env config.Env, _ func() float64) (py.Dict, error) {
-		root, err := config.Media(env).NeedRoot()
+	return skippable(func(ctx context.Context, d *db.DB, env config.Env, _ func() float64) (py.Dict, error) {
+		settings, err := media.Load(ctx, d.Read, env)
 		if err != nil {
 			return nil, err
 		}
-		generated, remaining := media.NewArtwork(cfg.MediaCacheDir(), nil).ThumbnailPass(ctx, root, media.ThumbnailPassLimit)
+		root, err := settings.NeedRoot()
+		if err != nil {
+			return nil, err
+		}
+		generated, remaining := media.NewArtwork(cfg.MediaCacheDir(), nil, settings.Tuning).ThumbnailPass(ctx, root, settings.ThumbPassLimit)
 		return py.Dict{{Key: "generated", Value: int64(generated)}, {Key: "remaining", Value: int64(remaining)}}, nil
 	})
 }

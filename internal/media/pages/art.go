@@ -61,7 +61,7 @@ func (s *service) serveArt(w http.ResponseWriter, r *http.Request) {
 		s.deps.Error(w, r, http.StatusNotFound, "not found")
 		return
 	}
-	path, ok := s.art.Poster(r.Context(), kind, name, 0)
+	path, ok := s.artwork(s.settings(r.Context())).Poster(r.Context(), kind, name, 0)
 	serveArtImage(w, r, path, ok)
 }
 
@@ -76,16 +76,17 @@ func (s *service) serveSeasonArt(w http.ResponseWriter, r *http.Request) {
 		s.deps.Error(w, r, http.StatusNotFound, "not found")
 		return
 	}
-	path, ok := s.art.Poster(r.Context(), media.KindSeason, name, number)
+	path, ok := s.artwork(s.settings(r.Context())).Poster(r.Context(), media.KindSeason, name, number)
 	serveArtImage(w, r, path, ok)
 }
 
 func (s *service) serveThumb(w http.ResponseWriter, r *http.Request) {
-	root, err := s.settings().NeedRoot()
+	set := s.settings(r.Context())
+	root, err := set.NeedRoot()
 	if err != nil {
 		writeArtPlaceholder(w)
 		return
 	}
-	path, ok := s.art.Thumbnail(r.Context(), root, web.PathParam(r, "*"))
+	path, ok := s.artwork(set).Thumbnail(r.Context(), root, web.PathParam(r, "*"))
 	serveArtImage(w, r, path, ok)
 }

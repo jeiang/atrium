@@ -1,10 +1,18 @@
 package pages
 
 import (
+	"context"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 func libWrite(t *testing.T, root, rel string, size int) {
@@ -29,8 +37,8 @@ func libVars(t *testing.T, extra map[string]string) (map[string]string, string) 
 	t.Helper()
 	root := t.TempDir()
 	vars := map[string]string{
-		"ATRIUM_MEDIA_ROOT": root, "ATRIUM_CORE_PUBLIC_URL": "https://atrium.test", "ATRIUM_MEDIA_MOVIES_URL": "http://artemis.vpn:8084",
-		"ATRIUM_MEDIA_TV_URL": "http://artemis.vpn:8085", "ATRIUM_MEDIA_LINK_KEY": "secret-key",
+		"ATRIUM_MEDIA_MEDIA_ROOT": root, "ATRIUM_CORE_PUBLIC_URL": "https://atrium.test", "ATRIUM_MEDIA_MEDIA_MOVIES_URL": "http://artemis.vpn:8084",
+		"ATRIUM_MEDIA_MEDIA_TV_URL": "http://artemis.vpn:8085", "ATRIUM_MEDIA_LINK_KEY": "secret-key",
 	}
 	for k, v := range extra {
 		vars[k] = v
@@ -89,7 +97,7 @@ func TestLibE2EPagesLinksAndMissing(t *testing.T) {
 }
 
 func TestLibE2ELinksFollowSettingsAndEmptyLibrary(t *testing.T) {
-	vars, root := libVars(t, map[string]string{"ATRIUM_CORE_PUBLIC_URL": "", "ATRIUM_MEDIA_MOVIES_URL": ""})
+	vars, root := libVars(t, map[string]string{"ATRIUM_CORE_PUBLIC_URL": "", "ATRIUM_MEDIA_MEDIA_MOVIES_URL": ""})
 	libWrite(t, root, "movies/Dune (2021)/Dune (2021).mkv", 10)
 	s := newSite(t, vars, Options{})
 	movie := status(t, s.get("/media/library/movie/Dune%20%282021%29"), 200, "movie without links")
@@ -102,8 +110,54 @@ func TestLibE2ELinksFollowSettingsAndEmptyLibrary(t *testing.T) {
 
 	bare := newSite(t, map[string]string{}, Options{})
 	unset := status(t, bare.get("/media/library"), 200, "library without a root")
-	contains(t, unset, "Library not configured", "ATRIUM_MEDIA_ROOT is not set")
+	contains(t, unset, "Library not configured", "media_root is not set; pin it with ATRIUM_MEDIA_MEDIA_ROOT")
 	lacks(t, unset, "Movies (")
 	status(t, bare.get("/media/library/movie/Dune"), 404, "movie without a root")
 	status(t, bare.get("/media/library/tv/Lanterns"), 404, "show without a root")
+}
+
+func TestLibE2ELinkTTLFollowsTheRegistry(t *testing.T) {
+	vars, root := libVars(t, nil)
+	libTree(t, root)
+	s := newSite(t, vars, Options{})
+	ctx := audit.With(context.Background(), "test", audit.CLI)
+
+	err := settings.Default.Set(ctx, s.db.Write, media.KeyLinkTTL, "59", 0)
+	if err == nil || !strings.Contains(err.Error(), "media_link_ttl_seconds must be between 60 and 2592000") {
+		t.Fatalf("ttl 59: %v", err)
+	}
+	if err := settings.Default.Set(ctx, s.db.Write, media.KeyLinkTTL, "7200", 0); err != nil {
+		t.Fatal(err)
+	}
+	movie := status(t, s.get("/media/library/movie/Dune%20%282021%29"), 200, "movie")
+	contains(t, movie, "expire after 2 hours")
+	show := status(t, s.get("/media/library/tv/Lanterns%20%282026%29"), 200, "show")
+	contains(t, show, "expire after 2 hours")
+	link, err := url.Parse(libHref(t, movie, "https://atrium.test/media/file/"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	exp, err := strconv.ParseInt(link.Query().Get("exp"), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ahead := exp - time.Now().Unix(); ahead < 7100 || ahead > 7205 {
+		t.Errorf("link expires in %d s, want about 7200", ahead)
+	}
+}
+
+func TestLibE2ELinkTTLReadsAsAHumanDuration(t *testing.T) {
+	vars, root := libVars(t, nil)
+	libTree(t, root)
+	s := newSite(t, vars, Options{})
+	ctx := audit.With(context.Background(), "test", audit.CLI)
+	for ttl, want := range map[string]string{
+		"1800": "expire after 30 minutes", "3540": "expire after 59 minutes", "5400": "expire after 90 minutes",
+		"60": "expire after 1 minute;", "3600": "expire after 1 hour;", "172800": "expire after 2 days",
+	} {
+		if err := settings.Default.Set(ctx, s.db.Write, media.KeyLinkTTL, ttl, 0); err != nil {
+			t.Fatal(err)
+		}
+		contains(t, status(t, s.get("/media/library/movie/Dune%20%282021%29"), 200, "movie "+ttl), want)
+	}
 }

@@ -22,7 +22,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
-	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
@@ -192,6 +191,8 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 	}
 	for phaseA, canonical := range map[string]string{
 		"ATRIUM_MODE": "ATRIUM_MAIL_MAIL_MODE", "ATRIUM_CHAT_URL": "ATRIUM_MAIL_MAIL_CHAT_URL", "ATRIUM_EMBED_URL": "ATRIUM_MAIL_MAIL_EMBED_URL",
+		"ATRIUM_MEDIA_ROOT": "ATRIUM_MEDIA_MEDIA_ROOT", "QBITTORRENT_URL": "ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL",
+		"ATRIUM_MEDIA_MOVIES_URL": "ATRIUM_MEDIA_MEDIA_MOVIES_URL", "ATRIUM_MEDIA_TV_URL": "ATRIUM_MEDIA_MEDIA_TV_URL",
 	} {
 		if v, ok := vars[phaseA]; ok {
 			vars[canonical] = v
@@ -344,8 +345,5 @@ func mediaServices(t *testing.T) map[string]string {
 	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	previous := media.EZTVAPI
-	media.EZTVAPI = srv.URL + "/api/get-torrents"
-	t.Cleanup(func() { media.EZTVAPI = previous })
-	return map[string]string{"QBITTORRENT_URL": srv.URL, "ATRIUM_NOTIFY_NTFY_URL": srv.URL}
+	return map[string]string{"QBITTORRENT_URL": srv.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": srv.URL + "/api/get-torrents", "ATRIUM_NOTIFY_NTFY_URL": srv.URL}
 }

@@ -23,16 +23,8 @@ const (
 	KindShow   = "show"
 	KindSeason = "season"
 
-	ThumbnailPassLimit = 200
-
-	postersDir     = "posters"
-	thumbsDir      = "thumbs"
-	noneTTL        = 7 * 86400
-	thumbWidth     = 480
-	thumbAt        = 0.10
-	niceLevel      = "10"
-	ffmpegTimeout  = 120 * time.Second
-	showSearchSize = 5
+	postersDir = "posters"
+	thumbsDir  = "thumbs"
 )
 
 type Runner func(ctx context.Context, argv []string) (stdout, stderr string, code int, err error)
@@ -43,10 +35,11 @@ type Artwork struct {
 	Cache string
 	TMDB  *TMDB
 	Run   Runner
+	Tuning
 }
 
-func NewArtwork(cacheDir string, tmdb *TMDB) *Artwork {
-	return &Artwork{Cache: cacheDir, TMDB: tmdb}
+func NewArtwork(cacheDir string, tmdb *TMDB, t Tuning) *Artwork {
+	return &Artwork{Cache: cacheDir, TMDB: tmdb, Tuning: t}
 }
 
 func slugOf(text string) string {
@@ -87,9 +80,9 @@ func (a *Artwork) thumbFile(rel string) string {
 
 func noneMarker(path string) string { return strings.TrimSuffix(path, ".jpg") + ".none" }
 
-func freshNone(path string) bool {
+func (a *Artwork) freshNone(path string) bool {
 	info, err := os.Stat(noneMarker(path))
-	return err == nil && Now()-float64(info.ModTime().UnixNano())/1e9 < noneTTL
+	return err == nil && Now()-float64(info.ModTime().UnixNano())/1e9 < a.ArtworkMissTTL
 }
 
 func rememberNone(path string) {
@@ -129,7 +122,7 @@ func store(path string, data []byte) error {
 }
 
 func (a *Artwork) posterPath(ctx context.Context, kind, name string, season int64) (string, error) {
-	parsed := ParseRelease(name)
+	parsed := a.ParseRelease(name)
 	title := parsed.Title
 	if title == "" {
 		title = name
@@ -141,7 +134,7 @@ func (a *Artwork) posterPath(ctx context.Context, kind, name string, season int6
 		}
 		return found[0].PosterPath, nil
 	}
-	shows, err := a.TMDB.SearchTV(ctx, title, showSearchSize)
+	shows, err := a.TMDB.SearchTV(ctx, title, a.ShowSearchLimit)
 	if err != nil {
 		return "", err
 	}
@@ -174,7 +167,7 @@ func (a *Artwork) Poster(ctx context.Context, kind, name string, season int64) (
 	if isFile(path) {
 		return path, true
 	}
-	if a.TMDB == nil || freshNone(path) {
+	if a.TMDB == nil || a.freshNone(path) {
 		return "", false
 	}
 	poster, err := a.posterPath(ctx, kind, name, season)
@@ -198,7 +191,7 @@ func (a *Artwork) Poster(ctx context.Context, kind, name string, season int64) (
 }
 
 func (a *Artwork) run(ctx context.Context, argv []string) (string, string, int, error) {
-	ctx, cancel := context.WithTimeout(ctx, ffmpegTimeout)
+	ctx, cancel := context.WithTimeout(ctx, a.FFmpegTimeout)
 	defer cancel()
 	if a.Run != nil {
 		return a.Run(ctx, argv)
@@ -221,12 +214,12 @@ func execRun(ctx context.Context, argv []string) (string, string, int, error) {
 	return stdout.String(), stderr.String(), 0, err
 }
 
-func niced(argv ...string) []string {
-	return append([]string{"nice", "-n", niceLevel}, argv...)
+func (a *Artwork) niced(argv ...string) []string {
+	return append([]string{"nice", "-n", a.FFmpegNice}, argv...)
 }
 
 func (a *Artwork) duration(ctx context.Context, full string) (float64, error) {
-	stdout, _, code, err := a.run(ctx, niced("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", full))
+	stdout, _, code, err := a.run(ctx, a.niced("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", full))
 	if err != nil {
 		return 0, err
 	}
@@ -261,7 +254,7 @@ func (a *Artwork) Thumbnail(ctx context.Context, root, rel string) (string, bool
 	if isFile(path) {
 		return path, true
 	}
-	if freshNone(path) {
+	if a.freshNone(path) {
 		return "", false
 	}
 	ffmpegMu.Lock()
@@ -281,14 +274,14 @@ func (a *Artwork) Thumbnail(ctx context.Context, root, rel string) (string, bool
 		return fail(err)
 	}
 	at := 0.0
-	if scaled := seconds * thumbAt; scaled > 0 {
+	if scaled := seconds * a.ThumbPosition; scaled > 0 {
 		at = scaled
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fail(err)
 	}
 	tmp := strings.TrimSuffix(path, ".jpg") + ".tmp.jpg"
-	_, stderr, code, err := a.run(ctx, niced("ffmpeg", "-v", "error", "-y", "-ss", seekText(at), "-i", full, "-frames:v", "1", "-vf", fmt.Sprintf("scale=%d:-2", thumbWidth), "-q:v", "4", tmp))
+	_, stderr, code, err := a.run(ctx, a.niced("ffmpeg", "-v", "error", "-y", "-ss", seekText(at), "-i", full, "-frames:v", "1", "-vf", fmt.Sprintf("scale=%d:-2", a.ThumbWidth), "-q:v", "4", tmp))
 	if err != nil {
 		return fail(err)
 	}
@@ -302,7 +295,7 @@ func (a *Artwork) Thumbnail(ctx context.Context, root, rel string) (string, bool
 }
 
 func (a *Artwork) ThumbnailPass(ctx context.Context, root string, limit int) (generated, remaining int) {
-	for _, rel := range EpisodeFiles(root) {
+	for _, rel := range a.EpisodeFiles(root) {
 		if ctx.Err() != nil {
 			break
 		}

@@ -1,6 +1,6 @@
 {{define "title"}}{{.Data.movie.title}}{{end}}
 {{define "heading"}}Media · {{.Data.movie.title}}{{if .Data.movie.year}} ({{.Data.movie.year}}){{end}}{{end}}
-{{define "content"}}{{$ttl := .Data.ttl_hours}}
+{{define "content"}}{{$ttl := .Data.ttl}}
 <p class="text-xs"><a class="underline underline-offset-4" href="/media/library">{{icon "arrow-left" "inline size-3.5"}} Library</a></p>
 <div class="flex flex-col gap-4 sm:flex-row">
   <img class="aspect-[2/3] w-40 shrink-0 rounded-lg border bg-muted object-cover" src="/media/art/movie/{{urlencode .Data.movie.dir}}" alt="">
@@ -8,12 +8,12 @@
     {{range .Data.movie.files}}
     <li class="flex flex-col gap-2 rounded-lg border bg-card p-4">
       <span class="break-all font-mono text-xs">{{.name}} <span class="text-muted-foreground">· {{printf "%.1f" (fdiv .size 1e9)}} GB</span></span>
-      {{template "media_file_links" (dict "f" . "ttl_hours" $ttl)}}
+      {{template "media_file_links" (dict "f" . "ttl" $ttl)}}
     </li>
     {{else}}
     <li class="text-sm text-muted-foreground">No video files in this folder.</li>
     {{end}}
   </ul>
 </div>
-<p class="text-xs text-muted-foreground">Public links are signed and expire after {{$ttl}} hours; they support seeking (HTTP Range) in VLC and Infuse. VPN links need the mesh.</p>
+<p class="text-xs text-muted-foreground">Public links are signed and expire after {{$ttl}}; they support seeking (HTTP Range) in VLC and Infuse. VPN links need the mesh.</p>
 {{end}}

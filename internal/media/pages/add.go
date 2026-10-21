@@ -34,7 +34,7 @@ func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
 	if mode == dlModeMedia {
 		tags = media.TagMedia
 	}
-	data, present, err := dlDecodeTorrent(torrent)
+	data, present, err := dlDecodeTorrent(torrent, s.settings(r.Context()).TorrentUpload)
 	if err == nil && present {
 		_, err = media.TorrentHash(data)
 	}
@@ -68,7 +68,7 @@ func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) dlAdd(r *http.Request, magnet, name string, data []byte, present bool, tags string) (string, error) {
 	ctx := r.Context()
-	client, err := s.dlQbit()
+	client, err := s.dlQbit(ctx)
 	if err != nil {
 		return "", err
 	}

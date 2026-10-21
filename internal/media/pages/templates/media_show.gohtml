@@ -1,10 +1,10 @@
 {{define "title"}}{{.Data.show.title}}{{end}}
 {{define "heading"}}Media · {{.Data.show.title}}{{if .Data.show.year}} ({{.Data.show.year}}){{end}}{{end}}
-{{define "content"}}{{$ttl := .Data.ttl_hours}}{{$dir := .Data.show.dir}}
+{{define "content"}}{{$ttl := .Data.ttl}}{{$dir := .Data.show.dir}}
 <p class="text-xs"><a class="underline underline-offset-4" href="/media/library">{{icon "arrow-left" "inline size-3.5"}} Library</a></p>
 <div class="flex items-start gap-4">
   <img class="aspect-[2/3] w-32 shrink-0 rounded-lg border bg-muted object-cover" src="/media/art/show/{{urlencode $dir}}" alt="">
-  <p class="text-sm text-muted-foreground">{{len .Data.show.seasons}} season{{if ne (len .Data.show.seasons) 1}}s{{end}}. Public links are signed and expire after {{$ttl}} hours; VPN links need the mesh.</p>
+  <p class="text-sm text-muted-foreground">{{len .Data.show.seasons}} season{{if ne (len .Data.show.seasons) 1}}s{{end}}. Public links are signed and expire after {{$ttl}}; VPN links need the mesh.</p>
 </div>
 {{range $i, $s := .Data.show.seasons}}{{$n := inc $i}}
 <section class="flex flex-col gap-3" aria-labelledby="season-{{$n}}">
@@ -19,7 +19,7 @@
       <div class="flex min-w-0 flex-1 flex-col gap-2">
         <span class="text-sm font-medium">{{if not (isnil .episode)}}Episode {{.episode}}{{else}}{{.name}}{{end}}</span>
         <span class="break-all font-mono text-xs text-muted-foreground">{{.name}} · {{printf "%.1f" (fdiv .size 1e9)}} GB</span>
-        {{template "media_file_links" (dict "f" . "ttl_hours" $ttl)}}
+        {{template "media_file_links" (dict "f" . "ttl" $ttl)}}
       </div>
     </li>
     {{else}}

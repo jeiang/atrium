@@ -13,8 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
-const eztvReleaseLimit = 100
-
 func (s *service) registerChannels(r chi.Router) {
 	r.Get("/media/channels", s.channelsIndex)
 	r.Post("/media/channels", s.channelAdd)
@@ -42,6 +40,7 @@ func chLastCheck(v any) *float64 {
 
 func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toast, status int, q string, form *ChannelForm, results *[]SearchHit) {
 	ctx := r.Context()
+	set := s.settings(ctx)
 	rows, err := media.ListChannels(ctx, s.deps.DB.Read)
 	if err != nil {
 		panic(err)
@@ -61,7 +60,7 @@ func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toa
 	data := ChannelsPage{
 		Channels: channels,
 		Status:   ChannelStatusView{LastCheck: chLastCheck(state.LastCheck), Errors: errs},
-		TMDB:     s.art.TMDB != nil,
+		TMDB:     set.TMDBKey != "",
 		Q:        q,
 		Results:  results,
 		Form:     ChannelForm{Backfill: true},
@@ -86,13 +85,14 @@ func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 	name := web.QueryValue(query, "name")
 	tmdbID := py.Strip(web.QueryValue(query, "tmdb_id"))
 	pattern := web.QueryValue(query, "pattern")
-	client := s.art.TMDB
+	set := s.settings(r.Context())
+	client := media.NewTMDB(set.TMDBKey, set.TMDBTimeout)
 	var results *[]SearchHit
 	var notice *tpl.Toast
 	err := func() error {
 		ctx := r.Context()
 		if q != "" && client != nil {
-			found, err := client.SearchTV(ctx, q, media.TMDBSearchLimit)
+			found, err := client.SearchTV(ctx, q, set.TMDBSearchLimit)
 			if err != nil {
 				return err
 			}
@@ -142,7 +142,7 @@ func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
 			tmdb = &id
 		}
 	}
-	row, err := media.AddChannel(ctx, s.deps.DB.Write, name, imdb, pattern, caseSensitive, tmdb, s.now, false)
+	row, err := s.settings(ctx).AddChannel(ctx, s.deps.DB.Write, name, imdb, pattern, caseSensitive, tmdb, s.now, false)
 	if err != nil {
 		var refused media.ChannelError
 		if !errors.As(err, &refused) {
@@ -155,13 +155,13 @@ func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
 		s.chPage(w, r, chToast("success", "Watching "+row.Name, "The first poll only records what is already out; later matches are downloaded."), http.StatusOK, "", nil, nil)
 		return
 	}
-	settings := s.settings()
-	base, err := settings.NeedQbit()
+	settings := s.settings(ctx)
+	qb, err := settings.Qbit()
 	if err != nil {
 		s.chPage(w, r, chToast("error", "Watching "+row.Name, "Nothing downloaded: "+err.Error()), http.StatusOK, "", nil, nil)
 		return
 	}
-	out, err := media.Poll(ctx, s.deps.DB.Write, s.deps.Env, media.NewQbit(base), settings, media.PollOptions{Now: s.now, Only: &row.ID, Force: true})
+	out, err := media.Poll(ctx, s.deps.DB.Write, s.deps.Env, qb, settings, media.PollOptions{Now: s.now, Only: &row.ID, Force: true})
 	if err != nil {
 		panic(err)
 	}
@@ -219,7 +219,8 @@ func (s *service) channelPreview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) chReleases(r *http.Request, digits, pattern string, caseSensitive bool) ([]media.PreviewRow, error) {
-	releases, err := media.FetchReleases(r.Context(), digits, eztvReleaseLimit)
+	set := s.settings(r.Context())
+	releases, err := set.FetchReleases(r.Context(), digits)
 	if err != nil {
 		return nil, chExpected(err)
 	}
@@ -230,7 +231,7 @@ func (s *service) chReleases(r *http.Request, digits, pattern string, caseSensit
 		}
 		return rows, nil
 	}
-	rows, err := media.Preview(releases, pattern, caseSensitive)
+	rows, err := set.Preview(releases, pattern, caseSensitive)
 	return rows, chExpected(err)
 }
 
@@ -266,13 +267,13 @@ func (s *service) channelDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) channelPoll(w http.ResponseWriter, r *http.Request) {
-	settings := s.settings()
-	base, err := settings.NeedQbit()
+	settings := s.settings(r.Context())
+	qb, err := settings.Qbit()
 	if err != nil {
 		s.chPage(w, r, chToast("error", "Not polled", err.Error()), http.StatusUnprocessableEntity, "", nil, nil)
 		return
 	}
-	out, err := media.Poll(r.Context(), s.deps.DB.Write, s.deps.Env, media.NewQbit(base), settings, media.PollOptions{Now: s.now})
+	out, err := media.Poll(r.Context(), s.deps.DB.Write, s.deps.Env, qb, settings, media.PollOptions{Now: s.now})
 	if err != nil {
 		panic(err)
 	}

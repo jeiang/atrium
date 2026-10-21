@@ -16,32 +16,30 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
-	FilePrefix     = "/media/file/"
-	LinkTTLSeconds = 12 * 3600
-	linkKeyBytes   = 32
+	FilePrefix   = "/media/file/"
+	linkKeyBytes = 32
 )
 
 type Links struct {
-	settings config.MediaSettings
-	keyPath  string
-	mu       sync.Mutex
-	secret   []byte
+	key     string
+	keyPath string
+	mu      sync.Mutex
+	secret  []byte
 }
 
-func NewLinks(settings config.MediaSettings, keyPath string) *Links {
-	return &Links{settings: settings, keyPath: keyPath}
+func NewLinks(linkKey, keyPath string) *Links {
+	return &Links{key: linkKey, keyPath: keyPath}
 }
 
 func trimKey(b []byte) []byte { return bytes.Trim(b, " \t\n\r\v\f") }
 
-func (l *Links) key() ([]byte, error) {
-	if l.settings.LinkKey != "" {
-		return []byte(l.settings.LinkKey), nil
+func (l *Links) secretKey() ([]byte, error) {
+	if l.key != "" {
+		return []byte(l.key), nil
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -116,30 +114,30 @@ func verifyWith(secret []byte, rel, exp, sig string, now float64) bool {
 }
 
 func (l *Links) Verify(rel, exp, sig string, now float64) bool {
-	secret, err := l.key()
+	secret, err := l.secretKey()
 	if err != nil {
 		return false
 	}
 	return verifyWith(secret, rel, exp, sig, now)
 }
 
-func (l *Links) PublicURL(rel string, now float64) (string, error) {
-	secret, err := l.key()
+func (l *Links) PublicURL(base, rel string, now float64, ttl int64) (string, error) {
+	secret, err := l.secretKey()
 	if err != nil {
 		return "", err
 	}
-	exp := int64(now + LinkTTLSeconds)
-	return l.settings.PublicURL + FilePrefix + py.URLQuote(rel) + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + Sign(secret, rel, exp), nil
+	exp := int64(now + float64(ttl))
+	return base + FilePrefix + py.URLQuote(rel) + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + Sign(secret, rel, exp), nil
 }
 
-func (l *Links) VPNURL(rel string) string {
+func (s Settings) VPNURL(rel string) string {
 	top, rest, _ := strings.Cut(rel, "/")
 	base := ""
 	switch top {
 	case Movies:
-		base = l.settings.MoviesURL
+		base = s.MoviesURL
 	case TV:
-		base = l.settings.TVURL
+		base = s.TVURL
 	}
 	if base == "" {
 		return ""

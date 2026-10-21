@@ -15,7 +15,6 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
@@ -33,9 +32,8 @@ const (
 	StoppedUP = "stoppedUP"
 	StoppedDL = "stoppedDL"
 
-	qbitTimeout = 15 * time.Second
-	okReply     = "Ok."
-	maxBencode  = 512
+	okReply    = "Ok."
+	maxBencode = 512
 )
 
 var (
@@ -49,8 +47,6 @@ var (
 	}
 
 	btih = rx.MustCompile(`^urn:btih:([0-9a-fA-F]{40}|[A-Za-z2-7]{32})$`, 0)
-
-	qbitClient = newClient(qbitTimeout)
 )
 
 type QbitError string
@@ -293,9 +289,14 @@ func TorrentHash(data []byte) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-type Qbit struct{ base string }
+type Qbit struct {
+	base string
+	Tuning
+}
 
-func NewQbit(base string) *Qbit { return &Qbit{base: strings.TrimRight(base, "/")} }
+func NewQbit(base string, t Tuning) *Qbit {
+	return &Qbit{base: strings.TrimRight(base, "/"), Tuning: t}
+}
 
 func (q *Qbit) do(ctx context.Context, method, path string, params []param, body io.Reader, contentType string) ([]byte, error) {
 	target := q.base + "/api/v2/" + path
@@ -309,7 +310,7 @@ func (q *Qbit) do(ctx context.Context, method, path string, params []param, body
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	res, err := send(ctx, qbitClient, req)
+	res, err := send(ctx, clientFor(q.QbitTimeout), req)
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {
