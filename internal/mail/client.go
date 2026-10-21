@@ -91,6 +91,7 @@ type FetchItems struct {
 	Body         bool
 	HeaderOnly   bool
 	ChangedSince uint64
+	BodyCap      int
 }
 
 type WriteInterrupted struct {
@@ -201,6 +202,13 @@ func (g gate) UIDSearch(ctx context.Context, criteria SearchCriteria) ([]uint32,
 }
 
 func (g gate) UIDFetch(ctx context.Context, uids UIDSet, items FetchItems) ([]Message, error) {
+	if g.q != nil && (items.Header || items.Body) {
+		r := Read(ctx, g.q)
+		items.BodyCap = r.Int(KeyBodyCapBytes)
+		if err := r.Err(); err != nil {
+			return nil, err
+		}
+	}
 	return g.conn.UIDFetch(ctx, uids, items)
 }
 

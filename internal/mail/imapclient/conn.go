@@ -698,6 +698,10 @@ func (c *conn) UIDSearch(ctx context.Context, criteria mail.SearchCriteria) ([]u
 func fetchOptions(items mail.FetchItems) *imap.FetchOptions {
 	opts := &imap.FetchOptions{UID: true, Flags: true, ChangedSince: items.ChangedSince}
 	opts.Gmail.Labels = items.Labels
+	bodyCap := int64(bodyCapBytes)
+	if items.BodyCap > 0 {
+		bodyCap = int64(items.BodyCap)
+	}
 	switch {
 	case items.Header || items.Body:
 		opts.InternalDate = true
@@ -707,7 +711,7 @@ func fetchOptions(items mail.FetchItems) *imap.FetchOptions {
 		opts.Gmail.ThrID = items.Labels
 		opts.BodySection = []*imap.FetchItemBodySection{
 			{Specifier: imap.PartSpecifierHeader, Peek: true},
-			{Specifier: imap.PartSpecifierText, Peek: true, Partial: &imap.SectionPartial{Offset: 0, Size: bodyCapBytes}},
+			{Specifier: imap.PartSpecifierText, Peek: true, Partial: &imap.SectionPartial{Offset: 0, Size: bodyCap}},
 		}
 	case items.HeaderOnly:
 		opts.BodySection = []*imap.FetchItemBodySection{{Specifier: imap.PartSpecifierHeader, Peek: true}}

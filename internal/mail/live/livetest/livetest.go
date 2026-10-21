@@ -49,6 +49,7 @@ func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClien
 	t.Helper()
 	dir := t.TempDir()
 	env := config.Map(map[string]string{
+		"ATRIUM_MODE":      mode,
 		"ATRIUM_DB":        filepath.Join(dir, "atrium.db"),
 		"ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"),
 	})
