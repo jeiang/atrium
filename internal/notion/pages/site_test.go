@@ -25,6 +25,7 @@ import (
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/notion"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -64,6 +65,12 @@ func newSite(t *testing.T, extra map[string]string) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
+	pins, err := config.LoadPins(env, settings.Default)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Default.SetPins(pins)
+	t.Cleanup(func() { settings.Default.SetPins(nil) })
 	s := &site{t: t, db: d, cfg: cfg, clock: 1_780_000_000}
 	render, err := web.NewRenderer(cfg, d, tpl.Config{Modules: []fs.FS{Templates(), assistantpages.Templates()}})
 	if err != nil {

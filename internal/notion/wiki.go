@@ -16,13 +16,8 @@ import (
 )
 
 const (
-	RootEnv      = "ATRIUM_NOTION_WIKI_ROOT"
-	LogTitle     = "Wiki Log"
 	logStateKey  = "wiki_log_page"
 	FooterPrefix = "Last reviewed "
-	MaxAliases   = 20
-	MaxSources   = 12
-	labelChars   = 48
 )
 
 var (
@@ -41,14 +36,6 @@ func (e WikiError) Error() string { return string(e) }
 func (WikiError) PyClass() string { return "WikiError" }
 
 func (WikiError) PyModule() string { return "atrium.notion_wiki" }
-
-func WikiRoot(env config.Env) (string, error) {
-	value, err := config.NotionWikiRoot(env)
-	if err != nil {
-		return "", WikiError(err.Error())
-	}
-	return notionid.Normalize(value), nil
-}
 
 func LocalDate(ts float64, env config.Env) (string, error) {
 	loc, err := config.Location(env)
@@ -79,7 +66,7 @@ func stringList(values any, what string) ([]string, error) {
 	return out, nil
 }
 
-func CleanAliases(values any) ([]string, error) {
+func (w Wiki) CleanAliases(values any) ([]string, error) {
 	var raw []string
 	if s, ok := values.(string); ok {
 		parts, err := aliasSplit.Split(s, 0)
@@ -102,10 +89,10 @@ func CleanAliases(values any) ([]string, error) {
 			out = append(out, text)
 		}
 	}
-	return out[:min(len(out), MaxAliases)], nil
+	return out[:min(len(out), w.MaxAliases)], nil
 }
 
-func CleanSources(values any) ([]string, error) {
+func (w Wiki) CleanSources(values any) ([]string, error) {
 	if values == nil {
 		return []string{}, nil
 	}
@@ -122,7 +109,7 @@ func CleanSources(values any) ([]string, error) {
 			out = append(out, text)
 		}
 	}
-	return out[:min(len(out), MaxSources)], nil
+	return out[:min(len(out), w.MaxSources)], nil
 }
 
 type WikiPage struct {
@@ -401,25 +388,25 @@ func AliasMatches(ctx context.Context, q db.Querier, query string) ([]string, er
 
 func rstrip(s string) string { return strings.TrimRightFunc(s, py.IsSpace) }
 
-func linkLabel(url string) (string, error) {
+func (w Wiki) linkLabel(url string) (string, error) {
 	text, err := labelSchema.Sub("", url, 0)
 	if err != nil {
 		return "", err
 	}
 	text = strings.TrimRight(text, "/")
-	if r := []rune(text); len(r) > labelChars {
-		return string(r[:labelChars-1]) + "…", nil
+	if r := []rune(text); len(r) > w.LabelChars {
+		return string(r[:w.LabelChars-1]) + "…", nil
 	}
 	return text, nil
 }
 
-func renderSource(value string) (string, error) {
+func (w Wiki) renderSource(value string) (string, error) {
 	m, err := wikiURLRe.Match(value)
 	if err != nil {
 		return "", err
 	}
 	if m != nil {
-		label, err := linkLabel(value)
+		label, err := w.linkLabel(value)
 		return "[" + label + "](" + value + ")", err
 	}
 	return strings.ReplaceAll(value, ",", " "), nil
@@ -476,13 +463,13 @@ func SplitFooter(markdown string) (body, reviewed string, sources []string, err 
 	return rstrip(strings.Join(lines[:len(lines)-1], "\n")), m.Group(1), sources, nil
 }
 
-func footerLine(date string, sources []string) (string, error) {
+func (w Wiki) footerLine(date string, sources []string) (string, error) {
 	line := FooterPrefix + date
 	if len(sources) > 0 {
 		rendered := make([]string, len(sources))
 		for i, s := range sources {
 			var err error
-			if rendered[i], err = renderSource(s); err != nil {
+			if rendered[i], err = w.renderSource(s); err != nil {
 				return "", err
 			}
 		}
@@ -491,14 +478,14 @@ func footerLine(date string, sources []string) (string, error) {
 	return line, nil
 }
 
-func WithFooter(markdown, date string, sources []string) (string, []string, error) {
+func (w Wiki) WithFooter(markdown, date string, sources []string) (string, []string, error) {
 	body, _, previous, err := SplitFooter(markdown)
 	if err != nil {
 		return "", nil, err
 	}
 	merged := dedupe(slices.Concat(previous, sources))
-	merged = merged[:min(len(merged), MaxSources)]
-	line, err := footerLine(date, merged)
+	merged = merged[:min(len(merged), w.MaxSources)]
+	line, err := w.footerLine(date, merged)
 	if err != nil {
 		return "", nil, err
 	}
@@ -580,7 +567,7 @@ func LogLine(date, action, title, url string) string {
 	return "- " + date + " · " + action + " " + EscapeLinkText(title)
 }
 
-func LogPageID(ctx context.Context, d *db.DB, client *Client, root string) (string, error) {
+func (w Wiki) LogPageID(ctx context.Context, d *db.DB, client *Client, root string) (string, error) {
 	var id string
 	err := d.Read.QueryRowContext(ctx, "SELECT value FROM notion_state WHERE key = ?", logStateKey).Scan(&id)
 	if err == nil {
@@ -590,12 +577,12 @@ func LogPageID(ctx context.Context, d *db.DB, client *Client, root string) (stri
 		return "", err
 	}
 	err = d.Read.QueryRowContext(ctx,
-		"SELECT id FROM notion_pages WHERE in_trash = 0 AND parent_type = 'page_id' AND parent_id = ? AND title = ?", root, LogTitle).Scan(&id)
+		"SELECT id FROM notion_pages WHERE in_trash = 0 AND parent_type = 'page_id' AND parent_id = ? AND title = ?", root, w.LogTitle).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		page, err := client.CreatePage(ctx, py.Dict{
 			{Key: "parent", Value: py.Dict{{Key: "page_id", Value: root}}},
 			{Key: "properties", Value: py.Dict{{Key: "title", Value: py.Dict{{Key: "title", Value: []any{
-				py.Dict{{Key: "type", Value: "text"}, {Key: "text", Value: py.Dict{{Key: "content", Value: LogTitle}}}}}}}}}},
+				py.Dict{{Key: "type", Value: "text"}, {Key: "text", Value: py.Dict{{Key: "content", Value: w.LogTitle}}}}}}}}}},
 			{Key: "markdown", Value: ""},
 		})
 		if err != nil {

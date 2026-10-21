@@ -21,11 +21,9 @@ import (
 var log = logx.Logger("atrium.notion.sync")
 
 const (
-	sensitivityProperty = "sensitivity"
-	privateValue        = "private"
-	PathSeparator       = " / "
-	untitled            = "Untitled"
-	maxPathDepth        = 12
+	PathSeparator = " / "
+	untitled      = "Untitled"
+	maxPathDepth  = 12
 )
 
 var noMarkdownStatuses = [...]int{400, 403, 404}
@@ -62,9 +60,9 @@ func PageTitle(page py.Dict) string {
 
 func sourceTitle(source py.Dict) string { return py.Strip(richText(list(source, "title"))) }
 
-func SensitivityOf(properties py.Dict) string {
+func (s Sensitivity) Of(properties py.Dict) string {
 	for _, p := range properties {
-		if py.Lower(py.Strip(p.Key)) != sensitivityProperty {
+		if py.Lower(py.Strip(p.Key)) != s.Property {
 			continue
 		}
 		prop := asDict(p.Value)
@@ -88,9 +86,9 @@ func SensitivityOf(properties py.Dict) string {
 	return ""
 }
 
-func IsPrivateValue(value string) bool {
+func (s Sensitivity) IsPrivate(value string) bool {
 	for _, v := range strings.Split(value, ",") {
-		if py.Lower(py.Strip(v)) == privateValue {
+		if py.Lower(py.Strip(v)) == s.Private {
 			return true
 		}
 	}
@@ -200,7 +198,7 @@ func dropIndex(ctx context.Context, q db.Querier, rid int64) error {
 	return err
 }
 
-func upsertPage(ctx context.Context, q db.Querier, client *Client, page py.Dict, stats *Stats, now float64) error {
+func upsertPage(ctx context.Context, q db.Querier, client *Client, sensitivity Sensitivity, page py.Dict, stats *Stats, now float64) error {
 	pid := notionid.Normalize(text(page, "id"))
 	props := asDict(field(page, "properties"))
 	edited := text(page, "last_edited_time")
@@ -237,7 +235,7 @@ func upsertPage(ctx context.Context, q db.Querier, client *Client, page py.Dict,
 			return err
 		}
 	}
-	sens := SensitivityOf(props)
+	sens := sensitivity.Of(props)
 	values := []py.Pair{
 		{Key: "parent_type", Value: kind},
 		{Key: "parent_id", Value: parentID},
@@ -250,7 +248,7 @@ func upsertPage(ctx context.Context, q db.Querier, client *Client, page py.Dict,
 		{Key: "edited_ts", Value: editedTS(edited)},
 		{Key: "in_trash", Value: trashed},
 		{Key: "sensitivity", Value: sens},
-		{Key: "private", Value: b2i(IsPrivateValue(sens))},
+		{Key: "private", Value: b2i(sensitivity.IsPrivate(sens))},
 		{Key: "links", Value: py.JSONDumps(linkTargets(props, markdown))},
 		{Key: "embedded", Value: 0},
 		{Key: "synced_at", Value: now},
@@ -302,7 +300,7 @@ type sourceNode struct {
 	id, databaseID, kind, parent, title string
 }
 
-func resolvePaths(ctx context.Context, q db.Querier) error {
+func resolvePaths(ctx context.Context, q db.Querier, sensitivity Sensitivity) error {
 	rows, err := q.QueryContext(ctx, "SELECT id, parent_type, parent_id, title, sensitivity FROM notion_pages WHERE in_trash = 0")
 	if err != nil {
 		return err
@@ -351,7 +349,7 @@ func resolvePaths(ctx context.Context, q db.Querier) error {
 			seen[key{kind, pid}] = true
 			if node, ok := pages[pid]; ok && kind == "page_id" {
 				titles = append(titles, orUntitled(node.title))
-				private = private || IsPrivateValue(node.sensitivity)
+				private = private || sensitivity.IsPrivate(node.sensitivity)
 				kind, pid = node.kind, node.parent
 				continue
 			}
@@ -379,7 +377,7 @@ func resolvePaths(ctx context.Context, q db.Querier) error {
 	changed := make([]change, 0, len(order))
 	for _, page := range order {
 		titles, inherited := chain(page.kind, page.parent)
-		changed = append(changed, change{page.id, strings.Join(titles, PathSeparator), b2i(IsPrivateValue(page.sensitivity) || inherited)})
+		changed = append(changed, change{page.id, strings.Join(titles, PathSeparator), b2i(sensitivity.IsPrivate(page.sensitivity) || inherited)})
 	}
 	for _, c := range changed {
 		var rid, private int64
@@ -427,10 +425,14 @@ func Sync(ctx context.Context, d *db.DB, cfg config.Config, client *Client, embe
 	if embedTexts == nil {
 		embedTexts = embed.Texts
 	}
+	sensitivity, err := LoadSensitivity(ctx, d.Read)
+	if err != nil {
+		return Stats{}, err
+	}
 	started := time.Now()
 	stamp := now()
 	var stats Stats
-	err := client.Search(ctx, "data_source", false, func(source py.Dict) error {
+	err = client.Search(ctx, "data_source", false, func(source py.Dict) error {
 		if text(source, "object") != "data_source" {
 			return nil
 		}
@@ -450,7 +452,7 @@ func Sync(ctx context.Context, d *db.DB, cfg config.Config, client *Client, embe
 		}
 		stats.Pages++
 		seen[notionid.Normalize(text(page, "id"))] = true
-		err := upsertPage(ctx, d.Write, client, page, &stats, stamp)
+		err := upsertPage(ctx, d.Write, client, sensitivity, page, &stats, stamp)
 		var refused *Error
 		if errors.As(err, &refused) {
 			stats.Failed++
@@ -490,7 +492,7 @@ func Sync(ctx context.Context, d *db.DB, cfg config.Config, client *Client, embe
 		}
 		stats.Trashed++
 	}
-	if err := resolvePaths(ctx, d.Write); err != nil {
+	if err := resolvePaths(ctx, d.Write, sensitivity); err != nil {
 		return stats, err
 	}
 	if _, err := d.Write.ExecContext(ctx,
