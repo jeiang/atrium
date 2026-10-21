@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail/search"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
@@ -29,7 +30,9 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, 
 		match, err = search.FTSQuery(q)
 		check(err)
 	}
-	found, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Match: match, Limit: threadLimit, Archived: view == archived, ProjectID: projectID})
+	limit, err := config.Limit(r.Context(), p.deps.DB.Read, config.KeyChatThreadLimit)
+	check(err)
+	found, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Match: match, Limit: limit, Archived: view == archived, ProjectID: projectID})
 	check(err)
 	if found == nil {
 		found = []threads.Listed{}

@@ -84,7 +84,7 @@ func QueryValue(q url.Values, name string) string { return LastValue(q[name], ""
 
 func FormValues(r *http.Request) url.Values {
 	if media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err == nil && strings.HasPrefix(media, "multipart/") {
-		if err := r.ParseMultipartForm(BodyCap); err != nil || r.MultipartForm == nil {
+		if err := r.ParseMultipartForm(int64(bodyCap(r.Context()))); err != nil || r.MultipartForm == nil {
 			return url.Values{}
 		}
 		return r.MultipartForm.Value

@@ -16,9 +16,7 @@ import (
 )
 
 const (
-	scheduleHistory    = 30
-	scheduleJobHistory = 10
-	stampLayout        = "Mon 02 Jan 15:04"
+	stampLayout = "Mon 02 Jan 15:04"
 )
 
 type JobView struct {
@@ -143,7 +141,9 @@ func (p *pages) scheduledData(r *http.Request) ScheduledData {
 	}))
 	jobs, err := scheduler.ListJobs(ctx, p.deps.DB.Read, false)
 	check(err)
-	runs, err := scheduler.ListRuns(ctx, p.deps.DB.Read, 0, scheduleHistory)
+	history, err := config.Limit(ctx, p.deps.DB.Read, config.KeyRunHistory)
+	check(err)
+	runs, err := scheduler.ListRuns(ctx, p.deps.DB.Read, 0, history)
 	check(err)
 	views := make([]JobView, len(jobs))
 	for i, j := range jobs {
@@ -179,7 +179,9 @@ func (p *pages) scheduleForm(w http.ResponseWriter, r *http.Request, status int,
 	tz := config.TZName(p.deps.Env)
 	var runs []scheduler.ListedRun
 	if job != nil {
-		found, err := scheduler.ListRuns(ctx, p.deps.DB.Read, job.ID, scheduleJobHistory)
+		history, err := config.Limit(ctx, p.deps.DB.Read, config.KeyJobHistory)
+		check(err)
+		found, err := scheduler.ListRuns(ctx, p.deps.DB.Read, job.ID, history)
 		check(err)
 		runs = found
 	}

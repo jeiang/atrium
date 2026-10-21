@@ -62,7 +62,7 @@ func requiredText(args py.Dict, name string) (any, error) {
 	return text, nil
 }
 
-func spec(args py.Dict, tz *time.Location) (string, calendar.Spec, error) {
+func spec(args py.Dict, tz *time.Location, defaultMinutes int) (string, calendar.Spec, error) {
 	raw := py.Dict{}
 	for _, name := range []string{"end", "location", "notes"} {
 		v, err := optionalText(args, name)
@@ -86,7 +86,7 @@ func spec(args py.Dict, tz *time.Location) (string, calendar.Spec, error) {
 	if target != calendar.ICloud && target != calendar.Google {
 		return "", calendar.Spec{}, tool.Error("calendar must be one of " + calendar.TargetsText)
 	}
-	normalized, err := calendar.NormalizeSpec(raw, tz, "")
+	normalized, err := calendar.NormalizeSpec(raw, tz, "", defaultMinutes)
 	return target, normalized, wrap(err)
 }
 
@@ -103,7 +103,11 @@ func list(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	listing, err := calendar.ListEvents(ctx, tc.Env, start, end, target)
+	set, err := calendar.LoadSettings(ctx, tc.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	listing, err := calendar.ListEvents(ctx, tc.Env, set, start, end, target)
 	if err != nil {
 		return nil, wrap(err)
 	}
@@ -115,11 +119,15 @@ func create(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	target, normalized, err := spec(args, tz)
+	set, err := calendar.LoadSettings(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
-	ref, err := calendar.CreateEvent(ctx, tc.Env, target, normalized, tz)
+	target, normalized, err := spec(args, tz, set.DefaultMinutes)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := calendar.CreateEvent(ctx, tc.Env, set, target, normalized, tz)
 	if err != nil {
 		return nil, wrap(err)
 	}
@@ -158,7 +166,11 @@ func remove(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := calendar.DeleteEvent(ctx, tc.Env, row.Calendar, uid); err != nil {
+	set, err := calendar.LoadSettings(ctx, tc.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	if err := calendar.DeleteEvent(ctx, tc.Env, set, row.Calendar, uid); err != nil {
 		return nil, wrap(err)
 	}
 	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
@@ -222,7 +234,11 @@ func propose(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 func undoDelete(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
 	target, _ := info["calendar"].(string)
 	uid, _ := info["uid"].(string)
-	if err := calendar.DeleteEvent(ctx, config.OS, target, uid); err != nil {
+	set, err := calendar.LoadSettings(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	if err := calendar.DeleteEvent(ctx, config.OS, set, target, uid); err != nil {
 		var failed calendar.Error
 		if errors.As(err, &failed) {
 			return nil, writes.UndoError(failed.Error())
@@ -246,7 +262,11 @@ func undoRecreate(ctx context.Context, q db.Querier, info map[string]any) (any, 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := calendar.CreateEvent(ctx, config.OS, target, restored, tz); err != nil {
+	set, err := calendar.LoadSettings(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := calendar.CreateEvent(ctx, config.OS, set, target, restored, tz); err != nil {
 		var failed calendar.Error
 		if errors.As(err, &failed) {
 			return nil, writes.UndoError(failed.Error())

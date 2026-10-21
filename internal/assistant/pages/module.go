@@ -52,7 +52,6 @@ type pages struct {
 }
 
 const (
-	threadLimit  = 50
 	emptyMessage = "Type a message first."
 	archived     = "archived"
 )
