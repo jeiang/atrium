@@ -60,7 +60,11 @@ func (o Options) ProposalsCommand() *cli.Command {
 				if err != nil {
 					return err
 				}
-				x.JSON(resolved)
+				settled := make([]any, len(resolved.Settled))
+				for i, n := range resolved.Settled {
+					settled[i] = n
+				}
+				x.JSON(py.Dict{{Key: "id", Value: resolved.ID}, {Key: "settled", Value: settled}})
 				return nil
 			}
 		}),

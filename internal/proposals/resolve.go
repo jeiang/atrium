@@ -44,8 +44,8 @@ func Blocked(ctx context.Context, q Querier, id int64) (bool, error) {
 }
 
 type Resolved struct {
-	ID      int64   `json:"id"`
-	Settled []int64 `json:"settled"`
+	ID      int64
+	Settled []int64
 }
 
 func (p *Pipeline) Resolve(ctx context.Context, id int64, outcome string, who Resolver) (Resolved, error) {

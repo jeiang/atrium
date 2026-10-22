@@ -157,7 +157,7 @@ func resolveAction(x *Exec, id int64, outcome string) error {
 		}
 		return err
 	}
-	x.JSON(result)
+	x.JSON(py.Dict{{Key: "id", Value: result.ID}, {Key: "outcome", Value: result.Outcome}})
 	return nil
 }
 

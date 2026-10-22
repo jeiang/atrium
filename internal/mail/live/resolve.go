@@ -11,8 +11,8 @@ import (
 )
 
 type Resolved struct {
-	ID      int64  `json:"id"`
-	Outcome string `json:"outcome"`
+	ID      int64
+	Outcome string
 }
 
 func Blocked(a Action) bool {
