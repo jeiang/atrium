@@ -90,13 +90,19 @@ func TestResumedRunSupersedesTheOriginalLoop(t *testing.T) {
 		})
 		return r, err
 	}
-	arrived := make(chan struct{}, 32)
+	arrived := make(chan struct{}, 3)
 	release := make(chan struct{})
 	var first sync.Once
+	var releaseOnce sync.Once
+	releaseOriginal := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseOriginal)
 	srv.OnRequest = func(anthropictest.Request) {
 		hold := false
 		first.Do(func() { hold = true })
-		arrived <- struct{}{}
+		select {
+		case arrived <- struct{}{}:
+		default:
+		}
 		if hold {
 			<-release
 		}
@@ -139,7 +145,7 @@ func TestResumedRunSupersedesTheOriginalLoop(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	close(release)
+	releaseOriginal()
 	select {
 	case code := <-runDone:
 		if code != cli.ExitOK {
