@@ -47,6 +47,26 @@ func freePort(t *testing.T) string {
 	_, port, _ := net.SplitHostPort(l.Addr().String())
 	return port
 }
+func waitForHealthz(t *testing.T, url string) {
+	t.Helper()
+	client := http.Client{Timeout: time.Second}
+	deadline := time.Now().Add(10 * time.Second)
+	last := "no response"
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(url + "/healthz")
+		if err != nil {
+			last = err.Error()
+		} else {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return
+			}
+			last = resp.Status
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("healthz did not become ready before deadline: %s", last)
+}
 
 func TestServeRecoversStuckDraftsAndStopsOnCancel(t *testing.T) {
 	dir := t.TempDir()
@@ -75,20 +95,7 @@ func TestServeRecoversStuckDraftsAndStopsOnCancel(t *testing.T) {
 		done <- code
 	}()
 	url := "http://127.0.0.1:" + port
-	var resp *http.Response
-	for range 100 {
-		if resp, err = http.Get(url + "/healthz"); err == nil {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Errorf("healthz = %d", resp.StatusCode)
-	}
+	waitForHealthz(t, url)
 	notify.Wait("WATCHDOG=1")
 	notify.Wait("READY=1")
 	notify.Wait("STATUS=serving 127.0.0.1:" + port)
@@ -163,17 +170,7 @@ func TestServeRecoversAStuckApprovedProposalOnlyOnceItIsOlderThanTheBound(t *tes
 		code, _, _ := runServe(t, cancelCtx, "--port", port, "--auth", "local")
 		done <- code
 	}()
-	var resp *http.Response
-	for range 100 {
-		if resp, err = http.Get("http://127.0.0.1:" + port + "/healthz"); err == nil {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
+	waitForHealthz(t, "http://127.0.0.1:"+port)
 	time.Sleep(300 * time.Millisecond)
 	if s := status(); s != proposals.Approved {
 		t.Fatalf("status inside the bound = %q, want approved", s)
@@ -228,6 +225,7 @@ func TestServeRecoversADraftThatGoesStaleWhileRunning(t *testing.T) {
 		runServe(t, cancelCtx, "--port", port, "--auth", "local")
 		close(done)
 	}()
+	waitForHealthz(t, "http://127.0.0.1:"+port)
 	status := ""
 	for range 200 {
 		if err := d.Read.QueryRow("SELECT status FROM drafts").Scan(&status); err == nil && status == drafts.Unknown {
