@@ -68,8 +68,8 @@ func TestSchedulerRunsUntilCancelledAndExitsZero(t *testing.T) {
 func TestResumedRunSupersedesTheOriginalLoop(t *testing.T) {
 	srv := anthropictest.New(t,
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("call-1", "count", nil)),
-		anthropictest.Reply("tool_use", anthropictest.ToolUse("call-1", "count", nil)),
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("call-1", "count", nil)),
 	)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
