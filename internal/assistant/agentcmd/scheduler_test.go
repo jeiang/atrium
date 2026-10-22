@@ -90,7 +90,7 @@ func TestResumedRunSupersedesTheOriginalLoop(t *testing.T) {
 		})
 		return r, err
 	}
-	arrived := make(chan struct{}, 3)
+	arrived := make(chan struct{}, 32)
 	release := make(chan struct{})
 	var first sync.Once
 	srv.OnRequest = func(anthropictest.Request) {
