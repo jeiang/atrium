@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
@@ -106,12 +105,9 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 	}
 	final := journal.Failed
 	var errText *string
-	hbCtx, stopBeat, lost := s.heartbeat(ctx)
-	err = s.body(hbCtx)
+	stopBeat := s.heartbeat(ctx)
+	err = s.body(ctx)
 	stopBeat()
-	if err != nil && lost.Load() && !errors.As(err, new(LeaseLost)) {
-		err = LeaseLost(fmt.Sprintf("run %d was taken over by another process", runID))
-	}
 	switch {
 	case err == nil:
 		final = journal.Done
@@ -219,6 +215,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning},
 	}
 	s.x.guard = s.renew
+	s.x.lost, s.x.abort = context.WithCancel(context.Background())
 	if o.Limits.MaxSteps != nil {
 		s.steps = int(*o.Limits.MaxSteps)
 	}
@@ -242,13 +239,12 @@ func (s *state) renew(ctx context.Context) error {
 	return nil
 }
 
-func (s *state) heartbeat(ctx context.Context) (context.Context, func(), *atomic.Bool) {
-	lost := new(atomic.Bool)
-	beatCtx, cancel := context.WithCancel(ctx)
+func (s *state) heartbeat(ctx context.Context) func() {
 	lease, err := journal.LeaseSeconds(ctx, s.d.Read)
 	if err != nil || lease <= 0 {
-		return beatCtx, cancel, lost
+		return func() {}
 	}
+	beatCtx, cancel := context.WithCancel(ctx)
 	every := time.Duration(lease / 3 * float64(time.Second))
 	done := make(chan struct{})
 	go func() {
@@ -261,14 +257,13 @@ func (s *state) heartbeat(ctx context.Context) (context.Context, func(), *atomic
 				return
 			case <-t.C:
 				if err := s.renew(beatCtx); errors.As(err, new(LeaseLost)) {
-					lost.Store(true)
-					cancel()
+					s.x.abort()
 					return
 				}
 			}
 		}
 	}()
-	return beatCtx, func() { cancel(); <-done }, lost
+	return func() { cancel(); <-done }
 }
 
 func (s *state) runStart(ctx context.Context) error {

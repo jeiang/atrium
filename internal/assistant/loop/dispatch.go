@@ -127,6 +127,8 @@ type dispatcher struct {
 	batch  Batch
 	tuning actx.Tuning
 	guard  func(ctx context.Context) error
+	lost   context.Context
+	abort  context.CancelFunc
 }
 
 func (x *dispatcher) lookup(name string) *tool.Tool {
@@ -157,6 +159,9 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	if ctx.Err() != nil {
 		return nil, nil, ctx.Err()
 	}
+	if x.lost.Err() != nil {
+		return nil, nil, LeaseLost(fmt.Sprintf("run %d was taken over by another process", x.tc.RunID))
+	}
 	if text, ok := toolErrorText(err); ok {
 		return fail(text)
 	}
@@ -170,6 +175,9 @@ func (x *dispatcher) call(ctx context.Context, t *tool.Tool, args py.Dict) (valu
 			err = fmt.Errorf("panic: %v\n%s", p, debug.Stack())
 		}
 	}()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer context.AfterFunc(x.lost, cancel)()
 	return t.Handler(ctx, x.tc, args)
 }
 
