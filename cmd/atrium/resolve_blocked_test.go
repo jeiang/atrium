@@ -45,9 +45,9 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		}
 		return id
 	}
-	autoAction := func() int64 {
-		res, err := seed.Write.Exec("INSERT INTO auto_actions (ts, account, message_id, kind, undo, ok, undone_error) VALUES (?, 'icloud', 1, 'file', ?, 1, ?)",
-			now-5000, `{"op":"move_back"}`, proposals.InFlightText)
+	autoAction := func(message int64) int64 {
+		res, err := seed.Write.Exec("INSERT INTO auto_actions (ts, account, message_id, kind, undo, ok, undone_error) VALUES (?, 'icloud', ?, 'file', ?, 1, ?)",
+			now-5000, message, `{"op":"move_back"}`, proposals.InFlightText)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -57,7 +57,7 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	viaCLI := blockedProposal("cli", proposals.InFlightText, now-4000)
 	viaWeb := blockedProposal("web", mailops.PartialPrefix+"expunge failed", now-4000)
 	recent := blockedProposal("recent", proposals.InFlightText, now)
-	undoCLI, undoWeb := autoAction(), autoAction()
+	undoCLI, undoWeb := autoAction(1), autoAction(2)
 	if err := seed.Close(); err != nil {
 		t.Fatal(err)
 	}
