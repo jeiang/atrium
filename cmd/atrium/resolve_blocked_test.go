@@ -131,11 +131,11 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	if status, body, _ := fetch(t, client, "POST", base+"/proposals/"+id(viaWeb)+"/resolve", url.Values{}); status != http.StatusOK || !strings.Contains(body, "Settled") {
 		t.Fatalf("POST proposal resolve = %d: %.400s", status, body)
 	}
-	if status, body, _ := fetch(t, client, "POST", base+"/activity/mail/"+id(undoWeb)+"/resolve", url.Values{"outcome": {"undone"}}); status != http.StatusOK || !strings.Contains(body, "Settled") {
-		t.Fatalf("POST activity resolve = %d: %.400s", status, body)
+	if status, body, header := fetch(t, client, "POST", base+"/activity/mail/"+id(undoWeb)+"/resolve", url.Values{"outcome": {"undone"}}); status != http.StatusSeeOther || header.Get("Location") != "/activity" {
+		t.Fatalf("POST activity resolve = %d %q: %.400s", status, header.Get("Location"), body)
 	}
-	if status, body, _ := fetch(t, client, "POST", base+"/activity/mail/"+id(undoWeb)+"/resolve", url.Values{"outcome": {"undone"}}); status != http.StatusOK || !strings.Contains(body, "Not settled") {
-		t.Errorf("second activity resolve = %d, want a refusal toast: %.400s", status, body)
+	if status, body, _ := fetch(t, client, "POST", base+"/activity/mail/"+id(undoWeb)+"/resolve", url.Values{"outcome": {"undone"}}); status != http.StatusConflict {
+		t.Errorf("second activity resolve = %d, want 409: %.400s", status, body)
 	}
 	if status, body, _ := fetch(t, client, "GET", base+"/proposals?status=failed", nil); status != http.StatusOK || strings.Contains(body, "/proposals/"+id(viaWeb)+"/resolve") {
 		t.Errorf("settled proposal still offers resolve (status %d)", status)
