@@ -126,6 +126,7 @@ type dispatcher struct {
 	now    func() float64
 	batch  Batch
 	tuning actx.Tuning
+	guard  func(ctx context.Context) error
 }
 
 func (x *dispatcher) lookup(name string) *tool.Tool {
@@ -212,6 +213,9 @@ func (x *dispatcher) toolStart(ctx context.Context, use ToolUse, args json.RawMe
 }
 
 func (x *dispatcher) startCall(ctx context.Context, use ToolUse) (int64, error) {
+	if err := x.guard(ctx); err != nil {
+		return 0, err
+	}
 	args, _, err := use.Args()
 	if err != nil {
 		return 0, err
@@ -282,6 +286,9 @@ func (x *dispatcher) executeAll(ctx context.Context, uses []ToolUse) ([]json.Raw
 }
 
 func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.ToolCall) (json.RawMessage, error) {
+	if err := x.guard(ctx); err != nil {
+		return nil, err
+	}
 	if call == nil {
 		return x.execute(ctx, use)
 	}

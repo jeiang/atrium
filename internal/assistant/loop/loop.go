@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
@@ -36,8 +37,6 @@ const (
 	Verify              = "atrium was interrupted while this call was in flight; it may or may not have taken effect. Check the current state before retrying it."
 	CompletedUncaptured = "This call completed before an interruption but its result was not captured. Check the current state."
 )
-
-var Owner = journal.NewOwner()
 
 var log = logx.Logger("atrium.agent")
 
@@ -107,7 +106,13 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 	}
 	final := journal.Failed
 	var errText *string
-	switch err := s.body(ctx); {
+	hbCtx, stopBeat, lost := s.heartbeat(ctx)
+	err = s.body(hbCtx)
+	stopBeat()
+	if err != nil && lost.Load() && !errors.As(err, new(LeaseLost)) {
+		err = LeaseLost(fmt.Sprintf("run %d was taken over by another process", runID))
+	}
+	switch {
 	case err == nil:
 		final = journal.Done
 	case errors.As(err, new(LeaseLost)):
@@ -213,6 +218,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		writer: writer, env: env, steps: steps, maxCost: maxCost, savings: int64(tuning.CommitSavings),
 		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning},
 	}
+	s.x.guard = s.renew
 	if o.Limits.MaxSteps != nil {
 		s.steps = int(*o.Limits.MaxSteps)
 	}
@@ -226,7 +232,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 }
 
 func (s *state) renew(ctx context.Context) error {
-	ok, err := journal.RenewLease(ctx, s.d.Write, s.run.ID, Owner, s.now())
+	ok, err := journal.RenewLease(ctx, s.d.Write, s.run.ID, deref(s.run.Owner), s.now())
 	if err != nil {
 		return err
 	}
@@ -234,6 +240,35 @@ func (s *state) renew(ctx context.Context) error {
 		return LeaseLost(fmt.Sprintf("run %d was taken over by another process", s.run.ID))
 	}
 	return nil
+}
+
+func (s *state) heartbeat(ctx context.Context) (context.Context, func(), *atomic.Bool) {
+	lost := new(atomic.Bool)
+	beatCtx, cancel := context.WithCancel(ctx)
+	lease, err := journal.LeaseSeconds(ctx, s.d.Read)
+	if err != nil || lease <= 0 {
+		return beatCtx, cancel, lost
+	}
+	every := time.Duration(lease / 3 * float64(time.Second))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		t := time.NewTicker(every)
+		defer t.Stop()
+		for {
+			select {
+			case <-beatCtx.Done():
+				return
+			case <-t.C:
+				if err := s.renew(beatCtx); errors.As(err, new(LeaseLost)) {
+					lost.Store(true)
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return beatCtx, func() { cancel(); <-done }, lost
 }
 
 func (s *state) runStart(ctx context.Context) error {
@@ -494,6 +529,9 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(compacted)),
 	}
 	if _, err := usage.Record(ctx, s.d.Write, entry, response.Usage); err != nil {
+		return false, nil, err
+	}
+	if err := s.renew(ctx); err != nil {
 		return false, nil, err
 	}
 	seq, err := journal.AppendMessage(ctx, s.d, s.thread.ID, &s.run.ID, journal.Assistant, blocks, s.now(), new(s.req.sig))

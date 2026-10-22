@@ -5,9 +5,12 @@ import (
 	"context"
 	"io"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -54,5 +57,86 @@ func TestSchedulerRunsUntilCancelledAndExitsZero(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("the scheduler ignored cancellation")
+	}
+}
+
+func TestResumedRunSupersedesTheOriginalLoop(t *testing.T) {
+	srv := anthropictest.New(t, anthropictest.Reply("end_turn", anthropictest.Text("first")), anthropictest.Reply("end_turn", anthropictest.Text("second")))
+	dir := t.TempDir()
+	path := filepath.Join(dir, "atrium.db")
+	env := config.Map(map[string]string{
+		"ATRIUM_DB": path, "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow",
+		"ANTHROPIC_API_KEY": anthropictest.APIKey, anthropic.BaseURLEnv: srv.URL,
+	})
+	arrived := make(chan struct{}, 2)
+	release := make(chan struct{})
+	var first sync.Once
+	srv.OnRequest = func(anthropictest.Request) {
+		hold := false
+		first.Do(func() { hold = true })
+		arrived <- struct{}{}
+		if hold {
+			<-release
+		}
+	}
+	a := cli.New("atrium", func(io.Writer) {})
+	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(env, noTools), schedulerCommand(env, noTools, func(string) bool { return true })}})
+	var runOut, runErr bytes.Buffer
+	runDone := make(chan int)
+	go func() {
+		runDone <- a.Run(t.Context(), []string{"agent", "run", "--text", "hello", "--kind", "cron"}, &runOut, &runErr)
+	}()
+	<-arrived
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec("UPDATE runs SET lease_until = 0 WHERE id = 1"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	schedDone := make(chan int)
+	var schedOut, schedErr bytes.Buffer
+	go func() { schedDone <- a.Run(ctx, []string{"agent", "scheduler"}, &schedOut, &schedErr) }()
+	select {
+	case <-arrived:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the scheduler never resumed the interrupted run")
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		var state string
+		if err := d.Read.QueryRow("SELECT state FROM runs WHERE id = 1").Scan(&state); err == nil && state == "done" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the resumed run never finished")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	close(release)
+	select {
+	case code := <-runDone:
+		if code != cli.ExitOK {
+			t.Fatalf("exit %d: %s", code, runErr.String())
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("the original loop never stopped")
+	}
+	cancel()
+	<-schedDone
+	var assistant, spent int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM thread_messages WHERE role = 'assistant'").Scan(&assistant); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM usage WHERE run_id = 1").Scan(&spent); err != nil {
+		t.Fatal(err)
+	}
+	if assistant != 1 {
+		t.Errorf("%d assistant messages: the superseded loop kept going", assistant)
+	}
+	if spent != 2 {
+		t.Errorf("%d usage rows: both model calls must be accounted", spent)
 	}
 }

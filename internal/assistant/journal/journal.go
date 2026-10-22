@@ -42,6 +42,8 @@ const (
 	Assistant = "assistant"
 )
 
+func LeaseSeconds(ctx context.Context, q db.Querier) (float64, error) { return leaseSeconds(ctx, q) }
+
 func leaseSeconds(ctx context.Context, q db.Querier) (float64, error) {
 	r := assistant.Read(ctx, q)
 	n := r.Int(assistant.KeyJournalLeaseSeconds)
