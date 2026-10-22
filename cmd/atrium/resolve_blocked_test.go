@@ -117,7 +117,11 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	if status, body, _ := fetch(t, client, "GET", base+"/activity", nil); status != http.StatusOK || !strings.Contains(body, "/activity/mail/"+id(undoWeb)+"/resolve") {
 		t.Fatalf("GET /activity = %d, want the resolve button for the blocked undo: %.400s", status, body)
 	}
-	bare := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	bareJar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bare := &http.Client{Jar: bareJar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	if status, _, _ := fetch(t, bare, "POST", base+"/proposals/"+id(viaWeb)+"/resolve", url.Values{}); status != http.StatusForbidden {
 		t.Errorf("POST resolve without a CSRF token = %d, want 403", status)
 	}
