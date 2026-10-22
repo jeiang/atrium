@@ -381,11 +381,12 @@ func (s *state) size(ctx context.Context, active []actx.Message, a *anchor) (int
 func (s *state) stream(ctx context.Context, messages []json.RawMessage) (*anthropic.Message, error) {
 	params := s.req.params
 	params.Messages = messages
-	response, err := s.client.Stream(ctx, params, func(ev anthropic.Event) error { return s.writer.Observe(ctx, ev) })
+	ledgerCtx := context.WithoutCancel(ctx)
+	response, err := s.client.Stream(ctx, params, func(ev anthropic.Event) error { return s.writer.Observe(ledgerCtx, ev) })
 	if err != nil {
 		return nil, err
 	}
-	return response, s.writer.Flush(ctx)
+	return response, s.writer.Flush(context.WithoutCancel(ctx))
 }
 
 func (s *state) settlePending(ctx context.Context) error {
@@ -506,7 +507,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err != nil {
 		return false, nil, err
 	}
-	if err := journal.BumpSteps(ctx, s.d.Write, s.run.ID); err != nil {
+	if err := journal.BumpSteps(context.WithoutCancel(ctx), s.d.Write, s.run.ID); err != nil {
 		return false, nil, err
 	}
 	blocks, err := journalBlocks(response.Content)
@@ -523,7 +524,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		TS: s.now(), ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: Model, Effort: s.run.Effort,
 		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(compacted)),
 	}
-	if _, err := usage.Record(ctx, s.d.Write, entry, response.Usage); err != nil {
+	if _, err := usage.Record(context.WithoutCancel(ctx), s.d.Write, entry, response.Usage); err != nil {
 		return false, nil, err
 	}
 	if err := s.renew(ctx); err != nil {
