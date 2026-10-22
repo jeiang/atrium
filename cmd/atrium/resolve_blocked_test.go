@@ -23,6 +23,8 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	t.Setenv("ATRIUM_DB", path)
+	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	t.Setenv("ATRIUM_PUBLIC_HOST", "")
 	ctx := context.Background()
 	seed, err := db.Connect(path)
 	if err != nil {
