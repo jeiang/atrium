@@ -42,6 +42,16 @@
     <div class="flex sm:ms-auto">
       {{if and (eq $e.source "write") $e.undone_at}}
       <span class="badge" data-variant="outline">Undone {{template "when" (dict "epoch" $e.undone_at "style" "datetime")}}</span>
+      {{else if $e.undo_blocked}}
+      <div class="flex flex-col gap-1">
+        <p class="max-w-xs text-xs text-muted-foreground">The undo has an unknown or partial outcome. Check the mailbox, then record what you found. atrium does not touch the mailbox.</p>
+        <div class="flex gap-2">
+          <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/activity/mail/{{$e.id}}/resolve" hx-vals='{"outcome": "undone"}' hx-target="#activity-{{$e.source}}-{{$e.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+                  hx-confirm="You checked the mailbox and the message is back where it was?">Message is back</button>
+          <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/activity/mail/{{$e.id}}/resolve" hx-vals='{"outcome": "not-undone"}' hx-target="#activity-{{$e.source}}-{{$e.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+                  hx-confirm="You checked the mailbox and the message was not moved back?">Not moved back</button>
+        </div>
+      </div>
       {{else if $e.undoable}}
       <button type="button" class="btn" data-size="sm" data-variant="outline" title="Undo"
               hx-post="/activity/{{$e.source}}/{{$e.id}}/undo" hx-target="#activity-{{$e.source}}-{{$e.id}}" hx-swap="outerHTML" hx-disabled-elt="this"

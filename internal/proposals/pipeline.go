@@ -377,7 +377,7 @@ func recovered(logged []Action, result any) bool {
 		}
 	}
 	for _, a := range logged {
-		if op, _ := a.field("op"); op != UndoOp && !a.OK && a.Error != nil && *a.Error == InFlightText {
+		if op, _ := a.field("op"); op != UndoOp && !a.OK && a.Error != nil && (*a.Error == InFlightText || *a.Error == SettledText) {
 			return true
 		}
 	}

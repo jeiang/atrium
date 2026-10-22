@@ -17,6 +17,7 @@ type ProposalView struct {
 	DecidedTS *float64 `json:"decided_ts"`
 	AppliedTS *float64 `json:"applied_ts"`
 	Undoable  bool     `json:"undoable"`
+	Blocked   bool     `json:"blocked"`
 	Preview   any      `json:"preview"`
 	Result    any      `json:"result"`
 }
@@ -83,17 +84,18 @@ type ActivityEntry struct {
 	Category string  `json:"category"`
 	TS       float64 `json:"ts"`
 
-	MessageID int64   `json:"message_id"`
-	Subject   *string `json:"subject"`
-	Kind      string  `json:"kind"`
-	FromName  *string `json:"from_name"`
-	FromAddr  *string `json:"from_addr"`
-	Account   string  `json:"account"`
-	Src       *string `json:"src"`
-	Dest      *string `json:"dest"`
-	Status    string  `json:"status"`
-	Error     *string `json:"error"`
-	Undoable  bool    `json:"undoable"`
+	MessageID   int64   `json:"message_id"`
+	Subject     *string `json:"subject"`
+	Kind        string  `json:"kind"`
+	FromName    *string `json:"from_name"`
+	FromAddr    *string `json:"from_addr"`
+	Account     string  `json:"account"`
+	Src         *string `json:"src"`
+	Dest        *string `json:"dest"`
+	Status      string  `json:"status"`
+	Error       *string `json:"error"`
+	Undoable    bool    `json:"undoable"`
+	UndoBlocked bool    `json:"undo_blocked"`
 
 	Tool       string   `json:"tool"`
 	Target     string   `json:"target"`
@@ -110,7 +112,7 @@ func mailEntry(a live.Action) ActivityEntry {
 	return ActivityEntry{
 		Source: sourceMail, ID: a.ID, Category: categoryMail, TS: a.TS, MessageID: a.MessageID, Subject: a.Subject,
 		Kind: a.Kind, FromName: a.FromName, FromAddr: a.FromAddr, Account: a.Account, Src: a.Src, Dest: a.Dest,
-		Status: a.Status, Error: a.Error, Undoable: a.Undoable,
+		Status: a.Status, Error: a.Error, Undoable: a.Undoable && !live.Blocked(a), UndoBlocked: live.Blocked(a),
 	}
 }
 

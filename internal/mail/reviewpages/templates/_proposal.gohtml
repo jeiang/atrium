@@ -286,6 +286,19 @@
 </div>
 {{else if eq $p.status "applied"}}
 <div class="flex flex-wrap items-center gap-2">
+  {{if $p.blocked}}
+  <div class="flex w-full flex-col gap-2 rounded-md border p-3 text-sm">
+    <p class="text-muted-foreground">A write has an unknown or partial outcome, so atrium refuses to retry it. Check the mailbox, then record that you did. atrium does not touch the mailbox. If an undo is blocked, say whether the messages are back.</p>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.id}}/resolve" hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-confirm="You checked the mailbox and want to clear the blocked write?">Mark checked</button>
+      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.id}}/resolve" hx-vals='{"outcome": "undone"}' hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-confirm="You checked the mailbox and the undone messages are back?">Undo confirmed</button>
+      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.id}}/resolve" hx-vals='{"outcome": "not-undone"}' hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-confirm="You checked the mailbox and the messages were not moved back?">Undo not done</button>
+    </div>
+  </div>
+  {{end}}
   <p class="flex min-w-0 flex-1 items-start gap-2 text-sm text-success">{{icon "check" "mt-0.5 size-4 shrink-0"}}<span>{{or (get $p.result "summary") "Applied"}} <span class="text-xs text-muted-foreground">{{template "when" (dict "epoch" $p.applied_ts "style" "datetime")}}</span></span></p>
   {{if $p.undoable}}
   <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.id}}/undo" hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
@@ -294,6 +307,19 @@
 </div>
 {{else if eq $p.status "failed"}}
 <div class="flex flex-wrap items-center gap-2">
+  {{if $p.blocked}}
+  <div class="flex w-full flex-col gap-2 rounded-md border p-3 text-sm">
+    <p class="text-muted-foreground">A write has an unknown or partial outcome, so atrium refuses to retry it. Check the mailbox, then record that you did. atrium does not touch the mailbox. If an undo is blocked, say whether the messages are back.</p>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.id}}/resolve" hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-confirm="You checked the mailbox and want to clear the blocked write?">Mark checked</button>
+      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.id}}/resolve" hx-vals='{"outcome": "undone"}' hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-confirm="You checked the mailbox and the undone messages are back?">Undo confirmed</button>
+      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.id}}/resolve" hx-vals='{"outcome": "not-undone"}' hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-confirm="You checked the mailbox and the messages were not moved back?">Undo not done</button>
+    </div>
+  </div>
+  {{end}}
   <p class="flex-1 text-xs whitespace-nowrap text-muted-foreground">Tried {{template "when" (dict "epoch" $p.decided_ts "style" "datetime")}}</p>
   {{if eq $p.kind "notion_wiki_plan"}}
   <span id="proposal-spinner-{{$p.id}}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{icon "loader-circle" "size-4 animate-spin"}}Applying…</span>
