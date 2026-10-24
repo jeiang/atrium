@@ -24,7 +24,7 @@ const (
 	EnvName      = "ENV_NAME"
 	UseInstead   = "USE_INSTEAD"
 	Model        = "MODEL"
-	SettingKey   = "KEY"
+	SettingKey   = "SETTING"
 	SettingValue = "VALUE"
 )
 
