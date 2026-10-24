@@ -21,6 +21,7 @@ const APIKey = "fake-anthropic-key"
 type Response struct {
 	Content           []json.RawMessage `json:"content"`
 	StopReason        string            `json:"stop_reason"`
+	StopDetails       json.RawMessage   `json:"stop_details"`
 	Usage             json.RawMessage   `json:"usage"`
 	ContextManagement json.RawMessage   `json:"context_management"`
 	Status            int               `json:"-"`
@@ -230,7 +231,7 @@ func message(id, model string, resp Response, content []json.RawMessage) map[str
 	}
 	return map[string]any{
 		"id": id, "type": "message", "role": "assistant", "model": model, "content": content,
-		"stop_reason": stop, "stop_sequence": nil, "usage": orNull(resp.Usage), "context_management": orNull(resp.ContextManagement),
+		"stop_reason": stop, "stop_details": orNull(resp.StopDetails), "stop_sequence": nil, "usage": orNull(resp.Usage), "context_management": orNull(resp.ContextManagement),
 	}
 }
 
@@ -275,7 +276,7 @@ func stream(w http.ResponseWriter, id, model string, resp Response) {
 	}
 	delta := map[string]any{
 		"type":  "message_delta",
-		"delta": map[string]any{"stop_reason": resp.StopReason, "stop_sequence": nil},
+		"delta": map[string]any{"stop_reason": resp.StopReason, "stop_details": orNull(resp.StopDetails), "stop_sequence": nil},
 		"usage": orNull(resp.Usage),
 	}
 	if cm := orNull(resp.ContextManagement); string(cm) != "null" {

@@ -11,6 +11,9 @@ not claims about the running application.
 - The application brings together mail, calendar, contacts, Notion, spending,
   media, notifications, and read-only Grafana access. The assistant adds
   chat, files, projects, skills, scheduled work, and research subagents.
+  A skill is a name, one-line description and Markdown body, exchanged as
+  `SKILL.md` folders through the Skills page and `atrium skills`; the
+  prompt carries only a budgeted index of them.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs.
@@ -21,19 +24,31 @@ not claims about the running application.
   stores its model, chosen at creation (default: the `default_model`
   setting) and editable like effort and context; other run kinds use Haiku.
   A run records and sends its thread's model, usage is priced from the model
-  on each usage row, and a model outside the catalog fails closed. The API key is a write-only secret
-  setting (the `ANTHROPIC_API_KEY` variable pins it). The monthly budget
-  defaults to $150 with scheduled runs paused at 80% and chat at 100%; each
-  model has its own run cost cap, checked against the next request written
-  cold at the thread's cache lifetime, and an Anthropic spend-cap 429 stops
-  the run as a budget stop. Mail classification and embeddings
+  on each usage row, and a model outside the catalog fails closed. The API key is
+  a write-only secret setting (the `ANTHROPIC_API_KEY` variable pins it). The
+  monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
+  100%; each model has its own run cost cap, checked against the next request
+  written cold at the thread's cache lifetime, and an Anthropic spend-cap 429
+  stops the run as a budget stop. The
+  catalog also records whether a model accepts a forced `tool_choice`
+  (`any` or a named tool): only Haiku does, and the loop sends the request
+  to Sonnet and Opus without it. The loop ends a run with a clear thread
+  message and run error on refusal (with the `stop_details` category),
+  `max_tokens`, `model_context_window_exceeded`, an empty `pause_turn` or
+  `end_turn`, a repeated identical tool call and result (`doom_loop_threshold`,
+  default 3) and the per-run-kind step cap (`max_steps_chat`, `_cron`,
+  `_nightly`, default 24; subagents use `agent_subagent_max_steps`). A server fallback is shown in the thread
+  and its tokens are recorded as a separate usage row priced at the model
+  that served them. Mail classification and embeddings
   have separately configured model endpoints. Connected content sent to a
   hosted model leaves the host; privacy does not mean that inference is
   necessarily local.
 - SQLite holds application records, configuration stored by the application,
   and assistant history. Uploaded files live beside the database under
   `files/`; the Notion wiki also has external state. The database alone is
-  not a complete backup. Rebuildable message and media caches are separate.
+  not a complete backup; `atrium backup` archives the database and `files/`,
+  and `atrium restore` (with a `--verify` dry run) restores them. Rebuildable
+  message and media caches are separate.
 - Deployment configuration and credentials come from the host and its
   environment files. Settings live in a registry: an `ATRIUM_<MODULE>_<KEY>`
   variable or configuration-file value pins a setting, otherwise a value

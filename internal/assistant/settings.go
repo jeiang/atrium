@@ -63,6 +63,7 @@ const (
 	KeySkillBodyChars   = "agent_skill_body_chars"
 	KeySkillExpandMax   = "agent_skill_expand_max"
 	KeySkillExpandChars = "agent_skill_expand_chars"
+	KeySkillIndexChars  = "agent_skill_index_chars"
 
 	KeyProjectNameChars        = "agent_project_name_chars"
 	KeyProjectInstructionChars = "agent_project_instruction_chars"
@@ -200,6 +201,7 @@ func init() {
 		count(KeySkillBodyChars, 20000, 100, 200000),
 		count(KeySkillExpandMax, 5, 1, 20),
 		count(KeySkillExpandChars, 20000, 100, 200000),
+		count(KeySkillIndexChars, 4000, 200, 100000),
 
 		count(KeyProjectNameChars, 80, 8, 500),
 		count(KeyProjectInstructionChars, 20000, 100, 200000),

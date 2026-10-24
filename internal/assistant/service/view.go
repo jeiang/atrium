@@ -22,6 +22,7 @@ import (
 const (
 	serverToolUse   = "server_tool_use"
 	webSearchResult = "web_search_tool_result"
+	fallbackBlock   = "fallback"
 	draftCreate     = "draft_email_create"
 )
 
@@ -334,6 +335,8 @@ func Items(messages []journal.Message, calls map[journal.CallKey]journal.ToolCal
 					result, failed := executionResult(block)
 					found.Result, found.IsError = new(progress.PreviewOf(result)), failed
 				}
+			case kind == fallbackBlock:
+				step(base, &Step{Kind: StepNote, Text: fallbackNote(block)})
 			case kind == actx.Compaction:
 				activity = nil
 				item := base
@@ -346,6 +349,21 @@ func Items(messages []journal.Message, calls map[journal.CallKey]journal.ToolCal
 }
 
 const loopResearch = "research"
+
+func fallbackNote(block py.Dict) string {
+	model := func(key string) string {
+		d, _ := get(block, key, nil).(py.Dict)
+		name, _ := get(d, "model", "").(string)
+		return name
+	}
+	note := fmt.Sprintf("%s declined; %s took over", model("from"), model("to"))
+	if trigger, ok := get(block, "trigger", nil).(py.Dict); ok {
+		if category, _ := get(trigger, "category", "").(string); category != "" {
+			note += fmt.Sprintf(" (refusal category: %s)", category)
+		}
+	}
+	return note + "."
+}
 
 func shortArgs(input any) (string, error) {
 	if !py.Truthy(input) {

@@ -230,6 +230,12 @@ func ClearsOf(m *anthropic.Message) (int64, int64) {
 
 func HistoryTokens(u anthropic.Usage) int64 {
 	t := usage.TokensOf(u)
+	for _, it := range u.Iterations {
+		if it.Type == anthropic.IterationFallbackMessage {
+			primary := usage.PrimaryTokens(u)
+			return primary.Prompt() + it.OutputTokens
+		}
+	}
 	return t.Input + t.CacheRead + t.CacheWrite5m + t.CacheWrite1h + t.Output
 }
 

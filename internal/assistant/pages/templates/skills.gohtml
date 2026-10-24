@@ -1,6 +1,6 @@
 {{define "title"}}Skills · Settings{{end}}
 {{define "heading"}}Settings · Skills{{end}}
-{{define "body_attrs"}}{{if .Data.strip_params}} data-strip-params="saved,deleted"{{end}}{{end}}
+{{define "body_attrs"}}{{if .Data.strip_params}} data-strip-params="saved,deleted,created,updated,unchanged"{{end}}{{end}}
 
 {{define "skills_refs"}}{{range $i, $r := .}}{{if $i}}, {{end}}<code class="font-mono">{{$r}}</code>{{end}}{{end}}
 
@@ -8,10 +8,20 @@
 {{template "settings_tabs" "skills"}}
 <p class="text-sm text-muted-foreground">Markdown playbooks the assistant can load by name. Only the name and one-line description are in every conversation; the body is read on demand. A skill may reference another as <code class="font-mono">/skill:name</code> or <code class="font-mono">[[skill:name]]</code>; the same tokens in a chat message or schedule prompt expand the skill into the message before the run. The assistant cannot edit skills.</p>
 
+<div class="flex flex-wrap items-end justify-between gap-2 text-sm">
 <form method="get" action="/settings/skills" class="flex items-end gap-2 text-sm">
   <label class="flex min-w-0 flex-1 flex-col gap-1 text-xs sm:max-w-sm">Search<input class="input w-full" type="search" name="q" value="{{$d.q}}" placeholder="name, description or body"></label>
   <button type="submit" class="btn" data-size="sm">{{icon "search"}}Find</button>
 </form>
+  <div class="flex flex-wrap items-end gap-2">
+    <a class="btn" data-variant="outline" data-size="sm" href="/settings/skills/export" download>{{icon "download"}}Export</a>
+    <form method="post" action="/settings/skills/import" enctype="multipart/form-data" hx-post="/settings/skills/import" hx-encoding="multipart/form-data" hx-swap="none" hx-disabled-elt="find button[type=submit]" class="flex items-end gap-2">
+      <label class="sr-only" for="import-file">SKILL.md or zip</label>
+      <input id="import-file" class="input" type="file" name="upload" accept=".md,.zip" required>
+      <button type="submit" class="btn" data-variant="outline" data-size="sm">{{icon "upload"}}Import</button>
+    </form>
+  </div>
+</div>
 
 {{if $d.skills}}
 <div class="flex flex-col gap-4">
@@ -20,6 +30,7 @@
     <summary class="flex cursor-pointer flex-col items-start gap-1 text-sm"{{if eq $d.focus .name}} autofocus{{end}}>
       <span class="flex flex-wrap items-center gap-2">
         <span class="font-mono font-medium">{{.name}}</span>
+        {{if .cut}}<span class="badge border-warning/30 bg-warning/10 text-warning">{{icon "eye-off"}}Not indexed</span>{{end}}
         {{if .references.unknown}}<span class="badge" data-variant="destructive" title="References skills that do not exist: {{join ", " .references.unknown}}">{{icon "circle-alert"}}unknown reference</span>{{end}}
       </span>
       <span class="line-clamp-2 max-w-full break-words text-muted-foreground">{{.description}}</span>

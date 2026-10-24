@@ -27,13 +27,14 @@ func runCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {
 			thread := args.Int("thread", 0, cli.Opt{Help: "existing thread id; omitted creates a new thread of --kind"})
 			text := args.String("text", "", cli.Opt{Required: true})
 			kind := args.String("kind", threads.Chat, cli.Opt{Choices: Kinds})
+			toolChoice := args.String("tool-choice", "", cli.Opt{Help: "force the first request to call a tool: any, or a tool name; models that reject forcing get the request without it"})
 			return func(env *cli.Env) int {
 				var threadID *int64
 				if args.Has("thread") {
 					id := int64(*thread)
 					threadID = &id
 				}
-				if err := run(env, cfgEnv, tools, threadID, *text, *kind); err != nil {
+				if err := run(env, cfgEnv, tools, threadID, *text, *kind, *toolChoice); err != nil {
 					_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
 					return cli.ExitError
 				}
@@ -43,7 +44,7 @@ func runCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {
 	}
 }
 
-func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64, text, kind string) error {
+func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64, text, kind, toolChoice string) error {
 	ctx := env.Ctx
 	cfg, err := config.Load(cfgEnv)
 	if err != nil {
@@ -70,7 +71,11 @@ func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64
 		}
 		threadID = &id
 	}
-	runID, err := svc.RunOnce(ctx, *threadID, text, service.Start{Kind: kind})
+	start := service.Start{Kind: kind}
+	if toolChoice != "" {
+		start.Limits.ToolChoice = &toolChoice
+	}
+	runID, err := svc.RunOnce(ctx, *threadID, text, start)
 	if err != nil {
 		return err
 	}

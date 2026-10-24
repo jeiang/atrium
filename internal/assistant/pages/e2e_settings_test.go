@@ -1,6 +1,8 @@
 package pages
 
 import (
+	"archive/zip"
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -116,7 +118,7 @@ func TestSkillsEditor(t *testing.T) {
 	if leafResponse.StatusCode != http.StatusSeeOther || leafResponse.Header.Get("Location") != "/settings/skills?saved=b" || leafResponse.body != "" {
 		t.Fatalf("skill save: %d %q %q", leafResponse.StatusCode, leafResponse.Header.Get("Location"), leafResponse.body)
 	}
-	mustContain(t, status(t, s.get(leafResponse.Header.Get("Location")), http.StatusOK), "Skill saved", `data-skill="b"`, `data-strip-params="saved,deleted"`, `open`)
+	mustContain(t, status(t, s.get(leafResponse.Header.Get("Location")), http.StatusOK), "Skill saved", `data-skill="b"`, `data-strip-params="saved,deleted,created,updated,unchanged"`, `open`)
 	savedResponse := s.post("/settings/skills", url.Values{"name": {"a"}, "description": {"Ay"}, "body": {"see /skill:b and /skill:ghost"}})
 	if savedResponse.StatusCode != http.StatusSeeOther || savedResponse.Header.Get("Location") != "/settings/skills?saved=a" || savedResponse.body != "" {
 		t.Fatalf("skill update: %d %q %q", savedResponse.StatusCode, savedResponse.Header.Get("Location"), savedResponse.body)
@@ -159,7 +161,7 @@ func TestSkillsEditor(t *testing.T) {
 		t.Fatalf("skill delete: %d %q %q", deleted.StatusCode, deleted.Header.Get("Location"), deleted.body)
 	}
 	deletedPage := status(t, s.get(deleted.Header.Get("Location")), http.StatusOK)
-	mustContain(t, deletedPage, "Skill deleted", `data-strip-params="saved,deleted"`)
+	mustContain(t, deletedPage, "Skill deleted", `data-strip-params="saved,deleted,created,updated,unchanged"`)
 	mustNotContain(t, deletedPage, `data-skill="recipe"`)
 	status(t, s.post("/settings/skills/recipe/delete", nil), http.StatusNotFound)
 }
@@ -256,4 +258,98 @@ func TestSubagentsSettings(t *testing.T) {
 	}
 	status(t, s.post("/settings/subagents/nope/toggle", nil), http.StatusNotFound)
 	status(t, s.post("/settings/subagents/nope/delete", nil), http.StatusNotFound)
+}
+
+func TestSkillsImportExportAndIndexWarning(t *testing.T) {
+	s := newSite(t)
+	exported := s.get("/settings/skills/export")
+	if exported.StatusCode != http.StatusOK || exported.Header.Get("Content-Type") != "application/zip" || !strings.Contains(exported.Header.Get("Content-Disposition"), "atrium-skills.zip") {
+		t.Fatalf("export: %d %v", exported.StatusCode, exported.Header)
+	}
+	archive, err := zip.NewReader(strings.NewReader(exported.body), int64(len(exported.body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, f := range archive.File {
+		names = append(names, f.Name)
+	}
+	if strings.Join(names, ",") != "wiki-capture/SKILL.md,wiki-ingest/SKILL.md,wiki-query/SKILL.md,wiki-review/SKILL.md" {
+		t.Fatalf("exported entries %v", names)
+	}
+	status(t, s.get("/settings/skills/export?name=ghost"), http.StatusNotFound)
+
+	card := "---\nname: weekly-review\ndescription: Review the week\n---\n\ncheck the calendar\n"
+	imported := s.multipart("/settings/skills/import", nil, []upload{{name: "SKILL.md", contentType: "text/markdown", data: []byte(card)}})
+	if imported.StatusCode != http.StatusSeeOther || imported.Header.Get("Location") != "/settings/skills?created=1&updated=0&unchanged=0" {
+		t.Fatalf("import: %d %q %s", imported.StatusCode, imported.Header.Get("Location"), imported.body)
+	}
+	mustContain(t, status(t, s.get(imported.Header.Get("Location")), http.StatusOK), "Skills imported", "1 created, 0 updated, 0 unchanged", `data-skill="weekly-review"`)
+
+	var zipped bytes.Buffer
+	w := zip.NewWriter(&zipped)
+	for _, name := range []string{"one", "two"} {
+		f, _ := w.Create(name + "/SKILL.md")
+		_, _ = f.Write([]byte("---\nname: " + name + "\ndescription: Skill " + name + "\n---\n\nbody\n"))
+	}
+	_ = w.Close()
+	viaZip := s.multipart("/settings/skills/import", nil, []upload{{name: "skills.zip", contentType: "application/zip", data: zipped.Bytes()}})
+	if viaZip.StatusCode != http.StatusSeeOther || viaZip.Header.Get("Location") != "/settings/skills?created=2&updated=0&unchanged=0" {
+		t.Fatalf("zip import: %d %q", viaZip.StatusCode, viaZip.Header.Get("Location"))
+	}
+
+	s.exec("UPDATE skills SET updated_at = 1 WHERE name = 'weekly-review'")
+	again := s.multipart("/settings/skills/import", nil, []upload{{name: "SKILL.md", contentType: "text/markdown", data: []byte(card)}})
+	if again.Header.Get("Location") != "/settings/skills?created=0&updated=0&unchanged=1" || s.count("SELECT count(*) FROM skills WHERE name = 'weekly-review' AND updated_at = 1") != 1 {
+		t.Fatalf("unchanged re-import: %q", again.Header.Get("Location"))
+	}
+
+	broken := s.multipart("/settings/skills/import", nil, []upload{{name: "bad.md", contentType: "text/markdown", data: []byte("no frontmatter")}})
+	mustContain(t, status(t, broken, http.StatusUnprocessableEntity), "Not imported", "bad.md: missing the --- frontmatter")
+	partial := "---\nname: fine\ndescription: ok\n---\n\nbody\n"
+	var mixed bytes.Buffer
+	mw := zip.NewWriter(&mixed)
+	f, _ := mw.Create("fine/SKILL.md")
+	_, _ = f.Write([]byte(partial))
+	f, _ = mw.Create("Bad/SKILL.md")
+	_, _ = f.Write([]byte("---\ndescription: d\n---\nbody\n"))
+	_ = mw.Close()
+	refused := s.multipart("/settings/skills/import", nil, []upload{{name: "mixed.zip", contentType: "application/zip", data: mixed.Bytes()}})
+	mustContain(t, status(t, refused, http.StatusUnprocessableEntity), "Not imported")
+	mustNotContain(t, status(t, s.get("/settings/skills"), http.StatusOK), `data-skill="fine"`)
+	status(t, s.multipart("/settings/skills/import", nil, nil), http.StatusUnprocessableEntity)
+
+	mustNotContain(t, status(t, s.get("/settings/skills"), http.StatusOK), "Not indexed")
+	s.exec("INSERT INTO settings (key, value) VALUES ('agent_skill_index_chars', '300') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+	over := status(t, s.get("/settings/skills"), http.StatusOK)
+	mustContain(t, over, "Not indexed")
+}
+
+func TestSkillsImportRefusesOversizedUploads(t *testing.T) {
+	s := newSite(t)
+	huge := s.multipart("/settings/skills/import", nil, []upload{{name: "skills.zip", contentType: "application/zip", data: bytes.Repeat([]byte{'x'}, 18<<20)}})
+	mustContain(t, status(t, huge, http.StatusUnprocessableEntity), "the upload is too large")
+
+	var bomb bytes.Buffer
+	w := zip.NewWriter(&bomb)
+	f, _ := w.Create("bomb/SKILL.md")
+	_, _ = f.Write([]byte("---\nname: bomb\ndescription: d\n---\n\n" + strings.Repeat("a", 1<<20)))
+	_ = w.Close()
+	if bomb.Len() > 64<<10 {
+		t.Fatalf("fixture is not compressible: %d", bomb.Len())
+	}
+	oversize := s.multipart("/settings/skills/import", nil, []upload{{name: "bomb.zip", contentType: "application/zip", data: bomb.Bytes()}})
+	mustContain(t, status(t, oversize, http.StatusUnprocessableEntity), "bomb/SKILL.md: larger than")
+
+	var many bytes.Buffer
+	mw := zip.NewWriter(&many)
+	for i := 0; i < 10001; i++ {
+		_, _ = mw.Create(fmt.Sprintf("f%d.txt", i))
+	}
+	_ = mw.Close()
+	crowded := s.multipart("/settings/skills/import", nil, []upload{{name: "many.zip", contentType: "application/zip", data: many.Bytes()}})
+	mustContain(t, status(t, crowded, http.StatusUnprocessableEntity), "files in the archive")
+	if n := s.count("SELECT count(*) FROM skills WHERE name = 'bomb'"); n != 0 {
+		t.Fatalf("refused import left %d rows", n)
+	}
 }

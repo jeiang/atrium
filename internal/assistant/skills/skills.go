@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -110,27 +111,86 @@ func Delete(ctx context.Context, q db.Querier, skill string) (bool, error) {
 	return n > 0, err
 }
 
-func IndexBlock(ctx context.Context, q db.Querier) (string, error) {
-	rows, err := q.QueryContext(ctx, "SELECT name, description FROM skills ORDER BY name")
+const indexHeader = "Skills (operator-written playbooks; call load_skill(name) to read one when it applies):"
+
+type Index struct {
+	Block   string
+	Omitted []string
+	Budget  int
+}
+
+func BuildIndex(ctx context.Context, q db.Querier) (Index, error) {
+	r := assistant.Read(ctx, q)
+	budget := r.Int(assistant.KeySkillIndexChars)
+	if err := r.Err(); err != nil {
+		return Index{}, err
+	}
+	builtin, err := db.BuiltinSkills()
 	if err != nil {
-		return "", err
+		return Index{}, err
+	}
+	rows, err := q.QueryContext(ctx, "SELECT name, description, updated_at FROM skills")
+	if err != nil {
+		return Index{}, err
 	}
 	defer func() { _ = rows.Close() }()
-	var lines []string
+	type entry struct {
+		name, line string
+		updated    float64
+	}
+	var all []entry
 	for rows.Next() {
 		var n, d string
-		if err := rows.Scan(&n, &d); err != nil {
-			return "", err
+		var updated float64
+		if err := rows.Scan(&n, &d, &updated); err != nil {
+			return Index{}, err
 		}
-		lines = append(lines, "- "+n+": "+d)
+		all = append(all, entry{name: n, line: "- " + n + ": " + d, updated: updated})
 	}
 	if err := rows.Err(); err != nil {
-		return "", err
+		return Index{}, err
 	}
-	if len(lines) == 0 {
-		return "", nil
+	if len(all) == 0 {
+		return Index{Budget: budget}, nil
 	}
-	return "Skills (operator-written playbooks; call load_skill(name) to read one when it applies):\n" + strings.Join(lines, "\n"), nil
+	sort.Slice(all, func(i, j int) bool {
+		a, b := all[i], all[j]
+		if builtin[a.name] != builtin[b.name] {
+			return builtin[a.name]
+		}
+		if a.updated != b.updated {
+			return a.updated > b.updated
+		}
+		return a.name < b.name
+	})
+	used := utf8.RuneCountInString(indexHeader)
+	var kept []entry
+	var omitted []string
+	cut := false
+	for _, e := range all {
+		cost := 1 + utf8.RuneCountInString(e.line)
+		if cut || used+cost > budget {
+			cut = true
+			omitted = append(omitted, e.name)
+			continue
+		}
+		used += cost
+		kept = append(kept, e)
+	}
+	sort.Slice(kept, func(i, j int) bool { return kept[i].name < kept[j].name })
+	lines := []string{indexHeader}
+	for _, e := range kept {
+		lines = append(lines, e.line)
+	}
+	if len(omitted) > 0 {
+		lines = append(lines, fmt.Sprintf("%d more skills are not listed because of the skills index budget; load_skill reads any skill by its exact name.", len(omitted)))
+	}
+	return Index{Block: strings.Join(lines, "\n"), Omitted: omitted, Budget: budget}, nil
+}
+
+func IndexBlock(ctx context.Context, q db.Querier) (string, error) {
+	index, err := BuildIndex(ctx, q)
+	return index.Block, err
 }
 
 func References(text string) []string {

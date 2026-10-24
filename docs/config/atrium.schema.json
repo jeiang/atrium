@@ -18,10 +18,6 @@
         "anthropic_admin_key_file": {
           "description": "path of a file holding the value",
           "type": "string"
-        },
-        "anthropic_api_key_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
         }
       },
       "type": "object"
@@ -747,6 +743,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_skill_index_chars": {
+          "default": 4000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_skill_index_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_stub_tokens": {
           "default": 2000,
           "type": [
@@ -1029,52 +1036,63 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "max_run_cost_usd_haiku_5_5": {
+        "doom_loop_threshold": {
+          "default": 3,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "doom_loop_threshold_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "max_run_cost_usd": {
           "default": 2,
           "type": [
             "number",
             "string"
           ]
         },
-        "max_run_cost_usd_haiku_5_5_file": {
+        "max_run_cost_usd_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "max_run_cost_usd_opus_5_5": {
-          "default": 10,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "max_run_cost_usd_opus_5_5_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "max_run_cost_usd_sonnet_5_5": {
-          "default": 6,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "max_run_cost_usd_sonnet_5_5_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "max_steps": {
+        "max_steps_chat": {
           "default": 24,
           "type": [
             "integer",
             "string"
           ]
         },
-        "max_steps_file": {
+        "max_steps_chat_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "max_steps_cron": {
+          "default": 24,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "max_steps_cron_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "max_steps_nightly": {
+          "default": 24,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "max_steps_nightly_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
         "monthly_budget_usd": {
-          "default": 150,
+          "default": 75,
           "type": [
             "number",
             "string"

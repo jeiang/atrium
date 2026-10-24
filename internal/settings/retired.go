@@ -11,7 +11,7 @@ import (
 
 var retiredKeys = [...]struct{ key, replacement string }{
 	{"max_run_cost_usd", "max_run_cost_usd_*"},
-	{"max_steps", "max_steps_*"},
+	{"max_steps", "max_steps_*,agent_subagent_max_steps"},
 }
 
 type Orphan struct {
@@ -38,11 +38,13 @@ func (r *Registry) IsRetired(key string) bool {
 }
 
 func (r *Registry) replacements(pattern string) string {
-	prefix, wild := strings.CutSuffix(pattern, "*")
 	var names []string
-	for _, d := range r.Defs() {
-		if d.Key == pattern || wild && strings.HasPrefix(d.Key, prefix) {
-			names = append(names, d.Key)
+	for _, one := range strings.Split(pattern, ",") {
+		prefix, wild := strings.CutSuffix(one, "*")
+		for _, d := range r.Defs() {
+			if d.Key == one || wild && strings.HasPrefix(d.Key, prefix) {
+				names = append(names, d.Key)
+			}
 		}
 	}
 	return strings.Join(names, ", ")

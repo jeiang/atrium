@@ -41,6 +41,8 @@ func (p *pages) settingsRoutes(r chi.Router) {
 	r.Get("/settings/usage", p.usagePage)
 	r.Get("/settings/skills", p.skillsIndex)
 	r.Post("/settings/skills", p.skillSave)
+	r.Get("/settings/skills/export", p.skillsExport)
+	r.Post("/settings/skills/import", p.skillsImport)
 	r.Post("/settings/skills/{name}/delete", p.skillDelete)
 	r.Get("/settings/subagents", p.subagentsIndex)
 	r.Post("/settings/subagents", p.subagentSave)

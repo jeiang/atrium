@@ -11,13 +11,6 @@ import (
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 )
 
-const (
-	DoomLoopThreshold = 3
-
-	stopRefusal       = "refusal"
-	stopContextWindow = "model_context_window_exceeded"
-)
-
 func textBlock(text string) json.RawMessage {
 	raw, err := json.Marshal(map[string]string{"type": "text", "text": text})
 	if err != nil {
@@ -49,15 +42,39 @@ func withoutToolUses(blocks []json.RawMessage) []json.RawMessage {
 	return out
 }
 
-func judge(stopReason string, blocks []json.RawMessage) (out []json.RawMessage, stop error) {
-	switch stopReason {
-	case stopRefusal:
-		return []json.RawMessage{textBlock("The model declined this request (stop reason: refusal). Nothing it produced was kept. Rephrase the request or start a new thread.")},
-			RunLimit("the model refused the request (stop reason: refusal)")
-	case anthropic.StopMaxTokens, stopContextWindow:
+func refusalNote(d *anthropic.StopDetails) (thread, stop string) {
+	thread = "The model declined this request (stop reason: refusal"
+	stop = "the model refused the request (stop reason: refusal"
+	if d != nil && d.Category != "" {
+		thread += ", category: " + d.Category
+		stop += ", category: " + d.Category
+	}
+	thread += ")."
+	stop += ")"
+	if d != nil && strings.TrimSpace(d.Explanation) != "" {
+		thread += " " + strings.TrimSpace(d.Explanation)
+		if !strings.HasSuffix(thread, ".") {
+			thread += "."
+		}
+	}
+	thread += " Nothing it produced was kept."
+	if d != nil && d.RecommendedModel != "" {
+		thread += " The server suggests retrying on " + d.RecommendedModel + "."
+	} else {
+		thread += " Rephrase the request or start a new thread."
+	}
+	return thread, stop
+}
+
+func judge(response *anthropic.Message, blocks []json.RawMessage) (out []json.RawMessage, stop error) {
+	switch stopReason := response.StopReason; stopReason {
+	case anthropic.StopRefusal:
+		thread, reason := refusalNote(response.StopDetails)
+		return []json.RawMessage{textBlock(thread)}, RunLimit(reason)
+	case anthropic.StopMaxTokens, anthropic.StopModelContextWindowExceeded:
 		kept := withoutToolUses(blocks)
 		note := "This reply was cut off at the output token limit (stop reason: max_tokens). Any tool call it was writing was dropped."
-		if stopReason == stopContextWindow {
+		if stopReason == anthropic.StopModelContextWindowExceeded {
 			note = "This reply was cut off because the context window filled (stop reason: model_context_window_exceeded). Any tool call it was writing was dropped."
 		}
 		return append(kept, textBlock(note)), RunLimit(fmt.Sprintf("the reply was cut off (stop reason: %s)", stopReason))
@@ -113,7 +130,7 @@ func (s *state) repeat(uses []ToolUse, results []json.RawMessage) error {
 	} else {
 		s.callsKey, s.repeats = key, 1
 	}
-	if s.repeats >= DoomLoopThreshold {
+	if s.repeats >= s.doomThreshold {
 		names := make([]string, len(uses))
 		for i, u := range uses {
 			names[i] = u.Name
