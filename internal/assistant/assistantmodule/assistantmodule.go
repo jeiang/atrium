@@ -7,6 +7,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/nightly"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/assistant/skills/skillscmd"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	contexttools "github.com/jeiang/atrium/internal/assistant/tools/context"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
@@ -33,7 +34,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 		Name:     module.Assistant,
 		Requires: []module.Requirement{{Name: "ANTHROPIC_API_KEY", Check: anthropicKey}},
 		Pages:    []web.Page{{Module: chatpages.Module(chat), Templates: chatpages.Templates()}},
-		Commands: []*cli.Command{agentcmd.Command(mc.Tools, mc.Enabled)},
+		Commands: []*cli.Command{agentcmd.Command(mc.Tools, mc.Enabled), skillscmd.Command()},
 		Tools:    addTools,
 	}
 }

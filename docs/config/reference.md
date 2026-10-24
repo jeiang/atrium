@@ -86,6 +86,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_skill_description_chars` | int | `160` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_DESCRIPTION_CHARS` |
 | `agent_skill_expand_chars` | int | `20000` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_CHARS` |
 | `agent_skill_expand_max` | int | `5` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_MAX` |
+| `agent_skill_index_chars` | int | `4000` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_INDEX_CHARS` |
 | `agent_stub_tokens` | int | `2000` | advanced | `ATRIUM_ASSISTANT_AGENT_STUB_TOKENS` |
 | `agent_subagent_context_ids` | int | `20` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_CONTEXT_IDS` |
 | `agent_subagent_description_chars` | int | `160` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_DESCRIPTION_CHARS` |
