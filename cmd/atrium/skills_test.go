@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 )
 
@@ -93,6 +94,7 @@ func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	prompt := func() string {
 		t.Helper()
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
 		ran := runApp("agent", "run", "--text", "hello", "--kind", "chat")
 		requests := api.Requests()
 		if ran.code != cli.ExitOK || len(requests) == 0 {
