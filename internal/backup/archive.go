@@ -453,7 +453,7 @@ func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[stri
 		}
 		hash := sha256.New()
 		body := io.TeeReader(o.tr, hash)
-		var sink io.Writer = io.Discard
+		sink := io.Discard
 		var out *os.File
 		if stage != "" {
 			if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
