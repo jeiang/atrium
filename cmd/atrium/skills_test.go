@@ -60,7 +60,7 @@ func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 	}
 
 	t.Setenv("ATRIUM_DB", filepath.Join(dir, "second.db"))
-	if ran := runApp("skills", "import", first); ran.code != cli.ExitOK || !strings.Contains(ran.stdout, "created trip-plan\n") || !strings.Contains(ran.stdout, "updated wiki-capture\n") {
+	if ran := runApp("skills", "import", first); ran.code != cli.ExitOK || !strings.Contains(ran.stdout, "created trip-plan\n") || !strings.Contains(ran.stdout, "unchanged wiki-capture\n") {
 		t.Fatalf("round-trip import: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
 	}
 	second := filepath.Join(dir, "export-2")
@@ -116,7 +116,7 @@ func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 
 	base := startServeIn(t, dir)
 	_, page, _ := fetch(t, http.DefaultClient, "GET", base+"/settings/skills", nil)
-	for _, fragment := range []string{"Over the 300-character skills index budget", "Not indexed", `href="/settings/skills/export"`, `action="/settings/skills/import"`} {
+	for _, fragment := range []string{"Not indexed", `href="/settings/skills/export"`, `action="/settings/skills/import"`} {
 		if !strings.Contains(page, fragment) {
 			t.Errorf("skills page lacks %q", fragment)
 		}

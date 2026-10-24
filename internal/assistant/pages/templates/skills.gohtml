@@ -1,6 +1,6 @@
 {{define "title"}}Skills · Settings{{end}}
 {{define "heading"}}Settings · Skills{{end}}
-{{define "body_attrs"}}{{if .Data.strip_params}} data-strip-params="saved,deleted,created,updated"{{end}}{{end}}
+{{define "body_attrs"}}{{if .Data.strip_params}} data-strip-params="saved,deleted,created,updated,unchanged"{{end}}{{end}}
 
 {{define "skills_refs"}}{{range $i, $r := .}}{{if $i}}, {{end}}<code class="font-mono">{{$r}}</code>{{end}}{{end}}
 
@@ -15,21 +15,13 @@
 </form>
   <div class="flex flex-wrap items-end gap-2">
     <a class="btn" data-variant="outline" data-size="sm" href="/settings/skills/export" download>{{icon "download"}}Export</a>
-    <form method="post" action="/settings/skills/import" enctype="multipart/form-data" hx-post="/settings/skills/import" hx-encoding="multipart/form-data" hx-swap="none" class="flex items-end gap-2">
-      <input type="hidden" name="csrf_token" value="{{$csrf}}">
+    <form method="post" action="/settings/skills/import" enctype="multipart/form-data" hx-post="/settings/skills/import" hx-encoding="multipart/form-data" hx-swap="none" hx-disabled-elt="find button[type=submit]" class="flex items-end gap-2">
       <label class="sr-only" for="import-file">SKILL.md or zip</label>
       <input id="import-file" class="input" type="file" name="upload" accept=".md,.zip" required>
       <button type="submit" class="btn" data-variant="outline" data-size="sm">{{icon "upload"}}Import</button>
     </form>
   </div>
 </div>
-
-{{if $d.cut}}
-<div class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning" role="status">
-  {{icon "circle-alert"}}
-  <p>Over the {{$d.budget}}-character skills index budget, so not in the assistant's index: {{template "skills_refs" $d.cut}}</p>
-</div>
-{{end}}
 
 {{if $d.skills}}
 <div class="flex flex-col gap-4">

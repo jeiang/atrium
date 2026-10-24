@@ -81,15 +81,19 @@ func importCommand(cfgEnv config.Env) *cli.Command {
 		Setup: func(args *cli.Args) cli.Handler {
 			source := args.Arg("path", cli.Opt{Help: "directory of skill folders, a skill folder, a SKILL.md file or a .zip archive"})
 			return func(env *cli.Env) int {
-				items, err := collect(*source)
-				if err != nil {
-					return fail(env, err)
-				}
 				d, err := open(env, cfgEnv)
 				if err != nil {
 					return fail(env, err)
 				}
 				defer func() { _ = d.Close() }()
+				limits, err := skills.ReadLimits(env.Ctx, d.Read)
+				if err != nil {
+					return fail(env, err)
+				}
+				items, err := collect(*source, limits)
+				if err != nil {
+					return fail(env, err)
+				}
 				done, err := skills.Import(env.Ctx, d, items, float64(time.Now().UnixMicro())/1e6)
 				if err != nil {
 					return fail(env, err)
@@ -100,19 +104,22 @@ func importCommand(cfgEnv config.Env) *cli.Command {
 				for _, name := range done.Updated {
 					_, _ = fmt.Fprintln(env.Stdout, "updated "+name)
 				}
+				for _, name := range done.Unchanged {
+					_, _ = fmt.Fprintln(env.Stdout, "unchanged "+name)
+				}
 				return cli.ExitOK
 			}
 		},
 	}
 }
 
-func collect(source string) ([]skills.Item, error) {
+func collect(source string, limits skills.Limits) ([]skills.Item, error) {
 	info, err := os.Stat(source)
 	if err != nil {
 		return nil, err
 	}
 	if info.IsDir() {
-		items, err := skills.Collect(os.DirFS(source))
+		items, err := skills.Collect(os.DirFS(source), limits)
 		for i := range items {
 			if items[i].Name == "" && filepath.Dir(items[i].Source) == "." {
 				items[i].Name = filepath.Base(absolute(source))
@@ -120,14 +127,17 @@ func collect(source string) ([]skills.Item, error) {
 		}
 		return items, err
 	}
+	if info.Size() > skills.MaxImportBytes {
+		return nil, skills.Error(source + ": too large")
+	}
 	data, err := os.ReadFile(source)
 	if err != nil {
 		return nil, err
 	}
 	if strings.EqualFold(filepath.Ext(source), ".zip") {
-		return skills.CollectZip(data)
+		return skills.CollectZip(data, limits)
 	}
-	items, err := skills.CollectFile(source, data)
+	items, err := skills.CollectFile(source, data, limits)
 	for i := range items {
 		if items[i].Name == "" {
 			items[i].Name = filepath.Base(filepath.Dir(absolute(source)))

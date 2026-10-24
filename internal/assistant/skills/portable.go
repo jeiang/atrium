@@ -13,14 +13,15 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
 	FileName        = "SKILL.md"
-	maxFileBytes    = 1 << 20
 	maxImportSkills = 1000
 )
 
@@ -32,8 +33,9 @@ type Item struct {
 }
 
 type Imported struct {
-	Created []string
-	Updated []string
+	Created   []string
+	Updated   []string
+	Unchanged []string
 }
 
 func Render(s Skill) string {
@@ -128,8 +130,33 @@ func nonEmpty(parts []string) []string {
 	return out
 }
 
-func Collect(fsys fs.FS) ([]Item, error) {
+type Limits struct {
+	Entry int64
+	Total int64
+}
+
+const (
+	MaxImportBytes   = 16 << 20
+	frontmatterBytes = 4096
+	maxZipEntries    = 10 * maxImportSkills
+)
+
+func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
+	r := assistant.Read(ctx, q)
+	body := r.Int(assistant.KeySkillBodyChars)
+	if err := r.Err(); err != nil {
+		return Limits{}, err
+	}
+	return Limits{Entry: int64(body)*utf8.UTFMax + frontmatterBytes, Total: MaxImportBytes}, nil
+}
+
+func tooLarge(source string, l Limits) Error {
+	return Error(fmt.Sprintf("%s: larger than %d bytes", source, l.Entry))
+}
+
+func Collect(fsys fs.FS, l Limits) ([]Item, error) {
 	var items []Item
+	var total int64
 	err := fs.WalkDir(fsys, ".", func(p string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -140,17 +167,27 @@ func Collect(fsys fs.FS) ([]Item, error) {
 		if len(items) >= maxImportSkills {
 			return Error(fmt.Sprintf("more than %d skills", maxImportSkills))
 		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Size() > l.Entry {
+			return tooLarge(p, l)
+		}
 		file, err := fsys.Open(p)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = file.Close() }()
-		raw, err := io.ReadAll(io.LimitReader(file, maxFileBytes+1))
+		raw, err := io.ReadAll(io.LimitReader(file, l.Entry+1))
 		if err != nil {
 			return err
 		}
-		if len(raw) > maxFileBytes {
-			return Error(p + ": larger than 1 MiB")
+		if int64(len(raw)) > l.Entry {
+			return tooLarge(p, l)
+		}
+		if total += int64(len(raw)); total > l.Total {
+			return Error(fmt.Sprintf("more than %d bytes of skills", l.Total))
 		}
 		name, description, body, err := Parse(string(raw))
 		if err != nil {
@@ -167,17 +204,20 @@ func Collect(fsys fs.FS) ([]Item, error) {
 	return items, err
 }
 
-func CollectZip(data []byte) ([]Item, error) {
+func CollectZip(data []byte, l Limits) ([]Item, error) {
 	archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, Error("not a zip archive")
 	}
-	return Collect(archive)
+	if len(archive.File) > maxZipEntries {
+		return nil, Error(fmt.Sprintf("more than %d files in the archive", maxZipEntries))
+	}
+	return Collect(archive, l)
 }
 
-func CollectFile(name string, data []byte) ([]Item, error) {
-	if len(data) > maxFileBytes {
-		return nil, Error(name + ": larger than 1 MiB")
+func CollectFile(name string, data []byte, l Limits) ([]Item, error) {
+	if int64(len(data)) > l.Entry {
+		return nil, tooLarge(name, l)
 	}
 	skill, description, body, err := Parse(string(data))
 	if err != nil {
@@ -207,6 +247,10 @@ func Import(ctx context.Context, d *db.DB, items []Item, now float64) (Imported,
 			if err != nil {
 				return err
 			}
+			if existing != nil && existing.Description == strings.Join(py.Split(item.Description), " ") && existing.Body == py.Strip(item.Body) {
+				out.Unchanged = append(out.Unchanged, name)
+				continue
+			}
 			if err := Save(ctx, tx, name, item.Description, item.Body, now); err != nil {
 				var refused Error
 				if errors.As(err, &refused) {
@@ -227,6 +271,7 @@ func Import(ctx context.Context, d *db.DB, items []Item, now float64) (Imported,
 	}
 	sort.Strings(out.Created)
 	sort.Strings(out.Updated)
+	sort.Strings(out.Unchanged)
 	return out, nil
 }
 

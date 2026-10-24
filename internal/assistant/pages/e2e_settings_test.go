@@ -281,10 +281,10 @@ func TestSkillsImportExportAndIndexWarning(t *testing.T) {
 
 	card := "---\nname: weekly-review\ndescription: Review the week\n---\n\ncheck the calendar\n"
 	imported := s.multipart("/settings/skills/import", nil, []upload{{name: "SKILL.md", contentType: "text/markdown", data: []byte(card)}})
-	if imported.StatusCode != http.StatusSeeOther || imported.Header.Get("Location") != "/settings/skills?created=1&updated=0" {
+	if imported.StatusCode != http.StatusSeeOther || imported.Header.Get("Location") != "/settings/skills?created=1&updated=0&unchanged=0" {
 		t.Fatalf("import: %d %q %s", imported.StatusCode, imported.Header.Get("Location"), imported.body)
 	}
-	mustContain(t, status(t, s.get(imported.Header.Get("Location")), http.StatusOK), "Skills imported", "1 created, 0 updated", `data-skill="weekly-review"`)
+	mustContain(t, status(t, s.get(imported.Header.Get("Location")), http.StatusOK), "Skills imported", "1 created, 0 updated, 0 unchanged", `data-skill="weekly-review"`)
 
 	var zipped bytes.Buffer
 	w := zip.NewWriter(&zipped)
@@ -294,8 +294,14 @@ func TestSkillsImportExportAndIndexWarning(t *testing.T) {
 	}
 	_ = w.Close()
 	viaZip := s.multipart("/settings/skills/import", nil, []upload{{name: "skills.zip", contentType: "application/zip", data: zipped.Bytes()}})
-	if viaZip.StatusCode != http.StatusSeeOther || viaZip.Header.Get("Location") != "/settings/skills?created=2&updated=0" {
+	if viaZip.StatusCode != http.StatusSeeOther || viaZip.Header.Get("Location") != "/settings/skills?created=2&updated=0&unchanged=0" {
 		t.Fatalf("zip import: %d %q", viaZip.StatusCode, viaZip.Header.Get("Location"))
+	}
+
+	s.exec("UPDATE skills SET updated_at = 1 WHERE name = 'weekly-review'")
+	again := s.multipart("/settings/skills/import", nil, []upload{{name: "SKILL.md", contentType: "text/markdown", data: []byte(card)}})
+	if again.Header.Get("Location") != "/settings/skills?created=0&updated=0&unchanged=1" || s.count("SELECT count(*) FROM skills WHERE name = 'weekly-review' AND updated_at = 1") != 1 {
+		t.Fatalf("unchanged re-import: %q", again.Header.Get("Location"))
 	}
 
 	broken := s.multipart("/settings/skills/import", nil, []upload{{name: "bad.md", contentType: "text/markdown", data: []byte("no frontmatter")}})
@@ -316,5 +322,34 @@ func TestSkillsImportExportAndIndexWarning(t *testing.T) {
 	mustNotContain(t, status(t, s.get("/settings/skills"), http.StatusOK), "Not indexed")
 	s.exec("INSERT INTO settings (key, value) VALUES ('agent_skill_index_chars', '300') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
 	over := status(t, s.get("/settings/skills"), http.StatusOK)
-	mustContain(t, over, "Over the 300-character skills index budget", "Not indexed")
+	mustContain(t, over, "Not indexed")
+}
+
+func TestSkillsImportRefusesOversizedUploads(t *testing.T) {
+	s := newSite(t)
+	huge := s.multipart("/settings/skills/import", nil, []upload{{name: "skills.zip", contentType: "application/zip", data: bytes.Repeat([]byte{'x'}, 18<<20)}})
+	mustContain(t, status(t, huge, http.StatusUnprocessableEntity), "the upload is too large")
+
+	var bomb bytes.Buffer
+	w := zip.NewWriter(&bomb)
+	f, _ := w.Create("bomb/SKILL.md")
+	_, _ = f.Write([]byte("---\nname: bomb\ndescription: d\n---\n\n" + strings.Repeat("a", 1<<20)))
+	_ = w.Close()
+	if bomb.Len() > 64<<10 {
+		t.Fatalf("fixture is not compressible: %d", bomb.Len())
+	}
+	oversize := s.multipart("/settings/skills/import", nil, []upload{{name: "bomb.zip", contentType: "application/zip", data: bomb.Bytes()}})
+	mustContain(t, status(t, oversize, http.StatusUnprocessableEntity), "bomb/SKILL.md: larger than")
+
+	var many bytes.Buffer
+	mw := zip.NewWriter(&many)
+	for i := 0; i < 10001; i++ {
+		_, _ = mw.Create(fmt.Sprintf("f%d.txt", i))
+	}
+	_ = mw.Close()
+	crowded := s.multipart("/settings/skills/import", nil, []upload{{name: "many.zip", contentType: "application/zip", data: many.Bytes()}})
+	mustContain(t, status(t, crowded, http.StatusUnprocessableEntity), "files in the archive")
+	if n := s.count("SELECT count(*) FROM skills WHERE name = 'bomb'"); n != 0 {
+		t.Fatalf("refused import left %d rows", n)
+	}
 }

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/skills"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
@@ -40,8 +41,6 @@ type SkillsData struct {
 	Error       string      `json:"error"`
 	Focus       string      `json:"focus"`
 	StripParams bool        `json:"strip_params"`
-	Cut         []string    `json:"cut"`
-	Budget      int         `json:"budget"`
 }
 
 func skillView(l skills.Listed) SkillView {
@@ -65,7 +64,7 @@ func (p *pages) skillsPage(w http.ResponseWriter, r *http.Request, status int, t
 		views[i].Cut = cutSet[l.Name]
 	}
 	p.settings(w, r, status, "skills.gohtml", SkillsData{
-		Skills: views, Q: q, Draft: draft, Editing: editing, Error: formError, Focus: focus, StripParams: stripParams, Cut: index.Omitted, Budget: index.Budget,
+		Skills: views, Q: q, Draft: draft, Editing: editing, Error: formError, Focus: focus, StripParams: stripParams,
 	}, toast)
 }
 
@@ -91,8 +90,8 @@ func (p *pages) skillsIndex(w http.ResponseWriter, r *http.Request) {
 			toast = notice(category, "Skill saved", description)
 		}
 	}
-	if created, updated := web.QueryValue(r.URL.Query(), "created"), web.QueryValue(r.URL.Query(), "updated"); created != "" || updated != "" {
-		toast = notice("success", "Skills imported", created+" created, "+updated+" updated")
+	if created, updated, unchanged := web.QueryValue(r.URL.Query(), "created"), web.QueryValue(r.URL.Query(), "updated"), web.QueryValue(r.URL.Query(), "unchanged"); created != "" || updated != "" || unchanged != "" {
+		toast = notice("success", "Skills imported", created+" created, "+updated+" updated, "+unchanged+" unchanged")
 	}
 	deleted := web.QueryValue(r.URL.Query(), "deleted")
 	if toast == nil && deleted != "" {
@@ -156,9 +155,19 @@ func (p *pages) skillsExport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *pages) skillsImport(w http.ResponseWriter, r *http.Request) {
-	web.FormValues(r)
+	ctx := r.Context()
+	fileLimits, err := files.ReadLimits(ctx, p.deps.DB.Read)
+	check(err)
+	limits, err := skills.ReadLimits(ctx, p.deps.DB.Read)
+	check(err)
+	r.Body = http.MaxBytesReader(w, r.Body, min(int64(fileLimits.MessageCap), limits.Total)+uploadSlack)
+	err = r.ParseMultipartForm(1 << 20)
+	if errors.As(err, new(*http.MaxBytesError)) {
+		p.skillsImportFailed(w, r, "the upload is too large")
+		return
+	}
 	var headers []*multipart.FileHeader
-	if r.MultipartForm != nil {
+	if err == nil && r.MultipartForm != nil {
 		headers = r.MultipartForm.File["upload"]
 	}
 	if len(headers) == 0 {
@@ -168,13 +177,17 @@ func (p *pages) skillsImport(w http.ResponseWriter, r *http.Request) {
 	file, err := headers[0].Open()
 	check(err)
 	defer func() { _ = file.Close() }()
-	data, err := io.ReadAll(file)
+	data, err := io.ReadAll(io.LimitReader(file, limits.Total+1))
 	check(err)
+	if int64(len(data)) > limits.Total {
+		p.skillsImportFailed(w, r, "the upload is too large")
+		return
+	}
 	var items []skills.Item
 	if strings.EqualFold(path.Ext(headers[0].Filename), ".zip") {
-		items, err = skills.CollectZip(data)
+		items, err = skills.CollectZip(data, limits)
 	} else {
-		items, err = skills.CollectFile(headers[0].Filename, data)
+		items, err = skills.CollectFile(headers[0].Filename, data, limits)
 	}
 	var refused skills.Error
 	if errors.As(err, &refused) {
@@ -188,7 +201,7 @@ func (p *pages) skillsImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	check(err)
-	location := "/settings/skills?created=" + strconv.Itoa(len(done.Created)) + "&updated=" + strconv.Itoa(len(done.Updated))
+	location := "/settings/skills?created=" + strconv.Itoa(len(done.Created)) + "&updated=" + strconv.Itoa(len(done.Updated)) + "&unchanged=" + strconv.Itoa(len(done.Unchanged))
 	if web.IsPartial(r) {
 		hxRedirect(w, location)
 		return
