@@ -2,7 +2,6 @@ package dbcmd
 
 import (
 	"context"
-	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -98,49 +97,6 @@ func exclusiveTemp(path string, perm os.FileMode) error {
 	return f.Close()
 }
 
-func tableCounts(ctx context.Context, q db.Querier) (map[string]int64, error) {
-	rows, err := q.QueryContext(ctx, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
-	if err != nil {
-		return nil, err
-	}
-	names, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var n string
-		err := r.Scan(&n)
-		return n, err
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]int64, len(names))
-	for _, n := range names {
-		var c int64
-		if err := q.QueryRowContext(ctx, "SELECT count(*) FROM \""+strings.ReplaceAll(n, "\"", "\"\"")+"\"").Scan(&c); err != nil {
-			return nil, fmt.Errorf("count %s: %w", n, err)
-		}
-		out[n] = c
-	}
-	return out, nil
-}
-
-func integrity(ctx context.Context, q db.Querier) error {
-	rows, err := q.QueryContext(ctx, "PRAGMA integrity_check")
-	if err != nil {
-		return err
-	}
-	lines, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var l string
-		err := r.Scan(&l)
-		return l, err
-	})
-	if err != nil {
-		return err
-	}
-	if len(lines) != 1 || lines[0] != "ok" {
-		return fmt.Errorf("integrity_check: %s", strings.Join(lines, "; "))
-	}
-	return nil
-}
-
 func sameCounts(want, got map[string]int64, ignore string) error {
 	for name, n := range want {
 		if name != ignore && got[name] != n {
@@ -161,13 +117,13 @@ func verifyCopy(ctx context.Context, path string, key db.Key, want map[string]in
 		return err
 	}
 	defer func() { _ = c.Close() }()
-	if err := integrity(ctx, c); err != nil {
+	if err := db.IntegrityCheck(ctx, c); err != nil {
 		return err
 	}
 	if want == nil {
 		return nil
 	}
-	got, err := tableCounts(ctx, c)
+	got, err := db.TableCounts(ctx, c)
 	if err != nil {
 		return err
 	}
@@ -227,42 +183,17 @@ func (s *service) check(*cli.Args) cli.Handler {
 			return cli.Fail(e, err)
 		}
 		_, _ = fmt.Fprintf(e.Stdout, "database: %s\nencryption: %s\n", path, encryption(d, key))
-		if err := integrity(e.Ctx, d.Read); err != nil {
+		if err := db.IntegrityCheck(e.Ctx, d.Read); err != nil {
 			_, _ = fmt.Fprintf(e.Stdout, "integrity_check: FAILED\n")
 			return cli.Fail(e, err)
 		}
 		_, _ = fmt.Fprintf(e.Stdout, "integrity_check: ok\n")
-		rows, err := d.Read.QueryContext(e.Ctx, "SELECT name, COALESCE(sql, '') FROM sqlite_master WHERE type = 'table' AND sql LIKE 'CREATE VIRTUAL TABLE%' ORDER BY name")
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		type vt struct{ name, kind string }
-		tables, err := db.Collect(rows, func(r *sql.Rows) (vt, error) {
-			var name, text string
-			if err := r.Scan(&name, &text); err != nil {
-				return vt{}, err
-			}
-			upper := strings.ToUpper(text)
-			switch {
-			case strings.Contains(upper, "USING FTS5"):
-				return vt{name, "fts5"}, nil
-			case strings.Contains(upper, "USING VEC0"):
-				return vt{name, "vec0"}, nil
-			}
-			return vt{}, nil
-		})
+		tables, err := db.VirtualTables(e.Ctx, d.Read)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
 		for _, t := range tables {
-			if t.kind == "" {
-				continue
-			}
-			var n int64
-			if err := d.Read.QueryRowContext(e.Ctx, "SELECT count(*) FROM \""+strings.ReplaceAll(t.name, "\"", "\"\"")+"\"").Scan(&n); err != nil {
-				return cli.Fail(e, fmt.Errorf("count %s: %w", t.name, err))
-			}
-			_, _ = fmt.Fprintf(e.Stdout, "%s %s: %d\n", t.kind, t.name, n)
+			_, _ = fmt.Fprintf(e.Stdout, "%s %s: %d\n", t.Kind, t.Name, t.Rows)
 		}
 		return cli.ExitOK
 	}
@@ -326,7 +257,7 @@ func (s *service) rekey(a *cli.Args) cli.Handler {
 		if err := db.Backup(e.Ctx, held, tmp, next); err != nil {
 			return cli.Fail(e, err)
 		}
-		want, err := tableCounts(e.Ctx, held)
+		want, err := db.TableCounts(e.Ctx, held)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
