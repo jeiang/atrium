@@ -167,16 +167,16 @@ func inspectStaged(ctx context.Context, staged string, key db.Key) (rep report, 
 	}
 	defer func() { err = errors.Join(err, c.Close()) }()
 	if err := db.RefuseFutureSchema(ctx, c); err != nil {
-		return rep, err
+		return rep, fmt.Errorf("schema check: %w", err)
 	}
 	if err := db.IntegrityCheck(ctx, c); err != nil {
 		return rep, err
 	}
 	if rep.from, err = db.SchemaVersion(ctx, c); err != nil {
-		return rep, err
+		return rep, fmt.Errorf("schema version: %w", err)
 	}
 	if rep.tables, err = db.VirtualTables(ctx, c); err != nil {
-		return rep, err
+		return rep, fmt.Errorf("table counts: %w", err)
 	}
 	for _, t := range rep.tables {
 		if err := db.SpotCheckKNN(ctx, c, t); err != nil {
