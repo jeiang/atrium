@@ -31,7 +31,7 @@ func connPragmas(foreignKeys bool) []string {
 	if foreignKeys {
 		fk = "PRAGMA foreign_keys = ON"
 	}
-	return []string{busyPragma(busyTimeout), fk, "PRAGMA synchronous = FULL", "PRAGMA journal_size_limit = 67108864"}
+	return []string{busyPragma(busyTimeout), fk, "PRAGMA synchronous = FULL", "PRAGMA journal_size_limit = 67108864", "PRAGMA temp_store = MEMORY"}
 }
 
 func busyPragma(d time.Duration) string {
@@ -66,6 +66,7 @@ func (d *DB) Checkpoint(ctx context.Context, wait time.Duration) (Checkpoint, er
 type DB struct {
 	Write     *sql.DB
 	Read      *sql.DB
+	KNN       *sql.DB
 	encrypted bool
 }
 
@@ -97,7 +98,7 @@ func connect(path string, foreignKeys bool, opts []Option) (*DB, error) {
 		return nil, err
 	}
 	pragmas := connPragmas(foreignKeys)
-	w := Open(writeDSN, pragmas...)
+	w := Open(writeDSN, append(append([]string{}, pragmas...), cachePragma(smallCacheKiB))...)
 	w.SetMaxOpenConns(1)
 	if err := guardEngine(w, key); err != nil {
 		_ = w.Close()
@@ -107,12 +108,13 @@ func connect(path string, foreignKeys bool, opts []Option) (*DB, error) {
 		_ = w.Close()
 		return nil, fmt.Errorf("db: %s: %w", path, err)
 	}
-	r := Open(readDSN, append(pragmas, "PRAGMA query_only = ON")...)
-	return &DB{Write: w, Read: r, encrypted: !key.IsZero()}, nil
+	r := newReader(readDSN, pragmas, smallCacheKiB)
+	k := newKNN(readDSN, pragmas)
+	return &DB{Write: w, Read: r, KNN: k, encrypted: !key.IsZero()}, nil
 }
 
 func (d *DB) Close() error {
-	return errors.Join(d.Read.Close(), d.Write.Close())
+	return errors.Join(d.KNN.Close(), d.Read.Close(), d.Write.Close())
 }
 
 func setWAL(w *sql.DB) error {

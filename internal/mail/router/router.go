@@ -385,7 +385,7 @@ func (r *Router) RouteAccount(ctx context.Context, account string) (int, error) 
 	decided := 0
 	for i := range pending {
 		m := &pending[i]
-		d, err := r.Decide(ctx, r.DB.Read, m, ruleList, &lc, tune)
+		d, err := r.Decide(ctx, r.DB.KNN, m, ruleList, &lc, tune)
 		var unavailable *httpx.ServiceUnavailable
 		if errors.As(err, &unavailable) {
 			r.log().Warn(fmt.Sprintf("chat unavailable, deferring %s: %s", account, unavailable))
