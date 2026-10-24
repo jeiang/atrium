@@ -42,6 +42,7 @@ func newHarness(t *testing.T, script ...anthropictest.Response) *harness {
 	t.Setenv("ATRIUM_DB", path)
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	t.Setenv("ATRIUM_MODE", "shadow")
+	anthropictest.PinKey(t)
 	env := config.Map(map[string]string{
 		"ATRIUM_DB": path, "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow",
 		"ANTHROPIC_API_KEY": anthropictest.APIKey, anthropic.BaseURLEnv: srv.URL,

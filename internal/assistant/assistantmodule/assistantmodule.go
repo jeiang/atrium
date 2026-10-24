@@ -18,8 +18,9 @@ import (
 	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -32,16 +33,20 @@ func (m Module) Register(mc module.Context) module.Registration {
 	chat.Tools = mc.Tools
 	return module.Registration{
 		Name:     module.Assistant,
-		Requires: []module.Requirement{{Name: "ANTHROPIC_API_KEY", Check: anthropicKey}},
+		Requires: []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
 		Pages:    []web.Page{{Module: chatpages.Module(chat), Templates: chatpages.Templates()}},
 		Commands: []*cli.Command{agentcmd.Command(mc.Tools, mc.Enabled), skillscmd.Command()},
 		Tools:    addTools,
 	}
 }
 
-func anthropicKey(_ context.Context, p module.Probe) (string, error) {
-	if _, err := config.AnthropicKey(p.Env); err != nil {
-		return err.Error(), nil
+func anthropicKey(ctx context.Context, p module.Probe) (string, error) {
+	key, err := secrets.Credential(ctx, p.Q, secrets.AnthropicAPIKey)
+	if err != nil {
+		return "", err
+	}
+	if py.Strip(key) == "" {
+		return secrets.AnthropicAPIKey + " is not set", nil
 	}
 	return "", nil
 }

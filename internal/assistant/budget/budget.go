@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -126,10 +129,61 @@ func Check(ctx context.Context, q db.Querier, now float64, loc *time.Location, u
 	return found, nil
 }
 
+const RunCapPrefix = "max_run_cost_usd_"
+
+var runCapDefaults = map[string]string{
+	pricing.HaikuID:  "2",
+	pricing.SonnetID: "6",
+	pricing.OpusID:   "10",
+}
+
+func RunCapKey(model string) string {
+	return RunCapPrefix + strings.ReplaceAll(strings.TrimPrefix(model, "claude-"), "-", "_")
+}
+
+func RunCap(ctx context.Context, q db.Querier, model string) (float64, error) {
+	if _, err := pricing.Lookup(model); err != nil {
+		return 0, err
+	}
+	found, err := settings.Default.Resolve(ctx, q, RunCapKey(model), 0)
+	if err != nil {
+		return 0, err
+	}
+	return found.Float()
+}
+
+func ColdRequestUSD(model string, tokens int64, ttl string) (float64, error) {
+	write := pricing.Tokens{CacheWrite5m: tokens}
+	if ttl == prompts.TTL1h {
+		write = pricing.Tokens{CacheWrite1h: tokens}
+	}
+	return pricing.CostUSD(model, write, 0)
+}
+
+func UncachedRequestUSD(model string, input, output int64) (float64, error) {
+	return pricing.CostUSD(model, pricing.Tokens{Input: input, Output: output}, 0)
+}
+
+const SpendCapText = "Anthropic spend limit reached: the organization's API usage cap refused the request. Raise the cap or wait for it to reset in the Anthropic console."
+
+func SpendCap() BudgetExceeded { return BudgetExceeded(SpendCapText) }
+
+func registerRunCaps() []settings.Def {
+	var defs []settings.Def
+	for _, id := range pricing.IDs() {
+		defs = append(defs, settings.Def{
+			Key: RunCapKey(id), Module: "assistant", Type: settings.Float, Default: runCapDefaults[id],
+			Check: settings.Above(0), Class: settings.Cap, Scopes: []settings.Scope{settings.Instance},
+		})
+	}
+	return defs
+}
+
 func init() {
+	settings.MustRegister(registerRunCaps()...)
 	settings.MustRegister(
 		settings.Def{
-			Key: BudgetKey, Module: "assistant", Type: settings.Float, Default: "75",
+			Key: BudgetKey, Module: "assistant", Type: settings.Float, Default: "150",
 			Check: settings.Above(0), Class: settings.UI, Scopes: []settings.Scope{settings.Instance},
 		},
 		settings.Def{

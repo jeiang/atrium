@@ -37,10 +37,9 @@ func HTTPClient(c *http.Client) Option {
 	return func(s *settings) { s.httpClient = c }
 }
 
-func New(env config.Env, opts ...Option) (*Client, error) {
-	key, err := config.AnthropicKey(env)
-	if err != nil {
-		return nil, err
+func New(key string, env config.Env, opts ...Option) (*Client, error) {
+	if key == "" {
+		return nil, config.NotConfigured("anthropic_api_key is not set")
 	}
 	s := settings{httpClient: defaultHTTPClient()}
 	for _, o := range opts {
@@ -50,11 +49,20 @@ func New(env config.Env, opts ...Option) (*Client, error) {
 		option.WithoutEnvironmentDefaults(),
 		option.WithAPIKey(key),
 		option.WithHTTPClient(s.httpClient),
+		option.WithMiddleware(spendCapNoRetry),
 	}
 	if base, ok := env(BaseURLEnv); ok && base != "" {
 		reqOpts = append(reqOpts, option.WithBaseURL(base))
 	}
 	return &Client{sdk: sdk.NewClient(reqOpts...)}, nil
+}
+
+func spendCapNoRetry(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+	resp, err := next(req)
+	if resp != nil && resp.StatusCode == http.StatusTooManyRequests && resp.Header.Get("Retry-After") == "" {
+		resp.Header.Set("X-Should-Retry", "false")
+	}
+	return resp, err
 }
 
 func defaultHTTPClient() *http.Client {
@@ -117,6 +125,18 @@ func (c *Client) Stream(ctx context.Context, p Params, observe func(Event) error
 		return nil, classify(io.ErrUnexpectedEOF)
 	}
 	return decodeMessage(acc.RawJSON())
+}
+
+func (c *Client) ModelIDs(ctx context.Context) ([]string, error) {
+	pager := c.sdk.Models.ListAutoPaging(ctx, sdk.ModelListParams{})
+	var ids []string
+	for pager.Next() {
+		ids = append(ids, pager.Current().ID)
+	}
+	if err := pager.Err(); err != nil {
+		return nil, classify(err)
+	}
+	return ids, nil
 }
 
 func (c *Client) DeleteFile(ctx context.Context, fileID string) {

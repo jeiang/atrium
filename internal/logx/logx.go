@@ -11,18 +11,21 @@ import (
 )
 
 const (
-	Component  = "COMPONENT"
-	RunID      = "RUN_ID"
-	ThreadID   = "THREAD_ID"
-	Job        = "JOB"
-	Account    = "ACCOUNT"
-	Err        = "ERR"
-	Module     = "MODULE"
-	State      = "STATE"
-	Reason     = "REASON"
-	Command    = "COMMAND"
-	EnvName    = "ENV_NAME"
-	UseInstead = "USE_INSTEAD"
+	Component    = "COMPONENT"
+	RunID        = "RUN_ID"
+	ThreadID     = "THREAD_ID"
+	Job          = "JOB"
+	Account      = "ACCOUNT"
+	Err          = "ERR"
+	Module       = "MODULE"
+	State        = "STATE"
+	Reason       = "REASON"
+	Command      = "COMMAND"
+	EnvName      = "ENV_NAME"
+	UseInstead   = "USE_INSTEAD"
+	Model        = "MODEL"
+	SettingKey   = "SETTING"
+	SettingValue = "VALUE"
 )
 
 const Redacted = "[redacted]"

@@ -86,7 +86,7 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 		t.Errorf("list keys = %v, want every registered key %v", listed, registered)
 	}
 
-	expect(runSettings(t, "get", "monthly_budget_usd").row(t), "75", "default", "ui")
+	expect(runSettings(t, "get", "monthly_budget_usd").row(t), "150", "default", "ui")
 
 	set := runSettings(t, "set", "monthly_budget_usd", "200")
 	if set.code != cli.ExitOK || set.stderr != "" {
@@ -131,7 +131,7 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 	if unset.code != cli.ExitOK {
 		t.Fatalf("settings unset: exit %d stderr %q", unset.code, unset.stderr)
 	}
-	expect(unset.row(t), "75", "default", "ui")
+	expect(unset.row(t), "150", "default", "ui")
 	if _, ok := storedSetting(t, path, "monthly_budget_usd"); ok {
 		t.Error("unset left the stored value")
 	}

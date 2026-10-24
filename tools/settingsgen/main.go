@@ -124,6 +124,9 @@ func environmentDoc(defs []settings.Def) string {
 	b.WriteString("| Variable | Setting |\n| --- | --- |\n")
 	for _, d := range defs {
 		fmt.Fprintf(&b, "| `%s` | `%s` |\n", config.EnvName(d), config.TOMLName(d))
+		if d.EnvAlias != "" {
+			fmt.Fprintf(&b, "| `%s` | `%s` |\n", d.EnvAlias, config.TOMLName(d))
+		}
 	}
 	return b.String()
 }

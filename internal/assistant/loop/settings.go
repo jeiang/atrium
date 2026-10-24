@@ -10,8 +10,7 @@ import (
 )
 
 const (
-	CacheTTLKey   = "cache_ttl_chat"
-	MaxRunCostKey = "max_run_cost_usd"
+	CacheTTLKey = "cache_ttl_chat"
 )
 
 func init() {
@@ -21,24 +20,12 @@ func init() {
 			Key: CacheTTLKey, Module: "assistant", Type: settings.Enum, Default: prompts.TTL5m,
 			Choices: []string{prompts.TTL5m, prompts.TTL1h}, Class: settings.UI, Scopes: instance,
 		},
-		settings.Def{
-			Key: MaxRunCostKey, Module: "assistant", Type: settings.Float, Default: "2",
-			Check: settings.Above(0), Class: settings.Cap, Scopes: instance,
-		},
 	)
 }
 
 func cacheTTL(ctx context.Context, q db.Querier) (string, error) {
 	found, err := settings.Default.Resolve(ctx, q, CacheTTLKey, 0)
 	return found.Value, err
-}
-
-func maxRunCost(ctx context.Context, q db.Querier) (float64, error) {
-	found, err := settings.Default.Resolve(ctx, q, MaxRunCostKey, 0)
-	if err != nil {
-		return 0, err
-	}
-	return found.Float()
 }
 
 func readWebSearchMaxUses(ctx context.Context, q db.Querier) (int, error) {

@@ -24,7 +24,12 @@ not claims about the running application.
   stores its model, chosen at creation (default: the `default_model`
   setting) and editable like effort and context; other run kinds use Haiku.
   A run records and sends its thread's model, usage is priced from the model
-  on each usage row, and a model outside the catalog fails closed. The
+  on each usage row, and a model outside the catalog fails closed. The API key is
+  a write-only secret setting (the `ANTHROPIC_API_KEY` variable pins it). The
+  monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
+  100%; each model has its own run cost cap, checked against the next request
+  written cold at the thread's cache lifetime, and an Anthropic spend-cap 429
+  stops the run as a budget stop. The
   catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread

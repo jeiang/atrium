@@ -57,6 +57,7 @@ type Def struct {
 	Restart             bool
 	Scopes              []Scope
 	ThreadColumn        string
+	EnvAlias            string
 }
 
 func (d Def) has(s Scope) bool { return slices.Contains(d.Scopes, s) }

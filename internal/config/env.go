@@ -96,8 +96,6 @@ func NotionToken(env Env) (string, error) { return requireStripped(env, "NOTION_
 
 func NotionWikiRoot(env Env) (string, error) { return requireStripped(env, "ATRIUM_NOTION_WIKI_ROOT") }
 
-func AnthropicKey(env Env) (string, error) { return requireStripped(env, "ANTHROPIC_API_KEY") }
-
 type GrafanaAccess struct {
 	URL   string
 	Token string

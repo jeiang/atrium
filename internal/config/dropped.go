@@ -1,6 +1,8 @@
 package config
 
 import (
+	"strings"
+
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -28,6 +30,7 @@ var droppedNames = [...]struct{ old, key string }{
 	{"ATRIUM_MEDIA_MOVIES_URL", "media_movies_url"},
 	{"ATRIUM_MEDIA_TV_URL", "media_tv_url"},
 	{"ATRIUM_CODEMODE_SOCKET", ""},
+	{"ATRIUM_ASSISTANT_MAX_RUN_COST_USD", "max_run_cost_usd_*"},
 }
 
 func DroppedEnv(env Env, reg *settings.Registry) []Dropped {
@@ -36,10 +39,17 @@ func DroppedEnv(env Env, reg *settings.Registry) []Dropped {
 		if _, set := env(d.old); !set {
 			continue
 		}
-		var replacement string
-		if def, ok := reg.Lookup(d.key); ok {
-			replacement = EnvName(def)
+		var names []string
+		if prefix, wild := strings.CutSuffix(d.key, "*"); wild {
+			for _, def := range reg.Defs() {
+				if strings.HasPrefix(def.Key, prefix) {
+					names = append(names, EnvName(def))
+				}
+			}
+		} else if def, ok := reg.Lookup(d.key); ok {
+			names = append(names, EnvName(def))
 		}
+		replacement := strings.Join(names, ", ")
 		out = append(out, Dropped{Old: d.old, New: replacement})
 	}
 	return out

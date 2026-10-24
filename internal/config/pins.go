@@ -49,24 +49,43 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 		if d.Class == settings.Fixed {
 			continue
 		}
-		name := EnvName(d)
+		found, ok, err := pinFromEnv(env, reg, d)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			pins.m[d.Key] = found
+		}
+	}
+	livePins.Store(pins)
+	return pins, nil
+}
+
+func pinFromEnv(env Env, reg *settings.Registry, d settings.Def) (pin, bool, error) {
+	names := []string{EnvName(d)}
+	if d.EnvAlias != "" {
+		names = append(names, d.EnvAlias)
+	}
+	var found []pin
+	var used []string
+	for _, name := range names {
 		value := get(env, name)
 		if d.Secret {
 			value = py.Strip(value)
 			fileName := name + strings.ToUpper(fileSuffix)
 			if path, set := env(fileName); set {
 				if value != "" {
-					return nil, fmt.Errorf("config: %s and %s are both set; set only one", name, fileName)
+					return pin{}, false, fmt.Errorf("config: %s and %s are both set; set only one", name, fileName)
 				}
 				secret, err := os.ReadFile(path)
 				if err != nil {
-					return nil, fmt.Errorf("config: %s: %w", fileName, err)
+					return pin{}, false, fmt.Errorf("config: %s: %w", fileName, err)
 				}
 				value, name = py.Strip(string(secret)), fileName
 				if err := reg.Validate(d.Key, value); err != nil {
-					return nil, fmt.Errorf("config: %s: %w", name, err)
+					return pin{}, false, fmt.Errorf("config: %s: %w", name, err)
 				}
-				pins.m[d.Key] = pin{value, "env " + name}
+				found, used = append(found, pin{value, "env " + name}), append(used, name)
 				continue
 			}
 		}
@@ -74,12 +93,17 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 			continue
 		}
 		if err := reg.Validate(d.Key, value); err != nil {
-			return nil, fmt.Errorf("config: %s: %w", name, err)
+			return pin{}, false, fmt.Errorf("config: %s: %w", name, err)
 		}
-		pins.m[d.Key] = pin{value, "env " + name}
+		found, used = append(found, pin{value, "env " + name}), append(used, name)
 	}
-	livePins.Store(pins)
-	return pins, nil
+	switch len(found) {
+	case 0:
+		return pin{}, false, nil
+	case 1:
+		return found[0], true, nil
+	}
+	return pin{}, false, fmt.Errorf("config: %s and %s are both set; set only one", used[0], used[1])
 }
 
 func (p *Pins) readFile(env Env, reg *settings.Registry, defs []settings.Def, path string) error {
