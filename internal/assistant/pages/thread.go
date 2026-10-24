@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -59,7 +58,7 @@ func (p *pages) threadContext(w http.ResponseWriter, r *http.Request, threadID i
 	}
 	t := threadOf(view)
 	return map[string]any{
-		"view": view, "thread_id": threadID, "models": pricing.Models(), "efforts": threads.Efforts[:], "context_limits": threads.ContextLimits[:],
+		"view": view, "thread_id": threadID,
 		"composer": composerData(t.Model, t.Effort, threads.ContextLimitOf(t), threadID),
 	}, true
 }

@@ -4,7 +4,7 @@
 
 {{define "subagent_fields"}}{{$a := .a}}{{$prefix := .prefix}}
 <div class="grid gap-3 sm:grid-cols-2">
-  <div role="group" class="field"><label for="{{$prefix}}-description">One-line description (shown to the assistant when it picks a role)</label><input id="{{$prefix}}-description" name="description" type="text" value="{{$a.description}}" maxlength="160" required></div>
+  <div role="group" class="field"><label for="{{$prefix}}-description">One-line description</label><input id="{{$prefix}}-description" name="description" type="text" value="{{$a.description}}" maxlength="160" required></div>
   <div role="group" class="field">
     <label for="{{$prefix}}-effort">Effort</label>
     <select id="{{$prefix}}-effort" name="effort">

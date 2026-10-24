@@ -79,7 +79,7 @@ func TestAssistantSettings(t *testing.T) {
 		t.Fatalf("assistant save: %d %q %q", savedResponse.StatusCode, savedResponse.Header.Get("Location"), savedResponse.body)
 	}
 	saved := status(t, s.get(savedResponse.Header.Get("Location")), http.StatusOK)
-	mustContain(t, saved, "Saved", "New chat threads start with these defaults.", `<option value="high" selected>high</option>`, `<option value="200000" selected>200K</option>`, `data-category="success"`, `data-strip-params="saved"`)
+	mustContain(t, saved, "Saved", `<option value="high" selected>high</option>`, `<option value="200000" selected>200K</option>`, `data-category="success"`, `data-strip-params="saved"`)
 	if n := strings.Count(saved, `id="toaster"`); n != 1 {
 		t.Errorf("%d toasters", n)
 	}

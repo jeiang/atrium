@@ -1,9 +1,12 @@
 package tpl
 
-import "reflect"
+import (
+	"fmt"
+	"reflect"
+)
 
 func init() {
-	registerFuncs(map[string]any{"has": has})
+	registerFuncs(map[string]any{"has": has, "ctxlabel": ctxlabel})
 }
 
 func has(list, item any) bool {
@@ -17,4 +20,15 @@ func has(list, item any) bool {
 		}
 	}
 	return false
+}
+
+func ctxlabel(v any) (string, error) {
+	f, err := toFloat(v)
+	if err != nil {
+		return "", err
+	}
+	if f >= 1_000_000 {
+		return fmt.Sprintf("%dM", int64(f/1_000_000)), nil
+	}
+	return fmt.Sprintf("%dK", int64(f/1000)), nil
 }

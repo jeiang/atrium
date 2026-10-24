@@ -62,7 +62,7 @@ func (p *pages) assistantSettings(w http.ResponseWriter, r *http.Request) {
 	var toast *tpl.Toast
 	saved := web.QueryValue(r.URL.Query(), "saved") == "1"
 	if saved {
-		toast = notice("success", "Saved", "New chat threads start with these defaults.")
+		toast = notice("success", "Saved", "")
 	}
 	p.assistantPage(w, r, http.StatusOK, toast, saved, "")
 }

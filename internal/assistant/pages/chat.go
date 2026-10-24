@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant/files"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -24,11 +23,8 @@ type listData struct {
 	View      string           `json:"view"`
 	ProjectID int64            `json:"project_id"`
 
-	Models        []pricing.Model `json:"models"`
-	Efforts       []string        `json:"efforts"`
-	ContextLimits []int64         `json:"context_limits"`
-	Defaults      threads.Options `json:"defaults"`
-	Composer      map[string]any  `json:"composer"`
+	Defaults threads.Options `json:"defaults"`
+	Composer map[string]any  `json:"composer"`
 }
 
 func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, projectID int64) {
@@ -49,7 +45,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, 
 	check(err)
 	data := listData{
 		Threads: found, Q: q, View: view, ProjectID: projectID,
-		Models: pricing.Models(), Efforts: threads.Efforts[:], ContextLimits: threads.ContextLimits[:], Defaults: defaults,
+		Defaults: defaults,
 		Composer: composerData(defaults.Model, defaults.Effort, defaults.ContextLimit, 0),
 	}
 	if web.IsPartial(r) {

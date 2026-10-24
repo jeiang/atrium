@@ -2,7 +2,6 @@ package pages
 
 import (
 	"net/http"
-	"slices"
 
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -24,18 +23,11 @@ func composerData(modelID, effort string, limit, live int64) map[string]any {
 	efforts, limits, known := threads.Efforts[:], threads.ContextLimits[:], false
 	if m, err := pricing.Lookup(modelID); err == nil {
 		known, efforts, limits = true, m.Efforts, contextLimitsOf(m)
-		if !slices.Contains(efforts, effort) {
-			effort = efforts[0]
-			if slices.Contains(efforts, threads.Medium) {
-				effort = threads.Medium
-			}
+		effort = threads.SnapEffort(m, effort)
+		if limit == 0 {
+			limit = threads.DefaultContextLimit
 		}
-		if !slices.Contains(limits, limit) {
-			limit = limits[len(limits)-1]
-			if slices.Contains(limits, threads.DefaultContextLimit) {
-				limit = threads.DefaultContextLimit
-			}
-		}
+		limit = threads.SnapContextLimit(m, limit)
 	}
 	return map[string]any{
 		"models": models, "model": modelID, "known": known,

@@ -27,7 +27,7 @@
       <div role="group" class="field">
         <label for="project-context">Default context</label>
         <select id="project-context" name="context_limit" class="select">
-          {{range .context_limits}}<option value="{{.}}"{{if and $v.context_limit (eq . $v.context_limit)}} selected{{end}}>{{if ge . 1000000}}{{int (fdiv . 1000000)}}M{{else}}{{int (fdiv . 1000)}}K{{end}}</option>{{end}}
+          {{range .context_limits}}<option value="{{.}}"{{if and $v.context_limit (eq . $v.context_limit)}} selected{{end}}>{{ctxlabel .}}</option>{{end}}
         </select>
       </div>
     </div>
