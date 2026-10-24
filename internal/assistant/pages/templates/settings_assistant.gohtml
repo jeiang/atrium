@@ -6,20 +6,23 @@
 <form method="post" action="/settings/assistant" class="flex max-w-xl flex-col gap-4">
   <input type="hidden" name="csrf_token" value="{{.CSRF}}">
   {{with $d.error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
-  <p class="text-sm text-muted-foreground">Defaults for new chat threads. Each thread keeps its own effort and context limit, changeable from its composer.</p>
+  <div role="group" class="field">
+    <label for="default-model">Default model</label>
+    <select id="default-model" name="model">
+      {{range $d.models}}<option value="{{.id}}"{{if eq .id $d.defaults.model}} selected{{end}}>{{.name}}</option>{{end}}
+    </select>
+  </div>
   <div role="group" class="field">
     <label for="default-effort">Default effort</label>
     <select id="default-effort" name="effort">
       {{range $d.efforts}}<option value="{{.}}"{{if eq . $d.defaults.effort}} selected{{end}}>{{.}}</option>{{end}}
     </select>
-    <p class="text-xs text-muted-foreground">How readily and deeply Claude Haiku 5.5 thinks: low for quick chat, medium (its default) for most work, high for longer tasks, xhigh and max for the hardest ones.</p>
   </div>
   <div role="group" class="field">
-    <label for="default-context">Default context limit</label>
+    <label for="default-context">Default context</label>
     <select id="default-context" name="context_limit">
-      {{range $d.context_limits}}<option value="{{.}}"{{if eq . $d.defaults.context_limit}} selected{{end}}>{{int (fdiv . 1000)}}K tokens</option>{{end}}
+      {{range $d.context_limits}}<option value="{{.}}"{{if eq . $d.defaults.context_limit}} selected{{end}}>{{ctxlabel .}}</option>{{end}}
     </select>
-    <p class="text-xs text-muted-foreground">Older tool results are cleared and the conversation is compacted just below this limit. Above 100K input tokens Haiku 5.5 bills input at 5×, so 90K keeps every request in the cheaper tier.</p>
   </div>
   <div><button type="submit" class="btn">{{icon "check"}}Save</button></div>
 </form>

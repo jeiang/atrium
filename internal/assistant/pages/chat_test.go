@@ -373,15 +373,16 @@ func TestListFlagsOptionsProjectsDelete(t *testing.T) {
 	}
 	mustContain(t, status(t, s.get("/chat?view=archived"), http.StatusOK), `aria-label="Archived"`, `name="view" value="archived"`)
 	status(t, s.post(fmt.Sprintf("/chat/%d/pin", thread), url.Values{"pinned": {"x"}}), http.StatusUnprocessableEntity)
-	meter := status(t, s.post(fmt.Sprintf("/chat/%d/options", thread), url.Values{"effort": {"low"}, "context_limit": {"500000"}}, hx, "true"), http.StatusOK)
-	mustContain(t, meter, `id="meter"`, "effort low", "0.0K / ")
+	meter := status(t, s.post(fmt.Sprintf("/chat/%d/options", thread), url.Values{"model": {"claude-sonnet-5-5"}, "effort": {"low"}, "context_limit": {"500000"}}, hx, "true"), http.StatusOK)
+	mustContain(t, meter, `id="meter"`, "Sonnet 5.5 · low", "0.0K / ", `id="composer-options"`, `hx-swap-oob="true"`, `<option value="claude-sonnet-5-5" selected>Sonnet 5.5</option>`)
 	refusedOptions := s.post(fmt.Sprintf("/chat/%d/options", thread), url.Values{"effort": {"bogus"}}, hx, "true")
 	mustContain(t, status(t, refusedOptions, http.StatusUnprocessableEntity), "Not saved")
 	if got := refusedOptions.Header.Get("HX-Reswap"); got != "none" {
 		t.Errorf("options HX-Reswap %q, want none", got)
 	}
 	page := status(t, s.get(fmt.Sprintf("/chat/%d", thread)), http.StatusOK)
-	mustContain(t, page, `<option value="500000" selected>500K (5× price over 100K)</option>`, `<option value="low" selected>low</option>`, `id="move-project"`)
+	mustContain(t, page, `<option value="500000" selected>500K</option>`, `<option value="low" selected>low</option>`, `<option value="claude-sonnet-5-5" selected>Sonnet 5.5</option>`, `id="move-project"`, `placeholder="Message the assistant"`)
+	mustNotContain(t, page, "5× price", "drop files to attach", "bills input at 5×")
 	if r := s.post(fmt.Sprintf("/chat/%d/project", thread), url.Values{"project_id": {"1"}}); r.StatusCode != http.StatusSeeOther {
 		t.Errorf("move %d", r.StatusCode)
 	}
@@ -485,5 +486,28 @@ func TestThreadModelPricedFromCatalog(t *testing.T) {
 	}
 	if got := s.count("SELECT COUNT(*) FROM usage WHERE model != 'claude-haiku-5-5'"); got != 2 {
 		t.Errorf("%d priced non-haiku rows, want 2", got)
+	}
+}
+
+func TestNewThreadPageOffersModelEffortAndContext(t *testing.T) {
+	s := newSite(t)
+	page := status(t, s.get("/chat"), http.StatusOK)
+	mustContain(t, page, `name="model"`, `name="effort"`, `name="context_limit"`, `id="composer-options"`, `hx-get="/chat/composer-options"`,
+		`<option value="claude-haiku-5-5" selected>Haiku 5.5</option>`, `<option value="claude-sonnet-5-5">Sonnet 5.5</option>`, `<option value="claude-opus-5-5">Opus 5.5</option>`,
+		`<option value="medium" selected>medium</option>`, `<option value="90000" selected>90K</option>`, `<option value="1000000">1M</option>`, `placeholder="Message the assistant"`)
+	mustNotContain(t, page, "5× price", "untrusted data", "drop files to attach")
+
+	options := status(t, s.get("/chat/composer-options?model=claude-opus-5-5&effort=high&context_limit=200000", hx, "true"), http.StatusOK)
+	mustContain(t, options, `id="composer-options"`, `<option value="claude-opus-5-5" selected>Opus 5.5</option>`, `<option value="high" selected>high</option>`, `<option value="200000" selected>200K</option>`)
+	status(t, s.get("/chat/composer-options?model=gpt-5", hx, "true"), http.StatusUnprocessableEntity)
+
+	created := s.multipart("/chat", map[string]string{"text": "", "model": "claude-sonnet-5-5", "effort": "high", "context_limit": "200000"}, nil)
+	var model, effort string
+	var limit int64
+	if err := s.db.Read.QueryRow("SELECT model, effort, context_limit FROM threads WHERE id = ?", s.idAt(created, "/chat/")).Scan(&model, &effort, &limit); err != nil {
+		t.Fatal(err)
+	}
+	if model != "claude-sonnet-5-5" || effort != "high" || limit != 200000 {
+		t.Errorf("thread %s %s %d, want claude-sonnet-5-5 high 200000", model, effort, limit)
 	}
 }

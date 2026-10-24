@@ -53,22 +53,12 @@
   <input type="hidden" name="edit" value="">
   <p id="composer-editing" class="flex items-center gap-2 text-xs text-muted-foreground" hidden>{{icon "pencil" "size-3.5"}}Editing your last message: sending replaces it and the reply.<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="cancel-edit">Cancel</button></p>
   <label for="composer-text" class="sr-only">Message</label>
-  <textarea id="composer-text" name="text" rows="2" class="textarea w-full" placeholder="Message the assistant… (⌘⏎ to send, drop files to attach)" data-submit-on-enter required autofocus></textarea>
+  <textarea id="composer-text" name="text" rows="2" class="textarea w-full" placeholder="Message the assistant" data-submit-on-enter required autofocus></textarea>
   {{template "attach_field"}}
   <div class="flex flex-wrap items-center gap-2 text-xs">
     {{template "attach_button"}}
     {{if eq $t.kind "chat"}}
-    <label class="flex items-center gap-1 text-muted-foreground">Effort
-      <select name="effort" class="select h-7 py-0 text-xs" data-option hx-post="/chat/{{$t.id}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML">
-        {{range $d.efforts}}<option value="{{.}}"{{if eq . $t.effort}} selected{{end}}>{{.}}</option>{{end}}
-      </select>
-    </label>
-    <label class="flex items-center gap-1 text-muted-foreground">Context
-      <select name="context_limit" class="select h-7 py-0 text-xs" data-option hx-post="/chat/{{$t.id}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML">
-        {{range $d.context_limits}}<option value="{{.}}"{{if eq . $v.meter.limit}} selected{{end}}>{{int (fdiv . 1000)}}K{{if gt . 100000}} (5× price over 100K){{end}}</option>{{end}}
-      </select>
-    </label>
-    <span class="hidden text-muted-foreground lg:inline">Above 100K input tokens Haiku 5.5 bills input at 5×.</span>
+    {{template "composer_options" (dict "c" $d.composer)}}
     {{end}}
     {{template "spinner" (dict "id" "composer-spinner" "label" "Sending")}}
     <span class="ms-auto flex items-center gap-1">

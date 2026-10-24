@@ -99,7 +99,8 @@ func TestProjectsCrudAndListing(t *testing.T) {
 	mustContain(t, cards, "Kitchen", "1 thread", "Always answer in metric units.", "0 threads", "No instructions.", "no activity yet", `href="/projects/1"`, "active <time")
 
 	edit := status(t, s.get("/projects/1/edit"), http.StatusOK)
-	mustContain(t, edit, "Always answer in metric units.", `value="Kitchen"`, `<option value="200000" selected>`, `<option value="high" selected>`, "Create wiki hub", `hx-post="/projects/1/archive"`, `id="project-dialog-title"`, `aria-describedby="project-effort-help"`, `id="project-effort-help"`, `aria-describedby="project-context-help"`, `id="project-context-help"`)
+	mustContain(t, edit, "Always answer in metric units.", `value="Kitchen"`, `<option value="200000" selected>`, `<option value="high" selected>`, "Create wiki hub", `hx-post="/projects/1/archive"`, `id="project-dialog-title"`)
+	mustNotContain(t, edit, "project-effort-help", "project-context-help", "5× price", "Added to the assistant")
 	mustNotContain(t, edit, "<html")
 	newForm := status(t, s.get("/projects/new"), http.StatusOK)
 	mustContain(t, newForm, "New project", `action="/projects"`, `<option value="90000" selected>`, `<option value="medium" selected>`)
@@ -111,7 +112,7 @@ func TestProjectsCrudAndListing(t *testing.T) {
 		t.Fatalf("update: %d %v", upd.StatusCode, upd.Header)
 	}
 	page := status(t, s.get("/projects/1"), http.StatusOK)
-	mustContain(t, page, "Kitchen reno", "Use cm.", `name="project_id" value="1"`, "effort high · context 200K", `id="thread-search"`, "Start a chat in Kitchen reno… (⌘⏎ to send, drop files to attach)", "Untitled thread", `aria-label="Recent"`)
+	mustContain(t, page, "Kitchen reno", "Use cm.", `name="project_id" value="1"`, "effort high · context 200K", `id="thread-search"`, `placeholder="Start a chat in Kitchen reno"`, `name="model"`, `<option value="high" selected>high</option>`, `<option value="200000" selected>200K</option>`, "Untitled thread", `aria-label="Recent"`)
 	hxUpdate := s.post("/projects/1", with(kitchen, "name", "Kitchen reno"), hx, "true")
 	if hxUpdate.StatusCode != http.StatusNoContent || hxUpdate.Header.Get("HX-Redirect") != "/projects/1" {
 		t.Fatalf("htmx update: %d %v", hxUpdate.StatusCode, hxUpdate.Header)

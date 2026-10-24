@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant/files"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -24,10 +23,8 @@ type listData struct {
 	View      string           `json:"view"`
 	ProjectID int64            `json:"project_id"`
 
-	Models        []pricing.Model `json:"models"`
-	Efforts       []string        `json:"efforts"`
-	ContextLimits []int64         `json:"context_limits"`
-	Defaults      threads.Options `json:"defaults"`
+	Defaults threads.Options `json:"defaults"`
+	Composer map[string]any  `json:"composer"`
 }
 
 func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, projectID int64) {
@@ -48,7 +45,8 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, 
 	check(err)
 	data := listData{
 		Threads: found, Q: q, View: view, ProjectID: projectID,
-		Models: pricing.Models(), Efforts: threads.Efforts[:], ContextLimits: threads.ContextLimits[:], Defaults: defaults,
+		Defaults: defaults,
+		Composer: composerData(defaults.Model, defaults.Effort, defaults.ContextLimit, 0),
 	}
 	if web.IsPartial(r) {
 		p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", data)
@@ -244,7 +242,10 @@ func (p *pages) chatOptions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p.fragment(w, r, http.StatusOK, "_meter.gohtml", map[string]any{"view": view})
+	thread := threadOf(view)
+	p.fragment(w, r, http.StatusOK, "_options_saved.gohtml", map[string]any{
+		"view": view, "composer": composerData(thread.Model, thread.Effort, threads.ContextLimitOf(thread), threadID),
+	})
 }
 
 func (p *pages) chatDelete(w http.ResponseWriter, r *http.Request) {

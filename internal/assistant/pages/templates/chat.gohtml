@@ -27,12 +27,12 @@
         class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" data-reset data-attach>
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
     <label for="new-text" class="sr-only">New thread</label>
-    <textarea id="new-text" name="text" rows="2" class="textarea w-full" placeholder="Ask about your mail, contacts, Notion, calendar or the web… (⌘⏎ to send, drop files to attach)" data-submit-on-enter autofocus></textarea>
+    <textarea id="new-text" name="text" rows="2" class="textarea w-full" placeholder="Message the assistant" data-submit-on-enter autofocus></textarea>
     {{template "attach_field"}}
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center gap-2 text-xs">
       {{template "attach_button"}}
-      <p class="hidden text-xs text-muted-foreground sm:block">Mail, web, Notion and attached file content is treated as untrusted data. The assistant never sends mail; it only drafts.</p>
-      <button type="submit" class="btn ms-auto">{{icon "send"}}Start</button>
+      {{template "composer_options" (dict "c" $d.composer)}}
+      <button type="submit" class="btn ms-auto" data-size="sm">{{icon "send"}}Start</button>
     </div>
   </form>
 </div>

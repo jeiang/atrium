@@ -103,6 +103,7 @@ func Module(o Options) web.Module {
 
 		r.Get("/chat", p.chatIndex)
 		r.Post("/chat", p.chatNew)
+		r.Get("/chat/composer-options", p.composerOptions)
 		r.Post("/chat/{thread_id}/pin", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "pinned") })
 		r.Post("/chat/{thread_id}/archive", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "archived") })
 		r.Get("/chat/{thread_id}", p.chatThread)

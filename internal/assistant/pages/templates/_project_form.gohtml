@@ -15,22 +15,20 @@
     </div>
     <div role="group" class="field">
       <label for="project-instructions">Instructions</label>
-      <textarea id="project-instructions" name="instructions" rows="6" class="w-full" placeholder="Markdown. Added to the assistant's system prompt in every chat of this project.">{{$v.instructions}}</textarea>
+      <textarea id="project-instructions" name="instructions" rows="6" class="w-full" placeholder="Markdown">{{$v.instructions}}</textarea>
     </div>
     <div class="grid gap-3 sm:grid-cols-2">
       <div role="group" class="field">
         <label for="project-effort">Default effort</label>
-        <select id="project-effort" name="effort" class="select" aria-describedby="project-effort-help">
+        <select id="project-effort" name="effort" class="select">
           {{range .efforts}}<option value="{{.}}"{{if eq . $v.effort}} selected{{end}}>{{.}}</option>{{end}}
         </select>
-        <p id="project-effort-help">How hard the assistant thinks in new chats of this project: low is quick, max is the most thorough. Each chat can still change it.</p>
       </div>
       <div role="group" class="field">
-        <label for="project-context">Default context limit</label>
-        <select id="project-context" name="context_limit" class="select" aria-describedby="project-context-help">
-          {{range .context_limits}}<option value="{{.}}"{{if and $v.context_limit (eq . $v.context_limit)}} selected{{end}}>{{int (fdiv . 1000)}}K{{if gt . 100000}} (5× price over 100K){{end}}</option>{{end}}
+        <label for="project-context">Default context</label>
+        <select id="project-context" name="context_limit" class="select">
+          {{range .context_limits}}<option value="{{.}}"{{if and $v.context_limit (eq . $v.context_limit)}} selected{{end}}>{{ctxlabel .}}</option>{{end}}
         </select>
-        <p id="project-context-help">When a chat approaches this limit, older tool results are cleared and the conversation is compacted.</p>
       </div>
     </div>
     {{template "project_hub" (dict "project" .project "hub_id" (or $v.wiki_hub_id "") "notice" nil "error" nil)}}

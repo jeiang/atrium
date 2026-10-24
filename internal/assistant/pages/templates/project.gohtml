@@ -5,7 +5,7 @@
   <header class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
     <a href="/projects" class="btn" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Projects</a>
     {{if $p.archived}}<span class="badge" data-variant="secondary">archived</span>{{end}}
-    <span>effort {{$p.effort}} · context {{int (fdiv $p.context_limit 1000)}}K</span>
+    <span>effort {{$p.effort}} · context {{ctxlabel $p.context_limit}}</span>
     {{if $p.wiki_hub_id}}<a class="btn" data-size="sm" data-variant="ghost" href="https://www.notion.so/{{replace "-" "" $p.wiki_hub_id}}" target="_blank" rel="noopener">{{icon "book-open"}}Wiki hub</a>{{end}}
     <span class="ms-auto flex items-center gap-1">
       <button id="edit-project" type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/projects/{{$p.id}}/edit" hx-target="#project-dialog" hx-swap="innerHTML">{{icon "pencil"}}Edit</button>
@@ -36,11 +36,12 @@
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
     <input type="hidden" name="project_id" value="{{$p.id}}">
     <label for="new-text" class="sr-only">New thread in {{$p.name}}</label>
-    <textarea id="new-text" name="text" rows="2" class="textarea w-full" placeholder="Start a chat in {{$p.name}}… (⌘⏎ to send, drop files to attach)" data-submit-on-enter autofocus></textarea>
+    <textarea id="new-text" name="text" rows="2" class="textarea w-full" placeholder="Start a chat in {{$p.name}}" data-submit-on-enter autofocus></textarea>
     {{template "attach_field"}}
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center gap-2 text-xs">
       {{template "attach_button"}}
-      <button type="submit" class="btn">{{icon "send"}}Start</button>
+      {{template "composer_options" (dict "c" $d.composer)}}
+      <button type="submit" class="btn ms-auto" data-size="sm">{{icon "send"}}Start</button>
     </div>
   </form>
   {{end}}

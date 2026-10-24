@@ -103,6 +103,32 @@ func CleanModelEffort(model pricing.Model, value string) (string, error) {
 	return effort, nil
 }
 
+func SnapEffort(model pricing.Model, effort string) string {
+	if model.SupportsEffort(effort) || len(model.Efforts) == 0 {
+		return effort
+	}
+	if model.SupportsEffort(Medium) {
+		return Medium
+	}
+	return model.Efforts[0]
+}
+
+func SnapContextLimit(model pricing.Model, limit int64) int64 {
+	if limit <= model.ContextWindow {
+		return limit
+	}
+	best := int64(0)
+	for _, n := range ContextLimits {
+		if n <= model.ContextWindow && n > best {
+			best = n
+		}
+	}
+	if DefaultContextLimit <= model.ContextWindow {
+		return DefaultContextLimit
+	}
+	return best
+}
+
 func CleanModelContextLimit(model pricing.Model, value any) (int64, error) {
 	limit, err := CleanContextLimit(value)
 	if err != nil {
@@ -313,14 +339,16 @@ func SetOptions(ctx context.Context, q db.Querier, threadID int64, model, effort
 	if err != nil {
 		return false, err
 	}
-	e, err := CleanModelEffort(m, effort)
+	e, err := CleanEffort(effort)
 	if err != nil {
 		return false, err
 	}
-	limit, err := CleanModelContextLimit(m, contextLimit)
+	e = SnapEffort(m, e)
+	limit, err := CleanContextLimit(contextLimit)
 	if err != nil {
 		return false, err
 	}
+	limit = SnapContextLimit(m, limit)
 	return changed(q.ExecContext(ctx, "UPDATE threads SET model = ?, effort = ?, context_limit = ? WHERE id = ? AND kind = ?", m.ID, e, limit, threadID, Chat))
 }
 
