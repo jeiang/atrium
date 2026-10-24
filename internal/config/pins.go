@@ -71,6 +71,7 @@ func pinFromEnv(env Env, reg *settings.Registry, d settings.Def) (pin, bool, err
 	for _, name := range names {
 		value := get(env, name)
 		if d.Secret {
+			value = py.Strip(value)
 			fileName := name + strings.ToUpper(fileSuffix)
 			if path, set := env(fileName); set {
 				if value != "" {

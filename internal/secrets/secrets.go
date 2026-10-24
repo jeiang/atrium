@@ -28,7 +28,7 @@ func init() {
 		settings.Def{Key: AnthropicAPIKey, Module: "anthropic", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true, EnvAlias: "ANTHROPIC_API_KEY"},
 		settings.Def{Key: AnthropicAdminKey, Module: "anthropic", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
 		settings.Def{Key: OpenAIAdminKey, Module: "openai", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
-		settings.Def{Key: ActionLinkKey, Module: "action_links", Type: settings.String, Class: settings.Secret, Secret: true, Generated: true},
+		settings.Def{Key: ActionLinkKey, Module: "action_links", Type: settings.String, Class: settings.Secret, Secret: true, Generated: true, Check: settings.NonEmpty},
 	)
 }
 
@@ -242,10 +242,14 @@ func (s *Store) GeneratedKey(ctx context.Context, name string) (string, error) {
 		return "", err
 	} else if pinned {
 		found, err := s.reg.Resolve(ctx, s.q, name, 0)
-		if err == nil {
-			logx.AddSecret(found.Value)
+		if err != nil {
+			return "", err
 		}
-		return found.Value, err
+		if found.Value == "" {
+			return "", EmptyValue(name)
+		}
+		logx.AddSecret(found.Value)
+		return found.Value, nil
 	}
 	var buf [32]byte
 	if _, err := rand.Read(buf[:]); err != nil {
@@ -265,3 +269,67 @@ func (s *Store) GeneratedKey(ctx context.Context, name string) (string, error) {
 }
 
 func now() float64 { return float64(time.Now().UnixNano()) / 1e9 }
+
+func (s *Store) Value(ctx context.Context, name string) (string, error) {
+	if _, err := s.def(name); err != nil {
+		return "", err
+	}
+	if _, pinned, err := s.reg.Pinned(name); err != nil {
+		return "", err
+	} else if pinned {
+		found, err := s.reg.Resolve(ctx, s.q, name, 0)
+		if err != nil {
+			return "", err
+		}
+		if found.Value == "" {
+			return "", EmptyValue(name)
+		}
+		logx.AddSecret(found.Value)
+		return found.Value, nil
+	}
+	var value string
+	err := s.q.QueryRowContext(ctx, "SELECT value FROM secrets WHERE name = ?", name).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err == nil {
+		logx.AddSecret(value)
+	}
+	return value, err
+}
+
+func (s *Store) Adopt(ctx context.Context, name, value string) (bool, error) {
+	d, err := s.def(name)
+	if err != nil {
+		return false, err
+	}
+	if !d.Generated {
+		return false, NotGenerated(name)
+	}
+	if value == "" {
+		return false, EmptyValue(name)
+	}
+	if _, pinned, err := s.reg.Pinned(name); err != nil || pinned {
+		return false, err
+	}
+	res, err := s.q.ExecContext(ctx,
+		"INSERT OR IGNORE INTO secrets (name, value, set_at, set_by) VALUES (?, ?, ?, 'migration')",
+		name, value, now())
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if n > 0 {
+		logx.AddSecret(value)
+	}
+	return n > 0, nil
+}
+
+func (s *Store) Reading() *Store {
+	scoped := *s
+	scoped.q = s.d.Read
+	return &scoped
+}
