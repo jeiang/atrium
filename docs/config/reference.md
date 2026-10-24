@@ -111,8 +111,11 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `default_context_limit` | enum (90000, 200000, 500000, 1000000) | `90000` | ui | `ATRIUM_ASSISTANT_DEFAULT_CONTEXT_LIMIT` |
 | `default_effort` | enum (low, medium, high, xhigh, max) | `medium` | ui | `ATRIUM_ASSISTANT_DEFAULT_EFFORT` |
 | `default_model` | enum (claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5) | `claude-haiku-5-5` | ui | `ATRIUM_ASSISTANT_DEFAULT_MODEL` |
+| `doom_loop_threshold` | int | `3` | advanced | `ATRIUM_ASSISTANT_DOOM_LOOP_THRESHOLD` |
 | `max_run_cost_usd` | float | `2` | cap | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD` |
-| `max_steps` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS` |
+| `max_steps_chat` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_CHAT` |
+| `max_steps_cron` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_CRON` |
+| `max_steps_nightly` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` |
 | `monthly_budget_usd` | float | `75` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
 
 ## calendar

@@ -49,7 +49,7 @@ func TestConfigFilePinsBeatTheDatabaseAndRefuseWrites(t *testing.T) {
 		}
 		return path
 	}
-	config := write("atrium.toml", "[assistant]\nmonthly_budget_usd = 120\nmax_steps = \"${PIN_TEST_STEPS}\"\n")
+	config := write("atrium.toml", "[assistant]\nmonthly_budget_usd = 120\nmax_steps_chat = \"${PIN_TEST_STEPS}\"\n")
 	t.Setenv("ATRIUM_CONFIG", config)
 	t.Setenv("PIN_TEST_STEPS", "30")
 
@@ -57,7 +57,7 @@ func TestConfigFilePinsBeatTheDatabaseAndRefuseWrites(t *testing.T) {
 	if got.Value != "120" || got.Source != "pin" || got.PinSource != "config "+config+" assistant."+key {
 		t.Errorf("config pin: %+v", got)
 	}
-	if got := pinRowOf(t, runSettings(t, "get", "max_steps")); got.Value != "30" || got.Source != "pin" {
+	if got := pinRowOf(t, runSettings(t, "get", "max_steps_chat")); got.Value != "30" || got.Source != "pin" {
 		t.Errorf("interpolated pin: %+v", got)
 	}
 
@@ -87,7 +87,7 @@ func TestConfigFilePinsBeatTheDatabaseAndRefuseWrites(t *testing.T) {
 	for name, c := range map[string]struct{ body, names string }{
 		"unknown key":     {"[assistant]\nnope = 1\n", "assistant.nope"},
 		"unknown module":  {"[nowhere]\nx = 1\n", "nowhere"},
-		"undefined env":   {"[assistant]\nmax_steps = \"${PIN_TEST_UNDEFINED}\"\n", "assistant.max_steps"},
+		"undefined env":   {"[assistant]\nmax_steps_chat = \"${PIN_TEST_UNDEFINED}\"\n", "assistant.max_steps_chat"},
 		"missing file":    {"[assistant]\nmonthly_budget_usd_file = \"" + filepath.Join(dir, "absent") + "\"\n", "assistant.monthly_budget_usd_file"},
 		"invalid value":   {"[assistant]\nmonthly_budget_usd = -1\n", "assistant.monthly_budget_usd"},
 		"both file+value": {"[assistant]\nmonthly_budget_usd = 1\nmonthly_budget_usd_file = \"" + secret + "\"\n", "assistant.monthly_budget_usd"},
@@ -98,7 +98,7 @@ func TestConfigFilePinsBeatTheDatabaseAndRefuseWrites(t *testing.T) {
 			t.Errorf("%s: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
 		}
 	}
-	t.Setenv("ATRIUM_CONFIG", write("bad.toml", "[assistant]\nmax_steps = \"${PIN_TEST_UNDEFINED}\"\n"))
+	t.Setenv("ATRIUM_CONFIG", write("bad.toml", "[assistant]\nmax_steps_chat = \"${PIN_TEST_UNDEFINED}\"\n"))
 	if r := runSettings(t, "get", key); !strings.Contains(r.stderr, "PIN_TEST_UNDEFINED") {
 		t.Errorf("stderr %q does not name the variable", r.stderr)
 	}
