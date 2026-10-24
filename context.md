@@ -41,7 +41,9 @@ not claims about the running application.
 - SQLite holds application records, configuration stored by the application,
   and assistant history. Uploaded files live beside the database under
   `files/`; the Notion wiki also has external state. The database alone is
-  not a complete backup. Rebuildable message and media caches are separate.
+  not a complete backup; `atrium backup` archives the database and `files/`,
+  and `atrium restore` (with a `--verify` dry run) restores them. Rebuildable
+  message and media caches are separate.
 - Deployment configuration and credentials come from the host and its
   environment files. Settings live in a registry: an `ATRIUM_<MODULE>_<KEY>`
   variable or configuration-file value pins a setting, otherwise a value

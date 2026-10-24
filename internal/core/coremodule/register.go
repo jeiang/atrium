@@ -3,6 +3,7 @@ package coremodule
 import (
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
+	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
@@ -32,6 +33,8 @@ func (m Module) Register(module.Context) module.Registration {
 			settingscmd.Command(m.Guard),
 			secretscmd.Command(),
 			dbcmd.Command(),
+			backup.BackupCommand(),
+			backup.RestoreCommand(),
 		},
 	}
 }
