@@ -1041,7 +1041,7 @@
           "type": "string"
         },
         "max_run_cost_usd_opus_5_5": {
-          "default": 6,
+          "default": 10,
           "type": [
             "number",
             "string"
@@ -1052,7 +1052,7 @@
           "type": "string"
         },
         "max_run_cost_usd_sonnet_5_5": {
-          "default": 3,
+          "default": 6,
           "type": [
             "number",
             "string"
