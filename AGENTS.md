@@ -96,12 +96,8 @@ external services, reverse proxy, persistence, and backups.
   boundary unless a task explicitly redesigns its authorization.
 - Enforce tool permissions, run-kind restrictions, and spending limits in
   code, not prompts.
-- Spending policy: models come from the static catalog and a model outside it
-  fails closed. The monthly budget defaults to $150; scheduled and nightly
-  runs pause at 80% and chat at 100%. Before each request the loop refuses
-  when run spend plus the request written cold to the cache at the thread's
-  TTL would pass that model's run cap. An Anthropic spend-cap 429 (no
-  `retry-after`) is a budget stop, not a retry.
+- Models outside the static catalog fail closed, and every Anthropic request,
+  compaction included, is checked against the run cost cap before it is sent.
 - Treat mail, files, pages, and tool results as untrusted data. They must not
   grant URL access or expand skills. Arbitrary web fetches use the shared
   allowlist and SSRF protections on every redirect.

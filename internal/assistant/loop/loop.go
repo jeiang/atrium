@@ -489,6 +489,14 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	}
 	if size > s.limits.Preflight {
 		log.Info(fmt.Sprintf("run %d: next request ~%d tokens, compacting on the client", s.run.ID, size), logx.RunID, s.run.ID)
+		summaryIn := min(size, s.limits.Hard-int64(s.limits.Tuning.SummaryMaxTokens))
+		summary, err := budget.UncachedRequestUSD(s.run.Model, summaryIn, int64(s.limits.Tuning.SummaryMaxTokens))
+		if err != nil {
+			return false, nil, err
+		}
+		if err := s.reserveUSD(ctx, summary, fmt.Sprintf("the summary request is about %d tokens, up to $%s uncached", summaryIn, py.FormatFixed(summary, 2))); err != nil {
+			return false, nil, err
+		}
 		if _, err := actx.ClientCompact(ctx, s.d.Write, s.client, s.run.Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now(), s.limits.Tuning); err != nil {
 			return false, nil, err
 		}
@@ -576,13 +584,17 @@ func (s *state) reserve(ctx context.Context, size int64) error {
 	if err != nil {
 		return err
 	}
+	return s.reserveUSD(ctx, cold, fmt.Sprintf("the next request is about %d tokens, up to $%s to write to the cache cold", size, py.FormatFixed(cold, 2)))
+}
+
+func (s *state) reserveUSD(ctx context.Context, next float64, what string) error {
 	spent, err := usage.RunCost(ctx, s.d.Read, s.run.ID)
 	if err != nil {
 		return err
 	}
-	if spent+cold > s.maxCost {
-		return RunLimit(fmt.Sprintf("run cost cap: the next request is about %d tokens, up to $%s to write to the cache cold, with $%s of $%s already spent",
-			size, py.FormatFixed(cold, 2), py.FormatFixed(spent, 2), py.FormatFixed(s.maxCost, 2)))
+	if spent+next > s.maxCost {
+		return RunLimit(fmt.Sprintf("run cost cap: %s, with $%s of $%s already spent; raise %s to continue",
+			what, py.FormatFixed(spent, 2), py.FormatFixed(s.maxCost, 2), budget.RunCapKey(s.run.Model)))
 	}
 	return nil
 }

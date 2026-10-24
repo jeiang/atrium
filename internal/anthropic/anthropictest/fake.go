@@ -201,7 +201,9 @@ func (s *Server) messages(w http.ResponseWriter, req Request) {
 
 func fail(w http.ResponseWriter, status int, body json.RawMessage) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Should-Retry", "false")
+	if status != http.StatusTooManyRequests {
+		w.Header().Set("X-Should-Retry", "false")
+	}
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
 }

@@ -82,11 +82,29 @@ func TestSpendCap429EndsTheRunAsABudgetStop(t *testing.T) {
 	}
 
 	limited := anthropictest.Failure(http.StatusTooManyRequests, "rate_limit_error", "slow down")
-	limited.Header = http.Header{"Retry-After": {"30"}}
+	limited.Header = http.Header{"Retry-After": {"30"}, "X-Should-Retry": {"false"}}
 	s.api.Push(limited)
 	other := s.startThread("again")
 	got = s.settle(s.lastRun(other))
 	if got.State != journal.Failed || got.Error == nil || strings.Contains(*got.Error, "spend limit") {
 		t.Fatalf("rate limited run %s %v, want an ordinary failure", got.State, got.Error)
+	}
+}
+
+func TestRunCapRefusesTheCompactionRequestBeforeItIsSent(t *testing.T) {
+	s := newSite(t)
+	s.store("max_run_cost_usd_opus_5_5", "0.01")
+	r := s.multipart("/chat", map[string]string{"text": strings.Repeat("word ", 120_000), "model": "claude-opus-5-5", "context_limit": "90000"}, nil, hx, "true")
+	status(t, r, http.StatusNoContent)
+	id, err := strconv.ParseInt(strings.TrimPrefix(r.Header.Get("HX-Redirect"), "/chat/"), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := s.settle(s.lastRun(id))
+	if got.State != journal.Failed || got.Error == nil || !strings.Contains(*got.Error, "the summary request is about") || !strings.Contains(*got.Error, "max_run_cost_usd_opus_5_5") {
+		t.Fatalf("run %s %v, want the compaction refused by the run cap", got.State, got.Error)
+	}
+	if n := len(s.api.Requests()); n != 0 {
+		t.Fatalf("%d requests sent, want none", n)
 	}
 }

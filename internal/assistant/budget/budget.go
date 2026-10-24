@@ -133,8 +133,8 @@ const RunCapPrefix = "max_run_cost_usd_"
 
 var runCapDefaults = map[string]string{
 	pricing.HaikuID:  "2",
-	pricing.SonnetID: "3",
-	pricing.OpusID:   "6",
+	pricing.SonnetID: "6",
+	pricing.OpusID:   "10",
 }
 
 func RunCapKey(model string) string {
@@ -160,9 +160,13 @@ func ColdRequestUSD(model string, tokens int64, ttl string) (float64, error) {
 	return pricing.CostUSD(model, write, 0)
 }
 
-func SpendCap() BudgetExceeded {
-	return BudgetExceeded("Anthropic spend limit reached: the organization's API usage cap refused the request. Raise the cap or wait for it to reset in the Anthropic console.")
+func UncachedRequestUSD(model string, input, output int64) (float64, error) {
+	return pricing.CostUSD(model, pricing.Tokens{Input: input, Output: output}, 0)
 }
+
+const SpendCapText = "Anthropic spend limit reached: the organization's API usage cap refused the request. Raise the cap or wait for it to reset in the Anthropic console."
+
+func SpendCap() BudgetExceeded { return BudgetExceeded(SpendCapText) }
 
 func registerRunCaps() []settings.Def {
 	var defs []settings.Def

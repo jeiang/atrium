@@ -49,11 +49,20 @@ func New(key string, env config.Env, opts ...Option) (*Client, error) {
 		option.WithoutEnvironmentDefaults(),
 		option.WithAPIKey(key),
 		option.WithHTTPClient(s.httpClient),
+		option.WithMiddleware(spendCapNoRetry),
 	}
 	if base, ok := env(BaseURLEnv); ok && base != "" {
 		reqOpts = append(reqOpts, option.WithBaseURL(base))
 	}
 	return &Client{sdk: sdk.NewClient(reqOpts...)}, nil
+}
+
+func spendCapNoRetry(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+	resp, err := next(req)
+	if resp != nil && resp.StatusCode == http.StatusTooManyRequests && resp.Header.Get("Retry-After") == "" {
+		resp.Header.Set("X-Should-Retry", "false")
+	}
+	return resp, err
 }
 
 func defaultHTTPClient() *http.Client {

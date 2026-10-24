@@ -59,6 +59,9 @@ func Credential(ctx context.Context, q db.Querier, name string) (string, error) 
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
+	if err == nil {
+		logx.AddSecret(value)
+	}
 	return value, err
 }
 
