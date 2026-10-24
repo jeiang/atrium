@@ -118,7 +118,7 @@ func TestSkillsEditor(t *testing.T) {
 	if leafResponse.StatusCode != http.StatusSeeOther || leafResponse.Header.Get("Location") != "/settings/skills?saved=b" || leafResponse.body != "" {
 		t.Fatalf("skill save: %d %q %q", leafResponse.StatusCode, leafResponse.Header.Get("Location"), leafResponse.body)
 	}
-	mustContain(t, status(t, s.get(leafResponse.Header.Get("Location")), http.StatusOK), "Skill saved", `data-skill="b"`, `data-strip-params="saved,deleted,created,updated"`, `open`)
+	mustContain(t, status(t, s.get(leafResponse.Header.Get("Location")), http.StatusOK), "Skill saved", `data-skill="b"`, `data-strip-params="saved,deleted,created,updated,unchanged"`, `open`)
 	savedResponse := s.post("/settings/skills", url.Values{"name": {"a"}, "description": {"Ay"}, "body": {"see /skill:b and /skill:ghost"}})
 	if savedResponse.StatusCode != http.StatusSeeOther || savedResponse.Header.Get("Location") != "/settings/skills?saved=a" || savedResponse.body != "" {
 		t.Fatalf("skill update: %d %q %q", savedResponse.StatusCode, savedResponse.Header.Get("Location"), savedResponse.body)
@@ -161,7 +161,7 @@ func TestSkillsEditor(t *testing.T) {
 		t.Fatalf("skill delete: %d %q %q", deleted.StatusCode, deleted.Header.Get("Location"), deleted.body)
 	}
 	deletedPage := status(t, s.get(deleted.Header.Get("Location")), http.StatusOK)
-	mustContain(t, deletedPage, "Skill deleted", `data-strip-params="saved,deleted,created,updated"`)
+	mustContain(t, deletedPage, "Skill deleted", `data-strip-params="saved,deleted,created,updated,unchanged"`)
 	mustNotContain(t, deletedPage, `data-skill="recipe"`)
 	status(t, s.post("/settings/skills/recipe/delete", nil), http.StatusNotFound)
 }
