@@ -24,6 +24,7 @@
             publicUrl = "https://atrium.example.org";
             icloudAppleId = "operator@example.org";
             web.allowedHost = "atrium.example.org";
+            backup.enable = true;
             media = {
               enable = true;
               qbittorrentUrl = "http://127.0.0.1:8081";
@@ -32,9 +33,25 @@
         }
       ];
     };
+    defaults = inputs.nixpkgs.lib.nixosSystem {
+      modules = [
+        self.nixosModules.default
+        {
+          nixpkgs.hostPlatform = "x86_64-linux";
+          system.stateVersion = "25.11";
+          services.atrium = {
+            enable = true;
+            web.allowedHost = "atrium.example.org";
+          };
+        }
+      ];
+    };
+    backupAbsentByDefault = assert !(defaults.config.systemd.units ? "atrium-backup.service" || defaults.config.systemd.units ? "atrium-backup.timer"); true;
     unit = name: pkgs.writeText name (builtins.unsafeDiscardStringContext nixos.config.systemd.units.${name}.text);
     unitNames = [
       "atrium-agent-scheduler.service"
+      "atrium-backup.service"
+      "atrium-backup.timer"
       "atrium-codemode.socket"
       "atrium-codemode@.service"
       "atrium-notion-sync.service"
@@ -58,11 +75,12 @@
         touch $out
       '';
 
-      module = pkgs.linkFarm "atrium-units" (map (name: {
-          inherit name;
-          path = unit name;
-        })
-        unitNames);
+      module = assert backupAbsentByDefault;
+        pkgs.linkFarm "atrium-units" (map (name: {
+            inherit name;
+            path = unit name;
+          })
+          unitNames);
     };
   };
 }
