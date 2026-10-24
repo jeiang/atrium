@@ -1025,6 +1025,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "doom_loop_threshold": {
+          "default": 3,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "doom_loop_threshold_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "max_run_cost_usd": {
           "default": 2,
           "type": [
@@ -1036,14 +1047,47 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "max_steps": {
+        "max_steps_chat": {
           "default": 24,
           "type": [
             "integer",
             "string"
           ]
         },
-        "max_steps_file": {
+        "max_steps_chat_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "max_steps_cron": {
+          "default": 24,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "max_steps_cron_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "max_steps_nightly": {
+          "default": 24,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "max_steps_nightly_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "max_steps_sub": {
+          "default": 24,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "max_steps_sub_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

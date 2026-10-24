@@ -99,8 +99,12 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_DEFAULT_CONTEXT_LIMIT` | `assistant.default_context_limit` |
 | `ATRIUM_ASSISTANT_DEFAULT_EFFORT` | `assistant.default_effort` |
 | `ATRIUM_ASSISTANT_DEFAULT_MODEL` | `assistant.default_model` |
+| `ATRIUM_ASSISTANT_DOOM_LOOP_THRESHOLD` | `assistant.doom_loop_threshold` |
 | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD` | `assistant.max_run_cost_usd` |
-| `ATRIUM_ASSISTANT_MAX_STEPS` | `assistant.max_steps` |
+| `ATRIUM_ASSISTANT_MAX_STEPS_CHAT` | `assistant.max_steps_chat` |
+| `ATRIUM_ASSISTANT_MAX_STEPS_CRON` | `assistant.max_steps_cron` |
+| `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` | `assistant.max_steps_nightly` |
+| `ATRIUM_ASSISTANT_MAX_STEPS_SUB` | `assistant.max_steps_sub` |
 | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` | `assistant.monthly_budget_usd` |
 | `ATRIUM_CALENDAR_CALENDAR_DIR` | `calendar.calendar_dir` |
 | `ATRIUM_CALENDAR_CANDIDATE_DRAFT_LIMIT` | `calendar.candidate_draft_limit` |
