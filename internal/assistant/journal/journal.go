@@ -123,6 +123,7 @@ type Limits struct {
 	MaxCostUSD   *float64
 	SystemExtra  *string
 	AllowedTools []string
+	ToolChoice   *string
 }
 
 func (l Limits) object() py.Dict {
@@ -138,6 +139,9 @@ func (l Limits) object() py.Dict {
 	}
 	if l.AllowedTools != nil {
 		o = append(o, py.Pair{Key: "allowed_tools", Value: l.AllowedTools})
+	}
+	if l.ToolChoice != nil {
+		o = append(o, py.Pair{Key: "tool_choice", Value: *l.ToolChoice})
 	}
 	return o
 }
@@ -161,11 +165,12 @@ func LimitsOf(ctx context.Context, q db.Querier, runID int64) (Limits, error) {
 		MaxCostUSD   *float64 `json:"max_cost_usd"`
 		SystemExtra  *string  `json:"system_extra"`
 		AllowedTools []string `json:"allowed_tools"`
+		ToolChoice   *string  `json:"tool_choice"`
 	}
 	if err := json.Unmarshal([]byte(*raw), &stored); err != nil {
 		return Limits{}, fmt.Errorf("journal: run %d limits_json: %w", runID, err)
 	}
-	return Limits{stored.MaxSteps, stored.MaxCostUSD, stored.SystemExtra, stored.AllowedTools}, nil
+	return Limits{stored.MaxSteps, stored.MaxCostUSD, stored.SystemExtra, stored.AllowedTools, stored.ToolChoice}, nil
 }
 
 func SetSkills(ctx context.Context, q db.Querier, runID int64, names []string) error {

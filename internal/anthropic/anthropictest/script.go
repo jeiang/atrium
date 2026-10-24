@@ -19,6 +19,7 @@ var Default = Usage{Input: 1000, Output: 100}
 
 type Iteration struct {
 	Type          string
+	Model         string
 	Input         int64
 	CacheCreation int64
 	CacheRead     int64
@@ -45,6 +46,9 @@ func (u Usage) JSON() json.RawMessage {
 				"cache_creation":              map[string]int64{"ephemeral_5m_input_tokens": it.CacheCreation, "ephemeral_1h_input_tokens": 0},
 				"cache_read_input_tokens":     it.CacheRead,
 				"output_tokens":               it.Output,
+			}
+			if it.Model != "" {
+				list[i]["model"] = it.Model
 			}
 		}
 		iterations = list
@@ -90,6 +94,19 @@ func StreamFailure(errType, message string) Response {
 
 func ErrorBody(errType, message string) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(`{"type":"error","error":{"type":%s,"message":%s}}`, mustJSON(errType), mustJSON(message)))
+}
+
+func Refusal(category, explanation string, content ...json.RawMessage) Response {
+	r := Reply("refusal", content...)
+	r.StopDetails = mustJSON(map[string]any{"type": "refusal", "category": category, "explanation": explanation})
+	return r
+}
+
+func Fallback(from, to, category string) json.RawMessage {
+	return mustJSON(map[string]any{
+		"type": "fallback", "from": map[string]string{"model": from}, "to": map[string]string{"model": to},
+		"trigger": map[string]string{"type": "refusal", "category": category},
+	})
 }
 
 func Cleared(clearedInputTokens, clearedToolUses int64) json.RawMessage {
