@@ -21,7 +21,17 @@ not claims about the running application.
   stores its model, chosen at creation (default: the `default_model`
   setting) and editable like effort and context; other run kinds use Haiku.
   A run records and sends its thread's model, usage is priced from the model
-  on each usage row, and a model outside the catalog fails closed. Mail classification and embeddings
+  on each usage row, and a model outside the catalog fails closed. The
+  catalog also records whether a model accepts a forced `tool_choice`
+  (`any` or a named tool): only Haiku does, and the loop sends the request
+  to Sonnet and Opus without it. The loop ends a run with a clear thread
+  message and run error on refusal (with the `stop_details` category),
+  `max_tokens`, `model_context_window_exceeded`, an empty `pause_turn` or
+  `end_turn`, a repeated identical tool call and result (`doom_loop_threshold`,
+  default 3) and the per-run-kind step cap (`max_steps_chat`, `_cron`,
+  `_nightly`, `_sub`, default 24). A server fallback is shown in the thread
+  and its tokens are recorded as a separate usage row priced at the model
+  that served them. Mail classification and embeddings
   have separately configured model endpoints. Connected content sent to a
   hosted model leaves the host; privacy does not mean that inference is
   necessarily local.

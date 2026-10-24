@@ -16,6 +16,14 @@ const (
 	StopPauseTurn  = "pause_turn"
 	StopCompaction = "compaction"
 	StopMaxTokens  = "max_tokens"
+	StopRefusal    = "refusal"
+
+	StopModelContextWindowExceeded = "model_context_window_exceeded"
+)
+
+const (
+	ToolChoiceAny  = "any"
+	ToolChoiceTool = "tool"
 )
 
 type Params struct {
@@ -26,6 +34,7 @@ type Params struct {
 	System            json.RawMessage   `json:"system,omitempty"`
 	ContextManagement json.RawMessage   `json:"context_management,omitempty"`
 	Tools             []json.RawMessage `json:"tools,omitempty"`
+	ToolChoice        *ToolChoice       `json:"tool_choice,omitempty"`
 	Messages          []json.RawMessage `json:"messages"`
 	Betas             []string          `json:"-"`
 }
@@ -33,6 +42,11 @@ type Params struct {
 type Thinking struct {
 	Type    string `json:"type"`
 	Display string `json:"display,omitempty"`
+}
+
+type ToolChoice struct {
+	Type string `json:"type"`
+	Name string `json:"name,omitempty"`
 }
 
 type OutputConfig struct {

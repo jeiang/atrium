@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
@@ -87,6 +88,10 @@ type state struct {
 
 	callsKey string
 	repeats  int
+
+	doomThreshold int
+	stepsKey      string
+	toolChoice    *anthropic.ToolChoice
 }
 
 func deref[T any](p *T) T {
@@ -170,7 +175,11 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 			return nil, err
 		}
 	}
-	steps, err := maxSteps(ctx, d.Read)
+	steps, err := maxSteps(ctx, d.Read, kind)
+	if err != nil {
+		return nil, err
+	}
+	doomThreshold, err := doomLoopThreshold(ctx, d.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -214,13 +223,17 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
-		writer: writer, env: env, steps: steps, maxCost: maxCost, savings: int64(tuning.CommitSavings),
+		writer: writer, env: env, steps: steps, stepsKey: maxStepsKeys[kind], doomThreshold: doomThreshold, maxCost: maxCost, savings: int64(tuning.CommitSavings),
 		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning},
 	}
 	s.x.guard = s.renew
 	s.x.lost, s.x.abort = context.WithCancel(context.Background())
 	if o.Limits.MaxSteps != nil {
 		s.steps = int(*o.Limits.MaxSteps)
+		s.stepsKey = assistant.KeySubagentMaxSteps
+	}
+	if s.toolChoice, err = forcedToolChoice(o.Limits.ToolChoice, model, byName); err != nil {
+		return nil, err
 	}
 	if o.Limits.MaxCostUSD != nil {
 		s.maxCost = *o.Limits.MaxCostUSD
@@ -384,6 +397,7 @@ func (s *state) size(ctx context.Context, active []actx.Message, a *anchor) (int
 func (s *state) stream(ctx context.Context, messages []json.RawMessage) (*anthropic.Message, error) {
 	params := s.req.params
 	params.Messages = messages
+	params.ToolChoice, s.toolChoice = s.toolChoice, nil
 	ledgerCtx := context.WithoutCancel(ctx)
 	response, err := s.client.Stream(ctx, params, func(ev anthropic.Event) error { return s.writer.Observe(ledgerCtx, ev) })
 	if err != nil {
@@ -441,7 +455,7 @@ func (s *state) body(ctx context.Context) error {
 		}
 		last = next
 	}
-	return RunLimit(fmt.Sprintf("stopped after %d steps", s.steps))
+	return RunLimit(fmt.Sprintf("stopped: step cap reached after %d steps in this %s run (%s)", s.steps, s.kind, s.stepsKey))
 }
 
 func (s *state) unattended(ctx context.Context) (bool, error) {
@@ -520,7 +534,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	compacted := response.StopReason == actx.Compaction
 	var stop error
 	if !compacted {
-		blocks, stop = judge(response.StopReason, blocks)
+		blocks, stop = judge(response, blocks)
 	}
 	clearEdits, cleared := actx.ClearsOf(response)
 	entry := usage.Entry{

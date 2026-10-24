@@ -105,7 +105,7 @@ func (o Start) kind() string {
 }
 
 func emptyLimits(l journal.Limits) bool {
-	return l.MaxSteps == nil && l.MaxCostUSD == nil && l.SystemExtra == nil && l.AllowedTools == nil
+	return l.MaxSteps == nil && l.MaxCostUSD == nil && l.SystemExtra == nil && l.AllowedTools == nil && l.ToolChoice == nil
 }
 
 func CreateThread(ctx context.Context, q db.Querier, now float64, n threads.NewThread) (int64, error) {
@@ -216,6 +216,9 @@ func merged(stored, override journal.Limits) journal.Limits {
 	}
 	if override.AllowedTools != nil {
 		stored.AllowedTools = override.AllowedTools
+	}
+	if override.ToolChoice != nil {
+		stored.ToolChoice = override.ToolChoice
 	}
 	return stored
 }

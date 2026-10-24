@@ -3,6 +3,7 @@ package usage
 import (
 	"context"
 	"database/sql"
+	"slices"
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -43,42 +44,77 @@ func SearchesOf(u anthropic.Usage) int64 {
 	return u.ServerToolUse.WebSearchRequests
 }
 
-func BilledEntries(u anthropic.Usage) []pricing.Tokens {
+const fallbackMessage = "fallback_message"
+
+type billed struct {
+	model   string
+	entries []pricing.Tokens
+}
+
+func billedByModel(model string, u anthropic.Usage) []billed {
+	groups := []billed{{model: model}}
 	if len(u.Iterations) == 0 {
-		return []pricing.Tokens{TokensOf(u)}
+		groups[0].entries = []pricing.Tokens{TokensOf(u)}
+		return groups
 	}
-	out := make([]pricing.Tokens, len(u.Iterations))
-	for i, it := range u.Iterations {
-		out[i] = tokensOf(it.InputTokens, it.CacheCreationInputTokens, it.CacheReadInputTokens, it.OutputTokens, it.CacheCreation)
+	for _, it := range u.Iterations {
+		t := tokensOf(it.InputTokens, it.CacheCreationInputTokens, it.CacheReadInputTokens, it.OutputTokens, it.CacheCreation)
+		served := model
+		if it.Type == fallbackMessage && it.Model != "" {
+			served = it.Model
+		}
+		i := slices.IndexFunc(groups, func(g billed) bool { return g.model == served })
+		if i < 0 {
+			groups = append(groups, billed{model: served})
+			i = len(groups) - 1
+		}
+		groups[i].entries = append(groups[i].entries, t)
 	}
-	return out
+	return groups
 }
 
 func Record(ctx context.Context, q db.Querier, e Entry, u anthropic.Usage) (float64, error) {
-	entries := BilledEntries(u)
+	var total []float64
+	for i, g := range billedByModel(e.Model, u) {
+		row := e
+		var searches int64
+		if i == 0 {
+			searches = SearchesOf(u)
+		} else {
+			row.ClearEdits, row.ClearedTokens, row.Compaction = 0, 0, 0
+		}
+		cost, err := insertRow(ctx, q, row, g, searches)
+		if err != nil {
+			return 0, err
+		}
+		total = append(total, cost)
+	}
+	return py.Sum(total), nil
+}
+
+func insertRow(ctx context.Context, q db.Querier, e Entry, g billed, searches int64) (float64, error) {
 	var sum pricing.Tokens
-	costs := make([]float64, len(entries))
+	costs := make([]float64, len(g.entries))
 	high := false
 	flat := false
-	for i, t := range entries {
+	for i, t := range g.entries {
 		sum.Input += t.Input
 		sum.CacheWrite5m += t.CacheWrite5m
 		sum.CacheWrite1h += t.CacheWrite1h
 		sum.CacheRead += t.CacheRead
 		sum.Output += t.Output
-		cost, err := pricing.CostUSD(e.Model, t, 0)
+		cost, err := pricing.CostUSD(g.model, t, 0)
 		if err != nil {
 			return 0, err
 		}
 		costs[i] = cost
-		tier, err := pricing.TierOf(e.Model, t)
+		tier, err := pricing.TierOf(g.model, t)
 		if err != nil {
 			return 0, err
 		}
 		high = high || tier == pricing.TierHigh
 		flat = tier == pricing.TierFlat
 	}
-	searches := SearchesOf(u)
 	cost := py.Sum(costs) + float64(float64(searches)*pricing.SearchUSD)
 	tier := pricing.TierLow
 	if high {
@@ -90,7 +126,7 @@ func Record(ctx context.Context, q db.Querier, e Entry, u anthropic.Usage) (floa
 		"INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, "+
 			"cache_read, output_tokens, searches, tier, cost_usd, clear_edits, cleared_tokens, compaction) "+
 			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		e.TS, e.ThreadID, e.RunID, e.Kind, e.Model, e.Effort, sum.Input, sum.CacheWrite5m, sum.CacheWrite1h,
+		e.TS, e.ThreadID, e.RunID, e.Kind, g.model, e.Effort, sum.Input, sum.CacheWrite5m, sum.CacheWrite1h,
 		sum.CacheRead, sum.Output, searches, tier, cost, e.ClearEdits, e.ClearedTokens, e.Compaction)
 	if err != nil {
 		return 0, err

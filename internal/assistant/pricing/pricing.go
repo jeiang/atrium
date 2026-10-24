@@ -44,13 +44,14 @@ type Model struct {
 	Thinking      []Thinking `json:"thinking"`
 	Rates         Rates      `json:"rates"`
 	LongRates     *Rates     `json:"long_rates"`
+	ForcedTools   bool       `json:"forced_tools"`
 }
 
 var allEfforts = []string{"low", "medium", "high", "xhigh", "max"}
 
 var catalog = []Model{
 	{
-		ID: HaikuID, Name: "Haiku 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: allEfforts,
+		ID: HaikuID, Name: "Haiku 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: allEfforts, ForcedTools: true,
 		Thinking:  []Thinking{{Type: "adaptive"}, {Type: "disabled", MaxEffort: "high"}},
 		Rates:     Rates{Input: 0.10, Output: 0.50, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01},
 		LongRates: &Rates{Input: 0.50, Output: 2.50, CacheWrite5m: 0.625, CacheWrite1h: 1.00, CacheRead: 0.05},

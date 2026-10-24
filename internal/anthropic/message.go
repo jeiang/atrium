@@ -10,8 +10,16 @@ type Message struct {
 	Model             string             `json:"model"`
 	Content           []json.RawMessage  `json:"content"`
 	StopReason        string             `json:"stop_reason"`
+	StopDetails       *StopDetails       `json:"stop_details"`
 	Usage             Usage              `json:"usage"`
 	ContextManagement *ContextManagement `json:"context_management"`
+}
+
+type StopDetails struct {
+	Type             string `json:"type"`
+	Category         string `json:"category"`
+	Explanation      string `json:"explanation"`
+	RecommendedModel string `json:"recommended_model"`
 }
 
 type Usage struct {
@@ -41,6 +49,7 @@ type Iteration struct {
 	CacheCreation            *CacheCreation `json:"cache_creation"`
 	CacheReadInputTokens     int64          `json:"cache_read_input_tokens"`
 	OutputTokens             int64          `json:"output_tokens"`
+	Model                    string         `json:"model"`
 }
 
 type ContextManagement struct {
