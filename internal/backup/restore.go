@@ -163,14 +163,14 @@ func checkStaged(ctx context.Context, staged string, key db.Key) (report, error)
 func inspectStaged(ctx context.Context, staged string, key db.Key) (rep report, err error) {
 	c, err := db.OpenFile(staged, key)
 	if err != nil {
-		return rep, err
+		return rep, fmt.Errorf("open the restored database: %w", err)
 	}
 	defer func() { err = errors.Join(err, c.Close()) }()
 	if err := db.RefuseFutureSchema(ctx, c); err != nil {
 		return rep, fmt.Errorf("schema check: %w", err)
 	}
 	if err := db.IntegrityCheck(ctx, c); err != nil {
-		return rep, err
+		return rep, fmt.Errorf("restored database: %w", err)
 	}
 	if rep.from, err = db.SchemaVersion(ctx, c); err != nil {
 		return rep, fmt.Errorf("schema version: %w", err)
@@ -180,7 +180,7 @@ func inspectStaged(ctx context.Context, staged string, key db.Key) (rep report, 
 	}
 	for _, t := range rep.tables {
 		if err := db.SpotCheckKNN(ctx, c, t); err != nil {
-			return rep, err
+			return rep, fmt.Errorf("restored database: %w", err)
 		}
 		if t.Kind == "vec0" && t.Rows > 0 {
 			rep.knn = append(rep.knn, t.Name)
