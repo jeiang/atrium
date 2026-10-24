@@ -59,7 +59,7 @@ func forcedToolChoice(choice *string, model pricing.Model, tools map[string]tool
 	out := &anthropic.ToolChoice{Type: anthropic.ToolChoiceAny}
 	if *choice != anthropic.ToolChoiceAny {
 		if _, ok := tools[*choice]; !ok {
-			return nil, fmt.Errorf("loop: tool_choice names %q, which is not available to this run", *choice)
+			return nil, RunLimit(fmt.Sprintf("tool_choice names %q, which is not available to this run", *choice))
 		}
 		out = &anthropic.ToolChoice{Type: anthropic.ToolChoiceTool, Name: *choice}
 	}

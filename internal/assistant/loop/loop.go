@@ -91,6 +91,7 @@ type state struct {
 
 	doomThreshold int
 	stepsKey      string
+	invalid       error
 	toolChoice    *anthropic.ToolChoice
 }
 
@@ -232,9 +233,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		s.steps = int(*o.Limits.MaxSteps)
 		s.stepsKey = assistant.KeySubagentMaxSteps
 	}
-	if s.toolChoice, err = forcedToolChoice(o.Limits.ToolChoice, model, byName); err != nil {
-		return nil, err
-	}
+	s.toolChoice, s.invalid = forcedToolChoice(o.Limits.ToolChoice, model, byName)
 	if o.Limits.MaxCostUSD != nil {
 		s.maxCost = *o.Limits.MaxCostUSD
 	}
@@ -426,6 +425,9 @@ func (s *state) settlePending(ctx context.Context) error {
 }
 
 func (s *state) body(ctx context.Context) error {
+	if s.invalid != nil {
+		return s.invalid
+	}
 	if err := s.runStart(ctx); err != nil {
 		return err
 	}

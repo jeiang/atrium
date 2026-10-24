@@ -9,6 +9,7 @@ import (
 	"math"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic"
@@ -28,6 +29,9 @@ type harness struct {
 	srv *anthropictest.Server
 	app *cli.App
 	d   *db.DB
+
+	mu     sync.Mutex
+	bodies []map[string]any
 }
 
 func newHarness(t *testing.T, script ...anthropictest.Response) *harness {
@@ -58,7 +62,18 @@ func newHarness(t *testing.T, script ...anthropictest.Response) *harness {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = d.Close() })
-	return &harness{t: t, srv: srv, app: a, d: d}
+	h := &harness{t: t, srv: srv, app: a, d: d}
+	srv.OnRequest = func(r anthropictest.Request) {
+		var body map[string]any
+		if err := json.Unmarshal(r.Body, &body); err != nil {
+			t.Errorf("request body: %v", err)
+			return
+		}
+		h.mu.Lock()
+		h.bodies = append(h.bodies, body)
+		h.mu.Unlock()
+	}
+	return h
 }
 
 func (h *harness) run(args ...string) (map[string]any, string) {
@@ -133,11 +148,10 @@ func TestForcedToolChoiceFollowsTheModelCatalog(t *testing.T) {
 			if view["state"] != "done" {
 				t.Fatalf("view %v", view)
 			}
-			reqs := h.srv.Requests()
-			if len(reqs) != 2 {
-				t.Fatalf("%d requests", len(reqs))
+			if len(h.bodies) != 2 {
+				t.Fatalf("%d requests", len(h.bodies))
 			}
-			first, second := reqs[0].JSON(t), reqs[1].JSON(t)
+			first, second := h.bodies[0], h.bodies[1]
 			got, present := first["tool_choice"]
 			if tc.want == nil && present || tc.want != nil && !jsonEqual(got, tc.want) {
 				t.Errorf("first request tool_choice = %v (present %t), want %v", got, present, tc.want)
@@ -158,10 +172,10 @@ func jsonEqual(a, b any) bool {
 func TestToolChoiceNamingAnUnavailableToolFailsTheRun(t *testing.T) {
 	h := newHarness(t)
 	view, _ := h.run("agent", "run", "--text", "go", "--tool-choice", "missing")
-	if view["state"] != "failed" || !strings.Contains(view["error"].(string), `"missing"`) {
+	if view["state"] != "failed" || view["error"] != `tool_choice names "missing", which is not available to this run` {
 		t.Errorf("view %v", view)
 	}
-	if n := len(h.srv.Requests()); n != 0 {
+	if n := len(h.bodies); n != 0 {
 		t.Errorf("%d requests sent", n)
 	}
 }
