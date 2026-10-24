@@ -24,6 +24,8 @@ const (
 	EnvName    = "ENV_NAME"
 	UseInstead = "USE_INSTEAD"
 	Model      = "MODEL"
+	Key        = "KEY"
+	Value      = "VALUE"
 )
 
 const Redacted = "[redacted]"

@@ -88,11 +88,30 @@ func (s *service) set(a *cli.Args) cli.Handler {
 func (s *service) unset(a *cli.Args) cli.Handler {
 	key := a.Arg("key", cli.Opt{})
 	return func(e *cli.Env) int {
+		if s.reg.IsRetired(*key) {
+			return s.dropOrphan(e, *key)
+		}
 		return s.keyed(e, *key, func(d *db.DB) error {
 			ctx := audit.With(e.Ctx, actor, audit.CLI)
 			return d.WithTx(ctx, func(tx *sql.Tx) error { return s.reg.Unset(ctx, tx, *key, 0) })
 		})
 	}
+}
+
+func (s *service) dropOrphan(e *cli.Env, key string) int {
+	return s.with(e, func(d *db.DB) (int, error) {
+		ctx := audit.With(e.Ctx, actor, audit.CLI)
+		err := d.WithTx(ctx, func(tx *sql.Tx) error { return s.reg.DropOrphan(ctx, tx, key) })
+		if errors.Is(err, settings.ErrNoOrphan) {
+			_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
+			return cli.ExitError, nil
+		}
+		if err != nil {
+			return 0, err
+		}
+		_, _ = fmt.Fprintf(e.Stdout, "%s: removed\n", key)
+		return cli.ExitOK, nil
+	})
 }
 
 func (s *service) keyed(e *cli.Env, key string, act func(*db.DB) error) int {
