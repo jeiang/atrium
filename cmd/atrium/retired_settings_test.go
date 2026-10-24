@@ -29,7 +29,7 @@ func TestRetiredStoredSettingWarnsAndUnsetRemovesItWithAnAuditRow(t *testing.T) 
 	_ = d.Close()
 
 	warned := runSettings(t, "list")
-	for _, want := range []string{"stored setting is retired", "KEY=max_run_cost_usd", "VALUE=0.5", "max_run_cost_usd_haiku_5_5", "max_run_cost_usd_opus_5_5"} {
+	for _, want := range []string{"stored setting is retired", "SETTING=max_run_cost_usd", "VALUE=0.5", "max_run_cost_usd_haiku_5_5", "max_run_cost_usd_opus_5_5"} {
 		if !strings.Contains(warned.stderr, want) {
 			t.Errorf("stderr %q misses %q", warned.stderr, want)
 		}
