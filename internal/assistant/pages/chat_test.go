@@ -423,3 +423,67 @@ func TestRawImageMissingFromStorage(t *testing.T) {
 	}
 	status(t, s.get(fmt.Sprintf("/chat/%d/files/%d/raw", thread, id)), http.StatusNotFound)
 }
+
+func TestThreadModelPricedFromCatalog(t *testing.T) {
+	s := newSite(t)
+	s.api.Push(reply1(anthropictest.Text("sonnet here")), reply1(anthropictest.Text("opus here")))
+
+	r := s.multipart("/chat", map[string]string{"text": "hi", "model": "claude-sonnet-5-5", "effort": "low", "context_limit": "200000"}, nil, hx, "true")
+	status(t, r, http.StatusNoContent)
+	thread, err := strconv.ParseInt(strings.TrimPrefix(r.Header.Get("HX-Redirect"), "/chat/"), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.settle(s.lastRun(thread)); got.State != journal.Done || got.Model != "claude-sonnet-5-5" {
+		t.Fatalf("run %s model %q %v", got.State, got.Model, got.Error)
+	}
+	if got := s.api.Requests()[0].JSON(t)["model"]; got != "claude-sonnet-5-5" {
+		t.Errorf("request model %v, want claude-sonnet-5-5", got)
+	}
+	var model, effort string
+	var limit int64
+	if err := s.db.Read.QueryRow("SELECT model, effort, context_limit FROM threads WHERE id = ?", thread).Scan(&model, &effort, &limit); err != nil {
+		t.Fatal(err)
+	}
+	if model != "claude-sonnet-5-5" || effort != "low" || limit != 200000 {
+		t.Errorf("thread %s %s %d", model, effort, limit)
+	}
+	var usageModel string
+	var cost float64
+	var tier string
+	if err := s.db.Read.QueryRow("SELECT model, tier, cost_usd FROM usage WHERE thread_id = ?", thread).Scan(&usageModel, &tier, &cost); err != nil {
+		t.Fatal(err)
+	}
+	if want := (1000*2.0 + 100*10.0) / 1e6; usageModel != "claude-sonnet-5-5" || tier != "flat" || cost != want {
+		t.Errorf("usage %s %s %v, want sonnet flat %v", usageModel, tier, cost, want)
+	}
+
+	status(t, s.post(fmt.Sprintf("/chat/%d/options", thread), url.Values{"model": {"claude-opus-5-5"}, "effort": {"high"}, "context_limit": {"500000"}}, hx, "true"), http.StatusOK)
+	status(t, s.multipart(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "again"}, nil, hx, "true"), http.StatusOK)
+	run := s.lastRun(thread)
+	if got := s.settle(run); got.State != journal.Done || got.Model != "claude-opus-5-5" {
+		t.Fatalf("run %s model %q %v", got.State, got.Model, got.Error)
+	}
+	if got := s.api.Requests()[1].JSON(t)["model"]; got != "claude-opus-5-5" {
+		t.Errorf("second request model %v, want claude-opus-5-5", got)
+	}
+	if err := s.db.Read.QueryRow("SELECT cost_usd FROM usage WHERE run_id = ?", run).Scan(&cost); err != nil {
+		t.Fatal(err)
+	}
+	if want := (1000*4.0 + 100*20.0) / 1e6; cost != want {
+		t.Errorf("opus cost %v, want %v", cost, want)
+	}
+
+	before := s.count("SELECT COUNT(*) FROM threads")
+	mustContain(t, status(t, s.multipart("/chat", map[string]string{"text": "hi", "model": "claude-fable-5-1"}, nil, hx, "true"), http.StatusUnprocessableEntity), "Not started")
+	if after := s.count("SELECT COUNT(*) FROM threads"); after != before {
+		t.Errorf("a refused model created a thread: %d threads, want %d", after, before)
+	}
+	mustContain(t, status(t, s.post(fmt.Sprintf("/chat/%d/options", thread), url.Values{"model": {"gpt-5"}, "effort": {"low"}, "context_limit": {"90000"}}, hx, "true"), http.StatusUnprocessableEntity), "Not saved")
+	if got := s.count("SELECT COUNT(*) FROM threads WHERE id = ? AND model = 'claude-opus-5-5'", thread); got != 1 {
+		t.Errorf("a refused model changed the thread")
+	}
+	if got := s.count("SELECT COUNT(*) FROM usage WHERE model != 'claude-haiku-5-5'"); got != 2 {
+		t.Errorf("%d priced non-haiku rows, want 2", got)
+	}
+}

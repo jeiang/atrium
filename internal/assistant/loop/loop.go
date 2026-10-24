@@ -27,7 +27,6 @@ import (
 )
 
 const (
-	Model           = pricing.Model
 	MaxTokens       = 16384
 	MaxTokensDeep   = 65536
 	Research        = "research"
@@ -187,8 +186,12 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if err != nil {
 		return nil, err
 	}
-	limits := actx.LimitsFor(threads.ContextLimitOf(*thread), tuning)
-	req, err := r.request(ctx, d.Read, *thread, kind, found.Effort, tools, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), allow, limits, webSearchMaxUses)
+	model, err := pricing.Lookup(found.Model)
+	if err != nil {
+		return nil, err
+	}
+	limits := actx.LimitsFor(min(threads.ContextLimitOf(*thread), model.ContextWindow), tuning)
+	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, tools, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), allow, limits, webSearchMaxUses)
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +484,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	}
 	if size > s.limits.Preflight {
 		log.Info(fmt.Sprintf("run %d: next request ~%d tokens, compacting on the client", s.run.ID, size), logx.RunID, s.run.ID)
-		if _, err := actx.ClientCompact(ctx, s.d.Write, s.client, Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now(), s.limits.Tuning); err != nil {
+		if _, err := actx.ClientCompact(ctx, s.d.Write, s.client, s.run.Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now(), s.limits.Tuning); err != nil {
 			return false, nil, err
 		}
 		last = nil
@@ -521,7 +524,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	}
 	clearEdits, cleared := actx.ClearsOf(response)
 	entry := usage.Entry{
-		TS: s.now(), ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: Model, Effort: s.run.Effort,
+		TS: s.now(), ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: s.run.Model, Effort: s.run.Effort,
 		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(compacted)),
 	}
 	if _, err := usage.Record(context.WithoutCancel(ctx), s.d.Write, entry, response.Usage); err != nil {

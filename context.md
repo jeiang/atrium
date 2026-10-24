@@ -14,7 +14,14 @@ not claims about the running application.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs.
-- The assistant uses the Anthropic API. Mail classification and embeddings
+- The assistant uses the Anthropic API. A static catalog in
+  `internal/assistant/pricing` holds Haiku 5.5, Sonnet 5.5 and Opus 5.5 with
+  their ids, context window, maximum output, effort levels, thinking modes
+  and per-token rates, including the Haiku over-100K tier. Each chat thread
+  stores its model, chosen at creation (default: the `default_model`
+  setting) and editable like effort and context; other run kinds use Haiku.
+  A run records and sends its thread's model, usage is priced from the model
+  on each usage row, and a model outside the catalog fails closed. Mail classification and embeddings
   have separately configured model endpoints. Connected content sent to a
   hosted model leaves the host; privacy does not mean that inference is
   necessarily local.
@@ -107,8 +114,8 @@ not claims about the running application.
 
 ## Planned capabilities
 
-- UI-managed integrations and settings, and model and effort selection per
-  thread. The notifications module requires `ntfy_url` and `ntfy_topic`, but
+- UI-managed integrations and settings, and model, effort and context
+  controls on the new-thread composer. The notifications module requires `ntfy_url` and `ntfy_topic`, but
   not the optional `NTFY_TOKEN`; its toggle is `notifications_enabled`.
 - OIDC access with separate operator and administrator permissions, and
   encrypted database storage.

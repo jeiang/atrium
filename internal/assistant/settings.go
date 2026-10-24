@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
@@ -16,6 +17,7 @@ const (
 	KeyBudgetUnattended = "budget_unattended_share"
 	KeyBudgetChat       = "budget_chat_share"
 
+	KeyDefaultModel        = "default_model"
 	KeyDefaultEffort       = "default_effort"
 	KeyDefaultContextLimit = "default_context_limit"
 	KeyEffortCron          = "agent_effort_cron"
@@ -135,6 +137,8 @@ func init() {
 		d.Choices = efforts
 		return d
 	}
+	chatModel := def(KeyDefaultModel, settings.Enum, settings.UI, pricing.DefaultModel, nil)
+	chatModel.Choices = pricing.IDs()
 	chatEffort := def(KeyDefaultEffort, settings.Enum, settings.UI, "medium", nil)
 	chatEffort.Choices = efforts
 	contextLimit := def(KeyDefaultContextLimit, settings.Enum, settings.UI, "90000", nil)
@@ -151,6 +155,7 @@ func init() {
 	recallMax.Peers = Ordered(false, []string{KeyRecallPageChars}, nil)
 	settings.MustRegister(
 		chat,
+		chatModel,
 		chatEffort,
 		contextLimit,
 		effort(KeyEffortCron, "high"),

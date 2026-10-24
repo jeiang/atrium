@@ -1012,6 +1012,19 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "default_model": {
+          "default": "claude-haiku-5-5",
+          "enum": [
+            "claude-haiku-5-5",
+            "claude-sonnet-5-5",
+            "claude-opus-5-5"
+          ],
+          "type": "string"
+        },
+        "default_model_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "max_run_cost_usd": {
           "default": 2,
           "type": [

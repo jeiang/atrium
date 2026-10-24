@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant/files"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -21,6 +23,11 @@ type listData struct {
 	Q         string           `json:"q"`
 	View      string           `json:"view"`
 	ProjectID int64            `json:"project_id"`
+
+	Models        []pricing.Model `json:"models"`
+	Efforts       []string        `json:"efforts"`
+	ContextLimits []int64         `json:"context_limits"`
+	Defaults      threads.Options `json:"defaults"`
 }
 
 func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, projectID int64) {
@@ -37,7 +44,12 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, 
 	if found == nil {
 		found = []threads.Listed{}
 	}
-	data := listData{Threads: found, Q: q, View: view, ProjectID: projectID}
+	defaults, err := threads.Defaults(r.Context(), p.deps.DB.Read)
+	check(err)
+	data := listData{
+		Threads: found, Q: q, View: view, ProjectID: projectID,
+		Models: pricing.Models(), Efforts: threads.Efforts[:], ContextLimits: threads.ContextLimits[:], Defaults: defaults,
+	}
 	if web.IsPartial(r) {
 		p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", data)
 		return
@@ -111,7 +123,15 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 		}
 		project = &projectID
 	}
-	threadID, err := service.CreateThread(ctx, p.deps.DB.Write, p.now(), threads.NewThread{Kind: threads.Chat, ProjectID: project})
+	threadID, err := service.CreateThread(ctx, p.deps.DB.Write, p.now(), threads.NewThread{
+		Kind: threads.Chat, ProjectID: project,
+		Model: web.FormString(form, "model", ""), Effort: web.FormString(form, "effort", ""), ContextLimit: optional(form, "context_limit"),
+	})
+	var refused threads.OptionError
+	if errors.As(err, &refused) {
+		p.failure(w, r, "Not started", err.Error())
+		return
+	}
 	check(err)
 	thread, err := threads.Get(ctx, p.deps.DB.Read, threadID)
 	check(err)
@@ -205,7 +225,7 @@ func (p *pages) chatOptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form := web.FormValues(r)
-	changed, err := threads.SetOptions(detached(r), p.deps.DB.Write, threadID, web.FormString(form, "effort", ""), web.FormString(form, "context_limit", ""))
+	changed, err := threads.SetOptions(detached(r), p.deps.DB.Write, threadID, web.FormString(form, "model", ""), web.FormString(form, "effort", ""), web.FormString(form, "context_limit", ""))
 	var refused threads.OptionError
 	if errors.As(err, &refused) {
 		p.failure(w, r, "Not saved", err.Error())
@@ -240,4 +260,11 @@ func (p *pages) chatDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirect(w, r, "/chat")
+}
+
+func optional(form url.Values, key string) any {
+	if v := web.FormString(form, key, ""); v != "" {
+		return v
+	}
+	return nil
 }

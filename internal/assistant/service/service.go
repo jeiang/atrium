@@ -172,7 +172,7 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 			return 0, err
 		}
 	}
-	runID, err := journal.StartRun(ctx, s.DB.Write, threadID, o.kind(), loop.Model, thread.Effort, now, o.ParentRunID, new(journal.NewOwner()))
+	runID, err := journal.StartRun(ctx, s.DB.Write, threadID, o.kind(), thread.Model, thread.Effort, now, o.ParentRunID, new(journal.NewOwner()))
 	if err != nil {
 		return 0, err
 	}
@@ -201,7 +201,7 @@ func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64)
 	if err := progress.ClearThread(ctx, s.DB.Write, threadID); err != nil {
 		return 0, err
 	}
-	return journal.StartRun(ctx, s.DB.Write, threadID, threads.Chat, loop.Model, thread.Effort, now, nil, new(journal.NewOwner()))
+	return journal.StartRun(ctx, s.DB.Write, threadID, threads.Chat, thread.Model, thread.Effort, now, nil, new(journal.NewOwner()))
 }
 
 func merged(stored, override journal.Limits) journal.Limits {
