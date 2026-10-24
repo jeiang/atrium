@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
@@ -17,7 +18,6 @@ var maxStepsKeys = map[tool.Kind]string{
 	tool.Chat:    "max_steps_chat",
 	tool.Cron:    "max_steps_cron",
 	tool.Nightly: "max_steps_nightly",
-	tool.Sub:     "max_steps_sub",
 }
 
 func init() {
@@ -26,7 +26,7 @@ func init() {
 		Key: DoomLoopThresholdKey, Module: "assistant", Type: settings.Int, Default: "3",
 		Check: settings.Between(2, 20), Class: settings.Advanced, Scopes: instance,
 	}}
-	for _, kind := range tool.AllKinds {
+	for _, kind := range []tool.Kind{tool.Chat, tool.Cron, tool.Nightly} {
 		defs = append(defs, settings.Def{
 			Key: maxStepsKeys[kind], Module: "assistant", Type: settings.Int, Default: "24",
 			Check: settings.Between(1, 200), Class: settings.Advanced, Scopes: instance,
@@ -35,8 +35,15 @@ func init() {
 	settings.MustRegister(defs...)
 }
 
+func maxStepsKey(kind tool.Kind) string {
+	if kind == tool.Sub {
+		return assistant.KeySubagentMaxSteps
+	}
+	return maxStepsKeys[kind]
+}
+
 func maxSteps(ctx context.Context, q db.Querier, kind tool.Kind) (int, error) {
-	return intSetting(ctx, q, maxStepsKeys[kind])
+	return intSetting(ctx, q, maxStepsKey(kind))
 }
 
 func doomLoopThreshold(ctx context.Context, q db.Querier) (int, error) {

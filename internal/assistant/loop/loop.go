@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
-	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
@@ -224,14 +223,13 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
-		writer: writer, env: env, steps: steps, stepsKey: maxStepsKeys[kind], doomThreshold: doomThreshold, maxCost: maxCost, savings: int64(tuning.CommitSavings),
+		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, savings: int64(tuning.CommitSavings),
 		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning},
 	}
 	s.x.guard = s.renew
 	s.x.lost, s.x.abort = context.WithCancel(context.Background())
 	if o.Limits.MaxSteps != nil {
 		s.steps = int(*o.Limits.MaxSteps)
-		s.stepsKey = assistant.KeySubagentMaxSteps
 	}
 	s.toolChoice, s.invalid = forcedToolChoice(o.Limits.ToolChoice, model, byName)
 	if o.Limits.MaxCostUSD != nil {

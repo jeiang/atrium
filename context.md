@@ -29,7 +29,7 @@ not claims about the running application.
   `max_tokens`, `model_context_window_exceeded`, an empty `pause_turn` or
   `end_turn`, a repeated identical tool call and result (`doom_loop_threshold`,
   default 3) and the per-run-kind step cap (`max_steps_chat`, `_cron`,
-  `_nightly`, `_sub`, default 24). A server fallback is shown in the thread
+  `_nightly`, default 24; subagents use `agent_subagent_max_steps`). A server fallback is shown in the thread
   and its tokens are recorded as a separate usage row priced at the model
   that served them. Mail classification and embeddings
   have separately configured model endpoints. Connected content sent to a

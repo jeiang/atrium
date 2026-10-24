@@ -21,6 +21,8 @@ const (
 	StopModelContextWindowExceeded = "model_context_window_exceeded"
 )
 
+const IterationFallbackMessage = "fallback_message"
+
 const (
 	ToolChoiceAny  = "any"
 	ToolChoiceTool = "tool"

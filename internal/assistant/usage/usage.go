@@ -44,8 +44,6 @@ func SearchesOf(u anthropic.Usage) int64 {
 	return u.ServerToolUse.WebSearchRequests
 }
 
-const fallbackMessage = "fallback_message"
-
 type billed struct {
 	model   string
 	entries []pricing.Tokens
@@ -60,7 +58,7 @@ func billedByModel(model string, u anthropic.Usage) []billed {
 	for _, it := range u.Iterations {
 		t := tokensOf(it.InputTokens, it.CacheCreationInputTokens, it.CacheReadInputTokens, it.OutputTokens, it.CacheCreation)
 		served := model
-		if it.Type == fallbackMessage && it.Model != "" {
+		if it.Type == anthropic.IterationFallbackMessage && it.Model != "" {
 			served = it.Model
 		}
 		i := slices.IndexFunc(groups, func(g billed) bool { return g.model == served })
@@ -74,8 +72,27 @@ func billedByModel(model string, u anthropic.Usage) []billed {
 }
 
 func Record(ctx context.Context, q db.Querier, e Entry, u anthropic.Usage) (float64, error) {
+	groups := billedByModel(e.Model, u)
+	if begin, ok := q.(interface {
+		BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
+	}); ok && len(groups) > 1 {
+		tx, err := begin.BeginTx(ctx, nil)
+		if err != nil {
+			return 0, err
+		}
+		cost, err := recordGroups(ctx, tx, e, u, groups)
+		if err != nil {
+			_ = tx.Rollback()
+			return 0, err
+		}
+		return cost, tx.Commit()
+	}
+	return recordGroups(ctx, q, e, u, groups)
+}
+
+func recordGroups(ctx context.Context, q db.Querier, e Entry, u anthropic.Usage, groups []billed) (float64, error) {
 	var total []float64
-	for i, g := range billedByModel(e.Model, u) {
+	for i, g := range groups {
 		row := e
 		var searches int64
 		if i == 0 {
@@ -233,3 +250,12 @@ func ByThread(ctx context.Context, q db.Querier, now float64, loc *time.Location
 }
 
 const DefaultThreadLimit = 50
+
+func PrimaryTokens(u anthropic.Usage) pricing.Tokens {
+	for _, it := range u.Iterations {
+		if it.Type != anthropic.IterationFallbackMessage {
+			return tokensOf(it.InputTokens, it.CacheCreationInputTokens, it.CacheReadInputTokens, it.OutputTokens, it.CacheCreation)
+		}
+	}
+	return TokensOf(u)
+}
