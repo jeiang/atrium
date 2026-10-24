@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -43,6 +45,18 @@ func TestAnthropicKeyIsAWriteOnlySecretThatPinsOverride(t *testing.T) {
 		anthropictest.Reply("end_turn", anthropictest.Text("from the stored key")),
 		anthropictest.Reply("end_turn", anthropictest.Text("from the pin")),
 	)
+	var mu sync.Mutex
+	var keys []string
+	srv.OnRequest = func(r anthropictest.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		keys = append(keys, r.Header.Get("X-Api-Key"))
+	}
+	sent := func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(keys)
+	}
 	base := []string{
 		"ATRIUM_CACHE_DIR=" + filepath.Join(dir, "cache"), "ATRIUM_CONFIG=",
 		"ANTHROPIC_API_KEY=", "ATRIUM_ANTHROPIC_ANTHROPIC_API_KEY=", "CREDENTIALS_DIRECTORY=", anthropic.BaseURLEnv + "=" + srv.URL,
@@ -72,8 +86,8 @@ func TestAnthropicKeyIsAWriteOnlySecretThatPinsOverride(t *testing.T) {
 	if ran.code != cli.ExitOK || strings.Contains(ran.stdout+ran.stderr, stored) {
 		t.Fatalf("agent run with the stored key: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
 	}
-	if got := srv.Requests(); len(got) != 1 || got[0].Header.Get("X-Api-Key") != stored {
-		t.Fatalf("requests %d, want one carrying the stored key", len(got))
+	if got := sent(); len(got) != 1 || got[0] != stored {
+		t.Fatalf("requests %d, want one carrying the stored key; run %q %q", len(got), ran.stdout, ran.stderr)
 	}
 
 	pin := append(encrypted, "ANTHROPIC_API_KEY="+pinned)
@@ -89,8 +103,8 @@ func TestAnthropicKeyIsAWriteOnlySecretThatPinsOverride(t *testing.T) {
 	if ran.code != cli.ExitOK || strings.Contains(ran.stdout+ran.stderr, pinned) {
 		t.Fatalf("agent run under the pin: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
 	}
-	if got := srv.Requests(); len(got) != 2 || got[1].Header.Get("X-Api-Key") != pinned {
-		t.Fatalf("requests %d, want the second to carry the pinned key", len(got))
+	if got := sent(); len(got) != 2 || got[1] != pinned {
+		t.Fatalf("requests %d, want the second to carry the pinned key; run %q %q", len(got), ran.stdout, ran.stderr)
 	}
 }
 
