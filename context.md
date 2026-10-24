@@ -11,6 +11,9 @@ not claims about the running application.
 - The application brings together mail, calendar, contacts, Notion, spending,
   media, notifications, and read-only Grafana access. The assistant adds
   chat, files, projects, skills, scheduled work, and research subagents.
+  A skill is a name, one-line description and Markdown body, exchanged as
+  `SKILL.md` folders through the Skills page and `atrium skills`; the
+  prompt carries only a budgeted index of them.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs.

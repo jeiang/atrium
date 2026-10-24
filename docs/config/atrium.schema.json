@@ -743,6 +743,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_skill_index_chars": {
+          "default": 4000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_skill_index_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_stub_tokens": {
           "default": 2000,
           "type": [
