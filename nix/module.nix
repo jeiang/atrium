@@ -129,6 +129,11 @@
 
   writeTimeout = "45min";
 
+  backupScript = pkgs.writeShellScript "atrium-backup" ''
+    set -euo pipefail
+    exec ${lib.getExe cfg.package} backup "${cfg.backup.directory}/atrium-$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ).backup"
+  '';
+
   appService = args:
     lib.recursiveUpdate
     {
@@ -276,6 +281,22 @@ in {
       tvUrl = nullableStr "URL serving root/tv read-only on the private network (ATRIUM_MEDIA_MEDIA_TV_URL).";
     };
 
+    backup = {
+      enable = mkEnableOption "the atrium-backup timer that writes an `atrium backup` archive to backup.directory";
+
+      directory = mkOption {
+        type = types.str;
+        default = "/var/backups/atrium";
+        description = "Directory that receives one timestamped archive per run; owned by the atrium user. Pruning and off-host copies are left to the host.";
+      };
+
+      onCalendar = mkOption {
+        type = types.str;
+        default = "daily";
+        description = "systemd OnCalendar expression of the backup timer.";
+      };
+    };
+
     extraEnvironment = mkOption {
       type = types.attrsOf types.str;
       default = {};
@@ -300,7 +321,9 @@ in {
 
     environment.systemPackages = [atriumRun];
 
-    systemd.tmpfiles.rules = ["d ${cacheDir} 0750 atrium atrium -"];
+    systemd.tmpfiles.rules =
+      ["d ${cacheDir} 0750 atrium atrium -"]
+      ++ lib.optional cfg.backup.enable "d ${cfg.backup.directory} 0750 atrium atrium -";
 
     systemd = {
       sockets.atrium-codemode = {
@@ -404,6 +427,17 @@ in {
             };
           };
         }
+        // lib.optionalAttrs cfg.backup.enable {
+          atrium-backup = appService {
+            description = "Write an atrium backup archive";
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = backupScript;
+              ReadWritePaths = [cfg.backup.directory];
+              TimeoutStartSec = "2h";
+            };
+          };
+        }
         // lib.optionalAttrs cfg.web.local.enable {
           atrium-web-local = webService {
             description = "atrium web UI (loopback, no proxy auth)";
@@ -457,6 +491,15 @@ in {
             wantedBy = ["timers.target"];
             timerConfig = {
               OnCalendar = "monthly";
+              Persistent = true;
+            };
+          };
+        }
+        // lib.optionalAttrs cfg.backup.enable {
+          atrium-backup = {
+            wantedBy = ["timers.target"];
+            timerConfig = {
+              OnCalendar = cfg.backup.onCalendar;
               Persistent = true;
             };
           };
