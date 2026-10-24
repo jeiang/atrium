@@ -44,6 +44,10 @@ not claims about the running application.
   not a complete backup; `atrium backup` archives the database and `files/`,
   and `atrium restore` (with a `--verify` dry run) restores them. Rebuildable
   message and media caches are separate.
+- Database connections: one write connection, a read pool, and one
+  dedicated KNN reader (semantic search and mail routing) with a 192 MiB
+  page cache; every other connection uses a 2 MiB cache, and all use
+  in-memory temporary storage and a 64 MiB journal size limit.
 - Deployment configuration and credentials come from the host and its
   environment files. Settings live in a registry: an `ATRIUM_<MODULE>_<KEY>`
   variable or configuration-file value pins a setting, otherwise a value

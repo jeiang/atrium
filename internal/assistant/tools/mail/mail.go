@@ -143,7 +143,7 @@ func mailSearch(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 			filters[f.filter] = nil
 		}
 	}
-	found, err := search.Search(ctx, tc.DB.Read, tc.Cfg, query, filters, int(limit), embedder(tc))
+	found, err := search.Search(ctx, tc.DB.KNN, tc.Cfg, query, filters, int(limit), embedder(tc))
 	if errors.Is(err, httpx.ErrValue) {
 		return nil, tool.Error("bad date filter: " + httpx.Message(err))
 	}

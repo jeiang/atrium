@@ -117,7 +117,7 @@ func (o Options) locked(ctx context.Context, d *db.DB, cfg config.Config, client
 }
 
 func (o Options) search(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env, query string, private bool, limit int) error {
-	result, err := Search(ctx, d.Read, query, private, limit, o.Embed)
+	result, err := Search(ctx, d.KNN, query, private, limit, o.Embed)
 	if err != nil {
 		return err
 	}
