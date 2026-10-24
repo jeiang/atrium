@@ -3,6 +3,8 @@ package pages
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -18,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/testutil/golden"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -103,7 +105,7 @@ func flProxy(t *testing.T, s *site) *site {
 		t.Fatal(err)
 	}
 	srv, err := web.New(web.Options{
-		Cfg: s.cfg, Env: s.env, DB: s.db, Auth: web.AuthProxy, AllowedHosts: []string{host}, Public: PublicCheck(s.cfg, s.env),
+		Cfg: s.cfg, Env: s.env, DB: s.db, Auth: web.AuthProxy, AllowedHosts: []string{host}, Public: PublicCheck(s.cfg, s.env, s.db),
 		Render: render, Modules: []web.Module{Module(Options{})},
 	})
 	if err != nil {
@@ -305,6 +307,31 @@ func TestFlPathTraversalAndRoot(t *testing.T) {
 	})
 }
 
+func flStoredKey(t *testing.T, w *flWorld) (value, by string, found bool) {
+	t.Helper()
+	err := w.db.Read.QueryRow("SELECT value, set_by FROM secrets WHERE name = ?", media.KeyLinkKey).Scan(&value, &by)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", false
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return value, by, true
+}
+
+func flGolden(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(golden.Dir(), "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "atrium.db")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestFlRotatedAndGeneratedKeys(t *testing.T) {
 	old := flNew(t, nil, Options{})
 	oldLink := flSigned(flKey, old.movieRel, flFar)
@@ -314,52 +341,88 @@ func TestFlRotatedAndGeneratedKeys(t *testing.T) {
 	status(t, rotated.get(oldLink), 403, "link from the previous key")
 	status(t, rotated.get(flSigned("rotated-key", rotated.movieRel, flFar)), 200, "link from the new key")
 
-	t.Run("key file created once without env", func(t *testing.T) {
+	t.Run("new install generates into the table", func(t *testing.T) {
 		w := flNew(t, map[string]string{"ATRIUM_MEDIA_LINK_KEY": ""}, Options{})
-		keyPath := w.cfg.MediaLinkKeyPath()
-		if _, err := os.Stat(keyPath); !os.IsNotExist(err) {
-			t.Fatalf("key exists before first use: %v", err)
+		if _, _, found := flStoredKey(t, w); found {
+			t.Fatal("key stored before first use")
 		}
-		links := media.NewLinks(config.MediaLinkKey(w.env), keyPath)
-		now := float64(time.Now().Unix())
-		url, err := links.PublicURL("https://atrium.test", w.movieRel, now, 43200)
-		if err != nil {
-			t.Fatal(err)
-		}
-		info, err := os.Stat(keyPath)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if info.Mode().Perm() != 0o600 {
-			t.Errorf("key mode %v", info.Mode().Perm())
-		}
-		first, _ := os.ReadFile(keyPath)
-		if len(first) != 64 {
-			t.Fatalf("key length %d", len(first))
-		}
-		path := strings.TrimPrefix(url, "https://atrium.test")
+		movie := status(t, w.get("/media/library/movie/Dune%20%282021%29"), 200, "movie")
+		public := libHref(t, movie, "https://atrium.test/media/file/")
+		path := strings.TrimPrefix(public, "https://atrium.test")
 		status(t, w.get(path), 200, "link signed with the generated key")
-		again, err := media.NewLinks(config.MediaLinkKey(w.env), keyPath).PublicURL("https://atrium.test", w.movieRel, now, 43200)
-		if err != nil || again != url {
-			t.Fatalf("second Links built %q (%v), want %q", again, err, url)
+		value, by, found := flStoredKey(t, w)
+		if !found || len(value) != 64 || by != "generated" {
+			t.Fatalf("stored key %q by %q found %v", value, by, found)
 		}
-		if after, _ := os.ReadFile(keyPath); !bytes.Equal(after, first) {
-			t.Errorf("key file rewritten")
+		if _, err := os.Stat(w.cfg.MediaLinkKeyPath()); !os.IsNotExist(err) {
+			t.Errorf("key file written: %v", err)
 		}
-
 		req := httptest.NewRequest("GET", path, nil)
-		if !PublicCheck(w.cfg, w.env)(req) {
-			t.Fatal("guard hook rejects the link before rotation")
+		if !PublicCheck(w.cfg, w.env, w.db)(req) {
+			t.Fatal("guard hook rejects the link")
 		}
-		if err := os.Remove(keyPath); err != nil {
+		if _, err := w.db.Write.Exec("DELETE FROM secrets WHERE name = ?", media.KeyLinkKey); err != nil {
 			t.Fatal(err)
 		}
-		if PublicCheck(w.cfg, w.env)(req) {
-			t.Error("guard hook accepts the link after the key file was deleted")
+		if PublicCheck(w.cfg, w.env, w.db)(req) {
+			t.Error("guard hook accepts the link after the stored key was deleted")
 		}
-		if fresh, _ := os.ReadFile(keyPath); len(fresh) != 64 || bytes.Equal(fresh, first) {
-			t.Errorf("rotation did not write a new key")
+		if fresh, _, _ := flStoredKey(t, w); len(fresh) != 64 || fresh == value {
+			t.Errorf("rotation did not store a new key")
 		}
+	})
+
+	t.Run("legacy key file moves into the table on an upgraded database", func(t *testing.T) {
+		w := flNew(t, map[string]string{"ATRIUM_MEDIA_LINK_KEY": "", "ATRIUM_DB": flGolden(t)}, Options{})
+		legacy := w.cfg.MediaLinkKeyPath()
+		if err := os.WriteFile(legacy, []byte("legacy-file-key\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		link := flSigned("legacy-file-key", w.movieRel, flFar)
+		status(t, w.get(link), 200, "link signed before the upgrade")
+		value, by, found := flStoredKey(t, w)
+		if !found || value != "legacy-file-key" || by != "migration" {
+			t.Fatalf("stored key %q by %q found %v", value, by, found)
+		}
+		if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+			t.Errorf("legacy key file left behind: %v", err)
+		}
+		if !PublicCheck(w.cfg, w.env, w.db)(httptest.NewRequest("GET", link, nil)) {
+			t.Error("guard hook rejects the link after the file is gone")
+		}
+		status(t, w.get(flSigned("other", w.movieRel, flFar)), 403, "link signed with another key")
+	})
+
+	t.Run("pin wins over the table and leaves the legacy file alone", func(t *testing.T) {
+		w := flNew(t, nil, Options{})
+		if _, err := w.db.Write.Exec("INSERT INTO secrets (name, value, set_at, set_by) VALUES (?, 'table-key', 1.0, 'cli')", media.KeyLinkKey); err != nil {
+			t.Fatal(err)
+		}
+		legacy := w.cfg.MediaLinkKeyPath()
+		if err := os.WriteFile(legacy, []byte("legacy-file-key"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		status(t, w.get(flSigned(flKey, w.movieRel, flFar)), 200, "pinned key")
+		status(t, w.get(flSigned("table-key", w.movieRel, flFar)), 403, "table key under a pin")
+		status(t, w.get(flSigned("legacy-file-key", w.movieRel, flFar)), 403, "legacy key under a pin")
+		if value, _, _ := flStoredKey(t, w); value != "table-key" {
+			t.Errorf("stored key changed to %q", value)
+		}
+		if _, err := os.Stat(legacy); err != nil {
+			t.Errorf("legacy key file touched: %v", err)
+		}
+	})
+
+	t.Run("stored key wins over a stale legacy file", func(t *testing.T) {
+		w := flNew(t, map[string]string{"ATRIUM_MEDIA_LINK_KEY": ""}, Options{})
+		if _, err := w.db.Write.Exec("INSERT INTO secrets (name, value, set_at, set_by) VALUES (?, 'table-key', 1.0, 'cli')", media.KeyLinkKey); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(w.cfg.MediaLinkKeyPath(), []byte("legacy-file-key"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		status(t, w.get(flSigned("table-key", w.movieRel, flFar)), 200, "stored key")
+		status(t, w.get(flSigned("legacy-file-key", w.movieRel, flFar)), 403, "stale legacy key")
 	})
 }
 

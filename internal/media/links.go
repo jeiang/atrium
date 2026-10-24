@@ -2,8 +2,8 @@ package media
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -11,84 +11,61 @@ import (
 	"math/big"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/secrets"
 )
 
-const (
-	FilePrefix   = "/media/file/"
-	linkKeyBytes = 32
-)
+const FilePrefix = "/media/file/"
 
 type Links struct {
-	key     string
-	keyPath string
-	mu      sync.Mutex
-	secret  []byte
+	d          *db.DB
+	legacyPath string
 }
 
-func NewLinks(linkKey, keyPath string) *Links {
-	return &Links{key: linkKey, keyPath: keyPath}
+func NewLinks(d *db.DB, legacyPath string) *Links {
+	return &Links{d: d, legacyPath: legacyPath}
 }
 
 func trimKey(b []byte) []byte { return bytes.Trim(b, " \t\n\r\v\f") }
 
-func (l *Links) secretKey() ([]byte, error) {
-	if l.key != "" {
-		return []byte(l.key), nil
+func (l *Links) secretKey(ctx context.Context) ([]byte, error) {
+	store := secrets.New(l.d, l.d)
+	value, err := store.Value(ctx, KeyLinkKey)
+	if err != nil || value != "" {
+		return []byte(value), err
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.secret != nil {
-		return l.secret, nil
-	}
-	secret, err := l.loadOrCreate()
-	if err != nil {
-		return nil, err
-	}
-	l.secret = secret
-	return secret, nil
-}
-
-func (l *Links) loadOrCreate() ([]byte, error) {
-	data, err := os.ReadFile(l.keyPath)
-	if err == nil {
-		return trimKey(data), nil
-	}
-	if !errors.Is(err, fs.ErrNotExist) {
-		return nil, err
-	}
-	raw := make([]byte, linkKeyBytes)
-	if _, err := rand.Read(raw); err != nil {
-		return nil, err
-	}
-	fresh := []byte(hex.EncodeToString(raw))
-	if err := os.MkdirAll(filepath.Dir(l.keyPath), 0o755); err != nil {
-		return nil, err
-	}
-	f, err := os.OpenFile(l.keyPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if errors.Is(err, fs.ErrExist) {
-		data, err := os.ReadFile(l.keyPath)
-		if err != nil {
-			return nil, err
+	var legacy []byte
+	err = store.InTx(ctx, func(w *secrets.Store) error {
+		if value, err = w.Value(ctx, KeyLinkKey); err != nil || value != "" {
+			return err
 		}
-		return trimKey(data), nil
-	}
+		if data, err := os.ReadFile(l.legacyPath); err == nil {
+			legacy = trimKey(data)
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		if len(legacy) > 0 {
+			if err := w.Adopt(ctx, KeyLinkKey, string(legacy)); err != nil {
+				return err
+			}
+		}
+		value, err = w.GeneratedKey(ctx, KeyLinkKey)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
-	if _, err := f.Write(fresh); err != nil {
-		_ = f.Close()
-		return nil, err
+	if len(legacy) > 0 {
+		if err := os.Remove(l.legacyPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			log.Warn("the retired media link key file could not be removed", logx.Err, err)
+		}
 	}
-	if err := f.Close(); err != nil {
-		return nil, err
-	}
-	return fresh, nil
+	return []byte(value), nil
 }
 
 func signText(secret []byte, rel, exp string) string {
@@ -113,16 +90,16 @@ func verifyWith(secret []byte, rel, exp, sig string, now float64) bool {
 	return hmac.Equal([]byte(want), []byte(py.Lower(py.Strip(sig))))
 }
 
-func (l *Links) Verify(rel, exp, sig string, now float64) bool {
-	secret, err := l.secretKey()
+func (l *Links) Verify(ctx context.Context, rel, exp, sig string, now float64) bool {
+	secret, err := l.secretKey(ctx)
 	if err != nil {
 		return false
 	}
 	return verifyWith(secret, rel, exp, sig, now)
 }
 
-func (l *Links) PublicURL(base, rel string, now float64, ttl int64) (string, error) {
-	secret, err := l.secretKey()
+func (l *Links) PublicURL(ctx context.Context, base, rel string, now float64, ttl int64) (string, error) {
+	secret, err := l.secretKey(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -161,6 +138,6 @@ func (l *Links) Verifier() func(*http.Request) bool {
 			return false
 		}
 		query := r.URL.Query()
-		return l.Verify(rest, firstQuery(query["exp"]), firstQuery(query["sig"]), Now())
+		return l.Verify(r.Context(), rest, firstQuery(query["exp"]), firstQuery(query["sig"]), Now())
 	}
 }

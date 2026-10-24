@@ -233,3 +233,50 @@ func (s *Store) GeneratedKey(ctx context.Context, name string) (string, error) {
 }
 
 func now() float64 { return float64(time.Now().UnixNano()) / 1e9 }
+
+func (s *Store) Value(ctx context.Context, name string) (string, error) {
+	if _, err := s.def(name); err != nil {
+		return "", err
+	}
+	if _, pinned, err := s.reg.Pinned(name); err != nil {
+		return "", err
+	} else if pinned {
+		found, err := s.reg.Resolve(ctx, s.q, name, 0)
+		if err == nil {
+			logx.AddSecret(found.Value)
+		}
+		return found.Value, err
+	}
+	var value string
+	err := s.q.QueryRowContext(ctx, "SELECT value FROM secrets WHERE name = ?", name).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err == nil {
+		logx.AddSecret(value)
+	}
+	return value, err
+}
+
+func (s *Store) Adopt(ctx context.Context, name, value string) error {
+	d, err := s.def(name)
+	if err != nil {
+		return err
+	}
+	if !d.Generated {
+		return NotGenerated(name)
+	}
+	if value == "" {
+		return EmptyValue(name)
+	}
+	if _, pinned, err := s.reg.Pinned(name); err != nil || pinned {
+		return err
+	}
+	if _, err := s.q.ExecContext(ctx,
+		"INSERT OR IGNORE INTO secrets (name, value, set_at, set_by) VALUES (?, ?, ?, 'migration')",
+		name, value, now()); err != nil {
+		return err
+	}
+	logx.AddSecret(value)
+	return nil
+}

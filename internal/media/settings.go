@@ -42,6 +42,7 @@ const (
 	KeyVideoExts         = "media_video_extensions"
 	KeySubtitleExts      = "media_subtitle_extensions"
 	KeyTorrentUploadCap  = "media_torrent_upload_bytes"
+	KeyLinkKey           = "link_key"
 )
 
 const (
@@ -85,6 +86,7 @@ func init() {
 		adv(KeyVideoExts, settings.String, defaultVideoExts, extensionsCheck),
 		adv(KeySubtitleExts, settings.String, defaultSubtitleExt, extensionsCheck),
 		between(KeyTorrentUploadCap, "1048576", 1024, 32<<20),
+		settings.Def{Key: KeyLinkKey, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, Generated: true},
 	)
 }
 
@@ -175,11 +177,10 @@ type Settings struct {
 	TVURL     string
 	PublicURL string
 	TMDBKey   string
-	LinkKey   string
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
-	out := Settings{PublicURL: config.PublicURL(env), TMDBKey: config.TMDBKey(env), LinkKey: config.MediaLinkKey(env)}
+	out := Settings{PublicURL: config.PublicURL(env), TMDBKey: config.TMDBKey(env)}
 	var failure error
 	resolve := func(key string) settings.Resolved {
 		if failure != nil {
