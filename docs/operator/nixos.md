@@ -81,8 +81,18 @@ Each option is null by default. A null option sets no environment variable for t
 | `media.moviesUrl` | null or string | `null` | URL serving `root/movies` read-only on the private network. |
 | `media.tvUrl` | null or string | `null` | URL serving `root/tv` read-only on the private network. |
 
+## Backup
+
+| Option | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `backup.enable` | bool | `false` | Defines `atrium-backup.service` and `atrium-backup.timer`. With the default no backup unit exists. |
+| `backup.directory` | string | `"/var/backups/atrium"` | Directory created for the `atrium` user. Each run writes one new `atrium-<UTC timestamp>.backup` archive there with `atrium backup`, under the same environment files and credentials as the other units, so a keyed database produces a keyed archive. |
+| `backup.onCalendar` | string | `"daily"` | systemd `OnCalendar` expression of the timer; the timer is persistent. |
+
+The module never removes old archives. Pruning and copying archives off the host belong to the host's own backup tooling. An archive made under a database key restores only with that key; the key must be kept outside the host's state (for example in the host's secrets store plus an offline copy), because after loss of the key a keyed archive cannot be opened. After `atrium db rekey`, archives made before the rekey still need the old key. The `restore-drill` flake check runs `atrium backup` and `atrium restore --verify` on the golden database, plaintext and keyed, and expects a corrupted archive, a wrong key and a missing key to be refused.
+
 ## Fixed by the module
 
 Regardless of options, the module places the database at `/var/lib/atrium/atrium.db` and the message cache at `/var/lib/atrium/cache/messages`, and installs the `atrium-run` command, which runs the atrium binary as the `atrium` user with the same environment files and variables as the units.
 
-The module defines these units: `atrium-web`, `atrium-watch`, `atrium-agent-scheduler`, the oneshot services `atrium-sync`, `atrium-notion-sync` and `atrium-scan` with their timers, and the code-mode worker socket and service. `atrium-web-local` exists only with `web.local.enable`, and `atrium-vdirsyncer-sync` with its timer only when `icloudAppleId` is set.
+The module defines these units: `atrium-web`, `atrium-watch`, `atrium-agent-scheduler`, the oneshot services `atrium-sync`, `atrium-notion-sync` and `atrium-scan` with their timers, and the code-mode worker socket and service. `atrium-backup` with its timer exists only with `backup.enable`, `atrium-web-local` only with `web.local.enable`, and `atrium-vdirsyncer-sync` with its timer only when `icloudAppleId` is set.
