@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents"
 	"github.com/jeiang/atrium/internal/assistant/workspace"
@@ -114,8 +115,12 @@ func threadViewDict(v *service.ThreadView) (map[string]any, error) {
 	if runs == nil {
 		runs = []journal.Run{}
 	}
+	label := v.Thread.Model
+	if m, err := pricing.Lookup(label); err == nil {
+		label = m.Name
+	}
 	return map[string]any{
-		"thread": v.Thread, "items": items, "runs": runs, "active": v.Active, "queued": queued, "cost": v.Cost,
+		"model_label": label, "thread": v.Thread, "items": items, "runs": runs, "active": v.Active, "queued": queued, "cost": v.Cost,
 		"meter": v.Meter, "last_operator_seq": v.LastOperatorSeq, "branched_from": v.BranchedFrom,
 	}, nil
 }

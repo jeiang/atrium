@@ -7,10 +7,9 @@
   <div role="group" class="field"><label for="{{$prefix}}-description">One-line description (shown to the assistant when it picks a role)</label><input id="{{$prefix}}-description" name="description" type="text" value="{{$a.description}}" maxlength="160" required></div>
   <div role="group" class="field">
     <label for="{{$prefix}}-effort">Effort</label>
-    <select id="{{$prefix}}-effort" name="effort" aria-describedby="{{$prefix}}-effort-help">
+    <select id="{{$prefix}}-effort" name="effort">
       {{range .efforts}}<option value="{{.}}"{{if eq (or $a.effort "medium") .}} selected{{end}}>{{.}}</option>{{end}}
     </select>
-    <p id="{{$prefix}}-effort-help" class="text-xs text-muted-foreground">How hard this subagent thinks each time the assistant delegates to it.</p>
   </div>
 </div>
 <div role="group" class="field"><label for="{{$prefix}}-prompt">System prompt addendum</label><textarea id="{{$prefix}}-prompt" name="prompt" rows="4" class="w-full" required>{{$a.prompt}}</textarea></div>

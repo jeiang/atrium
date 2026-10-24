@@ -22,10 +22,11 @@ type ProjectsData struct {
 }
 
 type ProjectData struct {
-	Project *projects.Project `json:"project"`
-	Files   []files.Row       `json:"files"`
-	Threads []threads.Listed  `json:"threads"`
-	View    string            `json:"view"`
+	Project  *projects.Project `json:"project"`
+	Files    []files.Row       `json:"files"`
+	Threads  []threads.Listed  `json:"threads"`
+	View     string            `json:"view"`
+	Composer map[string]any    `json:"composer"`
 }
 
 type ProjectFormValues struct {
@@ -170,7 +171,7 @@ func (p *pages) projectShow(w http.ResponseWriter, r *http.Request) {
 	if attached == nil {
 		attached = []files.Row{}
 	}
-	p.render(w, r, http.StatusOK, "projects", "project.gohtml", ProjectData{Project: found, Files: attached, Threads: listed, View: view}, nil)
+	p.render(w, r, http.StatusOK, "projects", "project.gohtml", ProjectData{Project: found, Files: attached, Threads: listed, View: view, Composer: p.newThreadComposer(r, found.Effort, found.ContextLimit)}, nil)
 }
 
 func (p *pages) projectEditForm(w http.ResponseWriter, r *http.Request) {

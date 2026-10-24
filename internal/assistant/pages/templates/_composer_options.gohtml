@@ -1,0 +1,22 @@
+{{template "composer_options" (dict "c" .Data.composer)}}
+
+{{define "composer_options"}}{{$c := .c}}{{$live := $c.live}}
+<span id="composer-options" class="contents"{{if opt . "oob" false}} hx-swap-oob="true"{{end}}>
+  <label class="flex items-center gap-1 text-muted-foreground">Model
+    <select name="model" class="select h-7 py-0 text-xs" data-option{{if $live}} hx-post="/chat/{{$live}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML"{{else}} hx-get="/chat/composer-options" hx-trigger="change" hx-include="[data-option]" hx-target="#composer-options" hx-swap="outerHTML"{{end}}>
+      {{if not $c.known}}<option value="{{$c.model}}" selected disabled>{{$c.model}}</option>{{end}}
+      {{range $c.models}}<option value="{{.id}}"{{if eq .id $c.model}} selected{{end}}>{{.name}}</option>{{end}}
+    </select>
+  </label>
+  <label class="flex items-center gap-1 text-muted-foreground">Effort
+    <select name="effort" class="select h-7 py-0 text-xs" data-option{{if $live}} hx-post="/chat/{{$live}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML"{{end}}>
+      {{range $c.efforts}}<option value="{{.}}"{{if eq . $c.effort}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </label>
+  <label class="flex items-center gap-1 text-muted-foreground">Context
+    <select name="context_limit" class="select h-7 py-0 text-xs" data-option{{if $live}} hx-post="/chat/{{$live}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML"{{end}}>
+      {{range $c.context_limits}}<option value="{{.}}"{{if eq . $c.context}} selected{{end}}>{{if ge . 1000000}}{{int (fdiv . 1000000)}}M{{else}}{{int (fdiv . 1000)}}K{{end}}</option>{{end}}
+    </select>
+  </label>
+</span>
+{{- end}}

@@ -72,13 +72,14 @@ func TestOldSettingsUrlsAreGone(t *testing.T) {
 func TestAssistantSettings(t *testing.T) {
 	s := newSite(t)
 	page := status(t, s.get("/settings/assistant"), http.StatusOK)
-	mustContain(t, page, `<option value="medium" selected>medium</option>`, `<option value="90000" selected>90K tokens</option>`, `action="/settings/assistant"`, "Claude Haiku 5.5")
+	mustContain(t, page, `<option value="medium" selected>medium</option>`, `<option value="90000" selected>90K</option>`, `<option value="claude-haiku-5-5" selected>Haiku 5.5</option>`, `action="/settings/assistant"`)
+	mustNotContain(t, page, "Defaults for new chat threads", "How readily", "Older tool results", "5×")
 	savedResponse := s.post("/settings/assistant", url.Values{"effort": {"high"}, "context_limit": {"200000"}})
 	if savedResponse.StatusCode != http.StatusSeeOther || savedResponse.Header.Get("Location") != "/settings/assistant?saved=1" || savedResponse.body != "" {
 		t.Fatalf("assistant save: %d %q %q", savedResponse.StatusCode, savedResponse.Header.Get("Location"), savedResponse.body)
 	}
 	saved := status(t, s.get(savedResponse.Header.Get("Location")), http.StatusOK)
-	mustContain(t, saved, "Saved", "New chat threads start with these defaults.", `<option value="high" selected>high</option>`, `<option value="200000" selected>200K tokens</option>`, `data-category="success"`, `data-strip-params="saved"`)
+	mustContain(t, saved, "Saved", "New chat threads start with these defaults.", `<option value="high" selected>high</option>`, `<option value="200000" selected>200K</option>`, `data-category="success"`, `data-strip-params="saved"`)
 	if n := strings.Count(saved, `id="toaster"`); n != 1 {
 		t.Errorf("%d toasters", n)
 	}

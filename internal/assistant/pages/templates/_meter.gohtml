@@ -1,8 +1,8 @@
 {{template "chat_meter" (dict "view" .Data.view "oob" (opt .Data "oob" false))}}
 
 {{define "chat_meter"}}{{$v := .view}}{{$m := $v.meter}}
-<span id="meter" class="flex items-center gap-2 tabular-nums" title="Prompt tokens of the last request against the point where the context is compacted ({{$m.compact_at}} of the {{$m.limit}} limit)"{{if opt . "oob" false}} hx-swap-oob="true"{{end}}>
-  <span class="badge" data-variant="outline">effort {{$v.thread.effort}}</span>
+<span id="meter" class="flex items-center gap-2 tabular-nums" title="Compacts at {{$m.compact_at}} of the {{$m.limit}} limit"{{if opt . "oob" false}} hx-swap-oob="true"{{end}}>
+  <span class="badge" data-variant="outline">{{$v.model_label}} · {{$v.thread.effort}}</span>
   <span class="flex items-center gap-1.5" role="img" aria-label="Context used: {{printf "%.1f" (fdiv $m.tokens 1000)}}K of {{int (round (fdiv $m.compact_at 1000))}}K">
     <span class="h-1.5 w-16 overflow-hidden rounded-full bg-muted" aria-hidden="true"><span class="block h-full rounded-full {{if ge $m.share 0.8}}bg-warning{{else}}bg-chart-3{{end}}" style="width: {{int (round (mul $m.share 100))}}%"></span></span>
     <span>{{printf "%.1f" (fdiv $m.tokens 1000)}}K / {{int (round (fdiv $m.compact_at 1000))}}K</span>
