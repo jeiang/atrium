@@ -77,6 +77,9 @@ external services, reverse proxy, persistence, and backups.
   `time.Local`.
 - Stage web assets through the existing build. Do not commit
   `internal/web/static`.
+- UI: avoid unnecessary secondary labels and descriptions. Let the layout
+  do the explaining. No helper text that restates a control, no
+  parenthetical notes repeated on every option.
 - Dependency changes must update the vendor hashes in `nix/go-package.nix`
   and `flake-modules/go-checks.nix`.
 
