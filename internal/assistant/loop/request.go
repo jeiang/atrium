@@ -70,7 +70,7 @@ func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.
 	return prompts.SystemBlocks(p, cc), nil
 }
 
-func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Thread, kind tool.Kind, effort string, tools []tool.Tool,
+func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Thread, kind tool.Kind, model, effort string, tools []tool.Tool,
 	cc prompts.CacheControl, extra string, allow []string, limits actx.Limits, webSearchMaxUses int) (request, error) {
 	system, err := r.systemBlocks(ctx, q, thread, cc, extra)
 	if err != nil {
@@ -94,7 +94,7 @@ func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Threa
 	}
 	return request{
 		params: anthropic.Params{
-			Model:             Model,
+			Model:             model,
 			MaxTokens:         MaxTokensFor(effort),
 			Thinking:          &anthropic.Thinking{Type: "adaptive", Display: "summarized"},
 			OutputConfig:      &anthropic.OutputConfig{Effort: effort},

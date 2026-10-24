@@ -98,6 +98,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_CACHE_TTL_CHAT` | `assistant.cache_ttl_chat` |
 | `ATRIUM_ASSISTANT_DEFAULT_CONTEXT_LIMIT` | `assistant.default_context_limit` |
 | `ATRIUM_ASSISTANT_DEFAULT_EFFORT` | `assistant.default_effort` |
+| `ATRIUM_ASSISTANT_DEFAULT_MODEL` | `assistant.default_model` |
 | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD` | `assistant.max_run_cost_usd` |
 | `ATRIUM_ASSISTANT_MAX_STEPS` | `assistant.max_steps` |
 | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` | `assistant.monthly_budget_usd` |

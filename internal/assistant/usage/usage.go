@@ -59,20 +59,32 @@ func Record(ctx context.Context, q db.Querier, e Entry, u anthropic.Usage) (floa
 	var sum pricing.Tokens
 	costs := make([]float64, len(entries))
 	high := false
+	flat := false
 	for i, t := range entries {
 		sum.Input += t.Input
 		sum.CacheWrite5m += t.CacheWrite5m
 		sum.CacheWrite1h += t.CacheWrite1h
 		sum.CacheRead += t.CacheRead
 		sum.Output += t.Output
-		costs[i] = pricing.CostUSD(t, 0)
-		high = high || pricing.TierOf(t) == pricing.TierHigh
+		cost, err := pricing.CostUSD(e.Model, t, 0)
+		if err != nil {
+			return 0, err
+		}
+		costs[i] = cost
+		tier, err := pricing.TierOf(e.Model, t)
+		if err != nil {
+			return 0, err
+		}
+		high = high || tier == pricing.TierHigh
+		flat = tier == pricing.TierFlat
 	}
 	searches := SearchesOf(u)
 	cost := py.Sum(costs) + float64(float64(searches)*pricing.SearchUSD)
 	tier := pricing.TierLow
 	if high {
 		tier = pricing.TierHigh
+	} else if flat {
+		tier = pricing.TierFlat
 	}
 	_, err := q.ExecContext(ctx,
 		"INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, "+

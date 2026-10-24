@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -83,6 +84,36 @@ func CleanEffort(value string) (string, error) {
 	return value, nil
 }
 
+func CleanModel(value string) (pricing.Model, error) {
+	m, err := pricing.Lookup(value)
+	if err != nil {
+		return pricing.Model{}, OptionError("model must be one of " + strings.Join(pricing.IDs(), ", "))
+	}
+	return m, nil
+}
+
+func CleanModelEffort(model pricing.Model, value string) (string, error) {
+	effort, err := CleanEffort(value)
+	if err != nil {
+		return "", err
+	}
+	if !model.SupportsEffort(effort) {
+		return "", OptionError(model.Name + " does not support effort " + effort)
+	}
+	return effort, nil
+}
+
+func CleanModelContextLimit(model pricing.Model, value any) (int64, error) {
+	limit, err := CleanContextLimit(value)
+	if err != nil {
+		return 0, err
+	}
+	if limit > model.ContextWindow {
+		return 0, OptionError(fmt.Sprintf("%s supports at most %dK of context", model.Name, model.ContextWindow/1000))
+	}
+	return limit, nil
+}
+
 func CleanContextLimit(value any) (int64, error) {
 	limit, ok := int64(0), false
 	switch v := value.(type) {
@@ -110,6 +141,7 @@ func CleanContextLimit(value any) (int64, error) {
 }
 
 type Options struct {
+	Model        string `json:"model"`
 	Effort       string `json:"effort"`
 	ContextLimit int64  `json:"context_limit"`
 }
@@ -123,7 +155,15 @@ func Defaults(ctx context.Context, q db.Querier) (Options, error) {
 	if !slices.Contains(Efforts[:], effort) {
 		effort = Medium
 	}
-	out := Options{Effort: effort, ContextLimit: DefaultContextLimit}
+	out := Options{Model: pricing.DefaultModel, Effort: effort, ContextLimit: DefaultContextLimit}
+	found, err = settings.Default.Resolve(ctx, q, assistant.KeyDefaultModel, 0)
+	if err != nil {
+		return out, err
+	}
+	if _, err := CleanModel(found.Value); err != nil {
+		return out, fmt.Errorf("threads: setting %s: %w", assistant.KeyDefaultModel, err)
+	}
+	out.Model = found.Value
 	found, err = settings.Default.Resolve(ctx, q, assistant.KeyDefaultContextLimit, 0)
 	if err != nil {
 		return out, err
@@ -138,16 +178,29 @@ func Defaults(ctx context.Context, q db.Querier) (Options, error) {
 	return out, nil
 }
 
-func SetDefaults(ctx context.Context, q db.Querier, effort string, contextLimit any) error {
-	e, err := CleanEffort(effort)
+func SetDefaults(ctx context.Context, q db.Querier, model, effort string, contextLimit any) error {
+	chosen := pricing.DefaultModel
+	if model != "" {
+		chosen = model
+	} else if current, err := Defaults(ctx, q); err == nil {
+		chosen = current.Model
+	}
+	m, err := CleanModel(chosen)
 	if err != nil {
+		return err
+	}
+	e, err := CleanModelEffort(m, effort)
+	if err != nil {
+		return err
+	}
+	limit, err := CleanModelContextLimit(m, contextLimit)
+	if err != nil {
+		return err
+	}
+	if err := setPinSafe(ctx, q, assistant.KeyDefaultModel, m.ID); err != nil {
 		return err
 	}
 	if err := setPinSafe(ctx, q, assistant.KeyDefaultEffort, e); err != nil {
-		return err
-	}
-	limit, err := CleanContextLimit(contextLimit)
-	if err != nil {
 		return err
 	}
 	return setPinSafe(ctx, q, assistant.KeyDefaultContextLimit, strconv.FormatInt(limit, 10))
@@ -177,11 +230,14 @@ func TitleFrom(text string) string {
 }
 
 type NewThread struct {
-	Kind      string
-	Title     *string
-	ParentID  *int64
-	JobID     *int64
-	ProjectID *int64
+	Kind         string
+	Title        *string
+	ParentID     *int64
+	JobID        *int64
+	ProjectID    *int64
+	Model        string
+	Effort       string
+	ContextLimit any
 }
 
 func Create(ctx context.Context, q db.Querier, now float64, n NewThread) (int64, error) {
@@ -198,6 +254,17 @@ func Create(ctx context.Context, q db.Querier, now float64, n NewThread) (int64,
 			return 0, err
 		}
 	}
+	model := pricing.DefaultModel
+	if n.Kind == Chat {
+		model = chosen.Model
+	}
+	if n.Model != "" {
+		model = n.Model
+	}
+	m, err := CleanModel(model)
+	if err != nil {
+		return 0, err
+	}
 	effort := chosen.Effort
 	if n.Kind != Chat {
 		var ok bool
@@ -208,25 +275,53 @@ func Create(ctx context.Context, q db.Querier, now float64, n NewThread) (int64,
 			return 0, fmt.Errorf("threads: no effort for kind %s", py.Repr(n.Kind))
 		}
 	}
+	if n.Effort != "" {
+		effort = n.Effort
+	}
+	if effort, err = CleanModelEffort(m, effort); err != nil {
+		return 0, err
+	}
+	limit := chosen.ContextLimit
+	if n.ContextLimit != nil {
+		if limit, err = CleanContextLimit(n.ContextLimit); err != nil {
+			return 0, err
+		}
+	}
+	if limit, err = CleanModelContextLimit(m, limit); err != nil {
+		return 0, err
+	}
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO threads (kind, title, job_id, parent_thread_id, effort, context_limit, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		n.Kind, n.Title, n.JobID, n.ParentID, effort, chosen.ContextLimit, n.ProjectID, now, now)
+		"INSERT INTO threads (kind, title, job_id, parent_thread_id, model, effort, context_limit, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		n.Kind, n.Title, n.JobID, n.ParentID, m.ID, effort, limit, n.ProjectID, now, now)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
-func SetOptions(ctx context.Context, q db.Querier, threadID int64, effort string, contextLimit any) (bool, error) {
-	e, err := CleanEffort(effort)
+func SetOptions(ctx context.Context, q db.Querier, threadID int64, model, effort string, contextLimit any) (bool, error) {
+	if model == "" {
+		err := q.QueryRowContext(ctx, "SELECT model FROM threads WHERE id = ? AND kind = ? AND deleted_at IS NULL", threadID, Chat).Scan(&model)
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+	}
+	m, err := CleanModel(model)
 	if err != nil {
 		return false, err
 	}
-	limit, err := CleanContextLimit(contextLimit)
+	e, err := CleanModelEffort(m, effort)
 	if err != nil {
 		return false, err
 	}
-	return changed(q.ExecContext(ctx, "UPDATE threads SET effort = ?, context_limit = ? WHERE id = ? AND kind = ?", e, limit, threadID, Chat))
+	limit, err := CleanModelContextLimit(m, contextLimit)
+	if err != nil {
+		return false, err
+	}
+	return changed(q.ExecContext(ctx, "UPDATE threads SET model = ?, effort = ?, context_limit = ? WHERE id = ? AND kind = ?", m.ID, e, limit, threadID, Chat))
 }
 
 func changed(res sql.Result, err error) (bool, error) {
@@ -243,6 +338,7 @@ type Thread struct {
 	Title                *string    `json:"title"`
 	JobID                *int64     `json:"job_id"`
 	ParentThreadID       *int64     `json:"parent_thread_id"`
+	Model                string     `json:"model"`
 	Effort               string     `json:"effort"`
 	AllowedURLs          []string   `json:"allowed_urls"`
 	CreatedAt            float64    `json:"created_at"`
@@ -260,13 +356,13 @@ type Thread struct {
 	DeletedAt            *float64   `json:"deleted_at"`
 }
 
-const Columns = "id, kind, title, job_id, parent_thread_id, effort, allowed_urls, created_at, updated_at, archived, pinned, " +
+const Columns = "id, kind, title, job_id, parent_thread_id, model, effort, allowed_urls, created_at, updated_at, archived, pinned, " +
 	"context_limit, branched_from_thread_id, branched_from_seq, role, parent_run_id, project_id, code_sandbox, container_id, deleted_at"
 
 func Scan(row interface{ Scan(...any) error }) (Thread, error) {
 	var t Thread
 	var urls string
-	err := row.Scan(&t.ID, &t.Kind, &t.Title, &t.JobID, &t.ParentThreadID, &t.Effort, &urls, &t.CreatedAt, &t.UpdatedAt,
+	err := row.Scan(&t.ID, &t.Kind, &t.Title, &t.JobID, &t.ParentThreadID, &t.Model, &t.Effort, &urls, &t.CreatedAt, &t.UpdatedAt,
 		&t.Archived, &t.Pinned, &t.ContextLimit, &t.BranchedFromThreadID, &t.BranchedFromSeq, &t.Role, &t.ParentRunID,
 		&t.ProjectID, &t.CodeSandbox, &t.ContainerID, &t.DeletedAt)
 	if err != nil {

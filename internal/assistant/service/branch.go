@@ -64,8 +64,8 @@ func (s *Service) Branch(ctx context.Context, threadID, seq int64) (int64, error
 		urls = []string{}
 	}
 	if _, err := s.DB.Write.ExecContext(ctx,
-		"UPDATE threads SET effort = ?, context_limit = ?, allowed_urls = ?, project_id = ?, branched_from_thread_id = ?, branched_from_seq = ? WHERE id = ?",
-		source.Effort, source.ContextLimit, py.JSONDumps(urls), source.ProjectID, threadID, seq, child); err != nil {
+		"UPDATE threads SET model = ?, effort = ?, context_limit = ?, allowed_urls = ?, project_id = ?, branched_from_thread_id = ?, branched_from_seq = ? WHERE id = ?",
+		source.Model, source.Effort, source.ContextLimit, py.JSONDumps(urls), source.ProjectID, threadID, seq, child); err != nil {
 		return 0, err
 	}
 	for _, m := range messages {
