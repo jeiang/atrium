@@ -8,6 +8,8 @@ An environment variable pins its setting and wins over the configuration file an
 | --- | --- |
 | `ATRIUM_ACTION_LINKS_ACTION_LINK_KEY` | `action_links.action_link_key` |
 | `ATRIUM_ANTHROPIC_ANTHROPIC_ADMIN_KEY` | `anthropic.anthropic_admin_key` |
+| `ATRIUM_ANTHROPIC_ANTHROPIC_API_KEY` | `anthropic.anthropic_api_key` |
+| `ANTHROPIC_API_KEY` | `anthropic.anthropic_api_key` |
 | `ATRIUM_ASSISTANT_AGENT_CLEAR_AT_LEAST_SHARE` | `assistant.agent_clear_at_least_share` |
 | `ATRIUM_ASSISTANT_AGENT_CLEAR_KEEP` | `assistant.agent_clear_keep` |
 | `ATRIUM_ASSISTANT_AGENT_CLEAR_SHARE` | `assistant.agent_clear_share` |
@@ -99,7 +101,9 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_DEFAULT_CONTEXT_LIMIT` | `assistant.default_context_limit` |
 | `ATRIUM_ASSISTANT_DEFAULT_EFFORT` | `assistant.default_effort` |
 | `ATRIUM_ASSISTANT_DEFAULT_MODEL` | `assistant.default_model` |
-| `ATRIUM_ASSISTANT_MAX_RUN_COST_USD` | `assistant.max_run_cost_usd` |
+| `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_HAIKU_5_5` | `assistant.max_run_cost_usd_haiku_5_5` |
+| `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_OPUS_5_5` | `assistant.max_run_cost_usd_opus_5_5` |
+| `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_SONNET_5_5` | `assistant.max_run_cost_usd_sonnet_5_5` |
 | `ATRIUM_ASSISTANT_MAX_STEPS` | `assistant.max_steps` |
 | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` | `assistant.monthly_budget_usd` |
 | `ATRIUM_CALENDAR_CALENDAR_DIR` | `calendar.calendar_dir` |

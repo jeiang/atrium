@@ -44,7 +44,7 @@ func TestAnthropicKeyIsAWriteOnlySecretThatPinsOverride(t *testing.T) {
 		anthropictest.Reply("end_turn", anthropictest.Text("from the pin")),
 	)
 	base := []string{
-		"ATRIUM_CACHE_DIR=" + filepath.Join(dir, "cache"), "ATRIUM_CONFIG=", "ATRIUM_DB_KEY=", "ATRIUM_DB_KEY_FILE=",
+		"ATRIUM_CACHE_DIR=" + filepath.Join(dir, "cache"), "ATRIUM_CONFIG=", "ATRIUM_DB_KEY=",
 		"ANTHROPIC_API_KEY=", "ATRIUM_ANTHROPIC_ANTHROPIC_API_KEY=", "CREDENTIALS_DIRECTORY=", anthropic.BaseURLEnv + "=" + srv.URL,
 	}
 	plain := append([]string{"ATRIUM_DB=" + filepath.Join(dir, "plain.db")}, base...)
