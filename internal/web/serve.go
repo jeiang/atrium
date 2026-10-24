@@ -65,7 +65,7 @@ type Page struct {
 	Module    Module
 	Templates fs.FS
 	Globals   map[string]any
-	Public    func(config.Config, config.Env) func(*http.Request) bool
+	Public    func(config.Config, config.Env, *db.DB) func(*http.Request) bool
 }
 
 func ServeCommand(pages ...Page) *cli.Command {
@@ -159,7 +159,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	for _, p := range a.pages {
 		modules = append(modules, p.Module)
 		if p.Public != nil {
-			public = append(public, p.Public(cfg, a.env))
+			public = append(public, p.Public(cfg, a.env, d))
 		}
 		if p.Templates != nil {
 			templates = append(templates, p.Templates)
