@@ -86,13 +86,17 @@ func Record(ctx context.Context, d *db.DB, messageID int64, folder, source strin
 	return out, err
 }
 
-func Clear(ctx context.Context, d *db.DB, messageID int64, folder *string) (bool, error) {
+type Execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func Clear(ctx context.Context, x Execer, messageID int64, folder *string) (bool, error) {
 	query, args := "DELETE FROM corrections WHERE message_id = ?", []any{messageID}
 	if folder != nil {
 		query += " AND folder = ?"
 		args = append(args, *folder)
 	}
-	res, err := d.Write.ExecContext(ctx, query, args...)
+	res, err := x.ExecContext(ctx, query, args...)
 	if err != nil {
 		return false, err
 	}

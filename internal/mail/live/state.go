@@ -428,8 +428,15 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		return UndoResult{}, UndoError("no undo handler for " + py.ReprValue(op))
 	}
 	settle := context.WithoutCancel(ctx)
-	if _, err := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET undone_error = ? WHERE id = ?", proposals.InFlightText, id); err != nil {
+	held, err := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET undone_error = ?, undo_started_at = ? WHERE id = ? AND undone_ts IS NULL AND NOT "+
+		mailops.BlockingTextSQL("undone_error"), proposals.InFlightText, l.now(), id)
+	if err != nil {
 		return UndoResult{}, err
+	}
+	if n, err := held.RowsAffected(); err != nil {
+		return UndoResult{}, err
+	} else if n == 0 {
+		return UndoResult{}, UndoError(fmt.Sprintf("action %d has an undo in progress or a partial undo; resolve it in the mailbox before undoing again", id))
 	}
 	detail, err := undoer(safety.ApprovedWrites(ctx, fmt.Sprintf("undo-%d", id)), json.RawMessage(*plan))
 	if err != nil {
@@ -437,7 +444,7 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		if name == OpMoveBack {
 			text = mailops.UnknownText(err, text)
 		}
-		if _, uerr := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET undone_error = ? WHERE id = ?", text, id); uerr != nil {
+		if uerr := l.settleHeld(settle, id, "UPDATE auto_actions SET undone_error = ? WHERE id = ? AND undone_error = ?", text, id, proposals.InFlightText); uerr != nil {
 			return UndoResult{}, uerr
 		}
 		if ctx.Err() != nil {
@@ -445,13 +452,23 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		}
 		return UndoResult{}, UndoError(text)
 	}
-	if _, err := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET undone_ts = ?, undone_error = NULL WHERE id = ?", l.now(), id); err != nil {
-		return UndoResult{}, err
-	}
-	if kind == Correct {
-		if _, err := corrections.Clear(settle, l.DB, messageID, dest); err != nil {
-			return UndoResult{}, err
+	err = l.DB.WithTx(settle, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(settle, "UPDATE auto_actions SET undone_ts = ?, undone_error = NULL WHERE id = ? AND undone_error = ?", l.now(), id, proposals.InFlightText)
+		if err != nil {
+			return err
 		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return errSettledMeanwhile(id)
+		}
+		if kind == Correct {
+			_, err = corrections.Clear(settle, tx, messageID, dest)
+		}
+		return err
+	})
+	if err != nil {
+		return UndoResult{}, err
 	}
 	out := UndoResult{ID: id, Undone: true, Detail: detail}
 	if l.Registry != nil && l.Registry.Sync != nil {
@@ -520,4 +537,21 @@ func (l *Live) Status(ctx context.Context) (py.Dict, error) {
 		{Key: "mode", Value: mode}, {Key: "paused", Value: l.Paused()}, {Key: "golive_ts", Value: nullable(golive)},
 		{Key: "baseline", Value: baseline}, {Key: "actions", Value: counts},
 	}, nil
+}
+
+func errSettledMeanwhile(id int64) error {
+	return UndoError(fmt.Sprintf("action %d was settled by the operator while its undo ran; the recorded outcome stands", id))
+}
+
+func (l *Live) settleHeld(ctx context.Context, id int64, query string, args ...any) error {
+	res, err := l.DB.Write.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return errSettledMeanwhile(id)
+	}
+	return nil
 }

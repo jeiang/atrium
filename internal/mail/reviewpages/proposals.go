@@ -1,6 +1,7 @@
 package reviewpages
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -55,7 +56,9 @@ func (s *service) proposalsPage(w http.ResponseWriter, r *http.Request) {
 	check(err)
 	counts, err := proposals.CountsByStatus(ctx, s.deps.DB.Read)
 	check(err)
-	data := proposalListData{Proposals: proposalViews(list), Status: status, Kind: kind, Counts: counts}
+	views := proposalViews(list)
+	check(s.markBlocked(ctx, views))
+	data := proposalListData{Proposals: views, Status: status, Kind: kind, Counts: counts}
 	if web.IsPartial(r) {
 		data.Partial = true
 		s.fragment(w, r, http.StatusOK, "_proposal_list.gohtml", data, nil)
@@ -71,7 +74,9 @@ func (s *service) card(w http.ResponseWriter, r *http.Request, id int64, notice 
 		s.fail(w, r, http.StatusNotFound, "unknown proposal")
 		return
 	}
-	s.fragment(w, r, http.StatusOK, "_proposal.gohtml", proposalCardData{Proposal: proposalView(found), PendingOOB: true}, notice)
+	view := []ProposalView{proposalView(found)}
+	check(s.markBlocked(r.Context(), view))
+	s.fragment(w, r, http.StatusOK, "_proposal.gohtml", proposalCardData{Proposal: view[0], PendingOOB: true}, notice)
 }
 
 func picked(form url.Values, index int, messages any) ([]any, error) {
@@ -228,4 +233,45 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.card(w, r, id, toast("error", "Undo did not finish", failed))
+}
+
+func (s *service) markBlocked(ctx context.Context, views []ProposalView) error {
+	for i := range views {
+		if views[i].Status != proposals.Failed && views[i].Status != proposals.Applied {
+			continue
+		}
+		blocked, undo, err := proposals.Blocked(ctx, s.deps.DB.Read, views[i].ID)
+		if err != nil {
+			return err
+		}
+		views[i].Blocked, views[i].BlockedUndo = blocked, undo
+	}
+	return nil
+}
+
+func resolvedToast(outcome string) *tpl.Toast {
+	const untouched = " atrium did not touch the mailbox."
+	switch outcome {
+	case proposals.OutcomeUndone:
+		return toast("success", "Undo recorded as done", "You checked that the messages are back."+untouched)
+	case proposals.OutcomeNotUndone:
+		return toast("success", "Undo recorded as not done", "You checked that the messages were not moved back, so the undo can be tried again."+untouched)
+	}
+	return toast("success", "Marked as checked", "The blocked write is recorded as checked by you."+untouched)
+}
+
+func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "proposal_id")
+	if !ok {
+		return
+	}
+	outcome, _ := web.FormField(web.FormValues(r), "outcome")
+	_, err := s.pipeline.Resolve(detached(r), id, outcome, proposals.Resolver{Actor: "operator", Source: "ui"})
+	var refused proposals.ProposalError
+	if errors.As(err, &refused) {
+		s.card(w, r, id, toast("error", "Not settled", err.Error()))
+		return
+	}
+	check(err)
+	s.card(w, r, id, resolvedToast(outcome))
 }

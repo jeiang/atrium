@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/backlog"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/run"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -32,6 +33,11 @@ func (o Options) LiveCommand() *cli.Command {
 			limit := a.Int("limit", 20, cli.Opt{})
 			kind := a.String("kind", "", cli.Opt{Choices: live.Kinds[:]})
 			return func(x *Exec) error { return listActions(x, *limit, *kind) }
+		}),
+		o.leaf("resolve", func(a *cli.Args) body {
+			id := a.IntArg("id", cli.Opt{})
+			outcome := a.String("outcome", "", cli.Opt{Choices: []string{proposals.OutcomeUndone, proposals.OutcomeNotUndone}, Required: true, Help: "what the mailbox shows for the blocked undo"})
+			return func(x *Exec) error { return resolveAction(x, int64(*id), *outcome) }
 		}),
 		o.leaf("undo", func(a *cli.Args) body {
 			id := a.IntArg("id", cli.Opt{})
@@ -139,6 +145,19 @@ func undoAction(x *Exec, id int64) error {
 		{Key: "id", Value: result.ID}, {Key: "undone", Value: result.Undone}, {Key: "detail", Value: result.Detail},
 		{Key: "sync_error", Value: nullable(result.SyncError)},
 	})
+	return nil
+}
+
+func resolveAction(x *Exec, id int64, outcome string) error {
+	result, err := x.Live().Resolve(x.Ctx, id, outcome, operator)
+	if err != nil {
+		var undoErr live.UndoError
+		if errors.As(err, &undoErr) {
+			return failure(cli.ExitError, err)
+		}
+		return err
+	}
+	x.JSON(py.Dict{{Key: "id", Value: result.ID}, {Key: "outcome", Value: result.Outcome}})
 	return nil
 }
 

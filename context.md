@@ -42,7 +42,11 @@ not claims about the running application.
   a row to the append-only `settings_audit` table (old and new value, or
   only `changed` for secrets; actor and source), listed read-only in
   `/activity`. Known secret values are scrubbed from log output and
-  `agent_writes` snapshots.
+  `agent_writes` snapshots. An operator can settle a blocked unknown, partial
+  or in-flight mail write or undo after checking the mailbox
+  (`atrium proposals resolve`, `atrium live resolve`, or the web buttons); the
+  action touches no mailbox and appends actor, source, outcome and the prior
+  error to the append-only `write_resolutions` table.
 - Modules are toggled at runtime, all compiled in. Core (settings, secrets,
   `db`, `serve`, the About, review and activity pages) is always on; mail,
   calendar, Notion, money, media, assistant, notifications and Grafana each

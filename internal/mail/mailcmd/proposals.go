@@ -1,6 +1,8 @@
 package mailcmd
 
 import (
+	"errors"
+
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
@@ -46,6 +48,26 @@ func (o Options) ProposalsCommand() *cli.Command {
 				return nil
 			}
 		}),
+		o.leaf("resolve", func(a *cli.Args) body {
+			id := a.IntArg("id", cli.Opt{})
+			outcome := a.String("outcome", "", cli.Opt{Choices: []string{proposals.OutcomeUndone, proposals.OutcomeNotUndone}, Help: "what the mailbox shows for a blocked undo"})
+			return func(x *Exec) error {
+				resolved, err := x.Pipeline().Resolve(x.Ctx, int64(*id), *outcome, operator)
+				var refused proposals.ProposalError
+				if errors.As(err, &refused) {
+					return failure(cli.ExitError, err)
+				}
+				if err != nil {
+					return err
+				}
+				settled := make([]any, len(resolved.Settled))
+				for i, n := range resolved.Settled {
+					settled[i] = n
+				}
+				x.JSON(py.Dict{{Key: "id", Value: resolved.ID}, {Key: "settled", Value: settled}})
+				return nil
+			}
+		}),
 		o.leaf("undo", func(a *cli.Args) body {
 			id := a.IntArg("id", cli.Opt{})
 			return func(x *Exec) error {
@@ -59,6 +81,8 @@ func (o Options) ProposalsCommand() *cli.Command {
 		}),
 	)
 }
+
+var operator = proposals.Resolver{Actor: "operator", Source: "cli"}
 
 func (x *Exec) Pipeline() *proposals.Pipeline {
 	return &proposals.Pipeline{DB: x.DB, Registry: x.Registry(), Now: x.opts.Now}

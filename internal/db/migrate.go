@@ -22,6 +22,7 @@ var migrations = []migration{
 	{3, secretsTable},
 	{4, settingsAudit},
 	{5, keyHistory},
+	{6, writeResolutions},
 }
 
 type FutureSchemaError struct {
@@ -352,4 +353,26 @@ const KeyHistoryDDL = "CREATE TABLE IF NOT EXISTS db_key_history (" +
 func keyHistory(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, KeyHistoryDDL)
 	return err
+}
+
+func writeResolutions(ctx context.Context, tx *sql.Tx) error {
+	if _, err := addColumn(ctx, tx, "auto_actions", column{"undo_started_at", "REAL"}); err != nil {
+		return err
+	}
+	for _, stmt := range []string{
+		"CREATE TABLE IF NOT EXISTS write_resolutions (" +
+			"id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, actor TEXT NOT NULL, " +
+			"source TEXT NOT NULL CHECK (source IN ('cli', 'ui')), " +
+			"kind TEXT NOT NULL CHECK (kind IN ('proposal_action', 'auto_undo')), " +
+			"row_id INTEGER NOT NULL, proposal_id INTEGER, outcome TEXT NOT NULL, prior_error TEXT NOT NULL)",
+		"CREATE TRIGGER IF NOT EXISTS write_resolutions_no_update BEFORE UPDATE ON write_resolutions " +
+			"BEGIN SELECT RAISE(ABORT, 'write_resolutions is append-only'); END",
+		"CREATE TRIGGER IF NOT EXISTS write_resolutions_no_delete BEFORE DELETE ON write_resolutions " +
+			"BEGIN SELECT RAISE(ABORT, 'write_resolutions is append-only'); END",
+	} {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }

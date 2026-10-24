@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/live"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -229,6 +230,37 @@ func (s *service) undoMail(w http.ResponseWriter, r *http.Request) {
 	}
 	found, err := live.Get(ctx, s.deps.DB.Write, id)
 	check(err)
+	s.undone(w, r, mailEntry(*found), notice)
+}
+
+func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "action_id")
+	if !ok {
+		return
+	}
+	ctx := detached(r)
+	outcome, _ := web.FormField(web.FormValues(r), "outcome")
+	var notice *tpl.Toast
+	_, err := s.live.Resolve(ctx, id, outcome, proposals.Resolver{Actor: "operator", Source: "ui"})
+	var refused live.UndoError
+	switch {
+	case errors.As(err, &refused):
+		if !web.IsPartial(r) {
+			s.fail(w, r, http.StatusConflict, err.Error())
+			return
+		}
+		notice = toast("error", "Not settled", err.Error())
+	case err != nil:
+		panic(err)
+	default:
+		notice = resolvedToast(outcome)
+	}
+	found, err := live.Get(ctx, s.deps.DB.Write, id)
+	check(err)
+	if found == nil {
+		s.fail(w, r, http.StatusNotFound, "unknown action")
+		return
+	}
 	s.undone(w, r, mailEntry(*found), notice)
 }
 
