@@ -106,6 +106,10 @@ external services, reverse proxy, persistence, and backups.
 - Never edit or renumber a shipped database migration. New migrations are
   additive by default. Row rewrites require explicit approval and validation
   on a database copy. Refuse unknown future schema versions before writes.
+  `initSchema` in `internal/db` is migration 1 and never runs on an
+  existing database: every schema change is a new numbered migration in
+  `internal/db/migrate.go`, with an e2e that migrates a copy of the golden
+  Phase A database.
 - A binary downgrade can require restoring the pre-migration database,
   losing later writes. Do not imply that changing the binary reverses data.
 - Unit names, environment variable names, and `atrium-run` are host-facing
