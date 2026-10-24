@@ -244,9 +244,36 @@ func SettleAction(ctx context.Context, x Execer, id int64, action, undo any, ok 
 	if undo != nil {
 		plan = py.JSONDumps(undo)
 	}
-	_, err := x.ExecContext(context.WithoutCancel(ctx), "UPDATE proposal_actions SET ts = ?, action = ?, undo = ?, ok = ?, error = ? WHERE id = ?",
-		ts, py.JSONDumps(action), plan, ok, errText, id)
-	return err
+	res, err := x.ExecContext(context.WithoutCancel(ctx), "UPDATE proposal_actions SET ts = ?, action = ?, undo = ?, ok = ?, error = ? WHERE id = ? AND ok = 0 AND error = ?",
+		ts, py.JSONDumps(action), plan, ok, errText, id, InFlightText)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return ErrSettledMeanwhile
+	}
+	return nil
+}
+
+func (p *Pipeline) beginUndo(ctx context.Context, proposalID, of int64, action any) (int64, error) {
+	var held int64
+	err := p.DB.WithTx(context.WithoutCancel(ctx), func(tx *sql.Tx) error {
+		var open bool
+		if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = ? AND json_extract(a.action, '$.op') IS ? "+
+			"AND json_extract(a.action, '$.of') IS ? AND (a.ok = 1 OR (a.ok = 0 AND "+mailops.BlockingTextSQL("a.error")+")))",
+			proposalID, UndoOp, of).Scan(&open); err != nil {
+			return err
+		}
+		if open {
+			return ProposalError(fmt.Sprintf("action %d was already undone or has an undo that is in progress or unresolved; check the mailbox before undoing again", of))
+		}
+		var err error
+		held, err = BeginAction(ctx, tx, proposalID, action, p.now())
+		return err
+	})
+	return held, err
 }
 
 func DropAction(ctx context.Context, x Execer, id int64) error {
@@ -583,7 +610,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 			return UndoResult{}, ProposalError("no undo handler for " + py.ReprValue(op))
 		}
 		undoAction := py.Dict{{Key: "op", Value: UndoOp}, {Key: "of", Value: entry.ID}}
-		held, err := BeginAction(ctx, p.DB.Write, id, undoAction, p.now())
+		held, err := p.beginUndo(ctx, id, entry.ID, undoAction)
 		if err != nil {
 			return UndoResult{}, err
 		}

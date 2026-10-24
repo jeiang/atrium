@@ -36,11 +36,12 @@ func RecordResolution(ctx context.Context, x Execer, who Resolver, ts float64, k
 	return err
 }
 
-func Blocked(ctx context.Context, q Querier, id int64) (bool, error) {
-	var blocked bool
-	err := q.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = ? AND a.ok = 0 AND "+
-		"(instr(a.error, '"+mailops.UnknownPrefix+"') > 0 OR instr(a.error, '"+mailops.PartialPrefix+"') > 0))", id).Scan(&blocked)
-	return blocked, err
+const ErrSettledMeanwhile = ProposalError("the write was settled by the operator while it ran; the recorded outcome stands")
+
+func Blocked(ctx context.Context, q Querier, id int64) (blocked, undo bool, err error) {
+	err = q.QueryRowContext(ctx, "SELECT COUNT(*) > 0, COALESCE(MAX(json_extract(a.action, '$.op') IS 'undo'), 0) FROM proposal_actions a "+
+		"WHERE a.proposal_id = ? AND a.ok = 0 AND "+mailops.BlockingTextSQL("a.error"), id).Scan(&blocked, &undo)
+	return blocked, undo, err
 }
 
 type Resolved struct {

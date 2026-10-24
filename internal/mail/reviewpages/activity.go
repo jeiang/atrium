@@ -253,7 +253,7 @@ func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		panic(err)
 	default:
-		notice = toast("success", "Settled", "The blocked undo is recorded as checked by you. atrium did not touch the mailbox.")
+		notice = resolvedToast(outcome)
 	}
 	found, err := live.Get(ctx, s.deps.DB.Write, id)
 	check(err)

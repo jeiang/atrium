@@ -8,18 +8,19 @@ import (
 )
 
 type ProposalView struct {
-	ID        int64    `json:"id"`
-	Kind      string   `json:"kind"`
-	Status    string   `json:"status"`
-	Account   *string  `json:"account"`
-	Title     string   `json:"title"`
-	CreatedTS float64  `json:"created_ts"`
-	DecidedTS *float64 `json:"decided_ts"`
-	AppliedTS *float64 `json:"applied_ts"`
-	Undoable  bool     `json:"undoable"`
-	Blocked   bool     `json:"blocked"`
-	Preview   any      `json:"preview"`
-	Result    any      `json:"result"`
+	ID          int64    `json:"id"`
+	Kind        string   `json:"kind"`
+	Status      string   `json:"status"`
+	Account     *string  `json:"account"`
+	Title       string   `json:"title"`
+	CreatedTS   float64  `json:"created_ts"`
+	DecidedTS   *float64 `json:"decided_ts"`
+	AppliedTS   *float64 `json:"applied_ts"`
+	Undoable    bool     `json:"undoable"`
+	Blocked     bool     `json:"blocked"`
+	BlockedUndo bool     `json:"blocked_undo"`
+	Preview     any      `json:"preview"`
+	Result      any      `json:"result"`
 }
 
 const kindWikiPlan = "notion_wiki_plan"

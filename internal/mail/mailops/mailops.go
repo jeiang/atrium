@@ -48,6 +48,10 @@ const (
 	ReasonUnresolved  = "unresolved"
 )
 
+func BlockingTextSQL(column string) string {
+	return "(COALESCE(instr(" + column + ", '" + UnknownPrefix + "'), 0) > 0 OR COALESCE(instr(" + column + ", '" + PartialPrefix + "'), 0) > 0)"
+}
+
 func BlockingActionSQL(alias string) string {
 	return alias + ".ok = 0 AND json_extract(" + alias + ".action, '$.op') IS NOT 'undo' AND (instr(" + alias + ".error, '" +
 		UnknownPrefix + "') > 0 OR instr(" + alias + ".error, '" + PartialPrefix + "') > 0)"

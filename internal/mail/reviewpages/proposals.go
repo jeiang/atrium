@@ -240,13 +240,24 @@ func (s *service) markBlocked(ctx context.Context, views []ProposalView) error {
 		if views[i].Status != proposals.Failed && views[i].Status != proposals.Applied {
 			continue
 		}
-		blocked, err := proposals.Blocked(ctx, s.deps.DB.Read, views[i].ID)
+		blocked, undo, err := proposals.Blocked(ctx, s.deps.DB.Read, views[i].ID)
 		if err != nil {
 			return err
 		}
-		views[i].Blocked = blocked
+		views[i].Blocked, views[i].BlockedUndo = blocked, undo
 	}
 	return nil
+}
+
+func resolvedToast(outcome string) *tpl.Toast {
+	const untouched = " atrium did not touch the mailbox."
+	switch outcome {
+	case proposals.OutcomeUndone:
+		return toast("success", "Undo recorded as done", "You checked that the messages are back."+untouched)
+	case proposals.OutcomeNotUndone:
+		return toast("success", "Undo recorded as not done", "You checked that the messages were not moved back, so the undo can be tried again."+untouched)
+	}
+	return toast("success", "Marked as checked", "The blocked write is recorded as checked by you."+untouched)
 }
 
 func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
@@ -262,5 +273,5 @@ func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	check(err)
-	s.card(w, r, id, toast("success", "Settled", "The blocked write is recorded as checked by you. atrium did not touch the mailbox."))
+	s.card(w, r, id, resolvedToast(outcome))
 }

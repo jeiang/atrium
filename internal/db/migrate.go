@@ -356,6 +356,9 @@ func keyHistory(ctx context.Context, tx *sql.Tx) error {
 }
 
 func writeResolutions(ctx context.Context, tx *sql.Tx) error {
+	if _, err := addColumn(ctx, tx, "auto_actions", column{"undo_started_at", "REAL"}); err != nil {
+		return err
+	}
 	for _, stmt := range []string{
 		"CREATE TABLE IF NOT EXISTS write_resolutions (" +
 			"id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, actor TEXT NOT NULL, " +

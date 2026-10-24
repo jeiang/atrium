@@ -1,0 +1,11 @@
+{{define "resolve_controls"}}<div role="group" aria-label="Record what you found in the mailbox" class="flex flex-wrap gap-2">
+  {{if .undo}}
+  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="{{.path}}" hx-vals='{"outcome": "undone"}' hx-target="{{.target}}" hx-swap="outerHTML" hx-disabled-elt="this"
+          hx-confirm="You checked the mailbox and the messages are back where they were?">Messages are back</button>
+  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="{{.path}}" hx-vals='{"outcome": "not-undone"}' hx-target="{{.target}}" hx-swap="outerHTML" hx-disabled-elt="this"
+          hx-confirm="You checked the mailbox and the messages were not moved back?">Not moved back</button>
+  {{else}}
+  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="{{.path}}" hx-target="{{.target}}" hx-swap="outerHTML" hx-disabled-elt="this"
+          hx-confirm="You checked the mailbox and want to clear the blocked write?">Mark checked</button>
+  {{end}}
+</div>{{end}}
