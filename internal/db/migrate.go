@@ -23,6 +23,7 @@ var migrations = []migration{
 	{4, settingsAudit},
 	{5, keyHistory},
 	{6, writeResolutions},
+	{7, threadModel},
 }
 
 type FutureSchemaError struct {
@@ -375,4 +376,9 @@ func writeResolutions(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func threadModel(ctx context.Context, tx *sql.Tx) error {
+	_, err := addColumn(ctx, tx, "threads", column{"model", "TEXT NOT NULL DEFAULT 'claude-haiku-5-5'"})
+	return err
 }
