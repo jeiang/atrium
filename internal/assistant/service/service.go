@@ -172,7 +172,7 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 			return 0, err
 		}
 	}
-	runID, err := journal.StartRun(ctx, s.DB.Write, threadID, o.kind(), loop.Model, thread.Effort, now, o.ParentRunID, new(loop.Owner))
+	runID, err := journal.StartRun(ctx, s.DB.Write, threadID, o.kind(), loop.Model, thread.Effort, now, o.ParentRunID, new(journal.NewOwner()))
 	if err != nil {
 		return 0, err
 	}
@@ -201,7 +201,7 @@ func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64)
 	if err := progress.ClearThread(ctx, s.DB.Write, threadID); err != nil {
 		return 0, err
 	}
-	return journal.StartRun(ctx, s.DB.Write, threadID, threads.Chat, loop.Model, thread.Effort, now, nil, new(loop.Owner))
+	return journal.StartRun(ctx, s.DB.Write, threadID, threads.Chat, loop.Model, thread.Effort, now, nil, new(journal.NewOwner()))
 }
 
 func merged(stored, override journal.Limits) journal.Limits {
@@ -436,7 +436,7 @@ func NeedsOperator(ctx context.Context, q db.Querier, run journal.Run) (bool, er
 }
 
 func (s *Service) claim(ctx context.Context, runID int64) error {
-	ok, err := journal.ClaimResume(ctx, s.DB.Write, runID, loop.Owner, s.now())
+	ok, err := journal.ClaimResume(ctx, s.DB.Write, runID, journal.NewOwner(), s.now())
 	if err != nil {
 		return err
 	}
@@ -488,7 +488,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, background bool) ([]Res
 			outcome = append(outcome, Resumed{run.ID, AwaitingOperator})
 			continue
 		}
-		ok, err := journal.ClaimResume(ctx, s.DB.Write, run.ID, loop.Owner, s.now())
+		ok, err := journal.ClaimResume(ctx, s.DB.Write, run.ID, journal.NewOwner(), s.now())
 		if err != nil {
 			return nil, err
 		}
