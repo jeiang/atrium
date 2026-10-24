@@ -152,7 +152,15 @@ func archiveKey(h Header, configured db.Key, keyFile string) (db.Key, error) {
 	return key, nil
 }
 
-func checkStaged(ctx context.Context, staged string, key db.Key) (rep report, err error) {
+func checkStaged(ctx context.Context, staged string, key db.Key) (report, error) {
+	rep, err := inspectStaged(ctx, staged, key)
+	if err != nil {
+		return rep, err
+	}
+	return rep, migrateStaged(ctx, staged, key, &rep)
+}
+
+func inspectStaged(ctx context.Context, staged string, key db.Key) (rep report, err error) {
 	c, err := db.OpenFile(staged, key)
 	if err != nil {
 		return rep, err
@@ -178,7 +186,7 @@ func checkStaged(ctx context.Context, staged string, key db.Key) (rep report, er
 			rep.knn = append(rep.knn, t.Name)
 		}
 	}
-	return rep, migrateStaged(ctx, staged, key, &rep)
+	return rep, nil
 }
 
 func migrateStaged(ctx context.Context, staged string, key db.Key, rep *report) (err error) {
