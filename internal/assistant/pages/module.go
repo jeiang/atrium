@@ -80,9 +80,19 @@ func Module(o Options) web.Module {
 		svc := service.New(base, d.DB, d.Cfg, d.Env, run)
 		svc.Client = o.Client
 		svc.Now = o.Now
+		checked := make(chan struct{})
+		if o.Client == nil {
+			go func() {
+				defer close(checked)
+				svc.CheckCatalog(base)
+			}()
+		} else {
+			close(checked)
+		}
 		shutdown := func() {
 			svc.Close()
 			cancel()
+			<-checked
 		}
 		if d.OnClose != nil {
 			d.OnClose(shutdown)

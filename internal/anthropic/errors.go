@@ -44,6 +44,7 @@ type APIError struct {
 	StatusCode int
 	Type       string
 	Message    string
+	RetryAfter string
 	err        error
 }
 
@@ -55,6 +56,10 @@ func (e *APIError) PyClass() string { return e.Class }
 
 func (e *APIError) RateLimited() bool {
 	return e.StatusCode == http.StatusTooManyRequests || e.Type == "rate_limit_error"
+}
+
+func (e *APIError) SpendCapped() bool {
+	return e.StatusCode == http.StatusTooManyRequests && e.RetryAfter == ""
 }
 
 func (e *APIError) Overloaded() bool { return e.StatusCode == 529 || e.Type == "overloaded_error" }
@@ -109,6 +114,9 @@ func statusError(apiErr *sdk.Error, err error) *APIError {
 	status := apiErr.StatusCode
 	text := strings.TrimSpace(apiErr.RawJSON())
 	out := &APIError{Class: statusClass(status), StatusCode: status, Type: string(apiErr.Type()), err: err}
+	if apiErr.Response != nil {
+		out.RetryAfter = strings.TrimSpace(apiErr.Response.Header.Get("Retry-After"))
+	}
 	repr, ok := pyRepr([]byte(text))
 	switch {
 	case ok && status < http.StatusBadRequest:

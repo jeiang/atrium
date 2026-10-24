@@ -10,9 +10,8 @@ import (
 )
 
 const (
-	CacheTTLKey   = "cache_ttl_chat"
-	MaxStepsKey   = "max_steps"
-	MaxRunCostKey = "max_run_cost_usd"
+	CacheTTLKey = "cache_ttl_chat"
+	MaxStepsKey = "max_steps"
 )
 
 func init() {
@@ -25,10 +24,6 @@ func init() {
 		settings.Def{
 			Key: MaxStepsKey, Module: "assistant", Type: settings.Int, Default: "24",
 			Check: settings.Between(1, 200), Class: settings.Advanced, Scopes: instance,
-		},
-		settings.Def{
-			Key: MaxRunCostKey, Module: "assistant", Type: settings.Float, Default: "2",
-			Check: settings.Above(0), Class: settings.Cap, Scopes: instance,
 		},
 	)
 }
@@ -45,14 +40,6 @@ func maxSteps(ctx context.Context, q db.Querier) (int, error) {
 	}
 	n, err := found.Int()
 	return int(n), err
-}
-
-func maxRunCost(ctx context.Context, q db.Querier) (float64, error) {
-	found, err := settings.Default.Resolve(ctx, q, MaxRunCostKey, 0)
-	if err != nil {
-		return 0, err
-	}
-	return found.Float()
 }
 
 func readWebSearchMaxUses(ctx context.Context, q db.Querier) (int, error) {

@@ -16,7 +16,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -124,11 +123,8 @@ func archivedProject(project *projects.Project, verb string) (string, bool) {
 	return fmt.Sprintf("“%s” is archived. Restore it to %s.", project.Name, verb), true
 }
 
-func (p *pages) remote() files.RemoteDeleter {
-	if p.svc.Client != nil {
-		return p.svc.Client
-	}
-	if client, err := anthropic.New(p.deps.Env); err == nil {
+func (p *pages) remote(ctx context.Context) files.RemoteDeleter {
+	if client, err := p.svc.ResolveClient(ctx); err == nil {
 		return client
 	}
 	return nil
@@ -334,7 +330,8 @@ func (p *pages) projectFileDelete(w http.ResponseWriter, r *http.Request) {
 		p.refuseProjectFiles(w, r, projectID, problem)
 		return
 	}
-	_, err := files.DeleteOne(detached(r), p.deps.DB.Write, p.remote(), found.ID)
+	ctx := detached(r)
+	_, err := files.DeleteOne(ctx, p.deps.DB.Write, p.remote(ctx), found.ID)
 	check(err)
 	p.projectFiles(w, r, projectID, http.StatusOK, nil)
 }

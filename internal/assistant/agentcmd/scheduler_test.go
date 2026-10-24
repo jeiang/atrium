@@ -71,6 +71,7 @@ func TestResumedRunSupersedesTheOriginalLoop(t *testing.T) {
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("call-1", "count", nil)),
 	)
+	anthropictest.PinKey(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	env := config.Map(map[string]string{

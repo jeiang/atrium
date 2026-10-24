@@ -205,6 +205,9 @@ func (w *Worker) settle(ctx context.Context, claim scheduler.Claim, runID int64,
 	}
 	o := scheduler.Outcome{Status: scheduler.StatusOK, ThreadID: threadID, Tokens: tokens, Cost: cost}
 	switch {
+	case run.State != journal.Done && run.Error != nil && *run.Error == budget.SpendCapText:
+		o.Status = scheduler.StatusSkippedBudget
+		o.Error = run.Error
 	case run.State != journal.Done:
 		o.Status = scheduler.StatusError
 		text := run.State

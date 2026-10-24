@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/loop"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
@@ -25,6 +27,8 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/secrets"
 )
 
 var log = logx.Logger("atrium.agent.service")
@@ -67,6 +71,40 @@ var ErrClosed = errors.New("service: closed")
 
 func New(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, runner *loop.Runner) *Service {
 	return &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: ctx, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}}
+}
+
+func (s *Service) ResolveClient(ctx context.Context) (*anthropic.Client, error) {
+	if s.Client != nil {
+		return s.Client, nil
+	}
+	key, err := secrets.Credential(ctx, s.DB.Read, secrets.AnthropicAPIKey)
+	if err != nil {
+		return nil, err
+	}
+	return anthropic.New(py.Strip(key), s.Env)
+}
+
+const catalogCheckTimeout = 30 * time.Second
+
+func (s *Service) CheckCatalog(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, catalogCheckTimeout)
+	defer cancel()
+	client, err := s.ResolveClient(ctx)
+	if err != nil {
+		return
+	}
+	offered, err := client.ModelIDs(ctx)
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			log.Warn("could not list models from the Anthropic Models API; the model catalog is unchecked", logx.Err, err.Error())
+		}
+		return
+	}
+	for _, id := range pricing.IDs() {
+		if !slices.Contains(offered, id) {
+			log.Warn("catalog model is not offered by the Anthropic Models API", logx.Model, id)
+		}
+	}
 }
 
 func (s *Service) Wait() {
@@ -221,20 +259,16 @@ func merged(stored, override journal.Limits) journal.Limits {
 }
 
 func (s *Service) Execute(ctx context.Context, runID int64, override journal.Limits) (*journal.Run, error) {
-	client := s.Client
-	if client == nil {
-		made, err := anthropic.New(s.Env)
-		var nc config.NotConfigured
-		if errors.As(err, &nc) {
-			if err := journal.FinishRun(ctx, s.DB.Write, runID, journal.Failed, s.now(), new(nc.Error())); err != nil {
-				return nil, err
-			}
-			return journal.GetRun(ctx, s.DB.Read, runID)
-		}
-		if err != nil {
+	client, err := s.ResolveClient(ctx)
+	var nc config.NotConfigured
+	if errors.As(err, &nc) {
+		if err := journal.FinishRun(ctx, s.DB.Write, runID, journal.Failed, s.now(), new(nc.Error())); err != nil {
 			return nil, err
 		}
-		client = made
+		return journal.GetRun(ctx, s.DB.Read, runID)
+	}
+	if err != nil {
+		return nil, err
 	}
 	stored, err := journal.LimitsOf(ctx, s.DB.Read, runID)
 	if err != nil {
@@ -396,9 +430,7 @@ func (s *Service) DeleteThread(ctx context.Context, threadID int64) error {
 		}
 	}
 	var remote files.RemoteDeleter
-	if s.Client != nil {
-		remote = s.Client
-	} else if made, err := anthropic.New(s.Env); err == nil {
+	if made, err := s.ResolveClient(ctx); err == nil {
 		remote = made
 	} else if !errors.As(err, new(config.NotConfigured)) {
 		return err

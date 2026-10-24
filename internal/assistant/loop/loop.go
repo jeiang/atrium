@@ -83,6 +83,7 @@ type state struct {
 	env     config.Env
 	steps   int
 	maxCost float64
+	ttl     string
 	savings int64
 
 	callsKey string
@@ -107,6 +108,10 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 	stopBeat := s.heartbeat(ctx)
 	err = s.body(ctx)
 	stopBeat()
+	var api *anthropic.APIError
+	if errors.As(err, &api) && api.SpendCapped() {
+		err = budget.SpendCap()
+	}
 	switch {
 	case err == nil:
 		final = journal.Done
@@ -174,10 +179,6 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if err != nil {
 		return nil, err
 	}
-	maxCost, err := maxRunCost(ctx, d.Read)
-	if err != nil {
-		return nil, err
-	}
 	tuning, err := actx.ReadTuning(ctx, d.Read)
 	if err != nil {
 		return nil, err
@@ -187,6 +188,10 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		return nil, err
 	}
 	model, err := pricing.Lookup(found.Model)
+	if err != nil {
+		return nil, err
+	}
+	maxCost, err := budget.RunCap(ctx, d.Read, model.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +219,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
-		writer: writer, env: env, steps: steps, maxCost: maxCost, savings: int64(tuning.CommitSavings),
+		writer: writer, env: env, steps: steps, maxCost: maxCost, ttl: ttl, savings: int64(tuning.CommitSavings),
 		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning},
 	}
 	s.x.guard = s.renew
@@ -484,6 +489,14 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	}
 	if size > s.limits.Preflight {
 		log.Info(fmt.Sprintf("run %d: next request ~%d tokens, compacting on the client", s.run.ID, size), logx.RunID, s.run.ID)
+		summaryIn := min(size, s.limits.Hard-int64(s.limits.Tuning.SummaryMaxTokens))
+		summary, err := budget.UncachedRequestUSD(s.run.Model, summaryIn, int64(s.limits.Tuning.SummaryMaxTokens))
+		if err != nil {
+			return false, nil, err
+		}
+		if err := s.reserveUSD(ctx, summary, fmt.Sprintf("the summary request is about %d tokens, up to $%s uncached", summaryIn, py.FormatFixed(summary, 2))); err != nil {
+			return false, nil, err
+		}
 		if _, err := actx.ClientCompact(ctx, s.d.Write, s.client, s.run.Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now(), s.limits.Tuning); err != nil {
 			return false, nil, err
 		}
@@ -497,6 +510,9 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	}
 	if size > s.limits.Hard {
 		return false, nil, RunLimit(fmt.Sprintf("next request would be about %d tokens, over the %d limit", size, s.limits.Hard))
+	}
+	if err := s.reserve(ctx, size); err != nil {
+		return false, nil, err
 	}
 	sent, err := withProjectFiles(ctx, s.d.Read, s.thread, active)
 	if err != nil {
@@ -561,6 +577,26 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	}
 	done, err := journal.FinishUnlessQueued(ctx, s.d, s.run.ID, s.thread.ID, journal.Done, s.now())
 	return done, next, err
+}
+
+func (s *state) reserve(ctx context.Context, size int64) error {
+	cold, err := budget.ColdRequestUSD(s.run.Model, size, s.ttl)
+	if err != nil {
+		return err
+	}
+	return s.reserveUSD(ctx, cold, fmt.Sprintf("the next request is about %d tokens, up to $%s to write to the cache cold", size, py.FormatFixed(cold, 2)))
+}
+
+func (s *state) reserveUSD(ctx context.Context, next float64, what string) error {
+	spent, err := usage.RunCost(ctx, s.d.Read, s.run.ID)
+	if err != nil {
+		return err
+	}
+	if spent+next > s.maxCost {
+		return RunLimit(fmt.Sprintf("run cost cap: %s, with $%s of $%s already spent; raise %s to continue",
+			what, py.FormatFixed(spent, 2), py.FormatFixed(s.maxCost, 2), budget.RunCapKey(s.run.Model)))
+	}
+	return nil
 }
 
 func (s *state) answer(ctx context.Context, uses []ToolUse, next **anchor) error {

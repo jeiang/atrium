@@ -15,6 +15,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
 | `anthropic_admin_key` | string | none | secret | `ATRIUM_ANTHROPIC_ANTHROPIC_ADMIN_KEY` |
+| `anthropic_api_key` | string | none | secret | `ATRIUM_ANTHROPIC_ANTHROPIC_API_KEY` |
 
 ## assistant
 
@@ -111,9 +112,11 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `default_context_limit` | enum (90000, 200000, 500000, 1000000) | `90000` | ui | `ATRIUM_ASSISTANT_DEFAULT_CONTEXT_LIMIT` |
 | `default_effort` | enum (low, medium, high, xhigh, max) | `medium` | ui | `ATRIUM_ASSISTANT_DEFAULT_EFFORT` |
 | `default_model` | enum (claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5) | `claude-haiku-5-5` | ui | `ATRIUM_ASSISTANT_DEFAULT_MODEL` |
-| `max_run_cost_usd` | float | `2` | cap | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD` |
+| `max_run_cost_usd_haiku_5_5` | float | `2` | cap | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_HAIKU_5_5` |
+| `max_run_cost_usd_opus_5_5` | float | `10` | cap | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_OPUS_5_5` |
+| `max_run_cost_usd_sonnet_5_5` | float | `6` | cap | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_SONNET_5_5` |
 | `max_steps` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS` |
-| `monthly_budget_usd` | float | `75` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
+| `monthly_budget_usd` | float | `150` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
 
 ## calendar
 

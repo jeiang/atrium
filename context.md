@@ -21,7 +21,12 @@ not claims about the running application.
   stores its model, chosen at creation (default: the `default_model`
   setting) and editable like effort and context; other run kinds use Haiku.
   A run records and sends its thread's model, usage is priced from the model
-  on each usage row, and a model outside the catalog fails closed. Mail classification and embeddings
+  on each usage row, and a model outside the catalog fails closed. The API key is a write-only secret
+  setting (the `ANTHROPIC_API_KEY` variable pins it). The monthly budget
+  defaults to $150 with scheduled runs paused at 80% and chat at 100%; each
+  model has its own run cost cap, checked against the next request written
+  cold at the thread's cache lifetime, and an Anthropic spend-cap 429 stops
+  the run as a budget stop. Mail classification and embeddings
   have separately configured model endpoints. Connected content sent to a
   hosted model leaves the host; privacy does not mean that inference is
   necessarily local.
