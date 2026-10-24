@@ -71,6 +71,6 @@ func warnOrphans(ctx context.Context, env config.Env) {
 		return
 	}
 	for _, o := range orphans {
-		log.Warn("stored setting is retired and ignored; remove it with atrium settings unset", logx.Key, o.Key, logx.Value, o.Value, logx.UseInstead, o.Replacement)
+		log.Warn("stored setting is retired and ignored; remove it with atrium settings unset", logx.SettingKey, o.Key, logx.SettingValue, o.Value, logx.UseInstead, o.Replacement)
 	}
 }
