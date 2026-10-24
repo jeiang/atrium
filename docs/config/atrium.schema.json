@@ -1080,17 +1080,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "max_steps_sub": {
-          "default": 24,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "max_steps_sub_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "monthly_budget_usd": {
           "default": 75,
           "type": [
