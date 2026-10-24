@@ -189,22 +189,38 @@ func inspectStaged(ctx context.Context, staged string, key db.Key) (rep report, 
 	return rep, nil
 }
 
-func migrateStaged(ctx context.Context, staged string, key db.Key, rep *report) (err error) {
+func migrateStaged(ctx context.Context, staged string, key db.Key, rep *report) error {
 	m, err := db.Connect(staged, db.WithKey(key))
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, m.Close()) }()
-	if err := db.Migrate(ctx, m, staged); err != nil {
-		return fmt.Errorf("migrating the restored database: %w", err)
-	}
-	if err := db.IntegrityCheck(ctx, m.Read); err != nil {
+	err = db.Migrate(ctx, m, staged)
+	if err = errors.Join(wrapMigrate(err), m.Close()); err != nil {
 		return err
 	}
-	if rep.to, err = db.SchemaVersion(ctx, m.Read); err != nil {
+	return settleStaged(ctx, staged, key, rep)
+}
+
+func wrapMigrate(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("migrating the restored database: %w", err)
+}
+
+func settleStaged(ctx context.Context, staged string, key db.Key, rep *report) (err error) {
+	c, err := db.OpenFile(staged, key)
+	if err != nil {
 		return err
 	}
-	_, err = m.Write.ExecContext(ctx, "PRAGMA journal_mode = DELETE")
+	defer func() { err = errors.Join(err, c.Close()) }()
+	if err := db.IntegrityCheck(ctx, c); err != nil {
+		return fmt.Errorf("migrated database: %w", err)
+	}
+	if rep.to, err = db.SchemaVersion(ctx, c); err != nil {
+		return err
+	}
+	_, err = c.ExecContext(ctx, "PRAGMA journal_mode = DELETE")
 	return err
 }
 
