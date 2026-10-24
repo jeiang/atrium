@@ -82,7 +82,11 @@ func withRunner(r *loop.Runner) siteOption { return func(s *site) { s.runner = r
 
 func newSite(t *testing.T, options ...siteOption) *site {
 	t.Helper()
-	d := dbtest.Schema(t)
+	return newSiteOn(t, dbtest.Schema(t), options...)
+}
+
+func newSiteOn(t *testing.T, d *db.DB, options ...siteOption) *site {
+	t.Helper()
 	dir := t.TempDir()
 	env := config.Map(map[string]string{
 		"ATRIUM_DB": filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow", "ATRIUM_CORE_TZ": zone,

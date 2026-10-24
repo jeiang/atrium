@@ -34,8 +34,7 @@ var (
 	threadFileColumns = []column{
 		{"anthropic_file_id", "TEXT"}, {"text", "TEXT"}, {"tokens", "INTEGER NOT NULL DEFAULT 0"}, {"project_id", "INTEGER"},
 	}
-	fileThreadColumns  = []column{{"code_sandbox", "INTEGER NOT NULL DEFAULT 0"}, {"container_id", "TEXT"}, {"deleted_at", "REAL"}}
-	modelThreadColumns = []column{{"model", "TEXT NOT NULL DEFAULT 'claude-haiku-5-5'"}}
+	fileThreadColumns = []column{{"code_sandbox", "INTEGER NOT NULL DEFAULT 0"}, {"container_id", "TEXT"}, {"deleted_at", "REAL"}}
 )
 
 func initSchema(ctx context.Context, q Querier) error {
@@ -81,7 +80,6 @@ func initSchema(ctx context.Context, q Querier) error {
 		func() error { return relaxOwner(ctx, q) },
 		columns(ctx, q, "thread_files", threadFileColumns),
 		columns(ctx, q, "threads", fileThreadColumns),
-		columns(ctx, q, "threads", modelThreadColumns),
 		columns(ctx, q, "thread_queue", []column{{"files_json", "TEXT"}}),
 		exec(ctx, q, "CREATE INDEX IF NOT EXISTS thread_files_project ON thread_files (project_id, id)"),
 		func() error { return refreshViews(ctx, q) },
