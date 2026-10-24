@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -16,6 +17,7 @@ import (
 )
 
 const (
+	AnthropicAPIKey   = "anthropic_api_key"
 	AnthropicAdminKey = "anthropic_admin_key"
 	OpenAIAdminKey    = "openai_admin_key"
 	ActionLinkKey     = "action_link_key"
@@ -23,6 +25,7 @@ const (
 
 func init() {
 	settings.MustRegister(
+		settings.Def{Key: AnthropicAPIKey, Module: "anthropic", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true, EnvAlias: "ANTHROPIC_API_KEY"},
 		settings.Def{Key: AnthropicAdminKey, Module: "anthropic", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
 		settings.Def{Key: OpenAIAdminKey, Module: "openai", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
 		settings.Def{Key: ActionLinkKey, Module: "action_links", Type: settings.String, Class: settings.Secret, Secret: true, Generated: true},
@@ -31,6 +34,32 @@ func init() {
 
 func init() {
 	db.OnReady(func(ctx context.Context, d *db.DB) error { return New(d, d).Load(ctx) })
+}
+
+var credentials = []string{AnthropicAPIKey}
+
+type NotCredential string
+
+func (e NotCredential) Error() string {
+	return "secrets: " + string(e) + " is write-only and has no read path"
+}
+
+func Credential(ctx context.Context, q db.Querier, name string) (string, error) {
+	if !slices.Contains(credentials, name) {
+		return "", NotCredential(name)
+	}
+	if _, pinned, err := settings.Default.Pinned(name); err != nil {
+		return "", err
+	} else if pinned {
+		found, err := settings.Default.Resolve(ctx, q, name, 0)
+		return found.Value, err
+	}
+	var value string
+	err := q.QueryRowContext(ctx, "SELECT value FROM secrets WHERE name = ?", name).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return value, err
 }
 
 type Cipher interface {

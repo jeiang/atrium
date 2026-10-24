@@ -23,6 +23,7 @@ const (
 	Command    = "COMMAND"
 	EnvName    = "ENV_NAME"
 	UseInstead = "USE_INSTEAD"
+	Model      = "MODEL"
 )
 
 const Redacted = "[redacted]"

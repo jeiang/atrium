@@ -232,7 +232,7 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		{module.Calendar, "iCloud CalDAV login or Google Calendar credentials"},
 		{module.Notion, "NOTION_TOKEN is not set"},
 		{module.Media, "media_root is not set"},
-		{module.Assistant, "ANTHROPIC_API_KEY is not set"},
+		{module.Assistant, "anthropic_api_key is not set"},
 		{module.Notifications, "ntfy_url is not set"},
 		{module.Grafana, "GRAFANA_URL and GRAFANA_VIEWER_TOKEN"},
 		{module.Grafana, "needs assistant"},

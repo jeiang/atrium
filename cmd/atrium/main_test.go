@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,7 +22,30 @@ func startServe(t *testing.T) string {
 	return startServeIn(t, t.TempDir())
 }
 
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 func startServeIn(t *testing.T, dir string) string {
+	t.Helper()
+	base, _ := startServeLogged(t, dir)
+	return base
+}
+
+func startServeLogged(t *testing.T, dir string) (string, *lockedBuffer) {
 	t.Helper()
 	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
@@ -35,9 +59,10 @@ func startServeIn(t *testing.T, dir string) string {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
+	logs := &lockedBuffer{}
 	go func() {
-		var stdout, stderr bytes.Buffer
-		done <- newApp().Run(ctx, []string{"serve", "--port", port, "--auth", "local"}, &stdout, &stderr)
+		var stdout bytes.Buffer
+		done <- newApp().Run(ctx, []string{"serve", "--port", port, "--auth", "local"}, &stdout, logs)
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -54,12 +79,12 @@ func startServeIn(t *testing.T, dir string) string {
 	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
 		if resp, err := http.Get(base + "/healthz"); err == nil {
 			_ = resp.Body.Close()
-			return base
+			return base, logs
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Fatal("serve did not start")
-	return ""
+	return "", nil
 }
 
 func fetch(t *testing.T, client *http.Client, method, url string, form url.Values) (int, string, http.Header) {

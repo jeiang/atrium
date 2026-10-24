@@ -25,6 +25,7 @@ func app(env config.Env) *cli.App {
 
 func TestRunPrintsTheRunView(t *testing.T) {
 	srv := anthropictest.New(t, anthropictest.Reply("end_turn", anthropictest.Text("hi")))
+	anthropictest.PinKey(t)
 	dir := t.TempDir()
 	env := config.Map(map[string]string{
 		"ATRIUM_DB": filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow",

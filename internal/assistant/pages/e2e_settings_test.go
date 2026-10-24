@@ -96,7 +96,7 @@ func TestAssistantSettings(t *testing.T) {
 func TestUsagePage(t *testing.T) {
 	s := newSite(t)
 	empty := status(t, s.get("/settings/usage"), http.StatusOK)
-	mustContain(t, empty, "No usage yet", "$0.00", "$75.00", "0% of $75 used; unattended runs pause at 80%, chat at 100%", "Spent this month", "0 API calls")
+	mustContain(t, empty, "No usage yet", "$0.00", "$150.00", "0% of $150 used; unattended runs pause at 80%, chat at 100%", "Spent this month", "0 API calls")
 	mustNotContain(t, empty, "Prompt tokens (all calls)")
 
 	thread := s.newThread("", 0)
@@ -104,7 +104,7 @@ func TestUsagePage(t *testing.T) {
 	s.exec("INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) "+
 		"VALUES (?, ?, 1, 'chat', 'm', 'medium', 100, 0, 0, 900, 50, 2, '<=100K', 80)", s.clock, thread)
 	page := status(t, s.get("/settings/usage"), http.StatusOK)
-	mustContain(t, page, "$80.00", "$0.00", "107% of $75 used", "1 API calls", ">90%</span>", "900 read · 0 written · 100 uncached", "50 output tokens · 2 web searches", "Requests over 100K tokens",
+	mustContain(t, page, "$80.00", "$0.00", "53% of $150 used", "1 API calls", ">90%</span>", "900 read · 0 written · 100 uncached", "50 output tokens · 2 web searches", "Requests over 100K tokens",
 		"$80.000", fmt.Sprintf(`href="/chat/%d"`, thread), "Untitled thread", "Prompt tokens (all calls)", "Largest request")
 	mustNotContain(t, page, "No usage yet")
 }

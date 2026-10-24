@@ -13,6 +13,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const APIKey = "fake-anthropic-key"
@@ -24,6 +25,7 @@ type Response struct {
 	ContextManagement json.RawMessage   `json:"context_management"`
 	Status            int               `json:"-"`
 	ErrorBody         json.RawMessage   `json:"-"`
+	Header            http.Header       `json:"-"`
 }
 
 type Request struct {
@@ -48,6 +50,7 @@ type Server struct {
 	t                testing.TB
 	OnRequest        func(Request)
 	FileDeleteStatus int
+	Models           []string
 
 	mu       sync.Mutex
 	script   []Response
@@ -85,8 +88,18 @@ func (s *Server) Env() config.Env {
 	return config.Map(map[string]string{"ANTHROPIC_API_KEY": APIKey, anthropic.BaseURLEnv: s.URL})
 }
 
+func PinKey(t testing.TB) {
+	t.Helper()
+	pins, err := config.LoadPins(config.Map(map[string]string{"ANTHROPIC_API_KEY": APIKey}), settings.Default)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Default.SetPins(pins)
+	t.Cleanup(func() { settings.Default.SetPins(nil) })
+}
+
 func (s *Server) Client() *anthropic.Client {
-	c, err := anthropic.New(s.Env(), anthropic.HTTPClient(s.HTTPClient()))
+	c, err := anthropic.New(APIKey, s.Env(), anthropic.HTTPClient(s.HTTPClient()))
 	if err != nil {
 		s.t.Fatalf("anthropictest: %v", err)
 	}
@@ -123,11 +136,21 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/messages":
 		s.messages(w, Request{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Clone(), body})
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/models":
+		s.models(w)
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1/files/"):
 		s.deleteFile(w, strings.TrimPrefix(r.URL.Path, "/v1/files/"))
 	default:
 		fail(w, http.StatusNotFound, ErrorBody("not_found_error", "no such endpoint"))
 	}
+}
+
+func (s *Server) models(w http.ResponseWriter) {
+	data := make([]map[string]string, len(s.Models))
+	for i, id := range s.Models {
+		data[i] = map[string]string{"type": "model", "id": id, "display_name": id, "created_at": "2026-01-01T00:00:00Z"}
+	}
+	writeJSON(w, map[string]any{"data": data, "has_more": false, "first_id": nil, "last_id": nil})
 }
 
 func (s *Server) deleteFile(w http.ResponseWriter, id string) {
@@ -161,6 +184,11 @@ func (s *Server) messages(w http.ResponseWriter, req Request) {
 	s.mu.Unlock()
 	switch {
 	case resp.Status != 0:
+		for name, values := range resp.Header {
+			for _, v := range values {
+				w.Header().Add(name, v)
+			}
+		}
 		fail(w, resp.Status, resp.ErrorBody)
 	case head.Stream:
 		stream(w, id, head.Model, resp)
