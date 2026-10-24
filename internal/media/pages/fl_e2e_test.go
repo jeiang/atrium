@@ -341,6 +341,12 @@ func TestFlRotatedAndGeneratedKeys(t *testing.T) {
 	status(t, rotated.get(oldLink), 403, "link from the previous key")
 	status(t, rotated.get(flSigned("rotated-key", rotated.movieRel, flFar)), 200, "link from the new key")
 
+	t.Run("whitespace around an env pin is not part of the key", func(t *testing.T) {
+		w := flNew(t, map[string]string{"ATRIUM_MEDIA_LINK_KEY": "  " + flKey + "\n"}, Options{})
+		status(t, w.get(flSigned(flKey, w.movieRel, flFar)), 200, "trimmed pin")
+		status(t, w.get(flSigned("  "+flKey+"\n", w.movieRel, flFar)), 403, "untrimmed key")
+	})
+
 	t.Run("new install generates into the table", func(t *testing.T) {
 		w := flNew(t, map[string]string{"ATRIUM_MEDIA_LINK_KEY": ""}, Options{})
 		if _, _, found := flStoredKey(t, w); found {

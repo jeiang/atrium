@@ -13,6 +13,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -22,9 +24,16 @@ import (
 
 const FilePrefix = "/media/file/"
 
+const linkKeyTTL = 30 * time.Second
+
+var errEmptyLinkKey = errors.New("media: the link key is empty")
+
 type Links struct {
 	d          *db.DB
 	legacyPath string
+	mu         sync.Mutex
+	key        []byte
+	loaded     time.Time
 }
 
 func NewLinks(d *db.DB, legacyPath string) *Links {
@@ -33,13 +42,52 @@ func NewLinks(d *db.DB, legacyPath string) *Links {
 
 func trimKey(b []byte) []byte { return bytes.Trim(b, " \t\n\r\v\f") }
 
-func (l *Links) secretKey(ctx context.Context) ([]byte, error) {
+func (l *Links) cached() []byte {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.key != nil && time.Since(l.loaded) < linkKeyTTL {
+		return l.key
+	}
+	return nil
+}
+
+func (l *Links) remember(key []byte) {
+	l.mu.Lock()
+	l.key, l.loaded = key, time.Now()
+	l.mu.Unlock()
+}
+
+func (l *Links) secretKey(ctx context.Context) (key []byte, fresh bool, err error) {
+	if key = l.cached(); key != nil {
+		return key, false, nil
+	}
+	key, err = l.load(ctx)
+	if err != nil {
+		return nil, true, err
+	}
+	l.remember(key)
+	return key, true, nil
+}
+
+func (l *Links) reread(ctx context.Context) []byte {
+	value, err := secrets.New(l.d, l.d).Reading().Value(ctx, KeyLinkKey)
+	if err != nil || value == "" {
+		return nil
+	}
+	return []byte(value)
+}
+
+func (l *Links) load(ctx context.Context) ([]byte, error) {
 	store := secrets.New(l.d, l.d)
-	value, err := store.Value(ctx, KeyLinkKey)
-	if err != nil || value != "" {
-		return []byte(value), err
+	value, err := store.Reading().Value(ctx, KeyLinkKey)
+	if err != nil {
+		return nil, err
+	}
+	if value != "" {
+		return []byte(value), nil
 	}
 	var legacy []byte
+	adopted := false
 	err = store.InTx(ctx, func(w *secrets.Store) error {
 		if value, err = w.Value(ctx, KeyLinkKey); err != nil || value != "" {
 			return err
@@ -50,7 +98,7 @@ func (l *Links) secretKey(ctx context.Context) ([]byte, error) {
 			return err
 		}
 		if len(legacy) > 0 {
-			if err := w.Adopt(ctx, KeyLinkKey, string(legacy)); err != nil {
+			if adopted, err = w.Adopt(ctx, KeyLinkKey, string(legacy)); err != nil {
 				return err
 			}
 		}
@@ -60,7 +108,10 @@ func (l *Links) secretKey(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(legacy) > 0 {
+	if value == "" {
+		return nil, errEmptyLinkKey
+	}
+	if adopted {
 		if err := os.Remove(l.legacyPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			log.Warn("the retired media link key file could not be removed", logx.Err, err)
 		}
@@ -91,17 +142,31 @@ func verifyWith(secret []byte, rel, exp, sig string, now float64) bool {
 }
 
 func (l *Links) Verify(ctx context.Context, rel, exp, sig string, now float64) bool {
-	secret, err := l.secretKey(ctx)
-	if err != nil {
+	secret, fresh, err := l.secretKey(ctx)
+	if err != nil || len(secret) == 0 {
 		return false
 	}
-	return verifyWith(secret, rel, exp, sig, now)
+	if verifyWith(secret, rel, exp, sig, now) {
+		return true
+	}
+	if fresh {
+		return false
+	}
+	again := l.reread(ctx)
+	if len(again) == 0 || bytes.Equal(again, secret) {
+		return false
+	}
+	l.remember(again)
+	return verifyWith(again, rel, exp, sig, now)
 }
 
 func (l *Links) PublicURL(ctx context.Context, base, rel string, now float64, ttl int64) (string, error) {
-	secret, err := l.secretKey(ctx)
+	secret, _, err := l.secretKey(ctx)
 	if err != nil {
 		return "", err
+	}
+	if len(secret) == 0 {
+		return "", errEmptyLinkKey
 	}
 	exp := int64(now + float64(ttl))
 	return base + FilePrefix + py.URLQuote(rel) + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + Sign(secret, rel, exp), nil

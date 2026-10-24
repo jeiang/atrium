@@ -25,7 +25,7 @@ func init() {
 	settings.MustRegister(
 		settings.Def{Key: AnthropicAdminKey, Module: "anthropic", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
 		settings.Def{Key: OpenAIAdminKey, Module: "openai", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
-		settings.Def{Key: ActionLinkKey, Module: "action_links", Type: settings.String, Class: settings.Secret, Secret: true, Generated: true},
+		settings.Def{Key: ActionLinkKey, Module: "action_links", Type: settings.String, Class: settings.Secret, Secret: true, Generated: true, Check: settings.NonEmpty},
 	)
 }
 
@@ -210,10 +210,14 @@ func (s *Store) GeneratedKey(ctx context.Context, name string) (string, error) {
 		return "", err
 	} else if pinned {
 		found, err := s.reg.Resolve(ctx, s.q, name, 0)
-		if err == nil {
-			logx.AddSecret(found.Value)
+		if err != nil {
+			return "", err
 		}
-		return found.Value, err
+		if found.Value == "" {
+			return "", EmptyValue(name)
+		}
+		logx.AddSecret(found.Value)
+		return found.Value, nil
 	}
 	var buf [32]byte
 	if _, err := rand.Read(buf[:]); err != nil {
@@ -242,10 +246,14 @@ func (s *Store) Value(ctx context.Context, name string) (string, error) {
 		return "", err
 	} else if pinned {
 		found, err := s.reg.Resolve(ctx, s.q, name, 0)
-		if err == nil {
-			logx.AddSecret(found.Value)
+		if err != nil {
+			return "", err
 		}
-		return found.Value, err
+		if found.Value == "" {
+			return "", EmptyValue(name)
+		}
+		logx.AddSecret(found.Value)
+		return found.Value, nil
 	}
 	var value string
 	err := s.q.QueryRowContext(ctx, "SELECT value FROM secrets WHERE name = ?", name).Scan(&value)
@@ -258,25 +266,38 @@ func (s *Store) Value(ctx context.Context, name string) (string, error) {
 	return value, err
 }
 
-func (s *Store) Adopt(ctx context.Context, name, value string) error {
+func (s *Store) Adopt(ctx context.Context, name, value string) (bool, error) {
 	d, err := s.def(name)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !d.Generated {
-		return NotGenerated(name)
+		return false, NotGenerated(name)
 	}
 	if value == "" {
-		return EmptyValue(name)
+		return false, EmptyValue(name)
 	}
 	if _, pinned, err := s.reg.Pinned(name); err != nil || pinned {
-		return err
+		return false, err
 	}
-	if _, err := s.q.ExecContext(ctx,
+	res, err := s.q.ExecContext(ctx,
 		"INSERT OR IGNORE INTO secrets (name, value, set_at, set_by) VALUES (?, ?, ?, 'migration')",
-		name, value, now()); err != nil {
-		return err
+		name, value, now())
+	if err != nil {
+		return false, err
 	}
-	logx.AddSecret(value)
-	return nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if n > 0 {
+		logx.AddSecret(value)
+	}
+	return n > 0, nil
+}
+
+func (s *Store) Reading() *Store {
+	scoped := *s
+	scoped.q = s.d.Read
+	return &scoped
 }

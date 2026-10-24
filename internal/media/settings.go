@@ -86,7 +86,7 @@ func init() {
 		adv(KeyVideoExts, settings.String, defaultVideoExts, extensionsCheck),
 		adv(KeySubtitleExts, settings.String, defaultSubtitleExt, extensionsCheck),
 		between(KeyTorrentUploadCap, "1048576", 1024, 32<<20),
-		settings.Def{Key: KeyLinkKey, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, Generated: true},
+		settings.Def{Key: KeyLinkKey, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, Generated: true, Check: settings.NonEmpty},
 	)
 }
 

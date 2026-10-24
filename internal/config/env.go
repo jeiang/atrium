@@ -114,5 +114,3 @@ func Grafana(env Env) (GrafanaAccess, error) {
 func NtfyToken(env Env) string { return stripped(env, "NTFY_TOKEN") }
 
 func TMDBKey(env Env) string { return stripped(env, "TMDB_API_KEY") }
-
-func MediaLinkKey(env Env) string { return stripped(env, "ATRIUM_MEDIA_LINK_KEY") }
