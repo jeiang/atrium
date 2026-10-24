@@ -297,7 +297,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	if body, err := os.ReadFile(filepath.Join(keptFiles[0], "stray.txt")); err != nil || string(body) != "stray" {
 		t.Errorf("the kept files/ lost stray.txt: %q, %v", body, err)
 	}
-	keptDB, _ := filepath.Glob(live + ".pre-restore-*")
+	keptDB, _ := filepath.Glob(live + ".pre-restore-*Z")
 	if len(keptDB) != 1 {
 		t.Fatalf("restore kept %v, want the previous database", keptDB)
 	}
@@ -346,7 +346,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	if forced := runProcess(t, "restore --replace-unopenable "+archive, thirdEnv...); forced.code != cli.ExitOK {
 		t.Fatalf("forced restore exited %d, stderr %q", forced.code, forced.stderr)
 	}
-	if kept, _ := filepath.Glob(other3 + ".pre-restore-*"); len(kept) != 1 {
+	if kept, _ := filepath.Glob(other3 + ".pre-restore-*Z"); len(kept) != 1 {
 		t.Errorf("forced restore kept %v, want the old database", kept)
 	}
 
