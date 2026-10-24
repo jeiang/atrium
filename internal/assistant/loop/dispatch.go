@@ -126,6 +126,9 @@ type dispatcher struct {
 	now    func() float64
 	batch  Batch
 	tuning actx.Tuning
+	guard  func(ctx context.Context) error
+	lost   context.Context
+	abort  context.CancelFunc
 }
 
 func (x *dispatcher) lookup(name string) *tool.Tool {
@@ -156,6 +159,9 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	if ctx.Err() != nil {
 		return nil, nil, ctx.Err()
 	}
+	if x.lost.Err() != nil {
+		return nil, nil, LeaseLost(fmt.Sprintf("run %d was taken over by another process", x.tc.RunID))
+	}
 	if text, ok := toolErrorText(err); ok {
 		return fail(text)
 	}
@@ -169,12 +175,16 @@ func (x *dispatcher) call(ctx context.Context, t *tool.Tool, args py.Dict) (valu
 			err = fmt.Errorf("panic: %v\n%s", p, debug.Stack())
 		}
 	}()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer context.AfterFunc(x.lost, cancel)()
 	return t.Handler(ctx, x.tc, args)
 }
 
 func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errText *string, value any) (json.RawMessage, error) {
+	ledgerCtx := context.WithoutCancel(ctx)
 	if errText != nil {
-		if err := journal.FinishToolCall(ctx, x.d.Write, callID, journal.Error, x.now(), errText, nil); err != nil {
+		if err := journal.FinishToolCall(ledgerCtx, x.d.Write, callID, journal.Error, x.now(), errText, nil); err != nil {
 			return nil, err
 		}
 		if err := x.tc.Progress.Event(ctx, progress.ToolDone, py.Dict{{Key: "id", Value: use.ID}, {Key: "ok", Value: false}, {Key: "preview", Value: progress.PreviewOf(*errText)}}); err != nil {
@@ -182,11 +192,11 @@ func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errT
 		}
 		return toolResult(use.ID, *errText, true), nil
 	}
-	content, resultID, err := actx.Ingest(ctx, x.d.Write, x.tc.RunID, callID, use.Name, value, x.now(), x.tuning)
+	content, resultID, err := actx.Ingest(ledgerCtx, x.d.Write, x.tc.RunID, callID, use.Name, value, x.now(), x.tuning)
 	if err != nil {
 		return nil, err
 	}
-	if err := journal.FinishToolCall(ctx, x.d.Write, callID, journal.OK, x.now(), nil, resultID); err != nil {
+	if err := journal.FinishToolCall(ledgerCtx, x.d.Write, callID, journal.OK, x.now(), nil, resultID); err != nil {
 		return nil, err
 	}
 	if err := x.tc.Progress.Event(ctx, progress.ToolDone, py.Dict{{Key: "id", Value: use.ID}, {Key: "ok", Value: true}, {Key: "preview", Value: progress.PreviewOf(content)}}); err != nil {
@@ -212,6 +222,9 @@ func (x *dispatcher) toolStart(ctx context.Context, use ToolUse, args json.RawMe
 }
 
 func (x *dispatcher) startCall(ctx context.Context, use ToolUse) (int64, error) {
+	if err := x.guard(ctx); err != nil {
+		return 0, err
+	}
 	args, _, err := use.Args()
 	if err != nil {
 		return 0, err
@@ -282,6 +295,9 @@ func (x *dispatcher) executeAll(ctx context.Context, uses []ToolUse) ([]json.Raw
 }
 
 func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.ToolCall) (json.RawMessage, error) {
+	if err := x.guard(ctx); err != nil {
+		return nil, err
+	}
 	if call == nil {
 		return x.execute(ctx, use)
 	}

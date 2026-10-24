@@ -37,8 +37,6 @@ const (
 	CompletedUncaptured = "This call completed before an interruption but its result was not captured. Check the current state."
 )
 
-var Owner = journal.NewOwner()
-
 var log = logx.Logger("atrium.agent")
 
 type RunLimit string
@@ -107,7 +105,10 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 	}
 	final := journal.Failed
 	var errText *string
-	switch err := s.body(ctx); {
+	stopBeat := s.heartbeat(ctx)
+	err = s.body(ctx)
+	stopBeat()
+	switch {
 	case err == nil:
 		final = journal.Done
 	case errors.As(err, new(LeaseLost)):
@@ -213,6 +214,8 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		writer: writer, env: env, steps: steps, maxCost: maxCost, savings: int64(tuning.CommitSavings),
 		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning},
 	}
+	s.x.guard = s.renew
+	s.x.lost, s.x.abort = context.WithCancel(context.Background())
 	if o.Limits.MaxSteps != nil {
 		s.steps = int(*o.Limits.MaxSteps)
 	}
@@ -226,7 +229,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 }
 
 func (s *state) renew(ctx context.Context) error {
-	ok, err := journal.RenewLease(ctx, s.d.Write, s.run.ID, Owner, s.now())
+	ok, err := journal.RenewLease(ctx, s.d.Write, s.run.ID, deref(s.run.Owner), s.now())
 	if err != nil {
 		return err
 	}
@@ -234,6 +237,33 @@ func (s *state) renew(ctx context.Context) error {
 		return LeaseLost(fmt.Sprintf("run %d was taken over by another process", s.run.ID))
 	}
 	return nil
+}
+
+func (s *state) heartbeat(ctx context.Context) func() {
+	lease, err := journal.LeaseSeconds(ctx, s.d.Read)
+	if err != nil || lease <= 0 {
+		return func() {}
+	}
+	beatCtx, cancel := context.WithCancel(ctx)
+	every := time.Duration(lease / 3 * float64(time.Second))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		t := time.NewTicker(every)
+		defer t.Stop()
+		for {
+			select {
+			case <-beatCtx.Done():
+				return
+			case <-t.C:
+				if err := s.renew(beatCtx); errors.As(err, new(LeaseLost)) {
+					s.x.abort()
+					return
+				}
+			}
+		}
+	}()
+	return func() { cancel(); <-done }
 }
 
 func (s *state) runStart(ctx context.Context) error {
@@ -351,11 +381,12 @@ func (s *state) size(ctx context.Context, active []actx.Message, a *anchor) (int
 func (s *state) stream(ctx context.Context, messages []json.RawMessage) (*anthropic.Message, error) {
 	params := s.req.params
 	params.Messages = messages
-	response, err := s.client.Stream(ctx, params, func(ev anthropic.Event) error { return s.writer.Observe(ctx, ev) })
+	ledgerCtx := context.WithoutCancel(ctx)
+	response, err := s.client.Stream(ctx, params, func(ev anthropic.Event) error { return s.writer.Observe(ledgerCtx, ev) })
 	if err != nil {
 		return nil, err
 	}
-	return response, s.writer.Flush(ctx)
+	return response, s.writer.Flush(context.WithoutCancel(ctx))
 }
 
 func (s *state) settlePending(ctx context.Context) error {
@@ -476,7 +507,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err != nil {
 		return false, nil, err
 	}
-	if err := journal.BumpSteps(ctx, s.d.Write, s.run.ID); err != nil {
+	if err := journal.BumpSteps(context.WithoutCancel(ctx), s.d.Write, s.run.ID); err != nil {
 		return false, nil, err
 	}
 	blocks, err := journalBlocks(response.Content)
@@ -493,7 +524,10 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		TS: s.now(), ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: Model, Effort: s.run.Effort,
 		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(compacted)),
 	}
-	if _, err := usage.Record(ctx, s.d.Write, entry, response.Usage); err != nil {
+	if _, err := usage.Record(context.WithoutCancel(ctx), s.d.Write, entry, response.Usage); err != nil {
+		return false, nil, err
+	}
+	if err := s.renew(ctx); err != nil {
 		return false, nil, err
 	}
 	seq, err := journal.AppendMessage(ctx, s.d, s.thread.ID, &s.run.ID, journal.Assistant, blocks, s.now(), new(s.req.sig))
