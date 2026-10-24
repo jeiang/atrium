@@ -206,6 +206,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MAIL_WATCHES_STALE_PACKAGE_DAYS` | `mail.watches_stale_package_days` |
 | `ATRIUM_MAIL_WRITE_ATTEMPTS` | `mail.write_attempts` |
 | `ATRIUM_MAIL_WRITE_CAP` | `mail.write_cap` |
+| `ATRIUM_MEDIA_LINK_KEY` | `media.link_key` |
 | `ATRIUM_MEDIA_MEDIA_ARTWORK_MISS_TTL_SECONDS` | `media.media_artwork_miss_ttl_seconds` |
 | `ATRIUM_MEDIA_MEDIA_ARTWORK_SHOW_SEARCH_LIMIT` | `media.media_artwork_show_search_limit` |
 | `ATRIUM_MEDIA_MEDIA_CHANNEL_NAME_CHARS` | `media.media_channel_name_chars` |

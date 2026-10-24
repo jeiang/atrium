@@ -30,7 +30,7 @@ func fileVideoType(path string) string {
 func (s *service) serveFile(w http.ResponseWriter, r *http.Request) {
 	rel := web.PathParam(r, "*")
 	query := r.URL.Query()
-	if !s.links.Verify(rel, web.QueryValue(query, "exp"), web.QueryValue(query, "sig"), s.now()) {
+	if !s.links.Verify(r.Context(), rel, web.QueryValue(query, "exp"), web.QueryValue(query, "sig"), s.now()) {
 		s.deps.Error(w, r, http.StatusForbidden, "the link is invalid or has expired")
 		return
 	}

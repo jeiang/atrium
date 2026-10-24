@@ -10,7 +10,7 @@ This page states what atrium does and refuses to do today. It describes current 
 - In local mode there is no group check. Without an explicit allowed Host, the accepted Hosts are `localhost`, `127.0.0.1` and `[::1]`.
 - The NixOS module runs the public listener in proxy mode and, by default, a second listener bound to `127.0.0.1` in local mode.
 - `POST`, `PUT`, `PATCH` and `DELETE` requests need the CSRF token that atrium issues in a cookie and a request whose `Origin`, when present, matches the Host. Responses carry a Content-Security-Policy.
-- A signed media link grants one file under `/media/file/`. It carries an expiry and an HMAC-SHA256 signature, and is valid for 12 hours from issue. A missing, altered or expired signature is not accepted and the request falls back to the normal group check. The signing key is the media link key setting when it is set; otherwise it is read from `media-link.key` beside the database, which is created on first use.
+- A signed media link grants one file under `/media/file/`. It carries an expiry and an HMAC-SHA256 signature, and is valid for 12 hours from issue. A missing, altered or expired signature is not accepted and the request falls back to the normal group check. The signing key is the `link_key` secret in the media module. A deployment pin (`ATRIUM_MEDIA_LINK_KEY`, `ATRIUM_MEDIA_LINK_KEY_FILE` or `media.link_key_file`) wins over the stored value; otherwise the key is stored in the database, generated on first use. An existing `media-link.key` beside the database is moved into the stored secret on first use and the file is removed, so links issued before the upgrade stay valid. Changing the key invalidates every issued link.
 
 ## Mail safety
 

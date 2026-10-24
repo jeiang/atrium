@@ -89,7 +89,9 @@ not claims about the running application.
 - The public web service trusts an authenticating reverse proxy and checks
   Host and operator group membership. A separate local mode provides
   loopback access. Public media file access requires an expiring signed
-  link and still checks Host.
+  link and still checks Host. The link signing key is a generated secret held in
+  the database (pinnable by the deployment); a legacy `media-link.key` file is
+  moved into it on first use.
 - Code execution is unavailable. The existing code-mode worker and service
   interface are inert; the replacement sandbox manager is deferred to
   [issue #202](https://github.com/jeiang/atrium/issues/202).

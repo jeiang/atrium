@@ -52,6 +52,7 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 		name := EnvName(d)
 		value := get(env, name)
 		if d.Secret {
+			value = py.Strip(value)
 			fileName := name + strings.ToUpper(fileSuffix)
 			if path, set := env(fileName); set {
 				if value != "" {

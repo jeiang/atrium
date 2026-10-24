@@ -248,6 +248,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
+| `link_key` | string | none | secret | `ATRIUM_MEDIA_LINK_KEY` |
 | `media_artwork_miss_ttl_seconds` | int | `604800` | advanced | `ATRIUM_MEDIA_MEDIA_ARTWORK_MISS_TTL_SECONDS` |
 | `media_artwork_show_search_limit` | int | `5` | advanced | `ATRIUM_MEDIA_MEDIA_ARTWORK_SHOW_SEARCH_LIMIT` |
 | `media_channel_name_chars` | int | `120` | advanced | `ATRIUM_MEDIA_MEDIA_CHANNEL_NAME_CHARS` |
