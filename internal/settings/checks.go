@@ -55,3 +55,10 @@ func Between(lo, hi float64) func(string) error {
 		return nil
 	}
 }
+
+func NonEmpty(value string) error {
+	if py.Strip(value) == "" {
+		return Invalid("must not be empty")
+	}
+	return nil
+}

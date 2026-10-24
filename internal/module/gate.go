@@ -56,8 +56,8 @@ func (s *Set) gatePage(owner string, p web.Page) web.Page {
 		}
 	}
 	if public := p.Public; public != nil {
-		p.Public = func(cfg config.Config, env config.Env) func(*http.Request) bool {
-			check := public(cfg, env)
+		p.Public = func(cfg config.Config, env config.Env, d *db.DB) func(*http.Request) bool {
+			check := public(cfg, env, d)
 			return func(r *http.Request) bool {
 				snap := s.Current()
 				return snap != nil && snap.Enabled(owner) && check(r)

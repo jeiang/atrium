@@ -2211,6 +2211,10 @@
     "media": {
       "additionalProperties": false,
       "properties": {
+        "link_key_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "media_artwork_miss_ttl_seconds": {
           "default": 604800,
           "type": [

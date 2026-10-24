@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -92,5 +93,33 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 	}
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM secrets").Scan(&rows); err != nil || rows != 0 {
 		t.Errorf("secrets rows after pinned delete = %d, %v; want 0", rows, err)
+	}
+}
+
+func TestEmptyPinnedLinkKeyIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	t.Setenv("ATRIUM_CONFIG", "")
+	t.Setenv("ATRIUM_MEDIA_LINK_KEY", "")
+	for name, body := range map[string]string{"empty": "", "blank": " \n\t\n"} {
+		path := filepath.Join(dir, name+".key")
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("ATRIUM_MEDIA_LINK_KEY_FILE", path)
+		if r := runSecrets(t, "", "status"); r.code != cli.ExitError || !strings.Contains(r.stderr, "ATRIUM_MEDIA_LINK_KEY_FILE") || r.stdout != "" {
+			t.Errorf("%s file: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
+		}
+		toml := filepath.Join(dir, name+".toml")
+		if err := os.WriteFile(toml, []byte("[media]\nlink_key_file = \""+path+"\"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("ATRIUM_MEDIA_LINK_KEY_FILE", "")
+		t.Setenv("ATRIUM_CONFIG", toml)
+		if r := runSecrets(t, "", "status"); r.code != cli.ExitError || !strings.Contains(r.stderr, "media.link_key_file") || r.stdout != "" {
+			t.Errorf("%s config file: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
+		}
+		t.Setenv("ATRIUM_CONFIG", "")
 	}
 }

@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -45,9 +46,9 @@ func (s *service) libraryIndex(w http.ResponseWriter, r *http.Request) {
 	s.libRender(w, r, "media_library.gohtml", LibraryPage{Movies: libEntries(set.MovieEntries(root)), Shows: libEntries(set.ShowEntries(root))})
 }
 
-func (s *service) libLinks(set media.Settings, rel string) (public, vpn string) {
+func (s *service) libLinks(ctx context.Context, set media.Settings, rel string) (public, vpn string) {
 	if set.PublicURL != "" {
-		url, err := s.links.PublicURL(set.PublicURL, rel, s.now(), set.LinkTTL)
+		url, err := s.links.PublicURL(ctx, set.PublicURL, rel, s.now(), set.LinkTTL)
 		if err != nil {
 			panic(err)
 		}
@@ -69,7 +70,7 @@ func (s *service) libraryMovie(w http.ResponseWriter, r *http.Request) {
 	}
 	files := make([]FileLink, len(found.Files))
 	for i, f := range found.Files {
-		public, vpn := s.libLinks(set, f.Rel)
+		public, vpn := s.libLinks(r.Context(), set, f.Rel)
 		files[i] = FileLink{Rel: f.Rel, Name: f.Name, Size: f.Size, Public: public, VPN: vpn}
 	}
 	view := MovieView{Dir: found.Dir, Title: found.Title, Year: found.Year, Files: files}
@@ -99,7 +100,7 @@ func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
 	for i, season := range found.Seasons {
 		episodes := make([]EpisodeView, len(season.Episodes))
 		for j, e := range season.Episodes {
-			public, vpn := s.libLinks(set, e.Rel)
+			public, vpn := s.libLinks(r.Context(), set, e.Rel)
 			episodes[j] = EpisodeView{
 				Rel: e.Rel, Name: e.Name, Size: e.Size, Public: public, VPN: vpn,
 				Season: libNumber(e.Season), Episode: libNumber(e.Episode),
