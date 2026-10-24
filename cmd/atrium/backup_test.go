@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
@@ -251,12 +252,63 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = damaged.Close()
-	if res := runProcess(t, "restore "+archive, env...); res.code != cli.ExitOK || !strings.Contains(res.stdout, "restored "+live) {
+
+	var collisions []string
+	for i := -2; i < 120; i++ {
+		c := live + ".pre-restore-" + time.Now().UTC().Add(time.Duration(i)*time.Second).Format("20060102T150405Z")
+		collisions = append(collisions, c)
+		if err := os.WriteFile(c, []byte("in the way"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if res := runProcess(t, "restore "+archive, env...); res.code != cli.ExitError || !strings.Contains(res.stderr, "already exists") {
+		t.Fatalf("restore with a blocked swap exited %d, stdout %q, stderr %q", res.code, res.stdout, res.stderr)
+	}
+	if body, err := os.ReadFile(filepath.Join(state, "files", "stray.txt")); err != nil || string(body) != "stray" {
+		t.Errorf("a failed swap left files/stray.txt = %q, %v", body, err)
+	}
+	if left, _ := filepath.Glob(filepath.Join(state, "files.pre-restore-*")); len(left) != 0 {
+		t.Errorf("a failed swap left %v", left)
+	}
+	intact, err := db.Connect(live, db.WithKey(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pages int
+	if err := intact.Read.QueryRow("SELECT count(*) FROM notion_pages WHERE rid = 1").Scan(&pages); err != nil || pages != 0 {
+		t.Errorf("a failed swap changed the live database: %d, %v", pages, err)
+	}
+	_ = intact.Close()
+	for _, c := range collisions {
+		_ = os.Remove(c)
+	}
+
+	res := runProcess(t, "restore "+archive, env...)
+	if res.code != cli.ExitOK || !strings.Contains(res.stdout, "restored "+live) || strings.Count(res.stdout, "previous state kept at") != 2 {
 		t.Fatalf("restore exited %d, stdout %q, stderr %q", res.code, res.stdout, res.stderr)
 	}
 	if _, err := os.Stat(filepath.Join(state, "files", "stray.txt")); err == nil {
-		t.Error("restore kept a file that is not in the archive")
+		t.Error("the restored files/ holds a file that is not in the archive")
 	}
+	keptFiles, _ := filepath.Glob(filepath.Join(state, "files.pre-restore-*"))
+	if len(keptFiles) != 1 {
+		t.Fatalf("restore kept %v, want the previous files/", keptFiles)
+	}
+	if body, err := os.ReadFile(filepath.Join(keptFiles[0], "stray.txt")); err != nil || string(body) != "stray" {
+		t.Errorf("the kept files/ lost stray.txt: %q, %v", body, err)
+	}
+	keptDB, _ := filepath.Glob(live + ".pre-restore-*")
+	if len(keptDB) != 1 {
+		t.Fatalf("restore kept %v, want the previous database", keptDB)
+	}
+	previous, err := db.Connect(keptDB[0], db.WithKey(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := previous.Read.QueryRow("SELECT count(*) FROM notion_pages WHERE rid = 1").Scan(&pages); err != nil || pages != 0 {
+		t.Errorf("the kept database does not hold the pre-restore state: %d, %v", pages, err)
+	}
+	_ = previous.Close()
 	if body, err := os.ReadFile(filepath.Join(state, "files", "threads", "1", "report.txt")); err != nil || string(body) != secretText {
 		t.Errorf("restored file = %q, %v", body, err)
 	}
@@ -266,9 +318,6 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 		}
 	}
 	if left, _ := filepath.Glob(filepath.Join(state, ".atrium-restore-*")); len(left) != 0 {
-		t.Errorf("restore left %v", left)
-	}
-	if left, _ := filepath.Glob(filepath.Join(state, "files.replaced")); len(left) != 0 {
 		t.Errorf("restore left %v", left)
 	}
 	if knn := runProcess(t, "db check", env...); knn.code != cli.ExitOK || !strings.Contains(knn.stdout, "vec0 notion_vec: 1\n") {
@@ -283,6 +332,23 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 		t.Errorf("restored page = %q, %v", title, err)
 	}
 	_ = restored.Close()
+
+	other3 := filepath.Join(dir, "third", "atrium.db")
+	third, err := db.ParseKey(thirdKeyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedBackupDB(t, other3, third)
+	thirdEnv := []string{"ATRIUM_DB=" + other3, "ATRIUM_DB_KEY=" + rightKeyHex}
+	if refused := runProcess(t, "restore "+archive, thirdEnv...); refused.code != cli.ExitError || !strings.Contains(refused.stderr, "cannot be opened and locked") {
+		t.Errorf("restore over an unopenable database exited %d, stderr %q", refused.code, refused.stderr)
+	}
+	if forced := runProcess(t, "restore --replace-unopenable "+archive, thirdEnv...); forced.code != cli.ExitOK {
+		t.Fatalf("forced restore exited %d, stderr %q", forced.code, forced.stderr)
+	}
+	if kept, _ := filepath.Glob(other3 + ".pre-restore-*"); len(kept) != 1 {
+		t.Errorf("forced restore kept %v, want the old database", kept)
+	}
 
 	rekeyFile := writeKey(t, dir, "next.key", otherKeyHex)
 	if got := runProcess(t, "db rekey --new-key-file "+rekeyFile, env...); got.code != cli.ExitOK {

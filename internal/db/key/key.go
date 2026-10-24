@@ -84,3 +84,11 @@ func BackupMAC(k db.Key) []byte { return derive(k, "atrium/backup/mac/v1", subke
 func BackupVerifier(k db.Key) string {
 	return hex.EncodeToString(derive(k, "atrium/backup/verifier/v1", subkeyLen))
 }
+
+func BackupSeal(k db.Key, salt []byte) []byte {
+	out, err := hkdf.Key(sha256.New, k.Raw(), salt, "atrium/backup/seal/v1", subkeyLen)
+	if err != nil {
+		panic(err)
+	}
+	return out
+}

@@ -3,6 +3,7 @@ package backup
 import (
 	"archive/tar"
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -36,6 +37,7 @@ const (
 
 	chunkSize    = 64 << 10
 	prefixLen    = 7
+	saltLen      = 16
 	maxHeader    = 1 << 20
 	maxEntryList = 64 << 20
 )
@@ -61,6 +63,9 @@ type Header struct {
 	KeyID     string   `json:"key_id,omitempty"`
 	KeyIDs    []string `json:"key_ids,omitempty"`
 	Verifier  string   `json:"verifier,omitempty"`
+	Salt      string   `json:"salt,omitempty"`
+	Files     int      `json:"files"`
+	Stored    int64    `json:"stored_bytes"`
 }
 
 type Entry struct {
@@ -89,8 +94,12 @@ func macOf(key db.Key, header, entries []byte) string {
 	return hex.EncodeToString(m.Sum(nil))
 }
 
-func newAEAD(key db.Key) (cipher.AEAD, error) {
-	block, err := aes.NewCipher(dbkey.Seal(key))
+func newAEAD(key db.Key, saltHex string) (cipher.AEAD, error) {
+	salt, err := hex.DecodeString(saltHex)
+	if err != nil || len(salt) != saltLen {
+		return nil, fmt.Errorf("%w: the header carries no valid salt", ErrTampered)
+	}
+	block, err := aes.NewCipher(dbkey.BackupSeal(key, salt))
 	if err != nil {
 		return nil, err
 	}
@@ -257,6 +266,13 @@ func writeEntry(tw *tar.Writer, name string, size int64, mode uint32, fill func(
 	return Entry{Name: name, Size: size, SHA256: hw.sum(), Mode: mode}, nil
 }
 
+func storedSize(key db.Key, size int64) int64 {
+	if key.IsZero() {
+		return size
+	}
+	return sealedSize(size)
+}
+
 func writeArchive(out io.Writer, header Header, key db.Key, snapshot string, files []source) error {
 	headerJSON, err := json.Marshal(header)
 	if err != nil {
@@ -268,7 +284,7 @@ func writeArchive(out io.Writer, header Header, key db.Key, snapshot string, fil
 	}
 	var aead cipher.AEAD
 	if !key.IsZero() {
-		if aead, err = newAEAD(key); err != nil {
+		if aead, err = newAEAD(key, header.Salt); err != nil {
 			return err
 		}
 	}
@@ -365,6 +381,8 @@ func validFilesName(name string) (string, bool) {
 	return rel, true
 }
 
+var allowedPAX = map[string]bool{"path": true, "size": true, "mtime": true, "atime": true, "ctime": true}
+
 type opened struct {
 	header  Header
 	file    *os.File
@@ -392,7 +410,7 @@ func checkKey(h Header, key db.Key) error {
 	if h.Encrypted != !key.IsZero() {
 		return ErrArchiveKey
 	}
-	if h.Encrypted && (dbkey.ID(key) != h.KeyID || dbkey.BackupVerifier(key) != h.Verifier) {
+	if h.Encrypted && (dbkey.ID(key) != h.KeyID || dbkey.BackupVerifier(key) != h.Verifier || h.Salt == "") {
 		return ErrArchiveKey
 	}
 	return nil
@@ -402,7 +420,7 @@ func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[stri
 	var aead cipher.AEAD
 	if !key.IsZero() {
 		var err error
-		if aead, err = newAEAD(key); err != nil {
+		if aead, err = newAEAD(key, o.header.Salt); err != nil {
 			return nil, err
 		}
 	}
@@ -410,6 +428,8 @@ func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[stri
 	var entriesJSON []byte
 	var mac string
 	var staged []string
+	remaining := o.header.Stored
+	budget := o.header.Files + 1
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -423,6 +443,11 @@ func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[stri
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			return nil, fmt.Errorf("%w: %s is not a regular entry", ErrTampered, hdr.Name)
+		}
+		for k := range hdr.PAXRecords {
+			if !allowedPAX[k] {
+				return nil, fmt.Errorf("%w: %s carries the extension %q", ErrTampered, hdr.Name, k)
+			}
 		}
 		switch hdr.Name {
 		case entriesEntry:
@@ -438,6 +463,11 @@ func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[stri
 			mac = string(raw)
 			continue
 		}
+		if hdr.Size < 0 || hdr.Size > remaining || budget == 0 {
+			return nil, fmt.Errorf("%w: %s exceeds the sizes the header declares", ErrTampered, hdr.Name)
+		}
+		remaining -= hdr.Size
+		budget--
 		if _, dup := seen[hdr.Name]; dup {
 			return nil, fmt.Errorf("%w: %s appears twice", ErrTampered, hdr.Name)
 		}
@@ -514,3 +544,5 @@ func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[stri
 	}
 	return listed, nil
 }
+
+func sameBytes(a, b []byte) bool { return bytes.Equal(a, b) }

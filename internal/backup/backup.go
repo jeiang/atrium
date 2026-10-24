@@ -2,6 +2,8 @@ package backup
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -96,6 +98,15 @@ func writeBackup(ctx context.Context, cfg config.Config, key db.Key, dest string
 	if err != nil {
 		return 0, err
 	}
+	info, err := os.Stat(snapshot)
+	if err != nil {
+		return 0, err
+	}
+	header.Files = len(files)
+	header.Stored = info.Size()
+	for _, f := range files {
+		header.Stored += storedSize(key, f.size)
+	}
 	out, err := os.OpenFile(partial, os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return 0, err
@@ -137,6 +148,11 @@ func snapshotHeader(ctx context.Context, snapshot string, key db.Key) (Header, e
 	if err != nil {
 		return Header{}, err
 	}
+	salt := make([]byte, saltLen)
+	if _, err := rand.Read(salt); err != nil {
+		return Header{}, err
+	}
+	h.Salt = hex.EncodeToString(salt)
 	h.KeyID = dbkey.ID(key)
 	h.Verifier = dbkey.BackupVerifier(key)
 	for _, id := range retired {

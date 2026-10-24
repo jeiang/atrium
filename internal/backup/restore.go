@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -41,6 +42,7 @@ type report struct {
 func restoreSetup(a *cli.Args) cli.Handler {
 	verify := a.Bool("verify", cli.Opt{Help: "check the archive in a temporary location and change nothing"})
 	keyFile := a.String("key-file", "", cli.Opt{Metavar: "PATH", Help: "file holding the 64-hex-digit key the archive was made under, when it differs from the configured key"})
+	replaceUnopenable := a.Bool("replace-unopenable", cli.Opt{Help: "replace an existing database that cannot be opened and locked with an available key; it is kept aside"})
 	archive := a.Arg("archive", cli.Opt{Help: "path of the backup archive"})
 	return func(e *cli.Env) int {
 		cfg, err := config.Load(config.OS)
@@ -55,7 +57,7 @@ func restoreSetup(a *cli.Args) cli.Handler {
 		if err != nil {
 			return cli.Fail(e, fmt.Errorf("restore %s: %w", *archive, err))
 		}
-		defer func() { _ = o.Close() }()
+		firstHead := o.rawHead
 		key, err := archiveKey(o.header, configured, *keyFile)
 		if err != nil {
 			return cli.Fail(e, err)
@@ -68,6 +70,17 @@ func restoreSetup(a *cli.Args) cli.Handler {
 			return cli.Fail(e, err)
 		}
 		defer func() { _ = os.RemoveAll(stage) }()
+		if _, err := o.unpack(e.Ctx, key, ""); err != nil {
+			return cli.Fail(e, fmt.Errorf("restore %s: %w; nothing was changed", *archive, err))
+		}
+		_ = o.Close()
+		if o, err = openArchive(*archive); err != nil {
+			return cli.Fail(e, fmt.Errorf("restore %s: %w", *archive, err))
+		}
+		defer func() { _ = o.Close() }()
+		if !sameBytes(o.rawHead, firstHead) {
+			return cli.Fail(e, fmt.Errorf("restore %s: %w: the archive changed while it was being read; nothing was changed", *archive, ErrTampered))
+		}
 		entries, err := o.unpack(e.Ctx, key, stage)
 		if err != nil {
 			return cli.Fail(e, fmt.Errorf("restore %s: %w; nothing was changed", *archive, err))
@@ -82,10 +95,14 @@ func restoreSetup(a *cli.Args) cli.Handler {
 			_, _ = fmt.Fprintln(e.Stdout, "verified; nothing was written")
 			return cli.ExitOK
 		}
-		if err := install(e.Ctx, cfg, configured, key, stage); err != nil {
+		moved, err := install(e.Ctx, cfg, configured, key, stage, *replaceUnopenable)
+		if err != nil {
 			return cli.Fail(e, err)
 		}
 		_, _ = fmt.Fprintf(e.Stdout, "restored %s\n", cfg.DBPath)
+		for _, m := range moved {
+			_, _ = fmt.Fprintf(e.Stdout, "previous state kept at %s\n", m)
+		}
 		if !key.IsZero() && dbkey.ID(key) != dbkey.ID(configured) {
 			_, _ = fmt.Fprintf(e.Stdout, "the restored database is encrypted under key id %s, not the configured key; configure that key before starting atrium\n", dbkey.ID(key))
 		}
@@ -251,28 +268,31 @@ func isKeyError(err error) bool {
 	return errors.Is(err, db.ErrWrongKey) || errors.Is(err, db.ErrKeyMissing) || errors.Is(err, db.ErrPlaintextDB)
 }
 
-func holdExisting(ctx context.Context, path string, keys ...db.Key) (func(), error) {
-	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+func holdExisting(ctx context.Context, path string, replaceUnopenable bool, keys ...db.Key) (func(), error) {
+	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
 		return func() {}, nil
 	}
+	var last error
 	for _, k := range keys {
 		held, err := db.OpenFile(path, k)
-		if isKeyError(err) {
-			continue
-		}
 		if err != nil {
-			return nil, err
+			last = err
+			continue
 		}
 		if err := db.HoldExclusive(ctx, held); err != nil {
 			_ = held.Close()
 			if errors.Is(err, db.ErrInUse) {
 				return nil, fmt.Errorf("restore refused: %w; the database and files are unchanged", err)
 			}
-			return nil, err
+			last = err
+			continue
 		}
 		return func() { _ = held.Close() }, nil
 	}
-	return func() {}, nil
+	if replaceUnopenable {
+		return func() {}, nil
+	}
+	return nil, fmt.Errorf("restore refused: the existing database %s cannot be opened and locked with the configured key or the archive's key (%v), so a running instance cannot be ruled out; fix the key or pass --replace-unopenable to replace it, which keeps the old database aside; the database and files are unchanged", path, last)
 }
 
 func chownLike(path string, info os.FileInfo) error {
@@ -286,20 +306,20 @@ func chownLike(path string, info os.FileInfo) error {
 	return nil
 }
 
-func install(ctx context.Context, cfg config.Config, configured, key db.Key, stage string) error {
+func install(ctx context.Context, cfg config.Config, configured, key db.Key, stage string, replaceUnopenable bool) ([]string, error) {
 	path := cfg.DBPath
 	lock, err := db.Exclusive(ctx, path, db.ShortLockWait)
 	if err != nil {
 		var timeout *db.LockTimeout
 		if errors.As(err, &timeout) {
-			return fmt.Errorf("restore refused: %w; stop the atrium units and timers that use the database first", err)
+			return nil, fmt.Errorf("restore refused: %w; stop the atrium units and timers that use the database first", err)
 		}
-		return err
+		return nil, err
 	}
 	defer func() { _ = lock.Close() }()
-	release, err := holdExisting(ctx, path, configured, key)
+	release, err := holdExisting(ctx, path, replaceUnopenable, configured, key)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer release()
 	owner, err := os.Stat(path)
@@ -307,11 +327,11 @@ func install(ctx context.Context, cfg config.Config, configured, key db.Key, sta
 	if err == nil {
 		dbMode = owner.Mode().Perm()
 	} else if owner, err = os.Stat(filepath.Dir(path)); err != nil {
-		return err
+		return nil, err
 	}
 	stagedFiles := filepath.Join(stage, "files")
 	if err := os.MkdirAll(stagedFiles, 0o700); err != nil {
-		return err
+		return nil, err
 	}
 	dirMode := fs.FileMode(0o755)
 	if info, err := os.Stat(cfg.FilesDir()); err == nil {
@@ -319,7 +339,7 @@ func install(ctx context.Context, cfg config.Config, configured, key db.Key, sta
 	}
 	stagedDB := filepath.Join(stage, dbEntry)
 	if err := os.Chmod(stagedDB, dbMode); err != nil {
-		return err
+		return nil, err
 	}
 	err = filepath.WalkDir(stage, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -330,53 +350,84 @@ func install(ctx context.Context, cfg config.Config, configured, key db.Key, sta
 				return err
 			}
 		}
-		return chownLike(p, owner)
+		if err := chownLike(p, owner); err != nil {
+			return err
+		}
+		return syncPath(p)
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	return swap(path, cfg.FilesDir(), stagedDB, stagedFiles)
 }
 
-func swap(dbPath, filesDir, stagedDB, stagedFiles string) error {
-	replaced := filesDir + ".replaced"
-	if err := os.RemoveAll(replaced); err != nil {
-		return err
-	}
-	hadFiles := true
-	if err := os.Rename(filesDir, replaced); errors.Is(err, fs.ErrNotExist) {
-		hadFiles = false
-	} else if err != nil {
-		return err
-	}
-	if err := os.Rename(stagedFiles, filesDir); err != nil {
-		if hadFiles {
-			_ = os.Rename(replaced, filesDir)
-		}
-		return err
-	}
-	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
-		if err := os.Remove(dbPath + suffix); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-	}
-	if err := os.Rename(stagedDB, dbPath); err != nil {
-		if hadFiles {
-			_ = os.RemoveAll(filesDir)
-			_ = os.Rename(replaced, filesDir)
-		}
-		return err
-	}
-	if err := syncDir(filepath.Dir(dbPath)); err != nil {
-		return err
-	}
-	return os.RemoveAll(replaced)
-}
-
-func syncDir(dir string) error {
-	f, err := os.Open(dir)
+func syncPath(p string) error {
+	f, err := os.Open(p)
 	if err != nil {
 		return err
 	}
 	return errors.Join(f.Sync(), f.Close())
+}
+
+type undoStack []func()
+
+func (u undoStack) run() {
+	for i := len(u) - 1; i >= 0; i-- {
+		u[i]()
+	}
+}
+
+func exists(p string) bool {
+	_, err := os.Lstat(p)
+	return err == nil
+}
+
+func swap(dbPath, filesDir, stagedDB, stagedFiles string) (moved []string, err error) {
+	stamp := time.Now().UTC().Format("20060102T150405Z")
+	var undo undoStack
+	defer func() {
+		if err != nil {
+			undo.run()
+			moved = nil
+		}
+	}()
+	move := func(from, to string) error {
+		if exists(to) {
+			return fmt.Errorf("restore: %s already exists; the database and files are unchanged", to)
+		}
+		if err := os.Rename(from, to); err != nil {
+			return err
+		}
+		undo = append(undo, func() { _ = os.Rename(to, from) })
+		return nil
+	}
+	if exists(filesDir) {
+		aside := filesDir + ".pre-restore-" + stamp
+		if err := move(filesDir, aside); err != nil {
+			return nil, err
+		}
+		moved = append(moved, aside)
+	}
+	if err := move(stagedFiles, filesDir); err != nil {
+		return nil, err
+	}
+	asideDB := dbPath + ".pre-restore-" + stamp
+	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
+		if !exists(dbPath + suffix) {
+			continue
+		}
+		if err := move(dbPath+suffix, asideDB+suffix); err != nil {
+			return nil, err
+		}
+		if suffix == "" {
+			moved = append(moved, asideDB)
+		}
+	}
+	if err := move(stagedDB, dbPath); err != nil {
+		return nil, err
+	}
+	if err := syncPath(filepath.Dir(dbPath)); err != nil {
+		return nil, err
+	}
+	return moved, nil
 }
