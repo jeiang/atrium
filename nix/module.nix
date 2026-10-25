@@ -10,7 +10,6 @@
   stateDirName = "atrium";
   stateDir = "/var/lib/${stateDirName}";
   cacheDir = "${stateDir}/cache";
-  codemodeDirName = "atrium-codemode";
   vdirsyncerDir = "${stateDir}/vdirsyncer";
   calendarDir = "${vdirsyncerDir}/calendars";
   contactsDir = "${vdirsyncerDir}/contacts";
@@ -355,51 +354,8 @@ in {
       ++ lib.optional cfg.backup.enable "d ${cfg.backup.directory} 0750 atrium atrium -";
 
     systemd = {
-      sockets.atrium-codemode = {
-        description = "atrium code-mode worker socket";
-        wantedBy = ["sockets.target"];
-        socketConfig = {
-          ListenStream = "/run/${codemodeDirName}/codemode.sock";
-          SocketUser = "atrium";
-          SocketGroup = "atrium";
-          SocketMode = "0600";
-          DirectoryMode = "0755";
-          Accept = true;
-        };
-      };
-
       services =
         {
-          "atrium-codemode@" = {
-            description = "atrium code-mode worker";
-            serviceConfig = {
-              ExecStart = "${lib.getExe cfg.package} codemode-worker";
-              StandardInput = "socket";
-              StandardOutput = "socket";
-              StandardError = "journal";
-              DynamicUser = true;
-              PrivateNetwork = true;
-              ProtectSystem = "strict";
-              ProtectHome = true;
-              PrivateTmp = true;
-              PrivateDevices = true;
-              ProtectProc = "invisible";
-              ProcSubset = "pid";
-              NoNewPrivileges = true;
-              CapabilityBoundingSet = "";
-              RestrictAddressFamilies = "AF_UNIX";
-              RestrictSUIDSGID = true;
-              LockPersonality = true;
-              ProtectKernelModules = true;
-              ProtectKernelLogs = true;
-              ProtectKernelTunables = true;
-              ProtectClock = true;
-              MemoryMax = "256M";
-              CPUQuota = "50%";
-              RuntimeMaxSec = 60;
-            };
-          };
-
           atrium-watch = appService {
             description = "Watch the atrium mailboxes for new mail";
             serviceConfig = {

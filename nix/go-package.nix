@@ -1,6 +1,7 @@
 {
   lib,
   buildGo126Module,
+  buildPackages,
   file,
   go-licenses,
   removeReferencesTo,
@@ -15,22 +16,24 @@
 
     {{.LicenseText}}
     {{end}}'';
+  src = lib.fileset.toSource {
+    inherit root;
+    fileset = lib.fileset.unions [
+      (root + "/go.mod")
+      (root + "/go.sum")
+      (root + "/cmd")
+      (root + "/internal")
+      (root + "/sdk")
+      (root + "/third_party")
+      (root + "/LICENSE")
+      (root + "/testdata")
+    ];
+  };
 in
   buildGo126Module (finalAttrs: {
     pname = "atrium";
     version = "0.1.0";
-    src = lib.fileset.toSource {
-      inherit root;
-      fileset = lib.fileset.unions [
-        (root + "/go.mod")
-        (root + "/go.sum")
-        (root + "/cmd")
-        (root + "/internal")
-        (root + "/third_party")
-        (root + "/LICENSE")
-        (root + "/testdata")
-      ];
-    };
+    inherit src;
     vendorHash = "sha256-6lVfSTy4LhejmYJ5Qh66nRgG82tWd880D32l0XmbkU8=";
     proxyVendor = true;
     excludedPackages = ["third_party"];
@@ -55,9 +58,37 @@ in
       cp -r --no-preserve=mode ${atrium-static} internal/web/static
       export GOFLAGS="$GOFLAGS -tags=libsqlite3,sqlite_fts5"
       go-licenses check ./... --disallowed_types=forbidden,unknown
-      go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --template ${noticesTemplate} > internal/about/THIRD_PARTY_NOTICES
+      go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --ignore github.com/jeiang/atrium/sdk --template ${noticesTemplate} > internal/about/THIRD_PARTY_NOTICES
       ${sqlcipherLib.appendNotices "internal/about/THIRD_PARTY_NOTICES"}
     '';
+
+    passthru.withModules = {
+      modules,
+      hash ? lib.fakeHash,
+    }: let
+      unversioned = lib.filter (m: !lib.hasInfix "@" m) modules;
+      imports = lib.concatMapStrings (m: "\t_ \"${lib.head (lib.splitString "@" m)}\"\n") modules;
+      goGet = ''
+        export GOCACHE=$TMPDIR/go-cache GOPATH=$TMPDIR/go
+        go get ${lib.escapeShellArgs modules}
+      '';
+    in
+      assert lib.assertMsg (unversioned == []) "atrium modules need a version (path@version): ${lib.concatStringsSep ", " unversioned}";
+        finalAttrs.finalPackage.overrideAttrs (prev: {
+          vendorHash = hash;
+          postPatch = ''
+            printf 'package main\n\nimport (\n%s)\n' ${lib.escapeShellArg imports} > cmd/atrium/modules_ext.go
+          '';
+          postConfigure = goGet;
+          passthru =
+            prev.passthru
+            // {
+              overrideModAttrs = old: {
+                nativeBuildInputs = old.nativeBuildInputs ++ [buildPackages.git];
+                postPatch = old.postPatch + goGet;
+              };
+            };
+        });
 
     postInstall = ''
       remove-references-to -t ${sqlcipherLib.openssl.etc} $out/bin/atrium

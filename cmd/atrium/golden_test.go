@@ -115,7 +115,7 @@ func copyTree(t *testing.T, from, to string) {
 
 var pythonOrder = []string{
 	"sync", "watch", "rules", "shadow-report", "reindex", "rebalance", "deletions", "gmail-labels", "live", "proposals",
-	"notion", "agent", "calendar", "loops", "watches", "money", "media", "serve", "codemode-worker",
+	"notion", "agent", "calendar", "loops", "watches", "money", "media", "serve",
 }
 
 func inPythonOrder(have []*cli.Command) []*cli.Command {
