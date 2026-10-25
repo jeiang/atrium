@@ -1,9 +1,8 @@
 {{$t := .Data.test}}
 {{if eq $t.status "pending"}}
-<div id="oidc-test" data-state="pending" data-seq="{{$t.seq}}" hx-get="/settings/auth/test/status{{if $t.waiting}}?after={{$t.seq}}{{end}}" hx-trigger="every 1s" hx-swap="outerHTML" class="flex items-center gap-2 text-sm text-muted-foreground" role="status">{{icon "loader-circle" "size-4 animate-spin"}}Waiting for the provider tab</div>
+<div id="oidc-test" data-state="pending" data-seq="{{$t.seq}}" hx-get="/settings/auth/test/status{{if $t.waiting}}?after={{$t.seq}}{{end}}" hx-trigger="every 2s" hx-swap="outerHTML" class="flex items-center gap-2 text-sm text-muted-foreground" role="status">{{icon "loader-circle" "size-4 animate-spin"}}Waiting for the provider tab</div>
 {{else if eq $t.status "passed"}}
 <div id="oidc-test" data-state="passed" data-seq="{{$t.seq}}" class="flex flex-col gap-3">
-  <div class="alert" role="status">{{icon "check"}}<p>Test passed.</p></div>
   {{if $t.groups}}<div class="flex flex-wrap gap-2">{{range $t.groups}}<span class="badge" data-variant="secondary">{{.}}</span>{{end}}</div>{{end}}
   <form hx-post="/settings/auth/activate" hx-target="#oidc-test" hx-swap="outerHTML">
     <input type="hidden" name="fingerprint" value="{{$t.fingerprint}}">
@@ -12,8 +11,6 @@
 </div>
 {{else if eq $t.status "failed"}}
 <div id="oidc-test" data-state="failed" data-seq="{{$t.seq}}"><div class="alert" data-variant="destructive" role="alert">{{icon "circle-alert"}}<p>{{$t.reason}}</p></div></div>
-{{else if eq $t.status "activated"}}
-<div id="oidc-test" data-state="activated" data-seq="{{$t.seq}}"><div class="alert" role="status">{{icon "check"}}<p>Sign-in is active.</p></div></div>
 {{else}}
 <div id="oidc-test" data-state="idle" data-seq="{{$t.seq}}"{{if $t.oob}} hx-swap-oob="true"{{end}}></div>
 {{end}}

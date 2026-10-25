@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
@@ -57,6 +58,7 @@ type Form struct {
 }
 
 type Draft struct {
+	form        Form
 	cfg         Config
 	vals        values
 	secret      string
@@ -173,7 +175,13 @@ func (f Form) shown(preset Preset) map[string]string {
 }
 
 func (s *Service) Draft(ctx context.Context, f Form) (Draft, error) {
-	active, problems := resolved(ctx, s.d.Read)
+	d, err := s.draftFrom(ctx, s.d.Read, f)
+	d.form = f
+	return d, err
+}
+
+func (s *Service) draftFrom(ctx context.Context, q db.Querier, f Form) (Draft, error) {
+	active, problems := resolved(ctx, q)
 	if len(problems) > 0 {
 		return Draft{}, errors.New(strings.Join(problems, "; "))
 	}
@@ -223,7 +231,7 @@ func (s *Service) Draft(ctx context.Context, f Form) (Draft, error) {
 			d.changed[key] = value
 		}
 	}
-	stored, err := secrets.Credential(ctx, s.d.Read, secrets.OIDCClientSecret)
+	stored, err := secrets.Credential(ctx, q, secrets.OIDCClientSecret)
 	if err != nil {
 		return Draft{}, err
 	}
@@ -354,6 +362,11 @@ func (s *Service) TestResult() TestResult {
 		return TestResult{Status: TestIdle, Seq: s.testSeq}
 	}
 	res := s.test.result
+	if res.Status == TestPending && s.now().Sub(s.test.created) > loginTTL {
+		s.test.state = ""
+		res = TestResult{Status: TestFailed, Reason: "Sign-in timed out.", HTTP: 400, Fingerprint: s.test.draft.fingerprint}
+		s.test.result = res
+	}
 	res.Seq = s.test.seq
 	return res
 }
@@ -450,6 +463,11 @@ func (s *Service) Activate(ctx context.Context, fingerprint string) error {
 	s.mu.Unlock()
 	ctx = audit.With(ctx, "operator", audit.UI)
 	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		current, err := s.draftFrom(ctx, tx, d.form)
+		if err != nil || current.fingerprint != d.fingerprint {
+			return ErrStaleTest
+		}
+		d = current
 		keys := make([]string, 0, len(d.changed))
 		for k := range d.changed {
 			keys = append(keys, k)

@@ -64,7 +64,6 @@ type setupView struct {
 	SecretSet     bool       `json:"secret_set"`
 	SecretPinned  bool       `json:"secret_pinned"`
 	Pinned        pinnedView `json:"pinned"`
-	Error         string     `json:"error"`
 }
 
 type presetOption struct {
@@ -147,7 +146,7 @@ func (s *Server) steps(v oidc.View) []stepView {
 	return out
 }
 
-func (s *Server) setupFor(v oidc.View, problem string) setupView {
+func (s *Server) setupFor(v oidc.View) setupView {
 	p, val := v.Preset, v.Values
 	pin := func(key string) bool { return v.Pinned[key] }
 	view := setupView{
@@ -157,7 +156,7 @@ func (s *Server) setupFor(v oidc.View, problem string) setupView {
 		AccessEmails: val[oidc.KeyAccessEmails], AdminEmails: val[oidc.KeyAdminEmails],
 		AccessDomains: val[oidc.KeyAccessDomains], AdminDomains: val[oidc.KeyAdminDomains],
 		Groups: p.Groups, Lists: p.Lists, Placeholder: p.Placeholder, Open: p.Open,
-		SecretSet: v.SecretSet, SecretPinned: v.SecretPinned, Error: problem,
+		SecretSet: v.SecretSet, SecretPinned: v.SecretPinned,
 		Pinned: pinnedView{
 			Issuer: pin(oidc.KeyIssuer), ClientID: pin(oidc.KeyClientID), Scopes: pin(oidc.KeyScopes), GroupsClaim: pin(oidc.KeyGroupsClaim),
 			AccessGroup: pin(oidc.KeyAccessGroup), AdminGroup: pin(oidc.KeyAdminGroup), AccessEmails: pin(oidc.KeyAccessEmails),
@@ -191,7 +190,7 @@ func testFrom(res oidc.TestResult, after string) testView {
 	return view
 }
 
-func (s *Server) wizardData(r *http.Request, presetName, problem string) (wizardData, error) {
+func (s *Server) wizardData(r *http.Request, presetName string) (wizardData, error) {
 	v, err := s.oidc.View(r.Context(), presetName)
 	if err != nil {
 		return wizardData{}, err
@@ -201,7 +200,7 @@ func (s *Server) wizardData(r *http.Request, presetName, problem string) (wizard
 		options = append(options, presetOption{Name: p.Name, Label: p.Label(), Selected: p.Name == v.Preset.Name})
 	}
 	return wizardData{
-		Presets: options, PresetPinned: v.PresetPinned, Setup: s.setupFor(v, problem), State: s.stateFor(v),
+		Presets: options, PresetPinned: v.PresetPinned, Setup: s.setupFor(v), State: s.stateFor(v),
 		Test: testFrom(s.oidc.TestResult(), ""),
 	}, nil
 }
@@ -227,7 +226,7 @@ func (s *Server) wizardRender(w http.ResponseWriter, r *http.Request, status int
 
 func (s *Server) wizardPage(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
-	data, err := s.wizardData(r, "", "")
+	data, err := s.wizardData(r, "")
 	if err != nil {
 		s.wizardFail(w, r, err)
 		return
@@ -237,7 +236,7 @@ func (s *Server) wizardPage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) wizardPreset(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
-	data, err := s.wizardData(r, r.URL.Query().Get("preset"), "")
+	data, err := s.wizardData(r, r.URL.Query().Get("preset"))
 	if err != nil {
 		s.wizardFail(w, r, err)
 		return
@@ -262,7 +261,7 @@ func (s *Server) wizardActivate(w http.ResponseWriter, r *http.Request) {
 			s.wizardFail(w, r, verr)
 			return
 		}
-		data := wizardData{State: s.stateFor(v), Test: testView{Status: "activated", Seq: s.oidc.TestResult().Seq}, OOB: true}
+		data := wizardData{State: s.stateFor(v), Test: testView{Status: string(oidc.TestIdle), Seq: s.oidc.TestResult().Seq}, OOB: true}
 		s.wizardRender(w, r, http.StatusOK, "_oidc_activated.gohtml", data)
 	case errors.Is(err, oidc.ErrNoPassedTest), errors.Is(err, oidc.ErrStaleTest):
 		data := wizardData{Test: testView{Status: string(oidc.TestFailed), Reason: "Test sign-in again before activating.", Seq: s.oidc.TestResult().Seq}}

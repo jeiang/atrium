@@ -284,6 +284,7 @@ func TestLoginLinkIssueAndRedeemAreAuditedWithoutTheToken(t *testing.T) {
 	site.browser().post("/login/link", url.Values{"token": {token}})
 	site.browser().post("/login/link", url.Values{"token": {token}})
 	site.browser().post("/login/link", url.Values{"token": {"garbage"}})
+	site.browser().post("/login/link", url.Values{"token": {nonce + ".AAAA"}})
 
 	rows, err := site.db.Read.Query("SELECT new_value, actor, source FROM settings_audit WHERE key = 'login_link' ORDER BY id")
 	if err != nil {
@@ -298,7 +299,7 @@ func TestLoginLinkIssueAndRedeemAreAuditedWithoutTheToken(t *testing.T) {
 		}
 		got = append(got, source+" "+actor+": "+value)
 	}
-	prefixes := []string{"cli operator: issued #1", "cli operator: issued #2", "ui login-link: redeemed #2", "ui login-link: refused: #2 was already used", "ui login-link: refused: not valid"}
+	prefixes := []string{"cli operator: issued #1", "cli operator: issued #2", "ui login-link: redeemed #2", "ui login-link: refused: #2 was already used"}
 	if len(got) != len(prefixes) {
 		t.Fatalf("audit trail %q", got)
 	}
@@ -355,7 +356,7 @@ func TestLoginLinkFirstRunSetupThenOIDCSignIn(t *testing.T) {
 	status := owner.get("/settings/auth/test/status")
 	linkExpect(t, status, http.StatusOK, "Activate")
 	fingerprint := regexp.MustCompile(`name="fingerprint" value="([0-9a-f]+)"`).FindStringSubmatch(status.body)[1]
-	linkExpect(t, owner.post("/settings/auth/activate", url.Values{"fingerprint": {fingerprint}}), http.StatusOK, "Sign-in is active", "Pocket ID")
+	linkExpect(t, owner.post("/settings/auth/activate", url.Values{"fingerprint": {fingerprint}}), http.StatusOK, "Active", "Pocket ID")
 
 	if owner.sessionToken() != before {
 		t.Fatal("activation replaced the link session")

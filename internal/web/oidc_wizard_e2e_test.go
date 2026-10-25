@@ -196,7 +196,7 @@ func TestWizardTestSignInThenActivate(t *testing.T) {
 		t.Fatal("a stale fingerprint activated the configuration")
 	}
 	activated := admin.post("/settings/auth/activate", url.Values{"fingerprint": {fingerprint[1]}})
-	expect(t, activated, http.StatusOK, "Sign-in is active")
+	expect(t, activated, http.StatusOK, "Active")
 	if activeSetting(t, r, oidc.KeyAccessGroup) != "team_access" || activeSetting(t, r, oidc.KeyAdminGroup) != "team_admin" {
 		t.Fatal("the tested groups were not saved")
 	}
@@ -330,7 +330,7 @@ func TestWizardGoogleFlowUsesEmailAllowlists(t *testing.T) {
 	if fingerprint == nil {
 		t.Fatalf("no fingerprint in %s", status.Body)
 	}
-	expect(t, admin.post("/settings/auth/activate", url.Values{"fingerprint": {fingerprint[1]}}), http.StatusOK, "Sign-in is active")
+	expect(t, admin.post("/settings/auth/activate", url.Values{"fingerprint": {fingerprint[1]}}), http.StatusOK, "Active")
 	if got := activeSetting(t, r, oidc.KeyAccessEmails); got != "friend@example.com, boss@example.com" {
 		t.Fatalf("access emails %q", got)
 	}

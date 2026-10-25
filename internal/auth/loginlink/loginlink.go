@@ -105,15 +105,9 @@ func (s *Service) Issue(ctx context.Context, ttl time.Duration) (string, error) 
 
 func (s *Service) Redeem(ctx context.Context, token string) error {
 	ctx = audit.With(ctx, "login-link", audit.UI)
-	refuse := func(reason string, err error) error {
-		if werr := s.d.WithTx(ctx, func(tx *sql.Tx) error { return note(ctx, tx, "refused: %s", reason) }); werr != nil {
-			return werr
-		}
-		return err
-	}
 	nonce, given, ok := strings.Cut(token, ".")
 	if !ok || len(nonce) > 128 || len(given) > 128 {
-		return refuse("not valid", ErrInvalid)
+		return ErrInvalid
 	}
 	want, err := s.mac(ctx, nonce)
 	if err != nil {
@@ -121,7 +115,7 @@ func (s *Service) Redeem(ctx context.Context, token string) error {
 	}
 	got, err := base64.RawURLEncoding.DecodeString(given)
 	if err != nil || !hmac.Equal(got, want) {
-		return refuse("not valid", ErrInvalid)
+		return ErrInvalid
 	}
 	var outcome error
 	err = s.d.WithTx(ctx, func(tx *sql.Tx) error {
@@ -132,7 +126,7 @@ func (s *Service) Redeem(ctx context.Context, token string) error {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			outcome = ErrInvalid
-			return note(ctx, tx, "refused: not valid")
+			return nil
 		case err != nil:
 			return err
 		case used.Valid:

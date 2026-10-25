@@ -5,7 +5,6 @@
 <form method="post" action="/settings/auth/test" target="oidc-test" class="flex flex-col gap-4" data-test-signin>
   <input type="hidden" name="csrf_token" value="{{.CSRF}}">
   <input type="hidden" name="preset" value="{{$s.preset}}">
-  {{with $s.error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
   {{if $s.issuer_label}}
   <div role="group" class="field"><label for="oidc-issuer">{{$s.issuer_label}}{{if $s.pinned.issuer}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="oidc-issuer" name="issuer" type="{{if eq $s.preset "entra"}}text{{else}}url{{end}}" value="{{$s.issuer}}" autocomplete="off" required{{if $s.pinned.issuer}} disabled{{end}}></div>
   {{end}}

@@ -1,6 +1,5 @@
 {{$d := .Data}}
 {{if $d.passed}}
-<div class="alert" role="status">{{icon "check"}}<p>Test passed.</p></div>
 {{if $d.groups}}<div class="flex flex-wrap gap-2">{{range $d.groups}}<span class="badge" data-variant="secondary">{{.}}</span>{{end}}</div>{{end}}
 {{else}}
 <div class="alert" data-variant="destructive" role="alert">{{icon "circle-alert"}}<p>{{$d.reason}}</p></div>
