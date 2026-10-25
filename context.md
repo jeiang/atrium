@@ -110,7 +110,9 @@ not claims about the running application.
   Research subagents have restricted tools and bounded runs.
 - The public web service trusts an authenticating reverse proxy and checks
   Host and operator group membership. A separate local mode provides
-  loopback access. Public media file access requires an expiring signed
+  loopback access. `atrium serve` refuses to start with no authentication in
+  force unless `--force-disable-auth` is given, which shows a persistent
+  banner. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in
   the database (pinnable by the deployment); a legacy `media-link.key` file is
   moved into it on first use.

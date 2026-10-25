@@ -5,6 +5,7 @@ This page states what atrium does and refuses to do today. It describes current 
 ## Access
 
 - `atrium serve` binds `127.0.0.1` unless told otherwise. Proxy authentication is its default mode; local mode is selected with `--auth local`. A listener in proxy mode refuses to start without an accepted Host (`--allowed-host`, or the public host setting).
+- `atrium serve` refuses to start, exits non-zero and warns that authentication is recommended because the instance holds API keys and mailbox access, when no authentication is in force: local mode on an address that is not loopback, or proxy mode without an accepted Host. `--force-disable-auth` starts it anyway on any interface, logs a warning at start, and shows a persistent "Authentication is disabled" banner on every page. The flag has no effect when proxy authentication is configured or local mode listens on loopback; the banner then does not appear.
 - Every request except `GET /healthz` must carry an accepted Host header; any other Host receives `400`.
 - In proxy mode the request must carry a `Remote-Groups` header that lists `atrium_access`, otherwise it receives `403`. Static assets under `/static/` and valid signed media links are exempt from the group check. The Host check still applies to them.
 - In local mode there is no group check. Without an explicit allowed Host, the accepted Hosts are `localhost`, `127.0.0.1` and `[::1]`.

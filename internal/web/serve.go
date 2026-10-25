@@ -76,8 +76,9 @@ func ServeCommand(pages ...Page) *cli.Command {
 			port := args.Int("port", 0, cli.Opt{Required: true})
 			mode := args.String("auth", AuthProxy, cli.Opt{Choices: AuthModes[:]})
 			hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
+			force := args.Bool("force-disable-auth", cli.Opt{Help: "start without authentication when none is configured"})
 			return func(env *cli.Env) int {
-				return serve(env, serveArgs{host: *host, port: *port, auth: *mode, hosts: *hosts, pages: pages, env: config.OS})
+				return serve(env, serveArgs{host: *host, port: *port, auth: *mode, hosts: *hosts, forceDisableAuth: *force, pages: pages, env: config.OS})
 			}
 		},
 	}
@@ -90,6 +91,9 @@ type serveArgs struct {
 	hosts []string
 	pages []Page
 	env   config.Env
+
+	forceDisableAuth bool
+	authDisabled     bool
 }
 
 func publicHosts(given []string, env config.Env) []string {
@@ -104,10 +108,11 @@ func publicHosts(given []string, env config.Env) []string {
 
 func serve(env *cli.Env, a serveArgs) int {
 	hosts := publicHosts(a.hosts, a.env)
-	if a.auth == AuthProxy && len(hosts) == 0 {
-		_, _ = fmt.Fprintln(env.Stderr, "proxy mode needs --allowed-host or ATRIUM_PUBLIC_HOST")
+	disabled, ok := resolveAuth(env.Stderr, a, hosts)
+	if !ok {
 		return cli.ExitError
 	}
+	a.authDisabled = disabled
 	cfg, err := config.Load(a.env)
 	if err != nil {
 		_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
@@ -154,7 +159,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	}()
 	var modules []Module
 	var templates []fs.FS
-	globals := map[string]any{}
+	globals := map[string]any{"auth_disabled": a.authDisabled}
 	var public []func(*http.Request) bool
 	for _, p := range a.pages {
 		modules = append(modules, p.Module)

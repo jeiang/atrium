@@ -31,6 +31,9 @@ func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, erro
 	if _, ok := extra.Globals["module_enabled"]; !ok {
 		extra.Globals["module_enabled"] = func(string) bool { return true }
 	}
+	if _, ok := extra.Globals["auth_disabled"]; !ok {
+		extra.Globals["auth_disabled"] = false
+	}
 	engine, err := tpl.New(extra)
 	if err != nil {
 		return nil, err
