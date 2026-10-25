@@ -19,24 +19,26 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func resolveAuth(stderr io.Writer, a serveArgs, hosts []string) (disabled bool, ok bool) {
+func resolveAuth(stderr io.Writer, a serveArgs, hosts []string) (serveArgs, bool) {
 	configured := false
 	switch a.auth {
 	case AuthProxy:
 		configured = len(hosts) > 0
-		if !configured && !a.forceDisableAuth {
-			_, _ = fmt.Fprintln(stderr, "proxy mode needs --allowed-host or ATRIUM_PUBLIC_HOST")
-		}
 	case AuthLocal:
 		configured = isLoopbackHost(a.host)
 	}
 	if configured {
-		return false, true
+		return a, true
 	}
 	if !a.forceDisableAuth {
 		_, _ = fmt.Fprintln(stderr, authWarning)
-		return false, false
+		if a.auth == AuthProxy {
+			_, _ = fmt.Fprintln(stderr, "proxy mode needs --allowed-host or ATRIUM_PUBLIC_HOST")
+		}
+		return a, false
 	}
 	log.Warn(authDisabledLog)
-	return true, true
+	a.auth = AuthLocal
+	a.authDisabled = true
+	return a, true
 }

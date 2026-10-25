@@ -108,11 +108,10 @@ func publicHosts(given []string, env config.Env) []string {
 
 func serve(env *cli.Env, a serveArgs) int {
 	hosts := publicHosts(a.hosts, a.env)
-	disabled, ok := resolveAuth(env.Stderr, a, hosts)
+	a, ok := resolveAuth(env.Stderr, a, hosts)
 	if !ok {
 		return cli.ExitError
 	}
-	a.authDisabled = disabled
 	cfg, err := config.Load(a.env)
 	if err != nil {
 		_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
