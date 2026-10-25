@@ -623,5 +623,6 @@ func Tools() []tool.Tool {
 			Effect:      tool.Read,
 			Contexts:    contexts,
 		},
+		selfDiagnoseTool,
 	}
 }

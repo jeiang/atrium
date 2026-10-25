@@ -54,7 +54,7 @@ func init() {
 		var out []Sample
 		for _, j := range jobs {
 			if j.Enabled && j.NextDue != nil {
-				out = append(out, Sample{Labels: [][2]string{{"job", j.Name}}, Value: *j.NextDue})
+				out = append(out, Sample{Labels: [][2]string{{"scheduled_job", j.Name}}, Value: *j.NextDue})
 			}
 		}
 		return out, err
@@ -64,7 +64,7 @@ func init() {
 		var out []Sample
 		for _, j := range jobs {
 			if j.LastStarted != nil && j.LastStatus != nil {
-				out = append(out, Sample{Labels: [][2]string{{"job", j.Name}, {"status", *j.LastStatus}}, Value: *j.LastStarted})
+				out = append(out, Sample{Labels: [][2]string{{"scheduled_job", j.Name}, {"status", *j.LastStatus}}, Value: *j.LastStarted})
 			}
 		}
 		return out, err

@@ -86,6 +86,12 @@
             path = unit name;
           })
           unitNames);
+
+      monitoring = pkgs.runCommand "atrium-monitoring-check" {nativeBuildInputs = [pkgs.prometheus.cli (pkgs.callPackage ../nix/dashboard-linter.nix {})];} ''
+        promtool check rules ${../nix/monitoring/atrium.rules.yml}
+        dashboard-linter lint --strict ${../nix/monitoring/atrium-dashboard.json}
+        touch $out
+      '';
     };
   };
 }

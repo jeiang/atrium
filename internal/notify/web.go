@@ -26,6 +26,7 @@ type listing struct {
 }
 
 func Module(r chi.Router, d *web.Deps) {
+	go watchStale(d.DB, d.Env, d.Stopping)
 	r.Get("/settings/notifications", func(w http.ResponseWriter, r *http.Request) {
 		list, err := Recent(r.Context(), d.DB.Read, 100)
 		if err != nil {

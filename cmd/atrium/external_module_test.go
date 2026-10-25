@@ -105,14 +105,14 @@ func TestExternalModuleMigratesAGoldenDatabaseCopy(t *testing.T) {
 	}
 	defer func() { _ = d.Close() }()
 	var core, mod int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 10").Scan(&core); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version IN (10, 11)").Scan(&core); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM module_migrations WHERE module = ? AND version = 1", extName).Scan(&mod); err != nil {
 		t.Fatal(err)
 	}
-	if core != 1 || mod != 1 {
-		t.Fatalf("golden copy: core migration 10 recorded %d, module migration recorded %d", core, mod)
+	if core != 2 || mod != 1 || !tableExists(t, dir, "pass_runs") || !tableExists(t, dir, "pass_run_alerts") {
+		t.Fatalf("golden copy: core migrations 10-11 recorded %d, module migration recorded %d", core, mod)
 	}
 }
 

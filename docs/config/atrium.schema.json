@@ -1486,6 +1486,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "pass_run_retention_days": {
+          "default": 90,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "pass_run_retention_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "public_url": {
           "type": "string"
         },

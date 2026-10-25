@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/money"
+	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -236,5 +237,5 @@ func Sync(ctx context.Context, cfg config.Config, requested string, open mailops
 	if err != nil {
 		return nil, err
 	}
-	return accounts, New(d, cfg, open, nil).Locked(ctx, ctx, accounts)
+	return accounts, passrun.Track(ctx, d, passrun.Sync, func() error { return New(d, cfg, open, nil).Locked(ctx, ctx, accounts) })
 }
