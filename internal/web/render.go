@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -13,6 +14,7 @@ import (
 )
 
 type Renderer struct {
+	oidcOn atomic.Bool
 	engine *tpl.Engine
 	cfg    config.Config
 	db     *db.DB
@@ -31,11 +33,20 @@ func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, erro
 	if _, ok := extra.Globals["module_enabled"]; !ok {
 		extra.Globals["module_enabled"] = func(string) bool { return true }
 	}
+	rd := &Renderer{cfg: cfg, db: d}
+	enabled, _ := extra.Globals["module_enabled"].(func(string) bool)
+	extra.Globals["module_enabled"] = func(name string) bool {
+		if name == "auth" {
+			return rd.oidcOn.Load()
+		}
+		return enabled(name)
+	}
 	engine, err := tpl.New(extra)
 	if err != nil {
 		return nil, err
 	}
-	return &Renderer{engine: engine, cfg: cfg, db: d}, nil
+	rd.engine = engine
+	return rd, nil
 }
 
 func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, error) {

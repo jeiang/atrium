@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -50,11 +51,14 @@ type Options struct {
 	Static       fs.FS
 	Modules      []Module
 	OIDC         *oidc.Service
+	LoginLinks   *loginlink.Service
 	NoAuth       bool
 }
 
 type Server struct {
+	auth     AuthSet
 	oidc     *oidc.Service
+	links    *loginlink.Service
 	render   *Renderer
 	secure   func(*http.Request) bool
 	handler  http.Handler
@@ -77,10 +81,13 @@ func New(o Options) (*Server, error) {
 	if o.Env == nil {
 		o.Env = config.OS
 	}
-	if auth.OIDC && o.OIDC == nil {
-		return nil, errors.New("oidc auth needs a session service")
+	if auth.OIDC && (o.OIDC == nil || o.Render == nil || (o.LoginLinks == nil && o.DB == nil)) {
+		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
-	s := &Server{mux: chi.NewRouter(), errPage: o.ErrorPage, oidc: o.OIDC, render: o.Render}
+	s := &Server{mux: chi.NewRouter(), errPage: o.ErrorPage, oidc: o.OIDC, render: o.Render, auth: auth, links: o.LoginLinks}
+	if s.links == nil && o.DB != nil {
+		s.links = loginlink.New(o.DB)
+	}
 	if s.errPage == nil && o.Render != nil {
 		s.errPage = o.Render.ErrorPage
 	}
@@ -112,6 +119,7 @@ func New(o Options) (*Server, error) {
 		return hasSecureTransport(r, strings.HasPrefix(config.PublicURL(o.Env), "https://"))
 	}
 	if auth.OIDC {
+		o.Render.oidcOn.Store(true)
 		s.registerAuthRoutes()
 	}
 	for _, register := range o.Modules {

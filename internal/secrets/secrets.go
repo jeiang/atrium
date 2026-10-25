@@ -114,6 +114,10 @@ func New(d *db.DB, cipher Cipher) *Store {
 	return &Store{reg: settings.Default, d: d, q: d.Write, cipher: cipher}
 }
 
+func NewIn(d *db.DB, q db.Querier, cipher Cipher) *Store {
+	return &Store{reg: settings.Default, d: d, q: q, cipher: cipher}
+}
+
 func (s *Store) InTx(ctx context.Context, fn func(*Store) error) error {
 	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		scoped := *s
