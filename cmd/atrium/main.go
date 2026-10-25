@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/notion/notionmodule"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/sdk"
 )
 
 var version = "dev"
@@ -45,7 +46,7 @@ func newSet(clients run.Clients, now func() float64) *module.Set {
 	guard := func(ctx context.Context, q db.Querier, key, value string) error {
 		return set.Guard(ctx, q, key, value)
 	}
-	set, err := module.NewSet(settings.Default, config.OS,
+	mods := append([]module.Module{
 		coremodule.Module{Version: version, Guard: guard},
 		mailmodule.Module{Clients: clients, Now: now},
 		calendarmodule.Module{},
@@ -55,7 +56,8 @@ func newSet(clients run.Clients, now func() float64) *module.Set {
 		assistantmodule.Module{},
 		notifymodule.Module{},
 		grafanamodule.Module{},
-	)
+	}, sdk.Modules()...)
+	set, err := module.NewSet(settings.Default, config.OS, mods...)
 	if err != nil {
 		panic(err)
 	}
@@ -64,6 +66,6 @@ func newSet(clients run.Clients, now func() float64) *module.Set {
 
 func commands(clients run.Clients, now func() float64) []*cli.Command {
 	set := newSet(clients, now)
-	cmds := append(set.Commands(), web.ServeCommand(set.Pages()...), codemodeWorkerCommand())
+	cmds := append(set.Commands(), web.ServeCommand(set.Pages()...))
 	return pinned(cmds)
 }

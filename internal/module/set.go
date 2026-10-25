@@ -22,13 +22,32 @@ type Set struct {
 
 func NewSet(reg *settings.Registry, env config.Env, mods ...Module) (*Set, error) {
 	s := &Set{reg: reg, env: env}
+	var regs []Registration
 	for _, m := range mods {
-		s.regs = append(s.regs, m.Register(Context{Current: s.Current}))
+		regs = append(regs, m.Register(Context{Current: s.Current}))
 	}
+	s.regs = byNeeds(regs)
 	if err := s.validate(); err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+func byNeeds(regs []Registration) []Registration {
+	placed := map[string]bool{}
+	var out []Registration
+	for len(regs) > 0 {
+		i := slices.IndexFunc(regs, func(r Registration) bool {
+			return !slices.ContainsFunc(r.Needs, func(dep string) bool { return !placed[dep] })
+		})
+		if i < 0 {
+			return append(out, regs...)
+		}
+		placed[regs[i].Name] = true
+		out = append(out, regs[i])
+		regs = slices.Delete(regs, i, i+1)
+	}
+	return out
 }
 
 func (s *Set) validate() error {

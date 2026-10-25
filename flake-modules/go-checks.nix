@@ -19,6 +19,7 @@
         (lib.fileset.maybeMissing (root + "/go.sum"))
         (root + "/cmd")
         (root + "/internal")
+        (root + "/sdk")
         (root + "/tools/settingsgen")
         (root + "/docs/config")
         (lib.fileset.maybeMissing (root + "/third_party"))
@@ -114,7 +115,7 @@
       go-licenses = goCheck "licenses" [pkgs.go-licenses] ''
         ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" go-licenses check ./... --disallowed_types=forbidden,unknown''}
         mkdir -p $out
-        GOFLAGS="$GOFLAGS -tags=libsqlite3,sqlite_fts5" go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --template ${notices} >$out/THIRD_PARTY_NOTICES
+        GOFLAGS="$GOFLAGS -tags=libsqlite3,sqlite_fts5" go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --ignore github.com/jeiang/atrium/sdk --template ${notices} >$out/THIRD_PARTY_NOTICES
         ${sqlcipherLib.appendNotices "$out/THIRD_PARTY_NOTICES"}
         cp $out/THIRD_PARTY_NOTICES internal/about/THIRD_PARTY_NOTICES
         test -s internal/about/THIRD_PARTY_NOTICES

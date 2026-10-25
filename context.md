@@ -78,7 +78,11 @@ not claims about the running application.
   (`atrium proposals resolve`, `atrium live resolve`, or the web buttons); the
   action touches no mailbox and appends actor, source, outcome and the prior
   error to the append-only `write_resolutions` table.
-- Modules are toggled at runtime, all compiled in. Core (settings, secrets,
+- Modules are toggled at runtime. The built-in modules are always compiled
+  in; a build can add external compile-time modules that register through
+  the public `sdk` package (`withModules` in the Nix package), each with its
+  own `<name>_enabled` flag and migrations recorded in `module_migrations`.
+  Core (settings, secrets,
   `db`, `serve`, the About, review and activity pages) is always on; mail,
   calendar, Notion, money, media, assistant, notifications and Grafana each
   have a `<name>_enabled` setting. A module is on only when its flag is true
@@ -123,9 +127,8 @@ not claims about the running application.
   configured. The Sign-in settings tab sets up OIDC from provider presets and
   activates a configuration only after a Test sign-in in a separate state
   showed the tested account would keep administrator access.
-- Code execution is unavailable. The existing code-mode worker and service
-  interface are inert; the replacement sandbox manager is deferred to
-  [issue #202](https://github.com/jeiang/atrium/issues/202).
+- Code execution is not part of the application. The code-mode worker
+  command and units are removed; coding may return as an external module.
 
 ## Accepted direction
 
@@ -152,19 +155,11 @@ not claims about the running application.
 - UI-managed integrations and settings, and model, effort and context
   controls on the new-thread composer. The notifications module requires `ntfy_url` and `ntfy_topic`, but
   not the optional `NTFY_TOKEN`; its toggle is `notifications_enabled`.
-- Isolated coding workspaces, repository integration, and delegation to
-  coding agents for scripts, bounded changes, and draft pull requests.
-  Secrets must stay outside the workspace, with controlled network access
-  and no general model shell on the application host. The recorded sandbox
-  direction is remote microVMs, without Nix inside the sandbox, a macOS
-  sandbox host, or OCI images; implementation remains deferred.
 - Independent instances for other operators, without owner-specific source
-  changes or a shared multi-tenant sandbox manager.
+  changes.
 
 ## Open decisions
 
-- Whether the first branch push or draft pull request for a repository
-  requires explicit approval.
 - Which phone interface to support and which actions it may authorize.
 
 Detailed feature scope and acceptance criteria belong in the

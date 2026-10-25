@@ -52,8 +52,6 @@
       "atrium-agent-scheduler.service"
       "atrium-backup.service"
       "atrium-backup.timer"
-      "atrium-codemode.socket"
-      "atrium-codemode@.service"
       "atrium-notion-sync.service"
       "atrium-notion-sync.timer"
       "atrium-scan.service"

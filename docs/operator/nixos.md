@@ -97,4 +97,17 @@ The module never removes old archives. Pruning and copying archives off the host
 
 Regardless of options, the module places the database at `/var/lib/atrium/atrium.db` and the message cache at `/var/lib/atrium/cache/messages`, and installs the `atrium-run` command, which runs the atrium binary as the `atrium` user with the same environment files and variables as the units.
 
-The module defines these units: `atrium-web`, `atrium-watch`, `atrium-agent-scheduler`, the oneshot services `atrium-sync`, `atrium-notion-sync` and `atrium-scan` with their timers, and the code-mode worker socket and service. `atrium-backup` with its timer exists only with `backup.enable`, `atrium-web-local` only with `web.local.enable`, and `atrium-vdirsyncer-sync` with its timer only when `icloudAppleId` is set.
+The module defines these units: `atrium-web`, `atrium-watch`, `atrium-agent-scheduler`, and the oneshot services `atrium-sync`, `atrium-notion-sync` and `atrium-scan` with their timers. `atrium-backup` with its timer exists only with `backup.enable`, `atrium-web-local` only with `web.local.enable`, and `atrium-vdirsyncer-sync` with its timer only when `icloudAppleId` is set.
+
+## External modules
+
+`package` accepts a build with extra compile-time modules. Each entry is a Go module path with a version; the build blank-imports it into `cmd/atrium`, and the module registers itself through `github.com/jeiang/atrium/sdk`. Omit `hash` on the first build and copy the hash Nix reports.
+
+```nix
+services.atrium.package = atrium.packages.x86_64-linux.atrium.withModules {
+  modules = ["example.com/atrium-extra@v0.1.0"];
+  hash = "sha256-...";
+};
+```
+
+An external module is off until its `<name>_enabled` setting is true. Its migrations run whenever a command opens the database, whether the module is on or off, and are recorded in `module_migrations`. A database migrated by a newer version of the module is refused. Removing the module from the build leaves its tables in place.
