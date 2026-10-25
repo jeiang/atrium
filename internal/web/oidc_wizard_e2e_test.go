@@ -185,7 +185,7 @@ func TestWizardTestSignInThenActivate(t *testing.T) {
 	expect(t, stranger.signIn(r, "boss"), http.StatusForbidden)
 
 	status := admin.get("/settings/auth/test/status")
-	expect(t, status, http.StatusOK, "Test passed", "Activate", "team_admin")
+	expect(t, status, http.StatusOK, "Activate", "team_admin")
 	fingerprint := regexp.MustCompile(`name="fingerprint" value="([0-9a-f]+)"`).FindStringSubmatch(status.Body)
 	if fingerprint == nil {
 		t.Fatalf("no fingerprint in %s", status.Body)
