@@ -171,6 +171,20 @@ const actions = {
     if (window.innerWidth < 768 && sidebar.getAttribute("aria-hidden") === "false") sidebar.querySelector("a")?.focus();
   },
   "close-dialog": (button) => button.closest("dialog")?.close(),
+  "copy-value": async (button) => {
+    const text = document.getElementById(button.dataset.target)?.textContent || "";
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents(document.getElementById(button.dataset.target));
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand("copy");
+      selection.removeAllRanges();
+    }
+  },
   "remove-condition": (button) => {
     const form = button.form;
     const row = button.closest("li");
@@ -604,4 +618,33 @@ document.addEventListener("htmx:afterSettle", (event) => {
   const transcript = document.getElementById("transcript");
   if (transcript && transcript.contains(event.detail.target)) transcript.lastElementChild?.scrollIntoView({ block: "end" });
   focusFallback(event.detail.target);
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.querySelector("form[data-link-form]");
+  if (!form) return;
+  const token = location.hash.slice(1);
+  if (!token) {
+    form.hidden = true;
+    document.querySelector("[data-link-invalid]")?.removeAttribute("hidden");
+    return;
+  }
+  form.elements.token.value = token;
+  history.replaceState(null, "", location.pathname);
+});
+
+document.addEventListener("submit", (event) => {
+  if (!event.target.matches("form[data-test-signin]")) return;
+  const status = document.getElementById("oidc-test");
+  htmx.ajax("GET", `/settings/auth/test/status?after=${status?.dataset.seq || 0}`, { target: "#oidc-test", swap: "outerHTML" });
+});
+
+document.addEventListener("input", (event) => {
+  if (!event.target.closest("form[data-test-signin]")) return;
+  const status = document.getElementById("oidc-test");
+  if (!status || status.dataset.state === "idle") return;
+  const idle = Object.assign(document.createElement("div"), { id: "oidc-test" });
+  idle.dataset.state = "idle";
+  idle.dataset.seq = status.dataset.seq;
+  status.replaceWith(idle);
 });

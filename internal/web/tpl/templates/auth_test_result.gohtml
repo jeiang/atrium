@@ -1,0 +1,7 @@
+{{define "bare"}}{{end}}
+{{define "title"}}{{if .Data.passed}}Test passed{{else}}Test failed{{end}}{{end}}
+{{define "content"}}{{$d := .Data}}
+<h1 class="text-lg font-semibold tracking-tight">{{if $d.passed}}Test passed{{else}}Test failed{{end}}</h1>
+{{template "_oidc_result.gohtml" .}}
+<a href="/settings/auth" class="btn self-start" data-size="sm" data-variant="outline">{{icon "arrow-left"}}Settings</a>
+{{end}}

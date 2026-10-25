@@ -25,6 +25,7 @@ var migrations = []migration{
 	{6, writeResolutions},
 	{7, threadModel},
 	{8, authSessions},
+	{9, loginLinks},
 }
 
 type FutureSchemaError struct {
@@ -403,4 +404,14 @@ func authSessions(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func loginLinks(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS auth_login_links ("+
+		"id INTEGER PRIMARY KEY AUTOINCREMENT, nonce_hash TEXT NOT NULL UNIQUE, issued_at REAL NOT NULL, "+
+		"expires_at REAL NOT NULL, used_at REAL)"); err != nil {
+		return err
+	}
+	_, err := addColumn(ctx, tx, "auth_sessions", column{"origin", "TEXT NOT NULL DEFAULT 'oidc' CHECK (origin IN ('oidc', 'link'))"})
+	return err
 }

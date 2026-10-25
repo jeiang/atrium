@@ -118,6 +118,11 @@ not claims about the running application.
   link and still checks Host. The link signing key is a generated secret held in
   the database (pinnable by the deployment); a legacy `media-link.key` file is
   moved into it on first use.
+- `atrium login-link` mints a single-use, short-lived administrator sign-in
+  link (HMAC-signed nonce, hashed at rest, audited) that works with no OIDC
+  configured. The Sign-in settings tab sets up OIDC from provider presets and
+  activates a configuration only after a Test sign-in in a separate state
+  showed the tested account would keep administrator access.
 - Code execution is unavailable. The existing code-mode worker and service
   interface are inert; the replacement sandbox manager is deferred to
   [issue #202](https://github.com/jeiang/atrium/issues/202).
