@@ -332,6 +332,10 @@ in {
         message = "services.atrium.web.auth = \"local\" needs a loopback services.atrium.web.host, or services.atrium.web.forceDisableAuth = true";
       }
       {
+        assertion = !cfg.web.forceDisableAuth || cfg.web.allowedHost != null || lib.hasPrefix "127." cfg.web.host || builtins.elem cfg.web.host ["localhost" "::1" "[::1]"];
+        message = "services.atrium.web.forceDisableAuth on a non-loopback services.atrium.web.host needs services.atrium.web.allowedHost";
+      }
+      {
         assertion = !(cfg.web.oidc.enable && cfg.web.auth == "local");
         message = "services.atrium.web.oidc.enable cannot combine with web.auth = \"local\"";
       }

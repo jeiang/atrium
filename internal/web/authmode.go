@@ -40,6 +40,10 @@ func resolveAuth(stderr io.Writer, a serveArgs, hosts []string) (serveArgs, bool
 		}
 		return a, false
 	}
+	if len(hosts) == 0 && !isLoopbackHost(a.host) {
+		_, _ = fmt.Fprintln(stderr, "error: --force-disable-auth on a non-loopback address needs --allowed-host or ATRIUM_PUBLIC_HOST, otherwise every non-loopback Host is refused")
+		return a, false
+	}
 	log.Warn(authDisabledLog)
 	a.auth = []string{AuthLocal}
 	a.authDisabled = true
