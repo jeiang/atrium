@@ -309,6 +309,11 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 		t.Errorf("the kept database does not hold the pre-restore state: %d, %v", pages, err)
 	}
 	_ = previous.Close()
+	for _, kept := range append(keptFiles, keptDB[0], keptDB[0]+"-wal", keptDB[0]+"-shm") {
+		if err := os.RemoveAll(kept); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if body, err := os.ReadFile(filepath.Join(state, "files", "threads", "1", "report.txt")); err != nil || string(body) != secretText {
 		t.Errorf("restored file = %q, %v", body, err)
 	}
