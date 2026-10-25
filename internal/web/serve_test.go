@@ -239,3 +239,107 @@ func TestServeRecoversADraftThatGoesStaleWhileRunning(t *testing.T) {
 		t.Errorf("draft status = %q, want %q", status, drafts.Unknown)
 	}
 }
+
+const bannerText = "Authentication is disabled"
+
+func startServe(t *testing.T, args ...string) (string, func() int) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	ctx, cancel := context.WithCancel(context.Background())
+	port := freePort(t)
+	done := make(chan int, 1)
+	go func() {
+		code, _, _ := runServe(t, ctx, append([]string{"--port", port}, args...)...)
+		done <- code
+	}()
+	url := "http://127.0.0.1:" + port
+	waitForHealthz(t, url)
+	return url, func() int {
+		cancel()
+		return <-done
+	}
+}
+
+func getPage(t *testing.T, url string, header http.Header) (int, string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url+"/chat", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "text/html")
+	for k, v := range header {
+		req.Header[k] = v
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var b bytes.Buffer
+	_, _ = b.ReadFrom(resp.Body)
+	return resp.StatusCode, b.String()
+}
+
+func TestServeRefusesWithoutAuthOnANonLoopbackInterface(t *testing.T) {
+	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	code, _, stderr := runServe(t, context.Background(), "--port", "1", "--host", "0.0.0.0", "--auth", "local")
+	if code != cli.ExitError || !strings.Contains(stderr, "Authentication is recommended because this instance holds API keys and mailbox access") {
+		t.Errorf("code %d stderr %q", code, stderr)
+	}
+}
+
+func TestServeForceDisableAuthServesWithBanner(t *testing.T) {
+	url, stop := startServe(t, "--host", "127.0.0.1", "--auth", "proxy", "--force-disable-auth")
+	status, body := getPage(t, url, nil)
+	if status != http.StatusNotFound || !strings.Contains(body, bannerText) {
+		t.Errorf("status %d banner %v", status, strings.Contains(body, bannerText))
+	}
+	if code := stop(); code != cli.ExitOK {
+		t.Errorf("exit %d", code)
+	}
+}
+
+func TestServeLoopbackLocalModeUnchanged(t *testing.T) {
+	url, stop := startServe(t, "--auth", "local")
+	status, body := getPage(t, url, nil)
+	if status != http.StatusNotFound || strings.Contains(body, bannerText) {
+		t.Errorf("status %d banner %v", status, strings.Contains(body, bannerText))
+	}
+	stop()
+}
+
+func TestServeProxyModeUnchanged(t *testing.T) {
+	url, stop := startServe(t, "--auth", "proxy", "--allowed-host", "127.0.0.1")
+	if status, _ := getPage(t, url, nil); status != http.StatusForbidden {
+		t.Errorf("without group status %d", status)
+	}
+	status, body := getPage(t, url, http.Header{"Remote-Groups": {"atrium_access"}})
+	if status != http.StatusNotFound || strings.Contains(body, bannerText) {
+		t.Errorf("status %d banner %v", status, strings.Contains(body, bannerText))
+	}
+	stop()
+}
+
+func TestServeOIDCModeHasNoBanner(t *testing.T) {
+	url, stop := startServe(t, "--auth", "oidc", "--allowed-host", "127.0.0.1")
+	client := http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	req, err := http.NewRequest(http.MethodGet, url+"/login", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "text/html")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b bytes.Buffer
+	_, _ = b.ReadFrom(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode >= 500 || strings.Contains(b.String(), bannerText) {
+		t.Errorf("status %d banner %v", resp.StatusCode, strings.Contains(b.String(), bannerText))
+	}
+	stop()
+}

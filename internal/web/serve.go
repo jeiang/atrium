@@ -78,8 +78,9 @@ func ServeCommand(pages ...Page) *cli.Command {
 			port := args.Int("port", 0, cli.Opt{Required: true})
 			modes := args.Repeated("auth", cli.Opt{Choices: AuthModes[:], Help: "authentication mode; repeatable (proxy and oidc combine; default proxy)"})
 			hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
+			force := args.Bool("force-disable-auth", cli.Opt{Help: "start without authentication when none is configured"})
 			return func(env *cli.Env) int {
-				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, pages: pages, env: config.OS})
+				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, forceDisableAuth: *force, pages: pages, env: config.OS})
 			}
 		},
 	}
@@ -92,6 +93,9 @@ type serveArgs struct {
 	hosts []string
 	pages []Page
 	env   config.Env
+
+	forceDisableAuth bool
+	authDisabled     bool
 }
 
 func publicHosts(given []string, env config.Env) []string {
@@ -106,17 +110,8 @@ func publicHosts(given []string, env config.Env) []string {
 
 func serve(env *cli.Env, a serveArgs) int {
 	hosts := publicHosts(a.hosts, a.env)
-	auth, err := ParseAuth(a.auth)
-	if err != nil {
-		_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
-		return cli.ExitError
-	}
-	if !auth.Local && len(hosts) == 0 {
-		name := AuthProxy
-		if !auth.Proxy {
-			name = AuthOIDC
-		}
-		_, _ = fmt.Fprintf(env.Stderr, "%s mode needs --allowed-host or ATRIUM_PUBLIC_HOST\n", name)
+	a, ok := resolveAuth(env.Stderr, a, hosts)
+	if !ok {
 		return cli.ExitError
 	}
 	cfg, err := config.Load(a.env)
@@ -188,7 +183,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	if err != nil {
 		return err
 	}
-	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions})
+	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, NoAuth: a.authDisabled})
 	if err != nil {
 		return err
 	}

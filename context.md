@@ -112,7 +112,9 @@ not claims about the running application.
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are
   administrators; a proxy request or OIDC session is an administrator only
   with the admin group, and administrator-only routes answer 403 otherwise. A
-  separate local mode provides loopback access. Public media file access requires an expiring signed
+  separate local mode provides loopback access. `atrium serve` refuses to start
+  with no authentication in force unless `--force-disable-auth` is given, which
+  shows a persistent banner. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in
   the database (pinnable by the deployment); a legacy `media-link.key` file is
   moved into it on first use.
