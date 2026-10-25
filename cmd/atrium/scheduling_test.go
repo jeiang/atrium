@@ -112,8 +112,10 @@ func unescape(body string) string {
 }
 
 const invite = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:lunch\r\nDTSTAMP:20261001T000000Z\r\n" +
-	"DTSTART:20261110T170000Z\r\nDTEND:20261110T180000Z\r\nSUMMARY:Lunch\r\nORGANIZER:mailto:pat@example.com\r\n" +
+	"DTSTART:20261110T170000Z\r\nDTEND:20261110T180000Z\r\nSUMMARY:Lunch\r\nLOCATION:Cafe\r\nRRULE:FREQ=WEEKLY;COUNT=4\r\n" +
+	"X-APPLE-TRAVEL-ADVISORY-BEHAVIOR:AUTOMATIC\r\nORGANIZER:mailto:pat@example.com\r\n" +
 	"ATTENDEE;PARTSTAT=ACCEPTED:mailto:pat@example.com\r\nATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:operator@icloud.invalid\r\n" +
+	"BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:Lunch\r\nEND:VALARM\r\n" +
 	"END:VEVENT\r\nEND:VCALENDAR\r\n"
 
 func proposalID(t *testing.T, result string) string {
@@ -158,6 +160,11 @@ func TestRSVPAndUpdateProposalsWriteOnlyOnApprovalAndUndo(t *testing.T) {
 	body = srv.Objects()[path]
 	if !strings.Contains(body, "SUMMARY:Long lunch") || strings.Count(body, "ATTENDEE") != 2 || !strings.Contains(body, "ORGANIZER") {
 		t.Fatalf("after the approved update the event is %q", body)
+	}
+	for _, kept := range []string{"RRULE:FREQ=WEEKLY;COUNT=4", "BEGIN:VALARM", "X-APPLE-TRAVEL-ADVISORY-BEHAVIOR", "LOCATION:Cafe", "SEQUENCE:1"} {
+		if !strings.Contains(body, kept) {
+			t.Errorf("the update lost %s: %q", kept, body)
+		}
 	}
 	if got := runApp("proposals", "undo", update); got.code != cli.ExitOK {
 		t.Fatalf("undo update: %d %s", got.code, got.stderr)

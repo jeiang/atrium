@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -83,16 +84,29 @@ func (o *icloudObject) put(ctx context.Context, cal *ical.Calendar) error {
 }
 
 func eventOf(cal *ical.Calendar) *ical.Component {
+	var first *ical.Component
 	for _, c := range cal.Children {
-		if c.Name == ical.CompEvent {
+		if c.Name != ical.CompEvent {
+			continue
+		}
+		if c.Props.Get(ical.PropRecurrenceID) == nil {
 			return c
 		}
+		if first == nil {
+			first = c
+		}
 	}
-	return nil
+	return first
 }
+
+var updatedProps = []string{ical.PropSummary, ical.PropDateTimeStart, ical.PropDateTimeEnd, ical.PropLocation, ical.PropDescription, ical.PropDateTimeStamp}
 
 func updateICloud(ctx context.Context, env config.Env, set Settings, spec Spec, tz *time.Location) (py.Dict, error) {
 	obj, err := findICloud(ctx, env, set, spec.UID)
+	if err != nil {
+		return nil, err
+	}
+	copied, err := decodeICS([]byte(obj.raw))
 	if err != nil {
 		return nil, err
 	}
@@ -100,16 +114,22 @@ func updateICloud(ctx context.Context, env config.Env, set Settings, spec Spec, 
 	if err != nil {
 		return nil, err
 	}
-	old, ev := eventOf(obj.cal), eventOf(fresh)
-	if old == nil || ev == nil {
+	ev, want := eventOf(copied), eventOf(fresh)
+	if ev == nil || want == nil {
 		return nil, Error("the iCloud object has no event")
 	}
-	for _, name := range []string{ical.PropAttendee, ical.PropOrganizer} {
-		if props, ok := old.Props[name]; ok {
+	for _, name := range updatedProps {
+		if props, ok := want.Props[name]; ok {
 			ev.Props[name] = props
 		}
 	}
-	if err := obj.put(ctx, fresh); err != nil {
+	delete(ev.Props, ical.PropDuration)
+	sequence := 0
+	if p := ev.Props.Get(ical.PropSequence); p != nil {
+		sequence, _ = strconv.Atoi(strings.TrimSpace(p.Value))
+	}
+	ev.Props.Set(&ical.Prop{Name: ical.PropSequence, Params: ical.Params{}, Value: strconv.Itoa(sequence + 1)})
+	if err := obj.put(ctx, copied); err != nil {
 		return nil, err
 	}
 	return py.Dict{{Key: "op", Value: RestoreOp}, {Key: "calendar", Value: ICloud}, {Key: "uid", Value: spec.UID}, {Key: "ics", Value: obj.raw}}, nil
