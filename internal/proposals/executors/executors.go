@@ -179,6 +179,7 @@ type slot struct {
 	pid  int64
 	id   int64
 	uids []uint32
+	stop func()
 }
 
 func (e *Executors) hold(ctx context.Context, pid int64, action py.Dict, uids []uint32) (*slot, error) {
@@ -187,7 +188,7 @@ func (e *Executors) hold(ctx context.Context, pid int64, action py.Dict, uids []
 	if err != nil {
 		return nil, err
 	}
-	return &slot{e: e, pid: pid, id: id, uids: uids}, nil
+	return &slot{e: e, pid: pid, id: id, uids: uids, stop: proposals.KeepActionAlive(e.DB.Write, e.now, id)}, nil
 }
 
 func (s *slot) settle(ctx context.Context, action, undo py.Dict, ok bool, text *string) error {
@@ -201,6 +202,7 @@ func (s *slot) settle(ctx context.Context, action, undo py.Dict, ok bool, text *
 	}
 	id := s.id
 	s.id = 0
+	s.stop()
 	return proposals.SettleAction(ctx, s.e.DB.Write, id, action, plan, ok, text, s.e.now())
 }
 
@@ -218,6 +220,7 @@ func (s *slot) release(ctx context.Context) error {
 	}
 	id := s.id
 	s.id = 0
+	s.stop()
 	return proposals.DropAction(ctx, s.e.DB.Write, id)
 }
 

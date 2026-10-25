@@ -438,7 +438,10 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	} else if n == 0 {
 		return UndoResult{}, UndoError(fmt.Sprintf("action %d has an undo in progress or a partial undo; resolve it in the mailbox before undoing again", id))
 	}
-	detail, err := undoer(safety.ApprovedWrites(ctx, fmt.Sprintf("undo-%d", id)), json.RawMessage(*plan))
+	detail, err := func() (py.Dict, error) {
+		defer proposals.KeepAlive(l.DB.Write, l.now, "UPDATE auto_actions SET undo_started_at = ? WHERE id = ? AND undone_ts IS NULL AND undone_error = ?", id, proposals.InFlightText)()
+		return undoer(safety.ApprovedWrites(ctx, fmt.Sprintf("undo-%d", id)), json.RawMessage(*plan))
+	}()
 	if err != nil {
 		text := py.ExceptionText(err)
 		if name == OpMoveBack {

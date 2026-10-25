@@ -412,7 +412,7 @@ func recovered(logged []Action, result any) bool {
 }
 
 const (
-	StuckSeconds       = 600
+	StuckSeconds       = 4 * RenewSeconds
 	StuckUnheldSeconds = 3600
 )
 
@@ -614,7 +614,10 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		if err != nil {
 			return UndoResult{}, err
 		}
-		detail, err := undoer(approved, entry.Plan)
+		detail, err := func() (py.Dict, error) {
+			defer KeepActionAlive(p.DB.Write, p.now, held)()
+			return undoer(approved, entry.Plan)
+		}()
 		if err != nil {
 			text := py.ExceptionText(err)
 			if name == "move_back" {
