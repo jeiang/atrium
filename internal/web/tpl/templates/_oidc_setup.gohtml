@@ -1,0 +1,32 @@
+{{$s := .Data.setup}}
+<ol class="flex list-decimal flex-col gap-2 ps-5 text-sm">
+  {{range $s.steps}}<li>{{range .parts}}{{if .chip}}<span class="inline-flex items-center gap-1"><code id="{{.id}}" class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">{{.chip}}</code><button type="button" class="btn" data-variant="ghost" data-size="icon-sm" data-action="copy-value" data-target="{{.id}}" aria-label="Copy">{{icon "copy" "size-3.5"}}</button></span>{{else if .missing}}<span class="text-destructive">Public URL is not set</span>{{else}}{{.text}}{{end}}{{end}}</li>{{end}}
+</ol>
+<form method="post" action="/settings/auth/test" target="oidc-test" class="flex flex-col gap-4" data-test-signin>
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <input type="hidden" name="preset" value="{{$s.preset}}">
+  {{with $s.error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
+  {{if $s.issuer_label}}
+  <div role="group" class="field"><label for="oidc-issuer">{{$s.issuer_label}}{{if $s.pinned.issuer}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="oidc-issuer" name="issuer" type="{{if eq $s.preset "entra"}}text{{else}}url{{end}}" value="{{$s.issuer}}" autocomplete="off" required{{if $s.pinned.issuer}} disabled{{end}}></div>
+  {{end}}
+  <div role="group" class="field"><label for="oidc-client-id">Client ID{{if $s.pinned.client_id}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="oidc-client-id" name="client_id" type="text" value="{{$s.client_id}}" autocomplete="off" required{{if $s.pinned.client_id}} disabled{{end}}></div>
+  <div role="group" class="field"><label for="oidc-client-secret">Client secret{{if $s.secret_pinned}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="oidc-client-secret" name="client_secret" type="password" autocomplete="off"{{if $s.secret_set}} placeholder="Stored"{{else}} required{{end}}{{if $s.secret_pinned}} disabled{{end}}></div>
+  {{if $s.groups}}
+  <div role="group" class="field"><label for="oidc-access-group">Access group{{if $s.pinned.access_group}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="oidc-access-group" name="access_group" type="text" value="{{$s.access_group}}" placeholder="{{$s.placeholder}}" autocomplete="off" required{{if $s.pinned.access_group}} disabled{{end}}></div>
+  <div role="group" class="field"><label for="oidc-admin-group">Admin group{{if $s.pinned.admin_group}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="oidc-admin-group" name="admin_group" type="text" value="{{$s.admin_group}}" placeholder="{{$s.placeholder}}" autocomplete="off" required{{if $s.pinned.admin_group}} disabled{{end}}></div>
+  {{end}}
+  {{if $s.lists}}
+  <div role="group" class="field"><label for="oidc-access-emails">Access emails{{if $s.pinned.access_emails}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="oidc-access-emails" name="access_emails" type="text" value="{{$s.access_emails}}" autocomplete="off"{{if $s.pinned.access_emails}} disabled{{end}}></div>
+  <div role="group" class="field"><label for="oidc-admin-emails">Admin emails{{if $s.pinned.admin_emails}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="oidc-admin-emails" name="admin_emails" type="text" value="{{$s.admin_emails}}" autocomplete="off"{{if $s.pinned.admin_emails}} disabled{{end}}></div>
+  <div role="group" class="field"><label for="oidc-access-domains">Access domains{{if $s.pinned.access_domains}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="oidc-access-domains" name="access_domains" type="text" value="{{$s.access_domains}}" autocomplete="off"{{if $s.pinned.access_domains}} disabled{{end}}></div>
+  <div role="group" class="field"><label for="oidc-admin-domains">Admin domains{{if $s.pinned.admin_domains}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="oidc-admin-domains" name="admin_domains" type="text" value="{{$s.admin_domains}}" autocomplete="off"{{if $s.pinned.admin_domains}} disabled{{end}}></div>
+  {{end}}
+  <details{{if $s.open}} open{{end}}>
+    <summary class="cursor-pointer text-sm font-medium">Advanced</summary>
+    <div class="mt-3 flex flex-col gap-4">
+      {{if $s.groups}}<div role="group" class="field"><label for="oidc-groups-claim">Groups claim{{if $s.pinned.groups_claim}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="oidc-groups-claim" name="groups_claim" type="text" value="{{$s.groups_claim}}" autocomplete="off"{{if $s.pinned.groups_claim}} disabled{{end}}></div>{{end}}
+      <div role="group" class="field"><label for="oidc-scopes">Scopes{{if $s.pinned.scopes}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="oidc-scopes" name="scopes" type="text" value="{{$s.scopes}}" autocomplete="off"{{if $s.pinned.scopes}} disabled{{end}}></div>
+    </div>
+  </details>
+  <div><button type="submit" class="btn">{{icon "log-in"}}Test sign-in</button></div>
+</form>

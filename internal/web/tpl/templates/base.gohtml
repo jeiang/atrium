@@ -40,7 +40,8 @@
       <h1 class="truncate px-1 text-sm font-medium">{{block "heading" .}}{{end}}</h1>
       <div class="ml-auto flex items-center gap-3">
         {{if .Auth.Admin}}{{if call $on "assistant"}}<a href="/settings" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{{if eq $page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}</a>
-        {{- else if call $on "notifications"}}<a href="/settings/notifications" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{{if eq $page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}</a>{{end}}{{end}}
+        {{- else if call $on "notifications"}}<a href="/settings/notifications" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{{if eq $page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}</a>
+        {{- else if call $on "auth"}}<a href="/settings/auth" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{{if eq $page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}</a>{{end}}{{end}}
         {{template "mode_badge" $state}}
         {{if and (eq .Mode "live") (or .Auth.Admin (not .Paused))}}
         <form method="post" action="/live/{{if .Paused}}resume{{else}}pause{{end}}">

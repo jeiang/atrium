@@ -1,0 +1,15 @@
+{{define "bare"}}{{end}}
+{{define "title"}}Admin sign-in{{end}}
+{{define "content"}}
+<h1 class="text-lg font-semibold tracking-tight">Admin sign-in</h1>
+{{if .Data.message}}
+<div class="alert" data-variant="destructive" role="alert">{{icon "circle-alert"}}<p>{{.Data.message}} Run <code>atrium login-link</code> again.</p></div>
+{{else}}
+<form method="post" action="/login/link" class="flex flex-col gap-3" data-link-form>
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <input type="hidden" name="token" value="">
+  <button type="submit" class="btn w-full" autofocus>{{icon "log-in"}}Continue</button>
+</form>
+<div class="alert hidden" data-variant="destructive" role="alert" data-link-invalid hidden>{{icon "circle-alert"}}<p>This link is not valid. Run <code>atrium login-link</code> again.</p></div>
+{{end}}
+{{end}}

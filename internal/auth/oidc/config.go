@@ -54,39 +54,60 @@ func list(value string) []string {
 	return out
 }
 
-func load(ctx context.Context, q db.Querier, env config.Env, encrypted bool) (Config, error) {
+var valueKeys = []string{
+	KeyPreset, KeyIssuer, KeyClientID, KeyScopes, KeyGroupsClaim, KeyAccessGroup, KeyAdminGroup,
+	KeyAccessEmails, KeyAdminEmails, KeyAccessDomains, KeyAdminDomains, KeyIdleDays, KeyMaxDays, KeyRecheckMinutes,
+}
+
+type values map[string]string
+
+func resolved(ctx context.Context, q db.Querier) (values, []string) {
 	var problems []string
-	get := func(key string) string {
+	out := values{}
+	for _, key := range valueKeys {
 		found, err := settings.Default.Resolve(ctx, q, key, 0)
 		if err != nil {
 			problems = append(problems, err.Error())
 		}
-		return py.Strip(found.Value)
+		out[key] = py.Strip(found.Value)
 	}
+	return out, problems
+}
+
+func load(ctx context.Context, q db.Querier, env config.Env, encrypted bool) (Config, error) {
+	vals, problems := resolved(ctx, q)
+	secret, err := secrets.Credential(ctx, q, secrets.OIDCClientSecret)
+	if err != nil {
+		problems = append(problems, err.Error())
+	}
+	return assemble(vals, py.Strip(secret), env, encrypted, problems)
+}
+
+func assemble(get values, secret string, env config.Env, encrypted bool, problems []string) (Config, error) {
 	days := func(key string, unit time.Duration) time.Duration {
-		n, ok := py.ParseInt(get(key))
+		n, ok := py.ParseInt(get[key])
 		if !ok {
 			problems = append(problems, key+" is not a number")
 		}
 		return time.Duration(n) * unit
 	}
-	name := get(KeyPreset)
+	name := get[KeyPreset]
 	preset, ok := presetNamed(name)
 	if !ok {
 		problems = append(problems, "unknown preset "+py.Repr(name))
 	}
 	c := Config{
 		Preset:        preset,
-		Issuer:        get(KeyIssuer),
-		ClientID:      get(KeyClientID),
-		Scopes:        list(get(KeyScopes)),
-		GroupsClaim:   get(KeyGroupsClaim),
-		AccessGroup:   get(KeyAccessGroup),
-		AdminGroup:    get(KeyAdminGroup),
-		AccessEmails:  list(strings.ToLower(get(KeyAccessEmails))),
-		AdminEmails:   list(strings.ToLower(get(KeyAdminEmails))),
-		AccessDomains: list(strings.ToLower(get(KeyAccessDomains))),
-		AdminDomains:  list(strings.ToLower(get(KeyAdminDomains))),
+		Issuer:        get[KeyIssuer],
+		ClientID:      get[KeyClientID],
+		Scopes:        list(get[KeyScopes]),
+		GroupsClaim:   get[KeyGroupsClaim],
+		AccessGroup:   get[KeyAccessGroup],
+		AdminGroup:    get[KeyAdminGroup],
+		AccessEmails:  list(strings.ToLower(get[KeyAccessEmails])),
+		AdminEmails:   list(strings.ToLower(get[KeyAdminEmails])),
+		AccessDomains: list(strings.ToLower(get[KeyAccessDomains])),
+		AdminDomains:  list(strings.ToLower(get[KeyAdminDomains])),
 		Idle:          days(KeyIdleDays, 24*time.Hour),
 		Max:           days(KeyMaxDays, 24*time.Hour),
 		Recheck:       days(KeyRecheckMinutes, time.Minute),
@@ -100,11 +121,7 @@ func load(ctx context.Context, q db.Querier, env config.Env, encrypted bool) (Co
 	if c.GroupsClaim == "" {
 		c.GroupsClaim = preset.GroupsClaim
 	}
-	secret, err := secrets.Credential(ctx, q, secrets.OIDCClientSecret)
-	if err != nil {
-		problems = append(problems, err.Error())
-	}
-	c.ClientSecret = py.Strip(secret)
+	c.ClientSecret = secret
 	public := config.PublicURL(env)
 	switch {
 	case c.Issuer == "":

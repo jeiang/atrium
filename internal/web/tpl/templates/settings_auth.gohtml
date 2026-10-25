@@ -1,0 +1,17 @@
+{{define "title"}}Sign-in · Settings{{end}}
+{{define "heading"}}Settings · Sign-in{{end}}
+{{define "content"}}{{$d := .Data}}
+{{template "settings_tabs" "auth"}}
+<div class="flex max-w-xl flex-col gap-6">
+  {{template "_oidc_state.gohtml" .}}
+  <hr role="separator">
+  <div role="group" class="field">
+    <label for="oidc-preset">Provider</label>
+    <select id="oidc-preset" name="preset" hx-get="/settings/auth/preset" hx-target="#oidc-setup" hx-swap="innerHTML" hx-include="this"{{if $d.preset_pinned}} disabled{{end}}>
+      {{range $d.presets}}<option value="{{.name}}"{{if .selected}} selected{{end}}>{{.label}}</option>{{end}}
+    </select>
+  </div>
+  <div id="oidc-setup" class="flex flex-col gap-6">{{template "_oidc_setup.gohtml" .}}</div>
+  {{template "_oidc_test.gohtml" .}}
+</div>
+{{end}}

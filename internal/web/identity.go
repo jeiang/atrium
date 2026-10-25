@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
 )
@@ -54,6 +55,8 @@ func signInPath(r *http.Request) bool {
 		return r.Method == http.MethodGet || r.Method == http.MethodPost
 	case CallbackPath:
 		return r.Method == http.MethodGet
+	case loginlink.Path:
+		return r.Method == http.MethodGet || r.Method == http.MethodPost
 	}
 	return false
 }

@@ -89,10 +89,16 @@ func (s *Server) registerAuthRoutes() {
 		setCookie(w, bindingCookie, login.Binding, 600, secure(r))
 		http.Redirect(w, r, login.URL, http.StatusSeeOther)
 	})
+	s.registerLinkRoutes()
+	s.registerWizardRoutes()
 	s.mux.Get(CallbackPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
-		expireCookie(w, bindingCookie, secure(r))
 		q := r.URL.Query()
+		if s.oidc.IsTestState(q.Get("state")) {
+			s.testCallback(w, r)
+			return
+		}
+		expireCookie(w, bindingCookie, secure(r))
 		if q.Get("error") != "" {
 			log.Warn("provider refused the sign-in", "error", sanitizeLog(q.Get("error")))
 			s.loginPage(w, r, "refused", "")
@@ -153,4 +159,12 @@ func (s *Server) signInFailed(w http.ResponseWriter, r *http.Request, err error,
 	}
 	log.Warn("sign-in failed", "reason", reason, logx.Err, err.Error())
 	s.loginPage(w, r, reason, next)
+}
+
+func (s *Server) registerWizardRoutes() {
+	s.mux.Get(WizardPath, s.wizardPage)
+	s.mux.Get(WizardPath+"/preset", s.wizardPreset)
+	s.mux.Post(testPath, s.wizardTest)
+	s.mux.Get(testPath+"/status", s.wizardStatus)
+	s.mux.Post(WizardPath+"/activate", s.wizardActivate)
 }

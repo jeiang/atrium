@@ -56,6 +56,8 @@ type Service struct {
 	providers map[string]*provider
 	locks     map[int64]*sync.Mutex
 	retry     map[int64]time.Time
+	test      *testRun
+	testSeq   int
 }
 
 func New(d *db.DB, env config.Env) *Service {
@@ -134,6 +136,14 @@ func (s *Service) Begin(ctx context.Context, returnTo string) (Login, error) {
 	if err != nil {
 		return Login{}, err
 	}
+	target, err := s.authorizeURL(cfg, p, state, nonce, verifier)
+	if err != nil {
+		return Login{}, err
+	}
+	return Login{URL: target, Binding: binding}, nil
+}
+
+func (s *Service) authorizeURL(cfg Config, p *provider, state, nonce, verifier string) (string, error) {
 	scopes := slices.Clone(cfg.Scopes)
 	if p.offline && !slices.Contains(scopes, "offline_access") {
 		scopes = append(scopes, "offline_access")
@@ -153,14 +163,14 @@ func (s *Service) Begin(ctx context.Context, returnTo string) (Login, error) {
 	}
 	target, err := url.Parse(p.authURL)
 	if err != nil {
-		return Login{}, fmt.Errorf("%w: %w", ErrProvider, err)
+		return "", fmt.Errorf("%w: %w", ErrProvider, err)
 	}
 	existing := target.Query()
 	for k, v := range q {
 		existing[k] = v
 	}
 	target.RawQuery = existing.Encode()
-	return Login{URL: target.String(), Binding: binding}, nil
+	return target.String(), nil
 }
 
 type Session struct {
@@ -221,23 +231,7 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 	if err != nil {
 		return Grant{}, err
 	}
-	reply, err := s.tokens(ctx, cfg, p, url.Values{
-		"grant_type":    {"authorization_code"},
-		"code":          {code},
-		"redirect_uri":  {cfg.RedirectURI},
-		"code_verifier": {pending.verifier},
-	})
-	if err != nil {
-		return Grant{}, err
-	}
-	if reply.IDToken == "" {
-		return Grant{}, fmt.Errorf("%w: the token reply carries no id_token", ErrToken)
-	}
-	claims, err := s.verifyIDToken(ctx, p, cfg, reply.IDToken, claimRules{nonce: pending.nonce})
-	if err != nil {
-		return Grant{}, err
-	}
-	id, err := s.resolveIdentity(ctx, p, cfg, claims, reply.AccessToken)
+	reply, id, err := s.exchange(ctx, cfg, p, code, pending.verifier, pending.nonce)
 	if err != nil {
 		return Grant{}, err
 	}
@@ -273,6 +267,27 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 	}
 	sess.Subject, sess.Email, sess.Name, sess.Admin = id.Subject, id.Email, id.Name, admin
 	return Grant{Token: token, ReturnTo: pending.returnTo, MaxAge: cfg.Max, Session: sess}, nil
+}
+
+func (s *Service) exchange(ctx context.Context, cfg Config, p *provider, code, verifier, nonce string) (tokenReply, identity, error) {
+	reply, err := s.tokens(ctx, cfg, p, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"redirect_uri":  {cfg.RedirectURI},
+		"code_verifier": {verifier},
+	})
+	if err != nil {
+		return reply, identity{}, err
+	}
+	if reply.IDToken == "" {
+		return reply, identity{}, fmt.Errorf("%w: the token reply carries no id_token", ErrToken)
+	}
+	claims, err := s.verifyIDToken(ctx, p, cfg, reply.IDToken, claimRules{nonce: nonce})
+	if err != nil {
+		return reply, identity{}, err
+	}
+	id, err := s.resolveIdentity(ctx, p, cfg, claims, reply.AccessToken)
+	return reply, id, err
 }
 
 func boolInt(b bool) int {

@@ -21,17 +21,18 @@ type row struct {
 	accessToken     string
 	emailVerified   bool
 	hosted          string
+	origin          string
 	accessExpires   sql.NullFloat64
 	refreshToken    string
 }
 
-const sessionColumns = "id, subject, email, name, admin, idle_expires_at, absolute_expires_at, last_seen_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain"
+const sessionColumns = "id, subject, email, name, admin, idle_expires_at, absolute_expires_at, last_seen_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain, origin"
 
 func (s *Service) loadRow(ctx context.Context, hash string) (row, error) {
 	var r row
 	var admin, verified int
 	err := s.d.Read.QueryRowContext(ctx, "SELECT "+sessionColumns+" FROM auth_sessions WHERE token_hash = ?", hash).
-		Scan(&r.ID, &r.Subject, &r.Email, &r.Name, &admin, &r.idleExpires, &r.absoluteExpires, &r.lastSeen, &r.rechecked, &r.accessToken, &r.accessExpires, &r.refreshToken, &verified, &r.hosted)
+		Scan(&r.ID, &r.Subject, &r.Email, &r.Name, &admin, &r.idleExpires, &r.absoluteExpires, &r.lastSeen, &r.rechecked, &r.accessToken, &r.accessExpires, &r.refreshToken, &verified, &r.hosted, &r.origin)
 	r.emailVerified = verified == 1
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, ErrNoSession
@@ -79,7 +80,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 	if err != nil {
 		return Session{}, err
 	}
-	if now >= r.rechecked+t.recheck.Seconds() {
+	if r.origin != originLink && now >= r.rechecked+t.recheck.Seconds() {
 		if r, err = s.recheck(ctx, hash, r, t); err != nil {
 			return Session{}, err
 		}
