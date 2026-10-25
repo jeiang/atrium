@@ -47,6 +47,13 @@
       ];
     };
     backupAbsentByDefault = assert !(defaults.config.systemd.units ? "atrium-backup.service" || defaults.config.systemd.units ? "atrium-backup.timer"); true;
+    unitText = name: nixos.config.systemd.units.${name}.text;
+    notifyUnits = ["atrium-web.service" "atrium-watch.service" "atrium-agent-scheduler.service"];
+    notifyOnLongRunning = let
+      notifying = name: let t = unitText name; in inputs.nixpkgs.lib.hasInfix "Type=notify" t && inputs.nixpkgs.lib.hasInfix "WatchdogSec=" t;
+    in
+      assert builtins.all notifying notifyUnits;
+      assert !(builtins.any notifying ["atrium-sync.service" "atrium-scan.service" "atrium-notion-sync.service" "atrium-backup.service"]); true;
     unit = name: pkgs.writeText name (builtins.unsafeDiscardStringContext nixos.config.systemd.units.${name}.text);
     unitNames = [
       "atrium-agent-scheduler.service"
@@ -73,7 +80,7 @@
         touch $out
       '';
 
-      module = assert backupAbsentByDefault;
+      module = assert backupAbsentByDefault && notifyOnLongRunning;
         pkgs.linkFarm "atrium-units" (map (name: {
             inherit name;
             path = unit name;

@@ -99,6 +99,8 @@ Regardless of options, the module places the database at `/var/lib/atrium/atrium
 
 The module defines these units: `atrium-web`, `atrium-watch`, `atrium-agent-scheduler`, and the oneshot services `atrium-sync`, `atrium-notion-sync` and `atrium-scan` with their timers. `atrium-backup` with its timer exists only with `backup.enable`, `atrium-web-local` only with `web.local.enable`, and `atrium-vdirsyncer-sync` with its timer only when `icloudAppleId` is set.
 
+`atrium-web`, `atrium-watch` and `atrium-agent-scheduler` are `Type=notify` units with a systemd watchdog (`WatchdogSec` 1 min, 45 min and 10 min); each signals readiness after its migrations, and a command skipped because its module is off signals readiness before it exits. `atrium-web` serves the ops listener on `127.0.0.1:9180`; `atrium-web-local` runs without it.
+
 ## External modules
 
 `package` accepts a build with extra compile-time modules. Each entry is a Go module path with a version; the build blank-imports it into `cmd/atrium`, and the module registers itself through `github.com/jeiang/atrium/sdk`. Omit `hash` on the first build and copy the hash Nix reports.

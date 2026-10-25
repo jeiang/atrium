@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -121,6 +122,7 @@ func (s *Set) gateSetup(owner, path string, needs []string, setup func(*cli.Args
 
 func skip(path string, st Status, msg string) {
 	log.Info(msg, logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Reason, logx.Command, strings.TrimSpace(path))
+	sdnotify.FromEnv().Ready()
 }
 
 func (s *Set) load(ctx context.Context) (*Snapshot, error) {

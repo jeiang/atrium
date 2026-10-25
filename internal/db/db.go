@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -151,6 +152,8 @@ func (e *LockTimeout) Error() string {
 	return fmt.Sprintf("db: timed out after %s waiting for exclusive lock on %s", e.Timeout, e.Path)
 }
 
+var ExclusiveWaits, ExclusiveTimeouts atomic.Int64
+
 func Exclusive(ctx context.Context, path string, wait time.Duration) (*Lock, error) {
 	lock := path + ".lock"
 	if err := os.MkdirAll(filepath.Dir(lock), 0o777); err != nil {
@@ -163,7 +166,7 @@ func Exclusive(ctx context.Context, path string, wait time.Duration) (*Lock, err
 	ticker := time.NewTicker(lockPollInterval)
 	defer ticker.Stop()
 	started := time.Now()
-	logged := false
+	logged, waited := false, false
 	var timeout <-chan time.Time
 	if wait > 0 {
 		timer := time.NewTimer(wait)
@@ -194,8 +197,13 @@ func Exclusive(ctx context.Context, path string, wait time.Duration) (*Lock, err
 			return nil, fmt.Errorf("db: flock %s: %w", lock, err)
 		case wait > 0 && timeout == nil:
 			_ = f.Close()
+			ExclusiveTimeouts.Add(1)
 			return nil, &LockTimeout{Path: lock, Timeout: wait}
 		default:
+			if !waited {
+				waited = true
+				ExclusiveWaits.Add(1)
+			}
 			select {
 			case <-ctx.Done():
 				_ = f.Close()

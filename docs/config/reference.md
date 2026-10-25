@@ -175,6 +175,8 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `money_enabled` | bool | `false` | ui | `ATRIUM_CORE_MONEY_ENABLED` |
 | `notifications_enabled` | bool | `false` | ui | `ATRIUM_CORE_NOTIFICATIONS_ENABLED` |
 | `notion_enabled` | bool | `false` | ui | `ATRIUM_CORE_NOTION_ENABLED` |
+| `ops_listen` | string | `127.0.0.1:9180` | bootstrap | `ATRIUM_CORE_OPS_LISTEN` |
+| `ops_pprof` | bool | `false` | bootstrap | `ATRIUM_CORE_OPS_PPROF` |
 | `public_url` | string | none | ui | `ATRIUM_CORE_PUBLIC_URL` |
 | `tz` | string | `America/Port_of_Spain` | ui | `ATRIUM_CORE_TZ` |
 

@@ -150,6 +150,7 @@
     auth,
     oidc ? false,
     force ? false,
+    ops ? true,
   }: let
     needsHost = auth != "local" || oidc || (force && cfg.web.allowedHost != null);
     authArgs = lib.concatMapStringsSep " " (mode: "--auth ${mode}") ([auth] ++ lib.optional (oidc && auth != "oidc") "oidc");
@@ -157,13 +158,16 @@
     inherit description;
     after = ["network-online.target"] ++ cfg.modelServerUnits;
     wants = ["network-online.target"] ++ cfg.modelServerUnits;
-    environment = appEnvironment // lib.optionalAttrs needsHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
+    environment = appEnvironment // lib.optionalAttrs needsHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;} // lib.optionalAttrs (!ops) {ATRIUM_CORE_OPS_LISTEN = "off";};
     path = mediaPath;
     serviceConfig =
       hardening
       // mediaWriter
       // {
         ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString force " --force-disable-auth";
+        Type = "notify";
+        WatchdogSec = "1min";
+        TimeoutStartSec = writeTimeout;
         Restart = "always";
         RestartSec = 5;
       };
@@ -360,6 +364,9 @@ in {
             description = "Watch the atrium mailboxes for new mail";
             serviceConfig = {
               ExecStart = "${lib.getExe cfg.package} watch";
+              Type = "notify";
+              WatchdogSec = writeTimeout;
+              TimeoutStartSec = writeTimeout;
               TimeoutStopSec = writeTimeout;
               Restart = "on-failure";
               RestartSec = 10;
@@ -374,6 +381,9 @@ in {
               mediaWriter
               // {
                 ExecStart = "${lib.getExe cfg.package} agent scheduler";
+                Type = "notify";
+                WatchdogSec = "10min";
+                TimeoutStartSec = writeTimeout;
                 Restart = "on-failure";
                 RestartSec = 10;
               };
@@ -431,6 +441,7 @@ in {
             host = "127.0.0.1";
             port = cfg.web.local.port;
             auth = "local";
+            ops = false;
           };
         }
         // lib.optionalAttrs icloud {

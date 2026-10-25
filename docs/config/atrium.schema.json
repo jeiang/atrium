@@ -1467,6 +1467,25 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "ops_listen": {
+          "default": "127.0.0.1:9180",
+          "type": "string"
+        },
+        "ops_listen_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_pprof": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "ops_pprof_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "public_url": {
           "type": "string"
         },
