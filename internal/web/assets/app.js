@@ -577,7 +577,13 @@ const connectLive = (li) => {
     if (li.isConnected) htmx.trigger(li, "run-done");
   };
   on("done", () => settle(true));
-  source.onerror = () => setTimeout(settle, RETRY_MS);
+  source.onerror = () => {
+    if (source.readyState === EventSource.CLOSED) {
+      location.reload();
+      return;
+    }
+    setTimeout(settle, RETRY_MS);
+  };
   setBusy(true);
 };
 

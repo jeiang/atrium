@@ -17,6 +17,7 @@ var adminRules = []adminRule{
 	{"", "/modules/*"},
 	{"", "/budget"},
 	{"", "/budget/*"},
+	{http.MethodPost, "/live/resume"},
 	{http.MethodPost, "/live/mode"},
 	{http.MethodPost, "/live/go-live"},
 }

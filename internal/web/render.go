@@ -47,7 +47,12 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 	if err != nil {
 		return nil, err
 	}
+	var auth tpl.AuthView
+	if who, ok := IdentityOf(r.Context()); ok {
+		auth = tpl.AuthView{Admin: who.Admin, SignOut: who.Source == SourceOIDC, NoAuth: who.NoAuth}
+	}
 	return &tpl.Frame{
+		Auth:         auth,
 		CSRF:         CSRFToken(r.Context()),
 		Mode:         mode,
 		Paused:       safety.IsPaused(rd.cfg.PausePath()),
@@ -102,8 +107,11 @@ func (rd *Renderer) ErrorPage(w http.ResponseWriter, r *http.Request, status int
 	if err == nil && !IsPartial(r) {
 		err = rd.Page(w, r, status, "error.gohtml", f)
 	} else if err == nil {
-		if status == http.StatusUnprocessableEntity {
+		switch status {
+		case http.StatusUnprocessableEntity:
 			f.Toast = &tpl.Toast{Category: "error", Title: "Filter not understood", Description: problem}
+		case http.StatusForbidden:
+			f.Toast = &tpl.Toast{Category: "error", Title: "Admins only"}
 		}
 		err = rd.Fragment(w, r, status, "_error.gohtml", f)
 	}

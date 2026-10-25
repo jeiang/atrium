@@ -14,6 +14,7 @@ const (
 
 type Preset struct {
 	Name        string
+	Display     string
 	Issuer      string
 	Scopes      []string
 	GroupsClaim string
@@ -23,12 +24,12 @@ type Preset struct {
 
 var presets = []Preset{
 	{Name: PresetGeneric, Scopes: []string{"openid", "profile", "email", "groups"}, GroupsClaim: "groups"},
-	{Name: PresetPocketID, Scopes: []string{"openid", "profile", "email", "groups"}, GroupsClaim: "groups"},
-	{Name: PresetAuthelia, Scopes: []string{"openid", "profile", "email", "groups"}, GroupsClaim: "groups"},
-	{Name: PresetAuthentik, Scopes: []string{"openid", "profile", "email"}, GroupsClaim: "groups"},
-	{Name: PresetKeycloak, Scopes: []string{"openid", "profile", "email"}, GroupsClaim: "groups", TrimSlash: true},
-	{Name: PresetGoogle, Issuer: "https://accounts.google.com", Scopes: []string{"openid", "email", "profile"}, AuthParams: map[string]string{"access_type": "offline"}},
-	{Name: PresetEntra, Scopes: []string{"openid", "profile", "email"}, GroupsClaim: "groups"},
+	{Name: PresetPocketID, Display: "Pocket ID", Scopes: []string{"openid", "profile", "email", "groups"}, GroupsClaim: "groups"},
+	{Name: PresetAuthelia, Display: "Authelia", Scopes: []string{"openid", "profile", "email", "groups"}, GroupsClaim: "groups"},
+	{Name: PresetAuthentik, Display: "Authentik", Scopes: []string{"openid", "profile", "email"}, GroupsClaim: "groups"},
+	{Name: PresetKeycloak, Display: "Keycloak", Scopes: []string{"openid", "profile", "email"}, GroupsClaim: "groups", TrimSlash: true},
+	{Name: PresetGoogle, Display: "Google", Issuer: "https://accounts.google.com", Scopes: []string{"openid", "email", "profile"}, AuthParams: map[string]string{"access_type": "offline"}},
+	{Name: PresetEntra, Display: "Microsoft Entra", Scopes: []string{"openid", "profile", "email"}, GroupsClaim: "groups"},
 }
 
 func PresetNames() []string {

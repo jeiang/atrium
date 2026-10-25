@@ -87,7 +87,7 @@ func load(ctx context.Context, q db.Querier, env config.Env) (Config, error) {
 		Max:          days(KeyMaxDays, 24*time.Hour),
 		Recheck:      days(KeyRecheckMinutes, time.Minute),
 	}
-	if preset.Issuer != "" {
+	if preset.Issuer != "" && c.Issuer == "" {
 		c.Issuer = preset.Issuer
 	}
 	if len(c.Scopes) == 0 {

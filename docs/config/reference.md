@@ -122,6 +122,24 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `max_steps_nightly` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` |
 | `monthly_budget_usd` | float | `150` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
 
+## auth
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `oidc_access_emails` | string | none | ui | `ATRIUM_AUTH_OIDC_ACCESS_EMAILS` |
+| `oidc_access_group` | string | `atrium_access` | ui | `ATRIUM_AUTH_OIDC_ACCESS_GROUP` |
+| `oidc_admin_emails` | string | none | ui | `ATRIUM_AUTH_OIDC_ADMIN_EMAILS` |
+| `oidc_admin_group` | string | `atrium_admin` | ui | `ATRIUM_AUTH_OIDC_ADMIN_GROUP` |
+| `oidc_client_id` | string | none | ui | `ATRIUM_AUTH_OIDC_CLIENT_ID` |
+| `oidc_client_secret` | string | none | secret | `ATRIUM_AUTH_OIDC_CLIENT_SECRET` |
+| `oidc_groups_claim` | string | none | ui | `ATRIUM_AUTH_OIDC_GROUPS_CLAIM` |
+| `oidc_issuer` | string | none | ui | `ATRIUM_AUTH_OIDC_ISSUER` |
+| `oidc_preset` | enum (generic, pocket_id, authelia, authentik, keycloak, google, entra) | `generic` | ui | `ATRIUM_AUTH_OIDC_PRESET` |
+| `oidc_recheck_minutes` | int | `60` | advanced | `ATRIUM_AUTH_OIDC_RECHECK_MINUTES` |
+| `oidc_scopes` | string | none | ui | `ATRIUM_AUTH_OIDC_SCOPES` |
+| `oidc_session_idle_days` | int | `7` | advanced | `ATRIUM_AUTH_OIDC_SESSION_IDLE_DAYS` |
+| `oidc_session_max_days` | int | `30` | advanced | `ATRIUM_AUTH_OIDC_SESSION_MAX_DAYS` |
+
 ## calendar
 
 | Key | Type | Default | Class | Environment variable |

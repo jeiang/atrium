@@ -63,6 +63,8 @@ type Guard struct {
 	public   func(*http.Request) bool
 	bodyCap  func(context.Context) (int, error)
 	sessions *oidc.Service
+	errPage  ErrorPage
+	noAuth   bool
 }
 
 func NewGuard(auth AuthSet, allowedHosts []string, public func(*http.Request) bool) *Guard {
@@ -175,15 +177,22 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 		case errors.Is(err, errUnavailable):
 			deny(w, http.StatusServiceUnavailable, "Service Unavailable")
 			return
-		case err != nil && !static && !g.public(r) && !(g.auth.OIDC && signInPath(r)):
-			g.unauthenticated(w, r)
-			return
-		case err == nil && !who.Admin && adminRoute(r):
-			deny(w, http.StatusForbidden, "Forbidden: administrator access required")
+		case err != nil && !static && !g.public(r) && (!g.auth.OIDC || !signInPath(r)):
+			g.unauthenticated(w, r, err)
 			return
 		}
 		if err == nil {
+			who.NoAuth = who.Source == SourceLocal && g.noAuth
 			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, who))
+			if !who.Admin && adminRoute(r) {
+				setSecurityHeaders(w.Header())
+				if g.errPage != nil {
+					g.errPage(w, r, http.StatusForbidden, "Admins only.")
+				} else {
+					deny(w, http.StatusForbidden, "Forbidden: administrator access required")
+				}
+				return
+			}
 		}
 		token, found := cookieToken(r)
 		fresh := !found

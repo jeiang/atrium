@@ -108,9 +108,11 @@ not claims about the running application.
 - The registry restricts tools by run kind. Scheduled runs read, propose,
   and notify; nightly runs may also update Notion and the profile with undo.
   Research subagents have restricted tools and bounded runs.
-- The public web service trusts an authenticating reverse proxy and checks
-  Host and operator group membership. A separate local mode provides
-  loopback access. Public media file access requires an expiring signed
+- The public web service accepts an authenticating reverse proxy
+  (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Proxy and
+  local requests are administrators; an OIDC session is an administrator only
+  with the admin group, and administrator-only routes answer 403 otherwise. A
+  separate local mode provides loopback access. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in
   the database (pinnable by the deployment); a legacy `media-link.key` file is
   moved into it on first use.
@@ -143,8 +145,6 @@ not claims about the running application.
 - UI-managed integrations and settings, and model, effort and context
   controls on the new-thread composer. The notifications module requires `ntfy_url` and `ntfy_topic`, but
   not the optional `NTFY_TOKEN`; its toggle is `notifications_enabled`.
-- OIDC access with separate operator and administrator permissions, and
-  encrypted database storage.
 - Isolated coding workspaces, repository integration, and delegation to
   coding agents for scripts, bounded changes, and draft pull requests.
   Secrets must stay outside the workspace, with controlled network access

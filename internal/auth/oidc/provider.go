@@ -160,7 +160,7 @@ func (s *Service) keysFor(ctx context.Context, p *provider, t rawToken) ([]named
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	stale := p.keys == nil || s.now().Sub(p.keysFetched) > jwksTTL
-	missing := !t.hasKey(p.keys) && s.now().Sub(p.keysFetched) > jwksMinGap
+	missing := !t.hasKey(p.keys) && s.now().Sub(p.keysFetched) > s.KeyRefetchGap
 	if !stale && !missing {
 		return p.keys, nil
 	}
@@ -208,4 +208,25 @@ func (s *Service) verifyIDToken(ctx context.Context, p *provider, cfg Config, ra
 		return nil, err
 	}
 	return t.claims, nil
+}
+
+func origin(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+func (s *Service) Origins(cfg Config) []string {
+	out := []string{origin(cfg.Issuer)}
+	s.mu.Lock()
+	p := s.providers[cfg.Issuer]
+	s.mu.Unlock()
+	if p != nil {
+		if o := origin(p.authURL); o != "" && !slices.Contains(out, o) {
+			out = append(out, o)
+		}
+	}
+	return slices.DeleteFunc(out, func(o string) bool { return o == "" })
 }

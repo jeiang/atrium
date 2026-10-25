@@ -105,18 +105,20 @@ func (k jwk) public() (crypto.PublicKey, error) {
 		default:
 			return nil, errors.New("unsupported curve")
 		}
+		size := (curve.Params().BitSize + 7) / 8
 		x, err := decodeBig(k.X)
-		if err != nil {
-			return nil, err
+		if err != nil || x.BitLen() > size*8 {
+			return nil, errors.New("bad x")
 		}
 		y, err := decodeBig(k.Y)
-		if err != nil {
-			return nil, err
+		if err != nil || y.BitLen() > size*8 {
+			return nil, errors.New("bad y")
 		}
-		if !curve.IsOnCurve(x, y) {
-			return nil, errors.New("point not on curve")
-		}
-		return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+		point := make([]byte, 1+2*size)
+		point[0] = 4
+		x.FillBytes(point[1 : 1+size])
+		y.FillBytes(point[1+size:])
+		return ecdsa.ParseUncompressedPublicKey(curve, point)
 	case "OKP":
 		if k.Crv != "Ed25519" {
 			return nil, errors.New("unsupported curve")
@@ -208,7 +210,7 @@ func verifySignature(alg string, key crypto.PublicKey, signed string, sig []byte
 			return rsa.VerifyPSS(pub, h, digest, sig, &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash}) == nil
 		}
 	case *ecdsa.PublicKey:
-		if alg[:2] != "ES" {
+		if alg[:2] != "ES" || pub.Curve.Params().BitSize != map[string]int{"ES256": 256, "ES384": 384, "ES512": 521}[alg] {
 			return false
 		}
 		size := (pub.Curve.Params().BitSize + 7) / 8

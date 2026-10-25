@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+  {{template "document_head" .}}
+</head>
+<body class="min-h-dvh" hx-headers='{{tojson (dict "X-CSRF-Token" .CSRF)}}'{{block "body_attrs" .}}{{end}}>
+  <main id="content" tabindex="-1" class="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-6 px-4 py-8 outline-none">
+    <div class="flex items-center gap-2">{{template "brand_mark"}}</div>
+    {{block "content" .}}{{end}}
+  </main>
+  {{$toasts := list}}
+  {{with .Toast}}{{$toasts = list (dict "category" .Category "title" .Title "description" .Description)}}{{end}}
+  {{template "toaster" (dict "toasts" $toasts)}}
+</body>
+</html>

@@ -50,10 +50,12 @@ type Options struct {
 	Static       fs.FS
 	Modules      []Module
 	OIDC         *oidc.Service
+	NoAuth       bool
 }
 
 type Server struct {
 	oidc     *oidc.Service
+	render   *Renderer
 	handler  http.Handler
 	mux      *chi.Mux
 	errPage  ErrorPage
@@ -77,7 +79,7 @@ func New(o Options) (*Server, error) {
 	if auth.OIDC && o.OIDC == nil {
 		return nil, errors.New("oidc auth needs a session service")
 	}
-	s := &Server{mux: chi.NewRouter(), errPage: o.ErrorPage, oidc: o.OIDC}
+	s := &Server{mux: chi.NewRouter(), errPage: o.ErrorPage, oidc: o.OIDC, render: o.Render}
 	if s.errPage == nil && o.Render != nil {
 		s.errPage = o.Render.ErrorPage
 	}
@@ -113,6 +115,8 @@ func New(o Options) (*Server, error) {
 	}
 	guard := NewGuard(auth, o.AllowedHosts, o.Public)
 	guard.sessions = o.OIDC
+	guard.errPage = s.errPage
+	guard.noAuth = o.NoAuth
 	if o.DB != nil {
 		guard.bodyCap = func(ctx context.Context) (int, error) { return config.Limit(ctx, o.DB.Read, config.KeyBodyCap) }
 	}

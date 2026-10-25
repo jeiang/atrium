@@ -35,9 +35,11 @@ const (
 var (
 	log = logx.Logger("atrium.auth")
 
-	ErrNoSession = errors.New("oidc: no session")
-	ErrLogin     = errors.New("oidc: login state is invalid or expired")
-	ErrDenied    = errors.New("oidc: account has no access")
+	ErrNoSession    = errors.New("oidc: no session")
+	ErrLogin        = errors.New("oidc: login state is invalid")
+	ErrLoginTimeout = errors.New("oidc: login state expired")
+	ErrRevoked      = errors.New("oidc: access was removed")
+	ErrDenied       = errors.New("oidc: account has no access")
 )
 
 type Service struct {
@@ -46,6 +48,8 @@ type Service struct {
 	hc  *http.Client
 	now func() time.Time
 
+	KeyRefetchGap time.Duration
+
 	mu        sync.Mutex
 	providers map[string]*provider
 	locks     map[int64]*sync.Mutex
@@ -53,7 +57,7 @@ type Service struct {
 }
 
 func New(d *db.DB, env config.Env) *Service {
-	s := &Service{d: d, env: env, now: time.Now, providers: map[string]*provider{}, locks: map[int64]*sync.Mutex{}, retry: map[int64]time.Time{}}
+	s := &Service{d: d, env: env, now: time.Now, KeyRefetchGap: jwksMinGap, providers: map[string]*provider{}, locks: map[int64]*sync.Mutex{}, retry: map[int64]time.Time{}}
 	s.hc = s.client()
 	return s
 }
@@ -199,8 +203,11 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 	if err != nil {
 		return Grant{}, err
 	}
-	if s.unix()-pending.created > loginTTL.Seconds() || subtle.ConstantTimeCompare([]byte(pending.binding), []byte(digest(binding))) != 1 {
+	if subtle.ConstantTimeCompare([]byte(pending.binding), []byte(digest(binding))) != 1 {
 		return Grant{}, ErrLogin
+	}
+	if s.unix()-pending.created > loginTTL.Seconds() {
+		return Grant{}, ErrLoginTimeout
 	}
 	cfg, err := load(ctx, s.d.Read, s.env)
 	if err != nil {

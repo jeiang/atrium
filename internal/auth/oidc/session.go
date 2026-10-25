@@ -143,7 +143,7 @@ func (s *Service) recheck(ctx context.Context, hash string, seen row, t timing) 
 	s.mu.Lock()
 	next := s.retry[r.ID]
 	s.mu.Unlock()
-	if s.now().Before(next) {
+	if s.now().Before(next) && now < r.rechecked+t.recheck.Seconds()+recheckGrace.Seconds() {
 		return r, nil
 	}
 	outcome, err := s.refresh(ctx, cfg, r)
@@ -164,7 +164,11 @@ func (s *Service) recheck(ctx context.Context, hash string, seen row, t timing) 
 		return r, nil
 	default:
 		log.Warn("session ended by group re-check", "sub", r.Subject, "reason", describe(err))
-		return r, s.drop(ctx, r.ID)
+		dropped := s.drop(ctx, r.ID)
+		if errors.Is(err, ErrDenied) && errors.Is(dropped, ErrNoSession) {
+			return r, ErrRevoked
+		}
+		return r, dropped
 	}
 }
 

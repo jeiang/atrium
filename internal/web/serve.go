@@ -181,7 +181,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	if slices.Contains(a.auth, AuthOIDC) {
 		sessions = oidc.New(d, a.env)
 		if err := sessions.Check(ctx); err != nil {
-			return err
+			log.Warn("oidc sign-in is not set up; nobody can sign in until it is", logx.Err, err.Error())
 		}
 	}
 	render, err := NewRenderer(cfg, d, tpl.Config{Modules: templates, Globals: globals})

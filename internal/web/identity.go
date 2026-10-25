@@ -16,10 +16,9 @@ const (
 	SourceLocal = "local"
 	SourceOIDC  = "oidc"
 
-	LoginPath     = "/auth/login"
-	CallbackPath  = oidc.CallbackPath
-	LogoutPath    = "/auth/logout"
-	SignedOutPath = "/auth/signed-out"
+	LoginPath    = "/login"
+	CallbackPath = oidc.CallbackPath
+	LogoutPath   = "/logout"
 
 	sessionCookie = "atrium_session"
 	bindingCookie = "atrium_oidc_state"
@@ -28,6 +27,8 @@ const (
 
 var (
 	errAnonymous   = errors.New("no identity")
+	errExpired     = errors.New("session expired")
+	errRevoked     = errors.New("session revoked")
 	errUnavailable = errors.New("session lookup failed")
 )
 
@@ -37,6 +38,7 @@ type Identity struct {
 	Email   string
 	Name    string
 	Admin   bool
+	NoAuth  bool
 }
 
 type identityKey struct{}
@@ -47,12 +49,11 @@ func IdentityOf(ctx context.Context) (Identity, bool) {
 }
 
 func signInPath(r *http.Request) bool {
-	if r.Method != http.MethodGet {
-		return false
-	}
 	switch r.URL.Path {
-	case LoginPath, CallbackPath, SignedOutPath:
-		return true
+	case LoginPath:
+		return r.Method == http.MethodGet || r.Method == http.MethodPost
+	case CallbackPath:
+		return r.Method == http.MethodGet
 	}
 	return false
 }
@@ -70,7 +71,11 @@ func (g *Guard) identify(r *http.Request) (Identity, error) {
 			switch {
 			case err == nil:
 				return Identity{Source: SourceOIDC, Subject: s.Subject, Email: s.Email, Name: s.Name, Admin: s.Admin}, nil
-			case !errors.Is(err, oidc.ErrNoSession):
+			case errors.Is(err, oidc.ErrRevoked):
+				return Identity{}, errRevoked
+			case errors.Is(err, oidc.ErrNoSession):
+				return Identity{}, errExpired
+			default:
 				log.Error("session lookup failed", logx.Err, err.Error())
 				return Identity{}, errUnavailable
 			}
@@ -79,26 +84,39 @@ func (g *Guard) identify(r *http.Request) (Identity, error) {
 	return Identity{}, errAnonymous
 }
 
-func (g *Guard) unauthenticated(w http.ResponseWriter, r *http.Request) {
+func (g *Guard) unauthenticated(w http.ResponseWriter, r *http.Request, why error) {
 	if !g.auth.OIDC {
 		deny(w, http.StatusForbidden, "Forbidden")
 		return
 	}
 	setSecurityHeaders(w.Header())
 	w.Header().Set("Cache-Control", "no-store")
-	target := LoginPath
-	if r.Method == http.MethodGet || r.Method == http.MethodHead {
-		target += "?return=" + url.QueryEscape(oidc.SafeReturn(r.URL.RequestURI()))
-	}
+	q := url.Values{}
 	switch {
-	case IsPartial(r):
+	case errors.Is(why, errRevoked):
+		q.Set("reason", "revoked")
+	case errors.Is(why, errExpired):
+		q.Set("reason", "expired")
+	}
+	if !errors.Is(why, errAnonymous) {
+		expireCookie(w, sessionCookie, isHTTPS(r))
+	}
+	get := r.Method == http.MethodGet || r.Method == http.MethodHead
+	if get && !IsPartial(r) {
+		if next := oidc.SafeReturn(r.URL.RequestURI()); next != "/" {
+			q.Set("next", next)
+		}
+	}
+	target := LoginPath
+	if len(q) > 0 {
+		target += "?" + q.Encode()
+	}
+	if IsPartial(r) {
 		w.Header().Set("HX-Redirect", target)
 		deny(w, http.StatusUnauthorized, "Unauthorized")
-	case r.Method == http.MethodGet || r.Method == http.MethodHead:
-		http.Redirect(w, r, target, http.StatusSeeOther)
-	default:
-		deny(w, http.StatusUnauthorized, "Unauthorized")
+		return
 	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
 func cookieValue(r *http.Request, name string) string {
