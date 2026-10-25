@@ -8,6 +8,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/testutil/golden"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -368,4 +370,76 @@ func TestLoginLinkFirstRunSetupThenOIDCSignIn(t *testing.T) {
 	authz := user.get(begin.header.Get("Location"))
 	linkExpect(t, user.get(authz.header.Get("Location")), http.StatusSeeOther)
 	linkExpect(t, user.get("/settings/auth"), http.StatusOK, "Active")
+}
+
+func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(golden.Dir(), "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "atrium.db")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ATRIUM_DB", path)
+	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	t.Setenv("ATRIUM_CORE_PUBLIC_URL", "https://atrium.example")
+	t.Cleanup(func() { settings.Default.SetPins(nil) })
+
+	counts := func(d *db.DB) map[string]int {
+		out := map[string]int{}
+		for _, table := range []string{"threads", "messages", "settings", "proposals", "usage"} {
+			var n int
+			if err := d.Read.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&n); err == nil {
+				out[table] = n
+			}
+		}
+		return out
+	}
+	raw, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := counts(raw)
+	_ = raw.Close()
+	if len(before) == 0 {
+		t.Fatal("golden database holds none of the expected tables")
+	}
+
+	var out, errs bytes.Buffer
+	if code := newApp().Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitOK {
+		t.Fatalf("login-link on a golden copy: %d %s", code, errs.String())
+	}
+	if !strings.HasPrefix(out.String(), "https://atrium.example/login/link#") {
+		t.Fatalf("link %q", out.String())
+	}
+	migrated, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = migrated.Close() }()
+	for table, n := range before {
+		if got := counts(migrated)[table]; got != n {
+			t.Fatalf("%s rows changed: %d -> %d", table, n, got)
+		}
+	}
+	var version, links int
+	if err := migrated.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 9").Scan(&version); err != nil || version != 1 {
+		t.Fatalf("migration 9 applied %d: %v", version, err)
+	}
+	if err := migrated.Read.QueryRow("SELECT COUNT(*) FROM auth_login_links").Scan(&links); err != nil || links != 1 {
+		t.Fatalf("links %d: %v", links, err)
+	}
+	if _, err := migrated.Write.Exec("INSERT INTO auth_sessions (token_hash, subject, admin, created_at, last_seen_at, idle_expires_at, absolute_expires_at, rechecked_at) VALUES ('h', 's', 0, 1, 1, 2, 2, 1)"); err != nil {
+		t.Fatal(err)
+	}
+	var origin string
+	if err := migrated.Read.QueryRow("SELECT origin FROM auth_sessions WHERE token_hash = 'h'").Scan(&origin); err != nil || origin != "oidc" {
+		t.Fatalf("session origin %q: %v", origin, err)
+	}
+	out.Reset()
+	if code := newApp().Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitOK {
+		t.Fatalf("second login-link: %d %s", code, errs.String())
+	}
 }
