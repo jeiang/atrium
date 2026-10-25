@@ -144,6 +144,8 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_CORE_MONEY_ENABLED` | `core.money_enabled` |
 | `ATRIUM_CORE_NOTIFICATIONS_ENABLED` | `core.notifications_enabled` |
 | `ATRIUM_CORE_NOTION_ENABLED` | `core.notion_enabled` |
+| `ATRIUM_CORE_OPS_LISTEN` | `core.ops_listen` |
+| `ATRIUM_CORE_OPS_PPROF` | `core.ops_pprof` |
 | `ATRIUM_CORE_PUBLIC_URL` | `core.public_url` |
 | `ATRIUM_CORE_TZ` | `core.tz` |
 | `ATRIUM_DB_KEY` | `db.key` |

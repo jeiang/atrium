@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -46,6 +47,7 @@ func requirementEnv(mediaRoot string) map[string]string {
 func init() {
 	defaults := requirementEnv(filepath.Join(os.TempDir(), "atrium-test-media"))
 	defaults[anthropic.BaseURLEnv] = "http://127.0.0.1:9"
+	defaults[settingEnv(ops.ListenKey)] = "127.0.0.1:0"
 	for _, name := range moduleNames {
 		defaults[flagEnv(name)] = "true"
 	}
