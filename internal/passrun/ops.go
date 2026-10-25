@@ -17,7 +17,7 @@ func init() {
 			var out []ops.Sample
 			for _, l := range latest {
 				if l.Success != nil {
-					out = append(out, ops.Sample{Labels: [][2]string{{"job", l.Job}}, Value: *l.Success})
+					out = append(out, ops.Sample{Labels: [][2]string{{"pass", l.Job}}, Value: *l.Success})
 				}
 			}
 			return out, err
@@ -32,7 +32,7 @@ func init() {
 				if stale, _ := l.Stale(at); stale {
 					v = 1
 				}
-				out = append(out, ops.Sample{Labels: [][2]string{{"job", l.Job}}, Value: v})
+				out = append(out, ops.Sample{Labels: [][2]string{{"pass", l.Job}}, Value: v})
 			}
 			return out, err
 		}})

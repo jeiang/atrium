@@ -24,6 +24,7 @@
       (root + "/cmd")
       (root + "/internal")
       (root + "/sdk")
+      (root + "/nix/monitoring")
       (root + "/third_party")
       (root + "/LICENSE")
       (root + "/testdata")

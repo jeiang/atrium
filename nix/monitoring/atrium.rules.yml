@@ -1,0 +1,49 @@
+groups:
+  - name: atrium
+    rules:
+      - alert: AtriumMetricsAbsent
+        expr: absent(atrium_budget_monthly_usd)
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: atrium's ops listener is not being scraped or atrium-web is down.
+      - alert: AtriumNotReady
+        expr: atrium_readiness_check_ok == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "atrium readiness check {{ $labels.check }} is failing."
+      - alert: AtriumPassStale
+        expr: atrium_job_stale == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "atrium pass {{ $labels.pass }} failed or has not succeeded within its limit."
+      - alert: AtriumMailSyncStale
+        expr: time() - atrium_job_last_success_timestamp_seconds{pass="sync"} > 3 * 3600
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: atrium has not synced mail successfully for more than 3 hours.
+      - alert: AtriumBudgetHigh
+        expr: atrium_budget_spent_ratio >= 0.8
+        labels:
+          severity: warning
+        annotations:
+          summary: "atrium has spent {{ $value | humanizePercentage }} of its monthly budget; scheduled runs pause at 80%."
+      - alert: AtriumBudgetExhausted
+        expr: atrium_budget_spent_ratio >= 1
+        labels:
+          severity: critical
+        annotations:
+          summary: atrium has spent its monthly budget; chat is paused.
+      - alert: AtriumLockTimeouts
+        expr: increase(atrium_db_exclusive_timeouts_total[1h]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: atrium timed out waiting for the database lock in the last hour.

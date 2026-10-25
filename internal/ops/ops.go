@@ -126,14 +126,31 @@ func Handler(d *db.DB, withPprof bool) http.Handler {
 
 func (s *server) metrics(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	if s.body == nil || time.Since(s.scraped) > scrapeTTL {
-		s.body = render(r.Context(), s.d)
-		s.scraped = time.Now()
-	}
+	expired := s.body == nil || time.Since(s.scraped) > scrapeTTL
 	body := s.body
 	s.mu.Unlock()
+	if expired {
+		body = append(render(r.Context(), s.d), s.readiness(r.Context())...)
+		s.mu.Lock()
+		s.body, s.scraped = body, time.Now()
+		s.mu.Unlock()
+	}
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	_, _ = w.Write(body)
+}
+
+func (s *server) readiness(ctx context.Context) []byte {
+	_, checks := snapshot()
+	var b strings.Builder
+	b.WriteString("# HELP atrium_readiness_check_ok 1 when the readiness check passes.\n# TYPE atrium_readiness_check_ok gauge\n")
+	for _, c := range checks {
+		ok := 1
+		if s.run(ctx, c) != nil {
+			ok = 0
+		}
+		fmt.Fprintf(&b, "atrium_readiness_check_ok{check=%q} %d\n", c.Name, ok)
+	}
+	return []byte(b.String())
 }
 
 func render(ctx context.Context, d *db.DB) []byte {

@@ -1,3 +1,5 @@
+//go:build !modernc
+
 package main
 
 import (
@@ -90,7 +92,7 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 		opsBase := opsAddr(t)
 		startServeIn(t, dir)
 		_, body, _ := fetch(t, http.DefaultClient, "GET", opsBase+"/metrics", nil)
-		if !strings.Contains(body, `atrium_job_stale{job="backup"} 1`) {
+		if !strings.Contains(body, `atrium_job_stale{pass="backup"} 1`) {
 			t.Errorf("metrics lack the stale backup gauge:\n%s", body)
 		}
 		if status, state := readiness(t, opsBase); status != http.StatusOK || state != ops.StateDegraded {
@@ -125,7 +127,7 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 			t.Errorf("readyz = %d %s after a success, want ready", status, state)
 		}
 		_, body, _ := fetch(t, http.DefaultClient, "GET", opsBase+"/metrics", nil)
-		if !strings.Contains(body, `atrium_job_last_success_timestamp_seconds{job="backup"}`) {
+		if !strings.Contains(body, `atrium_job_last_success_timestamp_seconds{pass="backup"}`) {
 			t.Errorf("metrics lack the last-success gauge:\n%s", body)
 		}
 		time.Sleep(300 * time.Millisecond)

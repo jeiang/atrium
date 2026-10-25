@@ -317,6 +317,22 @@ in {
       };
     };
 
+    monitoring = {
+      ruleFile = mkOption {
+        type = types.path;
+        readOnly = true;
+        default = ./monitoring/atrium.rules.yml;
+        description = "Prometheus alert rules for atrium's ops metrics, for services.prometheus.ruleFiles or vmalert.";
+      };
+
+      dashboardFile = mkOption {
+        type = types.path;
+        readOnly = true;
+        default = ./monitoring/atrium-dashboard.json;
+        description = "Grafana dashboard for atrium's ops metrics, for Grafana dashboard provisioning.";
+      };
+    };
+
     extraEnvironment = mkOption {
       type = types.attrsOf types.str;
       default = {};
