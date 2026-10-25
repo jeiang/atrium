@@ -49,7 +49,7 @@ Each option is null by default. A null option sets no environment variable for t
 | `embedUrl` | OpenAI-compatible embeddings base URL. |
 | `publicUrl` | URL the operator reaches the web UI at; used in notifications and signed media links. |
 | `grafanaUrl` | Grafana base URL for the observability tools. |
-| `icloudAppleId` | Apple ID for iCloud CalDAV and CardDAV. Setting it also defines the vdirsyncer unit and timer that mirror calendars and contacts, and points atrium at the mirrored directories. |
+| `icloudAppleId` | Apple ID for iCloud CalDAV and CardDAV. Setting it also defines `atrium-dav-sync` and its 15-minute timer, which run `atrium calendar sync` and `atrium contacts sync` into the mirrored directories atrium reads. |
 
 ## Web listeners
 
@@ -97,7 +97,7 @@ The module never removes old archives. Pruning and copying archives off the host
 
 Regardless of options, the module places the database at `/var/lib/atrium/atrium.db` and the message cache at `/var/lib/atrium/cache/messages`, and installs the `atrium-run` command, which runs the atrium binary as the `atrium` user with the same environment files and variables as the units.
 
-The module defines these units: `atrium-web`, `atrium-watch`, `atrium-agent-scheduler`, and the oneshot services `atrium-sync`, `atrium-notion-sync` and `atrium-scan` with their timers. `atrium-backup` with its timer exists only with `backup.enable`, `atrium-web-local` only with `web.local.enable`, and `atrium-vdirsyncer-sync` with its timer only when `icloudAppleId` is set.
+The module defines these units: `atrium-web`, `atrium-watch`, `atrium-agent-scheduler`, and the oneshot services `atrium-sync`, `atrium-notion-sync` and `atrium-scan` with their timers. `atrium-backup` with its timer exists only with `backup.enable`, `atrium-web-local` only with `web.local.enable`, and `atrium-dav-sync` with its timer only when `icloudAppleId` is set. The vdirsyncer unit is gone; the native mirror keeps the same directories.
 
 `atrium-web`, `atrium-watch` and `atrium-agent-scheduler` are `Type=notify` units with a systemd watchdog (`WatchdogSec` 1 min, 45 min and 10 min); each signals readiness after its migrations, and a command skipped because its module is off signals readiness before it exits. `atrium-web` serves the ops listener on `127.0.0.1:9180`; `atrium-web-local` runs without it.
 

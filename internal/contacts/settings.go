@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -18,6 +19,9 @@ func init() {
 }
 
 func Dir(ctx context.Context, q db.Querier) (string, error) {
+	if on, err := module.FlagOn(ctx, q, module.Contacts); err != nil || !on {
+		return "", err
+	}
 	found, err := settings.Default.Resolve(ctx, q, DirKey, 0)
 	if err != nil || found.Value == "" {
 		return "", err

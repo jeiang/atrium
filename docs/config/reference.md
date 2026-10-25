@@ -168,6 +168,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | --- | --- | --- | --- | --- |
 | `assistant_enabled` | bool | `false` | ui | `ATRIUM_CORE_ASSISTANT_ENABLED` |
 | `calendar_enabled` | bool | `false` | ui | `ATRIUM_CORE_CALENDAR_ENABLED` |
+| `contacts_enabled` | bool | `false` | ui | `ATRIUM_CORE_CONTACTS_ENABLED` |
 | `grafana_enabled` | bool | `false` | ui | `ATRIUM_CORE_GRAFANA_ENABLED` |
 | `http_timeout_seconds` | int | `600` | advanced | `ATRIUM_CORE_HTTP_TIMEOUT_SECONDS` |
 | `mail_enabled` | bool | `false` | ui | `ATRIUM_CORE_MAIL_ENABLED` |

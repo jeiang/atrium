@@ -1,4 +1,4 @@
-package mailtools
+package contactsmodule
 
 import (
 	"context"
@@ -6,10 +6,44 @@ import (
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/calendar"
+	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
+	"github.com/jeiang/atrium/internal/davmirror"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/py"
 )
+
+type Module struct{}
+
+func (Module) Register(module.Context) module.Registration {
+	return module.Registration{
+		Name:     module.Contacts,
+		Requires: []module.Requirement{module.Setting(contacts.DirKey)},
+		Commands: []*cli.Command{{Name: "contacts", Commands: []*cli.Command{syncCommand()}}},
+		Tools:    func(r *registry.Registry) error { return r.Add(Tools()...) },
+	}
+}
+
+func syncCommand() *cli.Command {
+	return davmirror.SyncCommand("mirror the iCloud address books into the contacts directory (read-only)", passrun.CardDAV,
+		func(ctx context.Context, d *db.DB) (davmirror.Stats, error) {
+			set, err := calendar.LoadSettings(ctx, d.Read)
+			if err != nil {
+				return davmirror.Stats{}, err
+			}
+			dir, err := contacts.Dir(ctx, d.Read)
+			if err != nil {
+				return davmirror.Stats{}, err
+			}
+			return calendar.SyncContactsMirror(ctx, config.OS, set, dir)
+		})
+}
 
 const schemaMaxContacts = 10
 
@@ -17,7 +51,7 @@ var contactsSchema = json.RawMessage(`{"type":"object","properties":{"query":{"t
 	`"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxContacts) + `}},` +
 	`"required":["query"],"additionalProperties":false}`)
 
-func contactTools() []tool.Tool {
+func Tools() []tool.Tool {
 	return []tool.Tool{{
 		Name:        "contacts_lookup",
 		Description: "Look up people in the operator's address book by name, email, phone or organisation.",

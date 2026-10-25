@@ -23,6 +23,7 @@ func (m Module) Register(module.Context) module.Registration {
 	mailCmds := mailcmd.Options{Clients: m.Clients, Now: m.Now}
 	return module.Registration{
 		Name: module.Mail,
+		Soft: []string{module.Contacts},
 		Requires: []module.Requirement{
 			module.Setting(mail.KeyChatURL),
 			module.Setting(mail.KeyEmbedURL),

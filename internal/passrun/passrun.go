@@ -18,6 +18,8 @@ const (
 	NotionSync = "notion-sync"
 	Scan       = "scan"
 	Backup     = "backup"
+	CalDAV     = "caldav"
+	CardDAV    = "carddav"
 
 	OK     = "ok"
 	Failed = "failed"
@@ -28,6 +30,8 @@ var MaxAge = map[string]time.Duration{
 	NotionSync: time.Hour,
 	Scan:       35 * 24 * time.Hour,
 	Backup:     8 * 24 * time.Hour,
+	CalDAV:     time.Hour,
+	CardDAV:    time.Hour,
 }
 
 var log = logx.Logger("atrium.passrun")

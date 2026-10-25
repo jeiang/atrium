@@ -84,11 +84,13 @@ not claims about the running application.
   own `<name>_enabled` flag and migrations recorded in `module_migrations`.
   Core (settings, secrets,
   `db`, `serve`, the About, review and activity pages) is always on; mail,
-  calendar, Notion, money, media, assistant, notifications and Grafana each
+  calendar, contacts, Notion, money, media, assistant, notifications and Grafana each
   have a `<name>_enabled` setting. A module is on only when its flag is true
   and its required settings are met (an `needs-settings` state otherwise);
-  grafana needs the assistant, and money and calendar candidates need mail
-  for their pipeline stages. A disabled module registers no pages, tools or
+  grafana needs the assistant, money and calendar candidates need mail
+  for their pipeline stages, and mail uses contacts as an optional source
+  for its flag rule. iCloud calendars and address books are mirrored by
+  atrium's own read-only CalDAV/CardDAV sync (vdirsyncer is gone). A disabled module registers no pages, tools or
   nav entries, its commands exit 0 without doing work, its scheduler jobs, the mail pass's money and calendar-candidate stages and
   notification sends are skipped (the mail pause controls stay available), and its tables remain. The first start
   after the module wiring adopts a database that already holds operator data

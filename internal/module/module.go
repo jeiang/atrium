@@ -23,6 +23,7 @@ const (
 	Assistant     = "assistant"
 	Notifications = "notifications"
 	Grafana       = "grafana"
+	Contacts      = "contacts"
 )
 
 type Module interface {

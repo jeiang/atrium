@@ -10,50 +10,10 @@
   stateDirName = "atrium";
   stateDir = "/var/lib/${stateDirName}";
   cacheDir = "${stateDir}/cache";
-  vdirsyncerDir = "${stateDir}/vdirsyncer";
-  calendarDir = "${vdirsyncerDir}/calendars";
-  contactsDir = "${vdirsyncerDir}/contacts";
-  vdirsyncerStatusDir = "${vdirsyncerDir}/status";
+  davDir = "${stateDir}/vdirsyncer";
+  calendarDir = "${davDir}/calendars";
+  contactsDir = "${davDir}/contacts";
   icloud = cfg.icloudAppleId != null;
-
-  vdirsyncerConfig = pkgs.writeText "atrium-vdirsyncer-config" ''
-    [general]
-    status_path = "${vdirsyncerStatusDir}"
-
-    [pair icloud_calendar]
-    a = "icloud_calendar_local"
-    b = "icloud_calendar_remote"
-    collections = ["from b"]
-
-    [storage icloud_calendar_local]
-    type = "filesystem"
-    path = "${calendarDir}"
-    fileext = ".ics"
-
-    [storage icloud_calendar_remote]
-    type = "caldav"
-    url = "https://caldav.icloud.com/"
-    username = "${cfg.icloudAppleId}"
-    password.fetch = ["command", "printenv", "ICLOUD_APP_PASSWORD"]
-    item_types = ["VEVENT"]
-
-    [pair icloud_contacts]
-    a = "icloud_contacts_local"
-    b = "icloud_contacts_remote"
-    collections = ["from b"]
-
-    [storage icloud_contacts_local]
-    type = "filesystem"
-    path = "${contactsDir}"
-    fileext = ".vcf"
-
-    [storage icloud_contacts_remote]
-    type = "carddav"
-    url = "https://contacts.icloud.com/"
-    username = "${cfg.icloudAppleId}"
-    password.fetch = ["command", "printenv", "ICLOUD_APP_PASSWORD"]
-    read_only = true
-  '';
 
   appEnvironment =
     lib.filterAttrs (_: value: value != null) {
@@ -218,7 +178,7 @@ in {
     embedUrl = nullableStr "OpenAI-compatible embeddings base URL of the local model (ATRIUM_MAIL_MAIL_EMBED_URL).";
     publicUrl = nullableStr "URL the operator reaches the web UI at; used in notifications and signed media links (ATRIUM_CORE_PUBLIC_URL).";
     grafanaUrl = nullableStr "Grafana base URL for the observability tools (GRAFANA_URL).";
-    icloudAppleId = nullableStr "Apple ID for iCloud CalDAV and CardDAV; also runs the vdirsyncer mirror of the calendars and contacts.";
+    icloudAppleId = nullableStr "Apple ID for iCloud CalDAV and CardDAV; also runs atrium-dav-sync, which mirrors the calendars and address books.";
 
     timeZone = mkOption {
       type = types.nullOr types.str;
@@ -461,25 +421,12 @@ in {
           };
         }
         // lib.optionalAttrs icloud {
-          atrium-vdirsyncer-sync = {
-            description = "Sync iCloud calendar and contacts via vdirsyncer";
-            after = ["network-online.target"];
-            wants = ["network-online.target"];
-            path = [pkgs.vdirsyncer];
-            environment.VDIRSYNCER_CONFIG = vdirsyncerConfig;
-            serviceConfig =
-              hardening
-              // {
-                Type = "oneshot";
-              };
-            script = ''
-              set -euo pipefail
-
-              install -d -m 0700 "${calendarDir}" "${contactsDir}" "${vdirsyncerStatusDir}"
-
-              printf 'y\n%.0s' $(seq 1 100) | vdirsyncer discover
-              vdirsyncer sync
-            '';
+          atrium-dav-sync = appService {
+            description = "Mirror the iCloud calendars and address books";
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = ["${lib.getExe cfg.package} calendar sync" "${lib.getExe cfg.package} contacts sync"];
+            };
           };
         };
 
@@ -519,7 +466,7 @@ in {
           };
         }
         // lib.optionalAttrs icloud {
-          atrium-vdirsyncer-sync = {
+          atrium-dav-sync = {
             wantedBy = ["timers.target"];
             timerConfig = {
               OnActiveSec = "1m";

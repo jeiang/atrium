@@ -54,6 +54,7 @@ var moduleCases = []moduleCase{
 		}},
 	{module: module.Notifications, tool: "notify", table: "notifications", method: "GET", path: "/settings/notifications", status: http.StatusOK},
 	{module: module.Grafana, tool: "grafana_datasources"},
+	{module: module.Contacts, tool: "contacts_lookup"},
 }
 
 type appRun struct {

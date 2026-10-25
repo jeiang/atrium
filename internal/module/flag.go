@@ -19,7 +19,7 @@ const (
 )
 
 func init() {
-	for _, name := range []string{Mail, Calendar, Notion, Money, Media, Assistant, Notifications, Grafana} {
+	for _, name := range []string{Mail, Calendar, Notion, Money, Media, Assistant, Notifications, Grafana, Contacts} {
 		settings.MustRegister(FlagDef(name))
 	}
 }
@@ -57,9 +57,13 @@ func seeded(ctx context.Context, q db.Querier) (bool, error) {
 	return n > 0, err
 }
 
+var lateModules = []string{Contacts}
+
 func (s *Set) Seed(ctx context.Context, d *db.DB) error {
-	if done, err := seeded(ctx, d.Read); err != nil || done {
+	if done, err := seeded(ctx, d.Read); err != nil {
 		return err
+	} else if done {
+		return s.adoptLate(ctx, d)
 	}
 	ctx = audit.With(ctx, seedActor, audit.Migration)
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
@@ -73,7 +77,7 @@ func (s *Set) Seed(ctx context.Context, d *db.DB) error {
 		next := seedEmpty
 		if phaseA {
 			next = seedAdopted
-			if err := s.adopt(ctx, tx); err != nil {
+			if err := s.adopt(ctx, tx, nil); err != nil {
 				return err
 			}
 		}
@@ -95,7 +99,31 @@ func hasOperatorData(ctx context.Context, q db.Querier) (bool, error) {
 	return false, nil
 }
 
-func (s *Set) adopt(ctx context.Context, q db.Querier) error {
+func (s *Set) adoptLate(ctx context.Context, d *db.DB) error {
+	var first string
+	err := d.Read.QueryRowContext(ctx, "SELECT new_value FROM settings_audit WHERE key = ? AND source = ? ORDER BY id LIMIT 1",
+		seedKey, string(audit.Migration)).Scan(&first)
+	if err != nil || first != seedAdopted {
+		return err
+	}
+	pending := map[string]bool{}
+	for _, name := range lateModules {
+		var n int
+		if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM settings_audit WHERE key = ?", FlagKey(name)).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			pending[name] = true
+		}
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+	ctx = audit.With(ctx, seedActor, audit.Migration)
+	return d.WithTx(ctx, func(tx *sql.Tx) error { return s.adopt(ctx, tx, pending) })
+}
+
+func (s *Set) adopt(ctx context.Context, q db.Querier, only map[string]bool) error {
 	probe := Probe{Settings: s.reg, Q: q, Env: s.env}
 	states := map[string]State{}
 	for _, r := range s.regs {
@@ -112,6 +140,9 @@ func (s *Set) adopt(ctx context.Context, q db.Querier) error {
 			value, state = "true", Enabled
 		}
 		states[r.Name] = state
+		if only != nil && !only[r.Name] {
+			continue
+		}
 		if _, pinned, err := s.reg.Pinned(FlagKey(r.Name)); err != nil {
 			return err
 		} else if pinned {
