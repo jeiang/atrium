@@ -451,7 +451,15 @@ func (p *Provider) pubPEMLike(s signer) []byte {
 	if s.rsa != nil {
 		return s.rsa.N.Bytes()
 	}
-	return s.ec.PublicKey.Bytes()
+	return ecPoint(s)
+}
+
+func ecPoint(s signer) []byte {
+	b, err := s.ec.PublicKey.Bytes()
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func (p *Provider) jwks(w http.ResponseWriter) {
@@ -461,7 +469,7 @@ func (p *Provider) jwks(w http.ResponseWriter) {
 	for _, s := range p.keys {
 		if s.ec != nil {
 			keys = append(keys, map[string]any{"kty": "EC", "crv": "P-256", "kid": s.kid, "use": "sig", "alg": "ES256",
-				"x": b64(s.ec.PublicKey.Bytes()[1:33]), "y": b64(s.ec.PublicKey.Bytes()[33:])})
+				"x": b64(ecPoint(s)[1:33]), "y": b64(ecPoint(s)[33:])})
 			continue
 		}
 		keys = append(keys, map[string]any{"kty": "RSA", "kid": s.kid, "use": "sig", "alg": "RS256",
