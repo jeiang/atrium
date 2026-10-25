@@ -47,6 +47,7 @@ type triageData struct {
 	Summaries   []triage.Summary  `json:"summaries"`
 	Flags       []triage.Judgment `json:"flags"`
 	FlagsCapped bool              `json:"flags_capped"`
+	NoContacts  bool              `json:"no_contacts"`
 	Rows        []triage.Row      `json:"rows"`
 	Total       int               `json:"total"`
 	Offset      int               `json:"offset"`

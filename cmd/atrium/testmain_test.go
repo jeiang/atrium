@@ -7,6 +7,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
@@ -15,7 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-var moduleNames = []string{module.Mail, module.Calendar, module.Notion, module.Money, module.Media, module.Assistant, module.Notifications, module.Grafana}
+var moduleNames = []string{module.Mail, module.Calendar, module.Notion, module.Money, module.Media, module.Assistant, module.Notifications, module.Grafana, module.Contacts}
 
 func settingEnv(key string) string {
 	d, ok := settings.Default.Lookup(key)
@@ -36,6 +37,7 @@ func requirementEnv(mediaRoot string) map[string]string {
 		settingEnv(notify.KeyURL):       "http://ntfy.invalid",
 		settingEnv(notify.KeyTopic):     "atrium",
 		settingEnv(calendar.AppleIDKey): "operator@icloud.invalid",
+		settingEnv(contacts.DirKey):     mediaRoot + "-contacts",
 		"ICLOUD_APP_PASSWORD":           "dummy-icloud-password",
 		"ANTHROPIC_API_KEY":             "dummy-anthropic-key",
 		"NOTION_TOKEN":                  "dummy-notion-token",

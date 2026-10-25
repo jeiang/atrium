@@ -22,6 +22,7 @@ const (
 	ICloud        = "icloud"
 	Google        = "google"
 	CalDAVURL     = "https://caldav.icloud.com/"
+	CardDAVURL    = "https://contacts.icloud.com/"
 	TokenURI      = "https://oauth2.googleapis.com/token"
 	Scope         = "https://www.googleapis.com/auth/calendar.events"
 	remoteTimeout = 60 * time.Second
@@ -35,9 +36,10 @@ type Endpoints struct {
 	Token     string
 	GoogleAPI string
 	CalDAV    string
+	CardDAV   string
 }
 
-var endpoints = Endpoints{Token: TokenURI, CalDAV: CalDAVURL}
+var endpoints = Endpoints{Token: TokenURI, CalDAV: CalDAVURL, CardDAV: CardDAVURL}
 
 func UseEndpoints(e Endpoints) func() {
 	saved := endpoints
@@ -49,6 +51,9 @@ func UseEndpoints(e Endpoints) func() {
 	}
 	if e.CalDAV != "" {
 		endpoints.CalDAV = e.CalDAV
+	}
+	if e.CardDAV != "" {
+		endpoints.CardDAV = e.CardDAV
 	}
 	return func() { endpoints = saved }
 }

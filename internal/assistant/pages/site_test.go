@@ -38,6 +38,7 @@ import (
 	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/notify"
@@ -67,7 +68,7 @@ func allTools(t *testing.T) *registry.Registry {
 		mailtools.Tools(), mediatools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
 		contexttools.Tools(), recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
 		scheduletools.Tools(), skillstools.Tools(), moneytools.Tools(), notiontools.Tools(),
-		grafanatools.Tools(), calendartools.Tools(),
+		grafanatools.Tools(), calendartools.Tools(), contactsmodule.Tools(),
 	} {
 		if err := r.Add(tools...); err != nil {
 			t.Fatal(err)

@@ -137,6 +137,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_CONTACTS_CONTACTS_DIR` | `contacts.contacts_dir` |
 | `ATRIUM_CORE_ASSISTANT_ENABLED` | `core.assistant_enabled` |
 | `ATRIUM_CORE_CALENDAR_ENABLED` | `core.calendar_enabled` |
+| `ATRIUM_CORE_CONTACTS_ENABLED` | `core.contacts_enabled` |
 | `ATRIUM_CORE_GRAFANA_ENABLED` | `core.grafana_enabled` |
 | `ATRIUM_CORE_HTTP_TIMEOUT_SECONDS` | `core.http_timeout_seconds` |
 | `ATRIUM_CORE_MAIL_ENABLED` | `core.mail_enabled` |

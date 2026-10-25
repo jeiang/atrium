@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar/calendarmodule"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/core/coremodule"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -48,6 +49,7 @@ func newSet(clients run.Clients, now func() float64) *module.Set {
 	}
 	mods := append([]module.Module{
 		coremodule.Module{Version: version, Guard: guard},
+		contactsmodule.Module{},
 		mailmodule.Module{Clients: clients, Now: now},
 		calendarmodule.Module{},
 		notionmodule.Module{},

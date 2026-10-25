@@ -22,7 +22,21 @@ type Server struct {
 	Password  string
 }
 
-const header = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">`
+const header = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav">`
+
+const BookPath = "/addressbooks/card/"
+
+func (s *Server) SetObject(path, body string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.objects[path] = body
+}
+
+func (s *Server) RemoveObject(path string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.objects, path)
+}
 
 func propstat(prop string) string {
 	return "<D:propstat><D:prop>" + prop + "</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat>"
@@ -74,7 +88,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		var out strings.Builder
 		out.WriteString(header)
 		for path, data := range s.objects {
-			if strings.HasPrefix(path, r.URL.Path) {
+			if !strings.HasPrefix(path, r.URL.Path) {
+				continue
+			}
+			if strings.HasPrefix(path, "/addressbooks/") {
+				out.WriteString(response(path, `<D:getetag>"1"</D:getetag><CR:address-data>`+html.EscapeString(data)+`</CR:address-data>`))
+			} else {
 				out.WriteString(response(path, `<D:getetag>"1"</D:getetag><C:calendar-data>`+html.EscapeString(data)+`</C:calendar-data>`))
 			}
 		}
@@ -103,6 +122,11 @@ func (s *Server) propfind(w http.ResponseWriter, r *http.Request, body string) {
 		out.WriteString(response(r.URL.Path, `<D:current-user-principal><D:href>/principal/</D:href></D:current-user-principal>`))
 	case strings.Contains(body, "calendar-home-set"):
 		out.WriteString(response(r.URL.Path, `<C:calendar-home-set><D:href>`+s.URL+`/calendars/</D:href></C:calendar-home-set>`))
+	case strings.Contains(body, "addressbook-home-set"):
+		out.WriteString(response(r.URL.Path, `<CR:addressbook-home-set><D:href>`+s.URL+`/addressbooks/</D:href></CR:addressbook-home-set>`))
+	case strings.HasPrefix(r.URL.Path, "/addressbooks/"):
+		out.WriteString(response("/addressbooks/", `<D:resourcetype><D:collection/></D:resourcetype>`))
+		out.WriteString(response(BookPath, `<D:resourcetype><D:collection/><CR:addressbook/></D:resourcetype>`))
 	default:
 		out.WriteString(response("/calendars/", `<D:resourcetype><D:collection/></D:resourcetype><D:displayname>calendars</D:displayname>`))
 		for i, name := range s.Calendars {

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/mail/triage"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
@@ -55,5 +56,8 @@ func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 	check(err)
 	data.FlagsCapped = len(flags) > pageSize
 	data.Flags = flags[:min(len(flags), pageSize)]
+	dir, err := contacts.Dir(ctx, s.deps.DB.Read)
+	check(err)
+	data.NoContacts = dir == ""
 	s.page(w, r, http.StatusOK, "triage.gohtml", data, nil)
 }

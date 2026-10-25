@@ -18,16 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/passrun"
 )
 
-func passRows(t *testing.T, dir, job string) (ok, failed int, message string) {
-	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	if err := d.Read.QueryRow("SELECT COUNT(*) FILTER (WHERE outcome = 'ok'), COUNT(*) FILTER (WHERE outcome = 'failed'), "+
-		"COALESCE((SELECT message FROM pass_runs WHERE job = ? ORDER BY id DESC LIMIT 1), '') FROM pass_runs WHERE job = ?", job, job).Scan(&ok, &failed, &message); err != nil {
-		t.Fatal(err)
-	}
-	return ok, failed, message
-}
-
 func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
 	if got := runApp("settings", "list"); got.code != cli.ExitOK {

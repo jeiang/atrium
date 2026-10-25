@@ -1390,6 +1390,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "contacts_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "contacts_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "grafana_enabled": {
           "default": false,
           "type": [

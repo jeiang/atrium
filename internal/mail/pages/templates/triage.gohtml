@@ -36,6 +36,7 @@
 {{define "mail_triage_flags_panel"}}{{$d := .Data -}}
 <div class="flex flex-col gap-3 pt-3">
   <p class="text-sm text-muted-foreground">Unread inbox mail and whether it {{if eq .Mode "live"}}is flagged: mail from a contact is flagged automatically, the 9B judgment is only logged{{else}}would be flagged. Nothing is flagged in shadow mode{{end}}.{{if $d.flags_capped}} Showing the newest {{len $d.flags}}.{{end}}</p>
+  {{if $d.no_contacts}}<p class="text-sm text-muted-foreground">No contact source is configured, so no sender is flagged as a contact.</p>{{end}}
   {{if $d.flags}}
   <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
     {{range $d.flags}}

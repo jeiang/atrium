@@ -11,6 +11,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -153,9 +154,7 @@ func TestWatchesPageListsAndDismissesBirthdays(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := newSite(t)
-	if err := settings.Default.Set(audit.With(t.Context(), "test", audit.CLI), s.db.Write, contacts.DirKey, cards, 0); err != nil {
-		t.Fatal(err)
-	}
+	enableContacts(t, s, cards)
 	s.clock = float64(time.Now().Unix())
 	page := status(t, s.get("/watches"), http.StatusOK)
 	mustContain(t, page, "Ada Lovelace", "(today)", "(1)")
@@ -176,10 +175,18 @@ func TestWatchesPageListsAndDismissesBirthdays(t *testing.T) {
 func TestWatchesWithAnEmptyAddressBook(t *testing.T) {
 	cards := t.TempDir()
 	s := newSite(t)
-	if err := settings.Default.Set(audit.With(t.Context(), "test", audit.CLI), s.db.Write, contacts.DirKey, cards, 0); err != nil {
-		t.Fatal(err)
-	}
+	enableContacts(t, s, cards)
 	mustContain(t, status(t, s.get("/watches"), http.StatusOK), "Nothing coming up", "(0)")
+}
+
+func enableContacts(t *testing.T, s *site, dir string) {
+	t.Helper()
+	ctx := audit.With(t.Context(), "test", audit.CLI)
+	for key, value := range map[string]string{contacts.DirKey: dir, module.FlagKey(module.Contacts): "true"} {
+		if err := settings.Default.Set(ctx, s.db.Write, key, value, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestEmptyFormFieldsAreAbsent(t *testing.T) {
