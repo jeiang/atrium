@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
+	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -79,6 +80,8 @@ func writeBackup(ctx context.Context, cfg config.Config, key db.Key, dest string
 		return 0, err
 	}
 	defer func() { _ = d.Close() }()
+	started := float64(time.Now().UnixNano()) / 1e9
+	defer func() { passrun.Record(context.WithoutCancel(ctx), d, passrun.Backup, started, err) }()
 	partial := dest + ".partial"
 	snapshot := partial + ".db"
 	for _, p := range []string{partial, snapshot} {

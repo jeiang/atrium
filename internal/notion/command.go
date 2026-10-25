@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -81,6 +82,10 @@ func run(env *cli.Env, o Options, fn func(context.Context, *db.DB, config.Config
 }
 
 func (o Options) sync(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
+	return passrun.Track(ctx, d, passrun.NotionSync, func() error { return o.syncPass(ctx, d, cfg, env) })
+}
+
+func (o Options) syncPass(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
 	token, err := config.NotionToken(o.env())
 	if err != nil {
 		return err

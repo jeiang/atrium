@@ -177,6 +177,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `notion_enabled` | bool | `false` | ui | `ATRIUM_CORE_NOTION_ENABLED` |
 | `ops_listen` | string | `127.0.0.1:9180` | bootstrap | `ATRIUM_CORE_OPS_LISTEN` |
 | `ops_pprof` | bool | `false` | bootstrap | `ATRIUM_CORE_OPS_PPROF` |
+| `pass_run_retention_days` | int | `90` | advanced | `ATRIUM_CORE_PASS_RUN_RETENTION_DAYS` |
 | `public_url` | string | none | ui | `ATRIUM_CORE_PUBLIC_URL` |
 | `tz` | string | `America/Port_of_Spain` | ui | `ATRIUM_CORE_TZ` |
 

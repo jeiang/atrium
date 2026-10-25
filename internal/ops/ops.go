@@ -66,6 +66,7 @@ type Metric struct {
 type Check struct {
 	Name     string
 	Critical bool
+	Remote   bool
 	Run      func(ctx context.Context, d *db.DB) error
 }
 
@@ -191,7 +192,7 @@ func (s *server) readyz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) run(ctx context.Context, c Check) error {
-	if !c.Critical {
+	if c.Remote {
 		s.mu.Lock()
 		got, ok := s.third[c.Name]
 		s.mu.Unlock()
@@ -202,7 +203,7 @@ func (s *server) run(ctx context.Context, c Check) error {
 	ctx, cancel := context.WithTimeout(ctx, checkWait)
 	defer cancel()
 	err := c.Run(ctx, s.d)
-	if !c.Critical {
+	if c.Remote {
 		s.mu.Lock()
 		s.third[c.Name] = result{at: time.Now(), err: err}
 		s.mu.Unlock()

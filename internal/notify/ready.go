@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	ops.Ready(ops.Check{Name: "ntfy", Run: health})
+	ops.Ready(ops.Check{Name: "ntfy", Remote: true, Run: health})
 }
 
 func health(ctx context.Context, d *db.DB) error {

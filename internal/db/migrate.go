@@ -28,6 +28,7 @@ var migrations = []migration{
 	{8, authSessions},
 	{9, loginLinks},
 	{10, moduleMigrationsTable},
+	{11, passRuns},
 }
 
 type ModuleMigration struct {
@@ -534,4 +535,19 @@ func moduleMigrationsTable(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS module_migrations ("+
 		"module TEXT NOT NULL, version INTEGER NOT NULL, applied_at REAL NOT NULL, PRIMARY KEY (module, version))")
 	return err
+}
+
+func passRuns(ctx context.Context, tx *sql.Tx) error {
+	for _, stmt := range []string{
+		"CREATE TABLE IF NOT EXISTS pass_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, job TEXT NOT NULL, " +
+			"started_at REAL NOT NULL, finished_at REAL NOT NULL, outcome TEXT NOT NULL CHECK (outcome IN ('ok', 'failed')), " +
+			"message TEXT NOT NULL DEFAULT '')",
+		"CREATE INDEX IF NOT EXISTS pass_runs_job ON pass_runs (job, id)",
+		"CREATE TABLE IF NOT EXISTS pass_run_alerts (job TEXT PRIMARY KEY, notified_at REAL NOT NULL)",
+	} {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
