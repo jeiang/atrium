@@ -72,36 +72,44 @@ func homeSetURL(ctx context.Context, client webdav.HTTPClient, principal *url.UR
 	return nil, errors.New("caldav: no calendar-home-set")
 }
 
-func openICloud(ctx context.Context, env config.Env, set Settings) (*icloudCalendar, error) {
+func icloudCalendars(ctx context.Context, env config.Env, set Settings) (*caldav.Client, []caldav.Calendar, error) {
 	login, err := icloudLogin(env, set)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	httpClient := webdav.HTTPClientWithBasicAuth(&http.Client{Timeout: remoteTimeout}, login.AppleID, login.Password)
 	base, err := url.Parse(endpoints.CalDAV)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	first, err := caldav.NewClient(httpClient, base.String())
 	if err != nil {
-		return nil, remote(err)
+		return nil, nil, remote(err)
 	}
 	principalPath, err := first.FindCurrentUserPrincipal(ctx)
 	if err != nil {
-		return nil, remote(err)
+		return nil, nil, remote(err)
 	}
 	home, err := homeSetURL(ctx, httpClient, base.ResolveReference(&url.URL{Path: principalPath}))
 	if err != nil {
-		return nil, remote(err)
+		return nil, nil, remote(err)
 	}
 	host := &url.URL{Scheme: home.Scheme, Host: home.Host}
 	client, err := caldav.NewClient(httpClient, host.String())
 	if err != nil {
-		return nil, remote(err)
+		return nil, nil, remote(err)
 	}
 	calendars, err := client.FindCalendars(ctx, home.Path)
 	if err != nil {
-		return nil, remote(err)
+		return nil, nil, remote(err)
+	}
+	return client, calendars, nil
+}
+
+func openICloud(ctx context.Context, env config.Env, set Settings) (*icloudCalendar, error) {
+	client, calendars, err := icloudCalendars(ctx, env, set)
+	if err != nil {
+		return nil, err
 	}
 	named := set.ICloudCalendar
 	for _, cal := range calendars {

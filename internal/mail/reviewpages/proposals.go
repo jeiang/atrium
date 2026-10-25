@@ -24,7 +24,7 @@ var proposalStatuses = []string{
 
 var proposalKinds = []string{
 	executors.RebalanceSplit, executors.RebalanceMerge, executors.InboxBacklog, executors.DeletionRule, executors.GmailLabelMerge,
-	"notion_link", "notion_edit", "calendar_event", "reminder", kindWikiPlan,
+	"notion_link", "notion_edit", "calendar_event", "calendar_update", "calendar_rsvp", "reminder", kindWikiPlan,
 }
 
 var (

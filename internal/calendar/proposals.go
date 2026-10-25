@@ -178,4 +178,7 @@ func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, er
 func Register(reg *proposals.Registry, p *Proposals) {
 	reg.Executors[Kind] = p.Execute
 	reg.Undoers[UndoOp] = p.Undo
+	reg.Executors[UpdateKind] = p.ExecuteUpdate
+	reg.Executors[RSVPKind] = p.ExecuteRSVP
+	reg.Undoers[RestoreOp] = p.Restore
 }
