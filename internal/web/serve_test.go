@@ -343,3 +343,20 @@ func TestServeOIDCModeHasNoBanner(t *testing.T) {
 	}
 	stop()
 }
+
+func TestServeForceDisableAuthOnAllInterfacesNeedsAllowedHost(t *testing.T) {
+	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	code, _, stderr := runServe(t, context.Background(), "--port", "1", "--host", "0.0.0.0", "--auth", "local", "--force-disable-auth")
+	if code != cli.ExitError || !strings.Contains(stderr, "--force-disable-auth on a non-loopback address needs --allowed-host") {
+		t.Errorf("code %d stderr %q", code, stderr)
+	}
+}
+
+func TestServeForceDisableAuthOnAllInterfacesServesAllowedHostWithBanner(t *testing.T) {
+	url, stop := startServe(t, "--host", "0.0.0.0", "--auth", "local", "--force-disable-auth", "--allowed-host", "127.0.0.1")
+	status, body := getPage(t, url, nil)
+	if status != http.StatusNotFound || !strings.Contains(body, bannerText) {
+		t.Errorf("status %d banner %v", status, strings.Contains(body, bannerText))
+	}
+	stop()
+}
