@@ -118,6 +118,7 @@ func New(o Options) (*Server, error) {
 	guard.errPage = s.errPage
 	guard.noAuth = o.NoAuth
 	if o.DB != nil {
+		guard.admin = func(ctx context.Context) string { return oidc.AdminGroup(ctx, o.DB.Read) }
 		guard.bodyCap = func(ctx context.Context) (int, error) { return config.Limit(ctx, o.DB.Read, config.KeyBodyCap) }
 	}
 	s.handler = guard.Middleware(Gzip(recoverer(s.mux)))

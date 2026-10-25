@@ -1134,6 +1134,13 @@
     "auth": {
       "additionalProperties": false,
       "properties": {
+        "oidc_access_domains": {
+          "type": "string"
+        },
+        "oidc_access_domains_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "oidc_access_emails": {
           "type": "string"
         },
@@ -1146,6 +1153,13 @@
           "type": "string"
         },
         "oidc_access_group_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_admin_domains": {
+          "type": "string"
+        },
+        "oidc_admin_domains_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

@@ -511,8 +511,12 @@ func TestAuthModesCombine(t *testing.T) {
 	expect(t, b.get("/ping"), http.StatusForbidden)
 	expect(t, b.get("/login", "Remote-Groups", "atrium_access"), http.StatusNotFound)
 	expect(t, b.get("/auth/callback", "Remote-Groups", "atrium_access"), http.StatusNotFound)
-	expect(t, b.get("/ping", "Remote-Groups", "atrium_access"), http.StatusOK, "source=proxy", "admin=yes")
-	expect(t, b.get("/settings/ping", "Remote-Groups", "atrium_access"), http.StatusOK)
+	expect(t, b.get("/ping", "Remote-Groups", "atrium_access"), http.StatusOK, "source=proxy", "admin=no")
+	expect(t, b.get("/settings/ping", "Remote-Groups", "atrium_access"), http.StatusForbidden, "Admins only")
+	expect(t, b.post("/live/resume", nil, "Remote-Groups", "atrium_access"), http.StatusForbidden)
+	expect(t, b.get("/settings/ping", "Remote-Groups", "atrium_access, atrium_admin"), http.StatusOK, "admin=yes")
+	expect(t, b.post("/settings/ping", nil, "Remote-Groups", "atrium_access,atrium_admin"), http.StatusOK)
+	expect(t, b.get("/settings/ping", "Remote-Groups", "atrium_admin"), http.StatusForbidden)
 	expect(t, b.get("/ping", "Remote-Groups", "other"), http.StatusForbidden)
 
 	only := shapes[0].rig(t)
@@ -530,7 +534,31 @@ func TestAuthModesCombine(t *testing.T) {
 	expect(t, c.get("/ping"), http.StatusSeeOther)
 	c.mustSignIn(both, "member")
 	expect(t, c.get("/ping"), http.StatusOK, "source=oidc", "admin=no")
-	expect(t, c.get("/ping", "Remote-Groups", "atrium_access"), http.StatusOK, "source=proxy", "admin=yes")
+	expect(t, c.get("/ping", "Remote-Groups", "atrium_access"), http.StatusOK, "source=proxy", "admin=no")
+	expect(t, c.get("/ping", "Remote-Groups", "atrium_access,atrium_admin"), http.StatusOK, "source=proxy", "admin=yes")
+}
+
+func TestProxyAdminGroupIsConfigurable(t *testing.T) {
+	r := newRig(t, rigOpts{preset: "generic", auth: []string{web.AuthProxy}, settings: map[string]string{"oidc_admin_group": "operators"}})
+	b := r.browser()
+	expect(t, b.get("/settings/ping", "Remote-Groups", "atrium_access,atrium_admin"), http.StatusForbidden)
+	expect(t, b.get("/settings/ping", "Remote-Groups", "atrium_access,operators"), http.StatusOK)
+}
+
+func TestOIDCDomainAllowlists(t *testing.T) {
+	r := newRig(t, rigOpts{preset: "google", settings: map[string]string{"oidc_access_domains": "example.com", "oidc_admin_domains": "ops.example.org"}})
+	r.idp.AddUser(oidctest.User{Name: "staff", Email: "a@Example.com", EmailVerified: true})
+	r.idp.AddUser(oidctest.User{Name: "ops", Email: "root@ops.example.org", EmailVerified: true})
+	r.idp.AddUser(oidctest.User{Name: "lookalike", Email: "a@notexample.com", EmailVerified: true})
+	r.idp.AddUser(oidctest.User{Name: "unverified", Email: "a@example.com"})
+	staff := r.browser()
+	staff.mustSignIn(r, "staff")
+	expect(t, staff.get("/settings/ping"), http.StatusForbidden)
+	ops := r.browser()
+	ops.mustSignIn(r, "ops")
+	expect(t, ops.get("/settings/ping"), http.StatusOK)
+	expect(t, r.browser().signIn(r, "lookalike"), http.StatusForbidden)
+	expect(t, r.browser().signIn(r, "unverified"), http.StatusForbidden)
 }
 
 func TestLocalModeStaysOpenAndAdmin(t *testing.T) {

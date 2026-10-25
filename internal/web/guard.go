@@ -65,6 +65,7 @@ type Guard struct {
 	sessions *oidc.Service
 	errPage  ErrorPage
 	noAuth   bool
+	admin    func(context.Context) string
 }
 
 func NewGuard(auth AuthSet, allowedHosts []string, public func(*http.Request) bool) *Guard {
@@ -97,9 +98,9 @@ func hostname(value string) string {
 	return host
 }
 
-func hasGroup(value string) bool {
+func hasGroup(value, group string) bool {
 	for _, part := range strings.Split(value, ",") {
-		if py.Strip(part) == Group {
+		if py.Strip(part) == group {
 			return true
 		}
 	}
@@ -242,4 +243,11 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), csrfKey{}, token)))
 	})
+}
+
+func (g *Guard) adminGroup(ctx context.Context) string {
+	if g.admin == nil {
+		return oidc.DefaultAdminGroup
+	}
+	return g.admin(ctx)
 }

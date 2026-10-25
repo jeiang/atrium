@@ -62,8 +62,8 @@ func (g *Guard) identify(r *http.Request) (Identity, error) {
 	if g.auth.Local {
 		return Identity{Source: SourceLocal, Admin: true}, nil
 	}
-	if g.auth.Proxy && hasGroup(r.Header.Get("Remote-Groups")) {
-		return Identity{Source: SourceProxy, Admin: true}, nil
+	if g.auth.Proxy && hasGroup(r.Header.Get("Remote-Groups"), Group) {
+		return Identity{Source: SourceProxy, Admin: hasGroup(r.Header.Get("Remote-Groups"), g.adminGroup(r.Context()))}, nil
 	}
 	if g.auth.OIDC {
 		if token := cookieValue(r, sessionCookie); token != "" {

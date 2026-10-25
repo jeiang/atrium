@@ -109,8 +109,8 @@ not claims about the running application.
   and notify; nightly runs may also update Notion and the profile with undo.
   Research subagents have restricted tools and bounded runs.
 - The public web service accepts an authenticating reverse proxy
-  (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Proxy and
-  local requests are administrators; an OIDC session is an administrator only
+  (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are
+  administrators; a proxy request or OIDC session is an administrator only
   with the admin group, and administrator-only routes answer 403 otherwise. A
   separate local mode provides loopback access. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in

@@ -17,21 +17,23 @@ import (
 const CallbackPath = "/auth/callback"
 
 type Config struct {
-	Preset       Preset
-	Issuer       string
-	ClientID     string
-	ClientSecret string
-	Scopes       []string
-	GroupsClaim  string
-	AccessGroup  string
-	AdminGroup   string
-	AccessEmails []string
-	AdminEmails  []string
-	Idle         time.Duration
-	Max          time.Duration
-	Recheck      time.Duration
-	RedirectURI  string
-	Secure       bool
+	Preset        Preset
+	Issuer        string
+	ClientID      string
+	ClientSecret  string
+	Scopes        []string
+	GroupsClaim   string
+	AccessGroup   string
+	AdminGroup    string
+	AccessEmails  []string
+	AdminEmails   []string
+	AccessDomains []string
+	AdminDomains  []string
+	Idle          time.Duration
+	Max           time.Duration
+	Recheck       time.Duration
+	RedirectURI   string
+	Secure        bool
 }
 
 type ConfigError struct{ Problems []string }
@@ -74,18 +76,20 @@ func load(ctx context.Context, q db.Querier, env config.Env) (Config, error) {
 		problems = append(problems, "unknown preset "+py.Repr(name))
 	}
 	c := Config{
-		Preset:       preset,
-		Issuer:       get(KeyIssuer),
-		ClientID:     get(KeyClientID),
-		Scopes:       list(get(KeyScopes)),
-		GroupsClaim:  get(KeyGroupsClaim),
-		AccessGroup:  get(KeyAccessGroup),
-		AdminGroup:   get(KeyAdminGroup),
-		AccessEmails: list(strings.ToLower(get(KeyAccessEmails))),
-		AdminEmails:  list(strings.ToLower(get(KeyAdminEmails))),
-		Idle:         days(KeyIdleDays, 24*time.Hour),
-		Max:          days(KeyMaxDays, 24*time.Hour),
-		Recheck:      days(KeyRecheckMinutes, time.Minute),
+		Preset:        preset,
+		Issuer:        get(KeyIssuer),
+		ClientID:      get(KeyClientID),
+		Scopes:        list(get(KeyScopes)),
+		GroupsClaim:   get(KeyGroupsClaim),
+		AccessGroup:   get(KeyAccessGroup),
+		AdminGroup:    get(KeyAdminGroup),
+		AccessEmails:  list(strings.ToLower(get(KeyAccessEmails))),
+		AdminEmails:   list(strings.ToLower(get(KeyAdminEmails))),
+		AccessDomains: list(strings.ToLower(get(KeyAccessDomains))),
+		AdminDomains:  list(strings.ToLower(get(KeyAdminDomains))),
+		Idle:          days(KeyIdleDays, 24*time.Hour),
+		Max:           days(KeyMaxDays, 24*time.Hour),
+		Recheck:       days(KeyRecheckMinutes, time.Minute),
 	}
 	if preset.Issuer != "" && c.Issuer == "" {
 		c.Issuer = preset.Issuer
@@ -117,8 +121,8 @@ func load(ctx context.Context, q db.Querier, env config.Env) (Config, error) {
 		c.RedirectURI = public + CallbackPath
 		c.Secure = strings.HasPrefix(public, "https://")
 	}
-	if c.GroupsClaim == "" && len(c.AccessEmails) == 0 && len(c.AdminEmails) == 0 {
-		problems = append(problems, fmt.Sprintf("nothing grants access: set %s or %s", KeyGroupsClaim, KeyAccessEmails))
+	if c.GroupsClaim == "" && len(c.AccessEmails) == 0 && len(c.AdminEmails) == 0 && len(c.AccessDomains) == 0 && len(c.AdminDomains) == 0 {
+		problems = append(problems, fmt.Sprintf("nothing grants access: set %s, %s or %s", KeyGroupsClaim, KeyAccessEmails, KeyAccessDomains))
 	}
 	if !slices.Contains(c.Scopes, "openid") {
 		problems = append(problems, KeyScopes+" must include openid")
@@ -127,4 +131,12 @@ func load(ctx context.Context, q db.Querier, env config.Env) (Config, error) {
 		return c, &ConfigError{Problems: problems}
 	}
 	return c, nil
+}
+
+func AdminGroup(ctx context.Context, q db.Querier) string {
+	found, err := settings.Default.Resolve(ctx, q, KeyAdminGroup, 0)
+	if err != nil || py.Strip(found.Value) == "" {
+		return DefaultAdminGroup
+	}
+	return py.Strip(found.Value)
 }

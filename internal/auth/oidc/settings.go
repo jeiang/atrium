@@ -20,6 +20,8 @@ const (
 	KeyAdminGroup     = "oidc_admin_group"
 	KeyAccessEmails   = "oidc_access_emails"
 	KeyAdminEmails    = "oidc_admin_emails"
+	KeyAccessDomains  = "oidc_access_domains"
+	KeyAdminDomains   = "oidc_admin_domains"
 	KeyIdleDays       = "oidc_session_idle_days"
 	KeyMaxDays        = "oidc_session_max_days"
 	KeyRecheckMinutes = "oidc_recheck_minutes"
@@ -46,6 +48,8 @@ func init() {
 		settings.Def{Key: KeyAdminGroup, Module: module, Type: settings.String, Default: DefaultAdminGroup, Check: settings.NonEmpty, Class: settings.UI, Scopes: instance},
 		text(KeyAccessEmails, nil),
 		text(KeyAdminEmails, nil),
+		text(KeyAccessDomains, nil),
+		text(KeyAdminDomains, nil),
 		settings.Def{Key: KeyIdleDays, Module: module, Type: settings.Int, Default: "7", Check: settings.Between(1, 365), Class: settings.Advanced, Scopes: instance},
 		settings.Def{Key: KeyMaxDays, Module: module, Type: settings.Int, Default: "30", Check: settings.Between(1, 365), Class: settings.Advanced, Scopes: instance},
 		settings.Def{Key: KeyRecheckMinutes, Module: module, Type: settings.Int, Default: "60", Check: settings.Between(1, 1440), Class: settings.Advanced, Scopes: instance},
