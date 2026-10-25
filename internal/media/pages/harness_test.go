@@ -68,7 +68,7 @@ func newSite(t *testing.T, vars map[string]string, o Options) *site {
 		t.Fatal(err)
 	}
 	srv, err := web.New(web.Options{
-		Cfg: cfg, Env: env, DB: d, Auth: web.AuthLocal, AllowedHosts: []string{host}, Public: PublicCheck(cfg, env, d),
+		Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, AllowedHosts: []string{host}, Public: PublicCheck(cfg, env, d),
 		Render: render, Modules: []web.Module{Module(o)},
 	})
 	if err != nil {

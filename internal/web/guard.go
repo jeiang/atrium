@@ -6,10 +6,12 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -17,6 +19,7 @@ import (
 const (
 	AuthProxy = "proxy"
 	AuthLocal = "local"
+	AuthOIDC  = "oidc"
 
 	Group      = "atrium_access"
 	CSRFCookie = "atrium_csrf"
@@ -32,7 +35,7 @@ const (
 )
 
 var (
-	AuthModes  = [...]string{AuthProxy, AuthLocal}
+	AuthModes  = [...]string{AuthProxy, AuthLocal, AuthOIDC}
 	localHosts = [...]string{"localhost", "127.0.0.1", "[::1]"}
 )
 
@@ -55,20 +58,21 @@ func bodyCap(ctx context.Context) int {
 }
 
 type Guard struct {
-	auth    string
-	hosts   map[string]struct{}
-	public  func(*http.Request) bool
-	bodyCap func(context.Context) (int, error)
+	auth     AuthSet
+	hosts    map[string]struct{}
+	public   func(*http.Request) bool
+	bodyCap  func(context.Context) (int, error)
+	sessions *oidc.Service
 }
 
-func NewGuard(auth string, allowedHosts []string, public func(*http.Request) bool) *Guard {
+func NewGuard(auth AuthSet, allowedHosts []string, public func(*http.Request) bool) *Guard {
 	hosts := map[string]struct{}{}
 	switch {
 	case len(allowedHosts) > 0:
 		for _, h := range allowedHosts {
 			hosts[hostname(h)] = struct{}{}
 		}
-	case auth == AuthLocal:
+	case auth.Local:
 		for _, h := range localHosts {
 			hosts[h] = struct{}{}
 		}
@@ -165,9 +169,21 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			deny(w, http.StatusBadRequest, "Bad Host header")
 			return
 		}
-		if g.auth == AuthProxy && !strings.HasPrefix(r.URL.Path, StaticPrefix) && !hasGroup(r.Header.Get("Remote-Groups")) && !g.public(r) {
-			deny(w, http.StatusForbidden, "Forbidden")
+		static := strings.HasPrefix(r.URL.Path, StaticPrefix)
+		who, err := g.identify(r)
+		switch {
+		case errors.Is(err, errUnavailable):
+			deny(w, http.StatusServiceUnavailable, "Service Unavailable")
 			return
+		case err != nil && !static && !g.public(r) && !(g.auth.OIDC && signInPath(r)):
+			g.unauthenticated(w, r)
+			return
+		case err == nil && !who.Admin && adminRoute(r):
+			deny(w, http.StatusForbidden, "Forbidden: administrator access required")
+			return
+		}
+		if err == nil {
+			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, who))
 		}
 		token, found := cookieToken(r)
 		fresh := !found

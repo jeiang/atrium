@@ -24,6 +24,7 @@ var migrations = []migration{
 	{5, keyHistory},
 	{6, writeResolutions},
 	{7, threadModel},
+	{8, authSessions},
 }
 
 type FutureSchemaError struct {
@@ -381,4 +382,24 @@ func writeResolutions(ctx context.Context, tx *sql.Tx) error {
 func threadModel(ctx context.Context, tx *sql.Tx) error {
 	_, err := addColumn(ctx, tx, "threads", column{"model", "TEXT NOT NULL DEFAULT 'claude-haiku-5-5'"})
 	return err
+}
+
+func authSessions(ctx context.Context, tx *sql.Tx) error {
+	for _, stmt := range []string{
+		"CREATE TABLE IF NOT EXISTS auth_sessions (" +
+			"id INTEGER PRIMARY KEY AUTOINCREMENT, token_hash TEXT NOT NULL UNIQUE, subject TEXT NOT NULL, " +
+			"email TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '', admin INTEGER NOT NULL CHECK (admin IN (0, 1)), " +
+			"created_at REAL NOT NULL, last_seen_at REAL NOT NULL, idle_expires_at REAL NOT NULL, " +
+			"absolute_expires_at REAL NOT NULL, rechecked_at REAL NOT NULL, " +
+			"access_token TEXT NOT NULL DEFAULT '', access_expires_at REAL, refresh_token TEXT NOT NULL DEFAULT '')",
+		"CREATE INDEX IF NOT EXISTS auth_sessions_absolute ON auth_sessions (absolute_expires_at)",
+		"CREATE TABLE IF NOT EXISTS auth_logins (" +
+			"state_hash TEXT PRIMARY KEY, binding_hash TEXT NOT NULL, nonce TEXT NOT NULL, verifier TEXT NOT NULL, " +
+			"return_to TEXT NOT NULL, created_at REAL NOT NULL)",
+	} {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }

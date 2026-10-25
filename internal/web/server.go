@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -40,16 +42,18 @@ type Options struct {
 	Cfg          config.Config
 	Env          config.Env
 	DB           *db.DB
-	Auth         string
+	Auth         []string
 	AllowedHosts []string
 	Public       func(*http.Request) bool
 	ErrorPage    ErrorPage
 	Render       *Renderer
 	Static       fs.FS
 	Modules      []Module
+	OIDC         *oidc.Service
 }
 
 type Server struct {
+	oidc     *oidc.Service
 	handler  http.Handler
 	mux      *chi.Mux
 	errPage  ErrorPage
@@ -60,8 +64,9 @@ type Server struct {
 }
 
 func New(o Options) (*Server, error) {
-	if o.Auth != AuthProxy && o.Auth != AuthLocal {
-		return nil, fmt.Errorf("unknown auth mode %q", o.Auth)
+	auth, err := ParseAuth(o.Auth)
+	if err != nil {
+		return nil, err
 	}
 	if o.Static == nil {
 		o.Static = Static
@@ -69,7 +74,10 @@ func New(o Options) (*Server, error) {
 	if o.Env == nil {
 		o.Env = config.OS
 	}
-	s := &Server{mux: chi.NewRouter(), errPage: o.ErrorPage}
+	if auth.OIDC && o.OIDC == nil {
+		return nil, errors.New("oidc auth needs a session service")
+	}
+	s := &Server{mux: chi.NewRouter(), errPage: o.ErrorPage, oidc: o.OIDC}
 	if s.errPage == nil && o.Render != nil {
 		s.errPage = o.Render.ErrorPage
 	}
@@ -97,10 +105,14 @@ func New(o Options) (*Server, error) {
 		Cfg: o.Cfg, Env: o.Env, DB: o.DB, Render: o.Render, Error: s.Error, Stopping: s.stop,
 		OnClose: func(f func()) { s.closers = append(s.closers, f) },
 	}
+	if auth.OIDC {
+		s.registerAuthRoutes(o.Env)
+	}
 	for _, register := range o.Modules {
 		register(s.mux, deps)
 	}
-	guard := NewGuard(o.Auth, o.AllowedHosts, o.Public)
+	guard := NewGuard(auth, o.AllowedHosts, o.Public)
+	guard.sessions = o.OIDC
 	if o.DB != nil {
 		guard.bodyCap = func(ctx context.Context) (int, error) { return config.Limit(ctx, o.DB.Read, config.KeyBodyCap) }
 	}

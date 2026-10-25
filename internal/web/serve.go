@@ -8,9 +8,11 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
+	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -74,10 +76,10 @@ func ServeCommand(pages ...Page) *cli.Command {
 		Setup: func(args *cli.Args) cli.Handler {
 			host := args.String("host", DefaultHost, cli.Opt{})
 			port := args.Int("port", 0, cli.Opt{Required: true})
-			mode := args.String("auth", AuthProxy, cli.Opt{Choices: AuthModes[:]})
+			modes := args.Repeated("auth", cli.Opt{Choices: AuthModes[:], Help: "authentication mode; repeatable (proxy and oidc combine; default proxy)"})
 			hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
 			return func(env *cli.Env) int {
-				return serve(env, serveArgs{host: *host, port: *port, auth: *mode, hosts: *hosts, pages: pages, env: config.OS})
+				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, pages: pages, env: config.OS})
 			}
 		},
 	}
@@ -86,7 +88,7 @@ func ServeCommand(pages ...Page) *cli.Command {
 type serveArgs struct {
 	host  string
 	port  int
-	auth  string
+	auth  []string
 	hosts []string
 	pages []Page
 	env   config.Env
@@ -104,8 +106,17 @@ func publicHosts(given []string, env config.Env) []string {
 
 func serve(env *cli.Env, a serveArgs) int {
 	hosts := publicHosts(a.hosts, a.env)
-	if a.auth == AuthProxy && len(hosts) == 0 {
-		_, _ = fmt.Fprintln(env.Stderr, "proxy mode needs --allowed-host or ATRIUM_PUBLIC_HOST")
+	auth, err := ParseAuth(a.auth)
+	if err != nil {
+		_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
+		return cli.ExitError
+	}
+	if !auth.Local && len(hosts) == 0 {
+		name := AuthProxy
+		if !auth.Proxy {
+			name = AuthOIDC
+		}
+		_, _ = fmt.Fprintf(env.Stderr, "%s mode needs --allowed-host or ATRIUM_PUBLIC_HOST\n", name)
 		return cli.ExitError
 	}
 	cfg, err := config.Load(a.env)
@@ -166,11 +177,18 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 		}
 		maps.Copy(globals, p.Globals)
 	}
+	var sessions *oidc.Service
+	if slices.Contains(a.auth, AuthOIDC) {
+		sessions = oidc.New(d, a.env)
+		if err := sessions.Check(ctx); err != nil {
+			return err
+		}
+	}
 	render, err := NewRenderer(cfg, d, tpl.Config{Modules: templates, Globals: globals})
 	if err != nil {
 		return err
 	}
-	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules})
+	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions})
 	if err != nil {
 		return err
 	}
