@@ -105,7 +105,7 @@ func flProxy(t *testing.T, s *site) *site {
 		t.Fatal(err)
 	}
 	srv, err := web.New(web.Options{
-		Cfg: s.cfg, Env: s.env, DB: s.db, Auth: web.AuthProxy, AllowedHosts: []string{host}, Public: PublicCheck(s.cfg, s.env, s.db),
+		Cfg: s.cfg, Env: s.env, DB: s.db, Auth: []string{web.AuthProxy}, AllowedHosts: []string{host}, Public: PublicCheck(s.cfg, s.env, s.db),
 		Render: render, Modules: []web.Module{Module(Options{})},
 	})
 	if err != nil {

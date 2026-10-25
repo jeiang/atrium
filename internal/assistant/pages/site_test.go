@@ -104,7 +104,7 @@ func newSiteOn(t *testing.T, d *db.DB, options ...siteOption) *site {
 		t.Fatal(err)
 	}
 	module := Module(Options{Runner: s.runner, Registry: allTools(t), Client: s.api.Client(), Now: s.now, Poll: 10 * time.Millisecond, KeepAlive: 200 * time.Millisecond})
-	s.srv, err = web.New(web.Options{Cfg: cfg, Env: env, DB: d, Auth: web.AuthLocal, Render: render, Modules: []web.Module{module}})
+	s.srv, err = web.New(web.Options{Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, Render: render, Modules: []web.Module{module}})
 	if err != nil {
 		t.Fatal(err)
 	}

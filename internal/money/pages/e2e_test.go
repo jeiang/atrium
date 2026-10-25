@@ -46,7 +46,7 @@ func newE2E(t *testing.T, fetch money.Fetch) *e2eSite {
 	}
 	clock := 1_792_425_600.0
 	srv, err := web.New(web.Options{
-		Cfg: cfg, Env: env, DB: d, Auth: web.AuthLocal, AllowedHosts: []string{"testserver"}, Render: render,
+		Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, AllowedHosts: []string{"testserver"}, Render: render,
 		Modules: []web.Module{
 			Module(Options{Now: func() float64 { clock++; return clock }, Fetch: fetch}),
 			reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(env)}),

@@ -1131,6 +1131,138 @@
       },
       "type": "object"
     },
+    "auth": {
+      "additionalProperties": false,
+      "properties": {
+        "oidc_access_domains": {
+          "type": "string"
+        },
+        "oidc_access_domains_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_access_emails": {
+          "type": "string"
+        },
+        "oidc_access_emails_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_access_group": {
+          "default": "atrium_access",
+          "type": "string"
+        },
+        "oidc_access_group_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_admin_domains": {
+          "type": "string"
+        },
+        "oidc_admin_domains_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_admin_emails": {
+          "type": "string"
+        },
+        "oidc_admin_emails_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_admin_group": {
+          "default": "atrium_admin",
+          "type": "string"
+        },
+        "oidc_admin_group_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_client_id": {
+          "type": "string"
+        },
+        "oidc_client_id_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_client_secret_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_groups_claim": {
+          "type": "string"
+        },
+        "oidc_groups_claim_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_issuer": {
+          "type": "string"
+        },
+        "oidc_issuer_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_preset": {
+          "default": "generic",
+          "enum": [
+            "generic",
+            "pocket_id",
+            "authelia",
+            "authentik",
+            "keycloak",
+            "google",
+            "entra"
+          ],
+          "type": "string"
+        },
+        "oidc_preset_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_recheck_minutes": {
+          "default": 60,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "oidc_recheck_minutes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_scopes": {
+          "type": "string"
+        },
+        "oidc_scopes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_session_idle_days": {
+          "default": 7,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "oidc_session_idle_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_session_max_days": {
+          "default": 30,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "oidc_session_max_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "calendar": {
       "additionalProperties": false,
       "properties": {

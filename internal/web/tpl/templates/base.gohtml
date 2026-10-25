@@ -1,16 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <title>{{block "title" .}}{{end}} · atrium</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect%7Bfill:oklch(0.25 0.014 60)%7Dtext%7Bfill:oklch(0.985 0.003 85)%7D@media (prefers-color-scheme:dark)%7Brect%7Bfill:oklch(0.92 0.008 85)%7Dtext%7Bfill:oklch(0.2 0.012 60)%7D%7D%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='22.5' font-family='ui-monospace,monospace' font-size='19' font-weight='600' text-anchor='middle'%3Ea%3C/text%3E%3C/svg%3E">
-  <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
-  <link rel="stylesheet" href="{{asset "app.css"}}">
-  <script src="{{asset "htmx.min.js"}}" defer></script>
-  <script src="{{asset "basecoat/all.min.js"}}" defer></script>
-  <script src="{{asset "app.js"}}" defer></script>
+  {{template "document_head" .}}
 </head>
 <body class="min-h-dvh" hx-headers='{{tojson (dict "X-CSRF-Token" .CSRF)}}'{{block "body_attrs" .}}{{end}}>
   <a href="#content" class="sr-only rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50">Skip to content</a>
@@ -48,15 +39,19 @@
       <hr role="separator" aria-orientation="vertical" class="h-4 w-px border-0 bg-border">
       <h1 class="truncate px-1 text-sm font-medium">{{block "heading" .}}{{end}}</h1>
       <div class="ml-auto flex items-center gap-3">
-        {{if call $on "assistant"}}<a href="/settings" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{{if eq $page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}</a>
-        {{- else if call $on "notifications"}}<a href="/settings/notifications" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{{if eq $page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}</a>{{end}}
+        {{if .Auth.Admin}}{{if call $on "assistant"}}<a href="/settings" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{{if eq $page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}</a>
+        {{- else if call $on "notifications"}}<a href="/settings/notifications" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings"{{if eq $page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}</a>{{end}}{{end}}
         {{template "mode_badge" $state}}
-        {{if eq .Mode "live"}}
+        {{if and (eq .Mode "live") (or .Auth.Admin (not .Paused))}}
         <form method="post" action="/live/{{if .Paused}}resume{{else}}pause{{end}}">
           <input type="hidden" name="csrf_token" value="{{.CSRF}}">
           <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon (ternary .Paused "zap" "lock")}}{{if .Paused}}Resume{{else}}Pause{{end}}</button>
         </form>
         {{end}}
+        {{if .Auth.SignOut}}<form method="post" action="/logout">
+          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+          <button type="submit" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Sign out" title="Sign out">{{icon "log-out"}}</button>
+        </form>{{end}}
       </div>
     </header>
     <div id="content" tabindex="-1" class="mx-auto flex w-full {{block "content_class" .}}max-w-6xl{{end}} flex-col gap-6 px-4 py-6 outline-none md:px-8 md:py-8">
@@ -88,10 +83,25 @@
 </body>
 </html>
 {{define "page"}}{{.Page}}{{end}}
-{{define "base_brand"}}
-  <a href="/chat" class="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+{{define "document_head"}}
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{{block "title" .}}{{end}} · atrium</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect%7Bfill:oklch(0.25 0.014 60)%7Dtext%7Bfill:oklch(0.985 0.003 85)%7D@media (prefers-color-scheme:dark)%7Brect%7Bfill:oklch(0.92 0.008 85)%7Dtext%7Bfill:oklch(0.2 0.012 60)%7D%7D%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='22.5' font-family='ui-monospace,monospace' font-size='19' font-weight='600' text-anchor='middle'%3Ea%3C/text%3E%3C/svg%3E">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+  <link rel="stylesheet" href="{{asset "app.css"}}">
+  <script src="{{asset "htmx.min.js"}}" defer></script>
+  <script src="{{asset "basecoat/all.min.js"}}" defer></script>
+  <script src="{{asset "app.js"}}" defer></script>
+{{end}}
+{{define "brand_mark"}}
     <span class="grid size-7 place-items-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground" aria-hidden="true">a</span>
     <span class="text-base font-semibold tracking-tight">atrium</span>
+{{end}}
+{{define "base_brand"}}
+  <a href="/chat" class="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    {{template "brand_mark"}}
   </a>
 {{end}}
 {{define "base_footer"}}

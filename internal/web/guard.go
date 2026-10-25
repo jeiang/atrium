@@ -6,10 +6,12 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -17,6 +19,7 @@ import (
 const (
 	AuthProxy = "proxy"
 	AuthLocal = "local"
+	AuthOIDC  = "oidc"
 
 	Group      = "atrium_access"
 	CSRFCookie = "atrium_csrf"
@@ -32,7 +35,7 @@ const (
 )
 
 var (
-	AuthModes  = [...]string{AuthProxy, AuthLocal}
+	AuthModes  = [...]string{AuthProxy, AuthLocal, AuthOIDC}
 	localHosts = [...]string{"localhost", "127.0.0.1", "[::1]"}
 )
 
@@ -55,20 +58,25 @@ func bodyCap(ctx context.Context) int {
 }
 
 type Guard struct {
-	auth    string
-	hosts   map[string]struct{}
-	public  func(*http.Request) bool
-	bodyCap func(context.Context) (int, error)
+	auth     AuthSet
+	hosts    map[string]struct{}
+	public   func(*http.Request) bool
+	bodyCap  func(context.Context) (int, error)
+	sessions *oidc.Service
+	errPage  ErrorPage
+	noAuth   bool
+	admin    func(context.Context) string
+	secure   func(*http.Request) bool
 }
 
-func NewGuard(auth string, allowedHosts []string, public func(*http.Request) bool) *Guard {
+func NewGuard(auth AuthSet, allowedHosts []string, public func(*http.Request) bool) *Guard {
 	hosts := map[string]struct{}{}
 	switch {
 	case len(allowedHosts) > 0:
 		for _, h := range allowedHosts {
 			hosts[hostname(h)] = struct{}{}
 		}
-	case auth == AuthLocal:
+	case auth.Local:
 		for _, h := range localHosts {
 			hosts[h] = struct{}{}
 		}
@@ -91,9 +99,9 @@ func hostname(value string) string {
 	return host
 }
 
-func hasGroup(value string) bool {
+func hasGroup(value, group string) bool {
 	for _, part := range strings.Split(value, ",") {
-		if py.Strip(part) == Group {
+		if py.Strip(part) == group {
 			return true
 		}
 	}
@@ -165,14 +173,35 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			deny(w, http.StatusBadRequest, "Bad Host header")
 			return
 		}
-		if g.auth == AuthProxy && !strings.HasPrefix(r.URL.Path, StaticPrefix) && !hasGroup(r.Header.Get("Remote-Groups")) && !g.public(r) {
-			deny(w, http.StatusForbidden, "Forbidden")
+		static := strings.HasPrefix(r.URL.Path, StaticPrefix)
+		who, err := g.identify(r)
+		switch {
+		case errors.Is(err, errUnavailable):
+			deny(w, http.StatusServiceUnavailable, "Service Unavailable")
+			return
+		case err != nil && !static && !g.public(r) && (!g.auth.OIDC || !signInPath(r)):
+			g.unauthenticated(w, r, err)
 			return
 		}
 		token, found := cookieToken(r)
 		fresh := !found
 		if fresh {
 			token = newToken()
+		}
+		if err == nil {
+			who.NoAuth = who.Source == SourceLocal && g.noAuth
+			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, who))
+			if !who.Admin && adminRoute(r) {
+				setSecurityHeaders(w.Header())
+				g.issueCSRF(w, r, token, fresh)
+				r = r.WithContext(context.WithValue(context.WithValue(r.Context(), csrfKey{}, token), adminOnlyKey{}, true))
+				if g.errPage != nil {
+					g.errPage(w, r, http.StatusForbidden, "Admins only.")
+				} else {
+					deny(w, http.StatusForbidden, "Forbidden: administrator access required")
+				}
+				return
+			}
 		}
 		if isUnsafe(r.Method) {
 			limit := defaultBodyCap
@@ -206,15 +235,33 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 				return
 			}
 		}
-		h := w.Header()
-		setSecurityHeaders(h)
-		if fresh {
-			cookie := CSRFCookie + "=" + token + "; Path=/; HttpOnly; SameSite=Strict"
-			if isHTTPS(r) {
-				cookie += "; Secure"
-			}
-			h.Add("Set-Cookie", cookie)
-		}
+		setSecurityHeaders(w.Header())
+		g.issueCSRF(w, r, token, fresh)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), csrfKey{}, token)))
 	})
+}
+
+func (g *Guard) adminGroup(ctx context.Context) string {
+	if g.admin == nil {
+		return oidc.DefaultAdminGroup
+	}
+	return g.admin(ctx)
+}
+
+func (g *Guard) issueCSRF(w http.ResponseWriter, r *http.Request, token string, fresh bool) {
+	if !fresh {
+		return
+	}
+	cookie := CSRFCookie + "=" + token + "; Path=/; HttpOnly; SameSite=Strict"
+	if isHTTPS(r) {
+		cookie += "; Secure"
+	}
+	w.Header().Add("Set-Cookie", cookie)
+}
+
+type adminOnlyKey struct{}
+
+func AdminOnly(ctx context.Context) bool {
+	v, _ := ctx.Value(adminOnlyKey{}).(bool)
+	return v
 }

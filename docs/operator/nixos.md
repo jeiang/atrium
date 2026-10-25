@@ -57,8 +57,9 @@ Each option is null by default. A null option sets no environment variable for t
 | --- | --- | --- | --- |
 | `web.host` | string | `"0.0.0.0"` | Address the public listener binds. |
 | `web.port` | port | `8480` | Port of the public listener. |
-| `web.auth` | `"proxy"` or `"local"` | `"proxy"` | `proxy` (the default) trusts the `Remote-Groups` header from the reverse proxy and requires `web.allowedHost`. `local` is possible and trusts every request. |
-| `web.allowedHost` | null or string | `null` | The one Host header the public listener accepts. The configuration fails to evaluate with `web.auth = "proxy"` while it is null. |
+| `web.auth` | `"proxy"`, `"oidc"` or `"local"` | `"proxy"` | `proxy` (the default) trusts the `Remote-Groups` header from the reverse proxy and requires `web.allowedHost`. `atrium_access` grants use; administrator features also need `atrium_admin` in the header, so the proxy's identity provider must send it for administrators. `oidc` accepts OIDC sessions only and ignores proxy headers. `local` is possible and trusts every request. |
+| `web.allowedHost` | null or string | `null` | The one Host header the public listener accepts. The configuration fails to evaluate with `web.auth = "proxy"` or `"oidc"`, or `web.oidc.enable`, while it is null. |
+| `web.oidc.enable` | bool | `false` | Adds `--auth oidc` to the public listener next to `web.auth`, so both proxy headers and OIDC sessions are accepted; the reverse proxy must then strip or overwrite `Remote-*` headers on every request, otherwise use `web.auth = "oidc"`. It cannot combine with `web.auth = "local"` or `"oidc"`. The provider is set through the `auth` settings (`ATRIUM_AUTH_OIDC_ISSUER`, `ATRIUM_AUTH_OIDC_CLIENT_ID`, `ATRIUM_AUTH_OIDC_CLIENT_SECRET_FILE`) and the public URL setting. |
 | `web.local.enable` | bool | `true` | Runs a second listener bound to `127.0.0.1` with `--auth local`, defined as `atrium-web-local`. |
 | `web.local.port` | port | `8481` | Port of the loopback listener. |
 
