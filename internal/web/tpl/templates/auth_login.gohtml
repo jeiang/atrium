@@ -1,0 +1,14 @@
+{{define "bare"}}{{end}}
+{{define "title"}}Sign in{{end}}
+{{define "body_attrs"}}{{if .Data.reason}} data-strip-params="reason"{{end}}{{end}}
+{{define "content"}}
+<h1 class="text-lg font-semibold tracking-tight">Sign in</h1>
+{{if .Data.message}}<div class="alert" data-variant="{{if eq .Data.tone "destructive"}}destructive{{else}}default{{end}}" role="{{if eq .Data.tone "destructive"}}alert{{else}}status{{end}}">{{if eq .Data.tone "destructive"}}{{icon "circle-alert"}}{{end}}<p>{{.Data.message}}</p></div>{{end}}
+{{if .Data.start}}
+<form method="post" action="/login" class="flex flex-col gap-3">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <input type="hidden" name="next" value="{{.Data.next}}">
+  <button type="submit" class="btn w-full" autofocus>{{icon "log-in"}}{{.Data.button}}</button>
+</form>
+{{end}}
+{{end}}

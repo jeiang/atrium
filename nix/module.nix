@@ -149,17 +149,22 @@
     host,
     port,
     auth,
-  }: {
+    oidc ? false,
+    force ? false,
+  }: let
+    needsHost = auth != "local" || oidc || (force && cfg.web.allowedHost != null);
+    authArgs = lib.concatMapStringsSep " " (mode: "--auth ${mode}") ([auth] ++ lib.optional (oidc && auth != "oidc") "oidc");
+  in {
     inherit description;
     after = ["network-online.target"] ++ cfg.modelServerUnits;
     wants = ["network-online.target"] ++ cfg.modelServerUnits;
-    environment = appEnvironment // lib.optionalAttrs (auth == "proxy") {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
+    environment = appEnvironment // lib.optionalAttrs needsHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
     path = mediaPath;
     serviceConfig =
       hardening
       // mediaWriter
       // {
-        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} --auth ${auth}" + lib.optionalString (auth == "proxy") " --allowed-host ${cfg.web.allowedHost}";
+        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString force " --force-disable-auth";
         Restart = "always";
         RestartSec = 5;
       };
@@ -233,12 +238,24 @@ in {
       };
 
       auth = mkOption {
-        type = types.enum ["proxy" "local"];
+        type = types.enum ["proxy" "oidc" "local"];
         default = "proxy";
-        description = "Auth mode of the public listener: proxy trusts Remote-Groups from the reverse proxy and needs allowedHost; local trusts every request.";
+        description = "Auth mode of the public listener: proxy trusts Remote-Groups from the reverse proxy and needs allowedHost; oidc accepts OIDC sessions only and needs allowedHost; local trusts every request.";
       };
 
-      allowedHost = nullableStr "The one Host header the public listener accepts (ATRIUM_PUBLIC_HOST). Required with auth = \"proxy\".";
+      allowedHost = nullableStr "The one Host header the public listener accepts (ATRIUM_PUBLIC_HOST). Required with auth = \"proxy\" or \"oidc\", or oidc.enable.";
+
+      oidc.enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Also accept OIDC sign-in on the public listener (--auth oidc), next to the selected auth mode. The provider is configured through the auth settings.";
+      };
+
+      forceDisableAuth = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Pass --force-disable-auth to the public listener so it starts without authentication on a non-loopback web.host with web.auth = \"local\". Set allowedHost as well, otherwise only loopback Host headers are accepted.";
+      };
 
       local = {
         enable = mkOption {
@@ -307,8 +324,16 @@ in {
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion = cfg.web.auth != "proxy" || cfg.web.allowedHost != null;
-        message = "services.atrium.web.allowedHost is required with web.auth = \"proxy\"";
+        assertion = (cfg.web.auth == "local" && !cfg.web.oidc.enable) || cfg.web.allowedHost != null;
+        message = "services.atrium.web.allowedHost is required with web.auth = \"proxy\", \"oidc\" or web.oidc.enable";
+      }
+      {
+        assertion = cfg.web.auth != "local" || cfg.web.forceDisableAuth || lib.hasPrefix "127." cfg.web.host || builtins.elem cfg.web.host ["localhost" "::1" "[::1]"];
+        message = "services.atrium.web.auth = \"local\" needs a loopback services.atrium.web.host, or services.atrium.web.forceDisableAuth = true";
+      }
+      {
+        assertion = !(cfg.web.oidc.enable && cfg.web.auth == "local");
+        message = "services.atrium.web.oidc.enable cannot combine with web.auth = \"local\"";
       }
     ];
 
@@ -398,6 +423,8 @@ in {
           atrium-web = webService {
             description = "atrium web UI";
             inherit (cfg.web) host port auth;
+            oidc = cfg.web.oidc.enable;
+            force = cfg.web.forceDisableAuth;
           };
 
           atrium-sync = appService {

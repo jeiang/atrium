@@ -265,7 +265,7 @@ func startServe(t *testing.T, args ...string) (string, func() int) {
 
 func getPage(t *testing.T, url string, header http.Header) (int, string) {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodGet, url+"/missing", nil)
+	req, err := http.NewRequest(http.MethodGet, url+"/chat", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,6 +319,27 @@ func TestServeProxyModeUnchanged(t *testing.T) {
 	status, body := getPage(t, url, http.Header{"Remote-Groups": {"atrium_access"}})
 	if status != http.StatusNotFound || strings.Contains(body, bannerText) {
 		t.Errorf("status %d banner %v", status, strings.Contains(body, bannerText))
+	}
+	stop()
+}
+
+func TestServeOIDCModeHasNoBanner(t *testing.T) {
+	url, stop := startServe(t, "--auth", "oidc", "--allowed-host", "127.0.0.1")
+	client := http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	req, err := http.NewRequest(http.MethodGet, url+"/login", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "text/html")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b bytes.Buffer
+	_, _ = b.ReadFrom(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode >= 500 || strings.Contains(b.String(), bannerText) {
+		t.Errorf("status %d banner %v", resp.StatusCode, strings.Contains(b.String(), bannerText))
 	}
 	stop()
 }

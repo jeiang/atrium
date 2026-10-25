@@ -5,6 +5,7 @@ import (
 	_ "github.com/jeiang/atrium/internal/assistant/budget"
 	_ "github.com/jeiang/atrium/internal/assistant/loop"
 	_ "github.com/jeiang/atrium/internal/assistant/scheduler"
+	_ "github.com/jeiang/atrium/internal/auth/oidc"
 	_ "github.com/jeiang/atrium/internal/calendar"
 	_ "github.com/jeiang/atrium/internal/config"
 	_ "github.com/jeiang/atrium/internal/contacts"

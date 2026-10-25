@@ -577,7 +577,17 @@ const connectLive = (li) => {
     if (li.isConnected) htmx.trigger(li, "run-done");
   };
   on("done", () => settle(true));
-  source.onerror = () => setTimeout(settle, RETRY_MS);
+  source.onerror = () => {
+    if (source.readyState === EventSource.CLOSED) {
+      const last = Number(sessionStorage.getItem("atrium-sse-reload") || 0);
+      if (Date.now() - last > 60000) {
+        sessionStorage.setItem("atrium-sse-reload", String(Date.now()));
+        location.reload();
+        return;
+      }
+    }
+    setTimeout(settle, RETRY_MS);
+  };
   setBusy(true);
 };
 

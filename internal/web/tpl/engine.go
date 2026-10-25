@@ -16,7 +16,10 @@ import (
 //go:embed templates/*.gohtml templates/basecoat/*.gohtml
 var builtin embed.FS
 
-const layout = "base.gohtml"
+const (
+	layout     = "base.gohtml"
+	bareLayout = "bare.gohtml"
+)
 
 type Config struct {
 	AssetVersion string
@@ -38,13 +41,21 @@ type Frame struct {
 	PendingCount int
 	Page         string
 	Toast        *Toast
+	Auth         AuthView
 	Data         any
 }
 
+type AuthView struct {
+	Admin   bool
+	SignOut bool
+	NoAuth  bool
+}
+
 type ErrorView struct {
-	Status  int    `json:"status"`
-	Problem string `json:"problem"`
-	Path    string `json:"path"`
+	Status    int    `json:"status"`
+	Problem   string `json:"problem"`
+	Path      string `json:"path"`
+	AdminOnly bool   `json:"admin_only"`
 }
 
 type Engine struct {
@@ -101,6 +112,9 @@ func (e *Engine) Page(w io.Writer, name string, f *Frame) error {
 	if !ok {
 		return fmt.Errorf("tpl: no page %q", name)
 	}
+	if set.Lookup("bare") != nil {
+		return execute(w, set, bareLayout, f)
+	}
 	return execute(w, set, layout, f)
 }
 
@@ -150,7 +164,7 @@ func collect(cfg Config) (sources, error) {
 			}
 			seen[name] = true
 			src := source{fsys, path.Join(dir, name)}
-			if name == layout || strings.HasPrefix(name, "_") || strings.Contains(dir, "basecoat") {
+			if name == layout || name == bareLayout || strings.HasPrefix(name, "_") || strings.Contains(dir, "basecoat") {
 				out.shared = append(out.shared, src)
 			} else {
 				out.pages[name] = src

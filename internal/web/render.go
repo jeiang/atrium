@@ -31,9 +31,6 @@ func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, erro
 	if _, ok := extra.Globals["module_enabled"]; !ok {
 		extra.Globals["module_enabled"] = func(string) bool { return true }
 	}
-	if _, ok := extra.Globals["auth_disabled"]; !ok {
-		extra.Globals["auth_disabled"] = false
-	}
 	engine, err := tpl.New(extra)
 	if err != nil {
 		return nil, err
@@ -50,7 +47,12 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 	if err != nil {
 		return nil, err
 	}
+	var auth tpl.AuthView
+	if who, ok := IdentityOf(r.Context()); ok {
+		auth = tpl.AuthView{Admin: who.Admin, SignOut: who.Source == SourceOIDC, NoAuth: who.NoAuth}
+	}
 	return &tpl.Frame{
+		Auth:         auth,
 		CSRF:         CSRFToken(r.Context()),
 		Mode:         mode,
 		Paused:       safety.IsPaused(rd.cfg.PausePath()),
@@ -100,13 +102,16 @@ func write(w http.ResponseWriter, status int, b *bytes.Buffer) error {
 }
 
 func (rd *Renderer) ErrorPage(w http.ResponseWriter, r *http.Request, status int, problem string) {
-	view := tpl.ErrorView{Status: status, Problem: problem, Path: r.URL.Path}
+	view := tpl.ErrorView{Status: status, Problem: problem, Path: r.URL.Path, AdminOnly: AdminOnly(r.Context())}
 	f, err := rd.Frame(r, "", view)
 	if err == nil && !IsPartial(r) {
 		err = rd.Page(w, r, status, "error.gohtml", f)
 	} else if err == nil {
-		if status == http.StatusUnprocessableEntity {
+		switch {
+		case status == http.StatusUnprocessableEntity:
 			f.Toast = &tpl.Toast{Category: "error", Title: "Filter not understood", Description: problem}
+		case view.AdminOnly:
+			f.Toast = &tpl.Toast{Category: "error", Title: "Admins only"}
 		}
 		err = rd.Fragment(w, r, status, "_error.gohtml", f)
 	}

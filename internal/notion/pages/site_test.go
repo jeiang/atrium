@@ -81,7 +81,7 @@ func newSite(t *testing.T, extra map[string]string) *site {
 	}
 	assistant := assistantpages.Module(assistantpages.Options{Runner: &loop.Runner{Registry: registry.New()}, Registry: registry.New(), Now: s.now})
 	s.srv, err = web.New(web.Options{
-		Cfg: cfg, Env: env, DB: d, Auth: web.AuthLocal, AllowedHosts: []string{"testserver"}, Render: render,
+		Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, AllowedHosts: []string{"testserver"}, Render: render,
 		Modules: []web.Module{Module(Options{Chat: chat, Now: s.now}), assistant},
 	})
 	if err != nil {
