@@ -289,6 +289,10 @@ func schema(properties string, required string) json.RawMessage {
 }
 
 func Tools() []tool.Tool {
+	return append(append(baseTools(), findSlotTool), updateTools...)
+}
+
+func baseTools() []tool.Tool {
 	return []tool.Tool{
 		{
 			Name: "calendar_list",

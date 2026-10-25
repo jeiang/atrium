@@ -1348,6 +1348,22 @@
         "max_occurrences_file": {
           "description": "path of a file holding the value",
           "type": "string"
+        },
+        "work_days": {
+          "default": "mon,tue,wed,thu,fri",
+          "type": "string"
+        },
+        "work_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "work_hours": {
+          "default": "09:00-17:00",
+          "type": "string"
+        },
+        "work_hours_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
         }
       },
       "type": "object"

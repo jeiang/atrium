@@ -134,6 +134,8 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_CALENDAR_ICLOUD_CALENDAR` | `calendar.icloud_calendar` |
 | `ATRIUM_CALENDAR_MAX_EVENTS` | `calendar.max_events` |
 | `ATRIUM_CALENDAR_MAX_OCCURRENCES` | `calendar.max_occurrences` |
+| `ATRIUM_CALENDAR_WORK_DAYS` | `calendar.work_days` |
+| `ATRIUM_CALENDAR_WORK_HOURS` | `calendar.work_hours` |
 | `ATRIUM_CONTACTS_CONTACTS_DIR` | `contacts.contacts_dir` |
 | `ATRIUM_CORE_ASSISTANT_ENABLED` | `core.assistant_enabled` |
 | `ATRIUM_CORE_CALENDAR_ENABLED` | `core.calendar_enabled` |

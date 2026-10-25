@@ -155,6 +155,8 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `icloud_calendar` | string | none | ui | `ATRIUM_CALENDAR_ICLOUD_CALENDAR` |
 | `max_events` | int | `200` | advanced | `ATRIUM_CALENDAR_MAX_EVENTS` |
 | `max_occurrences` | int | `2000` | advanced | `ATRIUM_CALENDAR_MAX_OCCURRENCES` |
+| `work_days` | string | `mon,tue,wed,thu,fri` | ui | `ATRIUM_CALENDAR_WORK_DAYS` |
+| `work_hours` | string | `09:00-17:00` | ui | `ATRIUM_CALENDAR_WORK_HOURS` |
 
 ## contacts
 
