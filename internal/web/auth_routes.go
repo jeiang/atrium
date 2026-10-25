@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/auth/oidc"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/logx"
 )
 
@@ -67,10 +66,8 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request, reason, next 
 	}
 }
 
-func (s *Server) registerAuthRoutes(env config.Env) {
-	secure := func(r *http.Request) bool {
-		return hasSecureTransport(r, strings.HasPrefix(config.PublicURL(env), "https://"))
-	}
+func (s *Server) registerAuthRoutes() {
+	secure := s.secure
 	s.mux.Get(LoginPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		q := r.URL.Query()
@@ -101,7 +98,7 @@ func (s *Server) registerAuthRoutes(env config.Env) {
 			s.loginPage(w, r, "refused", "")
 			return
 		}
-		grant, err := s.oidc.Complete(r.Context(), q.Get("state"), q.Get("code"), cookieValue(r, bindingCookie))
+		grant, err := s.oidc.Complete(r.Context(), q.Get("state"), q.Get("code"), cookieValue(r, bindingCookie, secure(r)))
 		if err != nil {
 			s.signInFailed(w, r, err, "")
 			return
@@ -111,7 +108,7 @@ func (s *Server) registerAuthRoutes(env config.Env) {
 	})
 	s.mux.Post(LogoutPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
-		if err := s.oidc.End(r.Context(), cookieValue(r, sessionCookie)); err != nil {
+		if err := s.oidc.End(r.Context(), cookieValue(r, sessionCookie, secure(r))); err != nil {
 			log.Error("sign-out failed", logx.Err, err.Error())
 			s.Error(w, r, http.StatusInternalServerError, "Internal Server Error")
 			return

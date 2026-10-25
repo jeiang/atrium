@@ -10,6 +10,7 @@ type identity struct {
 	Email         string
 	EmailVerified bool
 	Name          string
+	Hosted        string
 	Groups        []string
 	HasGroups     bool
 }
@@ -89,6 +90,9 @@ func identityOf(claims map[string]any, cfg Config) identity {
 	if id.Name == "" {
 		id.Name = claimString(claims, "preferred_username")
 	}
+	if cfg.Preset.DomainClaim != "" {
+		id.Hosted = strings.ToLower(claimString(claims, cfg.Preset.DomainClaim))
+	}
 	if cfg.GroupsClaim != "" {
 		if v, ok := lookupClaim(claims, cfg.GroupsClaim); ok {
 			id.Groups, id.HasGroups = groupList(v, cfg.Preset.TrimSlash)
@@ -100,6 +104,12 @@ func identityOf(claims map[string]any, cfg Config) identity {
 func (c Config) decide(id identity) (access, admin bool) {
 	emailOK := id.EmailVerified && id.Email != ""
 	domain := id.Email[strings.LastIndexByte(id.Email, '@')+1:]
+	if c.Preset.DomainClaim != "" {
+		domain = id.Hosted
+	}
+	if domain == "" {
+		domain = "\x00"
+	}
 	admin = slices.Contains(id.Groups, c.AdminGroup) || (emailOK && (slices.Contains(c.AdminEmails, id.Email) || slices.Contains(c.AdminDomains, domain)))
 	access = admin || slices.Contains(id.Groups, c.AccessGroup) || (emailOK && (slices.Contains(c.AccessEmails, id.Email) || slices.Contains(c.AccessDomains, domain)))
 	return access, admin

@@ -52,9 +52,10 @@ type AuthView struct {
 }
 
 type ErrorView struct {
-	Status  int    `json:"status"`
-	Problem string `json:"problem"`
-	Path    string `json:"path"`
+	Status    int    `json:"status"`
+	Problem   string `json:"problem"`
+	Path      string `json:"path"`
+	AdminOnly bool   `json:"admin_only"`
 }
 
 type Engine struct {

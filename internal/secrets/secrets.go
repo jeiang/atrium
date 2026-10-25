@@ -29,7 +29,7 @@ func init() {
 		settings.Def{Key: AnthropicAPIKey, Module: "anthropic", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true, EnvAlias: "ANTHROPIC_API_KEY"},
 		settings.Def{Key: AnthropicAdminKey, Module: "anthropic", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
 		settings.Def{Key: OpenAIAdminKey, Module: "openai", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
-		settings.Def{Key: OIDCClientSecret, Module: "auth", Type: settings.String, Class: settings.Secret, Secret: true},
+		settings.Def{Key: OIDCClientSecret, Module: "auth", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
 		settings.Def{Key: ActionLinkKey, Module: "action_links", Type: settings.String, Class: settings.Secret, Secret: true, Generated: true, Check: settings.NonEmpty},
 	)
 }

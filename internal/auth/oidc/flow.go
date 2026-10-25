@@ -51,6 +51,8 @@ type Service struct {
 	KeyRefetchGap time.Duration
 
 	mu        sync.Mutex
+	sealed    *sealer
+	sealedFor string
 	providers map[string]*provider
 	locks     map[int64]*sync.Mutex
 	retry     map[int64]time.Time
@@ -63,11 +65,13 @@ func New(d *db.DB, env config.Env) *Service {
 }
 
 func (s *Service) Check(ctx context.Context) error {
-	_, err := load(ctx, s.d.Read, s.env)
+	_, err := load(ctx, s.d.Read, s.env, s.d.Encrypted())
 	return err
 }
 
-func (s *Service) Config(ctx context.Context) (Config, error) { return load(ctx, s.d.Read, s.env) }
+func (s *Service) Config(ctx context.Context) (Config, error) {
+	return load(ctx, s.d.Read, s.env, s.d.Encrypted())
+}
 
 func (s *Service) unix() float64 { return float64(s.now().UnixNano()) / 1e9 }
 
@@ -106,7 +110,7 @@ type Login struct {
 }
 
 func (s *Service) Begin(ctx context.Context, returnTo string) (Login, error) {
-	cfg, err := load(ctx, s.d.Read, s.env)
+	cfg, err := load(ctx, s.d.Read, s.env, s.d.Encrypted())
 	if err != nil {
 		return Login{}, err
 	}
@@ -209,7 +213,7 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 	if s.unix()-pending.created > loginTTL.Seconds() {
 		return Grant{}, ErrLoginTimeout
 	}
-	cfg, err := load(ctx, s.d.Read, s.env)
+	cfg, err := load(ctx, s.d.Read, s.env, s.d.Encrypted())
 	if err != nil {
 		return Grant{}, err
 	}
@@ -242,6 +246,7 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 		log.Warn("sign-in refused: no access", "sub", id.Subject, "groups_present", id.HasGroups)
 		return Grant{}, ErrDenied
 	}
+	sl := s.sealerFor(cfg)
 	token := randomToken()
 	now := s.unix()
 	var accessExpires any
@@ -255,8 +260,8 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 		}
 		absolute := now + cfg.Max.Seconds()
 		idle := min(now+cfg.Idle.Seconds(), absolute)
-		res, err := tx.ExecContext(ctx, "INSERT INTO auth_sessions (token_hash, subject, email, name, admin, created_at, last_seen_at, idle_expires_at, absolute_expires_at, rechecked_at, access_token, access_expires_at, refresh_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			digest(token), id.Subject, id.Email, id.Name, boolInt(admin), now, now, idle, absolute, now, reply.AccessToken, accessExpires, reply.RefreshToken)
+		res, err := tx.ExecContext(ctx, "INSERT INTO auth_sessions (token_hash, subject, email, name, admin, created_at, last_seen_at, idle_expires_at, absolute_expires_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			digest(token), id.Subject, id.Email, id.Name, boolInt(admin), now, now, idle, absolute, now, sl.seal(reply.AccessToken), accessExpires, sl.seal(reply.RefreshToken), boolInt(id.EmailVerified), id.Hosted)
 		if err != nil {
 			return err
 		}
@@ -386,4 +391,13 @@ func (s *Service) userinfo(ctx context.Context, p *provider, accessToken string)
 		return nil, fmt.Errorf("%w: userinfo is not JSON", ErrProvider)
 	}
 	return claims, nil
+}
+
+func (s *Service) sealerFor(cfg Config) *sealer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sealed == nil || s.sealedFor != cfg.ClientSecret {
+		s.sealed, s.sealedFor = newSealer(cfg.ClientSecret, s.d.Encrypted()), cfg.ClientSecret
+	}
+	return s.sealed
 }

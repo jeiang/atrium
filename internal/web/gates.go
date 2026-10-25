@@ -10,16 +10,7 @@ type adminRule struct {
 var adminRules = []adminRule{
 	{"", "/settings"},
 	{"", "/settings/*"},
-	{"", "/secrets/*"},
-	{"", "/integrations"},
-	{"", "/integrations/*"},
-	{"", "/modules"},
-	{"", "/modules/*"},
-	{"", "/budget"},
-	{"", "/budget/*"},
 	{http.MethodPost, "/live/resume"},
-	{http.MethodPost, "/live/mode"},
-	{http.MethodPost, "/live/go-live"},
 }
 
 func adminRoute(r *http.Request) bool {

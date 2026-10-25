@@ -103,9 +103,8 @@ func newRig(t *testing.T, o rigOpts) *rig {
 				t.Fatalf("set %s: %v", k, err)
 			}
 		}
-		if err := secrets.New(d, d).Set(ctx, secrets.OIDCClientSecret, o.idp.ClientSecret, "test"); err != nil {
-			t.Fatal(err)
-		}
+		settings.Default.SetPins(secretPin{secrets.OIDCClientSecret: o.idp.ClientSecret})
+		t.Cleanup(func() { settings.Default.SetPins(nil) })
 	}
 	svc := oidc.New(d, env)
 	svc.KeyRefetchGap = 0
@@ -127,6 +126,13 @@ func newRig(t *testing.T, o rigOpts) *rig {
 		app.Close()
 	})
 	return &rig{t: t, db: d, idp: idp, svc: svc, srv: listener, url: base}
+}
+
+type secretPin map[string]string
+
+func (p secretPin) Pin(key string) (string, string, bool) {
+	v, ok := p[key]
+	return v, "test", ok
 }
 
 type reply struct {

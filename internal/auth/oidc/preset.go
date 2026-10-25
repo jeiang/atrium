@@ -19,6 +19,7 @@ type Preset struct {
 	Scopes      []string
 	GroupsClaim string
 	TrimSlash   bool
+	DomainClaim string
 	AuthParams  map[string]string
 }
 
@@ -28,7 +29,7 @@ var presets = []Preset{
 	{Name: PresetAuthelia, Display: "Authelia", Scopes: []string{"openid", "profile", "email", "groups"}, GroupsClaim: "groups"},
 	{Name: PresetAuthentik, Display: "Authentik", Scopes: []string{"openid", "profile", "email"}, GroupsClaim: "groups"},
 	{Name: PresetKeycloak, Display: "Keycloak", Scopes: []string{"openid", "profile", "email"}, GroupsClaim: "groups", TrimSlash: true},
-	{Name: PresetGoogle, Display: "Google", Issuer: "https://accounts.google.com", Scopes: []string{"openid", "email", "profile"}, AuthParams: map[string]string{"access_type": "offline"}},
+	{Name: PresetGoogle, Display: "Google", Issuer: "https://accounts.google.com", Scopes: []string{"openid", "email", "profile"}, DomainClaim: "hd", AuthParams: map[string]string{"access_type": "offline"}},
 	{Name: PresetEntra, Display: "Microsoft Entra", Scopes: []string{"openid", "profile", "email"}, GroupsClaim: "groups"},
 }
 

@@ -66,6 +66,7 @@ type Guard struct {
 	errPage  ErrorPage
 	noAuth   bool
 	admin    func(context.Context) string
+	secure   func(*http.Request) bool
 }
 
 func NewGuard(auth AuthSet, allowedHosts []string, public func(*http.Request) bool) *Guard {
@@ -182,11 +183,18 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			g.unauthenticated(w, r, err)
 			return
 		}
+		token, found := cookieToken(r)
+		fresh := !found
+		if fresh {
+			token = newToken()
+		}
 		if err == nil {
 			who.NoAuth = who.Source == SourceLocal && g.noAuth
 			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, who))
 			if !who.Admin && adminRoute(r) {
 				setSecurityHeaders(w.Header())
+				g.issueCSRF(w, r, token, fresh)
+				r = r.WithContext(context.WithValue(context.WithValue(r.Context(), csrfKey{}, token), adminOnlyKey{}, true))
 				if g.errPage != nil {
 					g.errPage(w, r, http.StatusForbidden, "Admins only.")
 				} else {
@@ -194,11 +202,6 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 				}
 				return
 			}
-		}
-		token, found := cookieToken(r)
-		fresh := !found
-		if fresh {
-			token = newToken()
 		}
 		if isUnsafe(r.Method) {
 			limit := defaultBodyCap
@@ -232,15 +235,8 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 				return
 			}
 		}
-		h := w.Header()
-		setSecurityHeaders(h)
-		if fresh {
-			cookie := CSRFCookie + "=" + token + "; Path=/; HttpOnly; SameSite=Strict"
-			if isHTTPS(r) {
-				cookie += "; Secure"
-			}
-			h.Add("Set-Cookie", cookie)
-		}
+		setSecurityHeaders(w.Header())
+		g.issueCSRF(w, r, token, fresh)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), csrfKey{}, token)))
 	})
 }
@@ -250,4 +246,22 @@ func (g *Guard) adminGroup(ctx context.Context) string {
 		return oidc.DefaultAdminGroup
 	}
 	return g.admin(ctx)
+}
+
+func (g *Guard) issueCSRF(w http.ResponseWriter, r *http.Request, token string, fresh bool) {
+	if !fresh {
+		return
+	}
+	cookie := CSRFCookie + "=" + token + "; Path=/; HttpOnly; SameSite=Strict"
+	if isHTTPS(r) {
+		cookie += "; Secure"
+	}
+	w.Header().Add("Set-Cookie", cookie)
+}
+
+type adminOnlyKey struct{}
+
+func AdminOnly(ctx context.Context) bool {
+	v, _ := ctx.Value(adminOnlyKey{}).(bool)
+	return v
 }

@@ -1,10 +1,10 @@
-{{define "title"}}{{if eq .Data.status 422}}Filter not understood{{else if eq .Data.status 403}}Admins only{{else}}Not found{{end}}{{end}}
-{{define "heading"}}{{if eq .Data.status 422}}Filter not understood{{else if eq .Data.status 403}}Admins only{{else}}Not found{{end}}{{end}}
+{{define "title"}}{{if eq .Data.status 422}}Filter not understood{{else if .Data.admin_only}}Admins only{{else}}Not found{{end}}{{end}}
+{{define "heading"}}{{if eq .Data.status 422}}Filter not understood{{else if .Data.admin_only}}Admins only{{else}}Not found{{end}}{{end}}
 {{define "content"}}
 {{if eq .Data.status 422}}
 {{template "empty_state" (dict "icon_name" "circle-alert" "title" "atrium cannot show this" "body" (printf "%s Pick the filter again from the page." .Data.problem))}}
 <a href="{{safeurl .Data.path}}" class="btn self-start" data-size="sm" data-variant="outline">{{icon "arrow-left"}}Clear filters</a>
-{{else if eq .Data.status 403}}
+{{else if .Data.admin_only}}
 {{template "empty_state" (dict "icon_name" "lock" "title" "Admins only")}}
 <a href="/chat" class="btn self-start" data-size="sm" data-variant="outline">{{icon "arrow-left"}}Chat</a>
 {{else}}

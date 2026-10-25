@@ -54,7 +54,7 @@ func list(value string) []string {
 	return out
 }
 
-func load(ctx context.Context, q db.Querier, env config.Env) (Config, error) {
+func load(ctx context.Context, q db.Querier, env config.Env, encrypted bool) (Config, error) {
 	var problems []string
 	get := func(key string) string {
 		found, err := settings.Default.Resolve(ctx, q, key, 0)
@@ -126,6 +126,9 @@ func load(ctx context.Context, q db.Querier, env config.Env) (Config, error) {
 	}
 	if !slices.Contains(c.Scopes, "openid") {
 		problems = append(problems, KeyScopes+" must include openid")
+	}
+	if c.GroupsClaim != "" && c.ClientSecret == "" && !encrypted {
+		problems = append(problems, "group re-checks keep refresh tokens, which needs a client secret or an encrypted database")
 	}
 	if len(problems) > 0 {
 		return c, &ConfigError{Problems: problems}

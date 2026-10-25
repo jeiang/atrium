@@ -151,8 +151,8 @@
     auth,
     oidc ? false,
   }: let
-    needsHost = auth == "proxy" || oidc;
-    authArgs = lib.concatMapStringsSep " " (mode: "--auth ${mode}") ([auth] ++ lib.optional oidc "oidc");
+    needsHost = auth != "local" || oidc;
+    authArgs = lib.concatMapStringsSep " " (mode: "--auth ${mode}") ([auth] ++ lib.optional (oidc && auth != "oidc") "oidc");
   in {
     inherit description;
     after = ["network-online.target"] ++ cfg.modelServerUnits;
@@ -237,12 +237,12 @@ in {
       };
 
       auth = mkOption {
-        type = types.enum ["proxy" "local"];
+        type = types.enum ["proxy" "oidc" "local"];
         default = "proxy";
-        description = "Auth mode of the public listener: proxy trusts Remote-Groups from the reverse proxy and needs allowedHost; local trusts every request.";
+        description = "Auth mode of the public listener: proxy trusts Remote-Groups from the reverse proxy and needs allowedHost; oidc accepts OIDC sessions only and needs allowedHost; local trusts every request.";
       };
 
-      allowedHost = nullableStr "The one Host header the public listener accepts (ATRIUM_PUBLIC_HOST). Required with auth = \"proxy\" or oidc.enable.";
+      allowedHost = nullableStr "The one Host header the public listener accepts (ATRIUM_PUBLIC_HOST). Required with auth = \"proxy\" or \"oidc\", or oidc.enable.";
 
       oidc.enable = mkOption {
         type = types.bool;
@@ -317,8 +317,8 @@ in {
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion = (cfg.web.auth != "proxy" && !cfg.web.oidc.enable) || cfg.web.allowedHost != null;
-        message = "services.atrium.web.allowedHost is required with web.auth = \"proxy\" or web.oidc.enable";
+        assertion = (cfg.web.auth == "local" && !cfg.web.oidc.enable) || cfg.web.allowedHost != null;
+        message = "services.atrium.web.allowedHost is required with web.auth = \"proxy\", \"oidc\" or web.oidc.enable";
       }
       {
         assertion = !(cfg.web.oidc.enable && cfg.web.auth == "local");

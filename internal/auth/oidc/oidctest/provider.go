@@ -26,6 +26,7 @@ type User struct {
 	Email         string
 	EmailVerified bool
 	Name          string
+	Hosted        string
 	Groups        []string
 }
 
@@ -370,6 +371,9 @@ func (p *Provider) userClaims(u *User, withGroups bool) map[string]any {
 	}
 	if u.Name != "" {
 		claims["name"] = u.Name
+	}
+	if u.Hosted != "" {
+		claims["hd"] = u.Hosted
 	}
 	if withGroups {
 		setPath(claims, p.opts.GroupsClaim, p.groupsFor(u))

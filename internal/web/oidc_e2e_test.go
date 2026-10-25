@@ -10,10 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -545,20 +546,92 @@ func TestProxyAdminGroupIsConfigurable(t *testing.T) {
 	expect(t, b.get("/settings/ping", "Remote-Groups", "atrium_access,operators"), http.StatusOK)
 }
 
-func TestOIDCDomainAllowlists(t *testing.T) {
+func TestOIDCDomainAllowlistsUseTheHostedDomainClaim(t *testing.T) {
 	r := newRig(t, rigOpts{preset: "google", settings: map[string]string{"oidc_access_domains": "example.com", "oidc_admin_domains": "ops.example.org"}})
-	r.idp.AddUser(oidctest.User{Name: "staff", Email: "a@Example.com", EmailVerified: true})
-	r.idp.AddUser(oidctest.User{Name: "ops", Email: "root@ops.example.org", EmailVerified: true})
-	r.idp.AddUser(oidctest.User{Name: "lookalike", Email: "a@notexample.com", EmailVerified: true})
-	r.idp.AddUser(oidctest.User{Name: "unverified", Email: "a@example.com"})
+	r.idp.AddUser(oidctest.User{Name: "staff", Email: "a@example.com", EmailVerified: true, Hosted: "example.com"})
+	r.idp.AddUser(oidctest.User{Name: "ops", Email: "root@ops.example.org", EmailVerified: true, Hosted: "ops.example.org"})
+	r.idp.AddUser(oidctest.User{Name: "consumer", Email: "a@example.com", EmailVerified: true})
+	r.idp.AddUser(oidctest.User{Name: "unverified", Email: "a@example.com", Hosted: "example.com"})
 	staff := r.browser()
 	staff.mustSignIn(r, "staff")
 	expect(t, staff.get("/settings/ping"), http.StatusForbidden)
 	ops := r.browser()
 	ops.mustSignIn(r, "ops")
 	expect(t, ops.get("/settings/ping"), http.StatusOK)
-	expect(t, r.browser().signIn(r, "lookalike"), http.StatusForbidden)
+	expect(t, r.browser().signIn(r, "consumer"), http.StatusForbidden)
 	expect(t, r.browser().signIn(r, "unverified"), http.StatusForbidden)
+}
+
+func TestOIDCAllowlistSessionsAreRechecked(t *testing.T) {
+	stale := "UPDATE auth_sessions SET rechecked_at = rechecked_at - 7200"
+	r := shapes[6].rig(t)
+	b := r.browser()
+	b.mustSignIn(r, "admin")
+	r.exec(stale)
+	expect(t, b.get("/settings/ping"), http.StatusOK)
+	if r.idp.RefreshCall != 1 {
+		t.Fatalf("%d refresh calls", r.idp.RefreshCall)
+	}
+	setting(t, r, "oidc_admin_emails", "someone@example.com")
+	setting(t, r, "oidc_access_emails", "friend@example.com,boss@example.com")
+	r.exec(stale)
+	expect(t, b.get("/settings/ping"), http.StatusForbidden)
+	setting(t, r, "oidc_access_emails", "friend@example.com")
+	r.exec(stale)
+	expect(t, b.get("/ping"), http.StatusSeeOther)
+	if n := r.count("SELECT COUNT(*) FROM auth_sessions"); n != 0 {
+		t.Fatalf("%d sessions", n)
+	}
+	m := r.browser()
+	m.mustSignIn(r, "member")
+	r.idp.RevokeAll = true
+	r.exec(stale)
+	expect(t, m.get("/ping"), http.StatusSeeOther)
+}
+
+func setting(t *testing.T, r *rig, key, value string) {
+	t.Helper()
+	ctx := audit.With(context.Background(), "test", audit.CLI)
+	if err := settings.Default.Set(ctx, r.db.Write, key, value, 0); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOIDCTokensAreSealedAtRest(t *testing.T) {
+	r := shapes[0].rig(t)
+	r.browser().mustSignIn(r, "admin")
+	var access, refresh string
+	if err := r.db.Read.QueryRow("SELECT access_token, refresh_token FROM auth_sessions").Scan(&access, &refresh); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(access, "v1:") || !strings.HasPrefix(refresh, "v1:") || strings.Contains(access+refresh, "at-") || strings.Contains(access+refresh, "rt-") {
+		t.Fatalf("tokens stored as %q %q", access, refresh)
+	}
+}
+
+func TestAdminsOnlyPageCarriesWorkingForms(t *testing.T) {
+	r := shapes[0].rig(t)
+	b := r.browser()
+	b.mustSignIn(r, "member")
+	var session string
+	u, _ := url.Parse(r.url)
+	for _, c := range b.jar.Cookies(u) {
+		if c.Name == "atrium_session" {
+			session = c.Value
+		}
+	}
+	fresh := r.browser()
+	page := fresh.get("/settings/ping", "Cookie", "atrium_session="+session)
+	expect(t, page, http.StatusForbidden, "Admins only", `action="/logout"`)
+	set := strings.Join(page.Header.Values("Set-Cookie"), "\n")
+	i := strings.Index(set, "atrium_csrf=")
+	if i < 0 {
+		t.Fatalf("no CSRF cookie: %s", set)
+	}
+	token := strings.SplitN(set[i+len("atrium_csrf="):], ";", 2)[0]
+	if !strings.Contains(page.Body, `name="csrf_token" value="`+token+`"`) {
+		t.Fatal("the page form token does not match the cookie")
+	}
 }
 
 func TestLocalModeStaysOpenAndAdmin(t *testing.T) {
@@ -670,5 +743,3 @@ func TestServeAuthFlags(t *testing.T) {
 		t.Errorf("unknown mode: %d %q", code, stderr)
 	}
 }
-
-var _ = oidc.CallbackPath

@@ -56,6 +56,7 @@ type Options struct {
 type Server struct {
 	oidc     *oidc.Service
 	render   *Renderer
+	secure   func(*http.Request) bool
 	handler  http.Handler
 	mux      *chi.Mux
 	errPage  ErrorPage
@@ -107,13 +108,17 @@ func New(o Options) (*Server, error) {
 		Cfg: o.Cfg, Env: o.Env, DB: o.DB, Render: o.Render, Error: s.Error, Stopping: s.stop,
 		OnClose: func(f func()) { s.closers = append(s.closers, f) },
 	}
+	s.secure = func(r *http.Request) bool {
+		return hasSecureTransport(r, strings.HasPrefix(config.PublicURL(o.Env), "https://"))
+	}
 	if auth.OIDC {
-		s.registerAuthRoutes(o.Env)
+		s.registerAuthRoutes()
 	}
 	for _, register := range o.Modules {
 		register(s.mux, deps)
 	}
 	guard := NewGuard(auth, o.AllowedHosts, o.Public)
+	guard.secure = s.secure
 	guard.sessions = o.OIDC
 	guard.errPage = s.errPage
 	guard.noAuth = o.NoAuth

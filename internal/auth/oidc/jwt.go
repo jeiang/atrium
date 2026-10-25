@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"slices"
 	"strings"
 	"time"
 )
@@ -337,24 +338,27 @@ func (t rawToken) checkClaims(r claimRules) error {
 }
 
 func audienceOK(claims map[string]any, client string) error {
+	var audiences []string
 	switch aud := claims["aud"].(type) {
 	case string:
-		if aud == client {
-			return nil
-		}
+		audiences = []string{aud}
 	case []any:
-		found := false
 		for _, a := range aud {
-			if s, ok := a.(string); ok && s == client {
-				found = true
+			if s, ok := a.(string); ok {
+				audiences = append(audiences, s)
 			}
-		}
-		if found {
-			if azp, _ := claims["azp"].(string); len(aud) > 1 && azp != client {
-				return tokenError("authorized party mismatch")
-			}
-			return nil
 		}
 	}
-	return tokenError("audience mismatch")
+	if !slices.Contains(audiences, client) {
+		return tokenError("audience mismatch")
+	}
+	azp, present := claims["azp"]
+	if present {
+		if s, _ := azp.(string); s != client {
+			return tokenError("authorized party mismatch")
+		}
+	} else if len(audiences) > 1 {
+		return tokenError("authorized party mismatch")
+	}
+	return nil
 }

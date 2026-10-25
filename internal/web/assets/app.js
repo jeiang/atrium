@@ -579,8 +579,12 @@ const connectLive = (li) => {
   on("done", () => settle(true));
   source.onerror = () => {
     if (source.readyState === EventSource.CLOSED) {
-      location.reload();
-      return;
+      const last = Number(sessionStorage.getItem("atrium-sse-reload") || 0);
+      if (Date.now() - last > 60000) {
+        sessionStorage.setItem("atrium-sse-reload", String(Date.now()));
+        location.reload();
+        return;
+      }
     }
     setTimeout(settle, RETRY_MS);
   };

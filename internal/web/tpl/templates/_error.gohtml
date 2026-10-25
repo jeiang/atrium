@@ -1,7 +1,7 @@
 {{if eq .Data.status 422}}
 <p class="text-sm text-muted-foreground" role="alert">{{.Data.problem}} Pick the filter again.</p>
 {{if .Toast}}{{template "_toast.gohtml" .}}{{end}}
-{{else if eq .Data.status 403}}
+{{else if .Data.admin_only}}
 <p class="text-sm text-muted-foreground" role="alert">Admins only.</p>
 {{if .Toast}}{{template "_toast.gohtml" .}}{{end}}
 {{else}}

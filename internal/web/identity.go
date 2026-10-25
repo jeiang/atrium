@@ -66,7 +66,7 @@ func (g *Guard) identify(r *http.Request) (Identity, error) {
 		return Identity{Source: SourceProxy, Admin: hasGroup(r.Header.Get("Remote-Groups"), g.adminGroup(r.Context()))}, nil
 	}
 	if g.auth.OIDC {
-		if token := cookieValue(r, sessionCookie); token != "" {
+		if token := cookieValue(r, sessionCookie, g.secure(r)); token != "" {
 			s, err := g.sessions.Authenticate(r.Context(), token)
 			switch {
 			case err == nil:
@@ -119,11 +119,12 @@ func (g *Guard) unauthenticated(w http.ResponseWriter, r *http.Request, why erro
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
-func cookieValue(r *http.Request, name string) string {
-	for _, candidate := range []string{hostPrefix + name, name} {
-		if c, err := r.Cookie(candidate); err == nil && c.Value != "" {
-			return c.Value
-		}
+func cookieValue(r *http.Request, name string, secure bool) string {
+	if secure {
+		name = hostPrefix + name
+	}
+	if c, err := r.Cookie(name); err == nil {
+		return c.Value
 	}
 	return ""
 }

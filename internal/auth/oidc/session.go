@@ -19,17 +19,20 @@ type row struct {
 	lastSeen        float64
 	rechecked       float64
 	accessToken     string
+	emailVerified   bool
+	hosted          string
 	accessExpires   sql.NullFloat64
 	refreshToken    string
 }
 
-const sessionColumns = "id, subject, email, name, admin, idle_expires_at, absolute_expires_at, last_seen_at, rechecked_at, access_token, access_expires_at, refresh_token"
+const sessionColumns = "id, subject, email, name, admin, idle_expires_at, absolute_expires_at, last_seen_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain"
 
 func (s *Service) loadRow(ctx context.Context, hash string) (row, error) {
 	var r row
-	var admin int
+	var admin, verified int
 	err := s.d.Read.QueryRowContext(ctx, "SELECT "+sessionColumns+" FROM auth_sessions WHERE token_hash = ?", hash).
-		Scan(&r.ID, &r.Subject, &r.Email, &r.Name, &admin, &r.idleExpires, &r.absoluteExpires, &r.lastSeen, &r.rechecked, &r.accessToken, &r.accessExpires, &r.refreshToken)
+		Scan(&r.ID, &r.Subject, &r.Email, &r.Name, &admin, &r.idleExpires, &r.absoluteExpires, &r.lastSeen, &r.rechecked, &r.accessToken, &r.accessExpires, &r.refreshToken, &verified, &r.hosted)
+	r.emailVerified = verified == 1
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, ErrNoSession
 	}
@@ -132,13 +135,10 @@ func (s *Service) recheck(ctx context.Context, hash string, seen row, t timing) 
 	if now < r.rechecked+t.recheck.Seconds() {
 		return r, nil
 	}
-	cfg, err := load(ctx, s.d.Read, s.env)
+	cfg, err := load(ctx, s.d.Read, s.env, s.d.Encrypted())
 	if err != nil {
 		log.Warn("session ended: oidc configuration is unusable", "sub", r.Subject)
 		return r, s.drop(ctx, r.ID)
-	}
-	if !cfg.rechecks() {
-		return r, s.touchRecheck(ctx, r, now)
 	}
 	s.mu.Lock()
 	next := s.retry[r.ID]
@@ -146,12 +146,15 @@ func (s *Service) recheck(ctx context.Context, hash string, seen row, t timing) 
 	if s.now().Before(next) && now < r.rechecked+t.recheck.Seconds()+recheckGrace.Seconds() {
 		return r, nil
 	}
+	sl := s.sealerFor(cfg)
+	r.accessToken, r.refreshToken = sl.open(r.accessToken), sl.open(r.refreshToken)
 	outcome, err := s.refresh(ctx, cfg, r)
 	switch {
 	case err == nil:
 		r.Email, r.Name, r.Admin = outcome.Email, outcome.Name, outcome.Admin
 		r.accessToken, r.refreshToken, r.accessExpires = outcome.accessToken, outcome.refreshToken, outcome.accessExpires
-		if err := s.saveRecheck(ctx, r, now); err != nil {
+		r.emailVerified, r.hosted = outcome.verified, outcome.hosted
+		if err := s.saveRecheck(ctx, sl, r, now); err != nil {
 			return r, err
 		}
 		r.rechecked = now
@@ -191,10 +194,21 @@ type recheckOutcome struct {
 	accessToken   string
 	refreshToken  string
 	accessExpires sql.NullFloat64
+	verified      bool
+	hosted        string
 }
 
 func (s *Service) refresh(ctx context.Context, cfg Config, r row) (recheckOutcome, error) {
-	out := recheckOutcome{Session: r.Session, accessToken: r.accessToken, refreshToken: r.refreshToken, accessExpires: r.accessExpires}
+	out := recheckOutcome{Session: r.Session, accessToken: r.accessToken, refreshToken: r.refreshToken, accessExpires: r.accessExpires, verified: r.emailVerified, hosted: r.hosted}
+	needGroups := cfg.GroupsClaim != ""
+	stored := identity{Subject: r.Subject, Email: r.Email, EmailVerified: r.emailVerified, Hosted: r.hosted, Name: r.Name}
+	accessExpired := r.accessExpires.Valid && s.unix() >= r.accessExpires.Float64
+	if r.refreshToken == "" && (accessExpired || r.accessToken == "") {
+		if needGroups {
+			return out, fmt.Errorf("%w: no way to ask the provider for groups", ErrRejected)
+		}
+		return s.decideRecheck(cfg, stored, out)
+	}
 	p, err := s.provider(ctx, cfg.Issuer)
 	if err != nil {
 		return out, err
@@ -220,19 +234,22 @@ func (s *Service) refresh(ctx context.Context, cfg Config, r row) (recheckOutcom
 				return out, err
 			}
 		}
-	} else if r.accessExpires.Valid && s.unix() >= r.accessExpires.Float64 {
-		return out, fmt.Errorf("%w: the access token expired and no refresh token was issued", ErrRejected)
 	}
-	var id identity
+	id := stored
 	if claims != nil {
-		id = identityOf(claims, cfg)
-	} else {
-		id = identity{Subject: r.Subject}
-	}
-	if !id.HasGroups {
-		if p.userinfoURL == "" {
-			return out, fmt.Errorf("%w: no group information available", ErrDenied)
+		fresh := identityOf(claims, cfg)
+		id.Groups, id.HasGroups = fresh.Groups, fresh.HasGroups
+		if fresh.Email != "" {
+			id.Email, id.EmailVerified = fresh.Email, fresh.EmailVerified
 		}
+		if fresh.Hosted != "" {
+			id.Hosted = fresh.Hosted
+		}
+		if fresh.Name != "" {
+			id.Name = fresh.Name
+		}
+	}
+	if (needGroups && !id.HasGroups || claims == nil) && p.userinfoURL != "" {
 		info, err := s.userinfo(ctx, p, access)
 		if err != nil {
 			return out, err
@@ -241,35 +258,37 @@ func (s *Service) refresh(ctx context.Context, cfg Config, r row) (recheckOutcom
 			return out, fmt.Errorf("%w: userinfo subject differs from the session", ErrToken)
 		}
 		extra := identityOf(info, cfg)
-		id.Groups, id.HasGroups = extra.Groups, extra.HasGroups
-		if id.Email == "" {
+		if !id.HasGroups {
+			id.Groups, id.HasGroups = extra.Groups, extra.HasGroups
+		}
+		if extra.Email != "" {
 			id.Email, id.EmailVerified = extra.Email, extra.EmailVerified
 		}
-		if id.Name == "" {
+		if extra.Hosted != "" {
+			id.Hosted = extra.Hosted
+		}
+		if extra.Name != "" {
 			id.Name = extra.Name
 		}
 	}
-	if id.Name == "" {
-		id.Name = r.Name
+	if needGroups && !id.HasGroups {
+		return out, fmt.Errorf("%w: no group information available", ErrDenied)
 	}
+	return s.decideRecheck(cfg, id, out)
+}
+
+func (s *Service) decideRecheck(cfg Config, id identity, out recheckOutcome) (recheckOutcome, error) {
 	granted, admin := cfg.decide(id)
 	if !granted {
 		return out, ErrDenied
 	}
-	if id.Email != "" {
-		out.Email = id.Email
-	}
-	out.Name, out.Admin = id.Name, admin
+	out.Email, out.Name, out.Admin = id.Email, id.Name, admin
+	out.verified, out.hosted = id.EmailVerified, id.Hosted
 	return out, nil
 }
 
-func (s *Service) touchRecheck(ctx context.Context, r row, now float64) error {
-	_, err := s.d.Write.ExecContext(ctx, "UPDATE auth_sessions SET rechecked_at = ? WHERE id = ?", now, r.ID)
-	return err
-}
-
-func (s *Service) saveRecheck(ctx context.Context, r row, now float64) error {
-	_, err := s.d.Write.ExecContext(ctx, "UPDATE auth_sessions SET rechecked_at = ?, admin = ?, email = ?, name = ?, access_token = ?, access_expires_at = ?, refresh_token = ? WHERE id = ?",
-		now, boolInt(r.Admin), r.Email, r.Name, r.accessToken, r.accessExpires, r.refreshToken, r.ID)
+func (s *Service) saveRecheck(ctx context.Context, sl *sealer, r row, now float64) error {
+	_, err := s.d.Write.ExecContext(ctx, "UPDATE auth_sessions SET rechecked_at = ?, admin = ?, email = ?, name = ?, access_token = ?, access_expires_at = ?, refresh_token = ?, email_verified = ?, hosted_domain = ? WHERE id = ?",
+		now, boolInt(r.Admin), r.Email, r.Name, sl.seal(r.accessToken), r.accessExpires, sl.seal(r.refreshToken), boolInt(r.emailVerified), r.hosted, r.ID)
 	return err
 }
