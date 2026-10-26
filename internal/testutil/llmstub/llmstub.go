@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -16,14 +15,12 @@ import (
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/watches"
-	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
 type script struct {
 	Defaults  map[string]json.RawMessage            `json:"defaults"`
 	BySubject map[string]map[string]json.RawMessage `json:"by_subject"`
-	Payees    map[string]json.RawMessage            `json:"payees"`
 }
 
 func subjectOf(prompt string) (string, bool) {
@@ -46,24 +43,6 @@ func SparseEmbedding(text string) []float64 {
 	return v
 }
 
-func titleCase(s string) string {
-	var b strings.Builder
-	cased := false
-	for _, r := range s {
-		letter := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
-		switch {
-		case !letter:
-			b.WriteRune(r)
-		case cased:
-			b.WriteString(strings.ToLower(string(r)))
-		default:
-			b.WriteString(strings.ToUpper(string(r)))
-		}
-		cased = letter
-	}
-	return b.String()
-}
-
 func reply(w http.ResponseWriter, content string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": content}}}})
 }
@@ -77,7 +56,6 @@ func Server(t *testing.T, inspect func(feature string, body []byte) bool) *httpt
 	features := map[string]string{
 		llm.FolderSystem: "folder", llm.FlagSystem: "flag", llm.EventSystem: "event",
 		openloops.CommitmentSystem: "commitments", watches.PackageSystem: "package", rebalance.NameSystem: "folder_name",
-		money.ExtractSystem: "money", money.PayeeSystem: "payee",
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -106,16 +84,6 @@ func Server(t *testing.T, inspect func(feature string, body []byte) bool) *httpt
 		}
 		if inspect != nil && !inspect(feature, body) {
 			http.Error(w, "unexpected", http.StatusBadRequest)
-			return
-		}
-		if feature == "payee" {
-			content := req.Messages[1].Content
-			normalized := content[strings.Index(content, "\nNormalized: ")+len("\nNormalized: "):]
-			answer, known := s.Payees[normalized]
-			if !known {
-				answer = json.RawMessage(`{"name": ` + strconv.Quote(titleCase(normalized)) + `, "category": "Other"}`)
-			}
-			reply(w, string(answer))
 			return
 		}
 		answer := s.Defaults[feature]

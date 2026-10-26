@@ -19,7 +19,6 @@ import (
 
 const (
 	categoryAssistant = "assistant"
-	categoryMoney     = "money"
 	categoryWiki      = "wiki"
 	categoryMedia     = "media"
 	categorySettings  = "settings"
@@ -27,10 +26,9 @@ const (
 	snippetLimit      = 800
 )
 
-var categories = []string{categoryMail, categoryAssistant, categoryMoney, categoryWiki, categoryMedia, categorySettings}
+var categories = []string{categoryMail, categoryAssistant, categoryWiki, categoryMedia, categorySettings}
 
-const categorySQL = "CASE WHEN json_extract(w.undo_json, '$.op') = 'money_restore' THEN 'money' WHEN w.tool LIKE 'notion%' THEN 'wiki' " +
-	"WHEN w.tool LIKE 'media%' THEN 'media' ELSE 'assistant' END"
+const categorySQL = "CASE WHEN w.tool LIKE 'notion%' THEN 'wiki' WHEN w.tool LIKE 'media%' THEN 'media' ELSE 'assistant' END"
 
 const writeColumns = "id, ts, thread_id, tool, target, before_json, after_json, undo_json, undone_at, thread_kind, category"
 

@@ -18,7 +18,6 @@ const (
 	Mail          = "mail"
 	Calendar      = "calendar"
 	Notion        = "notion"
-	Money         = "money"
 	Media         = "media"
 	Assistant     = "assistant"
 	Notifications = "notifications"

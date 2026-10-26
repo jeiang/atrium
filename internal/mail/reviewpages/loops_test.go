@@ -128,9 +128,9 @@ func TestWatchesPageAndPackageDismissal(t *testing.T) {
 	s.package_("1Z999AA10123456784", "in_transit", s.clock-3600, 0)
 	s.package_("DELIVERED1", "delivered", s.clock-3600, 0)
 	page := status(t, s.get("/watches"), http.StatusOK)
-	mustContain(t, page, "1Z999AA10123456784", "Address book not configured", "ATRIUM_CONTACTS_CONTACTS_DIR is not set.", `href="/money/bills"`,
+	mustContain(t, page, "1Z999AA10123456784", "Address book not configured", "ATRIUM_CONTACTS_CONTACTS_DIR is not set.",
 		"Packages in transit (1)", "in transit", `href="/messages/2"`, "Birthdays and anniversaries, next 60 days</h2>")
-	mustNotContain(t, page, "DELIVERED1", "Renewals")
+	mustNotContain(t, page, "DELIVERED1", "Renewals", "/money/")
 	body := status(t, s.post("/watches/packages/1/dismiss", nil), http.StatusOK)
 	mustContain(t, body, "Dismissed", "No packages in transit")
 	mustNotContain(t, body, "1Z999AA10123456784")

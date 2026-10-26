@@ -18,7 +18,6 @@ const (
 	KeyWeeklyReview    = "agent_schedule_weekly_review"
 	KeyDailyNudges     = "agent_schedule_daily_nudges"
 	KeyCalendarCands   = "agent_schedule_calendar_candidates"
-	KeyFXRates         = "agent_schedule_fx_rates"
 	KeyMediaChannels   = "agent_schedule_media_channels"
 	KeyMediaSweep      = "agent_schedule_media_sweep"
 	KeyMediaThumbnails = "agent_schedule_media_thumbnails"
@@ -29,7 +28,6 @@ var scheduleKeys = map[string]string{
 	"weekly-review":        KeyWeeklyReview,
 	"daily-nudges":         KeyDailyNudges,
 	CalendarCandidatesName: KeyCalendarCands,
-	FXRatesName:            KeyFXRates,
 	MediaChannelsName:      KeyMediaChannels,
 	MediaSweepName:         KeyMediaSweep,
 	MediaThumbnailsName:    KeyMediaThumbnails,
@@ -64,7 +62,6 @@ func init() {
 		modelRun(KeyWeeklyReview, "weekly sun 18:00"),
 		modelRun(KeyDailyNudges, "daily 08:00"),
 		recurring(KeyCalendarCands, "0 * * * *"),
-		recurring(KeyFXRates, "weekly mon 06:00"),
 		recurring(KeyMediaChannels, "*/30 * * * *"),
 		recurring(KeyMediaSweep, "*/10 * * * *"),
 		recurring(KeyMediaThumbnails, "daily 04:00"),

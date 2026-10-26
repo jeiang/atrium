@@ -7,7 +7,6 @@ import (
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/money"
 )
 
 func Undoers(env config.Env) *writes.Registry {
@@ -16,6 +15,5 @@ func Undoers(env config.Env) *writes.Registry {
 	calendartools.RegisterUndoers(r)
 	mediatools.RegisterUndoer(r, env)
 	notiontools.RegisterUndoers(r, env)
-	money.RegisterUndoer(r)
 	return r
 }

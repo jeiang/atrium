@@ -18,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/media/mediamodule"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/money/moneymodule"
 	"github.com/jeiang/atrium/internal/notify/notifymodule"
 	"github.com/jeiang/atrium/internal/notion/notionmodule"
 	"github.com/jeiang/atrium/internal/settings"
@@ -53,7 +52,6 @@ func newSet(clients run.Clients, now func() float64) *module.Set {
 		mailmodule.Module{Clients: clients, Now: now},
 		calendarmodule.Module{},
 		notionmodule.Module{},
-		moneymodule.Module{Now: now},
 		mediamodule.Module{Now: now},
 		assistantmodule.Module{},
 		notifymodule.Module{},

@@ -98,8 +98,6 @@ const (
 	KeyNotionMaxMarkdown = "agent_notion_max_markdown_chars"
 
 	KeyMediaTorrentLimit = "agent_media_torrent_limit"
-	KeyMoneyMaxLimit     = "agent_money_max_limit"
-	KeyMoneyMaxDays      = "agent_money_max_days"
 
 	KeyGrafanaTimeout    = "agent_grafana_timeout_seconds"
 	KeyGrafanaSeries     = "agent_grafana_max_series"
@@ -236,8 +234,6 @@ func init() {
 		count(KeyNotionMaxMarkdown, 100000, 1000, 1000000),
 
 		count(KeyMediaTorrentLimit, 50, 1, 500),
-		count(KeyMoneyMaxLimit, 200, 1, 2000),
-		count(KeyMoneyMaxDays, 365, 1, 3660),
 
 		count(KeyGrafanaTimeout, 15, 1, 120),
 		count(KeyGrafanaSeries, 20, 1, 200),

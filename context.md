@@ -8,7 +8,7 @@ not claims about the running application.
 
 - One operator per instance. The application is a Go CLI and web service
   with embedded assets, packaged and deployed through a NixOS module.
-- The application brings together mail, calendar, contacts, Notion, spending,
+- The application brings together mail, calendar, contacts, Notion,
   media, notifications, and read-only Grafana access. The assistant adds
   chat, files, projects, skills, scheduled work, and research subagents.
   A skill is a name, one-line description and Markdown body, exchanged as
@@ -84,14 +84,14 @@ not claims about the running application.
   own `<name>_enabled` flag and migrations recorded in `module_migrations`.
   Core (settings, secrets,
   `db`, `serve`, the About, review and activity pages) is always on; mail,
-  calendar, contacts, Notion, money, media, assistant, notifications and Grafana each
+  calendar, contacts, Notion, media, assistant, notifications and Grafana each
   have a `<name>_enabled` setting. A module is on only when its flag is true
   and its required settings are met (an `needs-settings` state otherwise);
-  grafana needs the assistant, money and calendar candidates need mail
-  for their pipeline stages, and mail uses contacts as an optional source
+  grafana needs the assistant, calendar candidates need mail
+  for their pipeline stage, and mail uses contacts as an optional source
   for its flag rule. iCloud calendars and address books are mirrored by
   atrium's own read-only CalDAV/CardDAV sync (vdirsyncer is gone). A disabled module registers no pages, tools or
-  nav entries, its commands exit 0 without doing work, its scheduler jobs, the mail pass's money and calendar-candidate stages and
+  nav entries, its commands exit 0 without doing work, its scheduler jobs, the mail pass's calendar-candidate stage and
   notification sends are skipped (the mail pause controls stay available), and its tables remain. The first start
   after the module wiring adopts a database that already holds operator data
   (settings, secrets, accounts, threads or usage rows): every module whose
@@ -137,17 +137,16 @@ not claims about the running application.
 - Memory precedence is profile, then nightly observations, then wiki. The
   profile is authoritative; observations update knowledge according to
   confidence rather than indiscriminately replacing established facts.
-- Currencies will be configurable, with USD as the base and operator-set
-  rates stored per transaction. Changing a rate must not rewrite earlier
-  transactions. This replaces the current fetched-rate workflow; it does
-  not describe that workflow as already removed.
+- The money (spending ledger) module is removed and deferred. Its tables
+  and stored rows stay in the database, untouched; mail-statement parsing
+  is not the planned source when it returns.
 - Mail model endpoints should support local or hosted OpenAI-compatible
   services without requiring a local model. Endpoint selection should make
   the privacy consequences visible.
 - Cost accounting should explain usage by job and run. Recorded runs should
   support evaluating application and model changes.
-- Follow-ups, proposals, plans, event candidates, unassigned transactions,
-  and drafts should converge into one attention view.
+- Follow-ups, proposals, plans, event candidates and drafts should
+  converge into one attention view.
 - The memory model should state what belongs in profile, wiki, skills,
   projects, nightly capture, and thread summaries, and how stale facts
   expire.

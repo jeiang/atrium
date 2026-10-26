@@ -26,7 +26,6 @@
         (ternary (call $on "mail") (dict "label" "Rules" "url" "/rules" "icon" (icon "scroll-text") "current" (eq $page "rules")) nil)
         (dict "label" "Drafts" "url" "/drafts" "icon" (icon "mail") "current" (eq $page "drafts")))))
       (dict "type" "group" "label" "Life" "items" (compact (list
-        (ternary (call $on "money") (dict "label" "Money" "url" "/money" "icon" (icon "wallet") "current" (eq $page "money")) nil)
         (dict "label" "Loops" "url" "/loops" "icon" (icon "list-checks") "current" (eq $page "loops"))
         (dict "label" "Watches" "url" "/watches" "icon" (icon "package") "current" (eq $page "watches")))))
       (ternary (call $on "media") (dict "type" "group" "label" "Media" "items" (list

@@ -7,4 +7,3 @@
 2026-10-18 16:00:00,000 atrium.run INFO gmail: 0 invitation proposals, 0 event candidates
 2026-10-18 16:00:00,000 atrium.run INFO open loops: {'backfilled': 0, 'loops': {'owe_reply': 52, 'waiting_on_them': 2}, 'commitments': 0, 'reminders': 0}
 2026-10-18 16:00:00,000 atrium.run INFO watches: {'packages': {'scanned': 0, 'found': 0}}
-2026-10-18 16:00:00,000 atrium.run INFO money: {'rates': None, 'scanned': 0, 'posted': 0}

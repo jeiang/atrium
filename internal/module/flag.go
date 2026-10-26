@@ -19,7 +19,7 @@ const (
 )
 
 func init() {
-	for _, name := range []string{Mail, Calendar, Notion, Money, Media, Assistant, Notifications, Grafana, Contacts} {
+	for _, name := range []string{Mail, Calendar, Notion, Media, Assistant, Notifications, Grafana, Contacts} {
 		settings.MustRegister(FlagDef(name))
 	}
 }

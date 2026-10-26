@@ -17,7 +17,6 @@ const (
 	NightlyName = "nightly"
 
 	CalendarCandidatesName = "calendar-candidates"
-	FXRatesName            = "fx-rates"
 	MediaChannelsName      = "media-channels"
 	MediaSweepName         = "media-sweep"
 	MediaThumbnailsName    = "media-thumbnails"
@@ -35,14 +34,14 @@ const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untruste
 	"3) Stalled: items from open_loops or commitments (status=open) that have been open for more than 14 days. " +
 	"4) Owed replies: open_loops state=owe_reply. " +
 	"5) Commitments due in the next 7 days or overdue: commitments status=open, compared with today's date. " +
-	"6) Next week: bills upcoming_days=7, upcoming_birthdays days=7, and the calendar for the next 7 days. " +
+	"6) Next week: upcoming_birthdays days=7 and the calendar for the next 7 days. " +
 	"7) Packages in transit: packages active_only=true. " +
 	"Cite message ids for each item so the operator can open the source. Say plainly when a section is empty " +
 	"or when a date is only inferred. Finish by calling notify exactly once with a title and a two-line summary " +
 	"of the most important items."
 
 const dailyNudgesPrompt = "Daily nudges for the operator. " + prompts.Untrusted + " Check, using today's date: " +
-	"upcoming_birthdays days=3 (birthdays and anniversaries), bills upcoming_days=7, and commitments " +
+	"upcoming_birthdays days=3 (birthdays and anniversaries) and commitments " +
 	"status=open whose due date is before today (overdue). If NONE of these has an item, reply with the single " +
 	"line 'Nothing to nudge.' and do not call notify. Otherwise call notify exactly once with a short title and " +
 	"a plain list (one line per item: who or what, the date, and the source message id when there is one), " +
@@ -52,7 +51,6 @@ var BuiltinJobs = []Builtin{
 	{"weekly-review", weeklyReviewPrompt},
 	{"daily-nudges", dailyNudgesPrompt},
 	{CalendarCandidatesName, "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty)."},
-	{FXRatesName, "Weekly: fetch the CBTT USD selling rate for the spending ledger (no model run)."},
 	{MediaChannelsName, "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run)."},
 	{MediaSweepName, "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run)."},
 	{MediaThumbnailsName, "Daily: generate missing episode thumbnails for the media library (no model run)."},
@@ -79,7 +77,7 @@ func syncSchedule(ctx context.Context, q db.Querier, job Job, now float64) error
 	return err
 }
 
-var CallableNames = []string{CalendarCandidatesName, FXRatesName, MediaChannelsName, MediaSweepName, MediaThumbnailsName}
+var CallableNames = []string{CalendarCandidatesName, MediaChannelsName, MediaSweepName, MediaThumbnailsName}
 
 func BuiltinPrompt(name string) (string, bool) {
 	for _, b := range BuiltinJobs {
@@ -114,14 +112,15 @@ func EnsureNightly(ctx context.Context, q db.Querier, tz string, now float64) er
 	return err
 }
 
+type have struct {
+	id   int64
+	name string
+}
+
 func EnsureBuiltins(ctx context.Context, q db.Querier, tz string, now float64) error {
 	rows, err := q.QueryContext(ctx, "SELECT id, name FROM jobs WHERE kind = ?", JobBuiltin)
 	if err != nil {
 		return err
-	}
-	type have struct {
-		id   int64
-		name string
 	}
 	existing, err := db.Collect(rows, func(r *sqlRows) (have, error) {
 		var h have
@@ -151,6 +150,18 @@ func EnsureBuiltins(ctx context.Context, q db.Querier, tz string, now float64) e
 			Name: spec.Name, Prompt: spec.Prompt, Schedule: schedule, TZ: tz, Now: now,
 			CreatedBy: Operator, Kind: JobBuiltin, SkipLimits: true,
 		}); err != nil {
+			return err
+		}
+	}
+	return retireBuiltins(ctx, q, existing)
+}
+
+func retireBuiltins(ctx context.Context, q db.Querier, existing []have) error {
+	for _, h := range existing {
+		if _, known := BuiltinPrompt(h.name); known {
+			continue
+		}
+		if _, err := q.ExecContext(ctx, "UPDATE jobs SET cancelled = 1, enabled = 0, next_due = NULL WHERE id = ? AND cancelled = 0", h.id); err != nil {
 			return err
 		}
 	}
