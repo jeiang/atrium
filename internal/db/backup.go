@@ -71,3 +71,24 @@ func Backup(ctx context.Context, src *sql.DB, dest string, key Key) (err error) 
 	_, err = dst.ExecContext(ctx, "PRAGMA journal_mode = DELETE")
 	return err
 }
+
+func Export(ctx context.Context, src *sql.DB, dest string, key Key) (err error) {
+	uri, err := dsn(dest, false, key)
+	if err != nil {
+		return err
+	}
+	conn, err := src.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, conn.Close()) }()
+	if _, err := conn.ExecContext(ctx, "ATTACH DATABASE ? AS export", uri); err != nil {
+		return err
+	}
+	defer func() {
+		_, derr := conn.ExecContext(context.WithoutCancel(ctx), "DETACH DATABASE export")
+		err = errors.Join(err, derr)
+	}()
+	_, err = conn.ExecContext(ctx, "SELECT sqlcipher_export('export')")
+	return err
+}
