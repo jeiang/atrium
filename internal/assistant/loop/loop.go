@@ -610,6 +610,14 @@ func (s *state) reserveUSD(ctx context.Context, next float64, what string) error
 		return RunLimit(fmt.Sprintf("run cost cap: %s, with $%s of $%s already spent; raise %s to continue",
 			what, py.FormatFixed(spent, 2), py.FormatFixed(s.maxCost, 2), budget.RunCapKey(s.run.Model)))
 	}
+	threadSpent, limit, err := budget.ThreadCap(ctx, s.d.Read, s.thread.ID)
+	if err != nil {
+		return err
+	}
+	if threadSpent+next > limit {
+		return RunLimit(fmt.Sprintf("thread cost cap: %s, with $%s of $%s already spent in this thread; raise %s to continue",
+			what, py.FormatFixed(threadSpent, 2), py.FormatFixed(limit, 2), budget.ThreadCapKey))
+	}
 	return nil
 }
 

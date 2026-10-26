@@ -168,6 +168,20 @@ const SpendCapText = "Anthropic spend limit reached: the organization's API usag
 
 func SpendCap() BudgetExceeded { return BudgetExceeded(SpendCapText) }
 
+const ThreadCapKey = "thread_cost_cap_usd"
+
+func ThreadCap(ctx context.Context, q db.Querier, threadID int64) (spent, limit float64, err error) {
+	found, err := settings.Default.Resolve(ctx, q, ThreadCapKey, 0)
+	if err != nil {
+		return 0, 0, err
+	}
+	if limit, err = found.Float(); err != nil {
+		return 0, 0, err
+	}
+	err = q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE thread_id = ?", threadID).Scan(&spent)
+	return spent, limit, err
+}
+
 func registerRunCaps() []settings.Def {
 	var defs []settings.Def
 	for _, id := range pricing.IDs() {
@@ -190,6 +204,10 @@ func init() {
 			Key: UnattendedKey, Module: "assistant", Type: settings.Float, Default: "0.8",
 			Check: settings.Within(0, 1), Peers: assistant.Ordered(false, nil, []string{ChatKey}),
 			Class: settings.Advanced, Scopes: []settings.Scope{settings.Instance},
+		},
+		settings.Def{
+			Key: ThreadCapKey, Module: "assistant", Type: settings.Float, Default: "10",
+			Check: settings.Above(0), Class: settings.Cap, Scopes: []settings.Scope{settings.Instance},
 		},
 	)
 }

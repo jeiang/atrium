@@ -1132,6 +1132,17 @@
         "prompt_system_file": {
           "description": "path of a file holding the value",
           "type": "string"
+        },
+        "thread_cost_cap_usd": {
+          "default": 10,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "thread_cost_cap_usd_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
         }
       },
       "type": "object"

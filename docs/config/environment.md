@@ -112,6 +112,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` | `assistant.prompt_subagent` |
 | `ATRIUM_ASSISTANT_PROMPT_SUMMARY` | `assistant.prompt_summary` |
 | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` | `assistant.prompt_system` |
+| `ATRIUM_ASSISTANT_THREAD_COST_CAP_USD` | `assistant.thread_cost_cap_usd` |
 | `ATRIUM_AUTH_OIDC_ACCESS_DOMAINS` | `auth.oidc_access_domains` |
 | `ATRIUM_AUTH_OIDC_ACCESS_EMAILS` | `auth.oidc_access_emails` |
 | `ATRIUM_AUTH_OIDC_ACCESS_GROUP` | `auth.oidc_access_group` |
