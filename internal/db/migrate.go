@@ -33,6 +33,7 @@ var migrations = []migration{
 	{13, endpointProbes},
 	{14, integrationHealth},
 	{15, mailAccounts},
+	{16, embedIndex},
 }
 
 type ModuleMigration struct {
@@ -590,4 +591,20 @@ func mailAccounts(ctx context.Context, tx *sql.Tx) error {
 		"preset TEXT NOT NULL CHECK (preset IN ('icloud', 'gmail')), login TEXT NOT NULL, "+
 		"enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)), created_at REAL NOT NULL)")
 	return err
+}
+
+func embedIndex(ctx context.Context, tx *sql.Tx) error {
+	for _, stmt := range []string{
+		"CREATE TABLE IF NOT EXISTS embed_index (generation INTEGER PRIMARY KEY CHECK (generation >= 0), " +
+			"state TEXT NOT NULL UNIQUE CHECK (state IN ('active', 'building')), url TEXT NOT NULL DEFAULT '', " +
+			"model TEXT NOT NULL DEFAULT '', dimension INTEGER NOT NULL CHECK (dimension > 0), " +
+			"done INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '', " +
+			"started_at REAL, finished_at REAL)",
+		"INSERT OR IGNORE INTO embed_index (generation, state, dimension) VALUES (0, 'active', 768)",
+	} {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }

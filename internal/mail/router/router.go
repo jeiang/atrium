@@ -11,6 +11,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
@@ -121,8 +122,13 @@ type Neighbor struct {
 }
 
 func NearestFiled(ctx context.Context, q Querier, m *rules.Message, count, knnMax int) ([]Neighbor, error) {
+	idx, err := embed.Active(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	table := idx.MessageTable()
 	var blob []byte
-	err := q.QueryRowContext(ctx, "SELECT embedding FROM message_vec WHERE rowid = ?", m.ID).Scan(&blob)
+	err = q.QueryRowContext(ctx, "SELECT embedding FROM "+table+" WHERE rowid = ?", m.ID).Scan(&blob)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -130,12 +136,12 @@ func NearestFiled(ctx context.Context, q Querier, m *rules.Message, count, knnMa
 		return nil, err
 	}
 	var total int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM message_vec WHERE account = ?", m.Account).Scan(&total); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table+" WHERE account = ?", m.Account).Scan(&total); err != nil {
 		return nil, err
 	}
 	k := max(count*4, 32)
 	for {
-		hits, err := knn(ctx, q, blob, min(k, max(total, 1), knnMax), m.Account)
+		hits, err := knn(ctx, q, table, blob, min(k, max(total, 1), knnMax), m.Account)
 		if err != nil {
 			return nil, err
 		}
@@ -183,9 +189,9 @@ type hit struct {
 	distance float64
 }
 
-func knn(ctx context.Context, q Querier, blob []byte, k int, account string) ([]hit, error) {
+func knn(ctx context.Context, q Querier, table string, blob []byte, k int, account string) ([]hit, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT rowid, distance FROM message_vec WHERE embedding MATCH ? AND k = ? AND account = ?", blob, k, account)
+		"SELECT rowid, distance FROM "+table+" WHERE embedding MATCH ? AND k = ? AND account = ?", blob, k, account)
 	if err != nil {
 		return nil, err
 	}

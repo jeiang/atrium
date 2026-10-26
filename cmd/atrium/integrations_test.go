@@ -59,6 +59,14 @@ func (h *healthServer) notices() []string {
 	return out
 }
 
+func unsetEnv(t *testing.T, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		t.Setenv(name, "")
+		_ = os.Unsetenv(name)
+	}
+}
+
 type integrationSite struct {
 	t      *testing.T
 	dir    string

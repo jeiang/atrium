@@ -7,8 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"slices"
 	"strings"
@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
@@ -82,11 +83,18 @@ func Endpoints(ctx context.Context, q Querier) ([]Endpoint, error) {
 	return out, nil
 }
 
-func withKeys(ctx context.Context, endpoints []Endpoint) context.Context {
+func Integration(kind string) string { return "mail_" + kind }
+
+func withEndpoints(ctx context.Context, q Querier, endpoints []Endpoint) (context.Context, error) {
+	out := ctx
 	for _, e := range endpoints {
-		ctx = httpx.WithBearer(ctx, e.URL, e.key)
+		client, err := transport.For(ctx, readOnly{q}, Integration(e.Kind), config.HTTPTimeout(config.OS))
+		if err != nil {
+			return ctx, err
+		}
+		out = httpx.WithEndpoint(out, e.URL, e.key, client)
 	}
-	return ctx
+	return out, nil
 }
 
 type ProbeResult struct {
@@ -153,11 +161,35 @@ func probeEmbed(ctx context.Context, e Endpoint) (string, int) {
 	if json.Unmarshal(raw, &reply) != nil || len(reply.Data) != 1 || len(reply.Data[0].Embedding) == 0 {
 		return "the reply has no embedding", 0
 	}
-	dim := len(reply.Data[0].Embedding)
-	if dim != config.EmbedDim {
-		return fmt.Sprintf("the embedding has %d dimensions; the index stores %d", dim, config.EmbedDim), dim
+	return "", len(reply.Data[0].Embedding)
+}
+
+func probe(ctx context.Context, e Endpoint) ProbeResult {
+	res := ProbeResult{Kind: e.Kind, URL: e.URL, Model: e.Model, Hosted: Hosted(e.URL)}
+	if e.URL == "" {
+		res.Reason = "no URL configured"
+	} else {
+		res.Models = discover(ctx, e.URL)
+		if e.Kind == EndpointChat {
+			res.Reason, res.Dimension = probeChat(ctx, e)
+		} else {
+			res.Reason, res.Dimension = probeEmbed(ctx, e)
+		}
 	}
-	return "", dim
+	res.OK = res.Reason == ""
+	if res.Models == nil {
+		res.Models = []string{}
+	}
+	return res
+}
+
+func recordProbe(ctx context.Context, d *db.DB, e Endpoint, res ProbeResult, now float64) error {
+	models, _ := json.Marshal(res.Models)
+	_, err := d.Write.ExecContext(ctx, "INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES (?, ?, ?, ?, ?, ?, ?) "+
+		"ON CONFLICT(kind) DO UPDATE SET fingerprint = excluded.fingerprint, ok = excluded.ok, reason = excluded.reason, "+
+		"dimension = excluded.dimension, models = excluded.models, probed_at = excluded.probed_at",
+		e.Kind, e.fingerprint(), res.OK, res.Reason, nullDim(res.Dimension), string(models), now)
+	return err
 }
 
 func ProbeEndpoints(ctx context.Context, d *db.DB, now float64) ([]ProbeResult, error) {
@@ -165,34 +197,33 @@ func ProbeEndpoints(ctx context.Context, d *db.DB, now float64) ([]ProbeResult, 
 	if err != nil {
 		return nil, err
 	}
-	ctx = withKeys(ctx, endpoints)
+	if ctx, err = withEndpoints(ctx, d.Read, endpoints); err != nil {
+		return nil, err
+	}
 	out := make([]ProbeResult, 0, len(endpoints))
 	for _, e := range endpoints {
-		res := ProbeResult{Kind: e.Kind, URL: e.URL, Model: e.Model, Hosted: Hosted(e.URL)}
-		if e.URL == "" {
-			res.Reason = "no URL configured"
-		} else {
-			res.Models = discover(ctx, e.URL)
-			if e.Kind == EndpointChat {
-				res.Reason, res.Dimension = probeChat(ctx, e)
-			} else {
-				res.Reason, res.Dimension = probeEmbed(ctx, e)
-			}
-		}
-		res.OK = res.Reason == ""
-		if res.Models == nil {
-			res.Models = []string{}
-		}
-		models, _ := json.Marshal(res.Models)
-		if _, err := d.Write.ExecContext(ctx, "INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES (?, ?, ?, ?, ?, ?, ?) "+
-			"ON CONFLICT(kind) DO UPDATE SET fingerprint = excluded.fingerprint, ok = excluded.ok, reason = excluded.reason, "+
-			"dimension = excluded.dimension, models = excluded.models, probed_at = excluded.probed_at",
-			e.Kind, e.fingerprint(), res.OK, res.Reason, nullDim(res.Dimension), string(models), now); err != nil {
+		res := probe(ctx, e)
+		if err := recordProbe(ctx, d, e, res, now); err != nil {
 			return nil, err
 		}
 		out = append(out, res)
 	}
 	return out, nil
+}
+
+func ProbeCandidate(ctx context.Context, d *db.DB, kind, url, key string, client *http.Client, now float64) (ProbeResult, error) {
+	endpoints, err := Endpoints(ctx, d.Read)
+	if err != nil {
+		return ProbeResult{}, err
+	}
+	i := slices.IndexFunc(endpoints, func(e Endpoint) bool { return e.Kind == kind })
+	e := endpoints[i]
+	e.URL, e.key = url, key
+	res := probe(httpx.WithEndpoint(ctx, url, key, client), e)
+	if res.OK {
+		err = recordProbe(ctx, d, e, res, now)
+	}
+	return res, err
 }
 
 func nullDim(n int) any {

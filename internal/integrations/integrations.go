@@ -34,6 +34,7 @@ var ErrAuth = errors.New("credentials refused")
 type Conn struct {
 	URL, Secret string
 	HTTP        *http.Client
+	DB          *db.DB
 }
 
 type Integration struct {
@@ -158,18 +159,18 @@ func Records(ctx context.Context, q db.Querier) ([]Record, error) {
 	return out, nil
 }
 
-func current(ctx context.Context, q db.Querier, i Integration) (Conn, error) {
-	u, err := text(ctx, q, i.URLKey)
+func current(ctx context.Context, d *db.DB, i Integration) (Conn, error) {
+	u, err := text(ctx, d.Read, i.URLKey)
 	if err != nil {
 		return Conn{}, err
 	}
 	var secret string
 	if i.SecretKey != "" {
-		if secret, err = secrets.NewIn(nil, q, nil).Value(ctx, i.SecretKey); err != nil {
+		if secret, err = secrets.NewIn(nil, d.Read, nil).Value(ctx, i.SecretKey); err != nil {
 			return Conn{}, err
 		}
 	}
-	return Conn{URL: strings.TrimRight(u, "/"), Secret: secret}, nil
+	return Conn{URL: strings.TrimRight(u, "/"), Secret: secret, DB: d}, nil
 }
 
 func run(ctx context.Context, q db.Querier, i Integration, c Conn) (state, reason string, expires *time.Time, err error) {
@@ -242,7 +243,7 @@ func Check(ctx context.Context, d *db.DB, env config.Env, name string, now float
 	if !ok {
 		return "", Unknown(name)
 	}
-	c, err := current(ctx, d.Read, i)
+	c, err := current(ctx, d, i)
 	if err != nil {
 		return "", err
 	}
@@ -287,7 +288,7 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 	if !ok {
 		return Unknown(name)
 	}
-	c, err := current(ctx, d.Read, i)
+	c, err := current(ctx, d, i)
 	if err != nil {
 		return err
 	}

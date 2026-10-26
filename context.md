@@ -59,11 +59,13 @@ not claims about the running application.
   and its tokens are recorded as a separate usage row priced at the model
   that served them. Mail classification and embeddings
   use separately configured OpenAI-compatible endpoints, local or hosted,
-  each with an optional Bearer key; `atrium endpoints probe` records
-  whether each works and holds mail in needs-settings while the current
-  endpoint's probe fails. Connected content sent to a hosted model leaves
+  each with an optional Bearer key, CA bundle and proxy; `atrium endpoints
+  probe` and the Integrations Test record whether each works, and mail is
+  held in needs-settings while the current endpoint's probe fails. Connected content sent to a hosted model leaves
   the host; privacy does not mean that inference is necessarily local.
-  The embed dimension is still fixed at 768.
+  The embedding index records its embedder and dimension; changing the
+  embedder re-embeds in the background under `atrium serve` and swaps the
+  index when complete.
 - ntfy, qBittorrent (API key) and TMDB (read token) are connection records on the Integrations settings
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-integration CA bundle and proxy. Certificate verification
