@@ -109,6 +109,7 @@
         if [ "$status" -ne 0 ]; then
           echo "=== go-test failure summary ==="
           grep -E -- '^(--- FAIL|FAIL[[:space:]]|panic:)|DATA RACE|^[[:space:]]+[A-Za-z0-9_]+_test\.go:[0-9]+:' "$log" | sort -u
+          awk 'race && /^==================$/ { exit } race && (/^[A-Z]/ || /jeiang\/atrium/) { sub(/ \+0x[0-9a-f]+$/, ""); print } /WARNING: DATA RACE/ { race = 1 }' "$log" | head -n 22
           exit 1
         fi
       '';
