@@ -7,7 +7,12 @@ not claims about the running application.
 ## Current application
 
 - One operator per instance. The application is a Go CLI and web service
-  with embedded assets, packaged and deployed through a NixOS module.
+  with embedded assets, packaged and deployed through a NixOS module. The
+  module takes typed deployment options, application settings rendered to
+  TOML, and secret settings as files delivered through systemd
+  credentials to every unit and `atrium-run`. Mail account, Notion,
+  Grafana, ntfy and TMDB credentials still come from environment files
+  until they become settings.
 - The application brings together mail, calendar, contacts, Notion,
   media, notifications, and read-only Grafana access. The assistant adds
   chat, files, projects, skills, scheduled work, and research subagents.
