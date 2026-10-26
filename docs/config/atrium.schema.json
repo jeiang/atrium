@@ -1271,6 +1271,13 @@
     "calendar": {
       "additionalProperties": false,
       "properties": {
+        "calendar_account": {
+          "type": "string"
+        },
+        "calendar_account_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "calendar_dir": {
           "type": "string"
         },

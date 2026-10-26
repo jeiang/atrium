@@ -38,6 +38,7 @@ var droppedNames = [...]struct{ old, key string }{
 	{"ICLOUD_MAIL_USERNAME", KeyMailAccountsFile},
 	{"GMAIL_ADDRESS", KeyMailAccountsFile},
 	{"GMAIL_APP_PASSWORD", KeyMailAccountsFile},
+	{"ICLOUD_APP_PASSWORD", KeyMailAccountsFile},
 }
 
 func DroppedEnv(env Env, reg *settings.Registry) []Dropped {

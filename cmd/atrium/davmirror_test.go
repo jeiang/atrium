@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
@@ -105,7 +106,7 @@ func TestContactsSyncMirrorsTheAddressBookForLookup(t *testing.T) {
 	}
 }
 
-func TestCalendarSyncMirrorsEventsAndBadCredentialsChangeNothing(t *testing.T) {
+func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothing(t *testing.T) {
 	dir, srv := davFixture(t)
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)
 	if got := runApp("calendar", "sync"); got.code != cli.ExitOK {
@@ -118,7 +119,8 @@ func TestCalendarSyncMirrorsEventsAndBadCredentialsChangeNothing(t *testing.T) {
 	}
 
 	srv.RemoveObject(caldavtest.CalendarPath(0) + "dentist.ics")
-	t.Setenv("ICLOUD_APP_PASSWORD", "wrong")
+	t.Setenv("ICLOUD_APP_PASSWORD", davPassword)
+	t.Setenv(settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"icloud", "icloud", "operator@icloud.invalid", "wrong", false}))
 	if got := runApp("calendar", "sync"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "401") {
 		t.Fatalf("sync with a bad password: %d %q", got.code, got.stderr)
 	}
@@ -129,7 +131,14 @@ func TestCalendarSyncMirrorsEventsAndBadCredentialsChangeNothing(t *testing.T) {
 		t.Errorf("caldav failed rows = %d, want 1", failed)
 	}
 
-	t.Setenv("ICLOUD_APP_PASSWORD", davPassword)
+	t.Setenv(settingEnv(calendar.AppleIDKey), "")
+	t.Setenv(settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir,
+		mailAccount{"work", "icloud", "work@icloud.invalid", "wrong", false},
+		mailAccount{"home", "icloud", "operator@icloud.invalid", davPassword, false}))
+	if got := runApp("calendar", "sync"); !strings.Contains(got.stderr, "needs-settings") || !strings.Contains(got.stderr, "several iCloud mail accounts; set calendar_account") {
+		t.Fatalf("sync with two iCloud accounts and no calendar_account was not held for settings: %d %q", got.code, got.stderr)
+	}
+	t.Setenv(settingEnv(calendar.AccountKey), "home")
 	if got := runApp("calendar", "sync"); got.code != cli.ExitOK {
 		t.Fatalf("calendar sync: %d %q", got.code, got.stderr)
 	}

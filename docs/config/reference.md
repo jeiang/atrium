@@ -148,6 +148,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
+| `calendar_account` | string | none | ui | `ATRIUM_CALENDAR_CALENDAR_ACCOUNT` |
 | `calendar_dir` | string | none | advanced | `ATRIUM_CALENDAR_CALENDAR_DIR` |
 | `candidate_draft_limit` | int | `10` | advanced | `ATRIUM_CALENDAR_CANDIDATE_DRAFT_LIMIT` |
 | `candidate_scan_limit` | int | `50` | advanced | `ATRIUM_CALENDAR_CANDIDATE_SCAN_LIMIT` |

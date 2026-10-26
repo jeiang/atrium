@@ -43,8 +43,12 @@ func credentials(ctx context.Context, p module.Probe) (string, error) {
 		}
 		icloud.Value = ""
 	}
-	password, _ := p.Env("ICLOUD_APP_PASSWORD")
-	if strings.TrimSpace(icloud.Value) != "" && strings.TrimSpace(password) != "" {
+	account, err := p.Settings.Resolve(ctx, p.Q, calendar.AccountKey, 0)
+	if err != nil {
+		return "", err
+	}
+	_, icloudErr := calendar.ICloudLogin(calendar.Settings{AppleID: icloud.Value, Account: strings.TrimSpace(account.Value)})
+	if icloudErr == nil {
 		return "", nil
 	}
 
@@ -64,5 +68,5 @@ func credentials(ctx context.Context, p module.Probe) (string, error) {
 	if strings.TrimSpace(google.Value) != "" && strings.TrimSpace(secret) != "" && strings.TrimSpace(refresh) != "" {
 		return "", nil
 	}
-	return "an iCloud CalDAV login or Google Calendar credentials are required", nil
+	return "an iCloud CalDAV login or Google Calendar credentials are required (" + icloudErr.Error() + ")", nil
 }

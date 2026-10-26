@@ -10,9 +10,9 @@ not claims about the running application.
   with embedded assets, packaged and deployed through a NixOS module. The
   module takes typed deployment options, application settings rendered to
   TOML, and secret settings as files delivered through systemd
-  credentials to every unit and `atrium-run`. The calendar and contacts
-  iCloud app password and the ntfy token still come from environment
-  files until they become settings.
+  credentials to every unit and `atrium-run`. The ntfy token still comes
+  from an environment file until it becomes a setting. Calendar and
+  contacts sign in with an iCloud mail account's app password.
 - The application brings together mail, calendar, contacts, Notion,
   media, notifications, and read-only Grafana access. The assistant adds
   chat, files, projects, skills, scheduled work, and research subagents.
@@ -177,8 +177,6 @@ not claims about the running application.
 
 ## Planned capabilities
 
-- Calendar and contacts sign in with an iCloud mail account instead of
-  `ICLOUD_APP_PASSWORD`.
 - Model, effort and context controls on the new-thread composer.
 - Independent instances for other operators, without owner-specific source
   changes.

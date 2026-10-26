@@ -49,7 +49,7 @@ func encodeICS(cal *ical.Calendar) (string, error) {
 }
 
 func findICloud(ctx context.Context, env config.Env, set Settings, uid string) (*icloudObject, error) {
-	client, calendars, err := icloudCalendars(ctx, env, set)
+	client, calendars, err := icloudCalendars(ctx, set)
 	if err != nil {
 		return nil, err
 	}

@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
@@ -41,7 +40,7 @@ func syncCommand() *cli.Command {
 			if err != nil {
 				return davmirror.Stats{}, err
 			}
-			return calendar.SyncContactsMirror(ctx, config.OS, set, dir)
+			return calendar.SyncContactsMirror(ctx, set, dir)
 		})
 }
 
