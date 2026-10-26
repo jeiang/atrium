@@ -1,10 +1,12 @@
 package db
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 )
 
@@ -95,35 +97,9 @@ func VirtualTables(ctx context.Context, q Querier) ([]VirtualTable, error) {
 }
 
 func SpotCheckKNN(ctx context.Context, q Querier, t VirtualTable) error {
-	if t.Kind != "vec0" || t.Rows == 0 {
-		return nil
-	}
-	rows, err := q.QueryContext(ctx, "PRAGMA table_info("+quoteIdent(t.Name)+")")
-	if err != nil {
+	column, err := vectorColumn(ctx, q, t)
+	if err != nil || column == "" {
 		return err
-	}
-	columns, err := Collect(rows, func(r *sql.Rows) (string, error) {
-		var cid, notnull, pk int
-		var name, typ string
-		var dflt sql.NullString
-		err := r.Scan(&cid, &name, &typ, &notnull, &dflt, &pk)
-		if err != nil || !strings.HasPrefix(strings.ToLower(typ), "float") {
-			return "", err
-		}
-		return name, nil
-	})
-	if err != nil {
-		return err
-	}
-	column := ""
-	for _, c := range columns {
-		if c != "" {
-			column = c
-			break
-		}
-	}
-	if column == "" {
-		return nil
 	}
 	var rowid int64
 	var vector []byte
@@ -139,6 +115,67 @@ func SpotCheckKNN(ctx context.Context, q Querier, t VirtualTable) error {
 		return fmt.Errorf("knn %s: nearest neighbour of row %d is row %d at distance %g", t.Name, rowid, found, distance)
 	}
 	return nil
+}
+
+func Neighbours(ctx context.Context, q Querier, t VirtualTable, k int) ([]int64, error) {
+	column, err := vectorColumn(ctx, q, t)
+	if err != nil || column == "" {
+		return nil, err
+	}
+	var vector []byte
+	if err := q.QueryRowContext(ctx, "SELECT "+quoteIdent(column)+" FROM "+quoteIdent(t.Name)+" ORDER BY rowid LIMIT 1").Scan(&vector); err != nil {
+		return nil, fmt.Errorf("knn %s: %w", t.Name, err)
+	}
+	rows, err := q.QueryContext(ctx, "SELECT rowid, distance FROM "+quoteIdent(t.Name)+" WHERE "+quoteIdent(column)+" MATCH ? AND k = ?", vector, k)
+	if err != nil {
+		return nil, fmt.Errorf("knn %s: %w", t.Name, err)
+	}
+	type hit struct {
+		id       int64
+		distance float64
+	}
+	hits, err := Collect(rows, func(r *sql.Rows) (hit, error) {
+		var h hit
+		return h, r.Scan(&h.id, &h.distance)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("knn %s: %w", t.Name, err)
+	}
+	slices.SortFunc(hits, func(a, b hit) int { return cmp.Or(cmp.Compare(a.distance, b.distance), cmp.Compare(a.id, b.id)) })
+	ids := make([]int64, len(hits))
+	for i, h := range hits {
+		ids[i] = h.id
+	}
+	return ids, nil
+}
+
+func vectorColumn(ctx context.Context, q Querier, t VirtualTable) (string, error) {
+	if t.Kind != "vec0" || t.Rows == 0 {
+		return "", nil
+	}
+	rows, err := q.QueryContext(ctx, "PRAGMA table_info("+quoteIdent(t.Name)+")")
+	if err != nil {
+		return "", err
+	}
+	columns, err := Collect(rows, func(r *sql.Rows) (string, error) {
+		var cid, notnull, pk int
+		var name, typ string
+		var dflt sql.NullString
+		err := r.Scan(&cid, &name, &typ, &notnull, &dflt, &pk)
+		if err != nil || !strings.HasPrefix(strings.ToLower(typ), "float") {
+			return "", err
+		}
+		return name, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	for _, c := range columns {
+		if c != "" {
+			return c, nil
+		}
+	}
+	return "", nil
 }
 
 func SchemaVersion(ctx context.Context, q Querier) (int, error) {

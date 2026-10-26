@@ -25,6 +25,7 @@ func Command() *cli.Command {
 	return &cli.Command{
 		Name: "db",
 		Commands: []*cli.Command{
+			{Name: "encrypt", Help: "encrypt a plaintext database with the configured key into a fresh file, verify it and replace the original; stop the atrium units and timers that use the database first", Setup: s.encrypt},
 			{Name: "rekey", Help: "re-encrypt the database under a new key read from a file or standard input; stop the atrium units and timers that use the database first", Setup: s.rekey},
 			{Name: "backup", Help: "write a consistent copy of the database, encrypted like the source", Setup: s.backup},
 			{Name: "shell", Help: "run SQL statements from standard input against the database", Setup: s.shell},
