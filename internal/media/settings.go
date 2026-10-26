@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -43,6 +44,8 @@ const (
 	KeySubtitleExts      = "media_subtitle_extensions"
 	KeyTorrentUploadCap  = "media_torrent_upload_bytes"
 	KeyLinkKey           = "link_key"
+	KeyQbitAPIKey        = "media_qbittorrent_api_key"
+	KeyTMDBToken         = "media_tmdb_token"
 )
 
 const (
@@ -87,6 +90,8 @@ func init() {
 		adv(KeySubtitleExts, settings.String, defaultSubtitleExt, extensionsCheck),
 		between(KeyTorrentUploadCap, "1048576", 1024, 32<<20),
 		settings.Def{Key: KeyLinkKey, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, Generated: true, Check: settings.NonEmpty},
+		settings.Def{Key: KeyQbitAPIKey, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
+		settings.Def{Key: KeyTMDBToken, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
 	)
 }
 
@@ -173,14 +178,15 @@ type Settings struct {
 	Tuning
 	Root      string
 	QbitURL   string
+	QbitKey   string
 	MoviesURL string
 	TVURL     string
 	PublicURL string
-	TMDBKey   string
+	TMDBToken string
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
-	out := Settings{PublicURL: config.PublicURL(env), TMDBKey: config.TMDBKey(env)}
+	out := Settings{PublicURL: config.PublicURL(env)}
 	var failure error
 	resolve := func(key string) settings.Resolved {
 		if failure != nil {
@@ -251,6 +257,13 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 	if failure != nil {
 		return Settings{}, failure
 	}
+	store := secrets.NewIn(nil, q, nil)
+	if out.QbitKey, failure = store.Value(ctx, KeyQbitAPIKey); failure != nil {
+		return Settings{}, failure
+	}
+	if out.TMDBToken, failure = store.Value(ctx, KeyTMDBToken); failure != nil {
+		return Settings{}, failure
+	}
 	return out, nil
 }
 
@@ -273,5 +286,5 @@ func (s Settings) Qbit() (*Qbit, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewQbit(base, s.Tuning), nil
+	return NewQbit(base, s.QbitKey, s.Tuning), nil
 }

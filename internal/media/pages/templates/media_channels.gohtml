@@ -61,7 +61,7 @@
   </ul>
   {{end}}
   {{else}}
-  <p class="text-xs text-muted-foreground">TMDB_API_KEY is not set: enter the IMDb id directly.</p>
+  <p class="text-xs text-muted-foreground">No TMDB read token is set: enter the IMDb id directly.</p>
   {{end}}
 </section>
 
@@ -94,4 +94,5 @@
   </div>
   <div id="preview" hx-post="/media/channels/preview" hx-include="#new-channel" hx-trigger="{{if $form.imdb}}load, {{end}}input changed delay:500ms from:#pattern, change from:#case, change from:#imdb" hx-indicator="#preview-spinner"></div>
 </form>
+{{template "tmdb_attribution"}}
 {{end}}
