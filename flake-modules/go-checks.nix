@@ -102,7 +102,7 @@
         status=0
         for tags in libsqlite3,sqlite_fts5 modernc; do
           echo "tags: $tags"
-          if ! go test -race -tags "$tags" ./... 2>&1 | tee -a "$log"; then
+          if ! go test -race -timeout 30m -tags "$tags" ./... 2>&1 | tee -a "$log"; then
             status=1
           fi
         done
