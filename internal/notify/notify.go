@@ -20,9 +20,10 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
+	"github.com/jeiang/atrium/internal/secrets"
 )
 
-const notConfigured = "ntfy not configured (" + KeyURL + " and " + KeyTopic + ")"
+const notConfigured = "ntfy not configured (" + KeyURL + ")"
 
 var (
 	control    = rx.MustCompile(`[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]`, 0)
@@ -37,6 +38,7 @@ type Notification struct {
 	ThreadID   *int64     `json:"thread_id"`
 	RunID      *int64     `json:"run_id"`
 	ThreadLink *string    `json:"thread_link"`
+	Channel    string     `json:"channel"`
 	Delivered  store.Flag `json:"delivered"`
 	Error      *string    `json:"error"`
 }
@@ -47,8 +49,9 @@ type Message struct {
 	RunID       int64
 	ThreadLink  *string
 	Now         func() float64
-	Topic       string
+	Channel     string
 	Click       string
+	Priority    int
 }
 
 type Sent struct {
@@ -87,27 +90,50 @@ func isDigits(s string) bool {
 	return s != "" && strings.IndexFunc(s, func(r rune) bool { return !unicode.Is(unicode.Nd, r) }) < 0
 }
 
-func Deliver(ctx context.Context, q db.Querier, env config.Env, title, body, topic, click string) (bool, string, error) {
+type delivery struct {
+	channel, title, body, click string
+	priority                    int
+}
+
+func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (bool, string, error) {
 	base, err := text(ctx, q, KeyURL)
 	if err != nil {
 		return false, "", err
 	}
-	if topic == "" {
-		if topic, err = text(ctx, q, KeyTopic); err != nil {
-			return false, "", err
-		}
+	if m.channel == "" {
+		m.channel = Assistant
 	}
-	if base == "" || topic == "" {
+	if !known(m.channel) {
+		return false, "", ChannelError("unknown channel " + m.channel)
+	}
+	if base == "" {
 		return false, notConfigured, nil
+	}
+	c, err := GetChannel(ctx, q, m.channel)
+	if err != nil {
+		return false, "", err
 	}
 	timeout, err := timeoutOf(ctx, q)
 	if err != nil {
 		return false, "", err
 	}
-	token := config.NtfyToken(env)
-	payload := py.Dict{{Key: "topic", Value: topic}, {Key: "title", Value: title}, {Key: "message", Value: body}}
-	if click != "" {
-		payload = append(payload, py.Pair{Key: "click", Value: click})
+	token, err := secrets.NewIn(nil, q, nil).Value(ctx, TokenKey(m.channel))
+	if err != nil {
+		return false, "", err
+	}
+	if token == "" {
+		token = config.NtfyToken(env)
+	}
+	title, body := m.title, m.body
+	if !c.FullText() {
+		title, body = privateTitle, privateBody
+	}
+	payload := py.Dict{{Key: "topic", Value: c.Topic}, {Key: "title", Value: title}, {Key: "message", Value: body}}
+	if m.click != "" {
+		payload = append(payload, py.Pair{Key: "click", Value: m.click})
+	}
+	if m.priority >= 1 && m.priority <= 5 {
+		payload = append(payload, py.Pair{Key: "priority", Value: int64(m.priority)})
 	}
 	target, err := url.Parse(base)
 	if err != nil {
@@ -141,6 +167,73 @@ func Deliver(ctx context.Context, q db.Querier, env config.Env, title, body, top
 		return false, fmt.Sprintf("ntfy %d", resp.StatusCode), nil
 	}
 	return true, "", nil
+}
+
+func deliverAndRecord(ctx context.Context, q db.Querier, env config.Env, m delivery) (bool, string, error) {
+	delivered, failure, err := deliver(ctx, q, env, m)
+	if err != nil || failure == notConfigured {
+		return delivered, failure, err
+	}
+	if m.channel == "" {
+		m.channel = Assistant
+	}
+	failures, err := recordDelivery(ctx, q, m.channel, failure)
+	if err != nil {
+		return delivered, failure, err
+	}
+	if failures == FailingAfter && m.channel != System {
+		_, err = Send(ctx, q, env, Message{Channel: System, Priority: 4, Title: "atrium: notifications failing",
+			Body: fmt.Sprintf("The %s channel failed %d times in a row: %s", m.channel, failures, failure)})
+	}
+	return delivered, failure, err
+}
+
+func Resend(ctx context.Context, q db.Querier, env config.Env, id int64) (Sent, error) {
+	var title, body string
+	var link, channel, click *string
+	var priority *int64
+	var delivered bool
+	err := q.QueryRowContext(ctx, "SELECT title, body, thread_link, channel, click, priority, delivered FROM notifications WHERE id = ?", id).
+		Scan(&title, &body, &link, &channel, &click, &priority, &delivered)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Sent{}, ChannelError("no notification " + fmt.Sprint(id))
+	}
+	if err != nil {
+		return Sent{}, err
+	}
+	if delivered {
+		return Sent{ID: id, Delivered: true}, nil
+	}
+	message := body
+	if link != nil && *link != "" {
+		message = body + "\n\nThread: " + *link
+	}
+	m := delivery{channel: deref(channel), title: title, body: message, click: deref(click)}
+	if priority != nil {
+		m.priority = int(*priority)
+	}
+	ok, failure, err := deliverAndRecord(ctx, q, env, m)
+	if err != nil {
+		return Sent{}, err
+	}
+	if _, err := q.ExecContext(ctx, "UPDATE notifications SET delivered = ?, error = ? WHERE id = ?", ok, nullable(failure), id); err != nil {
+		return Sent{}, err
+	}
+	return Sent{ID: id, Delivered: ok, Error: failure}, nil
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func nullable(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func newClient(timeout time.Duration) *http.Client {
@@ -209,8 +302,8 @@ func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, e
 	if now == nil {
 		now = func() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 	}
-	res, err := q.ExecContext(ctx, "INSERT INTO notifications (ts, title, body, thread_id, run_id, thread_link) VALUES (?, ?, ?, ?, ?, ?)",
-		now(), title, body, nullID(m.ThreadID), nullID(m.RunID), linkValue)
+	res, err := q.ExecContext(ctx, "INSERT INTO notifications (ts, title, body, thread_id, run_id, thread_link, channel, click, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		now(), title, body, nullID(m.ThreadID), nullID(m.RunID), linkValue, nullable(m.Channel), nullable(m.Click), nullID(int64(m.Priority)))
 	if err != nil {
 		return Sent{}, err
 	}
@@ -218,7 +311,7 @@ func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, e
 	if err != nil {
 		return Sent{}, err
 	}
-	delivered, failure, err := Deliver(ctx, q, env, title, message, m.Topic, m.Click)
+	delivered, failure, err := deliverAndRecord(ctx, q, env, delivery{channel: m.Channel, title: title, body: message, click: m.Click, priority: m.Priority})
 	if err != nil {
 		return Sent{}, err
 	}
@@ -240,7 +333,7 @@ func nullID(id int64) any {
 }
 
 func Recent(ctx context.Context, q db.Querier, limit int) ([]Notification, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, ts, title, body, thread_id, run_id, thread_link, delivered, error FROM notifications ORDER BY id DESC LIMIT ?", limit)
+	rows, err := q.QueryContext(ctx, "SELECT id, ts, title, body, thread_id, run_id, thread_link, COALESCE(channel, ''), delivered, error FROM notifications ORDER BY id DESC LIMIT ?", limit)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +342,7 @@ func Recent(ctx context.Context, q db.Querier, limit int) ([]Notification, error
 		var threadID, runID sql.NullInt64
 		var link, failure sql.NullString
 		var delivered int64
-		if err := r.Scan(&n.ID, &n.TS, &n.Title, &n.Body, &threadID, &runID, &link, &delivered, &failure); err != nil {
+		if err := r.Scan(&n.ID, &n.TS, &n.Title, &n.Body, &threadID, &runID, &link, &n.Channel, &delivered, &failure); err != nil {
 			return n, err
 		}
 		n.Delivered = store.Flag(delivered != 0)

@@ -1,19 +1,68 @@
 {{define "title"}}Notifications · Settings{{end}}
 {{define "heading"}}Settings · Notifications{{end}}
-{{define "content"}}
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
 {{template "settings_tabs" "notifications"}}
-{{if .Data.notifications}}
+{{with $d.error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
+{{if $d.ntfy_sh}}<p class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning" data-ntfy-sh>{{icon "circle-alert"}}<span>On ntfy.sh anyone who knows a topic name can read it unless the topic is reserved. Treat each topic as a secret.</span></p>{{end}}
+
+<section class="flex flex-col gap-3" aria-labelledby="channels-h">
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <h2 id="channels-h" class="text-sm font-medium">Channels</h2>
+    {{if $d.url}}<form method="post" action="/settings/notifications/probe"><input type="hidden" name="csrf_token" value="{{$csrf}}"><button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "lock"}}Check privacy</button></form>{{end}}
+  </div>
+  <div class="grid gap-3 md:grid-cols-3">
+    {{range $d.channels}}
+    <div class="flex flex-col gap-2 rounded-lg border bg-card p-4 text-sm" data-channel="{{.name}}">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="font-medium capitalize">{{.name}}</span>
+        <span class="badge" data-variant="{{if eq .privacy "private"}}secondary{{else}}outline{{end}}">{{.privacy}}</span>
+        {{if ge .failures 3}}<span class="badge" data-variant="destructive">failing</span>{{else if .last_ok_at}}<span class="badge" data-variant="secondary">ok</span>{{end}}
+        {{if .token}}<span class="badge" data-variant="outline">token</span>{{end}}
+      </div>
+      <code class="break-all font-mono text-xs">{{if .subscribe}}{{.subscribe}}{{else}}{{.topic}}{{end}}</code>
+      <p class="text-xs text-muted-foreground">{{if .full_text}}Full text{{else}}Titles hidden{{end}}{{with .last_error}} · {{.}}{{end}}</p>
+      <form method="post" action="/settings/notifications/channels/{{.name}}/content" class="flex items-end gap-2">
+        <input type="hidden" name="csrf_token" value="{{$csrf}}">
+        <label class="sr-only" for="content-{{.name}}">Content</label>
+        <select id="content-{{.name}}" name="content" class="text-xs">
+          {{$c := .content}}{{range (list "auto" "full" "title")}}<option value="{{.}}"{{if eq . $c}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button>
+      </form>
+      <div class="flex flex-wrap gap-2">
+        <form method="post" action="/settings/notifications/channels/{{.name}}/test"><input type="hidden" name="csrf_token" value="{{$csrf}}"><button type="submit" class="btn" data-size="sm">{{icon "send"}}Test</button></form>
+        <form method="post" action="/settings/notifications/channels/{{.name}}/reset"><input type="hidden" name="csrf_token" value="{{$csrf}}"><button type="submit" class="btn" data-size="sm" data-variant="destructive" data-confirm-submit="Reset the {{.name}} channel? Its token is revoked and it gets a new topic; subscribers must resubscribe.">{{icon "trash-2"}}Reset</button></form>
+      </div>
+    </div>
+    {{end}}
+  </div>
+</section>
+
+{{if $d.url}}
+<form method="post" action="/settings/notifications/account" class="flex max-w-xl flex-col gap-3 rounded-lg border p-4" autocomplete="off">
+  <input type="hidden" name="csrf_token" value="{{$csrf}}">
+  <h2 class="text-sm font-medium">ntfy account</h2>
+  <div class="grid gap-3 sm:grid-cols-2">
+    <div role="group" class="field"><label for="ntfy-user">Username</label><input id="ntfy-user" name="username" type="text" required></div>
+    <div role="group" class="field"><label for="ntfy-password">Password</label><input id="ntfy-password" name="password" type="password" autocomplete="new-password" required></div>
+  </div>
+  <button type="submit" class="btn self-start" data-size="sm"{{if not $d.encrypted}} disabled title="Encrypt the database first"{{end}}>{{icon "link"}}Connect</button>
+</form>
+{{end}}
+
+{{if $d.notifications}}
 <div class="table-container rounded-lg border bg-card">
   <table class="table">
-    <caption class="sr-only">Notifications sent by the assistant, newest first</caption>
-    <thead><tr><th scope="col">When</th><th scope="col">Notification</th><th scope="col">Thread</th><th scope="col">Push</th></tr></thead>
+    <caption class="sr-only">Notifications, newest first</caption>
+    <thead><tr><th scope="col">When</th><th scope="col">Notification</th><th scope="col">Channel</th><th scope="col">Thread</th><th scope="col">Push</th></tr></thead>
     <tbody>
-      {{range .Data.notifications}}
+      {{range $d.notifications}}
       <tr>
         <td class="whitespace-nowrap text-muted-foreground">{{ts .ts}}</td>
         <td><span class="font-medium">{{.title}}</span><br><span class="whitespace-pre-line text-muted-foreground">{{.body}}</span></td>
+        <td class="capitalize">{{or .channel "assistant"}}</td>
         <td>{{if .thread_link}}<a class="underline underline-offset-4" href="{{.thread_link}}">open</a>{{end}}</td>
-        <td>{{if .delivered}}<span class="badge" data-variant="secondary">Sent</span>{{else}}<span class="badge" data-variant="outline" title="{{or .error ""}}">Local only</span>{{end}}</td>
+        <td>{{if .delivered}}<span class="badge" data-variant="secondary">Sent</span>{{else}}<form method="post" action="/settings/notifications/{{.id}}/resend" class="flex items-center gap-2"><input type="hidden" name="csrf_token" value="{{$csrf}}"><span class="badge" data-variant="outline" title="{{or .error ""}}">Local only</span><button type="submit" class="btn" data-size="sm" data-variant="ghost">Resend</button></form>{{end}}</td>
       </tr>
       {{end}}
     </tbody>

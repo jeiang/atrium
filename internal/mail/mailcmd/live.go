@@ -2,12 +2,15 @@ package mailcmd
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/backlog"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/run"
+	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -86,6 +89,9 @@ func setPaused(paused bool) body {
 		l := x.Live()
 		if err := l.SetPaused(paused); err != nil {
 			return err
+		}
+		if err := notify.PauseChanged(x.Ctx, x.DB, config.OS, paused); err != nil {
+			_, _ = fmt.Fprintln(x.Stderr, "warning: pause notice failed:", err)
 		}
 		x.JSON(py.Dict{{Key: "paused", Value: l.Paused()}})
 		return nil

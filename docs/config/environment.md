@@ -267,6 +267,9 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_NOTIFY_NOTIFY_TITLE_CHARS` | `notify.notify_title_chars` |
 | `ATRIUM_NOTIFY_NTFY_MEDIA_TOPIC` | `notify.ntfy_media_topic` |
 | `ATRIUM_NOTIFY_NTFY_TIMEOUT_SECONDS` | `notify.ntfy_timeout_seconds` |
+| `ATRIUM_NOTIFY_NTFY_TOKEN_ASSISTANT` | `notify.ntfy_token_assistant` |
+| `ATRIUM_NOTIFY_NTFY_TOKEN_MEDIA` | `notify.ntfy_token_media` |
+| `ATRIUM_NOTIFY_NTFY_TOKEN_SYSTEM` | `notify.ntfy_token_system` |
 | `ATRIUM_NOTIFY_NTFY_TOPIC` | `notify.ntfy_topic` |
 | `ATRIUM_NOTIFY_NTFY_URL` | `notify.ntfy_url` |
 | `ATRIUM_NOTION_NOTION_BLOCK_DEPTH` | `notion.notion_block_depth` |

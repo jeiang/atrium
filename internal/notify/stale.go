@@ -18,9 +18,16 @@ var staleLog = logx.Logger("atrium.notify.stale")
 func watchStale(d *db.DB, env config.Env, stopping <-chan struct{}) {
 	t := time.NewTicker(staleEvery)
 	defer t.Stop()
+	if err := probeUnknown(context.Background(), d); err != nil {
+		staleLog.Warn("ntfy privacy probe failed", logx.Err, err.Error())
+	}
 	for {
-		if err := noticeStale(context.Background(), d, env); err != nil {
+		ctx := context.Background()
+		if err := noticeStale(ctx, d, env); err != nil {
 			staleLog.Warn("stale pass check failed", logx.Err, err.Error())
+		}
+		if err := noticeBudget(ctx, d, env, stamp()); err != nil {
+			staleLog.Warn("budget threshold check failed", logx.Err, err.Error())
 		}
 		select {
 		case <-stopping:
@@ -69,7 +76,7 @@ func noticeStale(ctx context.Context, d *db.DB, env config.Env) error {
 		return err
 	}
 	for job, why := range fresh {
-		if _, err := Send(ctx, d.Write, env, Message{Title: "atrium: " + job + " is stale", Body: why}); err != nil {
+		if _, err := Send(ctx, d.Write, env, Message{Channel: System, Title: "atrium: " + job + " is stale", Body: why}); err != nil {
 			return err
 		}
 	}

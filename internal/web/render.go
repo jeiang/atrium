@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"net/http"
 	"sync/atomic"
 
@@ -62,15 +63,36 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 	if who, ok := IdentityOf(r.Context()); ok {
 		auth = tpl.AuthView{Admin: who.Admin, SignOut: who.Source == SourceOIDC, NoAuth: who.NoAuth}
 	}
+	var failing []string
+	if auth.Admin {
+		if failing, err = rd.failingChannels(r.Context()); err != nil {
+			return nil, err
+		}
+	}
 	return &tpl.Frame{
-		Auth:         auth,
-		CSRF:         CSRFToken(r.Context()),
-		Mode:         mode,
-		Paused:       safety.IsPaused(rd.cfg.PausePath()),
-		PendingCount: pending,
-		Page:         page,
-		Data:         data,
+		Auth:          auth,
+		CSRF:          CSRFToken(r.Context()),
+		Mode:          mode,
+		Paused:        safety.IsPaused(rd.cfg.PausePath()),
+		PendingCount:  pending,
+		NotifyFailing: failing,
+		Page:          page,
+		Data:          data,
 	}, nil
+}
+
+func (rd *Renderer) failingChannels(ctx context.Context) ([]string, error) {
+	if rd.db == nil {
+		return nil, nil
+	}
+	rows, err := rd.db.Read.QueryContext(ctx, "SELECT name FROM ntfy_channels WHERE failures >= 3 ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var name string
+		return name, r.Scan(&name)
+	})
 }
 
 func (rd *Renderer) mode(ctx context.Context) (string, error) {

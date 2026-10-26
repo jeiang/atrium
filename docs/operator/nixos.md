@@ -69,8 +69,8 @@ Each option is null by default. A null option sets no environment variable for t
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `ntfy.url` | null or string | `null` | ntfy server base URL. |
-| `ntfy.topic` | null or string | `null` | Topic for the assistant's notifications. |
-| `ntfy.mediaTopic` | null or string | `null` | Topic for media release notifications. |
+| `ntfy.topic` | null or string | `null` | Phase A topic. Copied once onto the assistant and system channels (and the media channel when `ntfy.mediaTopic` is unset) when the channels are first created; not read after that. |
+| `ntfy.mediaTopic` | null or string | `null` | Phase A media topic, copied once onto the media channel. |
 
 ## Media
 

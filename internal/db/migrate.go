@@ -29,6 +29,7 @@ var migrations = []migration{
 	{9, loginLinks},
 	{10, moduleMigrationsTable},
 	{11, passRuns},
+	{12, ntfyChannels},
 }
 
 type ModuleMigration struct {
@@ -546,6 +547,21 @@ func passRuns(ctx context.Context, tx *sql.Tx) error {
 		"CREATE TABLE IF NOT EXISTS pass_run_alerts (job TEXT PRIMARY KEY, notified_at REAL NOT NULL)",
 	} {
 		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ntfyChannels(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS ntfy_channels (name TEXT PRIMARY KEY, topic TEXT NOT NULL, "+
+		"privacy TEXT NOT NULL DEFAULT 'unknown' CHECK (privacy IN ('unknown', 'private', 'public')), "+
+		"content TEXT NOT NULL DEFAULT 'auto' CHECK (content IN ('auto', 'full', 'title')), probed_at REAL, "+
+		"failures INTEGER NOT NULL DEFAULT 0, last_error TEXT, last_ok_at REAL, created_at REAL NOT NULL)"); err != nil {
+		return err
+	}
+	for _, c := range []column{{"channel", "TEXT"}, {"click", "TEXT"}, {"priority", "INTEGER"}} {
+		if _, err := addColumn(ctx, tx, "notifications", c); err != nil {
 			return err
 		}
 	}

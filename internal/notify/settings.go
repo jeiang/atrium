@@ -70,10 +70,6 @@ func whole(ctx context.Context, q db.Querier, key string) (int, error) {
 	return int(n), err
 }
 
-func MediaTopic(ctx context.Context, q db.Querier) (string, error) {
-	return text(ctx, q, KeyMediaTopic)
-}
-
 func timeoutOf(ctx context.Context, q db.Querier) (time.Duration, error) {
 	n, err := whole(ctx, q, KeyTimeoutSeconds)
 	return time.Duration(n) * time.Second, err
