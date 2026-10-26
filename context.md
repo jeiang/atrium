@@ -158,8 +158,7 @@ not claims about the running application.
 ## Planned capabilities
 
 - UI-managed integrations and settings, and model, effort and context
-  controls on the new-thread composer. The notifications module requires `ntfy_url` and `ntfy_topic`, but
-  not the optional `NTFY_TOKEN`; its toggle is `notifications_enabled`.
+  controls on the new-thread composer.
 - Independent instances for other operators, without owner-specific source
   changes.
 

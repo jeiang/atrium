@@ -56,6 +56,10 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 	var mu sync.Mutex
 	var notices []string
 	ntfy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path != "/v1/health" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
 		if r.Method == http.MethodPost {
 			raw, _ := io.ReadAll(r.Body)
 			mu.Lock()

@@ -374,11 +374,7 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings 
 			return result, err
 		}
 		if on {
-			topic, err := notify.MediaTopic(ctx, q)
-			if err != nil {
-				return result, err
-			}
-			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Topic: topic}
+			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: notify.Media}
 			if settings.PublicURL != "" {
 				message.Click = settings.PublicURL + DownloadsPage
 			}

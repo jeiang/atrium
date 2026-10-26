@@ -16,15 +16,25 @@ const staleEvery = 5 * time.Minute
 var staleLog = logx.Logger("atrium.notify.stale")
 
 func watchStale(d *db.DB, env config.Env, stopping <-chan struct{}) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		<-stopping
+		cancel()
+	}()
+	warn := func(msg string, err error) {
+		if err != nil && ctx.Err() == nil {
+			staleLog.Warn(msg, logx.Err, err.Error())
+		}
+	}
 	t := time.NewTicker(staleEvery)
 	defer t.Stop()
-	for {
-		if err := noticeStale(context.Background(), d, env); err != nil {
-			staleLog.Warn("stale pass check failed", logx.Err, err.Error())
-		}
+	warn("ntfy privacy probe failed", probeUnknown(ctx, d))
+	for ctx.Err() == nil {
+		warn("stale pass check failed", noticeStale(ctx, d, env))
+		warn("budget threshold check failed", noticeBudget(ctx, d, env, stamp()))
 		select {
-		case <-stopping:
-			return
+		case <-ctx.Done():
 		case <-t.C:
 		}
 	}
@@ -69,7 +79,7 @@ func noticeStale(ctx context.Context, d *db.DB, env config.Env) error {
 		return err
 	}
 	for job, why := range fresh {
-		if _, err := Send(ctx, d.Write, env, Message{Title: "atrium: " + job + " is stale", Body: why}); err != nil {
+		if _, err := Send(ctx, d.Write, env, Message{Channel: System, Title: "atrium: " + job + " is stale", Body: why}); err != nil {
 			return err
 		}
 	}

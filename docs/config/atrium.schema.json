@@ -2750,6 +2750,18 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "ntfy_token_assistant_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ntfy_token_media_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ntfy_token_system_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "ntfy_topic": {
           "type": "string"
         },

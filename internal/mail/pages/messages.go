@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/triage"
+	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/web"
@@ -225,6 +226,9 @@ type appliedOutcome struct {
 
 func (s *service) togglePause(w http.ResponseWriter, r *http.Request, paused bool) {
 	check(s.live.SetPaused(paused))
+	if err := notify.PauseChanged(context.WithoutCancel(r.Context()), s.deps.DB, s.deps.Env, paused); err != nil {
+		log.Warn("pause notice failed", logx.Err, err.Error())
+	}
 	target := "/triage"
 	if path, query, same := referer(r); same && strings.HasPrefix(path, "/") && !strings.HasPrefix(path, "//") {
 		target = withQuery(path, query)
