@@ -63,29 +63,33 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 	if who, ok := IdentityOf(r.Context()); ok {
 		auth = tpl.AuthView{Admin: who.Admin, SignOut: who.Source == SourceOIDC, NoAuth: who.NoAuth}
 	}
-	var failing []string
+	var failing, alerts []string
 	if auth.Admin {
-		if failing, err = rd.failingChannels(r.Context()); err != nil {
+		if failing, err = rd.names(r.Context(), "SELECT name FROM ntfy_channels WHERE failures >= 3 ORDER BY name"); err != nil {
+			return nil, err
+		}
+		if alerts, err = rd.names(r.Context(), "SELECT name || ' ' || replace(state, '_', ' ') FROM integration_health WHERE state <> 'ok' ORDER BY name"); err != nil {
 			return nil, err
 		}
 	}
 	return &tpl.Frame{
-		Auth:          auth,
-		CSRF:          CSRFToken(r.Context()),
-		Mode:          mode,
-		Paused:        safety.IsPaused(rd.cfg.PausePath()),
-		PendingCount:  pending,
-		NotifyFailing: failing,
-		Page:          page,
-		Data:          data,
+		Auth:              auth,
+		CSRF:              CSRFToken(r.Context()),
+		Mode:              mode,
+		Paused:            safety.IsPaused(rd.cfg.PausePath()),
+		PendingCount:      pending,
+		NotifyFailing:     failing,
+		IntegrationAlerts: alerts,
+		Page:              page,
+		Data:              data,
 	}, nil
 }
 
-func (rd *Renderer) failingChannels(ctx context.Context) ([]string, error) {
+func (rd *Renderer) names(ctx context.Context, query string) ([]string, error) {
 	if rd.db == nil {
 		return nil, nil
 	}
-	rows, err := rd.db.Read.QueryContext(ctx, "SELECT name FROM ntfy_channels WHERE failures >= 3 ORDER BY name")
+	rows, err := rd.db.Read.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}

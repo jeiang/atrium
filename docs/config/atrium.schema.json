@@ -2689,6 +2689,20 @@
         "media_video_extensions_file": {
           "description": "path of a file holding the value",
           "type": "string"
+        },
+        "qbittorrent_ca_file": {
+          "type": "string"
+        },
+        "qbittorrent_ca_file_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "qbittorrent_proxy": {
+          "type": "string"
+        },
+        "qbittorrent_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
         }
       },
       "type": "object"
@@ -2740,10 +2754,24 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "ntfy_ca_file": {
+          "type": "string"
+        },
+        "ntfy_ca_file_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "ntfy_media_topic": {
           "type": "string"
         },
         "ntfy_media_topic_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ntfy_proxy": {
+          "type": "string"
+        },
+        "ntfy_proxy_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
