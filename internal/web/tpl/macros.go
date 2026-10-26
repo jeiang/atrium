@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"html/template"
 	"strings"
+
+	"github.com/jeiang/atrium/internal/config"
 )
 
 func safeURL(v any) template.URL {
@@ -49,7 +51,7 @@ func proposal(action, dest any) string {
 }
 
 func noun(account any) string {
-	if str(account) == "gmail" {
+	if config.Preset(str(account)) == config.Gmail {
 		return "label"
 	}
 	return "folder"

@@ -175,8 +175,8 @@ var (
 )
 
 func accountError() Error {
-	names := make([]string, len(config.Accounts))
-	for i, a := range config.Accounts {
+	names := make([]string, len(config.Accounts()))
+	for i, a := range config.Accounts() {
 		names[i] = a.Name
 	}
 	return Error("account must be one of " + strings.Join(names, ", "))

@@ -42,7 +42,7 @@ func (m mailbox) labels() []string {
 	return out
 }
 
-func load(ctx context.Context, q proposals.Querier) (mailbox, error) {
+func load(ctx context.Context, q proposals.Querier, account string) (mailbox, error) {
 	m := mailbox{members: map[string][]int64{}, rows: map[int64]scanutil.Message{}}
 	r := mail.Read(ctx, q)
 	m.maxMessages = r.Int(mail.KeyGmailLabelsMaxMessages)
@@ -52,7 +52,7 @@ func load(ctx context.Context, q proposals.Querier) (mailbox, error) {
 		return m, err
 	}
 	rows, err := q.QueryContext(ctx, "SELECT id, labels, subject, from_name, from_addr, date_ts FROM messages "+
-		"WHERE account = ? AND gone_at IS NULL AND sent = 0", config.Gmail)
+		"WHERE account = ? AND gone_at IS NULL AND sent = 0", account)
 	if err != nil {
 		return m, err
 	}
@@ -158,31 +158,51 @@ func (m mailbox) candidates() []candidate {
 }
 
 func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
-	m, err := load(ctx, d.Read)
+	var total scanutil.Result
+	for _, a := range config.Accounts() {
+		if a.Preset != config.Gmail {
+			continue
+		}
+		r, err := scan(ctx, d, a.Name, ts)
+		total.Candidates += r.Candidates
+		total.Created += r.Created
+		if err != nil {
+			return total, err
+		}
+	}
+	log.Info(fmt.Sprintf("gmail labels: %d candidates, %d new proposals", total.Candidates, total.Created))
+	return total, nil
+}
+
+func scan(ctx context.Context, d *db.DB, account string, ts float64) (scanutil.Result, error) {
+	m, err := load(ctx, d.Read, account)
 	if err != nil {
 		return scanutil.Result{}, err
 	}
 	found := m.candidates()
 	created := 0
 	for _, c := range found {
-		fingerprint := Kind + ":" + scanutil.Digest(c.label, c.into)
+		digest := scanutil.Digest(c.label, c.into)
+		if account != config.Gmail {
+			digest = scanutil.Digest(account, c.label, c.into)
+		}
+		fingerprint := Kind + ":" + digest
 		known, err := proposals.Known(ctx, d.Write, fingerprint)
 		if err != nil {
-			return scanutil.Result{}, err
+			return scanutil.Result{Candidates: len(found), Created: created}, err
 		}
 		if known {
 			continue
 		}
 		snaps, err := mailops.Snapshots(ctx, d.Read, c.ids)
 		if err != nil {
-			return scanutil.Result{}, err
+			return scanutil.Result{Candidates: len(found), Created: created}, err
 		}
 		ids := distinct(c.ids)
 		views := make([]any, len(ids))
 		for i, id := range ids {
 			views[i] = m.rows[id].View()
 		}
-		account := config.Gmail
 		_, ok, err := proposals.Create(ctx, d, Kind, &account, fmt.Sprintf("Merge label %s into %s", c.label, c.into),
 			py.Dict{{Key: "label", Value: c.label}, {Key: "into", Value: c.into}, {Key: "messages", Value: scanutil.SnapshotList(snaps)}},
 			py.Dict{
@@ -190,12 +210,11 @@ func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
 				{Key: "into_count", Value: len(m.members[c.into])}, {Key: "messages", Value: views},
 			}, fingerprint, ts)
 		if err != nil {
-			return scanutil.Result{}, err
+			return scanutil.Result{Candidates: len(found), Created: created}, err
 		}
 		if ok {
 			created++
 		}
 	}
-	log.Info(fmt.Sprintf("gmail labels: %d candidates, %d new proposals", len(found), created))
 	return scanutil.Result{Candidates: len(found), Created: created}, nil
 }

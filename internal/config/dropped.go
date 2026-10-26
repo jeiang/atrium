@@ -32,6 +32,9 @@ var droppedNames = [...]struct{ old, key string }{
 	{"TMDB_API_KEY", "media_tmdb_token"},
 	{"ATRIUM_CODEMODE_SOCKET", ""},
 	{"ATRIUM_ASSISTANT_MAX_RUN_COST_USD", "max_run_cost_usd_*"},
+	{"ICLOUD_MAIL_USERNAME", KeyMailAccountsFile},
+	{"GMAIL_ADDRESS", KeyMailAccountsFile},
+	{"GMAIL_APP_PASSWORD", KeyMailAccountsFile},
 }
 
 func DroppedEnv(env Env, reg *settings.Registry) []Dropped {

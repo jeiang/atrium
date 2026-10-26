@@ -393,7 +393,7 @@ func stringList(values []string) []any {
 	return out
 }
 
-func (e *Executors) relabelItems(ctx context.Context, client mail.Client, pid int64, items []mailops.Verified, add, remove []string) (int, error) {
+func (e *Executors) relabelItems(ctx context.Context, client mail.Client, pid int64, account string, items []mailops.Verified, add, remove []string) (int, error) {
 	changed := 0
 	size, err := mailops.BatchSize(ctx, client)
 	if err != nil {
@@ -405,7 +405,7 @@ func (e *Executors) relabelItems(ctx context.Context, client mail.Client, pid in
 		}
 		for _, g := range mailops.GroupByMailbox(r.Items) {
 			for _, chunk := range mailops.Chunks(sortedItems(g.Items), size) {
-				n, err := e.relabelChunk(ctx, client, pid, g, chunk, size, r)
+				n, err := e.relabelChunk(ctx, client, pid, account, g, chunk, size, r)
 				changed += n
 				if err != nil {
 					return changed, err
@@ -422,7 +422,7 @@ func sortedItems(items []mailops.Verified) []mailops.Verified {
 	return sorted
 }
 
-func (e *Executors) relabelChunk(ctx context.Context, client mail.Client, pid int64, g mailops.Group, chunk []mailops.Verified, size int, r mailops.Relabel) (int, error) {
+func (e *Executors) relabelChunk(ctx context.Context, client mail.Client, pid int64, account string, g mailops.Group, chunk []mailops.Verified, size int, r mailops.Relabel) (int, error) {
 	uids := make([]uint32, len(chunk))
 	ids := make([]any, len(chunk))
 	for i, item := range chunk {
@@ -439,7 +439,7 @@ func (e *Executors) relabelChunk(ctx context.Context, client mail.Client, pid in
 		return 0, s.fail(ctx, attempt, err)
 	}
 	base := py.Dict{
-		{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.IMAPName}, {Key: "uidvalidity", Value: g.UIDValidity},
+		{Key: "op", Value: live.OpGmailLabels}, {Key: "account", Value: account}, {Key: "imap_name", Value: g.IMAPName}, {Key: "uidvalidity", Value: g.UIDValidity},
 		{Key: "uids", Value: uidList(uids)}, {Key: "ids", Value: ids},
 	}
 	undo := append(slices.Clone(base), py.Pair{Key: "add", Value: stringList(r.Remove)}, py.Pair{Key: "remove", Value: stringList(r.Add)})
@@ -455,7 +455,7 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 	if err != nil {
 		return 0, err
 	}
-	if account != config.Gmail {
+	if config.Preset(account) != config.Gmail {
 		return e.moveItems(ctx, client, pid, account, items, trash)
 	}
 	trashed := 0
@@ -491,7 +491,7 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 			var undo py.Dict
 			if len(known) > 0 && len(known) == len(entries) {
 				undo = py.Dict{
-					{Key: "op", Value: live.OpGmailUntrash}, {Key: "trash_imap", Value: trash},
+					{Key: "op", Value: live.OpGmailUntrash}, {Key: "account", Value: account}, {Key: "trash_imap", Value: trash},
 					{Key: "dest_uidvalidity", Value: validityOrNil(copied)}, {Key: "uids", Value: known},
 				}
 			}
@@ -565,8 +565,8 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 				continue
 			}
 			var n int
-			if account == config.Gmail {
-				n, err = e.relabelItems(ctx, client, p.ID, items, []string{step.name}, []string{payload.Folder})
+			if config.Preset(account) == config.Gmail {
+				n, err = e.relabelItems(ctx, client, p.ID, account, items, []string{step.name}, []string{payload.Folder})
 			} else {
 				dest := mail.UTF7Encode(step.name)
 				create := py.Dict{{Key: "op", Value: "create_folder"}, {Key: "imap_name", Value: dest}}
@@ -718,7 +718,7 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 		if err := e.logSkips(ctx, p.ID, skips); err != nil {
 			return err
 		}
-		if moved, err = e.relabelItems(ctx, client, p.ID, items, []string{payload.Into}, []string{payload.Label}); err != nil {
+		if moved, err = e.relabelItems(ctx, client, p.ID, account, items, []string{payload.Into}, []string{payload.Label}); err != nil {
 			return err
 		}
 		label := mail.UTF7Encode(payload.Label)

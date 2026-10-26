@@ -19,8 +19,6 @@ const (
 	ICloudDomain = "icloud.com"
 )
 
-var Hosts = map[string]string{config.ICloud: "smtp.mail.me.com", config.Gmail: "smtp.gmail.com"}
-
 var log = logx.Logger("atrium.smtp")
 
 type Credentials interface {
@@ -28,7 +26,7 @@ type Credentials interface {
 }
 
 func SenderAddress(account, user string) string {
-	if account == config.ICloud && !strings.Contains(user, "@") {
+	if config.Preset(account) == config.ICloud && !strings.Contains(user, "@") {
 		return user + "@" + ICloudDomain
 	}
 	return user
@@ -55,8 +53,7 @@ func SplitAddresses(text string) ([]string, error) {
 func Send(ctx context.Context, creds Credentials, account string, msg *Message, factory Factory) (Refusals, error) {
 	user, password, ok := creds.Credential(account)
 	if !ok {
-		spec, _ := config.Account(account)
-		return nil, SendError(fmt.Sprintf("%s is not configured: %s/%s missing", account, spec.UserEnv, spec.PasswordEnv))
+		return nil, SendError(account + " is not configured: no enabled account with a login and password")
 	}
 	var recipients []string
 	for _, h := range [...]string{"To", "Cc"} {
@@ -84,7 +81,8 @@ func Send(ctx context.Context, creds Credentials, account string, msg *Message, 
 }
 
 func send(ctx context.Context, factory Factory, account, user, password string, msg *Message, recipients []string) (refused Refusals, err error) {
-	server, err := factory(ctx, Hosts[account], Port, Timeout)
+	spec, _ := config.Account(account)
+	server, err := factory(ctx, spec.SMTPHost, Port, Timeout)
 	if err != nil {
 		return nil, err
 	}

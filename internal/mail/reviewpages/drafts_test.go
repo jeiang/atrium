@@ -259,7 +259,7 @@ func TestHTMXCardResponsesCarryTheToastAfterTheRow(t *testing.T) {
 }
 
 func TestAnAccountWithoutCredentialsIsMarkedNotConfigured(t *testing.T) {
-	s := newSite(t, func(env map[string]string) { delete(env, "GMAIL_ADDRESS") })
+	s := newSite(t, func(env map[string]string) { delete(env, config.Gmail) })
 	s.draft(config.ICloud, "a@x.test", nil, "Hi", "body", nil)
 	page := status(t, s.get("/drafts"), http.StatusOK)
 	mustContain(t, page, ">gmail (not configured)</option>")

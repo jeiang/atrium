@@ -113,7 +113,7 @@ func (o Outcome) Kind(kind string) int {
 }
 
 func inInbox(account string, item mailops.Verified) bool {
-	if account == config.Gmail {
+	if config.Preset(account) == config.Gmail {
 		return slices.Contains(item.Labels, mailops.InboxLabel)
 	}
 	return py.Casefold(item.IMAPName) == py.Casefold(config.Inbox)
@@ -399,9 +399,9 @@ func observedLabels(ctx context.Context, client mail.Client, imapName string, ui
 	return out
 }
 
-func labelUndo(g *group, uid uint32, add, remove []string) py.Dict {
+func labelUndo(account string, g *group, uid uint32, add, remove []string) py.Dict {
 	return py.Dict{
-		{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.imapName}, {Key: "uidvalidity", Value: g.validity},
+		{Key: "op", Value: live.OpGmailLabels}, {Key: "account", Value: account}, {Key: "imap_name", Value: g.imapName}, {Key: "uidvalidity", Value: g.validity},
 		{Key: "uids", Value: []uint32{uid}}, {Key: "add", Value: add}, {Key: "remove", Value: remove},
 	}
 }
@@ -451,7 +451,7 @@ func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account st
 				if err != nil {
 					return err
 				}
-				undo := labelUndo(g, uid, unique(didRemove, priorAdd), unique(didAdd, priorRemove))
+				undo := labelUndo(account, g, uid, unique(didRemove, priorAdd), unique(didAdd, priorRemove))
 				after := py.Dict{{Key: "add", Value: didAdd}, {Key: "remove", Value: didRemove}}
 				if slices.Equal(didAdd, g.added) && slices.Equal(didRemove, g.removed) {
 					if err := a.Live.Finish(ctx, e.aid, after, undo, new("completed after: "+text)); err != nil {
@@ -478,7 +478,7 @@ func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account st
 			if err != nil {
 				return err
 			}
-			undo := labelUndo(g, uid, unique(g.removed, priorAdd), unique(g.added, priorRemove))
+			undo := labelUndo(account, g, uid, unique(g.removed, priorAdd), unique(g.added, priorRemove))
 			if err := a.Live.Finish(ctx, e.aid, after, undo, nil); err != nil {
 				return err
 			}
@@ -524,9 +524,9 @@ func locateInTrash(ctx context.Context, client mail.Client, trash string, item m
 	return st.UIDValidity, same[0], true
 }
 
-func untrashUndo(trash string, validity, uid any) py.Dict {
+func untrashUndo(account, trash string, validity, uid any) py.Dict {
 	return py.Dict{
-		{Key: "op", Value: live.OpGmailUntrash}, {Key: "trash_imap", Value: trash}, {Key: "dest_uidvalidity", Value: validity},
+		{Key: "op", Value: live.OpGmailUntrash}, {Key: "account", Value: account}, {Key: "trash_imap", Value: trash}, {Key: "dest_uidvalidity", Value: validity},
 		{Key: "uids", Value: []any{uid}},
 	}
 }
@@ -567,7 +567,7 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 					continue
 				}
 				after := py.Dict{{Key: "imap_name", Value: g.dest}, {Key: "uidvalidity", Value: validity}, {Key: "uid", Value: destUID}}
-				if err := a.Live.Finish(ctx, e.aid, after, untrashUndo(g.dest, validity, destUID), new("partial: "+text)); err != nil {
+				if err := a.Live.Finish(ctx, e.aid, after, untrashUndo(account, g.dest, validity, destUID), new("partial: "+text)); err != nil {
 					return err
 				}
 				out.count(e.intent.Kind, 1)
@@ -593,7 +593,7 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 			}
 			var undo any
 			if destUID != nil {
-				undo = untrashUndo(g.dest, destValidity, destUID)
+				undo = untrashUndo(account, g.dest, destValidity, destUID)
 			}
 			after := py.Dict{{Key: "imap_name", Value: g.dest}, {Key: "uidvalidity", Value: destValidity}, {Key: "uid", Value: destUID}}
 			if err := a.Live.Finish(ctx, e.aid, after, undo, nil); err != nil {
@@ -684,7 +684,7 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 		return err
 	}
 	folders := map[string]string{}
-	if account != config.Gmail {
+	if config.Preset(account) != config.Gmail {
 		boxes, err := client.ListMailboxes(ctx)
 		if err != nil {
 			return err
@@ -711,7 +711,7 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 			switch {
 			case !safeLabel(dest):
 				reason = "unsafe destination"
-			case account == config.Gmail:
+			case config.Preset(account) == config.Gmail:
 				if !slices.Contains(item.Labels, dest) {
 					added = []string{dest}
 				}
@@ -773,11 +773,11 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 		switch {
 		case in.Kind == live.Flag:
 			flagging.add(boxKey(item.IMAPName, item.UIDValidity), box(a.flagGroup, ""), e)
-		case in.Kind == live.Trash && account == config.Gmail:
+		case in.Kind == live.Trash && config.Preset(account) == config.Gmail:
 			trashes.add(boxKey(item.IMAPName, item.UIDValidity, trash), box(a.gmailTrashGroup, trash), e)
 		case in.Kind == live.Trash:
 			moves.add(boxKey(item.IMAPName, item.UIDValidity, trash), box(a.moveGroup, trash), e)
-		case account == config.Gmail:
+		case config.Preset(account) == config.Gmail:
 			labels.add(boxKey(item.IMAPName, item.UIDValidity, added, removed), box(a.labelGroup, ""), e)
 		default:
 			moves.add(boxKey(item.IMAPName, item.UIDValidity, destIMAP), box(a.moveGroup, destIMAP), e)
@@ -853,7 +853,7 @@ func (a *Applier) correctionIntents(ctx context.Context, account string, budget 
 	var pending []row
 	for _, x := range all {
 		var atTarget bool
-		if account == config.Gmail {
+		if config.Preset(account) == config.Gmail {
 			var labels []string
 			if err := json.Unmarshal([]byte(x.labels.String), &labels); err != nil {
 				return nil, err
@@ -869,7 +869,7 @@ func (a *Applier) correctionIntents(ctx context.Context, account string, budget 
 	var out []Intent
 	for _, x := range take(budget, pending, "corrections") {
 		var remove []string
-		if account == config.Gmail {
+		if config.Preset(account) == config.Gmail {
 			var prior sql.NullString
 			err := a.Live.DB.Write.QueryRowContext(ctx, priorLabel, account, x.digest).Scan(&prior)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {

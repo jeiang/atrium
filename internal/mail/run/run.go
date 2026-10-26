@@ -38,7 +38,7 @@ func SelectAccounts(cfg config.Config, requested string) ([]string, error) {
 		return []string{requested}, nil
 	}
 	var out []string
-	for _, spec := range config.Accounts {
+	for _, spec := range config.Accounts() {
 		if _, _, ok := cfg.Credential(spec.Name); ok {
 			out = append(out, spec.Name)
 		}

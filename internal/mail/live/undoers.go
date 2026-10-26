@@ -35,6 +35,7 @@ type MoveBack struct {
 }
 
 type GmailLabels struct {
+	Account     string   `json:"account"`
 	IMAPName    string   `json:"imap_name"`
 	UIDValidity uint32   `json:"uidvalidity"`
 	UIDs        []uint32 `json:"uids"`
@@ -43,6 +44,7 @@ type GmailLabels struct {
 }
 
 type GmailUntrash struct {
+	Account         string   `json:"account"`
 	TrashIMAP       string   `json:"trash_imap"`
 	DestUIDValidity *uint32  `json:"dest_uidvalidity"`
 	UIDs            []uint32 `json:"uids"`
@@ -70,6 +72,13 @@ func plan[T any](fn func(context.Context, T) (py.Dict, error)) proposals.Undoer 
 		}
 		return fn(ctx, p)
 	}
+}
+
+func gmailAccount(recorded string) string {
+	if recorded == "" {
+		return config.Gmail
+	}
+	return recorded
 }
 
 func validity(ctx context.Context, client mail.Client, imapName string) (uint32, error) {
@@ -147,7 +156,7 @@ func undoMoveBack(ctx context.Context, open mailops.Opener, p MoveBack) (py.Dict
 }
 
 func undoGmailLabels(ctx context.Context, open mailops.Opener, p GmailLabels) (py.Dict, error) {
-	err := mailops.Session(ctx, open, config.Gmail, func(client mail.Client) error {
+	err := mailops.Session(ctx, open, gmailAccount(p.Account), func(client mail.Client) error {
 		v, err := validity(ctx, client, p.IMAPName)
 		if err != nil {
 			return err
@@ -168,7 +177,7 @@ func undoGmailLabels(ctx context.Context, open mailops.Opener, p GmailLabels) (p
 }
 
 func undoGmailUntrash(ctx context.Context, open mailops.Opener, p GmailUntrash) (py.Dict, error) {
-	err := mailops.Session(ctx, open, config.Gmail, func(client mail.Client) error {
+	err := mailops.Session(ctx, open, gmailAccount(p.Account), func(client mail.Client) error {
 		if p.DestUIDValidity != nil {
 			v, err := validity(ctx, client, p.TrashIMAP)
 			if err != nil {

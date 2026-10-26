@@ -200,7 +200,17 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 		}
 		delete(vars, phaseA)
 	}
-	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ICLOUD_APPLE_ID"} {
+	accounts := []mailAccount{
+		{"icloud", "icloud", vars["ICLOUD_MAIL_USERNAME"], vars["ICLOUD_APP_PASSWORD"], false},
+		{"gmail", "gmail", vars["GMAIL_ADDRESS"], vars["GMAIL_APP_PASSWORD"], false},
+	}
+	for i, a := range accounts {
+		if a.login == "" || a.password == "" {
+			accounts[i] = mailAccount{a.id, a.preset, a.id, "unset", true}
+		}
+	}
+	vars[settingEnv(config.KeyMailAccountsFile)] = accountsFile(t, dir, accounts...)
+	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ICLOUD_APPLE_ID", "ICLOUD_MAIL_USERNAME", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
 		delete(vars, name)
 	}
 	for k, v := range vars {
