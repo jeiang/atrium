@@ -218,5 +218,8 @@ func Migrate(ctx context.Context, d *db.DB, cfg Config) error {
 	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
 		return err
 	}
-	return LoadCore(ctx, d.Read)
+	if err := LoadCore(ctx, d.Read); err != nil {
+		return err
+	}
+	return LoadStoredAccounts(ctx, d.Read)
 }

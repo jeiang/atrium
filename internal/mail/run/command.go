@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 
@@ -41,18 +42,17 @@ func command(name string, clients Clients, run runner) *cli.Command {
 
 func execute(env *cli.Env, requested string, run runner, clients Clients) int {
 	cfg, err := config.Load(config.OS)
-	if err == nil && requested != "" {
-		if _, known := config.Account(requested); !known {
-			var names []string
-			for _, a := range config.Accounts() {
-				names = append(names, py.Repr(a.Name))
-			}
-			slices.Sort(names)
-			return env.UsageError("argument --account: invalid choice: %s (choose from %s)", py.Repr(requested), strings.Join(names, ", "))
-		}
-	}
 	if err == nil {
 		err = run(env.Ctx, cfg, requested, clients(cfg))
+	}
+	var unknown UnknownAccount
+	if errors.As(err, &unknown) {
+		var names []string
+		for _, a := range config.Accounts() {
+			names = append(names, py.Repr(a.Name))
+		}
+		slices.Sort(names)
+		return env.UsageError("argument --account: invalid choice: %s (choose from %s)", py.Repr(requested), strings.Join(names, ", "))
 	}
 	if err != nil {
 		return cli.Fail(env, err)

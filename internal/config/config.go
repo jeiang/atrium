@@ -108,6 +108,7 @@ func Load(env Env) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	fileAccounts.Store(&accounts)
 	liveAccounts.Store(&accounts)
 	return Config{
 		DBPath:   filepath.Clean(db),

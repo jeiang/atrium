@@ -2,6 +2,8 @@ package config
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -12,7 +14,10 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -28,6 +33,7 @@ type AccountSpec struct {
 	Host          string
 	SMTPHost      string
 	UncertainDest string
+	Stored        bool
 }
 
 type preset struct{ host, smtpHost, uncertainDest string }
@@ -38,6 +44,7 @@ var presets = map[string]preset{
 }
 
 var (
+	fileAccounts atomic.Pointer[[]AccountSpec]
 	liveAccounts atomic.Pointer[[]AccountSpec]
 	accountID    = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 )
@@ -70,8 +77,65 @@ func Preset(account string) string {
 }
 
 func UseAccounts(list []AccountSpec) (restore func()) {
-	previous := liveAccounts.Swap(&list)
-	return func() { liveAccounts.Store(previous) }
+	previousFile, previous := fileAccounts.Swap(&list), liveAccounts.Swap(&list)
+	return func() {
+		fileAccounts.Store(previousFile)
+		liveAccounts.Store(previous)
+	}
+}
+
+func PasswordKey(id string) string { return "mail_password_" + id }
+
+func RegisterPassword(id string) error {
+	if _, ok := settings.Default.Lookup(PasswordKey(id)); ok {
+		return nil
+	}
+	return settings.Default.Register(settings.Def{
+		Key: PasswordKey(id), Module: "mail", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true,
+	})
+}
+
+func LoadStoredAccounts(ctx context.Context, q db.Querier) error {
+	var list []AccountSpec
+	if file := fileAccounts.Load(); file != nil {
+		list = slices.Clone(*file)
+	}
+	rows, err := q.QueryContext(ctx, "SELECT id, label, preset, login, enabled FROM mail_accounts ORDER BY created_at, id")
+	if err != nil {
+		return err
+	}
+	type row struct {
+		id, label, preset, login string
+		enabled                  bool
+	}
+	stored, err := db.Collect(rows, func(r *sql.Rows) (row, error) {
+		var x row
+		err := r.Scan(&x.id, &x.label, &x.preset, &x.login, &x.enabled)
+		return x, err
+	})
+	if err != nil {
+		return err
+	}
+	for _, x := range stored {
+		if slices.ContainsFunc(list, func(a AccountSpec) bool { return a.Name == x.id }) {
+			continue
+		}
+		if err := RegisterPassword(x.id); err != nil {
+			return err
+		}
+		password, err := secrets.NewIn(nil, q, nil).Value(ctx, PasswordKey(x.id))
+		if err != nil {
+			return err
+		}
+		a, err := NewAccount(x.id, x.label, x.preset, x.login, password, x.enabled)
+		if err != nil {
+			return fmt.Errorf("config: stored mail account %q: %w", x.id, err)
+		}
+		a.Stored = true
+		list = append(list, a)
+	}
+	liveAccounts.Store(&list)
+	return nil
 }
 
 func NewAccount(name, label, presetName, login, password string, enabled bool) (AccountSpec, error) {
@@ -147,6 +211,7 @@ func loadAccounts(env Env) ([]AccountSpec, error) {
 		if err != nil {
 			return nil, fmt.Errorf("config: %s: %w", where, err)
 		}
+		logx.AddSecret(a.Password)
 		list = append(list, a)
 	}
 	return list, nil

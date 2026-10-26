@@ -33,8 +33,8 @@ not claims about the running application.
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
   id and an iCloud or Gmail preset, read from the deploy-time
-  `mail_accounts_file`; accounts added and tested in the UI (stored in the
-  database) are planned.
+  `mail_accounts_file` or added, tested and removed on the Mail settings
+  page (stored in the database, password only on an encrypted database).
 - The assistant uses the Anthropic API. A static catalog in
   `internal/assistant/pricing` holds Haiku 5.5, Sonnet 5.5 and Opus 5.5 with
   their ids, context window, maximum output, effort levels, thinking modes

@@ -32,6 +32,7 @@ var migrations = []migration{
 	{12, ntfyChannels},
 	{13, endpointProbes},
 	{14, integrationHealth},
+	{15, mailAccounts},
 }
 
 type ModuleMigration struct {
@@ -581,5 +582,12 @@ func integrationHealth(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS integration_health (name TEXT PRIMARY KEY, "+
 		"state TEXT NOT NULL CHECK (state IN ('ok', 'failing', 'expiring', 'needs_reauth')), reason TEXT NOT NULL DEFAULT '', "+
 		"checked_at REAL NOT NULL, expires_at REAL)")
+	return err
+}
+
+func mailAccounts(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS mail_accounts (id TEXT PRIMARY KEY, label TEXT NOT NULL, "+
+		"preset TEXT NOT NULL CHECK (preset IN ('icloud', 'gmail')), login TEXT NOT NULL, "+
+		"enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)), created_at REAL NOT NULL)")
 	return err
 }
