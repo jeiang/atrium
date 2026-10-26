@@ -48,6 +48,9 @@ func (p *pages) settingsRoutes(r chi.Router) {
 	r.Post("/settings/subagents", p.subagentSave)
 	r.Post("/settings/subagents/{name}/toggle", p.subagentToggle)
 	r.Post("/settings/subagents/{name}/delete", p.subagentDelete)
+	r.Get("/settings/prompts", p.promptsIndex)
+	r.Post("/settings/prompts/{key}", p.promptSave)
+	r.Post("/settings/prompts/{key}/reset", p.promptReset)
 }
 
 func (p *pages) settings(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {

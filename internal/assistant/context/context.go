@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -53,20 +54,11 @@ const (
 	KindCommit = "commit"
 )
 
-const CompactionInstructions = `Summarize this conversation so the assistant can continue the work exactly where it stopped. Keep every detail below; omit chit-chat and superseded reasoning.
-1. The operator's goal and every constraint or preference they stated.
-2. Open vs completed work: pending actions and their tool_use ids, subagent (research) ids and status; never mark an outstanding external action as done.
-3. Drafts that were prepared but not sent (a draft is not a sent email), proposals awaiting approval, schedules created and their next due times.
-4. Exact source identifiers, verbatim: mail message ids, Notion page ids, calendar event ids, Grafana dashboard/panel ids and queries, URLs.
-5. Every result_id of stored tool results and what each contains, so recall(result_id, offset, limit) can page it back.
-6. Pinned context item ids and the folds already made (with their source ids).
-7. Facts learned, each with its source id; separate observed facts from inferences and note uncertainty.
-8. The next step to take.`
+const SummarySystem = "You write faithful, source-cited summaries of atrium assistant sessions. Output only the summary."
 
-const (
-	SummarySystem  = "You write faithful, source-cited summaries of atrium assistant sessions. Output only the summary."
-	SummaryRequest = "The conversation above must be compacted. " + CompactionInstructions + "\nWrite the summary now."
-)
+func SummaryRequest(instructions string) string {
+	return "The conversation above must be compacted. " + instructions + "\nWrite the summary now."
+}
 
 type ContextError string
 
@@ -128,6 +120,7 @@ type Tuning struct {
 	PreviewChars      int
 	DashboardItems    int
 	ManifestResults   int
+	Summary           string
 }
 
 func ReadTuning(ctx gocontext.Context, q db.Querier) (Tuning, error) {
@@ -146,7 +139,12 @@ func ReadTuning(ctx gocontext.Context, q db.Querier) (Tuning, error) {
 		DashboardItems:    r.Int(assistant.KeyDashboardItems),
 		ManifestResults:   r.Int(assistant.KeyManifestResults),
 	}
-	return t, r.Err()
+	if r.Err() != nil {
+		return t, r.Err()
+	}
+	var err error
+	t.Summary, err = prompts.Text(ctx, q, prompts.KeySummary)
+	return t, err
 }
 
 func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool string, value any, now float64, t Tuning) (string, *int64, error) {
@@ -208,7 +206,7 @@ func ContextManagement(l Limits) json.RawMessage {
 			{Key: "type", Value: Compact},
 			{Key: "trigger", Value: typed(inputTokens, l.Compact)},
 			{Key: "pause_after_compaction", Value: true},
-			{Key: "instructions", Value: CompactionInstructions},
+			{Key: "instructions", Value: l.Tuning.Summary},
 		},
 	}
 	return json.RawMessage(py.JSONDumps(py.Dict{{Key: "edits", Value: edits}}, compactJSON))

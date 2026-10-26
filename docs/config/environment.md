@@ -110,6 +110,9 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_MAX_STEPS_CRON` | `assistant.max_steps_cron` |
 | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` | `assistant.max_steps_nightly` |
 | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` | `assistant.monthly_budget_usd` |
+| `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` | `assistant.prompt_subagent` |
+| `ATRIUM_ASSISTANT_PROMPT_SUMMARY` | `assistant.prompt_summary` |
+| `ATRIUM_ASSISTANT_PROMPT_SYSTEM` | `assistant.prompt_system` |
 | `ATRIUM_AUTH_OIDC_ACCESS_DOMAINS` | `auth.oidc_access_domains` |
 | `ATRIUM_AUTH_OIDC_ACCESS_EMAILS` | `auth.oidc_access_emails` |
 | `ATRIUM_AUTH_OIDC_ACCESS_GROUP` | `auth.oidc_access_group` |

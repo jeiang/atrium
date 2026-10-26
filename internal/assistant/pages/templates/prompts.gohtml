@@ -1,0 +1,30 @@
+{{define "title"}}Prompts · Settings{{end}}
+{{define "heading"}}Settings · Prompts{{end}}
+{{define "body_attrs"}}{{if .Data.strip}} data-strip-params="saved,reset"{{end}}{{end}}
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
+{{template "settings_tabs" "prompts"}}
+<div class="flex flex-col gap-4">
+  <section class="rounded-lg border bg-card p-4" aria-labelledby="prompt-preamble">
+    <h2 id="prompt-preamble" class="flex items-center gap-2 text-sm font-medium">Preamble<span class="badge" data-variant="outline">fixed</span></h2>
+    <p class="mt-2 whitespace-pre-wrap text-sm text-muted-foreground" data-preamble>{{$d.preamble}}</p>
+  </section>
+  {{range $d.prompts}}
+  <form method="post" action="/settings/prompts/{{.key}}" class="flex flex-col gap-3 rounded-lg border bg-card p-4" data-prompt="{{.key}}">
+    <input type="hidden" name="csrf_token" value="{{$csrf}}">
+    <div class="flex flex-wrap items-center gap-2 text-sm">
+      <label for="prompt-{{.key}}" class="font-medium">{{.label}}</label>
+      {{if .custom}}<span class="badge" data-variant="secondary">custom</span>{{end}}
+      {{if .pinned}}<span class="badge" data-variant="outline">pinned</span>{{end}}
+    </div>
+    {{with .error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
+    <textarea id="prompt-{{.key}}" name="text" rows="12" class="w-full font-mono text-xs" maxlength="50000" required{{if .pinned}} readonly{{end}}>{{.text}}</textarea>
+    {{if not .pinned}}
+    <div class="flex flex-wrap gap-2">
+      <button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button>
+      {{if .custom}}<button type="submit" class="btn" data-size="sm" data-variant="outline" formaction="/settings/prompts/{{.key}}/reset" formnovalidate data-confirm-submit="Reset the {{.label}} prompt to the built-in text?">{{icon "undo-2"}}Reset to default</button>{{end}}
+    </div>
+    {{end}}
+  </form>
+  {{end}}
+</div>
+{{end}}

@@ -1127,6 +1127,27 @@
         "monthly_budget_usd_file": {
           "description": "path of a file holding the value",
           "type": "string"
+        },
+        "prompt_subagent": {
+          "type": "string"
+        },
+        "prompt_subagent_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "prompt_summary": {
+          "type": "string"
+        },
+        "prompt_summary_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "prompt_system": {
+          "type": "string"
+        },
+        "prompt_system_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
         }
       },
       "type": "object"
