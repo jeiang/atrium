@@ -39,6 +39,11 @@
         "anthropic.anthropic_api_key" = "/run/secrets/anthropic-api-key";
         "action_links.action_link_key" = "/run/secrets/action-link-key";
       };
+      mailAccounts.icloud = {
+        preset = "icloud";
+        login = "operator@icloud.example";
+        passwordFile = "/run/secrets/icloud-app-password";
+      };
       web.allowedHost = "atrium.example.org";
       backup.enable = true;
       media.enable = true;
@@ -72,7 +77,7 @@
     cfg = nixos.config.services.atrium;
     unitText = name: nixos.config.systemd.units.${name}.text;
     appUnits = ["atrium-web.service" "atrium-web-local.service" "atrium-watch.service" "atrium-agent-scheduler.service" "atrium-sync.service" "atrium-notion-sync.service" "atrium-scan.service" "atrium-dav-sync.service" "atrium-backup.service"];
-    credentialLines = ["LoadCredential=anthropic.anthropic_api_key:/run/secrets/anthropic-api-key" "LoadCredential=action_links.action_link_key:/run/secrets/action-link-key"];
+    credentialLines = ["LoadCredential=anthropic.anthropic_api_key:/run/secrets/anthropic-api-key" "LoadCredential=action_links.action_link_key:/run/secrets/action-link-key" "LoadCredential=mail-account-icloud:/run/secrets/icloud-app-password"];
     sharedLines = credentialLines ++ ["EnvironmentFile=/run/secrets/atrium.env" "User=atrium" "Group=atrium" "StateDirectory=atrium"];
     credentialsMatch = assert builtins.all (line: builtins.elem line cfg.runProperties) sharedLines;
     assert builtins.all (name: builtins.all (line: lib.hasInfix line (unitText name)) sharedLines) appUnits;
@@ -133,9 +138,17 @@
           mkdir -p "$CREDENTIALS_DIRECTORY"
           printf 'sk-ant-module-check\n' >"$CREDENTIALS_DIRECTORY/anthropic.anthropic_api_key"
           head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/action_links.action_link_key"
+          printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"
           atrium settings list >/dev/null
           atrium settings get mail_mode | grep -q '"value": "live"'
           atrium settings get public_url | grep -q '"value": "https://atrium.example.org"'
+          atrium settings get mail_accounts_file | grep -q 'mail-accounts.toml'
+          rm "$CREDENTIALS_DIRECTORY/mail-account-icloud"
+          if atrium settings list >/dev/null 2>&1; then
+            echo "a missing mail account password was accepted" >&2
+            exit 1
+          fi
+          printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"
           rm "$CREDENTIALS_DIRECTORY/anthropic.anthropic_api_key"
           if atrium settings list >/dev/null 2>&1; then
             echo "a missing credential file was accepted" >&2

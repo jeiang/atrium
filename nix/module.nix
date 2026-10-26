@@ -27,7 +27,22 @@
   in {${k.table}."${k.name}_file" = "\${CREDENTIALS_DIRECTORY}/${key}";})
   cfg.secretFiles);
 
-  settings = lib.recursiveUpdate cfg.settings secretPins;
+  accountCredential = id: "mail-account-${id}";
+  accountsFile = toml.generate "mail-accounts.toml" {
+    account =
+      lib.mapAttrsToList (id: account: {
+        inherit id;
+        inherit (account) preset login enabled;
+        label =
+          if account.label == null
+          then id
+          else account.label;
+        password_file = "\${CREDENTIALS_DIRECTORY}/${accountCredential id}";
+      })
+      cfg.mailAccounts;
+  };
+
+  settings = lib.recursiveUpdate (lib.optionalAttrs (cfg.mailAccounts != {}) {mail.mail_accounts_file = "${accountsFile}";}) (lib.recursiveUpdate cfg.settings secretPins);
   configFile = toml.generate "atrium.toml" settings;
 
   unknownSettings = lib.concatLists (lib.mapAttrsToList (table: keys:
@@ -36,7 +51,9 @@
     else map (key: "${table}.${key}") (builtins.filter (key: !(schema.properties.${table}.properties ? ${key})) (builtins.attrNames keys)))
   settings);
 
-  credentials = lib.mapAttrsToList (key: path: "${key}:${path}") cfg.secretFiles;
+  credentials =
+    lib.mapAttrsToList (key: path: "${key}:${path}") cfg.secretFiles
+    ++ lib.mapAttrsToList (id: account: "${accountCredential id}:${account.passwordFile}") cfg.mailAccounts;
   mediaRoot = cfg.settings.media.media_root or null;
 
   appEnvironment =
@@ -218,10 +235,48 @@ in {
       description = "Secret settings as <module>.<key> = host file. Each file is delivered to every unit and atrium-run through systemd LoadCredential and pinned as <key>_file, so the file can stay readable by root only.";
     };
 
+    mailAccounts = mkOption {
+      type = types.attrsOf (types.submodule {
+        options = {
+          label = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Display name; the id when null.";
+          };
+          preset = mkOption {
+            type = types.enum ["icloud" "gmail"];
+            description = "Provider preset that supplies the IMAP and SMTP hosts.";
+          };
+          login = mkOption {
+            type = types.str;
+            description = "IMAP and SMTP login.";
+          };
+          passwordFile = mkOption {
+            type = types.str;
+            description = "Host file holding the app password, delivered through LoadCredential.";
+          };
+          enabled = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Whether the account is opened and synced.";
+          };
+        };
+      });
+      default = {};
+      example = {
+        icloud = {
+          preset = "icloud";
+          login = "me@icloud.com";
+          passwordFile = "/run/secrets/icloud-app-password";
+        };
+      };
+      description = "Mail accounts by id, rendered to the file named by mail.mail_accounts_file. The id keys the account's cached mail; keep it stable.";
+    };
+
     environmentFiles = mkOption {
       type = types.listOf types.str;
       default = [];
-      description = "EnvironmentFile= paths for the credentials that are not settings yet (mail accounts, Notion, Grafana and ntfy tokens); read by every unit and atrium-run.";
+      description = "EnvironmentFile= paths for the credentials that are not settings yet (the iCloud calendar password, Notion, Grafana and ntfy tokens); read by every unit and atrium-run.";
     };
 
     modelServerUnits = mkOption {
