@@ -1,0 +1,43 @@
+{{define "title"}}Configuration · Settings{{end}}
+{{define "heading"}}Settings · Configuration{{end}}
+{{define "content"}}{{$d := .Data}}
+{{template "settings_tabs" "config"}}
+<div class="flex flex-col gap-4 md:flex-row">
+  <nav aria-label="Modules" class="flex flex-wrap gap-1 text-sm md:w-44 md:flex-col md:flex-nowrap">
+    {{range $d.modules}}<a href="/settings/config/{{.}}" class="rounded-md px-3 py-1.5 {{if eq . $d.module}}bg-accent font-medium text-foreground{{else}}text-muted-foreground hover:text-foreground{{end}}"{{if eq . $d.module}} aria-current="page"{{end}}>{{replace "_" " " .}}</a>{{end}}
+  </nav>
+  <form method="post" action="/settings/config/{{$d.module}}" class="flex min-w-0 flex-1 flex-col gap-3 text-sm" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    {{if $d.error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.error}}</p>{{end}}
+    <div class="flex flex-col divide-y rounded-lg border bg-card">
+      {{range $d.fields}}
+      <div class="grid gap-2 p-3 sm:grid-cols-3 sm:items-center" data-setting="{{.key}}"{{if eq $d.failed .key}} data-failed{{end}}>
+        <label for="v-{{.key}}" class="break-all font-mono text-xs{{if eq $d.failed .key}} text-destructive{{end}}">{{.key}}{{if .restart}} <span class="badge" data-variant="outline">restart</span>{{end}}</label>
+        {{if .page}}
+        <a href="{{.page}}" class="text-xs text-muted-foreground underline-offset-4 hover:underline" data-claimed>{{.page}}</a><span></span>
+        {{else if .pinned}}
+        <code id="v-{{.key}}" class="break-all font-mono text-xs" data-pinned>{{if .secret}}set{{else}}{{.value}}{{end}}</code><span class="text-xs text-muted-foreground">{{.pinned}}</span>
+        {{else if not .editable}}
+        <code id="v-{{.key}}" class="break-all font-mono text-xs">{{if .secret}}{{if .secret_set}}set{{else}}not set{{end}}{{else}}{{.value}}{{end}}</code><span></span>
+        {{else if .secret}}
+        <input id="v-{{.key}}" class="input w-full" name="v.{{.key}}" type="password" autocomplete="new-password" placeholder="{{if .secret_set}}set; type to replace{{end}}">
+        {{if .secret_set}}<label class="flex items-center gap-1 text-xs text-muted-foreground"><input type="checkbox" class="input" name="reset" value="{{.key}}">clear</label>{{else}}<span></span>{{end}}
+        {{else}}
+        {{if eq .type "bool"}}
+        <select id="v-{{.key}}" name="v.{{.key}}" class="select w-full">{{$v := .value}}{{range (list "true" "false")}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}</select>
+        {{else if eq .type "enum"}}
+        <select id="v-{{.key}}" name="v.{{.key}}" class="select w-full">{{$v := .value}}{{range .choices}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}</select>
+        {{else if or (eq .type "int") (eq .type "float")}}
+        <input id="v-{{.key}}" class="input w-full" name="v.{{.key}}" type="text" inputmode="decimal" value="{{.value}}" placeholder="{{.default}}">
+        {{else}}
+        <input id="v-{{.key}}" class="input w-full" name="v.{{.key}}" type="text" value="{{.value}}" placeholder="{{.default}}">
+        {{end}}
+        {{if .stored}}<label class="flex items-center gap-1 text-xs text-muted-foreground"><input type="checkbox" class="input" name="reset" value="{{.key}}">default</label>{{else}}<span></span>{{end}}
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+    <div><button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button></div>
+  </form>
+</div>
+{{end}}

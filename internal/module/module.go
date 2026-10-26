@@ -105,6 +105,7 @@ func FlagDef(name string) settings.Def {
 		Default: "false",
 		Class:   settings.UI,
 		Restart: true,
+		Page:    "/settings/modules",
 		Scopes:  []settings.Scope{settings.Instance},
 	}
 }

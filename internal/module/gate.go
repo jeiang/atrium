@@ -34,7 +34,7 @@ func (s *Set) Pages() []web.Page {
 			snap = s.coreOnly()
 		}
 		s.cur.Store(snap)
-	}}}
+	}}, s.modulesPage()}
 	for _, r := range s.regs {
 		for _, p := range r.Pages {
 			if p.Module == nil {
