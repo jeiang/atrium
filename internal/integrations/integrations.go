@@ -159,14 +159,14 @@ func Records(ctx context.Context, q db.Querier) ([]Record, error) {
 	return out, nil
 }
 
-func current(ctx context.Context, d *db.DB, i Integration) (Conn, error) {
-	u, err := text(ctx, d.Read, i.URLKey)
+func current(ctx context.Context, d *db.DB, q db.Querier, i Integration) (Conn, error) {
+	u, err := text(ctx, q, i.URLKey)
 	if err != nil {
 		return Conn{}, err
 	}
 	var secret string
 	if i.SecretKey != "" {
-		if secret, err = secrets.NewIn(nil, d.Read, nil).Value(ctx, i.SecretKey); err != nil {
+		if secret, err = secrets.NewIn(nil, q, nil).Value(ctx, i.SecretKey); err != nil {
 			return Conn{}, err
 		}
 	}
@@ -206,19 +206,32 @@ func run(ctx context.Context, q db.Querier, i Integration, c Conn) (state, reaso
 	return OK, detail, expires, nil
 }
 
-func record(ctx context.Context, d *db.DB, env config.Env, i Integration, state, reason string, expires *time.Time, now float64) error {
+func record(ctx context.Context, d *db.DB, env config.Env, i Integration, state, reason string, expires *time.Time, now float64, tested *Conn) error {
 	var previous string
-	err := d.Read.QueryRowContext(ctx, "SELECT state FROM integration_health WHERE name = ?", i.Name).Scan(&previous)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
 	var exp any
 	if expires != nil {
 		exp = float64(expires.Unix())
 	}
-	if _, err := d.Write.ExecContext(ctx, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES (?, ?, ?, ?, ?) "+
-		"ON CONFLICT(name) DO UPDATE SET state = excluded.state, reason = excluded.reason, checked_at = excluded.checked_at, expires_at = excluded.expires_at",
-		i.Name, state, reason, now, exp); err != nil {
+	stale := false
+	if err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		if tested != nil {
+			c, err := current(ctx, d, tx, i)
+			if err != nil {
+				return err
+			}
+			if stale = c.URL != tested.URL || c.Secret != tested.Secret; stale {
+				return nil
+			}
+		}
+		err := tx.QueryRowContext(ctx, "SELECT state FROM integration_health WHERE name = ?", i.Name).Scan(&previous)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES (?, ?, ?, ?, ?) "+
+			"ON CONFLICT(name) DO UPDATE SET state = excluded.state, reason = excluded.reason, checked_at = excluded.checked_at, expires_at = excluded.expires_at",
+			i.Name, state, reason, now, exp)
+		return err
+	}); err != nil || stale {
 		return err
 	}
 	mu.Lock()
@@ -235,7 +248,7 @@ func record(ctx context.Context, d *db.DB, env config.Env, i Integration, state,
 }
 
 func RecordResult(ctx context.Context, d *db.DB, env config.Env, name, label, state, reason string, now float64) error {
-	return record(ctx, d, env, Integration{Name: name, Label: label}, state, reason, nil, now)
+	return record(ctx, d, env, Integration{Name: name, Label: label}, state, reason, nil, now, nil)
 }
 
 func Check(ctx context.Context, d *db.DB, env config.Env, name string, now float64) (string, error) {
@@ -243,7 +256,7 @@ func Check(ctx context.Context, d *db.DB, env config.Env, name string, now float
 	if !ok {
 		return "", Unknown(name)
 	}
-	c, err := current(ctx, d, i)
+	c, err := current(ctx, d, d.Read, i)
 	if err != nil {
 		return "", err
 	}
@@ -254,7 +267,7 @@ func Check(ctx context.Context, d *db.DB, env config.Env, name string, now float
 	if err != nil {
 		return "", err
 	}
-	return state, record(ctx, d, env, i, state, reason, expires, now)
+	return state, record(ctx, d, env, i, state, reason, expires, now, &c)
 }
 
 func CheckAll(ctx context.Context, d *db.DB, env config.Env, now float64) error {
@@ -288,7 +301,7 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 	if !ok {
 		return Unknown(name)
 	}
-	c, err := current(ctx, d, i)
+	c, err := current(ctx, d, d.Read, i)
 	if err != nil {
 		return err
 	}
@@ -305,7 +318,7 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 	}
 	changed := urlChanged || cand.HasSecret
 	if !changed {
-		if err := record(ctx, d, env, i, state, reason, expires, now); err != nil {
+		if err := record(ctx, d, env, i, state, reason, expires, now, &c); err != nil {
 			return err
 		}
 	}
@@ -329,7 +342,7 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 	if err != nil {
 		return err
 	}
-	return record(ctx, d, env, i, state, reason, expires, now)
+	return record(ctx, d, env, i, state, reason, expires, now, &c)
 }
 
 func Disconnect(ctx context.Context, d *db.DB, name string) error {
