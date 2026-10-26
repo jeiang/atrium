@@ -197,8 +197,12 @@ type nearRow struct {
 }
 
 func knn(ctx context.Context, q Querier, blob []byte, k int, includePrivate bool) ([]nearRow, error) {
+	idx, err := embed.Active(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	var total int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM notion_vec").Scan(&total); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+idx.NotionTable()).Scan(&total); err != nil {
 		return nil, err
 	}
 	if total == 0 {
@@ -208,7 +212,7 @@ func knn(ctx context.Context, q Querier, blob []byte, k int, includePrivate bool
 	var out []nearRow
 	for _, visibility := range visibilities(includePrivate) {
 		rows, err := q.QueryContext(ctx,
-			"SELECT rowid, distance FROM notion_vec WHERE embedding MATCH ? AND k = ? AND visibility = ?", blob, k, visibility)
+			"SELECT rowid, distance FROM "+idx.NotionTable()+" WHERE embedding MATCH ? AND k = ? AND visibility = ?", blob, k, visibility)
 		if err != nil {
 			return nil, err
 		}
@@ -613,7 +617,11 @@ func RelatedPages(ctx context.Context, q Querier, pageID string, limit int) ([]R
 		out = append(out, Related{PageRef: pageRef(info.id, info.title, info.url, info.path, private != 0), Linked: true, Score: 1.0})
 	}
 	var blob []byte
-	err = q.QueryRowContext(ctx, "SELECT embedding FROM notion_vec WHERE rowid = ?", page.RID).Scan(&blob)
+	idx, err := embed.Active(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	err = q.QueryRowContext(ctx, "SELECT embedding FROM "+idx.NotionTable()+" WHERE rowid = ?", page.RID).Scan(&blob)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out[:min(len(out), limit)], nil
 	}

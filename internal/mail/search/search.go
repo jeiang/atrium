@@ -340,8 +340,13 @@ func narrow(f Filters) bool {
 
 func semantic(ctx context.Context, q Querier, vector []float64, f Filters, limit, knnMax int) ([]int64, error) {
 	where, params := filterSQL(f)
+	idx, err := embed.Active(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	table := idx.MessageTable()
 	var total int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM message_vec").Scan(&total); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&total); err != nil {
 		return nil, err
 	}
 	if total == 0 {
@@ -354,7 +359,7 @@ func semantic(ctx context.Context, q Querier, vector []float64, f Filters, limit
 	}
 	for {
 		k = min(k, total, knnMax)
-		knn := "SELECT rowid FROM message_vec WHERE embedding MATCH ? AND k = ?"
+		knn := "SELECT rowid FROM " + table + " WHERE embedding MATCH ? AND k = ?"
 		args := []any{blob, k}
 		if f.Account != nil {
 			knn += " AND account = ?"
@@ -383,15 +388,15 @@ func semantic(ctx context.Context, q Querier, vector []float64, f Filters, limit
 			return ranked[:min(len(ranked), limit)], nil
 		}
 		if k == knnMax {
-			return exactSemantic(ctx, q, blob, where, params, limit)
+			return exactSemantic(ctx, q, table, blob, where, params, limit)
 		}
 		k *= 4
 	}
 }
 
-func exactSemantic(ctx context.Context, q Querier, blob []byte, where string, params []any, limit int) ([]int64, error) {
+func exactSemantic(ctx context.Context, q Querier, table string, blob []byte, where string, params []any, limit int) ([]int64, error) {
 	return ids(q.QueryContext(ctx,
-		"SELECT v.rowid FROM message_vec v WHERE v.rowid IN "+
+		"SELECT v.rowid FROM "+table+" v WHERE v.rowid IN "+
 			"(SELECT m.id FROM messages m LEFT JOIN corrections c ON c.message_id = m.id WHERE "+where+") "+
 			"ORDER BY vec_distance_cosine(v.embedding, ?) LIMIT ?",
 		slices.Concat(params, []any{blob, limit})...))

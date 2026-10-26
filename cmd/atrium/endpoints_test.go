@@ -89,10 +89,10 @@ func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testi
 	}
 
 	embed.mu.Lock()
-	embed.dim = 1024
+	embed.dim = 0
 	embed.mu.Unlock()
-	if failed := runApp("endpoints", "probe"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "1024 dimensions") {
-		t.Fatalf("probe with a 1024-dimension embedder: %d %q", failed.code, failed.stdout)
+	if failed := runApp("endpoints", "probe"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "no embedding") {
+		t.Fatalf("probe with an embedder that returns no vector: %d %q", failed.code, failed.stdout)
 	}
 	if off := runSettings(t, "set", module.FlagKey(module.Mail), "false"); off.code != cli.ExitOK {
 		t.Fatalf("disabling mail: %d %q", off.code, off.stderr)
@@ -134,10 +134,10 @@ func TestEndpointFormTestUsesTheEndpointCAAndAPassingTestReleasesTheMailHold(t *
 		t.Fatalf("set embed CA: %d %q", got.code, got.stderr)
 	}
 	embed.mu.Lock()
-	embed.dim = 1024
+	embed.dim = 0
 	embed.mu.Unlock()
-	if failed := runApp("endpoints", "probe"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "1024 dimensions") {
-		t.Fatalf("probe with the CA and a 1024-dimension embedder: %d %q", failed.code, failed.stdout)
+	if failed := runApp("endpoints", "probe"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "no embedding") {
+		t.Fatalf("probe with the CA and an embedder that returns no vector: %d %q", failed.code, failed.stdout)
 	}
 	if refused := runSettings(t, "set", module.FlagKey(module.Mail), "true"); refused.code != cli.ExitError || !strings.Contains(refused.stderr, "embed endpoint probe failed") {
 		t.Fatalf("enabling mail with a failing probe: %d %q", refused.code, refused.stderr)
@@ -145,8 +145,8 @@ func TestEndpointFormTestUsesTheEndpointCAAndAPassingTestReleasesTheMailHold(t *
 
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
-	if code, body := s.post("/mail_embed/test", url.Values{"url": {embed.URL + "/v1"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "1024 dimensions") {
-		t.Fatalf("Test of a 1024-dimension embedder: %d %s", code, body)
+	if code, body := s.post("/mail_embed/test", url.Values{"url": {embed.URL + "/v1"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "no embedding") {
+		t.Fatalf("Test of an embedder that returns no vector: %d %s", code, body)
 	}
 	embed.mu.Lock()
 	embed.dim = config.EmbedDim

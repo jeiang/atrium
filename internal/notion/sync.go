@@ -195,8 +195,7 @@ func dropIndex(ctx context.Context, q db.Querier, rid int64) error {
 	if _, err := q.ExecContext(ctx, "DELETE FROM notion_fts WHERE rowid = ?", rid); err != nil {
 		return err
 	}
-	_, err := q.ExecContext(ctx, "DELETE FROM notion_vec WHERE rowid = ?", rid)
-	return err
+	return embed.DeleteNotion(ctx, q, rid)
 }
 
 func upsertPage(ctx context.Context, q db.Querier, client *Client, sensitivity Sensitivity, page py.Dict, stats *Stats, now float64) error {
@@ -277,6 +276,9 @@ func upsertPage(ctx context.Context, q db.Querier, client *Client, sensitivity S
 			return err
 		}
 		if _, err := q.ExecContext(ctx, "DELETE FROM notion_fts WHERE rowid = ?", rid); err != nil {
+			return err
+		}
+		if err := embed.StaleNotion(ctx, q, rid); err != nil {
 			return err
 		}
 		stats.Updated++

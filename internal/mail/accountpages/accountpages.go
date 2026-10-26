@@ -13,7 +13,9 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/config"
+	vecindex "github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/integrations"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
@@ -54,6 +56,7 @@ type account struct {
 type page struct {
 	Accounts []account         `json:"accounts"`
 	Presets  []string          `json:"presets"`
+	Indexes  []vecindex.Index  `json:"indexes"`
 	Failed   string            `json:"failed"`
 	Error    string            `json:"error"`
 	Form     map[string]string `json:"form"`
@@ -66,6 +69,12 @@ func stamp() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 func healthName(id string) string { return "mail_" + id }
 
 func Module(r chi.Router, d *web.Deps) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		reembed(d)
+	}()
+	d.OnClose(func() { <-done })
 	h := handlers{d}
 	r.Get(path, h.index)
 	r.Post(path+"/accounts", h.add)
@@ -97,6 +106,9 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 		panic(err)
 	}
 	data.Accounts, data.Presets = list, []string{config.ICloud, config.Gmail}
+	if data.Indexes, err = mail.EmbedIndexes(r.Context(), h.d.DB.Read); err != nil {
+		panic(err)
+	}
 	f, err := h.d.Render.Frame(r, "settings", data)
 	if err != nil {
 		panic(err)

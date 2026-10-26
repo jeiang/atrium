@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -162,11 +161,7 @@ func probeEmbed(ctx context.Context, e Endpoint) (string, int) {
 	if json.Unmarshal(raw, &reply) != nil || len(reply.Data) != 1 || len(reply.Data[0].Embedding) == 0 {
 		return "the reply has no embedding", 0
 	}
-	dim := len(reply.Data[0].Embedding)
-	if dim != config.EmbedDim {
-		return fmt.Sprintf("the embedding has %d dimensions; the index stores %d", dim, config.EmbedDim), dim
-	}
-	return "", dim
+	return "", len(reply.Data[0].Embedding)
 }
 
 func probe(ctx context.Context, e Endpoint) ProbeResult {
