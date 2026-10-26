@@ -263,11 +263,15 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MEDIA_MEDIA_TORRENT_UPLOAD_BYTES` | `media.media_torrent_upload_bytes` |
 | `ATRIUM_MEDIA_MEDIA_TV_URL` | `media.media_tv_url` |
 | `ATRIUM_MEDIA_MEDIA_VIDEO_EXTENSIONS` | `media.media_video_extensions` |
+| `ATRIUM_MEDIA_QBITTORRENT_CA_FILE` | `media.qbittorrent_ca_file` |
+| `ATRIUM_MEDIA_QBITTORRENT_PROXY` | `media.qbittorrent_proxy` |
 | `ATRIUM_NOTIFY_NOTIFY_BODY_CHARS` | `notify.notify_body_chars` |
 | `ATRIUM_NOTIFY_NOTIFY_NIGHTLY_CAP` | `notify.notify_nightly_cap` |
 | `ATRIUM_NOTIFY_NOTIFY_PER_RUN_CAP` | `notify.notify_per_run_cap` |
 | `ATRIUM_NOTIFY_NOTIFY_TITLE_CHARS` | `notify.notify_title_chars` |
+| `ATRIUM_NOTIFY_NTFY_CA_FILE` | `notify.ntfy_ca_file` |
 | `ATRIUM_NOTIFY_NTFY_MEDIA_TOPIC` | `notify.ntfy_media_topic` |
+| `ATRIUM_NOTIFY_NTFY_PROXY` | `notify.ntfy_proxy` |
 | `ATRIUM_NOTIFY_NTFY_TIMEOUT_SECONDS` | `notify.ntfy_timeout_seconds` |
 | `ATRIUM_NOTIFY_NTFY_TOKEN_ASSISTANT` | `notify.ntfy_token_assistant` |
 | `ATRIUM_NOTIFY_NTFY_TOKEN_MEDIA` | `notify.ntfy_token_media` |

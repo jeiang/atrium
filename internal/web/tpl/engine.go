@@ -35,15 +35,16 @@ type Toast struct {
 }
 
 type Frame struct {
-	CSRF          string
-	Mode          string
-	Paused        bool
-	PendingCount  int
-	NotifyFailing []string
-	Page          string
-	Toast         *Toast
-	Auth          AuthView
-	Data          any
+	CSRF              string
+	Mode              string
+	Paused            bool
+	PendingCount      int
+	NotifyFailing     []string
+	IntegrationAlerts []string
+	Page              string
+	Toast             *Toast
+	Auth              AuthView
+	Data              any
 }
 
 type AuthView struct {

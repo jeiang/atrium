@@ -36,6 +36,7 @@
     <div class="sticky top-0 z-30">
     {{if .Auth.NoAuth}}<div class="flex items-start gap-2 border-b border-warning/30 bg-warning/10 px-3 py-1.5 text-sm text-warning md:px-6">{{icon "circle-alert"}}<span>Authentication is disabled</span></div>{{end}}
     {{with .NotifyFailing}}<div class="flex items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-sm text-destructive md:px-6" data-notify-failing>{{icon "circle-alert"}}<span>Notifications failing: {{join ", " .}}. <a class="underline underline-offset-4" href="/settings/notifications">Check channels</a></span></div>{{end}}
+    {{with .IntegrationAlerts}}<div class="flex items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-sm text-destructive md:px-6" data-integration-alerts>{{icon "circle-alert"}}<span>Integrations: {{join ", " .}}. <a class="underline underline-offset-4" href="/settings/integrations">Check integrations</a></span></div>{{end}}
     <header class="flex h-14 items-center gap-2 border-b bg-background px-3 md:px-6">
       <button id="nav-toggle" type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Toggle navigation" aria-controls="sidebar" data-action="toggle-sidebar">{{icon "panel-left"}}</button>
       <hr role="separator" aria-orientation="vertical" class="h-4 w-px border-0 bg-border">

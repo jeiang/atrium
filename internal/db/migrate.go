@@ -31,6 +31,7 @@ var migrations = []migration{
 	{11, passRuns},
 	{12, ntfyChannels},
 	{13, endpointProbes},
+	{14, integrationHealth},
 }
 
 type ModuleMigration struct {
@@ -573,5 +574,12 @@ func endpointProbes(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS endpoint_probes (kind TEXT PRIMARY KEY CHECK (kind IN ('chat', 'embed')), "+
 		"fingerprint TEXT NOT NULL, ok INTEGER NOT NULL, reason TEXT NOT NULL DEFAULT '', dimension INTEGER, "+
 		"models TEXT NOT NULL DEFAULT '[]', probed_at REAL NOT NULL)")
+	return err
+}
+
+func integrationHealth(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS integration_health (name TEXT PRIMARY KEY, "+
+		"state TEXT NOT NULL CHECK (state IN ('ok', 'failing', 'expiring', 'needs_reauth')), reason TEXT NOT NULL DEFAULT '', "+
+		"checked_at REAL NOT NULL, expires_at REAL)")
 	return err
 }

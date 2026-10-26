@@ -56,6 +56,10 @@ not claims about the running application.
   endpoint's probe fails. Connected content sent to a hosted model leaves
   the host; privacy does not mean that inference is necessarily local.
   The embed dimension is still fixed at 768.
+- ntfy and qBittorrent are connection records on the Integrations settings
+  page, with Test before save, recorded health, a daily check, disconnect,
+  and a per-integration CA bundle and proxy. Certificate verification
+  cannot be turned off.
 - SQLite holds application records, configuration stored by the application,
   and assistant history. Uploaded files live beside the database under
   `files/`; the Notion wiki also has external state. The database alone is
@@ -165,8 +169,10 @@ not claims about the running application.
 
 ## Planned capabilities
 
-- UI-managed integrations and settings, and model, effort and context
-  controls on the new-thread composer.
+- UI-managed credentials for the remaining integrations (Notion, Grafana,
+  iCloud, Gmail, Anthropic, TMDB) as connection records, generated
+  settings forms, and model, effort and context controls on the new-thread
+  composer.
 - Independent instances for other operators, without owner-specific source
   changes.
 
