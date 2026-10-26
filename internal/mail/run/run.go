@@ -30,15 +30,22 @@ type MissingCredentials string
 
 func (e MissingCredentials) Error() string { return "missing credentials for " + string(e) }
 
+type UnknownAccount string
+
+func (e UnknownAccount) Error() string { return "unknown mail account " + string(e) }
+
 func SelectAccounts(cfg config.Config, requested string) ([]string, error) {
 	if requested != "" {
+		if _, known := config.Account(requested); !known {
+			return nil, UnknownAccount(requested)
+		}
 		if _, _, ok := cfg.Credential(requested); !ok {
 			return nil, MissingCredentials(requested)
 		}
 		return []string{requested}, nil
 	}
 	var out []string
-	for _, spec := range config.Accounts {
+	for _, spec := range config.Accounts() {
 		if _, _, ok := cfg.Credential(spec.Name); ok {
 			out = append(out, spec.Name)
 		}

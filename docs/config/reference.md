@@ -227,6 +227,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `llm_body_chars` | int | `1500` | advanced | `ATRIUM_MAIL_LLM_BODY_CHARS` |
 | `llm_neighbors` | int | `10` | advanced | `ATRIUM_MAIL_LLM_NEIGHBORS` |
 | `llm_top_senders` | int | `3` | advanced | `ATRIUM_MAIL_LLM_TOP_SENDERS` |
+| `mail_accounts_file` | string | none | bootstrap | `ATRIUM_MAIL_MAIL_ACCOUNTS_FILE` |
 | `mail_backoff_max_seconds` | int | `300` | advanced | `ATRIUM_MAIL_MAIL_BACKOFF_MAX_SECONDS` |
 | `mail_backoff_start_seconds` | int | `5` | advanced | `ATRIUM_MAIL_MAIL_BACKOFF_START_SECONDS` |
 | `mail_body_cap_bytes` | int | `65536` | advanced | `ATRIUM_MAIL_MAIL_BODY_CAP_BYTES` |

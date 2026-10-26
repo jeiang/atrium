@@ -98,7 +98,7 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 	if golive != nil {
 		goliveText = *golive
 	}
-	gmail := account == config.Gmail
+	gmail := config.Preset(account) == config.Gmail
 	folder, unit := config.Inbox, "folders"
 	if gmail {
 		folder, unit = mailops.InboxLabel, "labels"
@@ -154,7 +154,7 @@ func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 	if golive == nil {
 		return out, Error("the live service has not run yet: no go-live baseline exists")
 	}
-	for _, spec := range config.Accounts {
+	for _, spec := range config.Accounts() {
 		var one int
 		err := d.Write.QueryRowContext(ctx, "SELECT 1 FROM accounts WHERE name = ?", spec.Name).Scan(&one)
 		if errors.Is(err, sql.ErrNoRows) {

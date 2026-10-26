@@ -31,7 +31,7 @@ func MessageState(account, role, mailboxName string, flags, labels []string) Sta
 	var st State
 	st.Seen = bit(slices.Contains(flags, `\Seen`))
 	st.Flagged = bit(slices.Contains(flags, `\Flagged`))
-	if account == config.Gmail {
+	if config.Preset(account) == config.Gmail {
 		if labels == nil {
 			labels = []string{}
 		}

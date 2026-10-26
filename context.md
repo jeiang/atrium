@@ -10,9 +10,9 @@ not claims about the running application.
   with embedded assets, packaged and deployed through a NixOS module. The
   module takes typed deployment options, application settings rendered to
   TOML, and secret settings as files delivered through systemd
-  credentials to every unit and `atrium-run`. Mail account, iCloud and
-  ntfy credentials still come from environment files until they become
-  settings.
+  credentials to every unit and `atrium-run`. The calendar and contacts
+  iCloud app password and the ntfy token still come from environment
+  files until they become settings.
 - The application brings together mail, calendar, contacts, Notion,
   media, notifications, and read-only Grafana access. The assistant adds
   chat, files, projects, skills, scheduled work, and research subagents.
@@ -31,7 +31,10 @@ not claims about the running application.
   and a system-channel message.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
-  whether the mail pipeline runs.
+  whether the mail pipeline runs. Mail accounts are records with a stable
+  id and an iCloud or Gmail preset, read from the deploy-time
+  `mail_accounts_file` or added, tested and removed on the Mail settings
+  page (stored in the database, password only on an encrypted database).
 - The assistant uses the Anthropic API. A static catalog in
   `internal/assistant/pricing` holds Haiku 5.5, Sonnet 5.5 and Opus 5.5 with
   their ids, context window, maximum output, effort levels, thinking modes
@@ -174,9 +177,9 @@ not claims about the running application.
 
 ## Planned capabilities
 
-- UI-managed credentials for iCloud and Gmail as connection records,
-  generated settings forms, and model, effort and context controls on the
-  new-thread composer.
+- Calendar and contacts sign in with an iCloud mail account instead of
+  `ICLOUD_APP_PASSWORD`.
+- Model, effort and context controls on the new-thread composer.
 - Independent instances for other operators, without owner-specific source
   changes.
 

@@ -18,6 +18,23 @@ func PinMode(t testing.TB, mode string) {
 	t.Cleanup(func() { settings.Default.SetPins(nil) })
 }
 
+func UseAccounts(t testing.TB, logins map[string]string) {
+	t.Helper()
+	var list []config.AccountSpec
+	for _, preset := range []string{config.ICloud, config.Gmail} {
+		login, ok := logins[preset]
+		if !ok {
+			continue
+		}
+		a, err := config.NewAccount(preset, "", preset, login, "pw", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		list = append(list, a)
+	}
+	t.Cleanup(config.UseAccounts(list))
+}
+
 func modeDef(t testing.TB) settings.Def {
 	t.Helper()
 	d, ok := settings.Default.Lookup(mail.KeyMode)

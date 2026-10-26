@@ -175,8 +175,8 @@ func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 }
 
 func accountConfigured(cfg config.Config) map[string]bool {
-	out := make(map[string]bool, len(config.Accounts))
-	for _, spec := range config.Accounts {
+	out := make(map[string]bool, len(config.Accounts()))
+	for _, spec := range config.Accounts() {
 		_, _, ok := cfg.Credential(spec.Name)
 		out[spec.Name] = ok
 	}

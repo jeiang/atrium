@@ -55,6 +55,7 @@ func newEnv(t *testing.T, mode string) (config.Config, config.Env, *db.DB) {
 		t.Fatal(err)
 	}
 	mailtest.PinMode(t, mode)
+	mailtest.UseAccounts(t, map[string]string{config.ICloud: "me", config.Gmail: "me@gmail.test"})
 	for i, account := range []string{"icloud", "gmail"} {
 		rulestest.Exec(t, d, "INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, account)
 		rulestest.Exec(t, d, "INSERT INTO mailboxes (id, account, name, imap_name, role) VALUES (?, ?, 'box', 'box', 'filed')", i+1, account)

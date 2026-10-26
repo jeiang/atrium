@@ -258,7 +258,7 @@ func Summarize(ctx context.Context, q report.Querier, env config.Env, account st
 
 func Summaries(ctx context.Context, q report.Querier, env config.Env, since *string, at time.Time) ([]Summary, error) {
 	out := []Summary{}
-	for _, spec := range config.Accounts {
+	for _, spec := range config.Accounts() {
 		ok, err := report.AccountExists(ctx, q, spec.Name)
 		if err != nil {
 			return nil, err

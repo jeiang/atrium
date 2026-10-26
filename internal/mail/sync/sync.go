@@ -86,7 +86,7 @@ type mailbox struct {
 
 func (s *Syncer) Account(ctx context.Context, account string, client mail.Client) (Stats, error) {
 	var stats Stats
-	if _, err := s.DB.Write.ExecContext(ctx, "INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, account); err != nil {
+	if _, err := s.DB.Write.ExecContext(ctx, "INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, config.Preset(account)); err != nil {
 		return stats, err
 	}
 	lim, err := readLimits(ctx, s.DB.Read)
@@ -187,7 +187,7 @@ type stored struct {
 }
 
 func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account string, mbx mailbox, run float64, lim limits, stats *Stats) error {
-	gmail := account == config.Gmail
+	gmail := config.Preset(account) == config.Gmail
 	status, err := client.Status(ctx, mbx.IMAPName)
 	if err != nil {
 		return err
@@ -365,7 +365,7 @@ func (s *Syncer) refreshFlags(ctx context.Context, client mail.Client, account s
 	if len(survivors) == 0 {
 		return nil
 	}
-	gmail := account == config.Gmail
+	gmail := config.Preset(account) == config.Gmail
 	items := mail.FetchItems{Labels: gmail}
 	var updates []mail.Message
 	if client.HasCapability("CONDSTORE") && modseq != nil && storedModseq != nil {

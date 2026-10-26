@@ -323,7 +323,7 @@ func Build(ctx context.Context, q Querier, env config.Env, since *string, at tim
 		return "", err
 	}
 	var lines []string
-	for _, spec := range config.Accounts {
+	for _, spec := range config.Accounts() {
 		ok, err := AccountExists(ctx, q, spec.Name)
 		if err != nil {
 			return "", err

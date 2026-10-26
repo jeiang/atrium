@@ -1822,6 +1822,13 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "mail_accounts_file": {
+          "type": "string"
+        },
+        "mail_accounts_file_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "mail_backoff_max_seconds": {
           "default": 300,
           "type": [

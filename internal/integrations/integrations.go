@@ -248,6 +248,10 @@ func record(ctx context.Context, d *db.DB, env config.Env, i Integration, state,
 	return n(ctx, d, env, "atrium: "+i.Label+" "+strings.ReplaceAll(state, "_", " "), body)
 }
 
+func RecordResult(ctx context.Context, d *db.DB, env config.Env, name, label, state, reason string, now float64) error {
+	return record(ctx, d, env, Integration{Name: name, Label: label}, state, reason, nil, now)
+}
+
 func Check(ctx context.Context, d *db.DB, env config.Env, name string, now float64) (string, error) {
 	i, ok := Get(name)
 	if !ok {
