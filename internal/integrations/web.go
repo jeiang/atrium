@@ -47,7 +47,12 @@ type handlers struct{ d *web.Deps }
 func stamp() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 func Module(r chi.Router, d *web.Deps) {
-	go watch(d)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		watch(d)
+	}()
+	d.OnClose(func() { <-done })
 	h := handlers{d}
 	r.Get(path, h.index)
 	r.Post(path+"/{name}/test", h.test)

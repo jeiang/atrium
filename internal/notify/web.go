@@ -43,7 +43,12 @@ const page = "/settings/notifications"
 type handlers struct{ d *web.Deps }
 
 func Module(r chi.Router, d *web.Deps) {
-	go watchStale(d.DB, d.Env, d.Stopping)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		watchStale(d.DB, d.Env, d.Stopping)
+	}()
+	d.OnClose(func() { <-done })
 	h := handlers{d}
 	r.Get(page, h.index)
 	r.Post(page+"/account", h.connect)
