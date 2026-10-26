@@ -221,7 +221,7 @@ in {
     environmentFiles = mkOption {
       type = types.listOf types.str;
       default = [];
-      description = "EnvironmentFile= paths for the credentials that are not settings yet (mail accounts, Notion, Grafana, ntfy and TMDB tokens); read by every unit and atrium-run.";
+      description = "EnvironmentFile= paths for the credentials that are not settings yet (mail accounts, Notion, Grafana and ntfy tokens); read by every unit and atrium-run.";
     };
 
     modelServerUnits = mkOption {
