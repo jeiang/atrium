@@ -291,11 +291,12 @@ func TorrentHash(data []byte) (string, error) {
 
 type Qbit struct {
 	base, key string
+	http      *http.Client
 	Tuning
 }
 
-func NewQbit(base, key string, t Tuning) *Qbit {
-	return &Qbit{base: strings.TrimRight(base, "/"), key: key, Tuning: t}
+func NewQbit(base, key string, client *http.Client, t Tuning) *Qbit {
+	return &Qbit{base: strings.TrimRight(base, "/"), key: key, http: client, Tuning: t}
 }
 
 func (q *Qbit) do(ctx context.Context, method, path string, params []param, body io.Reader, contentType string) ([]byte, error) {
@@ -313,7 +314,7 @@ func (q *Qbit) do(ctx context.Context, method, path string, params []param, body
 	if q.key != "" {
 		req.Header.Set("Authorization", "Bearer "+q.key)
 	}
-	res, err := send(ctx, clientFor(q.QbitTimeout), req)
+	res, err := send(ctx, q.http, req)
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {

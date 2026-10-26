@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/integrations"
+	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/notify"
 )
@@ -255,16 +256,16 @@ func TestIntegrationTransportTrustsOnlyTheConfiguredCAAndUsesTheProxy(t *testing
 	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: tlsSrv.Certificate().Raw}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := runSettings(t, "set", integrations.CAKey("ntfy"), filepath.Join(dir, "missing.pem")); got.code != 0 {
+	if got := runSettings(t, "set", transport.CAKey("ntfy"), filepath.Join(dir, "missing.pem")); got.code != 0 {
 		t.Fatalf("set CA: %d %q", got.code, got.stderr)
 	}
 	if code, body := s.post("/ntfy/test", url.Values{"url": {tlsSrv.URL}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "cannot be read") {
 		t.Fatalf("unreadable CA: %d", code)
 	}
-	if got := runSettings(t, "set", integrations.CAKey("ntfy"), ca); got.code != 0 {
+	if got := runSettings(t, "set", transport.CAKey("ntfy"), ca); got.code != 0 {
 		t.Fatalf("set CA: %d %q", got.code, got.stderr)
 	}
-	if got := runSettings(t, "set", integrations.ProxyKey("ntfy"), proxy.URL); got.code != 0 {
+	if got := runSettings(t, "set", transport.ProxyKey("ntfy"), proxy.URL); got.code != 0 {
 		t.Fatalf("set proxy: %d %q", got.code, got.stderr)
 	}
 	if code, _ := s.post("/ntfy/test", url.Values{"url": {tlsSrv.URL}}); code != http.StatusOK {

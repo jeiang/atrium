@@ -14,12 +14,12 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -52,31 +52,6 @@ var (
 	dropFields = []string{"id", "tsNs"}
 	contexts   = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
 )
-
-var (
-	clientsMu sync.Mutex
-	clients   = map[time.Duration]*http.Client{}
-)
-
-func clientFor(timeout time.Duration) *http.Client {
-	clientsMu.Lock()
-	defer clientsMu.Unlock()
-	if c, ok := clients[timeout]; ok {
-		return c
-	}
-	c := &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			Proxy:                 http.ProxyFromEnvironment,
-			DialContext:           (&net.Dialer{Timeout: timeout}).DialContext,
-			TLSHandshakeTimeout:   timeout,
-			ResponseHeaderTimeout: timeout,
-		},
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
-	clients[timeout] = c
-	return c
-}
 
 func errorClass(err error) string {
 	var op *net.OpError
@@ -147,7 +122,16 @@ func request(ctx context.Context, tc *tool.Context, lim limits, method, path, ra
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := clientFor(lim.timeout).Do(req)
+	client, err := transport.For(ctx, tc.DB.Read, "grafana", lim.timeout)
+	var invalid transport.Error
+	if errors.As(err, &invalid) {
+		return nil, tool.Error("grafana unreachable: " + invalid.Error())
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer client.CloseIdleConnections()
+	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()

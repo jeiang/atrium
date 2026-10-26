@@ -86,7 +86,7 @@ func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 	tmdbID := py.Strip(web.QueryValue(query, "tmdb_id"))
 	pattern := web.QueryValue(query, "pattern")
 	set := s.settings(r.Context())
-	client := media.NewTMDB(set.TMDBToken, set.TMDBTimeout)
+	client := set.TMDB()
 	var results *[]SearchHit
 	var notice *tpl.Toast
 	err := func() error {
