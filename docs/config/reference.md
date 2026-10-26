@@ -215,11 +215,13 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `mail_backoff_max_seconds` | int | `300` | advanced | `ATRIUM_MAIL_MAIL_BACKOFF_MAX_SECONDS` |
 | `mail_backoff_start_seconds` | int | `5` | advanced | `ATRIUM_MAIL_MAIL_BACKOFF_START_SECONDS` |
 | `mail_body_cap_bytes` | int | `65536` | advanced | `ATRIUM_MAIL_MAIL_BODY_CAP_BYTES` |
+| `mail_chat_key` | string | none | secret | `ATRIUM_MAIL_MAIL_CHAT_KEY` |
 | `mail_chat_max_tokens` | int | `80` | advanced | `ATRIUM_MAIL_MAIL_CHAT_MAX_TOKENS` |
 | `mail_chat_model` | string | `qwen` | ui | `ATRIUM_MAIL_MAIL_CHAT_MODEL` |
 | `mail_chat_url` | string | none | ui | `ATRIUM_MAIL_MAIL_CHAT_URL` |
 | `mail_embed_batch` | int | `16` | advanced | `ATRIUM_MAIL_MAIL_EMBED_BATCH` |
 | `mail_embed_body_chars` | int | `1500` | advanced | `ATRIUM_MAIL_MAIL_EMBED_BODY_CHARS` |
+| `mail_embed_key` | string | none | secret | `ATRIUM_MAIL_MAIL_EMBED_KEY` |
 | `mail_embed_model` | string | `embeddinggemma` | advanced | `ATRIUM_MAIL_MAIL_EMBED_MODEL` |
 | `mail_embed_url` | string | none | ui | `ATRIUM_MAIL_MAIL_EMBED_URL` |
 | `mail_fetch_batch` | int | `40` | advanced | `ATRIUM_MAIL_MAIL_FETCH_BATCH` |
