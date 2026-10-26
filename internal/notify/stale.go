@@ -16,22 +16,25 @@ const staleEvery = 5 * time.Minute
 var staleLog = logx.Logger("atrium.notify.stale")
 
 func watchStale(d *db.DB, env config.Env, stopping <-chan struct{}) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		<-stopping
+		cancel()
+	}()
+	warn := func(msg string, err error) {
+		if err != nil && ctx.Err() == nil {
+			staleLog.Warn(msg, logx.Err, err.Error())
+		}
+	}
 	t := time.NewTicker(staleEvery)
 	defer t.Stop()
-	if err := probeUnknown(context.Background(), d); err != nil {
-		staleLog.Warn("ntfy privacy probe failed", logx.Err, err.Error())
-	}
-	for {
-		ctx := context.Background()
-		if err := noticeStale(ctx, d, env); err != nil {
-			staleLog.Warn("stale pass check failed", logx.Err, err.Error())
-		}
-		if err := noticeBudget(ctx, d, env, stamp()); err != nil {
-			staleLog.Warn("budget threshold check failed", logx.Err, err.Error())
-		}
+	warn("ntfy privacy probe failed", probeUnknown(ctx, d))
+	for ctx.Err() == nil {
+		warn("stale pass check failed", noticeStale(ctx, d, env))
+		warn("budget threshold check failed", noticeBudget(ctx, d, env, stamp()))
 		select {
-		case <-stopping:
-			return
+		case <-ctx.Done():
 		case <-t.C:
 		}
 	}
