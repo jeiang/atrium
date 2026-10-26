@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
@@ -183,6 +185,8 @@ type Settings struct {
 	TVURL     string
 	PublicURL string
 	TMDBToken string
+	QbitHTTP  *http.Client
+	TMDBHTTP  *http.Client
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
@@ -264,8 +268,16 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 	if out.TMDBToken, failure = store.Value(ctx, KeyTMDBToken); failure != nil {
 		return Settings{}, failure
 	}
+	if out.QbitHTTP, failure = transport.For(ctx, q, "qbittorrent", out.QbitTimeout); failure != nil {
+		return Settings{}, failure
+	}
+	if out.TMDBHTTP, failure = transport.For(ctx, q, "tmdb", out.TMDBTimeout); failure != nil {
+		return Settings{}, failure
+	}
 	return out, nil
 }
+
+func (s Settings) TMDB() *TMDB { return NewTMDB(s.TMDBToken, s.TMDBHTTP) }
 
 func (s Settings) NeedRoot() (string, error) {
 	if s.Root == "" {
@@ -286,5 +298,5 @@ func (s Settings) Qbit() (*Qbit, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewQbit(base, s.QbitKey, s.Tuning), nil
+	return NewQbit(base, s.QbitKey, s.QbitHTTP, s.Tuning), nil
 }

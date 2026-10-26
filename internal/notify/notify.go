@@ -18,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
@@ -246,7 +245,7 @@ func nullable(s string) any {
 }
 
 func newClient(ctx context.Context, q db.Querier, timeout time.Duration) (*http.Client, error) {
-	return integrations.Client(ctx, q, Integration, timeout)
+	return transport.For(ctx, q, Integration, timeout)
 }
 
 func errorClass(err error) string {

@@ -26,6 +26,7 @@ const (
 	Model        = "MODEL"
 	SettingKey   = "SETTING"
 	SettingValue = "VALUE"
+	Integration  = "INTEGRATION"
 )
 
 const Redacted = "[redacted]"

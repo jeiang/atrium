@@ -52,9 +52,6 @@ var (
 	notifier Notifier
 )
 
-func CAKey(name string) string    { return name + "_ca_file" }
-func ProxyKey(name string) string { return name + "_proxy" }
-
 func Register(i Integration) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -63,8 +60,8 @@ func Register(i Integration) {
 	}
 	instance := []settings.Scope{settings.Instance}
 	settings.MustRegister(
-		settings.Def{Key: CAKey(i.Name), Module: i.Module, Type: settings.String, Class: settings.Advanced, Scopes: instance},
-		settings.Def{Key: ProxyKey(i.Name), Module: i.Module, Type: settings.String, Class: settings.Advanced, Scopes: instance, Check: proxyCheck},
+		settings.Def{Key: transport.CAKey(i.Name), Module: i.Module, Type: settings.String, Class: settings.Advanced, Scopes: instance},
+		settings.Def{Key: transport.ProxyKey(i.Name), Module: i.Module, Type: settings.String, Class: settings.Advanced, Scopes: instance, Check: proxyCheck},
 	)
 	registry = append(registry, i)
 }
@@ -105,18 +102,6 @@ func text(ctx context.Context, q db.Querier, key string) (string, error) {
 	}
 	found, err := settings.Default.Resolve(ctx, q, key, 0)
 	return strings.TrimSpace(found.Value), err
-}
-
-func Client(ctx context.Context, q db.Querier, name string, timeout time.Duration) (*http.Client, error) {
-	ca, err := text(ctx, q, CAKey(name))
-	if err != nil {
-		return nil, err
-	}
-	proxy, err := text(ctx, q, ProxyKey(name))
-	if err != nil {
-		return nil, err
-	}
-	return transport.New(transport.Options{Timeout: timeout, CAFile: ca, Proxy: proxy})
 }
 
 type Record struct {
@@ -188,7 +173,7 @@ func current(ctx context.Context, q db.Querier, i Integration) (Conn, error) {
 }
 
 func run(ctx context.Context, q db.Querier, i Integration, c Conn) (state, reason string, expires *time.Time, err error) {
-	if c.HTTP, err = Client(ctx, q, i.Name, testTimeout); err != nil {
+	if c.HTTP, err = transport.Configured(ctx, q, i.Name, testTimeout); err != nil {
 		var te transport.Error
 		if errors.As(err, &te) {
 			return Failing, te.Error(), nil, nil

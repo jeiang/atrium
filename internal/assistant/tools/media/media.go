@@ -372,7 +372,7 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 	if err != nil {
 		return nil, err
 	}
-	client := media.NewTMDB(settings.TMDBToken, settings.TMDBTimeout)
+	client := settings.TMDB()
 	tmdbID, _ := args.Get("tmdb_id")
 	imdbText, _, err := tool.TextArg(args, "imdb_id", false)
 	if err != nil {

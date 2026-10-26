@@ -47,7 +47,7 @@ func (s *service) settings(ctx context.Context) media.Settings {
 }
 
 func (s *service) artwork(set media.Settings) *media.Artwork {
-	art := media.NewArtwork(s.deps.Cfg.MediaCacheDir(), media.NewTMDB(set.TMDBToken, set.TMDBTimeout), set.Tuning)
+	art := media.NewArtwork(s.deps.Cfg.MediaCacheDir(), set.TMDB(), set.Tuning)
 	art.Run = s.exec
 	return art
 }

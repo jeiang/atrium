@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
@@ -30,8 +31,9 @@ func Templates() fs.FS {
 }
 
 const (
-	path       = "/settings/integrations"
-	checkEvery = 24 * time.Hour
+	path         = "/settings/integrations"
+	checkEvery   = 24 * time.Hour
+	recheckAfter = 5 * time.Minute
 )
 
 var log = logx.Logger("atrium.integrations")
@@ -68,15 +70,41 @@ func watch(d *web.Deps) {
 	}()
 	t := time.NewTicker(checkEvery)
 	defer t.Stop()
+	checked := map[string]time.Time{}
 	for ctx.Err() == nil {
 		if err := CheckAll(ctx, d.DB, d.Env, stamp()); err != nil && ctx.Err() == nil {
 			log.Warn("integration health check failed", logx.Err, err.Error())
 		}
+		recheck(ctx, d, t.C, checked)
+	}
+}
+
+func recheck(ctx context.Context, d *web.Deps, daily <-chan time.Time, checked map[string]time.Time) {
+	for {
 		select {
 		case <-ctx.Done():
-		case <-t.C:
+			return
+		case <-daily:
+			return
+		case name := <-transport.Failed():
+			if _, known := Get(name); !known || time.Since(checked[name]) < recheckAfter || !working(ctx, d, name) {
+				continue
+			}
+			state, err := Check(ctx, d.DB, d.Env, name, stamp())
+			if err != nil && ctx.Err() == nil {
+				log.Warn("integration health check failed", logx.Integration, name, logx.Err, err.Error())
+			}
+			if state == OK {
+				checked[name] = time.Now()
+			}
 		}
 	}
+}
+
+func working(ctx context.Context, d *web.Deps, name string) bool {
+	var state string
+	err := d.DB.Read.QueryRowContext(ctx, "SELECT state FROM integration_health WHERE name = ?", name).Scan(&state)
+	return err != nil || state != Failing && state != NeedsReauth
 }
 
 func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, data page) {

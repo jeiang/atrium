@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -78,8 +79,11 @@ func (c *Client) Configure(ctx context.Context, q db.Querier) error {
 	if err != nil {
 		return err
 	}
-	c.API = limits
-	c.HTTP.Timeout = limits.Timeout
+	client, err := transport.For(ctx, q, "notion", limits.Timeout)
+	if err != nil {
+		return err
+	}
+	c.API, c.HTTP = limits, client
 	return nil
 }
 

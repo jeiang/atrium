@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -20,8 +19,8 @@ type TmdbError string
 func (e TmdbError) Error() string { return string(e) }
 
 type TMDB struct {
-	token   string
-	timeout time.Duration
+	token string
+	http  *http.Client
 }
 
 type TVResult struct {
@@ -35,11 +34,11 @@ type MovieResult struct {
 	PosterPath string
 }
 
-func NewTMDB(token string, timeout time.Duration) *TMDB {
+func NewTMDB(token string, client *http.Client) *TMDB {
 	if token == "" {
 		return nil
 	}
-	return &TMDB{token: token, timeout: timeout}
+	return &TMDB{token: token, http: client}
 }
 
 func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, error) {
@@ -52,7 +51,7 @@ func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, erro
 		return nil, TmdbError("TMDB unreachable: InvalidURL")
 	}
 	req.Header.Set("Authorization", "Bearer "+t.token)
-	res, err := send(ctx, clientFor(t.timeout), req)
+	res, err := send(ctx, t.http, req)
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {
@@ -200,7 +199,7 @@ func (t *TMDB) Image(ctx context.Context, posterPath string) ([]byte, error) {
 	if err != nil {
 		return nil, TmdbError("TMDB images unreachable: InvalidURL")
 	}
-	res, err := send(ctx, clientFor(t.timeout), req)
+	res, err := send(ctx, t.http, req)
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {
