@@ -38,7 +38,7 @@ services.atrium = {
 
 ## Removed options
 
-These options fail evaluation with a message that names the replacement: `id` (use `uid`, `user` and `group`), `mode` (`settings.mail.mail_mode`), `chatUrl` and `embedUrl` (`settings.mail.mail_chat_url`, `mail_embed_url`), `publicUrl` (`settings.core.public_url`), `timeZone` (`settings.core.tz`), `icloudAppleId` (the Settings page or `settings.calendar.icloud_apple_id`), `extraEnvironment` (`settings` and `secretFiles`), `web.port` (`port`), `ntfy.url`, `ntfy.topic` and `ntfy.mediaTopic` (`settings.notify.*`), and `media.root`, `media.qbittorrentUrl`, `media.moviesUrl` and `media.tvUrl` (`settings.media.*`).
+These options fail evaluation with a message that names the replacement: `id` (use `uid`, `user` and `group`), `mode` (`settings.mail.mail_mode`), `chatUrl` and `embedUrl` (`settings.mail.mail_chat_url`, `mail_embed_url`), `publicUrl` (`settings.core.public_url`), `timeZone` (`settings.core.tz`), `icloudAppleId` (the Settings page or `settings.calendar.icloud_apple_id`), `extraEnvironment` (`settings` and `secretFiles`), `web.port` (`port`), `ntfy.url`, `ntfy.topic` and `ntfy.mediaTopic` (`settings.notify.*`), `media.root`, `media.qbittorrentUrl`, `media.moviesUrl` and `media.tvUrl` (`settings.media.*`), and `grafanaUrl` (`settings.grafana.grafana_url`).
 
 atrium also logs a warning at startup for each environment variable it no longer reads (for example `ATRIUM_MODE`) and names the variable to use instead.
 
