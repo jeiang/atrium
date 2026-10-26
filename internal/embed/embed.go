@@ -34,6 +34,7 @@ type Options struct {
 	Model     string
 	BodyChars int
 	Batch     int
+	Dim       int
 }
 
 type optionsKey struct{}
@@ -52,6 +53,9 @@ func options(ctx context.Context) Options {
 	}
 	if o.Batch <= 0 {
 		o.Batch = config.EmbedBatch
+	}
+	if o.Dim <= 0 {
+		o.Dim = config.EmbedDim
 	}
 	return o
 }
@@ -122,7 +126,8 @@ func Texts(ctx context.Context, url string, texts []string) ([][]float64, error)
 			return nil, err
 		}
 	}
-	shape := fmt.Errorf("%w: embedding response shape mismatch: expected %dx%d", httpx.ErrValue, len(texts), config.EmbedDim)
+	dim := options(ctx).Dim
+	shape := fmt.Errorf("%w: embedding response shape mismatch: expected %dx%d", httpx.ErrValue, len(texts), dim)
 	if len(vectors) != len(texts) {
 		return nil, shape
 	}
@@ -131,7 +136,7 @@ func Texts(ctx context.Context, url string, texts []string) ([][]float64, error)
 		if err != nil {
 			return nil, err
 		}
-		if n != config.EmbedDim {
+		if n != dim {
 			return nil, shape
 		}
 	}
@@ -215,56 +220,72 @@ type pendingMessage struct {
 }
 
 func Pending(ctx context.Context, d *db.DB, url string) (int, error) {
-	batchLimit := options(ctx).Batch
 	done := 0
 	for {
-		rows, err := d.Read.QueryContext(ctx,
-			"SELECT id, account FROM messages WHERE embedded = 0 AND gone_at IS NULL ORDER BY id LIMIT ?", batchLimit)
+		idx, err := Active(ctx, d.Read)
 		if err != nil {
 			return done, err
 		}
-		batch, err := collect(rows, func(r *sql.Rows) (pendingMessage, error) {
-			var m pendingMessage
-			err := r.Scan(&m.id, &m.account)
-			return m, err
-		})
-		if err != nil {
+		n, err := messageBatch(ctx, d, url, idx, "embedded = 0", true)
+		done += n
+		if err != nil || n == 0 {
 			return done, err
 		}
-		if len(batch) == 0 {
-			return done, nil
-		}
-		texts := make([]string, len(batch))
-		for i, m := range batch {
-			if texts[i], err = MessageDocument(ctx, d.Read, m.id); err != nil {
-				return done, err
-			}
-		}
-		vectors, err := Texts(ctx, url, texts)
-		if err != nil {
-			return done, err
-		}
-		err = d.WithTx(ctx, func(tx *sql.Tx) error {
-			for i, m := range batch {
-				if _, err := tx.ExecContext(ctx, "DELETE FROM message_vec WHERE rowid = ?", m.id); err != nil {
-					return err
-				}
-				if _, err := tx.ExecContext(ctx, "INSERT INTO message_vec (rowid, account, embedding) VALUES (?, ?, ?)",
-					m.id, m.account, Serialize(vectors[i])); err != nil {
-					return err
-				}
-				if _, err := tx.ExecContext(ctx, "UPDATE messages SET embedded = 1 WHERE id = ?", m.id); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return done, err
-		}
-		done += len(batch)
 		log.Info(fmt.Sprintf("embedded %d", done))
 	}
+}
+
+func FillMessages(ctx context.Context, d *db.DB, url string, idx Index) (int, error) {
+	return messageBatch(ctx, d, url, idx, "id NOT IN (SELECT rowid FROM "+idx.MessageTable()+") AND id IN (SELECT rowid FROM message_fts)", false)
+}
+
+func messageBatch(ctx context.Context, d *db.DB, url string, idx Index, where string, mark bool) (int, error) {
+	rows, err := d.Read.QueryContext(ctx,
+		"SELECT id, account FROM messages WHERE "+where+" AND gone_at IS NULL ORDER BY id LIMIT ?", options(ctx).Batch)
+	if err != nil {
+		return 0, err
+	}
+	batch, err := collect(rows, func(r *sql.Rows) (pendingMessage, error) {
+		var m pendingMessage
+		err := r.Scan(&m.id, &m.account)
+		return m, err
+	})
+	if err != nil || len(batch) == 0 {
+		return 0, err
+	}
+	texts := make([]string, len(batch))
+	for i, m := range batch {
+		if texts[i], err = MessageDocument(ctx, d.Read, m.id); err != nil {
+			return 0, err
+		}
+	}
+	vectors, err := Texts(ctx, url, texts)
+	if err != nil {
+		return 0, err
+	}
+	table := idx.MessageTable()
+	err = d.WithTx(ctx, func(tx *sql.Tx) error {
+		for i, m := range batch {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE rowid = ?", m.id); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "INSERT INTO "+table+" (rowid, account, embedding) VALUES (?, ?, ?)",
+				m.id, m.account, Serialize(vectors[i])); err != nil {
+				return err
+			}
+			if !mark {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE messages SET embedded = 1 WHERE id = ?", m.id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return len(batch), nil
 }
 
 func PendingOrWarn(ctx context.Context, d *db.DB, url string, passLog *slog.Logger) error {
@@ -278,7 +299,11 @@ func PendingOrWarn(ctx context.Context, d *db.DB, url string, passLog *slog.Logg
 }
 
 func Reindex(ctx context.Context, d *db.DB, url string) (int, error) {
-	if _, err := d.Write.ExecContext(ctx, "DELETE FROM message_vec"); err != nil {
+	idx, err := Active(ctx, d.Read)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := d.Write.ExecContext(ctx, "DELETE FROM "+idx.MessageTable()); err != nil {
 		return 0, err
 	}
 	if _, err := d.Write.ExecContext(ctx, "UPDATE messages SET embedded = 0"); err != nil {
@@ -294,61 +319,77 @@ type pendingPage struct {
 }
 
 func NotionPending(ctx context.Context, d *db.DB, url string, texts TextsFunc) (int, error) {
-	batchLimit := options(ctx).Batch
 	done := 0
 	for {
-		rows, err := d.Read.QueryContext(ctx,
-			"SELECT rid, title, path, markdown, private FROM notion_pages WHERE embedded = 0 AND in_trash = 0 ORDER BY rid LIMIT ?",
-			batchLimit)
+		idx, err := Active(ctx, d.Read)
 		if err != nil {
 			return done, err
 		}
-		batch, err := collect(rows, func(r *sql.Rows) (pendingPage, error) {
-			var p pendingPage
-			err := r.Scan(&p.rid, &p.title, &p.path, &p.markdown, &p.private)
-			return p, err
-		})
-		if err != nil {
+		n, err := notionBatch(ctx, d, url, texts, idx, "embedded = 0", true)
+		done += n
+		if err != nil || n == 0 {
 			return done, err
 		}
-		if len(batch) == 0 {
-			return done, nil
-		}
-		docs := make([]string, len(batch))
-		for i, p := range batch {
-			docs[i] = NotionDocumentText(p.title, p.path, p.markdown)
-		}
-		vectors, err := texts(ctx, url, docs)
-		if err != nil {
-			return done, err
-		}
-		if len(vectors) != len(batch) {
-			return done, fmt.Errorf("%w: zip() argument 2 is shorter or longer than argument 1", httpx.ErrValue)
-		}
-		err = d.WithTx(ctx, func(tx *sql.Tx) error {
-			for i, p := range batch {
-				visibility := VisibilityPublic
-				if p.private != 0 {
-					visibility = VisibilityPrivate
-				}
-				if _, err := tx.ExecContext(ctx, "DELETE FROM notion_vec WHERE rowid = ?", p.rid); err != nil {
-					return err
-				}
-				if _, err := tx.ExecContext(ctx, "INSERT INTO notion_vec (rowid, visibility, embedding) VALUES (?, ?, ?)",
-					p.rid, visibility, Serialize(vectors[i])); err != nil {
-					return err
-				}
-				if _, err := tx.ExecContext(ctx, "UPDATE notion_pages SET embedded = 1 WHERE rid = ?", p.rid); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return done, err
-		}
-		done += len(batch)
 	}
+}
+
+func FillNotion(ctx context.Context, d *db.DB, url string, idx Index) (int, error) {
+	return notionBatch(ctx, d, url, Texts, idx, "rid NOT IN (SELECT rowid FROM "+idx.NotionTable()+")", false)
+}
+
+func notionBatch(ctx context.Context, d *db.DB, url string, texts TextsFunc, idx Index, where string, mark bool) (int, error) {
+	rows, err := d.Read.QueryContext(ctx,
+		"SELECT rid, title, path, markdown, private FROM notion_pages WHERE "+where+" AND in_trash = 0 ORDER BY rid LIMIT ?",
+		options(ctx).Batch)
+	if err != nil {
+		return 0, err
+	}
+	batch, err := collect(rows, func(r *sql.Rows) (pendingPage, error) {
+		var p pendingPage
+		err := r.Scan(&p.rid, &p.title, &p.path, &p.markdown, &p.private)
+		return p, err
+	})
+	if err != nil || len(batch) == 0 {
+		return 0, err
+	}
+	docs := make([]string, len(batch))
+	for i, p := range batch {
+		docs[i] = NotionDocumentText(p.title, p.path, p.markdown)
+	}
+	vectors, err := texts(ctx, url, docs)
+	if err != nil {
+		return 0, err
+	}
+	if len(vectors) != len(batch) {
+		return 0, fmt.Errorf("%w: zip() argument 2 is shorter or longer than argument 1", httpx.ErrValue)
+	}
+	table := idx.NotionTable()
+	err = d.WithTx(ctx, func(tx *sql.Tx) error {
+		for i, p := range batch {
+			visibility := VisibilityPublic
+			if p.private != 0 {
+				visibility = VisibilityPrivate
+			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE rowid = ?", p.rid); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "INSERT INTO "+table+" (rowid, visibility, embedding) VALUES (?, ?, ?)",
+				p.rid, visibility, Serialize(vectors[i])); err != nil {
+				return err
+			}
+			if !mark {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE notion_pages SET embedded = 1 WHERE rid = ?", p.rid); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return len(batch), nil
 }
 
 func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {

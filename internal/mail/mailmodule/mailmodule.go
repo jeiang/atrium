@@ -2,10 +2,14 @@ package mailmodule
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
@@ -16,6 +20,39 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/web"
 )
+
+func init() {
+	for _, e := range []struct{ kind, label, url, key string }{
+		{mail.EndpointChat, "Mail chat endpoint", mail.KeyChatURL, mail.KeyChatKey},
+		{mail.EndpointEmbed, "Mail embed endpoint", mail.KeyEmbedURL, mail.KeyEmbedKey},
+	} {
+		integrations.Register(integrations.Integration{
+			Name: mail.Integration(e.kind), Label: e.label, Module: module.Mail, URLKey: e.url, SecretKey: e.key,
+			Help: "OpenAI-compatible base URL, for example http://127.0.0.1:8187/v1; the Bearer key is optional.",
+			Test: probeTest(e.kind),
+		})
+	}
+}
+
+func probeTest(kind string) func(context.Context, integrations.Conn) (string, error) {
+	return func(ctx context.Context, c integrations.Conn) (string, error) {
+		res, err := mail.ProbeCandidate(ctx, c.DB, kind, c.URL, c.Secret, c.HTTP, float64(time.Now().UnixNano())/1e9)
+		if err != nil {
+			return "", err
+		}
+		if !res.OK {
+			return "", errors.New(res.Reason)
+		}
+		detail := fmt.Sprintf("%d models listed", len(res.Models))
+		if res.Dimension > 0 {
+			detail += fmt.Sprintf(", %d dimensions", res.Dimension)
+		}
+		if res.Hosted {
+			detail += "; hosted endpoint: mail content leaves this host"
+		}
+		return detail, nil
+	}
+}
 
 type Module struct {
 	Clients run.Clients

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -19,14 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/secrets"
 )
-
-func unsetEnv(t *testing.T, names ...string) {
-	t.Helper()
-	for _, name := range names {
-		t.Setenv(name, "")
-		_ = os.Unsetenv(name)
-	}
-}
 
 type fakeNotionAccess struct {
 	mu    sync.Mutex

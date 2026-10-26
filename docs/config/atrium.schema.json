@@ -1869,6 +1869,13 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "mail_chat_ca_file": {
+          "type": "string"
+        },
+        "mail_chat_ca_file_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "mail_chat_key_file": {
           "description": "path of a file holding the value",
           "type": "string"
@@ -1889,6 +1896,13 @@
           "type": "string"
         },
         "mail_chat_model_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_chat_proxy": {
+          "type": "string"
+        },
+        "mail_chat_proxy_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -1921,6 +1935,13 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "mail_embed_ca_file": {
+          "type": "string"
+        },
+        "mail_embed_ca_file_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "mail_embed_key_file": {
           "description": "path of a file holding the value",
           "type": "string"
@@ -1930,6 +1951,13 @@
           "type": "string"
         },
         "mail_embed_model_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_embed_proxy": {
+          "type": "string"
+        },
+        "mail_embed_proxy_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

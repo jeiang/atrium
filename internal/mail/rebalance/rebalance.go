@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
@@ -241,13 +242,17 @@ func (p params) senderSplit(rows []*row) (string, []Group, bool) {
 }
 
 func unitVectors(ctx context.Context, q proposals.Querier, ids []int64) (map[int64][]float32, error) {
+	idx, err := embed.Active(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	found := map[int64][]float32{}
 	for _, chunk := range mailops.Chunks(ids, 500) {
 		args := make([]any, len(chunk))
 		for i, id := range chunk {
 			args[i] = id
 		}
-		rows, err := q.QueryContext(ctx, "SELECT rowid, embedding FROM message_vec WHERE rowid IN (?"+strings.Repeat(",?", len(chunk)-1)+")", args...)
+		rows, err := q.QueryContext(ctx, "SELECT rowid, embedding FROM "+idx.MessageTable()+" WHERE rowid IN (?"+strings.Repeat(",?", len(chunk)-1)+")", args...)
 		if err != nil {
 			return nil, err
 		}

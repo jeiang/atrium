@@ -3,6 +3,14 @@
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
 {{template "settings_tabs" "mail"}}
 <div class="flex flex-col gap-3">
+  {{range $d.indexes}}
+  <div class="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-4 text-sm" data-embed-index="{{.state}}" data-generation="{{.generation}}">
+    <span class="font-medium">{{if eq .state "active"}}Embedding index{{else}}Re-embedding{{end}}</span>
+    <span class="text-xs text-muted-foreground">{{with .model}}{{.}} · {{end}}{{.dimension}} dimensions</span>
+    {{if eq .state "building"}}<span class="badge" data-variant="outline" data-progress>{{.done}} of {{.total}}</span>{{end}}
+    {{with .error}}<p class="w-full text-xs text-destructive">{{.}}</p>{{end}}
+  </div>
+  {{end}}
   {{range $d.accounts}}
   <form method="post" action="/settings/mail/accounts/{{.id}}" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-account="{{.id}}" data-state="{{.state}}" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">

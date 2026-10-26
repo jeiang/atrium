@@ -362,6 +362,10 @@ func ChatURL(ctx context.Context, q Querier) (string, error) {
 }
 
 func EmbedURL(ctx context.Context, q Querier) (string, error) {
+	active, err := embed.Active(ctx, q)
+	if err != nil || active.URL != "" {
+		return active.URL, err
+	}
 	return urlOf(ctx, q, KeyEmbedURL)
 }
 
@@ -386,9 +390,17 @@ func WithModels(ctx context.Context, q Querier) (context.Context, error) {
 	if r.Err() != nil {
 		return ctx, r.Err()
 	}
+	active, err := embed.Active(ctx, q)
+	if err != nil {
+		return ctx, err
+	}
+	vec.Dim = active.Dimension
+	if active.URL != "" {
+		vec.Model = active.Model
+	}
 	endpoints, err := Endpoints(ctx, q)
 	if err != nil {
 		return ctx, err
 	}
-	return withKeys(embed.WithOptions(llm.WithOptions(ctx, chat), vec), endpoints), nil
+	return withEndpoints(embed.WithOptions(llm.WithOptions(ctx, chat), vec), q, endpoints)
 }
