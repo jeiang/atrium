@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -30,21 +31,32 @@ func settingEnv(key string) string {
 
 func flagEnv(name string) string { return settingEnv(module.FlagKey(name)) }
 
+var defaultAccountsFile = func() string {
+	dir := filepath.Join(os.TempDir(), "atrium-test-accounts")
+	secret := filepath.Join(dir, "icloud.password")
+	path := filepath.Join(dir, "accounts.toml")
+	body := fmt.Sprintf("[[account]]\nid = \"icloud\"\npreset = \"icloud\"\nlogin = \"operator@icloud.invalid\"\npassword_file = %q\n", secret)
+	if os.MkdirAll(dir, 0o700) != nil || os.WriteFile(secret, []byte("dummy-icloud-password\n"), 0o600) != nil || os.WriteFile(path, []byte(body), 0o600) != nil {
+		panic("cannot write the default mail accounts file")
+	}
+	return path
+}()
+
 func requirementEnv(mediaRoot string) map[string]string {
 	return map[string]string{
-		settingEnv(mail.KeyChatURL):       "http://chat.invalid/v1",
-		settingEnv(mail.KeyEmbedURL):      "http://embed.invalid/v1",
-		settingEnv(media.KeyRoot):         mediaRoot,
-		settingEnv(media.KeyQbitURL):      "http://qbittorrent.invalid",
-		settingEnv(notify.KeyURL):         "http://ntfy.invalid",
-		settingEnv(notify.KeyTopic):       "atrium",
-		settingEnv(calendar.AppleIDKey):   "operator@icloud.invalid",
-		settingEnv(contacts.DirKey):       mediaRoot + "-contacts",
-		"ICLOUD_APP_PASSWORD":             "dummy-icloud-password",
-		"ANTHROPIC_API_KEY":               "dummy-anthropic-key",
-		settingEnv(notion.TokenKey):       "dummy-notion-token",
-		settingEnv(grafanatools.KeyURL):   "http://grafana.invalid",
-		settingEnv(grafanatools.KeyToken): "dummy-grafana-token",
+		settingEnv(mail.KeyChatURL):            "http://chat.invalid/v1",
+		settingEnv(mail.KeyEmbedURL):           "http://embed.invalid/v1",
+		settingEnv(media.KeyRoot):              mediaRoot,
+		settingEnv(media.KeyQbitURL):           "http://qbittorrent.invalid",
+		settingEnv(notify.KeyURL):              "http://ntfy.invalid",
+		settingEnv(notify.KeyTopic):            "atrium",
+		settingEnv(calendar.AppleIDKey):        "operator@icloud.invalid",
+		settingEnv(contacts.DirKey):            mediaRoot + "-contacts",
+		settingEnv(config.KeyMailAccountsFile): defaultAccountsFile,
+		"ANTHROPIC_API_KEY":                    "dummy-anthropic-key",
+		settingEnv(notion.TokenKey):            "dummy-notion-token",
+		settingEnv(grafanatools.KeyURL):        "http://grafana.invalid",
+		settingEnv(grafanatools.KeyToken):      "dummy-grafana-token",
 	}
 }
 

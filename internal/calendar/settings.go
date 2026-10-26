@@ -12,6 +12,7 @@ import (
 
 const (
 	AppleIDKey          = "icloud_apple_id"
+	AccountKey          = "calendar_account"
 	ICloudCalendarKey   = "icloud_calendar"
 	CalendarDirKey      = "calendar_dir"
 	GoogleClientIDKey   = "google_client_id"
@@ -29,6 +30,7 @@ func init() {
 	instance := []settings.Scope{settings.Instance}
 	settings.MustRegister(
 		settings.Def{Key: AppleIDKey, Module: "calendar", Type: settings.String, Class: settings.UI, Scopes: instance},
+		settings.Def{Key: AccountKey, Module: "calendar", Type: settings.String, Class: settings.UI, Scopes: instance},
 		settings.Def{Key: ICloudCalendarKey, Module: "calendar", Type: settings.String, Class: settings.UI, Scopes: instance},
 		settings.Def{Key: GoogleClientIDKey, Module: "calendar", Type: settings.String, Class: settings.UI, Scopes: instance},
 		settings.Def{
@@ -57,6 +59,7 @@ func init() {
 
 type Settings struct {
 	AppleID        string
+	Account        string
 	ICloudCalendar string
 	CalendarDir    string
 	GoogleClientID string
@@ -83,6 +86,7 @@ func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 	}
 	for _, step := range []func() error{
 		func() error { return text(AppleIDKey, &out.AppleID) },
+		func() error { return text(AccountKey, &out.Account) },
 		func() error { return text(ICloudCalendarKey, &out.ICloudCalendar) },
 		func() error { return text(CalendarDirKey, &out.CalendarDir) },
 		func() error { return text(GoogleClientIDKey, &out.GoogleClientID) },
@@ -123,16 +127,26 @@ func missingCredentials(missing []string) error {
 	return NotConfigured(strings.Join(missing, ", ") + " not set")
 }
 
-func icloudLogin(env config.Env, set Settings) (config.CalDAVLogin, error) {
-	password, _ := env("ICLOUD_APP_PASSWORD")
-	var missing []string
-	if set.AppleID == "" {
-		missing = append(missing, "ATRIUM_CALENDAR_ICLOUD_APPLE_ID")
+func ICloudLogin(set Settings) (config.CalDAVLogin, error) {
+	var found []config.AccountSpec
+	for _, a := range config.Accounts() {
+		if a.Enabled && a.Preset == config.ICloud && (set.Account == "" || a.Name == set.Account) {
+			found = append(found, a)
+		}
 	}
-	if password == "" {
-		missing = append(missing, "ICLOUD_APP_PASSWORD")
+	switch {
+	case len(found) == 0 && set.Account != "":
+		return config.CalDAVLogin{}, NotConfigured(AccountKey + " " + py.Repr(set.Account) + " is not an enabled iCloud mail account")
+	case len(found) == 0:
+		return config.CalDAVLogin{}, NotConfigured("no enabled iCloud mail account")
+	case len(found) > 1:
+		return config.CalDAVLogin{}, NotConfigured("several iCloud mail accounts; set " + AccountKey)
 	}
-	return config.CalDAVLogin{AppleID: set.AppleID, Password: password}, missingCredentials(missing)
+	apple := set.AppleID
+	if apple == "" {
+		apple = found[0].Login
+	}
+	return config.CalDAVLogin{AppleID: apple, Password: found[0].Password}, nil
 }
 
 func googleCredentials(env config.Env, set Settings) (config.GoogleCredentials, error) {

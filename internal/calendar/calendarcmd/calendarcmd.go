@@ -25,7 +25,7 @@ func syncCommand() *cli.Command {
 			if err != nil {
 				return davmirror.Stats{}, err
 			}
-			return calendar.SyncCalendarMirror(ctx, config.OS, set)
+			return calendar.SyncCalendarMirror(ctx, set)
 		})
 }
 

@@ -127,6 +127,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_AUTH_OIDC_SCOPES` | `auth.oidc_scopes` |
 | `ATRIUM_AUTH_OIDC_SESSION_IDLE_DAYS` | `auth.oidc_session_idle_days` |
 | `ATRIUM_AUTH_OIDC_SESSION_MAX_DAYS` | `auth.oidc_session_max_days` |
+| `ATRIUM_CALENDAR_CALENDAR_ACCOUNT` | `calendar.calendar_account` |
 | `ATRIUM_CALENDAR_CALENDAR_DIR` | `calendar.calendar_dir` |
 | `ATRIUM_CALENDAR_CANDIDATE_DRAFT_LIMIT` | `calendar.candidate_draft_limit` |
 | `ATRIUM_CALENDAR_CANDIDATE_SCAN_LIMIT` | `calendar.candidate_scan_limit` |

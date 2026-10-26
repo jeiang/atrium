@@ -121,7 +121,7 @@ func CreateEvent(ctx context.Context, env config.Env, set Settings, target strin
 			return Ref{}, remote(err)
 		}
 	case ICloud:
-		cal, err := openICloud(ctx, env, set)
+		cal, err := openICloud(ctx, set)
 		if err != nil {
 			return Ref{}, err
 		}
@@ -151,7 +151,7 @@ func DeleteEvent(ctx context.Context, env config.Env, set Settings, target, uid 
 			}
 		}
 	case ICloud:
-		cal, err := openICloud(ctx, env, set)
+		cal, err := openICloud(ctx, set)
 		if err != nil {
 			return err
 		}
