@@ -73,7 +73,7 @@ func flNew(t *testing.T, vars map[string]string, o Options) *flWorld {
 		"ATRIUM_CORE_PUBLIC_URL":        "https://atrium.test",
 		"ATRIUM_MEDIA_MEDIA_MOVIES_URL": "http://artemis.vpn:8084",
 		"ATRIUM_MEDIA_MEDIA_TV_URL":     "http://artemis.vpn:8085",
-		"TMDB_API_KEY":                  "k",
+		"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "k",
 		"ATRIUM_MEDIA_LINK_KEY":         flKey,
 	}
 	for k, v := range vars {
@@ -517,7 +517,10 @@ func flServeTMDB(t *testing.T) *flTMDB {
 		}
 		fake.mu.Unlock()
 		q := r.URL.Query()
-		if q.Get("api_key") != "k" {
+		if q.Has("api_key") {
+			t.Errorf("TMDB request %s carries api_key in its query", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer k" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -712,7 +715,7 @@ func TestFlThumbnailsRunOneAtATime(t *testing.T) {
 func TestFlWithoutTMDBOrRoot(t *testing.T) {
 	tmdb := flServeTMDB(t)
 	ff := &flFFmpeg{duration: "10"}
-	w := flNew(t, map[string]string{"TMDB_API_KEY": "", "ATRIUM_MEDIA_MEDIA_ROOT": ""}, Options{Exec: ff.run})
+	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "", "ATRIUM_MEDIA_MEDIA_ROOT": ""}, Options{Exec: ff.run})
 	flPlaceholderCheck(t, w.get("/media/art/movie/"+py.URLQuote("Dune (2021)")), "poster without a TMDB key")
 	flPlaceholderCheck(t, w.get("/media/thumb/"+py.URLQuote("tv/Lanterns (2026)/Season 01/x.mkv")), "thumbnail without a root")
 	if tmdb.hitCount() != 0 || ff.count() != 0 {
@@ -722,7 +725,7 @@ func TestFlWithoutTMDBOrRoot(t *testing.T) {
 
 func TestFlTMDBFailureGivesPlaceholderWithoutMarker(t *testing.T) {
 	tmdb := flServeTMDB(t)
-	w := flNew(t, map[string]string{"TMDB_API_KEY": "wrong"}, Options{})
+	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "wrong"}, Options{})
 	flPlaceholderCheck(t, w.get("/media/art/movie/"+py.URLQuote("Dune (2021)")), "TMDB rejects the key")
 	if tmdb.imageCount() != 0 {
 		t.Errorf("image fetched after TMDB error")

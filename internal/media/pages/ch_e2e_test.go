@@ -160,7 +160,7 @@ func TestChE2EChannelsSearchPreviewAddRemovePoll(t *testing.T) {
 	qb := chNewQbit(t)
 	ez.release("1234567", chHashA, "Lanterns S01E01 1080p WEB")
 	ez.release("1234567", chHashB, "lanterns s01e01 720p")
-	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": qb.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "ATRIUM_NOTIFY_NTFY_URL": chNewNtfy(t), "TMDB_API_KEY": "k"}), Options{})
+	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": qb.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "ATRIUM_NOTIFY_NTFY_URL": chNewNtfy(t), "ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "k"}), Options{})
 
 	empty := status(t, s.get("/media/channels"), 200, "channels page")
 	contains(t, empty, "No channels", "Not checked yet.", `name="backfill" value="1" checked`, "Watching (0)")
@@ -220,7 +220,7 @@ func TestChE2EChannelsSearchPreviewAddRemovePoll(t *testing.T) {
 func TestChE2ETmdbFailuresAndMissingBackends(t *testing.T) {
 	tm := chNewTmdb(t)
 	ez := chNewEztv(t)
-	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "TMDB_API_KEY": "k"}), Options{})
+	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "k"}), Options{})
 
 	missing := status(t, s.get("/media/channels?tmdb_id=7"), 200, "no imdb id")
 	contains(t, missing, "No IMDb id on TMDB", "Enter it by hand.")
@@ -242,6 +242,6 @@ func TestChE2ETmdbFailuresAndMissingBackends(t *testing.T) {
 
 	plain := newSite(t, chVars(t, nil), Options{})
 	page := status(t, plain.get("/media/channels?q=x"), 200, "no TMDB key")
-	contains(t, page, "TMDB_API_KEY is not set: enter the IMDb id directly.", `name="imdb"`)
+	contains(t, page, "No TMDB read token is set: enter the IMDb id directly.", `name="imdb"`)
 	lacks(t, page, `id="q"`)
 }

@@ -2565,6 +2565,10 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "media_qbittorrent_api_key_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "media_qbittorrent_timeout_seconds": {
           "default": 15,
           "type": [
@@ -2664,6 +2668,10 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "media_tmdb_token_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "media_torrent_upload_bytes": {
           "default": 1048576,
           "type": [
@@ -2701,6 +2709,20 @@
           "type": "string"
         },
         "qbittorrent_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tmdb_ca_file": {
+          "type": "string"
+        },
+        "tmdb_ca_file_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tmdb_proxy": {
+          "type": "string"
+        },
+        "tmdb_proxy_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }

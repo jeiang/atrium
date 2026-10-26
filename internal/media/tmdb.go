@@ -20,7 +20,7 @@ type TmdbError string
 func (e TmdbError) Error() string { return string(e) }
 
 type TMDB struct {
-	key     string
+	token   string
 	timeout time.Duration
 }
 
@@ -35,19 +35,23 @@ type MovieResult struct {
 	PosterPath string
 }
 
-func NewTMDB(key string, timeout time.Duration) *TMDB {
-	if key == "" {
+func NewTMDB(token string, timeout time.Duration) *TMDB {
+	if token == "" {
 		return nil
 	}
-	return &TMDB{key: key, timeout: timeout}
+	return &TMDB{token: token, timeout: timeout}
 }
 
 func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, error) {
-	target := TMDBAPI + "/" + path + "?" + encodeParams(append([]param{{"api_key", t.key}}, params...))
+	target := TMDBAPI + "/" + path
+	if len(params) > 0 {
+		target += "?" + encodeParams(params)
+	}
 	req, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
 		return nil, TmdbError("TMDB unreachable: InvalidURL")
 	}
+	req.Header.Set("Authorization", "Bearer "+t.token)
 	res, err := send(ctx, clientFor(t.timeout), req)
 	if err != nil {
 		var failure *httpFailure
@@ -58,6 +62,9 @@ func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, erro
 	}
 	if res.status == http.StatusNotFound {
 		return nil, nil
+	}
+	if res.status == http.StatusUnauthorized {
+		return nil, TmdbError("TMDB refused the read token (401)")
 	}
 	if res.status != http.StatusOK {
 		return nil, TmdbError("TMDB: " + strconv.Itoa(res.status))

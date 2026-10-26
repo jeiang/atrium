@@ -60,7 +60,7 @@ func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toa
 	data := ChannelsPage{
 		Channels: channels,
 		Status:   ChannelStatusView{LastCheck: chLastCheck(state.LastCheck), Errors: errs},
-		TMDB:     set.TMDBKey != "",
+		TMDB:     set.TMDBToken != "",
 		Q:        q,
 		Results:  results,
 		Form:     ChannelForm{Backfill: true},
@@ -86,7 +86,7 @@ func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 	tmdbID := py.Strip(web.QueryValue(query, "tmdb_id"))
 	pattern := web.QueryValue(query, "pattern")
 	set := s.settings(r.Context())
-	client := media.NewTMDB(set.TMDBKey, set.TMDBTimeout)
+	client := media.NewTMDB(set.TMDBToken, set.TMDBTimeout)
 	var results *[]SearchHit
 	var notice *tpl.Toast
 	err := func() error {

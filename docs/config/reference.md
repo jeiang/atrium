@@ -296,6 +296,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `media_ffmpeg_timeout_seconds` | int | `120` | advanced | `ATRIUM_MEDIA_MEDIA_FFMPEG_TIMEOUT_SECONDS` |
 | `media_link_ttl_seconds` | int | `43200` | advanced | `ATRIUM_MEDIA_MEDIA_LINK_TTL_SECONDS` |
 | `media_movies_url` | string | none | ui | `ATRIUM_MEDIA_MEDIA_MOVIES_URL` |
+| `media_qbittorrent_api_key` | string | none | secret | `ATRIUM_MEDIA_MEDIA_QBITTORRENT_API_KEY` |
 | `media_qbittorrent_timeout_seconds` | int | `15` | advanced | `ATRIUM_MEDIA_MEDIA_QBITTORRENT_TIMEOUT_SECONDS` |
 | `media_qbittorrent_url` | string | none | bootstrap | `ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL` |
 | `media_root` | string | none | bootstrap | `ATRIUM_MEDIA_MEDIA_ROOT` |
@@ -306,11 +307,14 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `media_thumbnail_width` | int | `480` | advanced | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_WIDTH` |
 | `media_tmdb_search_limit` | int | `8` | advanced | `ATRIUM_MEDIA_MEDIA_TMDB_SEARCH_LIMIT` |
 | `media_tmdb_timeout_seconds` | int | `15` | advanced | `ATRIUM_MEDIA_MEDIA_TMDB_TIMEOUT_SECONDS` |
+| `media_tmdb_token` | string | none | secret | `ATRIUM_MEDIA_MEDIA_TMDB_TOKEN` |
 | `media_torrent_upload_bytes` | int | `1048576` | advanced | `ATRIUM_MEDIA_MEDIA_TORRENT_UPLOAD_BYTES` |
 | `media_tv_url` | string | none | ui | `ATRIUM_MEDIA_MEDIA_TV_URL` |
 | `media_video_extensions` | string | `.mkv,.mp4,.m4v,.avi,.mov,.ts,.wmv` | advanced | `ATRIUM_MEDIA_MEDIA_VIDEO_EXTENSIONS` |
 | `qbittorrent_ca_file` | string | none | advanced | `ATRIUM_MEDIA_QBITTORRENT_CA_FILE` |
 | `qbittorrent_proxy` | string | none | advanced | `ATRIUM_MEDIA_QBITTORRENT_PROXY` |
+| `tmdb_ca_file` | string | none | advanced | `ATRIUM_MEDIA_TMDB_CA_FILE` |
+| `tmdb_proxy` | string | none | advanced | `ATRIUM_MEDIA_TMDB_PROXY` |
 
 ## notify
 

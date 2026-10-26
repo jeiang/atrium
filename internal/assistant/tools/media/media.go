@@ -372,7 +372,7 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 	if err != nil {
 		return nil, err
 	}
-	client := media.NewTMDB(settings.TMDBKey, settings.TMDBTimeout)
+	client := media.NewTMDB(settings.TMDBToken, settings.TMDBTimeout)
 	tmdbID, _ := args.Get("tmdb_id")
 	imdbText, _, err := tool.TextArg(args, "imdb_id", false)
 	if err != nil {
@@ -389,7 +389,7 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 			return nil, tool.Error("tmdb_id must be an integer")
 		}
 		if client == nil {
-			return nil, tool.NotConfigured("TMDB_API_KEY is not set; give imdb_id instead")
+			return nil, tool.NotConfigured("media_tmdb_token is not set; give imdb_id instead")
 		}
 		if isBig {
 			return nil, tool.Error(fmt.Sprintf("TMDB show %v has no IMDb id", tmdbID))
