@@ -39,7 +39,7 @@ var presets = map[string]preset{
 
 var (
 	liveAccounts atomic.Pointer[[]AccountSpec]
-	accountID    = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
+	accountID    = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 )
 
 func init() {
@@ -79,8 +79,8 @@ func NewAccount(name, label, presetName, login, password string, enabled bool) (
 	if !ok {
 		return AccountSpec{}, fmt.Errorf("preset must be %s or %s", ICloud, Gmail)
 	}
-	if !accountID.MatchString(name) {
-		return AccountSpec{}, errors.New("id must be 1-32 lowercase letters, digits, - or _")
+	if len(name) > 32 || !accountID.MatchString(name) {
+		return AccountSpec{}, errors.New("id must be up to 32 lowercase letters, digits and single underscores, starting with a letter")
 	}
 	if label == "" {
 		label = name
