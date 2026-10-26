@@ -1,0 +1,38 @@
+{{define "title"}}Integrations · Settings{{end}}
+{{define "heading"}}Settings · Integrations{{end}}
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
+{{template "settings_tabs" "integrations"}}
+<div class="flex flex-col gap-3">
+  {{range $d.records}}
+  <form method="post" action="/settings/integrations/{{.name}}/test" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-integration="{{.name}}" data-state="{{.state}}" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{$csrf}}">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="font-medium">{{.label}}</span>
+      <span class="badge" data-variant="{{if eq .state "ok"}}secondary{{else if eq .state "untested"}}outline{{else}}destructive{{end}}">{{replace "_" " " .state}}</span>
+      <span class="text-xs text-muted-foreground">{{.module}}</span>
+      {{with .checked_at}}<span class="text-xs text-muted-foreground">{{ts .}}</span>{{end}}
+    </div>
+    {{with .reason}}<p class="text-xs text-muted-foreground">{{.}}</p>{{end}}
+    {{if and (eq $d.failed .name) $d.error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.error}}</p>{{end}}
+    <div class="grid gap-3 sm:grid-cols-2">
+      {{if .url_key}}
+      <div role="group" class="field">
+        <label for="url-{{.name}}">URL</label>
+        {{if .url_pinned}}<code id="url-{{.name}}" class="break-all font-mono text-xs" data-pinned>{{.url}}</code>{{else}}<input id="url-{{.name}}" name="url" type="url" value="{{.url}}">{{end}}
+      </div>
+      {{end}}
+      {{if .secret_key}}
+      <div role="group" class="field">
+        <label for="secret-{{.name}}">Credential</label>
+        {{if .secret_pinned}}<span id="secret-{{.name}}" class="text-xs text-muted-foreground" data-pinned>set by deployment</span>{{else}}<input id="secret-{{.name}}" name="secret" type="password" autocomplete="new-password" placeholder="{{if .secret_set}}set; type to replace{{end}}">{{end}}
+      </div>
+      {{end}}
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <button type="submit" class="btn" data-size="sm">{{icon "check"}}Test</button>
+      {{if and (not .url_pinned) (not .secret_pinned) (or .url .secret_set)}}<button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/integrations/{{.name}}/disconnect" formnovalidate data-confirm-submit="Disconnect {{.label}}? Its {{.module}} module needs settings again; its data stays.">{{icon "x"}}Disconnect</button>{{end}}
+    </div>
+  </form>
+  {{end}}
+</div>
+{{end}}

@@ -8,9 +8,13 @@ linters:
   enable:
     - depguard
     - errcheck
+    - gosec
     - govet
     - staticcheck
   settings:
+    gosec:
+      includes:
+        - G402
     depguard:
       rules:
         anthropic-sdk:

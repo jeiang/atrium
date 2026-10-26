@@ -25,5 +25,6 @@
   <h2 id="tv-h" class="text-sm font-medium">TV ({{len .Data.shows}})</h2>
   {{if .Data.shows}}{{template "media_grid" (dict "items" .Data.shows "label" "Shows")}}{{else}}{{template "empty_state" (dict "icon_name" "tv" "title" "No shows yet" "body" "Filed episodes appear here by show.")}}{{end}}
 </section>
+{{template "tmdb_attribution"}}
 {{end}}
 {{end}}

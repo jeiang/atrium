@@ -2565,6 +2565,10 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "media_qbittorrent_api_key_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "media_qbittorrent_timeout_seconds": {
           "default": 15,
           "type": [
@@ -2664,6 +2668,10 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "media_tmdb_token_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "media_torrent_upload_bytes": {
           "default": 1048576,
           "type": [
@@ -2687,6 +2695,34 @@
           "type": "string"
         },
         "media_video_extensions_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "qbittorrent_ca_file": {
+          "type": "string"
+        },
+        "qbittorrent_ca_file_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "qbittorrent_proxy": {
+          "type": "string"
+        },
+        "qbittorrent_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tmdb_ca_file": {
+          "type": "string"
+        },
+        "tmdb_ca_file_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tmdb_proxy": {
+          "type": "string"
+        },
+        "tmdb_proxy_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -2740,10 +2776,24 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "ntfy_ca_file": {
+          "type": "string"
+        },
+        "ntfy_ca_file_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "ntfy_media_topic": {
           "type": "string"
         },
         "ntfy_media_topic_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ntfy_proxy": {
+          "type": "string"
+        },
+        "ntfy_proxy_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

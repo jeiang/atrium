@@ -18,6 +18,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/integrations"
+	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 	"github.com/jeiang/atrium/internal/secrets"
@@ -150,7 +152,14 @@ func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (boo
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	client := newClient(timeout)
+	client, err := newClient(ctx, q, timeout)
+	if err != nil {
+		var te transport.Error
+		if errors.As(err, &te) {
+			return false, "ntfy unreachable: " + te.Error(), nil
+		}
+		return false, "", err
+	}
 	defer client.CloseIdleConnections()
 	resp, err := client.Do(req)
 	if err == nil {
@@ -236,17 +245,8 @@ func nullable(s string) any {
 	return s
 }
 
-func newClient(timeout time.Duration) *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			Proxy:                 http.ProxyFromEnvironment,
-			DialContext:           (&net.Dialer{Timeout: timeout}).DialContext,
-			TLSHandshakeTimeout:   timeout,
-			ResponseHeaderTimeout: timeout,
-			DisableKeepAlives:     true,
-		},
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
+func newClient(ctx context.Context, q db.Querier, timeout time.Duration) (*http.Client, error) {
+	return integrations.Client(ctx, q, Integration, timeout)
 }
 
 func errorClass(err error) string {

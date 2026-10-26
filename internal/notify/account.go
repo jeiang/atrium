@@ -40,7 +40,10 @@ func call(ctx context.Context, q db.Querier, req *http.Request) (*http.Response,
 	if err != nil {
 		return nil, err
 	}
-	client := newClient(timeout)
+	client, err := newClient(ctx, q, timeout)
+	if err != nil {
+		return nil, err
+	}
 	defer client.CloseIdleConnections()
 	return client.Do(req)
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
+	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/logx"
 	mailpages "github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
@@ -36,6 +37,7 @@ func (m Module) Register(module.Context) module.Registration {
 			{Module: mailpages.PauseModule},
 			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(config.OS)}), Templates: reviewpages.Templates()},
 			{Module: startOps},
+			{Module: integrations.Module, Templates: integrations.Templates()},
 		},
 		Commands: []*cli.Command{
 			settingscmd.Command(m.Guard),

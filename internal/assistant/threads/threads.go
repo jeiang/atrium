@@ -379,20 +379,18 @@ type Thread struct {
 	Role                 *string    `json:"role"`
 	ParentRunID          *int64     `json:"parent_run_id"`
 	ProjectID            *int64     `json:"project_id"`
-	CodeSandbox          store.Flag `json:"code_sandbox"`
-	ContainerID          *string    `json:"container_id"`
 	DeletedAt            *float64   `json:"deleted_at"`
 }
 
 const Columns = "id, kind, title, job_id, parent_thread_id, model, effort, allowed_urls, created_at, updated_at, archived, pinned, " +
-	"context_limit, branched_from_thread_id, branched_from_seq, role, parent_run_id, project_id, code_sandbox, container_id, deleted_at"
+	"context_limit, branched_from_thread_id, branched_from_seq, role, parent_run_id, project_id, deleted_at"
 
 func Scan(row interface{ Scan(...any) error }) (Thread, error) {
 	var t Thread
 	var urls string
 	err := row.Scan(&t.ID, &t.Kind, &t.Title, &t.JobID, &t.ParentThreadID, &t.Model, &t.Effort, &urls, &t.CreatedAt, &t.UpdatedAt,
 		&t.Archived, &t.Pinned, &t.ContextLimit, &t.BranchedFromThreadID, &t.BranchedFromSeq, &t.Role, &t.ParentRunID,
-		&t.ProjectID, &t.CodeSandbox, &t.ContainerID, &t.DeletedAt)
+		&t.ProjectID, &t.DeletedAt)
 	if err != nil {
 		return Thread{}, err
 	}
@@ -562,17 +560,12 @@ func ListThreads(ctx context.Context, q db.Querier, o ListOpts) ([]Listed, error
 
 func SetFlag(ctx context.Context, q db.Querier, threadID int64, column string, value bool) (bool, error) {
 	switch column {
-	case "pinned", "archived", "code_sandbox":
+	case "pinned", "archived":
 	default:
 		return false, fmt.Errorf("threads: %s", py.Repr(column))
 	}
 	return changed(q.ExecContext(ctx,
 		"UPDATE threads SET "+column+" = ? WHERE id = ? AND kind = ? AND deleted_at IS NULL", store.Bit(value), threadID, Chat))
-}
-
-func SetContainer(ctx context.Context, q db.Querier, threadID int64, containerID *string) error {
-	_, err := q.ExecContext(ctx, "UPDATE threads SET container_id = ? WHERE id = ?", containerID, threadID)
-	return err
 }
 
 func Purge(ctx context.Context, q db.Querier, threadID int64, now float64) error {
@@ -593,6 +586,6 @@ func Purge(ctx context.Context, q db.Querier, threadID int64, now float64) error
 		}
 	}
 	_, err := q.ExecContext(ctx,
-		"UPDATE threads SET deleted_at = ?, archived = 1, pinned = 0, title = NULL, container_id = NULL WHERE id = ?", now, threadID)
+		"UPDATE threads SET deleted_at = ?, archived = 1, pinned = 0, title = NULL WHERE id = ?", now, threadID)
 	return err
 }
