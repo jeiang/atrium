@@ -7,66 +7,76 @@
   cfg = config.services.atrium;
   inherit (lib) mkOption mkEnableOption mkIf types;
 
-  stateDirName = "atrium";
-  stateDir = "/var/lib/${stateDirName}";
-  cacheDir = "${stateDir}/cache";
-  davDir = "${stateDir}/vdirsyncer";
-  calendarDir = "${davDir}/calendars";
-  contactsDir = "${davDir}/contacts";
-  icloud = cfg.icloudAppleId != null;
+  toml = pkgs.formats.toml {};
+  schema = lib.importJSON ../docs/config/atrium.schema.json;
+  reference = "docs/config/reference.md";
+
+  stateDirName = lib.removePrefix "/var/lib/" cfg.stateDir;
+  cacheDir = "${cfg.stateDir}/cache";
+  davDir = "${cfg.stateDir}/vdirsyncer";
+
+  splitKey = key: let
+    parts = lib.splitString "." key;
+  in {
+    table = builtins.head parts;
+    name = lib.concatStringsSep "." (builtins.tail parts);
+  };
+
+  secretPins = lib.foldl' lib.recursiveUpdate {} (lib.mapAttrsToList (key: _: let
+    k = splitKey key;
+  in {${k.table}."${k.name}_file" = "\${CREDENTIALS_DIRECTORY}/${key}";})
+  cfg.secretFiles);
+
+  settings = lib.recursiveUpdate cfg.settings secretPins;
+  configFile = toml.generate "atrium.toml" settings;
+
+  unknownSettings = lib.concatLists (lib.mapAttrsToList (table: keys:
+    if !(schema.properties ? ${table}) || !builtins.isAttrs keys
+    then [table]
+    else map (key: "${table}.${key}") (builtins.filter (key: !(schema.properties.${table}.properties ? ${key})) (builtins.attrNames keys)))
+  settings);
+
+  credentials = lib.mapAttrsToList (key: path: "${key}:${path}") cfg.secretFiles;
+  mediaRoot = cfg.settings.media.media_root or null;
 
   appEnvironment =
-    lib.filterAttrs (_: value: value != null) {
-      ATRIUM_DB = "${stateDir}/atrium.db";
+    {
+      ATRIUM_DB = "${cfg.stateDir}/atrium.db";
       ATRIUM_CACHE_DIR = "${cacheDir}/messages";
-      ATRIUM_MAIL_MAIL_MODE = cfg.mode;
-      ATRIUM_MAIL_MAIL_CHAT_URL = cfg.chatUrl;
-      ATRIUM_MAIL_MAIL_EMBED_URL = cfg.embedUrl;
-      ATRIUM_CONTACTS_CONTACTS_DIR =
-        if icloud
-        then contactsDir
-        else null;
-      ATRIUM_CALENDAR_CALENDAR_DIR =
-        if icloud
-        then calendarDir
-        else null;
-      ATRIUM_CORE_TZ = cfg.timeZone;
-      GRAFANA_URL = cfg.grafanaUrl;
-      ATRIUM_NOTIFY_NTFY_URL = cfg.ntfy.url;
-      ATRIUM_NOTIFY_NTFY_TOPIC = cfg.ntfy.topic;
-      ATRIUM_NOTIFY_NTFY_MEDIA_TOPIC = cfg.ntfy.mediaTopic;
-      ATRIUM_MEDIA_MEDIA_ROOT =
-        if cfg.media.enable
-        then cfg.media.root
-        else null;
-      ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL = cfg.media.qbittorrentUrl;
-      ATRIUM_CORE_PUBLIC_URL = cfg.publicUrl;
-      ATRIUM_MEDIA_MEDIA_MOVIES_URL = cfg.media.moviesUrl;
-      ATRIUM_MEDIA_MEDIA_TV_URL = cfg.media.tvUrl;
-      ATRIUM_CALENDAR_ICLOUD_APPLE_ID = cfg.icloudAppleId;
+      ATRIUM_CONFIG = "${configFile}";
     }
-    // cfg.extraEnvironment;
+    // lib.optionalAttrs (cfg.grafanaUrl != null) {GRAFANA_URL = cfg.grafanaUrl;};
+
+  runProperties =
+    [
+      "User=${cfg.user}"
+      "Group=${cfg.group}"
+      "StateDirectory=${stateDirName}"
+      "StateDirectoryMode=0750"
+      "UMask=0027"
+    ]
+    ++ map (file: "EnvironmentFile=${file}") cfg.environmentFiles
+    ++ map (credential: "LoadCredential=${credential}") credentials;
 
   atriumRun = pkgs.writeShellApplication {
     name = "atrium-run";
     runtimeInputs = [pkgs.systemd];
     text = ''
       exec systemd-run --pipe --wait --collect --quiet \
-        --property=User=atrium --property=Group=atrium \
-        --property=StateDirectory=${stateDirName} --property=StateDirectoryMode=0750 --property=UMask=0027 \
-        ${lib.concatMapStringsSep " \\\n          " (file: "--property=EnvironmentFile=${file}") cfg.environmentFiles} \
-        ${lib.concatStringsSep " \\\n          " (lib.mapAttrsToList (name: value: "--setenv=${name}=${value}") appEnvironment)} \
+        ${lib.concatMapStringsSep " \\\n          " (property: lib.escapeShellArg "--property=${property}") runProperties} \
+        ${lib.concatStringsSep " \\\n          " (lib.mapAttrsToList (name: value: lib.escapeShellArg "--setenv=${name}=${value}") appEnvironment)} \
         -- ${lib.getExe cfg.package} "$@"
     '';
   };
 
   hardening = {
-    User = "atrium";
-    Group = "atrium";
+    User = cfg.user;
+    Group = cfg.group;
     StateDirectory = stateDirName;
     StateDirectoryMode = "0750";
     UMask = "0027";
     EnvironmentFile = cfg.environmentFiles;
+    LoadCredential = credentials;
     NoNewPrivileges = true;
     ProtectSystem = "strict";
     ProtectHome = true;
@@ -81,7 +91,7 @@
   mediaWriter = lib.optionalAttrs cfg.media.enable {
     SupplementaryGroups = [cfg.media.group];
     UMask = "0002";
-    ReadWritePaths = [cfg.media.root];
+    ReadWritePaths = [mediaRoot];
   };
 
   mediaPath = lib.optional cfg.media.enable pkgs.ffmpeg-headless;
@@ -134,13 +144,28 @@
     wantedBy = ["multi-user.target"];
   };
 
-  nullableStr = description:
-    mkOption {
-      type = types.nullOr types.str;
-      default = null;
-      inherit description;
-    };
+  removed = path: replacement:
+    lib.mkRemovedOptionModule (["services" "atrium"] ++ path) "${replacement}; see ${reference}.";
 in {
+  imports = [
+    (removed ["id"] "Use services.atrium.uid, user and group")
+    (removed ["mode"] "Set services.atrium.settings.mail.mail_mode")
+    (removed ["chatUrl"] "Set services.atrium.settings.mail.mail_chat_url")
+    (removed ["embedUrl"] "Set services.atrium.settings.mail.mail_embed_url")
+    (removed ["publicUrl"] "Set services.atrium.settings.core.public_url")
+    (removed ["timeZone"] "Set services.atrium.settings.core.tz (defaults to time.timeZone)")
+    (removed ["icloudAppleId"] "Set the Apple ID on the Settings page or in services.atrium.settings.calendar.icloud_apple_id; atrium-dav-sync now always runs")
+    (removed ["extraEnvironment"] "Set application settings in services.atrium.settings and credentials in services.atrium.secretFiles")
+    (removed ["web" "port"] "Use services.atrium.port")
+    (removed ["ntfy" "url"] "Set services.atrium.settings.notify.ntfy_url")
+    (removed ["ntfy" "topic"] "Set services.atrium.settings.notify.ntfy_topic")
+    (removed ["ntfy" "mediaTopic"] "Set services.atrium.settings.notify.ntfy_media_topic")
+    (removed ["media" "root"] "Set services.atrium.settings.media.media_root")
+    (removed ["media" "qbittorrentUrl"] "Set services.atrium.settings.media.media_qbittorrent_url")
+    (removed ["media" "moviesUrl"] "Set services.atrium.settings.media.media_movies_url")
+    (removed ["media" "tvUrl"] "Set services.atrium.settings.media.media_tv_url")
+  ];
+
   options.services.atrium = {
     enable = mkEnableOption "atrium";
 
@@ -149,42 +174,67 @@ in {
       description = "The atrium application; the flake module defaults it to the static Go build for the host platform.";
     };
 
-    id = mkOption {
-      type = types.int;
-      default = 880;
-      description = "uid and gid of the static atrium user and group that own ${stateDir}.";
+    stateDir = mkOption {
+      type = types.strMatching "/var/lib/[^/]+";
+      default = "/var/lib/atrium";
+      description = "State directory holding the database, the message cache and the calendar and contacts mirrors; managed through systemd StateDirectory.";
     };
 
-    mode = mkOption {
-      type = types.enum ["shadow" "live"];
-      default = "shadow";
-      description = "ATRIUM_MAIL_MAIL_MODE: only live changes the mailboxes.";
+    user = mkOption {
+      type = types.str;
+      default = "atrium";
+      description = "Static system user that runs every unit and atrium-run.";
+    };
+
+    group = mkOption {
+      type = types.str;
+      default = "atrium";
+      description = "Group of that user.";
+    };
+
+    uid = mkOption {
+      type = types.int;
+      default = 880;
+      description = "uid of the user and gid of the group.";
+    };
+
+    port = mkOption {
+      type = types.port;
+      default = 8480;
+      description = "Port of the public listener.";
+    };
+
+    settings = mkOption {
+      inherit (toml) type;
+      default = {};
+      example = lib.literalExpression ''{ core.public_url = "https://atrium.example.org"; mail.mail_mode = "live"; }'';
+      description = "Application settings, one table per module, rendered to the TOML file named by ATRIUM_CONFIG. Every key set here is pinned. Keys unknown to ${reference} fail evaluation.";
+    };
+
+    secretFiles = mkOption {
+      type = types.attrsOf types.str;
+      default = {};
+      example = {"anthropic.anthropic_api_key" = "/run/secrets/anthropic-api-key";};
+      description = "Secret settings as <module>.<key> = host file. Each file is delivered to every unit and atrium-run through systemd LoadCredential and pinned as <key>_file, so the file can stay readable by root only.";
     };
 
     environmentFiles = mkOption {
       type = types.listOf types.str;
       default = [];
-      description = "EnvironmentFile= paths holding the credentials; read by every unit and atrium-run.";
+      description = "EnvironmentFile= paths for the credentials that are not settings yet (mail accounts, Notion, Grafana and ntfy tokens); read by every unit and atrium-run.";
     };
 
     modelServerUnits = mkOption {
       type = types.listOf types.str;
       default = [];
       example = ["atrium-llm.service" "atrium-embed.service"];
-      description = "Units serving chatUrl and embedUrl; the app units start after and want them.";
+      description = "Units serving the mail chat and embed endpoints; the app units start after and want them.";
     };
 
-    chatUrl = nullableStr "OpenAI-compatible chat completions base URL of the local model (ATRIUM_MAIL_MAIL_CHAT_URL).";
-    embedUrl = nullableStr "OpenAI-compatible embeddings base URL of the local model (ATRIUM_MAIL_MAIL_EMBED_URL).";
-    publicUrl = nullableStr "URL the operator reaches the web UI at; used in notifications and signed media links (ATRIUM_CORE_PUBLIC_URL).";
-    grafanaUrl = nullableStr "Grafana base URL for the observability tools (GRAFANA_URL).";
-    icloudAppleId = nullableStr "Apple ID for iCloud CalDAV and CardDAV; also runs atrium-dav-sync, which mirrors the calendars and address books.";
-
-    timeZone = mkOption {
+    grafanaUrl = mkOption {
       type = types.nullOr types.str;
-      default = config.time.timeZone;
-      defaultText = lib.literalExpression "config.time.timeZone";
-      description = "Time zone of the operator (ATRIUM_CORE_TZ).";
+      default = null;
+      description = "Grafana base URL for the observability tools (GRAFANA_URL).";
     };
 
     web = {
@@ -194,19 +244,17 @@ in {
         description = "Address the public listener binds.";
       };
 
-      port = mkOption {
-        type = types.port;
-        default = 8480;
-        description = "Port of the public listener.";
-      };
-
       auth = mkOption {
         type = types.enum ["proxy" "oidc" "local"];
         default = "proxy";
         description = "Auth mode of the public listener: proxy trusts Remote-Groups from the reverse proxy and needs allowedHost; oidc accepts OIDC sessions only and needs allowedHost; local trusts every request.";
       };
 
-      allowedHost = nullableStr "The one Host header the public listener accepts (ATRIUM_PUBLIC_HOST). Required with auth = \"proxy\" or \"oidc\", or oidc.enable.";
+      allowedHost = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "The one Host header the public listener accepts (ATRIUM_PUBLIC_HOST). Required with auth = \"proxy\" or \"oidc\", or oidc.enable.";
+      };
 
       oidc.enable = mkOption {
         type = types.bool;
@@ -235,30 +283,14 @@ in {
       };
     };
 
-    ntfy = {
-      url = nullableStr "ntfy server base URL (ATRIUM_NOTIFY_NTFY_URL).";
-      topic = nullableStr "Topic for the assistant's notifications (ATRIUM_NOTIFY_NTFY_TOPIC).";
-      mediaTopic = nullableStr "Topic for media release notifications (ATRIUM_NOTIFY_NTFY_MEDIA_TOPIC).";
-    };
-
     media = {
-      enable = mkEnableOption "the Media section: filing, EZTV channels and the library";
+      enable = mkEnableOption "the Media section: filing, EZTV channels and the library; needs settings.media.media_root";
 
       group = mkOption {
         type = types.str;
         default = "media";
         description = "Group that owns the media tree; the web and scheduler units write through it with umask 0002.";
       };
-
-      root = mkOption {
-        type = types.str;
-        default = "/var/lib/media";
-        description = "Media tree with downloads/, import/, movies/ and tv/ (ATRIUM_MEDIA_MEDIA_ROOT).";
-      };
-
-      qbittorrentUrl = nullableStr "qBittorrent Web UI URL, reachable without login (ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL).";
-      moviesUrl = nullableStr "URL serving root/movies read-only on the private network (ATRIUM_MEDIA_MEDIA_MOVIES_URL).";
-      tvUrl = nullableStr "URL serving root/tv read-only on the private network (ATRIUM_MEDIA_MEDIA_TV_URL).";
     };
 
     backup = {
@@ -293,15 +325,43 @@ in {
       };
     };
 
-    extraEnvironment = mkOption {
-      type = types.attrsOf types.str;
-      default = {};
-      description = "Environment added to every atrium unit and atrium-run.";
+    runProperties = mkOption {
+      type = types.listOf types.str;
+      internal = true;
+      readOnly = true;
+      default = runProperties;
+      description = "systemd properties atrium-run passes to systemd-run.";
+    };
+
+    renderedSettings = mkOption {
+      type = types.attrs;
+      internal = true;
+      readOnly = true;
+      default = settings;
+      description = "The settings written to the TOML configuration, secret pins included.";
     };
   };
 
   config = mkIf cfg.enable {
+    services.atrium.settings = {
+      core.tz = lib.mkIf (config.time.timeZone != null) (lib.mkDefault config.time.timeZone);
+      calendar.calendar_dir = lib.mkDefault "${davDir}/calendars";
+      contacts.contacts_dir = lib.mkDefault "${davDir}/contacts";
+    };
+
     assertions = [
+      {
+        assertion = unknownSettings == [];
+        message = "services.atrium.settings: unknown keys ${lib.concatStringsSep ", " unknownSettings}; see ${reference}";
+      }
+      {
+        assertion = builtins.all (key: builtins.length (lib.splitString "." key) == 2) (builtins.attrNames cfg.secretFiles);
+        message = "services.atrium.secretFiles keys are <module>.<key>";
+      }
+      {
+        assertion = !cfg.media.enable || mediaRoot != null;
+        message = "services.atrium.media.enable needs services.atrium.settings.media.media_root";
+      }
       {
         assertion = (cfg.web.auth == "local" && !cfg.web.oidc.enable) || cfg.web.allowedHost != null;
         message = "services.atrium.web.allowedHost is required with web.auth = \"proxy\", \"oidc\" or web.oidc.enable";
@@ -320,18 +380,17 @@ in {
       }
     ];
 
-    users.users.atrium = {
+    users.users.${cfg.user} = {
       isSystemUser = true;
-      uid = cfg.id;
-      group = "atrium";
+      inherit (cfg) uid group;
     };
-    users.groups.atrium.gid = cfg.id;
+    users.groups.${cfg.group}.gid = cfg.uid;
 
     environment.systemPackages = [atriumRun];
 
     systemd.tmpfiles.rules =
-      ["d ${cacheDir} 0750 atrium atrium -"]
-      ++ lib.optional cfg.backup.enable "d ${cfg.backup.directory} 0750 atrium atrium -";
+      ["d ${cacheDir} 0750 ${cfg.user} ${cfg.group} -"]
+      ++ lib.optional cfg.backup.enable "d ${cfg.backup.directory} 0750 ${cfg.user} ${cfg.group} -";
 
     systemd = {
       services =
@@ -368,7 +427,8 @@ in {
 
           atrium-web = webService {
             description = "atrium web UI";
-            inherit (cfg.web) host port auth;
+            inherit (cfg.web) host auth;
+            inherit (cfg) port;
             oidc = cfg.web.oidc.enable;
             force = cfg.web.forceDisableAuth;
           };
@@ -399,6 +459,14 @@ in {
               TimeoutStartSec = "2h";
             };
           };
+
+          atrium-dav-sync = appService {
+            description = "Mirror the iCloud calendars and address books";
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = ["${lib.getExe cfg.package} calendar sync" "${lib.getExe cfg.package} contacts sync"];
+            };
+          };
         }
         // lib.optionalAttrs cfg.backup.enable {
           atrium-backup = appService {
@@ -418,15 +486,6 @@ in {
             port = cfg.web.local.port;
             auth = "local";
             ops = false;
-          };
-        }
-        // lib.optionalAttrs icloud {
-          atrium-dav-sync = appService {
-            description = "Mirror the iCloud calendars and address books";
-            serviceConfig = {
-              Type = "oneshot";
-              ExecStart = ["${lib.getExe cfg.package} calendar sync" "${lib.getExe cfg.package} contacts sync"];
-            };
           };
         };
 
@@ -455,6 +514,14 @@ in {
               Persistent = true;
             };
           };
+
+          atrium-dav-sync = {
+            wantedBy = ["timers.target"];
+            timerConfig = {
+              OnActiveSec = "1m";
+              OnUnitActiveSec = "15m";
+            };
+          };
         }
         // lib.optionalAttrs cfg.backup.enable {
           atrium-backup = {
@@ -462,15 +529,6 @@ in {
             timerConfig = {
               OnCalendar = cfg.backup.onCalendar;
               Persistent = true;
-            };
-          };
-        }
-        // lib.optionalAttrs icloud {
-          atrium-dav-sync = {
-            wantedBy = ["timers.target"];
-            timerConfig = {
-              OnActiveSec = "1m";
-              OnUnitActiveSec = "15m";
             };
           };
         };
