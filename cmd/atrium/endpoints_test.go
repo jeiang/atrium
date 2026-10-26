@@ -2,15 +2,21 @@ package main
 
 import (
 	"encoding/json"
+	"encoding/pem"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/integrations"
+	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/module"
 )
@@ -103,5 +109,52 @@ func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testi
 	t.Setenv(settingEnv(mail.KeyEmbedURL), embed.URL+"/v2")
 	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
 		t.Errorf("a changed endpoint is not held to the old failed probe: %d %q", on.code, on.stderr)
+	}
+}
+
+func TestEndpointFormTestUsesTheEndpointCAAndAPassingTestReleasesTheMailHold(t *testing.T) {
+	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
+	tlsEmbed := httptest.NewTLSServer(embed.Config.Handler)
+	t.Cleanup(tlsEmbed.Close)
+	dir, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	unsetEnv(t, settingEnv(mail.KeyChatURL), settingEnv(mail.KeyEmbedURL))
+	for key, value := range map[string]string{mail.KeyChatURL: chat.URL + "/v1", mail.KeyEmbedURL: tlsEmbed.URL + "/v1"} {
+		if got := runSettings(t, "set", key, value); got.code != cli.ExitOK {
+			t.Fatalf("set %s: %d %q", key, got.code, got.stderr)
+		}
+	}
+	if untrusted := runApp("endpoints", "probe"); untrusted.code != cli.ExitError || !strings.Contains(untrusted.stdout, "certificate") {
+		t.Fatalf("probe without the embed CA: %d %q", untrusted.code, untrusted.stdout)
+	}
+	ca := filepath.Join(dir, "embed-ca.pem")
+	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: tlsEmbed.Certificate().Raw}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := runSettings(t, "set", transport.CAKey(mail.Integration(mail.EndpointEmbed)), ca); got.code != cli.ExitOK {
+		t.Fatalf("set embed CA: %d %q", got.code, got.stderr)
+	}
+	embed.mu.Lock()
+	embed.dim = 1024
+	embed.mu.Unlock()
+	if failed := runApp("endpoints", "probe"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "1024 dimensions") {
+		t.Fatalf("probe with the CA and a 1024-dimension embedder: %d %q", failed.code, failed.stdout)
+	}
+	if refused := runSettings(t, "set", module.FlagKey(module.Mail), "true"); refused.code != cli.ExitError || !strings.Contains(refused.stderr, "embed endpoint probe failed") {
+		t.Fatalf("enabling mail with a failing probe: %d %q", refused.code, refused.stderr)
+	}
+
+	s := &integrationSite{t: t, dir: dir}
+	s.start()
+	if code, body := s.post("/mail_embed/test", url.Values{"url": {embed.URL + "/v1"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "1024 dimensions") {
+		t.Fatalf("Test of a 1024-dimension embedder: %d %s", code, body)
+	}
+	embed.mu.Lock()
+	embed.dim = config.EmbedDim
+	embed.mu.Unlock()
+	if code, body := s.post("/mail_embed/test", nil); code != http.StatusOK || !strings.Contains(body, "768 dimensions") || health(t, dir, mail.Integration(mail.EndpointEmbed)) != integrations.OK {
+		t.Fatalf("Test of the stored embed endpoint: %d %s", code, body)
+	}
+	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+		t.Fatalf("enabling mail after a passing Test: %d %q", on.code, on.stderr)
 	}
 }

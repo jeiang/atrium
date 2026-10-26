@@ -13,6 +13,7 @@ import (
 	_ "github.com/jeiang/atrium/internal/contacts"
 	_ "github.com/jeiang/atrium/internal/db/key"
 	_ "github.com/jeiang/atrium/internal/mail"
+	_ "github.com/jeiang/atrium/internal/mail/mailmodule"
 	_ "github.com/jeiang/atrium/internal/media"
 	_ "github.com/jeiang/atrium/internal/module"
 	_ "github.com/jeiang/atrium/internal/notify"

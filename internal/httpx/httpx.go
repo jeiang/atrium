@@ -23,26 +23,35 @@ const (
 	UserAgent  = "atrium/1 (ledger rate fetch)"
 )
 
-type bearer struct{ base, token string }
-
-type bearerKey struct{}
-
-func WithBearer(ctx context.Context, base, token string) context.Context {
-	if base == "" || token == "" {
-		return ctx
-	}
-	list, _ := ctx.Value(bearerKey{}).([]bearer)
-	return context.WithValue(ctx, bearerKey{}, append(append([]bearer(nil), list...), bearer{strings.TrimRight(base, "/"), token}))
+type endpoint struct {
+	base, token string
+	client      *http.Client
 }
 
-func authorize(ctx context.Context, req *http.Request, rawURL string) {
-	list, _ := ctx.Value(bearerKey{}).([]bearer)
-	for _, b := range list {
-		if rawURL == b.base || strings.HasPrefix(rawURL, b.base+"/") {
-			req.Header.Set("Authorization", "Bearer "+b.token)
-			return
+type endpointKey struct{}
+
+func WithEndpoint(ctx context.Context, base, token string, client *http.Client) context.Context {
+	if base == "" || token == "" && client == nil {
+		return ctx
+	}
+	list, _ := ctx.Value(endpointKey{}).([]endpoint)
+	return context.WithValue(ctx, endpointKey{}, append(append([]endpoint(nil), list...), endpoint{strings.TrimRight(base, "/"), token, client}))
+}
+
+func endpointFor(ctx context.Context, req *http.Request, rawURL string) *http.Client {
+	list, _ := ctx.Value(endpointKey{}).([]endpoint)
+	for _, e := range list {
+		if rawURL == e.base || strings.HasPrefix(rawURL, e.base+"/") {
+			if e.token != "" {
+				req.Header.Set("Authorization", "Bearer "+e.token)
+			}
+			if e.client != nil {
+				return e.client
+			}
+			return client
 		}
 	}
+	return client
 }
 
 var (
@@ -114,8 +123,7 @@ func do(parent context.Context, rawURL string, timeout time.Duration, build func
 	if err != nil {
 		return nil, &ServiceUnavailable{fmt.Sprintf("%s: <urlopen error %v>", rawURL, err)}
 	}
-	authorize(parent, req, rawURL)
-	resp, err := client.Do(req)
+	resp, err := endpointFor(parent, req, rawURL).Do(req)
 	if err != nil {
 		if parent.Err() != nil {
 			return nil, parent.Err()

@@ -390,5 +390,5 @@ func WithModels(ctx context.Context, q Querier) (context.Context, error) {
 	if err != nil {
 		return ctx, err
 	}
-	return withKeys(embed.WithOptions(llm.WithOptions(ctx, chat), vec), endpoints), nil
+	return withEndpoints(embed.WithOptions(llm.WithOptions(ctx, chat), vec), q, endpoints)
 }
