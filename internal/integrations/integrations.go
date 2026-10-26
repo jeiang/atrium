@@ -261,6 +261,9 @@ func Check(ctx context.Context, d *db.DB, env config.Env, name string, now float
 	if err != nil {
 		return "", err
 	}
+	if i.URLKey != "" && c.URL == "" || i.URLKey == "" && c.Secret == "" {
+		return Untested, nil
+	}
 	state, reason, expires, err := run(ctx, d.Read, i, c)
 	if err != nil {
 		return "", err
