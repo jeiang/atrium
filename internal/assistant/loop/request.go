@@ -49,6 +49,9 @@ type request struct {
 func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.Thread, cc prompts.CacheControl, extra string) ([]prompts.Block, error) {
 	var p prompts.Parts
 	var err error
+	if p.System, err = prompts.Text(ctx, q, prompts.KeySystem); err != nil {
+		return nil, err
+	}
 	if r.Profile != nil {
 		if p.Profile, err = r.Profile(ctx, q); err != nil {
 			return nil, err

@@ -28,7 +28,7 @@ func assertNoConfirmOnAction(t *testing.T, page, action string) {
 }
 
 var settingsTabs = []struct{ id, label string }{
-	{"assistant", "Assistant"}, {"skills", "Skills"}, {"subagents", "Subagents"}, {"notifications", "Notifications"}, {"usage", "Usage"},
+	{"assistant", "Assistant"}, {"skills", "Skills"}, {"subagents", "Subagents"}, {"prompts", "Prompts"}, {"notifications", "Notifications"}, {"usage", "Usage"},
 }
 
 func TestSettingsIndexRedirectsAndTabsRender(t *testing.T) {

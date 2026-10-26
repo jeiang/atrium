@@ -121,6 +121,9 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `max_steps_cron` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_CRON` |
 | `max_steps_nightly` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` |
 | `monthly_budget_usd` | float | `150` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
+| `prompt_subagent` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` |
+| `prompt_summary` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUMMARY` |
+| `prompt_system` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` |
 
 ## auth
 

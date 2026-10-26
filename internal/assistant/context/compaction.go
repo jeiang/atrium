@@ -267,11 +267,12 @@ func lastOperatorBlocks(sent []Message) []json.RawMessage {
 }
 
 func SummaryParams(model string, active []Message, hardLimit int64, t Tuning) (anthropic.Params, error) {
-	messages, err := Shrink(active, hardLimit-int64(t.SummaryMaxTokens)-EstimateTokens(SummaryRequest)-1000, t.PreviewChars)
+	request := SummaryRequest(t.Summary)
+	messages, err := Shrink(active, hardLimit-int64(t.SummaryMaxTokens)-EstimateTokens(request)-1000, t.PreviewChars)
 	if err != nil {
 		return anthropic.Params{}, err
 	}
-	ask := TextBlock(SummaryRequest)
+	ask := TextBlock(request)
 	if n := len(messages); n > 0 && messages[n-1].Role == journal.User {
 		messages[n-1].Content = append(messages[n-1].Content, ask)
 	} else {

@@ -14,6 +14,10 @@ not claims about the running application.
   A skill is a name, one-line description and Markdown body, exchanged as
   `SKILL.md` folders through the Skills page and `atrium skills`; the
   prompt carries only a budgeted index of them.
+- The system prompt, compaction summary instructions and subagent rules
+  are operator-editable settings over built-in defaults; the untrusted-data
+  preamble is fixed in code and always comes first. Edits apply to every
+  thread's next request until the frozen-prefix work lands.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs.

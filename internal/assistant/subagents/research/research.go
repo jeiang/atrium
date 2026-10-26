@@ -254,8 +254,12 @@ func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, 
 	svc.Client = tc.Client
 	svc.Now = tc.Now
 	parent := tc.RunID
-	steps, cost, extra := int64(maxSteps), maxCost, subagents.SystemAddendum(agent)
-	_, err := svc.RunOnce(ctx, child, text, service.Start{
+	extra, err := subagents.SystemAddendum(ctx, tc.DB.Read, agent)
+	if err != nil {
+		return err
+	}
+	steps, cost := int64(maxSteps), maxCost
+	_, err = svc.RunOnce(ctx, child, text, service.Start{
 		Kind:        threads.Sub,
 		ParentRunID: &parent,
 		Limits:      journal.Limits{MaxSteps: &steps, MaxCostUSD: &cost, SystemExtra: &extra, AllowedTools: agent.Tools},
