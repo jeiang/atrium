@@ -128,20 +128,50 @@ func embedProgress(t *testing.T, base string) (done, total int, page string) {
 	return done, total, page
 }
 
-func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testing.T) {
-	fake := newFakeEmbedder(t)
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
+func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, path string) {
+	t.Helper()
+	dir, _ = moduleFixture(t, flagsExcept("", ""))
 	data, err := os.ReadFile(filepath.Join(golden.Dir(), "atrium.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(dir, "atrium.db")
+	path = filepath.Join(dir, "atrium.db")
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv(settingEnv(mail.KeyEmbedURL), fake.URL+"/v1")
-	t.Setenv(settingEnv(mail.KeyEmbedModel), "embeddinggemma")
+	t.Setenv(settingEnv(mail.KeyEmbedModel), model)
 	t.Setenv(settingEnv(mail.KeyEmbedBatch), "40")
+	return dir, path
+}
+
+func TestAFirstServeWithANewDimensionRebuildsTheIndexInsteadOfAdoptingIt(t *testing.T) {
+	fake := newFakeEmbedder(t)
+	dir, path := goldenEmbedFixture(t, fake, bigModel)
+	fake.release(1000)
+	base, _, stop := startServeStoppable(t, dir)
+	waitFor(t, func() bool {
+		_, _, page := embedProgress(t, base)
+		return strings.Contains(page, bigModel+" · 1024 dimensions") && !strings.Contains(page, "Re-embedding")
+	})
+	stop()
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	var generation int
+	if err := d.Read.QueryRow("SELECT generation FROM embed_index WHERE state = 'active' AND dimension = 1024").Scan(&generation); err != nil || generation != 1 {
+		t.Fatalf("active index after the first serve: generation %d (%v)", generation, err)
+	}
+	if got := runApp("notion", "search", "project notes"); got.code != cli.ExitOK || got.stdout == "" || fake.lastModel() != bigModel {
+		t.Fatalf("search on the rebuilt index: %d %q %q (query model %q)", got.code, got.stdout, got.stderr, fake.lastModel())
+	}
+}
+
+func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testing.T) {
+	fake := newFakeEmbedder(t)
+	dir, path := goldenEmbedFixture(t, fake, "embeddinggemma")
 	search := func() string {
 		t.Helper()
 		got := runApp("notion", "search", "project notes")

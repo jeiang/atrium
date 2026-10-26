@@ -35,9 +35,6 @@ func ReembedStep(ctx context.Context, d *db.DB, now float64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if active.URL == "" {
-		return false, embed.Adopt(ctx, d, target.URL, target.Model)
-	}
 	serves := func(i embed.Index) bool { return i.URL == target.URL && i.Model == target.Model }
 	building, ok, err := embed.Building(ctx, d.Read)
 	if err != nil {
@@ -60,6 +57,9 @@ func ReembedStep(ctx context.Context, d *db.DB, now float64) (bool, error) {
 		reason, dim := probeEmbed(ctx, target)
 		if reason != "" {
 			return false, errors.New(reason)
+		}
+		if active.URL == "" && dim == active.Dimension {
+			return false, embed.Adopt(ctx, d, target.URL, target.Model)
 		}
 		if building, err = embed.Create(ctx, d, target.URL, target.Model, dim, now); err != nil {
 			return false, err
