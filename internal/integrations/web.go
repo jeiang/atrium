@@ -98,13 +98,14 @@ func (h handlers) refuse(w http.ResponseWriter, r *http.Request, name string, er
 	var failed *TestFailed
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError
+	var scope *settings.ScopeError
 	var encryption secrets.EncryptionRequired
 	var empty secrets.EmptyValue
 	var unknown Unknown
 	switch {
 	case errors.As(err, &unknown):
 		http.NotFound(w, r)
-	case errors.As(err, &failed), errors.As(err, &invalid), errors.As(err, &pinned), errors.As(err, &encryption), errors.As(err, &empty):
+	case errors.As(err, &failed), errors.As(err, &invalid), errors.As(err, &pinned), errors.As(err, &scope), errors.As(err, &encryption), errors.As(err, &empty):
 		h.render(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}, page{Failed: name, Error: err.Error()})
 	default:
 		return false
