@@ -3,6 +3,7 @@ package db
 import (
 	"encoding/hex"
 	"strings"
+	"sync/atomic"
 )
 
 type KeyError string
@@ -43,9 +44,9 @@ func (k Key) Raw() []byte {
 	return raw
 }
 
-var defaultKey Key
+var defaultKey atomic.Pointer[Key]
 
-func SetDefaultKey(k Key) { defaultKey = k }
+func SetDefaultKey(k Key) { defaultKey.Store(&k) }
 
 type options struct{ key Key }
 
@@ -54,7 +55,10 @@ type Option func(*options)
 func WithKey(k Key) Option { return func(o *options) { o.key = k } }
 
 func applyOptions(opts []Option) options {
-	o := options{key: defaultKey}
+	o := options{}
+	if k := defaultKey.Load(); k != nil {
+		o.key = *k
+	}
 	for _, f := range opts {
 		f(&o)
 	}
