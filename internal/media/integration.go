@@ -22,20 +22,20 @@ func init() {
 	})
 }
 
-func testQbit(ctx context.Context, c integrations.Conn) error {
+func testQbit(ctx context.Context, c integrations.Conn) (string, error) {
 	status, body, err := bearerGet(ctx, c, c.URL+"/api/v2/app/version")
 	if err != nil {
-		return err
+		return "", err
 	}
 	switch {
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
-		return fmt.Errorf("%w: qBittorrent answered %d", integrations.ErrAuth, status)
+		return "", fmt.Errorf("%w: qBittorrent answered %d", integrations.ErrAuth, status)
 	case status != http.StatusOK:
-		return fmt.Errorf("qBittorrent answered %d", status)
+		return "", fmt.Errorf("qBittorrent answered %d", status)
 	case c.Secret != "" && !apiKeys(body):
-		return fmt.Errorf("qBittorrent %s has no API keys; upgrade to 5.2 or clear %s", strings.TrimSpace(body), KeyQbitAPIKey)
+		return "", fmt.Errorf("qBittorrent %s has no API keys; upgrade to 5.2 or clear %s", strings.TrimSpace(body), KeyQbitAPIKey)
 	}
-	return nil
+	return "", nil
 }
 
 func apiKeys(version string) bool {
@@ -48,18 +48,18 @@ func apiKeys(version string) bool {
 	return err1 == nil && err2 == nil && (major > 5 || major == 5 && minor >= 2)
 }
 
-func testTMDB(ctx context.Context, c integrations.Conn) error {
+func testTMDB(ctx context.Context, c integrations.Conn) (string, error) {
 	status, _, err := bearerGet(ctx, c, TMDBAPI+"/configuration")
 	if err != nil {
-		return err
+		return "", err
 	}
 	switch {
 	case status == http.StatusUnauthorized:
-		return fmt.Errorf("%w: TMDB refused the read token", integrations.ErrAuth)
+		return "", fmt.Errorf("%w: TMDB refused the read token", integrations.ErrAuth)
 	case status != http.StatusOK:
-		return fmt.Errorf("TMDB answered %d", status)
+		return "", fmt.Errorf("TMDB answered %d", status)
 	}
-	return nil
+	return "", nil
 }
 
 func bearerGet(ctx context.Context, c integrations.Conn, target string) (int, string, error) {

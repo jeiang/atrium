@@ -104,6 +104,8 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_webfetch_user_agent` | string | `atrium-webfetch/1` | advanced | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_USER_AGENT` |
 | `agent_workspace_plan_item_chars` | int | `200` | cap | `ATRIUM_ASSISTANT_AGENT_WORKSPACE_PLAN_ITEM_CHARS` |
 | `agent_workspace_plan_items` | int | `20` | cap | `ATRIUM_ASSISTANT_AGENT_WORKSPACE_PLAN_ITEMS` |
+| `anthropic_ca_file` | string | none | advanced | `ATRIUM_ASSISTANT_ANTHROPIC_CA_FILE` |
+| `anthropic_proxy` | string | none | advanced | `ATRIUM_ASSISTANT_ANTHROPIC_PROXY` |
 | `budget_chat_share` | float | `1` | cap | `ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE` |
 | `budget_unattended_share` | float | `0.8` | advanced | `ATRIUM_ASSISTANT_BUDGET_UNATTENDED_SHARE` |
 | `cache_ttl_chat` | enum (5m, 1h) | `5m` | ui | `ATRIUM_ASSISTANT_CACHE_TTL_CHAT` |
@@ -188,6 +190,19 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
 | `key` | string | none | secret | `ATRIUM_DB_KEY` |
+
+## grafana
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `grafana_ca_file` | string | none | advanced | `ATRIUM_GRAFANA_GRAFANA_CA_FILE` |
+| `grafana_logs_query` | string | none | advanced | `ATRIUM_GRAFANA_GRAFANA_LOGS_QUERY` |
+| `grafana_logs_type` | enum (loki, victorialogs) | `loki` | ui | `ATRIUM_GRAFANA_GRAFANA_LOGS_TYPE` |
+| `grafana_logs_uid` | string | none | ui | `ATRIUM_GRAFANA_GRAFANA_LOGS_UID` |
+| `grafana_metrics_uid` | string | none | ui | `ATRIUM_GRAFANA_GRAFANA_METRICS_UID` |
+| `grafana_proxy` | string | none | advanced | `ATRIUM_GRAFANA_GRAFANA_PROXY` |
+| `grafana_url` | string | none | ui | `ATRIUM_GRAFANA_GRAFANA_URL` |
+| `grafana_viewer_token` | string | none | secret | `ATRIUM_GRAFANA_GRAFANA_VIEWER_TOKEN` |
 
 ## mail
 
@@ -340,6 +355,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | --- | --- | --- | --- | --- |
 | `notion_block_depth` | int | `5` | advanced | `ATRIUM_NOTION_NOTION_BLOCK_DEPTH` |
 | `notion_branch_limit` | int | `50` | advanced | `ATRIUM_NOTION_NOTION_BRANCH_LIMIT` |
+| `notion_ca_file` | string | none | advanced | `ATRIUM_NOTION_NOTION_CA_FILE` |
 | `notion_edit_max_tokens` | int | `1500` | advanced | `ATRIUM_NOTION_NOTION_EDIT_MAX_TOKENS` |
 | `notion_edit_page_chars` | int | `12000` | advanced | `ATRIUM_NOTION_NOTION_EDIT_PAGE_CHARS` |
 | `notion_head_source_chars` | int | `1000` | advanced | `ATRIUM_NOTION_NOTION_HEAD_SOURCE_CHARS` |
@@ -351,11 +367,13 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `notion_max_sources` | int | `12` | advanced | `ATRIUM_NOTION_NOTION_MAX_SOURCES` |
 | `notion_page_size` | int | `100` | advanced | `ATRIUM_NOTION_NOTION_PAGE_SIZE` |
 | `notion_private_value` | string | `private` | ui | `ATRIUM_NOTION_NOTION_PRIVATE_VALUE` |
+| `notion_proxy` | string | none | advanced | `ATRIUM_NOTION_NOTION_PROXY` |
 | `notion_related_limit` | int | `10` | advanced | `ATRIUM_NOTION_NOTION_RELATED_LIMIT` |
 | `notion_retry_after_default_seconds` | float | `1` | advanced | `ATRIUM_NOTION_NOTION_RETRY_AFTER_DEFAULT_SECONDS` |
 | `notion_retry_after_max_seconds` | float | `60` | advanced | `ATRIUM_NOTION_NOTION_RETRY_AFTER_MAX_SECONDS` |
 | `notion_snippet_chars` | int | `220` | advanced | `ATRIUM_NOTION_NOTION_SNIPPET_CHARS` |
 | `notion_timeout_seconds` | int | `60` | advanced | `ATRIUM_NOTION_NOTION_TIMEOUT_SECONDS` |
+| `notion_token` | string | none | secret | `ATRIUM_NOTION_NOTION_TOKEN` |
 | `sensitivity_property` | string | `sensitivity` | ui | `ATRIUM_NOTION_SENSITIVITY_PROPERTY` |
 | `wiki_log_title` | string | `Wiki Log` | ui | `ATRIUM_NOTION_WIKI_LOG_TITLE` |
 | `wiki_root` | string | none | ui | `ATRIUM_NOTION_WIKI_ROOT` |

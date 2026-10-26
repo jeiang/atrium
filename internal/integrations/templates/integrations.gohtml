@@ -12,6 +12,7 @@
       <span class="text-xs text-muted-foreground">{{.module}}</span>
       {{with .checked_at}}<span class="text-xs text-muted-foreground">{{ts .}}</span>{{end}}
     </div>
+    {{with .help}}<p class="text-xs text-muted-foreground" data-help>{{.}}</p>{{end}}
     {{with .reason}}<p class="text-xs text-muted-foreground">{{.}}</p>{{end}}
     {{if and (eq $d.failed .name) $d.error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.error}}</p>{{end}}
     <div class="grid gap-3 sm:grid-cols-2">

@@ -119,9 +119,13 @@ func request(ctx context.Context, tc *tool.Context, lim limits, method, path, ra
 	if method != http.MethodGet && (method != http.MethodPost || path != "/api/ds/query") {
 		return nil, tool.Error("grafana tools are read-only")
 	}
-	access, err := config.Grafana(tc.Env)
-	if err != nil {
+	access, err := Load(ctx, tc.DB.Read)
+	var missing config.NotConfigured
+	if errors.As(err, &missing) {
 		return nil, tool.NotConfigured(err.Error())
+	}
+	if err != nil {
+		return nil, err
 	}
 	target := access.URL + path
 	if rawQuery != "" {

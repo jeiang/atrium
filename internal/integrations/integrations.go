@@ -39,7 +39,8 @@ type Conn struct {
 type Integration struct {
 	Name, Label, Module string
 	URLKey, SecretKey   string
-	Test                func(ctx context.Context, c Conn) error
+	Help                string
+	Test                func(ctx context.Context, c Conn) (string, error)
 	Expires             func(ctx context.Context, q db.Querier) (*time.Time, error)
 }
 
@@ -122,6 +123,7 @@ type Record struct {
 	Name         string     `json:"name"`
 	Label        string     `json:"label"`
 	Module       string     `json:"module"`
+	Help         string     `json:"help"`
 	URLKey       string     `json:"url_key"`
 	URL          string     `json:"url"`
 	URLPinned    bool       `json:"url_pinned"`
@@ -140,7 +142,7 @@ func Records(ctx context.Context, q db.Querier) ([]Record, error) {
 	var out []Record
 	store := secrets.NewIn(nil, q, nil)
 	for _, i := range All() {
-		r := Record{Name: i.Name, Label: i.Label, Module: i.Module, URLKey: i.URLKey, SecretKey: i.SecretKey, State: Untested}
+		r := Record{Name: i.Name, Label: i.Label, Module: i.Module, Help: i.Help, URLKey: i.URLKey, SecretKey: i.SecretKey, State: Untested}
 		if i.URLKey != "" {
 			found, err := settings.Default.Resolve(ctx, q, i.URLKey, 0)
 			if err != nil {
@@ -200,7 +202,8 @@ func run(ctx context.Context, q db.Querier, i Integration, c Conn) (state, reaso
 	if i.SecretKey != "" && c.Secret == "" && i.URLKey == "" {
 		return NeedsReauth, "no credential configured", nil, nil
 	}
-	if terr := i.Test(ctx, c); terr != nil {
+	detail, terr := i.Test(ctx, c)
+	if terr != nil {
 		if errors.Is(terr, ErrAuth) {
 			return NeedsReauth, terr.Error(), nil, nil
 		}
@@ -214,7 +217,7 @@ func run(ctx context.Context, q db.Querier, i Integration, c Conn) (state, reaso
 			return Expiring, "credential expires " + expires.Format(time.DateOnly), expires, nil
 		}
 	}
-	return OK, "", expires, nil
+	return OK, detail, expires, nil
 }
 
 func record(ctx context.Context, d *db.DB, env config.Env, i Integration, state, reason string, expires *time.Time, now float64) error {

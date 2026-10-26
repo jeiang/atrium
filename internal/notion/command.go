@@ -86,7 +86,7 @@ func (o Options) sync(ctx context.Context, d *db.DB, cfg config.Config, env *cli
 }
 
 func (o Options) syncPass(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
-	token, err := config.NotionToken(o.env())
+	token, err := Token(ctx, d.Read)
 	if err != nil {
 		return err
 	}

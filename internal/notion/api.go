@@ -65,7 +65,7 @@ func NewClient(token string) *Client {
 	api := defaultAPI()
 	return &Client{
 		token:   token,
-		BaseURL: BaseURL,
+		BaseURL: apiBase,
 		HTTP:    &http.Client{Timeout: api.Timeout},
 		API:     api,
 		Sleep:   sleep,

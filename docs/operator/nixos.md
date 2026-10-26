@@ -17,9 +17,8 @@ The module has a small set of typed deployment options. Application settings go 
 | `port` | port | `8480` | Port of the public listener. |
 | `settings` | TOML table per module | `{}` | Rendered to the file named by `ATRIUM_CONFIG`. Every key set here is pinned: it shows read-only and cannot be changed with `atrium settings`. A key unknown to the configuration reference fails evaluation. |
 | `secretFiles` | attribute set of string | `{}` | Secret settings as `"<module>.<key>" = "<host file>"`. Each file is delivered to every unit and to `atrium-run` through systemd `LoadCredential` and pinned as `<key>_file`, so the file can stay owned and readable by root. A key whose `<key>_file` form is unknown fails evaluation. |
-| `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`, for the credentials that are not settings yet: `ICLOUD_MAIL_USERNAME`, `ICLOUD_APP_PASSWORD`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, `NOTION_TOKEN`, `GRAFANA_VIEWER_TOKEN` and `NTFY_TOKEN`. The TMDB read token is the secret setting `media.media_tmdb_token` (`secretFiles`). |
+| `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`, for the credentials that are not settings yet: `ICLOUD_MAIL_USERNAME`, `ICLOUD_APP_PASSWORD`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD` and `NTFY_TOKEN`. The TMDB read token, the Notion token and the Grafana token are the secret settings `media.media_tmdb_token`, `notion.notion_token` and `grafana.grafana_viewer_token` (`secretFiles`); the Grafana URL is `settings.grafana.grafana_url`. |
 | `modelServerUnits` | list of string | `[]` | Units serving the mail chat and embed endpoints. The application units start after them and want them. |
-| `grafanaUrl` | null or string | `null` | Grafana base URL for the observability tools (`GRAFANA_URL`). |
 
 The module sets `core.tz` from `time.timeZone`, and `calendar.calendar_dir` and `contacts.contacts_dir` to the mirror directories under `stateDir`, unless `settings` sets them.
 

@@ -69,7 +69,7 @@ func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
 		t.Run(tc.dialect, func(t *testing.T) {
 			moduleFixture(t, flagsExcept("", ""))
 			grafana, seen := fakeGrafana(t)
-			t.Setenv("GRAFANA_URL", grafana.URL)
+			t.Setenv(settingEnv(grafanatools.KeyURL), grafana.URL)
 			t.Setenv(settingEnv(grafanatools.KeyMetricsUID), "vm-uid")
 			t.Setenv(settingEnv(grafanatools.KeyLogsUID), "logs-uid")
 			t.Setenv(settingEnv(grafanatools.KeyLogsType), tc.dialect)

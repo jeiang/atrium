@@ -10,9 +10,9 @@ not claims about the running application.
   with embedded assets, packaged and deployed through a NixOS module. The
   module takes typed deployment options, application settings rendered to
   TOML, and secret settings as files delivered through systemd
-  credentials to every unit and `atrium-run`. Mail account, Notion,
-  Grafana, ntfy and TMDB credentials still come from environment files
-  until they become settings.
+  credentials to every unit and `atrium-run`. Mail account, iCloud and
+  ntfy credentials still come from environment files until they become
+  settings.
 - The application brings together mail, calendar, contacts, Notion,
   media, notifications, and read-only Grafana access. The assistant adds
   chat, files, projects, skills, scheduled work, and research subagents.
@@ -174,10 +174,9 @@ not claims about the running application.
 
 ## Planned capabilities
 
-- UI-managed credentials for the remaining integrations (Notion, Grafana,
-  iCloud, Gmail, Anthropic) as connection records, generated
-  settings forms, and model, effort and context controls on the new-thread
-  composer.
+- UI-managed credentials for iCloud and Gmail as connection records,
+  generated settings forms, and model, effort and context controls on the
+  new-thread composer.
 - Independent instances for other operators, without owner-specific source
   changes.
 

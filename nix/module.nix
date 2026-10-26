@@ -39,13 +39,11 @@
   credentials = lib.mapAttrsToList (key: path: "${key}:${path}") cfg.secretFiles;
   mediaRoot = cfg.settings.media.media_root or null;
 
-  appEnvironment =
-    {
-      ATRIUM_DB = "${cfg.stateDir}/atrium.db";
-      ATRIUM_CACHE_DIR = "${cacheDir}/messages";
-      ATRIUM_CONFIG = "${configFile}";
-    }
-    // lib.optionalAttrs (cfg.grafanaUrl != null) {GRAFANA_URL = cfg.grafanaUrl;};
+  appEnvironment = {
+    ATRIUM_DB = "${cfg.stateDir}/atrium.db";
+    ATRIUM_CACHE_DIR = "${cacheDir}/messages";
+    ATRIUM_CONFIG = "${configFile}";
+  };
 
   runProperties =
     [
@@ -163,6 +161,7 @@ in {
     (removed ["media" "root"] "Set services.atrium.settings.media.media_root")
     (removed ["media" "qbittorrentUrl"] "Set services.atrium.settings.media.media_qbittorrent_url")
     (removed ["media" "moviesUrl"] "Set services.atrium.settings.media.media_movies_url")
+    (removed ["grafanaUrl"] "Set services.atrium.settings.grafana.grafana_url and the secretFiles entry grafana.grafana_viewer_token")
     (removed ["media" "tvUrl"] "Set services.atrium.settings.media.media_tv_url")
   ];
 
@@ -229,12 +228,6 @@ in {
       default = [];
       example = ["atrium-llm.service" "atrium-embed.service"];
       description = "Units serving the mail chat and embed endpoints; the app units start after and want them.";
-    };
-
-    grafanaUrl = mkOption {
-      type = types.nullOr types.str;
-      default = null;
-      description = "Grafana base URL for the observability tools (GRAFANA_URL).";
     };
 
     web = {
