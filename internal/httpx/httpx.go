@@ -23,6 +23,28 @@ const (
 	UserAgent  = "atrium/1 (ledger rate fetch)"
 )
 
+type bearer struct{ base, token string }
+
+type bearerKey struct{}
+
+func WithBearer(ctx context.Context, base, token string) context.Context {
+	if base == "" || token == "" {
+		return ctx
+	}
+	list, _ := ctx.Value(bearerKey{}).([]bearer)
+	return context.WithValue(ctx, bearerKey{}, append(append([]bearer(nil), list...), bearer{strings.TrimRight(base, "/"), token}))
+}
+
+func authorize(ctx context.Context, req *http.Request, rawURL string) {
+	list, _ := ctx.Value(bearerKey{}).([]bearer)
+	for _, b := range list {
+		if rawURL == b.base || strings.HasPrefix(rawURL, b.base+"/") {
+			req.Header.Set("Authorization", "Bearer "+b.token)
+			return
+		}
+	}
+}
+
 var (
 	ErrValue = errors.New("ValueError")
 	ErrKey   = errors.New("KeyError")
@@ -92,6 +114,7 @@ func do(parent context.Context, rawURL string, timeout time.Duration, build func
 	if err != nil {
 		return nil, &ServiceUnavailable{fmt.Sprintf("%s: <urlopen error %v>", rawURL, err)}
 	}
+	authorize(parent, req, rawURL)
 	resp, err := client.Do(req)
 	if err != nil {
 		if parent.Err() != nil {

@@ -30,6 +30,7 @@ var migrations = []migration{
 	{10, moduleMigrationsTable},
 	{11, passRuns},
 	{12, ntfyChannels},
+	{13, endpointProbes},
 }
 
 type ModuleMigration struct {
@@ -566,4 +567,11 @@ func ntfyChannels(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func endpointProbes(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS endpoint_probes (kind TEXT PRIMARY KEY CHECK (kind IN ('chat', 'embed')), "+
+		"fingerprint TEXT NOT NULL, ok INTEGER NOT NULL, reason TEXT NOT NULL DEFAULT '', dimension INTEGER, "+
+		"models TEXT NOT NULL DEFAULT '[]', probed_at REAL NOT NULL)")
+	return err
 }

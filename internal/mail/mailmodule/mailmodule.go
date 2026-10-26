@@ -1,6 +1,8 @@
 package mailmodule
 
 import (
+	"context"
+
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/cli"
@@ -27,6 +29,9 @@ func (m Module) Register(module.Context) module.Registration {
 		Requires: []module.Requirement{
 			module.Setting(mail.KeyChatURL),
 			module.Setting(mail.KeyEmbedURL),
+			{Name: "endpoint probes", Check: func(ctx context.Context, p module.Probe) (string, error) {
+				return mail.ProbeFailures(ctx, p.Q)
+			}},
 		},
 		Pages: []web.Page{
 			{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
@@ -44,11 +49,13 @@ func (m Module) Register(module.Context) module.Registration {
 			mailCmds.ProposalsCommand(),
 			openloops.Command(m.Now),
 			watches.Command(m.Now),
+			mailCmds.EndpointsCommand(),
 		},
 		Leaves: map[string]module.Leaf{
-			"live pause":  {Always: true},
-			"live resume": {Always: true},
-			"live status": {Always: true},
+			"live pause":      {Always: true},
+			"live resume":     {Always: true},
+			"live status":     {Always: true},
+			"endpoints probe": {Always: true},
 		},
 		Tools: func(r *registry.Registry) error { return r.Add(mailtools.Tools()...) },
 	}

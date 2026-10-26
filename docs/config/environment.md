@@ -174,11 +174,13 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MAIL_MAIL_BACKOFF_MAX_SECONDS` | `mail.mail_backoff_max_seconds` |
 | `ATRIUM_MAIL_MAIL_BACKOFF_START_SECONDS` | `mail.mail_backoff_start_seconds` |
 | `ATRIUM_MAIL_MAIL_BODY_CAP_BYTES` | `mail.mail_body_cap_bytes` |
+| `ATRIUM_MAIL_MAIL_CHAT_KEY` | `mail.mail_chat_key` |
 | `ATRIUM_MAIL_MAIL_CHAT_MAX_TOKENS` | `mail.mail_chat_max_tokens` |
 | `ATRIUM_MAIL_MAIL_CHAT_MODEL` | `mail.mail_chat_model` |
 | `ATRIUM_MAIL_MAIL_CHAT_URL` | `mail.mail_chat_url` |
 | `ATRIUM_MAIL_MAIL_EMBED_BATCH` | `mail.mail_embed_batch` |
 | `ATRIUM_MAIL_MAIL_EMBED_BODY_CHARS` | `mail.mail_embed_body_chars` |
+| `ATRIUM_MAIL_MAIL_EMBED_KEY` | `mail.mail_embed_key` |
 | `ATRIUM_MAIL_MAIL_EMBED_MODEL` | `mail.mail_embed_model` |
 | `ATRIUM_MAIL_MAIL_EMBED_URL` | `mail.mail_embed_url` |
 | `ATRIUM_MAIL_MAIL_FETCH_BATCH` | `mail.mail_fetch_batch` |

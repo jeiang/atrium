@@ -1777,6 +1777,10 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "mail_chat_key_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "mail_chat_max_tokens": {
           "default": 80,
           "type": [
@@ -1822,6 +1826,10 @@
           ]
         },
         "mail_embed_body_chars_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_embed_key_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

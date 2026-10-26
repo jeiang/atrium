@@ -105,7 +105,7 @@ func TestExternalModuleMigratesAGoldenDatabaseCopy(t *testing.T) {
 	}
 	defer func() { _ = d.Close() }()
 	var core, mod int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version IN (10, 11, 12)").Scan(&core); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version IN (10, 11, 12, 13)").Scan(&core); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM module_migrations WHERE module = ? AND version = 1", extName).Scan(&mod); err != nil {
@@ -115,8 +115,8 @@ func TestExternalModuleMigratesAGoldenDatabaseCopy(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications WHERE channel IS NULL").Scan(&notified); err != nil {
 		t.Fatalf("notifications after migration 12: %v", err)
 	}
-	if core != 3 || mod != 1 || !tableExists(t, dir, "pass_runs") || !tableExists(t, dir, "pass_run_alerts") || !tableExists(t, dir, "ntfy_channels") {
-		t.Fatalf("golden copy: core migrations 10-12 recorded %d, module migration recorded %d", core, mod)
+	if core != 4 || mod != 1 || !tableExists(t, dir, "pass_runs") || !tableExists(t, dir, "pass_run_alerts") || !tableExists(t, dir, "ntfy_channels") || !tableExists(t, dir, "endpoint_probes") {
+		t.Fatalf("golden copy: core migrations 10-13 recorded %d, module migration recorded %d", core, mod)
 	}
 }
 

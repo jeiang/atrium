@@ -18,6 +18,12 @@ not claims about the running application.
   are operator-editable settings over built-in defaults; the untrusted-data
   preamble is fixed in code and always comes first. Edits apply to every
   thread's next request until the frozen-prefix work lands.
+- Notifications are recorded in an in-app inbox first and pushed best
+  effort to ntfy on one of three channels (assistant, media, system), each
+  with its own topic and optional per-channel token minted from the
+  operator's ntfy account. Full text goes only to topics that refuse an
+  anonymous read. Three consecutive delivery failures raise an admin banner
+  and a system-channel message.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs.
@@ -44,9 +50,12 @@ not claims about the running application.
   `_nightly`, default 24; subagents use `agent_subagent_max_steps`). A server fallback is shown in the thread
   and its tokens are recorded as a separate usage row priced at the model
   that served them. Mail classification and embeddings
-  have separately configured model endpoints. Connected content sent to a
-  hosted model leaves the host; privacy does not mean that inference is
-  necessarily local.
+  use separately configured OpenAI-compatible endpoints, local or hosted,
+  each with an optional Bearer key; `atrium endpoints probe` records
+  whether each works and holds mail in needs-settings while the current
+  endpoint's probe fails. Connected content sent to a hosted model leaves
+  the host; privacy does not mean that inference is necessarily local.
+  The embed dimension is still fixed at 768.
 - SQLite holds application records, configuration stored by the application,
   and assistant history. Uploaded files live beside the database under
   `files/`; the Notion wiki also has external state. The database alone is
@@ -144,9 +153,8 @@ not claims about the running application.
 - The money (spending ledger) module is removed and deferred. Its tables
   and stored rows stay in the database, untouched; mail-statement parsing
   is not the planned source when it returns.
-- Mail model endpoints should support local or hosted OpenAI-compatible
-  services without requiring a local model. Endpoint selection should make
-  the privacy consequences visible.
+- A changed embed dimension should trigger a background re-embed that keeps
+  the old index serving until the swap.
 - Cost accounting should explain usage by job and run. Recorded runs should
   support evaluating application and model changes.
 - Follow-ups, proposals, plans, event candidates and drafts should
