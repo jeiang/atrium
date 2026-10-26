@@ -44,8 +44,6 @@ var moduleCases = []moduleCase{
 		command: []string{"notion", "wiki-plan"}, output: func(_, stderr string, code int) bool {
 			return code == cli.ExitError && strings.Contains(stderr, "wiki-plan")
 		}},
-	{module: module.Money, tool: "spending", table: "transactions", method: "GET", path: "/money", status: http.StatusOK,
-		command: []string{"money", "refresh"}, output: nonEmpty},
 	{module: module.Media, tool: "media_downloads", table: "media_channels", method: "GET", path: "/media/channels", status: http.StatusOK,
 		command: []string{"media", "poll"}, output: nonEmpty},
 	{module: module.Assistant, tool: "profile_set", table: "threads", method: "GET", path: "/projects", status: http.StatusOK,
@@ -245,9 +243,6 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		if v, ok := storedSetting(t, filepath.Join(dir, "atrium.db"), module.FlagKey(tc.module)); ok {
 			t.Errorf("%s_enabled stored as %q after a refusal", tc.module, v)
 		}
-	}
-	if got := runSettings(t, "set", module.FlagKey(module.Money), "true"); got.code != cli.ExitOK || got.row(t).Value == nil || *got.row(t).Value != "true" {
-		t.Errorf("enabling money: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	for name, value := range requirementEnv(filepath.Join(dir, "media")) {
 		t.Setenv(name, value)

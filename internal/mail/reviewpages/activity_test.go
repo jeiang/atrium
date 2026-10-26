@@ -47,10 +47,9 @@ func TestActivityMergesMailAndWritesAndFiltersByCategory(t *testing.T) {
 	s.thread()
 	profile := s.write(100, "profile_set", "profile:tone", 1, `{"k":"tone"}`, `{"k":"tone","v":"brief"}`, `{"op":"fake"}`)
 	s.write(105, "notion_update_page", "page", nil, nil, nil, nil)
-	s.write(106, "payee_rename", "payee:1", nil, nil, nil, `{"op": "money_restore"}`)
 	s.action(110, "flag", "INBOX", nil, `{"op":"unflag"}`, 1)
 	page := status(t, s.get("/activity"), http.StatusOK)
-	order := []string{`id="activity-mail-`, "payee_rename", "notion_update_page", "profile_set"}
+	order := []string{`id="activity-mail-`, "notion_update_page", "profile_set"}
 	last := -1
 	for _, want := range order {
 		at := strings.Index(page, want)
@@ -64,7 +63,6 @@ func TestActivityMergesMailAndWritesAndFiltersByCategory(t *testing.T) {
 		{"mail", "activity-mail-", "profile_set"},
 		{"assistant", "profile_set", "notion_update_page"},
 		{"wiki", "notion_update_page", "profile_set"},
-		{"money", "payee_rename", "notion_update_page"},
 	} {
 		filtered := status(t, s.get("/activity?category="+c.category), http.StatusOK)
 		mustContain(t, filtered, c.present)

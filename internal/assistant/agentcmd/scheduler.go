@@ -6,7 +6,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
@@ -15,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/sdnotify"
 )
 
@@ -33,19 +31,9 @@ func callables(enabled func(module string) bool) map[string]worker.Callable {
 			}
 		}
 	}
-	gate(map[string]worker.Callable{scheduler.FXRatesName: fxRates}, module.Money)
 	gate(calendarcmd.Callables(), module.Calendar, module.Mail)
 	gate(mediacmd.Callables(), module.Media)
 	return out
-}
-
-func fxRates(ctx context.Context, e worker.Env) (worker.Result, error) {
-	loc, err := config.Location(e.Env)
-	if err != nil {
-		return worker.Result{}, err
-	}
-	_, err = money.FetchRates(ctx, e.DB.Write, e.Now(), loc, nil)
-	return worker.Result{}, err
 }
 
 func schedulerCommand(cfgEnv config.Env, tools registry.Source, enabled func(module string) bool) *cli.Command {

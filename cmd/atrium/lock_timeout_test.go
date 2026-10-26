@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestMoneyRefreshReportsExclusiveLockTimeout(t *testing.T) {
+func TestRefreshReportsExclusiveLockTimeout(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	d, err := db.Connect(path)
@@ -72,8 +72,8 @@ func TestMoneyRefreshReportsExclusiveLockTimeout(t *testing.T) {
 	}
 
 	var out, stderr bytes.Buffer
-	code := newApp().Run(context.Background(), []string{"money", "refresh"}, &out, &stderr)
+	code := newApp().Run(context.Background(), []string{"loops", "refresh"}, &out, &stderr)
 	if code == cli.ExitOK || !strings.Contains(stderr.String(), "timed out after") || !strings.Contains(stderr.String(), path+".lock") {
-		t.Fatalf("money refresh = (%d, stdout %q, stderr %q), want non-zero and a clear lock timeout", code, out.String(), stderr.String())
+		t.Fatalf("loops refresh = (%d, stdout %q, stderr %q), want non-zero and a clear lock timeout", code, out.String(), stderr.String())
 	}
 }

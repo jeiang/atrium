@@ -1,7 +1,7 @@
 {{define "title"}}Watches{{end}}
 {{define "heading"}}Watches{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-<p class="text-sm text-muted-foreground">Read from your mail and address book by a local model. Dates and statuses can be wrong or stale; open the source mail to check. Nothing here pays, cancels or contacts anyone. Subscriptions and bills live on <a class="underline" href="/money/bills">Money · Bills</a>.</p>
+<p class="text-sm text-muted-foreground">Read from your mail and address book by a local model. Dates and statuses can be wrong or stale; open the source mail to check. Nothing here pays, cancels or contacts anyone.</p>
 
 <section class="flex flex-col gap-3" aria-labelledby="packages-h">
   <h2 id="packages-h" class="text-sm font-medium">Packages in transit ({{len $d.packages}})</h2>

@@ -115,7 +115,7 @@ func copyTree(t *testing.T, from, to string) {
 
 var pythonOrder = []string{
 	"sync", "watch", "rules", "shadow-report", "reindex", "rebalance", "deletions", "gmail-labels", "live", "proposals",
-	"notion", "agent", "calendar", "loops", "watches", "money", "media", "serve",
+	"notion", "agent", "calendar", "loops", "watches", "media", "serve",
 }
 
 func inPythonOrder(have []*cli.Command) []*cli.Command {
@@ -277,7 +277,7 @@ func TestCLIGoldens(t *testing.T) {
 
 func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
 	data := loadGoldenData(t)
-	for _, argv := range [][]string{{"live", "rebaseline"}, {"live", "deletions"}, {"loops", "refresh"}, {"watches", "refresh"}, {"money", "refresh"}} {
+	for _, argv := range [][]string{{"live", "rebaseline"}, {"live", "deletions"}, {"loops", "refresh"}, {"watches", "refresh"}} {
 		t.Run(strings.Join(argv, " "), func(t *testing.T) {
 			r := newRig(t, data, nil, "")
 			lock, err := db.Exclusive(context.Background(), filepath.Join(r.dir, "atrium.db"), db.ShortLockWait)

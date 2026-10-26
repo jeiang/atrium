@@ -27,12 +27,12 @@ func TestCommandRefusesNewerSchema(t *testing.T) {
 	t.Setenv("ATRIUM_DB", path)
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 
-	cmd := cliExitProcess(t, "money refresh")
+	cmd := cliExitProcess(t, "loops refresh")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	code := exitCode(cmd.Run())
 	if code != cli.ExitError || stdout.Len() != 0 || !strings.Contains(stderr.String(), "does not know") || !strings.Contains(stderr.String(), "9999") {
-		t.Errorf("money refresh on a newer schema exited %d, stdout %q, stderr %q; want %d, empty stdout and the unknown-migration message", code, stdout.String(), stderr.String(), cli.ExitError)
+		t.Errorf("loops refresh on a newer schema exited %d, stdout %q, stderr %q; want %d, empty stdout and the unknown-migration message", code, stdout.String(), stderr.String(), cli.ExitError)
 	}
 	var skills int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM skills WHERE name = 'wiki-query'").Scan(&skills); err != nil {

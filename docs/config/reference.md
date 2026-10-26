@@ -52,8 +52,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_manifest_results` | int | `30` | cap | `ATRIUM_ASSISTANT_AGENT_MANIFEST_RESULTS` |
 | `agent_media_torrent_limit` | int | `50` | cap | `ATRIUM_ASSISTANT_AGENT_MEDIA_TORRENT_LIMIT` |
 | `agent_message_cap_bytes` | int | `67108864` | cap | `ATRIUM_ASSISTANT_AGENT_MESSAGE_CAP_BYTES` |
-| `agent_money_max_days` | int | `365` | cap | `ATRIUM_ASSISTANT_AGENT_MONEY_MAX_DAYS` |
-| `agent_money_max_limit` | int | `200` | cap | `ATRIUM_ASSISTANT_AGENT_MONEY_MAX_LIMIT` |
 | `agent_nightly_max_threads` | int | `30` | cap | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_MAX_THREADS` |
 | `agent_nightly_thread_chars` | int | `3000` | cap | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_THREAD_CHARS` |
 | `agent_nightly_total_chars` | int | `40000` | cap | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_TOTAL_CHARS` |
@@ -73,7 +71,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_recall_page_chars` | int | `8000` | cap | `ATRIUM_ASSISTANT_AGENT_RECALL_PAGE_CHARS` |
 | `agent_schedule_calendar_candidates` | string | `0 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_CALENDAR_CANDIDATES` |
 | `agent_schedule_daily_nudges` | string | `daily 08:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_DAILY_NUDGES` |
-| `agent_schedule_fx_rates` | string | `weekly mon 06:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_FX_RATES` |
 | `agent_schedule_media_channels` | string | `*/30 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_CHANNELS` |
 | `agent_schedule_media_sweep` | string | `*/10 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_SWEEP` |
 | `agent_schedule_media_thumbnails` | string | `daily 04:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_THUMBNAILS` |
@@ -178,7 +175,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `http_timeout_seconds` | int | `600` | advanced | `ATRIUM_CORE_HTTP_TIMEOUT_SECONDS` |
 | `mail_enabled` | bool | `false` | ui | `ATRIUM_CORE_MAIL_ENABLED` |
 | `media_enabled` | bool | `false` | ui | `ATRIUM_CORE_MEDIA_ENABLED` |
-| `money_enabled` | bool | `false` | ui | `ATRIUM_CORE_MONEY_ENABLED` |
 | `notifications_enabled` | bool | `false` | ui | `ATRIUM_CORE_NOTIFICATIONS_ENABLED` |
 | `notion_enabled` | bool | `false` | ui | `ATRIUM_CORE_NOTION_ENABLED` |
 | `ops_listen` | string | `127.0.0.1:9180` | bootstrap | `ATRIUM_CORE_OPS_LISTEN` |
@@ -311,34 +307,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `media_torrent_upload_bytes` | int | `1048576` | advanced | `ATRIUM_MEDIA_MEDIA_TORRENT_UPLOAD_BYTES` |
 | `media_tv_url` | string | none | ui | `ATRIUM_MEDIA_MEDIA_TV_URL` |
 | `media_video_extensions` | string | `.mkv,.mp4,.m4v,.avi,.mov,.ts,.wmv` | advanced | `ATRIUM_MEDIA_MEDIA_VIDEO_EXTENSIONS` |
-
-## money
-
-| Key | Type | Default | Class | Environment variable |
-| --- | --- | --- | --- | --- |
-| `money_backfill_days` | int | `90` | advanced | `ATRIUM_MONEY_MONEY_BACKFILL_DAYS` |
-| `money_bank_senders` | string | `first_citizens=firstcitizenstt.com;scotiabank=scotiabank.com;republic=republictt.com,rfhl.com;cibc=cibcfcib.com,cibc.com` | advanced | `ATRIUM_MONEY_MONEY_BANK_SENDERS` |
-| `money_banks` | string | `first_citizens=First Citizens;scotiabank=Scotiabank;republic=Republic;cibc=CIBC` | advanced | `ATRIUM_MONEY_MONEY_BANKS` |
-| `money_bbd_forex_fee` | float | `1.02` | advanced | `ATRIUM_MONEY_MONEY_BBD_FOREX_FEE` |
-| `money_bbd_per_usd` | float | `2.0` | advanced | `ATRIUM_MONEY_MONEY_BBD_PER_USD` |
-| `money_bill_amount_tolerance` | float | `0.15` | advanced | `ATRIUM_MONEY_MONEY_BILL_AMOUNT_TOLERANCE` |
-| `money_bill_monthly_days` | int | `30` | advanced | `ATRIUM_MONEY_MONEY_BILL_MONTHLY_DAYS` |
-| `money_bill_monthly_slack` | int | `5` | advanced | `ATRIUM_MONEY_MONEY_BILL_MONTHLY_SLACK` |
-| `money_bill_weekly_days` | int | `7` | advanced | `ATRIUM_MONEY_MONEY_BILL_WEEKLY_DAYS` |
-| `money_bill_weekly_slack` | int | `2` | advanced | `ATRIUM_MONEY_MONEY_BILL_WEEKLY_SLACK` |
-| `money_bill_yearly_days` | int | `365` | advanced | `ATRIUM_MONEY_MONEY_BILL_YEARLY_DAYS` |
-| `money_bill_yearly_slack` | int | `20` | advanced | `ATRIUM_MONEY_MONEY_BILL_YEARLY_SLACK` |
-| `money_bills_soon_days` | int | `14` | advanced | `ATRIUM_MONEY_MONEY_BILLS_SOON_DAYS` |
-| `money_body_chars` | int | `3000` | advanced | `ATRIUM_MONEY_MONEY_BODY_CHARS` |
-| `money_cbtt_url` | string | `https://www.central-bank.org.tt/` | bootstrap | `ATRIUM_MONEY_MONEY_CBTT_URL` |
-| `money_cli_scan_limit` | int | `1000` | advanced | `ATRIUM_MONEY_MONEY_CLI_SCAN_LIMIT` |
-| `money_currencies` | string | `TTD,BBD` | advanced | `ATRIUM_MONEY_MONEY_CURRENCIES` |
-| `money_merge_days` | int | `3` | advanced | `ATRIUM_MONEY_MONEY_MERGE_DAYS` |
-| `money_merge_tolerance` | float | `0.03` | advanced | `ATRIUM_MONEY_MONEY_MERGE_TOLERANCE` |
-| `money_scan_limit` | int | `50` | advanced | `ATRIUM_MONEY_MONEY_SCAN_LIMIT` |
-| `money_transaction_limit` | int | `200` | advanced | `ATRIUM_MONEY_MONEY_TRANSACTION_LIMIT` |
-| `money_tx_currencies` | string | `TTD,BBD,USD` | advanced | `ATRIUM_MONEY_MONEY_TX_CURRENCIES` |
-| `money_unassigned_limit` | int | `50` | advanced | `ATRIUM_MONEY_MONEY_UNASSIGNED_LIMIT` |
 
 ## notify
 

@@ -20,7 +20,6 @@ import (
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/money"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -63,7 +62,6 @@ type Pass struct {
 	Judge   flags.Judge
 	Applier *applier.Applier
 	Events  func(ctx context.Context, account string) (invites, candidates int, err error)
-	Money   money.Options
 	Extras  []Extra
 }
 
@@ -96,16 +94,6 @@ func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *
 		}},
 		{"watches", func(ctx context.Context) (any, error) {
 			return watches.Refresh(ctx, d, now(), watches.Options{Clock: now}), nil
-		}},
-		{"money", func(ctx context.Context) (any, error) {
-			if on, err := module.FlagOn(ctx, d.Read, module.Money); err != nil || !on {
-				return py.Dict{{Key: "skipped", Value: "money module is not enabled"}}, err
-			}
-			limit, err := money.ScanLimit(ctx, d.Read)
-			if err != nil {
-				return nil, err
-			}
-			return money.Refresh(ctx, d, limit, now(), p.Money)
 		}},
 	}
 	return p

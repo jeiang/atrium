@@ -16,7 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-var moduleNames = []string{module.Mail, module.Calendar, module.Notion, module.Money, module.Media, module.Assistant, module.Notifications, module.Grafana, module.Contacts}
+var moduleNames = []string{module.Mail, module.Calendar, module.Notion, module.Media, module.Assistant, module.Notifications, module.Grafana, module.Contacts}
 
 func settingEnv(key string) string {
 	d, ok := settings.Default.Lookup(key)
