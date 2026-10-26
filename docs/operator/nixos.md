@@ -18,9 +18,8 @@ The module has a small set of typed deployment options. Application settings go 
 | `settings` | TOML table per module | `{}` | Rendered to the file named by `ATRIUM_CONFIG`. Every key set here is pinned: it shows read-only and cannot be changed with `atrium settings`. A key unknown to the configuration reference fails evaluation. |
 | `secretFiles` | attribute set of string | `{}` | Secret settings as `"<module>.<key>" = "<host file>"`. Each file is delivered to every unit and to `atrium-run` through systemd `LoadCredential` and pinned as `<key>_file`, so the file can stay owned and readable by root. A key whose `<key>_file` form is unknown fails evaluation. |
 | `mailAccounts` | attribute set of account | `{}` | Mail accounts by id (keep the id stable: it keys the account's cached mail). Each has `preset` (`icloud` or `gmail`), `login`, `passwordFile` (a host file delivered through `LoadCredential` as `mail-account-<id>`), and optional `label` and `enabled` (default `true`). Rendered to the file named by `mail.mail_accounts_file`, which it pins unless `settings` sets that key. |
-| `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`, for the credentials that are not settings yet: `ICLOUD_APP_PASSWORD` (calendar and contacts), `NOTION_TOKEN`, `GRAFANA_VIEWER_TOKEN` and `NTFY_TOKEN`. The TMDB read token is the secret setting `media.media_tmdb_token` (`secretFiles`). |
+| `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`, for the credentials that are not settings yet: `ICLOUD_APP_PASSWORD` (calendar and contacts) and `NTFY_TOKEN`. The TMDB read token, the Notion token and the Grafana token are the secret settings `media.media_tmdb_token`, `notion.notion_token` and `grafana.grafana_viewer_token` (`secretFiles`); the Grafana URL is `settings.grafana.grafana_url`. |
 | `modelServerUnits` | list of string | `[]` | Units serving the mail chat and embed endpoints. The application units start after them and want them. |
-| `grafanaUrl` | null or string | `null` | Grafana base URL for the observability tools (`GRAFANA_URL`). |
 
 The module sets `core.tz` from `time.timeZone`, and `calendar.calendar_dir` and `contacts.contacts_dir` to the mirror directories under `stateDir`, unless `settings` sets them.
 
@@ -39,7 +38,7 @@ services.atrium = {
 
 ## Removed options
 
-These options fail evaluation with a message that names the replacement: `id` (use `uid`, `user` and `group`), `mode` (`settings.mail.mail_mode`), `chatUrl` and `embedUrl` (`settings.mail.mail_chat_url`, `mail_embed_url`), `publicUrl` (`settings.core.public_url`), `timeZone` (`settings.core.tz`), `icloudAppleId` (the Settings page or `settings.calendar.icloud_apple_id`), `extraEnvironment` (`settings` and `secretFiles`), `web.port` (`port`), `ntfy.url`, `ntfy.topic` and `ntfy.mediaTopic` (`settings.notify.*`), and `media.root`, `media.qbittorrentUrl`, `media.moviesUrl` and `media.tvUrl` (`settings.media.*`).
+These options fail evaluation with a message that names the replacement: `id` (use `uid`, `user` and `group`), `mode` (`settings.mail.mail_mode`), `chatUrl` and `embedUrl` (`settings.mail.mail_chat_url`, `mail_embed_url`), `publicUrl` (`settings.core.public_url`), `timeZone` (`settings.core.tz`), `icloudAppleId` (the Settings page or `settings.calendar.icloud_apple_id`), `extraEnvironment` (`settings` and `secretFiles`), `web.port` (`port`), `ntfy.url`, `ntfy.topic` and `ntfy.mediaTopic` (`settings.notify.*`), `media.root`, `media.qbittorrentUrl`, `media.moviesUrl` and `media.tvUrl` (`settings.media.*`), and `grafanaUrl` (`settings.grafana.grafana_url`).
 
 atrium also logs a warning at startup for each environment variable it no longer reads (for example `ATRIUM_MODE`) and names the variable to use instead.
 

@@ -50,6 +50,7 @@ type Server struct {
 	*httptest.Server
 	t                testing.TB
 	OnRequest        func(Request)
+	RejectKey        string
 	FileDeleteStatus int
 	Models           []string
 
@@ -137,6 +138,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/messages":
 		s.messages(w, Request{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Clone(), body})
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/models" && s.RejectKey != "" && r.Header.Get("X-Api-Key") == s.RejectKey:
+		fail(w, http.StatusUnauthorized, ErrorBody("authentication_error", "invalid x-api-key"))
 	case r.Method == http.MethodGet && r.URL.Path == "/v1/models":
 		s.models(w)
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1/files/"):

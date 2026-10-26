@@ -93,6 +93,8 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_USER_AGENT` | `assistant.agent_webfetch_user_agent` |
 | `ATRIUM_ASSISTANT_AGENT_WORKSPACE_PLAN_ITEM_CHARS` | `assistant.agent_workspace_plan_item_chars` |
 | `ATRIUM_ASSISTANT_AGENT_WORKSPACE_PLAN_ITEMS` | `assistant.agent_workspace_plan_items` |
+| `ATRIUM_ASSISTANT_ANTHROPIC_CA_FILE` | `assistant.anthropic_ca_file` |
+| `ATRIUM_ASSISTANT_ANTHROPIC_PROXY` | `assistant.anthropic_proxy` |
 | `ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE` | `assistant.budget_chat_share` |
 | `ATRIUM_ASSISTANT_BUDGET_UNATTENDED_SHARE` | `assistant.budget_unattended_share` |
 | `ATRIUM_ASSISTANT_CACHE_TTL_CHAT` | `assistant.cache_ttl_chat` |
@@ -152,6 +154,14 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_CORE_PUBLIC_URL` | `core.public_url` |
 | `ATRIUM_CORE_TZ` | `core.tz` |
 | `ATRIUM_DB_KEY` | `db.key` |
+| `ATRIUM_GRAFANA_GRAFANA_CA_FILE` | `grafana.grafana_ca_file` |
+| `ATRIUM_GRAFANA_GRAFANA_LOGS_QUERY` | `grafana.grafana_logs_query` |
+| `ATRIUM_GRAFANA_GRAFANA_LOGS_TYPE` | `grafana.grafana_logs_type` |
+| `ATRIUM_GRAFANA_GRAFANA_LOGS_UID` | `grafana.grafana_logs_uid` |
+| `ATRIUM_GRAFANA_GRAFANA_METRICS_UID` | `grafana.grafana_metrics_uid` |
+| `ATRIUM_GRAFANA_GRAFANA_PROXY` | `grafana.grafana_proxy` |
+| `ATRIUM_GRAFANA_GRAFANA_URL` | `grafana.grafana_url` |
+| `ATRIUM_GRAFANA_GRAFANA_VIEWER_TOKEN` | `grafana.grafana_viewer_token` |
 | `ATRIUM_MAIL_BIRTHDAYS_DEFAULT_DAYS` | `mail.birthdays_default_days` |
 | `ATRIUM_MAIL_BIRTHDAYS_MAX_DAYS` | `mail.birthdays_max_days` |
 | `ATRIUM_MAIL_DELETION_INTERVAL_SECONDS` | `mail.deletion_interval_seconds` |
@@ -285,6 +295,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_NOTIFY_NTFY_URL` | `notify.ntfy_url` |
 | `ATRIUM_NOTION_NOTION_BLOCK_DEPTH` | `notion.notion_block_depth` |
 | `ATRIUM_NOTION_NOTION_BRANCH_LIMIT` | `notion.notion_branch_limit` |
+| `ATRIUM_NOTION_NOTION_CA_FILE` | `notion.notion_ca_file` |
 | `ATRIUM_NOTION_NOTION_EDIT_MAX_TOKENS` | `notion.notion_edit_max_tokens` |
 | `ATRIUM_NOTION_NOTION_EDIT_PAGE_CHARS` | `notion.notion_edit_page_chars` |
 | `ATRIUM_NOTION_NOTION_HEAD_SOURCE_CHARS` | `notion.notion_head_source_chars` |
@@ -296,11 +307,13 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_NOTION_NOTION_MAX_SOURCES` | `notion.notion_max_sources` |
 | `ATRIUM_NOTION_NOTION_PAGE_SIZE` | `notion.notion_page_size` |
 | `ATRIUM_NOTION_NOTION_PRIVATE_VALUE` | `notion.notion_private_value` |
+| `ATRIUM_NOTION_NOTION_PROXY` | `notion.notion_proxy` |
 | `ATRIUM_NOTION_NOTION_RELATED_LIMIT` | `notion.notion_related_limit` |
 | `ATRIUM_NOTION_NOTION_RETRY_AFTER_DEFAULT_SECONDS` | `notion.notion_retry_after_default_seconds` |
 | `ATRIUM_NOTION_NOTION_RETRY_AFTER_MAX_SECONDS` | `notion.notion_retry_after_max_seconds` |
 | `ATRIUM_NOTION_NOTION_SNIPPET_CHARS` | `notion.notion_snippet_chars` |
 | `ATRIUM_NOTION_NOTION_TIMEOUT_SECONDS` | `notion.notion_timeout_seconds` |
+| `ATRIUM_NOTION_NOTION_TOKEN` | `notion.notion_token` |
 | `ATRIUM_NOTION_SENSITIVITY_PROPERTY` | `notion.sensitivity_property` |
 | `ATRIUM_NOTION_WIKI_LOG_TITLE` | `notion.wiki_log_title` |
 | `ATRIUM_NOTION_WIKI_ROOT` | `notion.wiki_root` |

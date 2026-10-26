@@ -2,6 +2,7 @@ package grafanamodule
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
@@ -16,12 +17,14 @@ func (Module) Register(module.Context) module.Registration {
 		Name:  module.Grafana,
 		Needs: []string{module.Assistant},
 		Requires: []module.Requirement{{
-			Name: "GRAFANA_URL and GRAFANA_VIEWER_TOKEN",
-			Check: func(_ context.Context, p module.Probe) (string, error) {
-				if _, err := config.Grafana(p.Env); err != nil {
+			Name: grafanatools.KeyURL + " and " + grafanatools.KeyToken,
+			Check: func(ctx context.Context, p module.Probe) (string, error) {
+				_, err := grafanatools.Load(ctx, p.Q)
+				var missing config.NotConfigured
+				if errors.As(err, &missing) {
 					return err.Error(), nil
 				}
-				return "", nil
+				return "", err
 			},
 		}},
 		Tools: func(r *registry.Registry) error {

@@ -314,7 +314,7 @@ func (a *Applier) now() float64 {
 }
 
 func (a *Applier) client(ctx context.Context) (*Client, error) {
-	token, err := config.NotionToken(a.Env)
+	token, err := Token(ctx, a.DB.Read)
 	if err != nil {
 		return nil, err
 	}

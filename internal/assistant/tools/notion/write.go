@@ -287,7 +287,7 @@ func createPage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 	if err != nil {
 		return nil, err
 	}
-	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
+	client, err := makeClient(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -397,7 +397,7 @@ func updatePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 	if err != nil {
 		return nil, err
 	}
-	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
+	client, err := makeClient(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -495,7 +495,7 @@ func movePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	if parent == pageID || under {
 		return nil, tool.Error("a page cannot be moved under itself")
 	}
-	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
+	client, err := makeClient(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -550,7 +550,7 @@ func archivePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, erro
 	if pageID == wiki.Root {
 		return nil, tool.Error("Wiki Home itself cannot be archived")
 	}
-	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
+	client, err := makeClient(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -621,7 +621,7 @@ func addAlias(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	if len(taken) > 0 {
 		return nil, tool.Error("alias already names another page: " + strings.Join(taken, ", "))
 	}
-	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
+	client, err := makeClient(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}

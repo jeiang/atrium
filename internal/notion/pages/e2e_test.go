@@ -173,7 +173,7 @@ func TestNotionPageBackLink(t *testing.T) {
 
 func TestCreateWikiHubLinksTheNewPage(t *testing.T) {
 	fake := newFakeNotion(t)
-	s := newSite(t, map[string]string{"NOTION_TOKEN": notionToken, "ATRIUM_NOTION_WIKI_ROOT": wikiRootID})
+	s := newSite(t, map[string]string{"ATRIUM_NOTION_NOTION_TOKEN": notionToken, "ATRIUM_NOTION_WIKI_ROOT": wikiRootID})
 	id := s.newProject("Always answer in metric units.")
 	edit := "/projects/" + id + "/edit"
 	mustContain(t, status(t, s.get(edit), http.StatusOK), "Create wiki hub")
@@ -226,7 +226,7 @@ func TestCreateWikiHubReportsAMissingWikiRoot(t *testing.T) {
 func TestCreateWikiHubReportsNotionRefusals(t *testing.T) {
 	fake := newFakeNotion(t)
 	fake.refuse = true
-	s := newSite(t, map[string]string{"NOTION_TOKEN": notionToken, "ATRIUM_NOTION_WIKI_ROOT": wikiRootID})
+	s := newSite(t, map[string]string{"ATRIUM_NOTION_NOTION_TOKEN": notionToken, "ATRIUM_NOTION_WIKI_ROOT": wikiRootID})
 	id := s.newProject("x")
 	reply := status(t, s.post("/projects/"+id+"/wiki-hub", nil, hx, "true"), http.StatusUnprocessableEntity)
 	mustContain(t, reply, "Notion refused the page", "Create wiki hub")

@@ -13,10 +13,14 @@ import (
 
 var NewClient = notion.NewClient
 
-func makeClient(ctx context.Context, q db.Querier, env config.Env) (*notion.Client, error) {
-	token, err := config.NotionToken(env)
-	if err != nil {
+func makeClient(ctx context.Context, q db.Querier) (*notion.Client, error) {
+	token, err := notion.Token(ctx, q)
+	var missing config.NotConfigured
+	if errors.As(err, &missing) {
 		return nil, tool.NotConfigured(err.Error())
+	}
+	if err != nil {
+		return nil, err
 	}
 	client := NewClient(token)
 	return client, client.Configure(ctx, q)

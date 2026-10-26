@@ -18,7 +18,9 @@ func init() {
 	ops.Ready(ops.Check{Name: "ntfy", Remote: true, Run: health})
 	integrations.Register(integrations.Integration{
 		Name: Integration, Label: "ntfy", Module: module, URLKey: KeyURL,
-		Test: func(ctx context.Context, c integrations.Conn) error { return healthOf(ctx, c.HTTP, c.URL) },
+		Test: func(ctx context.Context, c integrations.Conn) (string, error) {
+			return "", healthOf(ctx, c.HTTP, c.URL)
+		},
 	})
 	integrations.SetNotifier(func(ctx context.Context, d *db.DB, env config.Env, title, body string) error {
 		if on, err := Enabled(ctx, d.Read); err != nil || !on {

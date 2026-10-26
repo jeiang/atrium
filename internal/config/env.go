@@ -92,21 +92,6 @@ func requireStripped(env Env, name string) (string, error) {
 	return "", NotConfigured(name + " is not set")
 }
 
-func NotionToken(env Env) (string, error) { return requireStripped(env, "NOTION_TOKEN") }
-
 func NotionWikiRoot(env Env) (string, error) { return requireStripped(env, "ATRIUM_NOTION_WIKI_ROOT") }
-
-type GrafanaAccess struct {
-	URL   string
-	Token string
-}
-
-func Grafana(env Env) (GrafanaAccess, error) {
-	g := GrafanaAccess{cleanURL(env, "GRAFANA_URL"), stripped(env, "GRAFANA_VIEWER_TOKEN")}
-	if g.URL == "" || g.Token == "" {
-		return GrafanaAccess{}, NotConfigured("GRAFANA_URL and GRAFANA_VIEWER_TOKEN must be set")
-	}
-	return g, nil
-}
 
 func NtfyToken(env Env) string { return stripped(env, "NTFY_TOKEN") }

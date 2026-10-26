@@ -130,7 +130,7 @@ func searchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 }
 
 func livePage(ctx context.Context, tc *tool.Context, pageID string) (py.Dict, error) {
-	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
+	client, err := makeClient(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
