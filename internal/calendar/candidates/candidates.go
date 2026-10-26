@@ -116,7 +116,7 @@ func pending(ctx context.Context, d *db.DB, account string) ([]row, error) {
 }
 
 func defaultCalendar(account string) string {
-	if account == "gmail" {
+	if config.Preset(account) == config.Gmail {
 		return calendar.Google
 	}
 	return calendar.ICloud

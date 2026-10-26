@@ -275,12 +275,17 @@ func (w *Watcher) cycle(ctx context.Context, account string, wait *retryBackoff)
 }
 
 func Watch(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) error {
+	notifier := sdnotify.FromEnv()
+	w := &Watcher{Cfg: cfg, Open: open, Notify: notifier}
+	_, release, err := w.connect(ctx)
+	if err != nil {
+		return err
+	}
+	release()
 	accounts, err := SelectAccounts(cfg, requested)
 	if err != nil {
 		return err
 	}
-	notifier := sdnotify.FromEnv()
-	w := &Watcher{Cfg: cfg, Open: open, Notify: notifier}
 	for _, account := range accounts {
 		w.heartbeat(account)
 	}

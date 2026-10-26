@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -47,32 +45,9 @@ const (
 
 var GmailCategories = [...]string{"social", "promotions", "updates", "forums"}
 
-type AccountSpec struct {
-	Name          string
-	Host          string
-	UserEnv       string
-	PasswordEnv   string
-	UncertainDest string
-}
-
-var Accounts = [...]AccountSpec{
-	{ICloud, "imap.mail.me.com", "ICLOUD_MAIL_USERNAME", "ICLOUD_APP_PASSWORD", "Misc"},
-	{Gmail, "imap.gmail.com", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD", ""},
-}
-
-func Account(name string) (AccountSpec, bool) {
-	for _, spec := range Accounts {
-		if spec.Name == name {
-			return spec, true
-		}
-	}
-	return AccountSpec{}, false
-}
-
 type Config struct {
-	DBPath      string
-	CacheDir    string
-	credentials map[string]string
+	DBPath   string
+	CacheDir string
 }
 
 func (c Config) PausePath() string { return c.sibling(PauseFile) }
@@ -94,16 +69,11 @@ func (c Config) sibling(name string) string {
 func LockPath(path string) string { return path + ".lock" }
 
 func (c Config) Credential(account string) (user, password string, ok bool) {
-	spec, found := Account(account)
-	if !found {
+	a, found := Account(account)
+	if !found || !a.Enabled || a.Login == "" || a.Password == "" {
 		return "", "", false
 	}
-	user = c.credentials[spec.UserEnv]
-	password = strings.Join(py.Split(c.credentials[spec.PasswordEnv]), "")
-	if user == "" || password == "" {
-		return "", "", false
-	}
-	return user, password, true
+	return a.Login, a.Password, true
 }
 
 func (c Config) String() string {
@@ -134,17 +104,14 @@ func Load(env Env) (Config, error) {
 	if cache == "" {
 		return Config{}, errors.New("ATRIUM_CACHE_DIR or STATE_DIRECTORY is required")
 	}
-	creds := map[string]string{}
-	for _, spec := range Accounts {
-		for _, name := range [...]string{spec.UserEnv, spec.PasswordEnv} {
-			if v, ok := env(name); ok {
-				creds[name] = v
-			}
-		}
+	accounts, err := loadAccounts(env)
+	if err != nil {
+		return Config{}, err
 	}
+	fileAccounts.Store(&accounts)
+	liveAccounts.Store(&accounts)
 	return Config{
-		DBPath:      filepath.Clean(db),
-		CacheDir:    filepath.Clean(cache),
-		credentials: creds,
+		DBPath:   filepath.Clean(db),
+		CacheDir: filepath.Clean(cache),
 	}, nil
 }

@@ -59,6 +59,7 @@ func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClien
 	w := &World{T: t, Account: account, Mode: mode, DB: dbtest.Schema(t), Cfg: cfg, Fake: mailtest.NewFakeClient(), Clock: 1_792_080_000}
 	w.Fake.BindMode(w.DB.Read)
 	mailtest.PinMode(t, mode)
+	mailtest.UseAccounts(t, map[string]string{config.ICloud: "me", config.Gmail: "me@gmail.test"})
 	for _, a := range [...]string{config.ICloud, config.Gmail} {
 		w.exec("INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", a, a)
 	}
@@ -128,7 +129,7 @@ func (w *World) add(box *mailtest.FakeBox, subject, sender string, flags, labels
 }
 
 func (w *World) InboxBox() *mailtest.FakeBox {
-	if w.Account == config.Gmail {
+	if config.Preset(w.Account) == config.Gmail {
 		return w.Fake.Boxes[config.GmailAllMail]
 	}
 	return w.Fake.Boxes[config.Inbox]
@@ -137,7 +138,7 @@ func (w *World) InboxBox() *mailtest.FakeBox {
 func (w *World) Arrive(subject string, flags ...string) uint32 {
 	w.T.Helper()
 	var labels []string
-	if w.Account == config.Gmail {
+	if config.Preset(w.Account) == config.Gmail {
 		labels = []string{mailops.InboxLabel}
 	}
 	if flags == nil {

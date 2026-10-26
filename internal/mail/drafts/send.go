@@ -19,7 +19,7 @@ type Result struct {
 }
 
 func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Message) (string, error) {
-	if account != config.ICloud {
+	if config.Preset(account) != config.ICloud {
 		return "gmail files Sent itself", nil
 	}
 	if s.Open == nil {

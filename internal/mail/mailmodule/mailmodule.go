@@ -7,6 +7,7 @@ import (
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/accountpages"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
@@ -35,6 +36,7 @@ func (m Module) Register(module.Context) module.Registration {
 		},
 		Pages: []web.Page{
 			{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
+			{Module: accountpages.Module, Templates: accountpages.Templates()},
 		},
 		Commands: []*cli.Command{
 			run.SyncCommand(m.Clients),

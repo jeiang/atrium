@@ -36,7 +36,7 @@ func IsSystemName(name string) bool {
 }
 
 func MailboxRole(name string, flags []string, account string) string {
-	if account == config.Gmail {
+	if config.Preset(account) == config.Gmail {
 		if name == config.GmailAllMail {
 			return "allmail"
 		}

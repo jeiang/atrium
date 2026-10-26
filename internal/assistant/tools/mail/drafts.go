@@ -13,7 +13,7 @@ import (
 
 const notSent = "Draft saved only. Nothing is sent: the operator reviews and sends it from the Drafts page."
 
-var draftSchemaProperties = `"account":{"type":"string","enum":["icloud","gmail"]},` +
+var draftSchemaProperties = `"account":{"type":"string","description":"Mail account id"},` +
 	`"to":{"type":"array","items":{"type":"string"}},"cc":{"type":"array","items":{"type":"string"}},`
 
 var draftCreateSchema = json.RawMessage(`{"type":"object","properties":{` + draftSchemaProperties +

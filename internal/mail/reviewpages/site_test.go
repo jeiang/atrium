@@ -30,12 +30,7 @@ import (
 
 const hx = "HX-Request"
 
-var credentials = map[string]string{
-	"ICLOUD_MAIL_USERNAME": "me",
-	"ICLOUD_APP_PASSWORD":  "pw",
-	"GMAIL_ADDRESS":        "me@gmail.test",
-	"GMAIL_APP_PASSWORD":   "pw",
-}
+var logins = map[string]string{config.ICloud: "me", config.Gmail: "me@gmail.test"}
 
 type site struct {
 	t        *testing.T
@@ -59,7 +54,7 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	d := dbtest.Schema(t)
 	dir := t.TempDir()
 	vars := map[string]string{"ATRIUM_DB": filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "live"}
-	for k, v := range credentials {
+	for k, v := range logins {
 		vars[k] = v
 	}
 	for _, option := range options {
@@ -71,6 +66,7 @@ func newSite(t *testing.T, options ...siteOption) *site {
 		t.Fatal(err)
 	}
 	mailtest.PinMode(t, vars["ATRIUM_MODE"])
+	mailtest.UseAccounts(t, map[string]string{config.ICloud: vars[config.ICloud], config.Gmail: vars[config.Gmail]})
 	s := &site{
 		t: t, db: d, cfg: cfg, env: env, registry: proposals.NewRegistry(), writes: toolset.Undoers(env), smtp: &smtptest.Server{},
 		imap: mailtest.NewFakeClient(), clock: 1_000_000,

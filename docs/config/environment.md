@@ -171,6 +171,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MAIL_LLM_BODY_CHARS` | `mail.llm_body_chars` |
 | `ATRIUM_MAIL_LLM_NEIGHBORS` | `mail.llm_neighbors` |
 | `ATRIUM_MAIL_LLM_TOP_SENDERS` | `mail.llm_top_senders` |
+| `ATRIUM_MAIL_MAIL_ACCOUNTS_FILE` | `mail.mail_accounts_file` |
 | `ATRIUM_MAIL_MAIL_BACKOFF_MAX_SECONDS` | `mail.mail_backoff_max_seconds` |
 | `ATRIUM_MAIL_MAIL_BACKOFF_START_SECONDS` | `mail.mail_backoff_start_seconds` |
 | `ATRIUM_MAIL_MAIL_BODY_CAP_BYTES` | `mail.mail_body_cap_bytes` |

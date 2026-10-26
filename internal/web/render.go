@@ -22,8 +22,8 @@ type Renderer struct {
 }
 
 func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, error) {
-	accounts := make([]string, len(config.Accounts))
-	for i, spec := range config.Accounts {
+	accounts := make([]string, len(config.Accounts()))
+	for i, spec := range config.Accounts() {
 		accounts[i] = spec.Name
 	}
 	extra.AssetVersion = AssetVersion

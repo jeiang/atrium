@@ -29,7 +29,7 @@ const (
 var mailKinds = tool.AllKinds
 
 var mailSearchSchema = json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"},` +
-	`"account":{"type":"string","enum":["icloud","gmail"]},"folder":{"type":"string"},` +
+	`"account":{"type":"string","description":"Mail account id"},"folder":{"type":"string"},` +
 	`"since":{"type":"string","description":"YYYY-MM-DD, inclusive"},` +
 	`"until":{"type":"string","description":"YYYY-MM-DD, inclusive"},` +
 	`"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxResults) + `}},` +
