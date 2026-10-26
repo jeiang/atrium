@@ -6,17 +6,27 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 const settingsFrame = "settings"
+
+func init() {
+	settings.Default.Claim("/settings/assistant", assistant.KeyDefaultModel, assistant.KeyDefaultEffort, assistant.KeyDefaultContextLimit)
+	for _, e := range prompts.Editables {
+		settings.Default.Claim("/settings/prompts", e.Key)
+	}
+}
 
 type AssistantData struct {
 	Models        []pricing.Model `json:"models"`

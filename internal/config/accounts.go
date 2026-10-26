@@ -91,7 +91,7 @@ func RegisterPassword(id string) error {
 		return nil
 	}
 	return settings.Default.Register(settings.Def{
-		Key: PasswordKey(id), Module: "mail", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true,
+		Key: PasswordKey(id), Module: "mail", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true, Page: "/settings/mail",
 	})
 }
 

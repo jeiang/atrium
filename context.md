@@ -84,7 +84,10 @@ not claims about the running application.
   environment files. Settings live in a registry: an `ATRIUM_<MODULE>_<KEY>`
   variable or configuration-file value pins a setting, otherwise a value
   stored in the database applies, and every command reads the same stored
-  values. Some settings are editable through the application.
+  values. Every setting that is not a generated secret appears on one
+  generated Configuration page per module, editable there unless pinned,
+  read-only by class, or claimed by a specialist page; the Modules page
+  toggles module flags and the Audit page lists `settings_audit`.
   Secrets set through `atrium secrets` are stored write-only in the database
   and are never read back or shown; admin keys are refused on a plaintext
   database. A database key (`db.key_file` in the configuration file,

@@ -1,0 +1,23 @@
+{{define "title"}}Audit · Settings{{end}}
+{{define "heading"}}Settings · Audit{{end}}
+{{define "content"}}{{$d := .Data}}
+{{template "settings_tabs" "audit"}}
+<div class="overflow-x-auto rounded-lg border bg-card">
+  <table class="w-full text-sm">
+    <thead class="text-left text-xs text-muted-foreground">
+      <tr><th class="p-2 font-medium">Time</th><th class="p-2 font-medium">Key</th><th class="p-2 font-medium">Old</th><th class="p-2 font-medium">New</th><th class="p-2 font-medium">By</th></tr>
+    </thead>
+    <tbody class="divide-y">
+      {{range $d.entries}}
+      <tr data-audit="{{.key}}">
+        <td class="whitespace-nowrap p-2 text-xs text-muted-foreground">{{ts .ts}}</td>
+        <td class="p-2 font-mono text-xs">{{.key}}{{with .thread}} · thread {{.}}{{end}}</td>
+        <td class="break-all p-2 font-mono text-xs">{{with .old}}{{.}}{{end}}</td>
+        <td class="break-all p-2 font-mono text-xs">{{with .new}}{{.}}{{end}}</td>
+        <td class="whitespace-nowrap p-2 text-xs">{{.actor}} · {{.source}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}

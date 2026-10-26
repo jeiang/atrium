@@ -64,6 +64,7 @@ func Register(i Integration) {
 		settings.Def{Key: transport.CAKey(i.Name), Module: i.Module, Type: settings.String, Class: settings.Advanced, Scopes: instance},
 		settings.Def{Key: transport.ProxyKey(i.Name), Module: i.Module, Type: settings.String, Class: settings.Advanced, Scopes: instance, Check: proxyCheck},
 	)
+	settings.Default.Claim(path, i.URLKey, i.SecretKey)
 	registry = append(registry, i)
 }
 
