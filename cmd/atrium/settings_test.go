@@ -29,7 +29,8 @@ type settingsRun struct {
 
 func runSettings(t *testing.T, args ...string) settingsRun {
 	t.Helper()
-	var out, errs bytes.Buffer
+	var out bytes.Buffer
+	var errs lockedBuffer
 	code := newApp().Run(context.Background(), append([]string{"settings"}, args...), &out, &errs)
 	return settingsRun{code, out.String(), errs.String()}
 }

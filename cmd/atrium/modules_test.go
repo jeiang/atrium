@@ -61,7 +61,8 @@ type appRun struct {
 }
 
 func runApp(args ...string) appRun {
-	var out, errs bytes.Buffer
+	var out bytes.Buffer
+	var errs lockedBuffer
 	code := newApp().Run(context.Background(), args, &out, &errs)
 	return appRun{code, out.String(), errs.String()}
 }
