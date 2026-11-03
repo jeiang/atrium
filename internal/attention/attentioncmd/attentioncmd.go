@@ -3,6 +3,7 @@ package attentioncmd
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -57,8 +58,14 @@ func Command(current func() *module.Snapshot) *cli.Command {
 						if err != nil {
 							return e.UsageError("--until must be a date as YYYY-MM-DD")
 						}
+						if !slices.Contains(attention.Kinds, *kind) {
+							return e.UsageError("unknown attention kind %q", *kind)
+						}
+						if *id == "" {
+							return e.UsageError("source id is empty")
+						}
 						if err := attention.Snooze(e.Ctx, d.Write, *kind, *id, when, time.Now()); err != nil {
-							return e.UsageError("%v", err)
+							return cli.Fail(e, err)
 						}
 						return cli.ExitOK
 					})
