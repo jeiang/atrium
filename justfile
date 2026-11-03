@@ -37,6 +37,17 @@ settingsgen-check:
   go run -tags modernc ./tools/settingsgen "$out"
   diff -r docs/config "$out"
 
+toolsgen:
+  go run -tags modernc ./tools/toolsgen docs/tools.md
+
+toolsgen-check:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  out=$(mktemp -d)
+  trap 'rm -rf "$out"' EXIT
+  go run -tags modernc ./tools/toolsgen "$out/tools.md"
+  diff docs/tools.md "$out/tools.md"
+
 go-test *args="./...":
   go test -race {{args}}
 

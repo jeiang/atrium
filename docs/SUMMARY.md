@@ -11,3 +11,4 @@
 # Current behavior
 
 - [Operator-visible behavior and boundaries](operator/behavior.md)
+- [Assistant tools](tools.md)

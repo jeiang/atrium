@@ -21,7 +21,9 @@
         (root + "/internal")
         (root + "/sdk")
         (root + "/tools/settingsgen")
+        (root + "/tools/toolsgen")
         (root + "/docs/config")
+        (root + "/docs/tools.md")
         (root + "/nix/monitoring")
         (lib.fileset.maybeMissing (root + "/third_party"))
         (lib.fileset.maybeMissing (root + "/testdata"))
@@ -94,6 +96,11 @@
       settingsgen = goCheck "settingsgen" [pkgs.diffutils] ''
         go run -tags modernc ./tools/settingsgen $TMPDIR/config
         diff -r docs/config $TMPDIR/config
+      '';
+
+      toolsgen = goCheck "toolsgen" [pkgs.diffutils] ''
+        go run -tags modernc ./tools/toolsgen $TMPDIR/tools.md
+        diff docs/tools.md $TMPDIR/tools.md
       '';
 
       go-test = goCheck "test" [] ''

@@ -155,7 +155,9 @@ not claims about the running application.
   everything but `read` to subagents; each rule carries examples checked at
   load. Nightly keeps its Notion writes. Each tool has an admin setting
   `tool_<name>_enabled` (default on), including `web_search`; a disabled tool is
-  absent from the model request. `ExternalEffect` marks `web_fetch` and the
+  absent from the model request. `docs/tools.md` is generated from the production
+  registry by `tools/toolsgen` (`just toolsgen`, drift checked by `just
+  toolsgen-check` and the `toolsgen` flake check). `ExternalEffect` marks `web_fetch` and the
   server `web_search`. The server `web_search` is pinned to
   `allowed_callers: ["direct"]` unless `agent_web_search_dynamic_filtering` is
   on.
