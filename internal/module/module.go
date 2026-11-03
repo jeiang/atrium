@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -47,15 +48,16 @@ func (c Context) Tools() (*registry.Registry, error) {
 }
 
 type Registration struct {
-	Name     string
-	Core     bool
-	Needs    []string
-	Soft     []string
-	Requires []Requirement
-	Pages    []web.Page
-	Commands []*cli.Command
-	Leaves   map[string]Leaf
-	Tools    func(r *registry.Registry) error
+	Name      string
+	Core      bool
+	Needs     []string
+	Soft      []string
+	Requires  []Requirement
+	Pages     []web.Page
+	Commands  []*cli.Command
+	Leaves    map[string]Leaf
+	Tools     func(r *registry.Registry) error
+	Attention []attention.Source
 }
 
 type Leaf struct {

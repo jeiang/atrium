@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
+	"github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
@@ -19,10 +20,11 @@ type Module struct{}
 func (Module) Register(mc module.Context) module.Registration {
 	command := calendarcmd.Command(mc.Tools)
 	return module.Registration{
-		Name:     module.Calendar,
-		Soft:     []string{module.Mail},
-		Requires: []module.Requirement{{Name: "calendar credentials", Check: credentials}},
-		Commands: []*cli.Command{command},
+		Name:      module.Calendar,
+		Attention: sources.Calendar(),
+		Soft:      []string{module.Mail},
+		Requires:  []module.Requirement{{Name: "calendar credentials", Check: credentials}},
+		Commands:  []*cli.Command{command},
 		Leaves: map[string]module.Leaf{
 			"calendar candidates":  {Needs: []string{module.Mail}},
 			"calendar google-auth": {Always: true},

@@ -8,7 +8,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
+	"github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
@@ -62,8 +64,9 @@ type Module struct {
 func (m Module) Register(module.Context) module.Registration {
 	mailCmds := mailcmd.Options{Clients: m.Clients, Now: m.Now}
 	return module.Registration{
-		Name: module.Mail,
-		Soft: []string{module.Contacts},
+		Name:      module.Mail,
+		Attention: sources.Mail(config.OS),
+		Soft:      []string{module.Contacts},
 		Requires: []module.Requirement{
 			module.Setting(mail.KeyChatURL),
 			module.Setting(mail.KeyEmbedURL),

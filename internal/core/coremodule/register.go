@@ -7,6 +7,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
+	"github.com/jeiang/atrium/internal/attention/attentioncmd"
+	"github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
@@ -28,7 +30,7 @@ type Module struct {
 	Guard   settingscmd.Guard
 }
 
-func (m Module) Register(module.Context) module.Registration {
+func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name: module.Core,
 		Core: true,
@@ -46,7 +48,10 @@ func (m Module) Register(module.Context) module.Registration {
 			dbcmd.Command(),
 			backup.BackupCommand(),
 			backup.RestoreCommand(),
+			attentioncmd.Command(mc.Current),
 		},
+		Leaves:    map[string]module.Leaf{"attention": {Needs: []string{module.Core}}},
+		Attention: sources.Core(),
 	}
 }
 

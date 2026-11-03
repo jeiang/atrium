@@ -14,8 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
-const birthdayWindowDays = 60
-
 type watchesPage struct {
 	Packages  []watches.Package `json:"packages"`
 	Birthdays *[]birthdays.Item `json:"birthdays"`
@@ -30,7 +28,7 @@ func (s *service) showWatches(w http.ResponseWriter, r *http.Request, notice *tp
 	check(err)
 	sec, _ := py.SplitTimestamp(now)
 	year, month, day := time.Unix(sec, 0).In(zone).Date()
-	items, configured, err := birthdays.UpcomingFor(ctx, s.deps.DB.Read, birthdays.Date(year, month, day), birthdayWindowDays)
+	items, configured, err := birthdays.UpcomingFor(ctx, s.deps.DB.Read, birthdays.Date(year, month, day), birthdays.WindowDays)
 	check(err)
 	data := watchesPage{Packages: packages}
 	if configured {

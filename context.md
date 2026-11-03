@@ -208,8 +208,13 @@ not claims about the running application.
   the old index serving until the swap.
 - Cost accounting should explain usage by job and run. Recorded runs should
   support evaluating application and model changes.
-- Follow-ups, proposals, plans, event candidates and drafts should
-  converge into one attention view.
+- Follow-ups, proposals, plans, event candidates and drafts converge into one
+  attention queue. Implemented: the contract in `internal/attention`, the
+  query, snoozes (migration 17) and the `atrium attention list|snooze`
+  commands; core, mail, calendar and assistant register sources through
+  `Registration.Attention`, so a disabled module drops its items. Planned:
+  the page, the digest and an assistant tool. The money sources are
+  deferred with the money module.
 - The memory model should state what belongs in profile, wiki, skills,
   projects, nightly capture, and thread summaries, and how stale facts
   expire.

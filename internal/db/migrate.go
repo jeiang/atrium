@@ -34,6 +34,7 @@ var migrations = []migration{
 	{14, integrationHealth},
 	{15, mailAccounts},
 	{16, embedIndex},
+	{17, attentionSnoozes},
 }
 
 type ModuleMigration struct {
@@ -607,4 +608,10 @@ func embedIndex(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func attentionSnoozes(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS attention_snoozes (kind TEXT NOT NULL, source_id TEXT NOT NULL, "+
+		"until REAL NOT NULL, created_at REAL NOT NULL, PRIMARY KEY (kind, source_id))")
+	return err
 }
