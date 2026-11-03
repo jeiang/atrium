@@ -32,6 +32,8 @@ const (
 	Research        = "research"
 	webSearchResult = "web_search_tool_result"
 
+	TaintRefusal = "This thread has read private data, so tools that reach outside the operator's systems are refused. Start a new thread to use them."
+
 	Verify              = "atrium was interrupted while this call was in flight; it may or may not have taken effect. Check the current state before retrying it."
 	CompletedUncaptured = "This call completed before an interruption but its result was not captured. Check the current state."
 )
@@ -93,6 +95,9 @@ type state struct {
 	stepsKey      string
 	invalid       error
 	toolChoice    *anthropic.ToolChoice
+
+	build   func(tainted bool) (map[string]tool.Tool, request, error)
+	tainted bool
 }
 
 func deref[T any](p *T) T {
@@ -166,13 +171,9 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	kind := tool.Kind(found.Kind)
 	allow := o.Limits.AllowedTools
-	tools, err := r.Registry.Run(ctx, kind, allow, d.Read)
+	tainted, err := r.Registry.Tainted(ctx, d.Read, thread.ID)
 	if err != nil {
 		return nil, err
-	}
-	byName := make(map[string]tool.Tool, len(tools))
-	for _, t := range tools {
-		byName[t.Name] = t
 	}
 	ttl := prompts.TTL5m
 	if kind == tool.Chat {
@@ -205,7 +206,21 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		return nil, err
 	}
 	limits := actx.LimitsFor(min(threads.ContextLimitOf(*thread), model.ContextWindow), tuning)
-	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, tools, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), allow, limits, webSearch)
+	build := func(tainted bool) (map[string]tool.Tool, request, error) {
+		tools, err := r.Registry.Run(ctx, kind, allow, d.Read, tainted)
+		if err != nil {
+			return nil, request{}, err
+		}
+		byName := make(map[string]tool.Tool, len(tools))
+		for _, t := range tools {
+			byName[t.Name] = t
+		}
+		web := webSearch
+		web.Enabled = web.Enabled && !registry.Dropped(registry.WebSearchFlags, tainted)
+		req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, tools, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), allow, limits, web)
+		return byName, req, err
+	}
+	byName, req, err := build(tainted)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +244,9 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
 		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl, savings: int64(tuning.CommitSavings),
-		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning},
+		x:       &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning, tainted: tainted},
+		build:   build,
+		tainted: tainted,
 	}
 	s.x.guard = s.renew
 	s.x.lost, s.x.abort = context.WithCancel(context.Background())
@@ -244,6 +261,22 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		s.savings = r.CommitSavings
 	}
 	return s, nil
+}
+
+func (s *state) retaint(ctx context.Context) error {
+	if s.tainted {
+		return nil
+	}
+	tainted, err := s.r.Registry.Tainted(ctx, s.d.Read, s.thread.ID)
+	if err != nil || !tainted {
+		return err
+	}
+	byName, req, err := s.build(true)
+	if err != nil {
+		return err
+	}
+	s.tainted, s.req, s.x.byName, s.x.tainted = true, req, byName, true
+	return nil
 }
 
 func (s *state) renew(ctx context.Context) error {
@@ -485,6 +518,9 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if injected {
 		last = nil
 		s.callsKey, s.repeats = "", 0
+	}
+	if err := s.retaint(ctx); err != nil {
+		return false, nil, err
 	}
 	spent, err := usage.RunCost(ctx, s.d.Read, s.run.ID)
 	if err != nil {

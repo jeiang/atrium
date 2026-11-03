@@ -10,6 +10,7 @@ import (
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/progress"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -120,15 +121,16 @@ func toolErrorText(err error) (string, bool) {
 }
 
 type dispatcher struct {
-	d      *db.DB
-	tc     *tool.Context
-	byName map[string]tool.Tool
-	now    func() float64
-	batch  Batch
-	tuning actx.Tuning
-	guard  func(ctx context.Context) error
-	lost   context.Context
-	abort  context.CancelFunc
+	d       *db.DB
+	tc      *tool.Context
+	byName  map[string]tool.Tool
+	tainted bool
+	now     func() float64
+	batch   Batch
+	tuning  actx.Tuning
+	guard   func(ctx context.Context) error
+	lost    context.Context
+	abort   context.CancelFunc
 }
 
 func (x *dispatcher) lookup(name string) *tool.Tool {
@@ -143,6 +145,12 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	fail := func(text string) (*string, any, error) { return new(text), nil, nil }
 	if t == nil {
 		return fail("unknown tool " + use.Name)
+	}
+	if registry.Dropped(t.Flags, x.tainted) {
+		return fail(TaintRefusal)
+	}
+	if registry.Taints(t.Flags) {
+		x.tainted = true
 	}
 	_, args, err := use.Args()
 	if err != nil {

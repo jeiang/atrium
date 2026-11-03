@@ -95,14 +95,14 @@ func ToolEnabled(ctx context.Context, q db.Querier, name string) (bool, error) {
 	return found.Value == "true", err
 }
 
-func (r *Registry) Run(ctx context.Context, kind tool.Kind, allow []string, q db.Querier) ([]tool.Tool, error) {
+func (r *Registry) Run(ctx context.Context, kind tool.Kind, allow []string, q db.Querier, tainted bool) ([]tool.Tool, error) {
 	found, err := r.For(kind)
 	if err != nil {
 		return nil, err
 	}
 	out := found[:0]
 	for _, t := range found {
-		if allow != nil && !slices.Contains(allow, t.Name) {
+		if (allow != nil && !slices.Contains(allow, t.Name)) || Dropped(t.Flags, tainted) {
 			continue
 		}
 		if q != nil {

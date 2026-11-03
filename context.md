@@ -156,9 +156,22 @@ not claims about the running application.
   load. Nightly keeps its Notion writes. Each tool has an admin setting
   `tool_<name>_enabled` (default on), including `web_search`; a disabled tool is
   absent from the model request. `ExternalEffect` marks `web_fetch` and the
-  server `web_search`; the flags do not yet change what a run may call. The
-  server `web_search` is pinned to `allowed_callers: ["direct"]` unless
-  `agent_web_search_dynamic_filtering` is on.
+  server `web_search`. The server `web_search` is pinned to
+  `allowed_callers: ["direct"]` unless `agent_web_search_dynamic_filtering` is
+  on.
+- Taint rule: once a thread has called a `PrivateData` tool, tools with
+  `ExternalEffect` (`web_fetch`, server `web_search`) are left out of every later
+  request and refused at dispatch. Taint is derived from the thread journal
+  (assistant `tool_use` blocks that are not superseded) up the `parent_thread_id`
+  chain, so research children start tainted and branches inherit through their
+  copied messages. Dropping, folding and compaction never delete journal rows, so
+  they cannot remove the evidence. The loop re-derives it before each request and
+  rebuilds the tool list when it first applies mid-run. A call after a private
+  read in the same response is refused; a `web_fetch` listed before the read in
+  that response still runs, and a server `web_search` in the same response as the
+  first private read cannot be stopped. Web tools do not taint: search then fetch
+  is the shipped flow, and no other tool has `ExternalEffect`. A research child's
+  private reads do not taint its parent, which sees only the digest.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are
   administrators; a proxy request or OIDC session is an administrator only
