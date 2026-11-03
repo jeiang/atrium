@@ -19,6 +19,7 @@
         (dict "label" "Scheduled" "url" "/scheduled" "icon" (icon "clock") "current" (eq $page "scheduled"))
         (dict "label" "Projects" "url" "/projects" "icon" (icon "folder") "current" (eq $page "projects")))) nil)
       (dict "type" "group" "label" "Review" "items" (list
+        (dict "label" "Attention" "url" "/attention" "icon" (icon "circle-alert") "current" (eq $page "attention"))
         (dict "label" (partial "base_proposals_label" .) "url" "/proposals" "icon" (icon "list-checks") "current" (eq $page "proposals") "class" "[&>span:last-child]:flex-1")
         (dict "label" "Activity" "url" "/activity" "icon" (icon "history") "current" (eq $page "activity"))))
       (dict "type" "group" "label" "Mail" "items" (compact (list

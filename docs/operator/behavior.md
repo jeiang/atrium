@@ -67,6 +67,9 @@ Every mailbox write goes through one safety gate.
 - Items carry one-click actions only where a review route takes them without extra input: proposals (dismiss, and approve only for kinds that need no message selection; selection kinds are approved on the Proposals page), drafts (open, discard), owed replies (snooze, dismiss) and commitments (done, dismiss). Sending a draft has no action here; it stays an operator action on the Drafts page. Event candidates and plans have no action.
 - `atrium attention snooze KIND SOURCE_ID --until YYYY-MM-DD` hides an item from the queue until local midnight of that date (migration 17 table `attention_snoozes`). It does not change the underlying record: an owed-reply loop keeps its own snooze and dismissal, and both apply.
 
+- The Attention page (`/attention`, first entry of the Review group in the sidebar) shows the same queue: a count per kind, the ordered items, then Waiting and Upcoming without actions. Each action posts to the route that owns it (`/proposals/ID/approve`, `/loops/ID/dismiss`, `/loops/commitments/ID/done`, `/drafts/ID/discard` and the others above), so state, safety gates, shadow or live behavior and undo are those of the source page. After an action the list reloads in place. Draft rows link to the draft and offer no send. Plan rows link to their chat thread. Event candidates have no link.
+- Each item also has a date field and Snooze until, which posts to `/attention/snooze` (`kind`, `source_id`, `until` as YYYY-MM-DD) and returns to the page.
+
 ## Settings and secrets
 
 - **Precedence.** For a setting: an environment variable, then the configuration file, then a value stored in the database, then the default. An environment variable or configuration file value pins the setting.

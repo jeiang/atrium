@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/attention/attentioncmd"
+	attentionpages "github.com/jeiang/atrium/internal/attention/pages"
 	"github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/backup"
@@ -38,6 +39,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			{Module: about.Module(m.Version), Templates: about.Templates()},
 			{Module: mailpages.PauseModule},
 			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(config.OS)}), Templates: reviewpages.Templates()},
+			{Module: attentionpages.Module(mc.Current), Templates: attentionpages.Templates()},
 			{Module: startOps},
 			{Module: integrations.Module, Templates: integrations.Templates()},
 		},

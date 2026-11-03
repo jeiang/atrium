@@ -89,6 +89,17 @@ var labelSets = map[string][]pair{
 		{"reminder", "scroll-text"},
 		{"notion_wiki_plan", "book-open"},
 	},
+	"attention_kind": {
+		{"proposal", "Proposal"},
+		{"draft", "Draft"},
+		{"owe_reply", "Reply owed"},
+		{"commitment", "Commitment"},
+		{"waiting_on_them", "Waiting on them"},
+		{"package", "Package"},
+		{"birthday", "Birthday"},
+		{"event_candidate", "Event"},
+		{"thread_plan", "Plan"},
+	},
 	"status": {
 		{"pending", "Pending"},
 		{"approved", "Applying"},

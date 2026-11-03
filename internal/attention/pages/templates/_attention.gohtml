@@ -1,0 +1,54 @@
+{{$d := .Data}}{{$csrf := .CSRF}}
+<div id="attention" class="flex flex-col gap-6" hx-get="/attention" hx-trigger="htmx:afterRequest from:.attention-act" hx-target="this" hx-swap="outerHTML">
+  {{if or $d.items $d.waiting $d.upcoming}}
+  {{if $d.items}}
+  <ul class="flex flex-wrap gap-1.5" role="list" aria-label="Counts">
+    {{range $d.groups}}<li class="badge" data-variant="outline">{{lbl "attention_kind" .name}} <span class="tabular-nums">{{.count}}</span></li>{{end}}
+  </ul>
+  <ul class="flex flex-col gap-3" role="list" aria-label="Needs attention">
+    {{range $d.items}}{{$item := .}}
+    <li class="flex flex-col gap-2 rounded-lg border bg-card p-4">
+      <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span class="badge" data-variant="secondary">{{lbl "attention_kind" .kind}}</span>
+        {{if eq .class "overdue"}}<span class="badge" data-variant="destructive">Overdue</span>{{else if eq .class "due_soon"}}<span class="badge" data-variant="outline">Due soon</span>{{end}}
+        {{if .due}}<span class="tabular-nums">{{.due}}</span>{{end}}
+      </div>
+      {{if eq .kind "thread_plan"}}<a class="text-sm font-medium underline-offset-4 hover:underline" href="/chat/{{.source_id}}">{{.title}}</a>
+      {{else}}<p class="text-sm font-medium">{{.title}}</p>{{end}}
+      <div class="flex flex-wrap items-center gap-2">
+        {{range .actions}}
+        {{if eq .method "GET"}}<a class="btn" data-size="sm" data-variant="outline" href="{{.path}}">{{.label}}</a>
+        {{else}}<form class="attention-act" hx-post="{{.path}}" hx-swap="none"><button type="submit" class="btn" data-size="sm" data-variant="outline" hx-disabled-elt="this">{{.label}}</button></form>{{end}}
+        {{end}}
+        <form method="post" action="/attention/snooze" class="flex items-center gap-2">
+          <input type="hidden" name="csrf_token" value="{{$csrf}}">
+          <input type="hidden" name="kind" value="{{$item.kind}}">
+          <input type="hidden" name="source_id" value="{{$item.source_id}}">
+          <input class="input" type="date" name="until" min="{{$d.tomorrow}}" required aria-label="Snooze until date">
+          <button type="submit" class="btn" data-size="sm" data-variant="ghost">Snooze until</button>
+        </form>
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+  {{if $d.waiting}}
+  <section class="flex flex-col gap-3" aria-labelledby="waiting-h">
+    <h2 id="waiting-h" class="text-sm font-medium">Waiting <span class="tabular-nums text-muted-foreground">{{len $d.waiting}}</span></h2>
+    <ul class="flex flex-col divide-y rounded-lg border bg-card" role="list">
+      {{range $d.waiting}}<li class="px-4 py-2 text-sm">{{.title}}</li>{{end}}
+    </ul>
+  </section>
+  {{end}}
+  {{if $d.upcoming}}
+  <section class="flex flex-col gap-3" aria-labelledby="upcoming-h">
+    <h2 id="upcoming-h" class="text-sm font-medium">Upcoming</h2>
+    <ul class="flex flex-wrap gap-2" role="list">
+      {{range $d.upcoming}}<li class="badge" data-variant="outline">{{.title}}{{if .due}} <span class="tabular-nums">{{.due}}</span>{{end}}</li>{{end}}
+    </ul>
+  </section>
+  {{end}}
+  {{else}}
+  {{template "empty_state" (dict "icon_name" "check" "title" "Nothing needs attention")}}
+  {{end}}
+</div>
