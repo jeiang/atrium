@@ -25,6 +25,7 @@ type Binder func(ctx context.Context, q db.Querier, t tool.Tool) (bound tool.Too
 type Registry struct {
 	tools   []tool.Tool
 	binders map[string]Binder
+	private []string
 }
 
 type Source func() (*Registry, error)
@@ -39,6 +40,22 @@ func (r *Registry) Add(tools ...tool.Tool) error {
 	}
 	r.tools = append(r.tools, tools...)
 	return nil
+}
+
+func (r *Registry) KeepTaint(names []string) { r.private = names }
+
+func (r *Registry) PrivateNames() ([]string, error) {
+	all, err := r.All()
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, t := range all {
+		if Taints(t.Flags) {
+			out = append(out, t.Name)
+		}
+	}
+	return out, nil
 }
 
 func (r *Registry) Bind(name string, b Binder) { r.binders[name] = b }

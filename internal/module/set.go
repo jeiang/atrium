@@ -196,6 +196,20 @@ func (n *Snapshot) Registry() (*registry.Registry, error) {
 	if _, err := out.All(); err != nil {
 		return nil, err
 	}
+	full := registry.New()
+	for _, r := range n.set.regs {
+		if r.Tools == nil {
+			continue
+		}
+		if err := r.Tools(full); err != nil {
+			return nil, err
+		}
+	}
+	names, err := full.PrivateNames()
+	if err != nil {
+		return nil, err
+	}
+	out.KeepTaint(names)
 	return out, nil
 }
 

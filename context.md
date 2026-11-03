@@ -171,7 +171,11 @@ not claims about the running application.
   that response still runs, and a server `web_search` in the same response as the
   first private read cannot be stopped. Web tools do not taint: search then fetch
   is the shipped flow, and no other tool has `ExternalEffect`. A research child's
-  private reads do not taint its parent, which sees only the digest.
+  private reads taint its parent: the journal scan also covers the thread's
+  subagent children, and after a `research` call a later `web_fetch` in the same
+  response re-checks it. The `PrivateData` tool names come from every module's
+  tools, enabled or not, so disabling a module does not clear taint on a thread
+  that already read through it.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are
   administrators; a proxy request or OIDC session is an administrator only

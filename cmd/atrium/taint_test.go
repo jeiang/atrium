@@ -153,3 +153,45 @@ func TestResearchChildOfATaintedThreadStartsTainted(t *testing.T) {
 	}
 	wantWeb(t, requests[1], "child of a tainted thread", false)
 }
+
+func TestDisablingAModuleKeepsTheThreadTainted(t *testing.T) {
+	dir, api := taintFixture(t)
+	requests := chatTurn(t, api, 0, use("c0", "mail_search", map[string]any{"query": "x"}), done())
+	if !slices.Contains(toolNamesIn(t, requests[0]), "mail_search") {
+		t.Fatal("mail_search is not offered, so this run proves nothing")
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	thread := scalar[int64](t, d, "SELECT max(id) FROM threads")
+
+	t.Setenv(flagEnv("mail"), "false")
+	requests = chatTurn(t, api, thread, done())
+	if slices.Contains(toolNamesIn(t, requests[0]), "mail_search") {
+		t.Fatal("mail module is still on")
+	}
+	wantWeb(t, requests[0], "thread whose mail module was turned off", false)
+}
+
+func TestResearchChildPrivateReadTaintsTheParent(t *testing.T) {
+	_, api := taintFixture(t)
+	brief := map[string]any{"role": "web", "task": "look something up"}
+	requests := chatTurn(t, api, 0, use("c0", "research", brief), done(), done())
+	wantWeb(t, requests[2], "parent after a research child that read nothing private", true)
+
+	fetch := map[string]any{"url": "https://example.com/a"}
+	requests = chatTurn(t, api, 0, anthropictest.Reply("tool_use",
+		anthropictest.ToolUse("s", "research", brief),
+		anthropictest.ToolUse("f", "web_fetch", fetch),
+	), use("p", "profile_get", nil), done(), done())
+	var parent anthropictest.Request
+	for _, r := range requests {
+		if !slices.Contains(toolNamesIn(t, r), "research") {
+			continue
+		}
+		parent = r
+	}
+	wantWeb(t, parent, "parent after a research child that read private data", false)
+	text, isError := toolResultText(t, parent, "f")
+	if !isError || text != loop.TaintRefusal {
+		t.Errorf("fetch after the research call = %q error=%v, want the taint refusal", text, isError)
+	}
+}

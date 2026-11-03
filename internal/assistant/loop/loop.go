@@ -244,7 +244,8 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
 		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl, savings: int64(tuning.CommitSavings),
-		x:       &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning, tainted: tainted},
+		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning, tainted: tainted,
+			retaint: func(ctx context.Context) (bool, error) { return r.Registry.Tainted(ctx, d.Read, thread.ID) }},
 		build:   build,
 		tainted: tainted,
 	}

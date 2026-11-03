@@ -121,16 +121,18 @@ func toolErrorText(err error) (string, bool) {
 }
 
 type dispatcher struct {
-	d       *db.DB
-	tc      *tool.Context
-	byName  map[string]tool.Tool
-	tainted bool
-	now     func() float64
-	batch   Batch
-	tuning  actx.Tuning
-	guard   func(ctx context.Context) error
-	lost    context.Context
-	abort   context.CancelFunc
+	d         *db.DB
+	tc        *tool.Context
+	byName    map[string]tool.Tool
+	tainted   bool
+	retaint   func(ctx context.Context) (bool, error)
+	delegated bool
+	now       func() float64
+	batch     Batch
+	tuning    actx.Tuning
+	guard     func(ctx context.Context) error
+	lost      context.Context
+	abort     context.CancelFunc
 }
 
 func (x *dispatcher) lookup(name string) *tool.Tool {
@@ -146,12 +148,18 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	if t == nil {
 		return fail("unknown tool " + use.Name)
 	}
+	if x.delegated && !x.tainted && t.Flags.Has(tool.ExternalEffect) {
+		if x.tainted, err = x.retaint(ctx); err != nil {
+			return nil, nil, err
+		}
+	}
 	if registry.Dropped(t.Flags, x.tainted) {
 		return fail(TaintRefusal)
 	}
 	if registry.Taints(t.Flags) {
 		x.tainted = true
 	}
+	x.delegated = x.delegated || t.Name == Research
 	_, args, err := use.Args()
 	if err != nil {
 		return nil, nil, err
@@ -270,6 +278,7 @@ func (x *dispatcher) executeAll(ctx context.Context, uses []ToolUse) ([]json.Raw
 			}
 			calls[u.ID] = id
 		}
+		x.delegated = true
 		outcomes, err := x.batch(ctx, x.tc, batch)
 		if err != nil {
 			return nil, err
