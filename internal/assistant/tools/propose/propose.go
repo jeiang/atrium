@@ -79,6 +79,7 @@ func Tools() []tool.Tool {
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {"kind": {"type": "string", "enum": ["notion_edit", "notion_link"]}, "payload": {"type": "object"}}, "required": ["kind", "payload"], "additionalProperties": false}`),
 		Handler:     propose,
 		Effect:      tool.Propose,
+		Flags:       tool.Annotated,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	}}
 }

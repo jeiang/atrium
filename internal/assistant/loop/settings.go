@@ -5,6 +5,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -28,8 +29,13 @@ func cacheTTL(ctx context.Context, q db.Querier) (string, error) {
 	return found.Value, err
 }
 
-func readWebSearchMaxUses(ctx context.Context, q db.Querier) (int, error) {
+func readWebSearch(ctx context.Context, q db.Querier) (registry.WebSearch, error) {
 	r := assistant.Read(ctx, q)
-	n := r.Int(assistant.KeyWebSearchMaxUses)
-	return n, r.Err()
+	web := registry.WebSearch{MaxUses: r.Int(assistant.KeyWebSearchMaxUses), DynamicFiltering: r.Text(assistant.KeyWebSearchDynamicFiltering) == "true"}
+	if err := r.Err(); err != nil {
+		return web, err
+	}
+	var err error
+	web.Enabled, err = registry.ToolEnabled(ctx, q, registry.WebSearchName)
+	return web, err
 }

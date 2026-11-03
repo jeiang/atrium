@@ -201,6 +201,7 @@ func readTools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 10}}, "required": ["query"], "additionalProperties": false}`),
 			Handler:     searchKnowledge,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.PrivateData | tool.UntrustedOutput,
 			Contexts:    readKinds,
 		},
 		{
@@ -209,6 +210,7 @@ func readTools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"page_id": {"type": "string"}, "max_chars": {"type": "integer", "minimum": 1, "maximum": 12000}}, "required": ["page_id"], "additionalProperties": false}`),
 			Handler:     fetchKnowledge,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.PrivateData | tool.UntrustedOutput,
 			Contexts:    readKinds,
 		},
 	}

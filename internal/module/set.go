@@ -199,6 +199,19 @@ func (n *Snapshot) Registry() (*registry.Registry, error) {
 	return out, nil
 }
 
+func (s *Set) CheckTools(knownUndo func(op string) bool) error {
+	out := registry.New()
+	for _, r := range s.regs {
+		if r.Tools == nil {
+			continue
+		}
+		if err := r.Tools(out); err != nil {
+			return err
+		}
+	}
+	return out.CheckUndo(knownUndo)
+}
+
 func (s *Set) Guard(ctx context.Context, q db.Querier, key, value string) error {
 	for _, r := range s.regs {
 		if key != FlagKey(r.Name) || value != "true" {

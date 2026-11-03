@@ -582,6 +582,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(emptySchema),
 			Handler:     datasources,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.UntrustedOutput,
 			Contexts:    contexts,
 		},
 		{
@@ -593,6 +594,7 @@ func Tools() []tool.Tool {
 				`"limit": {"type": "integer", "minimum": 1, "maximum": 200}}, "required": ["datasource_uid", "expr"], "additionalProperties": false}`),
 			Handler:  query,
 			Effect:   tool.Read,
+			Flags:    tool.Annotated | tool.UntrustedOutput,
 			Contexts: contexts,
 		},
 		{
@@ -601,6 +603,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(emptySchema),
 			Handler:     alerts,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.UntrustedOutput,
 			Contexts:    contexts,
 		},
 		{
@@ -609,6 +612,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"query": {"type": "string"}}, "required": [], "additionalProperties": false}`),
 			Handler:     searchDashboards,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.UntrustedOutput,
 			Contexts:    contexts,
 		},
 		selfDiagnoseTool,

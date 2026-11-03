@@ -316,7 +316,9 @@ func Tools() []tool.Tool {
 				"The prompt must be self-contained. " + Help + " At most 20 active schedules.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}, "prompt": {"type": "string"}, "schedule": {"type": "string", "description": ` + py.JSONDumps(Help) + `}}, "required": ["name", "prompt", "schedule"], "additionalProperties": false}`),
 			Handler:     create,
-			Effect:      tool.Write,
+			Effect:      tool.WriteUndo,
+			Flags:       tool.Annotated,
+			Undo:        []string{undoCreate},
 			Contexts:    chatOnly,
 		},
 		{
@@ -324,7 +326,9 @@ func Tools() []tool.Tool {
 			Description: "Change a schedule's name, prompt, schedule or enabled flag by id.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"id": {"type": "integer"}, "name": {"type": "string"}, "prompt": {"type": "string"}, "schedule": {"type": "string", "description": ` + py.JSONDumps(Help) + `}, "enabled": {"type": "boolean"}}, "required": ["id"], "additionalProperties": false}`),
 			Handler:     update,
-			Effect:      tool.Write,
+			Effect:      tool.WriteUndo,
+			Flags:       tool.Annotated,
+			Undo:        []string{undoUpdate},
 			Contexts:    chatOnly,
 		},
 		{
@@ -332,7 +336,9 @@ func Tools() []tool.Tool {
 			Description: "Cancel a schedule by id. Its past runs and threads are kept.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"], "additionalProperties": false}`),
 			Handler:     cancel,
-			Effect:      tool.Write,
+			Effect:      tool.WriteUndo,
+			Flags:       tool.Annotated,
+			Undo:        []string{undoCancel},
 			Contexts:    chatOnly,
 		},
 		{
@@ -341,6 +347,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "required": [], "additionalProperties": false}`),
 			Handler:     list,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated,
 			Contexts:    chatOnly,
 		},
 	}

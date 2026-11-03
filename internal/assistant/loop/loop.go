@@ -192,7 +192,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if err != nil {
 		return nil, err
 	}
-	webSearchMaxUses, err := readWebSearchMaxUses(ctx, d.Read)
+	webSearch, err := readWebSearch(ctx, d.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		return nil, err
 	}
 	limits := actx.LimitsFor(min(threads.ContextLimitOf(*thread), model.ContextWindow), tuning)
-	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, tools, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), allow, limits, webSearchMaxUses)
+	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, tools, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), allow, limits, webSearch)
 	if err != nil {
 		return nil, err
 	}

@@ -123,5 +123,6 @@ var selfDiagnoseTool = tool.Tool{
 		`"minutes": {"type": "integer", "minimum": 1, "maximum": 1440}}, "required": [], "additionalProperties": false}`),
 	Handler:  selfDiagnose,
 	Effect:   tool.Read,
+	Flags:    tool.Annotated | tool.UntrustedOutput,
 	Contexts: contexts,
 }

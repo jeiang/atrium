@@ -16,8 +16,20 @@ const (
 
 var WebSearchKinds = tool.Kinds{tool.Chat, tool.Cron}
 
-func webSearch(maxUses int) json.RawMessage {
-	return json.RawMessage(`{"type":"` + webSearchType + `","name":"` + WebSearchName + `","max_uses":` + strconv.Itoa(maxUses) + `,"allowed_callers":["direct"]}`)
+var WebSearchFlags = tool.Annotated | tool.UntrustedOutput | tool.ExternalEffect
+
+type WebSearch struct {
+	Enabled          bool
+	MaxUses          int
+	DynamicFiltering bool
+}
+
+func (w WebSearch) param() json.RawMessage {
+	callers := `,"allowed_callers":["direct"]`
+	if w.DynamicFiltering {
+		callers = ""
+	}
+	return json.RawMessage(`{"type":"` + webSearchType + `","name":"` + WebSearchName + `","max_uses":` + strconv.Itoa(w.MaxUses) + callers + `}`)
 }
 
 type toolParam struct {
@@ -38,19 +50,19 @@ func Params(tools []tool.Tool) ([]json.RawMessage, error) {
 	return out, nil
 }
 
-func ServerTools(kind tool.Kind, allow []string, webSearchMaxUses int) []json.RawMessage {
-	if WebSearchKinds.Has(kind) || (kind == tool.Sub && allow != nil && slices.Contains(allow, WebSearchName)) {
-		return []json.RawMessage{webSearch(webSearchMaxUses)}
+func ServerTools(kind tool.Kind, allow []string, web WebSearch) []json.RawMessage {
+	if web.Enabled && (WebSearchKinds.Has(kind) || (kind == tool.Sub && allow != nil && slices.Contains(allow, WebSearchName))) {
+		return []json.RawMessage{web.param()}
 	}
 	return nil
 }
 
-func RequestTools(tools []tool.Tool, kind tool.Kind, allow []string, cacheControl json.RawMessage, webSearchMaxUses int) ([]json.RawMessage, error) {
+func RequestTools(tools []tool.Tool, kind tool.Kind, allow []string, cacheControl json.RawMessage, web WebSearch) ([]json.RawMessage, error) {
 	params, err := Params(tools)
 	if err != nil {
 		return nil, err
 	}
-	params = append(params, ServerTools(kind, allow, webSearchMaxUses)...)
+	params = append(params, ServerTools(kind, allow, web)...)
 	if len(params) == 0 {
 		return nil, nil
 	}

@@ -25,6 +25,7 @@ func watchTools() []tool.Tool {
 			InputSchema: packagesSchema,
 			Handler:     packages,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.PrivateData | tool.UntrustedOutput,
 			Contexts:    loopKinds,
 		},
 		{
@@ -34,6 +35,7 @@ func watchTools() []tool.Tool {
 			InputSchema: birthdaysSchema,
 			Handler:     upcomingBirthdays,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.PrivateData | tool.UntrustedOutput,
 			Contexts:    loopKinds,
 		},
 	}

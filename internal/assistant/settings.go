@@ -25,7 +25,8 @@ const (
 	KeyEffortSubagent      = "agent_effort_subagent"
 	KeyEffortSub           = "agent_effort_sub"
 
-	KeyWebSearchMaxUses = "agent_web_search_max_uses"
+	KeyWebSearchMaxUses          = "agent_web_search_max_uses"
+	KeyWebSearchDynamicFiltering = "agent_web_search_dynamic_filtering"
 
 	KeyClearAtLeastShare = "agent_clear_at_least_share"
 	KeyClearShare        = "agent_clear_share"
@@ -108,6 +109,64 @@ const (
 	KeyGrafanaCellChars  = "agent_grafana_cell_chars"
 )
 
+var ToolNames = []string{
+	"atrium_self_diagnose",
+	"calendar_create",
+	"calendar_delete",
+	"calendar_list",
+	"calendar_rsvp",
+	"calendar_update",
+	"commitments",
+	"contacts_lookup",
+	"context_drop",
+	"context_fold",
+	"context_pin",
+	"context_status",
+	"draft_email_create",
+	"draft_email_update",
+	"event_propose",
+	"fetch_knowledge",
+	"find_slot",
+	"grafana_alerts",
+	"grafana_datasources",
+	"grafana_query",
+	"grafana_search_dashboards",
+	"load_skill",
+	"mail_read",
+	"mail_search",
+	"media_add_magnet",
+	"media_channel_add",
+	"media_channel_remove",
+	"media_channels",
+	"media_downloads",
+	"media_library_search",
+	"notify",
+	"notion_add_alias",
+	"notion_archive_page",
+	"notion_create_page",
+	"notion_move_page",
+	"notion_update_page",
+	"open_loops",
+	"packages",
+	"plan",
+	"profile_get",
+	"profile_set",
+	"propose",
+	"recall",
+	"research",
+	"schedule_cancel",
+	"schedule_create",
+	"schedule_list",
+	"schedule_update",
+	"search_knowledge",
+	"threads_today",
+	"upcoming_birthdays",
+	"web_fetch",
+	"web_search",
+}
+
+func ToolEnabledKey(name string) string { return "tool_" + name + "_enabled" }
+
 var efforts = []string{"low", "medium", "high", "xhigh", "max"}
 
 var contextLimits = []string{"90000", "200000", "500000", "1000000"}
@@ -152,7 +211,11 @@ func init() {
 	recallPage.Peers = Ordered(false, nil, []string{KeyRecallMaxPageChars})
 	recallMax := count(KeyRecallMaxPageChars, 16000, 100, 100000)
 	recallMax.Peers = Ordered(false, []string{KeyRecallPageChars}, nil)
+	for _, name := range ToolNames {
+		settings.MustRegister(def(ToolEnabledKey(name), settings.Bool, settings.Advanced, "true", nil))
+	}
 	settings.MustRegister(
+		adv(KeyWebSearchDynamicFiltering, settings.Bool, "false", nil),
 		chat,
 		chatModel,
 		chatEffort,

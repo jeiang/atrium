@@ -849,6 +849,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_web_search_dynamic_filtering": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "agent_web_search_dynamic_filtering_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_web_search_max_uses": {
           "default": 5,
           "type": [
@@ -1141,6 +1152,589 @@
           "type": "string"
         },
         "prompt_system_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_atrium_self_diagnose_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_atrium_self_diagnose_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_calendar_create_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_calendar_create_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_calendar_delete_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_calendar_delete_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_calendar_list_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_calendar_list_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_calendar_rsvp_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_calendar_rsvp_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_calendar_update_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_calendar_update_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_commitments_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_commitments_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_contacts_lookup_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_contacts_lookup_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_context_drop_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_context_drop_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_context_fold_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_context_fold_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_context_pin_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_context_pin_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_context_status_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_context_status_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_draft_email_create_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_draft_email_create_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_draft_email_update_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_draft_email_update_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_event_propose_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_event_propose_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_fetch_knowledge_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_fetch_knowledge_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_find_slot_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_find_slot_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_grafana_alerts_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_grafana_alerts_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_grafana_datasources_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_grafana_datasources_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_grafana_query_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_grafana_query_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_grafana_search_dashboards_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_grafana_search_dashboards_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_load_skill_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_load_skill_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_mail_read_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_mail_read_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_mail_search_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_mail_search_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_media_add_magnet_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_media_add_magnet_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_media_channel_add_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_media_channel_add_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_media_channel_remove_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_media_channel_remove_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_media_channels_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_media_channels_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_media_downloads_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_media_downloads_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_media_library_search_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_media_library_search_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_notify_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_notify_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_notion_add_alias_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_notion_add_alias_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_notion_archive_page_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_notion_archive_page_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_notion_create_page_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_notion_create_page_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_notion_move_page_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_notion_move_page_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_notion_update_page_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_notion_update_page_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_open_loops_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_open_loops_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_packages_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_packages_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_plan_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_plan_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_profile_get_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_profile_get_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_profile_set_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_profile_set_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_propose_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_propose_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_recall_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_recall_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_research_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_research_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_schedule_cancel_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_schedule_cancel_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_schedule_create_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_schedule_create_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_schedule_list_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_schedule_list_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_schedule_update_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_schedule_update_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_search_knowledge_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_search_knowledge_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_threads_today_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_threads_today_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_upcoming_birthdays_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_upcoming_birthdays_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_web_fetch_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_web_fetch_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tool_web_search_enabled": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "tool_web_search_enabled_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }

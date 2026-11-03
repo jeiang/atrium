@@ -34,6 +34,8 @@ func (r *Registry) Register(op string, fn Undoer) {
 	r.by[op] = fn
 }
 
+func (r *Registry) Has(op string) bool { return r.lookup(op) != nil }
+
 func (r *Registry) lookup(op string) Undoer {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

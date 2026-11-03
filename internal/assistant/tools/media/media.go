@@ -37,6 +37,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false}`),
 			Handler:     mediaDownloads,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.PrivateData | tool.UntrustedOutput,
 			Contexts:    readKinds,
 		},
 		{
@@ -45,6 +46,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": %d}}, "required": ["query"], "additionalProperties": false}`, searchLimitCeiling)),
 			Handler:     mediaLibrarySearch,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.PrivateData | tool.UntrustedOutput,
 			Contexts:    readKinds,
 		},
 		{
@@ -53,6 +55,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false}`),
 			Handler:     mediaChannels,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.PrivateData,
 			Contexts:    readKinds,
 		},
 		{
@@ -60,7 +63,9 @@ func Tools() []tool.Tool {
 			Description: "Add a magnet link to qBittorrent. media=true (default) tags it for filing into the library with automatic video/subtitle selection; false adds a plain torrent. Undo deletes the torrent and its data unless it was already filed.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"magnet": {"type": "string"}, "media": {"type": "boolean"}}, "required": ["magnet"], "additionalProperties": false}`),
 			Handler:     mediaAddMagnet,
-			Effect:      tool.Write,
+			Effect:      tool.WriteUndo,
+			Flags:       tool.Annotated,
+			Undo:        []string{UndoTorrent},
 			Contexts:    writeKinds,
 		},
 		{
@@ -68,7 +73,9 @@ func Tools() []tool.Tool {
 			Description: "Watch a show on EZTV: give imdb_id (tt1234567) or tmdb_id (needs TMDB) plus a regex over release titles; case_sensitive defaults to false. New matches are downloaded automatically after the first poll. Undo removes the channel.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"imdb_id": {"type": "string"}, "tmdb_id": {"type": "integer"}, "regex": {"type": "string"}, "case_sensitive": {"type": "boolean"}, "name": {"type": "string", "description": "Display name; defaults to the TMDB title or the IMDb id."}}, "required": ["regex"], "additionalProperties": false}`),
 			Handler:     mediaChannelAdd,
-			Effect:      tool.Write,
+			Effect:      tool.WriteUndo,
+			Flags:       tool.Annotated,
+			Undo:        []string{UndoChannelDelete},
 			Contexts:    writeKinds,
 		},
 		{
@@ -76,7 +83,9 @@ func Tools() []tool.Tool {
 			Description: "Remove an EZTV channel by id (see media_channels). Undo restores it.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"], "additionalProperties": false}`),
 			Handler:     mediaChannelRemove,
-			Effect:      tool.Write,
+			Effect:      tool.WriteUndo,
+			Flags:       tool.Annotated,
+			Undo:        []string{UndoChannelRestore},
 			Contexts:    writeKinds,
 		},
 	}

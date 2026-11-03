@@ -146,6 +146,19 @@ not claims about the running application.
   Every chat write tool, draft and schedule tools included, records an
   `agent_writes` row with a registered undo.
   Research subagents have restricted tools and bounded runs.
+- Tool contract v2: every tool has an effect (`read`, `write_undo`, `propose`,
+  `notify`) and states `UntrustedOutput`, `PrivateData` and `ExternalEffect`
+  explicitly; a tool that omits them is refused when the registry builds.
+  `operator_only` actions are not tools. A `write_undo` tool names its undo
+  ops, and startup refuses one whose op has no registered undoer. The run-kind
+  policy table in `internal/assistant/registry` denies `write_undo` to cron and
+  everything but `read` to subagents; each rule carries examples checked at
+  load. Nightly keeps its Notion writes. Each tool has an admin setting
+  `tool_<name>_enabled` (default on), including `web_search`; a disabled tool is
+  absent from the model request. `ExternalEffect` marks `web_fetch` and the
+  server `web_search`; the flags do not yet change what a run may call. The
+  server `web_search` is pinned to `allowed_callers: ["direct"]` unless
+  `agent_web_search_dynamic_filtering` is on.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are
   administrators; a proxy request or OIDC session is an administrator only

@@ -38,7 +38,9 @@ func draftTools() []tool.Tool {
 				"headers are set; recipients that were not on the original message are flagged to the operator.",
 			InputSchema: draftCreateSchema,
 			Handler:     draftEmailCreate,
-			Effect:      tool.Write,
+			Effect:      tool.WriteUndo,
+			Flags:       tool.Annotated | tool.PrivateData,
+			Undo:        []string{undoDraftCreate},
 			Contexts:    tool.Kinds{tool.Chat},
 		},
 		{
@@ -47,7 +49,9 @@ func draftTools() []tool.Tool {
 				"discarded drafts cannot be edited. Never sends.",
 			InputSchema: draftUpdateSchema,
 			Handler:     draftEmailUpdate,
-			Effect:      tool.Write,
+			Effect:      tool.WriteUndo,
+			Flags:       tool.Annotated | tool.PrivateData,
+			Undo:        []string{undoDraftUpdate},
 			Contexts:    tool.Kinds{tool.Chat},
 		},
 	}

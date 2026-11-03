@@ -57,6 +57,7 @@ func Tools() []tool.Tool {
 		InputSchema: contactsSchema,
 		Handler:     contactsLookup,
 		Effect:      tool.Read,
+		Flags:       tool.Annotated | tool.PrivateData,
 		Contexts:    tool.AllKinds,
 	}}
 }

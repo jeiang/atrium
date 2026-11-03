@@ -91,6 +91,7 @@ func Tools() []tool.Tool {
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {"result_id": {"type": "integer"}, "offset": {"type": "integer", "minimum": 0}, "limit": {"type": "integer", "minimum": 1, "maximum": 16000}}, "required": ["result_id"], "additionalProperties": false}`),
 		Handler:     recall,
 		Effect:      tool.Read,
+		Flags:       tool.Annotated | tool.PrivateData | tool.UntrustedOutput,
 		Contexts:    tool.AllKinds,
 	}}
 }

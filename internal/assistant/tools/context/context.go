@@ -91,6 +91,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false}`),
 			Handler:     status,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated,
 			Contexts:    contexts,
 		},
 		{
@@ -99,6 +100,7 @@ func Tools() []tool.Tool {
 			InputSchema: idsSchema,
 			Handler:     pin,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated,
 			Contexts:    contexts,
 		},
 		{
@@ -107,6 +109,7 @@ func Tools() []tool.Tool {
 			InputSchema: idsSchema,
 			Handler:     drop,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated,
 			Contexts:    contexts,
 		},
 		{
@@ -115,6 +118,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"from_seq": {"type": "integer", "minimum": 1}, "to_seq": {"type": "integer", "minimum": 1}, "summary": {"type": "string", "maxLength": 4000}, "source_ids": {"type": "array", "items": {"type": ["string", "integer"]}, "maxItems": 100}}, "required": ["from_seq", "to_seq", "summary"], "additionalProperties": false}`),
 			Handler:     fold,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated,
 			Contexts:    contexts,
 		},
 	}

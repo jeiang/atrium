@@ -302,6 +302,7 @@ func baseTools() []tool.Tool {
 			InputSchema: schema(`"start":{"type":"string","description":"`+timeNote+`"},"end":{"type":"string","description":"`+timeNote+`"},"calendar":{"type":"string"}`, `["start","end"]`),
 			Handler:     list,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.PrivateData | tool.UntrustedOutput,
 			Contexts:    tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 		},
 		{
@@ -311,7 +312,9 @@ func baseTools() []tool.Tool {
 				"operator asked for this event in chat.",
 			InputSchema: schema(eventProperties, `["calendar","title","start"]`),
 			Handler:     create,
-			Effect:      tool.Write,
+			Effect:      tool.WriteUndo,
+			Flags:       tool.Annotated,
+			Undo:        []string{"calendar_delete"},
 			Contexts:    tool.Kinds{tool.Chat},
 		},
 		{
@@ -319,7 +322,9 @@ func baseTools() []tool.Tool {
 			Description: "Delete an event that atrium created earlier (by its uid from calendar_create). Other events cannot be deleted.",
 			InputSchema: schema(`"uid":{"type":"string"}`, `["uid"]`),
 			Handler:     remove,
-			Effect:      tool.Write,
+			Effect:      tool.WriteUndo,
+			Flags:       tool.Annotated,
+			Undo:        []string{"calendar_recreate"},
 			Contexts:    tool.Kinds{tool.Chat},
 		},
 		{
@@ -330,6 +335,7 @@ func baseTools() []tool.Tool {
 			InputSchema: schema(eventProperties+`,"source_message_id":{"type":"integer"}`, `["calendar","title","start"]`),
 			Handler:     propose,
 			Effect:      tool.Propose,
+			Flags:       tool.Annotated,
 			Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 		},
 	}

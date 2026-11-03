@@ -54,5 +54,6 @@ var findSlotTool = tool.Tool{
 		`"duration_minutes":{"type":"integer","minimum":5,"maximum":1440},"calendar":{"type":"string"}`, `["start","end"]`),
 	Handler:  findSlot,
 	Effect:   tool.Read,
+	Flags:    tool.Annotated | tool.PrivateData,
 	Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 }

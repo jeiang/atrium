@@ -70,6 +70,7 @@ func Tool(f *Fetcher) tool.Tool {
 			return handle(ctx, f, tc, args)
 		},
 		Effect:   tool.Read,
+		Flags:    tool.Annotated | tool.UntrustedOutput | tool.ExternalEffect,
 		Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Sub},
 	}
 }

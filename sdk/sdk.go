@@ -40,6 +40,7 @@ type (
 	ToolHandler = tool.Handler
 	ToolArgs    = py.Dict
 	Effect      = tool.Effect
+	ToolFlags   = tool.Flags
 	Kind        = tool.Kind
 	Kinds       = tool.Kinds
 
@@ -59,10 +60,15 @@ const (
 	ExitError = cli.ExitError
 	ExitUsage = cli.ExitUsage
 
-	Read    = tool.Read
-	Write   = tool.Write
-	Propose = tool.Propose
-	Notify  = tool.Notify
+	Read      = tool.Read
+	WriteUndo = tool.WriteUndo
+	Propose   = tool.Propose
+	Notify    = tool.Notify
+
+	Annotated       = tool.Annotated
+	UntrustedOutput = tool.UntrustedOutput
+	PrivateData     = tool.PrivateData
+	ExternalEffect  = tool.ExternalEffect
 
 	Chat    = tool.Chat
 	Cron    = tool.Cron

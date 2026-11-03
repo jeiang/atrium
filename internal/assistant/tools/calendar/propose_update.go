@@ -58,6 +58,7 @@ var updateTools = []tool.Tool{
 		InputSchema: schema(`"uid":{"type":"string"},`+eventProperties, `["calendar","uid","title","start"]`),
 		Handler:     proposeUpdate,
 		Effect:      tool.Propose,
+		Flags:       tool.Annotated,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	},
 	{
@@ -68,6 +69,7 @@ var updateTools = []tool.Tool{
 			`"response":{"type":"string","enum":["accepted","declined","tentative"]},"title":{"type":"string"}`, `["calendar","uid","response"]`),
 		Handler:  proposeRSVP,
 		Effect:   tool.Propose,
+		Flags:    tool.Annotated,
 		Contexts: tool.Kinds{tool.Chat, tool.Cron},
 	},
 }

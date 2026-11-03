@@ -19,8 +19,23 @@ type Tool struct {
 	InputSchema json.RawMessage
 	Handler     Handler
 	Effect      Effect
+	Flags       Flags
+	Undo        []string
 	Contexts    Kinds
 }
+
+type Flags uint8
+
+const (
+	Annotated Flags = 1 << iota
+	UntrustedOutput
+	PrivateData
+	ExternalEffect
+)
+
+func (f Flags) Stated() bool { return f&Annotated != 0 }
+
+func (f Flags) Has(flag Flags) bool { return f&flag == flag }
 
 type Context struct {
 	DB          *db.DB

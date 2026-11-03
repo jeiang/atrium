@@ -24,6 +24,7 @@ func Tools() []tool.Tool {
 		InputSchema: inputSchema,
 		Handler:     handle,
 		Effect:      tool.Notify,
+		Flags:       tool.Annotated,
 		Contexts:    tool.DefaultKinds,
 	}}
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
 	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/calendar/calendarmodule"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -66,6 +67,9 @@ func newSet(clients run.Clients, now func() float64) *module.Set {
 
 func commands(clients run.Clients, now func() float64) []*cli.Command {
 	set := newSet(clients, now)
+	if err := set.CheckTools(toolset.Undoers(config.OS).Has); err != nil {
+		panic(err)
+	}
 	cmds := append(set.Commands(), web.ServeCommand(set.Pages()...))
 	return pinned(cmds)
 }

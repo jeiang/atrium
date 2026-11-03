@@ -676,31 +676,31 @@ func writeTools() []tool.Tool {
 			Name:        "notion_create_page",
 			Description: "Create a wiki page under a hub page (parent_page_id; Wiki Home when omitted). Search first (search_knowledge): a page whose title or alias already matches is refused unless allow_duplicate is true. " + markdownNote + wikiNote,
 			InputSchema: schema(`{"parent_page_id": {"type": "string"}, "title": {"type": "string"}, "markdown": {"type": "string"}, "aliases": `+aliasesProp+`, "sources": `+sourcesProp+`, "allow_duplicate": {"type": "boolean"}}`, "title", "markdown"),
-			Handler:     createPage, Effect: tool.Write, Contexts: writeKinds,
+			Handler:     createPage, Effect: tool.WriteUndo, Flags: tool.Annotated, Undo: []string{undoTrash}, Contexts: writeKinds,
 		},
 		{
 			Name:        "notion_update_page",
 			Description: "Change a wiki page: replace its body (markdown_replace) or append to it (append_markdown); with section (a heading text) only that section is replaced or appended to, and a missing section is added by append. Fetch the page first. " + markdownNote + wikiNote,
 			InputSchema: schema(`{"page_id": {"type": "string"}, "markdown_replace": {"type": "string"}, "append_markdown": {"type": "string"}, "section": {"type": "string"}, "sources": `+sourcesProp+`}`, "page_id"),
-			Handler:     updatePage, Effect: tool.Write, Contexts: writeKinds,
+			Handler:     updatePage, Effect: tool.WriteUndo, Flags: tool.Annotated, Undo: []string{undoRestore}, Contexts: writeKinds,
 		},
 		{
 			Name:        "notion_move_page",
 			Description: "Move a wiki page under another hub page." + wikiNote,
 			InputSchema: schema(`{"page_id": {"type": "string"}, "parent_page_id": {"type": "string"}}`, "page_id", "parent_page_id"),
-			Handler:     movePage, Effect: tool.Write, Contexts: writeKinds,
+			Handler:     movePage, Effect: tool.WriteUndo, Flags: tool.Annotated, Undo: []string{undoMove}, Contexts: writeKinds,
 		},
 		{
 			Name:        "notion_archive_page",
 			Description: "Move a wiki page to the trash (never deleted)." + wikiNote,
 			InputSchema: schema(`{"page_id": {"type": "string"}}`, "page_id"),
-			Handler:     archivePage, Effect: tool.Write, Contexts: writeKinds,
+			Handler:     archivePage, Effect: tool.WriteUndo, Flags: tool.Annotated, Undo: []string{undoUntrash}, Contexts: writeKinds,
 		},
 		{
 			Name:        "notion_add_alias",
 			Description: "Record other names for a wiki page so search_knowledge and the duplicate check find it; an alias in use by another page is refused." + wikiNote,
 			InputSchema: schema(`{"page_id": {"type": "string"}, "aliases": `+aliasesProp+`}`, "page_id", "aliases"),
-			Handler:     addAlias, Effect: tool.Write, Contexts: writeKinds,
+			Handler:     addAlias, Effect: tool.WriteUndo, Flags: tool.Annotated, Undo: []string{undoAliases}, Contexts: writeKinds,
 		},
 	}
 }

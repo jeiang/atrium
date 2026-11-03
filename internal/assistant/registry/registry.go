@@ -6,8 +6,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 type DuplicateError []string
@@ -62,7 +64,35 @@ func (r *Registry) For(kind tool.Kind) ([]tool.Tool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return slices.DeleteFunc(all, func(t tool.Tool) bool { return !t.Contexts.Has(kind) }), nil
+	return slices.DeleteFunc(all, func(t tool.Tool) bool { return !Offered(kind, t) }), nil
+}
+
+func (r *Registry) CheckUndo(known func(op string) bool) error {
+	all, err := r.All()
+	if err != nil {
+		return err
+	}
+	var bad []string
+	for _, t := range all {
+		for _, op := range t.Undo {
+			if !known(op) {
+				bad = append(bad, t.Name+": "+op)
+			}
+		}
+	}
+	if len(bad) > 0 {
+		return InvalidError("write_undo tools name undo ops with no registered undoer: " + strings.Join(bad, ", "))
+	}
+	return nil
+}
+
+func ToolEnabled(ctx context.Context, q db.Querier, name string) (bool, error) {
+	key := assistant.ToolEnabledKey(name)
+	if _, ok := settings.Default.Lookup(key); !ok {
+		return true, nil
+	}
+	found, err := settings.Default.Resolve(ctx, q, key, 0)
+	return found.Value == "true", err
 }
 
 func (r *Registry) Run(ctx context.Context, kind tool.Kind, allow []string, q db.Querier) ([]tool.Tool, error) {
@@ -75,6 +105,15 @@ func (r *Registry) Run(ctx context.Context, kind tool.Kind, allow []string, q db
 		if allow != nil && !slices.Contains(allow, t.Name) {
 			continue
 		}
+		if q != nil {
+			on, err := ToolEnabled(ctx, q, t.Name)
+			if err != nil {
+				return nil, err
+			}
+			if !on {
+				continue
+			}
+		}
 		if b, ok := r.binders[t.Name]; ok && q != nil {
 			bound, keep, err := b(ctx, q, t)
 			if err != nil {
@@ -83,8 +122,8 @@ func (r *Registry) Run(ctx context.Context, kind tool.Kind, allow []string, q db
 			if !keep {
 				continue
 			}
-			if bound.Name != t.Name || bound.Effect != t.Effect || !slices.Equal(bound.Contexts, t.Contexts) {
-				return nil, InvalidError(fmt.Sprintf("binder for %s changed its name, effect or run kinds", t.Name))
+			if bound.Name != t.Name || bound.Effect != t.Effect || bound.Flags != t.Flags || !slices.Equal(bound.Contexts, t.Contexts) {
+				return nil, InvalidError(fmt.Sprintf("binder for %s changed its name, effect, flags or run kinds", t.Name))
 			}
 			t = bound
 		}
@@ -98,7 +137,7 @@ func (r *Registry) SubagentPool() ([]tool.Tool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return slices.DeleteFunc(all, func(t tool.Tool) bool { return t.Effect != tool.Read || !t.Contexts.Has(tool.Sub) }), nil
+	return slices.DeleteFunc(all, func(t tool.Tool) bool { return !Offered(tool.Sub, t) }), nil
 }
 
 func countNamed(tools []tool.Tool, name string) int {
@@ -119,6 +158,12 @@ func validate(t tool.Tool) error {
 		return InvalidError(fmt.Sprintf("tool %s has no handler", t.Name))
 	case !t.Effect.Valid():
 		return InvalidError(fmt.Sprintf("tool %s has unknown effect %q", t.Name, t.Effect))
+	case !t.Flags.Stated():
+		return InvalidError(fmt.Sprintf("tool %s does not state its untrusted_output, private_data and external_effect flags", t.Name))
+	case t.Effect == tool.WriteUndo && len(t.Undo) == 0:
+		return InvalidError(fmt.Sprintf("write_undo tool %s names no undo ops", t.Name))
+	case t.Effect != tool.WriteUndo && len(t.Undo) > 0:
+		return InvalidError(fmt.Sprintf("tool %s names undo ops but its effect is %s", t.Name, t.Effect))
 	case len(t.Contexts) == 0:
 		return InvalidError(fmt.Sprintf("tool %s has no run kinds", t.Name))
 	}

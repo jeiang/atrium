@@ -41,6 +41,7 @@ func openLoopTools() []tool.Tool {
 			InputSchema: openLoopsSchema,
 			Handler:     openLoops,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.PrivateData | tool.UntrustedOutput,
 			Contexts:    loopKinds,
 		},
 		{
@@ -50,6 +51,7 @@ func openLoopTools() []tool.Tool {
 			InputSchema: commitmentsSchema,
 			Handler:     commitments,
 			Effect:      tool.Read,
+			Flags:       tool.Annotated | tool.PrivateData | tool.UntrustedOutput,
 			Contexts:    loopKinds,
 		},
 	}
