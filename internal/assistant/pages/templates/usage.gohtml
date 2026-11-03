@@ -7,6 +7,7 @@
     <span class="text-xs text-muted-foreground">Spent this month</span>
     <span class="text-2xl font-semibold tabular-nums">${{printf "%.2f" $b.spent_usd}}</span>
     <span class="text-xs text-muted-foreground">{{$s.calls}} API calls</span>
+    {{with $d.memory}}{{if .calls}}<span class="text-xs text-muted-foreground" data-memory-usage>Memory summaries: ${{printf "%.2f" .cost}} in {{.calls}} calls, outside the budget</span>{{end}}{{end}}
   </div>
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Budget remaining</span>

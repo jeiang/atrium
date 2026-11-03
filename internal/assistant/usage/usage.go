@@ -158,10 +158,23 @@ func MonthStart(now float64, loc *time.Location) float64 {
 	return float64(py.WallToUnix(loc, wall))
 }
 
+const KindMemory = "memory"
+
 func MonthToDate(ctx context.Context, q db.Querier, now float64, loc *time.Location) (float64, error) {
 	var cost float64
-	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE ts >= ?", MonthStart(now, loc)).Scan(&cost)
+	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE ts >= ? AND kind != ?", MonthStart(now, loc), KindMemory).Scan(&cost)
 	return cost, err
+}
+
+type Outside struct {
+	Calls int64   `json:"calls"`
+	Cost  float64 `json:"cost"`
+}
+
+func MemoryMonth(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Outside, error) {
+	var o Outside
+	err := q.QueryRowContext(ctx, "SELECT COUNT(*), COALESCE(SUM(cost_usd), 0) FROM usage WHERE ts >= ? AND kind = ?", MonthStart(now, loc), KindMemory).Scan(&o.Calls, &o.Cost)
+	return o, err
 }
 
 func RunCost(ctx context.Context, q db.Querier, runID int64) (float64, error) {
@@ -185,11 +198,11 @@ type Summary struct {
 const summarySQL = "SELECT COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost, COALESCE(SUM(input_tokens), 0) AS input_tokens, " +
 	"COALESCE(SUM(cache_write_5m + cache_write_1h), 0) AS cache_write, COALESCE(SUM(cache_read), 0) AS cache_read, " +
 	"COALESCE(SUM(output_tokens), 0) AS output_tokens, COALESCE(SUM(searches), 0) AS searches, " +
-	"COALESCE(SUM(tier = ?), 0) AS high_tier FROM usage WHERE ts >= ?"
+	"COALESCE(SUM(tier = ?), 0) AS high_tier FROM usage WHERE ts >= ? AND kind != ?"
 
 func MonthSummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
 	var s Summary
-	err := q.QueryRowContext(ctx, summarySQL, pricing.TierHigh, MonthStart(now, loc)).Scan(
+	err := q.QueryRowContext(ctx, summarySQL, pricing.TierHigh, MonthStart(now, loc), KindMemory).Scan(
 		&s.Calls, &s.Cost, &s.InputTokens, &s.CacheWrite, &s.CacheRead, &s.OutputTokens, &s.Searches, &s.HighTier)
 	if err != nil {
 		return Summary{}, err

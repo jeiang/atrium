@@ -108,7 +108,13 @@ func TestUsagePage(t *testing.T) {
 	page := status(t, s.get("/settings/usage"), http.StatusOK)
 	mustContain(t, page, "$80.00", "$70.00", "53% of $150 used", "1 API calls", ">90%</span>", "900 read · 0 written · 100 uncached", "50 output tokens · 2 web searches", "Requests over 100K tokens",
 		"$80.000", fmt.Sprintf(`href="/chat/%d"`, thread), "Untitled thread", "Prompt tokens (all calls)", "Largest request")
-	mustNotContain(t, page, "No usage yet")
+	mustNotContain(t, page, "No usage yet", "data-memory-usage")
+
+	s.exec("INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) "+
+		"VALUES (?, ?, 1, 'memory', 'm', 'low', 5000, 0, 0, 0, 400, 0, '<=100K', 500)", s.clock, thread)
+	withMemory := status(t, s.get("/settings/usage"), http.StatusOK)
+	mustContain(t, withMemory, "$80.00", "$70.00", "53% of $150 used", "1 API calls", "100 uncached", "Memory summaries: $500.00 in 1 calls, outside the budget",
+		`<td class="py-1">memory</td>`, "$500.000", "$580.000")
 }
 
 func TestSkillsEditor(t *testing.T) {

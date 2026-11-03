@@ -17,6 +17,7 @@ import (
 func TestMonthlyBudgetPausesUnattendedRunsAt80AndChatAt100(t *testing.T) {
 	srv := anthropictest.New(t,
 		anthropictest.Reply("end_turn", anthropictest.Text("first")),
+		anthropictest.Reply("end_turn", anthropictest.Text("cron beside memory spend")),
 		anthropictest.Reply("end_turn", anthropictest.Text("chat at 80")),
 	)
 	anthropictest.PinKey(t)
@@ -39,12 +40,18 @@ func TestMonthlyBudgetPausesUnattendedRunsAt80AndChatAt100(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
-	spend := func(usd float64) {
+	record := func(kind string, usd float64) {
 		t.Helper()
 		if _, err := d.Write.Exec("INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) "+
-			"VALUES (?, 1, 1, 'chat', 'claude-haiku-5-5', 'medium', 0, 0, 0, 0, 0, 0, '<=100K', ?)", float64(time.Now().UnixMicro())/1e6, usd); err != nil {
+			"VALUES (?, 1, 1, ?, 'claude-haiku-5-5', 'medium', 0, 0, 0, 0, 0, 0, '<=100K', ?)", float64(time.Now().UnixMicro())/1e6, kind, usd); err != nil {
 			t.Fatal(err)
 		}
+	}
+	spend := func(usd float64) { t.Helper(); record("chat", usd) }
+
+	record("memory", 1000)
+	if code, stderr := run("cron"); code != cli.ExitOK {
+		t.Fatalf("cron run beside memory spend: exit %d: %s", code, stderr)
 	}
 
 	spend(120)
@@ -57,8 +64,9 @@ func TestMonthlyBudgetPausesUnattendedRunsAt80AndChatAt100(t *testing.T) {
 	}
 
 	spend(30)
+	record("memory", 1000)
 	code, stderr = run("chat")
-	if code != cli.ExitError || !strings.Contains(stderr, "(100%); chat pauses at 100%") {
+	if code != cli.ExitError || !strings.Contains(stderr, "$150.00 of $150.00 spent (100%); chat pauses at 100%") {
 		t.Fatalf("chat run at 100%%: exit %d stderr %q, want a budget refusal", code, stderr)
 	}
 	if n := srv.Remaining(); n != 0 {
