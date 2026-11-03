@@ -143,6 +143,8 @@ not claims about the running application.
   permission granted by the existing tools.
 - The registry restricts tools by run kind. Scheduled runs read, propose,
   and notify; nightly runs may also update Notion and the profile with undo.
+  Every chat write tool, draft and schedule tools included, records an
+  `agent_writes` row with a registered undo.
   Research subagents have restricted tools and bounded runs.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are

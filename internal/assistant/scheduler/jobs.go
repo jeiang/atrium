@@ -246,6 +246,29 @@ func CancelJob(ctx context.Context, q db.Querier, id int64) error {
 	return err
 }
 
+func UncancelJob(ctx context.Context, q db.Querier, id int64, enabled bool, now float64) error {
+	job, err := GetJob(ctx, q, id)
+	if err != nil {
+		return err
+	}
+	if job == nil || !job.Cancelled {
+		return Error(fmt.Sprintf("schedule %d is not cancelled", id))
+	}
+	var due *float64
+	if enabled {
+		_, d, err := Validate(ctx, q, job.Schedule, job.TZ, now, false)
+		if err != nil {
+			return err
+		}
+		due = &d
+		if err := atCap(ctx, q); err != nil {
+			return err
+		}
+	}
+	_, err = q.ExecContext(ctx, "UPDATE jobs SET cancelled = 0, enabled = ?, next_due = ? WHERE id = ?", enabled, due, id)
+	return err
+}
+
 func ListJobs(ctx context.Context, q db.Querier, includeCancelled bool) ([]ListedJob, error) {
 	where := "WHERE j.cancelled = 0"
 	if includeCancelled {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math/big"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/skills"
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -118,8 +120,10 @@ func create(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		if err != nil {
 			return err
 		}
-		job, err = scheduler.GetJob(ctx, tx, id)
-		return err
+		if job, err = scheduler.GetJob(ctx, tx, id); err != nil {
+			return err
+		}
+		return record(ctx, tc, tx, "schedule_create", nil, job, map[string]any{"op": undoCreate, "id": id})
 	})
 	if err != nil {
 		return nil, raised(err)
@@ -151,8 +155,16 @@ func update(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		if u.Schedule, err = text(args, "schedule"); err != nil {
 			return err
 		}
-		updated, err = scheduler.UpdateJob(ctx, tx, job.ID, tc.Now(), u)
-		return err
+		if updated, err = scheduler.UpdateJob(ctx, tx, job.ID, tc.Now(), u); err != nil {
+			return err
+		}
+		var promptBy any
+		if job.PromptBy != nil {
+			promptBy = *job.PromptBy
+		}
+		return record(ctx, tc, tx, "schedule_update", job, updated, map[string]any{
+			"op": undoUpdate, "id": job.ID, "applied": snapshot(updated), "previous": snapshot(job), "previous_prompt_by": promptBy,
+		})
 	})
 	if err != nil {
 		return nil, raised(err)
@@ -168,12 +180,113 @@ func cancel(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 			return err
 		}
 		id = job.ID
-		return scheduler.CancelJob(ctx, tx, id)
+		if err := scheduler.CancelJob(ctx, tx, id); err != nil {
+			return err
+		}
+		return record(ctx, tc, tx, "schedule_cancel", job, nil, map[string]any{"op": undoCancel, "id": id, "enabled": job.Enabled})
 	})
 	if err != nil {
 		return nil, err
 	}
 	return py.Dict{{Key: "cancelled", Value: id}}, nil
+}
+
+const (
+	undoCreate = "schedule_discard"
+	undoUpdate = "schedule_restore"
+	undoCancel = "schedule_uncancel"
+)
+
+func snapshot(j *scheduler.Job) map[string]any {
+	return map[string]any{"name": j.Name, "prompt": j.Prompt, "schedule": j.Schedule, "enabled": j.Enabled}
+}
+
+func record(ctx context.Context, tc *tool.Context, tx *sql.Tx, name string, before, after *scheduler.Job, undo map[string]any) error {
+	w := writes.New{TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: name, Undo: undo}
+	if before != nil {
+		w.Before = snapshot(before)
+		w.Target = fmt.Sprintf("schedule:%d", before.ID)
+	}
+	if after != nil {
+		w.After = snapshot(after)
+		w.Target = fmt.Sprintf("schedule:%d", after.ID)
+	}
+	_, err := writes.Record(ctx, tx, w)
+	return err
+}
+
+func refuse(err error) error {
+	var se scheduler.Error
+	if errors.As(err, &se) {
+		return writes.UndoError(se)
+	}
+	return err
+}
+
+func undoJob(ctx context.Context, q db.Querier, info map[string]any) (*scheduler.Job, error) {
+	id, _ := info["id"].(float64)
+	job, err := scheduler.GetJob(ctx, q, int64(id))
+	if err != nil {
+		return nil, err
+	}
+	if job == nil {
+		return nil, writes.UndoError(fmt.Sprintf("no schedule %d", int64(id)))
+	}
+	return job, nil
+}
+
+func undoCreateOp(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
+	job, err := undoJob(ctx, q, info)
+	if err != nil {
+		return nil, err
+	}
+	if err := scheduler.CancelJob(ctx, q, job.ID); err != nil {
+		return nil, refuse(err)
+	}
+	return py.Dict{{Key: "cancelled", Value: job.ID}}, nil
+}
+
+func undoUpdateOp(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
+	job, err := undoJob(ctx, q, info)
+	if err != nil {
+		return nil, err
+	}
+	applied, _ := info["applied"].(map[string]any)
+	previous, _ := info["previous"].(map[string]any)
+	if job.Cancelled || !maps.Equal(snapshot(job), applied) {
+		return nil, writes.UndoError(fmt.Sprintf("schedule %d changed since this write", job.ID))
+	}
+	name, _ := previous["name"].(string)
+	prompt, _ := previous["prompt"].(string)
+	schedule, _ := previous["schedule"].(string)
+	enabled, _ := previous["enabled"].(bool)
+	promptBy, _ := info["previous_prompt_by"].(string)
+	if _, err := scheduler.UpdateJob(ctx, q, job.ID, nowSeconds(), scheduler.JobUpdate{
+		Name: &name, Prompt: &prompt, Schedule: &schedule, Enabled: &enabled, SkipLimits: true, PromptBy: promptBy,
+	}); err != nil {
+		return nil, refuse(err)
+	}
+	return py.Dict{{Key: "restored", Value: job.ID}}, nil
+}
+
+func undoCancelOp(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
+	job, err := undoJob(ctx, q, info)
+	if err != nil {
+		return nil, err
+	}
+	enabled, _ := info["enabled"].(bool)
+	if err := scheduler.UncancelJob(ctx, q, job.ID, enabled, nowSeconds()); err != nil {
+		return nil, refuse(err)
+	}
+	return py.Dict{{Key: "restored", Value: job.ID}}, nil
+}
+
+func nowSeconds() float64 { return float64(time.Now().UnixNano()) / 1e9 }
+
+func RegisterUndoers(r *writes.Registry) {
+	r.Register(undoCreate, undoCreateOp)
+	r.Register(undoUpdate, undoUpdateOp)
+	r.Register(undoCancel, undoCancelOp)
 }
 
 func list(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {

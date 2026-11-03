@@ -589,6 +589,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_schedule_max_active_jobs": {
+          "default": 20,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_schedule_max_active_jobs_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_schedule_media_channels": {
           "default": "*/30 * * * *",
           "type": "string"

@@ -71,6 +71,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_recall_page_chars` | int | `8000` | cap | `ATRIUM_ASSISTANT_AGENT_RECALL_PAGE_CHARS` |
 | `agent_schedule_calendar_candidates` | string | `0 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_CALENDAR_CANDIDATES` |
 | `agent_schedule_daily_nudges` | string | `daily 08:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_DAILY_NUDGES` |
+| `agent_schedule_max_active_jobs` | int | `20` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MAX_ACTIVE_JOBS` |
 | `agent_schedule_media_channels` | string | `*/30 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_CHANNELS` |
 | `agent_schedule_media_sweep` | string | `*/10 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_SWEEP` |
 | `agent_schedule_media_thumbnails` | string | `daily 04:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_THUMBNAILS` |
