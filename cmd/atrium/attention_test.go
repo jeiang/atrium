@@ -63,6 +63,7 @@ func attentionSeed(t *testing.T, dir string) {
 		args []any
 	}{
 		{"INSERT INTO proposals (id, kind, status, created_ts, title, fingerprint) VALUES (1, 'rebalance', 'pending', ?, 'Move receipts', 'f1')", []any{ago(7)}},
+		{"INSERT INTO proposals (id, kind, status, created_ts, title, fingerprint) VALUES (3, 'inbox_backlog', 'pending', ?, 'Sort backlog', 'f3')", []any{ago(7)}},
 		{"INSERT INTO proposals (id, kind, status, created_ts, title, fingerprint) VALUES (2, 'rebalance', 'applied', ?, 'Old move', 'f2')", []any{ago(8)}},
 		{"INSERT INTO open_loops (thread_key, account, state, last_message_id, since, counterpart, subject, updated_ts) VALUES ('t1', 'icloud', 'owe_reply', 1, ?, 'Bo', 'Lunch', 1)", []any{ago(6)}},
 		{"INSERT INTO open_loops (thread_key, account, state, last_message_id, since, counterpart, subject, updated_ts) VALUES ('t2', 'icloud', 'waiting_on_them', 2, ?, 'Cy', 'Quote', 1)", []any{ago(10)}},
@@ -100,7 +101,7 @@ func TestAttentionQueueIsOrderedStableAndGrouped(t *testing.T) {
 	}
 	want := []string{
 		"commitment/1", "commitment/3", "commitment/2",
-		"proposal/1", "owe_reply/1", "draft/1", "event_candidate/7", "commitment/4", "commitment/5",
+		"proposal/1", "proposal/3", "owe_reply/1", "draft/1", "event_candidate/7", "commitment/4", "commitment/5",
 		"thread_plan/1",
 	}
 	if got := attentionKeys(res.Items); strings.Join(got, " ") != strings.Join(want, " ") {
@@ -115,7 +116,7 @@ func TestAttentionQueueIsOrderedStableAndGrouped(t *testing.T) {
 			t.Errorf("%s is %q, want %q (day boundaries follow the configured zone, not UTC)", key, classes[key], class)
 		}
 	}
-	wantGroups := []attention.Group{{Name: "commitment", Count: 5}, {Name: "draft", Count: 1}, {Name: "event_candidate", Count: 1}, {Name: "owe_reply", Count: 1}, {Name: "proposal", Count: 1}, {Name: "thread_plan", Count: 1}}
+	wantGroups := []attention.Group{{Name: "commitment", Count: 5}, {Name: "draft", Count: 1}, {Name: "event_candidate", Count: 1}, {Name: "owe_reply", Count: 1}, {Name: "proposal", Count: 2}, {Name: "thread_plan", Count: 1}}
 	if fmt.Sprint(res.Groups) != fmt.Sprint(wantGroups) {
 		t.Errorf("groups %v, want %v", res.Groups, wantGroups)
 	}
@@ -133,8 +134,12 @@ func TestAttentionQueueIsOrderedStableAndGrouped(t *testing.T) {
 	for _, it := range res.Items {
 		switch it.Kind {
 		case attention.KindProposal:
-			if len(it.Actions) != 2 || it.Actions[0].Path != "/proposals/1/approve" || it.Actions[0].Method != "POST" {
+			approve := it.SourceID == "1"
+			if approve && (len(it.Actions) != 2 || it.Actions[0].Path != "/proposals/1/approve" || it.Actions[0].Method != "POST") {
 				t.Errorf("proposal actions %v", it.Actions)
+			}
+			if !approve && (len(it.Actions) != 1 || !strings.HasSuffix(it.Actions[0].Path, "/dismiss")) {
+				t.Errorf("proposal %s needs a message selection, so it offers only %v", it.SourceID, it.Actions)
 			}
 		case attention.KindEvent, attention.KindThreadPlan:
 			if len(it.Actions) != 0 {
