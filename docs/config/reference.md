@@ -123,6 +123,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `prompt_subagent` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` |
 | `prompt_summary` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUMMARY` |
 | `prompt_system` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` |
+| `thread_cost_cap_usd` | float | `10` | cap | `ATRIUM_ASSISTANT_THREAD_COST_CAP_USD` |
 
 ## auth
 
