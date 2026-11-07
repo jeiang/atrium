@@ -58,6 +58,7 @@ type Def struct {
 	Scopes              []Scope
 	ThreadColumn        string
 	EnvAlias            string
+	Page                string
 }
 
 func (d Def) has(s Scope) bool { return slices.Contains(d.Scopes, s) }
@@ -67,12 +68,23 @@ type PinSource interface {
 }
 
 type Registry struct {
-	mu   sync.RWMutex
-	defs map[string]Def
-	pins PinSource
+	mu     sync.RWMutex
+	defs   map[string]Def
+	claims map[string]string
+	pins   PinSource
 }
 
-func New() *Registry { return &Registry{defs: map[string]Def{}} }
+func New() *Registry { return &Registry{defs: map[string]Def{}, claims: map[string]string{}} }
+
+func (r *Registry) Claim(page string, keys ...string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, k := range keys {
+		if k != "" {
+			r.claims[k] = page
+		}
+	}
+}
 
 var Default = New()
 
@@ -118,7 +130,7 @@ func (r *Registry) Defs() []Def {
 	defer r.mu.RUnlock()
 	out := make([]Def, 0, len(r.defs))
 	for _, d := range r.defs {
-		out = append(out, d.clone())
+		out = append(out, r.claimed(d).clone())
 	}
 	slices.SortFunc(out, func(a, b Def) int { return strings.Compare(a.Key, b.Key) })
 	return out
@@ -128,7 +140,14 @@ func (r *Registry) Lookup(key string) (Def, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	d, ok := r.defs[key]
-	return d.clone(), ok
+	return r.claimed(d).clone(), ok
+}
+
+func (r *Registry) claimed(d Def) Def {
+	if page, ok := r.claims[d.Key]; ok && d.Page == "" {
+		d.Page = page
+	}
+	return d
 }
 
 func (d Def) clone() Def {

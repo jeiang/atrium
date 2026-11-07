@@ -1,0 +1,20 @@
+{{define "title"}}Modules · Settings{{end}}
+{{define "heading"}}Settings · Modules{{end}}
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
+{{template "settings_tabs" "modules"}}
+<div class="flex flex-col divide-y rounded-lg border bg-card text-sm">
+  {{range $d.modules}}
+  <form method="post" action="/settings/modules/{{.name}}" class="flex flex-wrap items-center gap-2 p-3" data-module="{{.name}}" data-state="{{.state}}">
+    <input type="hidden" name="csrf_token" value="{{$csrf}}">
+    <span class="font-medium">{{replace "_" " " .name}}</span>
+    <span class="badge" data-variant="{{if eq .state "enabled"}}secondary{{else if eq .state "off"}}outline{{else}}destructive{{end}}">{{replace "-" " " .state}}</span>
+    {{if .restart}}<span class="badge" data-variant="outline" data-restart>restart to apply</span>{{end}}
+    {{with .reason}}<span class="basis-full text-xs text-muted-foreground">{{.}}</span>{{end}}
+    <span class="ms-auto"></span>
+    {{if .pinned}}<span class="text-xs text-muted-foreground" data-pinned>{{.pinned}}</span>
+    {{else if .on}}<button type="submit" name="on" value="false" class="btn" data-size="sm" data-variant="outline">Disable</button>
+    {{else if ne .state "needs-settings"}}<button type="submit" name="on" value="true" class="btn" data-size="sm">Enable</button>{{end}}
+  </form>
+  {{end}}
+</div>
+{{end}}

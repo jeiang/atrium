@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
+	"github.com/jeiang/atrium/internal/settings/settingspages"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -38,6 +39,7 @@ func (m Module) Register(module.Context) module.Registration {
 			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(config.OS)}), Templates: reviewpages.Templates()},
 			{Module: startOps},
 			{Module: integrations.Module, Templates: integrations.Templates()},
+			{Module: settingspages.Module, Templates: settingspages.Templates()},
 		},
 		Commands: []*cli.Command{
 			settingscmd.Command(m.Guard),

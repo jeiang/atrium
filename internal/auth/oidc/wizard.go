@@ -151,6 +151,10 @@ var wizardKeys = []string{
 	KeyAccessEmails, KeyAdminEmails, KeyAccessDomains, KeyAdminDomains,
 }
 
+func init() {
+	settings.Default.Claim("/settings/auth", append([]string{KeyPreset, secrets.OIDCClientSecret}, wizardKeys...)...)
+}
+
 func (f Form) shown(preset Preset) map[string]string {
 	out := map[string]string{KeyClientID: f.ClientID, KeyScopes: f.Scopes}
 	if preset.Issuer == "" {
