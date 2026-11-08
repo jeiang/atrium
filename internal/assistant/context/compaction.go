@@ -283,7 +283,7 @@ func summaryParams(model string, active []Message, hardLimit int64, t Tuning) (a
 	}, nil
 }
 
-func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client, model string, active []Message, threadID, runID int64, kind string, hardLimit int64, now float64, t Tuning) (int64, error) {
+func ClientCompact(ctx gocontext.Context, d *db.DB, client *anthropic.Client, model string, active []Message, threadID, runID int64, kind string, hardLimit int64, now float64, t Tuning) (int64, error) {
 	params, err := summaryParams(model, active, hardLimit, t)
 	if err != nil {
 		return 0, err
@@ -293,7 +293,7 @@ func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client
 		return 0, err
 	}
 	entry := usage.Entry{TS: now, ThreadID: threadID, RunID: runID, Kind: kind, Model: model, Effort: SummaryEffort, Compaction: 1}
-	if _, err := usage.Record(ctx, q, entry, response.Usage); err != nil {
+	if _, err := usage.Record(ctx, d, entry, response.Usage); err != nil {
 		return 0, err
 	}
 	var texts []string
@@ -314,13 +314,13 @@ func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client
 	if summary == "" {
 		return 0, ContextError("compaction summary was empty")
 	}
-	manifest, err := manifestBlock(ctx, q, threadID, t)
+	manifest, err := manifestBlock(ctx, d.Read, threadID, t)
 	if err != nil {
 		return 0, err
 	}
 	content := []json.RawMessage{TextBlock("[Context summary written at compaction; earlier messages are no longer shown]\n" + summary), manifest}
 	content = append(content, lastOperatorBlocks(active)...)
-	base, err := nextSeq(ctx, q, threadID)
+	base, err := nextSeq(ctx, d.Read, threadID)
 	if err != nil {
 		return 0, err
 	}
@@ -333,5 +333,5 @@ func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client
 		return 0, err
 	}
 	head := []Message{{Role: journal.User, Content: content}}
-	return saveProjection(ctx, q, threadID, runID, KindClient, base, base, base, head, max(before-after, 0), now)
+	return saveProjection(ctx, d.Write, threadID, runID, KindClient, base, base, base, head, max(before-after, 0), now)
 }

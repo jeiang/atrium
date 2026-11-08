@@ -503,7 +503,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		if err := s.reserveUSD(ctx, summary, fmt.Sprintf("the summary request is about %d tokens, up to $%s uncached", summaryIn, py.FormatFixed(summary, 2))); err != nil {
 			return false, nil, err
 		}
-		if _, err := actx.ClientCompact(ctx, s.d.Write, s.client, s.run.Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now(), s.limits.Tuning); err != nil {
+		if _, err := actx.ClientCompact(ctx, s.d, s.client, s.run.Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now(), s.limits.Tuning); err != nil {
 			return false, nil, err
 		}
 		last = nil
@@ -549,7 +549,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		TS: s.now(), ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: s.run.Model, Effort: s.run.Effort,
 		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(compacted)),
 	}
-	if _, err := usage.Record(context.WithoutCancel(ctx), s.d.Write, entry, response.Usage); err != nil {
+	if _, err := usage.Record(context.WithoutCancel(ctx), s.d, entry, response.Usage); err != nil {
 		return false, nil, err
 	}
 	if err := s.renew(ctx); err != nil {

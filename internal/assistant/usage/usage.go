@@ -71,23 +71,18 @@ func billedByModel(model string, u anthropic.Usage) []billed {
 	return groups
 }
 
-func Record(ctx context.Context, q db.Querier, e Entry, u anthropic.Usage) (float64, error) {
+func Record(ctx context.Context, d *db.DB, e Entry, u anthropic.Usage) (float64, error) {
 	groups := billedByModel(e.Model, u)
-	if begin, ok := q.(interface {
-		BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
-	}); ok && len(groups) > 1 {
-		tx, err := begin.BeginTx(ctx, nil)
-		if err != nil {
-			return 0, err
-		}
-		cost, err := recordGroups(ctx, tx, e, u, groups)
-		if err != nil {
-			_ = tx.Rollback()
-			return 0, err
-		}
-		return cost, tx.Commit()
+	if len(groups) < 2 {
+		return recordGroups(ctx, d.Write, e, u, groups)
 	}
-	return recordGroups(ctx, q, e, u, groups)
+	var cost float64
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		cost, err = recordGroups(ctx, tx, e, u, groups)
+		return err
+	})
+	return cost, err
 }
 
 func recordGroups(ctx context.Context, q db.Querier, e Entry, u anthropic.Usage, groups []billed) (float64, error) {
