@@ -19,6 +19,12 @@ This page states what atrium does and refuses to do today. It describes current 
 - `POST`, `PUT`, `PATCH` and `DELETE` requests need the CSRF token that atrium issues in a cookie and a request whose `Origin`, when present, matches the Host. Responses carry a Content-Security-Policy.
 - A signed media link grants one file under `/media/file/`. It carries an expiry and an HMAC-SHA256 signature, and is valid for 12 hours from issue. A missing, altered or expired signature is not accepted and the request falls back to the normal group check. The signing key is the `link_key` secret in the media module. A deployment pin (`ATRIUM_MEDIA_LINK_KEY`, `ATRIUM_MEDIA_LINK_KEY_FILE` or `media.link_key_file`) wins over the stored value; otherwise the key is stored in the database, generated on first use. An existing `media-link.key` beside the database is moved into the stored secret on first use and the file is removed, so links issued before the upgrade stay valid. Changing the key invalidates every issued link.
 
+## Web interface
+
+- The light, dark or system theme chosen in the sidebar is stored in the `atrium_theme` cookie and applied by the server on the next page, so pages render in that theme without a flash. System follows the browser's colour-scheme preference. Any other cookie value renders the system theme.
+- The sidebar lists pinned threads, then recent threads by day, then threads grouped by project (archived projects are left out), and the module pages. Collapsing it to a rail is stored in the `atrium_rail` cookie. Below 768px the sidebar opens as a sheet.
+- Pages load scripts only from `/static/`; there are no inline scripts or inline event handlers. Fonts are self-hosted under `/static/fonts/` with their OFL license files.
+
 ## Phone actions
 
 - Phone actions are off by default. `phone_actions_enabled` turns them on and `phone_actions_kinds` lists the proposal kinds that may be approved or dismissed from a notification; the web-only kinds (Gmail label merge, inbox backlog, rebalance split and merge, deletion rule) cannot be enabled.

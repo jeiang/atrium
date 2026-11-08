@@ -65,7 +65,7 @@
   </div>
   <nav class="sb-body" aria-label="Primary">
     {{with .Threads}}
-    <a href="/chat" class="btn sb-new" data-variant="outline" title="New chat">{{icon "square-pen"}}<span>New chat</span></a>
+    <a href="/chat" class="btn sb-new" title="New chat">{{icon "plus"}}<span>New chat</span></a>
     <div class="sb-threads">
       {{if .Pinned}}{{template "sb_threads" (dict "label" "Pinned" "threads" .Pinned "path" $path)}}{{end}}
       {{range .Dated}}{{template "sb_threads" (dict "label" .Label "threads" .Threads "path" $path)}}{{end}}
