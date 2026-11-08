@@ -384,7 +384,7 @@ in {
     environmentFiles = mkOption {
       type = types.listOf types.str;
       default = [];
-      description = "EnvironmentFile= paths for credentials that are not settings yet (the ntfy token); read by every unit and atrium-run.";
+      description = "EnvironmentFile= paths read by every unit and atrium-run.";
     };
 
     modelServerUnits = mkOption {

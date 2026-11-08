@@ -29,7 +29,6 @@ func watchStale(base context.Context, d *db.DB, env config.Env, stopping <-chan 
 	}
 	t := time.NewTicker(staleEvery)
 	defer t.Stop()
-	warn("ntfy privacy probe failed", probeUnknown(ctx, d))
 	for ctx.Err() == nil {
 		warn("stale pass check failed", noticeStale(ctx, d, env))
 		warn("budget threshold check failed", noticeBudget(ctx, d, env, stamp()))
@@ -79,7 +78,7 @@ func noticeStale(ctx context.Context, d *db.DB, env config.Env) error {
 		return err
 	}
 	for job, why := range fresh {
-		if _, err := Send(ctx, d.Write, env, Message{Channel: System, Title: "atrium: " + job + " is stale", Body: why}); err != nil {
+		if _, err := Send(ctx, d.Write, Message{Channel: System, Title: "atrium: " + job + " is stale", Body: why}); err != nil {
 			return err
 		}
 	}

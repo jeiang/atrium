@@ -10,7 +10,7 @@
   <main class="app-main">
     <div class="sticky top-0 z-30 bg-background">
     {{if .Auth.NoAuth}}<div class="flex items-start gap-2 border-b border-warning/30 bg-warning/10 px-3 py-1.5 text-sm text-warning md:px-6">{{icon "circle-alert"}}<span>Authentication is disabled</span></div>{{end}}
-    {{with .NotifyFailing}}<div class="flex items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-sm text-destructive md:px-6" data-notify-failing>{{icon "circle-alert"}}<span>Notifications failing: {{join ", " .}}. <a class="underline underline-offset-4" href="/settings/notifications">Check channels</a></span></div>{{end}}
+    {{with .NotifyFailing}}<div class="flex items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-sm text-destructive md:px-6" data-notify-failing>{{icon "circle-alert"}}<span>Push failing: {{join ", " .}}. <a class="underline underline-offset-4" href="/settings/notifications">Check devices</a></span></div>{{end}}
     {{with .IntegrationAlerts}}<div class="flex items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-sm text-destructive md:px-6" data-integration-alerts>{{icon "circle-alert"}}<span>Integrations: {{join ", " .}}. <a class="underline underline-offset-4" href="/settings/integrations">Check integrations</a></span></div>{{end}}
     <header class="topbar">
       <button id="nav-toggle" type="button" class="btn md:hidden" data-variant="ghost" data-size="icon-sm" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" data-action="open-sidebar">{{icon "menu"}}</button>

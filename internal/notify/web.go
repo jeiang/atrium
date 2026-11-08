@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
-	"net/url"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -30,13 +29,10 @@ func Templates() fs.FS {
 }
 
 type listing struct {
-	Channels  []Channel   `json:"channels"`
-	URL       string      `json:"url"`
-	NtfySh    bool        `json:"ntfy_sh"`
-	Encrypted bool        `json:"encrypted"`
-	Error     string      `json:"error"`
-	Push      pushListing `json:"push"`
-	Phone     any         `json:"phone"`
+	Channels []Channel   `json:"channels"`
+	Error    string      `json:"error"`
+	Push     pushListing `json:"push"`
+	Phone    any         `json:"phone"`
 }
 
 type pushListing struct {
@@ -78,26 +74,12 @@ func serve(d *web.Deps, phone Section) {
 		if !f.Auth.Admin {
 			return nil
 		}
-		rows, err := d.DB.Read.QueryContext(ctx, "SELECT name FROM ntfy_channels WHERE failures >= 3 ORDER BY name")
-		if err != nil {
-			return err
-		}
-		defer func() { _ = rows.Close() }()
-		for rows.Next() {
-			var name string
-			if err := rows.Scan(&name); err != nil {
-				return err
-			}
-			f.NotifyFailing = append(f.NotifyFailing, name)
-		}
-		return rows.Err()
+		labels, err := failingDevices(ctx, d.DB.Read)
+		f.NotifyFailing = labels
+		return err
 	})
 	d.Admin(http.MethodGet, page, h.index)
-	d.Admin(http.MethodPost, page+"/account", h.connect)
-	d.Admin(http.MethodPost, page+"/probe", h.probe)
-	d.Admin(http.MethodPost, page+"/channels/{name}/test", h.test)
 	d.Admin(http.MethodPost, page+"/channels/{name}/content", h.content)
-	d.Admin(http.MethodPost, page+"/channels/{name}/reset", h.reset)
 	d.Admin(http.MethodPost, page+"/push/subscriptions", h.subscribe)
 	d.Admin(http.MethodPost, page+"/push/unsubscribe", h.unsubscribe)
 	d.Admin(http.MethodPost, page+"/push/test", h.pushTest)
@@ -113,21 +95,10 @@ func (h handlers) ctx(r *http.Request) context.Context {
 
 func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, problem string) {
 	ctx := r.Context()
-	channels, err := ListChannels(ctx, h.d.DB.Write)
-	if err != nil {
+	data := listing{Error: problem}
+	var err error
+	if data.Channels, err = ListChannels(ctx, h.d.DB.Read); err != nil {
 		panic(err)
-	}
-	data := listing{Encrypted: h.d.DB.Encrypted(), Error: problem}
-	base, baseErr := baseURL(ctx, h.d.DB.Read)
-	if baseErr == nil {
-		data.URL, data.NtfySh = base.String(), IsNtfySh(base)
-	}
-	for _, c := range channels {
-		c.ShowsText = c.FullText()
-		if baseErr == nil {
-			c.Subscribe = "ntfy://" + base.Host + "/" + url.PathEscape(c.Topic)
-		}
-		data.Channels = append(data.Channels, c)
 	}
 	if data.Push.Devices, err = Devices(ctx, h.d.DB.Read); err != nil {
 		panic(err)
@@ -177,12 +148,10 @@ func (h handlers) inbox(w http.ResponseWriter, r *http.Request) {
 }
 
 func refused(err error) bool {
-	var account AccountError
 	var channel ChannelError
-	var encryption settings.EncryptionRequired
-	var pinned *settings.PinnedError
 	var push PushError
-	return errors.As(err, &account) || errors.As(err, &channel) || errors.As(err, &push) || errors.As(err, &encryption) || errors.As(err, &pinned)
+	var pinned *settings.PinnedError
+	return errors.As(err, &channel) || errors.As(err, &push) || errors.As(err, &pinned)
 }
 
 func (h handlers) done(w http.ResponseWriter, r *http.Request, err error, title string) {
@@ -196,36 +165,9 @@ func (h handlers) done(w http.ResponseWriter, r *http.Request, err error, title 
 	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: title}, "")
 }
 
-func (h handlers) connect(w http.ResponseWriter, r *http.Request) {
-	form := web.FormValues(r)
-	err := Connect(h.ctx(r), h.d.DB, web.FormString(form, "username", ""), web.FormString(form, "password", ""), "ui")
-	h.done(w, r, err, "Account connected")
-}
-
-func (h handlers) probe(w http.ResponseWriter, r *http.Request) {
-	h.done(w, r, ProbeAll(h.ctx(r), h.d.DB), "Privacy checked")
-}
-
-func (h handlers) test(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-	if !known(name) {
-		http.NotFound(w, r)
-		return
-	}
-	sent, err := Send(h.ctx(r), h.d.DB.Write, h.d.Env, Message{Channel: name, Title: "atrium test", Body: "Test message for the " + name + " channel."})
-	if err == nil && !sent.Delivered {
-		err = ChannelError("Test not delivered: " + sent.Error)
-	}
-	h.done(w, r, err, "Test sent")
-}
-
 func (h handlers) content(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	h.done(w, r, SetContent(h.ctx(r), h.d.DB.Write, chi.URLParam(r, "name"), web.FormString(form, "content", "")), "Saved")
-}
-
-func (h handlers) reset(w http.ResponseWriter, r *http.Request) {
-	h.done(w, r, ResetChannel(h.ctx(r), h.d.DB, chi.URLParam(r, "name")), "Channel reset")
 }
 
 func (h handlers) resend(w http.ResponseWriter, r *http.Request) {
@@ -234,7 +176,7 @@ func (h handlers) resend(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	sent, err := Resend(h.ctx(r), h.d.DB.Write, h.d.Env, id)
+	sent, err := Resend(h.ctx(r), h.d.DB.Write, id)
 	if err == nil && !sent.Delivered {
 		err = ChannelError("Not delivered: " + sent.Error)
 	}
@@ -272,7 +214,7 @@ func (h handlers) pushTest(w http.ResponseWriter, r *http.Request) {
 	sent, failure, err := PushTest(h.ctx(r), h.d.DB.Write)
 	if err == nil && sent == 0 {
 		if failure == "" {
-			failure = "no subscribed devices"
+			failure = NoDevices
 		}
 		err = PushError("Test not delivered: " + failure)
 	}

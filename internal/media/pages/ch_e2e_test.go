@@ -117,17 +117,10 @@ func chNewQbit(t *testing.T) *chQbit {
 	return f
 }
 
-func chNewNtfy(t *testing.T) string {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	t.Cleanup(srv.Close)
-	return srv.URL
-}
-
 func chVars(t *testing.T, extra map[string]string) map[string]string {
 	t.Helper()
 	vars := map[string]string{
-		"ATRIUM_MEDIA_MEDIA_ROOT": t.TempDir(), "ATRIUM_MEDIA_LINK_KEY": "secret-key", "NTFY_TOKEN": "tok", "ATRIUM_NOTIFY_NTFY_MEDIA_TOPIC": "media-releases",
+		"ATRIUM_MEDIA_MEDIA_ROOT": t.TempDir(), "ATRIUM_MEDIA_LINK_KEY": "secret-key", "ATRIUM_NOTIFY_WEBPUSH_SUBJECT": "mailto:ops@example.invalid",
 	}
 	for k, v := range extra {
 		vars[k] = v
@@ -159,7 +152,7 @@ func TestChE2EChannelsSearchPreviewAddRemovePoll(t *testing.T) {
 	qb := chNewQbit(t)
 	ez.release("1234567", chHashA, "Lanterns S01E01 1080p WEB")
 	ez.release("1234567", chHashB, "lanterns s01e01 720p")
-	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": qb.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "ATRIUM_NOTIFY_NTFY_URL": chNewNtfy(t), "ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "k", "ATRIUM_MEDIA_MEDIA_TMDB_URL": tm.URL}), Options{})
+	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": qb.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "k", "ATRIUM_MEDIA_MEDIA_TMDB_URL": tm.URL}), Options{})
 
 	empty := status(t, s.get("/apps/media/channels"), 200, "channels page")
 	contains(t, empty, "No channels", "Not checked yet.", `name="backfill" value="1" checked`, "Watching (0)")

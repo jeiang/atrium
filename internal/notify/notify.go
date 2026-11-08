@@ -1,37 +1,24 @@
 package notify
 
 import (
-	"bytes"
 	"context"
 	"crypto/x509"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
-	"net/http"
-	"net/url"
-	"strconv"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
 
-	"regexp"
-
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations/transport"
-	"github.com/jeiang/atrium/internal/obs"
-	"github.com/jeiang/atrium/internal/secrets"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
-const notConfigured = "ntfy not configured (" + KeyURL + ")"
+const NoDevices = "no push devices"
 
 var (
 	control    = regexp.MustCompile(`[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]`)
@@ -109,149 +96,16 @@ type delivery struct {
 	actions                     []Action
 }
 
-func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (delivered bool, failure string, err error) {
-	base, err := text(ctx, q, KeyURL)
-	if err != nil {
-		return false, "", err
-	}
-	if m.channel == "" {
-		m.channel = Assistant
-	}
-	if !known(m.channel) {
-		return false, "", ChannelError("unknown channel " + m.channel)
-	}
-	if base == "" {
-		return false, notConfigured, nil
-	}
-	ctx, span := obs.Start(ctx, "notify.deliver", trace.WithAttributes(
-		obs.String(obs.NotifyChannel, m.channel),
-		obs.String(obs.NotifyBackend, "ntfy"),
-	))
-	attempted := false
-	defer func() {
-		span.SetAttributes(obs.Bool(obs.NotifyDelivered, delivered))
-		if err != nil {
-			obs.Fail(span, "error")
-		} else if failure != "" && failure != notConfigured {
-			span.SetAttributes(obs.String(obs.ErrorType, "delivery_failed"))
-		}
-		span.End()
-		if attempted {
-			obs.NotifyDelivery.Add(1, m.channel, "ntfy", strconv.FormatBool(delivered))
-		}
-	}()
-	c, err := GetChannel(ctx, q, m.channel)
-	if err != nil {
-		return false, "", err
-	}
-	timeout, err := timeoutOf(ctx, q)
-	if err != nil {
-		return false, "", err
-	}
-	token, err := secrets.NewIn(settings.From(ctx), nil, q, nil).Value(ctx, TokenKey(m.channel))
-	if err != nil {
-		return false, "", err
-	}
-	if token == "" {
-		token = config.NtfyToken(env)
-	}
-	title, body := m.title, m.body
-	if !c.FullText() {
-		title, body = privateTitle, privateBody
-	}
-	actions := make([]Action, len(m.actions))
-	for i, action := range m.actions {
-		if strings.HasPrefix(action.URL, "/") {
-			if base := config.From(ctx).PublicURL(env); base != "" {
-				action.URL = base + action.URL
-			}
-		}
-		actions[i] = action
-	}
-	click := m.click
-	if strings.HasPrefix(click, "/") {
-		click = ""
-		if base := config.From(ctx).PublicURL(env); base != "" {
-			click = base + m.click
-		}
-	}
-	payload := struct {
-		Topic    string   `json:"topic"`
-		Title    string   `json:"title"`
-		Message  string   `json:"message"`
-		Click    string   `json:"click,omitempty"`
-		Priority int      `json:"priority,omitempty"`
-		Actions  []Action `json:"actions,omitempty"`
-	}{Topic: c.Topic, Title: title, Message: body, Click: click, Actions: actions}
-	if m.priority >= 1 && m.priority <= 5 {
-		payload.Priority = m.priority
-	}
-	target, err := url.Parse(base)
-	if err != nil {
-		return false, "", tool.Error("ntfy URL is invalid")
-	}
-	if target.Scheme != "http" && target.Scheme != "https" {
-		return false, "ntfy unreachable: unsupported protocol", nil
-	}
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		return false, "", err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base, bytes.NewReader(payloadJSON))
-	if err != nil {
-		return false, "", tool.Error("ntfy URL is invalid")
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	client, err := newClient(ctx, q, timeout)
-	if err != nil {
-		var te transport.Error
-		if errors.As(err, &te) {
-			return false, "ntfy unreachable: " + te.Error(), nil
-		}
-		return false, "", err
-	}
-	defer client.CloseIdleConnections()
-	attempted = true
-	resp, err := client.Do(req)
-	if err == nil {
-		_, err = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-	}
-	if err != nil {
-		if ctx.Err() != nil {
-			return false, "", ctx.Err()
-		}
-		return false, "ntfy unreachable: " + errorClass(err), nil
-	}
-	if resp.StatusCode >= 400 {
-		return false, fmt.Sprintf("ntfy %d", resp.StatusCode), nil
-	}
-	return true, "", nil
-}
-
-func deliverAndRecord(ctx context.Context, q db.Querier, env config.Env, m delivery) (bool, string, error) {
-	delivered, failure, err := deliver(ctx, q, env, m)
-	if err != nil || failure == notConfigured {
-		return delivered, failure, err
-	}
-	if m.channel == "" {
-		m.channel = Assistant
-	}
-	failures, err := recordDelivery(ctx, q, m.channel, failure)
-	if err != nil {
-		return delivered, failure, err
-	}
-	if failures == FailingAfter && m.channel != System {
-		_, err = Send(ctx, q, env, Message{Channel: System, Priority: 4, Title: "atrium: notifications failing",
-			Body: fmt.Sprintf("The %s channel failed %d times in a row: %s", m.channel, failures, failure)})
+func deliver(ctx context.Context, q db.Querier, m delivery, link string) (bool, string, error) {
+	tried, delivered, failure, err := deliverPush(ctx, q, m, link)
+	if err == nil && !tried {
+		failure = NoDevices
+		pushLog.Info("no push devices; notification kept in the inbox")
 	}
 	return delivered, failure, err
 }
 
-func Resend(ctx context.Context, q db.Querier, env config.Env, id int64) (Sent, error) {
+func Resend(ctx context.Context, q db.Querier, id int64) (Sent, error) {
 	var title, body string
 	var link, channel, click *string
 	var priority *int64
@@ -267,20 +121,14 @@ func Resend(ctx context.Context, q db.Querier, env config.Env, id int64) (Sent, 
 	if delivered {
 		return Sent{ID: id, Delivered: true}, nil
 	}
-	message := body
-	if link != nil && *link != "" {
-		message = body + "\n\nThread: " + *link
+	m := delivery{channel: deref(channel), title: title, body: body, click: deref(click)}
+	if m.channel == "" {
+		m.channel = Assistant
 	}
-	m := delivery{channel: deref(channel), title: title, body: message, click: deref(click)}
 	if priority != nil {
 		m.priority = int(*priority)
 	}
-	ok, failure, err := deliverAndRecord(ctx, q, env, m)
-	if err != nil {
-		return Sent{}, err
-	}
-	m.body = body
-	ok, failure, err = withPush(ctx, q, m, deref(link), ok, failure)
+	ok, failure, err := deliver(ctx, q, m, deref(link))
 	if err != nil {
 		return Sent{}, err
 	}
@@ -288,23 +136,6 @@ func Resend(ctx context.Context, q db.Querier, env config.Env, id int64) (Sent, 
 		return Sent{}, err
 	}
 	return Sent{ID: id, Delivered: ok, Error: failure}, nil
-}
-
-func withPush(ctx context.Context, q db.Querier, m delivery, link string, delivered bool, failure string) (bool, string, error) {
-	tried, pushed, pushFailure, err := deliverPush(ctx, q, m, link)
-	if err != nil || !tried {
-		return delivered, failure, err
-	}
-	if failure == notConfigured {
-		failure = ""
-	}
-	if delivered || pushed {
-		return true, "", nil
-	}
-	if failure != "" && pushFailure != "" {
-		return false, failure + "; " + pushFailure, nil
-	}
-	return false, failure + pushFailure, nil
 }
 
 func deref(s *string) string {
@@ -319,10 +150,6 @@ func nullable(s string) any {
 		return nil
 	}
 	return s
-}
-
-func newClient(ctx context.Context, q db.Querier, timeout time.Duration) (*http.Client, error) {
-	return transport.For(ctx, q, Integration, timeout)
 }
 
 func errorClass(err error) string {
@@ -351,7 +178,7 @@ func errorClass(err error) string {
 	return "read failed"
 }
 
-func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, error) {
+func Send(ctx context.Context, q db.Querier, m Message) (Sent, error) {
 	titleChars, err := whole(ctx, q, KeyTitleChars)
 	if err != nil {
 		return Sent{}, err
@@ -368,10 +195,8 @@ func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, e
 	if err != nil {
 		return Sent{}, err
 	}
-	message := body
 	var linkValue any
 	if link != "" {
-		message = body + "\n\nThread: " + link
 		linkValue = link
 	}
 	now := m.Now
@@ -394,13 +219,7 @@ func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, e
 	if err != nil {
 		return Sent{}, err
 	}
-	d := delivery{channel: channel, title: title, body: message, click: m.Click, priority: m.Priority, actions: m.Actions}
-	delivered, failure, err := deliverAndRecord(ctx, q, env, d)
-	if err != nil {
-		return Sent{}, err
-	}
-	d.body = body
-	delivered, failure, err = withPush(ctx, q, d, link, delivered, failure)
+	delivered, failure, err := deliver(ctx, q, delivery{channel: channel, title: title, body: body, click: m.Click, priority: m.Priority, actions: m.Actions}, link)
 	if err != nil {
 		return Sent{}, err
 	}

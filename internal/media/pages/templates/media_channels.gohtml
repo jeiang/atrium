@@ -1,6 +1,7 @@
 {{define "title"}}Channels{{end}}
 {{define "heading"}}Media · Channels{{end}}
 {{define "content"}}{{$csrf := .CSRF}}{{$q := .Data.Q}}{{$form := .Data.Form}}{{$status := .Data.Status}}
+
 <section class="flex flex-col gap-3" aria-labelledby="channels-h">
   <div class="flex flex-wrap items-center justify-between gap-2">
     <h2 id="channels-h" class="text-sm font-medium">Watching ({{len .Data.Channels}})</h2>

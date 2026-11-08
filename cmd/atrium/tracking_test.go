@@ -18,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail/tracking"
-	"github.com/jeiang/atrium/internal/notify"
 )
 
 type fakeShip24 struct {
@@ -248,9 +247,6 @@ func TestPackagePollingUpdatesStatusAndNotifiesOnceOnDelivered(t *testing.T) {
 	t.Cleanup(srv.Close)
 	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
 	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
-	ntfy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
-	t.Cleanup(ntfy.Close)
-	setEnv(t, settingEnv(notify.KeyURL), ntfy.URL)
 	if warm := runApp(t, "settings", "list"); warm.code != cli.ExitOK {
 		t.Fatalf("warm command: %d %s", warm.code, warm.stderr)
 	}

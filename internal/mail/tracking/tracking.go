@@ -628,7 +628,7 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 		if body == "" {
 			body = "Status " + advanced
 		}
-		if _, err := notify.Send(ctx, d.Write, env, notify.Message{
+		if _, err := notify.Send(ctx, d.Write, notify.Message{
 			Title: title, Body: body, Channel: notify.Assistant, Now: func() float64 { return now },
 		}); err != nil {
 			log.Warn("package notification failed", logx.Err, err.Error())

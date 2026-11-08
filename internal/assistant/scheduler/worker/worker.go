@@ -146,7 +146,7 @@ func (w *Worker) notifySkipped(ctx context.Context, skip scheduler.Skipped, now 
 	}
 	body := fmt.Sprintf("Monthly budget is at $%.2f of $%.2f (%.0f%%); unattended runs pause at %.0f%%. This scheduled run did not start.",
 		st.SpentUSD, st.BudgetUSD, st.Share*100, pause*100)
-	_, err = notify.Send(ctx, w.Service.DB.Write, w.Service.Env, notify.Message{
+	_, err = notify.Send(ctx, w.Service.DB.Write, notify.Message{
 		Channel: notify.System,
 		Title:   "Skipped: " + skip.Job.Name,
 		Body:    body,

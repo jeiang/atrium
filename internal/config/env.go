@@ -66,5 +66,3 @@ type GoogleCredentials struct {
 }
 
 func GoogleOAuthSecret(env Env) string { return get(env, "GOOGLE_OAUTH_CLIENT_SECRET") }
-
-func NtfyToken(env Env) string { return stripped(env, "NTFY_TOKEN") }

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/ops"
 )
 
@@ -110,21 +108,13 @@ func TestOpsListenerServesMetricsAndReadinessApartFromThePublicListener(t *testi
 	}
 }
 
-func TestOpsReadinessIsDegradedWhenNtfyIsDownAndPprofFollowsItsSetting(t *testing.T) {
+func TestOpsPprofFollowsItsSetting(t *testing.T) {
 	t.Parallel()
-	ntfy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	t.Cleanup(ntfy.Close)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(notify.KeyURL), ntfy.URL)
 	setEnv(t, settingEnv(ops.PprofKey), "true")
 	opsBase := opsAddr(t)
 	startServeIn(t, dir)
 
-	if status, state := readiness(t, opsBase); status != http.StatusOK || state != ops.StateDegraded {
-		t.Errorf("readyz with ntfy down = %d %s, want 200 degraded", status, state)
-	}
 	if status, _, _ := fetch(t, http.DefaultClient, "GET", opsBase+"/debug/pprof/", nil); status != http.StatusOK {
 		t.Errorf("ops pprof = %d with pprof on, want 200", status)
 	}

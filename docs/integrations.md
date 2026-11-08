@@ -14,7 +14,6 @@ sections below cover the console work atrium cannot do for you.
 | Mail chat endpoint | `mail_chat` | Optional Bearer key | Chat and routing calls to an OpenAI-compatible endpoint | A hosted endpoint sends mail content off this host |
 | Mail embed endpoint | `mail_embed` | Optional Bearer key | Embeddings for mail search and routing | Same as the chat endpoint |
 | Notion | `notion` | Internal integration token or personal access token | Wiki read, update and insert | Share the pages with the integration; a personal token acts as the user and lasts at most a year |
-| ntfy | `ntfy` | Optional token | Push notifications | Full text goes only to topics that refuse an anonymous read |
 | qBittorrent | `qbittorrent` | API key | Media torrent and library operations | API keys need qBittorrent 5.2 or newer |
 | TMDB | `tmdb` | API read access token | Media metadata | Read-only; media pages show the attribution |
 | Open-Meteo | `open_meteo` | None | Weather forecasts and place lookup | Public API; no key. The configured coordinates are sent to Open-Meteo |
@@ -135,12 +134,6 @@ dimension. A hosted endpoint warns that mail content leaves this host.
 Create an API key in qBittorrent 5.2 or newer and paste it. Without a key,
 requests go unauthenticated. Test fails on a server older than 5.2, which has
 no API keys.
-
-## ntfy
-
-Point the URL at your ntfy server; the token is optional. Notifications use
-three channels (assistant, media and system), each with its own topic and
-optional token. Full text goes only to topics that refuse an anonymous read.
 
 ## TMDB
 

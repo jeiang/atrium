@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/actionlink/policy"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -25,7 +24,7 @@ func NotifyCreated(ctx context.Context, d *db.DB, p *proposals.Proposal) {
 		return
 	}
 	title, body := Text(p.Kind, p.ID)
-	_, _ = notify.Send(ctx, d.Write, config.Map(nil), notify.Message{
+	_, _ = notify.Send(ctx, d.Write, notify.Message{
 		Channel: notify.Assistant, Title: title, Body: body, Click: fmt.Sprintf("/proposals/%d", p.ID),
 		Actions: []notify.Action{
 			{Action: "view", Label: "Approve", URL: "/actions/" + approve, Method: "POST"},
