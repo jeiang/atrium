@@ -55,6 +55,9 @@ func (f *fakeShip24) handler(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && r.URL.Path == "/public/v1/trackers/trk_1/results":
 		f.results++
 		event := `{"eventId":"e1","status":"In transit","description":"Package is moving","occurrenceDatetime":"2026-11-08T10:00:00","location":"Hub","statusMilestone":"in_transit"}`
+		if f.milestone == "exception" {
+			event = `{"eventId":"e3","status":"Exception","description":"Delivery exception","occurrenceDatetime":"2026-11-08T11:00:00","location":"Hub","statusMilestone":"exception"}`
+		}
 		if f.milestone == "delivered" {
 			event = `{"eventId":"e2","status":"Delivered","description":"Left at the door","occurrenceDatetime":"2026-11-08T12:00:00","location":"Door","statusMilestone":"delivered"}`
 		}
@@ -274,14 +277,46 @@ func TestPackagePollingUpdatesStatusAndNotifiesOnceOnDelivered(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT status FROM packages WHERE id = 1").Scan(&status); err != nil || status != "in_transit" {
 		t.Fatalf("status after a lower milestone = %q, %v; want in_transit", status, err)
 	}
+	fake.setMilestone("exception")
+	poll()
+	if err := d.Read.QueryRow("SELECT status FROM packages WHERE id = 1").Scan(&status); err != nil || status != "exception" {
+		t.Fatalf("status after an exception = %q, %v; want exception", status, err)
+	}
+	var notifiedStatus string
+	if err := d.Read.QueryRow("SELECT notified_status FROM packages WHERE id = 1").Scan(&notifiedStatus); err != nil || notifiedStatus != "exception" {
+		t.Fatalf("notified_status after an exception = %q, %v; want exception", notifiedStatus, err)
+	}
+	var notifications int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications WHERE title = 'Package exception'").Scan(&notifications); err != nil || notifications != 1 {
+		t.Fatalf("exception notifications = %d, %v; want 1", notifications, err)
+	}
+	fake.setMilestone("in_transit")
+	poll()
+	if err := d.Read.QueryRow("SELECT status FROM packages WHERE id = 1").Scan(&status); err != nil || status != "in_transit" {
+		t.Fatalf("status after leaving the exception = %q, %v; want in_transit", status, err)
+	}
+	if err := d.Read.QueryRow("SELECT notified_status FROM packages WHERE id = 1").Scan(&notifiedStatus); err != nil || notifiedStatus != "" {
+		t.Fatalf("notified_status after leaving the exception = %q, %v; want empty", notifiedStatus, err)
+	}
+	fake.setMilestone("exception")
+	poll()
+	if err := d.Read.QueryRow("SELECT status FROM packages WHERE id = 1").Scan(&status); err != nil || status != "exception" {
+		t.Fatalf("status after a second exception = %q, %v; want exception", status, err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications WHERE title = 'Package exception'").Scan(&notifications); err != nil || notifications != 2 {
+		t.Fatalf("exception notifications after a second exception = %d, %v; want 2", notifications, err)
+	}
 	fake.setMilestone("delivered")
 	poll()
 	if err := d.Read.QueryRow("SELECT status FROM packages WHERE id = 1").Scan(&status); err != nil || status != "delivered" {
 		t.Fatalf("status after delivery = %q, %v", status, err)
 	}
-	var notifications int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications WHERE title = 'Package delivered'").Scan(&notifications); err != nil || notifications != 1 {
 		t.Fatalf("delivered notifications = %d, %v; want 1", notifications, err)
+	}
+	var total int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications").Scan(&total); err != nil || total != 3 {
+		t.Fatalf("total notifications = %d, %v; want 3", total, err)
 	}
 	_, before := fake.counts()
 	poll()
