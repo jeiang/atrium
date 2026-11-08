@@ -49,7 +49,7 @@ func newSet(env config.Env, reg *settings.Registry, mods []module.Module, client
 		return set.Guard(ctx, q, key, value)
 	}
 	all := append([]module.Module{
-		coremodule.Module{Version: version, Guard: guard},
+		coremodule.Module{Version: version, Guard: guard, Clients: clients, Now: now},
 		contactsmodule.Module{},
 		mailmodule.Module{Clients: clients, Now: now},
 		calendarmodule.Module{},

@@ -46,6 +46,11 @@ func ApprovedProposal(ctx context.Context) (string, bool) {
 	return id, ok
 }
 
+func ApprovalIsConsent(ctx context.Context) bool {
+	_, ok := ApprovedProposal(ctx)
+	return ok
+}
+
 func IsPaused(pausePath string) bool {
 	_, err := os.Stat(pausePath)
 	return err == nil
@@ -78,7 +83,7 @@ func WriteGate(ctx context.Context, current ModeFunc, action, target string) err
 	if pausePath, ok := ctx.Value(automaticKey{}).(string); ok && IsPaused(pausePath) {
 		return WriteRefused(fmt.Sprintf("refusing automatic mailbox write %s: atrium is paused", strconv.Quote(action)))
 	}
-	if _, ok := ApprovedProposal(ctx); ok {
+	if ApprovalIsConsent(ctx) {
 		return nil
 	}
 	if sent, ok := ctx.Value(operatorSendKey{}).(string); ok && action == AppendAction && target == sent {

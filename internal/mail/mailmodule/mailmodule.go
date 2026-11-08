@@ -84,7 +84,6 @@ func (m Module) Register(mc module.Context) module.Registration {
 			mailCmds.DeletionsCommand(),
 			mailCmds.GmailLabelsCommand(),
 			mailCmds.LiveCommand(),
-			mailCmds.ProposalsCommand(),
 			openloops.Command(mc.Env, m.Now),
 			watches.Command(mc.Env, m.Now),
 			mailCmds.EndpointsCommand(),
