@@ -82,10 +82,7 @@ func (w *Worker) Tick(ctx context.Context) error {
 		return err
 	}
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := scheduler.EnsureNightly(ctx, tx, tz, stamp); err != nil {
-			return err
-		}
-		return scheduler.EnsureBuiltins(ctx, tx, tz, stamp)
+		return scheduler.Ensure(ctx, tx, tz, stamp)
 	})
 	if err != nil {
 		return err

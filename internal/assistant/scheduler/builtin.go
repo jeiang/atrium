@@ -111,11 +111,18 @@ func syncSchedule(ctx context.Context, q db.Querier, job Job, now float64) error
 	return err
 }
 
-func EnsureNightly(ctx context.Context, q db.Querier, tz string, now float64) error {
+func Ensure(ctx context.Context, q db.Querier, tz string, now float64) error {
+	if err := ensureNightly(ctx, q, tz, now); err != nil {
+		return err
+	}
+	return ensureBuiltins(ctx, q, tz, now)
+}
+
+func ensureNightly(ctx context.Context, q db.Querier, tz string, now float64) error {
 	return ensureOne(ctx, q, tz, now, NightlyName)
 }
 
-func EnsureBuiltins(ctx context.Context, q db.Querier, tz string, now float64) error {
+func ensureBuiltins(ctx context.Context, q db.Querier, tz string, now float64) error {
 	rows, err := q.QueryContext(ctx, "SELECT id, name FROM jobs WHERE kind = ?", JobBuiltin)
 	if err != nil {
 		return err

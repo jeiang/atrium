@@ -327,6 +327,9 @@ func resolve(ctx context.Context, q db.Querier, kind Kind, projectID *int64, exp
 }
 
 func Create(ctx context.Context, q db.Querier, now float64, s Spec) (int64, error) {
+	if _, ok := ParseKind(string(s.Kind)); !ok {
+		return 0, fmt.Errorf("unknown thread kind %q", s.Kind)
+	}
 	explicit := Options{Model: s.Model, Effort: s.Effort}
 	if s.ContextLimit != nil {
 		limit, err := CleanContextLimit(s.ContextLimit)
