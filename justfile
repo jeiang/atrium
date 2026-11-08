@@ -1,5 +1,5 @@
-dev := if env("ATRIUM_DEV_SHELL", "") == "1" { "" } else { "nix develop --impure -c" }
-reexec := 'if [ -z "${ATRIUM_DEV_SHELL:-}" ]; then exec nix develop --impure -c bash "$0"; fi'
+dev := if env("ATRIUM_DEV_SHELL", "") == "1" { "" } else { "nix develop -c" }
+reexec := 'if [ -z "${ATRIUM_DEV_SHELL:-}" ]; then exec nix develop -c bash "$0"; fi'
 
 default:
   @just --list
@@ -35,7 +35,7 @@ changed base="v2-develop":
   [ ${#pkgs[@]} -eq 0 ] || go test -count=1 "${pkgs[@]}"
 
 check-eval:
-  nix flake check --no-build --impure
+  nix flake check --no-build
 
 check-quick:
   #!/usr/bin/env bash
@@ -74,7 +74,7 @@ fmt:
   statix check
 
 check extraArgs="":
-  nix flake check --impure --keep-going {{extraArgs}}
+  nix flake check --keep-going {{extraArgs}}
 
 fast-check extraArgs="":
   nix run nixpkgs#nix-fast-build -- --flake '.#checks' --skip-cached --no-nom {{extraArgs}}
