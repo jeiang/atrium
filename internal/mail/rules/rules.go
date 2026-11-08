@@ -250,7 +250,7 @@ func ageMatches(m *Message, days, now float64) bool {
 	return m.DateTS != 0 && (now-m.DateTS)/secondsPerDay >= days
 }
 
-func DomainSuffix(value, suffix string) bool {
+func domainSuffix(value, suffix string) bool {
 	return value == suffix || strings.HasSuffix(value, "."+suffix)
 }
 
@@ -350,7 +350,7 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 			}
 			folded := py.Casefold(v)
 			for _, t := range targets {
-				if DomainSuffix(folded, t) {
+				if domainSuffix(folded, t) {
 					return true, nil
 				}
 			}
@@ -848,7 +848,7 @@ func LearnedGroups(ctx context.Context, q Querier, account string) ([]LearnedGro
 	return out, nil
 }
 
-func LearnedCounts(ctx context.Context, q Querier, account string, columns []string, values []string, excludeID int64) (map[string]int, error) {
+func learnedCounts(ctx context.Context, q Querier, account string, columns []string, values []string, excludeID int64) (map[string]int, error) {
 	where := make([]string, len(columns))
 	for i, c := range columns {
 		where[i] = c + " = ?"
@@ -901,7 +901,7 @@ func LearnedMatch(ctx context.Context, q Querier, m *Message, t Thresholds) (*Le
 		if !allNonEmpty(values) {
 			continue
 		}
-		counts, err := LearnedCounts(ctx, q, m.Account, level.Columns, values, m.ID)
+		counts, err := learnedCounts(ctx, q, m.Account, level.Columns, values, m.ID)
 		if err != nil {
 			return nil, err
 		}

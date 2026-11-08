@@ -105,28 +105,3 @@ func Clear(ctx context.Context, x Execer, messageID int64, folder *string) (bool
 	n, err := res.RowsAffected()
 	return n > 0, err
 }
-
-func List(ctx context.Context, q Querier, account string, limit int) ([]Correction, error) {
-	query, args := "SELECT message_id, account, folder, ts, source FROM corrections", []any{}
-	if account != "" {
-		query += " WHERE account = ?"
-		args = append(args, account)
-	}
-	query += " ORDER BY ts DESC LIMIT ?"
-	args = append(args, limit)
-	rows, err := q.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	out, err := db.Collect(rows, func(r *sql.Rows) (Correction, error) {
-		var c Correction
-		err := r.Scan(&c.MessageID, &c.Account, &c.Folder, &c.TS, &c.Source)
-		return c, err
-	})
-	if out == nil {
-		out = []Correction{}
-	}
-	return out, err
-}
-
-const DefaultListLimit = 100

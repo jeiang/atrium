@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	SourceRaw   = "raw"
-	SourceIndex = "index"
+	sourceRaw   = "raw"
+	sourceIndex = "index"
 )
 
 var Headers = [...]string{"From", "To", "Cc", "Reply-To", "Date", "Subject", "Message-ID", "List-Id"}
@@ -174,7 +174,7 @@ func rowMap(rows *sql.Rows) (map[string]any, error) {
 	return out, rows.Err()
 }
 
-func LatestDecision(ctx context.Context, q Querier, messageID int64) (map[string]any, error) {
+func latestDecision(ctx context.Context, q Querier, messageID int64) (map[string]any, error) {
 	rows, err := q.QueryContext(ctx, "SELECT * FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1", messageID)
 	if err != nil {
 		return nil, err
@@ -231,7 +231,7 @@ func Get(ctx context.Context, q Querier, cacheDir string, messageID int64) (*Vie
 		v.Headers[name] = ""
 	}
 	v.Attachments = []Attachment{}
-	v.BodySource = SourceIndex
+	v.BodySource = sourceIndex
 	if path, ok := RawFile(cacheDir, rawPath.String); ok {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -246,13 +246,13 @@ func Get(ctx context.Context, q Querier, cacheDir string, messageID int64) (*Vie
 				v.Headers[name] = msg.Header(name)
 			}
 		}
-		v.Body, v.Attachments, v.BodySource = plainBody(msg), attachments(msg), SourceRaw
+		v.Body, v.Attachments, v.BodySource = plainBody(msg), attachments(msg), sourceRaw
 	}
 	if v.Body == "" {
 		if v.Body, err = indexBody(ctx, q, messageID); err != nil {
 			return nil, err
 		}
-		v.BodySource = SourceIndex
+		v.BodySource = sourceIndex
 	}
 	if v.Headers["Subject"] == "" {
 		v.Headers["Subject"] = v.Subject
@@ -270,7 +270,7 @@ func Get(ctx context.Context, q Querier, cacheDir string, messageID int64) (*Vie
 	if v.FlagDecision, err = rowMap(rows); err != nil {
 		return nil, err
 	}
-	if v.Decision, err = LatestDecision(ctx, q, messageID); err != nil {
+	if v.Decision, err = latestDecision(ctx, q, messageID); err != nil {
 		return nil, err
 	}
 	v.InInbox, v.Seen, v.Flagged = inInbox != 0, seen != 0, flagged != 0

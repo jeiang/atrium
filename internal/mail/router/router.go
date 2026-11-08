@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -21,6 +20,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/py"
 )
+
+var log = logx.Logger("atrium.router")
 
 var Stages = [...]string{"correction", "operator", "learned", "knn", "llm", "fallback"}
 
@@ -40,8 +41,6 @@ type LLMContext struct {
 	Available bool
 	Down      bool
 }
-
-type Judge func(ctx context.Context, url string, folders []string, catalog string, neighbors []llm.Neighbor, m llm.Message, body string) (string, bool, error)
 
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
@@ -76,17 +75,8 @@ func ReadTuning(ctx context.Context, q Querier, account string) (Tuning, error) 
 }
 
 type Router struct {
-	DB    *db.DB
-	Judge Judge
-	Now   func() float64
-	Log   *slog.Logger
-}
-
-func (r *Router) judge() Judge {
-	if r.Judge != nil {
-		return r.Judge
-	}
-	return llm.JudgeFolder
+	DB  *db.DB
+	Now func() float64
 }
 
 func (r *Router) now() float64 {
@@ -94,13 +84,6 @@ func (r *Router) now() float64 {
 		return r.Now()
 	}
 	return float64(time.Now().UnixNano()) / 1e9
-}
-
-func (r *Router) log() *slog.Logger {
-	if r.Log != nil {
-		return r.Log
-	}
-	return logx.Logger("atrium.router")
 }
 
 func Eligible(ctx context.Context, q Querier, account string) ([]rules.Message, error) {
@@ -316,7 +299,7 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		for i := range near {
 			near[i] = llm.Neighbor{Folder: neighbors[i].Folder, FromDomain: neighbors[i].FromDomain, Subject: neighbors[i].Subject}
 		}
-		folder, confident, err := r.judge()(ctx, lc.URL, lc.Folders, lc.Catalog, near,
+		folder, confident, err := llm.JudgeFolder(ctx, lc.URL, lc.Folders, lc.Catalog, near,
 			llm.Message{Subject: m.Subject, FromName: m.FromName, FromAddr: m.FromAddr}, body)
 		if err != nil {
 			return nil, err
@@ -383,7 +366,7 @@ func (r *Router) RouteAccount(ctx context.Context, account string) (int, error) 
 		d, err := r.Decide(ctx, r.DB.KNN, m, ruleList, &lc, tune)
 		var unavailable *httpx.ServiceUnavailable
 		if errors.As(err, &unavailable) {
-			r.log().Warn(fmt.Sprintf("chat unavailable, deferring %s: %s", account, unavailable))
+			log.Warn(fmt.Sprintf("chat unavailable, deferring %s: %s", account, unavailable))
 			lc.Down = true
 			continue
 		}

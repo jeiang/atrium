@@ -370,8 +370,6 @@ type LearnedRule struct {
 	N      int     `json:"n"`
 }
 
-const DefaultLearnedLimit = 50
-
 func LearnedRulesSummary(ctx context.Context, q rules.Querier, account string, limit int) ([]LearnedRule, error) {
 	thresholds, err := rules.ReadThresholds(ctx, q)
 	if err != nil {
