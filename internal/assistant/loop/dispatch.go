@@ -176,12 +176,12 @@ func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errT
 }
 
 func (x *dispatcher) perform(ctx context.Context, t *tool.Tool, callID int64, use ToolUse) (json.RawMessage, error) {
-	effect := "unknown"
+	name, effect := "unknown", "unknown"
 	if t != nil {
-		effect = string(t.Effect)
+		name, effect = t.Name, string(t.Effect)
 	}
 	ctx, span := obs.Start(ctx, "tool.call", trace.WithAttributes(
-		obs.String(obs.ToolName, use.Name),
+		obs.String(obs.ToolName, name),
 		obs.String(obs.ToolEffect, effect),
 	))
 	started := time.Now()
@@ -201,8 +201,8 @@ func (x *dispatcher) perform(ctx context.Context, t *tool.Tool, callID int64, us
 		obs.Fail(span, class)
 		span.SetAttributes(obs.String(obs.ErrorType, class))
 	}
-	obs.ToolCalls.Add(1, use.Name, strconv.FormatBool(ok))
-	obs.ToolDuration.Observe(duration.Seconds(), use.Name, strconv.FormatBool(ok))
+	obs.ToolCalls.Add(1, name, strconv.FormatBool(ok))
+	obs.ToolDuration.Observe(duration.Seconds(), name, strconv.FormatBool(ok))
 	span.End()
 	return out, err
 }
