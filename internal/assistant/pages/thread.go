@@ -135,7 +135,7 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	back := "/chat/" + strconv.FormatInt(threadID, 10)
-	if _, edit := web.FormField(form, "edit"); edit {
+	if _, edit := web.Value(form, "edit"); edit {
 		_, err := p.svc.EditLast(ctx, threadID, text, attached)
 		if p.refused(w, r, err) {
 			return
@@ -221,9 +221,9 @@ func (p *pages) chatStop(w http.ResponseWriter, r *http.Request) {
 func (p *pages) chatBranch(w http.ResponseWriter, r *http.Request) {
 	threadID, errs := pathInt(r, "thread_id")
 	form := web.FormValues(r)
-	raw, found := web.FormField(form, "seq")
+	raw, found := web.Value(form, "seq")
 	var seq int64
-	if !found {
+	if !found || raw == "" {
 		errs = append(errs, web.Missing("body", "seq"))
 	} else if n, ok := py.LaxInt64(raw); ok {
 		seq = n

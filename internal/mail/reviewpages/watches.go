@@ -59,8 +59,14 @@ func (s *service) packageDismiss(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) birthdayDismiss(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	key, haveKey := web.FormField(form, "key")
-	date, haveDate := web.FormField(form, "date")
+	key, haveKey := web.Value(form, "key")
+	date, haveDate := web.Value(form, "date")
+	if key == "" {
+		haveKey = false
+	}
+	if date == "" {
+		haveDate = false
+	}
 	var problems []web.FieldError
 	if !haveKey {
 		problems = append(problems, web.Missing("body", "key"))

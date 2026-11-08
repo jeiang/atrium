@@ -247,7 +247,7 @@ func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	outcome, _ := web.FormField(web.FormValues(r), "outcome")
+	outcome, _ := web.Value(web.FormValues(r), "outcome")
 	var notice *tpl.Toast
 	_, err := s.live.Resolve(ctx, id, outcome, proposals.Resolver{Actor: "operator", Source: "ui"})
 	var refused live.UndoError

@@ -15,10 +15,11 @@ import (
 func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var offset int
-	if values, given := q["offset"]; given {
-		n, ok := laxInt64(web.LastValue(values, ""))
+	if _, given := q["offset"]; given {
+		raw := web.ValueOr(q, "offset", "")
+		n, ok := laxInt64(raw)
 		if !ok {
-			web.Unprocessable(w, web.BadInt("query", "offset", web.LastValue(values, "")))
+			web.Unprocessable(w, web.BadInt("query", "offset", raw))
 			return
 		}
 		offset = int(max(n, 0))

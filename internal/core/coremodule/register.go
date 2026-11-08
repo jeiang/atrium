@@ -42,7 +42,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			{Module: about.Module(m.Version), Templates: about.Templates()},
 			{Module: mailpages.PauseModule},
 			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env)}), Templates: reviewpages.Templates()},
-			{Module: startOps},
+			{Start: startOps},
 			{Module: startEmbed},
 			{Module: integrations.Module, Templates: integrations.Templates()},
 			{Module: settingspages.Module, Templates: settingspages.Templates()},
@@ -61,13 +61,14 @@ func (m Module) Register(mc module.Context) module.Registration {
 
 var log = logx.Logger("atrium.core")
 
-func startOps(_ chi.Router, d *web.Deps) {
-	stop, err := ops.Start(context.Background(), d.DB)
+func startOps(ctx context.Context, d *web.Deps) error {
+	stop, err := ops.Start(ctx, d.DB)
 	if err != nil {
 		log.Error("ops listener did not start", logx.Err, err.Error())
-		return
+		return nil
 	}
 	d.OnClose(stop)
+	return nil
 }
 
 const embedEvery = time.Minute

@@ -68,7 +68,7 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request, reason, next 
 
 func (s *Server) registerAuthRoutes() {
 	secure := s.secure
-	s.mux.Get(LoginPath, func(w http.ResponseWriter, r *http.Request) {
+	s.route(accessPublic, http.MethodGet, LoginPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		q := r.URL.Query()
 		if _, ok := IdentityOf(r.Context()); ok {
@@ -77,7 +77,7 @@ func (s *Server) registerAuthRoutes() {
 		}
 		s.loginPage(w, r, q.Get("reason"), q.Get("next"))
 	})
-	s.mux.Post(LoginPath, func(w http.ResponseWriter, r *http.Request) {
+	s.route(accessPublic, http.MethodPost, LoginPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		form := FormValues(r)
 		next := form.Get("next")
@@ -91,7 +91,7 @@ func (s *Server) registerAuthRoutes() {
 	})
 	s.registerLinkRoutes()
 	s.registerWizardRoutes()
-	s.mux.Get(CallbackPath, func(w http.ResponseWriter, r *http.Request) {
+	s.route(accessPublic, http.MethodGet, CallbackPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		q := r.URL.Query()
 		if s.oidc.IsTestState(q.Get("state")) {
@@ -162,9 +162,9 @@ func (s *Server) signInFailed(w http.ResponseWriter, r *http.Request, err error,
 }
 
 func (s *Server) registerWizardRoutes() {
-	s.mux.Get(WizardPath, s.wizardPage)
-	s.mux.Get(WizardPath+"/preset", s.wizardPreset)
-	s.mux.Post(testPath, s.wizardTest)
-	s.mux.Get(testPath+"/status", s.wizardStatus)
-	s.mux.Post(WizardPath+"/activate", s.wizardActivate)
+	s.route(accessAdmin, http.MethodGet, WizardPath, s.wizardPage)
+	s.route(accessAdmin, http.MethodGet, WizardPath+"/preset", s.wizardPreset)
+	s.route(accessAdmin, http.MethodPost, testPath, s.wizardTest)
+	s.route(accessAdmin, http.MethodGet, testPath+"/status", s.wizardStatus)
+	s.route(accessAdmin, http.MethodPost, WizardPath+"/activate", s.wizardActivate)
 }

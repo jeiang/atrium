@@ -140,7 +140,7 @@ func newLinkSite(t *testing.T) *linkSite {
 	if err != nil {
 		t.Fatal(err)
 	}
-	render, err := web.NewRenderer(cfg, d, tpl.Config{})
+	render, err := web.NewRenderer(tpl.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}

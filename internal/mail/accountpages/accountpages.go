@@ -70,11 +70,11 @@ func healthName(id string) string { return "mail_" + id }
 
 func Module(r chi.Router, d *web.Deps) {
 	h := handlers{d}
-	r.Get(path, h.index)
-	r.Post(path+"/accounts", h.add)
-	r.Post(path+"/accounts/{id}", h.update)
-	r.Post(path+"/accounts/{id}/test", h.test)
-	r.Post(path+"/accounts/{id}/remove", h.remove)
+	d.Admin(http.MethodGet, "/settings/mail", h.index)
+	d.Admin(http.MethodPost, "/settings/mail/accounts", h.add)
+	d.Admin(http.MethodPost, "/settings/mail/accounts/{id}", h.update)
+	d.Admin(http.MethodPost, "/settings/mail/accounts/{id}/test", h.test)
+	d.Admin(http.MethodPost, "/settings/mail/accounts/{id}/remove", h.remove)
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {

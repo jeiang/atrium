@@ -78,7 +78,6 @@ func (g *gzipWriter) startGzip() {
 	g.mode = gzipOn
 	h.Del("Content-Length")
 	h.Set("Content-Encoding", "gzip")
-	h.Add("Vary", "Accept-Encoding")
 	g.sendHeader()
 	g.gz, _ = gzip.NewWriterLevel(g.ResponseWriter, gzip.BestCompression)
 	_, _ = g.gz.Write(g.buf.Bytes())

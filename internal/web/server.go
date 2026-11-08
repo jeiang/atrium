@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net/http"
 	"net/url"
 	"strings"
@@ -27,14 +26,45 @@ var log = logx.Logger("atrium.web")
 
 type ErrorPage func(w http.ResponseWriter, r *http.Request, status int, problem string)
 
+type access uint8
+
+const (
+	accessDefault access = iota
+	accessPublic
+	accessAdmin
+)
+
+type routeRule struct {
+	method  string
+	pattern string
+	access  access
+}
+
 type Deps struct {
 	Cfg      config.Config
 	Env      config.Env
 	DB       *db.DB
 	Render   *Renderer
 	Error    func(w http.ResponseWriter, r *http.Request, status int, detail string)
+	OnFrame  func(FrameFunc)
 	Stopping <-chan struct{}
 	OnClose  func(func())
+
+	router chi.Router
+	routes *[]routeRule
+}
+
+func (d *Deps) Public(method, pattern string, h http.HandlerFunc) {
+	d.route(method, pattern, accessPublic, h)
+}
+
+func (d *Deps) Admin(method, pattern string, h http.HandlerFunc) {
+	d.route(method, pattern, accessAdmin, h)
+}
+
+func (d *Deps) route(method, pattern string, class access, h http.HandlerFunc) {
+	d.router.Method(method, pattern, h)
+	*d.routes = append(*d.routes, routeRule{method: method, pattern: pattern, access: class})
 }
 
 type Module func(r chi.Router, d *Deps)
@@ -46,17 +76,17 @@ type Options struct {
 	Auth         []string
 	AllowedHosts []string
 	Public       func(*http.Request) bool
-	ErrorPage    ErrorPage
 	Render       *Renderer
-	Static       fs.FS
 	Modules      []Module
+	Home         string
 	OIDC         *oidc.Service
 	LoginLinks   *loginlink.Service
-	NoAuth       bool
+	Policy       *Policy
+	OnReady      func(*Deps) error
 }
 
 type Server struct {
-	auth     AuthSet
+	auth     Policy
 	oidc     *oidc.Service
 	links    *loginlink.Service
 	render   *Renderer
@@ -68,23 +98,30 @@ type Server struct {
 	stopOnce sync.Once
 	starting atomic.Bool
 	closers  []func()
+	routes   []routeRule
 }
 
 func New(o Options) (*Server, error) {
-	auth, err := ParseAuth(o.Auth)
-	if err != nil {
-		return nil, err
+	var auth Policy
+	if o.Policy != nil {
+		auth = *o.Policy
+	} else {
+		var err error
+		auth, err = ParseAuth(o.Auth)
+		if err != nil {
+			return nil, err
+		}
 	}
-	if o.Static == nil {
-		o.Static = Static
+	if auth.Open && !auth.Local() {
+		return nil, errors.New("open authentication requires local mode")
 	}
 	if o.Env == nil {
 		o.Env = config.OS
 	}
-	if auth.OIDC && (o.OIDC == nil || o.Render == nil || (o.LoginLinks == nil && o.DB == nil)) {
+	if auth.OIDC() && (o.OIDC == nil || o.Render == nil || (o.LoginLinks == nil && o.DB == nil)) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
-	s := &Server{mux: chi.NewRouter(), errPage: o.ErrorPage, oidc: o.OIDC, render: o.Render, auth: auth, links: o.LoginLinks}
+	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, links: o.LoginLinks}
 	if s.links == nil && o.DB != nil {
 		s.links = loginlink.New(o.DB)
 	}
@@ -94,7 +131,7 @@ func New(o Options) (*Server, error) {
 	if s.errPage == nil {
 		s.errPage = plainErrorPage
 	}
-	static := newStaticHandler(o.Static)
+	static := newStaticHandler(Static)
 	s.mux.NotFound(s.notFound)
 	s.mux.MethodNotAllowed(s.methodNotAllowed)
 	s.mux.Get(HealthPath, func(w http.ResponseWriter, _ *http.Request) {
@@ -107,29 +144,45 @@ func New(o Options) (*Server, error) {
 	s.mux.Handle(StaticPrefix+"*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		static.serve(w, r, func(status int, detail string) { s.Error(w, r, status, detail) })
 	}))
+	home := o.Home
+	if home == "" {
+		home = "/about"
+	}
 	s.mux.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/chat", http.StatusSeeOther)
+		http.Redirect(w, r, home, http.StatusSeeOther)
 	})
 	s.stop = make(chan struct{})
 	deps := &Deps{
 		Cfg: o.Cfg, Env: o.Env, DB: o.DB, Render: o.Render, Error: s.Error, Stopping: s.stop,
+		OnFrame: func(FrameFunc) {},
 		OnClose: func(f func()) { s.closers = append(s.closers, f) },
+		router:  s.mux, routes: &s.routes,
+	}
+	if o.Render != nil {
+		deps.OnFrame = o.Render.OnFrame
 	}
 	s.secure = func(r *http.Request) bool {
 		return hasSecureTransport(r, strings.HasPrefix(config.PublicURL(o.Env), "https://"))
 	}
-	if auth.OIDC {
+	if auth.OIDC() {
 		o.Render.oidcOn.Store(true)
 		s.registerAuthRoutes()
+	}
+	if o.OnReady != nil {
+		if err := o.OnReady(deps); err != nil {
+			for _, close := range s.closers {
+				close()
+			}
+			return nil, err
+		}
 	}
 	for _, register := range o.Modules {
 		register(s.mux, deps)
 	}
-	guard := NewGuard(auth, o.AllowedHosts, o.Public)
+	guard := NewGuard(auth, o.AllowedHosts, o.Public, s.access)
 	guard.secure = s.secure
 	guard.sessions = o.OIDC
 	guard.errPage = s.errPage
-	guard.noAuth = o.NoAuth
 	if o.DB != nil {
 		guard.admin = func(ctx context.Context) string { return oidc.AdminGroup(ctx, o.DB.Read) }
 		guard.bodyCap = func(ctx context.Context) (int, error) { return config.Limit(ctx, o.DB.Read, config.KeyBodyCap) }
@@ -139,6 +192,25 @@ func New(o Options) (*Server, error) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }
+
+func (s *Server) route(class access, method, pattern string, h http.HandlerFunc) {
+	s.mux.Method(method, pattern, h)
+	s.routes = append(s.routes, routeRule{method: method, pattern: pattern, access: class})
+}
+
+func (s *Server) access(r *http.Request) access {
+	ctx := chi.NewRouteContext()
+	if !s.mux.Match(ctx, r.Method, r.URL.Path) {
+		return accessDefault
+	}
+	pattern := ctx.RoutePattern()
+	for _, rule := range s.routes {
+		if rule.method == r.Method && rule.pattern == pattern {
+			return rule.access
+		}
+	}
+	return accessDefault
+}
 
 func (s *Server) stopped() bool {
 	select {

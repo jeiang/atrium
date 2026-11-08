@@ -106,7 +106,7 @@ func newSiteOn(t *testing.T, d *db.DB, options ...siteOption) *site {
 	for _, o := range options {
 		o(s)
 	}
-	render, err := web.NewRenderer(cfg, d, tpl.Config{Modules: []fs.FS{Templates()}})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,9 +21,9 @@ func (s *service) dlAddGet(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	magnet, _ := web.FormField(form, "magnet")
-	torrent, _ := web.FormField(form, "torrent")
-	name, _ := web.FormField(form, "name")
+	magnet, _ := web.Value(form, "magnet")
+	torrent, _ := web.Value(form, "torrent")
+	name, _ := web.Value(form, "name")
 	mode := web.FormString(form, "mode", dlModeMedia)
 	magnet = strings.TrimSpace(magnet)
 	if !slices.Contains(dlAddModes, mode) {

@@ -124,10 +124,10 @@ func (s *service) ruleNew(w http.ResponseWriter, r *http.Request) {
 	}
 	data := ruleEditData{IsNew: true, Suggestions: []map[string]any{}, Errors: []string{}}
 	ctx := r.Context()
-	if values, given := q["message"]; given {
-		sourceID, ok := laxInt64(web.LastValue(values, ""))
+	if _, given := q["message"]; given {
+		sourceID, ok := laxInt64(web.ValueOr(q, "message", ""))
 		if !ok {
-			web.Unprocessable(w, web.BadInt("query", "message", web.LastValue(values, "")))
+			web.Unprocessable(w, web.BadInt("query", "message", web.ValueOr(q, "message", "")))
 			return
 		}
 		features, err := ruleedit.MessageFeatures(ctx, s.deps.DB.Read, sourceID)
@@ -155,11 +155,11 @@ func (s *service) ruleNew(w http.ResponseWriter, r *http.Request) {
 func (s *service) ruleCondition(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	field, op := "from_addr", "eq"
-	if values, given := q["field"]; given {
-		field = web.LastValue(values, "")
+	if _, given := q["field"]; given {
+		field = web.ValueOr(q, "field", "")
 	}
-	if values, given := q["op"]; given {
-		op = web.LastValue(values, "")
+	if _, given := q["op"]; given {
+		op = web.ValueOr(q, "op", "")
 	}
 	c := map[string]any{"field": field, "op": op, "value": web.QueryValue(q, "value")}
 	s.fragment(w, r, "_condition_row.gohtml", conditionData{C: c, Focus: web.QueryValue(q, "focus")}, nil)
@@ -309,7 +309,10 @@ func (s *service) ruleMove(w http.ResponseWriter, r *http.Request) {
 	id := web.PathParam(r, "rule_id")
 	form := web.FormValues(r)
 	var errs []web.FieldError
-	direction, given := web.FormField(form, "direction")
+	direction, given := web.Value(form, "direction")
+	if given && direction == "" {
+		given = false
+	}
 	switch {
 	case !given:
 		errs = append(errs, web.Missing("body", "direction"))

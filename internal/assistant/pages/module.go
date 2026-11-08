@@ -236,8 +236,8 @@ func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 }
 
 func formInt(form map[string][]string, where, name string, def int64, errs *[]web.FieldError) int64 {
-	raw, ok := web.FormField(form, name)
-	if !ok {
+	raw, ok := web.Value(form, name)
+	if !ok || raw == "" {
 		return def
 	}
 	n, valid := py.LaxInt64(raw)

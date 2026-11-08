@@ -36,8 +36,8 @@ func (s *Set) modulesPage() web.Page {
 		panic(err)
 	}
 	return web.Page{Templates: sub, Module: func(r chi.Router, d *web.Deps) {
-		r.Get(modulesPath, func(w http.ResponseWriter, r *http.Request) { s.renderModules(w, r, d, http.StatusOK, nil) })
-		r.Post(modulesPath+"/{name}", func(w http.ResponseWriter, r *http.Request) { s.toggle(w, r, d) })
+		d.Admin(http.MethodGet, modulesPath, func(w http.ResponseWriter, r *http.Request) { s.renderModules(w, r, d, http.StatusOK, nil) })
+		d.Admin(http.MethodPost, modulesPath+"/{name}", func(w http.ResponseWriter, r *http.Request) { s.toggle(w, r, d) })
 	}}
 }
 

@@ -68,5 +68,5 @@ func newSet(env config.Env, reg *settings.Registry, mods []module.Module, client
 
 func commands(env config.Env, reg *settings.Registry, mods []module.Module, clients run.Clients, now func() float64) []*cli.Command {
 	set := newSet(env, reg, mods, clients, now)
-	return append(set.Commands(), web.ServeCommand(set.Pages()...))
+	return append(set.Commands(), web.ServeCommand(set, set.Pages()...))
 }

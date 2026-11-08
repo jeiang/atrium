@@ -3,6 +3,7 @@ package web_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -663,7 +666,9 @@ func runServe(t *testing.T, args ...string) (int, string) {
 	t.Setenv("COLUMNS", "")
 	t.Setenv("ATRIUM_PUBLIC_HOST", "")
 	app := cli.New("atrium", nil)
-	app.Add(web.ServeCommand())
+	app.Add(web.ServeCommand(web.BootFunc{OpenFunc: func(context.Context) (*db.DB, config.Config, error) {
+		return nil, config.Config{}, errors.New("test boot")
+	}}))
 	var stdout, stderr bytes.Buffer
 	code := app.Run(context.Background(), append([]string{"serve"}, args...), &stdout, &stderr)
 	return code, stderr.String()

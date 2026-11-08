@@ -5,29 +5,53 @@ import (
 	"fmt"
 )
 
-type AuthSet struct {
-	Proxy, Local, OIDC bool
+type Mode uint8
+
+const (
+	ModeProxy Mode = iota + 1
+	ModeLocal
+	ModeOIDC
+	ModeProxyOIDC
+)
+
+type Policy struct {
+	Mode Mode
+	Open bool
 }
 
-func ParseAuth(modes []string) (AuthSet, error) {
+func (p Policy) Local() bool    { return p.Mode == ModeLocal }
+func (p Policy) Proxy() bool    { return p.Mode == ModeProxy || p.Mode == ModeProxyOIDC }
+func (p Policy) OIDC() bool     { return p.Mode == ModeOIDC || p.Mode == ModeProxyOIDC }
+func (p Policy) Enforced() bool { return !p.Open }
+
+func ParseAuth(modes []string) (Policy, error) {
 	if len(modes) == 0 {
-		return AuthSet{Proxy: true}, nil
+		return Policy{Mode: ModeProxy}, nil
 	}
-	var set AuthSet
+	var proxy, local, oidc bool
 	for _, mode := range modes {
 		switch mode {
 		case AuthProxy:
-			set.Proxy = true
+			proxy = true
 		case AuthLocal:
-			set.Local = true
+			local = true
 		case AuthOIDC:
-			set.OIDC = true
+			oidc = true
 		default:
-			return AuthSet{}, fmt.Errorf("unknown auth mode %q", mode)
+			return Policy{}, fmt.Errorf("unknown auth mode %q", mode)
 		}
 	}
-	if set.Local && (set.Proxy || set.OIDC) {
-		return AuthSet{}, errors.New("auth mode local cannot combine with another mode")
+	if local && (proxy || oidc) {
+		return Policy{}, errors.New("auth mode local cannot combine with another mode")
 	}
-	return set, nil
+	switch {
+	case local:
+		return Policy{Mode: ModeLocal}, nil
+	case proxy && oidc:
+		return Policy{Mode: ModeProxyOIDC}, nil
+	case oidc:
+		return Policy{Mode: ModeOIDC}, nil
+	default:
+		return Policy{Mode: ModeProxy}, nil
+	}
 }

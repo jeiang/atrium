@@ -45,22 +45,22 @@ type UsageData struct {
 }
 
 func (p *pages) settingsRoutes(r chi.Router) {
-	r.Get("/settings", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
-	r.Get("/settings/assistant", p.assistantSettings)
-	r.Post("/settings/assistant", p.assistantSave)
-	r.Get("/settings/usage", p.usagePage)
-	r.Get("/settings/skills", p.skillsIndex)
-	r.Post("/settings/skills", p.skillSave)
-	r.Get("/settings/skills/export", p.skillsExport)
-	r.Post("/settings/skills/import", p.skillsImport)
-	r.Post("/settings/skills/{name}/delete", p.skillDelete)
-	r.Get("/settings/subagents", p.subagentsIndex)
-	r.Post("/settings/subagents", p.subagentSave)
-	r.Post("/settings/subagents/{name}/toggle", p.subagentToggle)
-	r.Post("/settings/subagents/{name}/delete", p.subagentDelete)
-	r.Get("/settings/prompts", p.promptsIndex)
-	r.Post("/settings/prompts/{key}", p.promptSave)
-	r.Post("/settings/prompts/{key}/reset", p.promptReset)
+	p.deps.Admin(http.MethodGet, "/settings", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
+	p.deps.Admin(http.MethodGet, "/settings/assistant", p.assistantSettings)
+	p.deps.Admin(http.MethodPost, "/settings/assistant", p.assistantSave)
+	p.deps.Admin(http.MethodGet, "/settings/usage", p.usagePage)
+	p.deps.Admin(http.MethodGet, "/settings/skills", p.skillsIndex)
+	p.deps.Admin(http.MethodPost, "/settings/skills", p.skillSave)
+	p.deps.Admin(http.MethodGet, "/settings/skills/export", p.skillsExport)
+	p.deps.Admin(http.MethodPost, "/settings/skills/import", p.skillsImport)
+	p.deps.Admin(http.MethodPost, "/settings/skills/{name}/delete", p.skillDelete)
+	p.deps.Admin(http.MethodGet, "/settings/subagents", p.subagentsIndex)
+	p.deps.Admin(http.MethodPost, "/settings/subagents", p.subagentSave)
+	p.deps.Admin(http.MethodPost, "/settings/subagents/{name}/toggle", p.subagentToggle)
+	p.deps.Admin(http.MethodPost, "/settings/subagents/{name}/delete", p.subagentDelete)
+	p.deps.Admin(http.MethodGet, "/settings/prompts", p.promptsIndex)
+	p.deps.Admin(http.MethodPost, "/settings/prompts/{key}", p.promptSave)
+	p.deps.Admin(http.MethodPost, "/settings/prompts/{key}/reset", p.promptReset)
 }
 
 func (p *pages) settings(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {
