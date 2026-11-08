@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations"
+	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notion/pages"
@@ -67,7 +68,7 @@ func (m Module) Register(module.Context) module.Registration {
 				return "", err
 			},
 		}},
-		Pages:    []web.Page{{Module: pages.Module(pages.Options{}), Templates: pages.Templates()}},
+		Pages:    []web.Page{{Module: pages.Module(pages.Options{Chat: llm.ChatJSON}), Templates: pages.Templates()}},
 		Commands: []*cli.Command{notion.Command(notion.Options{Env: env})},
 		Tools: func(r *registry.Registry) error {
 			notiontools.RegisterProposalKinds()
