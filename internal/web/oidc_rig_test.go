@@ -44,15 +44,15 @@ type rig struct {
 	url string
 }
 
-func probe(r chi.Router, _ *web.Deps) {
+func probe(r chi.Router, d *web.Deps) {
 	who := func(w http.ResponseWriter, r *http.Request) {
 		id, ok := web.IdentityOf(r.Context())
 		_, _ = io.WriteString(w, "who="+boolText(ok)+" source="+id.Source+" admin="+boolText(id.Admin)+" sub="+id.Subject)
 	}
 	r.Get("/ping", who)
-	r.Get("/settings/ping", who)
-	r.Post("/settings/ping", who)
-	r.Post("/live/resume", who)
+	d.Admin(http.MethodGet, "/settings/ping", who)
+	d.Admin(http.MethodPost, "/settings/ping", who)
+	d.Admin(http.MethodPost, "/live/resume", who)
 	r.Get("/public/file", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "public") })
 }
 

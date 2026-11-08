@@ -55,9 +55,9 @@ func Module(r chi.Router, d *web.Deps) {
 	}()
 	d.OnClose(func() { <-done })
 	h := handlers{d}
-	r.Get(path, h.index)
-	r.Post(path+"/{name}/test", h.test)
-	r.Post(path+"/{name}/disconnect", h.disconnect)
+	d.Admin(http.MethodGet, path, h.index)
+	d.Admin(http.MethodPost, path+"/{name}/test", h.test)
+	d.Admin(http.MethodPost, path+"/{name}/disconnect", h.disconnect)
 }
 
 func watch(d *web.Deps) {

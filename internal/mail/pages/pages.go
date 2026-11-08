@@ -37,7 +37,7 @@ func Templates() fs.FS {
 func PauseModule(r chi.Router, d *web.Deps) {
 	s := &service{deps: d, live: &live.Live{DB: d.DB, Cfg: d.Cfg}}
 	r.Post("/live/pause", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, true) })
-	r.Post("/live/resume", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })
+	d.Admin(http.MethodPost, "/live/resume", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })
 }
 
 func Globals() map[string]any {

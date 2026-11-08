@@ -49,13 +49,7 @@ func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, erro
 	if _, ok := extra.Globals["module_enabled"]; !ok {
 		extra.Globals["module_enabled"] = func(string) bool { return true }
 	}
-	enabled, _ := extra.Globals["module_enabled"].(func(string) bool)
-	extra.Globals["module_enabled"] = func(name string) bool {
-		if name == "auth" {
-			return rd.oidcOn.Load()
-		}
-		return enabled(name)
-	}
+	extra.Globals["auth_enabled"] = func() bool { return rd.oidcOn.Load() }
 	engine, err := tpl.New(extra)
 	if err != nil {
 		return nil, err

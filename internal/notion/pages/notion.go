@@ -37,8 +37,8 @@ func (s *service) view(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) link(w http.ResponseWriter, r *http.Request) {
-	target, ok := web.FormField(web.FormValues(r), "target")
-	if !ok {
+	target, ok := web.Value(web.FormValues(r), "target")
+	if !ok || target == "" {
 		web.Unprocessable(w, web.Missing("body", "target"))
 		return
 	}

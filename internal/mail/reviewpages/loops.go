@@ -86,7 +86,7 @@ func (s *service) loopSnooze(w http.ResponseWriter, r *http.Request) {
 	snooze, err := openloops.SnoozeDefault(r.Context(), s.deps.DB.Read)
 	check(err)
 	days := int64(snooze)
-	if raw, given := web.FormField(web.FormValues(r), "days"); given {
+	if raw, given := web.Value(web.FormValues(r), "days"); given && raw != "" {
 		n, valid := clampDays(raw)
 		if !valid {
 			errs = append(errs, web.BadInt("body", "days", raw))
@@ -120,8 +120,8 @@ func (s *service) loopDismiss(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) loopDismissAll(w http.ResponseWriter, r *http.Request) {
-	state, given := web.FormField(web.FormValues(r), "state")
-	if !given {
+	state, given := web.Value(web.FormValues(r), "state")
+	if !given || state == "" {
 		web.Unprocessable(w, web.Missing("body", "state"))
 		return
 	}

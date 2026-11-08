@@ -49,13 +49,13 @@ func Module(r chi.Router, d *web.Deps) {
 	}()
 	d.OnClose(func() { <-done })
 	h := handlers{d}
-	r.Get(page, h.index)
-	r.Post(page+"/account", h.connect)
-	r.Post(page+"/probe", h.probe)
-	r.Post(page+"/channels/{name}/test", h.test)
-	r.Post(page+"/channels/{name}/content", h.content)
-	r.Post(page+"/channels/{name}/reset", h.reset)
-	r.Post(page+"/{id}/resend", h.resend)
+	d.Admin(http.MethodGet, page, h.index)
+	d.Admin(http.MethodPost, page+"/account", h.connect)
+	d.Admin(http.MethodPost, page+"/probe", h.probe)
+	d.Admin(http.MethodPost, page+"/channels/{name}/test", h.test)
+	d.Admin(http.MethodPost, page+"/channels/{name}/content", h.content)
+	d.Admin(http.MethodPost, page+"/channels/{name}/reset", h.reset)
+	d.Admin(http.MethodPost, page+"/{id}/resend", h.resend)
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {

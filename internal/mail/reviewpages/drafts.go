@@ -89,8 +89,8 @@ func (s *service) draftPage(w http.ResponseWriter, r *http.Request) {
 func (s *service) draftUpdate(w http.ResponseWriter, r *http.Request) {
 	id, errs := pathInt(r, "draft_id")
 	form := web.FormValues(r)
-	account, found := web.FormField(form, "account")
-	if !found {
+	account, found := web.Value(form, "account")
+	if !found || account == "" {
 		errs = append(errs, web.Missing("body", "account"))
 	}
 	if len(errs) > 0 {
@@ -99,7 +99,7 @@ func (s *service) draftUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	changes := map[string]any{"account": account}
 	for _, name := range []string{"to", "cc", "subject", "body"} {
-		value, _ := web.FormField(form, name)
+		value, _ := web.Value(form, name)
 		changes[name] = value
 	}
 	_, err := s.drafts.Update(detached(r), id, changes)
@@ -132,7 +132,7 @@ func (s *service) draftSend(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	updated, _ := web.FormField(web.FormValues(r), "updated_at")
+	updated, _ := web.Value(web.FormValues(r), "updated_at")
 	var result drafts.Result
 	var err error
 	if at, perr := strconv.ParseFloat(updated, 64); perr == nil {
@@ -168,7 +168,7 @@ func (s *service) draftResolve(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	outcome, _ := web.FormField(web.FormValues(r), "outcome")
+	outcome, _ := web.Value(web.FormValues(r), "outcome")
 	var verdict string
 	switch outcome {
 	case "sent":

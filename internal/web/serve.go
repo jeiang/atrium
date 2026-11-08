@@ -67,6 +67,7 @@ type Page struct {
 	Templates fs.FS
 	Globals   map[string]any
 	Public    func(config.Config, config.Env, *db.DB) func(*http.Request) bool
+	Home      string
 }
 
 func ServeCommand(pages ...Page) *cli.Command {
@@ -160,6 +161,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string, po
 	var templates []fs.FS
 	globals := map[string]any{}
 	var public []func(*http.Request) bool
+	home := ""
 	for _, p := range a.pages {
 		modules = append(modules, p.Module)
 		if p.Public != nil {
@@ -167,6 +169,9 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string, po
 		}
 		if p.Templates != nil {
 			templates = append(templates, p.Templates)
+		}
+		if p.Home != "" {
+			home = p.Home
 		}
 		maps.Copy(globals, p.Globals)
 	}
@@ -181,7 +186,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string, po
 	if err != nil {
 		return err
 	}
-	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions})
+	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home})
 	if err != nil {
 		return err
 	}

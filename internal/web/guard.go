@@ -179,7 +179,7 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 		if err == nil {
 			who.NoAuth = who.Source == SourceLocal && g.auth.Open
 			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, who))
-			if !who.Admin && (class == accessAdmin || adminRoute(r)) {
+			if !who.Admin && class == accessAdmin {
 				setSecurityHeaders(w.Header())
 				g.issueCSRF(w, r, token, fresh)
 				r = r.WithContext(context.WithValue(context.WithValue(r.Context(), csrfKey{}, token), adminOnlyKey{}, true))

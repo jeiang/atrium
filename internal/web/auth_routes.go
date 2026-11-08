@@ -162,9 +162,9 @@ func (s *Server) signInFailed(w http.ResponseWriter, r *http.Request, err error,
 }
 
 func (s *Server) registerWizardRoutes() {
-	s.mux.Get(WizardPath, s.wizardPage)
-	s.mux.Get(WizardPath+"/preset", s.wizardPreset)
-	s.mux.Post(testPath, s.wizardTest)
-	s.mux.Get(testPath+"/status", s.wizardStatus)
-	s.mux.Post(WizardPath+"/activate", s.wizardActivate)
+	s.route(accessAdmin, http.MethodGet, WizardPath, s.wizardPage)
+	s.route(accessAdmin, http.MethodGet, WizardPath+"/preset", s.wizardPreset)
+	s.route(accessAdmin, http.MethodPost, testPath, s.wizardTest)
+	s.route(accessAdmin, http.MethodGet, testPath+"/status", s.wizardStatus)
+	s.route(accessAdmin, http.MethodPost, WizardPath+"/activate", s.wizardActivate)
 }

@@ -69,7 +69,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name:     module.Assistant,
 		Requires: []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
-		Pages:    []web.Page{{Module: chatpages.Module(chat), Templates: chatpages.Templates()}},
+		Pages:    []web.Page{{Module: chatpages.Module(chat), Templates: chatpages.Templates(), Home: "/chat"}},
 		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled), skillscmd.Command(mc.Env)},
 		Tools:    addTools,
 	}

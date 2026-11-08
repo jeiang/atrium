@@ -44,8 +44,8 @@ func dlSoft(err error) (string, bool) {
 
 func dlLastValues(form url.Values) map[string]string {
 	out := make(map[string]string, len(form))
-	for key, values := range form {
-		out[key] = web.LastValue(values, "")
+	for key := range form {
+		out[key] = web.ValueOr(form, key, "")
 	}
 	return out
 }
@@ -192,7 +192,7 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	var errs []web.FieldError
 	var index int64
-	if raw, found := web.FormField(form, "index"); !found {
+	if raw, found := web.Value(form, "index"); !found || raw == "" {
 		errs = append(errs, web.Missing("body", "index"))
 	} else if n, ok := laxInt64(raw); ok {
 		index = n
@@ -200,7 +200,7 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 		errs = append(errs, web.BadInt("body", "index", raw))
 	}
 	wanted := int64(1)
-	if raw, found := web.FormField(form, "wanted"); found {
+	if raw, found := web.Value(form, "wanted"); found && raw != "" {
 		if n, ok := laxInt64(raw); ok {
 			wanted = n
 		} else {
@@ -292,8 +292,8 @@ func (s *service) dlFind(ctx context.Context, id string) (*media.Qbit, string, m
 
 func (s *service) dlIgnorePost(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	id, found := web.FormField(form, "id")
-	if !found {
+	id, found := web.Value(form, "id")
+	if !found || id == "" {
 		web.Unprocessable(w, web.Missing("body", "id"))
 		return
 	}

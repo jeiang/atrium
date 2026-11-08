@@ -78,6 +78,7 @@ type Options struct {
 	Public       func(*http.Request) bool
 	Render       *Renderer
 	Modules      []Module
+	Home         string
 	OIDC         *oidc.Service
 	LoginLinks   *loginlink.Service
 	Policy       *Policy
@@ -142,8 +143,12 @@ func New(o Options) (*Server, error) {
 	s.mux.Handle(StaticPrefix+"*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		static.serve(w, r, func(status int, detail string) { s.Error(w, r, status, detail) })
 	}))
+	home := o.Home
+	if home == "" {
+		home = "/about"
+	}
 	s.mux.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/about", http.StatusSeeOther)
+		http.Redirect(w, r, home, http.StatusSeeOther)
 	})
 	s.stop = make(chan struct{})
 	deps := &Deps{

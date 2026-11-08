@@ -99,8 +99,8 @@ func (s *service) messagePage(w http.ResponseWriter, r *http.Request) {
 func (s *service) correctForm(w http.ResponseWriter, r *http.Request) {
 	id, errs := pathInt(r, "message_id")
 	context := contextMessage
-	if values, given := r.URL.Query()["context"]; given {
-		if context = web.LastValue(values, ""); context != contextRow && context != contextMessage {
+	if value, given := web.Value(r.URL.Query(), "context"); given {
+		if context = value; context != contextRow && context != contextMessage {
 			errs = append(errs, web.BadLiteral("query", "context", context, "'row'", "'message'"))
 		}
 	}

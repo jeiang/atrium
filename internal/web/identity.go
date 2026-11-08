@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
@@ -135,17 +134,3 @@ func expireCookie(w http.ResponseWriter, name string, secure bool) {
 }
 
 func hasSecureTransport(r *http.Request, publicSecure bool) bool { return publicSecure || isHTTPS(r) }
-
-func routeMatches(pattern, path string) bool {
-	want := strings.Split(strings.Trim(pattern, "/"), "/")
-	got := strings.Split(strings.Trim(strings.ToLower(path), "/"), "/")
-	for i, seg := range want {
-		if seg == "*" {
-			return true
-		}
-		if i >= len(got) || got[i] != seg {
-			return false
-		}
-	}
-	return len(got) == len(want)
-}

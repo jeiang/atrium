@@ -116,7 +116,7 @@ func selectionOf(p *proposals.Proposal, form url.Values) (py.Dict, error) {
 		for i, g := range groups {
 			group, _ := g.(py.Dict)
 			var name any
-			if v, ok := web.FormLast(form, fmt.Sprintf("name-%d", i)); ok {
+			if v, ok := web.Value(form, fmt.Sprintf("name-%d", i)); ok {
 				name = v
 			}
 			messages, _ := group.Get("messages")
@@ -160,7 +160,7 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	var selection any
 	var done *proposals.Proposal
-	if all, _ := web.FormLast(form, "all"); all == "" {
+	if all, _ := web.Value(form, "all"); all == "" {
 		var picked py.Dict
 		if picked, err = selectionOf(found, form); picked != nil {
 			selection = picked
@@ -190,7 +190,7 @@ func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	forever, _ := web.FormField(web.FormValues(r), "forever")
+	forever, _ := web.Value(web.FormValues(r), "forever")
 	err := proposals.Dismiss(detached(r), s.deps.DB.Write, id, forever != "", s.now())
 	var refused proposals.ProposalError
 	if errors.As(err, &refused) {
@@ -262,7 +262,7 @@ func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	outcome, _ := web.FormField(web.FormValues(r), "outcome")
+	outcome, _ := web.Value(web.FormValues(r), "outcome")
 	_, err := s.pipeline.Resolve(detached(r), id, outcome, proposals.Resolver{Actor: "operator", Source: "ui"})
 	var refused proposals.ProposalError
 	if errors.As(err, &refused) {

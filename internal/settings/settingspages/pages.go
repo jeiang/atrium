@@ -74,10 +74,10 @@ type handlers struct{ d *web.Deps }
 
 func Module(r chi.Router, d *web.Deps) {
 	h := handlers{d}
-	r.Get(path, h.first)
-	r.Get(path+"/{module}", h.index)
-	r.Post(path+"/{module}", h.save)
-	r.Get(auditPath, h.audit)
+	d.Admin(http.MethodGet, path, h.first)
+	d.Admin(http.MethodGet, path+"/{module}", h.index)
+	d.Admin(http.MethodPost, path+"/{module}", h.save)
+	d.Admin(http.MethodGet, auditPath, h.audit)
 }
 
 func shown(d settings.Def) bool { return !d.Generated }
@@ -143,7 +143,7 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 	}
 	for i := range list {
 		if list[i].Key == data.Failed && !list[i].Secret && len(data.Entered) > 0 {
-			list[i].Value = web.LastValue(data.Entered, "")
+			list[i].Value = data.Entered[len(data.Entered)-1]
 		}
 	}
 	data.Modules, data.Fields = modules(), list
@@ -230,11 +230,11 @@ func apply(ctx context.Context, d *db.DB, tx *sql.Tx, f field, form url.Values) 
 		}
 		return nil
 	}
-	value, ok := form["v."+f.Key]
-	if !ok || web.LastValue(value, "") == f.Value {
+	value, ok := web.Value(form, "v."+f.Key)
+	if !ok || value == f.Value {
 		return nil
 	}
-	return settings.Default.Set(ctx, tx, f.Key, web.LastValue(value, ""))
+	return settings.Default.Set(ctx, tx, f.Key, value)
 }
 
 func refused(err error) bool {
