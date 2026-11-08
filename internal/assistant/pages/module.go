@@ -115,9 +115,11 @@ func Module(o Options) web.Module {
 		p := &pages{deps: d, svc: svc, now: now, poll: poll, keepalive: keepalive, reg: reg}
 		tz := config.From(base).TZName(d.Env)
 		stamp := now()
-		check(d.DB.WithTx(base, func(tx *sql.Tx) error {
+		if err := d.DB.WithTx(base, func(tx *sql.Tx) error {
 			return scheduler.Ensure(base, tx, tz, stamp)
-		}))
+		}); err != nil && !errors.Is(err, context.Canceled) {
+			panic(err)
+		}
 
 		r.Get("/chat", p.chatIndex)
 		r.Post("/chat", p.chatNew)
