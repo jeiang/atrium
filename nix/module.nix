@@ -464,7 +464,7 @@ in {
       tracesEndpoint = mkOption {
         type = types.nullOr types.str;
         default = null;
-        description = "Full OTLP/HTTP traces URL, such as http://zantark:10428/insert/opentelemetry/v1/traces. Null disables tracing.";
+        description = "Full OTLP/HTTP traces URL, such as http://traces.example:10428/insert/opentelemetry/v1/traces. Null disables tracing.";
       };
     };
 
