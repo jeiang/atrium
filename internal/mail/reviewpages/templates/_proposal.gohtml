@@ -33,13 +33,13 @@
   </ul>
 </details>{{end}}
 
-{{define "proposal_group_picker"}}{{$p := .p}}{{$g := .g}}{{$uid := printf "%v-%v" $p.id .i}}
+{{define "proposal_group_picker"}}{{$p := .p}}{{$g := .g}}{{$uid := printf "%v-%v" $p.ID .i}}
 <fieldset class="flex flex-col gap-3 border-t pt-4"{{if .picker}} data-group{{end}}>
   <legend class="sr-only">{{pyattr $g "name"}}</legend>
   <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
     {{if and .editable .pending}}
     <div role="group" class="field min-w-0 flex-1 sm:max-w-sm">
-      <label for="name-{{$uid}}">New {{noun $p.account}}</label>
+      <label for="name-{{$uid}}">New {{noun $p.Account}}</label>
       <input id="name-{{$uid}}" name="name-{{.i}}" type="text" value="{{pyattr $g "name"}}" required autocomplete="off" spellcheck="false">
     </div>
     {{else}}
@@ -72,7 +72,7 @@
 {{define "proposal_plain_picker"}}{{$g := index .picks 0}}
 <fieldset class="flex flex-col gap-2" data-group>
   <legend class="sr-only">Messages</legend>
-  {{template "proposal_toggle" (dict "uid" (printf "%v-0" .p.id) "g" $g)}}
+  {{template "proposal_toggle" (dict "uid" (printf "%v-0" .p.ID) "g" $g)}}
   {{template "proposal_message_list" (dict "i" 0 "messages" (get $g "messages") "verb" .verb)}}
 </fieldset>{{end}}
 
@@ -81,18 +81,18 @@
   {{if get . "path"}}<span class="truncate text-xs text-muted-foreground">{{page_path (get . "path")}}</span>{{end}}
 </div>{{end}}
 
-{{define "proposal_body"}}{{$p := .p}}{{$v := .v}}{{$kind := $p.kind}}
-{{if and (eq $p.status "failed") (get $p.result "error")}}
+{{define "proposal_body"}}{{$p := .p}}{{$v := .v}}{{$kind := $p.Kind}}
+{{if and (eq $p.Status "failed") (get $p.Result "error")}}
 <div class="alert" data-variant="destructive" role="alert">
   {{icon "circle-alert"}}
   <h4>It did not finish</h4>
-  <section><p>{{pyattr $p.result "error"}}</p></section>
+  <section><p>{{pyattr $p.Result "error"}}</p></section>
 </div>
 {{end}}
 
 {{if eq $kind "rebalance_split"}}
 {{$groups := get $v "groups"}}
-<p class="text-sm"><span class="text-muted-foreground">Split</span> <span class="font-medium">{{place (get $v "folder")}}</span> <span class="text-muted-foreground">into {{pylen $groups}} new {{noun $p.account}}{{if ne (pylen $groups) 1}}s{{end}}. Anything not moved stays where it is.</span></p>
+<p class="text-sm"><span class="text-muted-foreground">Split</span> <span class="font-medium">{{place (get $v "folder")}}</span> <span class="text-muted-foreground">into {{pylen $groups}} new {{noun $p.Account}}{{if ne (pylen $groups) 1}}s{{end}}. Anything not moved stays where it is.</span></p>
 <div class="flex flex-col gap-3">
   {{range $i, $g := $groups}}{{template "proposal_group_picker" (dict "p" $p "i" $i "g" $g "editable" true "pending" $.pending "picker" $.picker)}}{{end}}
 </div>
@@ -108,7 +108,7 @@
   {{range get $v "sources"}}<span class="badge" data-variant="secondary">{{place (get . "folder")}} <span class="tabular-nums text-muted-foreground">{{pyattr . "count"}}</span></span>{{end}}
   {{icon "arrow-right" "size-3.5 text-muted-foreground"}}
   <span class="font-medium">{{place (get $v "into")}}</span>
-  <span class="text-xs text-muted-foreground">existing {{noun $p.account}}</span>
+  <span class="text-xs text-muted-foreground">existing {{noun $p.Account}}</span>
 </div>
 {{template "proposal_group_picker" (dict "p" $p "i" 0 "g" (get $v "group") "editable" false "pending" $.pending "picker" $.picker)}}
 
@@ -120,7 +120,7 @@
       <h4 class="text-xs font-medium text-muted-foreground">Rule{{if get $rule "account"}} for {{pyattr $rule "account"}}{{end}}</h4>
       <ul class="flex flex-col gap-1 text-sm" role="list" aria-label="Conditions, all must hold">
         {{range $i, $c := get $rule "when"}}
-        <li class="flex flex-wrap items-baseline gap-x-1.5">{{if ne $i 0}}<span class="text-xs text-muted-foreground">and</span>{{end}}{{template "condition_text" $c}}</li>
+        <li class="flex flex-wrap items-baseline gap-x-1.5">{{if ne $i 0}}<span class="text-xs text-muted-foreground">and</span>{{end}}{{template "condition_text" (dict "Field" (pyattr $c "field") "Op" (pyattr $c "op") "Value" (get $c "value"))}}</li>
         {{end}}
       </ul>
       <p class="flex items-center gap-1.5 text-sm">{{icon "arrow-right" "size-3.5 text-muted-foreground"}}<span class="font-medium text-destructive">Delete</span></p>
@@ -233,75 +233,75 @@
 
 {{end}}{{end}}
 
-{{define "proposal_blocked"}}{{if .blocked}}
+{{define "proposal_blocked"}}{{if .Blocked}}
 <div class="flex w-full flex-col gap-2 rounded-md border p-3 text-sm">
   <p class="text-muted-foreground">A write has an unknown or partial outcome, so atrium refuses to retry it. Check the mailbox, then record what you found. atrium does not touch the mailbox.</p>
-  {{template "resolve_controls" (dict "path" (printf "/proposals/%v/resolve" .id) "target" (printf "#proposal-%v" .id) "undo" .blocked_undo "forward" false)}}
+  {{template "resolve_controls" (dict "path" (printf "/proposals/%v/resolve" .ID) "target" (printf "#proposal-%v" .ID) "undo" .BlockedUndo "forward" false)}}
 </div>
 {{end}}{{end}}
 
 {{define "proposal_footer"}}{{$p := .p}}
 {{if .pending}}
 <div class="flex flex-wrap items-center gap-2">
-  {{$deletes := eq $p.kind "deletion_rule"}}
+  {{$deletes := eq $p.Kind "deletion_rule"}}
   <button type="submit" class="btn" data-size="sm" name="all" value="1"{{if $deletes}} data-confirm="{{if .picker}}Move all matching messages to Trash now and save the rule?{{else}}Save the rule? Nothing moves to Trash now.{{end}}"{{end}}>
     {{icon (ternary .picker "check-check" "check")}}{{if .picker}}Approve all{{else}}Approve{{end}}
   </button>
   {{if .picker}}
   <button type="submit" class="btn" data-size="sm" data-variant="outline" data-approve-picked{{if $deletes}} data-confirm="Move the selected messages to Trash now and save the rule?" data-confirm-none="Save the rule without moving any messages to Trash?"{{end}}>{{icon "check"}}<span data-some>Approve <span class="tabular-nums" data-picked-total>{{sumlens "messages" .picks}}</span> selected</span>{{if $deletes}}<span data-none hidden>Save rule only</span>{{end}}</button>
   {{end}}
-  <span id="proposal-spinner-{{$p.id}}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{icon "loader-circle" "size-4 animate-spin"}}Applying…</span>
+  <span id="proposal-spinner-{{$p.ID}}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{icon "loader-circle" "size-4 animate-spin"}}Applying…</span>
   <div class="ml-auto flex gap-1">
-    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.id}}/dismiss" hx-indicator="unset">Dismiss</button>
-    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.id}}/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
             title="Never propose this again">Dismiss forever</button>
   </div>
 </div>
-{{else if eq $p.status "applied"}}
+{{else if eq $p.Status "applied"}}
 <div class="flex flex-wrap items-center gap-2">
   {{template "proposal_blocked" $p}}
-  <p class="flex min-w-0 flex-1 items-start gap-2 text-sm text-success">{{icon "check" "mt-0.5 size-4 shrink-0"}}<span>{{or (get $p.result "summary") "Applied"}} <span class="text-xs text-muted-foreground">{{template "when" (dict "epoch" $p.applied_ts "style" "datetime")}}</span></span></p>
-  {{if $p.undoable}}
-  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.id}}/undo" hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+  <p class="flex min-w-0 flex-1 items-start gap-2 text-sm text-success">{{icon "check" "mt-0.5 size-4 shrink-0"}}<span>{{or (get $p.Result "summary") "Applied"}} <span class="text-xs text-muted-foreground">{{template "when" (dict "epoch" $p.AppliedTS "style" "datetime")}}</span></span></p>
+  {{if $p.Undoable}}
+  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.ID}}/undo" hx-target="#proposal-{{$p.ID}}" hx-swap="outerHTML" hx-disabled-elt="this"
           hx-confirm="Undo this proposal and put everything back?">{{icon "undo-2"}}Undo</button>
   {{end}}
 </div>
-{{else if eq $p.status "failed"}}
+{{else if eq $p.Status "failed"}}
 <div class="flex flex-wrap items-center gap-2">
   {{template "proposal_blocked" $p}}
-  <p class="flex-1 text-xs whitespace-nowrap text-muted-foreground">Tried {{template "when" (dict "epoch" $p.decided_ts "style" "datetime")}}</p>
-  {{if $p.undoable}}
-  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.id}}/undo" hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this">{{icon "undo-2"}}Undo what it did</button>
+  <p class="flex-1 text-xs whitespace-nowrap text-muted-foreground">Tried {{template "when" (dict "epoch" $p.DecidedTS "style" "datetime")}}</p>
+  {{if $p.Undoable}}
+  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.ID}}/undo" hx-target="#proposal-{{$p.ID}}" hx-swap="outerHTML" hx-disabled-elt="this">{{icon "undo-2"}}Undo what it did</button>
   {{end}}
-  <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.id}}/dismiss" hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML">Dismiss</button>
+  <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-target="#proposal-{{$p.ID}}" hx-swap="outerHTML">Dismiss</button>
 </div>
 {{else}}
-<p class="text-xs text-muted-foreground">{{if or (eq $p.status "dismissed") (eq $p.status "suppressed")}}Dismissed{{else}}Decided{{end}} {{template "when" (dict "epoch" $p.decided_ts "style" "datetime")}}{{if eq $p.status "suppressed"}}. atrium will not propose this again.{{end}}</p>
+<p class="text-xs text-muted-foreground">{{if or (eq $p.Status "dismissed") (eq $p.Status "suppressed")}}Dismissed{{else}}Decided{{end}} {{template "when" (dict "epoch" $p.DecidedTS "style" "datetime")}}{{if eq $p.Status "suppressed"}}. atrium will not propose this again.{{end}}</p>
 {{end}}
 {{end}}
 
-{{define "proposal_card"}}{{$p := .p}}{{$v := $p.preview}}{{$pending := eq $p.status "pending"}}
+{{define "proposal_card"}}{{$p := .p}}{{$v := $p.Preview}}{{$pending := eq $p.Status "pending"}}
 {{$picks := list}}
-{{if or (eq $p.kind "rebalance_split") (eq $p.kind "inbox_backlog")}}{{$picks = selattr "messages" (get $v "groups")}}
-{{else if eq $p.kind "rebalance_merge"}}{{$picks = selattr "messages" (list (get $v "group"))}}
-{{else if eq $p.kind "deletion_rule"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "backlog")))}}
-{{else if eq $p.kind "gmail_label_merge"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "from_count")))}}{{end}}
+{{if or (eq $p.Kind "rebalance_split") (eq $p.Kind "inbox_backlog")}}{{$picks = selattr "messages" (get $v "groups")}}
+{{else if eq $p.Kind "rebalance_merge"}}{{$picks = selattr "messages" (list (get $v "group"))}}
+{{else if eq $p.Kind "deletion_rule"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "backlog")))}}
+{{else if eq $p.Kind "gmail_label_merge"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "from_count")))}}{{end}}
 {{$picker := and $pending (gt (len $picks) 0)}}
 {{$ctx := dict "p" $p "v" $v "pending" $pending "picks" $picks "picker" $picker "mode" .mode}}
-<li id="proposal-{{$p.id}}" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring {{if or (eq $p.status "dismissed") (eq $p.status "suppressed")}}opacity-80{{end}}">
-  <article aria-labelledby="proposal-title-{{$p.id}}">
+<li id="proposal-{{$p.ID}}" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring {{if or (eq $p.Status "dismissed") (eq $p.Status "suppressed")}}opacity-80{{end}}">
+  <article aria-labelledby="proposal-title-{{$p.ID}}">
     {{if $pending}}
-    <form class="flex flex-col" hx-post="/proposals/{{$p.id}}/approve" hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML"
-          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-{{$p.id}}"{{if $picker}} data-selection{{end}}>
+    <form class="flex flex-col" hx-post="/proposals/{{$p.ID}}/approve" hx-target="#proposal-{{$p.ID}}" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-{{$p.ID}}"{{if $picker}} data-selection{{end}}>
     {{end}}
     <header class="flex flex-col gap-2 p-4 pb-3">
       <div class="flex flex-wrap items-center gap-2">
-        <span class="badge" data-variant="secondary">{{icon (or $p.kind_icon "list-checks")}}{{$p.kind_label}}</span>
-        {{if $p.account}}<span class="badge" data-variant="outline">{{$p.account}}</span>{{end}}
-        {{template "status_badge" $p.status}}
-        <span class="ml-auto text-xs text-muted-foreground">#{{$p.id}} · {{template "when" (dict "epoch" $p.created_ts)}}</span>
+        <span class="badge" data-variant="secondary">{{icon (or $p.KindIcon "list-checks")}}{{$p.KindLabel}}</span>
+        {{if $p.Account}}<span class="badge" data-variant="outline">{{str $p.Account}}</span>{{end}}
+        {{template "status_badge" $p.Status}}
+        <span class="ml-auto text-xs text-muted-foreground">#{{$p.ID}} · {{template "when" (dict "epoch" $p.CreatedTS)}}</span>
       </div>
-      <h3 id="proposal-title-{{$p.id}}" class="font-medium text-pretty">{{$p.title}}</h3>
+      <h3 id="proposal-title-{{$p.ID}}" class="font-medium text-pretty">{{$p.Title}}</h3>
     </header>
     <div class="flex flex-col gap-4 px-4 pb-4">{{template "proposal_body" $ctx}}</div>
     <footer class="border-t px-4 py-3">{{template "proposal_footer" $ctx}}</footer>
@@ -312,4 +312,4 @@
 {{with .toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
 {{end}}
 
-{{template "proposal_card" (dict "p" .Data.proposal "mode" .Mode "toast" .Toast "pending_oob" .Data.pending_oob "pending_count" .PendingCount)}}
+{{template "proposal_card" (dict "p" .Data.Proposal "mode" .Mode "toast" .Toast "pending_oob" .Data.PendingOOB "pending_count" .PendingCount)}}

@@ -12,6 +12,28 @@ import (
 	"github.com/jeiang/atrium/internal/web"
 )
 
+type historyLine struct {
+	ThreadID int64
+	Text     string
+	From     int64
+	To       int64
+	N        int64
+	State    string
+	Leaf     bool
+}
+
+type historyData struct {
+	Lines []historyLine
+}
+
+type historyChildren struct {
+	Children []historyLine
+}
+
+type historyLeaf struct {
+	Text string
+}
+
 func (p *pages) hasHistory(ctx context.Context, threadID int64) bool {
 	var n int
 	if err := p.deps.DB.Read.QueryRowContext(ctx,
@@ -31,13 +53,11 @@ func (p *pages) history(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, r, http.StatusNotFound, "unknown thread")
 		return
 	}
-	lines := make([]map[string]any, len(v.Lines))
+	lines := make([]historyLine, len(v.Lines))
 	for i, l := range v.Lines {
-		lines[i] = map[string]any{
-			"thread_id": threadID, "text": l.Text, "from": l.From, "to": l.To, "n": 1 << l.Level, "state": l.State, "leaf": l.Level == 0,
-		}
+		lines[i] = historyLine{ThreadID: threadID, Text: l.Text, From: l.From, To: l.To, N: 1 << l.Level, State: l.State, Leaf: l.Level == 0}
 	}
-	p.fragment(w, r, http.StatusOK, "_history.gohtml", map[string]any{"thread_id": threadID, "lines": lines})
+	p.fragment(w, r, http.StatusOK, "_history.gohtml", historyData{Lines: lines})
 }
 
 func (p *pages) historyZoom(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +86,7 @@ func (p *pages) historyZoom(w http.ResponseWriter, r *http.Request) {
 			p.fail(w, r, http.StatusNotFound, "unknown range")
 			return
 		}
-		p.fragment(w, r, http.StatusOK, "_history_leaf.gohtml", map[string]any{"text": text})
+		p.fragment(w, r, http.StatusOK, "_history_leaf.gohtml", historyLeaf{Text: text})
 		return
 	}
 	level := bits.TrailingZeros64(uint64(n))
@@ -81,20 +101,18 @@ func (p *pages) historyZoom(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, r, http.StatusNotFound, "unknown range")
 		return
 	}
-	var children []map[string]any
+	var children []historyLine
 	for i := range nodes {
 		if nodes[i].Level == level-1 && (nodes[i].Index == parent.Index*2 || nodes[i].Index == parent.Index*2+1) {
-			children = append(children, map[string]any{
-				"thread_id": threadID, "text": nodes[i].Text, "from": nodes[i].FromSeq, "to": nodes[i].ToSeq,
-				"n": n / 2, "state": nodes[i].State, "leaf": level-1 == 0,
-			})
+			children = append(children, historyLine{ThreadID: threadID, Text: nodes[i].Text, From: nodes[i].FromSeq, To: nodes[i].ToSeq,
+				N: n / 2, State: nodes[i].State, Leaf: level-1 == 0})
 		}
 	}
 	if len(children) != 2 {
 		p.fail(w, r, http.StatusNotFound, "unknown range")
 		return
 	}
-	p.fragment(w, r, http.StatusOK, "_history_children.gohtml", map[string]any{"thread_id": threadID, "children": children})
+	p.fragment(w, r, http.StatusOK, "_history_children.gohtml", historyChildren{Children: children})
 }
 
 func leafText(ctx context.Context, p *pages, threadID, seq int64, nodes []memory.Node) (string, bool) {

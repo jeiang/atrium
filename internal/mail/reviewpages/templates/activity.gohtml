@@ -7,10 +7,10 @@
   <section><p>Mailbox filing, flags and deletions, and the assistant's direct writes to Notion, the profile, the calendar and media, plus every settings change, newest first. Undo restores the previous state, and refuses when the target changed since.</p></section>
 </div>
 <nav class="button-group self-start" aria-label="Category">
-  <a class="btn" data-size="sm" data-variant="{{if $d.category}}outline{{else}}secondary{{end}}" href="/activity">All</a>
-  {{range $d.categories}}<a class="btn" data-size="sm" data-variant="{{if eq $d.category .}}secondary{{else}}outline{{end}}" href="/activity?category={{.}}">{{capitalize .}}</a>{{end}}
+  <a class="btn" data-size="sm" data-variant="{{if $d.Category}}outline{{else}}secondary{{end}}" href="/activity">All</a>
+  {{range $d.Categories}}<a class="btn" data-size="sm" data-variant="{{if eq $d.Category .}}secondary{{else}}outline{{end}}" href="/activity?category={{.}}">{{capitalize .}}</a>{{end}}
 </nav>
 <ul id="activity" class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list" aria-label="Activity">
-  {{template "activity_rows" (dict "entries" $d.entries "category" $d.category "offset" $d.offset "next_offset" $d.next_offset "toast" .Toast)}}
+  {{template "activity_rows" (dict "entries" $d.Entries "category" $d.Category "offset" $d.Offset "next_offset" $d.NextOffset "toast" .Toast)}}
 </ul>
 {{end}}

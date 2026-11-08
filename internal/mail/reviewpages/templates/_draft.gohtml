@@ -1,59 +1,59 @@
 {{define "draft_card"}}{{$d := .d}}{{$csrf := .csrf}}{{$configured := .configured}}
-<li id="draft-{{$d.id}}" class="flex flex-col gap-3 rounded-lg border bg-card p-4" data-draft-card="{{$d.id}}">
+<li id="draft-{{$d.ID}}" class="flex flex-col gap-3 rounded-lg border bg-card p-4" data-draft-card="{{$d.ID}}">
   <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-    <span class="badge" data-variant="outline">{{$d.status}}</span>
-    <span>{{$d.account}}</span>
-    {{if $d.in_reply_to_message_id}}<a class="underline" href="/messages/{{$d.in_reply_to_message_id}}">reply to message {{$d.in_reply_to_message_id}}</a>{{end}}
-    {{if $d.thread_id}}<a class="underline" href="/chat/{{$d.thread_id}}">{{icon "messages-square" "size-3"}}from thread</a>{{end}}
-    <span class="tabular-nums">{{template "when" (dict "epoch" $d.updated_at "style" "datetime")}}</span>
+    <span class="badge" data-variant="outline">{{$d.Status}}</span>
+    <span>{{$d.Account}}</span>
+    {{if $d.InReplyToMessageID}}<a class="underline" href="/messages/{{str $d.InReplyToMessageID}}">reply to message {{str $d.InReplyToMessageID}}</a>{{end}}
+    {{if $d.ThreadID}}<a class="underline" href="/chat/{{str $d.ThreadID}}">{{icon "messages-square" "size-3"}}from thread</a>{{end}}
+    <span class="tabular-nums">{{template "when" (dict "epoch" $d.UpdatedAt "style" "datetime")}}</span>
   </div>
-  {{if $d.unexpected}}
+  {{if $d.Unexpected}}
   <div class="alert" data-variant="destructive" role="alert">
     {{icon "circle-alert"}}
     <h2>Recipients differ from the original thread</h2>
-    <section><p>Not on the original message: <strong>{{join ", " $d.unexpected}}</strong></p></section>
+    <section><p>Not on the original message: <strong>{{join ", " $d.Unexpected}}</strong></p></section>
   </div>
   {{end}}
-  {{if eq $d.status "draft"}}
-  <form method="post" action="/drafts/{{$d.id}}" class="flex flex-col gap-2" hx-post="/drafts/{{$d.id}}" hx-target="#draft-{{$d.id}}" hx-swap="outerHTML">
+  {{if eq $d.Status "draft"}}
+  <form method="post" action="/drafts/{{$d.ID}}" class="flex flex-col gap-2" hx-post="/drafts/{{$d.ID}}" hx-target="#draft-{{$d.ID}}" hx-swap="outerHTML">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
     <div role="group" class="field">
-      <label for="acc-{{$d.id}}">Send from</label>
-      <select id="acc-{{$d.id}}" name="account">
-        {{range global "accounts"}}<option value="{{.}}"{{if eq $d.account .}} selected{{end}}>{{.}}{{if not (index $configured .)}} (not configured){{end}}</option>{{end}}
+      <label for="acc-{{$d.ID}}">Send from</label>
+      <select id="acc-{{$d.ID}}" name="account">
+        {{range global "accounts"}}<option value="{{.}}"{{if eq $d.Account .}} selected{{end}}>{{.}}{{if not (index $configured .)}} (not configured){{end}}</option>{{end}}
       </select>
     </div>
-    <div role="group" class="field"><label for="to-{{$d.id}}">To</label><input id="to-{{$d.id}}" name="to" type="text" value="{{$d.to_addrs}}"></div>
-    <div role="group" class="field"><label for="cc-{{$d.id}}">Cc</label><input id="cc-{{$d.id}}" name="cc" type="text" value="{{$d.cc_addrs}}"></div>
-    <div role="group" class="field"><label for="sub-{{$d.id}}">Subject</label><input id="sub-{{$d.id}}" name="subject" type="text" value="{{$d.subject}}"></div>
-    <div role="group" class="field"><label for="body-{{$d.id}}">Body</label><textarea id="body-{{$d.id}}" name="body" rows="10" class="textarea w-full">{{$d.body}}</textarea></div>
+    <div role="group" class="field"><label for="to-{{$d.ID}}">To</label><input id="to-{{$d.ID}}" name="to" type="text" value="{{$d.ToAddrs}}"></div>
+    <div role="group" class="field"><label for="cc-{{$d.ID}}">Cc</label><input id="cc-{{$d.ID}}" name="cc" type="text" value="{{$d.CcAddrs}}"></div>
+    <div role="group" class="field"><label for="sub-{{$d.ID}}">Subject</label><input id="sub-{{$d.ID}}" name="subject" type="text" value="{{$d.Subject}}"></div>
+    <div role="group" class="field"><label for="body-{{$d.ID}}">Body</label><textarea id="body-{{$d.ID}}" name="body" rows="10" class="textarea w-full">{{$d.Body}}</textarea></div>
     <div><button type="submit" class="btn" data-variant="outline">{{icon "pencil"}}Save changes</button></div>
   </form>
   <div class="flex gap-2">
-    <form method="post" action="/drafts/{{$d.id}}/send" hx-post="/drafts/{{$d.id}}/send" hx-target="#draft-{{$d.id}}" hx-swap="outerHTML" hx-confirm="Send this email now?">
+    <form method="post" action="/drafts/{{$d.ID}}/send" hx-post="/drafts/{{$d.ID}}/send" hx-target="#draft-{{$d.ID}}" hx-swap="outerHTML" hx-confirm="Send this email now?">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
-      <input type="hidden" name="revision" value="{{$d.revision}}">
+      <input type="hidden" name="revision" value="{{$d.Revision}}">
       <button type="submit" class="btn">{{icon "send"}}Send</button>
     </form>
-    <form method="post" action="/drafts/{{$d.id}}/discard" hx-post="/drafts/{{$d.id}}/discard" hx-target="#draft-{{$d.id}}" hx-swap="outerHTML">
+    <form method="post" action="/drafts/{{$d.ID}}/discard" hx-post="/drafts/{{$d.ID}}/discard" hx-target="#draft-{{$d.ID}}" hx-swap="outerHTML">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <button type="submit" class="btn" data-variant="outline">{{icon "trash-2"}}Discard</button>
     </form>
   </div>
   {{else}}
-  {{if eq $d.status "unknown"}}
+  {{if eq $d.Status "unknown"}}
   <div class="alert" data-variant="destructive" role="alert">
     {{icon "circle-alert"}}
     <h2>Check if the mail went out</h2>
     <section><p>The send was interrupted, so it is unknown whether this mail went out. The Sent folder can be empty even if the mail was delivered. Ask the recipient or look in the web mail of the account before you choose Back to draft. If you send it again, the recipient can get it twice. It is never resent automatically.</p></section>
   </div>
   <div class="flex gap-2">
-    <form method="post" action="/drafts/{{$d.id}}/resolve" hx-post="/drafts/{{$d.id}}/resolve" hx-target="#draft-{{$d.id}}" hx-swap="outerHTML">
+    <form method="post" action="/drafts/{{$d.ID}}/resolve" hx-post="/drafts/{{$d.ID}}/resolve" hx-target="#draft-{{$d.ID}}" hx-swap="outerHTML">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <input type="hidden" name="outcome" value="sent">
       <button type="submit" class="btn">{{icon "send"}}Mark sent</button>
     </form>
-    <form method="post" action="/drafts/{{$d.id}}/resolve" hx-post="/drafts/{{$d.id}}/resolve" hx-target="#draft-{{$d.id}}" hx-swap="outerHTML">
+    <form method="post" action="/drafts/{{$d.ID}}/resolve" hx-post="/drafts/{{$d.ID}}/resolve" hx-target="#draft-{{$d.ID}}" hx-swap="outerHTML">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <input type="hidden" name="outcome" value="draft">
       <button type="submit" class="btn" data-variant="outline">{{icon "pencil"}}Back to draft</button>
@@ -61,14 +61,14 @@
   </div>
   {{end}}
   <dl class="grid gap-1 text-sm">
-    <div><dt class="inline font-medium">To:</dt> <dd class="inline">{{$d.to_addrs}}</dd></div>
-    {{if $d.cc_addrs}}<div><dt class="inline font-medium">Cc:</dt> <dd class="inline">{{$d.cc_addrs}}</dd></div>{{end}}
-    <div><dt class="inline font-medium">Subject:</dt> <dd class="inline">{{$d.subject}}</dd></div>
+    <div><dt class="inline font-medium">To:</dt> <dd class="inline">{{$d.ToAddrs}}</dd></div>
+    {{if $d.CcAddrs}}<div><dt class="inline font-medium">Cc:</dt> <dd class="inline">{{$d.CcAddrs}}</dd></div>{{end}}
+    <div><dt class="inline font-medium">Subject:</dt> <dd class="inline">{{$d.Subject}}</dd></div>
   </dl>
-  <pre class="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">{{$d.body}}</pre>
+  <pre class="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">{{$d.Body}}</pre>
   {{end}}
-  {{if $d.smtp_result}}<p class="text-xs text-muted-foreground">{{$d.smtp_result}}</p>{{end}}
+  {{if $d.SMTPResult}}<p class="text-xs text-muted-foreground">{{str $d.SMTPResult}}</p>{{end}}
 </li>
 {{if and .partial .toast}}{{with .toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}{{end}}{{end}}
 
-{{template "draft_card" (dict "d" .Data.d "configured" .Data.configured "csrf" .CSRF "partial" .Data.partial "toast" .Toast)}}
+{{template "draft_card" (dict "d" .Data.D "configured" .Data.Configured "csrf" .CSRF "partial" .Data.Partial "toast" .Toast)}}

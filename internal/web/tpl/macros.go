@@ -31,7 +31,7 @@ func pct(v any) (string, error) {
 
 func place(v any) string {
 	switch s := str(v); {
-	case v == nil:
+	case isNil(v):
 		return "Gone"
 	case s == "INBOX":
 		return "Inbox"

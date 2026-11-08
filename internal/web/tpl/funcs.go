@@ -60,6 +60,7 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 		"markdown": func(v any) template.HTML { return Markdown(str(v)) },
 		"ts":       ts,
 		"truncate": func(n int, v any) string { return truncate(str(v), n) },
+		"str":      str,
 		"filesizeformat": func(v any) (string, error) {
 			f, err := toFloat(v)
 			return fileSizeFormat(f), err
@@ -85,6 +86,7 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 			return arith(a, b, func(x, y float64) float64 { return float64(x * y) })
 		},
 		"fdiv":  func(a, b any) (float64, error) { return arith(a, b, func(x, y float64) float64 { return x / y }) },
+		"float": func(v any) (float64, error) { return toFloat(v) },
 		"inc":   func(i int) int { return i + 1 },
 		"lower": func(v any) string { return strings.ToLower(str(v)) },
 		"capitalize": func(v any) string {
@@ -139,7 +141,7 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 		"noun":      e.noun,
 		"sender":    sender,
 		"page_path": pagePath,
-		"isnil":     func(v any) bool { return v == nil },
+		"isnil":     isNil,
 		"haskey":    haskey,
 	}
 	for name, fn := range extraFuncs {
@@ -163,10 +165,48 @@ func dict(kv ...any) (map[string]any, error) {
 	return m, nil
 }
 
+func isNil(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
+		return rv.IsNil()
+	}
+	return false
+}
+
 func opt(m any, key string, def any) any {
 	if mm, ok := m.(map[string]any); ok {
 		if v, ok := mm[key]; ok {
 			return v
+		}
+	}
+	if d, ok := m.(py.Dict); ok {
+		if v, ok := d.Get(key); ok {
+			return v
+		}
+	}
+	rv := reflect.ValueOf(m)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if rv.IsNil() {
+			return def
+		}
+		rv = rv.Elem()
+	}
+	if rv.IsValid() && rv.Kind() == reflect.Struct {
+		want := strings.ReplaceAll(strings.ToLower(key), "_", "")
+		t := rv.Type()
+		for i := range t.NumField() {
+			f := t.Field(i)
+			if f.PkgPath != "" {
+				continue
+			}
+			tag, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+			if tag == key || strings.EqualFold(f.Name, key) || strings.ReplaceAll(strings.ToLower(f.Name), "_", "") == want {
+				return rv.Field(i).Interface()
+			}
 		}
 	}
 	return def
@@ -215,15 +255,23 @@ func ts(v any, style ...string) (string, error) {
 }
 
 func str(v any) string {
-	switch x := v.(type) {
-	case nil:
+	rv := reflect.ValueOf(v)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if rv.IsNil() {
+			return ""
+		}
+		rv = rv.Elem()
+	}
+	if !rv.IsValid() {
 		return ""
+	}
+	switch x := rv.Interface().(type) {
 	case string:
 		return x
 	case template.HTML:
 		return string(x)
 	}
-	return fmt.Sprint(v)
+	return fmt.Sprint(rv.Interface())
 }
 
 func strs(l any) []string {
@@ -288,8 +336,40 @@ func elems(l any) []map[string]any {
 	var out []map[string]any
 	if rv := reflect.ValueOf(l); l != nil && rv.Kind() == reflect.Slice {
 		for i := range rv.Len() {
-			if m, ok := rv.Index(i).Interface().(map[string]any); ok {
+			elem := rv.Index(i).Interface()
+			erv := reflect.ValueOf(elem)
+			for erv.IsValid() && (erv.Kind() == reflect.Pointer || erv.Kind() == reflect.Interface) {
+				if erv.IsNil() {
+					break
+				}
+				erv = erv.Elem()
+			}
+			switch m := elem.(type) {
+			case map[string]any:
 				out = append(out, m)
+			case py.Dict:
+				row := make(map[string]any, len(m))
+				for _, pair := range m {
+					row[pair.Key] = pair.Value
+				}
+				out = append(out, row)
+			default:
+				if erv.IsValid() && erv.Kind() == reflect.Struct {
+					row := make(map[string]any, erv.NumField())
+					t := erv.Type()
+					for j := range t.NumField() {
+						f := t.Field(j)
+						if f.PkgPath != "" {
+							continue
+						}
+						key, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+						if key == "" {
+							key = f.Name
+						}
+						row[key] = erv.Field(j).Interface()
+					}
+					out = append(out, row)
+				}
 			}
 		}
 	}
@@ -303,9 +383,14 @@ func truthy(v any) bool {
 
 func filter(l any, key string, want bool) []any {
 	var out []any
-	for _, m := range elems(l) {
-		if truthy(m[key]) == want {
-			out = append(out, m)
+	rv := reflect.ValueOf(l)
+	if l == nil || rv.Kind() != reflect.Slice {
+		return out
+	}
+	for i := range rv.Len() {
+		elem := rv.Index(i).Interface()
+		if truthy(opt(elem, key, nil)) == want {
+			out = append(out, elem)
 		}
 	}
 	return out
@@ -330,6 +415,16 @@ func sumlens(key string, l any) int {
 }
 
 func pyStr(v any) (string, error) {
+	rv := reflect.ValueOf(v)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if rv.IsNil() {
+			return "None", nil
+		}
+		rv = rv.Elem()
+	}
+	if rv.IsValid() {
+		v = rv.Interface()
+	}
 	switch x := v.(type) {
 	case nil:
 		return "None", nil

@@ -1,12 +1,12 @@
-{{define "mail_message"}}{{$m := .m}}{{$h := $m.headers}}{{$mode := .mode -}}
-<article id="message-{{$m.id}}" class="flex flex-col gap-5" aria-labelledby="message-subject-{{$m.id}}">
+{{define "mail_message"}}{{$m := .m}}{{$h := $m.Headers}}{{$mode := .mode -}}
+<article id="message-{{$m.ID}}" class="flex flex-col gap-5" aria-labelledby="message-subject-{{$m.ID}}">
   <header class="flex flex-col gap-3">
-    <h2 id="message-subject-{{$m.id}}" class="text-xl font-semibold tracking-tight text-balance">{{or $m.subject "(no subject)"}}</h2>
+    <h2 id="message-subject-{{$m.ID}}" class="text-xl font-semibold tracking-tight text-balance">{{or $m.Subject "(no subject)"}}</h2>
     <div class="flex flex-wrap items-center gap-1.5">
-      <span class="badge" data-variant="secondary">{{if $m.in_inbox}}{{place "INBOX"}}{{else}}{{place $m.location}}{{end}}</span>
-      <span class="badge" data-variant="outline">{{$m.account}}</span>
-      {{if not $m.seen}}<span class="badge border-warning/30 bg-warning/10 text-warning">Unread</span>{{end}}
-      {{if $m.flagged}}<span class="badge border-warning/30 bg-warning/10 text-warning">{{icon "flag"}}Flagged</span>{{end}}
+      <span class="badge" data-variant="secondary">{{if $m.InInbox}}{{place "INBOX"}}{{else}}{{place $m.Location}}{{end}}</span>
+      <span class="badge" data-variant="outline">{{$m.Account}}</span>
+      {{if not $m.Seen}}<span class="badge border-warning/30 bg-warning/10 text-warning">Unread</span>{{end}}
+      {{if $m.Flagged}}<span class="badge border-warning/30 bg-warning/10 text-warning">{{icon "flag"}}Flagged</span>{{end}}
     </div>
     <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
       <dt class="text-muted-foreground">From</dt>
@@ -18,16 +18,16 @@
       {{end}}
       {{end}}
       <dt class="text-muted-foreground">Date</dt>
-      <dd>{{template "when" (dict "epoch" $m.date_ts "style" "datetime")}}</dd>
+      <dd>{{template "when" (dict "epoch" $m.DateTS "style" "datetime")}}</dd>
     </dl>
   </header>
 
   {{template "mail_decision_card" (dict "m" $m "mode" $mode "toast" (opt . "toast" nil) "correct" (opt . "correct" nil))}}
 
-  {{$f := $m.flag_decision}}
+  {{$f := $m.FlagDecision}}
   {{if $f}}
-  <section class="flex flex-col gap-2 rounded-lg border p-4" aria-labelledby="flag-title-{{$m.id}}">
-    <h3 id="flag-title-{{$m.id}}" class="text-sm font-medium">Flag judgment</h3>
+  <section class="flex flex-col gap-2 rounded-lg border p-4" aria-labelledby="flag-title-{{$m.ID}}">
+    <h3 id="flag-title-{{$m.ID}}" class="text-sm font-medium">Flag judgment</h3>
     <ul class="flex flex-wrap gap-1.5 text-xs" role="list">
       {{range $row := list (list "contacts_match" "Sender is a contact") (list "person_asking" "A person is asking") (list "deadline_or_payment_due" "Deadline or payment") (list "security_event" "Security event") (list "llm_flag" "9B would flag")}}
       {{$v := get $f (index $row 0)}}{{$label := index $row 1}}
@@ -42,14 +42,14 @@
   </section>
   {{end}}
 
-  {{if $m.attachments}}
-  <section aria-labelledby="attachments-title-{{$m.id}}" class="flex flex-col gap-2">
-    <h3 id="attachments-title-{{$m.id}}" class="text-sm font-medium">Attachments</h3>
+  {{if $m.Attachments}}
+  <section aria-labelledby="attachments-title-{{$m.ID}}" class="flex flex-col gap-2">
+    <h3 id="attachments-title-{{$m.ID}}" class="text-sm font-medium">Attachments</h3>
     <ul class="flex flex-wrap gap-2" role="list">
-      {{range $m.attachments}}
+      {{range $m.Attachments}}
       <li class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs">
-        {{icon "paperclip" "size-3.5 text-muted-foreground"}}<span class="max-w-60 truncate">{{or .filename .content_type}}</span>
-        <span class="text-muted-foreground tabular-nums">{{filesizeformat .size}}</span>
+        {{icon "paperclip" "size-3.5 text-muted-foreground"}}<span class="max-w-60 truncate">{{or .Filename .ContentType}}</span>
+        <span class="text-muted-foreground tabular-nums">{{filesizeformat .Size}}</span>
       </li>
       {{end}}
     </ul>
@@ -57,15 +57,15 @@
   {{end}}
 
   <section aria-label="Message body" class="flex flex-col gap-2 border-t pt-5">
-    {{if $m.body}}
-    <div class="max-w-prose whitespace-pre-wrap break-words text-sm/relaxed">{{$m.body}}</div>
+    {{if $m.Body}}
+    <div class="max-w-prose whitespace-pre-wrap break-words text-sm/relaxed">{{$m.Body}}</div>
     {{else}}
     <p class="text-sm text-muted-foreground">This message has no plain-text body.</p>
     {{end}}
-    {{if eq $m.body_source "index"}}
+    {{if eq $m.BodySource "index"}}
     <p class="text-xs text-muted-foreground">Showing the indexed text; the raw message is not in the cache.</p>
     {{end}}
   </section>
 </article>
 {{end}}
-{{template "mail_message" (dict "m" .Data.message "mode" .Mode "toast" .Toast)}}
+{{template "mail_message" (dict "m" .Data.Message "mode" .Mode "toast" .Toast)}}

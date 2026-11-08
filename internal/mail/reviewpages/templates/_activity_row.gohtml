@@ -1,104 +1,104 @@
 {{define "activity_row"}}{{$e := .e}}{{with .toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
-<li id="activity-{{$e.source}}-{{$e.id}}" class="flex flex-col gap-2 px-4 py-3">
+<li id="activity-{{$e.Source}}-{{$e.ID}}" class="flex flex-col gap-2 px-4 py-3">
   <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
     <div class="flex items-center gap-2 whitespace-nowrap text-xs text-muted-foreground sm:w-48 sm:shrink-0">
-      <span class="badge" data-variant="secondary">{{$e.category}}</span>
-      <span class="tabular-nums">{{template "when" (dict "epoch" $e.ts "style" "datetime")}}</span>
+      <span class="badge" data-variant="secondary">{{$e.Category}}</span>
+      <span class="tabular-nums">{{template "when" (dict "epoch" $e.TS "style" "datetime")}}</span>
     </div>
-    {{with $e.mail}}
+    {{with $e.Mail}}
     <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
-      <a class="truncate rounded-sm text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {{template "open_attrs" .message_id}}>{{or .subject "(no subject)"}}</a>
+      <a class="truncate rounded-sm text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {{template "open_attrs" .MessageID}}>{{or (str .Subject) "(no subject)"}}</a>
       <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-        <span class="badge" data-variant="outline">{{.kind}}</span>
-        <span class="truncate">{{or .from_name .from_addr}} · {{.account}}</span>
-        {{if ne .kind "flag"}}
-        <span class="max-w-full truncate">{{place .src}}</span>
+        <span class="badge" data-variant="outline">{{.Kind}}</span>
+        <span class="truncate">{{or (str .FromName) (str .FromAddr)}} · {{.Account}}</span>
+        {{if ne .Kind "flag"}}
+        <span class="max-w-full truncate">{{place .Src}}</span>
         {{icon "arrow-right" "size-3.5 shrink-0"}}
-        <span class="max-w-full truncate font-medium text-foreground">{{place .dest}}</span>
+        <span class="max-w-full truncate font-medium text-foreground">{{place .Dest}}</span>
         {{end}}
         {{template "action_badge" .}}
-        {{if .error}}<span class="truncate" title="{{.error}}">{{.error}}</span>{{end}}
+        {{if .Error}}<span class="truncate" title="{{str .Error}}">{{str .Error}}</span>{{end}}
       </div>
     </div>
     {{end}}
-    {{with $e.phone}}
+    {{with $e.Phone}}
     <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
       <span class="text-sm font-medium">approved via phone</span>
-      <p class="text-xs text-muted-foreground">{{.actor}} · {{.kind}} · {{.status}} · {{.target}}</p>
+      <p class="text-xs text-muted-foreground">{{.Actor}} · {{.Kind}} · {{.Status}} · {{.Target}}</p>
     </div>
     {{end}}
-    {{with $e.settings}}
+    {{with $e.Settings}}
     <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
       <div class="flex min-w-0 flex-wrap items-center gap-2">
-        <span class="badge" data-variant="outline">{{.tool}}</span>
-        {{if .thread_id}}<span class="text-xs text-muted-foreground">thread {{.thread_id}}</span>{{end}}
+        <span class="badge" data-variant="outline">{{.Tool}}</span>
+        {{if .ThreadID}}<span class="text-xs text-muted-foreground">thread {{str .ThreadID}}</span>{{end}}
       </div>
-      <p class="text-xs text-muted-foreground">by {{.actor}} via {{.origin}}</p>
+      <p class="text-xs text-muted-foreground">by {{.Actor}} via {{.Origin}}</p>
     </div>
     {{end}}
-    {{with $e.write}}
+    {{with $e.Write}}
     <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
       <div class="flex min-w-0 flex-wrap items-center gap-2">
-        <span class="badge" data-variant="outline">{{.tool}}</span>
-        <span class="truncate font-mono text-xs">{{.target}}</span>
+        <span class="badge" data-variant="outline">{{.Tool}}</span>
+        <span class="truncate font-mono text-xs">{{.Target}}</span>
       </div>
       <p class="text-xs text-muted-foreground">
-        {{if .thread_id}}by <a class="underline underline-offset-4" href="/chat/{{.thread_id}}">{{or .thread_kind "thread"}} thread</a>{{else}}by atrium{{end}}
+        {{if .ThreadID}}by <a class="underline underline-offset-4" href="/chat/{{str .ThreadID}}">{{or (str .ThreadKind) "thread"}} thread</a>{{else}}by atrium{{end}}
       </p>
-      {{if .error}}<p class="max-w-full truncate text-xs text-muted-foreground" title="{{.error}}">{{.error}}</p>{{end}}
+      {{if .Error}}<p class="max-w-full truncate text-xs text-muted-foreground" title="{{str .Error}}">{{str .Error}}</p>{{end}}
     </div>
     {{end}}
     <div class="flex sm:ms-auto">
-      {{with $e.write}}
-      {{if .undone_at}}
-      <span class="badge" data-variant="outline">Undone {{template "when" (dict "epoch" .undone_at "style" "datetime")}}</span>
-      {{else if eq .state "unknown"}}
+      {{with $e.Write}}
+      {{if .UndoneAt}}
+      <span class="badge" data-variant="outline">Undone {{template "when" (dict "epoch" .UndoneAt "style" "datetime")}}</span>
+      {{else if eq .State "unknown"}}
       <div class="flex flex-col gap-1">
         <p class="max-w-xs text-xs text-muted-foreground">The write has an unknown outcome. Check the calendar, then resolve it. atrium does not touch the calendar.</p>
         <button type="button" class="btn" data-size="sm" data-variant="outline"
-                hx-post="/activity/write/{{$e.id}}/resolve" hx-target="#activity-{{$e.source}}-{{$e.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+                hx-post="/activity/write/{{$e.ID}}/resolve" hx-target="#activity-{{$e.Source}}-{{$e.ID}}" hx-swap="outerHTML" hx-disabled-elt="this"
                 hx-confirm="Mark this write resolved?">Resolve</button>
       </div>
-      {{else if eq .state "resolved"}}
+      {{else if eq .State "resolved"}}
       <span class="badge" data-variant="outline">Resolved</span>
-      {{else if .undoable}}
+      {{else if .Undoable}}
       <button type="button" class="btn" data-size="sm" data-variant="outline" title="Undo"
-              hx-post="/activity/write/{{$e.id}}/undo" hx-target="#activity-{{$e.source}}-{{$e.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-post="/activity/write/{{$e.ID}}/undo" hx-target="#activity-{{$e.Source}}-{{$e.ID}}" hx-swap="outerHTML" hx-disabled-elt="this"
               hx-confirm="Undo this change?">{{icon "undo-2"}}Undo</button>
       {{end}}
       {{end}}
-      {{with $e.mail}}
-      {{if .blocked}}
+      {{with $e.Mail}}
+      {{if .Blocked}}
       <div class="flex flex-col gap-1">
-        <p class="max-w-xs text-xs text-muted-foreground">{{if .undo_blocked}}The undo has an unknown or partial outcome.{{else}}The write has an unknown or interrupted outcome.{{end}} Check the mailbox, then record what you found. atrium does not touch the mailbox.</p>
-        {{template "resolve_controls" (dict "path" (printf "/activity/mail/%v/resolve" $e.id) "target" (printf "#activity-%v-%v" $e.source $e.id) "undo" .undo_blocked "forward" (and .blocked (not .undo_blocked)))}}
+        <p class="max-w-xs text-xs text-muted-foreground">{{if .UndoBlocked}}The undo has an unknown or partial outcome.{{else}}The write has an unknown or interrupted outcome.{{end}} Check the mailbox, then record what you found. atrium does not touch the mailbox.</p>
+        {{template "resolve_controls" (dict "path" (printf "/activity/mail/%v/resolve" $e.ID) "target" (printf "#activity-%v-%v" $e.Source $e.ID) "undo" .UndoBlocked "forward" (and .Blocked (not .UndoBlocked)))}}
       </div>
-      {{else if .undoable}}
+      {{else if .Undoable}}
       <button type="button" class="btn" data-size="sm" data-variant="outline" title="Undo"
-              hx-post="/activity/mail/{{$e.id}}/undo" hx-target="#activity-{{$e.source}}-{{$e.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-post="/activity/mail/{{$e.ID}}/undo" hx-target="#activity-{{$e.Source}}-{{$e.ID}}" hx-swap="outerHTML" hx-disabled-elt="this"
               hx-confirm="Undo this and put the message back?">{{icon "undo-2"}}Undo</button>
       {{end}}
       {{end}}
     </div>
   </div>
-  {{with $e.write}}{{if or .before .after}}
+  {{with $e.Write}}{{if or .Before .After}}
   <details class="text-xs">
     <summary class="cursor-pointer text-muted-foreground">Before and after</summary>
     <div class="mt-2 grid gap-2 md:grid-cols-2">
-      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="Before">{{or .before "(nothing)"}}</pre>
-      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="After">{{or .after "(nothing)"}}</pre>
+      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="Before">{{or .Before "(nothing)"}}</pre>
+      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="After">{{or .After "(nothing)"}}</pre>
     </div>
   </details>
   {{end}}{{end}}
-  {{with $e.settings}}{{if or .before .after}}
+  {{with $e.Settings}}{{if or .Before .After}}
   <details class="text-xs">
     <summary class="cursor-pointer text-muted-foreground">Before and after</summary>
     <div class="mt-2 grid gap-2 md:grid-cols-2">
-      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="Before">{{or .before "(nothing)"}}</pre>
-      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="After">{{or .after "(nothing)"}}</pre>
+      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="Before">{{or .Before "(nothing)"}}</pre>
+      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="After">{{or .After "(nothing)"}}</pre>
     </div>
   </details>
   {{end}}{{end}}
 </li>{{end}}
 
-{{template "activity_row" (dict "e" .Data.e "toast" .Toast)}}
+{{template "activity_row" (dict "e" .Data.E "toast" .Toast)}}

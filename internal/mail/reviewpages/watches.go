@@ -15,9 +15,10 @@ import (
 )
 
 type watchesPage struct {
-	Packages     []watches.Package `json:"packages"`
-	Birthdays    *[]birthdays.Item `json:"birthdays"`
-	BirthdayDays int               `json:"birthday_days"`
+	Packages            []watches.Package `json:"packages"`
+	Birthdays           []birthdays.Item  `json:"birthdays"`
+	BirthdaysConfigured bool              `json:"birthdays_configured"`
+	BirthdayDays        int               `json:"birthday_days"`
 }
 
 func (s *service) showWatches(w http.ResponseWriter, r *http.Request, notice *tpl.Toast) {
@@ -37,12 +38,12 @@ func (s *service) showWatches(w http.ResponseWriter, r *http.Request, notice *tp
 	}
 	items, configured, err := birthdays.UpcomingFor(ctx, s.deps.DB.Read, birthdays.Date(year, month, day), window)
 	check(err)
-	data := watchesPage{Packages: packages, BirthdayDays: window}
+	data := watchesPage{Packages: packages, BirthdayDays: window, BirthdaysConfigured: configured}
 	if configured {
 		if items == nil {
 			items = []birthdays.Item{}
 		}
-		data.Birthdays = &items
+		data.Birthdays = items
 	}
 	s.page(w, r, http.StatusOK, "watches", "watches.gohtml", data, notice)
 }

@@ -1,8 +1,8 @@
-{{define "title"}}{{or .Data.view.thread.title "Thread"}}{{end}}
-{{define "heading"}}{{or .Data.view.thread.title "Thread"}}{{end}}
+{{define "title"}}{{or .Data.View.Thread.Title "Thread"}}{{end}}
+{{define "heading"}}{{or .Data.View.Thread.Title "Thread"}}{{end}}
 {{define "content_class"}}max-w-[96rem]{{end}}
-{{define "content"}}{{$d := .Data}}{{$t := $d.view.thread}}
-<div id="workspace" class="flex min-h-[calc(100dvh-6.5rem)] flex-col gap-6 md:grid md:min-h-[calc(100dvh-7.5rem)] md:grid-cols-[minmax(0,1fr)_auto_var(--panel-w)] md:items-start" style="--panel-w: 24rem" data-thread="{{$t.id}}">
+{{define "content"}}{{$d := .Data}}{{$t := $d.View.Thread}}
+<div id="workspace" class="flex min-h-[calc(100dvh-6.5rem)] flex-col gap-6 md:grid md:min-h-[calc(100dvh-7.5rem)] md:grid-cols-[minmax(0,1fr)_auto_var(--panel-w)] md:items-start" style="--panel-w: 24rem" data-thread="{{$t.ID}}">
   <div id="thread" class="flex min-h-full min-w-0 flex-col gap-6">
     {{template "chat_thread" (dict "d" $d "csrf" .CSRF)}}
   </div>
@@ -14,11 +14,11 @@
       <button type="button" role="tab" id="panel-tab-preview" aria-controls="panel-preview" aria-selected="false" tabindex="-1">{{icon "eye" "size-3.5"}}Preview</button>
       <button type="button" class="btn ms-auto md:hidden" data-variant="ghost" data-size="icon-sm" aria-label="Close panel" data-action="toggle-panel">{{icon "x"}}</button>
     </nav>
-    <div role="tabpanel" id="panel-work" aria-labelledby="panel-tab-work" tabindex="-1" aria-selected="true" class="flex flex-col gap-4" hx-get="/chat/{{$t.id}}/work" hx-trigger="work-changed" hx-swap="innerHTML">
-      {{template "chat_work" $d.work}}
+    <div role="tabpanel" id="panel-work" aria-labelledby="panel-tab-work" tabindex="-1" aria-selected="true" class="flex flex-col gap-4" hx-get="/chat/{{$t.ID}}/work" hx-trigger="work-changed" hx-swap="innerHTML">
+      {{template "chat_work" $d.Work}}
     </div>
-    {{if $d.history}}<div role="tabpanel" id="panel-history" aria-labelledby="panel-tab-history" tabindex="-1" aria-selected="false" hidden>
-      <div id="history-body" hx-get="/chat/{{$t.id}}/history" hx-trigger="load" hx-swap="innerHTML"></div>
+    {{if $d.History}}<div role="tabpanel" id="panel-history" aria-labelledby="panel-tab-history" tabindex="-1" aria-selected="false" hidden>
+      <div id="history-body" hx-get="/chat/{{$t.ID}}/history" hx-trigger="load" hx-swap="innerHTML"></div>
     </div>{{end}}
     <div role="tabpanel" id="panel-preview" aria-labelledby="panel-tab-preview" tabindex="-1" aria-selected="false" hidden>
       <div id="preview-body" data-loading="reader-loading" class="flex flex-col gap-4">

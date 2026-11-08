@@ -170,14 +170,11 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	check(err)
-	result, _ := plainJSON(done.Result).(map[string]any)
 	if done.Status == proposals.Applied {
-		summary, _ := result["summary"].(string)
-		s.card(w, r, id, toast("success", "Applied", summary))
+		s.card(w, r, id, toast("success", "Applied", resultString(done.Result, "summary")))
 		return
 	}
-	failure, _ := result["error"].(string)
-	s.card(w, r, id, toast("error", "It did not finish", failure))
+	s.card(w, r, id, toast("error", "It did not finish", resultString(done.Result, "error")))
 }
 
 func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
@@ -260,4 +257,17 @@ func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
 	}
 	check(err)
 	s.card(w, r, id, resolvedToast(outcome))
+}
+
+func resultString(v any, key string) string {
+	switch x := v.(type) {
+	case py.Dict:
+		value, _ := x.Get(key)
+		s, _ := value.(string)
+		return s
+	case map[string]any:
+		s, _ := x[key].(string)
+		return s
+	}
+	return ""
 }
