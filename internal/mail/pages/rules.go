@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -17,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/ruleedit"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/mail/triage"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -43,7 +43,7 @@ func ruleProblem(err error) string {
 		return friendly
 	}
 	_, size := utf8.DecodeRuneInString(text)
-	return py.Upper(text[:size]) + text[size:]
+	return strings.ToUpper(text[:size]) + text[size:]
 }
 
 func (s *service) ruleViews(ctx context.Context, account string) []ruleView {
@@ -125,7 +125,7 @@ func (s *service) ruleNew(w http.ResponseWriter, r *http.Request) {
 	data := ruleEditData{IsNew: true, Suggestions: []map[string]any{}, Errors: []string{}}
 	ctx := r.Context()
 	if values, given := q["message"]; given {
-		sourceID, ok := py.LaxInt64(web.LastValue(values, ""))
+		sourceID, ok := laxInt64(web.LastValue(values, ""))
 		if !ok {
 			web.Unprocessable(w, web.BadInt("query", "message", web.LastValue(values, "")))
 			return
@@ -195,21 +195,17 @@ func conditionList(fields, ops, values []string) []any {
 		case op == "in" || op == "suffix":
 			list := []string{}
 			for part := range strings.SplitSeq(value, ",") {
-				if part = py.Strip(part); part != "" {
+				if part = strings.TrimSpace(part); part != "" {
 					list = append(list, part)
 				}
 			}
 			condition["value"] = list
-		case field == rules.AgeField && py.IsDigits(py.Strip(value)):
-			n, err := py.IntString(value)
+		case field == rules.AgeField && isDigits(strings.TrimSpace(value)):
+			n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 			if err != nil {
 				panic(err)
 			}
-			if n.IsInt64() {
-				condition["value"] = n.Int64()
-			} else {
-				condition["value"] = n
-			}
+			condition["value"] = n
 		default:
 			condition["value"] = value
 		}
@@ -281,7 +277,7 @@ func (s *service) saveRule(w http.ResponseWriter, r *http.Request, id string, is
 	var query []string
 	for _, p := range [][2]string{{"account", form.account}, {"saved", rule.ID}, {"created", map[bool]string{true: "1"}[isNew]}} {
 		if p[1] != "" {
-			query = append(query, py.URLQuotePlus(p[0])+"="+py.URLQuotePlus(p[1]))
+			query = append(query, url.QueryEscape(p[0])+"="+url.QueryEscape(p[1]))
 		}
 	}
 	http.Redirect(w, r, withQuery("/rules", strings.Join(query, "&")), http.StatusSeeOther)
@@ -289,7 +285,7 @@ func (s *service) saveRule(w http.ResponseWriter, r *http.Request, id string, is
 
 func (s *service) ruleCreate(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	s.saveRule(w, r, py.Strip(web.FormString(form, "id", "")), true, readRuleForm(form))
+	s.saveRule(w, r, strings.TrimSpace(web.FormString(form, "id", "")), true, readRuleForm(form))
 }
 
 func (s *service) ruleUpdate(w http.ResponseWriter, r *http.Request) {

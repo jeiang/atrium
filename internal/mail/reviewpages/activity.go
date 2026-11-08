@@ -3,6 +3,7 @@ package reviewpages
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -28,6 +28,16 @@ const (
 
 var categories = []string{categoryMail, categoryAssistant, categoryWiki, categoryMedia, categorySettings}
 
+func mustJSON(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
+func mustJSONIndent(v any) string {
+	b, _ := json.MarshalIndent(v, "", " ")
+	return string(b)
+}
+
 const categorySQL = "CASE WHEN w.tool LIKE 'notion%' THEN 'wiki' WHEN w.tool LIKE 'media%' THEN 'media' ELSE 'assistant' END"
 
 const writeColumns = "id, ts, thread_id, tool, target, before_json, after_json, undo_json, undone_at, thread_kind, category"
@@ -36,11 +46,11 @@ func snippet(raw *string) (string, error) {
 	if raw == nil || *raw == "" {
 		return "", nil
 	}
-	value, err := py.JSONLoads([]byte(*raw))
-	if err != nil {
+	var value any
+	if err := json.Unmarshal([]byte(*raw), &value); err != nil {
 		return "", err
 	}
-	text := []rune(py.JSONDumps(value, py.JSONOpts{Indent: 1, NoEnsureASCII: true}))
+	text := []rune(mustJSONIndent(value))
 	if len(text) <= snippetLimit {
 		return string(text), nil
 	}
@@ -169,7 +179,7 @@ func (s *service) activityPage(w http.ResponseWriter, r *http.Request) {
 	offset := int64(0)
 	if r.URL.Query().Has("offset") {
 		raw := web.QueryValue(r.URL.Query(), "offset")
-		n, ok := py.LaxInt64(raw)
+		n, ok := laxInt64(raw)
 		if !ok {
 			web.Unprocessable(w, web.BadInt("query", "offset", raw))
 			return

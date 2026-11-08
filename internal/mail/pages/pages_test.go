@@ -11,7 +11,6 @@ import (
 	"regexp"
 
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func TestMessagePageFullPartialAndMissing(t *testing.T) {
@@ -287,12 +286,28 @@ func TestRuleMoveAndDelete(t *testing.T) {
 	contains(t, status(t, s.do("DELETE", "/rules/one", nil, hx), 200, "delete again"), "Rule not found")
 }
 
+func urlQuote(s string) string {
+	const hex = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := range len(s) {
+		c := s[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '.' || c == '-' || c == '~' || c == '/' {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(hex[c>>4])
+		b.WriteByte(hex[c&15])
+	}
+	return b.String()
+}
+
 func TestRuleIDsWithSpecialCharactersReachTheRule(t *testing.T) {
 	s := seeded(t, "shadow", Options{})
 	name := "a b&c<d>é?#%"
 	status(t, s.post("/rules", url.Values{"id": {name}, "action": {"file"}, "dest": {"Bills"}, "field": {"from_addr"}, "op": {"eq"}, "value": {"x"}}), 303, "create")
 	list := status(t, s.get("/rules"), 200, "list")
-	escaped := py.URLQuote(name)
+	escaped := urlQuote(name)
 	contains(t, list, `href="/rules/`+escaped+`/edit"`)
 	lacks(t, list, "%2525")
 	status(t, s.get("/rules/"+escaped+"/edit"), 200, "edit")

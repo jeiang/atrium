@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/smtp"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -135,7 +135,7 @@ func (s *service) draftSend(w http.ResponseWriter, r *http.Request) {
 	updated, _ := web.FormField(web.FormValues(r), "updated_at")
 	var result drafts.Result
 	var err error
-	if at, perr := py.ParseFloat(updated); perr == nil {
+	if at, perr := strconv.ParseFloat(updated, 64); perr == nil {
 		result, err = s.drafts.Send(detached(r), id, at)
 	} else {
 		err = drafts.Error("draft changed, review again")

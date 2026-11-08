@@ -16,8 +16,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/triage"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
+	"github.com/jeiang/atrium/internal/urlx"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -47,7 +47,7 @@ func withQuery(path, query string) string {
 }
 
 func referer(r *http.Request) (path, query string, sameHost bool) {
-	parts, err := py.URLSplit(r.Header.Get("Referer"))
+	parts, err := urlx.URLSplit(r.Header.Get("Referer"))
 	return parts.Path, parts.Query, err == nil && parts.Netloc == r.Host
 }
 
@@ -163,7 +163,7 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 	var form_ *correctForm
 	if !ok {
 		var selected *string
-		if text := py.Strip(dest); text != "" {
+		if text := strings.TrimSpace(dest); text != "" {
 			selected = &text
 		}
 		form_ = s.correctContext(r, fresh, shown, selected, problem)
@@ -205,7 +205,7 @@ func (s *service) moveCorrection(r *http.Request, found *message.View, id int64)
 	}()
 	if err != nil {
 		log.Error(fmt.Sprintf("moving corrected message %d failed", id), logx.Err, err.Error())
-		return " It could not be moved yet: " + py.ExceptionClass(err) + "."
+		return " It could not be moved yet: " + err.Error() + "."
 	}
 	switch {
 	case !out.ran:
