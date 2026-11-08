@@ -376,26 +376,3 @@ func Disconnect(ctx context.Context, d *db.DB, name string) error {
 type Unknown string
 
 func (e Unknown) Error() string { return fmt.Sprintf("unknown integration %q", string(e)) }
-
-func Alerts(ctx context.Context, q db.Querier) ([]string, error) {
-	rows, err := q.QueryContext(ctx, "SELECT name, state FROM integration_health WHERE state IN (?, ?, ?) ORDER BY name", Failing, NeedsReauth, Expiring)
-	if err != nil {
-		return nil, err
-	}
-	pairs, err := db.Collect(rows, func(r *sql.Rows) ([2]string, error) {
-		var p [2]string
-		return p, r.Scan(&p[0], &p[1])
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(pairs))
-	for _, p := range pairs {
-		label := p[0]
-		if i, ok := Get(p[0]); ok {
-			label = i.Label
-		}
-		out = append(out, label+" "+strings.ReplaceAll(p[1], "_", " "))
-	}
-	return out, nil
-}

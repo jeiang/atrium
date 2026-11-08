@@ -62,7 +62,7 @@ func (c Config) sibling(name string) string {
 	return filepath.Join(filepath.Dir(c.DBPath), name)
 }
 
-func (c Config) Credential(ctx context.Context, account string) (user, password string, ok bool) {
+func Credential(ctx context.Context, account string) (user, password string, ok bool) {
 	st := From(ctx)
 	a, found := st.Account(account)
 	if !found || !a.Enabled || a.Login == "" {

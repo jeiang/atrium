@@ -14,8 +14,6 @@ import (
 	"github.com/mattn/go-sqlite3"
 )
 
-const driverName = "mattn"
-
 func init() {
 	sqlitevec.Auto()
 	conn, err := openDriver().Open("file::memory:")

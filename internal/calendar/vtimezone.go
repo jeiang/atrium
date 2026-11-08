@@ -31,11 +31,10 @@ func zoneNamed(name string) *time.Location {
 }
 
 type onset struct {
-	at       int64
-	offset   int
-	dst      bool
-	abbrev   string
-	fromWall int64
+	at     int64
+	offset int
+	dst    bool
+	abbrev string
 }
 
 func parseOffset(s string) (int, bool) {

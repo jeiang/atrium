@@ -25,21 +25,6 @@ func Templates() fs.FS {
 	return files
 }
 
-func noticeCount(text string) int {
-	lines := strings.Split(text, "\n")
-	separator := strings.Repeat("=", 64)
-	n := 0
-	for i, line := range lines {
-		if line != separator || i+1 >= len(lines) {
-			continue
-		}
-		if strings.Contains(lines[i+1], " (") && !strings.HasPrefix(lines[i+1], " ") {
-			n++
-		}
-	}
-	return n
-}
-
 func Module(version string) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		r.Get("/about", func(w http.ResponseWriter, r *http.Request) {

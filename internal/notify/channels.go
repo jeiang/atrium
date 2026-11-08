@@ -148,17 +148,6 @@ func (c Channel) FullText() bool {
 	return c.Privacy == Private
 }
 
-func Failing(ctx context.Context, q db.Querier) ([]string, error) {
-	rows, err := q.QueryContext(ctx, "SELECT name FROM ntfy_channels WHERE failures >= ? ORDER BY name", FailingAfter)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var name string
-		return name, r.Scan(&name)
-	})
-}
-
 func recordDelivery(ctx context.Context, q db.Querier, channel string, failure string) (int, error) {
 	if failure == "" {
 		_, err := q.ExecContext(ctx, "UPDATE ntfy_channels SET failures = 0, last_error = NULL, last_ok_at = ? WHERE name = ?", stamp(), channel)

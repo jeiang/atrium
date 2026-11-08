@@ -5,7 +5,6 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -52,8 +51,6 @@ func (s *service) artwork(set media.Settings) *media.Artwork {
 	art.Run = s.exec
 	return art
 }
-
-func wallClock() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
 
 func PublicCheck(cfg config.Config, _ config.Env, d *db.DB, reg *settings.Registry) func(*http.Request) bool {
 	return media.NewLinks(reg, d, cfg.MediaLinkKeyPath()).Verifier()

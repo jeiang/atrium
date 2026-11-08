@@ -85,8 +85,6 @@ type PropertyRow struct {
 	Value string `json:"value"`
 }
 
-func propertyText(prop Property) string { return prop.Text() }
-
 func propertyRows(properties string) ([]PropertyRow, error) {
 	var props map[string]Property
 	if err := json.Unmarshal([]byte(properties), &props); err != nil {
@@ -216,7 +214,6 @@ type hitInfo struct {
 	lastEditedTime       string
 	editedTS             float64
 	private              bool
-	score                float64
 }
 
 func idsJSON[T int64 | string](list []T) string {

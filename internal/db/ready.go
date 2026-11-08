@@ -12,12 +12,6 @@ var ready struct {
 	hooks []ReadyHook
 }
 
-func OnReady(h ReadyHook) {
-	ready.mu.Lock()
-	defer ready.mu.Unlock()
-	ready.hooks = append(ready.hooks, h)
-}
-
 func Ready(ctx context.Context, d *DB) error {
 	ready.mu.RLock()
 	hooks := append([]ReadyHook(nil), ready.hooks...)

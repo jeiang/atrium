@@ -644,10 +644,6 @@ func calls(rows *sql.Rows, err error) ([]ToolCall, error) {
 	return db.Collect(rows, func(r *sql.Rows) (ToolCall, error) { return scanCall(r) })
 }
 
-func ToolCallsOf(ctx context.Context, q db.Querier, runID int64) ([]ToolCall, error) {
-	return calls(q.QueryContext(ctx, "SELECT "+callColumns+" FROM tool_calls WHERE run_id = ? ORDER BY id", runID))
-}
-
 type CallKey struct {
 	RunID     int64
 	ToolUseID string

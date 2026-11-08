@@ -2,7 +2,6 @@ package timex
 
 import (
 	"math"
-	"math/big"
 	"slices"
 	"time"
 )
@@ -18,21 +17,6 @@ const (
 	secondsPerDay      = 86400
 	microsecondsPerSec = 1_000_000
 )
-
-func (d DateTime) Timestamp(loc *time.Location) float64 {
-	wall := time.Date(d.Year, time.Month(d.Month), d.Day, d.Hour, d.Minute, d.Second, 0, time.UTC).Unix()
-	var unix int64
-	if d.Aware {
-		unix = wall - int64(d.OffsetSeconds)
-	} else {
-		unix = WallToUnix(loc, wall)
-	}
-	micros := new(big.Int).SetInt64(unix)
-	micros.Mul(micros, big.NewInt(microsecondsPerSec))
-	micros.Add(micros, big.NewInt(int64(d.Microsecond)-int64(d.OffsetMicroseconds)))
-	f, _ := new(big.Rat).SetFrac(micros, big.NewInt(microsecondsPerSec)).Float64()
-	return f
-}
 
 func offsetAt(loc *time.Location, unix int64) int64 {
 	_, off := time.Unix(unix, 0).In(loc).Zone()

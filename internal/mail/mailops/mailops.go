@@ -435,10 +435,6 @@ func StoreFlag(ctx context.Context, client mail.Client, imapName string, validit
 	return nil
 }
 
-func ArchiveUIDs(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32, size int) error {
-	return StoreLabels(ctx, client, imapName, validity, uids, size, nil, []string{InboxLabel})
-}
-
 type Relabel struct {
 	Add    []string
 	Remove []string

@@ -12,10 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 )
 
-func Raw(subject string) (header, text []byte) {
-	return RawWith(subject, "a@x.test", subject, "hello")
-}
-
 func RawWith(subject, sender, msgid, body string) (header, text []byte) {
 	h := fmt.Sprintf("From: %s\r\nTo: me@x.test\r\nSubject: %s\r\nMessage-ID: <%s@x.test>\r\n"+
 		"Date: Tue, 06 Oct 2026 10:00:00 +0000\r\nContent-Type: text/plain\r\n\r\n", sender, subject, msgid)

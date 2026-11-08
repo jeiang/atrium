@@ -21,8 +21,6 @@ var proposalStatuses = []string{
 	proposals.Pending, proposals.Applied, proposals.Failed, proposals.Dismissed, proposals.Suppressed, allStatuses,
 }
 
-func (s *service) kind(name string) (proposals.Kind, bool) { return s.registry.Kind(name) }
-
 func (s *service) kindLabel(name string) string {
 	kind, _ := s.registry.Kind(name)
 	return kind.Label

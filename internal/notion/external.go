@@ -40,5 +40,3 @@ func ExternalURLs(markdown string) ([]string, error) {
 	}
 	return out, nil
 }
-
-func ParentRef(parent Parent) (kind, id string) { return parent.Ref() }

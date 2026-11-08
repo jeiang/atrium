@@ -228,10 +228,6 @@ func (s *slot) record(ctx context.Context, action, undo py.Dict) error {
 	return s.settle(ctx, action, undo, ledger.OK, nil)
 }
 
-func (s *slot) recordFailed(ctx context.Context, action py.Dict, text string) error {
-	return s.settle(ctx, action, nil, ledger.Failed, &text)
-}
-
 func (s *slot) partial(ctx context.Context, action, undo py.Dict, text string) error {
 	return s.settle(ctx, action, undo, ledger.Partial, &text)
 }

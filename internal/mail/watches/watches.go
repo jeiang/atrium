@@ -141,20 +141,6 @@ func (o Options) chat() Chat {
 	return chatJSON
 }
 
-func (o Options) clock() float64 {
-	if o.Clock != nil {
-		return o.Clock()
-	}
-	return float64(time.Now().UnixNano()) / 1e9
-}
-
-func (o Options) env() config.Env {
-	if o.Env != nil {
-		return o.Env
-	}
-	return config.OS
-}
-
 type tracking struct{ Carrier, Number string }
 
 func findTracking(text string) []tracking {

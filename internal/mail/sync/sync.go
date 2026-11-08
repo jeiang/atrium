@@ -420,8 +420,6 @@ func dayOf(ts float64) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-func IMAPDate(t time.Time) string { return t.UTC().Format("02-Jan-2006") }
-
 func (s *Syncer) SentSince(ctx context.Context, mailboxID, validity int64, run float64, backfillDays int) (time.Time, error) {
 	cutoff := run - float64(backfillDays)*86400
 	var oldest sql.NullFloat64
@@ -605,13 +603,6 @@ func internalTS(value string) float64 {
 		return ts
 	}
 	return 0
-}
-
-func nullable(s string) any {
-	if s == "" {
-		return nil
-	}
-	return s
 }
 
 func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mailbox, validity int64, ftsBodyChars int, run float64, item mail.Message) error {

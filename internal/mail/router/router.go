@@ -321,20 +321,6 @@ func (r *Router) Record(ctx context.Context, m *rules.Message, d *Decision) erro
 	})
 }
 
-func deref(s *string) any {
-	if s == nil {
-		return nil
-	}
-	return *s
-}
-
-func derefFloat(f *float64) any {
-	if f == nil {
-		return nil
-	}
-	return *f
-}
-
 func (r *Router) RouteAccount(ctx context.Context, account string) (int, error) {
 	pending, err := Eligible(ctx, r.DB.Read, account)
 	if err != nil || len(pending) == 0 {

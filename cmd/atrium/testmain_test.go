@@ -93,13 +93,6 @@ func fixtureFor(t *testing.T) *fixture {
 	return nil
 }
 
-func fixtureEnv(t *testing.T) map[string]string {
-	if f := fixtureFor(t); f != nil {
-		return f.env
-	}
-	return nil
-}
-
 func varsFor(t *testing.T) *testVars {
 	if v, ok := testVarsByTest.Load(t); ok {
 		return v.(*testVars)

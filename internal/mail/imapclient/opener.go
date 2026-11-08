@@ -9,9 +9,9 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 )
 
-func Opener(cfg config.Config) mail.OpenFunc {
+func Opener(_ config.Config) mail.OpenFunc {
 	return func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
-		_, password, ok := cfg.Credential(ctx, opts.Account)
+		_, password, ok := config.Credential(ctx, opts.Account)
 		spec, known := config.From(ctx).Account(opts.Account)
 		if !ok || !known {
 			return nil, errors.New("missing credentials for " + opts.Account)

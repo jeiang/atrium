@@ -3,7 +3,6 @@ package tool
 import (
 	"context"
 	"encoding/json"
-	"errors"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/progress"
@@ -62,12 +61,3 @@ type Context struct {
 type Park struct{ Question string }
 
 func (p *Park) Error() string { return "waiting for the operator: " + p.Question }
-
-// Question extracts the question text from a park error.
-func Question(err error) (string, bool) {
-	var p *Park
-	if errors.As(err, &p) {
-		return p.Question, true
-	}
-	return "", false
-}

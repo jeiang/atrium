@@ -156,7 +156,7 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Res
 }
 
 func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusals, error) {
-	user, _, ok := s.Cfg.Credential(ctx, d.Account)
+	user, _, ok := config.Credential(ctx, d.Account)
 	if !ok {
 		return nil, nil, &smtp.Failure{Kind: "Config", Msg: d.Account + " is not configured"}
 	}
@@ -170,7 +170,7 @@ func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusal
 		ToAddrs: d.ToAddrs, CcAddrs: d.CcAddrs, Subject: d.Subject, Body: d.Body, InReplyTo: d.InReplyTo, Refs: d.Refs,
 	}, s.now(), makeID(domain))
 	recipients := append(addresses(d.ToAddrs), addresses(d.CcAddrs)...)
-	refused, err := smtp.Send(ctx, s.Cfg, d.Account, msg, recipients, s.SMTP)
+	refused, err := smtp.Send(ctx, config.Credential, d.Account, msg, recipients, s.SMTP)
 	return msg, refused, err
 }
 
