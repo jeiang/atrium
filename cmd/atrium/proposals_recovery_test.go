@@ -19,7 +19,7 @@ import (
 func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoable(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	t.Setenv("ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_DB", path)
 	ctx := context.Background()
 	seed, err := db.Connect(path)
 	if err != nil {

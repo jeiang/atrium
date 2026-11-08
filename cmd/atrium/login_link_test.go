@@ -117,11 +117,11 @@ func newLinkSite(t *testing.T) *linkSite {
 	path := filepath.Join(dir, "atrium.db")
 	listener := httptest.NewUnstartedServer(nil)
 	base := "http://" + listener.Listener.Addr().String()
-	t.Setenv("ATRIUM_DB", path)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_MODE", "shadow")
-	t.Setenv("ATRIUM_CORE_PUBLIC_URL", base)
-	t.Setenv(settingEnv(secrets.OIDCClientSecret), "s3cret-for-the-test")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_MODE", "shadow")
+	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", base)
+	setEnv(t, settingEnv(secrets.OIDCClientSecret), "s3cret-for-the-test")
 	t.Cleanup(func() { settings.Default.SetPins(nil) })
 	site := &linkSite{t: t, base: base}
 	site.idp = oidctest.New(t, oidctest.Options{ClientSecret: "s3cret-for-the-test"})
@@ -136,7 +136,7 @@ func newLinkSite(t *testing.T) *linkSite {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 	site.db = d
-	cfg, err := config.Load(config.OS)
+	cfg, err := config.Load(testLookup)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,8 +149,8 @@ func newLinkSite(t *testing.T) *linkSite {
 	links := loginlink.New(d)
 	links.Now = func() time.Time { return *site.clock }
 	app, err := web.New(web.Options{
-		Cfg: cfg, Env: config.OS, DB: d, Auth: []string{web.AuthOIDC}, AllowedHosts: []string{"127.0.0.1"},
-		Render: render, OIDC: oidc.New(d, config.OS), LoginLinks: links,
+		Cfg: cfg, Env: testLookup, DB: d, Auth: []string{web.AuthOIDC}, AllowedHosts: []string{"127.0.0.1"},
+		Render: render, OIDC: oidc.New(d, testLookup), LoginLinks: links,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -321,7 +321,7 @@ func TestLoginLinkRefusesBadLifetimesAndMissingPublicURL(t *testing.T) {
 			t.Fatalf("%s minutes: %d %q", minutes, code, out.String())
 		}
 	}
-	t.Setenv("ATRIUM_CORE_PUBLIC_URL", "")
+	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", "")
 	var out, errs bytes.Buffer
 	if code := defaultApp().Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitError || out.Len() != 0 || !strings.Contains(errs.String(), "public") {
 		t.Fatalf("no public URL: %d %q %q", code, out.String(), errs.String())
@@ -375,9 +375,9 @@ func TestLoginLinkFirstRunSetupThenOIDCSignIn(t *testing.T) {
 func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	t.Setenv("ATRIUM_DB", path)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_CORE_PUBLIC_URL", "https://atrium.example")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", "https://atrium.example")
 	t.Cleanup(func() { settings.Default.SetPins(nil) })
 	var imported, importErrs bytes.Buffer
 	if code := defaultApp().Run(context.Background(), []string{"db", "import-v1", filepath.Join(golden.Dir(), "atrium.db")}, &imported, &importErrs); code != cli.ExitOK {

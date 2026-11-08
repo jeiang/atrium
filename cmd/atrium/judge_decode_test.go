@@ -47,8 +47,8 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": answer}}}})
 	}))
 	t.Cleanup(srv.Close)
-	t.Setenv("ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	t.Setenv("ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
+	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
+	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
 
 	seed, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
 	if err != nil {

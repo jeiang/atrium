@@ -91,7 +91,7 @@ func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 		t.Errorf("invalid import: exit %d stderr %q", ran.code, ran.stderr)
 	}
 
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	prompt := func() string {
 		t.Helper()
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))

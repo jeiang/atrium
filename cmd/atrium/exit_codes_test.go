@@ -48,10 +48,8 @@ func TestCLISignalExitCodes(t *testing.T) {
 		{name: "hangup", sig: syscall.SIGHUP},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
-			t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-			t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-			t.Setenv("ATRIUM_PUBLIC_HOST", "")
 			listener, err := net.Listen("tcp", "127.0.0.1:0")
 			if err != nil {
 				t.Fatal(err)
@@ -64,6 +62,7 @@ func TestCLISignalExitCodes(t *testing.T) {
 				t.Fatal(err)
 			}
 			cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", port, "--auth", "local"})
+			cmd.Env = append(cmd.Env, "ATRIUM_DB="+filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR="+filepath.Join(dir, "cache"), "ATRIUM_PUBLIC_HOST=")
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &stdout, &stderr
 			if err := cmd.Start(); err != nil {
@@ -118,10 +117,12 @@ func cliExitProcessArgs(t *testing.T, args []string) *exec.Cmd {
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=^TestCLIExitProcess$")
 	cmd.Env = append(os.Environ(), "ATRIUM_CLI_EXIT_E2E=1", "ATRIUM_CLI_EXIT_ARGS="+string(encoded))
+	inherited := testEnv
 	if activeFixture != nil {
-		for name, value := range activeFixture.env {
-			cmd.Env = append(cmd.Env, name+"="+value)
-		}
+		inherited = activeFixture.env
+	}
+	for name, value := range inherited {
+		cmd.Env = append(cmd.Env, name+"="+value)
 	}
 	return cmd
 }

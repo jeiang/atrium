@@ -31,10 +31,10 @@ func pinRowOf(t *testing.T, r settingsRun) pinRow {
 func TestConfigFilePinsBeatTheDatabaseAndRefuseWrites(t *testing.T) {
 	dir := t.TempDir()
 	db := filepath.Join(dir, "atrium.db")
-	t.Setenv("ATRIUM_DB", db)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
-	t.Setenv("ATRIUM_CONFIG", "")
+	setEnv(t, "ATRIUM_DB", db)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_CONFIG", "")
 	const key = "monthly_budget_usd"
 
 	if r := runSettings(t, "set", key, "90"); r.code != cli.ExitOK {
@@ -50,8 +50,8 @@ func TestConfigFilePinsBeatTheDatabaseAndRefuseWrites(t *testing.T) {
 		return path
 	}
 	config := write("atrium.toml", "[assistant]\nmonthly_budget_usd = 120\nmax_steps_chat = \"${PIN_TEST_STEPS}\"\n")
-	t.Setenv("ATRIUM_CONFIG", config)
-	t.Setenv("PIN_TEST_STEPS", "30")
+	setEnv(t, "ATRIUM_CONFIG", config)
+	setEnv(t, "PIN_TEST_STEPS", "30")
 
 	got := pinRowOf(t, runSettings(t, "get", key))
 	if got.Value != "120" || got.Source != "pin" || got.PinSource != "config "+config+" assistant."+key {
@@ -71,15 +71,15 @@ func TestConfigFilePinsBeatTheDatabaseAndRefuseWrites(t *testing.T) {
 		t.Errorf("stored value = %q, %v; want 90 untouched", value, ok)
 	}
 
-	t.Setenv("ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD", "200")
+	setEnv(t, "ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD", "200")
 	got = pinRowOf(t, runSettings(t, "get", key))
 	if got.Value != "200" || got.PinSource != "env ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD" {
 		t.Errorf("env pin over config: %+v", got)
 	}
-	t.Setenv("ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD", "")
+	setEnv(t, "ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD", "")
 
 	secret := write("budget", " 130\n")
-	t.Setenv("ATRIUM_CONFIG", write("file.toml", "[assistant]\nmonthly_budget_usd_file = "+`"`+secret+`"`+"\n"))
+	setEnv(t, "ATRIUM_CONFIG", write("file.toml", "[assistant]\nmonthly_budget_usd_file = "+`"`+secret+`"`+"\n"))
 	if got := pinRowOf(t, runSettings(t, "get", key)); got.Value != "130" || got.Source != "pin" {
 		t.Errorf("file pin: %+v", got)
 	}
@@ -92,13 +92,13 @@ func TestConfigFilePinsBeatTheDatabaseAndRefuseWrites(t *testing.T) {
 		"invalid value":   {"[assistant]\nmonthly_budget_usd = -1\n", "assistant.monthly_budget_usd"},
 		"both file+value": {"[assistant]\nmonthly_budget_usd = 1\nmonthly_budget_usd_file = \"" + secret + "\"\n", "assistant.monthly_budget_usd"},
 	} {
-		t.Setenv("ATRIUM_CONFIG", write("bad.toml", c.body))
+		setEnv(t, "ATRIUM_CONFIG", write("bad.toml", c.body))
 		r := runSettings(t, "get", key)
 		if r.code != cli.ExitError || !strings.Contains(r.stderr, c.names) || r.stdout != "" {
 			t.Errorf("%s: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
 		}
 	}
-	t.Setenv("ATRIUM_CONFIG", write("bad.toml", "[assistant]\nmax_steps_chat = \"${PIN_TEST_UNDEFINED}\"\n"))
+	setEnv(t, "ATRIUM_CONFIG", write("bad.toml", "[assistant]\nmax_steps_chat = \"${PIN_TEST_UNDEFINED}\"\n"))
 	if r := runSettings(t, "get", key); !strings.Contains(r.stderr, "PIN_TEST_UNDEFINED") {
 		t.Errorf("stderr %q does not name the variable", r.stderr)
 	}

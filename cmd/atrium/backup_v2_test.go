@@ -16,9 +16,9 @@ func shellEnv(t *testing.T) (string, []string) {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	t.Setenv("ATRIUM_DB_KEY", "")
-	t.Setenv("ATRIUM_CONFIG", "")
-	t.Setenv("CREDENTIALS_DIRECTORY", "")
+	setEnv(t, "ATRIUM_DB_KEY", "")
+	setEnv(t, "ATRIUM_CONFIG", "")
+	setEnv(t, "CREDENTIALS_DIRECTORY", "")
 	return path, []string{"ATRIUM_DB=" + path, "ATRIUM_CACHE_DIR=" + filepath.Join(dir, "cache")}
 }
 

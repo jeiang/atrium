@@ -36,7 +36,7 @@ var nextRequest = regexp.MustCompile(`about (\d+) tokens`)
 
 func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 	dir, api := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(settingEnv(loop.CacheTTLKey), "5m")
+	setEnv(t, settingEnv(loop.CacheTTLKey), "5m")
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("first")))
 	first := agentRun(t, "--text", "hello")
 	if first.State != "done" {
@@ -44,7 +44,7 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 	}
 	thread := strconv.FormatInt(first.ThreadID, 10)
 
-	t.Setenv(settingEnv(budget.ThreadCapKey), "0.000001")
+	setEnv(t, settingEnv(budget.ThreadCapKey), "0.000001")
 	sent := len(api.Requests())
 	refused := agentRun(t, "--thread", thread, "--text", "again")
 	if refused.State != "failed" || refused.Error == nil || !strings.Contains(*refused.Error, "thread cost cap") || len(api.Requests()) != sent {
@@ -73,12 +73,12 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 		return spent
 	}
 	spent := threadSpend()
-	t.Setenv(settingEnv(budget.ThreadCapKey), fmt.Sprintf("%.8f", spent+cold*1.5))
+	setEnv(t, settingEnv(budget.ThreadCapKey), fmt.Sprintf("%.8f", spent+cold*1.5))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("second")))
 	if ran := agentRun(t, "--thread", thread, "--text", "one"); ran.State != "done" {
 		t.Fatalf("run under the thread cap: %+v", ran)
 	}
-	t.Setenv(settingEnv(budget.ThreadCapKey), fmt.Sprintf("%.8f", cold+threadSpend()/2))
+	setEnv(t, settingEnv(budget.ThreadCapKey), fmt.Sprintf("%.8f", cold+threadSpend()/2))
 	sent = len(api.Requests())
 	if held := agentRun(t, "--thread", thread, "--text", "two"); held.State != "failed" || held.Error == nil ||
 		!strings.Contains(*held.Error, budget.ThreadCapKey) || len(api.Requests()) != sent {

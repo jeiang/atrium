@@ -95,10 +95,10 @@ func (f *fakeNtfy) last() (ntfyPublish, int) {
 func TestNtfyChannelsMintTokensProbePrivacyAndTrackHealth(t *testing.T) {
 	f := newFakeNtfy(t)
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv("ATRIUM_DB_KEY", rightKeyHex)
-	t.Setenv(settingEnv(notify.KeyURL), f.URL)
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	setEnv(t, settingEnv(notify.KeyURL), f.URL)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	t.Setenv(settingEnv(notify.KeyTopic), "phase-a-topic")
+	setEnv(t, settingEnv(notify.KeyTopic), "phase-a-topic")
 	if got := runApp("settings", "list"); got.code != 0 {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}

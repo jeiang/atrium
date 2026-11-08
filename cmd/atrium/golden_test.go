@@ -186,25 +186,25 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ICLOUD_APPLE_ID", "ICLOUD_MAIL_USERNAME", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
 		delete(vars, name)
 	}
-	for k, v := range vars {
-		t.Setenv(k, v)
-	}
-	pins, err := config.LoadPins(config.OS, settings.Default)
-	if err != nil {
-		t.Fatal(err)
-	}
-	settings.Default.SetPins(pins)
+	env := config.Map(vars)
 	t.Cleanup(func() { settings.Default.SetPins(nil) })
 	fakes := data.world.fakes()
 	clients := func(config.Config) mail.OpenFunc {
 		return func(_ context.Context, account string) (mail.Client, error) { return fakes[account], nil }
 	}
 	app := cli.New("atrium", logx.Setup)
-	app.Bootstrap = bootstrap(config.OS, settings.Default)
-	app.Add(commands(config.OS, settings.Default, nil, clients, func() float64 { return data.world.Clock })...)
+	app.Env = env
+	app.Bootstrap = bootstrap(env, settings.Default)
+	app.Add(commands(env, settings.Default, nil, clients, func() float64 { return data.world.Clock })...)
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
 	f := &fixture{t: t, dir: dir, env: vars, app: app}
+	activeFixture = f
+	t.Cleanup(func() {
+		if activeFixture == f {
+			activeFixture = nil
+		}
+	})
 	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"))
 	if code, _, stderr := f.Run(context.Background(), "reindex"); code != cli.ExitOK {
 		t.Fatalf("embed the seeded world: exit %d stderr %q", code, stderr)
@@ -216,10 +216,19 @@ func (f *fixture) lookup(name string) (string, bool) {
 	if v, ok := f.env[name]; ok {
 		return v, true
 	}
-	return config.OS(name)
+	return testLookup(name)
+}
+
+func (f *fixture) loadPins() {
+	pins, err := config.LoadPins(config.Map(f.env), settings.Default)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	settings.Default.SetPins(pins)
 }
 
 func (f *fixture) Run(ctx context.Context, argv ...string) (code int, stdout, stderr string) {
+	f.loadPins()
 	var out, errs bytes.Buffer
 	code = f.app.Run(ctx, argv, &out, &errs)
 	return code, out.String(), errs.String()
@@ -227,6 +236,7 @@ func (f *fixture) Run(ctx context.Context, argv ...string) (code int, stdout, st
 
 func (f *fixture) Serve() string {
 	if f.base == "" {
+		f.loadPins()
 		f.base = startServeIn(f.t, f.dir)
 	}
 	return f.base

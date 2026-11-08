@@ -44,9 +44,9 @@ func event(uid, start, end string) string {
 func TestFindSlotHonoursOverlapsAllDayEventsWorkingHoursAndDST(t *testing.T) {
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_CORE_TZ", "America/New_York")
-	t.Setenv(settingEnv(calendar.WorkDaysKey), "sun,mon")
+	setEnv(t, settingEnv(calendar.WorkDaysKey), "sun,mon")
 	mirror := filepath.Join(dir, "calendars")
-	t.Setenv(settingEnv(calendar.CalendarDirKey), mirror)
+	setEnv(t, settingEnv(calendar.CalendarDirKey), mirror)
 	if err := os.MkdirAll(filepath.Join(mirror, "home"), 0o750); err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestFindSlotHonoursOverlapsAllDayEventsWorkingHoursAndDST(t *testing.T) {
 		t.Errorf("find_slot result lacks the expected windows:\n%s", got)
 	}
 
-	t.Setenv(settingEnv(calendar.WorkHoursKey), "13:00-14:00")
+	setEnv(t, settingEnv(calendar.WorkHoursKey), "13:00-14:00")
 	if got := unescape(toolResult(t, "find_slot", input)); !strings.Contains(got, `"2026-11-01T13:00:00-05:00"`) || strings.Contains(got, `"2026-11-01T09:00:00-05:00"`) {
 		t.Errorf("changing work_hours did not change the windows:\n%s", got)
 	}

@@ -28,7 +28,7 @@ func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT INTO pass_runs (job, started_at, finished_at, outcome) VALUES ('scan', ?, ?, 'ok')", old, old); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(settingEnv(passrun.RetentionKey), "1")
+	setEnv(t, settingEnv(passrun.RetentionKey), "1")
 
 	if got := runApp("proposals", "scan-all"); got.code != cli.ExitOK {
 		t.Fatalf("scan-all: %d %s", got.code, got.stderr)
@@ -74,7 +74,7 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 		return len(notices)
 	}
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(settingEnv(notify.KeyURL), ntfy.URL)
+	setEnv(t, settingEnv(notify.KeyURL), ntfy.URL)
 	if got := runApp("settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}

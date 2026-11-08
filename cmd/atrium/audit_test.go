@@ -19,9 +19,9 @@ type auditRow struct {
 func TestSettingsAuditRecordsCommandsAndShowsInActivity(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	t.Setenv("ATRIUM_DB", path)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 
 	const first, second = "sk-audit-first-0123456789", "sk-audit-second-9876543210"
 	runs := []settingsRun{

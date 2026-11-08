@@ -37,7 +37,7 @@ func opsAddr(t *testing.T) string {
 	}
 	addr := l.Addr().String()
 	_ = l.Close()
-	t.Setenv(settingEnv(ops.ListenKey), addr)
+	setEnv(t, settingEnv(ops.ListenKey), addr)
 	return "http://" + addr
 }
 
@@ -115,8 +115,8 @@ func TestOpsReadinessIsDegradedWhenNtfyIsDownAndPprofFollowsItsSetting(t *testin
 	}))
 	t.Cleanup(ntfy.Close)
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(settingEnv(notify.KeyURL), ntfy.URL)
-	t.Setenv(settingEnv(ops.PprofKey), "true")
+	setEnv(t, settingEnv(notify.KeyURL), ntfy.URL)
+	setEnv(t, settingEnv(ops.PprofKey), "true")
 	opsBase := opsAddr(t)
 	startServeIn(t, dir)
 

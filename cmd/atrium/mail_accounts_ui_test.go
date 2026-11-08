@@ -29,12 +29,12 @@ import (
 func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T) {
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
 	srv := llmstub.Server(t, nil)
-	t.Setenv("ATRIUM_DB_KEY", rightKeyHex)
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	t.Setenv(settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
-	t.Setenv("ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	t.Setenv("ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "shadow")
+	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
+	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
+	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
+	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "shadow")
 
 	work := mailtest.NewFakeClient()
 	work.Gmail = true
@@ -124,8 +124,8 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 		return func(_ context.Context, account string) (mail.Client, error) { return fakes[account], nil }
 	}
 	app := cli.New("atrium", logx.Setup)
-	app.Bootstrap = bootstrap(config.OS, settings.Default)
-	app.Add(commands(config.OS, settings.Default, nil, clients, nil)...)
+	app.Bootstrap = bootstrap(testLookup, settings.Default)
+	app.Add(commands(testLookup, settings.Default, nil, clients, nil)...)
 	var out, errs bytes.Buffer
 	if code := app.Run(context.Background(), []string{"sync", "--account", "work"}, &out, &errs); code != 0 {
 		t.Fatalf("sync of the added account: %d %s", code, errs.String())

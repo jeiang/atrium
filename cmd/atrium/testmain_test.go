@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic"
@@ -52,13 +53,45 @@ var defaultAccountsFile = func() string {
 	return path
 }()
 
+var testEnv = func() map[string]string {
+	env := requirementEnv(filepath.Join(testRoot, "media"))
+	env[anthropic.BaseURLEnv] = "http://127.0.0.1:9"
+	env[settingEnv(ops.ListenKey)] = "127.0.0.1:0"
+	for _, name := range moduleNames {
+		env[flagEnv(name)] = "true"
+	}
+	return env
+}()
+
+func testLookup(name string) (string, bool) {
+	if activeFixture != nil {
+		if v, ok := activeFixture.env[name]; ok {
+			return v, true
+		}
+	}
+	if v, ok := testEnv[name]; ok {
+		return v, true
+	}
+	return config.OS(name)
+}
+
+var testApp = newApp(testLookup, settings.Default, nil)
+
 func setEnv(t *testing.T, name, value string) {
 	t.Helper()
+	target := testEnv
 	if activeFixture != nil {
-		activeFixture.env[name] = value
-		return
+		target = activeFixture.env
 	}
-	t.Setenv(name, value)
+	old, had := target[name]
+	target[name] = value
+	t.Cleanup(func() {
+		if had {
+			target[name] = old
+			return
+		}
+		delete(target, name)
+	})
 }
 
 func moduleEnv(dir string) map[string]string {
@@ -99,11 +132,16 @@ func init() {
 			_ = os.Setenv(name, value)
 		}
 	}
+	for _, entry := range os.Environ() {
+		if name, value, ok := strings.Cut(entry, "="); ok {
+			testEnv[name] = value
+		}
+	}
 }
 
 func defaultApp() *cli.App {
 	if activeFixture != nil {
 		return activeFixture.app
 	}
-	return newApp(config.OS, settings.Default, nil)
+	return testApp
 }

@@ -61,9 +61,9 @@ func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testi
 	const chatKey = "sk-chat-endpoint-0123456789"
 	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
 	moduleFixture(t, flagsExcept(module.Mail, ""))
-	t.Setenv(settingEnv(mail.KeyChatURL), chat.URL+"/v1")
-	t.Setenv(settingEnv(mail.KeyEmbedURL), embed.URL+"/v1")
-	t.Setenv(settingEnv(mail.KeyChatKey), chatKey)
+	setEnv(t, settingEnv(mail.KeyChatURL), chat.URL+"/v1")
+	setEnv(t, settingEnv(mail.KeyEmbedURL), embed.URL+"/v1")
+	setEnv(t, settingEnv(mail.KeyChatKey), chatKey)
 
 	ok := runApp("endpoints", "probe")
 	if ok.code != cli.ExitOK || strings.Contains(ok.stdout+ok.stderr, chatKey) || strings.Contains(ok.stderr, "hosted") {
@@ -106,7 +106,7 @@ func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testi
 		t.Errorf("rules export while mail needs settings: %d %q", export.code, export.stdout)
 	}
 
-	t.Setenv(settingEnv(mail.KeyEmbedURL), embed.URL+"/v2")
+	setEnv(t, settingEnv(mail.KeyEmbedURL), embed.URL+"/v2")
 	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
 		t.Errorf("a changed endpoint is not held to the old failed probe: %d %q", on.code, on.stderr)
 	}

@@ -19,10 +19,10 @@ import (
 
 func TestDatabaseEncryptCopiesAPlaintextDatabaseAndRefusesWhileItIsInUse(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_DB_KEY", "")
-	t.Setenv("ATRIUM_CONFIG", "")
-	t.Setenv("CREDENTIALS_DIRECTORY", "")
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_DB_KEY", "")
+	setEnv(t, "ATRIUM_CONFIG", "")
+	setEnv(t, "CREDENTIALS_DIRECTORY", "")
 	path := filepath.Join(dir, "atrium.db")
 	data, err := os.ReadFile(filepath.Join(golden.Dir(), "world.db"))
 	if err != nil {
