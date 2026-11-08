@@ -19,14 +19,9 @@ const (
 )
 
 func init() {
-	for _, name := range []string{Mail, Calendar, Notion, Media, Assistant, Notifications, Grafana, Contacts} {
+	for _, name := range Builtins {
 		settings.MustRegister(FlagDef(name))
 	}
-}
-
-func FlagOn(ctx context.Context, q db.Querier, name string) (bool, error) {
-	got, err := settings.Default.Resolve(ctx, q, FlagKey(name))
-	return got.Value == "true", err
 }
 
 var operatorTables = []string{"settings", "secrets", "accounts", "threads", "usage"}
@@ -57,13 +52,11 @@ func seeded(ctx context.Context, q db.Querier) (bool, error) {
 	return n > 0, err
 }
 
-var lateModules = []string{Contacts}
-
 func (s *Set) Seed(ctx context.Context, d *db.DB) error {
 	if done, err := seeded(ctx, d.Read); err != nil {
 		return err
 	} else if done {
-		return s.adoptLate(ctx, d)
+		return s.adoptMissing(ctx, d)
 	}
 	ctx = audit.With(ctx, seedActor, audit.Migration)
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
@@ -99,7 +92,7 @@ func hasOperatorData(ctx context.Context, q db.Querier) (bool, error) {
 	return false, nil
 }
 
-func (s *Set) adoptLate(ctx context.Context, d *db.DB) error {
+func (s *Set) adoptMissing(ctx context.Context, d *db.DB) error {
 	var first string
 	err := d.Read.QueryRowContext(ctx, "SELECT new_value FROM settings_audit WHERE key = ? AND source = ? ORDER BY id LIMIT 1",
 		seedKey, string(audit.Migration)).Scan(&first)
@@ -107,13 +100,16 @@ func (s *Set) adoptLate(ctx context.Context, d *db.DB) error {
 		return err
 	}
 	pending := map[string]bool{}
-	for _, name := range lateModules {
+	for _, r := range s.regs {
+		if r.Core {
+			continue
+		}
 		var n int
-		if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM settings_audit WHERE key = ?", FlagKey(name)).Scan(&n); err != nil {
+		if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM settings_audit WHERE key = ?", FlagKey(r.Name)).Scan(&n); err != nil {
 			return err
 		}
 		if n == 0 {
-			pending[name] = true
+			pending[r.Name] = true
 		}
 	}
 	if len(pending) == 0 {

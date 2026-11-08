@@ -107,11 +107,13 @@ func (s *Set) gateSetup(owner, path string, needs []string, setup func(*cli.Args
 			}
 			if st, _ := snap.Status(owner); st.State != Enabled {
 				skip(path, st, "module is not enabled, command skipped")
+				sdnotify.FromEnv().Ready()
 				return cli.ExitOK
 			}
 			for _, name := range needs {
 				if st, _ := snap.Status(name); st.State != Enabled {
 					skip(path, st, "needed module is not enabled, command skipped")
+					sdnotify.FromEnv().Ready()
 					return cli.ExitOK
 				}
 			}
@@ -122,10 +124,9 @@ func (s *Set) gateSetup(owner, path string, needs []string, setup func(*cli.Args
 
 func skip(path string, st Status, msg string) {
 	log.Info(msg, logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Reason(), logx.Command, strings.TrimSpace(path))
-	sdnotify.FromEnv().Ready()
 }
 
-func (s *Set) load(ctx context.Context) (*Snapshot, error) {
+func (s *Set) open(ctx context.Context) (*db.DB, error) {
 	cfg, err := config.Load(s.env)
 	if err != nil {
 		return nil, err
@@ -134,10 +135,19 @@ func (s *Set) load(ctx context.Context) (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = d.Close() }()
 	if err := config.Boot(ctx, s.env, d, cfg); err != nil {
+		_ = d.Close()
 		return nil, err
 	}
+	return d, nil
+}
+
+func (s *Set) load(ctx context.Context) (*Snapshot, error) {
+	d, err := s.open(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = d.Close() }()
 	if err := s.Seed(ctx, d); err != nil {
 		return nil, err
 	}

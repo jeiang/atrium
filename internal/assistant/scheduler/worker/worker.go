@@ -128,7 +128,7 @@ func (w *Worker) notifySkipped(ctx context.Context, skip scheduler.Skipped, now 
 	if previous == scheduler.StatusSkippedBudget {
 		return nil
 	}
-	if on, err := notify.Enabled(ctx, w.Service.DB.Read); err != nil || !on {
+	if !notify.Enabled() {
 		return err
 	}
 	loc, err := config.Location(w.Service.Env)

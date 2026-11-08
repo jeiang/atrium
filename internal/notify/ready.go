@@ -23,8 +23,8 @@ func init() {
 		},
 	})
 	integrations.SetNotifier(func(ctx context.Context, d *db.DB, env config.Env, title, body string) error {
-		if on, err := Enabled(ctx, d.Read); err != nil || !on {
-			return err
+		if !Enabled() {
+			return nil
 		}
 		_, err := Send(ctx, d.Write, env, Message{Channel: System, Priority: 4, Title: title, Body: body})
 		return err
@@ -51,8 +51,8 @@ func healthOf(ctx context.Context, client *http.Client, base string) error {
 }
 
 func health(ctx context.Context, d *db.DB) error {
-	if on, err := Enabled(ctx, d.Read); err != nil || !on {
-		return err
+	if !Enabled() {
+		return nil
 	}
 	base, err := text(ctx, d.Read, KeyURL)
 	if err != nil || base == "" {

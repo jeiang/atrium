@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
@@ -20,43 +21,68 @@ type Set struct {
 	cur  atomic.Pointer[Snapshot]
 }
 
+var active atomic.Pointer[Set]
+
+func IsEnabled(name string) bool {
+	s := active.Load()
+	if s == nil {
+		return false
+	}
+	snap := s.Current()
+	return snap != nil && snap.Enabled(name)
+}
+
 func NewSet(reg *settings.Registry, env config.Env, mods ...Module) (*Set, error) {
 	s := &Set{reg: reg, env: env}
 	var regs []Registration
 	for _, m := range mods {
 		regs = append(regs, m.Register(Context{Current: s.Current, Env: env}))
 	}
-	s.regs = byNeeds(regs)
+	s.regs = regs
 	if err := s.validate(); err != nil {
 		return nil, err
 	}
+	ordered, err := byNeeds(regs)
+	if err != nil {
+		return nil, err
+	}
+	s.regs = ordered
+	active.Store(s)
 	return s, nil
 }
 
-func byNeeds(regs []Registration) []Registration {
+func byNeeds(regs []Registration) ([]Registration, error) {
 	placed := map[string]bool{}
 	var out []Registration
-	for len(regs) > 0 {
-		i := slices.IndexFunc(regs, func(r Registration) bool {
+	remaining := slices.Clone(regs)
+	for len(remaining) > 0 {
+		i := slices.IndexFunc(remaining, func(r Registration) bool {
 			return !slices.ContainsFunc(r.Needs, func(dep string) bool { return !placed[dep] })
 		})
 		if i < 0 {
-			return append(out, regs...)
+			names := make([]string, len(remaining))
+			for j, r := range remaining {
+				names[j] = r.Name
+			}
+			return nil, &DependencyCycle{Modules: names}
 		}
-		placed[regs[i].Name] = true
-		out = append(out, regs[i])
-		regs = slices.Delete(regs, i, i+1)
+		placed[remaining[i].Name] = true
+		out = append(out, remaining[i])
+		remaining = slices.Delete(remaining, i, i+1)
 	}
-	return out
+	return out, nil
 }
 
 func (s *Set) validate() error {
 	seen := map[string]bool{}
-	commands := map[string]bool{}
 	for _, r := range s.regs {
 		if r.Name == "" || seen[r.Name] {
 			return DuplicateModule(r.Name)
 		}
+		seen[r.Name] = true
+	}
+	commands := map[string]bool{}
+	for _, r := range s.regs {
 		if r.Core && (len(r.Needs) > 0 || len(r.Requires) > 0) {
 			return &InvalidCore{Module: r.Name}
 		}
@@ -65,14 +91,16 @@ func (s *Set) validate() error {
 				return &UnknownDependency{Module: r.Name, Dependency: dep}
 			}
 		}
-		seen[r.Name] = true
 		if !r.Core {
 			if _, ok := s.reg.Lookup(FlagKey(r.Name)); !ok {
 				return FlagNotRegistered(FlagKey(r.Name))
 			}
 		}
 		for _, rq := range r.Requires {
-			if _, ok := s.reg.Lookup(rq.Key); rq.Key != "" && !ok {
+			if rq.Key == "" {
+				continue
+			}
+			if _, ok := s.reg.Lookup(rq.Key); !ok {
 				return settings.UnknownKey(rq.Key)
 			}
 		}
@@ -82,16 +110,19 @@ func (s *Set) validate() error {
 			}
 			commands[c.Name] = true
 		}
-	}
-	for _, r := range s.regs {
-		for _, name := range r.Soft {
-			if !seen[name] {
-				return &UnknownDependency{Module: r.Name, Dependency: name}
+		for _, p := range r.Pages {
+			if p.Module == nil {
+				return &InvalidPage{Module: r.Name}
 			}
 		}
+	}
+	for _, r := range s.regs {
 		for path, leaf := range r.Leaves {
 			if !hasPath(r.Commands, strings.Fields(path)) {
 				return &UnknownLeaf{Module: r.Name, Path: path}
+			}
+			if leaf.Always && len(leaf.Needs) > 0 {
+				return &InvalidLeaf{Module: r.Name, Path: path}
 			}
 			for _, name := range leaf.Needs {
 				if !seen[name] {
@@ -122,6 +153,9 @@ func hasPath(cmds []*cli.Command, path []string) bool {
 type Snapshot struct {
 	set      *Set
 	statuses []Status
+	once     sync.Once
+	registry *registry.Registry
+	regErr   error
 }
 
 func (s *Set) Current() *Snapshot { return s.cur.Load() }
@@ -195,6 +229,11 @@ func (n *Snapshot) Enabled(name string) bool {
 }
 
 func (n *Snapshot) Registry() (*registry.Registry, error) {
+	n.once.Do(func() { n.registry, n.regErr = n.buildRegistry() })
+	return n.registry, n.regErr
+}
+
+func (n *Snapshot) buildRegistry() (*registry.Registry, error) {
 	out := registry.New()
 	for _, r := range n.set.regs {
 		if r.Tools == nil || !n.Enabled(r.Name) {

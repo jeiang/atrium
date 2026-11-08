@@ -51,10 +51,11 @@ func (s *Set) rows(ctx context.Context, d *web.Deps) ([]row, error) {
 		if s.regs[i].Core {
 			continue
 		}
-		on, err := FlagOn(ctx, d.DB.Read, st.Name)
+		found, err := s.reg.Resolve(ctx, d.DB.Read, FlagKey(st.Name))
 		if err != nil {
 			return nil, err
 		}
+		on := found.Value == "true"
 		source, _, err := s.reg.Pinned(FlagKey(st.Name))
 		if err != nil {
 			return nil, err
