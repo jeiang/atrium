@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/big"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,10 +18,12 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/mail/rules"
+	"github.com/jeiang/atrium/internal/ordmap"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
-const Gone = "(gone)"
+const gone = "(gone)"
 
 var sinceRe = regexp.MustCompile(`^(\d+)([hd])$`)
 
@@ -30,17 +32,13 @@ const liveCopy = "(SELECT l.%s FROM messages l WHERE l.account = m.account AND l
 
 var ActualSQL = fmt.Sprintf(liveCopy, "location") + " AS actual, " + fmt.Sprintf(liveCopy, "in_inbox") + " AS actual_inbox"
 
-var OutcomeSQL = "SELECT d.id AS decision_id, d.stage, d.action, d.dest, m.id AS message_id, m.msgid, m.from_domain, " +
+var outcomeSQL = "SELECT d.stage, d.action, d.dest, m.from_domain, " +
 	ActualSQL + " FROM decisions d JOIN messages m ON m.id = d.message_id WHERE d.account = ? AND d.ts >= ? ORDER BY d.id"
 
 type Querier = db.Querier
 
-type SinceError string
-
-func (e SinceError) Error() string { return string(e) }
-
 func sinceError(value string) error {
-	return SinceError(fmt.Sprintf("time data %q does not match format YYYY-MM-DD", value))
+	return fmt.Errorf("invalid date %q, want YYYY-MM-DD", value)
 }
 
 func ParseSince(env config.Env, value *string, at time.Time) (float64, error) {
@@ -48,24 +46,23 @@ func ParseSince(env config.Env, value *string, at time.Time) (float64, error) {
 	if value == nil {
 		return 0, nil
 	}
-	match := sinceRe.FindStringSubmatchIndex(*value)
+	match := sinceRe.FindStringSubmatch(*value)
 	if match != nil {
-		n := new(big.Int)
-		for _, r := range (*value)[match[2]:match[3]] {
-			n.Mul(n, big.NewInt(10)).Add(n, big.NewInt(int64(py.DigitValue(r))))
+		n, err := strconv.ParseInt(match[1], 10, 64)
+		if err != nil {
+			return 0, errors.New("int too large to convert to float")
 		}
-		if (*value)[match[4]:match[5]] == "h" {
-			n.Mul(n, big.NewInt(3600))
-		} else {
-			n.Mul(n, big.NewInt(86400))
+		unit := int64(86400)
+		if match[2] == "h" {
+			unit = 3600
 		}
-		span, _ := new(big.Float).SetInt(n).Float64()
+		span := float64(n) * float64(unit)
 		if math.IsInf(span, 0) {
 			return 0, errors.New("int too large to convert to float")
 		}
 		return now - span, nil
 	}
-	day, ok := py.StrptimeDate(*value)
+	day, ok := timex.ParseDay(*value)
 	if !ok {
 		return 0, sinceError(*value)
 	}
@@ -73,30 +70,26 @@ func ParseSince(env config.Env, value *string, at time.Time) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return day.Timestamp(loc), nil
+	return float64(time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc).Unix()), nil
 }
 
 type Row struct {
-	DecisionID  int64
 	Stage       string
 	Action      string
 	Dest        sql.NullString
-	MessageID   int64
-	MsgID       string
 	FromDomain  string
 	Actual      sql.NullString
 	ActualInbox sql.NullInt64
 }
 
 func Outcomes(ctx context.Context, q Querier, account string, since float64) ([]Row, error) {
-	rows, err := q.QueryContext(ctx, OutcomeSQL, account, since)
+	rows, err := q.QueryContext(ctx, outcomeSQL, account, since)
 	if err != nil {
 		return nil, err
 	}
 	return db.Collect(rows, func(r *sql.Rows) (Row, error) {
 		var row Row
-		err := r.Scan(&row.DecisionID, &row.Stage, &row.Action, &row.Dest, &row.MessageID, &row.MsgID, &row.FromDomain,
-			&row.Actual, &row.ActualInbox)
+		err := r.Scan(&row.Stage, &row.Action, &row.Dest, &row.FromDomain, &row.Actual, &row.ActualInbox)
 		return row, err
 	})
 }
@@ -104,7 +97,7 @@ func Outcomes(ctx context.Context, q Querier, account string, since float64) ([]
 func (r Row) Outcome() string {
 	switch {
 	case !r.Actual.Valid:
-		return Gone
+		return gone
 	case r.ActualInbox.Int64 != 0:
 		return config.Inbox
 	}
@@ -115,48 +108,9 @@ func (r Row) Matches() bool {
 	return r.Dest.Valid && slices.Contains(strings.Split(r.Actual.String, "|"), r.Dest.String)
 }
 
-type Counter[K comparable] struct {
-	keys   []K
-	counts map[K]int
-}
-
-func (c *Counter[K]) Add(k K) {
-	if c.counts == nil {
-		c.counts = map[K]int{}
-	}
-	if _, ok := c.counts[k]; !ok {
-		c.keys = append(c.keys, k)
-	}
-	c.counts[k]++
-}
-
-func (c *Counter[K]) Get(k K) int { return c.counts[k] }
-
-func (c *Counter[K]) Total() int {
-	total := 0
-	for _, n := range c.counts {
-		total += n
-	}
-	return total
-}
-
-type Entry[K comparable] struct {
-	Key   K
-	Count int
-}
-
-func (c *Counter[K]) MostCommon(n int) []Entry[K] {
-	out := make([]Entry[K], len(c.keys))
-	for i, k := range c.keys {
-		out[i] = Entry[K]{k, c.counts[k]}
-	}
-	slices.SortStableFunc(out, func(a, b Entry[K]) int { return b.Count - a.Count })
-	return out[:min(n, len(out))]
-}
-
 type Tally struct {
-	Stages        Counter[string]
-	Dests         Counter[string]
+	Stages        ordmap.Counter[string]
+	Dests         ordmap.Counter[string]
 	Deletes       int
 	NoLabel       int
 	Inbox, Gone   int
@@ -179,7 +133,7 @@ func Count(rows []Row) Tally {
 		switch r.Outcome() {
 		case config.Inbox:
 			t.Inbox++
-		case Gone:
+		case gone:
 			t.Gone++
 		default:
 			t.Moved = append(t.Moved, r)
@@ -228,7 +182,7 @@ type disagreement struct{ domain, proposed, actual string }
 
 func disagreementLines(title string, pairs []Row, limit int) []string {
 	out := []string{fmt.Sprintf("%s: %d", title, len(pairs))}
-	var grouped Counter[disagreement]
+	var grouped ordmap.Counter[disagreement]
 	for _, r := range pairs {
 		proposed := r.Dest.String
 		if proposed == "" {
@@ -316,15 +270,12 @@ func Build(ctx context.Context, q Querier, env config.Env, since *string, at tim
 	if err != nil {
 		return "", err
 	}
+	accounts, err := config.ExistingAccounts(ctx, q)
+	if err != nil {
+		return "", err
+	}
 	var lines []string
-	for _, spec := range config.Accounts() {
-		ok, err := AccountExists(ctx, q, spec.Name)
-		if err != nil {
-			return "", err
-		}
-		if !ok {
-			continue
-		}
+	for _, spec := range accounts {
 		section, err := accountSection(ctx, q, spec.Name, start, topDests, disagreeLines)
 		if err != nil {
 			return "", err

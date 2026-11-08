@@ -212,7 +212,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_CHARS` | `mail.mail_search_snippet_chars` |
 | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_TOKENS` | `mail.mail_search_snippet_tokens` |
 | `ATRIUM_MAIL_MAILOPS_BATCH` | `mail.mailops_batch` |
-| `ATRIUM_MAIL_OPENLOOPS_BACKFILL_LIMIT` | `mail.openloops_backfill_limit` |
 | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_SCAN_LIMIT` | `mail.openloops_commitment_scan_limit` |
 | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_WINDOW_DAYS` | `mail.openloops_commitment_window_days` |
 | `ATRIUM_MAIL_OPENLOOPS_COMMITMENTS_PER_MESSAGE` | `mail.openloops_commitments_per_message` |

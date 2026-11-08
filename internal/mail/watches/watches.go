@@ -3,7 +3,6 @@ package watches
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -18,27 +17,27 @@ import (
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/message"
+	"github.com/jeiang/atrium/internal/mail/mailscan"
 	"github.com/jeiang/atrium/internal/py"
 )
 
 var log = logx.Logger("atrium.watches")
 
 const (
-	Packages = "packages"
+	packages = "packages"
 
-	Ordered        = "ordered"
-	Shipped        = "shipped"
-	InTransit      = "in_transit"
-	OutForDelivery = "out_for_delivery"
-	Delivered      = "delivered"
-	Delayed        = "delayed"
-	Exception      = "exception"
+	ordered        = "ordered"
+	shipped        = "shipped"
+	inTransit      = "in_transit"
+	outForDelivery = "out_for_delivery"
+	delivered      = "delivered"
+	delayed        = "delayed"
+	exception      = "exception"
 
 	Day = 86400.0
 )
 
-var Statuses = [...]string{Ordered, Shipped, InTransit, OutForDelivery, Delivered, Delayed, Exception}
+var statusNames = [...]string{ordered, shipped, inTransit, outForDelivery, delivered, delayed, exception}
 
 var (
 	nonAlnum    = regexp.MustCompile(`[^a-z0-9]+`)
@@ -56,12 +55,12 @@ var (
 		status  string
 		pattern *regexp.Regexp
 	}{
-		{OutForDelivery, regexp.MustCompile(`(?i)out for delivery`)},
-		{Delivered, regexp.MustCompile(`(?i)\bdelivered\b`)},
-		{Exception, regexp.MustCompile(`(?i)unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception`)},
-		{Delayed, regexp.MustCompile(`(?i)\bdelay(?:ed)?\b|running late`)},
-		{InTransit, regexp.MustCompile(`(?i)in transit|on its way|on the way|arriving|arrives`)},
-		{Shipped, regexp.MustCompile(`(?i)\bshipped\b|has shipped|shipment|label created|picked up`)},
+		{outForDelivery, regexp.MustCompile(`(?i)out for delivery`)},
+		{delivered, regexp.MustCompile(`(?i)\bdelivered\b`)},
+		{exception, regexp.MustCompile(`(?i)unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception`)},
+		{delayed, regexp.MustCompile(`(?i)\bdelay(?:ed)?\b|running late`)},
+		{inTransit, regexp.MustCompile(`(?i)in transit|on its way|on the way|arriving|arrives`)},
+		{shipped, regexp.MustCompile(`(?i)\bshipped\b|has shipped|shipment|label created|picked up`)},
 	}
 )
 
@@ -81,7 +80,7 @@ const PackageSystem = "You read one email for the mailbox owner and decide wheth
 
 func str() map[string]any { return map[string]any{"type": "string"} }
 
-var PackageSchema = map[string]any{
+var packageSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"is_order":        map[string]any{"type": "boolean"},
@@ -89,16 +88,16 @@ var PackageSchema = map[string]any{
 		"tracking_number": str(),
 		"merchant":        str(),
 		"order_ref":       str(),
-		"status":          map[string]any{"type": "string", "enum": Statuses[:]},
+		"status":          map[string]any{"type": "string", "enum": statusNames[:]},
 		"status_text":     str(),
 	},
 	"required":             []string{"is_order", "carrier", "tracking_number", "merchant", "order_ref", "status", "status_text"},
 	"additionalProperties": false,
 }
 
-func MerchantKey(name string) (string, error) {
+func merchantKey(name string) string {
 	text := nonAlnum.ReplaceAllString(py.Casefold(name), " ")
-	return strings.Join(py.Split(text), " "), nil
+	return strings.Join(py.Split(text), " ")
 }
 
 func clip(text string, limit int) string {
@@ -109,16 +108,7 @@ func clip(text string, limit int) string {
 	return py.Clip(text, limit-1) + "…"
 }
 
-type Row struct {
-	ID         int64
-	DateTS     float64
-	Subject    string
-	FromName   string
-	FromAddr   string
-	FromDomain string
-}
-
-func rowText(row Row, body string, bodyChars int) string {
+func rowText(row mailscan.Message, body string, bodyChars int) string {
 	return fmt.Sprintf("From: %s <%s>\nSubject: %s\nBody:\n%s", row.FromName, row.FromAddr, row.Subject, py.Clip(body, bodyChars))
 }
 
@@ -130,7 +120,7 @@ type Options struct {
 
 type Chat func(ctx context.Context, url, system, user string, schema any, maxTokens int) (any, error)
 
-func ChatJSON(ctx context.Context, url, system, user string, schema any, maxTokens int) (any, error) {
+func chatJSON(ctx context.Context, url, system, user string, schema any, maxTokens int) (any, error) {
 	raw, err := llm.ChatJSON(ctx, url, system, user, schema, maxTokens)
 	if err != nil {
 		return nil, err
@@ -146,7 +136,7 @@ func (o Options) chat() Chat {
 	if o.Chat != nil {
 		return o.Chat
 	}
-	return ChatJSON
+	return chatJSON
 }
 
 func (o Options) clock() float64 {
@@ -163,41 +153,17 @@ func (o Options) env() config.Env {
 	return config.OS
 }
 
-func markScanned(ctx context.Context, d *db.DB, o Options, watch string, messageID int64, found bool) error {
-	_, err := d.Write.ExecContext(ctx, "INSERT OR REPLACE INTO watch_scans (watch, message_id, ts, found) VALUES (?, ?, ?, ?)",
-		watch, messageID, o.clock(), found)
-	return err
-}
+type tracking struct{ Carrier, Number string }
 
-func unscanned(ctx context.Context, q db.Querier, watch, where string, windowDays int, limit int, now float64) ([]Row, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT m.id, m.date_ts, m.subject, m.from_name, m.from_addr, m.from_domain FROM messages m WHERE m.gone_at IS NULL AND "+
-			"m.sent = 0 AND m.date_ts >= ? AND ("+where+") AND NOT EXISTS (SELECT 1 FROM messages o JOIN watch_scans s "+
-			"ON s.message_id = o.id WHERE s.watch = ? AND o.account = m.account AND o.digest = m.digest) "+
-			"ORDER BY m.date_ts DESC LIMIT ?",
-		now-float64(windowDays)*Day, watch, limit)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (Row, error) {
-		var m Row
-		err := r.Scan(&m.ID, &m.DateTS, &m.Subject, &m.FromName, &m.FromAddr, &m.FromDomain)
-		return m, err
-	})
-}
-
-type Tracking struct{ Carrier, Number string }
-
-func FindTracking(text string) ([]Tracking, error) {
+func findTracking(text string) []tracking {
 	low := py.Casefold(text)
-	var found []Tracking
-	add := func(carrier string, pattern *regexp.Regexp) error {
+	var found []tracking
+	add := func(carrier string, pattern *regexp.Regexp) {
 		for _, loc := range pattern.FindAllStringSubmatchIndex(text, -1) {
-			if item := (Tracking{carrier, text[loc[2]:loc[3]]}); !slices.Contains(found, item) {
+			if item := (tracking{carrier, text[loc[2]:loc[3]]}); !slices.Contains(found, item) {
 				found = append(found, item)
 			}
 		}
-		return nil
 	}
 	steps := []struct {
 		carrier string
@@ -208,49 +174,46 @@ func FindTracking(text string) ([]Tracking, error) {
 		{"FedEx", fedexRE, strings.Contains(low, "fedex")}, {"DHL", dhlRE, strings.Contains(low, "dhl")},
 	}
 	for _, s := range steps {
-		if !s.when {
-			continue
-		}
-		if err := add(s.carrier, s.pattern); err != nil {
-			return nil, err
+		if s.when {
+			add(s.carrier, s.pattern)
 		}
 	}
 	seen := map[string]bool{}
-	var out []Tracking
+	var out []tracking
 	for _, t := range found {
 		if !seen[t.Number] {
 			seen[t.Number] = true
 			out = append(out, t)
 		}
 	}
-	return out[:min(len(out), 5)], nil
+	return out[:min(len(out), 5)]
 }
 
-func FindOrderRef(text string) (string, error) {
+func findOrderRef(text string) string {
 	for _, loc := range orderRE.FindAllStringSubmatchIndex(text, -1) {
 		ref := py.Upper(text[loc[2]:loc[3]])
 		if strings.ContainsAny(ref, "0123456789") {
-			return ref, nil
+			return ref
 		}
 	}
-	return "", nil
+	return ""
 }
 
-func ClassifyStatus(subject, body string) (string, error) {
+func classifyStatus(subject, body string) string {
 	for _, text := range [...]string{subject, py.Clip(body, 1500)} {
 		for _, s := range statuses {
 			for _, loc := range s.pattern.FindAllStringIndex(text, -1) {
-				if s.status == Delivered && strings.HasSuffix(strings.ToLower(text[:loc[0]]), "be ") {
+				if s.status == delivered && strings.HasSuffix(strings.ToLower(text[:loc[0]]), "be ") {
 					continue
 				}
-				return s.status, nil
+				return s.status
 			}
 		}
 	}
-	return Ordered, nil
+	return ordered
 }
 
-func senderMerchant(row Row, carrierDomains []string) string {
+func senderMerchant(row mailscan.Message, carrierDomains []string) string {
 	domain := py.Casefold(row.FromDomain)
 	for _, d := range carrierDomains {
 		if domain == d || strings.HasSuffix(domain, "."+d) {
@@ -260,7 +223,7 @@ func senderMerchant(row Row, carrierDomains []string) string {
 	return clip(row.FromName, 80)
 }
 
-type Item struct {
+type item struct {
 	Carrier        string
 	TrackingNumber string
 	Merchant       string
@@ -269,26 +232,20 @@ type Item struct {
 	StatusText     string
 }
 
-func RegexPackages(row Row, body string, carrierDomains []string) ([]Item, error) {
+func regexPackages(row mailscan.Message, body string, carrierDomains []string) []item {
 	text := row.Subject + "\n" + body
-	numbers, err := FindTracking(text)
-	if err != nil || len(numbers) == 0 {
-		return nil, err
+	numbers := findTracking(text)
+	if len(numbers) == 0 {
+		return nil
 	}
-	status, err := ClassifyStatus(row.Subject, body)
-	if err != nil {
-		return nil, err
-	}
-	orderRef, err := FindOrderRef(text)
-	if err != nil {
-		return nil, err
-	}
+	status := classifyStatus(row.Subject, body)
+	orderRef := findOrderRef(text)
 	merchant := senderMerchant(row, carrierDomains)
-	out := make([]Item, len(numbers))
+	out := make([]item, len(numbers))
 	for i, n := range numbers {
-		out[i] = Item{n.Carrier, n.Number, merchant, orderRef, status, clip(row.Subject, 120)}
+		out[i] = item{n.Carrier, n.Number, merchant, orderRef, status, clip(row.Subject, 120)}
 	}
-	return out, nil
+	return out
 }
 
 func pyStr(v any) string {
@@ -301,13 +258,13 @@ func pyStr(v any) string {
 	return fmt.Sprint(v)
 }
 
-func CleanPackage(answer any, text string) (item Item, ok bool, err error) {
+func cleanPackage(answer any, text string) (item, bool, error) {
 	reply, isDict := answer.(py.Dict)
 	if !isDict {
-		return Item{}, false, nil
+		return item{}, false, nil
 	}
 	if v, _ := reply.Get("is_order"); !py.Truthy(v) {
-		return Item{}, false, nil
+		return item{}, false, nil
 	}
 	field := func(key string) any { v, _ := reply.Get(key); return v }
 	tracking := spaceRuns.ReplaceAllString(pyStr(field("tracking_number")), "")
@@ -322,13 +279,13 @@ func CleanPackage(answer any, text string) (item Item, ok bool, err error) {
 		orderRef = ""
 	}
 	if tracking == "" && orderRef == "" {
-		return Item{}, false, nil
+		return item{}, false, nil
 	}
-	status := Ordered
-	if s, isStr := field("status").(string); isStr && slices.Contains(Statuses[:], s) {
+	status := ordered
+	if s, isStr := field("status").(string); isStr && slices.Contains(statusNames[:], s) {
 		status = s
 	}
-	return Item{
+	return item{
 		Carrier:        clip(pyStr(field("carrier")), 30),
 		TrackingNumber: tracking,
 		Merchant:       clip(pyStr(field("merchant")), 80),
@@ -365,17 +322,14 @@ func findPackages(ctx context.Context, q db.Querier, where string, args ...any) 
 	return db.Collect(rows, scanPackageRow)
 }
 
-func findPackage(ctx context.Context, q db.Querier, item Item) (*packageRow, error) {
+func findPackage(ctx context.Context, q db.Querier, item item) (*packageRow, error) {
 	if item.TrackingNumber != "" {
 		rows, err := findPackages(ctx, q, "tracking_number = ?", item.TrackingNumber)
 		if err != nil || len(rows) > 0 {
 			return first(rows), err
 		}
 	}
-	key, err := MerchantKey(item.Merchant)
-	if err != nil {
-		return nil, err
-	}
+	key := merchantKey(item.Merchant)
 	if item.OrderRef != "" {
 		if key != "" {
 			rows, err := findPackages(ctx, q, "merchant_key = ? AND order_ref = ?", key, item.OrderRef)
@@ -401,18 +355,15 @@ func first(rows []packageRow) *packageRow {
 	return &rows[0]
 }
 
-func orElse(a, b string) string {
-	if a != "" {
-		return a
+func prefer(next, current string) string {
+	if next != "" {
+		return next
 	}
-	return b
+	return current
 }
 
-func UpsertPackage(ctx context.Context, q db.Querier, item Item, messageID int64, messageTS, now float64) (int64, error) {
-	key, err := MerchantKey(item.Merchant)
-	if err != nil {
-		return 0, err
-	}
+func upsertPackage(ctx context.Context, q db.Querier, item item, messageID int64, messageTS, now float64) (int64, error) {
+	key := merchantKey(item.Merchant)
 	existing, err := findPackage(ctx, q, item)
 	if err != nil {
 		return 0, err
@@ -429,92 +380,72 @@ func UpsertPackage(ctx context.Context, q db.Querier, item Item, messageID int64
 		return res.LastInsertId()
 	}
 	sets := []string{"carrier = ?", "tracking_number = ?", "merchant = ?", "merchant_key = ?", "order_ref = ?"}
-	args := []any{orElse(existing.Carrier, item.Carrier), orElse(existing.Tracking, item.TrackingNumber),
-		orElse(existing.Merchant, item.Merchant), orElse(existing.MerchantKey, key), orElse(existing.OrderRef, item.OrderRef)}
+	args := []any{prefer(item.Carrier, existing.Carrier), prefer(item.TrackingNumber, existing.Tracking),
+		prefer(item.Merchant, existing.Merchant), prefer(key, existing.MerchantKey), prefer(item.OrderRef, existing.OrderRef)}
 	if messageTS >= existing.UpdatedTS {
 		sets = append(sets, "status = ?", "status_text = ?", "last_message_id = ?", "updated_ts = ?")
-		args = append(args, item.Status, orElse(item.StatusText, existing.StatusText), messageID, messageTS)
+		args = append(args, item.Status, prefer(item.StatusText, existing.StatusText), messageID, messageTS)
 	}
 	_, err = q.ExecContext(ctx, "UPDATE packages SET "+strings.Join(sets, ", ")+" WHERE id = ?", append(args, existing.ID)...)
 	return existing.ID, err
 }
 
-type ScanResult struct {
+type scanResult struct {
 	Scanned int `json:"scanned"`
 	Found   int `json:"found"`
 }
 
-func ScanPackages(ctx context.Context, d *db.DB, now float64, o Options) (ScanResult, error) {
+func ScanPackages(ctx context.Context, d *db.DB, now float64, o Options) (scanResult, error) {
 	r := mail.Read(ctx, d.Read)
 	limit := r.Int(mail.KeyWatchesScanLimit)
 	window := r.Int(mail.KeyWatchesPackageWindow)
 	bodyChars := r.Int(mail.KeyWatchesBodyChars)
 	carrierDomains := r.List(mail.KeyWatchesCarrierDomains)
 	if err := r.Err(); err != nil {
-		return ScanResult{}, err
+		return scanResult{}, err
 	}
 	chatURL, err := mail.ChatURL(ctx, d.Read)
 	if err != nil {
-		return ScanResult{}, err
+		return scanResult{}, err
 	}
 	ctx, err = mail.WithModels(ctx, d.Read)
 	if err != nil {
-		return ScanResult{}, err
+		return scanResult{}, err
 	}
-	rows, err := unscanned(ctx, d.Read, Packages, PackageHint, window, limit, now)
-	if err != nil {
-		return ScanResult{}, err
-	}
-	var result ScanResult
-scan:
-	for _, row := range rows {
-		body, err := message.Body(ctx, d.Read, row.ID)
-		if err != nil {
-			return result, err
-		}
-		items, err := RegexPackages(row, body, carrierDomains)
-		if err != nil {
-			return result, err
-		}
-		if len(items) == 0 {
-			answer, err := o.chat()(ctx, chatURL, PackageSystem, rowText(row, body, bodyChars), PackageSchema, 200)
-			var unavailable *httpx.ServiceUnavailable
-			switch {
-			case errors.As(err, &unavailable):
-				log.Warn(fmt.Sprintf("chat unavailable, deferring package scan: %s", unavailable))
-				break scan
-			case errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) || errors.Is(err, httpx.ErrShape):
-				log.Warn(fmt.Sprintf("message %d: unreadable package answer: %s", row.ID, httpx.Message(err)))
-				if err := markScanned(ctx, d, o, Packages, row.ID, false); err != nil {
-					return result, err
+	result, err := mailscan.Run(ctx, d, now, mailscan.Spec{
+		Kind: packages, Hint: "m.sent = 0 AND (" + PackageHint + ")", WindowDays: window, FetchLimit: limit, Limit: limit,
+		Judge: func(ctx context.Context, row mailscan.Message, body string) (int, error) {
+			items := regexPackages(row, body, carrierDomains)
+			if len(items) == 0 {
+				answer, err := o.chat()(ctx, chatURL, PackageSystem, rowText(row, body, bodyChars), packageSchema, 200)
+				if err != nil {
+					return 0, err
 				}
-				continue
-			case err != nil:
-				return result, err
+				found, ok, err := cleanPackage(answer, row.Subject+"\n"+body)
+				if err != nil {
+					return 0, err
+				}
+				if ok {
+					items = []item{found}
+				}
 			}
-			item, ok, err := CleanPackage(answer, row.Subject+"\n"+body)
-			if err != nil {
-				return result, err
+			found := 0
+			for _, item := range items {
+				id, err := upsertPackage(ctx, d.Write, item, row.ID, row.DateTS, now)
+				if err != nil {
+					return found, err
+				}
+				if id != 0 {
+					found++
+				}
 			}
-			if ok {
-				items = []Item{item}
-			}
-		}
-		result.Scanned++
-		for _, item := range items {
-			id, err := UpsertPackage(ctx, d.Write, item, row.ID, row.DateTS, now)
-			if err != nil {
-				return result, err
-			}
-			if id != 0 {
-				result.Found++
-			}
-		}
-		if err := markScanned(ctx, d, o, Packages, row.ID, len(items) > 0); err != nil {
-			return result, err
-		}
+			return found, nil
+		},
+	})
+	if err != nil {
+		return scanResult{}, err
 	}
-	return result, nil
+	return scanResult{Scanned: result.Scanned, Found: result.Found}, nil
 }
 
 type Package struct {
@@ -567,7 +498,7 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 		cutoff := now - float64(stale)*Day
 		out = out[:0:0]
 		for _, p := range all {
-			if p.Status != Delivered && p.UpdatedTS >= cutoff {
+			if p.Status != delivered && p.UpdatedTS >= cutoff {
 				out = append(out, p)
 			}
 		}
@@ -595,11 +526,11 @@ func DismissPackage(ctx context.Context, q db.Querier, id int64) (bool, error) {
 	return n == 1, err
 }
 
-func Refresh(ctx context.Context, d *db.DB, now float64, o Options) py.Dict {
+func Refresh(ctx context.Context, d *db.DB, now float64, o Options) (py.Dict, error) {
 	result, err := ScanPackages(ctx, d, now, o)
 	if err != nil {
-		log.Error(Packages+" scan failed", logx.Err, err.Error())
-		return py.Dict{{Key: Packages, Value: py.Dict{{Key: "error", Value: true}}}}
+		log.Error(packages+" scan failed", logx.Err, err.Error())
+		return nil, err
 	}
-	return py.Dict{{Key: Packages, Value: py.Dict{{Key: "scanned", Value: result.Scanned}, {Key: "found", Value: result.Found}}}}
+	return py.Dict{{Key: packages, Value: py.Dict{{Key: "scanned", Value: result.Scanned}, {Key: "found", Value: result.Found}}}}, nil
 }

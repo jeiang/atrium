@@ -64,7 +64,11 @@ func packages(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 }
 
 func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	days, err := tool.BoundedInt(args, "days", birthdays.DefaultDays, birthdays.MaxDays, 0)
+	defaultDays, maxDays, err := birthdays.Limits(ctx, tc.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	days, err := tool.BoundedInt(args, "days", int64(defaultDays), int64(maxDays), 0)
 	if err != nil {
 		return nil, err
 	}

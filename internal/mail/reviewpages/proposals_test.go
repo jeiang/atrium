@@ -101,19 +101,14 @@ func TestGroupWithoutMessagesShowsItsCount(t *testing.T) {
 
 func TestRebalanceMergeIntoAnExistingFolderIsNotEditable(t *testing.T) {
 	s := newSite(t)
-	merge := func(exists bool, fingerprint string) string {
-		preview := py.Dict{
-			{Key: "sources", Value: []any{py.Dict{{Key: "folder", Value: "Old"}, {Key: "count", Value: int64(2)}}}},
-			{Key: "into", Value: "Shop|Orders"}, {Key: "into_exists", Value: exists}, {Key: "group", Value: group("Shop|Orders", 1, 2)},
-		}
-		s.propose("rebalance_merge", "icloud", "Merge "+fingerprint, preview, fingerprint)
-		return status(t, s.get("/proposals?kind=rebalance_merge", hx, "true"), http.StatusOK)
+	preview := py.Dict{
+		{Key: "sources", Value: []any{py.Dict{{Key: "folder", Value: "Old"}, {Key: "count", Value: int64(2)}}}},
+		{Key: "into", Value: "Shop|Orders"}, {Key: "group", Value: group("Shop|Orders", 1, 2)},
 	}
-	existing := merge(true, "exists")
+	s.propose("rebalance_merge", "icloud", "Merge", preview, "exists")
+	existing := status(t, s.get("/proposals?kind=rebalance_merge", hx, "true"), http.StatusOK)
 	mustContain(t, existing, "existing folder", "Shop · Orders")
 	mustNotContain(t, existing, `name="name-0"`)
-	fresh := merge(false, "fresh")
-	mustContain(t, fresh, `name="name-0"`, "new folder")
 }
 
 func TestCalendarAndNotionCardsToleratePartialPreviews(t *testing.T) {

@@ -73,14 +73,19 @@ func (s *Syncer) One(ctx context.Context, account string, open mail.OpenFunc) (S
 	return stats, nil
 }
 
+type checkpoint struct {
+	Valid      bool
+	Validity   int64
+	HighestUID uint32
+	ModSeq     uint64
+}
+
 type mailbox struct {
-	ID            int64
-	Name          string
-	IMAPName      string
-	Role          string
-	UIDValidity   *int64
-	HighestUID    int64
-	HighestModSeq *int64
+	ID         int64
+	Name       string
+	IMAPName   string
+	Role       string
+	Checkpoint checkpoint
 }
 
 func (s *Syncer) Account(ctx context.Context, account string, client mail.Client) (Stats, error) {
@@ -93,7 +98,7 @@ func (s *Syncer) Account(ctx context.Context, account string, client mail.Client
 		return stats, err
 	}
 	run := s.now()
-	mailboxes, err := s.upsertMailboxes(ctx, account, client)
+	mailboxes, err := s.upsertMailboxes(ctx, account, client, run, &stats)
 	if err != nil {
 		return stats, err
 	}
@@ -103,16 +108,77 @@ func (s *Syncer) Account(ctx context.Context, account string, client mail.Client
 		}
 		stats.Mailboxes++
 	}
-	if err := s.reconcile(ctx, account, stats.GoneIDs); err != nil {
+	if err := s.reconcile(ctx, account, stats.GoneIDs, run); err != nil {
 		return stats, err
 	}
 	_, err = s.DB.Write.ExecContext(ctx, "UPDATE accounts SET last_sync_at = ? WHERE name = ?", run, account)
 	return stats, err
 }
 
-func (s *Syncer) upsertMailboxes(ctx context.Context, account string, client mail.Client) ([]mailbox, error) {
+func nullableModSeq(v uint64) any {
+	if v == 0 {
+		return nil
+	}
+	return int64(v)
+}
+
+func (s *Syncer) retireMailboxes(ctx context.Context, account string, listed map[string]bool, run float64, stats *Stats) error {
+	rows, err := s.DB.Read.QueryContext(ctx, "SELECT id, name FROM mailboxes WHERE account = ?", account)
+	if err != nil {
+		return err
+	}
+	existing, err := db.Collect(rows, func(r *sql.Rows) (mailbox, error) {
+		var m mailbox
+		err := r.Scan(&m.ID, &m.Name)
+		return m, err
+	})
+	if err != nil {
+		return err
+	}
+	for _, mb := range existing {
+		if listed[mb.Name] {
+			continue
+		}
+		rows, err := s.DB.Read.QueryContext(ctx, "SELECT id FROM messages WHERE mailbox_id = ? AND gone_at IS NULL", mb.ID)
+		if err != nil {
+			return err
+		}
+		ids, err := db.Collect(rows, func(r *sql.Rows) (int64, error) {
+			var id int64
+			return id, r.Scan(&id)
+		})
+		if err != nil {
+			return err
+		}
+		if len(ids) > 0 {
+			if _, err := s.DB.Write.ExecContext(ctx, "UPDATE messages SET gone_at = ? WHERE mailbox_id = ? AND gone_at IS NULL", run, mb.ID); err != nil {
+				return err
+			}
+			stats.GoneIDs = append(stats.GoneIDs, ids...)
+		}
+		var remaining int
+		if err := s.DB.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM messages WHERE mailbox_id = ?", mb.ID).Scan(&remaining); err != nil {
+			return err
+		}
+		if remaining == 0 {
+			if _, err := s.DB.Write.ExecContext(ctx, "DELETE FROM mailboxes WHERE id = ?", mb.ID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Syncer) upsertMailboxes(ctx context.Context, account string, client mail.Client, run float64, stats *Stats) ([]mailbox, error) {
 	listed, err := client.ListMailboxes(ctx)
 	if err != nil {
+		return nil, err
+	}
+	listedNames := map[string]bool{}
+	for _, info := range listed {
+		listedNames[info.Name] = true
+	}
+	if err := s.retireMailboxes(ctx, account, listedNames, run, stats); err != nil {
 		return nil, err
 	}
 	type chosen struct {
@@ -155,8 +221,15 @@ func (s *Syncer) upsertMailboxes(ctx context.Context, account string, client mai
 	var out []mailbox
 	for rows.Next() {
 		var m mailbox
-		if err := rows.Scan(&m.ID, &m.Name, &m.IMAPName, &m.Role, &m.UIDValidity, &m.HighestUID, &m.HighestModSeq); err != nil {
+		var validity, highestUID, modseq sql.NullInt64
+		if err := rows.Scan(&m.ID, &m.Name, &m.IMAPName, &m.Role, &validity, &highestUID, &modseq); err != nil {
 			return nil, err
+		}
+		if validity.Valid && highestUID.Valid {
+			m.Checkpoint = checkpoint{Valid: true, Validity: validity.Int64, HighestUID: uint32(highestUID.Int64)}
+			if modseq.Valid {
+				m.Checkpoint.ModSeq = uint64(modseq.Int64)
+			}
 		}
 		out = append(out, m)
 	}
@@ -192,13 +265,12 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 		return err
 	}
 	validity := int64(status.UIDValidity)
-	var modseq *int64
+	current := checkpoint{Valid: true, Validity: validity}
 	if status.HighestModSeq != nil {
-		v := int64(*status.HighestModSeq)
-		modseq = &v
+		current.ModSeq = uint64(*status.HighestModSeq)
 	}
-	storedModseq := mbx.HighestModSeq
-	if mbx.UIDValidity != nil && *mbx.UIDValidity != validity {
+	prev := mbx.Checkpoint
+	if prev.Valid && prev.Validity != validity {
 		if _, err := s.DB.Write.ExecContext(ctx, "UPDATE messages SET gone_at = ? WHERE mailbox_id = ? AND gone_at IS NULL", run, mbx.ID); err != nil {
 			return err
 		}
@@ -206,7 +278,7 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 			"UPDATE mailboxes SET uidvalidity = NULL, highest_uid = 0, highestmodseq = NULL WHERE id = ?", mbx.ID); err != nil {
 			return err
 		}
-		storedModseq = nil
+		prev = checkpoint{}
 	}
 	if err := client.Select(ctx, mbx.IMAPName); err != nil {
 		return err
@@ -243,9 +315,11 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 		present[u] = true
 	}
 	var vanished []stored
-	for _, u := range liveOrder {
-		if !present[u] {
-			vanished = append(vanished, live[u])
+	if mbx.Role != "sent" {
+		for _, u := range liveOrder {
+			if !present[u] {
+				vanished = append(vanished, live[u])
+			}
 		}
 	}
 	if len(vanished) > 0 {
@@ -270,7 +344,7 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 			survivors[u] = r
 		}
 	}
-	if err := s.refreshFlags(ctx, client, account, mbx, survivors, storedModseq, modseq, lim, stats); err != nil {
+	if err := s.refreshFlags(ctx, client, account, mbx, survivors, prev, current, lim, stats, run); err != nil {
 		return err
 	}
 	var fresh []uint32
@@ -288,7 +362,7 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 		}
 		err = s.DB.WithTx(ctx, func(tx *sql.Tx) error {
 			for _, item := range fetched {
-				if err := s.ingest(ctx, tx, account, mbx, validity, lim.ftsBodyChars, item); err != nil {
+				if err := s.ingest(ctx, tx, account, mbx, validity, lim.ftsBodyChars, run, item); err != nil {
 					return err
 				}
 				stats.New++
@@ -305,16 +379,16 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 			return err
 		}
 	}
-	var top int64
+	var top uint32
 	for _, u := range serverUIDs {
-		top = max(top, int64(u))
+		top = max(top, u)
 	}
-	if mbx.UIDValidity != nil && *mbx.UIDValidity == validity {
-		top = max(top, mbx.HighestUID)
+	if prev.Valid && prev.Validity == validity {
+		top = max(top, prev.HighestUID)
 	}
 	_, err = s.DB.Write.ExecContext(ctx,
 		"UPDATE mailboxes SET uidvalidity = ?, highest_uid = ?, highestmodseq = ?, synced_at = ? WHERE id = ?",
-		validity, top, modseq, run, mbx.ID)
+		validity, top, nullableModSeq(current.ModSeq), run, mbx.ID)
 	if err != nil {
 		return err
 	}
@@ -363,18 +437,18 @@ func (s *Syncer) SentSince(ctx context.Context, mailboxID, validity int64, run f
 }
 
 func (s *Syncer) refreshFlags(ctx context.Context, client mail.Client, account string, mbx mailbox,
-	survivors map[uint32]stored, storedModseq, modseq *int64, lim limits, stats *Stats) error {
+	survivors map[uint32]stored, prev, current checkpoint, lim limits, stats *Stats, run float64) error {
 	if len(survivors) == 0 {
 		return nil
 	}
 	gmail := config.Preset(account) == config.Gmail
 	items := mail.FetchRequest{Mode: mail.FetchFlags, Labels: gmail}
 	var updates []mail.Message
-	if client.HasCapability("CONDSTORE") && modseq != nil && storedModseq != nil {
-		if *modseq == *storedModseq {
+	if client.HasCapability("CONDSTORE") && current.ModSeq != 0 && prev.Valid && prev.ModSeq != 0 {
+		if current.ModSeq == prev.ModSeq {
 			return nil
 		}
-		items.ChangedSince = uint64(*storedModseq)
+		items.ChangedSince = prev.ModSeq
 		var err error
 		if updates, err = client.UIDFetch(ctx, mail.AllUIDs(), items); err != nil {
 			return err
@@ -393,7 +467,7 @@ func (s *Syncer) refreshFlags(ctx context.Context, client mail.Client, account s
 			updates = append(updates, got...)
 		}
 	}
-	ts := s.now()
+	ts := run
 	for _, item := range updates {
 		row, ok := survivors[item.UID]
 		if !ok {
@@ -507,7 +581,7 @@ func RawLocation(cfg config.Config, account string, mailboxID, validity int64, u
 }
 
 func storeRaw(file string, payload []byte) error {
-	if err := os.MkdirAll(filepath.Dir(file), 0o777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
 		return err
 	}
 	tmp := file + ".tmp"
@@ -539,7 +613,7 @@ func nullable(s string) any {
 	return s
 }
 
-func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mailbox, validity int64, ftsBodyChars int, item mail.Message) error {
+func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mailbox, validity int64, ftsBodyChars int, run float64, item mail.Message) error {
 	var attachments []features.Attachment
 	if item.Attachments != nil {
 		attachments = make([]features.Attachment, len(item.Attachments))
@@ -552,9 +626,6 @@ func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mai
 	relative, absolute := RawLocation(s.Cfg, account, mbx.ID, validity, item.UID)
 	raw := make([]byte, 0, len(item.Header)+len(item.Text))
 	raw = append(append(raw, item.Header...), item.Text...)
-	if err := storeRaw(absolute, raw); err != nil {
-		return err
-	}
 	state := MessageState(account, mbx.Role, mbx.Name, item.Flags, item.Labels)
 	id, err := rules.InsertMessage(ctx, tx, rules.MessageInsert{
 		Account: account, MailboxID: mbx.ID, UIDValidity: validity, UID: item.UID, MsgID: feats.MsgID, Digest: digest,
@@ -566,7 +637,7 @@ func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mai
 		Subject: feats.Subject, SubjectTmpl: feats.SubjectTmpl, MsgIDDomain: feats.MsgIDDomain, InReplyTo: feats.InReplyTo,
 		Refs: feats.Refs, DKIMD: py.JSONDumps(nonNil(feats.DKIMD)), ESP: py.JSONDumps(nonNil(feats.ESP)),
 		AttTypes: py.JSONDumps(nonNil(feats.AttTypes)), AttNames: py.JSONDumps(nonNil(feats.AttNames)),
-		KOrder: feats.KOrder, KVCode: feats.KVCode, KOTP6: feats.KOTP6, FirstSeen: s.now(),
+		KOrder: feats.KOrder, KVCode: feats.KVCode, KOTP6: feats.KOTP6, FirstSeen: run,
 	})
 	if err != nil {
 		return err
@@ -576,11 +647,11 @@ func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mai
 	if err != nil {
 		return err
 	}
-	return nil
+	return storeRaw(absolute, raw)
 }
 
-func (s *Syncer) reconcile(ctx context.Context, account string, goneIDs []int64) error {
-	ts := s.now()
+func (s *Syncer) reconcile(ctx context.Context, account string, goneIDs []int64, run float64) error {
+	ts := run
 	for _, id := range goneIDs {
 		var digest, location string
 		var mailboxID int64

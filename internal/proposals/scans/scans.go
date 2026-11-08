@@ -25,7 +25,7 @@ var All = []Scan{
 	{"deletions", "deletions", func(ctx context.Context, d *db.DB, ts float64, _ rebalance.Namer) (scanutil.Result, error) {
 		return deletions.Scan(ctx, d, ts)
 	}},
-	{"gmail-labels", "gmail_labels", func(ctx context.Context, d *db.DB, ts float64, _ rebalance.Namer) (scanutil.Result, error) {
+	{"gmail-labels", "gmail-labels", func(ctx context.Context, d *db.DB, ts float64, _ rebalance.Namer) (scanutil.Result, error) {
 		return gmaillabels.Scan(ctx, d, ts)
 	}},
 }

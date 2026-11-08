@@ -258,7 +258,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `mail_search_snippet_chars` | int | `220` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_CHARS` |
 | `mail_search_snippet_tokens` | int | `24` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_TOKENS` |
 | `mailops_batch` | int | `100` | advanced | `ATRIUM_MAIL_MAILOPS_BATCH` |
-| `openloops_backfill_limit` | int | `2000` | advanced | `ATRIUM_MAIL_OPENLOOPS_BACKFILL_LIMIT` |
 | `openloops_commitment_scan_limit` | int | `20` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_SCAN_LIMIT` |
 | `openloops_commitment_window_days` | int | `14` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_WINDOW_DAYS` |
 | `openloops_commitments_per_message` | int | `5` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENTS_PER_MESSAGE` |

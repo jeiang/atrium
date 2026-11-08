@@ -3,6 +3,7 @@ package openloops
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strconv"
@@ -65,25 +66,12 @@ func IsDraft(labels, flagList string) (bool, error) {
 		if !strings.Contains(value, "Draft") {
 			continue
 		}
-		decoded, err := py.JSONLoads([]byte(value))
-		if err != nil {
+		var list []string
+		if err := json.Unmarshal([]byte(value), &list); err != nil {
 			return false, err
 		}
-		switch v := decoded.(type) {
-		case []any:
-			if slices.Contains(v, any(`\Draft`)) {
-				return true, nil
-			}
-		case string:
-			if strings.Contains(v, `\Draft`) {
-				return true, nil
-			}
-		case py.Dict:
-			if _, ok := v.Get(`\Draft`); ok {
-				return true, nil
-			}
-		default:
-			return false, fmt.Errorf("%w: %s is not a list or string", httpx.ErrShape, py.TypeName(decoded))
+		if slices.Contains(list, `\Draft`) {
+			return true, nil
 		}
 	}
 	return false, nil
@@ -114,19 +102,9 @@ func (m *Message) Recipients() ([]string, error) {
 	if text == "" {
 		text = "[]"
 	}
-	decoded, err := py.JSONLoads([]byte(text))
-	if err != nil {
-		return nil, err
-	}
-	items, ok := decoded.([]any)
-	if !ok {
-		return nil, fmt.Errorf("%w: to_addrs is not a list", httpx.ErrShape)
-	}
-	out := make([]string, len(items))
-	for i, item := range items {
-		if out[i], ok = item.(string); !ok {
-			return nil, fmt.Errorf("%w: to_addrs item %d is %s, not a string", httpx.ErrShape, i, py.TypeName(item))
-		}
+	var out []string
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
+		return nil, fmt.Errorf("%w: to_addrs is not a list of strings", httpx.ErrShape)
 	}
 	return out, nil
 }
@@ -286,9 +264,8 @@ func (c Counts) Dict() py.Dict {
 	return py.Dict{{Key: OweReply, Value: c.OweReply}, {Key: Waiting, Value: c.WaitingOnThem}}
 }
 
-type previousLoop struct {
+type override struct {
 	lastMessageID int64
-	state         string
 	snoozedUntil  *float64
 	dismissed     int64
 }
@@ -337,18 +314,27 @@ func Compute(ctx context.Context, d *db.DB, now float64) (Counts, error) {
 				selves[m.FromAddr] = true
 			}
 		}
-		prev, err := tx.QueryContext(ctx, "SELECT thread_key, last_message_id, state, snoozed_until, dismissed FROM open_loops")
+		rows, err = tx.QueryContext(ctx, "SELECT thread_key FROM open_loops")
 		if err != nil {
 			return err
 		}
-		keys := []string{}
-		previous := map[string]previousLoop{}
-		_, err = db.Collect(prev, func(r *sql.Rows) (struct{}, error) {
+		keys, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
 			var key string
-			var p previousLoop
-			err := r.Scan(&key, &p.lastMessageID, &p.state, &p.snoozedUntil, &p.dismissed)
-			keys = append(keys, key)
-			previous[key] = p
+			return key, r.Scan(&key)
+		})
+		if err != nil {
+			return err
+		}
+		overrides := map[string]override{}
+		rows, err = tx.QueryContext(ctx, "SELECT thread_key, last_message_id, snoozed_until, dismissed FROM loop_overrides")
+		if err != nil {
+			return err
+		}
+		_, err = db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
+			var key string
+			var o override
+			err := r.Scan(&key, &o.lastMessageID, &o.snoozedUntil, &o.dismissed)
+			overrides[key] = o
 			return struct{}{}, err
 		})
 		if err != nil {
@@ -378,29 +364,26 @@ func Compute(ctx context.Context, d *db.DB, now float64) (Counts, error) {
 			if first.MsgID == "" {
 				key = "t:id" + strconv.FormatInt(first.ID, 10)
 			}
-			before, had := previous[key]
-			same := had && before.lastMessageID == last.ID && before.state == state
-			var snoozed *float64
-			var dismissed int64
-			if same {
-				snoozed, dismissed = before.snoozedUntil, before.dismissed
-			}
 			subject := first.Subject
 			if subject == "" {
 				subject = last.Subject
 			}
 			_, err = tx.ExecContext(ctx,
-				"INSERT INTO open_loops (thread_key, account, state, last_message_id, since, counterpart, subject, "+
-					"snoozed_until, dismissed, updated_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "+
-					"ON CONFLICT (thread_key) DO UPDATE SET account = excluded.account, state = excluded.state, "+
-					"last_message_id = excluded.last_message_id, since = excluded.since, counterpart = excluded.counterpart, "+
-					"subject = excluded.subject, snoozed_until = excluded.snoozed_until, dismissed = excluded.dismissed, "+
-					"updated_ts = excluded.updated_ts",
-				key, last.Account, state, last.ID, last.DateTS, counterpart, subject, snoozed, dismissed, now)
+				"INSERT INTO open_loops (thread_key, account, state, last_message_id, since, counterpart, subject, updated_ts) "+
+					"VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (thread_key) DO UPDATE SET account = excluded.account, "+
+					"state = excluded.state, last_message_id = excluded.last_message_id, since = excluded.since, "+
+					"counterpart = excluded.counterpart, subject = excluded.subject, updated_ts = excluded.updated_ts",
+				key, last.Account, state, last.ID, last.DateTS, counterpart, subject, now)
 			if err != nil {
 				return err
 			}
 			keep[key] = true
+			o, has := overrides[key]
+			hidden := has && o.lastMessageID == last.ID &&
+				(o.dismissed != 0 || o.snoozedUntil != nil && *o.snoozedUntil > now)
+			if hidden {
+				continue
+			}
 			if state == OweReply {
 				counts.OweReply++
 			} else {
@@ -461,7 +444,7 @@ func ListLoops(ctx context.Context, q db.Querier, now float64, state string, lim
 		params = append(params, state)
 	}
 	if !hidden {
-		where = append(where, "l.dismissed = 0 AND (l.snoozed_until IS NULL OR l.snoozed_until <= ?)")
+		where = append(where, "COALESCE(o.dismissed, 0) = 0 AND (o.snoozed_until IS NULL OR o.snoozed_until <= ?)")
 		params = append(params, now)
 	}
 	clause := ""
@@ -470,7 +453,9 @@ func ListLoops(ctx context.Context, q db.Querier, now float64, state string, lim
 	}
 	rows, err := q.QueryContext(ctx,
 		"SELECT l.rowid AS id, l.thread_key, l.account, l.state, l.last_message_id, l.since, l.counterpart, l.subject, "+
-			"l.snoozed_until, l.dismissed FROM open_loops l "+clause+" ORDER BY l.since LIMIT ?", append(params, limit)...)
+			"o.snoozed_until, COALESCE(o.dismissed, 0) FROM open_loops l LEFT JOIN loop_overrides o "+
+			"ON o.thread_key = l.thread_key AND o.last_message_id = l.last_message_id "+clause+" ORDER BY l.since LIMIT ?",
+		append(params, limit)...)
 	if err != nil {
 		return nil, err
 	}
@@ -491,19 +476,33 @@ func affectedOne(res sql.Result, err error) (bool, error) {
 	return n == 1, err
 }
 
-func Snooze(ctx context.Context, q db.Querier, id int64, until float64) (bool, error) {
-	return affectedOne(q.ExecContext(ctx, "UPDATE open_loops SET snoozed_until = ? WHERE rowid = ?", until, id))
+func Snooze(ctx context.Context, q db.Querier, id int64, until, now float64) (bool, error) {
+	return affectedOne(q.ExecContext(ctx,
+		"INSERT INTO loop_overrides (thread_key, last_message_id, snoozed_until, dismissed, updated_ts) "+
+			"SELECT thread_key, last_message_id, ?, 0, ? FROM open_loops WHERE rowid = ? "+
+			"ON CONFLICT (thread_key) DO UPDATE SET last_message_id = excluded.last_message_id, "+
+			"snoozed_until = excluded.snoozed_until, updated_ts = excluded.updated_ts", until, now, id))
 }
 
-func Dismiss(ctx context.Context, q db.Querier, id int64) (bool, error) {
-	return affectedOne(q.ExecContext(ctx, "UPDATE open_loops SET dismissed = 1 WHERE rowid = ?", id))
+func Dismiss(ctx context.Context, q db.Querier, id int64, now float64) (bool, error) {
+	return affectedOne(q.ExecContext(ctx,
+		"INSERT INTO loop_overrides (thread_key, last_message_id, snoozed_until, dismissed, updated_ts) "+
+			"SELECT thread_key, last_message_id, NULL, 1, ? FROM open_loops WHERE rowid = ? "+
+			"ON CONFLICT (thread_key) DO UPDATE SET last_message_id = excluded.last_message_id, "+
+			"dismissed = 1, updated_ts = excluded.updated_ts", now, id))
 }
 
-func DismissAll(ctx context.Context, q db.Querier, state string) (int64, error) {
+func DismissAll(ctx context.Context, q db.Querier, state string, now float64) (int64, error) {
 	if !slices.Contains(States[:], state) {
 		return 0, fmt.Errorf("%w: unknown state %s", httpx.ErrPayload, strconv.Quote(state))
 	}
-	res, err := q.ExecContext(ctx, "UPDATE open_loops SET dismissed = 1 WHERE state = ? AND dismissed = 0", state)
+	res, err := q.ExecContext(ctx,
+		"INSERT INTO loop_overrides (thread_key, last_message_id, snoozed_until, dismissed, updated_ts) "+
+			"SELECT l.thread_key, l.last_message_id, o.snoozed_until, 1, ? FROM open_loops l "+
+			"LEFT JOIN loop_overrides o ON o.thread_key = l.thread_key "+
+			"WHERE l.state = ? AND COALESCE(o.dismissed, 0) = 0 "+
+			"ON CONFLICT (thread_key) DO UPDATE SET last_message_id = excluded.last_message_id, "+
+			"dismissed = 1, updated_ts = excluded.updated_ts", now, state)
 	if err != nil {
 		return 0, err
 	}

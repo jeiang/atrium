@@ -2108,17 +2108,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "openloops_backfill_limit": {
-          "default": 2000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_backfill_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "openloops_commitment_scan_limit": {
           "default": 20,
           "type": [

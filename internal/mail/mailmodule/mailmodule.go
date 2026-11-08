@@ -13,10 +13,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
-	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/run"
-	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -68,11 +66,10 @@ func (m Module) Register(mc module.Context) module.Registration {
 		mailCmds.ShadowReportCommand(),
 		mailCmds.ReindexCommand(),
 		mailCmds.LiveCommand(),
-		openloops.Command(mc.Env, m.Now),
-		watches.Command(mc.Env, m.Now),
 		mailCmds.EndpointsCommand(),
 	}
 	cmds = append(cmds, mailCmds.ScanCommands()...)
+	cmds = append(cmds, mailCmds.RefreshCommands()...)
 	return module.Registration{
 		Name: module.Mail,
 		Requires: []module.Requirement{
