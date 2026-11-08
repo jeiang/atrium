@@ -5,6 +5,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	askoperatortools "github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
@@ -40,6 +41,7 @@ func Undoers(env config.Env) *writes.Registry {
 func Registry() (*registry.Registry, error) {
 	r := registry.New()
 	for _, group := range [][]tool.Tool{
+		askoperatortools.Tools(),
 		mailtools.Tools(),
 		calendartools.Tools(),
 		mediatools.Tools(),

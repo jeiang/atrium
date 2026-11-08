@@ -46,8 +46,10 @@ func TestNightlyRunOmitsWriteUndoTools(t *testing.T) {
 	_, api := moduleFixture(t, flagsExcept("", ""))
 	ran := runApp("agent", "run", "--text", "hi", "--kind", "nightly")
 	names := offeredTools(t, api, ran)
-	if slices.Contains(names, "profile_set") {
-		t.Errorf("nightly run was offered the write_undo tool profile_set: %v", names)
+	for _, name := range []string{"profile_set", "ask_operator"} {
+		if slices.Contains(names, name) {
+			t.Errorf("nightly run was offered the chat-only tool %s: %v", name, names)
+		}
 	}
 	if !slices.Contains(names, "profile_get") {
 		t.Errorf("nightly run was not offered the read tool profile_get: %v", names)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/projects"
@@ -348,4 +349,26 @@ func (p *pages) chatResume(w http.ResponseWriter, r *http.Request) {
 		last = max(last, seqOf(item))
 	}
 	p.fragment(w, r, http.StatusOK, "_run_live.gohtml", map[string]any{"view": view, "thread_id": threadID, "run_id": runID, "after": last})
+}
+
+func (p *pages) chatAnswer(w http.ResponseWriter, r *http.Request) {
+	threadID, ok := pathID(w, r, "thread_id")
+	if !ok {
+		return
+	}
+	form := web.FormValues(r)
+	text := web.FormString(form, "text", "")
+	if strings.TrimSpace(text) == "" {
+		web.Unprocessable(w, web.FieldError{Loc: []string{"body", "text"}, Msg: "Type an answer first."})
+		return
+	}
+	if err := p.svc.Answer(detached(r), threadID, text); err != nil {
+		p.fail(w, r, http.StatusConflict, err.Error())
+		return
+	}
+	if !web.IsPartial(r) {
+		redirect(w, r, "/chat/"+strconv.FormatInt(threadID, 10))
+		return
+	}
+	p.transcript(w, r, threadID, "")
 }

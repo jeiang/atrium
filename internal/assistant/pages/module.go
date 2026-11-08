@@ -136,6 +136,7 @@ func Module(o Options) web.Module {
 		r.Get("/chat/{thread_id}/events", p.chatEvents)
 		r.Get("/chat/{thread_id}/runs/{run_id}", p.chatRun)
 		r.Post("/chat/{thread_id}/runs/{run_id}/resume", p.chatResume)
+		r.Post("/chat/{thread_id}/answer", p.chatAnswer)
 
 		r.Get("/chat/{thread_id}/files/{file_id}", p.chatFile)
 		r.Get("/chat/{thread_id}/files/{file_id}/download", p.chatFileDownload)
