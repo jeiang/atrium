@@ -162,7 +162,7 @@ func TestRulesLifecycle(t *testing.T) {
 	form := url.Values{
 		"id": {"shop"}, "account": {"icloud"}, "action": {"file"}, "dest": {"Bills"},
 		"field": {"from_domain", "dkim_d", "subject"}, "op": {"suffix", "in", "present"},
-		"value": {"shop.test, mail.shop.test", "a.test,b.test", ""},
+		"value": {"shop.test\nmail.shop.test", "a.test\nb.test", ""},
 	}
 	created := s.post("/rules", form)
 	status(t, created, 303, "create")

@@ -16,6 +16,8 @@
     <label for="{{$uid}}-value" class="sm:sr-only">Value</label>
     {{if $valueless}}
     <input id="{{$uid}}-value" name="value" type="text" value="" readonly aria-disabled="true" placeholder="No value needed" class="cursor-not-allowed opacity-50">
+    {{else if or (eq $c.op "in") (eq $c.op "suffix")}}
+    <textarea id="{{$uid}}-value" name="value" rows="2" placeholder="{{lbl "op_hint" $c.op ""}}" spellcheck="false" class="font-mono">{{join "\n" $c.value}}</textarea>
     {{else}}
     <input id="{{$uid}}-value" name="value" type="text" value="{{or $c.value ""}}" placeholder="{{lbl "op_hint" $c.op ""}}" autocomplete="off" spellcheck="false" class="font-mono">
     {{end}}

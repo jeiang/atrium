@@ -23,24 +23,26 @@ import (
 )
 
 var ruleProblems = map[string]string{
-	"op eq needs a value":                         "“is” needs a value.",
-	"op re needs a value":                         "“matches regex” needs a pattern.",
-	"op suffix needs a value":                     "“is or ends in domain” needs at least one domain.",
-	"file rule needs dest":                        "Choose a destination, or set the action to Delete.",
-	"when must be a non-empty list":               "Add at least one condition.",
-	"op in needs a non-empty list of strings":     "“is one of” needs at least one value.",
-	"op suffix needs a string or list of strings": "“is or ends in domain” needs at least one domain.",
+	"op-eq-value":     "“is” needs a value.",
+	"op-re-value":     "“matches regex” needs a pattern.",
+	"op-suffix-value": "“is or ends in domain” needs at least one domain.",
+	"file-dest":       "Choose a destination, or set the action to Delete.",
+	"when-empty":      "Add at least one condition.",
+	"op-in-value":     "“is one of” needs at least one value.",
 }
 
 var ruleIDPrefix = regexp.MustCompile(`^[^:\s]+: `)
 
 func ruleProblem(err error) string {
+	var refused rules.RuleError
+	if errors.As(err, &refused) {
+		if friendly, ok := ruleProblems[refused.Code]; ok {
+			return friendly
+		}
+	}
 	text := err.Error()
 	if loc := ruleIDPrefix.FindStringIndex(text); loc != nil {
 		text = text[loc[1]:]
-	}
-	if friendly, ok := ruleProblems[text]; ok {
-		return friendly
 	}
 	_, size := utf8.DecodeRuneInString(text)
 	return strings.ToUpper(text[:size]) + text[size:]
@@ -118,11 +120,11 @@ func (s *service) rulesPage(w http.ResponseWriter, r *http.Request) {
 func (s *service) ruleNew(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	account := web.QueryValue(q, "account")
-	rule := ruleView{Action: string(rules.ActionFile), When: []map[string]any{}}
+	rule := ruleView{Action: string(rules.ActionFile), When: []conditionView{}}
 	if account != "" {
 		rule.Account = &account
 	}
-	data := ruleEditData{IsNew: true, Suggestions: []map[string]any{}, Errors: []string{}}
+	data := ruleEditData{IsNew: true, Suggestions: []conditionView{}, Errors: []string{}}
 	ctx := r.Context()
 	if _, given := q["message"]; given {
 		sourceID, ok := laxInt64(web.ValueOr(q, "message", ""))
@@ -144,7 +146,7 @@ func (s *service) ruleNew(w http.ResponseWriter, r *http.Request) {
 		rule.Account, rule.Dest, rule.When = &features.Account, features.Dest, conditionViews(features.Default)
 		for _, c := range features.Conditions {
 			if !slices.ContainsFunc(features.Default, func(d rules.Condition) bool { return reflect.DeepEqual(c, d) }) {
-				data.Suggestions = append(data.Suggestions, conditionView(c))
+				data.Suggestions = append(data.Suggestions, conditionViewOf(c))
 			}
 		}
 	}
@@ -161,7 +163,7 @@ func (s *service) ruleCondition(w http.ResponseWriter, r *http.Request) {
 	if _, given := q["op"]; given {
 		op = web.ValueOr(q, "op", "")
 	}
-	c := map[string]any{"field": field, "op": op, "value": web.QueryValue(q, "value")}
+	c := conditionView{Field: field, Op: op, Value: web.QueryValue(q, "value")}
 	s.fragment(w, r, "_condition_row.gohtml", conditionData{C: c, Focus: web.QueryValue(q, "focus")}, nil)
 }
 
@@ -182,6 +184,16 @@ func readRuleForm(form url.Values) ruleForm {
 	}
 }
 
+func splitList(value string) []string {
+	out := []string{}
+	for line := range strings.SplitSeq(value, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
 func conditionList(fields, ops, values []string) []any {
 	out := []any{}
 	for i := range min(len(fields), len(ops)) {
@@ -193,13 +205,7 @@ func conditionList(fields, ops, values []string) []any {
 		switch {
 		case slices.Contains(rules.ValuelessOps, op):
 		case op == "in" || op == "suffix":
-			list := []string{}
-			for part := range strings.SplitSeq(value, ",") {
-				if part = strings.TrimSpace(part); part != "" {
-					list = append(list, part)
-				}
-			}
-			condition["value"] = list
+			condition["value"] = splitList(value)
 		case field == rules.AgeField && isDigits(strings.TrimSpace(value)):
 			n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 			if err != nil {
@@ -214,6 +220,32 @@ func conditionList(fields, ops, values []string) []any {
 	return out
 }
 
+func conditionViewsFromForm(fields, ops, values []string) []conditionView {
+	out := []conditionView{}
+	for i := range min(len(fields), len(ops)) {
+		field, op, value := fields[i], ops[i], ""
+		if i < len(values) {
+			value = values[i]
+		}
+		view := conditionView{Field: field, Op: op}
+		switch {
+		case slices.Contains(rules.ValuelessOps, op):
+		case op == "in" || op == "suffix":
+			view.Value = splitList(value)
+		case field == rules.AgeField && isDigits(strings.TrimSpace(value)):
+			n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+			if err != nil {
+				panic(err)
+			}
+			view.Value = n
+		default:
+			view.Value = value
+		}
+		out = append(out, view)
+	}
+	return out
+}
+
 func (f ruleForm) raw() map[string]any {
 	var account, dest any
 	if f.account != "" {
@@ -223,6 +255,19 @@ func (f ruleForm) raw() map[string]any {
 		dest = f.dest
 	}
 	return map[string]any{"account": account, "action": f.action, "dest": dest, "when": conditionList(f.fields, f.ops, f.values)}
+}
+
+func (f ruleForm) view(id string) ruleView {
+	view := ruleView{ID: id, Action: f.action, When: conditionViewsFromForm(f.fields, f.ops, f.values)}
+	if f.account != "" {
+		account := f.account
+		view.Account = &account
+	}
+	if rules.Action(f.action) != rules.ActionDelete && f.dest != "" {
+		dest := f.dest
+		view.Dest = &dest
+	}
+	return view
 }
 
 func (s *service) rulePreview(w http.ResponseWriter, r *http.Request) {
@@ -239,20 +284,6 @@ func (s *service) rulePreview(w http.ResponseWriter, r *http.Request) {
 	s.fragment(w, r, "_rule_preview.gohtml", previewData{Preview: &found}, nil)
 }
 
-func shownRule(id string, raw map[string]any) ruleView {
-	view := ruleView{ID: id, Action: raw["action"].(string), When: []map[string]any{}}
-	if account, ok := raw["account"].(string); ok {
-		view.Account = &account
-	}
-	if dest, ok := raw["dest"].(string); ok {
-		view.Dest = &dest
-	}
-	for _, c := range raw["when"].([]any) {
-		view.When = append(view.When, c.(map[string]any))
-	}
-	return view
-}
-
 func (s *service) saveRule(w http.ResponseWriter, r *http.Request, id string, isNew bool, form ruleForm) {
 	ctx := context.WithoutCancel(r.Context())
 	raw := form.raw()
@@ -267,7 +298,7 @@ func (s *service) saveRule(w http.ResponseWriter, r *http.Request, id string, is
 	var invalid rules.RuleError
 	if errors.As(err, &invalid) {
 		data := ruleEditData{
-			Rule: shownRule(id, raw), IsNew: isNew, Folders: s.folderMap(ctx), Suggestions: []map[string]any{},
+			Rule: form.view(id), IsNew: isNew, Folders: s.folderMap(ctx), Suggestions: []conditionView{},
 			Errors: []string{ruleProblem(err)},
 		}
 		s.page(w, r, http.StatusOK, "rules", "rule_edit.gohtml", data, nil)
@@ -301,7 +332,7 @@ func (s *service) ruleEdit(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusNotFound, "unknown rule")
 		return
 	}
-	data := ruleEditData{Rule: all[found], Folders: s.folderMap(ctx), Suggestions: []map[string]any{}, Errors: []string{}}
+	data := ruleEditData{Rule: all[found], Folders: s.folderMap(ctx), Suggestions: []conditionView{}, Errors: []string{}}
 	s.page(w, r, http.StatusOK, "rules", "rule_edit.gohtml", data, nil)
 }
 

@@ -74,11 +74,20 @@ var LearnedLevels = []LearnedLevel{
 	{"domain", []string{"from_domain"}},
 }
 
-type RuleError string
+type RuleError struct {
+	Code string
+	Msg  string
+}
 
-func (e RuleError) Error() string { return string(e) }
+func (e RuleError) Error() string { return e.Msg }
 
-func ruleErrorf(format string, args ...any) error { return RuleError(fmt.Sprintf(format, args...)) }
+func ruleErrorf(format string, args ...any) error {
+	return RuleError{Code: "rule", Msg: fmt.Sprintf(format, args...)}
+}
+
+func ruleErrorCode(code, format string, args ...any) error {
+	return RuleError{Code: code, Msg: fmt.Sprintf(format, args...)}
+}
 
 type Condition struct {
 	field    string
@@ -486,14 +495,14 @@ func ValidateCondition(raw any) (Condition, error) {
 		return Condition{}, ruleErrorf("op %s needs a string value", op)
 	}
 	if isStr && py.Strip(text) == "" {
-		return Condition{}, ruleErrorf("op %s needs a value", op)
+		return Condition{}, ruleErrorCode("op-"+op+"-value", "op %s needs a value", op)
 	}
 	list, isList := valueList(value)
 	if op == "in" && !isList {
-		return Condition{}, ruleErrorf("op in needs a non-empty list of strings")
+		return Condition{}, ruleErrorCode("op-in-value", "op in needs a non-empty list of strings")
 	}
 	if op == "suffix" && !isStr && !isList {
-		return Condition{}, ruleErrorf("op suffix needs a string or list of strings")
+		return Condition{}, ruleErrorCode("op-suffix-value", "op suffix needs a string or list of strings")
 	}
 	if op == "re" {
 		re, err := compilePattern(text)
@@ -540,7 +549,7 @@ func ValidateRule(raw any) (Rule, error) {
 	destV, _ := get("dest")
 	dest, destIsStr := destV.(string)
 	if Action(act) == ActionFile && (!destIsStr || dest == "") {
-		return Rule{}, ruleErrorf("%s: file rule needs dest", id)
+		return Rule{}, ruleErrorCode("file-dest", "%s: file rule needs dest", id)
 	}
 	if Action(act) == ActionDelete && destV != nil {
 		return Rule{}, ruleErrorf("%s: delete rule takes no dest", id)
@@ -561,7 +570,7 @@ func ValidateRule(raw any) (Rule, error) {
 		}
 	}
 	if len(items) == 0 {
-		return Rule{}, ruleErrorf("%s: when must be a non-empty list", id)
+		return Rule{}, ruleErrorCode("when-empty", "%s: when must be a non-empty list", id)
 	}
 	rule := Rule{ID: id, Action: Action(act)}
 	if accountIsStr {
