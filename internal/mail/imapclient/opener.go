@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail"
 )
 
@@ -17,7 +18,7 @@ func Opener(cfg config.Config) mail.OpenFunc {
 		}
 		bodyCap := config.BodyCapBytes
 		if opts.Q != nil {
-			r := mail.Read(ctx, opts.Q)
+			r := endpoint.Read(ctx, opts.Q)
 			bodyCap = r.Int(mail.KeyBodyCapBytes)
 			if err := r.Err(); err != nil {
 				return nil, err

@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
@@ -27,7 +28,7 @@ const (
 )
 
 func batchFrom(ctx context.Context, q db.Querier) (int, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	n := r.Int(mail.KeyMailopsBatch)
 	return n, r.Err()
 }

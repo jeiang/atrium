@@ -675,9 +675,9 @@ func TestOIDCProviderUnreachable(t *testing.T) {
 
 func runServe(t *testing.T, args ...string) (int, string) {
 	t.Helper()
-	t.Setenv("COLUMNS", "")
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	env := config.Map(map[string]string{"COLUMNS": "", "ATRIUM_PUBLIC_HOST": ""})
 	app := cli.New("atrium", nil)
+	app.Env = env
 	app.Add(web.ServeCommand(web.BootFunc{OpenFunc: func(context.Context) (*db.DB, config.Config, error) {
 		return nil, config.Config{}, errors.New("test boot")
 	}}))

@@ -29,7 +29,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 )
@@ -261,11 +260,11 @@ func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error
 }
 
 func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error) {
-	url, err := mail.EmbedURL(ctx, s.DB.Read)
+	url, err := embed.EmbedURL(ctx, s.DB.Read)
 	if err != nil {
 		return nil, err
 	}
-	ctx, err = mail.WithModels(ctx, s.DB.Read)
+	ctx, err = embed.WithModels(ctx, s.DB.Read)
 	if err != nil {
 		return nil, err
 	}

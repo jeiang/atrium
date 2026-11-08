@@ -12,6 +12,7 @@ import (
 	"regexp"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
@@ -271,14 +272,14 @@ type override struct {
 }
 
 func SnoozeDefault(ctx context.Context, q db.Querier) (int, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	days := r.Int(mail.KeyLoopsSnoozeDefaultDays)
 	return days, r.Err()
 }
 
 func Compute(ctx context.Context, d *db.DB, now float64) (Counts, error) {
 	var counts Counts
-	r := mail.Read(ctx, d.Read)
+	r := endpoint.Read(ctx, d.Read)
 	window := r.Int(mail.KeyLoopsWindowDays)
 	limits := thresholds{
 		oweMaxAge:     r.Int(mail.KeyLoopsOweMaxAgeDays),

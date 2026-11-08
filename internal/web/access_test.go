@@ -10,12 +10,14 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 )
 
-func runServePages(t *testing.T, ctx context.Context, pages []Page, args ...string) (int, string, string) {
+func runServePages(t *testing.T, ctx context.Context, env config.Env, pages []Page, args ...string) (int, string, string) {
 	t.Helper()
 	app := cli.New("atrium", nil)
-	app.Add(ServeCommand(testBoot(), pages...))
+	app.Env = env
+	app.Add(ServeCommand(testBoot(env), pages...))
 	var stdout, stderr bytes.Buffer
 	code := app.Run(ctx, append([]string{"serve"}, args...), &stdout, &stderr)
 	return code, stdout.String(), stderr.String()
@@ -24,14 +26,12 @@ func runServePages(t *testing.T, ctx context.Context, pages []Page, args ...stri
 func startServePages(t *testing.T, pages []Page, args ...string) (string, func() int) {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	env := serveEnv(map[string]string{"ATRIUM_DB": filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache")})
 	ctx, cancel := context.WithCancel(context.Background())
 	port := freePort(t)
 	done := make(chan int, 1)
 	go func() {
-		code, _, _ := runServePages(t, ctx, pages, append([]string{"--port", port}, args...)...)
+		code, _, _ := runServePages(t, ctx, env, pages, append([]string{"--port", port}, args...)...)
 		done <- code
 	}()
 	url := "http://127.0.0.1:" + port

@@ -96,13 +96,13 @@ func (s *Set) gateSetup(owner, path string, needs []string, setup func(*cli.Args
 			}
 			if st, _ := snap.Status(owner); st.State != Enabled {
 				skip(path, st, "module is not enabled, command skipped")
-				sdnotify.FromEnv().Ready()
+				sdnotify.New(func(name string) string { v, _ := env.Env(name); return v }).Ready()
 				return cli.ExitOK
 			}
 			for _, name := range needs {
 				if st, _ := snap.Status(name); st.State != Enabled {
 					skip(path, st, "needed module is not enabled, command skipped")
-					sdnotify.FromEnv().Ready()
+					sdnotify.New(func(name string) string { v, _ := env.Env(name); return v }).Ready()
 					return cli.ExitOK
 				}
 			}

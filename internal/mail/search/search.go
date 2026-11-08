@@ -13,6 +13,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
@@ -31,7 +32,7 @@ type limits struct {
 }
 
 func readLimits(ctx context.Context, q Querier) (limits, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	l := limits{
 		rrfK: r.Int(mail.KeySearchRRFK), branchLimit: r.Int(mail.KeySearchBranchLimit), maxTerms: r.Int(mail.KeySearchMaxTerms),
 		snippetTokens: r.Int(mail.KeySearchSnippetTokens), snippetChars: r.Int(mail.KeySearchSnippetChars), knnMax: r.Int(mail.KeyKNNMax),
@@ -436,11 +437,11 @@ func Search(ctx context.Context, q Querier, req Query, embedTexts embed.TextsFun
 	if err != nil {
 		return Result{}, err
 	}
-	embedURL, err := mail.EmbedURL(ctx, q)
+	embedURL, err := embed.EmbedURL(ctx, q)
 	if err != nil {
 		return Result{}, err
 	}
-	ctx, err = mail.WithModels(ctx, q)
+	ctx, err = embed.WithModels(ctx, q)
 	if err != nil {
 		return Result{}, err
 	}

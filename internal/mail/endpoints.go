@@ -2,9 +2,7 @@ package mail
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net"
@@ -14,39 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/secrets"
-	"github.com/jeiang/atrium/internal/settings"
 )
-
-const (
-	KeyChatKey  = "mail_chat_key"
-	KeyEmbedKey = "mail_embed_key"
-
-	EndpointChat  = "chat"
-	EndpointEmbed = "embed"
-)
-
-func init() {
-	for _, key := range []string{KeyChatKey, KeyEmbedKey} {
-		settings.MustRegister(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: key, Module: module, Type: settings.String}))
-	}
-}
-
-type Endpoint struct {
-	Kind, URL, Model, key string
-}
-
-func (e Endpoint) fingerprint() string {
-	sum := sha256.Sum256([]byte(e.URL + "\x00" + e.Model + "\x00" + e.key))
-	return hex.EncodeToString(sum[:8])
-}
 
 func Hosted(raw string) bool {
 	u, err := url.Parse(raw)
@@ -61,50 +32,6 @@ func Hosted(raw string) bool {
 		return !ip.IsLoopback() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast()
 	}
 	return strings.Contains(host, ".")
-}
-
-func Endpoints(ctx context.Context, q db.Querier) ([]Endpoint, error) {
-	r := Read(ctx, q)
-	chat, embed := r.Text(KeyChatModel), r.Text(KeyEmbedModel)
-	if r.Err() != nil {
-		return nil, r.Err()
-	}
-	store := secrets.NewIn(nil, q, nil)
-	out := []Endpoint{{Kind: EndpointChat, Model: chat}, {Kind: EndpointEmbed, Model: embed}}
-	for i, pair := range [][2]string{{KeyChatURL, KeyChatKey}, {KeyEmbedURL, KeyEmbedKey}} {
-		u, err := urlOf(ctx, q, pair[0])
-		if err != nil {
-			return nil, err
-		}
-		key, err := store.Value(ctx, pair[1])
-		if err != nil {
-			return nil, err
-		}
-		out[i].URL, out[i].key = u, key
-	}
-	return out, nil
-}
-
-func endpointOf(endpoints []Endpoint, kind string) (Endpoint, bool) {
-	i := slices.IndexFunc(endpoints, func(e Endpoint) bool { return e.Kind == kind })
-	if i < 0 {
-		return Endpoint{}, false
-	}
-	return endpoints[i], true
-}
-
-func Integration(kind string) string { return "mail_" + kind }
-
-func withEndpoints(ctx context.Context, q db.Querier, endpoints []Endpoint) (context.Context, error) {
-	out := ctx
-	for _, e := range endpoints {
-		client, err := transport.For(ctx, q, Integration(e.Kind), config.HTTPTimeout(config.OS))
-		if err != nil {
-			return ctx, err
-		}
-		out = httpx.WithEndpoint(out, e.URL, e.key, client)
-	}
-	return out, nil
 }
 
 type ProbeResult struct {
@@ -156,7 +83,7 @@ var probeSchema = map[string]any{
 	"required": []string{"ok"}, "additionalProperties": false,
 }
 
-func probeChat(ctx context.Context, e Endpoint) (string, int) {
+func probeChat(ctx context.Context, e endpoint.Endpoint) (string, int) {
 	raw, err := llm.ChatJSON(endpoint.With(ctx, endpoint.Settings{ChatModel: e.Model, MaxTokens: 32}), e.URL, "Reply with JSON only.", `Return {"ok": true}.`, probeSchema, 0)
 	if err != nil {
 		return httpx.Message(err), 0
@@ -170,7 +97,7 @@ func probeChat(ctx context.Context, e Endpoint) (string, int) {
 	return "", 0
 }
 
-func probeEmbed(ctx context.Context, e Endpoint) (string, int) {
+func probeEmbed(ctx context.Context, e endpoint.Endpoint) (string, int) {
 	raw, err := httpx.PostJSON(ctx, e.URL+"/embeddings", map[string]any{"model": e.Model, "input": []string{"atrium probe"}})
 	if err != nil {
 		return httpx.Message(err), 0
@@ -186,13 +113,13 @@ func probeEmbed(ctx context.Context, e Endpoint) (string, int) {
 	return "", len(reply.Data[0].Embedding)
 }
 
-func probe(ctx context.Context, e Endpoint) ProbeResult {
+func probe(ctx context.Context, e endpoint.Endpoint) ProbeResult {
 	res := ProbeResult{Kind: e.Kind, URL: e.URL, Model: e.Model, Hosted: Hosted(e.URL)}
 	if e.URL == "" {
 		res.Reason = "no URL configured"
 	} else {
 		res.Models = discover(ctx, e.URL)
-		if e.Kind == EndpointChat {
+		if e.Kind == endpoint.EndpointChat {
 			res.Reason, res.Dimension = probeChat(ctx, e)
 		} else {
 			res.Reason, res.Dimension = probeEmbed(ctx, e)
@@ -205,21 +132,21 @@ func probe(ctx context.Context, e Endpoint) ProbeResult {
 	return res
 }
 
-func recordProbe(ctx context.Context, d *db.DB, e Endpoint, res ProbeResult, now float64) error {
+func recordProbe(ctx context.Context, d *db.DB, e endpoint.Endpoint, res ProbeResult, now float64) error {
 	models, _ := json.Marshal(res.Models)
 	_, err := d.Write.ExecContext(ctx, "INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES (?, ?, ?, ?, ?, ?, ?) "+
 		"ON CONFLICT(kind) DO UPDATE SET fingerprint = excluded.fingerprint, ok = excluded.ok, reason = excluded.reason, "+
 		"dimension = excluded.dimension, models = excluded.models, probed_at = excluded.probed_at",
-		e.Kind, e.fingerprint(), res.OK, res.Reason, nullDim(res.Dimension), string(models), now)
+		e.Kind, e.Fingerprint(), res.OK, res.Reason, nullDim(res.Dimension), string(models), now)
 	return err
 }
 
 func ProbeEndpoints(ctx context.Context, d *db.DB, now float64) ([]ProbeResult, error) {
-	endpoints, err := Endpoints(ctx, d.Read)
+	endpoints, err := endpoint.Endpoints(ctx, d.Read)
 	if err != nil {
 		return nil, err
 	}
-	if ctx, err = withEndpoints(ctx, d.Read, endpoints); err != nil {
+	if ctx, err = endpoint.WithEndpoints(ctx, d.Read, endpoints); err != nil {
 		return nil, err
 	}
 	out := make([]ProbeResult, 0, len(endpoints))
@@ -234,15 +161,15 @@ func ProbeEndpoints(ctx context.Context, d *db.DB, now float64) ([]ProbeResult, 
 }
 
 func ProbeCandidate(ctx context.Context, d *db.DB, kind, url, key string, client *http.Client, now float64) (ProbeResult, error) {
-	endpoints, err := Endpoints(ctx, d.Read)
+	endpoints, err := endpoint.Endpoints(ctx, d.Read)
 	if err != nil {
 		return ProbeResult{}, err
 	}
-	e, ok := endpointOf(endpoints, kind)
+	e, ok := endpoint.Of(endpoints, kind)
 	if !ok {
 		return ProbeResult{}, errors.New("unknown endpoint kind " + kind)
 	}
-	e.URL, e.key = url, key
+	e = endpoint.New(e.Kind, url, e.Model, key)
 	res := probe(httpx.WithEndpoint(ctx, url, key, client), e)
 	if res.OK {
 		err = recordProbe(ctx, d, e, res, now)
@@ -258,7 +185,7 @@ func nullDim(n int) any {
 }
 
 func ProbeFailures(ctx context.Context, q db.Querier) (string, error) {
-	endpoints, err := Endpoints(ctx, q)
+	endpoints, err := endpoint.Endpoints(ctx, q)
 	if err != nil {
 		return "", err
 	}
@@ -273,7 +200,7 @@ func ProbeFailures(ctx context.Context, q db.Querier) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if fingerprint == e.fingerprint() && !ok {
+		if fingerprint == e.Fingerprint() && !ok {
 			reasons = append(reasons, e.Kind+" endpoint probe failed: "+reason)
 		}
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
@@ -45,7 +46,7 @@ type params struct {
 }
 
 func readParams(ctx context.Context, q db.Querier) (params, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	p := params{
 		minFolder:          r.Int(mail.KeyRebalanceMinFolder),
 		minGroup:           r.Int(mail.KeyRebalanceMinGroup),
@@ -782,7 +783,7 @@ func Scan(ctx context.Context, d *db.DB, ts float64, namer Namer) (scanutil.Resu
 	if err != nil {
 		return scanutil.Result{}, err
 	}
-	if ctx, err = mail.WithModels(ctx, d.Read); err != nil {
+	if ctx, err = embed.WithModels(ctx, d.Read); err != nil {
 		return scanutil.Result{}, err
 	}
 	accounts, err := config.ExistingAccounts(ctx, d.Read)

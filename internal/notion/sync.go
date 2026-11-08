@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/notionid"
 )
 
@@ -485,11 +484,11 @@ func Sync(ctx context.Context, d *db.DB, client *Client, embedTexts embed.TextsF
 	if err := resolvePaths(ctx, d.Write, sensitivity); err != nil {
 		return stats, err
 	}
-	embedURL, err := mail.EmbedURL(ctx, d.Read)
+	embedURL, err := embed.EmbedURL(ctx, d.Read)
 	if err != nil {
 		return stats, err
 	}
-	modelCtx, err := mail.WithModels(ctx, d.Read)
+	modelCtx, err := embed.WithModels(ctx, d.Read)
 	if err != nil {
 		return stats, err
 	}

@@ -12,9 +12,11 @@ import (
 )
 
 type Socket struct {
-	t    *testing.T
-	mu   sync.Mutex
-	msgs []string
+	t        *testing.T
+	mu       sync.Mutex
+	msgs     []string
+	path     string
+	watchdog time.Duration
 }
 
 func Listen(t *testing.T, watchdog time.Duration) *Socket {
@@ -30,7 +32,7 @@ func Listen(t *testing.T, watchdog time.Duration) *Socket {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	s := &Socket{t: t}
+	s := &Socket{t: t, path: path, watchdog: watchdog}
 	go func() {
 		buf := make([]byte, 4096)
 		for {
@@ -43,14 +45,15 @@ func Listen(t *testing.T, watchdog time.Duration) *Socket {
 			s.mu.Unlock()
 		}
 	}()
-	t.Setenv("NOTIFY_SOCKET", path)
-	t.Setenv("WATCHDOG_PID", "")
-	if watchdog > 0 {
-		t.Setenv("WATCHDOG_USEC", strconv.FormatInt(watchdog.Microseconds(), 10))
-	} else {
-		t.Setenv("WATCHDOG_USEC", "")
-	}
 	return s
+}
+
+func (s *Socket) Env() map[string]string {
+	usec := ""
+	if s.watchdog > 0 {
+		usec = strconv.FormatInt(s.watchdog.Microseconds(), 10)
+	}
+	return map[string]string{"NOTIFY_SOCKET": s.path, "WATCHDOG_PID": "", "WATCHDOG_USEC": usec}
 }
 
 func (s *Socket) Messages() []string {

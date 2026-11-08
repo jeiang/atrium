@@ -45,7 +45,7 @@ func runScheduler(env *cli.Env, cfgEnv config.Env, tools registry.Source, enable
 		return err
 	}
 	defer closeApp()
-	notifier := sdnotify.FromEnv()
+	notifier := sdnotify.New(func(name string) string { v, _ := cfgEnv(name); return v })
 	beat := sdnotify.NewHeartbeat()
 	w, err := worker.New(ctx, svc, callables(), enabled)
 	if err != nil {

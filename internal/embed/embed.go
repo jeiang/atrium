@@ -305,3 +305,19 @@ func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error
 	}
 	return out, rows.Err()
 }
+
+func EmbedURL(ctx context.Context, q endpoint.Querier) (string, error) {
+	active, err := Active(ctx, q)
+	if err != nil {
+		return "", err
+	}
+	return endpoint.EmbedURL(ctx, q, active.URL)
+}
+
+func WithModels(ctx context.Context, q endpoint.Querier) (context.Context, error) {
+	active, err := Active(ctx, q)
+	if err != nil {
+		return ctx, err
+	}
+	return endpoint.WithModels(ctx, q, endpoint.Active{URL: active.URL, Model: active.Model, Dim: active.Dimension})
+}

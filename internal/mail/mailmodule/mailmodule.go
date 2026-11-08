@@ -9,6 +9,7 @@ import (
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
@@ -21,11 +22,11 @@ import (
 
 func init() {
 	for _, e := range []struct{ kind, label, url, key string }{
-		{mail.EndpointChat, "Mail chat endpoint", mail.KeyChatURL, mail.KeyChatKey},
-		{mail.EndpointEmbed, "Mail embed endpoint", mail.KeyEmbedURL, mail.KeyEmbedKey},
+		{endpoint.EndpointChat, "Mail chat endpoint", endpoint.KeyChatURL, endpoint.KeyChatKey},
+		{endpoint.EndpointEmbed, "Mail embed endpoint", endpoint.KeyEmbedURL, endpoint.KeyEmbedKey},
 	} {
 		integrations.Register(integrations.Integration{
-			Name: mail.Integration(e.kind), Label: e.label, Module: module.Mail, URLKey: e.url, SecretKey: e.key,
+			Name: endpoint.Integration(e.kind), Label: e.label, Module: module.Mail, URLKey: e.url, SecretKey: e.key,
 			Help: "OpenAI-compatible base URL, for example http://127.0.0.1:8187/v1; the Bearer key is optional.",
 			Test: probeTest(e.kind),
 		})
@@ -73,8 +74,8 @@ func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name: module.Mail,
 		Requires: []module.Requirement{
-			module.Setting(mail.KeyChatURL),
-			module.Setting(mail.KeyEmbedURL),
+			module.Setting(endpoint.KeyChatURL),
+			module.Setting(endpoint.KeyEmbedURL),
 			{Name: "endpoint probes", Check: func(ctx context.Context, p module.Probe) (string, error) {
 				return mail.ProbeFailures(ctx, p.Q)
 			}},

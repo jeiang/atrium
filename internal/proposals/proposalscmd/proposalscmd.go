@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
@@ -112,7 +113,7 @@ func Command(o Options) *cli.Command {
 				if !mailEnabled(x.Ctx, x.DB.Read) {
 					return nil
 				}
-				url, err := mail.ChatURL(x.Ctx, x.DB.Read)
+				url, err := endpoint.ChatURL(x.Ctx, x.DB.Read)
 				if err != nil {
 					return err
 				}
@@ -220,7 +221,7 @@ func mailEnabled(ctx context.Context, q db.Querier) bool {
 	if err != nil || flag.Value != "true" {
 		return false
 	}
-	for _, key := range []string{mail.KeyChatURL, mail.KeyEmbedURL} {
+	for _, key := range []string{endpoint.KeyChatURL, endpoint.KeyEmbedURL} {
 		found, err := settings.Default.Resolve(ctx, q, key)
 		if err != nil || found.Value == "" {
 			return false

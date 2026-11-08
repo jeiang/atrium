@@ -16,6 +16,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
@@ -40,7 +41,7 @@ func newBackoff() *retryBackoff {
 }
 
 func (b *retryBackoff) refresh(ctx context.Context, q db.Querier) error {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	start, ceiling := r.Int(mail.KeyBackoffStartSeconds), r.Int(mail.KeyBackoffMaxSeconds)
 	if err := r.Err(); err != nil {
 		return err
@@ -148,7 +149,7 @@ func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
 }
 
 func settleFor(ctx context.Context, q db.Querier) (time.Duration, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	seconds := r.Int(mail.KeyIdleSettleSeconds)
 	return time.Duration(seconds) * time.Second, r.Err()
 }
@@ -255,7 +256,7 @@ func Watch(ctx context.Context, env config.Env, cfg config.Config, requested str
 	if err != nil {
 		return err
 	}
-	notifier := sdnotify.FromEnv()
+	notifier := sdnotify.New(func(name string) string { v, _ := env(name); return v })
 	w := &Watcher{Env: env, Cfg: cfg, Open: open, Notify: notifier}
 	_, release, err := w.connect(ctx)
 	if err != nil {

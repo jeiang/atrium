@@ -20,6 +20,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mime"
@@ -396,7 +397,7 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 }
 
 func (s *Store) limits(ctx context.Context) (maxBody, maxSubject int, err error) {
-	r := mail.Read(ctx, s.DB.Read)
+	r := endpoint.Read(ctx, s.DB.Read)
 	maxBody = r.Int(mail.KeyDraftsMaxBody)
 	maxSubject = r.Int(mail.KeyDraftsMaxSubject)
 	return maxBody, maxSubject, r.Err()

@@ -10,6 +10,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/mail"
@@ -119,18 +121,18 @@ func ScanCommitments(ctx context.Context, d *db.DB, env config.Env, now float64,
 	if judge == nil {
 		judge = JudgeCommitments
 	}
-	r := mail.Read(ctx, d.Read)
+	r := endpoint.Read(ctx, d.Read)
 	window := r.Int(mail.KeyLoopsCommitWindowDays)
 	perMail := r.Int(mail.KeyLoopsCommitsPerMail)
 	limit := r.Int(mail.KeyLoopsCommitScanLimit)
 	if err := r.Err(); err != nil {
 		return 0, err
 	}
-	chatURL, err := mail.ChatURL(ctx, d.Read)
+	chatURL, err := endpoint.ChatURL(ctx, d.Read)
 	if err != nil {
 		return 0, err
 	}
-	ctx, err = mail.WithModels(ctx, d.Read)
+	ctx, err = embed.WithModels(ctx, d.Read)
 	if err != nil {
 		return 0, err
 	}

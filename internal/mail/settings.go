@@ -3,14 +3,11 @@ package mail
 import (
 	"context"
 	"fmt"
-	"math"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
@@ -20,18 +17,12 @@ const module = "mail"
 
 const (
 	KeyMode                   = "mail_mode"
-	KeyChatURL                = "mail_chat_url"
-	KeyEmbedURL               = "mail_embed_url"
-	KeyChatModel              = "mail_chat_model"
-	KeyChatMaxTokens          = "mail_chat_max_tokens"
-	KeyEmbedModel             = "mail_embed_model"
 	KeyWriteCap               = "write_cap"
 	KeyWriteAttempts          = "write_attempts"
 	KeyDeletionInterval       = "deletion_interval_seconds"
 	KeyUncertainDest          = "uncertain_dest"
 	KeyBodyCapBytes           = "mail_body_cap_bytes"
 	KeyFetchBatch             = "mail_fetch_batch"
-	KeyEmbedBatch             = "mail_embed_batch"
 	KeyFlagBatch              = "mail_flag_batch"
 	KeyMailopsBatch           = "mailops_batch"
 	KeySentBackfillDays       = "sent_backfill_days"
@@ -42,9 +33,6 @@ const (
 	KeyRuleMinPurity          = "rule_min_purity"
 	KeyFolderMinMessages      = "folder_min_messages"
 	KeyLLMNeighbors           = "llm_neighbors"
-	KeyLLMTopSenders          = "llm_top_senders"
-	KeyLLMBodyChars           = "llm_body_chars"
-	KeyEmbedBodyChars         = "mail_embed_body_chars"
 	KeyFTSBodyChars           = "mail_fts_body_chars"
 	KeyIdleSettleSeconds      = "mail_idle_settle_seconds"
 	KeyBackoffStartSeconds    = "mail_backoff_start_seconds"
@@ -119,11 +107,11 @@ func init() {
 	}
 	settings.MustRegister(
 		settings.Deploy(settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck}),
-		ui(KeyChatURL, settings.String, "", nil),
-		ui(KeyEmbedURL, settings.String, "", nil),
-		ui(KeyChatModel, settings.String, "qwen", nonBlank),
-		adv(KeyChatMaxTokens, settings.Int, "80", atLeast(1)),
-		adv(KeyEmbedModel, settings.String, "embeddinggemma", nonBlank),
+		ui(endpoint.KeyChatURL, settings.String, "", nil),
+		ui(endpoint.KeyEmbedURL, settings.String, "", nil),
+		ui(endpoint.KeyChatModel, settings.String, "qwen", nonBlank),
+		adv(endpoint.KeyChatMaxTokens, settings.Int, "80", atLeast(1)),
+		adv(endpoint.KeyEmbedModel, settings.String, "embeddinggemma", nonBlank),
 		settings.Value(settings.Advanced, settings.Def{
 			Key: KeyWriteCap, Module: module, Type: settings.Int, Default: "100",
 			Check: settings.Between(1, 1000)}),
@@ -132,7 +120,7 @@ func init() {
 		ui(KeyUncertainDest, settings.String, "Misc", nonBlank),
 		adv(KeyBodyCapBytes, settings.Int, strconv.Itoa(config.BodyCapBytes), settings.Between(1024, 1048576)),
 		count(KeyFetchBatch, 40),
-		count(KeyEmbedBatch, 16),
+		count(endpoint.KeyEmbedBatch, 16),
 		count(KeyFlagBatch, 500),
 		count(KeyMailopsBatch, 100),
 		count(KeySentBackfillDays, 90),
@@ -143,9 +131,9 @@ func init() {
 		share(KeyRuleMinPurity, "0.9"),
 		count(KeyFolderMinMessages, 10),
 		count(KeyLLMNeighbors, 10),
-		count(KeyLLMTopSenders, 3),
-		count(KeyLLMBodyChars, 1500),
-		count(KeyEmbedBodyChars, 1500),
+		count(endpoint.KeyLLMTopSenders, 3),
+		count(endpoint.KeyLLMBodyChars, 1500),
+		count(endpoint.KeyEmbedBodyChars, 1500),
 		count(KeyFTSBodyChars, 20000),
 		adv(KeyIdleSettleSeconds, settings.Int, "2", atLeast(0)),
 		count(KeyBackoffStartSeconds, 5),
@@ -234,15 +222,15 @@ func modeCheck(value string) error {
 }
 
 func clusterKsCheck(value string) error {
-	_, err := splitInts(value)
+	_, err := endpoint.SplitInts(value)
 	return err
 }
 
 func domainsCheck(value string) error {
-	if len(SplitList(value)) == 0 {
+	if len(endpoint.SplitList(value)) == 0 {
 		return settings.Invalid("must list at least one domain")
 	}
-	for _, d := range SplitList(value) {
+	for _, d := range endpoint.SplitList(value) {
 		for _, c := range d {
 			if c != '.' && c != '-' && (c < 'a' || c > 'z') && (c < '0' || c > '9') {
 				return settings.Invalid("domains are lowercase letters, digits, dots and hyphens, got " + strconv.Quote(d))
@@ -252,113 +240,18 @@ func domainsCheck(value string) error {
 	return nil
 }
 
-func SplitList(value string) []string {
-	var out []string
-	for _, part := range strings.Split(value, ",") {
-		if part = py.Strip(part); part != "" {
-			out = append(out, part)
-		}
-	}
-	return out
-}
-
-func splitInts(value string) ([]int, error) {
-	parts := SplitList(value)
-	if len(parts) == 0 {
-		return nil, settings.Invalid("must list at least one whole number")
-	}
-	out := make([]int, len(parts))
-	for i, part := range parts {
-		n, ok := py.ParseInt(part)
-		if !ok || n < 1 || n > math.MaxInt32 {
-			return nil, settings.Invalid("must be comma-separated whole numbers of at least 1, got " + strconv.Quote(part))
-		}
-		out[i] = int(n)
-	}
-	return out, nil
-}
-
-type Reader struct {
-	ctx context.Context
-	q   db.Querier
-	err error
-}
-
-func Read(ctx context.Context, q db.Querier) *Reader { return &Reader{ctx: ctx, q: q} }
-
 func WallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
-func (r *Reader) Err() error { return r.err }
-
-func (r *Reader) resolve(key string) settings.Resolved {
-	if r.err != nil {
-		return settings.Resolved{}
-	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key)
-	r.err = err
-	return found
-}
-
-func (r *Reader) Text(key string) string { return r.resolve(key).Value }
-
-func (r *Reader) Int(key string) int {
-	found := r.resolve(key)
-	if r.err != nil {
-		return 0
-	}
-	n, err := found.Int()
-	r.err = err
-	return int(n)
-}
-
-func (r *Reader) Float(key string) float64 {
-	found := r.resolve(key)
-	if r.err != nil {
-		return 0
-	}
-	f, err := found.Float()
-	r.err = err
-	return f
-}
-
-func (r *Reader) Ints(key string) []int {
-	found := r.resolve(key)
-	if r.err != nil {
-		return nil
-	}
-	out, err := splitInts(found.Value)
-	r.err = err
-	return out
-}
-
-func (r *Reader) List(key string) []string { return SplitList(r.resolve(key).Value) }
-
 func Mode(ctx context.Context, q db.Querier) (string, error) {
-	found, err := settings.Default.Resolve(ctx, q, KeyMode)
-	if err != nil {
+	r := endpoint.Read(ctx, q)
+	value := r.Text(KeyMode)
+	if err := r.Err(); err != nil {
 		return "", err
 	}
-	if err := modeCheck(found.Value); err != nil {
+	if err := modeCheck(value); err != nil {
 		return "", fmt.Errorf("%s %w", KeyMode, err)
 	}
-	return found.Value, nil
-}
-
-func ChatURL(ctx context.Context, q db.Querier) (string, error) {
-	return urlOf(ctx, q, KeyChatURL)
-}
-
-func EmbedURL(ctx context.Context, q db.Querier) (string, error) {
-	active, err := embed.Active(ctx, q)
-	if err != nil || active.URL != "" {
-		return active.URL, err
-	}
-	return urlOf(ctx, q, KeyEmbedURL)
-}
-
-func urlOf(ctx context.Context, q db.Querier, key string) (string, error) {
-	found, err := settings.Default.Resolve(ctx, q, key)
-	return strings.TrimRight(found.Value, "/"), err
+	return value, nil
 }
 
 func UncertainDest(ctx context.Context, q db.Querier, account string) (string, error) {
@@ -366,35 +259,6 @@ func UncertainDest(ctx context.Context, q db.Querier, account string) (string, e
 	if !ok || spec.UncertainDest() == "" {
 		return "", nil
 	}
-	found, err := settings.Default.Resolve(ctx, q, KeyUncertainDest)
-	return found.Value, err
-}
-
-func WithModels(ctx context.Context, q db.Querier) (context.Context, error) {
-	r := Read(ctx, q)
-	s := endpoint.Settings{
-		ChatModel:      r.Text(KeyChatModel),
-		EmbedModel:     r.Text(KeyEmbedModel),
-		LLMBodyChars:   r.Int(KeyLLMBodyChars),
-		EmbedBodyChars: r.Int(KeyEmbedBodyChars),
-		Batch:          r.Int(KeyEmbedBatch),
-		MaxTokens:      r.Int(KeyChatMaxTokens),
-		TopSenders:     r.Int(KeyLLMTopSenders),
-	}
-	if r.Err() != nil {
-		return ctx, r.Err()
-	}
-	active, err := embed.Active(ctx, q)
-	if err != nil {
-		return ctx, err
-	}
-	s.Dim = active.Dimension
-	if active.URL != "" {
-		s.EmbedModel = active.Model
-	}
-	endpoints, err := Endpoints(ctx, q)
-	if err != nil {
-		return ctx, err
-	}
-	return withEndpoints(endpoint.With(ctx, s), q, endpoints)
+	r := endpoint.Read(ctx, q)
+	return r.Text(KeyUncertainDest), r.Err()
 }

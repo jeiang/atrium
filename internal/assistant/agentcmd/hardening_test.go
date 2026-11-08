@@ -38,9 +38,6 @@ func newHarness(t *testing.T, script ...anthropictest.Response) *harness {
 	srv := anthropictest.New(t, script...)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	t.Setenv("ATRIUM_DB", path)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_MODE", "shadow")
 	anthropictest.PinKey(t)
 	env := config.Map(map[string]string{
 		"ATRIUM_DB": path, "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow",
@@ -56,7 +53,7 @@ func newHarness(t *testing.T, script ...anthropictest.Response) *harness {
 		return r, err
 	}
 	a := cli.New("atrium", func(io.Writer) {})
-	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(env, tools)}}, settingscmd.Command(config.OS, nil))
+	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(env, tools)}}, settingscmd.Command(env, nil))
 	d, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)

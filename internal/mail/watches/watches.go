@@ -13,6 +13,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
@@ -396,7 +398,7 @@ type scanResult struct {
 }
 
 func ScanPackages(ctx context.Context, d *db.DB, now float64, o Options) (scanResult, error) {
-	r := mail.Read(ctx, d.Read)
+	r := endpoint.Read(ctx, d.Read)
 	limit := r.Int(mail.KeyWatchesScanLimit)
 	window := r.Int(mail.KeyWatchesPackageWindow)
 	bodyChars := r.Int(mail.KeyWatchesBodyChars)
@@ -404,11 +406,11 @@ func ScanPackages(ctx context.Context, d *db.DB, now float64, o Options) (scanRe
 	if err := r.Err(); err != nil {
 		return scanResult{}, err
 	}
-	chatURL, err := mail.ChatURL(ctx, d.Read)
+	chatURL, err := endpoint.ChatURL(ctx, d.Read)
 	if err != nil {
 		return scanResult{}, err
 	}
-	ctx, err = mail.WithModels(ctx, d.Read)
+	ctx, err = embed.WithModels(ctx, d.Read)
 	if err != nil {
 		return scanResult{}, err
 	}
@@ -468,7 +470,7 @@ type Package struct {
 func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64, activeOnly, includeDismissed bool) ([]Package, error) {
 	stale := 0
 	if activeOnly {
-		r := mail.Read(ctx, q)
+		r := endpoint.Read(ctx, q)
 		stale = r.Int(mail.KeyWatchesStalePackage)
 		if err := r.Err(); err != nil {
 			return nil, err
