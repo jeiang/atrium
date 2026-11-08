@@ -34,17 +34,9 @@ func (s State) Settled() bool { return s == Settled || s == UndoSettled || s == 
 
 func (s State) Terminal() bool { return !s.Held() }
 
-func (s State) Done() bool { return s == Applied || s == OK || s == Undone }
-
-func (s State) Undo() bool {
-	return s == Undone || s == UndoHeld || s == UndoFailed || s == UndoUnknown || s == UndoPartial || s == UndoSettled
-}
-
 func BlockedSQL(alias string) string {
 	return alias + ".state IN ('unknown', 'partial', 'undo_unknown', 'undo_partial')"
 }
-
-func HeldSQL(alias string) string { return alias + ".state IN ('held', 'undo_held')" }
 
 func ActiveSQL(alias string) string { return alias + ".state IN ('held', 'unknown', 'partial')" }
 
