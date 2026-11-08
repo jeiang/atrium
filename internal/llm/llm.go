@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -36,72 +35,42 @@ const EventSystem = "You scan the mailbox owner's email for calendar events. has
 	"reservation, class, delivery window) with a concrete date or time. Newsletters, promotions, generic " +
 	"deadlines, past events and events of other people are has_event=false."
 
-var FlagFields = [...]string{"person_asking", "deadline_or_payment_due", "security_event", "flag"}
+var flagFields = [...]string{"person_asking", "deadline_or_payment_due", "security_event", "flag"}
 
-type Field struct {
-	Key   string
-	Value any
-}
+var boolean = map[string]any{"type": "boolean"}
 
-type Object []Field
-
-func (o Object) MarshalJSON() ([]byte, error) {
-	var b bytes.Buffer
-	b.WriteByte('{')
-	for i, f := range o {
-		if i > 0 {
-			b.WriteByte(',')
-		}
-		k, err := json.Marshal(f.Key)
-		if err != nil {
-			return nil, err
-		}
-		v, err := json.Marshal(f.Value)
-		if err != nil {
-			return nil, err
-		}
-		b.Write(k)
-		b.WriteByte(':')
-		b.Write(v)
+func flagSchema() map[string]any {
+	props := make(map[string]any, len(flagFields))
+	for _, k := range flagFields {
+		props[k] = boolean
 	}
-	b.WriteByte('}')
-	return b.Bytes(), nil
-}
-
-var boolean = Object{{"type", "boolean"}}
-
-func flagSchema() Object {
-	props := make(Object, len(FlagFields))
-	for i, k := range FlagFields {
-		props[i] = Field{k, boolean}
-	}
-	return Object{
-		{"type", "object"},
-		{"properties", props},
-		{"required", FlagFields[:]},
-		{"additionalProperties", false},
+	return map[string]any{
+		"type":                 "object",
+		"properties":           props,
+		"required":             flagFields[:],
+		"additionalProperties": false,
 	}
 }
 
 var (
-	FlagSchema  = flagSchema()
-	EventSchema = Object{
-		{"type", "object"},
-		{"properties", Object{{"has_event", boolean}}},
-		{"required", []string{"has_event"}},
-		{"additionalProperties", false},
+	flagSchemaValue = flagSchema()
+	eventSchema     = map[string]any{
+		"type":                 "object",
+		"properties":           map[string]any{"has_event": boolean},
+		"required":             []string{"has_event"},
+		"additionalProperties": false,
 	}
 )
 
-func FolderSchema(folders []string) Object {
-	return Object{
-		{"type", "object"},
-		{"properties", Object{
-			{"folder", Object{{"type", "string"}, {"enum", append(slices.Clip(folders), Uncertain)}}},
-			{"confident", boolean},
-		}},
-		{"required", []string{"folder", "confident"}},
-		{"additionalProperties", false},
+func folderSchema(folders []string) map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"folder":    map[string]any{"type": "string", "enum": append(slices.Clip(folders), Uncertain)},
+			"confident": boolean,
+		},
+		"required":             []string{"folder", "confident"},
+		"additionalProperties": false,
 	}
 }
 
@@ -216,7 +185,7 @@ func ChatJSON(ctx context.Context, url, system, user string, schema any, maxToke
 	}
 	text, ok := content.(string)
 	if !ok {
-		return nil, fmt.Errorf("%w: the JSON object must be str, not %s", httpx.ErrShape, httpx.TypeName(content))
+		return nil, fmt.Errorf("%w: chat reply content is not a string", httpx.ErrPayload)
 	}
 	if !json.Valid([]byte(text)) {
 		return nil, fmt.Errorf("%w: chat reply content is not JSON: %q", httpx.ErrPayload, text)
@@ -224,38 +193,28 @@ func ChatJSON(ctx context.Context, url, system, user string, schema any, maxToke
 	return json.RawMessage(text), nil
 }
 
-func answer(raw json.RawMessage) (any, error) {
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, fmt.Errorf("%w: %w", httpx.ErrPayload, err)
+func decode(raw json.RawMessage, v any) error {
+	if err := json.Unmarshal(raw, v); err != nil {
+		return fmt.Errorf("%w: %w", httpx.ErrPayload, err)
 	}
-	return v, nil
+	return nil
 }
 
-func field(a any, k string) (bool, error) {
-	v, err := httpx.Key(a, k)
-	return httpx.Truthy(v), err
+type folderAnswer struct {
+	Folder    string `json:"folder"`
+	Confident bool   `json:"confident"`
 }
 
 func JudgeFolder(ctx context.Context, url string, folders []string, catalog string, neighbors []Neighbor, m Message, body string) (string, bool, error) {
-	raw, err := ChatJSON(ctx, url, FolderSystem, FolderPrompt(ctx, catalog, neighbors, m, body), FolderSchema(folders), 0)
+	raw, err := ChatJSON(ctx, url, FolderSystem, FolderPrompt(ctx, catalog, neighbors, m, body), folderSchema(folders), 0)
 	if err != nil {
 		return "", false, err
 	}
-	a, err := answer(raw)
-	if err != nil {
+	var answer folderAnswer
+	if err := decode(raw, &answer); err != nil {
 		return "", false, err
 	}
-	f, err := httpx.Key(a, "folder")
-	if err != nil {
-		return "", false, err
-	}
-	folder, ok := f.(string)
-	if !ok {
-		return "", false, fmt.Errorf("%w: folder is %s, not str", httpx.ErrShape, httpx.TypeName(f))
-	}
-	confident, err := field(a, "confident")
-	return folder, confident, err
+	return answer.Folder, answer.Confident, nil
 }
 
 type Flags struct {
@@ -266,31 +225,27 @@ type Flags struct {
 }
 
 func JudgeFlag(ctx context.Context, url string, m Message, body string) (Flags, error) {
-	raw, err := ChatJSON(ctx, url, FlagSystem, messagePrompt(ctx, m, body), FlagSchema, 0)
+	raw, err := ChatJSON(ctx, url, FlagSystem, messagePrompt(ctx, m, body), flagSchemaValue, 0)
 	if err != nil {
 		return Flags{}, err
 	}
-	a, err := answer(raw)
-	if err != nil {
+	var flags Flags
+	if err := decode(raw, &flags); err != nil {
 		return Flags{}, err
 	}
-	var f Flags
-	for i, dst := range []*bool{&f.PersonAsking, &f.DeadlineOrPaymentDue, &f.SecurityEvent, &f.Flag} {
-		if *dst, err = field(a, FlagFields[i]); err != nil {
-			return Flags{}, err
-		}
-	}
-	return f, nil
+	return flags, nil
 }
 
 func JudgeEvent(ctx context.Context, url string, m Message, body string) (bool, error) {
-	raw, err := ChatJSON(ctx, url, EventSystem, messagePrompt(ctx, m, body), EventSchema, 0)
+	raw, err := ChatJSON(ctx, url, EventSystem, messagePrompt(ctx, m, body), eventSchema, 0)
 	if err != nil {
 		return false, err
 	}
-	a, err := answer(raw)
-	if err != nil {
+	var answer struct {
+		HasEvent bool `json:"has_event"`
+	}
+	if err := decode(raw, &answer); err != nil {
 		return false, err
 	}
-	return field(a, "has_event")
+	return answer.HasEvent, nil
 }

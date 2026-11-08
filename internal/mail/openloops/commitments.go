@@ -25,25 +25,25 @@ const CommitmentSystem = "You read one email for its owner and list explicit com
 	"invent dates, skip vague pleasantries ('let's catch up'), newsletters and automated notices. Return an empty " +
 	"list when there is nothing."
 
-var CommitmentSchema = llm.Object{
-	{Key: "type", Value: "object"},
-	{Key: "properties", Value: llm.Object{
-		{Key: "commitments", Value: llm.Object{
-			{Key: "type", Value: "array"},
-			{Key: "items", Value: llm.Object{
-				{Key: "type", Value: "object"},
-				{Key: "properties", Value: llm.Object{
-					{Key: "text", Value: llm.Object{{Key: "type", Value: "string"}}},
-					{Key: "owner", Value: llm.Object{{Key: "type", Value: "string"}, {Key: "enum", Value: []string{"me", "them"}}}},
-					{Key: "due", Value: llm.Object{{Key: "type", Value: []string{"string", "null"}}}},
-				}},
-				{Key: "required", Value: []string{"text", "owner", "due"}},
-				{Key: "additionalProperties", Value: false},
-			}},
-		}},
-	}},
-	{Key: "required", Value: []string{"commitments"}},
-	{Key: "additionalProperties", Value: false},
+var CommitmentSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"commitments": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"text":  map[string]any{"type": "string"},
+					"owner": map[string]any{"type": "string", "enum": []string{"me", "them"}},
+					"due":   map[string]any{"type": []string{"string", "null"}},
+				},
+				"required":             []string{"text", "owner", "due"},
+				"additionalProperties": false,
+			},
+		},
+	},
+	"required":             []string{"commitments"},
+	"additionalProperties": false,
 }
 
 func DueDate(value any) (string, bool) {
