@@ -50,7 +50,7 @@ func propose(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		return nil, err
 	}
 	payload, _ := args.Get("payload")
-	shown := "None"
+	shown := "unknown"
 	var fn Builder
 	if ok {
 		shown = strconv.Quote(kind)

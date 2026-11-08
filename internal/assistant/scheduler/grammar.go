@@ -115,7 +115,7 @@ func clock(text string) (int, int, error) {
 			return h, mi, nil
 		}
 	}
-	return 0, 0, Error(fmt.Sprintf("bad time %s; use HH:MM (24-hour)", py.Repr(text)))
+	return 0, 0, Error(fmt.Sprintf("bad time %s; use HH:MM (24-hour)", strconv.Quote(text)))
 }
 
 func cronValue(token string, index int) (int, error) {
@@ -123,7 +123,7 @@ func cronValue(token string, index int) (int, error) {
 		return v, nil
 	}
 	if !isDecimal(token) {
-		return 0, Error("bad cron value " + py.Repr(token))
+		return 0, Error("bad cron value " + strconv.Quote(token))
 	}
 	return pyInt(token), nil
 }
@@ -134,14 +134,14 @@ func cronField(text string, index int) ([]int, error) {
 	for part := range strings.SplitSeq(text, ",") {
 		body, stepText, _ := strings.Cut(part, "/")
 		if stepText != "" && !isDecimal(stepText) {
-			return nil, Error("bad cron step " + py.Repr(part))
+			return nil, Error("bad cron step " + strconv.Quote(part))
 		}
 		step := 1
 		if stepText != "" {
 			step = pyInt(stepText)
 		}
 		if step < 1 {
-			return nil, Error("bad cron step " + py.Repr(part))
+			return nil, Error("bad cron step " + strconv.Quote(part))
 		}
 		var start, end int
 		var err error
@@ -169,7 +169,7 @@ func cronField(text string, index int) ([]int, error) {
 			}
 		}
 		if start < low || end > high || start > end {
-			return nil, Error("cron value out of range in " + py.Repr(part))
+			return nil, Error("cron value out of range in " + strconv.Quote(part))
 		}
 		for v := start; v <= end; v += step {
 			if index == dowBound {

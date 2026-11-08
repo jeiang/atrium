@@ -291,7 +291,7 @@ func resolve(ctx context.Context, q db.Querier, kind string, projectID *int64, e
 			return Options{}, err
 		}
 		if !ok {
-			return Options{}, fmt.Errorf("threads: no effort for kind %s", py.Repr(kind))
+			return Options{}, fmt.Errorf("threads: no effort for kind %s", strconv.Quote(kind))
 		}
 		chosen.Effort, chosen.Model = effort, pricing.DefaultModel
 		projectEffort = false

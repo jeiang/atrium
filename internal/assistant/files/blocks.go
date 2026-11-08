@@ -82,7 +82,7 @@ func unavailable(d py.Dict) (json.RawMessage, error) {
 		if s, isString := v.(string); isString {
 			name = s
 		} else {
-			name = py.ReprValue(v)
+			name = fmt.Sprint(v)
 		}
 	}
 	return marshal(textBlock{Type: "text", Text: "[attachment " + name + " is no longer available]"})

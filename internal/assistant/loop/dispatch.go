@@ -87,22 +87,21 @@ func replayClass(t *tool.Tool) string {
 func className(err error) string {
 	var raised *tool.Raised
 	if errors.As(err, &raised) {
-		return raised.Class
+		return raised.Error()
 	}
-	var classed py.Classed
-	if errors.As(err, &classed) {
-		return classed.PyClass()
+	var te tool.Error
+	if errors.As(err, &te) {
+		return string(te)
 	}
-	for _, sentinel := range []error{httpx.ErrValue, httpx.ErrKey, httpx.ErrIndex, httpx.ErrType} {
-		if errors.Is(err, sentinel) {
-			return sentinel.Error()
-		}
+	var nc config.NotConfigured
+	if errors.As(err, &nc) {
+		return string(nc)
 	}
 	var unavailable *httpx.ServiceUnavailable
 	if errors.As(err, &unavailable) {
-		return "ServiceUnavailable"
+		return "service unavailable"
 	}
-	return "RuntimeError"
+	return err.Error()
 }
 
 func toolErrorText(err error) (string, bool) {

@@ -22,7 +22,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var log = logx.Logger("atrium.agent.scheduler")
@@ -188,7 +187,7 @@ func (w *Worker) finish(ctx context.Context, claim scheduler.Claim, o scheduler.
 	return err
 }
 
-func failed(err error) *string { return new(py.ExceptionText(err)) }
+func failed(err error) *string { return new(err.Error()) }
 
 func (w *Worker) settle(ctx context.Context, claim scheduler.Claim, runID int64, threadID *int64) (string, error) {
 	d := w.Service.DB

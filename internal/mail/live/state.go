@@ -54,10 +54,6 @@ type UndoError string
 
 func (e UndoError) Error() string { return string(e) }
 
-func (UndoError) PyClass() string { return "UndoError" }
-
-func (UndoError) PyModule() string { return "atrium.live" }
-
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
@@ -417,7 +413,7 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	fields, _ := parsed.(py.Dict)
 	op, found := fields.Get("op")
 	if !found {
-		return UndoResult{}, fmt.Errorf("%w: 'op'", httpx.ErrKey)
+		return UndoResult{}, fmt.Errorf("%w: 'op'", httpx.ErrMissing)
 	}
 	name, _ := op.(string)
 	var undoer proposals.Undoer
@@ -425,7 +421,7 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		undoer = l.Registry.Undoers[name]
 	}
 	if _, isString := op.(string); !isString || undoer == nil {
-		return UndoResult{}, UndoError("no undo handler for " + py.ReprValue(op))
+		return UndoResult{}, UndoError("no undo handler for " + fmt.Sprint(op))
 	}
 	settle := context.WithoutCancel(ctx)
 	held, err := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET undone_error = ?, undo_started_at = ? WHERE id = ? AND undone_ts IS NULL AND NOT "+
@@ -443,7 +439,7 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		return undoer(safety.ApprovedWrites(ctx, fmt.Sprintf("undo-%d", id)), json.RawMessage(*plan))
 	}()
 	if err != nil {
-		text := py.ExceptionText(err)
+		text := err.Error()
 		if name == OpMoveBack {
 			text = mailops.UnknownText(err, text)
 		}
@@ -477,7 +473,7 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	if l.Registry != nil && l.Registry.Sync != nil {
 		if err := l.Registry.Sync(ctx, account); err != nil {
 			log.Error(fmt.Sprintf("post-undo sync failed for action %d", id), logx.Err, err.Error())
-			text := py.ExceptionText(err)
+			text := err.Error()
 			out.SyncError = &text
 		}
 	}

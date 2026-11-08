@@ -60,8 +60,6 @@ type valueError string
 
 func (e valueError) Error() string { return string(e) }
 
-func (e valueError) PyClass() string { return "ValueError" }
-
 func unescapeText(s string) string {
 	if !strings.Contains(s, `\`) {
 		return s
@@ -152,7 +150,7 @@ func (z *zones) value(prop ical.Prop) (Value, error) {
 	text := prop.Value
 	upper := strings.ToUpper(text)
 	if strings.HasPrefix(upper, "P") || strings.HasPrefix(upper, "-P") || strings.HasPrefix(upper, "+P") || strings.Contains(upper, "/") {
-		return Value{}, valueError("Expected datetime, date, or time. Got: '" + text + "'")
+		return Value{}, valueError("expected a datetime, date, or time, got " + strconv.Quote(text))
 	}
 	var loc *time.Location
 	if tzid := prop.Params.Get(ical.ParamTimezoneID); tzid != "" {
@@ -163,20 +161,20 @@ func (z *zones) value(prop ical.Prop) (Value, error) {
 		if v, ok := clockValue(text, loc); ok {
 			return v, nil
 		}
-		return Value{}, valueError("Wrong datetime format: " + text)
+		return Value{}, valueError("invalid datetime " + strconv.Quote(text))
 	case 8:
 		y, ok1 := digitsAt(text, 0, 4)
 		mo, ok2 := digitsAt(text, 4, 6)
 		d, ok3 := digitsAt(text, 6, 8)
 		if !ok1 || !ok2 || !ok3 || y < 1 || mo < 1 || mo > 12 || d < 1 || d > time.Date(y, time.Month(mo)+1, 0, 0, 0, 0, 0, time.UTC).Day() {
-			return Value{}, valueError("Wrong date format " + text)
+			return Value{}, valueError("invalid date " + strconv.Quote(text))
 		}
 		if loc != nil {
 			return awareValue(resolve(loc, time.Date(y, time.Month(mo), d, 0, 0, 0, 0, time.UTC))), nil
 		}
 		return dateValue(y, time.Month(mo), d), nil
 	}
-	return Value{}, valueError("Expected datetime, date, or time. Got: '" + text + "'")
+	return Value{}, valueError("expected a datetime, date, or time, got " + strconv.Quote(text))
 }
 
 func (z *zones) list(prop ical.Prop) ([]Value, error) {
@@ -281,7 +279,7 @@ func parseEvent(comp *ical.Component, z *zones) (*icsEvent, error) {
 	if p := comp.Props.Get(ical.PropDuration); p != nil {
 		d, ok := parseDuration(p.Value)
 		if !ok {
-			return nil, valueError("Invalid iCalendar duration: " + p.Value)
+			return nil, valueError("invalid iCalendar duration: " + p.Value)
 		}
 		ev.duration = &d
 	}

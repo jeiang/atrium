@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -35,7 +36,7 @@ func (r Resolved) Float() (float64, error) { return py.ParseFloat(r.Value) }
 func (r Resolved) Int() (int64, error) {
 	n, ok := py.ParseInt(r.Value)
 	if !ok {
-		return 0, fmt.Errorf("invalid literal for int() with base 10: %s", py.Repr(r.Value))
+		return 0, fmt.Errorf("invalid integer %s", strconv.Quote(r.Value))
 	}
 	return n, nil
 }

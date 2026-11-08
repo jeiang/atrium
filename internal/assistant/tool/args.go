@@ -26,9 +26,9 @@ func BoundedInt(args py.Dict, name string, def, maximum, minimum int64) (int64, 
 	case float64:
 		switch {
 		case math.IsNaN(v):
-			return 0, &Raised{"ValueError"}
+			return 0, Error("value is not a number")
 		case math.IsInf(v, 0):
-			return 0, &Raised{"OverflowError"}
+			return 0, Error("value is out of range")
 		case v >= math.MaxInt64:
 			n = math.MaxInt64
 		case v <= math.MinInt64:

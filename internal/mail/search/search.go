@@ -173,7 +173,7 @@ func text(v any) (*string, error) {
 	if !flag(v) {
 		return nil, nil
 	}
-	return nil, fmt.Errorf("%w: '%s' object has no attribute 'strip'", httpx.ErrType, httpx.TypeName(v))
+	return nil, fmt.Errorf("%w: %s is not text", httpx.ErrShape, httpx.TypeName(v))
 }
 
 func timestamp(v any, endOfDay bool) (*float64, error) {
@@ -185,9 +185,9 @@ func timestamp(v any, endOfDay bool) (*float64, error) {
 		if t == "" {
 			return nil, nil
 		}
-		day, ok := py.StrptimeDate(py.Strip(t))
+		day, ok := py.StrptimeDate(strings.TrimSpace(t))
 		if !ok {
-			return nil, fmt.Errorf("%w: time data %s does not match format '%%Y-%%m-%%d'", httpx.ErrValue, py.Repr(py.Strip(t)))
+			return nil, fmt.Errorf("%w: time data %q does not match format YYYY-MM-DD", httpx.ErrPayload, strings.TrimSpace(t))
 		}
 		day.Aware = true
 		f = day.Timestamp(time.UTC)
@@ -208,7 +208,7 @@ func timestamp(v any, endOfDay bool) (*float64, error) {
 	case json.Number:
 		f, _ = t.Float64()
 	default:
-		return nil, fmt.Errorf("%w: unsupported date value %v", httpx.ErrValue, v)
+		return nil, fmt.Errorf("%w: unsupported date value %v", httpx.ErrPayload, v)
 	}
 	return &f, nil
 }
@@ -565,14 +565,14 @@ func Search(ctx context.Context, q Querier, _ config.Config, query string, filte
 	vectors, err := embedTexts(ctx, embedURL, []string{embed.QueryText(query)})
 	if err == nil {
 		if len(vectors) == 0 {
-			err = fmt.Errorf("%w: list index out of range", httpx.ErrIndex)
+			err = fmt.Errorf("%w: list index out of range", httpx.ErrRange)
 		} else {
 			sem, err = semantic(ctx, q, vectors[0], f, lim.branchLimit, lim.knnMax)
 		}
 	}
 	if err != nil {
 		var unavailable *httpx.ServiceUnavailable
-		if !errors.As(err, &unavailable) && !errors.Is(err, httpx.ErrValue) && !errors.Is(err, httpx.ErrKey) {
+		if !errors.As(err, &unavailable) && !errors.Is(err, httpx.ErrPayload) && !errors.Is(err, httpx.ErrMissing) {
 			return Result{}, err
 		}
 		available = false

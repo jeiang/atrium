@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 
 	"regexp"
@@ -75,10 +76,6 @@ var LearnedLevels = []LearnedLevel{
 type RuleError string
 
 func (e RuleError) Error() string { return string(e) }
-
-func (RuleError) PyClass() string { return "RuleError" }
-
-func (RuleError) PyModule() string { return "atrium.rules" }
 
 func ruleErrorf(format string, args ...any) error { return RuleError(fmt.Sprintf(format, args...)) }
 
@@ -295,7 +292,7 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 	if c.field == AgeField {
 		days, ok := number(c.value)
 		if !ok {
-			return false, fmt.Errorf("age_days value %s: not a number", py.ReprValue(c.value))
+			return false, fmt.Errorf("age_days value %s: not a number", fmt.Sprint(c.value))
 		}
 		return ageMatches(m, days, now), nil
 	}
@@ -311,7 +308,7 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 	case "eq":
 		target, ok := c.value.(string)
 		if !ok {
-			return false, fmt.Errorf("op eq: value %s: not a string", py.ReprValue(c.value))
+			return false, fmt.Errorf("op eq: value %s: not a string", fmt.Sprint(c.value))
 		}
 		target = py.Casefold(target)
 		for _, v := range values {
@@ -359,7 +356,7 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 	case "re":
 		re := c.matcher
 		if re == nil {
-			return false, fmt.Errorf("op re: pattern %s was not compiled", py.ReprValue(c.value))
+			return false, fmt.Errorf("op re: pattern %s was not compiled", fmt.Sprint(c.value))
 		}
 		for _, v := range values {
 			if v == "" {
@@ -457,7 +454,7 @@ func inList(s string, list []string) bool {
 func ValidateCondition(raw any) (Condition, error) {
 	get, ok := object(raw)
 	if !ok {
-		return Condition{}, ruleErrorf("condition must be an object: %s", py.ReprValue(raw))
+		return Condition{}, ruleErrorf("condition must be an object: %s", fmt.Sprint(raw))
 	}
 	fieldV, _ := get("field")
 	opV, _ := get("op")
@@ -472,10 +469,10 @@ func ValidateCondition(raw any) (Condition, error) {
 		return Condition{field: field, op: op, value: value, hasValue: true}, nil
 	}
 	if !fieldIsStr || (ListFields[field] == "" && ScalarFields[field] == "") {
-		return Condition{}, ruleErrorf("unknown field %s", py.ReprValue(fieldV))
+		return Condition{}, ruleErrorf("unknown field %s", fmt.Sprint(fieldV))
 	}
 	if !opIsStr || !inList(op, Ops) {
-		return Condition{}, ruleErrorf("unknown op %s", py.ReprValue(opV))
+		return Condition{}, ruleErrorf("unknown op %s", fmt.Sprint(opV))
 	}
 	if inList(op, ValuelessOps) {
 		if value != nil {
@@ -500,7 +497,7 @@ func ValidateCondition(raw any) (Condition, error) {
 	if op == "re" {
 		re, err := compilePattern(text)
 		if err != nil {
-			return Condition{}, ruleErrorf("invalid regex %s: %s", py.Repr(text), err)
+			return Condition{}, ruleErrorf("invalid regex %s: %s", strconv.Quote(text), err)
 		}
 		if isList {
 			value = list
@@ -537,7 +534,7 @@ func ValidateRule(raw any) (Rule, error) {
 	}
 	act, _ := action.(string)
 	if Action(act) != ActionFile && Action(act) != ActionDelete {
-		return Rule{}, ruleErrorf("%s: unknown action %s", id, py.ReprValue(action))
+		return Rule{}, ruleErrorf("%s: unknown action %s", id, fmt.Sprint(action))
 	}
 	destV, _ := get("dest")
 	dest, destIsStr := destV.(string)

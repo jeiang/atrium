@@ -40,7 +40,7 @@ func recall(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	case int64:
 		resultID = v
 	case *big.Int:
-		return nil, &tool.Raised{Class: "OverflowError"}
+		return nil, tool.Error("value is too large")
 	default:
 		return nil, tool.Error("result_id must be an integer")
 	}

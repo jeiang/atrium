@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Error struct {
@@ -21,10 +19,6 @@ type Error struct {
 }
 
 func (e *Error) Error() string { return e.Msg }
-
-func (e *Error) PyClass() string { return e.Kind }
-
-func (e *Error) PyModule() string { return "imaplib.IMAP4" }
 
 func pyError(format string, a ...any) *Error {
 	return &Error{Kind: "error", Msg: fmt.Sprintf(format, a...)}
@@ -94,7 +88,7 @@ func line(buf []byte, pos int) ([]byte, int, bool, error) {
 	}
 	raw := buf[pos : pos+i+1]
 	if !bytes.HasSuffix(raw, []byte("\r\n")) {
-		return nil, 0, false, pyAbort("socket error: unterminated line: %s", py.ReprBytes(raw))
+		return nil, 0, false, pyAbort("socket error: unterminated line: %s", strconv.Quote(string(raw)))
 	}
 	return raw[:len(raw)-2], pos + i + 1, true, nil
 }
@@ -250,7 +244,7 @@ func readResponse(buf []byte) (response, int, error) {
 	case len(resp) >= 2 && resp[0] == '*' && resp[1] == ' ':
 		typ, dat, ok := parseUntagged(resp)
 		if !ok {
-			return r, 0, pyAbort("unexpected response: %s", py.ReprBytes(resp))
+			return r, 0, pyAbort("unexpected response: %s", strconv.Quote(string(resp)))
 		}
 		r.kind, r.typ = untagged, typ
 		depth := 0
@@ -287,7 +281,7 @@ func readResponse(buf []byte) (response, int, error) {
 	default:
 		tag, typ, dat, ok := parseTagged(resp)
 		if !ok {
-			return r, 0, pyAbort("unexpected response: %s", py.ReprBytes(resp))
+			return r, 0, pyAbort("unexpected response: %s", strconv.Quote(string(resp)))
 		}
 		r.kind, r.tag, r.typ, r.dat = tagged, tag, typ, bytes.Clone(dat)
 	}

@@ -58,7 +58,7 @@ func draftFailed(err error) error {
 	if errors.As(err, &de) {
 		return tool.Error(string(de))
 	}
-	return raised(err)
+	return err
 }
 
 func replyID(args py.Dict) (any, error) {

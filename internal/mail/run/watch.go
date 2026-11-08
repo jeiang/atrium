@@ -18,8 +18,8 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/sdnotify"
 )
 
@@ -59,8 +59,9 @@ func (b *retryBackoff) next() int {
 }
 
 func ConnectionLost(err error) bool {
-	var classed py.Classed
-	if errors.As(err, &classed) && (classed.PyClass() == "abort" || classed.PyClass() == "readonly") {
+	var interrupted *mail.WriteInterrupted
+	var imapErr *imapclient.Error
+	if errors.As(err, &interrupted) || errors.As(err, &imapErr) && imapErr.Kind == "readonly" {
 		return true
 	}
 	var (

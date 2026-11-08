@@ -19,7 +19,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -316,7 +315,7 @@ func (c *conn) complete(name string) (string, []datum, error) {
 		}
 		i := c.tap.sentIndex(r.tag, c.sentPos)
 		if i < 0 {
-			return "", nil, pyAbort("command: %s => unexpected tagged response: %s", name, py.ReprBytes(r.line))
+			return "", nil, pyAbort("command: %s => unexpected tagged response: %s", name, strconv.Quote(string(r.line)))
 		}
 		if i != target {
 			continue
@@ -633,7 +632,7 @@ func (c *conn) selectBox(imapName string, readonly bool) (uint32, error) {
 	}
 	c.state = "SELECTED"
 	if _, ok := c.ur["READ-ONLY"]; ok && !readonly {
-		return 0, pyReadonly("%s is not writable", py.Repr(quoteName(imapName)))
+		return 0, pyReadonly("%s is not writable", strconv.Quote(quoteName(imapName)))
 	}
 	if err := goErr(werr); err != nil || readonly {
 		return 0, err
@@ -991,7 +990,7 @@ func (c *conn) awaitIdleStart() error {
 			if r.typ == "NO" {
 				return pyError("idle denied: %s", listRepr([]datum{{text: r.dat}}))
 			}
-			return pyAbort("unexpected status response: %s", py.ReprBytes(r.line))
+			return pyAbort("unexpected status response: %s", strconv.Quote(string(r.line)))
 		}
 	}
 }

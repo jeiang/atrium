@@ -95,7 +95,7 @@ func selected(selection any, key string) (any, error) {
 	}
 	d, ok := selection.(py.Dict)
 	if !ok {
-		return nil, py.AttributeError(selection, "get")
+		return nil, fmt.Errorf("selection is not an object")
 	}
 	return get(d, key), nil
 }
@@ -122,7 +122,7 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 		if picks != nil {
 			d, ok := picks[i].(py.Dict)
 			if !ok {
-				return nil, py.AttributeError(picks[i], "get")
+				return nil, fmt.Errorf("selection group is not an object")
 			}
 			pick = d
 		}
@@ -130,7 +130,7 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 		if chosen := get(pick, "name"); py.Truthy(chosen) {
 			s, ok := chosen.(string)
 			if !ok {
-				return nil, py.AttributeError(chosen, "strip")
+				return nil, fmt.Errorf("selection name is not text")
 			}
 			value = s
 		}
@@ -515,7 +515,7 @@ func decode(raw json.RawMessage) (py.Dict, error) {
 	}
 	d, ok := v.(py.Dict)
 	if !ok {
-		return nil, py.TypeError("'%s' object is not subscriptable", py.TypeName(v))
+		return nil, fmt.Errorf("proposal payload is not an object")
 	}
 	return d, nil
 }
@@ -523,7 +523,7 @@ func decode(raw json.RawMessage) (py.Dict, error) {
 func required(d py.Dict, key string) (any, error) {
 	v, ok := d.Get(key)
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", httpx.ErrKey, py.Repr(key))
+		return nil, fmt.Errorf("%w: %s", httpx.ErrMissing, strconv.Quote(key))
 	}
 	return v, nil
 }
@@ -633,7 +633,7 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 	}
 	ruleDict, ok := rule.(py.Dict)
 	if !ok {
-		return nil, py.TypeError("'%s' object is not subscriptable", py.TypeName(rule))
+		return nil, fmt.Errorf("proposal rule is not an object")
 	}
 	id, err := required(ruleDict, "id")
 	if err != nil {

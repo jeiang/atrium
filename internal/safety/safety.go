@@ -7,10 +7,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -28,10 +28,6 @@ type (
 type WriteRefused string
 
 func (e WriteRefused) Error() string { return string(e) }
-
-func (WriteRefused) PyClass() string { return "WriteRefused" }
-
-func (WriteRefused) PyModule() string { return "atrium.safety" }
 
 func ApprovedWrites(ctx context.Context, proposalID string) context.Context {
 	return context.WithValue(ctx, approvedKey{}, proposalID)
@@ -80,7 +76,7 @@ type ModeFunc func(ctx context.Context) (string, error)
 
 func WriteGate(ctx context.Context, current ModeFunc, action, target string) error {
 	if pausePath, ok := ctx.Value(automaticKey{}).(string); ok && IsPaused(pausePath) {
-		return WriteRefused(fmt.Sprintf("refusing automatic mailbox write %s: atrium is paused", py.Repr(action)))
+		return WriteRefused(fmt.Sprintf("refusing automatic mailbox write %s: atrium is paused", strconv.Quote(action)))
 	}
 	if _, ok := ApprovedProposal(ctx); ok {
 		return nil
@@ -96,7 +92,7 @@ func WriteGate(ctx context.Context, current ModeFunc, action, target string) err
 		}
 	}
 	if mode != Live {
-		return WriteRefused(fmt.Sprintf("refusing mailbox write %s: mail_mode (ATRIUM_MAIL_MAIL_MODE) is not %s", py.Repr(action), Live))
+		return WriteRefused(fmt.Sprintf("refusing mailbox write %s: mail_mode (ATRIUM_MAIL_MAIL_MODE) is not %s", strconv.Quote(action), Live))
 	}
 	return nil
 }

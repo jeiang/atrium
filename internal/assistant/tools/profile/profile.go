@@ -97,7 +97,7 @@ func set(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		return nil, err
 	}
 	if !keyOK || !valueOK {
-		return nil, &tool.Raised{Class: "TypeError"}
+		return nil, tool.Error("key and value are required")
 	}
 	r := assistant.Read(ctx, tc.DB.Read)
 	keyChars := r.Int(assistant.KeyProfileKeyChars)

@@ -15,7 +15,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -55,10 +54,10 @@ func endpointFor(ctx context.Context, req *http.Request, rawURL string) *http.Cl
 }
 
 var (
-	ErrValue = errors.New("ValueError")
-	ErrKey   = errors.New("KeyError")
-	ErrIndex = errors.New("IndexError")
-	ErrType  = errors.New("TypeError")
+	ErrPayload = errors.New("payload")
+	ErrMissing = errors.New("missing")
+	ErrRange   = errors.New("range")
+	ErrShape   = errors.New("shape")
 )
 
 type ServiceUnavailable struct{ Msg string }
@@ -77,7 +76,7 @@ var client = &http.Client{CheckRedirect: func(req *http.Request, via []*http.Req
 
 func PostJSON(ctx context.Context, rawURL string, payload any) (json.RawMessage, error) {
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
-		return nil, &ServiceUnavailable{"no service URL configured for " + py.Repr(rawURL)}
+		return nil, &ServiceUnavailable{"no service URL configured for " + strconv.Quote(rawURL)}
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -94,7 +93,7 @@ func PostJSON(ctx context.Context, rawURL string, payload any) (json.RawMessage,
 		return nil, err
 	}
 	if !json.Valid(reply) {
-		return nil, fmt.Errorf("%w: %s: reply is not JSON", ErrValue, rawURL)
+		return nil, fmt.Errorf("%w: %s: reply is not JSON", ErrPayload, rawURL)
 	}
 	return reply, nil
 }
@@ -121,19 +120,19 @@ func do(parent context.Context, rawURL string, timeout time.Duration, build func
 	defer cancel()
 	req, err := build(ctx)
 	if err != nil {
-		return nil, &ServiceUnavailable{fmt.Sprintf("%s: <urlopen error %v>", rawURL, err)}
+		return nil, &ServiceUnavailable{fmt.Sprintf("%s: %v", rawURL, err)}
 	}
 	resp, err := endpointFor(parent, req, rawURL).Do(req)
 	if err != nil {
 		if parent.Err() != nil {
 			return nil, parent.Err()
 		}
-		return nil, &ServiceUnavailable{fmt.Sprintf("%s: <urlopen error %s>", rawURL, reason(err))}
+		return nil, &ServiceUnavailable{fmt.Sprintf("%s: %s", rawURL, reason(err))}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		phrase := strings.TrimPrefix(resp.Status, strconv.Itoa(resp.StatusCode)+" ")
-		return nil, &ServiceUnavailable{fmt.Sprintf("%s: HTTP Error %d: %s", rawURL, resp.StatusCode, phrase)}
+		return nil, &ServiceUnavailable{fmt.Sprintf("%s: HTTP %d: %s", rawURL, resp.StatusCode, phrase)}
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {

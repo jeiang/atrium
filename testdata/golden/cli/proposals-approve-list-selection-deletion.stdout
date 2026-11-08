@@ -64,7 +64,7 @@
     ]
   },
   "result": {
-    "error": "AttributeError: 'list' object has no attribute 'get'"
+    "error": "selection is not an object"
   },
   "fingerprint": "deletion_rule:gmail:otp:domain:7ab518470601df19",
   "payload": {

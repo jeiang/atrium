@@ -26,8 +26,6 @@ type ProposalError string
 
 func (e ProposalError) Error() string { return string(e) }
 
-func (e ProposalError) PyClass() string { return "ValueError" }
-
 type Proposals struct {
 	DB  *db.DB
 	Now func() float64
@@ -125,15 +123,15 @@ func payloadOf(prop *proposals.Proposal) (target string, spec Spec, err error) {
 	}
 	value, found := d["calendar"]
 	if !found {
-		return "", Spec{}, fmt.Errorf("%w: 'calendar'", httpx.ErrKey)
+		return "", Spec{}, fmt.Errorf("%w: 'calendar'", httpx.ErrMissing)
 	}
 	target, ok := value.(string)
 	if !ok {
-		return "", Spec{}, fmt.Errorf("%w: calendar must be a string, not %T", httpx.ErrType, value)
+		return "", Spec{}, fmt.Errorf("%w: calendar must be a string, not %T", httpx.ErrShape, value)
 	}
 	raw, found := d["spec"]
 	if !found {
-		return "", Spec{}, fmt.Errorf("%w: 'spec'", httpx.ErrKey)
+		return "", Spec{}, fmt.Errorf("%w: 'spec'", httpx.ErrMissing)
 	}
 	spec, err = SpecOf(raw)
 	return target, spec, err

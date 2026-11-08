@@ -193,7 +193,7 @@ func validAccount(v any) (string, bool) {
 }
 
 func cleanLine(name, value string, limit int) (string, error) {
-	value = py.Strip(value)
+	value = strings.TrimSpace(value)
 	if lineBreakRE.MatchString(value) {
 		return "", Error(name + " must be a single line")
 	}
@@ -261,10 +261,10 @@ func NormalizeAddresses(name string, value any) (string, error) {
 }
 
 func formatAddr(name, address string) (string, error) {
-	if err := py.ASCIIEncodeError(address); err != nil {
-		return "", err
+	if !isASCII(address) {
+		return "", Error("address must be ASCII")
 	}
-	if py.ASCIIEncodeError(name) != nil {
+	if !isASCII(name) {
 		return headerEncode([]byte(name)) + " <" + address + ">", nil
 	}
 	quote := ""
@@ -372,7 +372,7 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 	}
 	references := ""
 	if raw != nil {
-		references = strings.Join(py.Split(raw.Header("References")), " ")
+		references = strings.Join(strings.Fields(raw.Header("References")), " ")
 	}
 	var chain []string
 	for _, x := range [...]string{references, inReplyTo} {
@@ -428,7 +428,7 @@ func (s *Store) Create(ctx context.Context, threadID *int64, account string, to,
 		return 0, err
 	}
 	text, _ := body.(string)
-	if py.Strip(text) == "" {
+	if strings.TrimSpace(text) == "" {
 		return 0, Error("body is required")
 	}
 	if utf8.RuneCountInString(text) > maxBody {
@@ -464,21 +464,21 @@ func (s *Store) replyFor(ctx context.Context, v any) (int64, reply, error) {
 	case int64:
 		id = n
 	case *big.Int:
-		return 0, reply{}, &py.Exception{Class: "OverflowError", Msg: "Python int too large to convert to SQLite INTEGER"}
+		return 0, reply{}, Error("message id is too large")
 	case bool:
 		shown = "False"
 		if n {
 			id, shown = 1, "True"
 		}
 	case float64:
-		shown = py.FloatRepr(n)
+		shown = strconv.FormatFloat(n, 'f', -1, 64)
 		found = n == math.Trunc(n) && math.Abs(n) < 1<<63
 		id = int64(n)
 	case string:
 		shown = n
 		id, found = sqliteInteger(n)
 	default:
-		return 0, reply{}, &py.Exception{Class: "ProgrammingError", Msg: "Error binding parameter 1: type '" + py.TypeName(v) + "' is not supported"}
+		return 0, reply{}, Error(fmt.Sprintf("unsupported message id type %T", v))
 	}
 	if !found {
 		return 0, reply{}, Error("no message " + shown)
@@ -514,7 +514,7 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 	if v, ok := changes["account"]; ok {
 		switch v.(type) {
 		case []any, []string, py.Dict, map[string]any:
-			return nil, &py.Exception{Class: "TypeError", Msg: "unhashable type: '" + py.TypeName(v) + "'"}
+			return nil, Error("account must be a single name")
 		}
 		name, valid := validAccount(v)
 		if !valid {
@@ -541,8 +541,8 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 	}
 	if v, ok := changes["subject"]; ok {
 		text, isText := v.(string)
-		if !isText && py.Truthy(v) {
-			return nil, &py.Exception{Class: "AttributeError", Msg: "'" + py.TypeName(v) + "' object has no attribute 'strip'"}
+		if !isText && truthy(v) {
+			return nil, Error("subject must be text")
 		}
 		subject, err := cleanLine("subject", text, maxSubject)
 		if err != nil {
@@ -552,7 +552,7 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 	}
 	if v, ok := changes["body"]; ok {
 		body, isText := v.(string)
-		if !isText || py.Strip(body) == "" || utf8.RuneCountInString(body) > maxBody {
+		if !isText || strings.TrimSpace(body) == "" || utf8.RuneCountInString(body) > maxBody {
 			return nil, Error(fmt.Sprintf("body must be 1..%d characters", maxBody))
 		}
 		set("body", body)
@@ -648,6 +648,37 @@ func (s *Store) UnexpectedRecipients(ctx context.Context, d Row) ([]string, erro
 		}
 	}
 	return out, nil
+}
+
+func isASCII(s string) bool {
+	for i := range len(s) {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
+}
+
+func truthy(v any) bool {
+	switch v := v.(type) {
+	case nil:
+		return false
+	case string:
+		return v != ""
+	case bool:
+		return v
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	case []any:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	}
+	return true
 }
 
 func sqliteInteger(text string) (int64, bool) {

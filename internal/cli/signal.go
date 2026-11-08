@@ -7,8 +7,6 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type signalKey struct{}
@@ -64,7 +62,7 @@ func Fail(env *Env, err error) int {
 	if code, ok := signalExit(env.Ctx, env.Stderr); ok {
 		return code
 	}
-	printf(env.Stderr, "%s\n", py.UncaughtText(err))
+	printf(env.Stderr, "error: %s\n", err.Error())
 	return ExitError
 }
 
@@ -74,7 +72,7 @@ func signalExit(ctx context.Context, stderr io.Writer) (int, bool) {
 	}
 	switch sig, _ := Received(ctx); sig {
 	case syscall.SIGINT:
-		printf(stderr, "KeyboardInterrupt\n")
+		printf(stderr, "interrupted\n")
 		return ExitInterrupt, true
 	case syscall.SIGTERM:
 		return ExitTerminated, true

@@ -477,7 +477,7 @@ func (p *Pipeline) sync(ctx context.Context, prop *Proposal) *string {
 	}
 	if err := p.Registry.Sync(ctx, *prop.Account); err != nil {
 		log.Error(fmt.Sprintf("post-apply sync failed for proposal %d", prop.ID), logx.Err, err.Error())
-		text := py.ExceptionText(err)
+		text := err.Error()
 		return &text
 	}
 	return nil
@@ -500,7 +500,7 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any)
 		executor = p.Registry.Executors[prop.Kind]
 	}
 	if executor == nil {
-		return nil, ProposalError(fmt.Sprintf("no executor for kind %s", py.Repr(prop.Kind)))
+		return nil, ProposalError(fmt.Sprintf("no executor for kind %s", strconv.Quote(prop.Kind)))
 	}
 	claimed, err := p.claim(ctx, id, Approved)
 	if err != nil {
@@ -525,7 +525,7 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any)
 		return nil, err
 	case err != nil:
 		log.Error(fmt.Sprintf("proposal %d failed", id), logx.Err, err.Error())
-		failure := py.Dict{{Key: "error", Value: py.ExceptionText(err)}}
+		failure := py.Dict{{Key: "error", Value: err.Error()}}
 		if _, uerr := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'failed', result = ? WHERE id = ?", py.JSONDumps(failure), id); uerr != nil {
 			return nil, uerr
 		}
@@ -599,7 +599,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		plan, _ := entry.Undo.(py.Dict)
 		op, found := plan.Get("op")
 		if !found {
-			return UndoResult{}, fmt.Errorf("%w: 'op'", httpx.ErrKey)
+			return UndoResult{}, fmt.Errorf("%w: 'op'", httpx.ErrMissing)
 		}
 		name, isString := op.(string)
 		var undoer Undoer
@@ -607,7 +607,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 			undoer = p.Registry.Undoers[name]
 		}
 		if undoer == nil {
-			return UndoResult{}, ProposalError("no undo handler for " + py.ReprValue(op))
+			return UndoResult{}, ProposalError("no undo handler for " + fmt.Sprint(op))
 		}
 		undoAction := py.Dict{{Key: "op", Value: UndoOp}, {Key: "of", Value: entry.ID}}
 		held, err := p.beginUndo(ctx, id, entry.ID, undoAction)
@@ -619,7 +619,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 			return undoer(approved, entry.Plan)
 		}()
 		if err != nil {
-			text := py.ExceptionText(err)
+			text := err.Error()
 			if name == "move_back" {
 				text = mailops.UnknownText(err, text)
 			}

@@ -24,8 +24,6 @@ type ruleError string
 
 func (e ruleError) Error() string { return string(e) }
 
-func (e ruleError) PyClass() string { return "ValueError" }
-
 func invalid(name, value string) error {
 	return ruleError(fmt.Sprintf("invalid %q: %s", name, value))
 }
@@ -187,7 +185,7 @@ func parseRule(text string) (*parsedRule, error) {
 		}
 	}
 	if !rule.hasFreq {
-		return nil, ruleError("rrule.__init__() missing 1 required positional argument: 'freq'")
+		return nil, ruleError("recurrence rule is missing freq")
 	}
 	return rule, nil
 }

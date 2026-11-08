@@ -486,14 +486,14 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 	vectors, err := embedTexts(modelCtx, embedURL, []string{embed.QueryText(query)})
 	if err == nil {
 		if len(vectors) == 0 {
-			err = fmt.Errorf("%w: list index out of range", httpx.ErrIndex)
+			err = fmt.Errorf("%w: list index out of range", httpx.ErrRange)
 		} else {
 			sem, err = semantic(ctx, q, vectors[0], includePrivate, limits.Branch)
 		}
 	}
 	if err != nil {
 		var unavailable *httpx.ServiceUnavailable
-		if !errors.As(err, &unavailable) && !errors.Is(err, httpx.ErrValue) && !errors.Is(err, httpx.ErrKey) {
+		if !errors.As(err, &unavailable) && !errors.Is(err, httpx.ErrPayload) && !errors.Is(err, httpx.ErrMissing) {
 			return Result{}, err
 		}
 		available = false

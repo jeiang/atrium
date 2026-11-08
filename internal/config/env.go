@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,7 +49,7 @@ func Zone(name string) (*time.Location, error) {
 			return loc, nil
 		}
 	}
-	return nil, fmt.Errorf("unknown timezone %s", py.Repr(name))
+	return nil, fmt.Errorf("unknown timezone %s", strconv.Quote(name))
 }
 
 func Location(env Env) (*time.Location, error) { return Zone(TZName(env)) }

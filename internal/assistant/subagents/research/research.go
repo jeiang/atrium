@@ -140,7 +140,7 @@ func cleanIDs(args py.Dict, maxIDs int) ([]string, error) {
 		case string:
 			ids = append(ids, py.Clip(v, 200))
 		case int, int64, *big.Int:
-			ids = append(ids, py.Clip(py.ReprValue(v), 200))
+			ids = append(ids, py.Clip(fmt.Sprint(v), 200))
 		default:
 			return nil, tool.Error("context_ids must contain strings or integers")
 		}
@@ -294,7 +294,7 @@ func (r *Research) one(ctx context.Context, tc *tool.Context, use loop.ToolUse) 
 	defer func() {
 		if p := recover(); p != nil {
 			log.Error("research panicked", logx.RunID, tc.RunID, logx.Err, fmt.Sprint(p))
-			o = loop.Outcome{Error: "research failed: RuntimeError"}
+			o = loop.Outcome{Error: "research failed: internal error"}
 		}
 	}()
 	_, input, err := use.Args()
@@ -303,7 +303,7 @@ func (r *Research) one(ctx context.Context, tc *tool.Context, use loop.ToolUse) 
 	}
 	args, ok := input.(py.Dict)
 	if !ok {
-		return loop.Outcome{Error: "research failed: AttributeError"}
+		return loop.Outcome{Error: "research failed: tool input must be an object"}
 	}
 	value, err := r.handle(ctx, tc, args)
 	if err == nil {

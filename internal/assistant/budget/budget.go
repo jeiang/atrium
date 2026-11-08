@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -92,8 +91,8 @@ func Check(ctx context.Context, q db.Querier, now float64, loc *time.Location, u
 	}
 	if found.Share >= threshold {
 		return Status{}, BudgetExceeded(fmt.Sprintf("monthly budget: $%s of $%s spent (%s); %s %s",
-			py.FormatFixed(found.SpentUSD, 2), py.FormatFixed(found.BudgetUSD, 2), py.FormatPercent(found.Share, 0), who,
-			py.FormatPercent(threshold, 0)))
+			strconv.FormatFloat(found.SpentUSD, 'f', 2, 64), strconv.FormatFloat(found.BudgetUSD, 'f', 2, 64), strconv.FormatFloat(found.Share*100, 'f', 0, 64)+"%", who,
+			strconv.FormatFloat(threshold*100, 'f', 0, 64)+"%"))
 	}
 	return found, nil
 }

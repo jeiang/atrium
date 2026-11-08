@@ -139,7 +139,7 @@ func TestSMTPFailureRevertsToDraft(t *testing.T) {
 	id := s.draft(config.Gmail, "a@x.test", nil, "Hi", "body", nil)
 	rec := s.post(fmt.Sprintf("/drafts/%d/send", id), form("updated_at", reviewed(s.row(id))), hx, "true")
 	body := status(t, rec, http.StatusConflict)
-	mustContain(t, body, "Not sent", "(535, b&#39;bad&#39;)")
+	mustContain(t, body, "Not sent", "SMTP 535: bad")
 	if row := s.row(id); row.Status != drafts.Draft || row.SMTPResult == nil || !strings.Contains(*row.SMTPResult, "failed") {
 		t.Errorf("row %+v", row)
 	}

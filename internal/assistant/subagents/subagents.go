@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -36,8 +37,6 @@ var name = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 type Error string
 
 func (e Error) Error() string { return string(e) }
-
-func (Error) PyClass() string { return "SubagentError" }
 
 type Agent struct {
 	Name        string   `json:"name"`
@@ -286,7 +285,7 @@ func RunCard(ctx context.Context, q db.Querier, t threads.Thread, run *journal.R
 	}
 	status, ok := statusOfRun[run.State]
 	if !ok {
-		return Card{}, fmt.Errorf("subagents: run %d has unknown state %s", run.ID, py.Repr(run.State))
+		return Card{}, fmt.Errorf("subagents: run %d has unknown state %s", run.ID, strconv.Quote(run.State))
 	}
 	card.Effort, card.RunID, card.ParentRunID = run.Effort, &run.ID, run.ParentRunID
 	card.Status, card.Error, card.Steps = status, run.Error, run.Steps

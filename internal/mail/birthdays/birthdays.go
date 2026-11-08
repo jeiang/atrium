@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,7 +52,7 @@ func Occurrence(month, day int, today time.Time) (time.Time, error) {
 			return when, nil
 		}
 	}
-	return time.Time{}, errors.New("AssertionError: unreachable")
+	return time.Time{}, errors.New("birthday date is unreachable")
 }
 
 type Dismissals map[[2]string]string
@@ -145,7 +146,7 @@ func UpcomingFor(ctx context.Context, q db.Querier, today time.Time, days int) (
 
 func Dismiss(ctx context.Context, q db.Querier, key, occurrenceDate string, ts float64) error {
 	if _, _, _, ok := py.DateFromISOFormat(occurrenceDate); !ok {
-		return fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrValue, py.Repr(occurrenceDate))
+		return fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrPayload, strconv.Quote(occurrenceDate))
 	}
 	_, err := q.ExecContext(ctx,
 		"INSERT INTO watch_dismissed (kind, key, occurrence, ts) VALUES (?, ?, ?, ?) "+

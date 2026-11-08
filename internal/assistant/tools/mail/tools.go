@@ -1,7 +1,6 @@
 package mailtools
 
 import (
-	"errors"
 	"math/big"
 	"time"
 
@@ -24,7 +23,7 @@ func intArg(value any, message string) (int64, error) {
 	case int64:
 		return v, nil
 	case *big.Int:
-		return 0, &tool.Raised{Class: "OverflowError"}
+		return 0, tool.Error("value is too large")
 	}
 	return 0, tool.Error(message)
 }
@@ -32,7 +31,7 @@ func intArg(value any, message string) (int64, error) {
 func zone(env config.Env) (*time.Location, error) {
 	loc, err := scheduler.Zone(config.TZName(env))
 	if err != nil {
-		return nil, &tool.Raised{Class: "ScheduleError"}
+		return nil, tool.Error("invalid time zone")
 	}
 	return loc, nil
 }
@@ -40,17 +39,4 @@ func zone(env config.Env) (*time.Location, error) {
 func localTime(ts float64, loc *time.Location) time.Time {
 	sec, us := timex.SplitTimestamp(ts)
 	return time.Unix(sec, us*1000).In(loc)
-}
-
-type classed interface {
-	error
-	PyClass() string
-}
-
-func raised(err error) error {
-	var c classed
-	if errors.As(err, &c) {
-		return &tool.Raised{Class: c.PyClass()}
-	}
-	return err
 }
