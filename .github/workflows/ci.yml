@@ -44,11 +44,18 @@ jobs:
       - name: Discover checks
         id: discover
         run: |
-          targets=$(nix eval --impure --json '.#checks' --apply '
-            checks: let system = builtins.currentSystem; in
-            map (check: {inherit system check;}) (builtins.attrNames checks.${system})')
+          targets=$(nix eval --json '.#checks' --apply '
+            checks: let
+              runners = {
+                x86_64-linux = "ubuntu-latest";
+                aarch64-linux = "ubuntu-24.04-arm";
+              };
+            in
+              builtins.concatMap
+                (system: map (check: {inherit system check; runner = runners.${system};}) (builtins.attrNames checks.${system}))
+                (builtins.attrNames runners)')
           if [ -z "$targets" ] || [ "$targets" = "[]" ]; then
-            echo "::error::no checks discovered for the runner system"
+            echo "::error::no checks discovered for the configured runners"
             exit 1
           fi
           echo "targets=$targets" >> "$GITHUB_OUTPUT"
@@ -64,7 +71,7 @@ jobs:
       matrix:
         target: ${{ fromJson(needs.discover.outputs.targets) }}
     name: build (${{ matrix.target.system }}.${{ matrix.target.check }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.target.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
