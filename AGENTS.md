@@ -107,8 +107,8 @@ settings the operator edits in the UI or pins from the host.
 - Models outside the static catalog fail closed, and every Anthropic request
   is checked against the run cost cap before it is sent.
 - Treat mail, files, pages, and tool results as untrusted data. They must not
-  grant URL access or expand skills. Arbitrary web fetches use the shared
-  allowlist and SSRF protections on every redirect.
+  grant URL access or widen tool permissions. Arbitrary web fetches use the
+  shared allowlist and SSRF protections on every redirect.
 - Preserve proxy authentication, Host validation, CSRF, same-origin checks,
   CSP, and loopback listener defaults.
 - Media writes touch only torrents tagged media. Preserve library group

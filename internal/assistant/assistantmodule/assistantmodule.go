@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/nightly"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/assistant/skills/skillscmd"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
@@ -24,7 +23,6 @@ import (
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
-	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
 	taskstools "github.com/jeiang/atrium/internal/assistant/tools/tasks"
 	weathertools "github.com/jeiang/atrium/internal/assistant/tools/weather"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
@@ -89,13 +87,12 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Group: "Assistant", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 10},
 				{Group: "Assistant", Label: "Projects", URL: "/projects", Icon: "folder", Page: "projects", Order: 10},
 				{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
-				{Label: "Skills", URL: "/settings/skills", Page: "skills", Settings: true, Order: 20},
 				{Label: "Subagents", URL: "/settings/subagents", Page: "subagents", Settings: true, Order: 30},
 				{Label: "Prompts", URL: "/settings/prompts", Page: "prompts", Settings: true, Order: 40},
 				{Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 80},
 			},
 		}},
-		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled), skillscmd.Command(mc.Env), memorycmd.Command(mc.Env)},
+		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled), memorycmd.Command(mc.Env)},
 		Tools:    addTools,
 	}
 }
@@ -115,7 +112,7 @@ func addTools(r *registry.Registry) error {
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(), memorytools.Tools(),
 		nightly.Tools(), webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
-		profiletools.Tools(), proposetools.Tools(), scheduletools.Tools(), skillstools.Tools(), taskstools.Tools(),
+		profiletools.Tools(), proposetools.Tools(), scheduletools.Tools(), taskstools.Tools(),
 		weathertools.Tools(),
 	} {
 		if err := r.Add(tools...); err != nil {

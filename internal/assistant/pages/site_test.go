@@ -36,7 +36,6 @@ import (
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
-	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/config"
@@ -81,7 +80,7 @@ func allTools(t *testing.T, fetchers ...*webfetch.Fetcher) *registry.Registry {
 	for _, tools := range [][]tool.Tool{
 		askoperatortools.Tools(), filetools.Tools(), memorytools.Tools(), mailtools.Tools(), mediatools.Tools(), notify.Tools(), fetch, nightly.Tools(),
 		recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
-		scheduletools.Tools(), skillstools.Tools(), notiontools.Tools(),
+		scheduletools.Tools(), notiontools.Tools(),
 		grafanatools.Tools(), calendartools.Tools(), contactsmodule.Tools(),
 	} {
 		if err := r.Add(tools...); err != nil {
@@ -101,7 +100,6 @@ func assistantNav() []web.NavItem {
 		{Group: "Assistant", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 10},
 		{Group: "Assistant", Label: "Projects", URL: "/projects", Icon: "folder", Page: "projects", Order: 10},
 		{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
-		{Label: "Skills", URL: "/settings/skills", Page: "skills", Settings: true, Order: 20},
 		{Label: "Subagents", URL: "/settings/subagents", Page: "subagents", Settings: true, Order: 30},
 		{Label: "Prompts", URL: "/settings/prompts", Page: "prompts", Settings: true, Order: 40},
 		{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Order: 60},

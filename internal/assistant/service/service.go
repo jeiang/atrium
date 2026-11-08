@@ -199,10 +199,6 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 			return fail(err)
 		}
 	}
-	text, used, err := s.Runner.Expand(ctx, s.DB.Write, tool.Kind(o.kind()), text)
-	if err != nil {
-		return fail(err)
-	}
 	if o.ParentRunID == nil {
 		if err := progress.ClearThread(ctx, s.DB.Write, threadID); err != nil {
 			return fail(err)
@@ -210,11 +206,6 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 	}
 	if !emptyLimits(o.Limits) {
 		if err := journal.SetLimits(ctx, s.DB.Write, runID, o.Limits); err != nil {
-			return fail(err)
-		}
-	}
-	if len(used) > 0 {
-		if err := journal.SetSkills(ctx, s.DB.Write, runID, used); err != nil {
 			return fail(err)
 		}
 	}

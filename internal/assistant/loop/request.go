@@ -59,11 +59,6 @@ func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.
 			return nil, err
 		}
 	}
-	if r.SkillsIndex != nil {
-		if p.SkillsIndex, err = r.SkillsIndex(ctx, q); err != nil {
-			return nil, err
-		}
-	}
 	p.Extra = extra
 	project, err := projects.SystemBlock(ctx, q, thread)
 	if err != nil {

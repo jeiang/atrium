@@ -46,7 +46,7 @@ func TestRunPrintsTheRunView(t *testing.T) {
 	if view["id"].(float64) != 1 || view["thread_id"].(float64) != 1 {
 		t.Errorf("ids %v", view)
 	}
-	if view["state"] != "done" || view["kind"] != "cron" || view["calls"] == nil || view["cost"].(float64) <= 0 || view["skills"] == nil {
+	if view["state"] != "done" || view["kind"] != "cron" || view["calls"] == nil || view["cost"].(float64) <= 0 {
 		t.Errorf("view %v", view)
 	}
 	if n := srv.Remaining(); n != 0 {

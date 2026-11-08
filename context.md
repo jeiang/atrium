@@ -19,11 +19,14 @@ behavior-parity target.
   OAuth client consented from the integrations page.
 - The application brings together mail, calendar, contacts, Notion,
   media, notifications, and read-only Grafana access. The assistant adds
-  chat, files, projects, skills, scheduled work, and research subagents.
-  A skill is a name, one-line description and Markdown body, exchanged as
-  `SKILL.md` folders through the Skills page and `atrium skills`; the
-  prompt carries only a budgeted index of them. The new-thread composer
-  takes the model, effort, context size, thinking, web search and cost cap.
+  chat, files, projects, scheduled work, and research subagents. The
+  new-thread composer takes the model, effort, context size, thinking, web
+  search and cost cap. The built-in system prompt and the Notion tool
+  descriptions carry the wiki guidance: search before writing, update the
+  section that changed, keep durable facts only, cite sources, and report
+  old review dates as possibly stale. There is no skills feature; the
+  `skills` table and `runs.skills_json` remain from it, unused and not
+  dropped.
 - The web interface is server-rendered Go templates with Basecoat, htmx
   and one static script under a strict CSP. A sidebar holds New chat, the
   thread list (pinned, by day, by project) and the module pages, and

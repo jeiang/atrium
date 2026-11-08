@@ -3,7 +3,6 @@ package runner
 import (
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/assistant/skills"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
@@ -15,7 +14,7 @@ func New(tools registry.Source) (*loop.Runner, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &loop.Runner{Registry: reg, Undoers: toolset.Undoers(config.OS), Profile: profiletools.Block, SkillsIndex: skills.IndexBlock, ExpandSkills: skills.ExpandHook}
+	r := &loop.Runner{Registry: reg, Undoers: toolset.Undoers(config.OS), Profile: profiletools.Block}
 	rs := research.New(r)
 	if err := rs.Install(reg); err != nil {
 		return nil, err

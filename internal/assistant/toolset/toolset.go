@@ -18,7 +18,6 @@ import (
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
-	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
 	taskstools "github.com/jeiang/atrium/internal/assistant/tools/tasks"
 	weathertools "github.com/jeiang/atrium/internal/assistant/tools/weather"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
@@ -59,7 +58,6 @@ func Registry() (*registry.Registry, error) {
 		scheduletools.Tools(),
 		plantools.Tools(),
 		recalltools.Tools(),
-		skillstools.Tools(),
 		taskstools.Tools(),
 		weathertools.Tools(),
 		proposetools.Tools(),

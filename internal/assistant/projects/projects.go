@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/skills"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/notionid"
@@ -197,15 +196,8 @@ func SystemBlock(ctx context.Context, q db.Querier, t threads.Thread) (*string, 
 		parts = append(parts, fmt.Sprintf("This thread belongs to the operator's project “%s”. Follow the project's instructions:\n<project_instructions>\n%s\n</project_instructions>", p.Name, p.Instructions))
 	}
 	if p.WikiHubID != nil && *p.WikiHubID != "" {
-		skill, err := skills.Get(ctx, q, "wiki-capture")
-		if err != nil {
-			return nil, err
-		}
-		if skill != nil {
-			parts = append(parts, fmt.Sprintf("The project's wiki hub page has id %s. Keep it updated with durable project knowledge "+
-				"(decisions, status, open questions, sources) as you learn it: load the wiki-capture skill (`/skill:wiki-capture`) and follow it, "+
-				"updating that hub page or pages under it rather than creating duplicates.", *p.WikiHubID))
-		}
+		parts = append(parts, fmt.Sprintf("The project's wiki hub page has id %s. Keep it updated with durable project knowledge "+
+			"(decisions, status, open questions, sources) as you learn it, updating that hub page or pages under it rather than creating duplicates.", *p.WikiHubID))
 	}
 	if len(parts) == 0 {
 		return nil, nil
