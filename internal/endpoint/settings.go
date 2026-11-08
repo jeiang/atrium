@@ -65,7 +65,7 @@ func (r *Reader) resolve(key string) settings.Resolved {
 	if r.err != nil {
 		return settings.Resolved{}
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key)
+	found, err := settings.From(r.ctx).Resolve(r.ctx, r.q, key)
 	r.err = err
 	return found
 }
@@ -150,7 +150,7 @@ func Endpoints(ctx context.Context, q Querier) ([]Endpoint, error) {
 	if r.Err() != nil {
 		return nil, r.Err()
 	}
-	store := secrets.NewIn(nil, readOnly{q}, nil)
+	store := secrets.NewIn(settings.From(ctx), nil, readOnly{q}, nil)
 	out := []Endpoint{New(EndpointChat, "", chat, ""), New(EndpointEmbed, "", embed, "")}
 	for i, pair := range [][2]string{{KeyChatURL, KeyChatKey}, {KeyEmbedURL, KeyEmbedKey}} {
 		u, err := urlOf(ctx, q, pair[0])
@@ -185,7 +185,7 @@ func Integration(kind string) string { return "mail_" + kind }
 func WithEndpoints(ctx context.Context, q Querier, endpoints []Endpoint) (context.Context, error) {
 	out := ctx
 	for _, e := range endpoints {
-		client, err := transport.For(ctx, readOnly{q}, Integration(e.Kind), config.HTTPTimeout(config.OS))
+		client, err := transport.For(ctx, readOnly{q}, Integration(e.Kind), config.From(ctx).HTTPTimeout(config.OS))
 		if err != nil {
 			return ctx, err
 		}
@@ -206,7 +206,7 @@ func EmbedURL(ctx context.Context, q Querier, activeURL string) (string, error) 
 }
 
 func urlOf(ctx context.Context, q Querier, key string) (string, error) {
-	found, err := settings.Default.Resolve(ctx, readOnly{q}, key)
+	found, err := settings.From(ctx).Resolve(ctx, readOnly{q}, key)
 	return strings.TrimRight(found.Value, "/"), err
 }
 

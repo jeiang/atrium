@@ -208,7 +208,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 			log.Warn("oidc sign-in is not set up; nobody can sign in until it is", logx.Err, err.Error())
 		}
 	}
-	render, err := NewRenderer(tpl.Config{Modules: templates, Globals: globals, State: a.state})
+	render, err := NewRenderer(tpl.Config{Modules: templates, Globals: globals, State: a.state}, nav...)
 	if err != nil {
 		return err
 	}

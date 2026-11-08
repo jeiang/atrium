@@ -366,7 +366,7 @@ type storedDraft struct {
 }
 
 func (s *Service) sealDraft(ctx context.Context, d *Draft) (string, error) {
-	key, err := secrets.New(s.d, s.d).Generate(ctx, secrets.ActionLinkKey)
+	key, err := secrets.New(settings.From(ctx), s.d, s.d).Generate(ctx, secrets.ActionLinkKey)
 	if err != nil {
 		return "", err
 	}
@@ -384,7 +384,7 @@ func (s *Service) sealDraft(ctx context.Context, d *Draft) (string, error) {
 }
 
 func (s *Service) openDraft(ctx context.Context, raw string) (Form, error) {
-	key, err := secrets.New(s.d, s.d).Generate(ctx, secrets.ActionLinkKey)
+	key, err := secrets.New(settings.From(ctx), s.d, s.d).Generate(ctx, secrets.ActionLinkKey)
 	if err != nil {
 		return Form{}, err
 	}

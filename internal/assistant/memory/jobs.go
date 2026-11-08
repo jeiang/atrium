@@ -62,7 +62,7 @@ func Queue(ctx context.Context, q db.Querier, threadID int64, now float64) error
 }
 
 func Model(ctx context.Context, q db.Querier) (string, error) {
-	found, err := settings.Default.Resolve(ctx, q, ModelKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, ModelKey)
 	if err != nil {
 		return "", err
 	}
@@ -74,7 +74,7 @@ func Model(ctx context.Context, q db.Querier) (string, error) {
 }
 
 func Effort(ctx context.Context, q db.Querier) (string, error) {
-	found, err := settings.Default.Resolve(ctx, q, EffortKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, EffortKey)
 	if err != nil {
 		return "", err
 	}
@@ -86,7 +86,7 @@ func Effort(ctx context.Context, q db.Querier) (string, error) {
 }
 
 func Concurrency(ctx context.Context, q db.Querier) (int, error) {
-	found, err := settings.Default.Resolve(ctx, q, ConcurrencyKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, ConcurrencyKey)
 	if err != nil {
 		return 0, err
 	}

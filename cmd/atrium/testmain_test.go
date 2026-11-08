@@ -16,7 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
-	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
@@ -173,8 +173,8 @@ func moduleEnv(dir string) map[string]string {
 
 func requirementEnv(mediaRoot string) map[string]string {
 	return map[string]string{
-		settingEnv(mail.KeyChatURL):            "http://chat.invalid/v1",
-		settingEnv(mail.KeyEmbedURL):           "http://embed.invalid/v1",
+		settingEnv(endpoint.KeyChatURL):        "http://chat.invalid/v1",
+		settingEnv(endpoint.KeyEmbedURL):       "http://embed.invalid/v1",
 		settingEnv(media.KeyRoot):              mediaRoot,
 		settingEnv(media.KeyQbitURL):           "http://qbittorrent.invalid",
 		settingEnv(notify.KeyURL):              "http://ntfy.invalid",

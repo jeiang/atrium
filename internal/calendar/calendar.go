@@ -129,8 +129,8 @@ func googleService(ctx context.Context, env config.Env, set Settings) (*gcal.Ser
 		Transport: &oauth2.Transport{Source: source, Base: acceptJSON{http.DefaultTransport}},
 	}
 	opts := []option.ClientOption{option.WithHTTPClient(client)}
-	if endpointsFrom(ctx).GoogleAPI != "" {
-		opts = append(opts, option.WithEndpoint(endpointsFrom(ctx).GoogleAPI))
+	if endpoints.GoogleAPI != "" {
+		opts = append(opts, option.WithEndpoint(endpoints.GoogleAPI))
 	}
 	return gcal.NewService(ctx, opts...)
 }

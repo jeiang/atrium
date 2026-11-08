@@ -41,8 +41,8 @@ func toolResultContents(t *testing.T, dir string) []string {
 }
 
 func TestSearchThreadsFindsSummariesAcrossThreads(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -59,7 +59,7 @@ func TestSearchThreadsFindsSummariesAcrossThreads(t *testing.T) {
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("s2", "search_threads", map[string]any{"query": "secret", "project": 1})))
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("s3", "search_threads", map[string]any{"query": "secret", "limit": 1})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	if ran := runApp("agent", "run", "--thread", "1", "--text", "search"); ran.code != cli.ExitOK {
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "search"); ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
 	results := toolResultContents(t, dir)

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -39,7 +38,7 @@ func passRows(t *testing.T, dir, job string) (ok, failed int, message string) {
 
 func davFixture(t *testing.T) (dir string, srv *caldavtest.Server) {
 	t.Helper()
-	dir, _, f := moduleFixture(t, flagsExcept("", ""))
+	dir, _, _ = moduleFixture(t, flagsExcept("", ""))
 	srv = caldavtest.New(t, "operator@icloud.invalid", davPassword, "Home")
 	setEnv(t, calendar.CalDAVEnv, srv.URL+"/")
 	setEnv(t, calendar.CardDAVEnv, srv.URL+"/")

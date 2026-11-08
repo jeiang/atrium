@@ -36,9 +36,9 @@ func TestMediaSweepOnlyDeletesMediaTorrents(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	_, _ = moduleFixture(t, flagsExcept("", ""))
+	_, _, _ = moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(media.KeyQbitURL), srv.URL)
-	ran := runApp("media", "sweep")
+	ran := runApp(t, "media", "sweep")
 	if ran.code != cli.ExitOK {
 		t.Fatalf("media sweep: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
 	}

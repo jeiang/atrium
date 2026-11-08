@@ -24,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	contactstools "github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 func Undoers(env config.Env) *writes.Registry {
@@ -42,7 +43,7 @@ func Undoers(env config.Env) *writes.Registry {
 // assistant module builds the live registry from the same packages; this
 // entry point exists so the catalog generator can see the whole set.
 func Registry() (*registry.Registry, error) {
-	r := registry.New()
+	r := registry.New(settings.New())
 	for _, group := range [][]tool.Tool{
 		askoperatortools.Tools(),
 		filetools.Tools(),

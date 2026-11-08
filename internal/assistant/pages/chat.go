@@ -49,7 +49,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, 
 	data := listData{
 		Threads: found, Q: q, View: view, ProjectID: projectID,
 		Defaults: defaults,
-		Composer: composerData(defaults.Model, defaults.Effort, defaults.Thinking, defaults.ContextLimit, defaults.WebSearch, defaults.CostCapUSD, 0),
+		Composer: composerData(r.Context(), defaults.Model, defaults.Effort, defaults.Thinking, defaults.ContextLimit, defaults.WebSearch, defaults.CostCapUSD, 0),
 	}
 	if web.IsPartial(r) {
 		p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", data)
@@ -258,7 +258,7 @@ func (p *pages) chatOptions(w http.ResponseWriter, r *http.Request) {
 	}
 	thread := threadOf(view)
 	p.fragment(w, r, http.StatusOK, "_options_saved.gohtml", map[string]any{
-		"view": view, "composer": composerData(thread.Model, thread.Effort, thread.Thinking, threads.ContextLimitOf(thread), bool(thread.WebSearch), thread.CostCapUSD, threadID),
+		"view": view, "composer": composerData(r.Context(), thread.Model, thread.Effort, thread.Thinking, threads.ContextLimitOf(thread), bool(thread.WebSearch), thread.CostCapUSD, threadID),
 	})
 }
 

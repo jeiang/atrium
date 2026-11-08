@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,7 +28,7 @@ type effortOption struct {
 	Disabled bool
 }
 
-func composerData(modelID, effort, thinking string, limit int64, webSearch bool, costCap *float64, live int64) map[string]any {
+func composerData(ctx context.Context, modelID, effort, thinking string, limit int64, webSearch bool, costCap *float64, live int64) map[string]any {
 	models := pricing.Models()
 	efforts, limits, known := []effortOption{}, assistant.ContextLimits, false
 	for _, e := range pricing.Efforts {
@@ -58,7 +59,7 @@ func composerData(modelID, effort, thinking string, limit int64, webSearch bool,
 		"context_limits": limits, "context": limit,
 		"thinking": thinking, "thinking_options": thinkingOptions, "effort_fixed": threads.EffortFixed(thinking),
 		"web_search": webSearch, "cost_cap": costCap,
-		"cliff": cliff, "coding": module.IsEnabled("sandbox"),
+		"cliff": cliff, "coding": module.IsEnabled(ctx, "sandbox"),
 		"live": live,
 	}
 }
@@ -72,7 +73,7 @@ func (p *pages) newThreadComposer(r *http.Request, effort string, limit int64) m
 	if limit == 0 {
 		limit = defaults.ContextLimit
 	}
-	return composerData(defaults.Model, effort, defaults.Thinking, limit, defaults.WebSearch, defaults.CostCapUSD, 0)
+	return composerData(r.Context(), defaults.Model, effort, defaults.Thinking, limit, defaults.WebSearch, defaults.CostCapUSD, 0)
 }
 
 func (p *pages) composerOptions(w http.ResponseWriter, r *http.Request) {
@@ -96,6 +97,6 @@ func (p *pages) composerOptions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	p.fragment(w, r, http.StatusOK, "_composer_options.gohtml", map[string]any{
-		"composer": composerData(model.ID, effort, thinking, limit, webSearch, costCap, 0),
+		"composer": composerData(r.Context(), model.ID, effort, thinking, limit, webSearch, costCap, 0),
 	})
 }
