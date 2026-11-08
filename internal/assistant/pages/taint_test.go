@@ -33,7 +33,7 @@ func TestPrivateDataTaintsLaterRuns(t *testing.T) {
 			}
 		}
 	}
-	for _, name := range []string{"notify", "web_fetch", "web_search"} {
+	for _, name := range []string{"notify", "web_fetch", "web_search", "file_write", "profile_set"} {
 		if slices.Contains(names, name) {
 			t.Errorf("%s was offered after a private-data read: %v", name, names)
 		}

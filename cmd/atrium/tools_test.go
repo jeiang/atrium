@@ -1,8 +1,10 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
@@ -79,6 +81,45 @@ func TestWebSearchAllowedCallers(t *testing.T) {
 		entry, _ := raw.(map[string]any)
 		if entry["name"] == "web_search" && entry["allowed_callers"] != nil {
 			t.Errorf("web_search kept allowed_callers with dynamic filtering: %v", entry["allowed_callers"])
+		}
+	}
+}
+
+func TestFileToolsReadSearchAndTraversal(t *testing.T) {
+	dir, api := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "file_write", map[string]any{"name": "note.txt", "content": "hello world"})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "file_read", map[string]any{"name": "note.txt"})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f3", "file_read", map[string]any{"name": "../secret"})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f4", "file_search", map[string]any{"query": "hello"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+	ran := runApp("agent", "run", "--thread", "1", "--text", "write a note")
+	if ran.code != cli.ExitOK {
+		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "files", "1", "note.txt"))
+	if err != nil || string(data) != "hello world" {
+		t.Fatalf("note.txt = %q, %v; run: %s", data, err, ran.stdout)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	rows, err := d.Read.Query("SELECT content_json FROM thread_messages WHERE thread_id = 1 AND role = 'user' ORDER BY seq")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var all strings.Builder
+	for rows.Next() {
+		var content string
+		if err := rows.Scan(&content); err != nil {
+			t.Fatal(err)
+		}
+		all.WriteString(content)
+	}
+	for _, want := range []string{"hello world", "invalid file name", "note.txt: hello world"} {
+		if !strings.Contains(all.String(), want) {
+			t.Errorf("tool results miss %q: %s", want, all.String())
 		}
 	}
 }
