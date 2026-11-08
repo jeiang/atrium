@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	netmail "net/mail"
 	"os"
 	"slices"
 	"strconv"
@@ -123,6 +124,7 @@ func (m *Message) Recipients() ([]string, error) {
 
 type envelope struct {
 	to              []string
+	cc              []string
 	listUnsubscribe string
 	autoSubmitted   string
 	ok              bool
@@ -140,12 +142,19 @@ func readEnvelope(cacheDir, rawPath string) envelope {
 	defer func() { _ = f.Close() }()
 	msg := mime.Parse(readHeader(f))
 	env := envelope{ok: true, listUnsubscribe: msg.Header("List-Unsubscribe"), autoSubmitted: msg.Header("Auto-Submitted")}
-	for _, a := range msg.Addresses("To") {
+	env.to = lowerAddresses(msg.Addresses("To"))
+	env.cc = lowerAddresses(msg.Addresses("Cc"))
+	return env
+}
+
+func lowerAddresses(addrs []netmail.Address) []string {
+	out := make([]string, 0, len(addrs))
+	for _, a := range addrs {
 		if a.Address != "" {
-			env.to = append(env.to, strings.ToLower(a.Address))
+			out = append(out, strings.ToLower(a.Address))
 		}
 	}
-	return env
+	return out
 }
 
 func readHeader(r io.Reader) []byte {
@@ -213,6 +222,15 @@ func (g *gate) automated(m *Message) (bool, error) {
 	return g.envelope(m).bulk(), nil
 }
 
+func (g *gate) addressed(addrs []string) bool {
+	for _, addr := range addrs {
+		if g.selves[addr] {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *gate) wanted(m *Message) (bool, error) {
 	if m.Sent {
 		return true, nil
@@ -223,23 +241,13 @@ func (g *gate) wanted(m *Message) (bool, error) {
 	}
 	env := g.envelope(m)
 	if env.ok {
-		for _, addr := range env.to {
-			if g.selves[addr] {
-				return true, nil
-			}
-		}
-		return false, nil
+		return g.addressed(env.to) || !g.addressed(env.cc), nil
 	}
 	to, err := m.Recipients()
 	if err != nil {
 		return false, err
 	}
-	for _, addr := range to {
-		if g.selves[addr] {
-			return true, nil
-		}
-	}
-	return false, nil
+	return g.addressed(to), nil
 }
 
 const messageColumns = "id, account, msgid, gm_thrid, in_reply_to, refs, date_ts, sent, subject, from_name, from_addr, from_domain, to_addrs, " +

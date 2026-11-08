@@ -99,6 +99,16 @@ func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
 		toAddrs: `["owner@example.test"]`, esp: "[]",
 		raw: "From: Friend <friend@example.test>\r\nTo: Owner <owner@example.test>\r\nSubject: Dinner?\r\n\r\nCan you reply by Friday?\r\n",
 	})
+	seedLoopMail(t, d, cacheDir, seededLoopMail{
+		uid: 6, ageDays: 1, subject: "Bcc intro", from: "colleague@example.test", fromDomain: "example.test",
+		toAddrs: `[]`, esp: "[]",
+		raw: "From: Colleague <colleague@example.test>\r\nSubject: Bcc intro\r\n\r\nCan we talk this week?\r\n",
+	})
+	seedLoopMail(t, d, cacheDir, seededLoopMail{
+		uid: 7, ageDays: 1, subject: "Mail merge", from: "friend@example.test", fromDomain: "example.test",
+		toAddrs: `["other@example.test"]`, esp: "[]",
+		raw: "From: Friend <friend@example.test>\r\nTo: Other <other@example.test>\r\nSubject: Mail merge\r\n\r\nAre you free next week?\r\n",
+	})
 	if ran := runApp(t, "loops", "refresh"); ran.code != cli.ExitOK {
 		t.Fatalf("loops refresh: %d %s", ran.code, ran.stderr)
 	}
@@ -115,24 +125,26 @@ func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
 		}
 		subjects = append(subjects, subject)
 	}
-	if len(subjects) != 1 || subjects[0] != "Dinner?" {
-		t.Fatalf("open loops = %v, want only the direct question", subjects)
+	if len(subjects) != 3 || subjects[0] != "Bcc intro" || subjects[1] != "Dinner?" || subjects[2] != "Mail merge" {
+		t.Fatalf("open loops = %v, want the direct question, the BCC and the mail merge", subjects)
 	}
 	var scans int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM mail_scans WHERE kind = 'commitments'").Scan(&scans); err != nil {
 		t.Fatal(err)
 	}
-	if scans != 1 {
-		t.Fatalf("commitment scans = %d, want only the direct question", scans)
+	if scans != 3 {
+		t.Fatalf("commitment scans = %d, want the three addressed messages", scans)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(bodies) != 1 {
-		t.Fatalf("commitment prompts = %d, want 1", len(bodies))
+	if len(bodies) != 3 {
+		t.Fatalf("commitment prompts = %d, want 3", len(bodies))
 	}
-	for _, want := range []string{"owner@example.test", "ignore items meant for other recipients"} {
-		if !strings.Contains(bodies[0], want) {
-			t.Fatalf("commitment prompt misses %q: %s", want, bodies[0])
+	for _, body := range bodies {
+		for _, want := range []string{"owner@example.test", "ignore items meant for other recipients"} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("commitment prompt misses %q: %s", want, body)
+			}
 		}
 	}
 }

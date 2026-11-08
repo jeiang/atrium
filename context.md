@@ -67,11 +67,13 @@ behavior-parity target.
   list, add, update, complete and propose tasks, and the reminder job inserts
   a task.
 - Open loops come from mail the operator actually needs to answer: the
-  latest message must be addressed directly to the operator in To and must
-  not be bulk or automated (List-Id, List-Unsubscribe, Precedence
-  bulk/list/junk, Auto-Submitted, a bulk Gmail category, an email service
-  provider, a Reply-To that differs from From, or an automated sender
-  address). Commitments follow the same rule and include only items
+  latest message must not be bulk or automated (List-Id, List-Unsubscribe,
+  Precedence bulk/list/junk, Auto-Submitted, a bulk Gmail category, an
+  email service provider, a Reply-To that differs from From, or an
+  automated sender address) and must not be addressed to the operator only
+  in Cc. A message that lists the operator in To, or in neither To nor Cc
+  (BCC, mail merge or a missing To header), still counts. Commitments
+  follow the same rule and include only items
   addressed to or requested of the operator; items meant for other
   recipients of a group message are ignored. Birthdays stay a
   contacts/calendar concern and are not an open-loop source.
