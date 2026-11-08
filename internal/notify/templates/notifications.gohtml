@@ -5,6 +5,38 @@
 {{with $d.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
 {{if $d.NtfySh}}<p class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning" data-ntfy-sh>{{icon "circle-alert"}}<span>On ntfy.sh anyone who knows a topic name can read it unless the topic is reserved. Treat each topic as a secret.</span></p>{{end}}
 
+<section class="flex flex-col gap-3" aria-labelledby="push-h" data-push data-push-key="{{$d.Push.Key}}">
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <h2 id="push-h" class="text-sm font-medium">Push</h2>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" class="btn" data-size="sm" data-action="push-enable" hidden>{{icon "bell"}}Enable push on this device</button>
+      <button type="button" class="btn" data-size="sm" data-variant="outline" data-action="push-disable" hidden>{{icon "bell-off"}}Disable push on this device</button>
+      {{if $d.Push.Devices}}<form method="post" action="/settings/notifications/push/test"><input type="hidden" name="csrf_token" value="{{$csrf}}"><button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "send"}}Send test</button></form>{{end}}
+    </div>
+  </div>
+  {{if not $d.Push.Subject}}<p class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning" data-push-subject>{{icon "circle-alert"}}<span><a class="underline underline-offset-4" href="/settings/config/notify">webpush_subject</a> is not set.</span></p>{{end}}
+  {{with $d.Push.Problem}}<p class="text-sm text-destructive" role="alert">{{.}}</p>{{end}}
+  <form method="post" action="/settings/notifications/push/subscriptions" data-push-form="subscribe" hidden>
+    <input type="hidden" name="csrf_token" value="{{$csrf}}"><input type="hidden" name="endpoint"><input type="hidden" name="p256dh"><input type="hidden" name="auth">
+  </form>
+  <form method="post" action="/settings/notifications/push/unsubscribe" data-push-form="unsubscribe" hidden>
+    <input type="hidden" name="csrf_token" value="{{$csrf}}"><input type="hidden" name="endpoint">
+  </form>
+  {{if $d.Push.Devices}}
+  <ul class="flex flex-col divide-y rounded-lg border bg-card text-sm">
+    {{range $d.Push.Devices}}
+    <li class="flex flex-wrap items-center gap-2 px-4 py-2" data-push-device="{{.Endpoint}}">
+      <span class="font-medium">{{.Label}}</span>
+      <span class="text-xs text-muted-foreground">{{ts .CreatedTS}}</span>
+      {{if ge .Failures 3}}<span class="badge" data-variant="destructive">failing</span>{{else if .LastOKTS}}<span class="badge" data-variant="secondary">ok</span>{{end}}
+      {{with .LastError}}<span class="text-xs text-muted-foreground">{{str .}}</span>{{end}}
+      <form method="post" action="/settings/notifications/push/{{.ID}}/remove" class="ms-auto"><input type="hidden" name="csrf_token" value="{{$csrf}}"><button type="submit" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Remove {{.Label}}">{{icon "trash-2"}}</button></form>
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+</section>
+
 <section class="flex flex-col gap-3" aria-labelledby="channels-h">
   <div class="flex flex-wrap items-center justify-between gap-2">
     <h2 id="channels-h" class="text-sm font-medium">Channels</h2>

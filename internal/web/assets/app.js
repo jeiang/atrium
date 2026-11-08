@@ -709,3 +709,58 @@ document.addEventListener("input", (event) => {
   idle.dataset.seq = status.dataset.seq;
   status.replaceWith(idle);
 });
+
+const pushState = { registration: null, subscription: null };
+const pushSection = () => document.querySelector("[data-push]");
+const pushBytes = (text) => {
+  const raw = atob(text.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (text.length % 4)) % 4));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+};
+const pushText = (buffer) => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+const pushSubmit = (name, fields) => {
+  const form = pushSection().querySelector(`[data-push-form="${name}"]`);
+  Object.entries(fields).forEach(([key, value]) => { form.elements[key].value = value; });
+  form.submit();
+};
+
+actions["push-enable"] = async (button) => {
+  const section = pushSection();
+  const key = pushBytes(section.dataset.pushKey);
+  button.disabled = true;
+  try {
+    let subscription = pushState.subscription;
+    if (subscription && pushText(subscription.options.applicationServerKey) !== pushText(key)) {
+      await subscription.unsubscribe();
+      subscription = null;
+    }
+    subscription ||= await pushState.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+    pushSubmit("subscribe", { endpoint: subscription.endpoint, p256dh: pushText(subscription.getKey("p256dh")), auth: pushText(subscription.getKey("auth")) });
+  } catch {
+    button.disabled = false;
+  }
+};
+
+actions["push-disable"] = async (button) => {
+  button.disabled = true;
+  const subscription = await pushState.registration.pushManager.getSubscription();
+  if (!subscription) {
+    location.reload();
+    return;
+  }
+  const endpoint = subscription.endpoint;
+  await subscription.unsubscribe();
+  pushSubmit("unsubscribe", { endpoint });
+};
+
+document.addEventListener("DOMContentLoaded", async () => {
+  const section = pushSection();
+  if (!section?.dataset.pushKey || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  await navigator.serviceWorker.register("/static/sw.js", { scope: "/" });
+  pushState.registration = await navigator.serviceWorker.ready;
+  pushState.subscription = await pushState.registration.pushManager.getSubscription();
+  const endpoint = pushState.subscription?.endpoint;
+  const known = Boolean(endpoint) && [...section.querySelectorAll("[data-push-device]")].some((row) => row.dataset.pushDevice === endpoint);
+  section.querySelector('[data-action="push-enable"]').hidden = known || globalThis.Notification?.permission === "denied";
+  section.querySelector('[data-action="push-disable"]').hidden = !known;
+});

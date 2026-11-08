@@ -27,7 +27,7 @@ const (
 	staticPrefix = "/static/"
 	healthPath   = "/healthz"
 
-	csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; form-action 'self'"
+	csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; form-action 'self'; worker-src 'self'"
 
 	formType = "application/x-www-form-urlencoded"
 )

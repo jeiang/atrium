@@ -50,5 +50,8 @@ func (s *staticHandler) serve(w http.ResponseWriter, r *http.Request, fail func(
 		return
 	}
 	w.Header().Set("ETag", s.etag(name, content))
+	if name == "sw.js" {
+		w.Header().Set("Service-Worker-Allowed", "/")
+	}
 	http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(content))
 }

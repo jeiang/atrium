@@ -35,6 +35,14 @@ type listing struct {
 	NtfySh        bool           `json:"ntfy_sh"`
 	Encrypted     bool           `json:"encrypted"`
 	Error         string         `json:"error"`
+	Push          pushListing    `json:"push"`
+}
+
+type pushListing struct {
+	Key     string       `json:"key"`
+	Subject bool         `json:"subject"`
+	Problem string       `json:"problem"`
+	Devices []PushDevice `json:"devices"`
 }
 
 const page = "/settings/notifications"
@@ -74,6 +82,10 @@ func Module(r chi.Router, d *web.Deps) {
 	d.Admin(http.MethodPost, page+"/channels/{name}/content", h.content)
 	d.Admin(http.MethodPost, page+"/channels/{name}/reset", h.reset)
 	d.Admin(http.MethodPost, page+"/{id}/resend", h.resend)
+	d.Admin(http.MethodPost, page+"/push/subscriptions", h.subscribe)
+	d.Admin(http.MethodPost, page+"/push/unsubscribe", h.unsubscribe)
+	d.Admin(http.MethodPost, page+"/push/test", h.pushTest)
+	d.Admin(http.MethodPost, page+"/push/{id}/remove", h.removeDevice)
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {
@@ -102,6 +114,17 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 		}
 		data.Channels = append(data.Channels, c)
 	}
+	if data.Push.Devices, err = Devices(ctx, h.d.DB.Read); err != nil {
+		panic(err)
+	}
+	subject, err := text(ctx, h.d.DB.Read, KeyPushSubject)
+	if err != nil {
+		panic(err)
+	}
+	data.Push.Subject = subject != ""
+	if data.Push.Key, err = PushPublicKey(ctx, h.d.DB.Write); err != nil {
+		data.Push.Problem = err.Error()
+	}
 	f, err := h.d.Render.Frame(r, "settings", data)
 	if err != nil {
 		panic(err)
@@ -121,7 +144,8 @@ func (h handlers) done(w http.ResponseWriter, r *http.Request, err error, title 
 	var channel ChannelError
 	var encryption settings.EncryptionRequired
 	var pinned *settings.PinnedError
-	if errors.As(err, &account) || errors.As(err, &channel) || errors.As(err, &encryption) || errors.As(err, &pinned) {
+	var push PushError
+	if errors.As(err, &account) || errors.As(err, &channel) || errors.As(err, &push) || errors.As(err, &encryption) || errors.As(err, &pinned) {
 		h.render(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}, err.Error())
 		return
 	}
@@ -174,4 +198,35 @@ func (h handlers) resend(w http.ResponseWriter, r *http.Request) {
 		err = ChannelError("Not delivered: " + sent.Error)
 	}
 	h.done(w, r, err, "Resent")
+}
+
+func (h handlers) subscribe(w http.ResponseWriter, r *http.Request) {
+	form := web.FormValues(r)
+	err := Subscribe(h.ctx(r), h.d.DB.Write, web.FormString(form, "endpoint", ""), web.FormString(form, "p256dh", ""), web.FormString(form, "auth", ""), PushLabel(r.UserAgent()))
+	h.done(w, r, err, "Push enabled on this device")
+}
+
+func (h handlers) unsubscribe(w http.ResponseWriter, r *http.Request) {
+	form := web.FormValues(r)
+	h.done(w, r, Unsubscribe(h.ctx(r), h.d.DB.Write, web.FormString(form, "endpoint", "")), "Push disabled on this device")
+}
+
+func (h handlers) removeDevice(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	h.done(w, r, RemoveDevice(h.ctx(r), h.d.DB.Write, id), "Device removed")
+}
+
+func (h handlers) pushTest(w http.ResponseWriter, r *http.Request) {
+	sent, failure, err := PushTest(h.ctx(r), h.d.DB.Write)
+	if err == nil && sent == 0 {
+		if failure == "" {
+			failure = "no subscribed devices"
+		}
+		err = PushError("Test not delivered: " + failure)
+	}
+	h.done(w, r, err, "Test sent")
 }

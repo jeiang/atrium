@@ -1,4 +1,4 @@
-package webfetch
+package netguard
 
 import (
 	"net/netip"
@@ -41,7 +41,7 @@ var (
 	embeddedIPv4 = prefixes("64:ff9b::/96", "::/96", "::ffff:0:0:0/96")
 )
 
-func defaultAllowed(ip netip.Addr) bool {
+func Public(ip netip.Addr) bool {
 	ip = ip.WithZone("")
 	if ip.Is6() {
 		switch {

@@ -3215,6 +3215,24 @@
         "ntfy_url_file": {
           "description": "path of a file holding the value",
           "type": "string"
+        },
+        "webpush_ca_file": {
+          "type": "string"
+        },
+        "webpush_ca_file_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "webpush_subject": {
+          "type": "string"
+        },
+        "webpush_subject_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "webpush_vapid_private_key_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
         }
       },
       "type": "object"
