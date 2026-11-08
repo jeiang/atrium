@@ -47,6 +47,13 @@ type Notification struct {
 	Error      *string    `json:"error"`
 }
 
+type Action struct {
+	Action string `json:"action"`
+	Label  string `json:"label"`
+	URL    string `json:"url"`
+	Method string `json:"method,omitempty"`
+}
+
 type Message struct {
 	Title, Body string
 	ThreadID    int64
@@ -56,6 +63,7 @@ type Message struct {
 	Channel     string
 	Click       string
 	Priority    int
+	Actions     []Action
 }
 
 type Sent struct {
@@ -94,6 +102,7 @@ func isDigits(s string) bool {
 type delivery struct {
 	channel, title, body, click string
 	priority                    int
+	actions                     []Action
 }
 
 func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (bool, string, error) {
@@ -129,13 +138,23 @@ func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (boo
 	if !c.FullText() {
 		title, body = privateTitle, privateBody
 	}
+	actions := make([]Action, len(m.actions))
+	for i, action := range m.actions {
+		if strings.HasPrefix(action.URL, "/") {
+			if base := config.From(ctx).PublicURL(env); base != "" {
+				action.URL = base + action.URL
+			}
+		}
+		actions[i] = action
+	}
 	payload := struct {
-		Topic    string `json:"topic"`
-		Title    string `json:"title"`
-		Message  string `json:"message"`
-		Click    string `json:"click,omitempty"`
-		Priority int    `json:"priority,omitempty"`
-	}{Topic: c.Topic, Title: title, Message: body, Click: m.click}
+		Topic    string   `json:"topic"`
+		Title    string   `json:"title"`
+		Message  string   `json:"message"`
+		Click    string   `json:"click,omitempty"`
+		Priority int      `json:"priority,omitempty"`
+		Actions  []Action `json:"actions,omitempty"`
+	}{Topic: c.Topic, Title: title, Message: body, Click: m.click, Actions: actions}
 	if m.priority >= 1 && m.priority <= 5 {
 		payload.Priority = m.priority
 	}
@@ -324,7 +343,7 @@ func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, e
 	if err != nil {
 		return Sent{}, err
 	}
-	delivered, failure, err := deliverAndRecord(ctx, q, env, delivery{channel: channel, title: title, body: message, click: m.Click, priority: m.Priority})
+	delivered, failure, err := deliverAndRecord(ctx, q, env, delivery{channel: channel, title: title, body: message, click: m.Click, priority: m.Priority, actions: m.Actions})
 	if err != nil {
 		return Sent{}, err
 	}

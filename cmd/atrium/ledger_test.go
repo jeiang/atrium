@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -20,7 +21,7 @@ func TestASecondUndoIsRefusedWhileTheFirstRunsAndAPartialUndoBlocksAnother(t *te
 	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	ctx := context.Background()
+	ctx := settings.With(context.Background(), settings.New())
 	d, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)

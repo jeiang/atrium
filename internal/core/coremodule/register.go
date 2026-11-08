@@ -7,6 +7,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/about"
+	"github.com/jeiang/atrium/internal/actionlink"
+	actionlinkpages "github.com/jeiang/atrium/internal/actionlink/pages"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/assistant/writes/writescmd"
 	"github.com/jeiang/atrium/internal/auth/loginlink"
@@ -52,7 +54,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
 			}},
 			{Module: mailpages.PauseModule},
-			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env), Enabled: enabled}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
+			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env), Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Nav: []web.NavItem{
 				{Group: "Review", Label: "Proposals", URL: "/proposals", Icon: "list-checks", Page: "proposals", Order: 20, Badge: true},
 				{Group: "Review", Label: "Activity", URL: "/activity", Icon: "history", Page: "activity", Order: 20},
 				{Group: "Mail", Label: "Drafts", URL: "/drafts", Icon: "mail", Page: "drafts", Order: 30},
@@ -67,6 +69,9 @@ func (m Module) Register(mc module.Context) module.Registration {
 			{Module: settingspages.Module, Templates: settingspages.Templates(), Nav: []web.NavItem{
 				{Label: "Configuration", URL: "/settings/config", Page: "config", Settings: true, Order: 110},
 				{Label: "Audit", URL: "/settings/audit", Page: "audit", Settings: true, Order: 120},
+			}},
+			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates(), Nav: []web.NavItem{
+				{Label: "Phone actions", URL: "/settings/phone-actions", Page: "phone_actions", Settings: true, Order: 61},
 			}},
 			{Nav: []web.NavItem{
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Auth: true, Order: 90},

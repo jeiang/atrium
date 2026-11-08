@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -108,6 +109,7 @@ func Module(o Options) web.Module {
 		r.Post("/proposals/{proposal_id}/dismiss", s.proposalDismiss)
 		r.Post("/proposals/{proposal_id}/undo", s.proposalUndo)
 		r.Post("/proposals/{proposal_id}/resolve", s.proposalResolve)
+		d.Public(http.MethodPost, "/actions/{token}", actionlink.Handler(s.pipeline, s.now))
 
 		r.Get("/activity", s.activityPage)
 		r.Post("/activity/mail/{action_id}/undo", s.undoMail)

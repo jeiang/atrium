@@ -171,6 +171,33 @@ func timeline(ctx context.Context, q db.Querier, category string, limit, offset 
 			entries = append(entries, mailEntry(a, now))
 		}
 	}
+	if category == "" || category == categoryMail {
+		rows, err := q.QueryContext(ctx,
+			"SELECT id, ts, actor, kind, row_id, proposal_id, outcome FROM write_resolutions WHERE source = 'phone' ORDER BY ts DESC, id DESC LIMIT ?", want)
+		if err != nil {
+			return nil, 0, err
+		}
+		phone, err := db.Collect(rows, func(r *sql.Rows) (ActivityEntry, error) {
+			var e ActivityEntry
+			var rowID int64
+			var proposalID *int64
+			var actor, kind, status string
+			if err := r.Scan(&e.ID, &e.TS, &actor, &kind, &rowID, &proposalID, &status); err != nil {
+				return e, err
+			}
+			target := fmt.Sprintf("%s %d", kind, rowID)
+			if proposalID != nil {
+				target = fmt.Sprintf("proposal %d", *proposalID)
+			}
+			e.Source, e.Category = "phone", categoryMail
+			e.Phone = &PhoneActivity{Actor: actor, Kind: kind, Status: status, Target: target}
+			return e, nil
+		})
+		if err != nil {
+			return nil, 0, err
+		}
+		entries = append(entries, phone...)
+	}
 	if category == "" || category == categorySettings {
 		changes, err := settingsEntries(ctx, q, want)
 		if err != nil {

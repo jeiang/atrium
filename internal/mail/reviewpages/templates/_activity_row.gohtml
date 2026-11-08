@@ -21,6 +21,12 @@
       </div>
     </div>
     {{end}}
+    {{with $e.phone}}
+    <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
+      <span class="text-sm font-medium">approved via phone</span>
+      <p class="text-xs text-muted-foreground">{{.actor}} · {{.kind}} · {{.status}} · {{.target}}</p>
+    </div>
+    {{end}}
     {{with $e.settings}}
     <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
       <div class="flex min-w-0 flex-wrap items-center gap-2">

@@ -239,7 +239,7 @@ func (s *site) propose(kind, account, title string, preview any, fingerprint str
 	if account != "" {
 		acct = &account
 	}
-	id, ok, err := proposals.Create(s.t.Context(), s.db, kind, acct, title, py.Dict{}, preview, fingerprint, 1_000.0)
+	id, ok, err := proposals.Create(settings.With(s.t.Context(), s.settings), s.db, kind, acct, title, py.Dict{}, preview, fingerprint, 1_000.0)
 	if err != nil || !ok {
 		s.t.Fatalf("create %s: %v %v", kind, ok, err)
 	}

@@ -82,6 +82,14 @@ type ActivityEntry struct {
 	Mail     *MailActivity     `json:"mail,omitempty"`
 	Write    *WriteActivity    `json:"write,omitempty"`
 	Settings *SettingsActivity `json:"settings,omitempty"`
+	Phone    *PhoneActivity    `json:"phone,omitempty"`
+}
+
+type PhoneActivity struct {
+	Actor  string `json:"actor"`
+	Kind   string `json:"kind"`
+	Status string `json:"status"`
+	Target string `json:"target"`
 }
 
 type MailActivity struct {

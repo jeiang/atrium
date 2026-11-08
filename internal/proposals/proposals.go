@@ -85,6 +85,8 @@ func Known(ctx context.Context, q Querier, fingerprint string) (bool, error) {
 	return err == nil && (status != Failed || unresolved), err
 }
 
+var OnCreate func(ctx context.Context, d *db.DB, p *Proposal)
+
 func Create(ctx context.Context, d *db.DB, kind string, account *string, title string, payload, preview any,
 	fingerprint string, ts float64) (id int64, created bool, err error) {
 	body, view := py.JSONDumps(payload), py.JSONDumps(preview)
@@ -111,5 +113,10 @@ func Create(ctx context.Context, d *db.DB, kind string, account *string, title s
 		}
 		return err
 	})
+	if err == nil && created && OnCreate != nil {
+		if p, getErr := Get(ctx, d.Read, id); getErr == nil && p != nil {
+			OnCreate(ctx, d, p)
+		}
+	}
 	return id, created, err
 }

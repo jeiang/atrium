@@ -191,7 +191,7 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 				return
 			}
 		}
-		if isUnsafe(r.Method) {
+		if isUnsafe(r.Method) && !strings.HasPrefix(r.URL.Path, "/actions/") {
 			limit := defaultBodyCap
 			if g.bodyCap != nil {
 				var err error
