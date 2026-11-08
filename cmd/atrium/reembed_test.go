@@ -147,6 +147,7 @@ func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, pa
 }
 
 func TestAFirstServeWithANewDimensionRebuildsTheIndexInsteadOfAdoptingIt(t *testing.T) {
+	t.Parallel()
 	fake := newFakeEmbedder(t)
 	dir, path := goldenEmbedFixture(t, fake, bigModel)
 	fake.release(1000)
@@ -171,6 +172,7 @@ func TestAFirstServeWithANewDimensionRebuildsTheIndexInsteadOfAdoptingIt(t *test
 }
 
 func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testing.T) {
+	t.Parallel()
 	fake := newFakeEmbedder(t)
 	dir, path := goldenEmbedFixture(t, fake, "embeddinggemma")
 	search := func() string {

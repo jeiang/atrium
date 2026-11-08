@@ -71,9 +71,10 @@ func extPings(t *testing.T, dir string) int {
 }
 
 func TestExternalModuleMigratesAndRunsOnlyWhenEnabled(t *testing.T) {
+	t.Parallel()
 	mods := extModules()
-	dir, _, f := moduleFixture(t, flagsExcept("", ""))
-	f.env[flagEnv(extName)] = ""
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, flagEnv(extName), "")
 
 	off := runAppWith(t, mods, extName)
 	if off.code != cli.ExitOK || off.stdout != "" {
@@ -99,9 +100,10 @@ func TestExternalModuleMigratesAndRunsOnlyWhenEnabled(t *testing.T) {
 }
 
 func TestNewerExternalModuleSchemaIsRefusedBeforeWrites(t *testing.T) {
+	t.Parallel()
 	mods := extModules()
-	dir, _, f := moduleFixture(t, flagsExcept("", ""))
-	f.env[flagEnv(extName)] = "true"
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, flagEnv(extName), "true")
 	if first := runAppWith(t, mods, extName); first.code != cli.ExitOK {
 		t.Fatalf("first run: exit %d stderr %q", first.code, first.stderr)
 	}

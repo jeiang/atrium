@@ -12,7 +12,9 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const lockHolderEnv = "ATRIUM_LOCK_TIMEOUT_TEST_HOLDER"
@@ -30,10 +32,13 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	extModules()
+	reg := settings.New()
+	newApp(config.OS, reg, config.NewState(reg), nil)
 	os.Exit(m.Run())
 }
 
 func TestRefreshReportsExclusiveLockTimeout(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	d, err := db.Connect(path)

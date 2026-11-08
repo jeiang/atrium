@@ -17,6 +17,7 @@ import (
 )
 
 func TestASecondUndoIsRefusedWhileTheFirstRunsAndAPartialUndoBlocksAnother(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	ctx := context.Background()

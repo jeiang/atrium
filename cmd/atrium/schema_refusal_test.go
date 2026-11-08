@@ -11,6 +11,7 @@ import (
 )
 
 func TestCommandRefusesNewerSchema(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	d, err := db.Connect(path)

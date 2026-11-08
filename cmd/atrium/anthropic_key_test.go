@@ -111,9 +111,9 @@ func TestAnthropicKeyIsAWriteOnlySecretThatPinsOverride(t *testing.T) {
 func TestStartupWarnsForACatalogModelTheModelsAPIOmits(t *testing.T) {
 	srv := anthropictest.New(t)
 	srv.Models = []string{"claude-haiku-5-5", "claude-sonnet-5-5"}
-	dir, _, f := moduleFixture(t, flagsExcept("assistant", "true"))
-	f.env[anthropic.BaseURLEnv] = srv.URL
-	f.env["ANTHROPIC_API_KEY"] = anthropictest.APIKey
+	dir, _, _ := moduleFixture(t, flagsExcept("assistant", "true"))
+	setEnv(t, anthropic.BaseURLEnv, srv.URL)
+	setEnv(t, "ANTHROPIC_API_KEY", anthropictest.APIKey)
 	base, logs := startServeLogged(t, dir)
 	waitForLog(t, logs, "claude-opus-5-5")
 	text := logs.String()
@@ -131,8 +131,8 @@ func TestStartupWarnsForACatalogModelTheModelsAPIOmits(t *testing.T) {
 }
 
 func TestStartupWarnsWhenTheModelsAPIFails(t *testing.T) {
-	dir, _, f := moduleFixture(t, flagsExcept("assistant", "true"))
-	f.env[anthropic.BaseURLEnv] = "http://127.0.0.1:9"
+	dir, _, _ := moduleFixture(t, flagsExcept("assistant", "true"))
+	setEnv(t, anthropic.BaseURLEnv, "http://127.0.0.1:9")
 	_, logs := startServeLogged(t, dir)
 	waitForLog(t, logs, "model catalog is unchecked")
 }

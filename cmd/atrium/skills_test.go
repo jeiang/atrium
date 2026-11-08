@@ -34,8 +34,9 @@ func readTree(t *testing.T, root string) map[string]string {
 }
 
 func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
+	t.Parallel()
 	flags := flagsExcept("assistant", "true")
-	dir, api, f := moduleFixture(t, flags)
+	dir, api, _ := moduleFixture(t, flags)
 
 	source := filepath.Join(dir, "source", "trip-plan")
 	if err := os.MkdirAll(source, 0o755); err != nil {
@@ -59,7 +60,7 @@ func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 		t.Fatalf("exported tree %v", tree)
 	}
 
-	f.env["ATRIUM_DB"] = filepath.Join(dir, "second.db")
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "second.db"))
 	if ran := runApp(t, "skills", "import", first); ran.code != cli.ExitOK || !strings.Contains(ran.stdout, "created trip-plan\n") || !strings.Contains(ran.stdout, "unchanged wiki-capture\n") {
 		t.Fatalf("round-trip import: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
 	}

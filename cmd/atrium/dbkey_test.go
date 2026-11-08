@@ -65,6 +65,7 @@ func isPlaintextSQLite(t *testing.T, path string) bool {
 }
 
 func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_DB_KEY", "")

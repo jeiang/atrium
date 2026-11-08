@@ -31,6 +31,7 @@ func (s *settingsSite) post(path string, form url.Values) (int, string) {
 }
 
 func TestSettingsPagesCoverTheRegistryAndSaveThroughTheAudit(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept(module.Contacts, ""))
 	unsetEnv(t, flagEnv(module.Contacts), settingEnv(contacts.DirKey))
 	jar, _ := cookiejar.New(nil)

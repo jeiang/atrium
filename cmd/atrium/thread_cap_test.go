@@ -35,6 +35,7 @@ func agentRun(t *testing.T, args ...string) runView {
 var nextRequest = regexp.MustCompile(`about (\d+) tokens`)
 
 func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(loop.CacheTTLKey), "5m")
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("first")))

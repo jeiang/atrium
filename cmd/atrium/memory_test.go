@@ -12,6 +12,7 @@ import (
 )
 
 func TestMemoryTreeFollowsChatRuns(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	reply := anthropictest.Reply("end_turn", anthropictest.Text("hi"))
 	api.Push(reply, reply)

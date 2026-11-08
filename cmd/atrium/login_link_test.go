@@ -174,7 +174,7 @@ func newLinkSite(t *testing.T) *linkSite {
 func (s *linkSite) link(t *testing.T, args ...string) string {
 	t.Helper()
 	var out, errs bytes.Buffer
-	code := newApp(testLookupFor(t), s.settings, s.state, nil).Run(context.Background(), append([]string{"login-link"}, args...), &out, &errs)
+	code := newAppWith(testLookupFor(t), s.settings, s.state, nil, nil, nil, quietLog).Run(context.Background(), append([]string{"login-link"}, args...), &out, &errs)
 	if code != cli.ExitOK {
 		t.Fatalf("login-link exit %d: %s", code, errs.String())
 	}
@@ -214,6 +214,7 @@ func linkExpect(t *testing.T, got linkReply, status int, contains ...string) {
 }
 
 func TestLoginLinkOpensAnAdminSessionOnceWithNoOIDCConfigured(t *testing.T) {
+	t.Parallel()
 	site := newLinkSite(t)
 	token := fragmentOf(t, site.link(t), site.base)
 
@@ -243,6 +244,7 @@ func TestLoginLinkOpensAnAdminSessionOnceWithNoOIDCConfigured(t *testing.T) {
 }
 
 func TestLoginLinkExpiresAndRejectsTampering(t *testing.T) {
+	t.Parallel()
 	site := newLinkSite(t)
 	token := fragmentOf(t, site.link(t, "--minutes", "1"), site.base)
 	nonce, mac, _ := strings.Cut(token, ".")
@@ -284,6 +286,7 @@ func TestLoginLinkExpiresAndRejectsTampering(t *testing.T) {
 }
 
 func TestLoginLinkIssueAndRedeemAreAuditedWithoutTheToken(t *testing.T) {
+	t.Parallel()
 	site := newLinkSite(t)
 	token := fragmentOf(t, site.link(t), site.base)
 	nonce, mac, _ := strings.Cut(token, ".")
@@ -321,6 +324,7 @@ func TestLoginLinkIssueAndRedeemAreAuditedWithoutTheToken(t *testing.T) {
 }
 
 func TestLoginLinkRefusesBadLifetimesAndMissingPublicURL(t *testing.T) {
+	t.Parallel()
 	newLinkSite(t)
 	for _, minutes := range []string{"0", "999"} {
 		var out, errs bytes.Buffer
@@ -336,6 +340,7 @@ func TestLoginLinkRefusesBadLifetimesAndMissingPublicURL(t *testing.T) {
 }
 
 func TestLoginLinkFirstRunSetupThenOIDCSignIn(t *testing.T) {
+	t.Parallel()
 	site := newLinkSite(t)
 	owner := site.browser()
 	linkExpect(t, owner.post("/login/link", url.Values{"token": {fragmentOf(t, site.link(t), site.base)}}), http.StatusSeeOther)
@@ -380,6 +385,7 @@ func TestLoginLinkFirstRunSetupThenOIDCSignIn(t *testing.T) {
 }
 
 func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	setEnv(t, "ATRIUM_DB", path)

@@ -104,6 +104,7 @@ func dirListing(t *testing.T, dir string) []string {
 }
 
 func TestBackupRestoreEncryptedDatabase(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	backupEnv(t, dir)
 	live := filepath.Join(dir, "state", "atrium.db")
@@ -386,6 +387,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 }
 
 func TestBackupRestorePlaintextMigratesOlderArchiveAndRefusesNewer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	backupEnv(t, dir)
 	live := filepath.Join(dir, "state", "atrium.db")

@@ -19,6 +19,7 @@ import (
 )
 
 func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
@@ -53,6 +54,7 @@ func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 }
 
 func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var notices []string
 	ntfy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

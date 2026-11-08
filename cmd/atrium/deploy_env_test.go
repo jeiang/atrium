@@ -12,6 +12,7 @@ import (
 )
 
 func TestCanonicalPinsPin(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
@@ -29,6 +30,7 @@ func TestCanonicalPinsPin(t *testing.T) {
 }
 
 func TestDatabaseTimeZoneReachesNonServeCommands(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	setEnv(t, "ATRIUM_DB", path)

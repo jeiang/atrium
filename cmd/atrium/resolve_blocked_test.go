@@ -21,6 +21,7 @@ import (
 )
 
 func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	setEnv(t, "ATRIUM_DB", path)

@@ -41,6 +41,7 @@ func accountsFile(t *testing.T, dir string, accounts ...mailAccount) string {
 }
 
 func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
@@ -75,7 +76,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	}
 	run := func(args ...string) appRun {
 		reg := settings.New()
-		app := newAppWith(testLookupFor(t), reg, config.NewState(reg), nil, clients, nil)
+		app := newAppWith(testLookupFor(t), reg, config.NewState(reg), nil, clients, nil, quietLog)
 		var out, errs bytes.Buffer
 		code := app.Run(context.Background(), args, &out, &errs)
 		return appRun{code, out.String(), errs.String()}

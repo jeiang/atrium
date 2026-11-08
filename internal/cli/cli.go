@@ -178,6 +178,8 @@ type App struct {
 	setup        func(stderr io.Writer)
 }
 
+func (a *App) SetLogSetup(setup func(stderr io.Writer)) { a.setup = setup }
+
 func New(name string, setup func(stderr io.Writer)) *App {
 	return &App{root: Command{Name: name}, setup: setup}
 }

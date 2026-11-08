@@ -44,6 +44,7 @@ func event(uid, start, end string) string {
 }
 
 func TestFindSlotHonoursOverlapsAllDayEventsWorkingHoursAndDST(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_CORE_TZ", "America/New_York")
 	setEnv(t, settingEnv(calendar.WorkDaysKey), "sun,mon")
@@ -131,6 +132,7 @@ func proposalID(t *testing.T, result string) string {
 }
 
 func TestRSVPAndUpdateProposalsWriteOnlyOnApprovalAndUndo(t *testing.T) {
+	t.Parallel()
 	_, srv := davFixture(t)
 	path := caldavtest.CalendarPath(0) + "lunch.ics"
 	srv.SetObject(path, invite)

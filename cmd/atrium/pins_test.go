@@ -29,6 +29,7 @@ func pinRowOf(t *testing.T, r settingsRun) pinRow {
 }
 
 func TestConfigFilePinsBeatTheDatabaseAndRefuseWrites(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	db := filepath.Join(dir, "atrium.db")
 	setEnv(t, "ATRIUM_DB", db)

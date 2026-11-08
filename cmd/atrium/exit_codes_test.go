@@ -39,6 +39,7 @@ func TestCLIExitProcess(t *testing.T) {
 }
 
 func TestCLISignalExitCodes(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		sig  syscall.Signal

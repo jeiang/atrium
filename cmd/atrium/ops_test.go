@@ -52,6 +52,7 @@ func readiness(t *testing.T, base string) (int, string) {
 }
 
 func TestOpsListenerServesMetricsAndReadinessApartFromThePublicListener(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Notifications, "false"))
 	opsBase := opsAddr(t)
 
@@ -110,6 +111,7 @@ func TestOpsListenerServesMetricsAndReadinessApartFromThePublicListener(t *testi
 }
 
 func TestOpsReadinessIsDegradedWhenNtfyIsDownAndPprofFollowsItsSetting(t *testing.T) {
+	t.Parallel()
 	ntfy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))

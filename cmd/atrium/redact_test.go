@@ -14,6 +14,7 @@ import (
 )
 
 func TestStoredSecretsAreRedactedFromLogsAndAgentWrites(t *testing.T) {
+	t.Parallel()
 	const secret = "sk-redact-profile-é-0123456789"
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setCmd := cliExitProcess(t, "secrets set "+secrets.ActionLinkKey)

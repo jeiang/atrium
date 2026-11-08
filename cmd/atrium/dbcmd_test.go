@@ -32,6 +32,7 @@ func runProcessStdin(t *testing.T, stdin, args string, env ...string) cliRun {
 }
 
 func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_DB_KEY", "")

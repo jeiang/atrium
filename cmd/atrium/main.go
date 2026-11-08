@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
@@ -36,12 +37,12 @@ func main() {
 }
 
 func newApp(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module) *cli.App {
-	return newAppWith(env, reg, st, mods, imapclient.Opener, nil)
+	return newAppWith(env, reg, st, mods, imapclient.Opener, nil, logx.Setup)
 }
 
-func newAppWith(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) *cli.App {
+func newAppWith(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64, setup func(io.Writer)) *cli.App {
 	set := newSet(env, reg, st, mods, clients, now)
-	app := cli.New("atrium", logx.Setup)
+	app := cli.New("atrium", setup)
 	app.Version = version
 	app.Env = env
 	app.Settings = reg

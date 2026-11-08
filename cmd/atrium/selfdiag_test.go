@@ -60,6 +60,7 @@ func fakeGrafana(t *testing.T) (*httptest.Server, func() []dsQuery) {
 }
 
 func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		dialect, want string
 	}{

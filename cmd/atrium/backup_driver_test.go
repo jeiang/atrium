@@ -9,6 +9,7 @@ import (
 )
 
 func TestPlaintextBackupVerifiesAndRestoresUnderEitherDriver(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list exited %d: %s", got.code, got.stderr)

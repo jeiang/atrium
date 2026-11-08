@@ -19,6 +19,8 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -61,6 +63,19 @@ type appRun struct {
 
 func runApp(t *testing.T, args ...string) appRun { return runAppWith(t, nil, args...) }
 
+func runAppLogged(t *testing.T, args ...string) appRun {
+	var out bytes.Buffer
+	var errs lockedBuffer
+	app := newTestApp(t, nil)
+	if f := fixtureFor(t); f != nil {
+		app = f.app
+	}
+	app.SetLogSetup(logx.Setup)
+	defer app.SetLogSetup(quietLog)
+	code := app.Run(context.Background(), args, &out, &errs)
+	return appRun{code, out.String(), errs.String()}
+}
+
 func runAppWith(t *testing.T, mods []module.Module, args ...string) appRun {
 	var out bytes.Buffer
 	var errs lockedBuffer
@@ -70,7 +85,7 @@ func runAppWith(t *testing.T, mods []module.Module, args ...string) appRun {
 			app = f.app
 		} else {
 			reg := settings.New()
-			app = newApp(f.lookup, reg, config.NewState(reg), mods)
+			app = newAppWith(f.lookup, reg, config.NewState(reg), mods, imapclient.Opener, nil, quietLog)
 		}
 	}
 	code := app.Run(context.Background(), args, &out, &errs)
@@ -116,7 +131,7 @@ func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *mode
 	reg := settings.New()
 	st := config.NewState(reg)
 	f = &fixture{t: t, dir: dir, env: env, settings: reg, state: st}
-	f.app = newApp(f.lookup, reg, st, nil)
+	f.app = newAppWith(f.lookup, reg, st, nil, imapclient.Opener, nil, quietLog)
 	fixturesByTest.Store(t, f)
 	fixturesByTest.Store(testKey(t), f)
 	return dir, api, f
@@ -178,6 +193,7 @@ func probe(t *testing.T, base string, c moduleCase) int {
 }
 
 func TestModuleTogglesThroughTheApplication(t *testing.T) {
+	t.Parallel()
 	for _, c := range moduleCases {
 		t.Run(c.module+"/disabled", func(t *testing.T) {
 			dir, api, _ := moduleFixture(t, flagsExcept(c.module, "false"))
@@ -240,6 +256,7 @@ func clearModuleEnv(t *testing.T) {
 }
 
 func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
@@ -284,6 +301,7 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 }
 
 func TestSettingsListWorksFromTheRootCommand(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
@@ -311,6 +329,7 @@ func readFlag(t *testing.T, name string) string {
 }
 
 func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
+	t.Parallel()
 	phaseA := func(t *testing.T, populated bool) (base string, path string) {
 		dir := t.TempDir()
 		path = filepath.Join(dir, "atrium.db")
@@ -378,6 +397,7 @@ func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 }
 
 func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
+	t.Parallel()
 	data := loadGoldenData(t)
 	candidates := func(flag string) int {
 		f := newFixture(t, data, map[string]string{flagEnv(module.Calendar): flag}, "")
@@ -418,6 +438,7 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 }
 
 func TestMailPauseStaysAvailableWhileMailIsOff(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, "false"))
 	paused := func() bool {
 		got := runApp(t, "live", "status")
