@@ -8,11 +8,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/files"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -26,7 +28,7 @@ type ProjectData struct {
 	Files    []files.Row       `json:"files"`
 	Threads  []threads.Listed  `json:"threads"`
 	View     string            `json:"view"`
-	Composer map[string]any    `json:"composer"`
+	Composer ComposerView      `json:"composer"`
 }
 
 type ProjectFormValues struct {
@@ -63,7 +65,7 @@ func submittedProject(form url.Values) projects.Fields {
 func submittedValues(f projects.Fields, fallback ProjectFormValues) ProjectFormValues {
 	hub := f.WikiHubID
 	effort := fallback.Effort
-	for _, choice := range threads.Efforts {
+	for _, choice := range pricing.Efforts {
 		if f.Effort == choice {
 			effort = f.Effort
 			break
@@ -71,8 +73,8 @@ func submittedValues(f projects.Fields, fallback ProjectFormValues) ProjectFormV
 	}
 	limit := *fallback.ContextLimit
 	if raw, ok := f.ContextLimit.(string); ok {
-		if submitted, valid := py.LaxInt64(raw); valid {
-			for _, choice := range threads.ContextLimits {
+		if submitted, valid := numx.LaxInt64(raw); valid {
+			for _, choice := range assistant.ContextLimits {
 				if submitted == choice {
 					limit = submitted
 					break
@@ -107,7 +109,7 @@ func (p *pages) projectsIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *pages) projectForm(w http.ResponseWriter, r *http.Request, status int, project *projects.Project, values ProjectFormValues, problem *string) {
-	data := ProjectFormData{Project: project, Values: values, Efforts: threads.Efforts[:], ContextLimits: threads.ContextLimits[:], Error: problem}
+	data := ProjectFormData{Project: project, Values: values, Efforts: pricing.Efforts, ContextLimits: assistant.ContextLimits, Error: problem}
 	p.renderFragment(w, r, status, "_project_form.gohtml", data, nil)
 }
 
@@ -162,7 +164,7 @@ func (p *pages) projectShow(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	limit, err := config.Limit(r.Context(), p.deps.DB.Read, config.KeyProjectThreads)
+	limit, err := config.From(r.Context()).Limit(r.Context(), p.deps.DB.Read, config.KeyProjectThreads)
 	check(err)
 	listed, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Limit: limit, Archived: view == archived, ProjectID: id})
 	check(err)

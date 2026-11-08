@@ -13,14 +13,12 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/mail"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Session interface {
@@ -103,7 +101,6 @@ type session struct {
 	ehloDone   bool
 	doesESMTP  bool
 	features   map[string]string
-	utf8Cmds   bool
 	challenges int
 }
 
@@ -141,10 +138,8 @@ func (s *session) putcmd(cmd, args string) error {
 		line = strings.ReplaceAll(strings.ReplaceAll(line, "\n", `\n`), "\r", `\r`)
 		return &Failure{Kind: "ValueError", Msg: "command and arguments contain prohibited newline characters: " + line}
 	}
-	if !s.utf8Cmds {
-		if err := py.ASCIIEncodeError(line); err != nil {
-			return err
-		}
+	if !isASCII([]byte(line)) {
+		return &Failure{Kind: "ValueError", Msg: "command and arguments must be ASCII"}
 	}
 	return s.send([]byte(line + "\r\n"))
 }
@@ -186,7 +181,7 @@ func (s *session) getreply() (int, string, error) {
 		}
 		if len(line) > maxLine {
 			s.close()
-			return 0, "", &ResponseError{Kind: "SMTPResponseException", Code: 500, Msg: "Line too long.", text: true}
+			return 0, "", &ResponseError{Kind: "SMTPResponseException", Code: 500, Msg: "Line too long."}
 		}
 		var rest []byte
 		if len(line) > 4 {
@@ -412,7 +407,7 @@ func (s *session) auth(mech, user, password string) error {
 		answer, _ := s.authResponse(mech, user, password, challenge, false)
 		code, resp, err = s.docmd(base64.StdEncoding.EncodeToString([]byte(answer)), "")
 		if err == nil && s.challenges > maxChallenge {
-			return &Failure{Kind: "SMTPException", Msg: fmt.Sprintf("Server AUTH mechanism infinite loop. Last response: (%d, %s)", code, py.ReprBytes([]byte(resp)))}
+			return &Failure{Kind: "SMTPException", Msg: fmt.Sprintf("Server AUTH mechanism infinite loop. Last response: %d %s", code, resp)}
 		}
 	}
 	if err != nil {
@@ -447,11 +442,7 @@ func decodeChallenge(s string) ([]byte, error) {
 }
 
 func quoteaddr(addr string) (string, error) {
-	parsed, err := mime.ParseAddr(addr)
-	if err != nil {
-		return "", err
-	}
-	if parsed != (mime.Addr{}) {
+	if parsed, err := mail.ParseAddress(addr); err == nil {
 		return "<" + parsed.Address + ">", nil
 	}
 	if strings.HasPrefix(strings.TrimSpace(addr), "<") {
@@ -461,22 +452,12 @@ func quoteaddr(addr string) (string, error) {
 }
 
 func (s *session) rset() {
-	s.utf8Cmds = false
 	_, _, _ = s.docmd("rset", "")
 }
 
 func (s *session) mail(from string, options []string) (int, string, error) {
 	optionlist := ""
 	if len(options) > 0 && s.doesESMTP {
-		for _, o := range options {
-			if strings.EqualFold(o, "smtputf8") {
-				if !s.hasExtn("smtputf8") {
-					return 0, "", &Failure{Kind: notSupported, Msg: "SMTPUTF8 not supported by server"}
-				}
-				s.utf8Cmds = true
-				break
-			}
-		}
 		optionlist = " " + strings.Join(options, " ")
 	}
 	quoted, err := quoteaddr(from)
@@ -532,24 +513,10 @@ func (s *session) SendMessage(msg *Message, from string, to []string) (Refusals,
 	if err := s.ehloOrHelo(); err != nil {
 		return nil, err
 	}
-	international := py.ASCIIEncodeError(from+strings.Join(to, "")) != nil
-	var mailOptions []string
-	if international {
-		if !s.hasExtn("smtputf8") {
-			return nil, &Failure{Kind: notSupported, Msg: "One or more source or delivery addresses require internationalized email support, but the server does not advertise the required SMTPUTF8 capability"}
-		}
-		mailOptions = []string{"SMTPUTF8", "BODY=8BITMIME"}
-	}
-	flat, err := msg.Bytes("\r\n", international)
-	if err != nil {
-		return nil, err
-	}
+	flat := msg.Bytes("\r\n", false)
 	var opts []string
-	if s.doesESMTP {
-		if s.hasExtn("size") {
-			opts = append(opts, fmt.Sprintf("size=%d", len(flat)))
-		}
-		opts = append(opts, mailOptions...)
+	if s.doesESMTP && s.hasExtn("size") {
+		opts = append(opts, fmt.Sprintf("size=%d", len(flat)))
 	}
 	code, resp, err := s.mail(from, opts)
 	if err != nil {

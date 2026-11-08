@@ -84,7 +84,9 @@ func Apply(dir, ext string, collections []Collection) (Stats, error) {
 		if err != nil {
 			return st, err
 		}
-		_ = os.Remove(path)
+		if err := os.Remove(path); err != nil {
+			return st, err
+		}
 	}
 	return st, nil
 }

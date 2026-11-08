@@ -11,6 +11,14 @@ const (
 	Sub     Kind = "sub"
 )
 
+func ParseKind(value string) (Kind, bool) {
+	switch Kind(value) {
+	case Chat, Cron, Nightly, Sub:
+		return Kind(value), true
+	}
+	return "", false
+}
+
 type Kinds []Kind
 
 var (
@@ -22,17 +30,16 @@ func (ks Kinds) Has(k Kind) bool { return slices.Contains(ks, k) }
 
 func (k Kind) Valid() bool { return AllKinds.Has(k) }
 
-func (k Kind) Unattended() bool { return k == Cron || k == Nightly }
-
 type Effect string
 
 const (
-	Read    Effect = "read"
-	Write   Effect = "write"
-	Propose Effect = "propose"
-	Notify  Effect = "notify"
+	Read      Effect = "read"
+	Write     Effect = "write"
+	WriteUndo Effect = "write_undo"
+	Propose   Effect = "propose"
+	Notify    Effect = "notify"
 )
 
-var Effects = []Effect{Read, Write, Propose, Notify}
+var Effects = []Effect{Read, Write, WriteUndo, Propose, Notify}
 
 func (e Effect) Valid() bool { return slices.Contains(Effects, e) }

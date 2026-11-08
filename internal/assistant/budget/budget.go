@@ -2,8 +2,6 @@ package budget
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -14,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -28,37 +25,8 @@ type BudgetExceeded string
 
 func (e BudgetExceeded) Error() string { return string(e) }
 
-func GetSetting(ctx context.Context, q db.Querier, key string) (string, bool, error) {
-	var value string
-	err := q.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = ?", key).Scan(&value)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", false, nil
-	}
-	return value, err == nil, err
-}
-
-func SetSetting(ctx context.Context, q db.Querier, key string, value any) error {
-	var text string
-	switch v := value.(type) {
-	case string:
-		text = v
-	case int:
-		text = strconv.Itoa(v)
-	case int64:
-		text = strconv.FormatInt(v, 10)
-	case float64:
-		text = py.FloatRepr(v)
-	case bool:
-		text = map[bool]string{true: "True", false: "False"}[v]
-	default:
-		return fmt.Errorf("budget: setting %q: cannot store a %T", key, value)
-	}
-	_, err := q.ExecContext(ctx, "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, text)
-	return err
-}
-
 func MonthlyBudget(ctx context.Context, q db.Querier) (float64, error) {
-	found, err := settings.Default.Resolve(ctx, q, BudgetKey, 0)
+	found, err := settings.From(ctx).Resolve(ctx, q, BudgetKey)
 	if err != nil {
 		return 0, err
 	}
@@ -66,7 +34,7 @@ func MonthlyBudget(ctx context.Context, q db.Querier) (float64, error) {
 }
 
 func chatShare(ctx context.Context, q db.Querier) (float64, error) {
-	found, err := settings.Default.Resolve(ctx, q, ChatKey, 0)
+	found, err := settings.From(ctx).Resolve(ctx, q, ChatKey)
 	if err != nil {
 		return 0, err
 	}
@@ -74,7 +42,7 @@ func chatShare(ctx context.Context, q db.Querier) (float64, error) {
 }
 
 func unattendedShare(ctx context.Context, q db.Querier) (float64, error) {
-	found, err := settings.Default.Resolve(ctx, q, UnattendedKey, 0)
+	found, err := settings.From(ctx).Resolve(ctx, q, UnattendedKey)
 	if err != nil {
 		return 0, err
 	}
@@ -123,19 +91,13 @@ func Check(ctx context.Context, q db.Querier, now float64, loc *time.Location, u
 	}
 	if found.Share >= threshold {
 		return Status{}, BudgetExceeded(fmt.Sprintf("monthly budget: $%s of $%s spent (%s); %s %s",
-			py.FormatFixed(found.SpentUSD, 2), py.FormatFixed(found.BudgetUSD, 2), py.FormatPercent(found.Share, 0), who,
-			py.FormatPercent(threshold, 0)))
+			strconv.FormatFloat(found.SpentUSD, 'f', 2, 64), strconv.FormatFloat(found.BudgetUSD, 'f', 2, 64), strconv.FormatFloat(found.Share*100, 'f', 0, 64)+"%", who,
+			strconv.FormatFloat(threshold*100, 'f', 0, 64)+"%"))
 	}
 	return found, nil
 }
 
 const RunCapPrefix = "max_run_cost_usd_"
-
-var runCapDefaults = map[string]string{
-	pricing.HaikuID:  "2",
-	pricing.SonnetID: "6",
-	pricing.OpusID:   "10",
-}
 
 func RunCapKey(model string) string {
 	return RunCapPrefix + strings.ReplaceAll(strings.TrimPrefix(model, "claude-"), "-", "_")
@@ -145,7 +107,7 @@ func RunCap(ctx context.Context, q db.Querier, model string) (float64, error) {
 	if _, err := pricing.Lookup(model); err != nil {
 		return 0, err
 	}
-	found, err := settings.Default.Resolve(ctx, q, RunCapKey(model), 0)
+	found, err := settings.From(ctx).Resolve(ctx, q, RunCapKey(model))
 	if err != nil {
 		return 0, err
 	}
@@ -153,28 +115,42 @@ func RunCap(ctx context.Context, q db.Querier, model string) (float64, error) {
 }
 
 func ColdRequestUSD(model string, tokens int64, ttl string) (float64, error) {
-	write := pricing.Tokens{CacheWrite5m: tokens}
-	if ttl == prompts.TTL1h {
+	var write pricing.Tokens
+	switch ttl {
+	case prompts.TTL5m:
+		write = pricing.Tokens{CacheWrite5m: tokens}
+	case prompts.TTL1h:
 		write = pricing.Tokens{CacheWrite1h: tokens}
+	default:
+		return 0, fmt.Errorf("budget: unknown cache TTL %q", ttl)
 	}
 	return pricing.CostUSD(model, write, 0)
-}
-
-func UncachedRequestUSD(model string, input, output int64) (float64, error) {
-	return pricing.CostUSD(model, pricing.Tokens{Input: input, Output: output}, 0)
 }
 
 const SpendCapText = "Anthropic spend limit reached: the organization's API usage cap refused the request. Raise the cap or wait for it to reset in the Anthropic console."
 
 func SpendCap() BudgetExceeded { return BudgetExceeded(SpendCapText) }
 
+const ThreadCapKey = "thread_cost_cap_usd"
+
+func ThreadCap(ctx context.Context, q db.Querier, threadID int64) (spent, limit float64, err error) {
+	found, err := settings.From(ctx).Resolve(ctx, q, ThreadCapKey)
+	if err != nil {
+		return 0, 0, err
+	}
+	if limit, err = found.Float(); err != nil {
+		return 0, 0, err
+	}
+	err = q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE thread_id = ?", threadID).Scan(&spent)
+	return spent, limit, err
+}
+
 func registerRunCaps() []settings.Def {
 	var defs []settings.Def
-	for _, id := range pricing.IDs() {
-		defs = append(defs, settings.Def{
-			Key: RunCapKey(id), Module: "assistant", Type: settings.Float, Default: runCapDefaults[id],
-			Check: settings.Above(0), Class: settings.Cap, Scopes: []settings.Scope{settings.Instance},
-		})
+	for _, m := range pricing.Models() {
+		defs = append(defs, settings.Value(settings.Advanced, settings.Def{
+			Key: RunCapKey(m.ID), Module: "assistant", Type: settings.Float, Default: strconv.FormatFloat(m.RunCapUSD, 'f', -1, 64),
+			Check: settings.Above(0)}))
 	}
 	return defs
 }
@@ -182,14 +158,14 @@ func registerRunCaps() []settings.Def {
 func init() {
 	settings.MustRegister(registerRunCaps()...)
 	settings.MustRegister(
-		settings.Def{
+		settings.Value(settings.UI, settings.Def{
 			Key: BudgetKey, Module: "assistant", Type: settings.Float, Default: "150",
-			Check: settings.Above(0), Class: settings.UI, Scopes: []settings.Scope{settings.Instance},
-		},
-		settings.Def{
+			Check: settings.Above(0)}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: UnattendedKey, Module: "assistant", Type: settings.Float, Default: "0.8",
-			Check: settings.Within(0, 1), Peers: assistant.Ordered(false, nil, []string{ChatKey}),
-			Class: settings.Advanced, Scopes: []settings.Scope{settings.Instance},
-		},
+			Check: settings.Within(0, 1), Peers: assistant.Ordered(false, nil, []string{ChatKey})}),
+		settings.Value(settings.Advanced, settings.Def{
+			Key: ThreadCapKey, Module: "assistant", Type: settings.Float, Default: "10",
+			Check: settings.Above(0)}),
 	)
 }

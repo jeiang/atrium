@@ -14,22 +14,22 @@ import (
 	"github.com/jeiang/atrium/internal/passrun"
 )
 
-func Command(tools registry.Source) *cli.Command {
-	return &cli.Command{Name: "calendar", Commands: []*cli.Command{candidatesCommand(config.OS, tools, nil), googleAuth(config.OS), syncCommand()}}
+func Command(env config.Env, tools registry.Source, auth calendar.AuthOptions) *cli.Command {
+	return &cli.Command{Name: "calendar", Commands: []*cli.Command{candidatesCommand(env, tools, nil), googleAuth(env, auth), syncCommand(env)}}
 }
 
-func syncCommand() *cli.Command {
+func syncCommand(env config.Env) *cli.Command {
 	return davmirror.SyncCommand("mirror the iCloud calendars into the calendar directory (read-only)", passrun.CalDAV,
 		func(ctx context.Context, d *db.DB) (davmirror.Stats, error) {
 			set, err := calendar.LoadSettings(ctx, d.Read)
 			if err != nil {
 				return davmirror.Stats{}, err
 			}
-			return calendar.SyncCalendarMirror(ctx, set)
+			return calendar.SyncCalendarMirror(ctx, env, set)
 		})
 }
 
-func googleAuth(env config.Env) *cli.Command {
+func googleAuth(env config.Env, auth calendar.AuthOptions) *cli.Command {
 	return &cli.Command{
 		Name: "google-auth",
 		Setup: func(a *cli.Args) cli.Handler {
@@ -44,16 +44,19 @@ func googleAuth(env config.Env) *cli.Command {
 					return cli.Fail(e, err)
 				}
 				defer func() { _ = d.Close() }()
-				if err := config.Migrate(e.Ctx, d, cfg); err != nil {
+				if err := config.Boot(e.Ctx, env, d, cfg); err != nil {
 					return cli.Fail(e, err)
 				}
 				set, err := calendar.LoadSettings(e.Ctx, d.Read)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				token, err := calendar.Authorize(e.Ctx, calendar.AuthOptions{
-					ClientID: set.GoogleClientID, ClientSecret: config.GoogleOAuthSecret(env), Port: *port, Out: e.Stdout,
-				})
+				auth.ClientID = set.GoogleClientID
+				auth.ClientSecret = config.GoogleOAuthSecret(env)
+				auth.Port = *port
+				auth.Out = e.Stdout
+				auth.Env = env
+				token, err := calendar.Authorize(e.Ctx, auth)
 				var failed calendar.Error
 				if errors.As(err, &failed) {
 					_, _ = fmt.Fprintf(e.Stderr, "error: %s\n", failed)

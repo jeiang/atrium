@@ -1,19 +1,22 @@
 package pages
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/search"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -24,7 +27,7 @@ type listData struct {
 	ProjectID int64            `json:"project_id"`
 
 	Defaults threads.Options `json:"defaults"`
-	Composer map[string]any  `json:"composer"`
+	Composer ComposerView    `json:"composer"`
 }
 
 func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, projectID int64) {
@@ -34,7 +37,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, 
 		match, err = search.FTSQuery(q)
 		check(err)
 	}
-	limit, err := config.Limit(r.Context(), p.deps.DB.Read, config.KeyChatThreadLimit)
+	limit, err := config.From(r.Context()).Limit(r.Context(), p.deps.DB.Read, config.KeyChatThreadLimit)
 	check(err)
 	found, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Match: match, Limit: limit, Archived: view == archived, ProjectID: projectID})
 	check(err)
@@ -46,7 +49,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, 
 	data := listData{
 		Threads: found, Q: q, View: view, ProjectID: projectID,
 		Defaults: defaults,
-		Composer: composerData(defaults.Model, defaults.Effort, defaults.ContextLimit, 0),
+		Composer: composerData(r.Context(), defaults.Model, defaults.Effort, defaults.Thinking, defaults.ContextLimit, defaults.WebSearch, defaults.CostCapUSD, 0),
 	}
 	if web.IsPartial(r) {
 		p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", data)
@@ -62,7 +65,7 @@ func (p *pages) chatIndex(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, r, http.StatusUnprocessableEntity, "unknown view")
 		return
 	}
-	p.listing(w, r, py.Strip(web.QueryValue(query, "q")), view, 0)
+	p.listing(w, r, strings.TrimSpace(web.QueryValue(query, "q")), view, 0)
 }
 
 func attachmentBlocks(blocks []files.AttachmentBlock) []json.RawMessage {
@@ -80,7 +83,7 @@ func (p *pages) attach(w http.ResponseWriter, r *http.Request, thread *threads.T
 		return nil, true
 	}
 	limit := threads.ContextLimitOf(*thread)
-	blocks, err := files.IngestUploads(detached(r), p.deps.DB.Write, p.deps.Cfg.FilesDir(), uploads, p.now(), files.Owner{ThreadID: thread.ID}, &limit)
+	blocks, err := files.IngestUploads(detached(r), p.deps.DB, p.deps.Cfg.FilesDir(), uploads, p.now(), files.ThreadOwner(thread.ID), &limit)
 	var refused files.FileError
 	if errors.As(err, &refused) {
 		p.failure(w, r, "Not attached", err.Error())
@@ -101,7 +104,7 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	text := py.Strip(web.FormString(form, "text", ""))
+	text := strings.TrimSpace(web.FormString(form, "text", ""))
 	if len(uploads) > 0 && text == "" {
 		p.failure(w, r, "Nothing sent", "Type a message to go with the files.")
 		return
@@ -121,9 +124,20 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 		}
 		project = &projectID
 	}
-	threadID, err := service.CreateThread(ctx, p.deps.DB.Write, p.now(), threads.NewThread{
+	webSearch := true
+	if values, ok := form["web_search"]; ok {
+		webSearch = slices.Contains(values, "1")
+	}
+	var costCap *float64
+	if raw := web.FormString(form, "cost_cap", ""); raw != "" {
+		if value, err := strconv.ParseFloat(raw, 64); err == nil {
+			costCap = &value
+		}
+	}
+	threadID, err := threads.Create(ctx, p.deps.DB.Write, p.now(), threads.Spec{
 		Kind: threads.Chat, ProjectID: project,
 		Model: web.FormString(form, "model", ""), Effort: web.FormString(form, "effort", ""), ContextLimit: optional(form, "context_limit"),
+		Thinking: web.FormString(form, "thinking", ""), WebSearch: &webSearch, CostCapUSD: costCap,
 	})
 	var refused threads.OptionError
 	if errors.As(err, &refused) {
@@ -152,7 +166,7 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, to)
 }
 
-func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string) {
+func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string, set func(context.Context, db.Querier, int64, bool) (bool, error)) {
 	threadID, errs := pathInt(r, "thread_id")
 	form := web.FormValues(r)
 	value := formInt(form, "body", column, 1, &errs)
@@ -161,7 +175,7 @@ func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	ok, err := threads.SetFlag(detached(r), p.deps.DB.Write, threadID, column, value != 0)
+	ok, err := set(detached(r), p.deps.DB.Write, threadID, value != 0)
 	check(err)
 	if !ok {
 		p.fail(w, r, http.StatusNotFound, "unknown thread")
@@ -172,7 +186,7 @@ func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string) {
 		if view != archived {
 			view = ""
 		}
-		p.listing(w, r, py.Strip(web.FormString(form, "q", "")), view, projectID)
+		p.listing(w, r, strings.TrimSpace(web.FormString(form, "q", "")), view, projectID)
 		return
 	}
 	back := "/chat/" + strconv.FormatInt(threadID, 10)
@@ -243,8 +257,8 @@ func (p *pages) chatOptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	thread := threadOf(view)
-	p.fragment(w, r, http.StatusOK, "_options_saved.gohtml", map[string]any{
-		"view": view, "composer": composerData(thread.Model, thread.Effort, threads.ContextLimitOf(thread), threadID),
+	p.fragment(w, r, http.StatusOK, "_options_saved.gohtml", OptionsSaved{
+		View: view, Composer: composerData(r.Context(), thread.Model, thread.Effort, thread.Thinking, threads.ContextLimitOf(thread), bool(thread.WebSearch), thread.CostCapUSD, threadID),
 	})
 }
 

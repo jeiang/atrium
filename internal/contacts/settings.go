@@ -9,22 +9,63 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-const DirKey = "contacts_dir"
+const (
+	DirKey        = "contacts_dir"
+	DirEnv        = "ATRIUM_CONTACTS_" + DirKey
+	MaxResultsKey = "contacts_max_results"
+)
 
 func init() {
-	settings.MustRegister(settings.Def{
-		Key: DirKey, Module: "contacts", Type: settings.String, Class: settings.Advanced,
-		Scopes: []settings.Scope{settings.Instance},
-	})
+	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
+		Key: DirKey, Module: "contacts", Type: settings.String}))
+	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
+		Key: MaxResultsKey, Module: "contacts", Type: settings.Int, Default: "10", Min: 1, Max: 100,
+		Check: settings.Between(1, 100)}))
+}
+
+type State uint8
+
+const (
+	Off State = iota
+	Unset
+	Ready
+)
+
+type Source struct {
+	State State
+	Dir   string
+}
+
+func Resolve(ctx context.Context, q db.Querier) (Source, error) {
+	on, err := settings.From(ctx).Resolve(ctx, q, module.FlagKey(module.Contacts))
+	if err != nil {
+		return Source{}, err
+	}
+	if on.Value != "true" {
+		return Source{State: Off}, nil
+	}
+	found, err := settings.From(ctx).Resolve(ctx, q, DirKey)
+	if err != nil {
+		return Source{}, err
+	}
+	if found.Value == "" {
+		return Source{State: Unset}, nil
+	}
+	return Source{State: Ready, Dir: filepath.Clean(found.Value)}, nil
 }
 
 func Dir(ctx context.Context, q db.Querier) (string, error) {
-	if on, err := module.FlagOn(ctx, q, module.Contacts); err != nil || !on {
+	src, err := Resolve(ctx, q)
+	if err != nil {
 		return "", err
 	}
-	found, err := settings.Default.Resolve(ctx, q, DirKey, 0)
-	if err != nil || found.Value == "" {
-		return "", err
+	return src.Dir, nil
+}
+
+func MaxResults(ctx context.Context, q db.Querier) (int64, error) {
+	found, err := settings.From(ctx).Resolve(ctx, q, MaxResultsKey)
+	if err != nil {
+		return 0, err
 	}
-	return filepath.Clean(found.Value), nil
+	return found.Int()
 }

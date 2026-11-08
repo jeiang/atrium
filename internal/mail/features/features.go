@@ -3,41 +3,33 @@ package features
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
+	"html"
+	"regexp"
 	"slices"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/pyhtml"
-	"github.com/jeiang/atrium/internal/rx"
 )
-
-var log = logx.Logger("atrium.features")
 
 const month = `(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?`
 
 var (
-	currencyRE = rx.MustCompile(
-		`(?:[$€£]\s?\d[\d,]*\.\d{2})|(?:\b(?:usd|ttd|tt\$|cad)\s?\d[\d,]*(?:\.\d{2})?)|(?:\b\d[\d,]*\.\d{2}\s?(?:usd|ttd|cad)\b)`,
-		rx.IgnoreCase,
-	)
-	otpRE         = rx.MustCompile(`(?<![\d.,$#-])\d{6}(?![\d.,-])`, 0)
-	vcodeRE       = rx.MustCompile(`verification code|security code|one[- ]time|passcode|your code|login code`, 0)
-	replyPrefixRE = rx.MustCompile(`^\s*(re|fwd?|fw|aw)\s*:\s*`, rx.IgnoreCase)
-	amountRE      = rx.MustCompile(`(?:[$€£]|usd|ttd|tt\$|us\$|cad)\s?\d[\d,]*(?:\.\d+)?|\d[\d,]*(?:\.\d+)?\s?(?:usd|ttd|cad)`, 0)
-	monthDayRE    = rx.MustCompile(`\b`+month+`\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{2,4})?`, 0)
-	dayMonthRE    = rx.MustCompile(`\b\d{1,2}(?:st|nd|rd|th)?\s+`+month+`(?:,?\s+\d{2,4})?`, 0)
-	numericDateRE = rx.MustCompile(`\b\d{1,4}[/-]\d{1,2}[/-]\d{1,4}\b`, 0)
-	numberWordRE  = rx.MustCompile(`\b\w*\d\w*\b`, 0)
-	hashNumberRE  = rx.MustCompile(`#\s*<n>`, 0)
-	spaceRE       = rx.MustCompile(`\s+`, 0)
-	scriptStyleRE = rx.MustCompile(`(?is)<(script|style).*?</\1>`, 0)
-	tagRE         = rx.MustCompile(`<[^>]+>`, 0)
-	digitsRE      = rx.MustCompile(`\d+`, 0)
-	msgidStripRE  = rx.MustCompile(`[<>\s]`, 0)
-	msgidRE       = rx.MustCompile(`<[^<>\s]+>`, 0)
-	dkimDomainRE  = rx.MustCompile(`\bd=([^;\s]+)`, 0)
+	otpRE         = regexp.MustCompile(`\d{6}`)
+	vcodeRE       = regexp.MustCompile(`verification code|security code|one[- ]time|passcode|your code|login code`)
+	replyPrefixRE = regexp.MustCompile(`(?i)^\s*(re|fwd?|fw|aw)\s*:\s*`)
+	amountRE      = regexp.MustCompile(`(?:[$€£]|usd|ttd|tt\$|us\$|cad)\s?\d[\d,]*(?:\.\d+)?|\d[\d,]*(?:\.\d+)?\s?(?:usd|ttd|cad)`)
+	monthDayRE    = regexp.MustCompile(`\b` + month + `\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{2,4})?`)
+	dayMonthRE    = regexp.MustCompile(`\b\d{1,2}(?:st|nd|rd|th)?\s+` + month + `(?:,?\s+\d{2,4})?`)
+	numericDateRE = regexp.MustCompile(`\b\d{1,4}[/-]\d{1,2}[/-]\d{1,4}\b`)
+	numberWordRE  = regexp.MustCompile(`\b\w*\d\w*\b`)
+	hashNumberRE  = regexp.MustCompile(`#\s*<n>`)
+	spaceRE       = regexp.MustCompile(`\s+`)
+	scriptStyleRE = regexp.MustCompile(`(?is)<script.*?</script>|<style.*?</style>`)
+	tagRE         = regexp.MustCompile(`<[^>]+>`)
+	digitsRE      = regexp.MustCompile(`\d+`)
+	msgidStripRE  = regexp.MustCompile(`[<>\s]`)
+	msgidRE       = regexp.MustCompile(`<[^<>\s]+>`)
+	dkimDomainRE  = regexp.MustCompile(`\bd=([^;\s]+)`)
 )
 
 var espExact = map[string]string{
@@ -90,24 +82,27 @@ type Features struct {
 	ESP         []string `json:"esp"`
 	AttTypes    []string `json:"att_types"`
 	AttNames    []string `json:"att_names"`
-	HasMoney    bool     `json:"has_money"`
-	KStatement  bool     `json:"k_statement"`
-	KReceipt    bool     `json:"k_receipt"`
 	KOrder      bool     `json:"k_order"`
 	KVCode      bool     `json:"k_vcode"`
 	KOTP6       bool     `json:"k_otp6"`
-	BodyLen     int      `json:"body_len"`
 	Body        string   `json:"body"`
 }
 
-func sub(re *rx.Regexp, repl, s string) string {
-	out, _ := re.Sub(repl, s, 0)
-	return out
-}
+func sub(re *regexp.Regexp, repl, s string) string { return re.ReplaceAllString(s, repl) }
 
-func found(re *rx.Regexp, s string) bool {
-	m, _ := re.Search(s)
-	return m != nil
+func found(re *regexp.Regexp, s string) bool { return re.MatchString(s) }
+
+func hasOTP(s string) bool {
+	for _, loc := range otpRE.FindAllStringIndex(s, -1) {
+		if loc[0] > 0 && strings.ContainsRune("0123456789.,$#-", rune(s[loc[0]-1])) {
+			continue
+		}
+		if loc[1] < len(s) && strings.ContainsRune("0123456789.,-", rune(s[loc[1]])) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func prefix(s string, n int) string {
@@ -121,8 +116,8 @@ func prefix(s string, n int) string {
 	return s
 }
 
-func SubjectTemplate(subject string) string {
-	s := mime.Strip(subject)
+func subjectTemplate(subject string) string {
+	s := strings.TrimSpace(subject)
 	for {
 		n := sub(replyPrefixRE, "", s)
 		if n == s {
@@ -130,36 +125,36 @@ func SubjectTemplate(subject string) string {
 		}
 		s = n
 	}
-	s = mime.Lower(s)
+	s = strings.ToLower(s)
 	s = sub(amountRE, "<amt>", s)
 	s = sub(monthDayRE, "<date>", s)
 	s = sub(dayMonthRE, "<date>", s)
 	s = sub(numericDateRE, "<date>", s)
 	s = sub(numberWordRE, "<n>", s)
 	s = sub(hashNumberRE, "<n>", s)
-	return mime.Strip(sub(spaceRE, " ", s))
+	return strings.TrimSpace(sub(spaceRE, " ", s))
 }
 
-func DomainOf(addr string) string {
+func domainOf(addr string) string {
 	i := strings.LastIndex(addr, "@")
 	if i < 0 {
 		return ""
 	}
-	return strings.Trim(mime.Lower(addr[i+1:]), "<>")
+	return strings.Trim(strings.ToLower(addr[i+1:]), "<>")
 }
 
 func StripMarkup(text string) string {
 	text = sub(scriptStyleRE, " ", text)
 	text = sub(tagRE, " ", text)
-	return mime.Strip(sub(spaceRE, " ", pyhtml.Unescape(text)))
+	return strings.TrimSpace(sub(spaceRE, " ", html.UnescapeString(text)))
 }
 
-func FilenamePattern(name string) string { return sub(digitsRE, "#", mime.Lower(name)) }
+func filenamePattern(name string) string { return sub(digitsRE, "#", strings.ToLower(name)) }
 
 func NormalizeMsgID(value string) string { return sub(msgidStripRE, "", value) }
 
 func MsgIDList(value string) []string {
-	ids, _ := msgidRE.FindAll(value)
+	ids := msgidRE.FindAllString(value, -1)
 	out := make([]string, len(ids))
 	for i, id := range ids {
 		out[i] = NormalizeMsgID(id)
@@ -177,38 +172,22 @@ func ContentDigest(header, text []byte) string {
 
 func EmailTS(value string) (float64, bool) { return mime.ParseDate(value) }
 
-func Header(msg *mime.Message, name string) string {
-	v, ok, err := msg.Get(name)
-	if !ok || err != nil {
-		return ""
-	}
-	return v
-}
-
-func addresses(msg *mime.Message, names ...string) ([]string, error) {
+func addresses(msg *mime.Message, names ...string) []string {
 	var out []string
 	for _, name := range names {
-		values, err := msg.GetAll(name)
-		if err != nil {
-			values = nil
-		}
-		addrs, err := mime.GetAddresses(values)
-		if err != nil {
-			return nil, err
-		}
-		for _, a := range addrs {
+		for _, a := range msg.Addresses(name) {
 			if a.Address != "" {
-				out = append(out, mime.Lower(a.Address))
+				out = append(out, strings.ToLower(a.Address))
 			}
 		}
 	}
-	return out, nil
+	return out
 }
 
 func espOf(msg *mime.Message) []string {
 	set := map[string]bool{}
 	for _, key := range msg.Keys() {
-		k := mime.Lower(key)
+		k := strings.ToLower(key)
 		if esp, ok := espExact[k]; ok {
 			set[esp] = true
 			continue
@@ -221,7 +200,7 @@ func espOf(msg *mime.Message) []string {
 				break
 			}
 		}
-		if !matched && strings.Contains(prefix(mime.Lower(Header(msg, key)), 200), "amazonses") {
+		if !matched && strings.Contains(prefix(strings.ToLower(msg.Header(key)), 200), "amazonses") {
 			set["ses"] = true
 		}
 	}
@@ -242,19 +221,15 @@ func bodyText(msg *mime.Message) string {
 		kind    string
 		convert func(string) string
 	}{
-		{"plain", func(t string) string { return mime.Strip(sub(spaceRE, " ", t)) }},
+		{"plain", func(t string) string { return strings.TrimSpace(sub(spaceRE, " ", t)) }},
 		{"html", StripMarkup},
 	}
 	for _, c := range converters {
-		part, err := msg.Body(c.kind)
-		if err != nil || part == nil {
+		part := msg.Body(c.kind)
+		if part == nil {
 			continue
 		}
-		content, err := part.Content()
-		if err != nil {
-			continue
-		}
-		if text := c.convert(content); text != "" {
+		if text := c.convert(part.Content()); text != "" {
 			return text
 		}
 	}
@@ -262,55 +237,35 @@ func bodyText(msg *mime.Message) string {
 }
 
 func mimeAttachments(msg *mime.Message) []Attachment {
-	parts, _ := msg.Attachments()
+	parts := msg.Attachments()
 	out := make([]Attachment, 0, len(parts))
 	for _, p := range parts {
-		name, _, err := p.Filename()
-		if err != nil {
-			break
-		}
-		out = append(out, Attachment{Type: p.ContentType(), Name: name})
+		out = append(out, Attachment{Type: p.ContentType(), Name: p.Filename()})
 	}
 	return out
 }
 
-func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, ftsBodyChars int) (f Features, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Error("features: recovered from a panic in extract", logx.Err, fmt.Sprint(r))
-			f, err = Features{}, fmt.Errorf("features: internal error: %v", r)
-		}
-	}()
-	msg, err := mime.Parse(append(slices.Clip(header), text...))
-	if err != nil {
-		return Features{}, err
+func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, ftsBodyChars int) Features {
+	msg := mime.Parse(append(slices.Clip(header), text...))
+	fromName, fromAddr := "", ""
+	if addrs := msg.Addresses("From"); len(addrs) > 0 {
+		fromName, fromAddr = addrs[0].Name, addrs[0].Address
 	}
-	from, err := mime.ParseAddr(Header(msg, "From"))
-	if err != nil {
-		return Features{}, err
-	}
-	addr := mime.Lower(from.Address)
-	dateTS, ok := EmailTS(Header(msg, "Date"))
+	addr := strings.ToLower(fromAddr)
+	dateTS, ok := EmailTS(msg.Header("Date"))
 	if !ok {
 		dateTS = fallbackTS
 	}
-	subject := Header(msg, "Subject")
+	subject := msg.Header("Subject")
 	body := bodyText(msg)
 	head := prefix(body, 4000)
-	low := mime.Lower(head)
-	replyTo, err := addresses(msg, "Reply-To")
-	if err != nil {
-		return Features{}, err
-	}
-	rpath, err := addresses(msg, "Return-Path")
-	if err != nil {
-		return Features{}, err
-	}
+	low := strings.ToLower(head)
+	replyTo := addresses(msg, "Reply-To")
+	rpath := addresses(msg, "Return-Path")
 	dkim := map[string]bool{}
-	values, _ := msg.GetAll("DKIM-Signature")
-	for _, v := range values {
-		if m, _ := dkimDomainRE.Search(v); m != nil {
-			dkim[mime.Lower(m.Group(1))] = true
+	for _, v := range msg.Headers("DKIM-Signature") {
+		if loc := dkimDomainRE.FindStringSubmatchIndex(v); loc != nil {
+			dkim[strings.ToLower(v[loc[2]:loc[3]])] = true
 		}
 	}
 	if attachments == nil {
@@ -320,7 +275,7 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, 
 	for _, a := range attachments {
 		types[a.Type] = true
 		if a.Name != "" {
-			names[FilenamePattern(a.Name)] = true
+			names[filenamePattern(a.Name)] = true
 		}
 	}
 	attNames := sortedSet(names)
@@ -328,46 +283,38 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, 
 		attNames = attNames[:3]
 	}
 	to := map[string]bool{}
-	tos, err := addresses(msg, "To", "Delivered-To", "X-Original-To", "Cc")
-	if err != nil {
-		return Features{}, err
-	}
-	for _, a := range tos {
+	for _, a := range addresses(msg, "To", "Delivered-To", "X-Original-To", "Cc") {
 		to[a] = true
 	}
-	msgid := NormalizeMsgID(Header(msg, "Message-ID"))
-	f = Features{
+	msgid := NormalizeMsgID(msg.Header("Message-ID"))
+	f := Features{
 		MsgID:       msgid,
-		MsgIDDomain: DomainOf(msgid),
-		InReplyTo:   strings.Join(MsgIDList(Header(msg, "In-Reply-To")), " "),
-		Refs:        strings.Join(MsgIDList(Header(msg, "References")), " "),
+		MsgIDDomain: domainOf(msgid),
+		InReplyTo:   strings.Join(MsgIDList(msg.Header("In-Reply-To")), " "),
+		Refs:        strings.Join(MsgIDList(msg.Header("References")), " "),
 		DateTS:      dateTS,
 		FromAddr:    addr,
-		FromDomain:  DomainOf(addr),
-		FromName:    from.Name,
+		FromDomain:  domainOf(addr),
+		FromName:    fromName,
 		ToAddrs:     sortedSet(to),
-		ListID:      mime.Lower(mime.Strip(Header(msg, "List-Id"))),
-		Precedence:  mime.Lower(mime.Strip(Header(msg, "Precedence"))),
+		ListID:      strings.ToLower(strings.TrimSpace(msg.Header("List-Id"))),
+		Precedence:  strings.ToLower(strings.TrimSpace(msg.Header("Precedence"))),
 		Subject:     subject,
-		SubjectTmpl: SubjectTemplate(subject),
+		SubjectTmpl: subjectTemplate(subject),
 		DKIMD:       sortedSet(dkim),
 		ESP:         espOf(msg),
 		AttTypes:    sortedSet(types),
 		AttNames:    attNames,
-		HasMoney:    found(currencyRE, head),
-		KStatement:  strings.Contains(low, "statement"),
-		KReceipt:    strings.Contains(low, "receipt"),
 		KOrder:      strings.Contains(low, "order"),
 		KVCode:      found(vcodeRE, low),
-		KOTP6:       found(otpRE, prefix(body, 600)),
-		BodyLen:     len([]rune(body)),
+		KOTP6:       hasOTP(prefix(body, 600)),
 		Body:        prefix(body, ftsBodyChars),
 	}
 	if len(replyTo) > 0 {
 		f.ReplyTo = replyTo[0]
 	}
 	if len(rpath) > 0 {
-		f.RPathDomain = DomainOf(rpath[0])
+		f.RPathDomain = domainOf(rpath[0])
 	}
-	return f, nil
+	return f
 }

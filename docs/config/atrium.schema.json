@@ -62,17 +62,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "agent_commit_savings": {
-          "default": 20000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_commit_savings_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "agent_compact_share": {
           "default": 0.875,
           "type": [
@@ -114,17 +103,6 @@
           ]
         },
         "agent_context_summary_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_dashboard_items": {
-          "default": 60,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_dashboard_items_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -306,17 +284,6 @@
           ]
         },
         "agent_mail_body_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_mail_max_contacts": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_mail_max_contacts_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -589,6 +556,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_schedule_max_active_jobs": {
+          "default": 20,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_schedule_max_active_jobs_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_schedule_media_channels": {
           "default": "*/30 * * * *",
           "type": "string"
@@ -613,6 +591,14 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_schedule_memory_work": {
+          "default": "*/2 * * * *",
+          "type": "string"
+        },
+        "agent_schedule_memory_work_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_schedule_min_interval_seconds": {
           "default": 3600,
           "type": [
@@ -629,6 +615,14 @@
           "type": "string"
         },
         "agent_schedule_nightly_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_schedule_task_reminders": {
+          "default": "*/5 * * * *",
+          "type": "string"
+        },
+        "agent_schedule_task_reminders_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -1112,6 +1106,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "nightly_stale_months": {
+          "default": 6,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "nightly_stale_months_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "prompt_subagent": {
           "type": "string"
         },
@@ -1130,6 +1135,17 @@
           "type": "string"
         },
         "prompt_system_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "thread_cost_cap_usd": {
+          "default": 10,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "thread_cost_cap_usd_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -1318,10 +1334,18 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "google_calendar_refresh_token_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "google_client_id": {
           "type": "string"
         },
         "google_client_id_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "google_oauth_client_secret_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -1387,6 +1411,17 @@
           "type": "string"
         },
         "contacts_dir_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "contacts_max_results": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "contacts_max_results_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -1763,6 +1798,10 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "google_gmail_refresh_token_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "knn_k": {
           "default": 7,
           "type": [
@@ -2105,17 +2144,6 @@
           ]
         },
         "mailops_batch_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "openloops_backfill_limit": {
-          "default": 2000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_backfill_limit_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -2766,6 +2794,14 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "media_tmdb_images_url": {
+          "default": "https://image.tmdb.org/t/p/w342",
+          "type": "string"
+        },
+        "media_tmdb_images_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "media_tmdb_search_limit": {
           "default": 8,
           "type": [
@@ -2789,6 +2825,14 @@
           "type": "string"
         },
         "media_tmdb_token_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_tmdb_url": {
+          "default": "https://api.themoviedb.org/3",
+          "type": "string"
+        },
+        "media_tmdb_url_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -2843,6 +2887,90 @@
           "type": "string"
         },
         "tmdb_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "memory": {
+      "additionalProperties": false,
+      "properties": {
+        "backfill_done": {
+          "type": "string"
+        },
+        "backfill_done_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "concurrency": {
+          "default": 4,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "concurrency_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "effort": {
+          "default": "low",
+          "type": "string"
+        },
+        "effort_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "model": {
+          "default": "claude-haiku-5-5",
+          "type": "string"
+        },
+        "model_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "node_bytes": {
+          "default": 512,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "node_bytes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tail_messages": {
+          "default": 6,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "tail_messages_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "view_high": {
+          "default": 128000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "view_high_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "view_low": {
+          "default": 64000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "view_low_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -3338,6 +3466,23 @@
           "type": "string"
         },
         "snooze_choices_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "web_search": {
+      "additionalProperties": false,
+      "properties": {
+        "dynamic_filtering": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "dynamic_filtering_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }

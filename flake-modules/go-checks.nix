@@ -8,33 +8,17 @@
     sqlcipherLib = pkgs.callPackage ../nix/sqlcipher.nix {};
     cgoEnv = {
       CGO_ENABLED = "1";
-      CGO_CFLAGS = "-I${sqlcipherLib}/include";
+      CGO_CFLAGS = "${lib.optionalString pkgs.stdenv.hostPlatform.isAarch64 "-flax-vector-conversions "}-I${sqlcipherLib}/include";
       CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
     };
-    root = ../.;
-    src = lib.fileset.toSource {
-      inherit root;
-      fileset = lib.fileset.unions [
-        (root + "/go.mod")
-        (lib.fileset.maybeMissing (root + "/go.sum"))
-        (root + "/cmd")
-        (root + "/internal")
-        (root + "/sdk")
-        (root + "/tools/settingsgen")
-        (root + "/docs/config")
-        (root + "/nix/monitoring")
-        (lib.fileset.maybeMissing (root + "/third_party"))
-        (lib.fileset.maybeMissing (root + "/testdata"))
-        (root + "/LICENSE")
-        (root + "/.golangci.yml")
-      ];
-    };
+    goSrc = import ../nix/go-src.nix {inherit lib;};
+    inherit (goSrc) src;
     stageAssets = "cp -r --no-preserve=mode ${self'.packages.atrium-static} internal/web/static";
     base = pkgs.buildGo126Module.override {inherit go;} {
       pname = "atrium-go";
       version = "0";
       inherit src;
-      vendorHash = "sha256-6lVfSTy4LhejmYJ5Qh66nRgG82tWd880D32l0XmbkU8=";
+      inherit (goSrc) vendorHash;
       proxyVendor = true;
       env = cgoEnv;
       doCheck = false;
@@ -60,18 +44,21 @@
           runHook postInstall
         '';
       });
-    notices = pkgs.writeText "third-party-notices.tmpl" ''
-      {{range .}}================================================================
-      {{.Name}} {{.Version}} ({{.LicenseName}})
-      ================================================================
-
-      {{.LicenseText}}
-      {{end}}'';
     eachDriver = cmd: ''
       for tags in libsqlite3,sqlite_fts5 modernc; do
         echo "tags: $tags"
         ${cmd}
       done
+    '';
+    testTags = tags: ''
+      log=$TMPDIR/go-test.log
+      if ! go test -race -timeout 30m -tags ${tags} ./... >"$log" 2>&1; then
+        cat "$log"
+        echo "=== go-test failure summary ==="
+        grep -E -- '^(--- FAIL|FAIL[[:space:]]|panic:)|DATA RACE|^[[:space:]]+[A-Za-z0-9_]+_test\.go:[0-9]+:' "$log" | sort -u
+        awk 'race && /^==================$/ { exit } race && (/^[A-Z]/ || /jeiang\/atrium/) { sub(/ \+0x[0-9a-f]+$/, ""); print } /WARNING: DATA RACE/ { race = 1 }' "$log" | head -n 22
+        exit 1
+      fi
     '';
   in {
     checks = {
@@ -96,31 +83,16 @@
         diff -r docs/config $TMPDIR/config
       '';
 
-      go-test = goCheck "test" [] ''
-        log=$TMPDIR/go-test.log
-        : >"$log"
-        status=0
-        for tags in libsqlite3,sqlite_fts5 modernc; do
-          echo "tags: $tags"
-          if ! go test -race -timeout 30m -tags "$tags" ./... 2>&1 | tee -a "$log"; then
-            status=1
-          fi
-        done
-        if [ "$status" -ne 0 ]; then
-          echo "=== go-test failure summary ==="
-          grep -E -- '^(--- FAIL|FAIL[[:space:]]|panic:)|DATA RACE|^[[:space:]]+[A-Za-z0-9_]+_test\.go:[0-9]+:' "$log" | sort -u
-          awk 'race && /^==================$/ { exit } race && (/^[A-Z]/ || /jeiang\/atrium/) { sub(/ \+0x[0-9a-f]+$/, ""); print } /WARNING: DATA RACE/ { race = 1 }' "$log" | head -n 22
-          exit 1
-        fi
-      '';
+      go-test = goCheck "test" [] (testTags "libsqlite3,sqlite_fts5");
 
-      go-licenses = goCheck "licenses" [pkgs.go-licenses] ''
-        ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" go-licenses check ./... --disallowed_types=forbidden,unknown''}
+      go-test-modernc = goCheck "test-modernc" [] (testTags "modernc");
+
+      go-licenses = goCheck "licenses" [pkgs.go-licenses pkgs.diffutils] ''
+        ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" ${goSrc.licenseCheck}''}
         mkdir -p $out
-        GOFLAGS="$GOFLAGS -tags=libsqlite3,sqlite_fts5" go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --ignore github.com/jeiang/atrium/sdk --template ${notices} >$out/THIRD_PARTY_NOTICES
+        GOFLAGS="$GOFLAGS -tags=libsqlite3,sqlite_fts5" ${goSrc.licenseReport "$out/THIRD_PARTY_NOTICES"}
         ${sqlcipherLib.appendNotices "$out/THIRD_PARTY_NOTICES"}
-        cp $out/THIRD_PARTY_NOTICES internal/about/THIRD_PARTY_NOTICES
-        test -s internal/about/THIRD_PARTY_NOTICES
+        diff -u internal/about/THIRD_PARTY_NOTICES $out/THIRD_PARTY_NOTICES
       '';
 
       govulncheck = let

@@ -15,7 +15,7 @@ type Module struct {
 	Now func() float64
 }
 
-func (m Module) Register(_ module.Context) module.Registration {
+func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name: module.Media,
 		Requires: []module.Requirement{
@@ -26,8 +26,13 @@ func (m Module) Register(_ module.Context) module.Registration {
 			Module:    pages.Module(pages.Options{Now: m.Now}),
 			Templates: pages.Templates(),
 			Public:    pages.PublicCheck,
+			Nav: []web.NavItem{
+				{Group: "Media", Label: "Downloads", URL: "/media/downloads", Icon: "download", Page: "media_downloads", Order: 50},
+				{Group: "Media", Label: "Channels", URL: "/media/channels", Icon: "tv", Page: "media_channels", Order: 50},
+				{Group: "Media", Label: "Library", URL: "/media/library", Icon: "film", Page: "media_library", Order: 50},
+			},
 		}},
-		Commands: []*cli.Command{mediacmd.Command(m.Now)},
+		Commands: []*cli.Command{mediacmd.Command(mc.Env, m.Now)},
 		Tools: func(r *registry.Registry) error {
 			return r.Add(mediatools.Tools()...)
 		},

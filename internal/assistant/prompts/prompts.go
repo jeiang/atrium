@@ -2,10 +2,11 @@ package prompts
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -20,7 +21,6 @@ Limits: you never send email; you can only prepare drafts (draft_email_create/up
 
 Research: delegate broad lookups with research (the available subagent roles and what each covers are in the tool's description); each returns a short digest and runs in its own thread. load_skill reads a saved operator skill by name when one fits; a message may also carry expanded <skill> blocks the operator asked for.
 
-Context: long threads are managed for you. Use context_status, context_pin, context_fold and context_drop only when asked or when the thread is near its limit; fetch elided tool output with recall.
 
 Unattended runs: scheduled (cron) runs can read, propose (propose, event_propose) and notify only. The nightly run may also write Notion and profile entries, which the operator can undo; it never sends, drafts, edits the calendar, searches the web or delegates.
 
@@ -66,37 +66,40 @@ var Editables = []Editable{
 
 func init() {
 	for _, e := range Editables {
-		settings.MustRegister(settings.Def{
-			Key: e.Key, Module: "assistant", Type: settings.String, Class: settings.UI,
-			Scopes: []settings.Scope{settings.Instance}, Check: check,
-		})
+		settings.MustRegister(settings.Value(settings.UI, settings.Def{
+			Key: e.Key, Module: "assistant", Type: settings.String, Check: check}))
 	}
 }
 
 func check(value string) error {
-	if py.Strip(value) == "" {
+	if strings.TrimSpace(value) == "" {
 		return settings.Invalid("must not be blank")
 	}
 	if utf8.RuneCountInString(value) > MaxChars {
-		return settings.Invalid("must be at most 50000 characters")
+		return settings.Invalid(fmt.Sprintf("must be at most %d characters", MaxChars))
 	}
 	return nil
 }
 
-func Text(ctx context.Context, q db.Querier, key string) (string, error) {
-	found, err := settings.Default.Resolve(ctx, q, key, 0)
+func Effective(ctx context.Context, q db.Querier, key string) (text string, custom, pinned bool, err error) {
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	if err != nil {
-		return "", err
+		return "", false, false, err
 	}
 	if found.Value != "" {
-		return found.Value, nil
+		return found.Value, true, found.Pinned(), nil
 	}
 	for _, e := range Editables {
 		if e.Key == key {
-			return e.Default, nil
+			return e.Default, false, false, nil
 		}
 	}
-	return "", settings.UnknownKey(key)
+	return "", false, false, settings.UnknownKey(key)
+}
+
+func Text(ctx context.Context, q db.Querier, key string) (string, error) {
+	text, _, _, err := Effective(ctx, q, key)
+	return text, err
 }
 
 func WithPreamble(body string) string { return Preamble + "\n\n" + body }

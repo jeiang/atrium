@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const description = "Send the operator a short plain-text notification (phone push plus the Notifications page). " +
@@ -24,11 +23,13 @@ func Tools() []tool.Tool {
 		InputSchema: inputSchema,
 		Handler:     handle,
 		Effect:      tool.Notify,
+		Annotated:   true,
+		Flags:       tool.Flags{ExternalEffect: true},
 		Contexts:    tool.DefaultKinds,
 	}}
 }
 
-func handle(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	title, _, err := tool.TextArg(args, "title", true)
 	if err != nil {
 		return nil, err
@@ -70,5 +71,5 @@ func handle(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if sent.Error != "" {
 		note = sent.Error
 	}
-	return py.Dict{{Key: "recorded", Value: true}, {Key: "delivered", Value: sent.Delivered}, {Key: "note", Value: note}}, nil
+	return map[string]any{"recorded": true, "delivered": sent.Delivered, "note": note}, nil
 }

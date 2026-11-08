@@ -4,19 +4,18 @@ CREATE TABLE IF NOT EXISTS jobs (
     prompt TEXT NOT NULL,
     schedule TEXT NOT NULL,
     tz TEXT NOT NULL,
-    effort TEXT NOT NULL DEFAULT 'high',
     kind TEXT NOT NULL DEFAULT 'cron',
-    enabled INTEGER NOT NULL DEFAULT 1,
-    cancelled INTEGER NOT NULL DEFAULT 0,
+    state TEXT NOT NULL DEFAULT 'active',
     next_due REAL,
     lease_owner TEXT,
     lease_until REAL,
     created_by TEXT NOT NULL,
     created_in_thread INTEGER,
     created_at REAL NOT NULL,
-    last_run_id INTEGER
+    last_run_id INTEGER,
+    prompt_by TEXT
 );
-CREATE INDEX IF NOT EXISTS jobs_due ON jobs (enabled, cancelled, next_due);
+CREATE INDEX IF NOT EXISTS jobs_due ON jobs (state, next_due);
 CREATE TABLE IF NOT EXISTS job_runs (
     id INTEGER PRIMARY KEY,
     job_id INTEGER NOT NULL REFERENCES jobs(id),

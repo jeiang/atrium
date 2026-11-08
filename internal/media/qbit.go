@@ -16,8 +16,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
+	"regexp"
+
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 const (
@@ -46,7 +47,14 @@ var (
 		"missingFiles": "missing files", "unknown": "unknown",
 	}
 
-	btih = rx.MustCompile(`^urn:btih:([0-9a-fA-F]{40}|[A-Za-z2-7]{32})$`, 0)
+	btih = regexp.MustCompile(`^urn:btih:([0-9a-fA-F]{40}|[A-Za-z2-7]{32})$`)
+
+	activeStates = map[string]bool{
+		"downloading": true, "metaDL": true, "forcedMetaDL": true, "stalledDL": true,
+		"checkingDL": true, "forcedDL": true, "queuedDL": true, "allocating": true,
+		"moving": true, "checkingResumeData": true, "uploading": true, "forcedUP": true,
+		"checkingUP": true,
+	}
 )
 
 type QbitError string
@@ -74,9 +82,11 @@ type TorrentFile struct {
 	Progress float64 `json:"progress"`
 }
 
+func (t Torrent) Active() bool { return activeStates[t.State] }
+
 func (t Torrent) HasTag(tag string) bool {
 	for part := range strings.SplitSeq(t.Tags, ",") {
-		if py.Strip(part) == tag {
+		if strings.TrimSpace(part) == tag {
 			return true
 		}
 	}
@@ -84,24 +94,20 @@ func (t Torrent) HasTag(tag string) bool {
 }
 
 func accepted(reply string) bool {
-	reply = py.Strip(reply)
+	reply = strings.TrimSpace(reply)
 	if reply == okReply {
 		return true
 	}
-	tally, err := py.JSONLoads([]byte(reply))
-	if err != nil {
+	var d map[string]any
+	if err := json.Unmarshal([]byte(reply), &d); err != nil || d == nil {
 		return false
 	}
-	d, ok := tally.(py.Dict)
-	if !ok {
-		return false
-	}
-	if failures, _ := d.Get("failure_count"); py.Truthy(failures) {
+	if failures := d["failure_count"]; truthy(failures) {
 		return false
 	}
 	total := 0.0
 	for _, key := range []string{"success_count", "pending_count"} {
-		v, _ := d.Get(key)
+		v := d[key]
 		n, ok := number(v)
 		if !ok {
 			return false
@@ -179,16 +185,16 @@ func MagnetHash(magnet string) (string, bool) {
 	if !strings.HasPrefix(magnet, "magnet:?") {
 		return "", false
 	}
-	parts, err := py.URLSplit(magnet)
+	parts, err := urlx.URLSplit(magnet)
 	if err != nil {
 		return "", false
 	}
 	for _, xt := range queryValues(parts.Query, "xt") {
-		m := matched(btih.Match(xt))
-		if m == nil {
+		loc := btih.FindStringSubmatchIndex(xt)
+		if loc == nil || loc[0] != 0 {
 			continue
 		}
-		value := m.Group(1)
+		value := xt[loc[2]:loc[3]]
 		if len(value) == 40 {
 			return strings.ToLower(value), true
 		}
@@ -213,7 +219,7 @@ func bdecode(data []byte, i, depth int) (value any, end int, ok bool) {
 		if stop < 0 {
 			return nil, 0, false
 		}
-		n, valid := py.ParseInt(string(data[i+1 : i+stop]))
+		n, valid := parseInt(string(data[i+1 : i+stop]))
 		if !valid {
 			return nil, 0, false
 		}
@@ -258,7 +264,7 @@ func bdecode(data []byte, i, depth int) (value any, end int, ok bool) {
 		if colon < 0 {
 			return nil, 0, false
 		}
-		length, valid := py.ParseInt(string(data[i : i+colon]))
+		length, valid := parseInt(string(data[i : i+colon]))
 		if !valid || length < 0 {
 			return nil, 0, false
 		}
@@ -292,11 +298,10 @@ func TorrentHash(data []byte) (string, error) {
 type Qbit struct {
 	base, key string
 	http      *http.Client
-	Tuning
 }
 
-func NewQbit(base, key string, client *http.Client, t Tuning) *Qbit {
-	return &Qbit{base: strings.TrimRight(base, "/"), key: key, http: client, Tuning: t}
+func NewQbit(base, key string, client *http.Client) *Qbit {
+	return &Qbit{base: strings.TrimRight(base, "/"), key: key, http: client}
 }
 
 func (q *Qbit) do(ctx context.Context, method, path string, params []param, body io.Reader, contentType string) ([]byte, error) {
@@ -306,7 +311,7 @@ func (q *Qbit) do(ctx context.Context, method, path string, params []param, body
 	}
 	req, err := http.NewRequest(method, target, body)
 	if err != nil {
-		return nil, QbitError("qBittorrent unreachable: InvalidURL")
+		return nil, QbitError("qBittorrent unreachable: invalid URL")
 	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
@@ -329,16 +334,13 @@ func (q *Qbit) do(ctx context.Context, method, path string, params []param, body
 }
 
 func (q *Qbit) post(ctx context.Context, path string, form []param) error {
-	body, err := q.do(ctx, http.MethodPost, path, nil, strings.NewReader(encodeParams(form)), "application/x-www-form-urlencoded")
-	if err != nil {
-		return err
-	}
-	return checkAdd(path, body)
+	_, err := q.do(ctx, http.MethodPost, path, nil, strings.NewReader(encodeParams(form)), "application/x-www-form-urlencoded")
+	return err
 }
 
-func checkAdd(path string, body []byte) error {
-	if path == "torrents/add" && !accepted(string(body)) {
-		text := py.Strip(string(body))
+func checkAdd(body []byte) error {
+	if !accepted(string(body)) {
+		text := strings.TrimSpace(string(body))
 		if text == "" {
 			text = "no reply"
 		}
@@ -394,7 +396,11 @@ func (q *Qbit) AddMagnet(ctx context.Context, magnet, tags string) error {
 	if tags != "" {
 		form = append(form, param{"tags", tags})
 	}
-	return q.post(ctx, "torrents/add", form)
+	body, err := q.do(ctx, http.MethodPost, "torrents/add", nil, strings.NewReader(encodeParams(form)), "application/x-www-form-urlencoded")
+	if err != nil {
+		return err
+	}
+	return checkAdd(body)
 }
 
 func (q *Qbit) AddFile(ctx context.Context, data []byte, name, tags string) error {
@@ -422,7 +428,11 @@ func (q *Qbit) AddFile(ctx context.Context, data []byte, name, tags string) erro
 	if err != nil {
 		return err
 	}
-	return checkAdd("torrents/add", body)
+	return checkAdd(body)
+}
+
+func (q *Qbit) RemoveTags(ctx context.Context, hash, tags string) error {
+	return q.post(ctx, "torrents/removeTags", []param{{"hashes", hash}, {"tags", tags}})
 }
 
 func (q *Qbit) AddTags(ctx context.Context, hash, tags string) error {

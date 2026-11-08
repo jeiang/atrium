@@ -4,31 +4,32 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
+	"github.com/jeiang/atrium/internal/attention"
+	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
-	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/run"
-	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/web"
 )
 
 func init() {
 	for _, e := range []struct{ kind, label, url, key string }{
-		{mail.EndpointChat, "Mail chat endpoint", mail.KeyChatURL, mail.KeyChatKey},
-		{mail.EndpointEmbed, "Mail embed endpoint", mail.KeyEmbedURL, mail.KeyEmbedKey},
+		{endpoint.EndpointChat, "Mail chat endpoint", endpoint.KeyChatURL, endpoint.KeyChatKey},
+		{endpoint.EndpointEmbed, "Mail embed endpoint", endpoint.KeyEmbedURL, endpoint.KeyEmbedKey},
 	} {
 		integrations.Register(integrations.Integration{
-			Name: mail.Integration(e.kind), Label: e.label, Module: module.Mail, URLKey: e.url, SecretKey: e.key,
-			Help: "OpenAI-compatible base URL, for example http://127.0.0.1:8187/v1; the Bearer key is optional.",
+			Name: endpoint.Integration(e.kind), Label: e.label, Module: module.Mail, URLKey: e.url, SecretKey: e.key,
+			Help: "OpenAI-compatible base URL ending in /v1; the Bearer key is optional.",
 			Test: probeTest(e.kind),
 		})
 	}
@@ -36,7 +37,7 @@ func init() {
 
 func probeTest(kind string) func(context.Context, integrations.Conn) (string, error) {
 	return func(ctx context.Context, c integrations.Conn) (string, error) {
-		res, err := mail.ProbeCandidate(ctx, c.DB, kind, c.URL, c.Secret, c.HTTP, float64(time.Now().UnixNano())/1e9)
+		res, err := mail.ProbeCandidate(ctx, c.DB, kind, c.URL, c.Secret, c.HTTP, mail.WallClock())
 		if err != nil {
 			return "", err
 		}
@@ -55,47 +56,51 @@ func probeTest(kind string) func(context.Context, integrations.Conn) (string, er
 }
 
 type Module struct {
-	Clients run.Clients
+	Clients func(config.Config) mail.OpenFunc
 	Now     func() float64
 }
 
-func (m Module) Register(module.Context) module.Registration {
-	mailCmds := mailcmd.Options{Clients: m.Clients, Now: m.Now}
+func (m Module) Register(mc module.Context) module.Registration {
+	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now}
+	cmds := []*cli.Command{
+		run.SyncCommand(mc.Env, m.Clients),
+		run.WatchCommand(mc.Env, m.Clients),
+		mailCmds.RulesCommand(),
+		mailCmds.ShadowReportCommand(),
+		mailCmds.ReindexCommand(),
+		mailCmds.LiveCommand(),
+		mailCmds.EndpointsCommand(),
+	}
+	cmds = append(cmds, mailCmds.ScanCommands()...)
+	cmds = append(cmds, mailCmds.RefreshCommands()...)
 	return module.Registration{
-		Name: module.Mail,
-		Soft: []string{module.Contacts},
+		Name:      module.Mail,
+		Attention: []attention.Source{attentionsources.Drafts(), attentionsources.Loops(), attentionsources.Commitments(), attentionsources.Packages()},
 		Requires: []module.Requirement{
-			module.Setting(mail.KeyChatURL),
-			module.Setting(mail.KeyEmbedURL),
+			module.Setting(endpoint.KeyChatURL),
+			module.Setting(endpoint.KeyEmbedURL),
 			{Name: "endpoint probes", Check: func(ctx context.Context, p module.Probe) (string, error) {
 				return mail.ProbeFailures(ctx, p.Q)
 			}},
 		},
 		Pages: []web.Page{
-			{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
+			{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
+				{Group: "Mail", Label: "Decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 30},
+				{Group: "Mail", Label: "Rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},
+				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Order: 50},
+			}},
 			{Module: accountpages.Module, Templates: accountpages.Templates()},
 		},
-		Commands: []*cli.Command{
-			run.SyncCommand(m.Clients),
-			run.WatchCommand(m.Clients),
-			mailCmds.RulesCommand(),
-			mailCmds.ShadowReportCommand(),
-			mailCmds.ReindexCommand(),
-			mailCmds.RebalanceCommand(),
-			mailCmds.DeletionsCommand(),
-			mailCmds.GmailLabelsCommand(),
-			mailCmds.LiveCommand(),
-			mailCmds.ProposalsCommand(),
-			openloops.Command(m.Now),
-			watches.Command(m.Now),
-			mailCmds.EndpointsCommand(),
-		},
+		Commands: cmds,
 		Leaves: map[string]module.Leaf{
 			"live pause":      {Always: true},
 			"live resume":     {Always: true},
 			"live status":     {Always: true},
 			"endpoints probe": {Always: true},
 		},
-		Tools: func(r *registry.Registry) error { return r.Add(mailtools.Tools()...) },
+		Tools: func(r *registry.Registry) error {
+			mailtools.RegisterProposalKinds()
+			return r.Add(mailtools.Tools()...)
+		},
 	}
 }

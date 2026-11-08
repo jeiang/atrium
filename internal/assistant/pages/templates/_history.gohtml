@@ -1,0 +1,11 @@
+<ol class="flex flex-col gap-2 text-sm">
+  {{range .Data.Lines}}
+  <li class="flex flex-col gap-1 border-t pt-2 first:border-0 first:pt-0">
+    <div class="flex items-start gap-2">
+      <button type="button" class="text-left underline underline-offset-4" hx-get="/chat/{{.ThreadID}}/history/{{.From}}/{{.N}}" hx-target="next div" hx-swap="innerHTML">{{.Text}}</button>
+      <span class="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{.From}}..{{.To}}</span>
+    </div>
+    <div></div>
+  </li>
+  {{end}}
+</ol>

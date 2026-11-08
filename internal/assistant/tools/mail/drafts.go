@@ -3,12 +3,11 @@ package mailtools
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"math/big"
+	"fmt"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const notSent = "Draft saved only. Nothing is sent: the operator reviews and sends it from the Drafts page."
@@ -34,8 +33,9 @@ func draftTools() []tool.Tool {
 				"headers are set; recipients that were not on the original message are flagged to the operator.",
 			InputSchema: draftCreateSchema,
 			Handler:     draftEmailCreate,
-			Effect:      tool.Write,
-			Contexts:    tool.Kinds{tool.Chat},
+			Effect:      tool.WriteUndo, Undo: "draft_delete",
+			Annotated: true,
+			Contexts:  tool.Kinds{tool.Chat},
 		},
 		{
 			Name: "draft_email_update",
@@ -43,8 +43,9 @@ func draftTools() []tool.Tool {
 				"discarded drafts cannot be edited. Never sends.",
 			InputSchema: draftUpdateSchema,
 			Handler:     draftEmailUpdate,
-			Effect:      tool.Write,
-			Contexts:    tool.Kinds{tool.Chat},
+			Effect:      tool.WriteUndo, Undo: "draft_restore",
+			Annotated: true,
+			Contexts:  tool.Kinds{tool.Chat},
 		},
 	}
 }
@@ -54,23 +55,22 @@ func store(tc *tool.Context) *drafts.Store {
 }
 
 func draftFailed(err error) error {
-	var de drafts.Error
-	if errors.As(err, &de) {
-		return tool.Error(string(de))
-	}
-	return raised(err)
+	return tool.Domain[drafts.Error, tool.Error](err)
 }
 
-func replyID(args py.Dict) (any, error) {
-	value, _ := args.Get("in_reply_to_message_id")
-	switch value.(type) {
-	case nil, int64, *big.Int:
-		return value, nil
+func replyID(args tool.Args) (any, error) {
+	value, ok := args.Get("in_reply_to_message_id")
+	if !ok || value == nil {
+		return nil, nil
 	}
-	return nil, tool.Error("in_reply_to_message_id must be an integer message_id from mail_search")
+	id, _, err := tool.IntArg(args, "in_reply_to_message_id", true)
+	if err != nil {
+		return nil, tool.Error("in_reply_to_message_id must be an integer message_id from mail_search")
+	}
+	return id, nil
 }
 
-func draftEmailCreate(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func draftEmailCreate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	account, _, err := tool.TextArg(args, "account", true)
 	if err != nil {
 		return nil, err
@@ -90,10 +90,17 @@ func draftEmailCreate(ctx context.Context, tc *tool.Context, args py.Dict) (any,
 	if err != nil {
 		return nil, draftFailed(err)
 	}
-	return py.Dict{{Key: "draft_id", Value: id}, {Key: "status", Value: drafts.Draft}, {Key: "note", Value: notSent}}, nil
+	if _, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
+		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "draft_email_create", Target: fmt.Sprintf("draft:%d", id),
+		After: map[string]any{"draft_id": id, "status": drafts.Draft},
+		Undo:  draftDeleteUndo{Op: "draft_delete", ID: id},
+	}); err != nil {
+		return nil, err
+	}
+	return map[string]any{"draft_id": id, "status": drafts.Draft, "note": notSent}, nil
 }
 
-func draftEmailUpdate(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func draftEmailUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, _ := args.Get("draft_id")
 	id, err := intArg(raw, "draft_id must be an integer")
 	if err != nil {
@@ -101,13 +108,41 @@ func draftEmailUpdate(ctx context.Context, tc *tool.Context, args py.Dict) (any,
 	}
 	changes := map[string]any{}
 	for _, key := range [...]string{"account", "to", "cc", "subject", "body", "in_reply_to_message_id"} {
-		if v, ok := args.Get(key); ok {
-			changes[key] = v
+		v, ok := args.Get(key)
+		if !ok {
+			continue
 		}
+		if key == "in_reply_to_message_id" && v != nil {
+			id, _, err := tool.IntArg(args, key, true)
+			if err != nil {
+				return nil, tool.Error("in_reply_to_message_id must be an integer message_id from mail_search")
+			}
+			v = id
+		}
+		changes[key] = v
 	}
-	row, err := store(tc).Update(ctx, id, changes)
+	store := store(tc)
+	previous, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, draftFailed(err)
 	}
-	return py.Dict{{Key: "draft_id", Value: row.ID}, {Key: "status", Value: row.Status}, {Key: "note", Value: notSent}}, nil
+	row, err := store.Update(ctx, id, changes)
+	if err != nil {
+		return nil, draftFailed(err)
+	}
+	if previous != nil {
+		if _, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
+			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "draft_email_update", Target: fmt.Sprintf("draft:%d", row.ID),
+			Before: map[string]any{"subject": previous.Subject, "body": previous.Body},
+			After:  map[string]any{"subject": row.Subject, "body": row.Body},
+			Undo: draftRestoreUndo{
+				Op: "draft_restore", ID: row.ID, Account: previous.Account, To: previous.ToAddrs, Cc: previous.CcAddrs,
+				Subject: previous.Subject, Body: previous.Body, InReplyToMessageID: previous.InReplyToMessageID,
+				InReplyTo: previous.InReplyTo, Refs: previous.Refs,
+			},
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return map[string]any{"draft_id": row.ID, "status": row.Status, "note": notSent}, nil
 }

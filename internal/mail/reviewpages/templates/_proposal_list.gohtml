@@ -1,6 +1,6 @@
 {{define "proposal_list"}}{{if .partial}}<title>Proposals · atrium</title>{{end}}
 <p class="text-xs text-muted-foreground tabular-nums" role="status">
-  {{- len .proposals}} {{if ne .status "all"}}{{lower (lbl "status" .status "")}} {{end}}{{if eq (len .proposals) 1}}proposal{{else}}proposals{{end}}{{with .kind}} · {{lbl "kind" .}}{{end -}}
+  {{- len .proposals}} {{if ne .status "all"}}{{lower (lbl "status" .status "")}} {{end}}{{if eq (len .proposals) 1}}proposal{{else}}proposals{{end}}{{with .kind}} · {{$.kind_label}}{{end -}}
 </p>
 {{if .proposals}}
 <ul class="flex flex-col gap-3" role="list">
@@ -12,4 +12,4 @@
 {{template "empty_state" (dict "icon_name" "list-checks" "title" "No proposals match" "body" "Choose another status or kind.")}}
 {{end}}{{end}}
 
-{{template "proposal_list" (dict "proposals" .Data.proposals "status" .Data.status "kind" .Data.kind "partial" .Data.partial "mode" .Mode "toast" .Toast)}}
+{{template "proposal_list" (dict "proposals" .Data.Proposals "status" .Data.Status "kind" .Data.Kind "kind_label" .Data.KindLabel "partial" .Data.Partial "mode" .Mode "toast" .Toast)}}

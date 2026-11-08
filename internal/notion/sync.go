@@ -3,6 +3,7 @@ package notion
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -14,9 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/notionid"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var log = logx.Logger("atrium.notion.sync")
@@ -30,14 +29,11 @@ const (
 var noMarkdownStatuses = [...]int{400, 403, 404}
 
 type Stats struct {
-	Sources   int
-	Pages     int
 	New       int
 	Updated   int
 	Unchanged int
 	Trashed   int
 	Failed    int
-	Embedded  int
 	Seconds   float64
 }
 
@@ -49,62 +45,40 @@ type Counts struct {
 	Sources  int64 `json:"sources"`
 }
 
-func PageTitle(page py.Dict) string {
-	for _, p := range asDict(field(page, "properties")) {
-		prop := asDict(p.Value)
-		if text(prop, "type") == "title" {
-			return py.Strip(richText(list(prop, "title")))
-		}
+func (s Sensitivity) Of(properties map[string]Property) string {
+	if s.Property == "" {
+		return ""
 	}
-	return ""
-}
-
-func sourceTitle(source py.Dict) string { return py.Strip(richText(list(source, "title"))) }
-
-func (s Sensitivity) Of(properties py.Dict) string {
-	for _, p := range properties {
-		if py.Lower(py.Strip(p.Key)) != s.Property {
+	for name, prop := range properties {
+		if strings.ToLower(strings.TrimSpace(name)) != s.Property {
 			continue
 		}
-		prop := asDict(p.Value)
-		kind, _ := field(prop, "type").(string)
-		value := field(prop, kind)
-		switch kind {
-		case "select", "status":
-			return text(asDict(value), "name")
-		case "multi_select":
-			var names []string
-			items, _ := value.([]any)
-			for _, v := range items {
-				names = append(names, text(asDict(v), "name"))
-			}
-			return strings.Join(names, ",")
-		case "rich_text", "title":
-			items, _ := value.([]any)
-			return richText(items)
+		switch prop.Type {
+		case "select", "status", "multi_select", "rich_text", "title", "formula", "rollup":
+			return prop.Text()
 		}
+		return s.Private
 	}
-	return ""
+	return s.Private
 }
 
 func (s Sensitivity) IsPrivate(value string) bool {
 	for _, v := range strings.Split(value, ",") {
-		if py.Lower(py.Strip(v)) == s.Private {
+		if strings.ToLower(strings.TrimSpace(v)) == s.Private {
 			return true
 		}
 	}
 	return false
 }
 
-func relationTargets(properties py.Dict) []string {
+func relationTargets(properties map[string]Property) []string {
 	var out []string
-	for _, p := range properties {
-		prop := asDict(p.Value)
-		if text(prop, "type") != "relation" {
+	for _, prop := range properties {
+		if prop.Type != "relation" {
 			continue
 		}
-		for _, item := range list(prop, "relation") {
-			id := notionid.Normalize(text(asDict(item), "id"))
+		for _, item := range prop.Relation {
+			id := notionid.Normalize(item.ID)
 			if id != "" && !slices.Contains(out, id) {
 				out = append(out, id)
 			}
@@ -113,7 +87,7 @@ func relationTargets(properties py.Dict) []string {
 	return out
 }
 
-func linkTargets(properties py.Dict, markdown string) []string {
+func linkTargets(properties map[string]Property, markdown string) []string {
 	out := relationTargets(properties)
 	for _, id := range notionid.IDsInText(markdown) {
 		if !slices.Contains(out, id) {
@@ -123,20 +97,12 @@ func linkTargets(properties py.Dict, markdown string) []string {
 	return out
 }
 
-func parentRef(parent py.Dict) (kind, id string) {
-	kind = text(parent, "type")
-	if kind == "workspace" {
-		return kind, ""
-	}
-	return kind, notionid.Normalize(text(parent, kind))
-}
-
 func editedTS(value string) float64 {
-	dt, ok := py.FromISOFormat(strings.ReplaceAll(value, "Z", "+00:00"))
-	if !ok {
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
 		return 0
 	}
-	return dt.Timestamp(time.Local)
+	return float64(t.UnixNano()) / 1e9
 }
 
 func b2i(b bool) int {
@@ -146,33 +112,25 @@ func b2i(b bool) int {
 	return 0
 }
 
-func upsertSource(ctx context.Context, q db.Querier, source py.Dict) error {
-	parent := asDict(field(source, "database_parent"))
-	if !py.Truthy(parent) {
-		parent = asDict(field(source, "parent"))
+func upsertSource(ctx context.Context, q db.Querier, source SearchResult) error {
+	parent := source.DatabaseParent
+	if parent.Type == "" {
+		parent = source.Parent
 	}
-	kind, parentID := parentRef(parent)
-	databaseID := notionid.Normalize(text(asDict(field(source, "parent")), "database_id"))
-	props := field(source, "properties")
-	if !py.Truthy(props) {
-		props = py.Dict{}
-	}
+	kind, parentID := parent.Ref()
+	databaseID := notionid.Normalize(source.Parent.DatabaseID)
 	_, err := q.ExecContext(ctx,
-		"INSERT INTO notion_sources (id, database_id, parent_type, parent_id, title, url, properties, "+
-			"last_edited_time, in_trash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "+
+		"INSERT INTO notion_sources (id, database_id, parent_type, parent_id, title) VALUES (?, ?, ?, ?, ?) "+
 			"ON CONFLICT(id) DO UPDATE SET database_id = excluded.database_id, parent_type = excluded.parent_type, "+
-			"parent_id = excluded.parent_id, title = excluded.title, url = excluded.url, "+
-			"properties = excluded.properties, last_edited_time = excluded.last_edited_time, "+
-			"in_trash = excluded.in_trash",
-		notionid.Normalize(text(source, "id")), databaseID, kind, parentID, sourceTitle(source), text(source, "url"),
-		py.JSONDumps(props), text(source, "last_edited_time"), b2i(py.Truthy(field(source, "in_trash"))))
+			"parent_id = excluded.parent_id, title = excluded.title",
+		notionid.Normalize(source.ID), databaseID, kind, parentID, source.TitleText())
 	return err
 }
 
 func FetchMarkdown(ctx context.Context, client *Client, pageID string) (string, error) {
 	reply, err := client.PageMarkdown(ctx, pageID)
 	if err == nil {
-		return text(reply, "markdown"), nil
+		return reply.Markdown, nil
 	}
 	var refused *Error
 	if !errors.As(err, &refused) || !slices.Contains(noMarkdownStatuses[:], refused.Status) {
@@ -187,7 +145,7 @@ func ftsWrite(ctx context.Context, q db.Querier, rid int64, title, path, markdow
 		return err
 	}
 	_, err := q.ExecContext(ctx, "INSERT INTO notion_fts (rowid, title, path, body) VALUES (?, ?, ?, ?)",
-		rid, title, path, py.Clip(markdown, config.FTSBodyChars))
+		rid, title, path, clip(markdown, config.FTSBodyChars))
 	return err
 }
 
@@ -198,10 +156,10 @@ func dropIndex(ctx context.Context, q db.Querier, rid int64) error {
 	return embed.DeleteNotion(ctx, q, rid)
 }
 
-func upsertPage(ctx context.Context, q db.Querier, client *Client, sensitivity Sensitivity, page py.Dict, stats *Stats, now float64) error {
-	pid := notionid.Normalize(text(page, "id"))
-	props := asDict(field(page, "properties"))
-	edited := text(page, "last_edited_time")
+func upsertPage(ctx context.Context, q db.Querier, client *Client, sensitivity Sensitivity, page RemotePage, stats *Stats, now float64) error {
+	pid := notionid.Normalize(page.ID)
+	props := page.Properties
+	edited := page.LastEditedTime
 	var rid, trashedBefore int64
 	var storedEdited, storedMarkdown string
 	found := true
@@ -212,13 +170,12 @@ func upsertPage(ctx context.Context, q db.Querier, client *Client, sensitivity S
 	} else if err != nil {
 		return err
 	}
-	parent := asDict(field(page, "parent"))
-	kind, parentID := parentRef(parent)
+	kind, parentID := page.Parent.Ref()
 	dataSource := ""
 	if kind == "data_source_id" {
-		dataSource = notionid.Normalize(text(parent, "data_source_id"))
+		dataSource = notionid.Normalize(page.Parent.DataSourceID)
 	}
-	trashed := int64(b2i(py.Truthy(field(page, "in_trash"))))
+	trashed := int64(b2i(page.InTrash))
 	if found && storedEdited == edited && trashedBefore == trashed {
 		_, err := q.ExecContext(ctx, "UPDATE notion_pages SET synced_at = ? WHERE rid = ?", now, rid)
 		stats.Unchanged++
@@ -236,29 +193,37 @@ func upsertPage(ctx context.Context, q db.Querier, client *Client, sensitivity S
 		}
 	}
 	sens := sensitivity.Of(props)
-	values := []py.Pair{
-		{Key: "parent_type", Value: kind},
-		{Key: "parent_id", Value: parentID},
-		{Key: "data_source_id", Value: dataSource},
-		{Key: "title", Value: PageTitle(page)},
-		{Key: "url", Value: text(page, "url")},
-		{Key: "properties", Value: py.JSONDumps(props)},
-		{Key: "markdown", Value: markdown},
-		{Key: "last_edited_time", Value: edited},
-		{Key: "edited_ts", Value: editedTS(edited)},
-		{Key: "in_trash", Value: trashed},
-		{Key: "sensitivity", Value: sens},
-		{Key: "private", Value: b2i(sensitivity.IsPrivate(sens))},
-		{Key: "links", Value: py.JSONDumps(linkTargets(props, markdown))},
-		{Key: "embedded", Value: 0},
-		{Key: "synced_at", Value: now},
+	propsJSON, err := json.Marshal(props)
+	if err != nil {
+		return err
+	}
+	linksJSON, err := json.Marshal(linkTargets(props, markdown))
+	if err != nil {
+		return err
+	}
+	values := []column{
+		{name: "parent_type", value: kind},
+		{name: "parent_id", value: parentID},
+		{name: "data_source_id", value: dataSource},
+		{name: "title", value: page.Title()},
+		{name: "url", value: page.URL},
+		{name: "properties", value: string(propsJSON)},
+		{name: "markdown", value: markdown},
+		{name: "last_edited_time", value: edited},
+		{name: "edited_ts", value: editedTS(edited)},
+		{name: "in_trash", value: trashed},
+		{name: "sensitivity", value: sens},
+		{name: "private", value: b2i(sensitivity.IsPrivate(sens))},
+		{name: "links", value: string(linksJSON)},
+		{name: "embedded", value: 0},
+		{name: "synced_at", value: now},
 	}
 	if !found {
 		columns, marks, args := []string{"id"}, []string{"?"}, []any{pid}
 		for _, v := range values {
-			columns = append(columns, v.Key)
+			columns = append(columns, v.name)
 			marks = append(marks, "?")
-			args = append(args, v.Value)
+			args = append(args, v.value)
 		}
 		if _, err := q.ExecContext(ctx, fmt.Sprintf("INSERT INTO notion_pages (%s) VALUES (%s)",
 			strings.Join(columns, ", "), strings.Join(marks, ", ")), args...); err != nil {
@@ -268,8 +233,8 @@ func upsertPage(ctx context.Context, q db.Querier, client *Client, sensitivity S
 	} else {
 		sets, args := make([]string, len(values)), make([]any, 0, len(values)+1)
 		for i, v := range values {
-			sets[i] = v.Key + " = ?"
-			args = append(args, v.Value)
+			sets[i] = v.name + " = ?"
+			args = append(args, v.value)
 		}
 		args = append(args, pid)
 		if _, err := q.ExecContext(ctx, "UPDATE notion_pages SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...); err != nil {
@@ -293,6 +258,11 @@ func upsertPage(ctx context.Context, q db.Querier, client *Client, sensitivity S
 		stats.Trashed++
 	}
 	return nil
+}
+
+type column struct {
+	name  string
+	value any
 }
 
 type pathNode struct {
@@ -435,31 +405,47 @@ func Sync(ctx context.Context, d *db.DB, client *Client, embedTexts embed.TextsF
 	started := time.Now()
 	stamp := now()
 	var stats Stats
-	err = client.Search(ctx, "data_source", false, func(source py.Dict) error {
-		if text(source, "object") != "data_source" {
+	seenSources := map[string]bool{}
+	err = client.Search(ctx, "data_source", func(source SearchResult) error {
+		if source.Object != "data_source" {
 			return nil
 		}
-		if err := upsertSource(ctx, d.Write, source); err != nil {
-			return err
-		}
-		stats.Sources++
-		return nil
+		seenSources[notionid.Normalize(source.ID)] = true
+		return upsertSource(ctx, d.Write, source)
 	})
 	if err != nil {
 		return stats, err
 	}
+	sourceRows, err := d.Write.QueryContext(ctx, "SELECT id FROM notion_sources")
+	if err != nil {
+		return stats, err
+	}
+	sources, err := db.Collect(sourceRows, func(r *sql.Rows) (string, error) {
+		var id string
+		return id, r.Scan(&id)
+	})
+	if err != nil {
+		return stats, err
+	}
+	for _, id := range sources {
+		if seenSources[id] {
+			continue
+		}
+		if _, err := d.Write.ExecContext(ctx, "DELETE FROM notion_sources WHERE id = ?", id); err != nil {
+			return stats, err
+		}
+	}
 	seen := map[string]bool{}
-	err = client.Search(ctx, "page", false, func(page py.Dict) error {
-		if text(page, "object") != "page" {
+	err = client.Search(ctx, "page", func(page SearchResult) error {
+		if page.Object != "page" {
 			return nil
 		}
-		stats.Pages++
-		seen[notionid.Normalize(text(page, "id"))] = true
-		err := upsertPage(ctx, d.Write, client, sensitivity, page, &stats, stamp)
+		seen[notionid.Normalize(page.ID)] = true
+		err := upsertPage(ctx, d.Write, client, sensitivity, page.RemotePage(), &stats, stamp)
 		var refused *Error
 		if errors.As(err, &refused) {
 			stats.Failed++
-			log.Warn(fmt.Sprintf("page %s: %s", text(page, "id"), err))
+			log.Warn(fmt.Sprintf("page %s: %s", page.ID, err))
 			return nil
 		}
 		return err
@@ -498,28 +484,21 @@ func Sync(ctx context.Context, d *db.DB, client *Client, embedTexts embed.TextsF
 	if err := resolvePaths(ctx, d.Write, sensitivity); err != nil {
 		return stats, err
 	}
-	if _, err := d.Write.ExecContext(ctx,
-		"INSERT INTO notion_state (key, value) VALUES ('last_sync_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-		py.FloatRepr(stamp)); err != nil {
-		return stats, err
-	}
-	embedURL, err := mail.EmbedURL(ctx, d.Read)
+	embedURL, err := embed.EmbedURL(ctx, d.Read)
 	if err != nil {
 		return stats, err
 	}
-	modelCtx, err := mail.WithModels(ctx, d.Read)
+	modelCtx, err := embed.WithModels(ctx, d.Read)
 	if err != nil {
 		return stats, err
 	}
-	embedded, err := embed.NotionPending(modelCtx, d, embedURL, embedTexts)
+	_, err = embed.NotionPending(modelCtx, d, embedURL, embedTexts)
 	if err != nil {
 		var unavailable *httpx.ServiceUnavailable
-		if !errors.As(err, &unavailable) && !errors.Is(err, httpx.ErrValue) && !errors.Is(err, httpx.ErrKey) {
+		if !errors.As(err, &unavailable) && !errors.Is(err, httpx.ErrPayload) && !errors.Is(err, httpx.ErrMissing) {
 			return stats, err
 		}
 		log.Warn("embedding unavailable: " + httpx.Message(err))
-	} else {
-		stats.Embedded = embedded
 	}
 	stats.Seconds = time.Since(started).Seconds()
 	return stats, nil
@@ -535,10 +514,4 @@ func Totals(ctx context.Context, q db.Querier) (Counts, error) {
 	}
 	err = q.QueryRowContext(ctx, "SELECT COUNT(*) FROM notion_sources").Scan(&c.Sources)
 	return c, err
-}
-
-func Pending(ctx context.Context, q db.Querier) (int64, error) {
-	var n int64
-	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM notion_pages WHERE embedded = 0 AND in_trash = 0").Scan(&n)
-	return n, err
 }

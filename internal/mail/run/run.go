@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/calendar/candidates"
@@ -11,17 +12,18 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/flags"
 	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/router"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/proposals/handlers"
 )
 
 var log = logx.Logger("atrium.run")
@@ -34,19 +36,20 @@ type UnknownAccount string
 
 func (e UnknownAccount) Error() string { return "unknown mail account " + string(e) }
 
-func SelectAccounts(cfg config.Config, requested string) ([]string, error) {
+func SelectAccounts(ctx context.Context, requested string) ([]string, error) {
 	if requested != "" {
-		if _, known := config.Account(requested); !known {
+		spec, known := config.From(ctx).Account(requested)
+		if !known {
 			return nil, UnknownAccount(requested)
 		}
-		if _, _, ok := cfg.Credential(requested); !ok {
+		if _, _, ok := config.Credential(ctx, requested); !ok && spec.AuthMethod != accounts.XOAUTH2 {
 			return nil, MissingCredentials(requested)
 		}
 		return []string{requested}, nil
 	}
 	var out []string
-	for _, spec := range config.Accounts() {
-		if _, _, ok := cfg.Credential(spec.Name); ok {
+	for _, spec := range config.From(ctx).Accounts() {
+		if _, _, ok := config.Credential(ctx, spec.Name); ok || spec.AuthMethod == accounts.XOAUTH2 {
 			out = append(out, spec.Name)
 		}
 	}
@@ -59,62 +62,74 @@ type Extra struct {
 }
 
 type Pass struct {
-	DB      *db.DB
-	Cfg     config.Config
-	Open    mailops.Opener
-	Now     func() float64
-	Syncer  *mailsync.Syncer
-	Live    *live.Live
-	Router  *router.Router
-	Judge   flags.Judge
-	Applier *applier.Applier
-	Events  func(ctx context.Context, account string) (invites, candidates int, err error)
-	Extras  []Extra
+	DB       *db.DB
+	Cfg      config.Config
+	Open     mail.OpenFunc
+	Now      func() float64
+	Syncer   *mailsync.Syncer
+	Live     *live.Live
+	Registry *proposals.Registry
+	Router   *router.Router
+	Applier  *applier.Applier
+	Events   func(ctx context.Context, account string) (invites, candidates int, err error)
+	Extras   []Extra
 }
 
-func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *Pass {
+func New(env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now func() float64) *Pass {
 	if now == nil {
-		now = wallClock
+		now = mail.WallClock
 	}
-	open = mailops.Opener(mail.BindMode(mail.OpenFunc(open), d.Read))
 	syncer := &mailsync.Syncer{DB: d, Cfg: cfg, Now: now}
-	l := &live.Live{DB: d, Cfg: cfg, Now: now}
+	registry := proposals.NewRegistry()
+	handlers.Register(registry, handlers.Deps{DB: d, Open: open, Syncer: syncer, Now: now, Env: env})
+	l := &live.Live{DB: d, Cfg: cfg, Registry: registry, Now: now}
 	p := &Pass{
-		DB:      d,
-		Cfg:     cfg,
-		Open:    open,
-		Now:     now,
-		Syncer:  syncer,
-		Live:    l,
-		Router:  &router.Router{DB: d, Now: now},
-		Applier: applier.New(l, open, syncer),
+		DB:       d,
+		Cfg:      cfg,
+		Open:     open,
+		Now:      now,
+		Syncer:   syncer,
+		Live:     l,
+		Registry: registry,
+		Router:   &router.Router{DB: d, Now: now},
+		Applier:  applier.New(l, open, syncer),
 		Events: func(ctx context.Context, account string) (int, int, error) {
-			if on, err := module.FlagOn(ctx, d.Read, module.Calendar); err != nil || !on {
-				return 0, 0, err
+			if !module.IsEnabled(ctx, module.Calendar) {
+				return 0, 0, nil
 			}
-			return candidates.ScanAccount(ctx, d, cfg, account, nil, config.OS, now)
+			return candidates.ScanAccount(ctx, d, cfg, account, nil, env, now)
 		},
 	}
 	p.Extras = []Extra{
 		{"open loops", func(ctx context.Context) (any, error) {
-			return openloops.Refresh(ctx, d, cfg, now(), openloops.Options{Clock: now}), nil
+			return openloops.Refresh(ctx, d, now(), openloops.Options{Env: env, Clock: now})
 		}},
 		{"watches", func(ctx context.Context) (any, error) {
-			return watches.Refresh(ctx, d, now(), watches.Options{Clock: now}), nil
+			return watches.Refresh(ctx, d, now(), watches.Options{Env: env, Clock: now})
 		}},
 	}
 	return p
 }
 
-func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
+func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.OpenFunc, now func() float64) (*Pass, func(), error) {
+	d, err := db.Connect(cfg.DBPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := config.Boot(ctx, env, d, cfg); err != nil {
+		_ = d.Close()
+		return nil, nil, err
+	}
+	return New(env, d, cfg, open, now), func() { _ = d.Close() }, nil
+}
 
 func (p *Pass) SyncOne(ctx context.Context, account string) error {
-	_, err := p.Syncer.One(ctx, account, mailsync.Opener(p.Open))
+	_, err := p.Syncer.One(ctx, account, p.Open)
 	return err
 }
 
 func (p *Pass) SyncAll(ctx context.Context) error {
-	accounts, err := SelectAccounts(p.Cfg, "")
+	accounts, err := SelectAccounts(ctx, "")
 	if err != nil {
 		return err
 	}
@@ -136,17 +151,18 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 			return err
 		}
 	}
-	embedURL, err := mail.EmbedURL(ctx, p.DB.Read)
+	embedURL, err := embed.EmbedURL(ctx, p.DB.Read)
 	if err != nil {
 		return err
 	}
-	ctx, err = mail.WithModels(ctx, p.DB.Read)
+	ctx, err = embed.WithModels(ctx, p.DB.Read)
 	if err != nil {
 		return err
 	}
 	if err := embed.PendingOrWarn(ctx, p.DB, embedURL, log); err != nil {
 		return err
 	}
+	var failed []string
 	for _, account := range accounts {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -155,20 +171,28 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		if err != nil {
 			return err
 		}
-		flagged, err := flags.FlagAccount(ctx, p.DB, account, p.Judge, p.Now)
+		flagged, err := flags.FlagAccount(ctx, p.DB, account, nil, p.Now)
 		if err != nil {
 			return err
 		}
-		log.Info(fmt.Sprintf("%s: %d routed, %d flag judgments", account, routed, flagged))
-		if p.Events != nil {
-			if invites, candidates, err := p.Events(ctx, account); err != nil {
-				log.Error(account+": event scan failed", logx.Err, err.Error())
-			} else {
-				log.Info(fmt.Sprintf("%s: %d invitation proposals, %d event candidates", account, invites, candidates))
-			}
+		log.Info("account routed", "account", account, "routed", routed, "flagged", flagged)
+		if invites, candidates, err := p.Events(ctx, account); err != nil {
+			log.Error("event scan failed", "account", account, logx.Err, err.Error())
+		} else {
+			log.Info("event scan done", "account", account, "invites", invites, "candidates", candidates)
 		}
-		if _, _, err := p.Applier.ApplyAll(ctx, account); err != nil {
-			log.Error(account+": live pass failed", logx.Err, err.Error())
+		applied, deleted, err := p.Applier.ApplyAll(ctx, account)
+		if _, serr := p.Applier.ApplySnoozes(ctx, account); serr != nil {
+			log.Error("snooze return failed", "account", account, logx.Err, serr.Error())
+			failed = append(failed, account)
+		}
+		switch {
+		case err != nil:
+			log.Error("live pass failed", "account", account, logx.Err, err.Error())
+			failed = append(failed, account)
+		case applied.Ran && applied.Written == 0 && applied.Failed > 0 && deleted.Written == 0:
+			log.Error("every live action failed", "account", account, "failed", applied.Failed)
+			failed = append(failed, account)
 		}
 	}
 	for _, extra := range p.Extras {
@@ -177,12 +201,18 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		}
 		result, err := extra.Run(ctx)
 		if err != nil {
-			log.Error(extra.Name+" refresh failed", logx.Err, err.Error())
+			log.Error("refresh failed", "name", extra.Name, logx.Err, err.Error())
 			continue
 		}
-		log.Info(extra.Name + ": " + py.ReprValue(result))
+		log.Info("refreshed", "name", extra.Name, "result", result)
 	}
-	return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("the live pass failed for %s", strings.Join(failed, ", "))
+	}
+	return nil
 }
 
 const checkpointWait = time.Second
@@ -219,18 +249,15 @@ func (p *Pass) checkpoint(ctx context.Context) {
 	}
 }
 
-func Sync(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) ([]string, error) {
-	d, err := db.Connect(cfg.DBPath)
+func Sync(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc) ([]string, error) {
+	accounts, err := SelectAccounts(ctx, requested)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = d.Close() }()
-	if err := config.Migrate(ctx, d, cfg); err != nil {
-		return nil, err
-	}
-	accounts, err := SelectAccounts(cfg, requested)
+	pass, release, err := Open(ctx, env, cfg, open, nil)
 	if err != nil {
 		return nil, err
 	}
-	return accounts, passrun.Track(ctx, d, passrun.Sync, func() error { return New(d, cfg, open, nil).Locked(ctx, ctx, accounts) })
+	defer release()
+	return accounts, passrun.Track(ctx, pass.DB, passrun.Sync, func() error { return pass.Locked(ctx, ctx, accounts) })
 }

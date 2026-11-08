@@ -14,9 +14,10 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -26,7 +27,7 @@ var Statuses = [...]string{Pending, Approved, Dismissed, Applied, Failed, Suppre
 
 const UndoOp = "undo"
 
-type Executor func(ctx context.Context, p *Proposal, selection any) (py.Dict, error)
+type Executor func(ctx context.Context, p *Proposal, selection any) (any, error)
 
 type Execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
@@ -40,12 +41,18 @@ type Proposal struct {
 	CreatedTS   float64
 	DecidedTS   *float64
 	AppliedTS   *float64
+	UndoneTS    *float64
+	Recovered   bool
 	Title       string
 	Payload     json.RawMessage
 	Preview     any
 	Result      any
+	previewRaw  string
+	resultRaw   string
 	Fingerprint string
 	Undoable    bool
+	Blocked     bool
+	BlockedUndo bool
 }
 
 func (p *Proposal) AccountName() string {
@@ -55,38 +62,63 @@ func (p *Proposal) AccountName() string {
 	return *p.Account
 }
 
-func (p *Proposal) Dict() py.Dict {
-	out := py.Dict{
-		{Key: "id", Value: p.ID}, {Key: "kind", Value: p.Kind}, {Key: "account", Value: nullable(p.Account)},
-		{Key: "status", Value: p.Status}, {Key: "created_ts", Value: p.CreatedTS},
-		{Key: "decided_ts", Value: nullable(p.DecidedTS)}, {Key: "applied_ts", Value: nullable(p.AppliedTS)},
-		{Key: "title", Value: p.Title}, {Key: "preview", Value: p.Preview}, {Key: "result", Value: p.Result},
-		{Key: "fingerprint", Value: p.Fingerprint},
+type jsonFloat float64
+
+func (f jsonFloat) MarshalJSON() ([]byte, error) {
+	s := strconv.FormatFloat(float64(f), 'f', -1, 64)
+	if !strings.ContainsAny(s, ".eE") {
+		s += ".0"
 	}
-	if p.Payload != nil {
-		payload, _ := py.JSONLoads(p.Payload)
-		out = append(out, py.Pair{Key: "payload", Value: payload})
-	}
-	return append(out, py.Pair{Key: "undoable", Value: p.Undoable})
+	return []byte(s), nil
 }
 
-func (p *Proposal) MarshalJSON() ([]byte, error) { return []byte(py.JSONDumps(p.Dict())), nil }
-
-func nullable[T any](v *T) any {
+func jsonFloatPtr(v *float64) *jsonFloat {
 	if v == nil {
 		return nil
 	}
-	return *v
+	f := jsonFloat(*v)
+	return &f
+}
+
+type ProposalView struct {
+	ID          int64           `json:"id"`
+	Kind        string          `json:"kind"`
+	Account     *string         `json:"account"`
+	Status      string          `json:"status"`
+	CreatedTS   jsonFloat       `json:"created_ts"`
+	DecidedTS   *jsonFloat      `json:"decided_ts"`
+	AppliedTS   *jsonFloat      `json:"applied_ts"`
+	Title       string          `json:"title"`
+	Preview     json.RawMessage `json:"preview"`
+	Result      json.RawMessage `json:"result"`
+	Fingerprint string          `json:"fingerprint"`
+	Payload     json.RawMessage `json:"payload,omitempty"`
+	Undoable    bool            `json:"undoable"`
+}
+
+func (p *Proposal) Dict() ProposalView {
+	return ProposalView{
+		ID: p.ID, Kind: p.Kind, Account: p.Account, Status: p.Status,
+		CreatedTS: jsonFloat(p.CreatedTS), DecidedTS: jsonFloatPtr(p.DecidedTS), AppliedTS: jsonFloatPtr(p.AppliedTS),
+		Title: p.Title, Preview: json.RawMessage(p.previewRaw), Result: json.RawMessage(p.resultRaw),
+		Fingerprint: p.Fingerprint, Payload: p.Payload, Undoable: p.Undoable,
+	}
 }
 
 func loads(text *string) (any, error) {
 	if text == nil {
 		return nil, nil
 	}
-	return py.JSONLoads([]byte(*text))
+	return jsonx.Loads([]byte(*text))
 }
 
-const columns = "id, kind, account, status, created_ts, decided_ts, applied_ts, title, payload, preview, result, fingerprint"
+var columns = "p.id, p.kind, p.account, p.status, p.created_ts, p.decided_ts, p.applied_ts, p.undone_ts, p.recovered, " +
+	"p.title, p.payload, p.preview, p.result, p.fingerprint, " +
+	"EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = p.id AND " + ledger.BlockedSQL("a") + ") AS blocked, " +
+	"EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = p.id AND a.state IN ('undo_unknown', 'undo_partial')) AS blocked_undo, " +
+	"(p.status IN ('applied', 'failed') AND p.undone_ts IS NULL AND (p.status = 'applied' OR p.recovered = 1) AND EXISTS " +
+	"(SELECT 1 FROM proposal_actions a WHERE a.proposal_id = p.id AND a.state = 'ok' AND a.undo IS NOT NULL AND NOT EXISTS " +
+	"(SELECT 1 FROM proposal_actions b WHERE b.proposal_id = p.id AND b.kind = 'undo' AND b.state = 'ok' AND b.undo_of = a.id))) AS undoable"
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -94,19 +126,28 @@ func scanProposal(s scanner, full bool) (*Proposal, error) {
 	var p Proposal
 	var payload, preview string
 	var result *string
-	if err := s.Scan(&p.ID, &p.Kind, &p.Account, &p.Status, &p.CreatedTS, &p.DecidedTS, &p.AppliedTS, &p.Title,
-		&payload, &preview, &result, &p.Fingerprint); err != nil {
+	var recovered, blocked, blockedUndo, undoable int64
+	if err := s.Scan(&p.ID, &p.Kind, &p.Account, &p.Status, &p.CreatedTS, &p.DecidedTS, &p.AppliedTS, &p.UndoneTS, &recovered,
+		&p.Title, &payload, &preview, &result, &p.Fingerprint, &blocked, &blockedUndo, &undoable); err != nil {
 		return nil, err
 	}
+	p.Recovered = recovered != 0
+	p.Blocked = blocked != 0
+	p.BlockedUndo = blockedUndo != 0
+	p.Undoable = undoable != 0
+	p.previewRaw = preview
+	if result != nil {
+		p.resultRaw = *result
+	}
 	var err error
-	if p.Preview, err = py.JSONLoads([]byte(preview)); err != nil {
+	if p.Preview, err = jsonx.Loads([]byte(preview)); err != nil {
 		return nil, err
 	}
 	if p.Result, err = loads(result); err != nil {
 		return nil, err
 	}
 	if full {
-		if _, err := py.JSONLoads([]byte(payload)); err != nil {
+		if _, err := jsonx.Loads([]byte(payload)); err != nil {
 			return nil, err
 		}
 		p.Payload = json.RawMessage(payload)
@@ -118,134 +159,145 @@ func List(ctx context.Context, q Querier, status, kind string) ([]*Proposal, err
 	var where []string
 	var args []any
 	if status != "" {
-		where = append(where, "status = ?")
+		where = append(where, "p.status = ?")
 		args = append(args, status)
 	}
 	if kind != "" {
-		where = append(where, "kind = ?")
+		where = append(where, "p.kind = ?")
 		args = append(args, kind)
 	}
-	query := "SELECT " + columns + " FROM proposals"
+	query := "SELECT " + columns + " FROM proposals p"
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
-	rows, err := q.QueryContext(ctx, query+" ORDER BY created_ts DESC, id DESC", args...)
+	rows, err := q.QueryContext(ctx, query+" ORDER BY p.created_ts DESC, p.id DESC", args...)
 	if err != nil {
 		return nil, err
 	}
-	out, err := db.Collect(rows, func(r *sql.Rows) (*Proposal, error) { return scanProposal(r, false) })
-	if err != nil {
-		return nil, err
-	}
-	for _, p := range out {
-		if p.Undoable, err = undoable(ctx, q, p); err != nil {
-			return nil, err
-		}
-	}
-	return out, nil
+	return db.Collect(rows, func(r *sql.Rows) (*Proposal, error) { return scanProposal(r, false) })
 }
 
 func Get(ctx context.Context, q Querier, id int64) (*Proposal, error) {
-	p, err := scanProposal(q.QueryRowContext(ctx, "SELECT "+columns+" FROM proposals WHERE id = ?", id), true)
+	p, err := scanProposal(q.QueryRowContext(ctx, "SELECT "+columns+" FROM proposals p WHERE p.id = ?", id), true)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	p.Undoable, err = undoable(ctx, q, p)
 	return p, err
 }
 
-func undoable(ctx context.Context, q Querier, p *Proposal) (bool, error) {
-	if p.Status != Applied && p.Status != Failed {
-		return false, nil
-	}
-	return CanUndo(ctx, q, p.ID)
-}
-
-func PendingCount(ctx context.Context, q Querier) (int64, error) {
-	var n int64
-	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE status = 'pending'").Scan(&n)
-	return n, err
-}
-
-func CountsByStatus(ctx context.Context, q Querier) (py.Dict, error) {
+func CountsByStatus(ctx context.Context, q Querier) (map[string]any, error) {
 	out, err := counts(ctx, q, "SELECT status, COUNT(*) AS n FROM proposals GROUP BY status")
 	if err != nil {
 		return nil, err
 	}
 	var all int64
-	for _, p := range out {
-		all += p.Value.(int64)
+	for _, v := range out {
+		all += v.(int64)
 	}
-	return append(out, py.Pair{Key: "all", Value: all}), nil
+	out["all"] = all
+	return out, nil
 }
 
-func CountsByKind(ctx context.Context, q Querier, status string) (py.Dict, error) {
-	return counts(ctx, q, "SELECT kind, COUNT(*) AS n FROM proposals WHERE status = ? GROUP BY kind", status)
-}
-
-func counts(ctx context.Context, q Querier, query string, args ...any) (py.Dict, error) {
+func counts(ctx context.Context, q Querier, query string, args ...any) (map[string]any, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
-	pairs, err := db.Collect(rows, func(r *sql.Rows) (py.Pair, error) {
+	defer func() { _ = rows.Close() }()
+	out := map[string]any{}
+	for rows.Next() {
 		var key string
 		var n int64
-		err := r.Scan(&key, &n)
-		return py.Pair{Key: key, Value: n}, err
-	})
-	return py.Dict(pairs), err
+		if err := rows.Scan(&key, &n); err != nil {
+			return nil, err
+		}
+		out[key] = n
+	}
+	return out, rows.Err()
 }
 
-func Dismiss(ctx context.Context, x Execer, id int64, suppress bool, ts float64) error {
-	status := Dismissed
-	if suppress {
-		status = Suppressed
+func Dismiss(ctx context.Context, d *db.DB, id int64, status string, who Resolver, ts float64) error {
+	if status != Dismissed && status != Suppressed {
+		return ProposalError("dismiss status must be " + Dismissed + " or " + Suppressed)
 	}
-	res, err := x.ExecContext(ctx, "UPDATE proposals SET status = ?, decided_ts = ? WHERE id = ? AND status IN ('pending', 'failed')",
-		status, ts, id)
-	if err != nil {
-		return err
-	}
-	if n, err := res.RowsAffected(); err != nil || n == 0 {
+	return d.WithTx(ctx, func(tx *sql.Tx) error {
+		var blocked bool
+		if err := tx.QueryRowContext(ctx, "SELECT "+ledger.UnresolvedSQL("a")+" FROM proposals WHERE id = ?", id).Scan(&blocked); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ProposalError(fmt.Sprintf("unknown proposal %d", id))
+			}
+			return err
+		}
+		if blocked {
+			return ProposalError(fmt.Sprintf("proposal %d has an unresolved write; resolve it in the mailbox before dismissing", id))
+		}
+		res, err := tx.ExecContext(ctx, "UPDATE proposals SET status = ?, decided_ts = ? WHERE id = ? AND status IN ('pending', 'failed')",
+			status, ts, id)
 		if err != nil {
 			return err
 		}
-		return ProposalError(fmt.Sprintf("proposal %d is not open", id))
-	}
-	return nil
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return ProposalError(fmt.Sprintf("proposal %d is not open", id))
+		}
+		return RecordResolution(ctx, tx, who, ts, ResolveProposalAction, id, &id, status, "")
+	})
 }
 
-func RecordAction(ctx context.Context, x Execer, proposalID int64, action, undo any, ok bool, errText *string, ts float64) (int64, error) {
+func marshalJSON(v any) (string, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func RecordAction(ctx context.Context, x Execer, proposalID int64, kind string, undoOf *int64, action, undo any, state ledger.State, errText *string, ts float64) (int64, error) {
 	var plan any
 	if undo != nil {
-		plan = py.JSONDumps(undo)
+		text, err := marshalJSON(undo)
+		if err != nil {
+			return 0, err
+		}
+		plan = text
 	}
-	res, err := x.ExecContext(context.WithoutCancel(ctx), "INSERT INTO proposal_actions (proposal_id, ts, action, undo, ok, error) VALUES (?, ?, ?, ?, ?, ?)",
-		proposalID, ts, py.JSONDumps(action), plan, ok, errText)
+	body, err := marshalJSON(action)
+	if err != nil {
+		return 0, err
+	}
+	var of any
+	if undoOf != nil {
+		of = *undoOf
+	}
+	res, err := x.ExecContext(context.WithoutCancel(ctx), "INSERT INTO proposal_actions "+
+		"(proposal_id, ts, lease, kind, undo_of, action, undo, state, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		proposalID, ts, ts, kind, of, body, plan, state, errText)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
-const InFlightText = mailops.UnknownPrefix + ": write in flight"
-
 func BeginAction(ctx context.Context, x Execer, proposalID int64, action any, ts float64) (int64, error) {
-	text := InFlightText
-	return RecordAction(ctx, x, proposalID, action, nil, false, &text, ts)
+	return RecordAction(ctx, x, proposalID, "write", nil, action, nil, ledger.Held, nil, ts)
 }
 
-func SettleAction(ctx context.Context, x Execer, id int64, action, undo any, ok bool, errText *string, ts float64) error {
+func SettleAction(ctx context.Context, x Execer, id int64, action, undo any, state ledger.State, errText *string, ts float64) error {
 	var plan any
 	if undo != nil {
-		plan = py.JSONDumps(undo)
+		text, err := marshalJSON(undo)
+		if err != nil {
+			return err
+		}
+		plan = text
 	}
-	res, err := x.ExecContext(context.WithoutCancel(ctx), "UPDATE proposal_actions SET ts = ?, action = ?, undo = ?, ok = ?, error = ? WHERE id = ? AND ok = 0 AND error = ?",
-		ts, py.JSONDumps(action), plan, ok, errText, id, InFlightText)
+	body, err := marshalJSON(action)
+	if err != nil {
+		return err
+	}
+	res, err := x.ExecContext(context.WithoutCancel(ctx), "UPDATE proposal_actions SET ts = ?, lease = ?, action = ?, undo = ?, state = ?, error = ? "+
+		"WHERE id = ? AND state = 'held'", ts, ts, body, plan, state, errText, id)
 	if err != nil {
 		return err
 	}
@@ -261,52 +313,39 @@ func (p *Pipeline) beginUndo(ctx context.Context, proposalID, of int64, action a
 	var held int64
 	err := p.DB.WithTx(context.WithoutCancel(ctx), func(tx *sql.Tx) error {
 		var open bool
-		if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = ? AND json_extract(a.action, '$.op') IS ? "+
-			"AND json_extract(a.action, '$.of') IS ? AND (a.ok = 1 OR (a.ok = 0 AND "+mailops.BlockingTextSQL("a.error")+")))",
-			proposalID, UndoOp, of).Scan(&open); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = ? AND a.kind = 'undo' "+
+			"AND a.undo_of = ? AND a.state IN ('held', 'ok', 'undo_unknown', 'undo_partial'))", proposalID, of).Scan(&open); err != nil {
 			return err
 		}
 		if open {
 			return ProposalError(fmt.Sprintf("action %d was already undone or has an undo that is in progress or unresolved; check the mailbox before undoing again", of))
 		}
 		var err error
-		held, err = BeginAction(ctx, tx, proposalID, action, p.now())
+		held, err = RecordAction(ctx, tx, proposalID, "undo", &of, action, nil, ledger.Held, nil, p.now())
 		return err
 	})
 	return held, err
 }
 
 func DropAction(ctx context.Context, x Execer, id int64) error {
-	_, err := x.ExecContext(context.WithoutCancel(ctx), "DELETE FROM proposal_actions WHERE id = ? AND ok = 0 AND error = ?", id, InFlightText)
+	_, err := x.ExecContext(context.WithoutCancel(ctx), "DELETE FROM proposal_actions WHERE id = ? AND state = 'held' AND error IS NULL", id)
 	return err
 }
 
 type Action struct {
 	ID     int64
 	TS     float64
+	Lease  float64
+	Kind   string
+	UndoOf *int64
 	Action any
 	Undo   any
-	Plan   json.RawMessage
-	OK     bool
+	State  ledger.State
 	Error  *string
 }
 
-func (a Action) Dict() py.Dict {
-	return py.Dict{
-		{Key: "id", Value: a.ID}, {Key: "ts", Value: a.TS}, {Key: "action", Value: a.Action}, {Key: "undo", Value: a.Undo},
-		{Key: "ok", Value: a.OK}, {Key: "error", Value: nullable(a.Error)},
-	}
-}
-
-func (a Action) MarshalJSON() ([]byte, error) { return []byte(py.JSONDumps(a.Dict())), nil }
-
-func (a Action) field(name string) (any, bool) {
-	d, _ := a.Action.(py.Dict)
-	return d.Get(name)
-}
-
 func Actions(ctx context.Context, q Querier, proposalID int64) ([]Action, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, ts, action, undo, ok, error FROM proposal_actions WHERE proposal_id = ? ORDER BY id", proposalID)
+	rows, err := q.QueryContext(ctx, "SELECT id, ts, lease, kind, undo_of, action, undo, state, error FROM proposal_actions WHERE proposal_id = ? ORDER BY id", proposalID)
 	if err != nil {
 		return nil, err
 	}
@@ -314,15 +353,12 @@ func Actions(ctx context.Context, q Querier, proposalID int64) ([]Action, error)
 		var a Action
 		var action string
 		var undo *string
-		if err := r.Scan(&a.ID, &a.TS, &action, &undo, &a.OK, &a.Error); err != nil {
+		if err := r.Scan(&a.ID, &a.TS, &a.Lease, &a.Kind, &a.UndoOf, &action, &undo, &a.State, &a.Error); err != nil {
 			return a, err
 		}
 		var err error
-		if a.Action, err = py.JSONLoads([]byte(action)); err != nil {
+		if a.Action, err = jsonx.Loads([]byte(action)); err != nil {
 			return a, err
-		}
-		if undo != nil {
-			a.Plan = json.RawMessage(*undo)
 		}
 		a.Undo, err = loads(undo)
 		return a, err
@@ -332,12 +368,8 @@ func Actions(ctx context.Context, q Querier, proposalID int64) ([]Action, error)
 func undoneIDs(logged []Action) map[int64]bool {
 	done := map[int64]bool{}
 	for _, a := range logged {
-		if op, _ := a.field("op"); op == UndoOp && a.OK {
-			if of, ok := a.field("of"); ok {
-				if id, isInt := of.(int64); isInt {
-					done[id] = true
-				}
-			}
+		if a.Kind == "undo" && a.State == ledger.OK && a.UndoOf != nil {
+			done[*a.UndoOf] = true
 		}
 	}
 	return done
@@ -345,10 +377,10 @@ func undoneIDs(logged []Action) map[int64]bool {
 
 func partialUndo(logged []Action, id int64) bool {
 	for _, a := range logged {
-		if op, _ := a.field("op"); op != UndoOp || a.OK || a.Error == nil || !mailops.Blocks(*a.Error) {
+		if a.Kind != "undo" || !a.State.Blocked() || a.UndoOf == nil {
 			continue
 		}
-		if of, ok := a.field("of"); ok && of == id {
+		if *a.UndoOf == id {
 			return true
 		}
 	}
@@ -359,56 +391,11 @@ func pending(logged []Action) []Action {
 	done := undoneIDs(logged)
 	var todo []Action
 	for _, a := range slices.Backward(logged) {
-		if a.OK && a.Undo != nil && !done[a.ID] {
+		if a.State == ledger.OK && a.Undo != nil && !done[a.ID] {
 			todo = append(todo, a)
 		}
 	}
 	return todo
-}
-
-func CanUndo(ctx context.Context, q Querier, id int64) (bool, error) {
-	var status string
-	var result *string
-	err := q.QueryRowContext(ctx, "SELECT status, result FROM proposals WHERE id = ?", id).Scan(&status, &result)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil || (status != Applied && status != Failed) {
-		return false, err
-	}
-	loaded, err := loads(result)
-	if err != nil {
-		return false, err
-	}
-	if d, isDict := loaded.(py.Dict); isDict {
-		if v, _ := d.Get("undone_ts"); py.Truthy(v) {
-			return false, nil
-		}
-	}
-	logged, err := Actions(ctx, q, id)
-	if err != nil {
-		return false, err
-	}
-	if status == Failed && !recovered(logged, loaded) {
-		return false, nil
-	}
-	return len(pending(logged)) > 0, nil
-}
-
-const interruptedKey = "interrupted"
-
-func recovered(logged []Action, result any) bool {
-	if d, isDict := result.(py.Dict); isDict {
-		if v, _ := d.Get(interruptedKey); py.Truthy(v) {
-			return true
-		}
-	}
-	for _, a := range logged {
-		if op, _ := a.field("op"); op != UndoOp && !a.OK && a.Error != nil && (*a.Error == InFlightText || *a.Error == SettledText) {
-			return true
-		}
-	}
-	return false
 }
 
 const (
@@ -417,11 +404,11 @@ const (
 )
 
 func RecoverStuck(ctx context.Context, d *db.DB, now float64) (int64, error) {
-	held := py.Dict{{Key: "error", Value: mailops.UnknownPrefix + ": approve interrupted; resolve the mailbox by hand before approving again"}}
-	res, err := d.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, result = ? WHERE status = ? AND EXISTS "+
-		"(SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.ok = 0 AND a.error = ? AND json_extract(a.action, '$.op') IS NOT ?) "+
-		"AND NOT EXISTS (SELECT 1 FROM proposal_actions b WHERE b.proposal_id = proposals.id AND b.ts >= ?)",
-		Failed, py.JSONDumps(held), Approved, InFlightText, UndoOp, now-StuckSeconds)
+	held := map[string]any{"error": "approve interrupted; resolve the mailbox by hand before approving again"}
+	res, err := d.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, result = ?, recovered = 1 WHERE status = ? AND EXISTS "+
+		"(SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.state = 'held' AND a.kind = 'write') "+
+		"AND NOT EXISTS (SELECT 1 FROM proposal_actions b WHERE b.proposal_id = proposals.id AND b.lease >= ?)",
+		Failed, jsonx.Dumps(held), Approved, now-StuckSeconds)
 	if err != nil {
 		return 0, err
 	}
@@ -429,13 +416,10 @@ func RecoverStuck(ctx context.Context, d *db.DB, now float64) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	unheld := py.Dict{
-		{Key: "error", Value: "approve interrupted before any write was in flight; the settled batches can be undone and the proposal approved again"},
-		{Key: interruptedKey, Value: true},
-	}
-	res, err = d.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, result = ? WHERE status = ? AND decided_ts < ? "+
-		"AND NOT EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND ("+mailops.BlockingActionSQL("a")+" OR a.ts >= ?))",
-		Failed, py.JSONDumps(unheld), Approved, now-StuckUnheldSeconds, now-StuckUnheldSeconds)
+	unheld := map[string]any{"error": "approve interrupted before any write was in flight; the settled batches can be undone and the proposal approved again", "interrupted": true}
+	res, err = d.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, result = ?, recovered = 1 WHERE status = ? AND decided_ts < ? "+
+		"AND NOT EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND (a.state IN ('held', 'unknown', 'partial') OR a.lease >= ?))",
+		Failed, jsonx.Dumps(unheld), Approved, now-StuckUnheldSeconds, now-StuckUnheldSeconds)
 	if err != nil {
 		return heldN, err
 	}
@@ -447,6 +431,18 @@ type Pipeline struct {
 	DB       *db.DB
 	Registry *Registry
 	Now      func() float64
+	Enabled  func(context.Context, db.Querier, string) (bool, error)
+}
+
+func (p *Pipeline) enabled(ctx context.Context, kind string) (bool, error) {
+	if p.Registry == nil || p.Enabled == nil {
+		return true, nil
+	}
+	k, ok := p.Registry.Kind(kind)
+	if !ok || k.Module == "" {
+		return true, nil
+	}
+	return p.Enabled(ctx, p.DB.Read, k.Module)
 }
 
 func (p *Pipeline) now() float64 {
@@ -456,11 +452,9 @@ func (p *Pipeline) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-var unresolvedSQL = "EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND (" + mailops.BlockingActionSQL("a") + "))"
-
 func (p *Pipeline) claim(ctx context.Context, id int64, status string) (bool, error) {
-	res, err := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, decided_ts = ? WHERE id = ? AND status IN ('pending', 'failed') AND NOT "+unresolvedSQL,
-		status, p.now(), id)
+	res, err := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, decided_ts = ? WHERE id = ? AND status IN ('pending', 'failed') AND NOT "+
+		ledger.UnresolvedSQL("a"), status, p.now(), id)
 	if err != nil {
 		return false, err
 	}
@@ -468,16 +462,26 @@ func (p *Pipeline) claim(ctx context.Context, id int64, status string) (bool, er
 	return n == 1, err
 }
 
+type unknownOutcome interface{ OutcomeUnknown() bool }
+
+func outcomeUnknown(err error) bool {
+	var unknown unknownOutcome
+	if errors.As(err, &unknown) {
+		return unknown.OutcomeUnknown()
+	}
+	return mailops.OutcomeUnknown(err)
+}
+
 func (p *Pipeline) sync(ctx context.Context, prop *Proposal) *string {
 	if p.Registry == nil || p.Registry.Sync == nil || prop.Account == nil {
 		return nil
 	}
-	if _, known := config.Account(*prop.Account); !known {
+	if _, known := config.From(ctx).Account(*prop.Account); !known {
 		return nil
 	}
 	if err := p.Registry.Sync(ctx, *prop.Account); err != nil {
 		log.Error(fmt.Sprintf("post-apply sync failed for proposal %d", prop.ID), logx.Err, err.Error())
-		text := py.ExceptionText(err)
+		text := err.Error()
 		return &text
 	}
 	return nil
@@ -487,7 +491,7 @@ func scope(ctx context.Context, id int64) context.Context {
 	return safety.ApprovedWrites(ctx, strconv.FormatInt(id, 10))
 }
 
-func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any) (*Proposal, error) {
+func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any, who Resolver) (*Proposal, error) {
 	prop, err := Get(ctx, p.DB.Write, id)
 	if err != nil {
 		return nil, err
@@ -495,12 +499,19 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any)
 	if prop == nil {
 		return nil, ProposalError(fmt.Sprintf("unknown proposal %d", id))
 	}
+	on, err := p.enabled(ctx, prop.Kind)
+	if err != nil {
+		return nil, err
+	}
+	if !on {
+		return nil, ProposalError(fmt.Sprintf("the %s module is disabled", p.Registry.mustKind(prop.Kind).Module))
+	}
 	var executor Executor
 	if p.Registry != nil {
 		executor = p.Registry.Executors[prop.Kind]
 	}
 	if executor == nil {
-		return nil, ProposalError(fmt.Sprintf("no executor for kind %s", py.Repr(prop.Kind)))
+		return nil, ProposalError(fmt.Sprintf("no executor for kind %s", strconv.Quote(prop.Kind)))
 	}
 	claimed, err := p.claim(ctx, id, Approved)
 	if err != nil {
@@ -508,86 +519,104 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any)
 	}
 	if !claimed {
 		if open, err := Get(ctx, p.DB.Write, id); err == nil && open != nil && (open.Status == Pending || open.Status == Failed) {
-			if err := p.refuseUnresolved(ctx, id); err != nil {
-				return nil, err
-			}
+			return nil, ProposalError(fmt.Sprintf("proposal %d has an unresolved write; resolve it in the mailbox before approving again", id))
 		}
 		return nil, ProposalError(fmt.Sprintf("proposal %d is not open", id))
+	}
+	if err := RecordResolution(ctx, p.DB.Write, who, p.now(), ResolveProposalAction, id, &id, "approved", ""); err != nil {
+		return nil, err
 	}
 	settle := context.WithoutCancel(ctx)
 	result, err := executor(scope(ctx, id), prop, selection)
 	var selErr SelectionError
 	switch {
 	case errors.As(err, &selErr):
-		if _, uerr := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'pending', decided_ts = NULL WHERE id = ?", id); uerr != nil {
+		if _, uerr := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'pending', decided_ts = NULL, result = NULL, applied_ts = NULL "+
+			"WHERE id = ? AND status = 'approved'", id); uerr != nil {
 			return nil, uerr
 		}
 		return nil, err
 	case err != nil:
 		log.Error(fmt.Sprintf("proposal %d failed", id), logx.Err, err.Error())
-		failure := py.Dict{{Key: "error", Value: py.ExceptionText(err)}}
-		if _, uerr := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'failed', result = ? WHERE id = ?", py.JSONDumps(failure), id); uerr != nil {
+		failure, merr := json.Marshal(map[string]any{"error": err.Error()})
+		if merr != nil {
+			return nil, merr
+		}
+		res, uerr := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'failed', result = ? WHERE id = ? AND status = 'approved'",
+			string(failure), id)
+		if uerr != nil {
 			return nil, uerr
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return nil, ErrSettledMeanwhile
 		}
 		p.sync(ctx, prop)
 		return Get(settle, p.DB.Write, id)
 	}
 	if syncErr := p.sync(ctx, prop); syncErr != nil {
-		result = result.Set("sync_error", *syncErr)
+		result = withSyncError(result, *syncErr)
 	}
-	if _, err := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'applied', applied_ts = ?, result = ? WHERE id = ?",
-		p.now(), py.JSONDumps(result), id); err != nil {
+	body, merr := json.Marshal(result)
+	if merr != nil {
+		return nil, merr
+	}
+	res, err := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'applied', applied_ts = ?, result = ? WHERE id = ? AND status = 'approved'",
+		p.now(), string(body), id)
+	if err != nil {
 		return nil, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, ErrSettledMeanwhile
 	}
 	return Get(settle, p.DB.Write, id)
 }
 
-func (p *Pipeline) refuseUnresolved(ctx context.Context, id int64) error {
-	logged, err := Actions(ctx, p.DB.Write, id)
-	if err != nil {
-		return err
-	}
-	for _, a := range logged {
-		if op, _ := a.field("op"); op != UndoOp && !a.OK && a.Error != nil && mailops.Blocks(*a.Error) {
-			return ProposalError(fmt.Sprintf("action %d has an unknown or partial outcome (%s); resolve it in the mailbox before approving again", a.ID, *a.Error))
-		}
-	}
-	return nil
-}
-
 type UndoResult struct {
 	Undone    bool
-	Outcomes  []py.Dict
+	Outcomes  []map[string]any
 	SyncError *string
 }
 
-func (r UndoResult) Dict() py.Dict {
+type undoView struct {
+	Undone    bool    `json:"undone"`
+	Outcomes  []any   `json:"outcomes"`
+	SyncError *string `json:"sync_error"`
+}
+
+func (r UndoResult) Dict() undoView {
 	outcomes := make([]any, len(r.Outcomes))
 	for i, o := range r.Outcomes {
 		outcomes[i] = o
 	}
-	return py.Dict{{Key: "undone", Value: r.Undone}, {Key: "outcomes", Value: outcomes}, {Key: "sync_error", Value: nullable(r.SyncError)}}
+	return undoView{Undone: r.Undone, Outcomes: outcomes, SyncError: r.SyncError}
 }
-
-func (r UndoResult) MarshalJSON() ([]byte, error) { return []byte(py.JSONDumps(r.Dict())), nil }
 
 func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	prop, err := Get(ctx, p.DB.Write, id)
 	if err != nil {
 		return UndoResult{}, err
 	}
+	if prop != nil {
+		on, err := p.enabled(ctx, prop.Kind)
+		if err != nil {
+			return UndoResult{}, err
+		}
+		if !on {
+			return UndoResult{}, ProposalError(fmt.Sprintf("the %s module is disabled", p.Registry.mustKind(prop.Kind).Module))
+		}
+	}
 	if prop == nil || (prop.Status != Applied && prop.Status != Failed) {
+		return UndoResult{}, ProposalError(fmt.Sprintf("proposal %d is not applied", id))
+	}
+	if prop.Status == Failed && !prop.Recovered {
 		return UndoResult{}, ProposalError(fmt.Sprintf("proposal %d is not applied", id))
 	}
 	logged, err := Actions(ctx, p.DB.Write, id)
 	if err != nil {
 		return UndoResult{}, err
 	}
-	if prop.Status == Failed && !recovered(logged, prop.Result) {
-		return UndoResult{}, ProposalError(fmt.Sprintf("proposal %d is not applied", id))
-	}
 	approved := scope(ctx, id)
-	out := UndoResult{Outcomes: []py.Dict{}}
+	out := UndoResult{Outcomes: []map[string]any{}}
 	settle := context.WithoutCancel(ctx)
 	for _, entry := range pending(logged) {
 		if partialUndo(logged, entry.ID) {
@@ -596,10 +625,10 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
-		plan, _ := entry.Undo.(py.Dict)
-		op, found := plan.Get("op")
+		plan, _ := entry.Undo.(map[string]any)
+		op, found := plan["op"]
 		if !found {
-			return UndoResult{}, fmt.Errorf("%w: 'op'", httpx.ErrKey)
+			return out, fmt.Errorf("%w: 'op'", httpx.ErrMissing)
 		}
 		name, isString := op.(string)
 		var undoer Undoer
@@ -607,36 +636,39 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 			undoer = p.Registry.Undoers[name]
 		}
 		if undoer == nil {
-			return UndoResult{}, ProposalError("no undo handler for " + py.ReprValue(op))
+			return out, ProposalError("no undo handler for " + fmt.Sprint(op))
 		}
-		undoAction := py.Dict{{Key: "op", Value: UndoOp}, {Key: "of", Value: entry.ID}}
+		undoAction := map[string]any{"op": UndoOp, "of": entry.ID}
 		held, err := p.beginUndo(ctx, id, entry.ID, undoAction)
 		if err != nil {
-			return UndoResult{}, err
+			return out, err
 		}
-		detail, err := func() (py.Dict, error) {
+		detail, err := func() (any, error) {
 			defer KeepActionAlive(p.DB.Write, p.now, held)()
-			return undoer(approved, entry.Plan)
+			return undoer(approved, json.RawMessage(jsonx.Dumps(entry.Undo)))
 		}()
 		if err != nil {
-			text := py.ExceptionText(err)
-			if name == "move_back" {
-				text = mailops.UnknownText(err, text)
+			state := ledger.UndoFailed
+			if outcomeUnknown(err) {
+				state = ledger.UndoUnknown
+			} else if _, partial := errors.AsType[*mailops.PartialMove](err); partial {
+				state = ledger.UndoPartial
 			}
-			if rerr := SettleAction(ctx, p.DB.Write, held, undoAction, nil, false, &text, p.now()); rerr != nil {
-				return UndoResult{}, rerr
+			text := err.Error()
+			if rerr := SettleAction(ctx, p.DB.Write, held, undoAction, nil, state, &text, p.now()); rerr != nil {
+				return out, rerr
 			}
-			out.Outcomes = append(out.Outcomes, py.Dict{{Key: "action", Value: entry.ID}, {Key: "ok", Value: false}, {Key: "error", Value: err.Error()}})
+			out.Outcomes = append(out.Outcomes, map[string]any{"action": entry.ID, "ok": false, "error": err.Error()})
 			continue
 		}
 		var details any
 		if detail != nil {
 			details = detail
 		}
-		if err := SettleAction(ctx, p.DB.Write, held, py.Dict{{Key: "op", Value: UndoOp}, {Key: "of", Value: entry.ID}, {Key: "detail", Value: details}}, nil, true, nil, p.now()); err != nil {
-			return UndoResult{}, err
+		if err := SettleAction(ctx, p.DB.Write, held, map[string]any{"op": UndoOp, "of": entry.ID, "detail": details}, nil, ledger.OK, nil, p.now()); err != nil {
+			return out, err
 		}
-		out.Outcomes = append(out.Outcomes, py.Dict{{Key: "action", Value: entry.ID}, {Key: "ok", Value: true}})
+		out.Outcomes = append(out.Outcomes, map[string]any{"action": entry.ID, "ok": true})
 	}
 	if err := ctx.Err(); err != nil {
 		return out, err
@@ -644,16 +676,23 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	out.SyncError = p.sync(ctx, prop)
 	out.Undone = true
 	for _, o := range out.Outcomes {
-		if ok, _ := o.Get("ok"); ok == false {
+		if ok, _ := o["ok"]; ok == false {
 			out.Undone = false
 		}
 	}
 	if out.Undone {
-		result, _ := prop.Result.(py.Dict)
-		result = result.Set("undone_ts", p.now())
-		if _, err := p.DB.Write.ExecContext(settle, "UPDATE proposals SET result = ? WHERE id = ?", py.JSONDumps(result), id); err != nil {
-			return UndoResult{}, err
+		if _, err := p.DB.Write.ExecContext(settle, "UPDATE proposals SET undone_ts = ? WHERE id = ?", p.now(), id); err != nil {
+			return out, err
 		}
 	}
 	return out, nil
+}
+
+func withSyncError(result any, msg string) any {
+	switch r := result.(type) {
+	case map[string]any:
+		r["sync_error"] = msg
+		return r
+	}
+	return result
 }

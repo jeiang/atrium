@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"time"
@@ -14,13 +15,13 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/ruleedit"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -32,28 +33,26 @@ const (
 
 	OpDeleteFolder = "delete_folder"
 	OpRuleDelete   = "rule_delete"
+	OpCancelSnooze = "cancel_snooze"
 )
 
 func chosenSnapshots(messages []mailops.Snapshot, wanted any) ([]mailops.Snapshot, error) {
 	if wanted == nil {
 		return slices.Clone(messages), nil
 	}
-	items, err := py.Iter(wanted)
-	if err != nil {
-		return nil, err
+	items, ok := wanted.([]any)
+	if !ok {
+		return nil, proposals.SelectionError("selection is not a list")
 	}
 	ids := map[int64]bool{}
 	outside := false
 	for _, item := range items {
-		id, err := py.Int(item)
-		if err != nil {
-			return nil, err
-		}
-		if id.IsInt64() {
-			ids[id.Int64()] = true
-		} else {
+		id, ok := numberToInt64(item)
+		if !ok {
 			outside = true
+			continue
 		}
+		ids[id] = true
 	}
 	known := map[int64]bool{}
 	for _, m := range messages {
@@ -84,18 +83,47 @@ type planned struct {
 	snaps []mailops.Snapshot
 }
 
-func get(d py.Dict, key string) any {
-	v, _ := d.Get(key)
-	return v
+type movesResult struct {
+	Summary      string `json:"summary"`
+	Moved        int    `json:"moved"`
+	Skipped      []any  `json:"skipped"`
+	Destinations []any  `json:"destinations"`
+}
+
+type deletionResult struct {
+	Summary string `json:"summary"`
+	Rule    string `json:"rule"`
+	Trashed int    `json:"trashed"`
+	Skipped []any  `json:"skipped"`
+}
+
+type labelMergeResult struct {
+	Summary         string `json:"summary"`
+	Relabelled      int    `json:"relabelled"`
+	LabelDeleted    bool   `json:"label_deleted"`
+	LabelKeptReason any    `json:"label_kept_reason"`
+	Skipped         []any  `json:"skipped"`
+}
+
+func withPairs(base map[string]any, kv ...any) map[string]any {
+	out := maps.Clone(base)
+	for i := 0; i+1 < len(kv); i += 2 {
+		out[kv[i].(string)] = kv[i+1]
+	}
+	return out
+}
+
+func get(d map[string]any, key string) any {
+	return d[key]
 }
 
 func selected(selection any, key string) (any, error) {
-	if !py.Truthy(selection) {
+	if !truthy(selection) {
 		return nil, nil
 	}
-	d, ok := selection.(py.Dict)
+	d, ok := selection.(map[string]any)
 	if !ok {
-		return nil, py.AttributeError(selection, "get")
+		return nil, fmt.Errorf("selection is not an object")
 	}
 	return get(d, key), nil
 }
@@ -105,32 +133,46 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 	if err != nil {
 		return nil, err
 	}
-	var picks []any
+	byID := map[string]map[string]any{}
 	if picksV != nil {
-		list, err := py.Iter(picksV)
-		if err != nil {
-			return nil, err
+		list, ok := picksV.([]any)
+		if !ok {
+			return nil, proposals.SelectionError("selection does not match the proposal groups")
 		}
 		if len(list) != len(groups) {
 			return nil, proposals.SelectionError("selection does not match the proposal groups")
 		}
-		picks = list
+		for _, value := range list {
+			d, ok := value.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("selection group is not an object")
+			}
+			id := d["id"]
+			name, ok := id.(string)
+			if !ok || name == "" {
+				return nil, proposals.SelectionError("selection group is missing its id")
+			}
+			if _, duplicate := byID[name]; duplicate {
+				return nil, proposals.SelectionError("selection repeats group " + strconv.Quote(name))
+			}
+			byID[name] = d
+		}
 	}
 	plan := make([]planned, 0, len(groups))
-	for i, g := range groups {
-		pick := py.Dict{}
-		if picks != nil {
-			d, ok := picks[i].(py.Dict)
+	for _, g := range groups {
+		pick := map[string]any{}
+		if picksV != nil {
+			found, ok := byID[g.Dest]
 			if !ok {
-				return nil, py.AttributeError(picks[i], "get")
+				return nil, proposals.SelectionError("selection does not name group " + strconv.Quote(g.Dest))
 			}
-			pick = d
+			pick = found
 		}
 		value := g.Dest
-		if chosen := get(pick, "name"); py.Truthy(chosen) {
+		if chosen := get(pick, "name"); truthy(chosen) {
 			s, ok := chosen.(string)
 			if !ok {
-				return nil, py.AttributeError(chosen, "strip")
+				return nil, fmt.Errorf("selection name is not text")
 			}
 			value = s
 		}
@@ -144,12 +186,15 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 		}
 		plan = append(plan, planned{name, snaps})
 	}
+	if picksV != nil && len(byID) != len(groups) {
+		return nil, proposals.SelectionError("selection names a group the proposal does not have")
+	}
 	return plan, nil
 }
 
 type Executors struct {
 	DB   *db.DB
-	Open mailops.Opener
+	Open mail.OpenFunc
 	Now  func() float64
 }
 
@@ -160,17 +205,17 @@ func (e *Executors) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-func (e *Executors) record(ctx context.Context, pid int64, action, undo py.Dict) error {
+func (e *Executors) record(ctx context.Context, pid int64, action, undo map[string]any) error {
 	var plan any
 	if undo != nil {
 		plan = undo
 	}
-	_, err := proposals.RecordAction(ctx, e.DB.Write, pid, action, plan, true, nil, e.now())
+	_, err := proposals.RecordAction(ctx, e.DB.Write, pid, "write", nil, action, plan, ledger.OK, nil, e.now())
 	return err
 }
 
-func (e *Executors) recordFailed(ctx context.Context, pid int64, action py.Dict, text string) error {
-	_, err := proposals.RecordAction(ctx, e.DB.Write, pid, action, nil, false, &text, e.now())
+func (e *Executors) recordFailed(ctx context.Context, pid int64, action map[string]any, text string) error {
+	_, err := proposals.RecordAction(ctx, e.DB.Write, pid, "write", nil, action, nil, ledger.Failed, &text, e.now())
 	return err
 }
 
@@ -182,8 +227,8 @@ type slot struct {
 	stop func()
 }
 
-func (e *Executors) hold(ctx context.Context, pid int64, action py.Dict, uids []uint32) (*slot, error) {
-	logged := append(slices.Clone(action), py.Pair{Key: "uids", Value: uidList(uids)})
+func (e *Executors) hold(ctx context.Context, pid int64, action map[string]any, uids []uint32) (*slot, error) {
+	logged := withPairs(action, "uids", uidList(uids))
 	id, err := proposals.BeginAction(ctx, e.DB.Write, pid, logged, e.now())
 	if err != nil {
 		return nil, err
@@ -191,27 +236,31 @@ func (e *Executors) hold(ctx context.Context, pid int64, action py.Dict, uids []
 	return &slot{e: e, pid: pid, id: id, uids: uids, stop: proposals.KeepActionAlive(e.DB.Write, e.now, id)}, nil
 }
 
-func (s *slot) settle(ctx context.Context, action, undo py.Dict, ok bool, text *string) error {
+func (s *slot) settle(ctx context.Context, action, undo map[string]any, state ledger.State, text *string) error {
 	var plan any
 	if undo != nil {
 		plan = undo
 	}
 	if s.id == 0 {
-		_, err := proposals.RecordAction(ctx, s.e.DB.Write, s.pid, action, plan, ok, text, s.e.now())
+		_, err := proposals.RecordAction(ctx, s.e.DB.Write, s.pid, "write", nil, action, plan, state, text, s.e.now())
 		return err
 	}
 	id := s.id
 	s.id = 0
 	s.stop()
-	return proposals.SettleAction(ctx, s.e.DB.Write, id, action, plan, ok, text, s.e.now())
+	return proposals.SettleAction(ctx, s.e.DB.Write, id, action, plan, state, text, s.e.now())
 }
 
-func (s *slot) record(ctx context.Context, action, undo py.Dict) error {
-	return s.settle(ctx, action, undo, true, nil)
+func (s *slot) record(ctx context.Context, action, undo map[string]any) error {
+	return s.settle(ctx, action, undo, ledger.OK, nil)
 }
 
-func (s *slot) recordFailed(ctx context.Context, action py.Dict, text string) error {
-	return s.settle(ctx, action, nil, false, &text)
+func (s *slot) recordFailed(ctx context.Context, action map[string]any, text string) error {
+	return s.settle(ctx, action, nil, ledger.Failed, &text)
+}
+
+func (s *slot) partial(ctx context.Context, action, undo map[string]any, text string) error {
+	return s.settle(ctx, action, undo, ledger.Partial, &text)
 }
 
 func (s *slot) release(ctx context.Context) error {
@@ -224,7 +273,7 @@ func (s *slot) release(ctx context.Context) error {
 	return proposals.DropAction(ctx, s.e.DB.Write, id)
 }
 
-func (s *slot) fail(ctx context.Context, action py.Dict, err error) error {
+func (s *slot) fail(ctx context.Context, action map[string]any, err error) error {
 	out := s.cancelled(ctx, action, err)
 	if rerr := s.release(ctx); rerr != nil && out == nil {
 		return rerr
@@ -232,7 +281,7 @@ func (s *slot) fail(ctx context.Context, action py.Dict, err error) error {
 	return out
 }
 
-func (s *slot) cancelled(ctx context.Context, action py.Dict, err error) error {
+func (s *slot) cancelled(ctx context.Context, action map[string]any, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -243,8 +292,8 @@ func (s *slot) cancelled(ctx context.Context, action py.Dict, err error) error {
 	if partial, ok := errors.AsType[*mailops.PartialMove](err); ok {
 		text = partial.Err.Error()
 	}
-	logged := append(slices.Clone(action), py.Pair{Key: "uids", Value: uidList(s.uids)})
-	if rerr := s.recordFailed(ctx, logged, mailops.UnknownPrefix+": "+text); rerr != nil {
+	logged := withPairs(action, "uids", uidList(s.uids))
+	if rerr := s.settle(ctx, logged, nil, ledger.Unknown, &text); rerr != nil {
 		return rerr
 	}
 	return err
@@ -262,7 +311,7 @@ func (e *Executors) logSkips(ctx context.Context, pid int64, skipped []mailops.S
 	if len(skipped) == 0 {
 		return nil
 	}
-	return e.recordFailed(ctx, pid, py.Dict{{Key: "op", Value: "skip"}, {Key: "messages", Value: skipList(skipped)}}, "changed since the proposal")
+	return e.recordFailed(ctx, pid, map[string]any{"op": "skip", "messages": skipList(skipped)}, "changed since the proposal")
 }
 
 func uidOrNil(copied *mail.CopyUID, uid uint32) any {
@@ -309,10 +358,7 @@ func (e *Executors) moveItems(ctx context.Context, client mail.Client, pid int64
 
 func (e *Executors) moveGroup(ctx context.Context, client mail.Client, pid int64, account string, g mailops.Group, destIMAP string) (moved int, err error) {
 	uids, byUID := sortedUIDs(g.Items)
-	action := py.Dict{
-		{Key: "op", Value: "move"}, {Key: "account", Value: account}, {Key: "src_imap", Value: g.IMAPName},
-		{Key: "src_uidvalidity", Value: g.UIDValidity}, {Key: "dest_imap", Value: destIMAP},
-	}
+	action := map[string]any{"op": "move", "account": account, "src_imap": g.IMAPName, "src_uidvalidity": g.UIDValidity, "dest_imap": destIMAP}
 	size, err := mailops.BatchSize(ctx, client)
 	if err != nil {
 		return 0, err
@@ -331,16 +377,10 @@ func (e *Executors) moveGroup(ctx context.Context, client mail.Client, pid int64
 	err = mailops.MoveUIDs(ctx, client, g.IMAPName, destIMAP, g.UIDValidity, uids, size, func(batch []uint32, copied *mail.CopyUID) error {
 		entries := make([]any, len(batch))
 		for i, u := range batch {
-			entries[i] = py.Dict{
-				{Key: "id", Value: byUID[u].ID}, {Key: "msgid", Value: byUID[u].MsgID}, {Key: "uid", Value: u},
-				{Key: "dest_uid", Value: uidOrNil(copied, u)},
-			}
+			entries[i] = map[string]any{"id": byUID[u].ID, "msgid": byUID[u].MsgID, "uid": u, "dest_uid": uidOrNil(copied, u)}
 		}
-		undo := py.Dict{
-			{Key: "op", Value: live.OpMoveBack}, {Key: "account", Value: account}, {Key: "src_imap", Value: g.IMAPName},
-			{Key: "dest_imap", Value: destIMAP}, {Key: "dest_uidvalidity", Value: validityOrNil(copied)}, {Key: "items", Value: entries},
-		}
-		done := append(slices.Clone(action), py.Pair{Key: "dest_uidvalidity", Value: validityOrNil(copied)}, py.Pair{Key: "items", Value: entries})
+		undo := map[string]any{"op": live.OpMoveBack, "account": account, "src_imap": g.IMAPName, "dest_imap": destIMAP, "dest_uidvalidity": validityOrNil(copied), "items": entries}
+		done := withPairs(action, "dest_uidvalidity", validityOrNil(copied), "items", entries)
 		if err := s.record(ctx, done, undo); err != nil {
 			return err
 		}
@@ -355,7 +395,7 @@ func (e *Executors) moveGroup(ctx context.Context, client mail.Client, pid int64
 		return nil
 	})
 	if partial, ok := errors.AsType[*mailops.PartialMove](err); ok && !partial.Unconfirmed {
-		copied := py.Dict{}
+		copied := map[string]any{}
 		if partial.Copied != nil {
 			keys := make([]uint32, 0, len(partial.Copied.Mapping))
 			for k := range partial.Copied.Mapping {
@@ -363,13 +403,14 @@ func (e *Executors) moveGroup(ctx context.Context, client mail.Client, pid int64
 			}
 			slices.Sort(keys)
 			for _, k := range keys {
-				copied = append(copied, py.Pair{Key: strconv.FormatUint(uint64(k), 10), Value: partial.Copied.Mapping[k]})
+				copied[strconv.FormatUint(uint64(k), 10)] = partial.Copied.Mapping[k]
 			}
 		}
-		failed := append(slices.Clone(action), py.Pair{Key: "dest_uidvalidity", Value: validityOrNil(partial.Copied)}, py.Pair{Key: "copied", Value: copied})
-		if rerr := s.recordFailed(ctx, failed, partial.Error()); rerr != nil {
+		failed := withPairs(action, "dest_uidvalidity", validityOrNil(partial.Copied), "copied", copied)
+		if rerr := s.partial(ctx, failed, nil, partial.Error()); rerr != nil {
 			return moved, rerr
 		}
+		return moved, err
 	}
 	if err != nil {
 		return moved, s.cancelled(ctx, action, err)
@@ -383,6 +424,13 @@ func uidList(uids []uint32) []any {
 		out[i] = u
 	}
 	return out
+}
+
+func nullableString(v string) any {
+	if v == "" {
+		return nil
+	}
+	return v
 }
 
 func stringList(values []string) []any {
@@ -429,8 +477,7 @@ func (e *Executors) relabelChunk(ctx context.Context, client mail.Client, pid in
 		uids[i] = item.UID
 		ids[i] = item.ID
 	}
-	attempt := py.Dict{{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: g.IMAPName},
-		{Key: "uidvalidity", Value: g.UIDValidity}, {Key: "add", Value: stringList(r.Add)}, {Key: "remove", Value: stringList(r.Remove)}}
+	attempt := map[string]any{"op": live.OpGmailLabels, "imap_name": g.IMAPName, "uidvalidity": g.UIDValidity, "add": stringList(r.Add), "remove": stringList(r.Remove)}
 	s, err := e.hold(ctx, pid, attempt, uids)
 	if err != nil {
 		return 0, err
@@ -438,12 +485,9 @@ func (e *Executors) relabelChunk(ctx context.Context, client mail.Client, pid in
 	if err := mailops.StoreLabels(ctx, client, g.IMAPName, g.UIDValidity, uids, size, r.Add, r.Remove); err != nil {
 		return 0, s.fail(ctx, attempt, err)
 	}
-	base := py.Dict{
-		{Key: "op", Value: live.OpGmailLabels}, {Key: "account", Value: account}, {Key: "imap_name", Value: g.IMAPName}, {Key: "uidvalidity", Value: g.UIDValidity},
-		{Key: "uids", Value: uidList(uids)}, {Key: "ids", Value: ids},
-	}
-	undo := append(slices.Clone(base), py.Pair{Key: "add", Value: stringList(r.Remove)}, py.Pair{Key: "remove", Value: stringList(r.Add)})
-	action := append(slices.Clone(base), py.Pair{Key: "add", Value: stringList(r.Add)}, py.Pair{Key: "remove", Value: stringList(r.Remove)})
+	base := map[string]any{"op": live.OpGmailLabels, "account": account, "imap_name": g.IMAPName, "uidvalidity": g.UIDValidity, "uids": uidList(uids), "ids": ids}
+	undo := withPairs(base, "add", stringList(r.Remove), "remove", stringList(r.Add))
+	action := withPairs(base, "add", stringList(r.Add), "remove", stringList(r.Remove))
 	if err := s.record(ctx, action, undo); err != nil {
 		return 0, err
 	}
@@ -455,7 +499,7 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 	if err != nil {
 		return 0, err
 	}
-	if config.Preset(account) != config.Gmail {
+	if config.From(ctx).Preset(account) != config.Gmail {
 		return e.moveItems(ctx, client, pid, account, items, trash)
 	}
 	trashed := 0
@@ -469,8 +513,7 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 			return trashed, err
 		}
 		for _, batch := range mailops.Chunks(uids, size) {
-			attempt := py.Dict{{Key: "op", Value: "trash"}, {Key: "imap_name", Value: g.IMAPName},
-				{Key: "uidvalidity", Value: g.UIDValidity}, {Key: "dest_imap", Value: trash}}
+			attempt := map[string]any{"op": "trash", "imap_name": g.IMAPName, "uidvalidity": g.UIDValidity, "dest_imap": trash}
 			s, err := e.hold(ctx, pid, attempt, batch)
 			if err != nil {
 				return trashed, err
@@ -483,21 +526,23 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 			var known []any
 			for i, u := range batch {
 				dest := uidOrNil(copied, u)
-				entries[i] = py.Dict{{Key: "id", Value: byUID[u].ID}, {Key: "uid", Value: u}, {Key: "dest_uid", Value: dest}}
+				entries[i] = map[string]any{"id": byUID[u].ID, "uid": u, "dest_uid": dest}
 				if dest != nil {
 					known = append(known, dest)
 				}
 			}
-			var undo py.Dict
-			if len(known) > 0 && len(known) == len(entries) {
-				undo = py.Dict{
-					{Key: "op", Value: live.OpGmailUntrash}, {Key: "account", Value: account}, {Key: "trash_imap", Value: trash},
-					{Key: "dest_uidvalidity", Value: validityOrNil(copied)}, {Key: "uids", Value: known},
-				}
+			var undo map[string]any
+			if len(known) > 0 {
+				undo = map[string]any{"op": live.OpGmailUntrash, "account": account, "trash_imap": trash, "dest_uidvalidity": validityOrNil(copied), "uids": known}
 			}
-			action := py.Dict{
-				{Key: "op", Value: "trash"}, {Key: "imap_name", Value: g.IMAPName}, {Key: "uidvalidity", Value: g.UIDValidity},
-				{Key: "dest_imap", Value: trash}, {Key: "items", Value: entries},
+			action := map[string]any{"op": "trash", "imap_name": g.IMAPName, "uidvalidity": g.UIDValidity, "dest_imap": trash, "items": entries}
+			if len(known) < len(entries) {
+				text := fmt.Sprintf("partial: %d of %d messages have no destination uid in Trash; check the mailbox", len(entries)-len(known), len(entries))
+				if err := s.partial(ctx, action, undo, text); err != nil {
+					return trashed, err
+				}
+				trashed += len(batch)
+				continue
 			}
 			if err := s.record(ctx, action, undo); err != nil {
 				return trashed, err
@@ -508,33 +553,73 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 	return trashed, nil
 }
 
-func decode(raw json.RawMessage) (py.Dict, error) {
-	v, err := py.JSONLoads(raw)
-	if err != nil {
+func decode(raw json.RawMessage) (map[string]any, error) {
+	var d map[string]any
+	if err := json.Unmarshal(raw, &d); err != nil {
 		return nil, err
 	}
-	d, ok := v.(py.Dict)
-	if !ok {
-		return nil, py.TypeError("'%s' object is not subscriptable", py.TypeName(v))
+	if d == nil {
+		return nil, fmt.Errorf("proposal payload is not an object")
 	}
 	return d, nil
 }
 
-func required(d py.Dict, key string) (any, error) {
-	v, ok := d.Get(key)
+func required(d map[string]any, key string) (any, error) {
+	v, ok := d[key]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", httpx.ErrKey, py.Repr(key))
+		return nil, fmt.Errorf("%w: %s", httpx.ErrMissing, strconv.Quote(key))
 	}
 	return v, nil
 }
 
 func snapshotsOf(v any) ([]mailops.Snapshot, error) {
 	var out []mailops.Snapshot
-	err := json.Unmarshal([]byte(py.JSONDumps(v)), &out)
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(b, &out)
 	return out, err
 }
 
-func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
+func truthy(v any) bool {
+	switch v := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return v
+	case string:
+		return v != ""
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	case []any:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	}
+	return true
+}
+
+func numberToInt64(v any) (int64, bool) {
+	switch n := v.(type) {
+	case int:
+		return int64(n), true
+	case int64:
+		return n, true
+	case float64:
+		return int64(n), n == float64(int64(n))
+	case json.Number:
+		i, err := n.Int64()
+		return i, err == nil
+	}
+	return 0, false
+}
+
+func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, selection any) (any, error) {
 	var payload struct {
 		Folder string  `json:"folder"`
 		Groups []group `json:"groups"`
@@ -548,7 +633,7 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 	}
 	account := p.AccountName()
 	moved, skipped, dests := 0, []mailops.Skip{}, []any{}
-	err = mailops.Session(ctx, e.Open, account, func(client mail.Client) error {
+	err = mailops.Session(ctx, e.Open, e.DB.Read, account, func(client mail.Client) error {
 		for _, step := range plan {
 			if len(step.snaps) == 0 {
 				continue
@@ -565,11 +650,11 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 				continue
 			}
 			var n int
-			if config.Preset(account) == config.Gmail {
+			if config.From(ctx).Preset(account) == config.Gmail {
 				n, err = e.relabelItems(ctx, client, p.ID, account, items, []string{step.name}, []string{payload.Folder})
 			} else {
 				dest := mail.UTF7Encode(step.name)
-				create := py.Dict{{Key: "op", Value: "create_folder"}, {Key: "imap_name", Value: dest}}
+				create := map[string]any{"op": "create_folder", "imap_name": dest}
 				s, herr := e.hold(ctx, p.ID, create, nil)
 				if herr != nil {
 					return herr
@@ -580,7 +665,7 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 				}
 				if created {
 					if err := s.record(ctx, create,
-						py.Dict{{Key: "op", Value: OpDeleteFolder}, {Key: "account", Value: account}, {Key: "imap_name", Value: dest}}); err != nil {
+						map[string]any{"op": OpDeleteFolder, "account": account, "imap_name": dest}); err != nil {
 						return err
 					}
 				}
@@ -600,13 +685,10 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{
-		{Key: "summary", Value: fmt.Sprintf("%d moved, %d skipped as changed", moved, len(skipped))},
-		{Key: "moved", Value: moved}, {Key: "skipped", Value: skipList(skipped)}, {Key: "destinations", Value: dests},
-	}, nil
+	return movesResult{Summary: fmt.Sprintf("%d moved, %d skipped as changed", moved, len(skipped)), Moved: moved, Skipped: skipList(skipped), Destinations: dests}, nil
 }
 
-func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
+func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, selection any) (any, error) {
 	payload, err := decode(p.Payload)
 	if err != nil {
 		return nil, err
@@ -631,9 +713,9 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 	if err != nil {
 		return nil, err
 	}
-	ruleDict, ok := rule.(py.Dict)
+	ruleDict, ok := rule.(map[string]any)
 	if !ok {
-		return nil, py.TypeError("'%s' object is not subscriptable", py.TypeName(rule))
+		return nil, fmt.Errorf("proposal rule is not an object")
 	}
 	id, err := required(ruleDict, "id")
 	if err != nil {
@@ -652,15 +734,15 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 			return nil, err
 		}
 		created = true
-		if err := e.record(ctx, p.ID, py.Dict{{Key: "op", Value: "rule_create"}, {Key: "id", Value: id}},
-			py.Dict{{Key: "op", Value: OpRuleDelete}, {Key: "id", Value: id}}); err != nil {
+		if err := e.record(ctx, p.ID, map[string]any{"op": "rule_create", "id": id},
+			map[string]any{"op": OpRuleDelete, "id": id}); err != nil {
 			return nil, err
 		}
 	}
 	trashed, skipped := 0, []mailops.Skip{}
 	if len(snaps) > 0 {
 		account := p.AccountName()
-		err := mailops.Session(ctx, e.Open, account, func(client mail.Client) error {
+		err := mailops.Session(ctx, e.Open, e.DB.Read, account, func(client mail.Client) error {
 			items, skips, err := mailops.Verify(ctx, e.DB.Read, client, account, snaps)
 			if err != nil {
 				return err
@@ -682,13 +764,10 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 	if created {
 		state = "created"
 	}
-	return py.Dict{
-		{Key: "summary", Value: fmt.Sprintf("rule %s, %d moved to Trash, %d skipped as changed", state, trashed, len(skipped))},
-		{Key: "rule", Value: id}, {Key: "trashed", Value: trashed}, {Key: "skipped", Value: skipList(skipped)},
-	}, nil
+	return deletionResult{Summary: fmt.Sprintf("rule %s, %d moved to Trash, %d skipped as changed", state, trashed, len(skipped)), Rule: fmt.Sprint(id), Trashed: trashed, Skipped: skipList(skipped)}, nil
 }
 
-func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
+func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal, selection any) (any, error) {
 	var payload struct {
 		Label    string             `json:"label"`
 		Into     string             `json:"into"`
@@ -709,7 +788,8 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 	var moved int
 	var skipped []mailops.Skip
 	deleted := false
-	err = mailops.Session(ctx, e.Open, account, func(client mail.Client) error {
+	keptReason := ""
+	err = mailops.Session(ctx, e.Open, e.DB.Read, account, func(client mail.Client) error {
 		items, skips, err := mailops.Verify(ctx, e.DB.Read, client, account, snaps)
 		if err != nil {
 			return err
@@ -723,10 +803,14 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 		}
 		label := mail.UTF7Encode(payload.Label)
 		st, err := client.Status(ctx, label)
-		if err != nil || st.Messages != 0 {
+		if err != nil {
 			return err
 		}
-		drop := py.Dict{{Key: "op", Value: "delete_label"}, {Key: "imap_name", Value: label}}
+		if st.Messages != 0 {
+			keptReason = fmt.Sprintf("%d messages still carry the label", st.Messages)
+			return nil
+		}
+		drop := map[string]any{"op": "delete_label", "imap_name": label}
 		s, err := e.hold(ctx, p.ID, drop, nil)
 		if err != nil {
 			return err
@@ -743,10 +827,12 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 	if deleted {
 		state = "deleted"
 	}
-	return py.Dict{
-		{Key: "summary", Value: fmt.Sprintf("%d relabelled, label %s, %d skipped as changed", moved, state, len(skipped))},
-		{Key: "relabelled", Value: moved}, {Key: "label_deleted", Value: deleted}, {Key: "skipped", Value: skipList(skipped)},
-	}, nil
+	summary := fmt.Sprintf("%d relabelled, label %s", moved, state)
+	if keptReason != "" {
+		summary += " (" + keptReason + ")"
+	}
+	summary += fmt.Sprintf(", %d skipped as changed", len(skipped))
+	return labelMergeResult{Summary: summary, Relabelled: moved, LabelDeleted: deleted, LabelKeptReason: nullableString(keptReason), Skipped: skipList(skipped)}, nil
 }
 
 type DeleteFolder struct {
@@ -758,13 +844,13 @@ type RuleDelete struct {
 	ID string `json:"id"`
 }
 
-func (e *Executors) UndoDeleteFolder(ctx context.Context, raw json.RawMessage) (py.Dict, error) {
+func (e *Executors) UndoDeleteFolder(ctx context.Context, raw json.RawMessage) (any, error) {
 	var plan DeleteFolder
 	if err := json.Unmarshal(raw, &plan); err != nil {
 		return nil, err
 	}
 	var deleted bool
-	err := mailops.Session(ctx, e.Open, plan.Account, func(client mail.Client) error {
+	err := mailops.Session(ctx, e.Open, e.DB.Read, plan.Account, func(client mail.Client) error {
 		var err error
 		deleted, err = mailops.DeleteFolderIfEmpty(ctx, client, plan.IMAPName)
 		return err
@@ -772,10 +858,10 @@ func (e *Executors) UndoDeleteFolder(ctx context.Context, raw json.RawMessage) (
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "deleted", Value: deleted}}, nil
+	return map[string]any{"deleted": deleted}, nil
 }
 
-func (e *Executors) UndoRuleDelete(ctx context.Context, raw json.RawMessage) (py.Dict, error) {
+func (e *Executors) UndoRuleDelete(ctx context.Context, raw json.RawMessage) (any, error) {
 	var plan RuleDelete
 	if err := json.Unmarshal(raw, &plan); err != nil {
 		return nil, err
@@ -784,29 +870,37 @@ func (e *Executors) UndoRuleDelete(ctx context.Context, raw json.RawMessage) (py
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "deleted", Value: deleted}}, nil
+	return map[string]any{"deleted": deleted}, nil
 }
 
-func SyncAfter(syncer *mailsync.Syncer, open mailops.Opener) proposals.SyncHook {
+func SyncAfter(syncer *mailsync.Syncer, open mail.OpenFunc) proposals.SyncHook {
 	return func(ctx context.Context, account string) error {
 		lock, err := db.Exclusive(ctx, syncer.Cfg.DBPath, db.ShortLockWait)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = lock.Close() }()
-		_, err = syncer.One(ctx, account, mailsync.Opener(open))
+		_, err = syncer.One(ctx, account, open)
 		return err
 	}
 }
 
-func Register(r *proposals.Registry, e *Executors, syncer *mailsync.Syncer) {
+func Register(r *proposals.Registry, e *Executors, syncer *mailsync.Syncer, owner string) {
 	r.Executors[RebalanceSplit] = e.ExecuteMoves
 	r.Executors[RebalanceMerge] = e.ExecuteMoves
 	r.Executors[DeletionRule] = e.ExecuteDeletion
 	r.Executors[GmailLabelMerge] = e.ExecuteLabelMerge
 	r.Executors[InboxBacklog] = e.ExecuteMoves
-	live.RegisterUndoers(r, e.Open)
+	r.Executors[MailTriage] = e.ExecuteTriage
+	r.AddKind(proposals.Kind{Name: RebalanceSplit, Module: owner, Label: "Split folder", Icon: "split", Picker: true, Groups: true})
+	r.AddKind(proposals.Kind{Name: RebalanceMerge, Module: owner, Label: "Merge folders", Icon: "merge", Picker: true, Group: true})
+	r.AddKind(proposals.Kind{Name: DeletionRule, Module: owner, Label: "Deletion rule", Icon: "trash-2", Picker: true, Messages: true, CountKey: "backlog"})
+	r.AddKind(proposals.Kind{Name: GmailLabelMerge, Module: owner, Label: "Merge labels", Icon: "tag", Picker: true, Messages: true, CountKey: "from_count"})
+	r.AddKind(proposals.Kind{Name: InboxBacklog, Module: owner, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true})
+	r.AddKind(proposals.Kind{Name: MailTriage, Module: owner, Label: "Mail triage", Icon: "inbox", Picker: true, Messages: true, CountKey: "count"})
+	live.RegisterUndoers(r, e.Open, e.DB.Read)
 	r.Undoers[OpDeleteFolder] = e.UndoDeleteFolder
 	r.Undoers[OpRuleDelete] = e.UndoRuleDelete
+	r.Undoers[OpCancelSnooze] = e.UndoCancelSnooze
 	r.Sync = SyncAfter(syncer, e.Open)
 }

@@ -1,28 +1,14 @@
 package dbtest
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
-
-func Mail(t testing.TB) *db.DB {
-	t.Helper()
-	d := Schema(t)
-	for i, account := range []string{"icloud", "gmail"} {
-		if _, err := d.Write.Exec("INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, account); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := d.Write.Exec("INSERT INTO mailboxes (id, account, name, imap_name, role) VALUES (?, ?, 'box', 'box', 'filed')", i+1, account); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return d
-}
 
 func AddMessage(t testing.TB, d *db.DB, uid int, body string, fields map[string]any) int64 {
 	t.Helper()
@@ -33,7 +19,8 @@ func AddMessage(t testing.TB, d *db.DB, uid int, body string, fields map[string]
 	row["digest"] = fmt.Sprintf("d%d", uid)
 	for k, v := range fields {
 		if list, ok := v.([]string); ok {
-			v = py.JSONDumps(list)
+			encoded, _ := json.Marshal(list)
+			v = string(encoded)
 		}
 		row[k] = v
 	}

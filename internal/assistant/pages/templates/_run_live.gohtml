@@ -1,4 +1,4 @@
-{{$d := .Data}}{{template "chat_run_live" (dict "thread_id" $d.thread_id "run_id" $d.run_id "after" $d.after)}}
+{{$d := .Data}}{{template "chat_run_live" (dict "thread_id" $d.ThreadID "run_id" $d.RunID "after" $d.After)}}
 
 {{define "chat_run_live"}}
 <li id="run-{{.run_id}}" class="flex flex-col gap-2 ps-10 text-xs" data-live-run="{{.run_id}}" data-thread="{{.thread_id}}" data-after="{{.after}}"

@@ -7,16 +7,20 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strings"
+	"strconv"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/tasks"
+	"github.com/jeiang/atrium/internal/textx"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
@@ -42,7 +46,7 @@ func (r *Reminders) env() config.Env {
 }
 
 func local(ts float64, loc *time.Location) time.Time {
-	sec, _ := py.SplitTimestamp(ts)
+	sec, _ := timex.SplitTimestamp(ts)
 	return time.Unix(sec, 0).In(loc)
 }
 
@@ -51,12 +55,13 @@ func ReminderTime(due, tz string, hour int, now float64) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	year, month, day, ok := py.DateFromISOFormat(due)
+	parsed, ok := timex.ParseDay(due)
 	if !ok {
-		return 0, fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrValue, py.Repr(due))
+		return 0, fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrPayload, strconv.Quote(due))
 	}
+	year, month, day := parsed.Year(), int(parsed.Month()), parsed.Day()
 	wall := time.Date(year, time.Month(month), day, hour, 0, 0, 0, time.UTC).Unix()
-	return max(float64(py.WallToUnix(loc, wall)), now+300), nil
+	return max(float64(timex.WallToUnix(loc, wall)), now+300), nil
 }
 
 func ReminderPrompt(text string, messageID int64) string {
@@ -65,13 +70,13 @@ func ReminderPrompt(text string, messageID int64) string {
 
 func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, error) {
 	if tz == "" {
-		tz = config.TZName(r.env())
+		tz = config.From(ctx).TZName(r.env())
 	}
 	loc, err := scheduler.Zone(tz)
 	if err != nil {
 		return 0, err
 	}
-	set := mail.Read(ctx, r.DB.Read)
+	set := endpoint.Read(ctx, r.DB.Read)
 	ahead := set.Int(mail.KeyLoopsRemindAheadDays)
 	overdue := set.Int(mail.KeyLoopsRemindOverdueDays)
 	hour := set.Int(mail.KeyLoopsRemindHour)
@@ -108,20 +113,26 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 		if err != nil {
 			return made, err
 		}
-		payload := py.Dict{
-			{Key: "commitment_id", Value: c.id}, {Key: "text", Value: c.text}, {Key: "due", Value: c.due},
-			{Key: "owner", Value: c.owner}, {Key: "message_id", Value: c.messageID}, {Key: "tz", Value: tz},
+		payload := map[string]any{
+			"commitment_id": c.id, "text": c.text, "due": c.due,
+			"owner": c.owner, "message_id": c.messageID, "tz": tz,
+			"remind_at": remindAt,
 		}
 		subject := ""
 		if c.subject != nil {
 			subject = *c.subject
 		}
-		preview := append(append(py.Dict{}, payload...), py.Pair{Key: "subject", Value: subject},
-			py.Pair{Key: "remind_at", Value: py.ISOFormat(local(remindAt, loc), "minutes")})
-		sum := sha256.Sum256([]byte(py.JSONDumps([]any{KindReminder, c.id})))
+		preview := map[string]any{}
+		for key, value := range payload {
+			preview[key] = value
+		}
+		preview["subject"] = subject
+		preview["remind_at"] = timex.ISOFormat(local(remindAt, loc), "minutes")
+		encoded, _ := json.Marshal([]any{KindReminder, c.id})
+		sum := sha256.Sum256(encoded)
 		fingerprint := hex.EncodeToString(sum[:])[:32]
-		title := fmt.Sprintf("Remind me: %s (due %s)", py.Clip(c.text, 80), c.due)
-		pid, created, err := proposals.Create(ctx, r.DB, KindReminder, nil, title, payload, preview, fingerprint, r.now())
+		title := fmt.Sprintf("Remind me: %s (due %s)", textx.Clip(c.text, 80), c.due)
+		pid, created, err := proposals.Create(ctx, r.DB, KindReminder, nil, title, payload, preview, fingerprint, now)
 		if err != nil {
 			return made, err
 		}
@@ -137,106 +148,90 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 	return made, nil
 }
 
-func payloadField(d py.Dict, key string) (any, error) {
-	v, ok := d.Get(key)
+func payloadField(d map[string]any, key string) (any, error) {
+	v, ok := d[key]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", httpx.ErrKey, py.Repr(key))
+		return nil, fmt.Errorf("%w: %s", httpx.ErrMissing, strconv.Quote(key))
 	}
 	return v, nil
 }
 
-func payloadString(d py.Dict, key string) (string, error) {
+func payloadNumber(d map[string]any, key string) (float64, error) {
+	v, err := payloadField(d, key)
+	if err != nil {
+		return 0, err
+	}
+	n, ok := v.(float64)
+	if !ok {
+		return 0, fmt.Errorf("%w: %s must be a number", httpx.ErrShape, key)
+	}
+	return n, nil
+}
+
+func payloadString(d map[string]any, key string) (string, error) {
 	v, err := payloadField(d, key)
 	if err != nil {
 		return "", err
 	}
 	s, ok := v.(string)
 	if !ok {
-		return "", fmt.Errorf("%w: %s must be a string, not %s", httpx.ErrType, key, py.TypeName(v))
+		return "", fmt.Errorf("%w: %s must be a string, not %s", httpx.ErrShape, key, fmt.Sprintf("%T", v))
 	}
 	return s, nil
 }
 
-func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
-	decoded, err := py.JSONLoads(p.Payload)
-	if err != nil {
+type executeResult struct {
+	Summary string `json:"summary"`
+	TaskID  int64  `json:"task_id"`
+}
+
+func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
+	var decoded any
+	if err := json.Unmarshal(p.Payload, &decoded); err != nil {
 		return nil, err
 	}
-	payload, ok := decoded.(py.Dict)
+	payload, ok := decoded.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("%w: reminder payload is not an object", httpx.ErrType)
+		return nil, fmt.Errorf("%w: reminder payload is not an object", httpx.ErrShape)
 	}
 	text, err := payloadString(payload, "text")
 	if err != nil {
 		return nil, err
 	}
-	due, err := payloadString(payload, "due")
-	if err != nil {
-		return nil, err
-	}
-	tz, err := payloadString(payload, "tz")
-	if err != nil {
-		return nil, err
-	}
-	messageID, err := payloadField(payload, "message_id")
-	if err != nil {
-		return nil, err
-	}
-	mid, err := py.Int(messageID)
+	remindAt, err := payloadNumber(payload, "remind_at")
 	if err != nil {
 		return nil, err
 	}
 	current := r.now()
-	set := mail.Read(ctx, r.DB.Read)
-	hour := set.Int(mail.KeyLoopsRemindHour)
-	if err := set.Err(); err != nil {
-		return nil, err
-	}
-	remindAt, err := ReminderTime(due, tz, hour, current)
-	if err != nil {
-		return nil, err
-	}
-	loc, err := scheduler.Zone(tz)
-	if err != nil {
-		return nil, err
-	}
-	moment := py.ISOFormat(local(remindAt, loc), "seconds")
-	jobID, err := scheduler.CreateJob(ctx, r.DB.Write, scheduler.NewJob{
-		Name:       "Reminder: " + py.Clip(text, 50),
-		Prompt:     ReminderPrompt(text, mid.Int64()),
-		Schedule:   moment,
-		TZ:         tz,
-		Now:        current,
-		SkipLimits: true,
+	id, err := tasks.Add(ctx, r.DB.Write, current, tasks.Spec{
+		Title: text, RemindAt: &remindAt, SourceKind: "proposal", SourceID: strconv.FormatInt(p.ID, 10),
 	})
 	if err != nil {
 		return nil, err
 	}
-	action := py.Dict{{Key: "type", Value: KindReminder}, {Key: "job_id", Value: jobID}}
-	undo := py.Dict{{Key: "op", Value: UndoReminder}, {Key: "job_id", Value: jobID}}
-	if _, err := proposals.RecordAction(ctx, r.DB.Write, p.ID, action, undo, true, nil, r.now()); err != nil {
+	action := map[string]any{"type": KindReminder, "task_id": id}
+	undo := map[string]any{"op": UndoReminder, "id": id}
+	if _, err := proposals.RecordAction(ctx, r.DB.Write, p.ID, "write", nil, action, undo, ledger.OK, nil, r.now()); err != nil {
 		return nil, err
 	}
-	return py.Dict{
-		{Key: "summary", Value: "Reminder scheduled for " + strings.ReplaceAll(py.Clip(moment, 16), "T", " ")},
-		{Key: "job_id", Value: jobID},
-	}, nil
+	return executeResult{Summary: "Reminder set for " + time.Unix(int64(remindAt), 0).UTC().Format("2006-01-02 15:04"), TaskID: id}, nil
 }
 
-func (r *Reminders) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
+func (r *Reminders) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
 	var info struct {
-		JobID int64 `json:"job_id"`
+		ID int64 `json:"id"`
 	}
 	if err := json.Unmarshal(plan, &info); err != nil {
 		return nil, err
 	}
-	if err := scheduler.CancelJob(ctx, r.DB.Write, info.JobID); err != nil {
+	if _, err := tasks.Delete(ctx, r.DB.Write, info.ID); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "cancelled", Value: info.JobID}}, nil
+	return map[string]any{"deleted": info.ID}, nil
 }
 
-func Register(reg *proposals.Registry, r *Reminders) {
+func Register(reg *proposals.Registry, r *Reminders, owner string) {
 	reg.Executors[KindReminder] = r.Execute
 	reg.Undoers[UndoReminder] = r.Undo
+	reg.AddKind(proposals.Kind{Name: KindReminder, Module: owner, Label: "Reminder", Icon: "scroll-text"})
 }

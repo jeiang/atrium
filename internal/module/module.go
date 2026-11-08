@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -25,12 +26,18 @@ const (
 	Contacts      = "contacts"
 )
 
+var Builtins = []string{Mail, Calendar, Notion, Media, Assistant, Notifications, Grafana, Contacts}
+
 type Module interface {
 	Register(mc Context) Registration
 }
 
 type Context struct {
-	Current func() *Snapshot
+	Current  func() *Snapshot
+	Evaluate func(context.Context, db.Querier) (*Snapshot, error)
+	Env      config.Env
+	Settings *settings.Registry
+	State    *config.State
 }
 
 func (c Context) Enabled(name string) bool {
@@ -47,15 +54,15 @@ func (c Context) Tools() (*registry.Registry, error) {
 }
 
 type Registration struct {
-	Name     string
-	Core     bool
-	Needs    []string
-	Soft     []string
-	Requires []Requirement
-	Pages    []web.Page
-	Commands []*cli.Command
-	Leaves   map[string]Leaf
-	Tools    func(r *registry.Registry) error
+	Name      string
+	Core      bool
+	Needs     []string
+	Requires  []Requirement
+	Pages     []web.Page
+	Commands  []*cli.Command
+	Leaves    map[string]Leaf
+	Tools     func(r *registry.Registry) error
+	Attention []attention.Source
 }
 
 type Leaf struct {
@@ -79,7 +86,7 @@ type Requirement struct {
 
 func Setting(key string) Requirement {
 	return Requirement{Name: key, Key: key, Check: func(ctx context.Context, p Probe) (string, error) {
-		got, err := p.Settings.Resolve(ctx, p.Q, key, 0)
+		got, err := p.Settings.Resolve(ctx, p.Q, key)
 		if err != nil {
 			return "", err
 		}
@@ -98,15 +105,12 @@ func Setting(key string) Requirement {
 func FlagKey(name string) string { return name + "_enabled" }
 
 func FlagDef(name string) settings.Def {
-	return settings.Def{
+	return settings.Value(settings.UI, settings.Def{
 		Key:     FlagKey(name),
 		Module:  Core,
 		Type:    settings.Bool,
 		Default: "false",
-		Class:   settings.UI,
-		Restart: true,
-		Scopes:  []settings.Scope{settings.Instance},
-	}
+		Page:    "/settings/modules"})
 }
 
 type State string
@@ -123,10 +127,10 @@ type Unmet struct {
 }
 
 type Status struct {
-	Name   string
-	State  State
-	Reason string
-	Unmet  []Unmet
+	Name  string
+	State State
+
+	Unmet []Unmet
 }
 
 var ErrNotEvaluated = errors.New("module: states are not evaluated yet")
@@ -151,7 +155,7 @@ type UnknownDependency struct {
 }
 
 func (e *UnknownDependency) Error() string {
-	return "module: " + e.Module + " needs " + e.Dependency + ", which is not registered before it"
+	return "module: " + e.Module + " needs " + e.Dependency + ", which is not registered"
 }
 
 type UnknownLeaf struct {
@@ -161,6 +165,24 @@ type UnknownLeaf struct {
 
 func (e *UnknownLeaf) Error() string {
 	return "module: " + e.Module + " has no command " + e.Path
+}
+
+type DependencyCycle struct{ Modules []string }
+
+func (e *DependencyCycle) Error() string {
+	return "module: dependency cycle among " + strings.Join(e.Modules, ", ")
+}
+
+type InvalidLeaf struct{ Module, Path string }
+
+func (e *InvalidLeaf) Error() string {
+	return "module: " + e.Module + " leaf " + e.Path + " sets both Always and Needs"
+}
+
+type InvalidPage struct{ Module string }
+
+func (e *InvalidPage) Error() string {
+	return "module: " + e.Module + " has a page with no Module"
 }
 
 type InvalidCore struct{ Module string }

@@ -36,5 +36,5 @@ func KeepAlive(x Execer, now func() float64, query string, args ...any) (stop fu
 }
 
 func KeepActionAlive(x Execer, now func() float64, id int64) (stop func()) {
-	return KeepAlive(x, now, "UPDATE proposal_actions SET ts = ? WHERE id = ? AND ok = 0 AND error = ?", id, InFlightText)
+	return KeepAlive(x, now, "UPDATE proposal_actions SET lease = ? WHERE id = ? AND state = 'held'", id)
 }

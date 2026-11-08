@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -21,10 +22,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	mailmime "github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/web"
-	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 const (
@@ -95,7 +94,7 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 
 func uploadReadError(err error, messageCap int) error {
 	if errors.As(err, new(*http.MaxBytesError)) {
-		return files.FileError(fmt.Sprintf("files in one message must total under %d MB", messageCap>>20))
+		return files.MessageCapError(messageCap)
 	}
 	return errBadBody
 }
@@ -106,7 +105,7 @@ func (p *pages) readUploads(w http.ResponseWriter, r *http.Request) (url.Values,
 	case errors.Is(err, errBadBody):
 		p.fail(w, r, http.StatusBadRequest, badBodyDetail)
 		return nil, nil, false
-	case err != nil && py.Strip(web.FormString(form, "text", "")) == "":
+	case err != nil && strings.TrimSpace(web.FormString(form, "text", "")) == "":
 		p.failure(w, r, "Nothing sent", "Type a message to go with the files.")
 		return nil, nil, false
 	case err != nil:
@@ -121,13 +120,6 @@ func archivedProject(project *projects.Project, verb string) (string, bool) {
 		return "", false
 	}
 	return fmt.Sprintf("“%s” is archived. Restore it to %s.", project.Name, verb), true
-}
-
-func (p *pages) remote(ctx context.Context) files.RemoteDeleter {
-	if client, err := p.svc.ResolveClient(ctx); err == nil {
-		return client
-	}
-	return nil
 }
 
 func (p *pages) threadFile(w http.ResponseWriter, r *http.Request) (*files.Row, string, bool) {
@@ -145,7 +137,12 @@ func (p *pages) threadFile(w http.ResponseWriter, r *http.Request) (*files.Row, 
 	}
 	found, err := files.Get(r.Context(), p.deps.DB.Read, fileID)
 	check(err)
-	if found == nil || found.ThreadID == nil || *found.ThreadID != threadID {
+	if found == nil {
+		p.fail(w, r, http.StatusNotFound, "unknown file")
+		return nil, "", false
+	}
+	owner, owned := files.OwnerOf(found)
+	if !owned || owner != files.ThreadOwner(threadID) {
 		p.fail(w, r, http.StatusNotFound, "unknown file")
 		return nil, "", false
 	}
@@ -159,7 +156,7 @@ func (p *pages) chatFile(w http.ResponseWriter, r *http.Request) {
 	}
 	preview, err := filePreview(r.Context(), p.deps.DB.Read, *found)
 	check(err)
-	p.fragment(w, r, http.StatusOK, "_file.gohtml", map[string]any{"file": preview, "file_url": fileURL})
+	p.fragment(w, r, http.StatusOK, "_file.gohtml", FileData{File: preview, FileURL: fileURL})
 }
 
 func (p *pages) chatFileDownload(w http.ResponseWriter, r *http.Request) {
@@ -193,14 +190,14 @@ func (p *pages) chatFileRaw(w http.ResponseWriter, r *http.Request) {
 }
 
 func contentType(media string) string {
-	if strings.HasPrefix(media, "text/") && !strings.Contains(py.Lower(media), "charset=") {
+	if strings.HasPrefix(media, "text/") && !strings.Contains(strings.ToLower(media), "charset=") {
 		return media + "; charset=utf-8"
 	}
 	return media
 }
 
 func disposition(name string) string {
-	if quoted := py.URLQuote(name); quoted != name {
+	if quoted := url.PathEscape(name); quoted != name {
 		return "attachment; filename*=utf-8''" + quoted
 	}
 	return `attachment; filename="` + name + `"`
@@ -244,7 +241,7 @@ func (p *pages) projectFiles(w http.ResponseWriter, r *http.Request, projectID i
 	if rows == nil {
 		rows = []files.Row{}
 	}
-	p.fragment(w, r, status, "_project_files.gohtml", map[string]any{"project": project, "files": rows, "error": problem})
+	p.fragment(w, r, status, "_project_files.gohtml", ProjectFiles{Project: project, Files: rows, Error: problem})
 }
 
 func (p *pages) projectFilesList(w http.ResponseWriter, r *http.Request) {
@@ -276,7 +273,7 @@ func (p *pages) projectFilesUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil {
 		limit := project.ContextLimit
-		_, err = files.IngestUploads(detached(r), p.deps.DB.Write, p.deps.Cfg.FilesDir(), uploads, p.now(), files.Owner{ProjectID: projectID}, &limit)
+		_, err = files.IngestUploads(detached(r), p.deps.DB, p.deps.Cfg.FilesDir(), uploads, p.now(), files.ProjectOwner(projectID), &limit)
 	}
 	var refused files.FileError
 	if errors.As(err, &refused) {
@@ -304,7 +301,12 @@ func (p *pages) projectFile(w http.ResponseWriter, r *http.Request) (int64, *fil
 	}
 	found, err := files.Get(r.Context(), p.deps.DB.Read, fileID)
 	check(err)
-	if found == nil || found.ProjectID == nil || *found.ProjectID != projectID {
+	if found == nil {
+		p.fail(w, r, http.StatusNotFound, "unknown file")
+		return 0, nil, false
+	}
+	owner, owned := files.OwnerOf(found)
+	if !owned || owner != files.ProjectOwner(projectID) {
 		p.fail(w, r, http.StatusNotFound, "unknown file")
 		return 0, nil, false
 	}
@@ -331,51 +333,48 @@ func (p *pages) projectFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	_, err := files.DeleteOne(ctx, p.deps.DB.Write, p.remote(ctx), found.ID)
+	_, err := files.DeleteOne(ctx, p.deps.DB.Write, found.ID)
 	check(err)
 	p.projectFiles(w, r, projectID, http.StatusOK, nil)
 }
 
-func filePreview(ctx context.Context, q db.Querier, found files.Row) (map[string]any, error) {
-	limit, err := config.Limit(ctx, q, config.KeyPreviewBytes)
+func filePreview(ctx context.Context, q db.Querier, found files.Row) (FilePreview, error) {
+	limit, err := config.From(ctx).Limit(ctx, q, config.KeyPreviewBytes)
 	if err != nil {
-		return nil, err
+		return FilePreview{}, err
 	}
-	out := tpl.View(found).(map[string]any)
 	render, text, rows, truncated, err := previewOf(found, limit)
 	if err != nil {
-		return nil, err
+		return FilePreview{}, err
 	}
-	out["render"], out["text"], out["rows"], out["truncated"] = render, text, rows, truncated
-	return out, nil
+	return FilePreview{ID: found.ID, ThreadID: found.ThreadID, RunID: found.RunID, Name: found.Name, MediaType: found.MediaType,
+		Bytes: found.Bytes, Path: found.Path, Origin: found.Origin, CreatedAt: found.CreatedAt, Text: found.Text, Tokens: found.Tokens,
+		ProjectID: found.ProjectID, Render: render, Body: text, Rows: rows, Truncated: truncated}, nil
 }
 
-func previewOf(found files.Row, previewBytes int) (render any, text string, rows [][]string, truncated bool, err error) {
+func previewOf(found files.Row, previewBytes int) (render string, text string, rows [][]string, truncated bool, err error) {
 	rows = [][]string{}
 	media := found.MediaType
 	if files.IsImageType(media) {
 		return "image", "", rows, false, nil
 	}
 	if media == files.PDFType {
-		return nil, "", rows, false, nil
+		return "", "", rows, false, nil
 	}
 	var body *string
 	if found.Text == nil {
 		info, statErr := os.Stat(found.Path)
 		if statErr != nil || !info.Mode().IsRegular() {
-			return nil, "", rows, false, nil
+			return "", "", rows, false, nil
 		}
 		raw, readErr := os.ReadFile(found.Path)
 		if readErr != nil {
-			return nil, "", nil, false, readErr
+			return "", "", nil, false, readErr
 		}
 		truncated = len(raw) > previewBytes
 		head := raw[:min(len(raw), sniffBytes)]
 		if strings.HasPrefix(media, "text/") || media == "application/json" || media == "application/xml" || bytes.IndexByte(head, 0) < 0 {
-			decoded, decodeErr := mailmime.DecodeReplace(raw[:min(len(raw), previewBytes)], "utf-8")
-			if decodeErr != nil {
-				return nil, "", nil, false, decodeErr
-			}
+			decoded := httpx.DecodeReplace(raw[:min(len(raw), previewBytes)])
 			body = &decoded
 		}
 	} else if utf8.RuneCountInString(*found.Text) > previewBytes {
@@ -385,9 +384,9 @@ func previewOf(found files.Row, previewBytes int) (render any, text string, rows
 		body = found.Text
 	}
 	if body == nil {
-		return nil, "", rows, false, nil
+		return "", "", rows, false, nil
 	}
-	suffix := py.Lower(py.PathSuffix(py.PathName(found.Path)))
+	suffix := strings.ToLower(path.Ext(path.Base(found.Path)))
 	switch {
 	case slices.Contains(markdownTypes, media) || suffix == ".md" || suffix == ".markdown":
 		return "markdown", *body, rows, truncated, nil

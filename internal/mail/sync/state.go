@@ -6,7 +6,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var systemRoles = map[string]bool{"trash": true, "sent": true, "drafts": true, "junk": true}
@@ -27,11 +26,11 @@ func bit(b bool) int {
 	return 0
 }
 
-func MessageState(account, role, mailboxName string, flags, labels []string) State {
+func MessageState(preset, role, mailboxName string, flags, labels []string) State {
 	var st State
 	st.Seen = bit(slices.Contains(flags, `\Seen`))
 	st.Flagged = bit(slices.Contains(flags, `\Flagged`))
-	if config.Preset(account) == config.Gmail {
+	if preset == config.Gmail {
 		if labels == nil {
 			labels = []string{}
 		}
@@ -60,7 +59,7 @@ func MessageState(account, role, mailboxName string, flags, labels []string) Sta
 	}
 	sorted := slices.Clone(flags)
 	slices.Sort(sorted)
-	st.Flags = py.JSONDumps(append([]string{}, sorted...))
-	st.Labels = py.JSONDumps(labels)
+	st.Flags = jsonString(append([]string{}, sorted...))
+	st.Labels = jsonString(labels)
 	return st
 }

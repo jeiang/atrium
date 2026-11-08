@@ -2,11 +2,11 @@ package notify
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	modules "github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -24,45 +24,39 @@ const (
 )
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
 	settings.MustRegister(
-		settings.Def{Key: KeyURL, Module: module, Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: KeyTopic, Module: module, Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: KeyMediaTopic, Module: module, Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{
+		settings.Value(settings.UI, settings.Def{Key: KeyURL, Module: module, Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: KeyTopic, Module: module, Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: KeyMediaTopic, Module: module, Type: settings.String}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: KeyTimeoutSeconds, Module: module, Type: settings.Int, Default: "10",
-			Check: settings.Between(1, 120), Class: settings.Advanced, Scopes: instance,
-		},
-		settings.Def{
+			Check: settings.Between(1, 120)}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: KeyPerRunCap, Module: module, Type: settings.Int, Default: "3",
-			Check: settings.Between(0, 100), Class: settings.Cap, Scopes: instance,
-		},
-		settings.Def{
+			Check: settings.Between(0, 100)}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: KeyNightlyCap, Module: module, Type: settings.Int, Default: "1",
-			Check: settings.Between(0, 100), Class: settings.Cap, Scopes: instance,
-		},
-		settings.Def{
+			Check: settings.Between(0, 100)}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: KeyTitleChars, Module: module, Type: settings.Int, Default: "120",
-			Check: settings.Between(1, 250), Class: settings.Advanced, Scopes: instance,
-		},
-		settings.Def{
+			Check: settings.Between(1, 250)}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: KeyBodyChars, Module: module, Type: settings.Int, Default: "1000",
-			Check: settings.Between(1, 4000), Class: settings.Advanced, Scopes: instance,
-		},
+			Check: settings.Between(1, 4000)}),
 	)
 }
 
-func Enabled(ctx context.Context, q db.Querier) (bool, error) {
-	return modules.FlagOn(ctx, q, modules.Notifications)
+func Enabled(ctx context.Context) bool {
+	return modules.IsEnabled(ctx, modules.Notifications)
 }
 
 func text(ctx context.Context, q db.Querier, key string) (string, error) {
-	found, err := settings.Default.Resolve(ctx, q, key, 0)
-	return py.Strip(found.Value), err
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
+	return strings.TrimSpace(found.Value), err
 }
 
 func whole(ctx context.Context, q db.Querier, key string) (int, error) {
-	found, err := settings.Default.Resolve(ctx, q, key, 0)
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	if err != nil {
 		return 0, err
 	}

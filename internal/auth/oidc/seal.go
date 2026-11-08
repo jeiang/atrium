@@ -54,6 +54,20 @@ func (s *sealer) seal(value string) string {
 	return sealedPrefix + base64.RawStdEncoding.EncodeToString(s.aead.Seal(nonce, nonce, []byte(value), nil))
 }
 
+func (s *sealer) sealPending(value string) string {
+	if s == nil || s.aead == nil {
+		return value
+	}
+	return s.seal(value)
+}
+
+func (s *sealer) openPending(stored string) string {
+	if s == nil || (s.aead == nil && !s.plain) {
+		return stored
+	}
+	return s.open(stored)
+}
+
 func (s *sealer) open(stored string) string {
 	switch {
 	case strings.HasPrefix(stored, plainPrefix):

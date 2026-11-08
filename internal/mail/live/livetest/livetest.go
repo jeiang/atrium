@@ -15,8 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/safety"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
@@ -36,6 +35,8 @@ type World struct {
 	Mode     string
 	DB       *db.DB
 	Cfg      config.Config
+	Settings *settings.Registry
+	State    *config.State
 	Fake     *mailtest.FakeClient
 	Syncer   *mailsync.Syncer
 	Registry *proposals.Registry
@@ -44,6 +45,12 @@ type World struct {
 	Synced   []string
 	Opened   int
 }
+
+func (w *World) Context() context.Context {
+	return config.With(settings.With(context.Background(), w.Settings), w.State)
+}
+
+func (w *World) ctx() context.Context { return w.Context() }
 
 func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClient), seed func(*World)) *World {
 	t.Helper()
@@ -56,27 +63,27 @@ func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClien
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &World{T: t, Account: account, Mode: mode, DB: dbtest.Schema(t), Cfg: cfg, Fake: mailtest.NewFakeClient(), Clock: 1_792_080_000}
-	w.Fake.BindMode(w.DB.Read)
-	mailtest.PinMode(t, mode)
-	mailtest.UseAccounts(t, map[string]string{config.ICloud: "me", config.Gmail: "me@gmail.test"})
+	reg := settings.New()
+	w := &World{T: t, Account: account, Mode: mode, DB: dbtest.Schema(t), Cfg: cfg, Settings: reg, State: config.NewState(reg), Fake: mailtest.NewFakeClient(), Clock: 1_792_080_000}
+	mailtest.PinMode(t, w.Settings, mode)
+	mailtest.UseAccounts(t, w.State, map[string]string{config.ICloud: "me", config.Gmail: "me@gmail.test"})
 	for _, a := range [...]string{config.ICloud, config.Gmail} {
 		w.exec("INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", a, a)
 	}
 	clock := func() float64 { return w.Clock }
 	w.Syncer = &mailsync.Syncer{DB: w.DB, Cfg: cfg, Now: clock}
 	w.Registry = proposals.NewRegistry()
-	live.RegisterUndoers(w.Registry, w.Open)
+	live.RegisterUndoers(w.Registry, w.Open, w.DB.Read)
 	w.Registry.Sync = func(ctx context.Context, account string) error {
 		w.Synced = append(w.Synced, account)
-		_, err := w.Syncer.Account(ctx, account, w.Fake)
+		_, err := w.Syncer.Account(ctx, account, w.Client())
 		return err
 	}
 	w.Live = &live.Live{DB: w.DB, Cfg: cfg, Registry: w.Registry, Now: clock}
 	boxes(w.Fake)
 	seed(w)
 	w.Sync()
-	if _, err := w.Live.EnsureGolive(context.Background(), nil); err != nil {
+	if _, err := w.Live.EnsureGolive(w.ctx(), nil); err != nil {
 		t.Fatal(err)
 	}
 	w.Clock += 60
@@ -92,19 +99,7 @@ func ICloud(t *testing.T, mode string, seed ...Seed) *World {
 		f.AddBox("Sent Messages", mailtest.NewBox(5), `\Sent`)
 	}, func(w *World) {
 		for _, s := range seed {
-			w.add(w.Fake.Boxes[config.Inbox], s.Subject, "a@x.test", s.Flags, nil)
-		}
-	})
-}
-
-func Gmail(t *testing.T, mode string, seed ...Seed) *World {
-	return newWorld(t, config.Gmail, mode, func(f *mailtest.FakeClient) {
-		f.Gmail = true
-		f.AddBox(config.GmailAllMail, mailtest.NewBox(1))
-		f.AddBox("[Gmail]/Trash", mailtest.NewBox(5), `\Trash`)
-	}, func(w *World) {
-		for _, s := range seed {
-			w.add(w.Fake.Boxes[config.GmailAllMail], s.Subject, "a@x.test", s.Flags, s.Labels)
+			w.add(w.Fake.Boxes[config.Inbox].Box, s.Subject, "a@x.test", s.Flags, nil)
 		}
 	})
 }
@@ -116,11 +111,11 @@ func (w *World) exec(query string, args ...any) {
 	}
 }
 
-func (w *World) Exec(query string, args ...any) { w.T.Helper(); w.exec(query, args...) }
+func (w *World) Client() mail.Client { return mail.Gated(w.Fake, w.DB.Read) }
 
-func (w *World) Open(context.Context, string) (mail.Client, error) {
+func (w *World) Open(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
 	w.Opened++
-	return w.Fake, nil
+	return mail.Gated(w.Fake, opts.Q), nil
 }
 
 func (w *World) add(box *mailtest.FakeBox, subject, sender string, flags, labels []string) uint32 {
@@ -129,16 +124,16 @@ func (w *World) add(box *mailtest.FakeBox, subject, sender string, flags, labels
 }
 
 func (w *World) InboxBox() *mailtest.FakeBox {
-	if config.Preset(w.Account) == config.Gmail {
-		return w.Fake.Boxes[config.GmailAllMail]
+	if w.State.Preset(w.Account) == config.Gmail {
+		return w.Fake.Boxes[config.GmailAllMail].Box
 	}
-	return w.Fake.Boxes[config.Inbox]
+	return w.Fake.Boxes[config.Inbox].Box
 }
 
 func (w *World) Arrive(subject string, flags ...string) uint32 {
 	w.T.Helper()
 	var labels []string
-	if config.Preset(w.Account) == config.Gmail {
+	if w.State.Preset(w.Account) == config.Gmail {
 		labels = []string{mailops.InboxLabel}
 	}
 	if flags == nil {
@@ -151,7 +146,7 @@ func (w *World) Arrive(subject string, flags ...string) uint32 {
 
 func (w *World) Sync() {
 	w.T.Helper()
-	if _, err := w.Syncer.Account(context.Background(), w.Account, w.Fake); err != nil {
+	if _, err := w.Syncer.Account(w.ctx(), w.Account, w.Client()); err != nil {
 		w.T.Fatal(err)
 	}
 }
@@ -189,136 +184,11 @@ func (w *World) Actions() []live.Action {
 	}
 	out := make([]live.Action, len(ids))
 	for i, id := range ids {
-		a, err := live.Get(context.Background(), w.DB.Read, id)
+		a, err := live.Get(w.ctx(), w.DB.Read, id)
 		if err != nil || a == nil {
 			w.T.Fatalf("action %d: %v", id, err)
 		}
 		out[i] = *a
 	}
 	return out
-}
-
-func (w *World) Automatic() context.Context {
-	return safety.AutomaticWrites(context.Background(), w.Cfg.PausePath())
-}
-
-func (w *World) verified(subject string) mailops.Verified {
-	w.T.Helper()
-	snaps, err := mailops.Snapshots(context.Background(), w.DB.Read, []int64{w.MID(subject)})
-	if err != nil {
-		w.T.Fatal(err)
-	}
-	ok, skipped, err := mailops.Verify(context.Background(), w.DB.Read, w.Fake, w.Account, snaps)
-	if err != nil || len(ok) != 1 {
-		w.T.Fatalf("verify %q: %v %v %v", subject, ok, skipped, err)
-	}
-	return ok[0]
-}
-
-func before(v mailops.Verified) py.Dict {
-	return py.Dict{
-		{Key: "imap_name", Value: v.IMAPName}, {Key: "uidvalidity", Value: v.UIDValidity}, {Key: "uid", Value: v.UID},
-		{Key: "msgid", Value: v.MsgID}, {Key: "flags", Value: v.Flags}, {Key: "labels", Value: v.Labels},
-	}
-}
-
-func (w *World) begin(v mailops.Verified, kind string, dest *string) int64 {
-	w.T.Helper()
-	id, ok, err := w.Live.Begin(context.Background(), w.Account, v.ID, v.Digest, kind, new(v.IMAPName), dest, before(v), nil)
-	if err != nil || !ok {
-		w.T.Fatalf("begin %s: %v %v", kind, ok, err)
-	}
-	return id
-}
-
-func (w *World) File(subject, kind, dest string) int64 {
-	w.T.Helper()
-	v := w.verified(subject)
-	id := w.begin(v, kind, &dest)
-	ctx := w.Automatic()
-	err := mailops.MoveUIDs(ctx, w.Fake, v.IMAPName, dest, v.UIDValidity, []uint32{v.UID}, mailops.Batch, func(_ []uint32, copied *mail.CopyUID) error {
-		var validity, destUID any
-		if copied != nil {
-			validity = copied.UIDValidity
-			if u, ok := copied.Mapping[v.UID]; ok {
-				destUID = u
-			}
-		}
-		after := py.Dict{{Key: "imap_name", Value: dest}, {Key: "uidvalidity", Value: validity}, {Key: "uid", Value: destUID}}
-		undo := py.Dict{
-			{Key: "op", Value: live.OpMoveBack}, {Key: "account", Value: w.Account}, {Key: "src_imap", Value: v.IMAPName},
-			{Key: "dest_imap", Value: dest}, {Key: "dest_uidvalidity", Value: validity},
-			{Key: "items", Value: []any{py.Dict{{Key: "id", Value: v.ID}, {Key: "msgid", Value: v.MsgID}, {Key: "uid", Value: v.UID}, {Key: "dest_uid", Value: destUID}}}},
-		}
-		return w.Live.Finish(ctx, id, after, undo, nil)
-	})
-	if err != nil {
-		w.T.Fatal(err)
-	}
-	return id
-}
-
-func (w *World) Relabel(subject, dest string) int64 {
-	w.T.Helper()
-	v := w.verified(subject)
-	id := w.begin(v, live.File, &dest)
-	ctx := w.Automatic()
-	if err := mailops.StoreLabels(ctx, w.Fake, v.IMAPName, v.UIDValidity, []uint32{v.UID}, mailops.Batch, []string{dest}, []string{mailops.InboxLabel}); err != nil {
-		w.T.Fatal(err)
-	}
-	undo := py.Dict{
-		{Key: "op", Value: live.OpGmailLabels}, {Key: "imap_name", Value: v.IMAPName}, {Key: "uidvalidity", Value: v.UIDValidity},
-		{Key: "uids", Value: []uint32{v.UID}}, {Key: "add", Value: []string{mailops.InboxLabel}}, {Key: "remove", Value: []string{dest}},
-	}
-	after := py.Dict{{Key: "add", Value: []string{dest}}, {Key: "remove", Value: []string{mailops.InboxLabel}}}
-	if err := w.Live.Finish(ctx, id, after, undo, nil); err != nil {
-		w.T.Fatal(err)
-	}
-	return id
-}
-
-func (w *World) Flag(subject string) int64 {
-	w.T.Helper()
-	v := w.verified(subject)
-	id := w.begin(v, live.Flag, nil)
-	ctx := w.Automatic()
-	if err := mailops.StoreFlag(ctx, w.Fake, v.IMAPName, v.UIDValidity, []uint32{v.UID}, mailops.Batch, mailops.Flagged, true); err != nil {
-		w.T.Fatal(err)
-	}
-	undo := py.Dict{
-		{Key: "op", Value: live.OpUnflag}, {Key: "account", Value: w.Account}, {Key: "imap_name", Value: v.IMAPName},
-		{Key: "uidvalidity", Value: v.UIDValidity}, {Key: "uids", Value: []uint32{v.UID}},
-	}
-	if err := w.Live.Finish(ctx, id, py.Dict{{Key: "flag", Value: mailops.Flagged}}, undo, nil); err != nil {
-		w.T.Fatal(err)
-	}
-	return id
-}
-
-func (w *World) GmailTrash(subject string) int64 {
-	w.T.Helper()
-	v := w.verified(subject)
-	ctx := w.Automatic()
-	trash, err := mailops.TrashMailbox(ctx, w.Fake, w.Account)
-	if err != nil {
-		w.T.Fatal(err)
-	}
-	id := w.begin(v, live.Trash, &trash)
-	if err := mailops.SelectRW(ctx, w.Fake, v.IMAPName, v.UIDValidity); err != nil {
-		w.T.Fatal(err)
-	}
-	copied, err := mailops.CopyUIDs(ctx, w.Fake, trash, []uint32{v.UID})
-	if err != nil || copied == nil {
-		w.T.Fatalf("copy: %v %v", copied, err)
-	}
-	destUID := copied.Mapping[v.UID]
-	undo := py.Dict{
-		{Key: "op", Value: live.OpGmailUntrash}, {Key: "trash_imap", Value: trash},
-		{Key: "dest_uidvalidity", Value: copied.UIDValidity}, {Key: "uids", Value: []uint32{destUID}},
-	}
-	after := py.Dict{{Key: "imap_name", Value: trash}, {Key: "uidvalidity", Value: copied.UIDValidity}, {Key: "uid", Value: destUID}}
-	if err := w.Live.Finish(ctx, id, after, undo, nil); err != nil {
-		w.T.Fatal(err)
-	}
-	return id
 }

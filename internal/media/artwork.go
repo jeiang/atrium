@@ -16,13 +16,9 @@ import (
 	"unicode"
 
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
-	KindShow   = "show"
-	KindSeason = "season"
-
 	postersDir = "posters"
 	thumbsDir  = "thumbs"
 )
@@ -51,7 +47,7 @@ func slugOf(text string) string {
 			b.WriteByte('_')
 		}
 	}
-	slug := py.Strip(b.String())
+	slug := strings.TrimSpace(b.String())
 	if slug == "" || slug == "." || slug == ".." {
 		return "_"
 	}
@@ -131,6 +127,13 @@ func (a *Artwork) posterPath(ctx context.Context, kind, name string, season int6
 		found, err := a.TMDB.SearchMovie(ctx, title, parsed.Year)
 		if err != nil || len(found) == 0 {
 			return "", err
+		}
+		if parsed.Year != "" {
+			for _, movie := range found {
+				if movie.Year == parsed.Year {
+					return movie.PosterPath, nil
+				}
+			}
 		}
 		return found[0].PosterPath, nil
 	}
@@ -226,7 +229,7 @@ func (a *Artwork) duration(ctx context.Context, full string) (float64, error) {
 	if code != 0 {
 		return 0, nil
 	}
-	seconds, perr := py.ParseFloat(stdout)
+	seconds, perr := strconv.ParseFloat(strings.TrimSpace(stdout), 64)
 	if perr != nil {
 		return 0, nil
 	}
@@ -280,7 +283,16 @@ func (a *Artwork) Thumbnail(ctx context.Context, root, rel string) (string, bool
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fail(err)
 	}
-	tmp := strings.TrimSuffix(path, ".jpg") + ".tmp.jpg"
+	tmpFile, err := os.CreateTemp(filepath.Dir(path), ".thumb-*.jpg")
+	if err != nil {
+		return fail(err)
+	}
+	tmp := tmpFile.Name()
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return fail(err)
+	}
+	defer func() { _ = os.Remove(tmp) }()
 	_, stderr, code, err := a.run(ctx, a.niced("ffmpeg", "-v", "error", "-y", "-ss", seekText(at), "-i", full, "-frames:v", "1", "-vf", fmt.Sprintf("scale=%d:-2", a.ThumbWidth), "-q:v", "4", tmp))
 	if err != nil {
 		return fail(err)

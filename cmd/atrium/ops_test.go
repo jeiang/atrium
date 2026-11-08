@@ -37,7 +37,7 @@ func opsAddr(t *testing.T) string {
 	}
 	addr := l.Addr().String()
 	_ = l.Close()
-	t.Setenv(settingEnv(ops.ListenKey), addr)
+	setEnv(t, settingEnv(ops.ListenKey), addr)
 	return "http://" + addr
 }
 
@@ -52,7 +52,8 @@ func readiness(t *testing.T, base string) (int, string) {
 }
 
 func TestOpsListenerServesMetricsAndReadinessApartFromThePublicListener(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept(module.Notifications, "false"))
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Notifications, "false"))
 	opsBase := opsAddr(t)
 
 	path := filepath.Join(dir, "atrium.db")
@@ -110,13 +111,14 @@ func TestOpsListenerServesMetricsAndReadinessApartFromThePublicListener(t *testi
 }
 
 func TestOpsReadinessIsDegradedWhenNtfyIsDownAndPprofFollowsItsSetting(t *testing.T) {
+	t.Parallel()
 	ntfy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	t.Cleanup(ntfy.Close)
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(settingEnv(notify.KeyURL), ntfy.URL)
-	t.Setenv(settingEnv(ops.PprofKey), "true")
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(notify.KeyURL), ntfy.URL)
+	setEnv(t, settingEnv(ops.PprofKey), "true")
 	opsBase := opsAddr(t)
 	startServeIn(t, dir)
 

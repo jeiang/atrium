@@ -31,7 +31,7 @@ func runSettings(t *testing.T, args ...string) settingsRun {
 	t.Helper()
 	var out bytes.Buffer
 	var errs lockedBuffer
-	code := newApp().Run(context.Background(), append([]string{"settings"}, args...), &out, &errs)
+	code := defaultApp(t).Run(context.Background(), append([]string{"settings"}, args...), &out, &errs)
 	return settingsRun{code, out.String(), errs.String()}
 }
 
@@ -57,11 +57,12 @@ func storedSetting(t *testing.T, path, key string) (string, bool) {
 }
 
 func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	t.Setenv("ATRIUM_DB", path)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 
 	expect := func(got settingRow, value, source, class string) {
 		t.Helper()
@@ -80,7 +81,7 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 		listed = append(listed, row.Key)
 	}
 	var registered []string
-	for _, def := range settings.Default.Defs() {
+	for _, def := range settings.New().Defs() {
 		registered = append(registered, def.Key)
 	}
 	if !slices.Equal(listed, registered) || !slices.Contains(listed, "monthly_budget_usd") || !slices.Contains(listed, "cache_ttl_chat") {
@@ -112,7 +113,7 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 		{"monthly_budget_usd", "0"},
 		{"cache_ttl_chat", "10m"},
 	} {
-		wantMessage := settings.Default.Validate(tc.key, tc.value)
+		wantMessage := settings.New().Validate(tc.key, tc.value)
 		if wantMessage == nil {
 			t.Fatalf("registry accepts %s=%s", tc.key, tc.value)
 		}

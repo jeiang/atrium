@@ -4,12 +4,13 @@ import (
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type ProposalView struct {
 	ID          int64    `json:"id"`
 	Kind        string   `json:"kind"`
+	KindLabel   string   `json:"kind_label"`
+	KindIcon    string   `json:"kind_icon"`
 	Status      string   `json:"status"`
 	Account     *string  `json:"account"`
 	Title       string   `json:"title"`
@@ -23,29 +24,20 @@ type ProposalView struct {
 	Result      any      `json:"result"`
 }
 
-const kindWikiPlan = "notion_wiki_plan"
-
-func proposalView(p *proposals.Proposal) ProposalView {
-	preview := plainJSON(p.Preview)
-	if dict, ok := p.Preview.(py.Dict); ok && p.Kind == kindWikiPlan {
-		if counts, found := dict.Get("counts"); found {
-			if plain, ok := preview.(map[string]any); ok {
-				plain["counts"] = counts
-			}
-		}
-	}
+func proposalView(p *proposals.Proposal, kind proposals.Kind) ProposalView {
 	return ProposalView{
-		ID: p.ID, Kind: p.Kind, Status: p.Status, Account: p.Account, Title: p.Title, CreatedTS: p.CreatedTS,
-		DecidedTS: p.DecidedTS, AppliedTS: p.AppliedTS, Undoable: p.Undoable, Preview: preview, Result: plainJSON(p.Result),
+		ID: p.ID, Kind: p.Kind, KindLabel: kind.Label, KindIcon: kind.Icon, Status: p.Status, Account: p.Account, Title: p.Title,
+		CreatedTS: p.CreatedTS, DecidedTS: p.DecidedTS, AppliedTS: p.AppliedTS, Undoable: p.Undoable, Blocked: p.Blocked,
+		BlockedUndo: p.BlockedUndo, Preview: plainJSON(p.Preview), Result: plainJSON(p.Result),
 	}
 }
 
 func plainJSON(v any) any {
 	switch x := v.(type) {
-	case py.Dict:
+	case map[string]any:
 		out := make(map[string]any, len(x))
-		for _, pair := range x {
-			out[pair.Key] = plainJSON(pair.Value)
+		for k, val := range x {
+			out[k] = plainJSON(val)
 		}
 		return out
 	case []any:
@@ -58,10 +50,11 @@ func plainJSON(v any) any {
 	return v
 }
 
-func proposalViews(list []*proposals.Proposal) []ProposalView {
+func proposalViews(list []*proposals.Proposal, registry *proposals.Registry) []ProposalView {
 	out := make([]ProposalView, len(list))
 	for i, p := range list {
-		out[i] = proposalView(p)
+		kind, _ := registry.Kind(p.Kind)
+		out[i] = proposalView(p, kind)
 	}
 	return out
 }
@@ -70,7 +63,8 @@ type proposalListData struct {
 	Proposals []ProposalView `json:"proposals"`
 	Status    string         `json:"status"`
 	Kind      string         `json:"kind"`
-	Counts    py.Dict        `json:"counts"`
+	KindLabel string         `json:"kind_label"`
+	Counts    map[string]any `json:"counts"`
 	Partial   bool           `json:"partial"`
 }
 
@@ -80,11 +74,24 @@ type proposalCardData struct {
 }
 
 type ActivityEntry struct {
-	Source   string  `json:"source"`
-	ID       int64   `json:"id"`
-	Category string  `json:"category"`
-	TS       float64 `json:"ts"`
+	Source   string            `json:"source"`
+	ID       int64             `json:"id"`
+	Category string            `json:"category"`
+	TS       float64           `json:"ts"`
+	Mail     *MailActivity     `json:"mail,omitempty"`
+	Write    *WriteActivity    `json:"write,omitempty"`
+	Settings *SettingsActivity `json:"settings,omitempty"`
+	Phone    *PhoneActivity    `json:"phone,omitempty"`
+}
 
+type PhoneActivity struct {
+	Actor  string `json:"actor"`
+	Kind   string `json:"kind"`
+	Status string `json:"status"`
+	Target string `json:"target"`
+}
+
+type MailActivity struct {
 	MessageID   int64   `json:"message_id"`
 	Subject     *string `json:"subject"`
 	Kind        string  `json:"kind"`
@@ -96,24 +103,41 @@ type ActivityEntry struct {
 	Status      string  `json:"status"`
 	Error       *string `json:"error"`
 	Undoable    bool    `json:"undoable"`
+	State       string  `json:"state"`
+	Blocked     bool    `json:"blocked"`
 	UndoBlocked bool    `json:"undo_blocked"`
+}
 
+type WriteActivity struct {
 	Tool       string   `json:"tool"`
 	Target     string   `json:"target"`
 	ThreadID   *int64   `json:"thread_id"`
 	ThreadKind *string  `json:"thread_kind"`
 	UndoneAt   *float64 `json:"undone_at"`
-	Actor      string   `json:"actor"`
-	Origin     string   `json:"origin"`
 	Before     string   `json:"before"`
 	After      string   `json:"after"`
+	State      string   `json:"state"`
+	Error      *string  `json:"error"`
+	Undoable   bool     `json:"undoable"`
 }
 
-func mailEntry(a live.Action) ActivityEntry {
+type SettingsActivity struct {
+	Tool     string `json:"tool"`
+	ThreadID *int64 `json:"thread_id"`
+	Actor    string `json:"actor"`
+	Origin   string `json:"origin"`
+	Before   string `json:"before"`
+	After    string `json:"after"`
+}
+
+func mailEntry(a live.Action, now float64) ActivityEntry {
 	return ActivityEntry{
-		Source: sourceMail, ID: a.ID, Category: categoryMail, TS: a.TS, MessageID: a.MessageID, Subject: a.Subject,
-		Kind: a.Kind, FromName: a.FromName, FromAddr: a.FromAddr, Account: a.Account, Src: a.Src, Dest: a.Dest,
-		Status: a.Status, Error: a.Error, Undoable: a.Undoable && !live.Blocked(a), UndoBlocked: live.Blocked(a),
+		Source: sourceMail, ID: a.ID, Category: categoryMail, TS: a.TS,
+		Mail: &MailActivity{
+			MessageID: a.MessageID, Subject: a.Subject, Kind: a.Kind, FromName: a.FromName, FromAddr: a.FromAddr,
+			Account: a.Account, Src: a.Src, Dest: a.Dest, Status: a.Status, Error: a.Error,
+			Undoable: a.Undoable && !live.Blocked(a, now), Blocked: live.Blocked(a, now), UndoBlocked: live.UndoBlocked(a, now),
+		},
 	}
 }
 
@@ -132,6 +156,7 @@ type activityRowData struct {
 type DraftView struct {
 	ID                 int64    `json:"id"`
 	Status             string   `json:"status"`
+	Revision           int64    `json:"revision"`
 	Account            string   `json:"account"`
 	InReplyToMessageID *int64   `json:"in_reply_to_message_id"`
 	ThreadID           *int64   `json:"thread_id"`
@@ -146,7 +171,7 @@ type DraftView struct {
 
 func draftView(row drafts.Row, unexpected []string) DraftView {
 	return DraftView{
-		ID: row.ID, Status: row.Status, Account: row.Account, InReplyToMessageID: row.InReplyToMessageID, ThreadID: row.ThreadID,
+		ID: row.ID, Status: string(row.Status), Revision: row.Revision, Account: row.Account, InReplyToMessageID: row.InReplyToMessageID, ThreadID: row.ThreadID,
 		UpdatedAt: row.UpdatedAt, Unexpected: unexpected, ToAddrs: row.ToAddrs, CcAddrs: row.CcAddrs, Subject: row.Subject,
 		Body: row.Body, SMTPResult: row.SMTPResult,
 	}

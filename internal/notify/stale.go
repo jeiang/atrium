@@ -15,8 +15,8 @@ const staleEvery = 5 * time.Minute
 
 var staleLog = logx.Logger("atrium.notify.stale")
 
-func watchStale(d *db.DB, env config.Env, stopping <-chan struct{}) {
-	ctx, cancel := context.WithCancel(context.Background())
+func watchStale(base context.Context, d *db.DB, env config.Env, stopping <-chan struct{}) {
+	ctx, cancel := context.WithCancel(base)
 	defer cancel()
 	go func() {
 		<-stopping

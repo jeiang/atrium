@@ -6,12 +6,26 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/progress"
+	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
 
-type Handler func(ctx context.Context, tc *Context, args py.Dict) (any, error)
+type Args map[string]any
+
+func (a Args) Get(name string) (any, bool) {
+	v, ok := a[name]
+	return v, ok
+}
+
+type Handler func(ctx context.Context, tc *Context, args Args) (any, error)
+
+type Flags struct {
+	UntrustedOutput bool
+	PrivateData     bool
+	ExternalEffect  bool
+	Web             bool
+}
 
 type Tool struct {
 	Name        string
@@ -19,7 +33,12 @@ type Tool struct {
 	InputSchema json.RawMessage
 	Handler     Handler
 	Effect      Effect
+	Undo        string
+	Flags       Flags
+	Annotated   bool
 	Contexts    Kinds
+	Server      bool
+	Parallel    bool
 }
 
 type Context struct {
@@ -34,4 +53,11 @@ type Context struct {
 	Now         func() float64
 	Client      *anthropic.Client
 	Progress    *progress.Writer
+	Undoers     *writes.Registry
 }
+
+// Park stops the run and waits for the operator. The loop leaves the tool call
+// open and finishes the run as parked; an answer resumes it.
+type Park struct{ Question string }
+
+func (p *Park) Error() string { return "waiting for the operator: " + p.Question }

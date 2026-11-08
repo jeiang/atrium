@@ -11,10 +11,10 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/skills"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/notionid"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type ProjectError string
@@ -37,7 +37,7 @@ type Project struct {
 
 const listSQL = "SELECT p.id, p.name, p.instructions, p.effort, p.context_limit, p.wiki_hub_id, p.archived, p.created_at, p.updated_at, " +
 	"(SELECT COUNT(*) FROM threads t WHERE t.project_id = p.id AND t.kind = 'chat' AND t.archived = 0) AS thread_count, " +
-	"(SELECT MAX(t.updated_at) FROM threads t WHERE t.project_id = p.id AND t.kind = 'chat') AS last_activity " +
+	"(SELECT MAX(t.updated_at) FROM threads t WHERE t.project_id = p.id AND t.kind = 'chat' AND t.archived = 0) AS last_activity " +
 	"FROM projects p"
 
 func scan(r interface{ Scan(...any) error }) (Project, error) {
@@ -64,7 +64,7 @@ type cleaned struct {
 }
 
 func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
-	name := py.Strip(f.Name)
+	name := strings.TrimSpace(f.Name)
 	if name == "" {
 		return cleaned{}, ProjectError("Give the project a name.")
 	}
@@ -76,7 +76,7 @@ func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
 	if utf8.RuneCountInString(name) > maxName {
 		return cleaned{}, ProjectError(fmt.Sprintf("The name is limited to %d characters.", maxName))
 	}
-	instructions := py.Strip(f.Instructions)
+	instructions := strings.TrimSpace(f.Instructions)
 	if utf8.RuneCountInString(instructions) > maxInstructions {
 		return cleaned{}, ProjectError(fmt.Sprintf("Instructions are limited to %d characters.", maxInstructions))
 	}
@@ -89,7 +89,7 @@ func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
 		return cleaned{}, ProjectError(err.Error())
 	}
 	out := cleaned{Name: name, Instructions: instructions, Effort: effort, ContextLimit: limit}
-	if hub := py.Strip(f.WikiHubID); hub != "" {
+	if hub := strings.TrimSpace(f.WikiHubID); hub != "" {
 		found := notionid.IDsInText(hub)
 		if len(found) == 0 {
 			return cleaned{}, ProjectError("The wiki hub must be a Notion page id or URL.")
@@ -118,17 +118,9 @@ func Update(ctx context.Context, q db.Querier, projectID int64, now float64, f F
 	if err != nil {
 		return false, err
 	}
-	return changed(q.ExecContext(ctx,
+	return db.Changed(q.ExecContext(ctx,
 		"UPDATE projects SET name = ?, instructions = ?, effort = ?, context_limit = ?, wiki_hub_id = ?, updated_at = ? WHERE id = ?",
 		v.Name, v.Instructions, v.Effort, v.ContextLimit, v.WikiHubID, now, projectID))
-}
-
-func changed(res sql.Result, err error) (bool, error) {
-	if err != nil {
-		return false, err
-	}
-	n, err := res.RowsAffected()
-	return n > 0, err
 }
 
 func Get(ctx context.Context, q db.Querier, projectID int64) (*Project, error) {
@@ -152,11 +144,22 @@ func List(ctx context.Context, q db.Querier, archived bool) ([]Project, error) {
 }
 
 func SetArchived(ctx context.Context, q db.Querier, projectID int64, value bool) (bool, error) {
-	return changed(q.ExecContext(ctx, "UPDATE projects SET archived = ? WHERE id = ?", store.Bit(value), projectID))
+	return db.Changed(q.ExecContext(ctx, "UPDATE projects SET archived = ? WHERE id = ?", store.Bit(value), projectID))
 }
 
 func SetHub(ctx context.Context, q db.Querier, projectID int64, pageID string, now float64) (bool, error) {
-	return changed(q.ExecContext(ctx, "UPDATE projects SET wiki_hub_id = ?, updated_at = ? WHERE id = ?", pageID, now, projectID))
+	var archived int
+	err := q.QueryRowContext(ctx, "SELECT archived FROM projects WHERE id = ?", projectID).Scan(&archived)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if archived != 0 {
+		return false, ProjectError("project is archived")
+	}
+	return db.Changed(q.ExecContext(ctx, "UPDATE projects SET wiki_hub_id = ?, updated_at = ? WHERE id = ?", pageID, now, projectID))
 }
 
 func MoveThread(ctx context.Context, q db.Querier, threadID int64, projectID *int64) (bool, error) {
@@ -170,7 +173,7 @@ func MoveThread(ctx context.Context, q db.Querier, threadID int64, projectID *in
 			return false, err
 		}
 	}
-	return changed(q.ExecContext(ctx, "UPDATE threads SET project_id = ? WHERE id = ? AND kind = 'chat'", projectID, threadID))
+	return db.Changed(q.ExecContext(ctx, "UPDATE threads SET project_id = ? WHERE id = ? AND kind = 'chat'", projectID, threadID))
 }
 
 func HubMarkdown(p Project) string {
@@ -194,9 +197,15 @@ func SystemBlock(ctx context.Context, q db.Querier, t threads.Thread) (*string, 
 		parts = append(parts, fmt.Sprintf("This thread belongs to the operator's project “%s”. Follow the project's instructions:\n<project_instructions>\n%s\n</project_instructions>", p.Name, p.Instructions))
 	}
 	if p.WikiHubID != nil && *p.WikiHubID != "" {
-		parts = append(parts, fmt.Sprintf("The project's wiki hub page has id %s. Keep it updated with durable project knowledge "+
-			"(decisions, status, open questions, sources) as you learn it: load the wiki-capture skill (`/skill:wiki-capture`) and follow it, "+
-			"updating that hub page or pages under it rather than creating duplicates.", *p.WikiHubID))
+		skill, err := skills.Get(ctx, q, "wiki-capture")
+		if err != nil {
+			return nil, err
+		}
+		if skill != nil {
+			parts = append(parts, fmt.Sprintf("The project's wiki hub page has id %s. Keep it updated with durable project knowledge "+
+				"(decisions, status, open questions, sources) as you learn it: load the wiki-capture skill (`/skill:wiki-capture`) and follow it, "+
+				"updating that hub page or pages under it rather than creating duplicates.", *p.WikiHubID))
+		}
 	}
 	if len(parts) == 0 {
 		return nil, nil

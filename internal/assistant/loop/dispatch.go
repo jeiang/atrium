@@ -6,75 +6,33 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"sync"
 
+	"github.com/jeiang/atrium/internal/assistant/block"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/progress"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
 )
 
-type ToolUse struct {
-	ID    string          `json:"id"`
-	Name  string          `json:"name"`
-	Input json.RawMessage `json:"input"`
-}
-
-func (u ToolUse) Args() (json.RawMessage, any, error) {
-	if len(u.Input) == 0 {
-		return json.RawMessage(`{}`), py.Dict{}, nil
-	}
-	v, err := py.JSONLoads(u.Input)
-	if err != nil {
-		return nil, nil, fmt.Errorf("loop: tool %s input: %w", u.Name, err)
-	}
-	if !py.Truthy(v) {
-		return json.RawMessage(`{}`), py.Dict{}, nil
-	}
-	return u.Input, v, nil
-}
-
-type Outcome struct {
-	OK    bool
-	Value any
-	Error string
-}
-
-type Batch func(ctx context.Context, tc *tool.Context, uses []ToolUse) (map[string]Outcome, error)
-
-func blockType(raw json.RawMessage) string {
-	var b struct {
-		Type string `json:"type"`
-	}
-	_ = json.Unmarshal(raw, &b)
-	return b.Type
-}
+type ToolUse = block.Use
 
 func toolUses(blocks []json.RawMessage) ([]ToolUse, error) {
-	var uses []ToolUse
-	for _, raw := range blocks {
-		if blockType(raw) != actx.ToolUse {
-			continue
-		}
-		var u ToolUse
-		if err := json.Unmarshal(raw, &u); err != nil {
-			return nil, fmt.Errorf("loop: tool_use block: %w", err)
-		}
-		uses = append(uses, u)
-	}
-	return uses, nil
+	return block.ToolUses(blocks)
 }
 
 func toolResult(toolUseID, content string, isError bool) json.RawMessage {
-	block := py.Dict{{Key: "type", Value: actx.ToolResult}, {Key: "tool_use_id", Value: toolUseID}, {Key: "content", Value: content}}
+	block := map[string]any{"type": actx.ToolResult, "tool_use_id": toolUseID, "content": content}
 	if isError {
-		block = append(block, py.Pair{Key: "is_error", Value: true})
+		block["is_error"] = true
 	}
-	return json.RawMessage(py.JSONDumps(block, journalJSON))
+	return json.RawMessage(jsonx.Dumps(block, jsonx.Opts{Compact: true, NoEnsureASCII: true}))
 }
 
 func replayClass(t *tool.Tool) string {
@@ -87,22 +45,21 @@ func replayClass(t *tool.Tool) string {
 func className(err error) string {
 	var raised *tool.Raised
 	if errors.As(err, &raised) {
-		return raised.Class
+		return raised.Error()
 	}
-	var classed py.Classed
-	if errors.As(err, &classed) {
-		return classed.PyClass()
+	var te tool.Error
+	if errors.As(err, &te) {
+		return string(te)
 	}
-	for _, sentinel := range []error{httpx.ErrValue, httpx.ErrKey, httpx.ErrIndex, httpx.ErrType} {
-		if errors.Is(err, sentinel) {
-			return sentinel.Error()
-		}
+	var nc config.NotConfigured
+	if errors.As(err, &nc) {
+		return string(nc)
 	}
 	var unavailable *httpx.ServiceUnavailable
 	if errors.As(err, &unavailable) {
-		return "ServiceUnavailable"
+		return "service unavailable"
 	}
-	return "RuntimeError"
+	return err.Error()
 }
 
 func toolErrorText(err error) (string, bool) {
@@ -124,8 +81,8 @@ type dispatcher struct {
 	tc     *tool.Context
 	byName map[string]tool.Tool
 	now    func() float64
-	batch  Batch
 	tuning actx.Tuning
+	reg    *registry.Registry
 	guard  func(ctx context.Context) error
 	lost   context.Context
 	abort  context.CancelFunc
@@ -148,12 +105,11 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	if err != nil {
 		return nil, nil, err
 	}
-	dict, ok := args.(py.Dict)
-	if !ok {
-		return fail("tool input must be an object")
-	}
-	value, err = x.call(ctx, t, dict)
+	value, err = x.call(ctx, t, tool.Args(args))
 	if err == nil {
+		if x.reg != nil {
+			x.reg.Taint(x.tc.ThreadID, *t)
+		}
 		return nil, value, nil
 	}
 	if ctx.Err() != nil {
@@ -162,6 +118,10 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	if x.lost.Err() != nil {
 		return nil, nil, LeaseLost(fmt.Sprintf("run %d was taken over by another process", x.tc.RunID))
 	}
+	var park *tool.Park
+	if errors.As(err, &park) {
+		return nil, nil, park
+	}
 	if text, ok := toolErrorText(err); ok {
 		return fail(text)
 	}
@@ -169,7 +129,7 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	return fail(fmt.Sprintf("%s failed: %s", use.Name, className(err)))
 }
 
-func (x *dispatcher) call(ctx context.Context, t *tool.Tool, args py.Dict) (value any, err error) {
+func (x *dispatcher) call(ctx context.Context, t *tool.Tool, args tool.Args) (value any, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			err = fmt.Errorf("panic: %v\n%s", p, debug.Stack())
@@ -187,7 +147,7 @@ func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errT
 		if err := journal.FinishToolCall(ledgerCtx, x.d.Write, callID, journal.Error, x.now(), errText, nil); err != nil {
 			return nil, err
 		}
-		if err := x.tc.Progress.Event(ctx, progress.ToolDone, py.Dict{{Key: "id", Value: use.ID}, {Key: "ok", Value: false}, {Key: "preview", Value: progress.PreviewOf(*errText)}}); err != nil {
+		if err := x.tc.Progress.Event(ctx, progress.ToolDone, map[string]any{"id": use.ID, "ok": false, "preview": progress.PreviewOf(*errText)}); err != nil {
 			return nil, err
 		}
 		return toolResult(use.ID, *errText, true), nil
@@ -199,7 +159,7 @@ func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errT
 	if err := journal.FinishToolCall(ledgerCtx, x.d.Write, callID, journal.OK, x.now(), nil, resultID); err != nil {
 		return nil, err
 	}
-	if err := x.tc.Progress.Event(ctx, progress.ToolDone, py.Dict{{Key: "id", Value: use.ID}, {Key: "ok", Value: true}, {Key: "preview", Value: progress.PreviewOf(content)}}); err != nil {
+	if err := x.tc.Progress.Event(ctx, progress.ToolDone, map[string]any{"id": use.ID, "ok": true, "preview": progress.PreviewOf(content)}); err != nil {
 		return nil, err
 	}
 	return toolResult(use.ID, content, false), nil
@@ -218,7 +178,7 @@ func (x *dispatcher) toolStart(ctx context.Context, use ToolUse, args json.RawMe
 	if err != nil {
 		return err
 	}
-	return x.tc.Progress.Event(ctx, progress.ToolStart, py.Dict{{Key: "id", Value: use.ID}, {Key: "name", Value: use.Name}, {Key: "args", Value: short}})
+	return x.tc.Progress.Event(ctx, progress.ToolStart, map[string]any{"id": use.ID, "name": use.Name, "args": short})
 }
 
 func (x *dispatcher) startCall(ctx context.Context, use ToolUse) (int64, error) {
@@ -244,54 +204,57 @@ func (x *dispatcher) execute(ctx context.Context, use ToolUse) (json.RawMessage,
 }
 
 func (x *dispatcher) executeAll(ctx context.Context, uses []ToolUse) ([]json.RawMessage, error) {
-	var batch []ToolUse
-	if _, offered := x.byName[Research]; offered && x.batch != nil {
-		for _, u := range uses {
-			if u.Name == Research {
-				batch = append(batch, u)
-			}
-		}
-	}
-	done := map[string]json.RawMessage{}
-	if len(batch) >= 2 {
-		calls := make(map[string]int64, len(batch))
-		for _, u := range batch {
-			id, err := x.startCall(ctx, u)
-			if err != nil {
-				return nil, err
-			}
-			calls[u.ID] = id
-		}
-		outcomes, err := x.batch(ctx, x.tc, batch)
-		if err != nil {
-			return nil, err
-		}
-		for _, u := range batch {
-			o := outcomes[u.ID]
-			var errText *string
-			if !o.OK {
-				errText = &o.Error
-			}
-			result, err := x.finish(ctx, calls[u.ID], u, errText, o.Value)
-			if err != nil {
-				return nil, err
-			}
-			done[u.ID] = result
-		}
-	}
 	results := make([]json.RawMessage, len(uses))
-	for i, u := range uses {
-		if r, ok := done[u.ID]; ok {
+	for i := 0; i < len(uses); {
+		t := x.lookup(uses[i].Name)
+		if t == nil || !t.Parallel {
+			r, err := x.execute(ctx, uses[i])
+			if err != nil {
+				return nil, err
+			}
 			results[i] = r
+			i++
 			continue
 		}
-		r, err := x.execute(ctx, u)
-		if err != nil {
+		j := i
+		for j < len(uses) {
+			n := x.lookup(uses[j].Name)
+			if n == nil || !n.Parallel {
+				break
+			}
+			j++
+		}
+		if err := x.executeParallel(ctx, uses[i:j], results[i:j]); err != nil {
 			return nil, err
 		}
-		results[i] = r
+		i = j
 	}
 	return results, nil
+}
+
+func (x *dispatcher) executeParallel(ctx context.Context, uses []ToolUse, out []json.RawMessage) error {
+	calls := make([]int64, len(uses))
+	for i, u := range uses {
+		id, err := x.startCall(ctx, u)
+		if err != nil {
+			return err
+		}
+		calls[i] = id
+	}
+	errs := make([]error, len(uses))
+	var wg sync.WaitGroup
+	for i := range uses {
+		wg.Go(func() {
+			out[i], errs[i] = x.perform(ctx, x.lookup(uses[i].Name), calls[i], uses[i])
+		})
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.ToolCall) (json.RawMessage, error) {
@@ -331,5 +294,3 @@ func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.Tool
 	}
 	return toolResult(use.ID, Verify, true), nil
 }
-
-func ClassName(err error) string { return className(err) }

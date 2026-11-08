@@ -2,6 +2,7 @@ package pages
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"errors"
 	"io/fs"
@@ -11,12 +12,16 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
+	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/service"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -56,8 +61,6 @@ const (
 	archived     = "archived"
 )
 
-func wallClock() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
-
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		run := o.Runner
@@ -70,13 +73,13 @@ func Module(o Options) web.Module {
 		}
 		now := o.Now
 		if now == nil {
-			now = wallClock
+			now = assistant.Now
 		}
 		poll := o.Poll
 		if poll == 0 {
 			poll = 300 * time.Millisecond
 		}
-		base, cancel := context.WithCancel(context.Background())
+		base, cancel := context.WithCancel(d.Ctx)
 		svc := service.New(base, d.DB, d.Cfg, d.Env, run)
 		svc.Client = o.Client
 		svc.Now = o.Now
@@ -110,12 +113,17 @@ func Module(o Options) web.Module {
 			reg = made
 		}
 		p := &pages{deps: d, svc: svc, now: now, poll: poll, keepalive: keepalive, reg: reg}
+		tz := config.From(base).TZName(d.Env)
+		stamp := now()
+		check(d.DB.WithTx(base, func(tx *sql.Tx) error {
+			return scheduler.Ensure(base, tx, tz, stamp)
+		}))
 
 		r.Get("/chat", p.chatIndex)
 		r.Post("/chat", p.chatNew)
 		r.Get("/chat/composer-options", p.composerOptions)
-		r.Post("/chat/{thread_id}/pin", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "pinned") })
-		r.Post("/chat/{thread_id}/archive", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "archived") })
+		r.Post("/chat/{thread_id}/pin", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "pinned", threads.SetPinned) })
+		r.Post("/chat/{thread_id}/archive", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "archived", threads.SetArchived) })
 		r.Get("/chat/{thread_id}", p.chatThread)
 		r.Post("/chat/{thread_id}/project", p.chatProject)
 		r.Post("/chat/{thread_id}/options", p.chatOptions)
@@ -125,9 +133,12 @@ func Module(o Options) web.Module {
 		r.Post("/chat/{thread_id}/stop", p.chatStop)
 		r.Post("/chat/{thread_id}/branch", p.chatBranch)
 		r.Get("/chat/{thread_id}/work", p.chatWork)
+		r.Get("/chat/{thread_id}/history", p.history)
+		r.Get("/chat/{thread_id}/history/{start}/{n}", p.historyZoom)
 		r.Get("/chat/{thread_id}/events", p.chatEvents)
 		r.Get("/chat/{thread_id}/runs/{run_id}", p.chatRun)
 		r.Post("/chat/{thread_id}/runs/{run_id}/resume", p.chatResume)
+		r.Post("/chat/{thread_id}/answer", p.chatAnswer)
 
 		r.Get("/chat/{thread_id}/files/{file_id}", p.chatFile)
 		r.Get("/chat/{thread_id}/files/{file_id}/download", p.chatFileDownload)
@@ -211,7 +222,7 @@ func hxRedirect(w http.ResponseWriter, to string) {
 
 func pathInt(r *http.Request, name string) (int64, []web.FieldError) {
 	raw := web.PathParam(r, name)
-	id, ok := py.LaxInt64(raw)
+	id, ok := numx.LaxInt64(raw)
 	if !ok {
 		return 0, []web.FieldError{web.BadInt("path", name, raw)}
 	}
@@ -228,11 +239,11 @@ func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 }
 
 func formInt(form map[string][]string, where, name string, def int64, errs *[]web.FieldError) int64 {
-	raw, ok := web.FormField(form, name)
-	if !ok {
+	raw, ok := web.Value(form, name)
+	if !ok || raw == "" {
 		return def
 	}
-	n, valid := py.LaxInt64(raw)
+	n, valid := numx.LaxInt64(raw)
 	if !valid {
 		*errs = append(*errs, web.BadInt(where, name, raw))
 	}

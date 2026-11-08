@@ -4,15 +4,19 @@ import (
 	"cmp"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/py"
+	"golang.org/x/text/cases"
 )
 
 const (
@@ -24,8 +28,8 @@ const (
 	TrashLabel = `\Trash`
 )
 
-func batchFrom(ctx context.Context, q mail.Querier) (int, error) {
-	r := mail.Read(ctx, q)
+func batchFrom(ctx context.Context, q db.Querier) (int, error) {
+	r := endpoint.Read(ctx, q)
 	n := r.Int(mail.KeyMailopsBatch)
 	return n, r.Err()
 }
@@ -48,31 +52,11 @@ const (
 	ReasonUnresolved  = "unresolved"
 )
 
-func BlockingTextSQL(column string) string {
-	return "(COALESCE(instr(" + column + ", '" + UnknownPrefix + "'), 0) > 0 OR COALESCE(instr(" + column + ", '" + PartialPrefix + "'), 0) > 0)"
-}
-
-func BlockingActionSQL(alias string) string {
-	return alias + ".ok = 0 AND json_extract(" + alias + ".action, '$.op') IS NOT 'undo' AND (instr(" + alias + ".error, '" +
-		UnknownPrefix + "') > 0 OR instr(" + alias + ".error, '" + PartialPrefix + "') > 0)"
-}
-
-var UnresolvedSQL = "(EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.uids') u WHERE " + BlockingActionSQL("pa") + " AND " +
-	"u.value = m.uid AND COALESCE(json_extract(pa.action, '$.src_uidvalidity'), json_extract(pa.action, '$.uidvalidity')) = m.uidvalidity " +
-	"AND COALESCE(json_extract(pa.action, '$.src_imap'), json_extract(pa.action, '$.imap_name')) = mb.imap_name) OR " +
-	"EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.copied') u WHERE " + BlockingActionSQL("pa") + " AND " +
-	"u.key = CAST(m.uid AS TEXT) AND json_extract(pa.action, '$.src_uidvalidity') = m.uidvalidity " +
-	"AND json_extract(pa.action, '$.src_imap') = mb.imap_name))"
-
 var trashNames = map[string]bool{"deleted messages": true, "deleted items": true, "trash": true, "bin": true}
 
 type Error string
 
 func (e Error) Error() string { return string(e) }
-
-func (Error) PyClass() string { return "MailOpError" }
-
-func (Error) PyModule() string { return "atrium.mailops" }
 
 var ErrValidityChanged = Error("UIDVALIDITY changed")
 
@@ -84,23 +68,12 @@ type PartialMove struct {
 
 const UnknownPrefix = "cancelled, write outcome unknown"
 
-func Blocks(text string) bool {
-	return strings.Contains(text, PartialPrefix) || strings.Contains(text, UnknownPrefix)
-}
-
 func OutcomeUnknown(err error) bool {
 	if partial, ok := errors.AsType[*PartialMove](err); ok {
 		return partial.Unconfirmed
 	}
 	_, ok := errors.AsType[*mail.WriteInterrupted](err)
 	return ok
-}
-
-func UnknownText(err error, text string) string {
-	if OutcomeUnknown(err) && !Blocks(text) {
-		return UnknownPrefix + ": " + text
-	}
-	return text
 }
 
 const PartialPrefix = "copied but not expunged: "
@@ -112,21 +85,10 @@ func (e *PartialMove) Error() string {
 	return PartialPrefix + e.Err.Error()
 }
 
-func (*PartialMove) PyClass() string { return "PartialMove" }
-
-func (*PartialMove) PyModule() string { return "atrium.mailops" }
-
 func (e *PartialMove) Unwrap() error { return e.Err }
 
-type Opener func(ctx context.Context, account string) (mail.Client, error)
-
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
-
-func Session(ctx context.Context, open Opener, account string, fn func(mail.Client) error) error {
-	client, err := open(ctx, account)
+func Session(ctx context.Context, open mail.OpenFunc, q db.Querier, account string, fn func(mail.Client) error) error {
+	client, err := open(ctx, mail.OpenOptions{Account: account, Q: q})
 	if err != nil {
 		return err
 	}
@@ -152,12 +114,8 @@ type Snapshot struct {
 	IMAPName    string `json:"imap_name"`
 }
 
-func (s Snapshot) Dict() py.Dict {
-	return py.Dict{
-		{Key: "id", Value: s.ID}, {Key: "uid", Value: s.UID}, {Key: "uidvalidity", Value: s.UIDValidity},
-		{Key: "msgid", Value: s.MsgID}, {Key: "digest", Value: s.Digest}, {Key: "mailbox", Value: s.Mailbox},
-		{Key: "imap_name", Value: s.IMAPName},
-	}
+func (s Snapshot) Dict() map[string]any {
+	return map[string]any{"id": s.ID, "uid": s.UID, "uidvalidity": s.UIDValidity, "msgid": s.MsgID, "digest": s.Digest, "mailbox": s.Mailbox, "imap_name": s.IMAPName}
 }
 
 type Verified struct {
@@ -171,11 +129,11 @@ type Skip struct {
 	Reason string
 }
 
-func (s Skip) Dict() py.Dict {
-	return py.Dict{{Key: "id", Value: s.ID}, {Key: "reason", Value: s.Reason}}
+func (s Skip) Dict() map[string]any {
+	return map[string]any{"id": s.ID, "reason": s.Reason}
 }
 
-func Snapshots(ctx context.Context, q Querier, ids []int64) ([]Snapshot, error) {
+func Snapshots(ctx context.Context, q db.Querier, ids []int64) ([]Snapshot, error) {
 	var out []Snapshot
 	for _, chunk := range Chunks(ids, 500) {
 		args := make([]any, len(chunk))
@@ -207,8 +165,7 @@ func Snapshots(ctx context.Context, q Querier, ids []int64) ([]Snapshot, error) 
 }
 
 func ServerMsgID(header []byte) string {
-	value, _ := mime.Compat32Header(header, "Message-ID")
-	return features.NormalizeMsgID(value)
+	return features.NormalizeMsgID(mime.RawHeader(header, "Message-ID"))
 }
 
 type boxKey struct {
@@ -216,7 +173,7 @@ type boxKey struct {
 	validity uint32
 }
 
-func Verify(ctx context.Context, q Querier, client mail.Client, account string, snaps []Snapshot) (ok []Verified, skipped []Skip, err error) {
+func Verify(ctx context.Context, q db.Querier, client mail.Client, account string, snaps []Snapshot) (ok []Verified, skipped []Skip, err error) {
 	batch, err := batchFrom(ctx, q)
 	if err != nil {
 		return nil, nil, err
@@ -228,7 +185,7 @@ func Verify(ctx context.Context, q Querier, client mail.Client, account string, 
 		var uid, validity int64
 		var digest, imapName string
 		var unresolved bool
-		err := q.QueryRowContext(ctx, "SELECT m.gone_at, m.uid, m.uidvalidity, m.digest, mb.imap_name, "+UnresolvedSQL+" FROM messages m "+
+		err := q.QueryRowContext(ctx, "SELECT m.gone_at, m.uid, m.uidvalidity, m.digest, mb.imap_name, "+ledger.MailUnresolvedSQL+" FROM messages m "+
 			"JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE m.id = ?", snap.ID).Scan(&gone, &uid, &validity, &digest, &imapName, &unresolved)
 		reason := ""
 		switch {
@@ -253,7 +210,7 @@ func Verify(ctx context.Context, q Querier, client mail.Client, account string, 
 		}
 		survivors[key] = append(survivors[key], snap)
 	}
-	items := mail.FetchItems{HeaderOnly: true, Labels: config.Preset(account) == config.Gmail}
+	items := mail.FetchRequest{Mode: mail.FetchHeaders, Labels: config.From(ctx).Preset(account) == config.Gmail}
 	for _, key := range order {
 		group := survivors[key]
 		st, err := client.Status(ctx, key.imapName)
@@ -357,11 +314,11 @@ func TrashMailbox(ctx context.Context, client mail.Client, account string) (stri
 	found := ""
 	for _, info := range boxes {
 		for _, f := range info.Flags {
-			if py.Lower(f) == py.Lower(TrashLabel) {
+			if strings.EqualFold(f, TrashLabel) {
 				return info.IMAPName, nil
 			}
 		}
-		if config.Preset(account) != config.Gmail && found == "" && trashNames[py.Casefold(info.Name)] {
+		if config.From(ctx).Preset(account) != config.Gmail && found == "" && trashNames[cases.Fold().String(info.Name)] {
 			found = info.IMAPName
 		}
 	}
@@ -475,10 +432,6 @@ func StoreFlag(ctx context.Context, client mail.Client, imapName string, validit
 	return nil
 }
 
-func ArchiveUIDs(ctx context.Context, client mail.Client, imapName string, validity uint32, uids []uint32, size int) error {
-	return StoreLabels(ctx, client, imapName, validity, uids, size, nil, []string{InboxLabel})
-}
-
 type Relabel struct {
 	Add    []string
 	Remove []string
@@ -501,7 +454,8 @@ func RelabelPlan(items []Verified, add, remove []string) []Relabel {
 				wantRemove = append(wantRemove, l)
 			}
 		}
-		key := py.JSONDumps([]any{wantAdd, wantRemove})
+		raw, _ := json.Marshal([]any{wantAdd, wantRemove})
+		key := string(raw)
 		i, ok := index[key]
 		if !ok {
 			i = len(out)

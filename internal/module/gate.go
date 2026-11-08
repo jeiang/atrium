@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/sdnotify"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -23,21 +24,10 @@ func (s *Set) enabled(name string) bool {
 }
 
 func (s *Set) Pages() []web.Page {
-	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}, Module: func(_ chi.Router, d *web.Deps) {
-		err := s.Seed(context.Background(), d.DB)
-		var snap *Snapshot
-		if err == nil {
-			snap, err = s.Evaluate(context.Background(), d.DB.Read)
-		}
-		if err != nil {
-			log.Error("module evaluation failed, serving core only", logx.Err, err.Error())
-			snap = s.coreOnly()
-		}
-		s.cur.Store(snap)
-	}}}
+	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}}, s.modulesPage()}
 	for _, r := range s.regs {
 		for _, p := range r.Pages {
-			if p.Module == nil {
+			if p.Module == nil && p.Start == nil && len(p.Nav) == 0 {
 				continue
 			}
 			if !r.Core {
@@ -50,6 +40,11 @@ func (s *Set) Pages() []web.Page {
 }
 
 func (s *Set) gatePage(owner string, p web.Page) web.Page {
+	for i := range p.Nav {
+		if p.Nav[i].Module == "" {
+			p.Nav[i].Module = owner
+		}
+	}
 	inner := p.Module
 	p.Module = func(r chi.Router, d *web.Deps) {
 		if s.Current().Enabled(owner) {
@@ -57,8 +52,8 @@ func (s *Set) gatePage(owner string, p web.Page) web.Page {
 		}
 	}
 	if public := p.Public; public != nil {
-		p.Public = func(cfg config.Config, env config.Env, d *db.DB) func(*http.Request) bool {
-			check := public(cfg, env, d)
+		p.Public = func(cfg config.Config, env config.Env, d *db.DB, reg *settings.Registry) func(*http.Request) bool {
+			check := public(cfg, env, d, reg)
 			return func(r *http.Request) bool {
 				snap := s.Current()
 				return snap != nil && snap.Enabled(owner) && check(r)
@@ -107,11 +102,13 @@ func (s *Set) gateSetup(owner, path string, needs []string, setup func(*cli.Args
 			}
 			if st, _ := snap.Status(owner); st.State != Enabled {
 				skip(path, st, "module is not enabled, command skipped")
+				sdnotify.New(func(name string) string { v, _ := env.Env(name); return v }).Ready()
 				return cli.ExitOK
 			}
 			for _, name := range needs {
 				if st, _ := snap.Status(name); st.State != Enabled {
 					skip(path, st, "needed module is not enabled, command skipped")
+					sdnotify.New(func(name string) string { v, _ := env.Env(name); return v }).Ready()
 					return cli.ExitOK
 				}
 			}
@@ -121,23 +118,56 @@ func (s *Set) gateSetup(owner, path string, needs []string, setup func(*cli.Args
 }
 
 func skip(path string, st Status, msg string) {
-	log.Info(msg, logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Reason, logx.Command, strings.TrimSpace(path))
-	sdnotify.FromEnv().Ready()
+	log.Info(msg, logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Reason(), logx.Command, strings.TrimSpace(path))
+}
+
+// Open loads the configuration, opens the database and boots it. It is the
+// serve command's only path to the application database.
+func (s *Set) Open(ctx context.Context) (*db.DB, config.Config, error) {
+	cfg, err := config.Load(s.env)
+	if err != nil {
+		return nil, config.Config{}, err
+	}
+	d, err := db.Connect(cfg.DBPath)
+	if err != nil {
+		return nil, config.Config{}, err
+	}
+	if err := config.Boot(ctx, s.env, d, cfg); err != nil {
+		_ = d.Close()
+		return nil, config.Config{}, err
+	}
+	return d, cfg, nil
+}
+
+func (s *Set) open(ctx context.Context) (*db.DB, error) {
+	d, _, err := s.Open(ctx)
+	return d, err
+}
+
+// Start seeds the module flags and evaluates the one startup snapshot. A
+// failure to evaluate leaves the process serving core only, matching the
+// behaviour the module gate has always had.
+func (s *Set) Start(ctx context.Context, d *web.Deps) error {
+	if err := s.Seed(ctx, d.DB); err != nil {
+		log.Error("module evaluation failed, serving core only", logx.Err, err.Error())
+		s.cur.Store(s.coreOnly())
+		return nil
+	}
+	snap, err := s.Evaluate(ctx, d.DB.Read)
+	if err != nil {
+		log.Error("module evaluation failed, serving core only", logx.Err, err.Error())
+		snap = s.coreOnly()
+	}
+	s.cur.Store(snap)
+	return nil
 }
 
 func (s *Set) load(ctx context.Context) (*Snapshot, error) {
-	cfg, err := config.Load(s.env)
-	if err != nil {
-		return nil, err
-	}
-	d, err := db.Connect(cfg.DBPath)
+	d, err := s.open(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = d.Close() }()
-	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
-		return nil, err
-	}
 	if err := s.Seed(ctx, d); err != nil {
 		return nil, err
 	}

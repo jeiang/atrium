@@ -1,8 +1,5 @@
 {inputs, ...}: {
-  imports = [
-    inputs.devenv.flakeModule
-    inputs.treefmt-nix.flakeModule
-  ];
+  imports = [inputs.treefmt-nix.flakeModule];
 
   perSystem = {
     pkgs,
@@ -26,11 +23,13 @@
     };
     formatter = config.treefmt.build.wrapper;
 
-    devenv.shells.default = {
-      name = "atrium";
+    devShells.default = pkgs.mkShell {
       packages = [
         config.treefmt.build.wrapper
+        go
+        pkgs.git
         pkgs.just
+        pkgs.statix
         pkgs.golangci-lint
         pkgs.govulncheck
         pkgs.go-licenses
@@ -39,9 +38,10 @@
       ];
       env =
         {
+          ATRIUM_DEV_SHELL = "1";
           CGO_ENABLED = "1";
           GOFLAGS = "-tags=libsqlite3,sqlite_fts5";
-          CGO_CFLAGS = "-I${sqlcipherLib}/include";
+          CGO_CFLAGS = "${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isAarch64 "-flax-vector-conversions "}-I${sqlcipherLib}/include";
           CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
           ATRIUM_STATIC_ASSETS = "${self'.packages.atrium-static}";
           ATRIUM_BASECOAT = "${self'.packages.atrium-static.basecoat}";
@@ -51,22 +51,11 @@
           ATRIUM_MUSL_CGO_CFLAGS = "-I${sqlcipherMusl}/include";
           ATRIUM_MUSL_CGO_LDFLAGS = "-L${sqlcipherMusl}/lib";
         };
-      enterShell = ''
-        [ -e "$DEVENV_ROOT/internal/web/static/app.css" ] || just --justfile "$DEVENV_ROOT/justfile" assets
+      shellHook = ''
+        unset GOROOT GOPATH
+        root=$(git rev-parse --show-toplevel 2>/dev/null) || root=$PWD
+        [ -e "$root/internal/web/static/app.css" ] || just --justfile "$root/justfile" assets
       '';
-      languages.go = {
-        enable = true;
-        package = go;
-      };
-      languages.nix.enable = true;
-      git-hooks.hooks = {
-        editorconfig-checker.enable = true;
-        statix.enable = true;
-        treefmt = {
-          enable = true;
-          package = config.treefmt.build.wrapper;
-        };
-      };
     };
   };
 }

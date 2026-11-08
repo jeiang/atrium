@@ -1,0 +1,30 @@
+{{define "title"}}Phone actions · Settings{{end}}
+{{define "heading"}}Settings · Phone actions{{end}}
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
+{{template "settings_tabs" (dict "Tab" "phone_actions" "Auth" .Auth "Settings" .Settings)}}
+{{with $d.Error}}<p class="text-sm text-destructive" role="alert">{{.}}</p>{{end}}
+<form method="post" action="/settings/phone-actions" class="flex flex-col gap-4">
+  <input type="hidden" name="csrf_token" value="{{$csrf}}">
+  <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="enabled" value="1"{{if $d.Enabled}} checked{{end}}> Allow proposal actions from phone notifications</label>
+  <section aria-labelledby="kinds-h" class="flex flex-col gap-2">
+    <h2 id="kinds-h" class="text-sm font-medium">Allowed proposal kinds</h2>
+    <div class="grid gap-2 sm:grid-cols-2">
+      {{range $d.Kinds}}
+      <label class="flex items-center gap-2 rounded-lg border bg-card p-2 text-sm">
+        <input type="checkbox" name="kind" value="{{.Name}}"{{if .On}} checked{{end}}{{if .WebOnly}} disabled{{end}}>
+        <span>{{.Name}}</span>
+        {{if .WebOnly}}<span class="badge" data-variant="secondary">{{icon "lock"}}web only</span>{{end}}
+      </label>
+      {{end}}
+    </div>
+  </section>
+  <div><button type="submit" class="btn" data-size="sm">Save</button></div>
+</form>
+<section class="flex flex-wrap items-center gap-3 border-t pt-4 text-sm">
+  <span>{{$d.Outstanding}} outstanding link{{if ne $d.Outstanding 1}}s{{end}}</span>
+  <form method="post" action="/settings/phone-actions/revoke" data-confirm-submit="Revoke every outstanding phone action link?">
+    <input type="hidden" name="csrf_token" value="{{$csrf}}">
+    <button type="submit" class="btn" data-size="sm" data-variant="destructive">{{icon "trash-2"}}Revoke all</button>
+  </form>
+</section>
+{{end}}

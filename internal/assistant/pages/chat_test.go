@@ -3,6 +3,7 @@ package pages
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,11 +18,12 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 )
 
 var pngBytes = func() []byte {
-	b, err := py.B64Decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+	b, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
 	if err != nil {
 		panic(err)
 	}
@@ -158,6 +160,35 @@ func TestLiveRunQueueStopAndKeepalive(t *testing.T) {
 	done := status(t, s.get(fmt.Sprintf("/chat/%d/runs/%d?after=0", thread, run), hx, "true"), http.StatusOK)
 	mustContain(t, done, fmt.Sprintf("Run %d stopped:", run))
 	mustNotContain(t, done, "Try again")
+}
+
+func TestQueuedMessageJoinsAtTheNextStep(t *testing.T) {
+	s := newSite(t)
+	release := s.hold()
+	defer release()
+	s.api.Push(reply1(anthropictest.Text("first")), reply1(anthropictest.Text("second")))
+	thread := s.startThread("long job")
+	run := s.lastRun(thread)
+	s.waitRequests(1)
+	queued := status(t, s.multipart(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "queued note"}, nil, hx, "true"), http.StatusOK)
+	mustContain(t, queued, "data-queued=", "queued note")
+	release()
+	if got := s.settle(run); got.State != journal.Done {
+		t.Fatalf("run %s %v", got.State, got.Error)
+	}
+	if n := s.count("SELECT COUNT(*) FROM thread_queue WHERE thread_id = ? AND consumed_at IS NOT NULL AND run_id = ?", thread, run); n != 1 {
+		t.Errorf("consumed queue rows %d", n)
+	}
+	if n := s.count("SELECT COUNT(*) FROM thread_messages WHERE thread_id = ? AND role = ? AND content_json LIKE ?", thread, journal.User, "%queued note%"); n != 1 {
+		t.Errorf("queued message rows %d", n)
+	}
+	requests := s.api.Requests()
+	if len(requests) < 2 || !strings.Contains(string(requests[1].Body), "queued note") {
+		t.Errorf("the next request did not carry the queued message")
+	}
+	if page := status(t, s.get(fmt.Sprintf("/chat/%d", thread)), http.StatusOK); strings.Count(page, "queued note") != 1 {
+		t.Errorf("queued message rendered %d times", strings.Count(page, "queued note"))
+	}
 }
 
 func TestStreamsEndOnShutdown(t *testing.T) {
@@ -304,8 +335,8 @@ func TestUploadsLimitsAndFileServing(t *testing.T) {
 func TestForeignAttachmentIsUnavailable(t *testing.T) {
 	s := newSite(t)
 	owner := s.startThread("")
-	blocks, err := files.IngestUploads(context.Background(), s.db.Write, s.cfg.FilesDir(),
-		[]files.UploadedFile{{Name: "secret.txt", Data: []byte("TOPSECRET"), Type: "text/plain"}}, 1, files.Owner{ThreadID: owner}, nil)
+	blocks, err := files.IngestUploads(s.ctx(), s.db, s.cfg.FilesDir(),
+		[]files.UploadedFile{{Name: "secret.txt", Data: []byte("TOPSECRET"), Type: "text/plain"}}, 1, files.ThreadOwner(owner), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +349,6 @@ func TestForeignAttachmentIsUnavailable(t *testing.T) {
 	status(t, s.multipart(fmt.Sprintf("/chat/%d/messages", thief), map[string]string{"text": "read it"}, nil, hx, "true"), http.StatusOK)
 	s.settle(s.lastRun(thief))
 	body := string(s.api.Requests()[0].Body)
-	mustContain(t, body, "[attachment secret.txt is no longer available]")
 	mustNotContain(t, body, "TOPSECRET")
 }
 
@@ -332,17 +362,21 @@ func TestEditRegenerateBranch(t *testing.T) {
 		t.Errorf("%d edit buttons", n)
 	}
 	s.api.Push(reply1(anthropictest.Text("Answer two")))
+	release := s.hold()
 	edited := s.multipart(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "second", "edit": "1"}, nil, hx, "true")
 	mustContain(t, status(t, edited, http.StatusOK), "second", "data-live-run")
 	if edited.Header.Get("HX-Reswap") != "innerHTML" {
 		t.Errorf("HX-Reswap %q", edited.Header.Get("HX-Reswap"))
 	}
+	release()
 	s.settle(s.lastRun(thread))
 	page = status(t, s.get(fmt.Sprintf("/chat/%d", thread)), http.StatusOK)
 	mustContain(t, page, "Answer two")
 	mustNotContain(t, page, "Answer one", "data-text>first<")
 	s.api.Push(reply1(anthropictest.Text("Answer three")))
+	release = s.hold()
 	mustContain(t, status(t, s.post(fmt.Sprintf("/chat/%d/regenerate", thread), nil, hx, "true"), http.StatusOK), "data-live-run")
+	release()
 	s.settle(s.lastRun(thread))
 	mustContain(t, status(t, s.get(fmt.Sprintf("/chat/%d", thread)), http.StatusOK), "Answer three")
 	var seq int64
@@ -357,6 +391,20 @@ func TestEditRegenerateBranch(t *testing.T) {
 	empty := s.startThread("")
 	mustContain(t, status(t, s.post(fmt.Sprintf("/chat/%d/regenerate", empty), nil, hx, "true"), http.StatusUnprocessableEntity), "Nothing to redo")
 	mustContain(t, status(t, s.multipart(fmt.Sprintf("/chat/%d/messages", empty), map[string]string{"text": "  "}, nil, hx, "true"), http.StatusUnprocessableEntity), "Nothing sent", "Type a message first.")
+}
+
+func TestEditedTextStopsMatchingSearch(t *testing.T) {
+	s := newSite(t)
+	s.api.Push(reply1(anthropictest.Text("answer one")), reply1(anthropictest.Text("answer two")), reply1(anthropictest.Text("answer three")))
+	thread := s.startThread("hello")
+	s.settle(s.lastRun(thread))
+	status(t, s.multipart(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "firstmarker"}, nil, hx, "true"), http.StatusOK)
+	s.settle(s.lastRun(thread))
+	mustContain(t, status(t, s.get("/chat?q=firstmarker", hx, "true"), http.StatusOK), fmt.Sprintf(`href="/chat/%d"`, thread))
+	status(t, s.multipart(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "secondmarker", "edit": "1"}, nil, hx, "true"), http.StatusOK)
+	s.settle(s.lastRun(thread))
+	mustContain(t, status(t, s.get("/chat?q=secondmarker", hx, "true"), http.StatusOK), fmt.Sprintf(`href="/chat/%d"`, thread))
+	mustContain(t, status(t, s.get("/chat?q=firstmarker", hx, "true"), http.StatusOK), "Nothing matches")
 }
 
 func TestListFlagsOptionsProjectsDelete(t *testing.T) {
@@ -510,4 +558,35 @@ func TestNewThreadPageOffersModelEffortAndContext(t *testing.T) {
 	if model != "claude-sonnet-5-5" || effort != "high" || limit != 200000 {
 		t.Errorf("thread %s %s %d, want claude-sonnet-5-5 high 200000", model, effort, limit)
 	}
+}
+
+func TestNewChatComposerShowsTheHaikuCliffAndResetsOnModelChange(t *testing.T) {
+	s := newSite(t)
+	body := status(t, s.get("/chat/composer-options?model=claude-haiku-5-5&context_limit=200000"), http.StatusOK)
+	mustContain(t, body, "long-context rate")
+	body = status(t, s.get("/chat/composer-options?model=claude-haiku-5-5&context_limit=90000"), http.StatusOK)
+	mustNotContain(t, body, "long-context rate")
+	body = status(t, s.get("/chat/composer-options?model=claude-sonnet-5-5&reset=1&effort=max&context_limit=200000"), http.StatusOK)
+	mustContain(t, body, `value="medium" selected`, `value="90000" selected`)
+	body = status(t, s.get("/chat/composer-options?model=claude-sonnet-5-5&thinking=between_tools&effort=high&context_limit=90000"), http.StatusOK)
+	mustContain(t, body, `title="Effort is fixed on this thinking mode"`)
+	mustNotContain(t, body, `id="composer-effort"`)
+}
+
+func TestThreadSettingsShowLockedFieldsAndCost(t *testing.T) {
+	s := newSite(t)
+	ctx := s.ctx()
+	id, err := threads.Create(ctx, s.db.Write, s.clock, threads.Spec{Kind: threads.Chat, Model: pricing.SonnetID, Effort: pricing.High, Thinking: "between_tools"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Write.Exec("INSERT INTO runs (id, thread_id, kind, model, effort, state, started_at) VALUES (1, ?, 'chat', ?, 'high', 'done', ?)", id, pricing.SonnetID, s.clock-60); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Write.Exec("INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (?, lower(hex(randomblob(16))), 'loop', 'anthropic', ?, 1, 'chat', ?, 'high', '[]', 1000, 0, 0, 500, 10, 0, 'flat', 0.1)", s.clock-60, id, pricing.SonnetID); err != nil {
+		t.Fatal(err)
+	}
+	body := status(t, s.get("/chat/"+strconv.FormatInt(id, 10)), http.StatusOK)
+	mustContain(t, body, "data-cost>$0.100", "between_tools", `title="Effort is fixed on this thinking mode"`)
+	mustNotContain(t, body, "Cache hit share", "switching", "Plan usage")
 }

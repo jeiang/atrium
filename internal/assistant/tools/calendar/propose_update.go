@@ -2,50 +2,47 @@ package calendartools
 
 import (
 	"context"
-	"errors"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/calendar"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func proposed(id int64, created bool, err error) (any, error) {
-	var refused calendar.ProposalError
-	if errors.As(err, &refused) {
-		return nil, tool.Error(refused.Error())
-	}
 	if err != nil {
+		if converted := tool.Domain[calendar.ProposalError, tool.Error](err); converted != err {
+			return nil, converted
+		}
 		return nil, wrap(err)
 	}
 	if !created {
-		return py.Dict{{Key: "proposed", Value: false}, {Key: "reason", Value: "an identical proposal already exists"}}, nil
+		return map[string]any{"proposed": false, "reason": "an identical proposal already exists"}, nil
 	}
-	return py.Dict{{Key: "proposed", Value: true}, {Key: "proposal_id", Value: id}}, nil
+	return map[string]any{"proposed": true, "proposal_id": id}, nil
 }
 
-func proposeUpdate(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
-	raw := py.Dict{}
+func proposeUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+	raw := map[string]any{}
 	for _, name := range []string{"uid", "title", "start", "end", "location", "notes"} {
 		v, err := optionalText(args, name)
 		if err != nil {
 			return nil, err
 		}
-		raw = raw.Set(name, v)
+		raw[name] = v
 	}
 	flag, _ := args.Get("all_day")
 	target, _ := args.Get("calendar")
-	raw = raw.Set("all_day", py.Truthy(flag)).Set("calendar", target)
+	raw["all_day"], raw["calendar"] = truthy(flag), target
 	return proposed((&calendar.Proposals{DB: tc.DB, Now: tc.Now, Env: tc.Env}).ProposeUpdate(ctx, raw))
 }
 
-func proposeRSVP(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
-	raw := py.Dict{}
+func proposeRSVP(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+	raw := map[string]any{}
 	for _, name := range []string{"calendar", "uid", "response", "title"} {
 		v, err := optionalText(args, name)
 		if err != nil {
 			return nil, err
 		}
-		raw = raw.Set(name, v)
+		raw[name] = v
 	}
 	return proposed((&calendar.Proposals{DB: tc.DB, Now: tc.Now, Env: tc.Env}).ProposeRSVP(ctx, raw))
 }
@@ -58,6 +55,8 @@ var updateTools = []tool.Tool{
 		InputSchema: schema(`"uid":{"type":"string"},`+eventProperties, `["calendar","uid","title","start"]`),
 		Handler:     proposeUpdate,
 		Effect:      tool.Propose,
+		Annotated:   true,
+		Flags:       tool.Flags{ExternalEffect: true},
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	},
 	{
@@ -66,8 +65,10 @@ var updateTools = []tool.Tool{
 			"operator to approve. Only the operator's own response changes.",
 		InputSchema: schema(`"calendar":{"type":"string","enum":["icloud","google"]},"uid":{"type":"string"},`+
 			`"response":{"type":"string","enum":["accepted","declined","tentative"]},"title":{"type":"string"}`, `["calendar","uid","response"]`),
-		Handler:  proposeRSVP,
-		Effect:   tool.Propose,
-		Contexts: tool.Kinds{tool.Chat, tool.Cron},
+		Handler:   proposeRSVP,
+		Effect:    tool.Propose,
+		Annotated: true,
+		Flags:     tool.Flags{ExternalEffect: true},
+		Contexts:  tool.Kinds{tool.Chat, tool.Cron},
 	},
 }

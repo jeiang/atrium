@@ -6,17 +6,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
-	"unicode/utf8"
+	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/proposals"
 )
 
-const UndoOp = "profile_restore"
+const (
+	UndoOp            = "profile_restore"
+	KindProfileUpdate = "profile_update"
+	UndoProfileUpdate = "profile_update_undo"
+)
 
 type Entry struct {
 	Key       string
@@ -67,7 +73,7 @@ func optional(s *string) any {
 	return *s
 }
 
-func get(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func get(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	key, ok, err := tool.TextArg(args, "key", false)
 	if err != nil {
 		return nil, err
@@ -81,12 +87,17 @@ func get(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		if ok && e.Key != key {
 			continue
 		}
-		entries = append(entries, py.Dict{{Key: "key", Value: e.Key}, {Key: "value", Value: e.Value}})
+		entries = append(entries, map[string]any{"key": e.Key, "value": e.Value})
 	}
-	return py.Dict{{Key: "entries", Value: entries}}, nil
+	return map[string]any{"entries": entries}, nil
 }
 
-func set(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+var (
+	keyBound   = tool.NewBound(assistant.KeyProfileKeyChars, "")
+	valueBound = tool.NewBound(assistant.KeyProfileValueChars, "")
+)
+
+func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	key, keyOK, err := tool.TextArg(args, "key", true)
 	if err != nil {
 		return nil, err
@@ -96,16 +107,13 @@ func set(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		return nil, err
 	}
 	if !keyOK || !valueOK {
-		return nil, &tool.Raised{Class: "TypeError"}
+		return nil, tool.Error("key and value are required")
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	keyChars := r.Int(assistant.KeyProfileKeyChars)
-	valueChars := r.Int(assistant.KeyProfileValueChars)
-	if err := r.Err(); err != nil {
+	if err := keyBound.ClampText(ctx, tc.DB.Read, key, "key"); err != nil {
 		return nil, err
 	}
-	if utf8.RuneCountInString(key) > keyChars || utf8.RuneCountInString(value) > valueChars {
-		return nil, tool.Error(fmt.Sprintf("key is limited to %d characters and value to %d", keyChars, valueChars))
+	if err := valueBound.ClampText(ctx, tc.DB.Read, value, "value"); err != nil {
+		return nil, err
 	}
 	var previous *string
 	var writeID int64
@@ -120,39 +128,48 @@ func set(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 			key, value, tc.Now()); err != nil {
 			return err
 		}
-		writeID, err = writes.Record(ctx, tx, writes.New{
+		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "profile_set", Target: "profile:" + key,
 			Before: map[string]any{"value": optional(previous)},
 			After:  map[string]any{"value": value},
-			Undo:   map[string]any{"op": UndoOp, "key": key, "previous": optional(previous), "applied": value},
+			Undo:   profileUndo{Op: UndoOp, Key: key, Previous: previous, Applied: value},
 		})
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "key", Value: key}, {Key: "value", Value: value}, {Key: "previous", Value: optional(previous)}, {Key: "write_id", Value: writeID}}, nil
+	return map[string]any{"key": key, "value": value, "previous": optional(previous), "write_id": writeID}, nil
 }
 
-func undo(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
-	key, _ := info["key"].(string)
-	found, err := current(ctx, q, key)
+type profileUndo struct {
+	Op       string  `json:"op"`
+	Key      string  `json:"key"`
+	Previous *string `json:"previous"`
+	Applied  string  `json:"applied"`
+}
+
+func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, error) {
+	var u profileUndo
+	if err := json.Unmarshal(payload, &u); err != nil {
+		return nil, writes.UndoError("profile undo payload is invalid")
+	}
+	found, err := current(ctx, q, u.Key)
 	if err != nil {
 		return nil, err
 	}
-	if optional(found) != info["applied"] {
-		return nil, writes.UndoError(fmt.Sprintf("profile %s changed since this write", py.Repr(key)))
+	if optional(found) != u.Applied {
+		return nil, writes.UndoError(fmt.Sprintf("profile %s changed since this write", strconv.Quote(u.Key)))
 	}
-	previous, restored := info["previous"].(string)
-	if !restored {
-		_, err = q.ExecContext(ctx, "DELETE FROM agent_profile WHERE key = ?", key)
+	if u.Previous == nil {
+		_, err = q.ExecContext(ctx, "DELETE FROM agent_profile WHERE key = ?", u.Key)
 	} else {
-		_, err = q.ExecContext(ctx, "UPDATE agent_profile SET value = ? WHERE key = ?", previous, key)
+		_, err = q.ExecContext(ctx, "UPDATE agent_profile SET value = ? WHERE key = ?", *u.Previous, u.Key)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "key", Value: key}, {Key: "restored", Value: info["previous"]}}, nil
+	return map[string]any{"key": u.Key, "restored": optional(u.Previous)}, nil
 }
 
 func RegisterUndoer(r *writes.Registry) { r.Register(UndoOp, undo) }
@@ -165,15 +182,77 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"key": {"type": "string"}}, "additionalProperties": false}`),
 			Handler:     get,
 			Effect:      tool.Read,
+			Annotated:   true,
+			Flags:       tool.Flags{PrivateData: true},
 			Contexts:    tool.Kinds{tool.Chat, tool.Cron, tool.Nightly},
 		},
 		{
 			Name:        "profile_set",
 			Description: "Record or overwrite one stable operator preference or fact in the profile (key/value). Logged and undoable by the operator. Keep values short and factual; never store secrets.",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"key": {"type": "string", "maxLength": 64}, "value": {"type": "string", "maxLength": 500}}, "required": ["key", "value"], "additionalProperties": false}`),
+			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"key": %s, "value": %s}, "required": ["key", "value"], "additionalProperties": false}`, keyBound.TextSchema(), valueBound.TextSchema())),
 			Handler:     set,
-			Effect:      tool.Write,
-			Contexts:    tool.Kinds{tool.Chat, tool.Nightly},
+			Effect:      tool.WriteUndo, Undo: "profile_restore",
+			Annotated: true,
+			Contexts:  tool.Kinds{tool.Chat, tool.Nightly},
 		},
 	}
+}
+
+type UpdateExecutor struct {
+	DB  *db.DB
+	Now func() float64
+}
+
+func (e *UpdateExecutor) now() float64 {
+	if e.Now != nil {
+		return e.Now()
+	}
+	return float64(time.Now().UnixNano()) / 1e9
+}
+
+func (e *UpdateExecutor) Execute(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
+	var payload struct {
+		Key      string `json:"key"`
+		Value    string `json:"value"`
+		Previous string `json:"previous"`
+	}
+	if err := json.Unmarshal([]byte(p.Payload), &payload); err != nil {
+		return nil, err
+	}
+	if _, err := e.DB.Write.ExecContext(ctx,
+		"INSERT INTO agent_profile (key, value, updated_at) VALUES (?, ?, ?) "+
+			"ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+		payload.Key, payload.Value, e.now()); err != nil {
+		return nil, err
+	}
+	action := map[string]any{"type": KindProfileUpdate, "key": payload.Key}
+	undo := map[string]any{"op": UndoProfileUpdate, "key": payload.Key, "previous": payload.Previous}
+	if _, err := proposals.RecordAction(ctx, e.DB.Write, p.ID, "write", nil, action, undo, ledger.OK, nil, e.now()); err != nil {
+		return nil, err
+	}
+	return map[string]any{"summary": "Profile updated: " + payload.Key}, nil
+}
+
+func (e *UpdateExecutor) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
+	var info struct {
+		Key      string `json:"key"`
+		Previous string `json:"previous"`
+	}
+	if err := json.Unmarshal(plan, &info); err != nil {
+		return nil, err
+	}
+	if info.Previous == "" {
+		if _, err := e.DB.Write.ExecContext(ctx, "DELETE FROM agent_profile WHERE key = ?", info.Key); err != nil {
+			return nil, err
+		}
+	} else if _, err := e.DB.Write.ExecContext(ctx, "UPDATE agent_profile SET value = ?, updated_at = ? WHERE key = ?", info.Previous, e.now(), info.Key); err != nil {
+		return nil, err
+	}
+	return map[string]any{"restored": info.Key}, nil
+}
+
+func RegisterProposal(reg *proposals.Registry, e *UpdateExecutor, owner string) {
+	reg.Executors[KindProfileUpdate] = e.Execute
+	reg.Undoers[UndoProfileUpdate] = e.Undo
+	reg.AddKind(proposals.Kind{Name: KindProfileUpdate, Module: owner, Label: "Profile update", Icon: "user-round"})
 }

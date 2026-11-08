@@ -6,20 +6,22 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
+	"golang.org/x/text/cases"
 )
 
 const (
 	DefaultDays = 14
 	MaxDays     = 366
-	DismissKind = "birthday"
 )
 
 func Date(year int, month time.Month, day int) time.Time {
@@ -27,7 +29,7 @@ func Date(year int, month time.Month, day int) time.Time {
 }
 
 func Limits(ctx context.Context, q db.Querier) (defaultDays, maxDays int, err error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	defaultDays = r.Int(mail.KeyBirthdaysDefaultDays)
 	maxDays = r.Int(mail.KeyBirthdaysMaxDays)
 	return defaultDays, maxDays, r.Err()
@@ -51,28 +53,28 @@ func Occurrence(month, day int, today time.Time) (time.Time, error) {
 			return when, nil
 		}
 	}
-	return time.Time{}, errors.New("AssertionError: unreachable")
+	return time.Time{}, errors.New("birthday date is unreachable")
 }
 
-type Dismissals map[[2]string]string
+type Dismissals map[string]string
 
 func DismissedKeys(ctx context.Context, q db.Querier) (Dismissals, error) {
-	rows, err := q.QueryContext(ctx, "SELECT kind, key, occurrence FROM watch_dismissed")
+	rows, err := q.QueryContext(ctx, "SELECT key, occurrence FROM watch_dismissed")
 	if err != nil {
 		return nil, err
 	}
 	out := Dismissals{}
 	_, err = db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
-		var kind, key, occurrence string
-		err := r.Scan(&kind, &key, &occurrence)
-		out[[2]string{kind, key}] = occurrence
+		var key, occurrence string
+		err := r.Scan(&key, &occurrence)
+		out[key] = occurrence
 		return struct{}{}, err
 	})
 	return out, err
 }
 
 func ItemKey(name string, entry contacts.Date) string {
-	return fmt.Sprintf("%s|%s|%02d-%02d", py.Casefold(name), entry.Kind, entry.Month, entry.Day)
+	return fmt.Sprintf("%s|%s|%02d-%02d", cases.Fold().String(name), entry.Kind, entry.Month, entry.Day)
 }
 
 type Item struct {
@@ -87,6 +89,7 @@ type Item struct {
 }
 
 func Upcoming(cards []contacts.Card, today time.Time, days int, dismissed Dismissals) ([]Item, error) {
+	today = Date(today.Year(), today.Month(), today.Day())
 	out := []Item{}
 	for _, card := range cards {
 		for _, entry := range card.Dates {
@@ -100,7 +103,7 @@ func Upcoming(cards []contacts.Card, today time.Time, days int, dismissed Dismis
 			}
 			key := ItemKey(card.Name, entry)
 			iso := when.Format("2006-01-02")
-			if dismissed[[2]string{DismissKind, key}] == iso {
+			if dismissed[key] == iso {
 				continue
 			}
 			var turning *int
@@ -119,7 +122,7 @@ func Upcoming(cards []contacts.Card, today time.Time, days int, dismissed Dismis
 		if a.DaysUntil != b.DaysUntil {
 			return a.DaysUntil - b.DaysUntil
 		}
-		if c := strings.Compare(py.Casefold(a.Name), py.Casefold(b.Name)); c != 0 {
+		if c := strings.Compare(cases.Fold().String(a.Name), cases.Fold().String(b.Name)); c != 0 {
 			return c
 		}
 		return strings.Compare(a.Kind, b.Kind)
@@ -144,12 +147,12 @@ func UpcomingFor(ctx context.Context, q db.Querier, today time.Time, days int) (
 }
 
 func Dismiss(ctx context.Context, q db.Querier, key, occurrenceDate string, ts float64) error {
-	if _, _, _, ok := py.DateFromISOFormat(occurrenceDate); !ok {
-		return fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrValue, py.Repr(occurrenceDate))
+	if _, ok := timex.ParseDay(occurrenceDate); !ok {
+		return fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrPayload, strconv.Quote(occurrenceDate))
 	}
 	_, err := q.ExecContext(ctx,
-		"INSERT INTO watch_dismissed (kind, key, occurrence, ts) VALUES (?, ?, ?, ?) "+
-			"ON CONFLICT(kind, key) DO UPDATE SET occurrence = excluded.occurrence, ts = excluded.ts",
-		DismissKind, key, occurrenceDate, ts)
+		"INSERT INTO watch_dismissed (key, occurrence, ts) VALUES (?, ?, ?) "+
+			"ON CONFLICT(key) DO UPDATE SET occurrence = excluded.occurrence, ts = excluded.ts",
+		key, occurrenceDate, ts)
 	return err
 }

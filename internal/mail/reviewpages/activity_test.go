@@ -1,7 +1,6 @@
 package reviewpages
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -13,7 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/assistant/writes"
 )
 
 func (s *site) thread() {
@@ -31,10 +30,10 @@ func (s *site) write(ts float64, tool, target string, thread any, before, after,
 	return id
 }
 
-func (s *site) action(ts float64, kind string, src, dest, undo any, ok any) int64 {
+func (s *site) action(ts float64, kind string, src, dest, undo any, state string) int64 {
 	s.t.Helper()
-	res, err := s.db.Write.Exec("INSERT INTO auto_actions (ts, account, message_id, kind, src, dest, undo, ok) VALUES (?, 'icloud', 7, ?, ?, ?, ?, ?)",
-		ts, kind, src, dest, undo, ok)
+	res, err := s.db.Write.Exec("INSERT INTO auto_actions (ts, account, message_id, kind, src, dest, undo, state) VALUES (?, 'icloud', 7, ?, ?, ?, ?, ?)",
+		ts, kind, src, dest, undo, state)
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -47,7 +46,7 @@ func TestActivityMergesMailAndWritesAndFiltersByCategory(t *testing.T) {
 	s.thread()
 	profile := s.write(100, "profile_set", "profile:tone", 1, `{"k":"tone"}`, `{"k":"tone","v":"brief"}`, `{"op":"fake"}`)
 	s.write(105, "notion_update_page", "page", nil, nil, nil, nil)
-	s.action(110, "flag", "INBOX", nil, `{"op":"unflag"}`, 1)
+	s.action(110, "flag", "INBOX", nil, `{"op":"unflag"}`, "applied")
 	page := status(t, s.get("/activity"), http.StatusOK)
 	order := []string{`id="activity-mail-`, "notion_update_page", "profile_set"}
 	last := -1
@@ -98,9 +97,9 @@ func TestActivityPagesThroughShowOlder(t *testing.T) {
 
 func TestActivityMailRowsWithoutPlacesShowGone(t *testing.T) {
 	s := newSite(t)
-	s.action(100, "file", nil, nil, nil, 0)
+	s.action(100, "file", nil, nil, nil, "failed")
 	page := status(t, s.get("/activity?category=mail"), http.StatusOK)
-	mustContain(t, page, "Gone", "(no subject)", "Skipped")
+	mustContain(t, page, "Gone", "(no subject)", "Failed")
 	mustNotContain(t, page, "Undo this")
 }
 
@@ -108,8 +107,9 @@ func TestUndoingAWriteWithoutARegisteredUndoerIsRefused(t *testing.T) {
 	s := newSite(t)
 	id := s.write(100, "profile_set", "profile:tone", nil, nil, nil, `{"op":"ghost"}`)
 	body := status(t, s.post(fmt.Sprintf("/activity/write/%d/undo", id), nil), http.StatusConflict)
-	if jsonOf(t, body)["detail"] != "unknown undo kind 'ghost'" {
-		t.Errorf("body = %s", body)
+	detail := fmt.Sprint(jsonOf(t, body)["detail"])
+	if !strings.Contains(detail, "Not undone") || strings.Contains(detail, "ghost") {
+		t.Errorf("detail = %q", detail)
 	}
 }
 
@@ -117,12 +117,14 @@ func (s *site) profileSet(run int64, key, value string) map[string]any {
 	s.t.Helper()
 	tools := profiletools.Tools()
 	i := slices.IndexFunc(tools, func(tl tool.Tool) bool { return tl.Name == "profile_set" })
-	tc := &tool.Context{DB: s.db, Cfg: s.cfg, Env: s.env, Kind: tool.Chat, ThreadID: 1, RunID: run, Now: func() float64 { return 100 }}
-	out, err := tools[i].Handler(context.Background(), tc, py.Dict{{Key: "key", Value: key}, {Key: "value", Value: value}})
+	reg := writes.NewRegistry()
+	profiletools.RegisterUndoer(reg)
+	tc := &tool.Context{DB: s.db, Cfg: s.cfg, Env: s.env, Kind: tool.Chat, ThreadID: 1, RunID: run, Now: func() float64 { return 100 }, Undoers: reg}
+	out, err := tools[i].Handler(s.ctx(), tc, tool.Args{"key": key, "value": value})
 	if err != nil {
 		s.t.Fatal(err)
 	}
-	return jsonOf(s.t, py.JSONDumps(out))
+	return jsonOf(s.t, mustJSON(out))
 }
 
 func (s *site) profile(key string) any {
@@ -141,7 +143,7 @@ func (s *site) profile(key string) any {
 func TestUndoingAProfileSetRestoresThePreviousValue(t *testing.T) {
 	s := newSite(t)
 	s.thread()
-	run, err := journal.StartRun(context.Background(), s.db.Write, 1, "chat", "m", "medium", 100, nil, nil)
+	run, err := journal.StartRun(s.ctx(), s.db, 1, "chat", "m", "medium", 100, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +167,7 @@ func TestUndoingAProfileSetRestoresThePreviousValue(t *testing.T) {
 	third := s.profileSet(run, "tz", "AST")
 	s.profileSet(run, "tz", "UTC")
 	refused := s.post(fmt.Sprintf("/activity/write/%v/undo", third["write_id"]), nil)
-	if got := status(t, refused, http.StatusConflict); jsonOf(t, got)["detail"] != "profile 'tz' changed since this write" {
+	if got := status(t, refused, http.StatusConflict); jsonOf(t, got)["detail"] != `profile "tz" changed since this write` {
 		t.Errorf("detail = %s", got)
 	}
 	if s.profile("tz") != "UTC" {

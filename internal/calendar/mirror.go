@@ -10,116 +10,70 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unicode/utf8"
-
-	"github.com/jeiang/atrium/internal/py"
 )
-
-func pathParts(p string) []string {
-	var parts []string
-	for _, part := range strings.Split(p, "/") {
-		if part != "" && part != "." {
-			parts = append(parts, part)
-		}
-	}
-	return parts
-}
-
-func pathText(p string) string {
-	parts := pathParts(p)
-	text := strings.Join(parts, "/")
-	switch {
-	case strings.HasPrefix(p, "/"):
-		return "/" + text
-	case text == "":
-		return "."
-	}
-	return text
-}
-
-type osFailure struct {
-	class string
-	text  string
-}
-
-func (e *osFailure) Error() string { return e.text }
-
-func (e *osFailure) PyClass() string { return e.class }
 
 func osClass(err error) string {
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return "FileNotFoundError"
+		return "file not found"
 	case errors.Is(err, fs.ErrPermission):
-		return "PermissionError"
+		return "permission denied"
 	case errors.Is(err, syscall.EISDIR):
-		return "IsADirectoryError"
+		return "is a directory"
 	case errors.Is(err, syscall.ENOTDIR):
-		return "NotADirectoryError"
+		return "not a directory"
 	}
-	return "OSError"
+	return "I/O error"
 }
 
-func collectionName(root, file string) (string, error) {
-	label := filepath.Join(filepath.Dir(file), "displayname")
-	if info, err := os.Stat(label); err == nil && info.Mode().IsRegular() {
-		data, err := os.ReadFile(label)
-		if err == nil {
-			if !utf8.Valid(data) {
-				return "", &osFailure{"UnicodeDecodeError", "'utf-8' codec can't decode bytes"}
-			}
-			if text := py.Strip(string(data)); text != "" {
-				return text, nil
-			}
-		}
-	}
+func collectionName(root, file string) string {
 	rel, _ := filepath.Rel(root, file)
-	parts := pathParts(filepath.ToSlash(rel))
+	parts := strings.Split(filepath.ToSlash(rel), "/")
 	if len(parts) > 1 {
-		return parts[0], nil
+		return parts[0]
 	}
-	rootParts := pathParts(filepath.ToSlash(root))
-	if len(rootParts) == 0 {
-		return "", nil
+	base := filepath.Base(filepath.Clean(root))
+	if base == "." || base == string(filepath.Separator) {
+		return ""
 	}
-	return rootParts[len(rootParts)-1], nil
+	return base
 }
 
 func MirrorEvents(directory string, ws, we time.Time, tz *time.Location, target string, maxOccurrences int) ([]Row, []string, error) {
-	root := pathText(directory)
+	root := filepath.Clean(directory)
 	if info, err := os.Stat(root); err != nil || !info.IsDir() {
 		return nil, nil, NotConfigured(fmt.Sprintf("calendar mirror %s is not a directory", root))
 	}
 	var files []string
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err == nil && path != root && strings.HasSuffix(d.Name(), ".ics") {
 			files = append(files, path)
 		}
 		return nil
-	})
+	}); err != nil {
+		return nil, nil, err
+	}
 	slices.SortFunc(files, func(a, b string) int {
-		return slices.Compare(pathParts(filepath.ToSlash(a)), pathParts(filepath.ToSlash(b)))
+		return strings.Compare(filepath.ToSlash(a), filepath.ToSlash(b))
 	})
-	wanted := py.Lower(target)
+	wanted := strings.ToLower(target)
 	out, notes := []Row{}, []string{}
 	for _, file := range files {
-		name, err := collectionName(root, file)
-		if err != nil {
-			return nil, nil, err
-		}
+		name := collectionName(root, file)
 		rel, _ := filepath.Rel(root, file)
-		if wanted != "" && wanted != py.Lower(name) && wanted != py.Lower(pathParts(filepath.ToSlash(rel))[0]) {
+		parts := strings.Split(filepath.ToSlash(rel), "/")
+		if wanted != "" && wanted != strings.ToLower(name) && (len(parts) == 0 || wanted != strings.ToLower(parts[0])) {
 			continue
 		}
 		data, err := os.ReadFile(file)
 		if err != nil {
-			notes = append(notes, fmt.Sprintf("%s: unreadable (%s)", filepath.Base(file), osClass(err)))
+			notes = append(notes, fmt.Sprintf("%s: unreadable: %s", filepath.Base(file), osClass(err)))
 			continue
 		}
 		rows, err := EventsInICS(data, name, ws, we, tz, &notes, maxOccurrences)
 		var bad valueError
 		if errors.As(err, &bad) {
-			notes = append(notes, fmt.Sprintf("%s: unreadable (ValueError)", filepath.Base(file)))
+			notes = append(notes, fmt.Sprintf("%s: unreadable: invalid calendar data", filepath.Base(file)))
 			continue
 		}
 		if err != nil {

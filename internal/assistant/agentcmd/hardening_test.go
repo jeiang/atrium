@@ -17,10 +17,10 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 )
 
@@ -42,22 +42,24 @@ func newHarness(t *testing.T, script ...anthropictest.Response) *harness {
 	t.Setenv("ATRIUM_DB", path)
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	t.Setenv("ATRIUM_MODE", "shadow")
-	anthropictest.PinKey(t)
+	anthropictest.PinKey(t, testRegistry)
 	env := config.Map(map[string]string{
 		"ATRIUM_DB": path, "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow",
 		"ANTHROPIC_API_KEY": anthropictest.APIKey, anthropic.BaseURLEnv: srv.URL,
 	})
 	tools := func() (*registry.Registry, error) {
-		r := registry.New()
+		r := registry.New(testRegistry)
 		err := r.Add(tool.Tool{
 			Name: "probe", Description: "Return a fixed result", InputSchema: json.RawMessage(`{"type":"object","properties":{"n":{"type":"integer"}}}`),
-			Effect: tool.Read, Contexts: tool.Kinds{tool.Chat, tool.Cron},
-			Handler: func(context.Context, *tool.Context, py.Dict) (any, error) { return "same", nil },
+			Effect: tool.Read, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron},
+			Handler: func(context.Context, *tool.Context, tool.Args) (any, error) { return "same", nil },
 		})
 		return r, err
 	}
 	a := cli.New("atrium", func(io.Writer) {})
-	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(env, tools)}}, settingscmd.Command(nil))
+	a.Settings = testRegistry
+	a.State = config.NewState(testRegistry)
+	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(env, tools)}}, settingscmd.Command(config.OS, nil))
 	d, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +138,7 @@ func TestForcedToolChoiceFollowsTheModelCatalog(t *testing.T) {
 	}{
 		{pricing.HaikuID, "any", map[string]any{"type": "any"}},
 		{pricing.HaikuID, "probe", map[string]any{"type": "tool", "name": "probe"}},
+		{pricing.HaikuID, "web_search", map[string]any{"type": "tool", "name": "web_search"}},
 		{pricing.SonnetID, "any", nil},
 		{pricing.OpusID, "probe", nil},
 	} {
@@ -214,21 +217,32 @@ func TestRefusalWithoutAFallbackNamesTheRecommendedModel(t *testing.T) {
 }
 
 func TestServerFallbackIsRecordedAndPricedByTheServingModel(t *testing.T) {
-	usage := anthropictest.Usage{Input: 1000, Output: 100, Iterations: []anthropictest.Iteration{
+	recorded := anthropictest.Usage{Input: 1000, Output: 100, Iterations: []anthropictest.Iteration{
 		{Type: "message", Input: 600, Output: 10},
 		{Type: "fallback_message", Model: pricing.HaikuID, Input: 400, Output: 90},
 	}}
 	h := newHarness(t, anthropictest.Reply("end_turn",
 		anthropictest.Fallback(pricing.OpusID, pricing.HaikuID, "cyber"), anthropictest.Text("served by the fallback"),
-	).WithUsage(usage))
+	).WithUsage(recorded))
 	h.set("default_model", pricing.OpusID)
 	view, out := h.run("agent", "run", "--text", "go")
 	if view["state"] != "done" {
 		t.Fatalf("view %s", out)
 	}
-	rows := h.usageRows()
-	if len(rows) != 2 || rows[0]["model"] != pricing.OpusID || rows[1]["model"] != pricing.HaikuID {
-		t.Fatalf("ledger %v", rows)
+	var model, iterations string
+	var input, output, unpriced int64
+	var cost float64
+	if err := h.d.Read.QueryRow("SELECT model, input_tokens, output_tokens, cost_usd, unpriced, iterations FROM usage").
+		Scan(&model, &input, &output, &cost, &unpriced, &iterations); err != nil {
+		t.Fatal(err)
+	}
+	var iters []usage.Iteration
+	if err := json.Unmarshal([]byte(iterations), &iters); err != nil {
+		t.Fatal(err)
+	}
+	if model != pricing.OpusID || input != 1000 || output != 100 || unpriced != 0 || len(iters) != 2 ||
+		iters[0].Model != pricing.OpusID || iters[1].Model != pricing.HaikuID {
+		t.Fatalf("ledger %s %d %d %d %v", model, input, output, unpriced, iters)
 	}
 	wantOpus, err := pricing.CostUSD(pricing.OpusID, pricing.Tokens{Input: 600, Output: 10}, 0)
 	if err != nil {
@@ -238,14 +252,17 @@ func TestServerFallbackIsRecordedAndPricedByTheServingModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rows[0]["cost"] != wantOpus || rows[1]["cost"] != wantHaiku {
-		t.Errorf("costs %v, want %v and %v", rows, wantOpus, wantHaiku)
+	if iters[0].CostUSD != wantOpus || iters[1].CostUSD != wantHaiku {
+		t.Errorf("costs %v, want %v and %v", iters, wantOpus, wantHaiku)
 	}
-	if rows[1]["input"] != int64(400) || rows[1]["output"] != int64(90) {
-		t.Errorf("fallback tokens %v", rows[1])
+	if iters[1].Input != 400 || iters[1].Output != 90 {
+		t.Errorf("fallback tokens %v", iters[1])
 	}
-	if cost := view["cost"].(float64); math.Abs(cost-(wantOpus+wantHaiku)) > 1e-12 {
-		t.Errorf("run cost %v, want %v", cost, wantOpus+wantHaiku)
+	if math.Abs(cost-(wantOpus+wantHaiku)) > 1e-12 {
+		t.Errorf("row cost %v, want %v", cost, wantOpus+wantHaiku)
+	}
+	if got := view["cost"].(float64); math.Abs(got-(wantOpus+wantHaiku)) > 1e-12 {
+		t.Errorf("run cost %v, want %v", got, wantOpus+wantHaiku)
 	}
 }
 

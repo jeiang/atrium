@@ -12,15 +12,17 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoable(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	t.Setenv("ATRIUM_DB", path)
-	ctx := context.Background()
+	setEnv(t, "ATRIUM_DB", path)
+	ctx := settings.With(context.Background(), settings.New())
 	seed, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)
@@ -35,19 +37,19 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 		}
 	}
 	approve := func(fingerprint, rule string, settledAt float64, held bool) int64 {
-		id, _, err := proposals.Create(ctx, seed, "rebalance_split", nil, fingerprint, py.Dict{}, py.Dict{}, fingerprint, now-1000)
+		id, _, err := proposals.Create(ctx, seed, "rebalance_split", nil, fingerprint, map[string]any{}, map[string]any{}, fingerprint, now-1000)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if _, err := seed.Write.Exec("UPDATE proposals SET status = 'approved', decided_ts = ? WHERE id = ?", settledAt-1, id); err != nil {
 			t.Fatal(err)
 		}
-		undo := py.Dict{{Key: "op", Value: "rule_delete"}, {Key: "id", Value: rule}}
-		if _, err := proposals.RecordAction(ctx, seed.Write, id, undo, undo, true, nil, settledAt); err != nil {
+		undo := map[string]any{"op": "rule_delete", "id": rule}
+		if _, err := proposals.RecordAction(ctx, seed.Write, id, "write", nil, undo, undo, ledger.OK, nil, settledAt); err != nil {
 			t.Fatal(err)
 		}
 		if held {
-			if _, err := proposals.BeginAction(ctx, seed.Write, id, py.Dict{{Key: "op", Value: "move"}}, now-700); err != nil {
+			if _, err := proposals.BeginAction(ctx, seed.Write, id, map[string]any{"op": "move"}, now-700); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -57,7 +59,7 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 	recent := approve("recent", "recent", now-5, true)
 	noRow := approve("norow", "norow", now-4000, false)
 	noRowRecent := approve("norowrecent", "norowrecent", now-1000, false)
-	noLedger, _, err := proposals.Create(ctx, seed, "rebalance_split", nil, "noledger", py.Dict{}, py.Dict{}, "noledger", now-5000)
+	noLedger, _, err := proposals.Create(ctx, seed, "rebalance_split", nil, "noledger", map[string]any{}, map[string]any{}, "noledger", now-5000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +120,7 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 		return base + "/proposals/" + strconv.FormatInt(id, 10) + "/" + verb
 	}
 	code, body, _ := fetch(t, client, "POST", route(stale, "approve"), url.Values{})
-	if code != http.StatusOK || !strings.Contains(body, "Not approved") || !strings.Contains(body, "unknown or partial outcome") {
+	if code != http.StatusOK || !strings.Contains(body, "Not approved") || !strings.Contains(body, "unresolved write") {
 		t.Errorf("approve of the recovered proposal = %d: %.400s", code, body)
 	}
 	if got := status(stale); got != proposals.Failed {

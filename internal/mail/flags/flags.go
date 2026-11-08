@@ -5,66 +5,28 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/router"
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
+	"github.com/jeiang/atrium/internal/mail/message"
 )
 
 var (
 	log = logx.Logger("atrium.flags")
 
-	automatedLocal = rx.MustCompile(
-		`no[-_.]?reply|do[-_.]?not[-_.]?reply|notifications?|mailer-daemon|postmaster|bounces?`, rx.IgnoreCase)
+	automatedLocal = regexp.MustCompile(`(?i)no[-_.]?reply|do[-_.]?not[-_.]?reply|notifications?|mailer-daemon|postmaster|bounces?`)
 )
 
-type Contacts map[string]struct{}
-
-func VCardEmails(text string) Contacts {
-	found := Contacts{}
-	for _, line := range py.SplitLines(contacts.Unfold(text)) {
-		head, value, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		name, _, _ := strings.Cut(head, ";")
-		if i := strings.LastIndex(name, "."); i >= 0 {
-			name = name[i+1:]
-		}
-		if strings.ToUpper(name) == "EMAIL" && strings.Contains(value, "@") {
-			found[py.Lower(py.Strip(value))] = struct{}{}
-		}
-	}
-	return found
-}
-
-func LoadContacts(dir string) Contacts {
-	emails := Contacts{}
-	if info, err := os.Stat(dir); dir == "" || err != nil || !info.IsDir() {
-		return emails
-	}
-	for _, path := range contacts.VCFPaths(dir) {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		for e := range VCardEmails(contacts.ReadText(data)) {
-			emails[e] = struct{}{}
-		}
-	}
-	return emails
-}
-
-type Row struct {
+type row struct {
 	ID       int64
 	FromAddr string
 	FromName string
@@ -72,8 +34,8 @@ type Row struct {
 	ListID   string
 }
 
-func ContactsFlag(row Row, contacts Contacts) (bool, error) {
-	if _, ok := contacts[row.FromAddr]; row.FromAddr == "" || !ok || row.ListID != "" {
+func contactsFlag(row row, known map[string]struct{}) (bool, error) {
+	if _, ok := known[row.FromAddr]; row.FromAddr == "" || !ok || row.ListID != "" {
 		return false, nil
 	}
 	local, _, _ := strings.Cut(row.FromAddr, "@")
@@ -82,13 +44,12 @@ func ContactsFlag(row Row, contacts Contacts) (bool, error) {
 }
 
 func AutomatedLocal(local string) (bool, error) {
-	m, err := automatedLocal.Search(local)
-	return m != nil, err
+	return automatedLocal.MatchString(local), nil
 }
 
 type Judge func(ctx context.Context, url string, m llm.Message, body string) (llm.Flags, error)
 
-func pending(ctx context.Context, d *db.DB, account string) ([]Row, error) {
+func pending(ctx context.Context, d *db.DB, account string) ([]row, error) {
 	rows, err := d.Read.QueryContext(ctx,
 		"SELECT m.id, m.from_addr, m.from_name, m.subject, m.list_id FROM messages m WHERE m.account = ? AND m.in_inbox = 1 "+
 			"AND m.seen = 0 AND m.sent = 0 AND m.gone_at IS NULL AND NOT EXISTS (SELECT 1 FROM flag_decisions f "+
@@ -96,8 +57,8 @@ func pending(ctx context.Context, d *db.DB, account string) ([]Row, error) {
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Row, error) {
-		var row Row
+	return db.Collect(rows, func(r *sql.Rows) (row, error) {
+		var row row
 		err := r.Scan(&row.ID, &row.FromAddr, &row.FromName, &row.Subject, &row.ListID)
 		return row, err
 	})
@@ -132,22 +93,27 @@ func FlagAccount(ctx context.Context, d *db.DB, account string, judge Judge, now
 	if err != nil {
 		return 0, err
 	}
-	chatURL, err := mail.ChatURL(ctx, d.Read)
+	chatURL, err := endpoint.ChatURL(ctx, d.Read)
 	if err != nil {
 		return 0, err
 	}
-	ctx, err = mail.WithModels(ctx, d.Read)
+	ctx, err = embed.WithModels(ctx, d.Read)
 	if err != nil {
 		return 0, err
 	}
-	known := LoadContacts(contactsDir)
+	known := map[string]struct{}{}
+	for _, card := range contacts.Load(contactsDir) {
+		for _, email := range card.Emails {
+			known[email] = struct{}{}
+		}
+	}
 	available := true
 	done := 0
 	for _, row := range rows {
 		var verdict llm.Flags
 		judged := false
 		if available {
-			body, err := router.MessageBody(ctx, d.Read, row.ID)
+			body, err := message.Body(ctx, d.Read, row.ID)
 			if err != nil {
 				return done, err
 			}
@@ -163,7 +129,7 @@ func FlagAccount(ctx context.Context, d *db.DB, account string, judge Judge, now
 				judged = true
 			}
 		}
-		match, err := ContactsFlag(row, known)
+		match, err := contactsFlag(row, known)
 		if err != nil {
 			return done, err
 		}

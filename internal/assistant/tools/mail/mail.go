@@ -4,10 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
-	"strconv"
 	"time"
 	"unicode/utf8"
 
@@ -18,12 +16,12 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/search"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
-const (
-	schemaMaxResults = 20
-	schemaBodyChars  = 8000
+var (
+	mailLimitBound = tool.NewBound(assistant.KeyMailMaxResults, "")
+	mailBodyBound  = tool.NewBound(assistant.KeyMailBodyChars, "")
 )
 
 var mailKinds = tool.AllKinds
@@ -32,11 +30,11 @@ var mailSearchSchema = json.RawMessage(`{"type":"object","properties":{"query":{
 	`"account":{"type":"string","description":"Mail account id"},"folder":{"type":"string"},` +
 	`"since":{"type":"string","description":"YYYY-MM-DD, inclusive"},` +
 	`"until":{"type":"string","description":"YYYY-MM-DD, inclusive"},` +
-	`"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxResults) + `}},` +
+	`"limit":` + mailLimitBound.Schema() + `},` +
 	`"required":["query"],"additionalProperties":false}`)
 
 var mailReadSchema = json.RawMessage(`{"type":"object","properties":{"message_id":{"type":"integer"},` +
-	`"max_chars":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaBodyChars) + `}},` +
+	`"max_chars":` + mailBodyBound.Schema() + `},` +
 	`"required":["message_id"],"additionalProperties":false}`)
 
 func mailTools() []tool.Tool {
@@ -48,6 +46,8 @@ func mailTools() []tool.Tool {
 			InputSchema: mailSearchSchema,
 			Handler:     mailSearch,
 			Effect:      tool.Read,
+			Annotated:   true,
+			Flags:       tool.Flags{PrivateData: true},
 			Contexts:    mailKinds,
 		},
 		{
@@ -57,17 +57,29 @@ func mailTools() []tool.Tool {
 			InputSchema: mailReadSchema,
 			Handler:     mailRead,
 			Effect:      tool.Read,
+			Annotated:   true,
+			Flags:       tool.Flags{PrivateData: true},
 			Contexts:    mailKinds,
 		},
 	}
+}
+
+func clip(s string, n int) string {
+	for i := range s {
+		if n == 0 {
+			return s[:i]
+		}
+		n--
+	}
+	return s
 }
 
 func iso(ts float64) string {
 	if ts == 0 {
 		return ""
 	}
-	sec, _ := py.SplitTimestamp(ts)
-	return py.ISOFormat(time.Unix(sec, 0).UTC(), "seconds")
+	sec, _ := timex.SplitTimestamp(ts)
+	return time.Unix(sec, 0).UTC().Format("2006-01-02T15:04:05-07:00")
 }
 
 func embedder(tc *tool.Context) embed.TextsFunc {
@@ -84,7 +96,11 @@ func recipients(ctx context.Context, q db.Querier, ids []int64) (map[int64]any, 
 	for i, id := range ids {
 		list[i] = id
 	}
-	rows, err := q.QueryContext(ctx, "SELECT id, to_addrs FROM messages WHERE id IN (SELECT value FROM json_each(?))", py.JSONDumps(list))
+	encoded, err := json.Marshal(list)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.QueryContext(ctx, "SELECT id, to_addrs FROM messages WHERE id IN (SELECT value FROM json_each(?))", encoded)
 	if err != nil {
 		return nil, err
 	}
@@ -105,48 +121,61 @@ func recipients(ctx context.Context, q db.Querier, ids []int64) (map[int64]any, 
 		if text == "" {
 			text = "[]"
 		}
-		v, err := py.JSONLoads([]byte(text))
-		if err != nil {
-			return nil, &tool.Raised{Class: "JSONDecodeError"}
+		var v any
+		if err := json.Unmarshal([]byte(text), &v); err != nil {
+			return nil, tool.Error("invalid recipients JSON")
 		}
 		out[r.id] = v
 	}
 	return out, nil
 }
 
-func mailSearch(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func mailSearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	query, _, err := tool.TextArg(args, "query", true)
 	if err != nil {
 		return nil, err
 	}
 	r := assistant.Read(ctx, tc.DB.Read)
-	maxResults := r.Int(assistant.KeyMailMaxResults)
 	snippetChars := r.Int(assistant.KeyMailSnippetChars)
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 10, int64(maxResults), 1)
+	limit, err := mailLimitBound.Clamp(ctx, tc.DB.Read, args, "limit")
 	if err != nil {
 		return nil, err
 	}
-	filters := map[string]any{}
-	for _, f := range [...]struct{ filter, arg string }{
-		{"account", "account"}, {"folder", "folder"}, {"date_from", "since"}, {"date_to", "until"},
-	} {
+	var filters search.Filters
+	for _, f := range [...]struct {
+		arg string
+		set func(string)
+	}{{"account", func(v string) { filters.Account = search.Text(v) }},
+		{"folder", func(v string) { filters.Folder = search.Text(v) }}} {
 		text, ok, err := tool.TextArg(args, f.arg, false)
 		if err != nil {
 			return nil, err
 		}
 		if ok {
-			filters[f.filter] = text
-		} else {
-			filters[f.filter] = nil
+			f.set(text)
 		}
 	}
-	found, err := search.Search(ctx, tc.DB.KNN, tc.Cfg, query, filters, int(limit), embedder(tc))
-	if errors.Is(err, httpx.ErrValue) {
-		return nil, tool.Error("bad date filter: " + httpx.Message(err))
+	for _, f := range [...]struct {
+		arg string
+		set func(*float64)
+	}{{"since", func(v *float64) { filters.DateFrom = v }}, {"until", func(v *float64) { filters.DateTo = v }}} {
+		text, ok, err := tool.TextArg(args, f.arg, false)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		day, err := search.Day(text, f.arg == "until")
+		if err != nil {
+			return nil, tool.Error("bad date filter: " + httpx.Message(err))
+		}
+		f.set(day)
 	}
+	found, err := search.Search(ctx, tc.DB.KNN, search.Query{Text: query, Filters: filters, Limit: int(limit)}, embedder(tc))
 	if err != nil {
 		return nil, err
 	}
@@ -168,21 +197,12 @@ func mailSearch(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 		if !ok {
 			recips = []any{}
 		}
-		results[i] = py.Dict{
-			{Key: "message_id", Value: h.ID},
-			{Key: "account", Value: h.Account},
-			{Key: "folder", Value: h.Folder},
-			{Key: "date", Value: iso(h.DateTS)},
-			{Key: "from", Value: from},
-			{Key: "to", Value: recips},
-			{Key: "subject", Value: h.Subject},
-			{Key: "snippet", Value: tool.Clip(h.Snippet, snippetChars)},
-		}
+		results[i] = map[string]any{"message_id": h.ID, "account": h.Account, "folder": h.Folder, "date": iso(h.DateTS), "from": from, "to": recips, "subject": h.Subject, "snippet": tool.Clip(h.Snippet, snippetChars)}
 	}
-	return py.Dict{{Key: "semantic", Value: found.Semantic}, {Key: "results", Value: results}}, nil
+	return map[string]any{"semantic": found.Semantic, "results": results}, nil
 }
 
-func mailRead(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func mailRead(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, _ := args.Get("message_id")
 	var id int64
 	switch v := raw.(type) {
@@ -192,17 +212,12 @@ func mailRead(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	default:
 		return nil, tool.Error("message_id must be an integer")
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	bodyChars := r.Int(assistant.KeyMailBodyChars)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
-	maxChars, err := tool.BoundedInt(args, "max_chars", int64(bodyChars), int64(bodyChars), 1)
+	maxChars, err := mailBodyBound.Clamp(ctx, tc.DB.Read, args, "max_chars")
 	if err != nil {
 		return nil, err
 	}
 	if _, huge := raw.(*big.Int); huge {
-		return nil, &tool.Raised{Class: "OverflowError"}
+		return nil, tool.Error("value is too large")
 	}
 	found, err := message.Get(ctx, tc.DB.Read, tc.Cfg.CacheDir, id)
 	if err != nil {
@@ -211,10 +226,10 @@ func mailRead(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	if found == nil {
 		return nil, tool.Error(fmt.Sprintf("no message %d", id))
 	}
-	headers := py.Dict{}
+	headers := map[string]any{}
 	for _, name := range message.Headers {
 		if v := found.Headers[name]; v != "" {
-			headers = append(headers, py.Pair{Key: name, Value: tool.Clip(v, 500)})
+			headers[name] = tool.Clip(v, 500)
 		}
 	}
 	attachments := make([]any, len(found.Attachments))
@@ -224,15 +239,5 @@ func mailRead(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 			attachments[i] = a.ContentType
 		}
 	}
-	return py.Dict{
-		{Key: "untrusted", Value: true},
-		{Key: "message_id", Value: found.ID},
-		{Key: "account", Value: found.Account},
-		{Key: "folder", Value: found.Folder},
-		{Key: "date", Value: iso(found.DateTS)},
-		{Key: "headers", Value: headers},
-		{Key: "body", Value: py.Clip(found.Body, int(maxChars))},
-		{Key: "truncated", Value: int64(utf8.RuneCountInString(found.Body)) > maxChars},
-		{Key: "attachments", Value: attachments},
-	}, nil
+	return map[string]any{"untrusted": true, "message_id": found.ID, "account": found.Account, "folder": found.Folder, "date": iso(found.DateTS), "headers": headers, "body": clip(found.Body, int(maxChars)), "truncated": int64(utf8.RuneCountInString(found.Body)) > maxChars, "attachments": attachments}, nil
 }

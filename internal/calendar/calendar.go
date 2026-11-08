@@ -3,6 +3,7 @@ package calendar
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"golang.org/x/oauth2"
 	gcal "google.golang.org/api/calendar/v3"
 	"google.golang.org/api/googleapi"
@@ -28,9 +28,37 @@ const (
 	remoteTimeout = 60 * time.Second
 )
 
-var Targets = [...]string{ICloud, Google}
+const TargetsText = "icloud, google"
 
-var TargetsText = strings.Join(Targets[:], ", ")
+type Target string
+
+func ParseTarget(value string) (Target, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case ICloud:
+		return ICloud, nil
+	case Google:
+		return Google, nil
+	}
+	return "", Error("calendar must be one of " + TargetsText)
+}
+
+type Filter struct {
+	Target     Target
+	Collection string
+}
+
+func ParseFilter(value string) (Filter, error) {
+	trimmed := strings.TrimSpace(value)
+	switch {
+	case trimmed == "":
+		return Filter{}, nil
+	case strings.EqualFold(trimmed, Google):
+		return Filter{Target: Google}, nil
+	case strings.EqualFold(trimmed, ICloud):
+		return Filter{Target: ICloud}, nil
+	}
+	return Filter{Target: ICloud, Collection: trimmed}, nil
+}
 
 type Endpoints struct {
 	Token     string
@@ -39,23 +67,28 @@ type Endpoints struct {
 	CardDAV   string
 }
 
-var endpoints = Endpoints{Token: TokenURI, CalDAV: CalDAVURL, CardDAV: CardDAVURL}
+const (
+	CalDAVEnv      = "ATRIUM_CALENDAR_CALDAV_URL"
+	CardDAVEnv     = "ATRIUM_CALENDAR_CARDDAV_URL"
+	GoogleTokenEnv = "ATRIUM_CALENDAR_GOOGLE_TOKEN_URL"
+	GoogleAPIEnv   = "ATRIUM_CALENDAR_GOOGLE_API_URL"
+)
 
-func UseEndpoints(e Endpoints) func() {
-	saved := endpoints
-	if e.Token != "" {
-		endpoints.Token = e.Token
+func EndpointsFrom(env config.Env) Endpoints {
+	pick := func(key, fallback string) string {
+		if env != nil {
+			if value, ok := env(key); ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+		return fallback
 	}
-	if e.GoogleAPI != "" {
-		endpoints.GoogleAPI = e.GoogleAPI
+	return Endpoints{
+		Token:     pick(GoogleTokenEnv, TokenURI),
+		GoogleAPI: pick(GoogleAPIEnv, ""),
+		CalDAV:    pick(CalDAVEnv, CalDAVURL),
+		CardDAV:   pick(CardDAVEnv, CardDAVURL),
 	}
-	if e.CalDAV != "" {
-		endpoints.CalDAV = e.CalDAV
-	}
-	if e.CardDAV != "" {
-		endpoints.CardDAV = e.CardDAV
-	}
-	return func() { endpoints = saved }
 }
 
 type Ref struct {
@@ -63,11 +96,13 @@ type Ref struct {
 	UID      string
 }
 
-func (r Ref) Dict() py.Dict {
-	return py.Dict{{Key: "calendar", Value: r.Calendar}, {Key: "uid", Value: r.UID}}
+func (r Ref) Dict() map[string]any {
+	return map[string]any{"calendar": r.Calendar, "uid": r.UID}
 }
 
-func Zone(env config.Env) (*time.Location, error) { return config.Location(env) }
+func Zone(ctx context.Context, env config.Env) (*time.Location, error) {
+	return config.From(ctx).Location(env)
+}
 
 func targetError() error { return Error("calendar must be one of " + TargetsText) }
 
@@ -86,6 +121,7 @@ func googleService(ctx context.Context, env config.Env, set Settings) (*gcal.Ser
 	if err != nil {
 		return nil, err
 	}
+	endpoints := EndpointsFrom(env)
 	source := oauth2.ReuseTokenSource(nil, &refresher{ctx: ctx, creds: creds, tokenURL: endpoints.Token})
 	client := &http.Client{
 		Timeout:   remoteTimeout,
@@ -106,7 +142,7 @@ func httpStatus(err error) int {
 	return 0
 }
 
-func CreateEvent(ctx context.Context, env config.Env, set Settings, target string, spec Spec, tz *time.Location) (Ref, error) {
+func CreateEvent(ctx context.Context, env config.Env, set Settings, target Target, spec Spec, tz *time.Location) (Ref, error) {
 	switch target {
 	case Google:
 		svc, err := googleService(ctx, env, set)
@@ -121,7 +157,7 @@ func CreateEvent(ctx context.Context, env config.Env, set Settings, target strin
 			return Ref{}, remote(err)
 		}
 	case ICloud:
-		cal, err := openICloud(ctx, set)
+		cal, err := openICloud(ctx, env, set)
 		if err != nil {
 			return Ref{}, err
 		}
@@ -135,10 +171,10 @@ func CreateEvent(ctx context.Context, env config.Env, set Settings, target strin
 	default:
 		return Ref{}, targetError()
 	}
-	return Ref{Calendar: target, UID: spec.UID}, nil
+	return Ref{Calendar: string(target), UID: spec.UID}, nil
 }
 
-func DeleteEvent(ctx context.Context, env config.Env, set Settings, target, uid string) error {
+func DeleteEvent(ctx context.Context, env config.Env, set Settings, target Target, uid string) error {
 	switch target {
 	case Google:
 		svc, err := googleService(ctx, env, set)
@@ -151,7 +187,7 @@ func DeleteEvent(ctx context.Context, env config.Env, set Settings, target, uid 
 			}
 		}
 	case ICloud:
-		cal, err := openICloud(ctx, set)
+		cal, err := openICloud(ctx, env, set)
 		if err != nil {
 			return err
 		}
@@ -164,11 +200,15 @@ func DeleteEvent(ctx context.Context, env config.Env, set Settings, target, uid 
 	return nil
 }
 
-func Track(ctx context.Context, q db.Querier, spec Spec, target string, proposalID *int64, now float64) error {
-	_, err := q.ExecContext(ctx,
+func Track(ctx context.Context, q db.Querier, spec Spec, target Target, proposalID *int64, now float64) error {
+	encoded, err := json.Marshal(spec.Dict())
+	if err != nil {
+		return err
+	}
+	_, err = q.ExecContext(ctx,
 		"INSERT OR REPLACE INTO agent_events (uid, calendar, title, start, end, spec, created_ts, deleted_ts, proposal_id) "+
 			"VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)",
-		spec.UID, target, spec.Title, spec.Start, spec.End, py.JSONDumps(spec.Dict()), now, proposalID)
+		spec.UID, string(target), spec.Title, spec.Start.iso(), spec.End.iso(), string(encoded), now, proposalID)
 	return err
 }
 
@@ -198,22 +238,23 @@ type Listing struct {
 	Events    []Row
 	Truncated bool
 	Notes     []string
+	tz        *time.Location
 }
 
-func (l Listing) Dict() py.Dict {
+func (l Listing) Dict() map[string]any {
 	events := make([]any, len(l.Events))
 	for i, row := range l.Events {
-		events[i] = row.Dict()
+		events[i] = row.Dict(l.tz)
 	}
 	notes := make([]any, len(l.Notes))
 	for i, note := range l.Notes {
 		notes[i] = note
 	}
-	return py.Dict{{Key: "events", Value: events}, {Key: "truncated", Value: l.Truncated}, {Key: "notes", Value: notes}}
+	return map[string]any{"events": events, "truncated": l.Truncated, "notes": notes}
 }
 
-func ListEvents(ctx context.Context, env config.Env, set Settings, start, end any, target string) (*Listing, error) {
-	tz, err := Zone(env)
+func ListEvents(ctx context.Context, env config.Env, set Settings, start, end any, filter Filter) (*Listing, error) {
+	tz, err := Zone(ctx, env)
 	if err != nil {
 		return nil, err
 	}
@@ -229,12 +270,12 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 	if !we.After(ws) {
 		return nil, Error("end must be after start")
 	}
-	wanted := strings.ToLower(py.Strip(target))
 	events, notes := []Row{}, []string{}
 	reached := 0
-	if wanted != Google {
+	var googleErr error
+	if filter.Target != Google {
 		if dir := set.CalendarDir; dir != "" {
-			found, extra, err := MirrorEvents(dir, ws, we, tz, wanted, set.MaxOccurrences)
+			found, extra, err := MirrorEvents(dir, ws, we, tz, filter.Collection, set.MaxOccurrences)
 			var missing NotConfigured
 			switch {
 			case errors.As(err, &missing):
@@ -250,44 +291,42 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 			notes = append(notes, "ATRIUM_CALENDAR_CALENDAR_DIR not set: iCloud mirror skipped")
 		}
 	}
-	if wanted == "" || wanted == Google {
+	if filter.Target == "" || filter.Target == Google {
 		found, err := googleEvents(ctx, env, set, ws, we, tz)
 		var missing NotConfigured
 		switch {
 		case errors.As(err, &missing):
 			notes = append(notes, "google: "+missing.Error())
 		case err != nil:
-			notes = append(notes, "google: "+py.ExceptionText(err))
+			notes = append(notes, "google: "+err.Error())
+			googleErr = err
 		default:
 			events = append(events, found...)
 			reached++
 		}
 	}
 	if reached == 0 {
+		if googleErr != nil {
+			return nil, googleErr
+		}
 		text := strings.Join(notes, "; ")
 		if text == "" {
 			text = "no calendar source configured"
 		}
 		return nil, NotConfigured(text)
 	}
-	if err := sortEvents(events, tz); err != nil {
-		return nil, err
-	}
+	sortEvents(events, tz)
 	truncated := len(events) > set.MaxEvents
 	if truncated {
 		events = events[:set.MaxEvents]
 	}
-	return &Listing{Events: events, Truncated: truncated, Notes: notes}, nil
+	return &Listing{Events: events, Truncated: truncated, Notes: notes, tz: tz}, nil
 }
 
-func sortEvents(events []Row, tz *time.Location) error {
+func sortEvents(events []Row, tz *time.Location) {
 	keys := make([]time.Time, len(events))
 	for i, ev := range events {
-		v, err := ParseWhen(ev.Start, tz, !strings.Contains(ev.Start, "T"))
-		if err != nil {
-			return err
-		}
-		keys[i] = asDT(v, tz)
+		keys[i] = asDT(ev.Start, tz)
 	}
 	order := make([]int, len(events))
 	for i := range order {
@@ -305,5 +344,4 @@ func sortEvents(events []Row, tz *time.Location) error {
 		sorted[i] = events[at]
 	}
 	copy(events, sorted)
-	return nil
 }

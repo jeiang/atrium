@@ -13,11 +13,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/settings"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations"
-	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -25,14 +25,14 @@ import (
 )
 
 func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	srv := llmstub.Server(t, nil)
-	t.Setenv("ATRIUM_DB_KEY", rightKeyHex)
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	t.Setenv(settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
-	t.Setenv("ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	t.Setenv("ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "shadow")
+	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
+	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
+	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
+	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "shadow")
 
 	work := mailtest.NewFakeClient()
 	work.Gmail = true
@@ -41,8 +41,8 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	h, x := mailtest.RawWith("Standup", "lead@work.test", "<work-1@work.test>", "Moved to 10.")
 	all.Add(h, x, nil, []string{`\Inbox`})
 	passwords := map[string]string{"me@icloud.test": "home-pass", "me@work.test": "work-pass"}
-	t.Cleanup(imapclient.UseDialer(func(_ context.Context, a config.AccountSpec) (mail.Conn, error) {
-		if passwords[a.Login] != a.Password {
+	t.Cleanup(imapclient.UseDialer(func(_ context.Context, a config.AccountSpec, password string) (mail.Conn, error) {
+		if passwords[a.Login] != password {
 			return nil, errors.New("AUTHENTICATIONFAILED Invalid credentials")
 		}
 		return mailtest.NewFakeClient(), nil
@@ -90,7 +90,7 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	if code, body := post("/accounts", add); code != http.StatusUnprocessableEntity || !strings.Contains(body, "AUTHENTICATIONFAILED") {
 		t.Fatalf("a failed Test: %d", code)
 	}
-	if n := count("SELECT COUNT(*) FROM mail_accounts"); n != 0 {
+	if n := count("SELECT COUNT(*) FROM mail_accounts WHERE pinned = 0"); n != 0 {
 		t.Fatalf("a failed Test stored %d accounts", n)
 	}
 	add.Set("password", "work-pass")
@@ -103,6 +103,20 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	}
 	if count("SELECT COUNT(*) FROM secrets WHERE name = ?", config.PasswordKey("work")) != 1 || health(t, dir, "mail_work") != integrations.OK {
 		t.Error("the added account has no stored password or no ok health")
+	}
+	if !strings.Contains(page(), `id="new-auth" name="auth_method"`) {
+		t.Error("the add form does not offer an auth method")
+	}
+	update := url.Values{"label": {"Work"}, "login": {"me@work.test"}, "enabled": {"1"}, "auth_method": {"xoauth2"}}
+	if code, body := post("/accounts/work", update); code != http.StatusOK || !strings.Contains(body, `<option value="xoauth2" selected>`) {
+		t.Fatalf("switching to xoauth2: %d", code)
+	}
+	if n := count("SELECT COUNT(*) FROM mail_accounts WHERE id = 'work' AND auth_method = 'xoauth2'"); n != 1 {
+		t.Fatal("the xoauth2 auth method was not stored")
+	}
+	update.Set("auth_method", "password")
+	if code, _ := post("/accounts/work", update); code != http.StatusOK {
+		t.Fatalf("switching back to password: %d", code)
 	}
 	if code, _ := post("/accounts", add); code != http.StatusUnprocessableEntity {
 		t.Errorf("a duplicate id: %d", code)
@@ -119,10 +133,12 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	fakes := map[string]*mailtest.FakeClient{"work": work, "home": mailtest.NewFakeClient()}
 	fakes["home"].AddBox("INBOX", mailtest.NewBox(3))
 	clients := func(config.Config) mail.OpenFunc {
-		return func(_ context.Context, account string) (mail.Client, error) { return fakes[account], nil }
+		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
+			return mail.Gated(fakes[opts.Account], opts.Q), nil
+		}
 	}
-	app := cli.New("atrium", logx.Setup)
-	app.Add(commands(clients, nil)...)
+	reg := settings.New()
+	app := newAppWith(f.lookup, reg, config.NewState(reg), nil, clients, nil, quietLog)
 	var out, errs bytes.Buffer
 	if code := app.Run(context.Background(), []string{"sync", "--account", "work"}, &out, &errs); code != 0 {
 		t.Fatalf("sync of the added account: %d %s", code, errs.String())
@@ -134,7 +150,7 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	if code, _ := post("/accounts/work/remove", nil); code != http.StatusOK {
 		t.Fatalf("remove: %d", code)
 	}
-	if count("SELECT COUNT(*) FROM mail_accounts") != 0 || count("SELECT COUNT(*) FROM secrets WHERE name = ?", config.PasswordKey("work")) != 0 {
+	if count("SELECT COUNT(*) FROM mail_accounts WHERE pinned = 0") != 0 || count("SELECT COUNT(*) FROM secrets WHERE name = ?", config.PasswordKey("work")) != 0 {
 		t.Error("remove left the account or its password")
 	}
 	if n := count("SELECT COUNT(*) FROM messages WHERE account = 'work'"); n != 1 {

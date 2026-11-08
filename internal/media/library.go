@@ -6,13 +6,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
+	"regexp"
+
+	"github.com/jeiang/atrium/internal/textutil"
 )
 
 var (
-	seasonDir   = rx.MustCompile(`^Season (\d{1,3})$`, 0)
-	episodeMark = rx.MustCompile(` - S(\d{2})E(\d{2,3})$`, 0)
+	seasonDir   = regexp.MustCompile(`^Season (\d{1,3})$`)
+	episodeMark = regexp.MustCompile(` - S(\d{2})E(\d{2,3})$`)
 )
 
 type NotFound string
@@ -133,7 +134,7 @@ func (t Tuning) MovieEntries(root string) []Entry {
 	dirs := dirsOf(filepath.Join(root, Movies))
 	out := []Entry{}
 	for _, d := range dirs[:min(t.ChildLimit, len(dirs))] {
-		out = append(out, t.entryOf(Movies, d))
+		out = append(out, t.entryOf(KindMovie, d))
 	}
 	return out
 }
@@ -142,7 +143,7 @@ func (t Tuning) ShowEntries(root string) []Entry {
 	dirs := dirsOf(filepath.Join(root, TV))
 	out := []Entry{}
 	for _, d := range dirs[:min(t.ChildLimit, len(dirs))] {
-		out = append(out, t.entryOf(TV, d))
+		out = append(out, t.entryOf(KindShow, d))
 	}
 	return out
 }
@@ -171,16 +172,17 @@ func (t Tuning) Movie(root, name string) (MovieView, error) {
 }
 
 func episodeNumber(name string) (*int, *int) {
-	m := matched(episodeMark.Search(name[:len(name)-len(Ext(name))]))
-	if m == nil {
+	text := name[:len(name)-len(Ext(name))]
+	loc := episodeMark.FindStringSubmatchIndex(text)
+	if loc == nil {
 		return nil, nil
 	}
-	season, errSeason := py.IntString(m.Group(1))
-	episode, errEpisode := py.IntString(m.Group(2))
-	if errSeason != nil || errEpisode != nil {
+	season, okSeason := parseInt(text[loc[2]:loc[3]])
+	episode, okEpisode := parseInt(text[loc[4]:loc[5]])
+	if !okSeason || !okEpisode {
 		return nil, nil
 	}
-	s, e := int(season.Int64()), int(episode.Int64())
+	s, e := int(season), int(episode)
 	return &s, &e
 }
 
@@ -192,9 +194,9 @@ func (t Tuning) Show(root, name string) (ShowView, error) {
 	view := ShowView{Entry: t.entryOf(TV, name), Seasons: []Season{}}
 	for _, d := range dirsOf(path) {
 		season := Season{Dir: d, Episodes: []Episode{}}
-		if m := matched(seasonDir.Match(d)); m != nil {
-			if n, err := py.IntString(m.Group(1)); err == nil {
-				v := int(n.Int64())
+		if loc := seasonDir.FindStringSubmatchIndex(d); loc != nil && loc[0] == 0 {
+			if n, ok := parseInt(d[loc[2]:loc[3]]); ok {
+				v := int(n)
 				season.Number = &v
 			}
 		}
@@ -237,15 +239,15 @@ func containsAll(hay string, words []string) bool {
 
 func (t Tuning) Search(root, query string, limit int) []SearchResult {
 	var words []string
-	for _, w := range py.Split(query) {
-		words = append(words, py.Casefold(w))
+	for _, w := range strings.Fields(query) {
+		words = append(words, textutil.Casefold(w))
 	}
 	out := []SearchResult{}
 	if len(words) == 0 {
 		return out
 	}
 	for _, m := range t.MovieEntries(root) {
-		if !containsAll(py.Casefold(m.Dir), words) {
+		if !containsAll(textutil.Casefold(m.Dir), words) {
 			continue
 		}
 		view, _ := t.Movie(root, m.Dir)
@@ -254,11 +256,14 @@ func (t Tuning) Search(root, query string, limit int) []SearchResult {
 			files = append(files, f.Rel)
 		}
 		out = append(out, SearchResult{Kind: KindMovie, Title: m.Title, Year: m.Year, Dir: m.Dir, Files: files})
+		if len(out) >= limit {
+			return out[:limit]
+		}
 	}
 	for _, s := range t.ShowEntries(root) {
 		for _, rel := range t.EpisodeFilesOf(root, s.Dir) {
-			if containsAll(py.Casefold(s.Dir+" "+filepath.Base(rel)), words) {
-				out = append(out, SearchResult{Kind: "episode", Title: s.Title, Year: s.Year, Dir: s.Dir, Files: []string{rel}})
+			if containsAll(textutil.Casefold(s.Dir+" "+filepath.Base(rel)), words) {
+				out = append(out, SearchResult{Kind: KindEpisode, Title: s.Title, Year: s.Year, Dir: s.Dir, Files: []string{rel}})
 			}
 		}
 		if len(out) >= limit {

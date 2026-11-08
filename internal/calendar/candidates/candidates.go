@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"strings"
 	"time"
@@ -13,71 +12,64 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/mail/router"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var log = logx.Logger("atrium.event_candidates")
 
+type Status string
+
 const (
-	StatusQueued = "queued"
-	Drafted      = "drafted"
-	Reviewed     = "reviewed"
-	Proposed     = "proposed"
-	None         = "none"
+	StatusQueued   Status = "queued"
+	StatusDrafted  Status = "drafted"
+	StatusReviewed Status = "reviewed"
+	StatusProposed Status = "proposed"
+	StatusNone     Status = "none"
 )
 
 var calendarTypes = map[string]bool{"text/calendar": true, "application/ics": true}
 
 type Judge func(ctx context.Context, url string, m llm.Message, body string) (bool, error)
 
-func set(ctx context.Context, d *db.DB, messageID any, status, reason string, now float64) error {
+func set(ctx context.Context, d *db.DB, messageID int64, status Status, reason string, now float64) error {
 	_, err := d.Write.ExecContext(ctx, "INSERT OR REPLACE INTO event_candidates (message_id, reason, status, ts) VALUES (?, ?, ?, ?)",
-		messageID, reason, status, now)
+		messageID, reason, string(status), now)
 	return err
 }
 
-func Mark(ctx context.Context, d *db.DB, messageID any, status string, now float64) error {
-	id := messageID
-	switch v := id.(type) {
-	case bool:
-		id = int64(0)
-		if v {
-			id = int64(1)
-		}
-	case *big.Int:
-		id = v.String()
-	}
-	res, err := d.Write.ExecContext(ctx, "UPDATE event_candidates SET status = ?, ts = ? WHERE message_id = ?", status, now, id)
+func Drafted(ctx context.Context, d *db.DB, messageID int64, now float64) (bool, error) {
+	res, err := d.Write.ExecContext(ctx,
+		"UPDATE event_candidates SET status = ?, ts = ? WHERE message_id = ? AND status = ?",
+		string(StatusDrafted), now, messageID, string(StatusQueued))
 	if err != nil {
-		return err
+		return false, err
 	}
-	if changed, err := res.RowsAffected(); err != nil || changed > 0 {
-		return err
-	}
-	return set(ctx, d, id, status, "", now)
+	changed, err := res.RowsAffected()
+	return changed > 0, err
 }
 
 type Item struct {
 	MessageID int64  `json:"message_id"`
+	Account   string `json:"account"`
 	Reason    string `json:"reason"`
 }
 
 func Queued(ctx context.Context, q db.Querier, limit int) ([]Item, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT message_id, reason FROM event_candidates WHERE status = ? ORDER BY ts, message_id LIMIT ?", StatusQueued, limit)
+		"SELECT e.message_id, m.account, e.reason FROM event_candidates e JOIN messages m ON m.id = e.message_id "+
+			"WHERE e.status = ? ORDER BY e.ts, e.message_id LIMIT ?", string(StatusQueued), limit)
 	if err != nil {
 		return nil, err
 	}
 	items, err := db.Collect(rows, func(r *sql.Rows) (Item, error) {
 		var item Item
-		return item, r.Scan(&item.MessageID, &item.Reason)
+		return item, r.Scan(&item.MessageID, &item.Account, &item.Reason)
 	})
 	if items == nil {
 		items = []Item{}
@@ -115,8 +107,8 @@ func pending(ctx context.Context, d *db.DB, account string) ([]row, error) {
 	})
 }
 
-func defaultCalendar(account string) string {
-	if config.Preset(account) == config.Gmail {
+func defaultCalendar(ctx context.Context, account string) calendar.Target {
+	if config.From(ctx).Preset(account) == config.Gmail {
 		return calendar.Google
 	}
 	return calendar.ICloud
@@ -131,62 +123,41 @@ func rowInvites(cfg config.Config, r row, now time.Time) ([]calendar.Invite, err
 	if err != nil {
 		return nil, err
 	}
-	msg, err := mime.Parse(data)
-	if err != nil {
-		return nil, err
-	}
+	msg := mime.Parse(data)
 	var out []calendar.Invite
 	seen := map[string]bool{}
-	var walk func(part *mime.Message) error
-	walk = func(part *mime.Message) error {
-		if err := collect(part, now, seen, &out); err != nil {
-			return err
-		}
+	var walk func(part *mime.Message)
+	walk = func(part *mime.Message) {
+		collect(part, now, seen, &out)
 		for _, sub := range part.Parts() {
-			if err := walk(sub); err != nil {
-				return err
-			}
+			walk(sub)
 		}
-		return nil
 	}
-	return out, walk(msg)
+	walk(msg)
+	return out, nil
 }
 
-func collect(part *mime.Message, now time.Time, seen map[string]bool, out *[]calendar.Invite) error {
-	if !calendarTypes[part.ContentType()] {
-		name, _, err := part.Filename()
-		if err != nil {
-			return err
-		}
-		if !strings.HasSuffix(py.Lower(name), ".ics") {
-			return nil
-		}
+func collect(part *mime.Message, now time.Time, seen map[string]bool, out *[]calendar.Invite) {
+	if !calendarTypes[part.ContentType()] && !strings.HasSuffix(strings.ToLower(part.Filename()), ".ics") {
+		return
 	}
-	data, err := part.Payload()
-	if err != nil {
-		return err
-	}
+	data := part.Payload()
 	if len(data) == 0 {
-		return nil
+		return
 	}
-	method, _, err := part.Param("method", "content-type")
-	if err != nil {
-		method = ""
-	}
-	for _, invite := range calendar.InvitesIn(data, method, now) {
+	for _, invite := range calendar.InvitesIn(data, part.Param("method"), now) {
 		if !seen[invite.UID] {
 			seen[invite.UID] = true
 			*out = append(*out, invite)
 		}
 	}
-	return nil
 }
 
 func proposeInvites(ctx context.Context, p *calendar.Proposals, r row, invites []calendar.Invite) (int, error) {
 	made := 0
 	for _, invite := range invites {
-		source := py.Dict{{Key: "message_id", Value: r.id}, {Key: "subject", Value: r.subject}, {Key: "from", Value: r.fromAddr}, {Key: "invitation", Value: true}}
-		_, created, err := p.Propose(ctx, invite.Raw(defaultCalendar(r.account)), source, "ics:"+invite.UID)
+		source := map[string]any{"message_id": r.id, "subject": r.subject, "from": r.fromAddr, "invitation": true}
+		_, created, err := p.Propose(ctx, invite.Raw(defaultCalendar(ctx, r.account)), source, "ics:"+invite.UID)
 		var refused calendar.ProposalError
 		if errors.As(err, &refused) {
 			log.Warn(fmt.Sprintf("message %d: invitation %s skipped: %s", r.id, invite.UID, refused))
@@ -216,11 +187,11 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 	if err != nil {
 		return 0, 0, err
 	}
-	chatURL, err := mail.ChatURL(ctx, d.Read)
+	chatURL, err := endpoint.ChatURL(ctx, d.Read)
 	if err != nil {
 		return 0, 0, err
 	}
-	ctx, err = mail.WithModels(ctx, d.Read)
+	ctx, err = embed.WithModels(ctx, d.Read)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -237,7 +208,7 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 			if err != nil {
 				return proposed, flagged, err
 			}
-			if err := set(ctx, d, r.id, Proposed, "calendar invitation", now()); err != nil {
+			if err := set(ctx, d, r.id, StatusProposed, "calendar invitation", now()); err != nil {
 				return proposed, flagged, err
 			}
 			continue
@@ -245,7 +216,7 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 		if !available {
 			continue
 		}
-		body, err := router.MessageBody(ctx, d.Read, r.id)
+		body, err := message.Body(ctx, d.Read, r.id)
 		if err != nil {
 			return proposed, flagged, err
 		}
@@ -259,7 +230,7 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 		if err != nil {
 			return proposed, flagged, err
 		}
-		status, reason := None, ""
+		status, reason := StatusNone, ""
 		if hasEvent {
 			status, reason = StatusQueued, "local model flagged an event"
 			flagged++

@@ -11,12 +11,10 @@ const (
 )
 
 const (
-	StopEndTurn    = "end_turn"
-	StopToolUse    = "tool_use"
-	StopPauseTurn  = "pause_turn"
-	StopCompaction = "compaction"
-	StopMaxTokens  = "max_tokens"
-	StopRefusal    = "refusal"
+	StopEndTurn   = "end_turn"
+	StopPauseTurn = "pause_turn"
+	StopMaxTokens = "max_tokens"
+	StopRefusal   = "refusal"
 
 	StopModelContextWindowExceeded = "model_context_window_exceeded"
 )

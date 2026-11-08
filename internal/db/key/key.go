@@ -33,12 +33,8 @@ func derive(k db.Key, info string, n int) []byte {
 
 func ID(k db.Key) string { return hex.EncodeToString(derive(k, "atrium/db/key-id/v1", idLen)) }
 
-func Cookie(k db.Key) []byte { return derive(k, "atrium/cookie/v1", subkeyLen) }
-
-func Seal(k db.Key) []byte { return derive(k, "atrium/seal/v1", subkeyLen) }
-
 func Load(env config.Env, reg *settings.Registry) (db.Key, error) {
-	resolved, err := reg.Resolve(context.Background(), nil, settingKey, 0)
+	resolved, err := reg.Resolve(context.Background(), nil, settingKey)
 	if err != nil {
 		return db.Key{}, err
 	}

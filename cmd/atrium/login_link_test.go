@@ -8,7 +8,6 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -29,11 +28,13 @@ import (
 )
 
 type linkSite struct {
-	t     *testing.T
-	base  string
-	db    *db.DB
-	clock *time.Time
-	idp   *oidctest.Provider
+	t        *testing.T
+	base     string
+	db       *db.DB
+	clock    *time.Time
+	idp      *oidctest.Provider
+	settings *settings.Registry
+	state    *config.State
 }
 
 type linkReply struct {
@@ -118,13 +119,19 @@ func newLinkSite(t *testing.T) *linkSite {
 	path := filepath.Join(dir, "atrium.db")
 	listener := httptest.NewUnstartedServer(nil)
 	base := "http://" + listener.Listener.Addr().String()
-	t.Setenv("ATRIUM_DB", path)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_MODE", "shadow")
-	t.Setenv("ATRIUM_CORE_PUBLIC_URL", base)
-	t.Setenv(settingEnv(secrets.OIDCClientSecret), "s3cret-for-the-test")
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
-	site := &linkSite{t: t, base: base}
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_MODE", "shadow")
+	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", base)
+	setEnv(t, settingEnv(secrets.OIDCClientSecret), "s3cret-for-the-test")
+	reg := settings.New()
+	st := config.NewState(reg)
+	pins, err := config.LoadPins(testLookupFor(t), reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.SetPins(pins)
+	site := &linkSite{t: t, base: base, settings: reg, state: st}
 	site.idp = oidctest.New(t, oidctest.Options{ClientSecret: "s3cret-for-the-test"})
 	site.idp.AddUser(oidctest.User{Name: "owner", Email: "owner@example.com", Groups: []string{"atrium_access", "atrium_admin"}})
 	site.idp.AddUser(oidctest.User{Name: "guest", Email: "guest@example.com", Groups: []string{"atrium_access"}})
@@ -137,21 +144,20 @@ func newLinkSite(t *testing.T) *linkSite {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 	site.db = d
-	cfg, err := config.Load(config.OS)
+	cfg, err := config.Load(testLookupFor(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	render, err := web.NewRenderer(cfg, d, tpl.Config{})
+	render, err := web.NewRenderer(tpl.Config{State: st})
 	if err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now()
 	site.clock = &now
-	links := loginlink.New(d)
-	links.Now = func() time.Time { return *site.clock }
+	links := loginlink.New(d, loginlink.WithNow(func() time.Time { return *site.clock }))
 	app, err := web.New(web.Options{
-		Cfg: cfg, Env: config.OS, DB: d, Auth: []string{web.AuthOIDC}, AllowedHosts: []string{"127.0.0.1"},
-		Render: render, OIDC: oidc.New(d, config.OS), LoginLinks: links,
+		Cfg: cfg, Env: testLookupFor(t), DB: d, Settings: reg, State: st, Auth: []string{web.AuthOIDC}, AllowedHosts: []string{"127.0.0.1"},
+		Render: render, OIDC: oidc.New(d, testLookupFor(t)), LoginLinks: links,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -168,7 +174,7 @@ func newLinkSite(t *testing.T) *linkSite {
 func (s *linkSite) link(t *testing.T, args ...string) string {
 	t.Helper()
 	var out, errs bytes.Buffer
-	code := newApp().Run(context.Background(), append([]string{"login-link"}, args...), &out, &errs)
+	code := newAppWith(testLookupFor(t), s.settings, s.state, nil, nil, nil, quietLog).Run(context.Background(), append([]string{"login-link"}, args...), &out, &errs)
 	if code != cli.ExitOK {
 		t.Fatalf("login-link exit %d: %s", code, errs.String())
 	}
@@ -208,6 +214,7 @@ func linkExpect(t *testing.T, got linkReply, status int, contains ...string) {
 }
 
 func TestLoginLinkOpensAnAdminSessionOnceWithNoOIDCConfigured(t *testing.T) {
+	t.Parallel()
 	site := newLinkSite(t)
 	token := fragmentOf(t, site.link(t), site.base)
 
@@ -237,6 +244,7 @@ func TestLoginLinkOpensAnAdminSessionOnceWithNoOIDCConfigured(t *testing.T) {
 }
 
 func TestLoginLinkExpiresAndRejectsTampering(t *testing.T) {
+	t.Parallel()
 	site := newLinkSite(t)
 	token := fragmentOf(t, site.link(t, "--minutes", "1"), site.base)
 	nonce, mac, _ := strings.Cut(token, ".")
@@ -278,6 +286,7 @@ func TestLoginLinkExpiresAndRejectsTampering(t *testing.T) {
 }
 
 func TestLoginLinkIssueAndRedeemAreAuditedWithoutTheToken(t *testing.T) {
+	t.Parallel()
 	site := newLinkSite(t)
 	token := fragmentOf(t, site.link(t), site.base)
 	nonce, mac, _ := strings.Cut(token, ".")
@@ -315,21 +324,23 @@ func TestLoginLinkIssueAndRedeemAreAuditedWithoutTheToken(t *testing.T) {
 }
 
 func TestLoginLinkRefusesBadLifetimesAndMissingPublicURL(t *testing.T) {
+	t.Parallel()
 	newLinkSite(t)
 	for _, minutes := range []string{"0", "999"} {
 		var out, errs bytes.Buffer
-		if code := newApp().Run(context.Background(), []string{"login-link", "--minutes", minutes}, &out, &errs); code != cli.ExitUsage || out.Len() != 0 {
+		if code := defaultApp(t).Run(context.Background(), []string{"login-link", "--minutes", minutes}, &out, &errs); code != cli.ExitUsage || out.Len() != 0 {
 			t.Fatalf("%s minutes: %d %q", minutes, code, out.String())
 		}
 	}
-	t.Setenv("ATRIUM_CORE_PUBLIC_URL", "")
+	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", "")
 	var out, errs bytes.Buffer
-	if code := newApp().Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitError || out.Len() != 0 || !strings.Contains(errs.String(), "public") {
+	if code := defaultApp(t).Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitError || out.Len() != 0 || !strings.Contains(errs.String(), "public") {
 		t.Fatalf("no public URL: %d %q %q", code, out.String(), errs.String())
 	}
 }
 
 func TestLoginLinkFirstRunSetupThenOIDCSignIn(t *testing.T) {
+	t.Parallel()
 	site := newLinkSite(t)
 	owner := site.browser()
 	linkExpect(t, owner.post("/login/link", url.Values{"token": {fragmentOf(t, site.link(t), site.base)}}), http.StatusSeeOther)
@@ -374,19 +385,16 @@ func TestLoginLinkFirstRunSetupThenOIDCSignIn(t *testing.T) {
 }
 
 func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join(golden.Dir(), "atrium.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatal(err)
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", "https://atrium.example")
+	var imported, importErrs bytes.Buffer
+	if code := defaultApp(t).Run(context.Background(), []string{"db", "import-v1", filepath.Join(golden.Dir(), "atrium.db")}, &imported, &importErrs); code != cli.ExitOK {
+		t.Fatalf("import-v1 on a golden copy: %d %s", code, importErrs.String())
 	}
-	t.Setenv("ATRIUM_DB", path)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_CORE_PUBLIC_URL", "https://atrium.example")
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
 
 	counts := func(d *db.DB) map[string]int {
 		out := map[string]int{}
@@ -409,7 +417,7 @@ func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
 	}
 
 	var out, errs bytes.Buffer
-	if code := newApp().Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitOK {
+	if code := defaultApp(t).Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitOK {
 		t.Fatalf("login-link on a golden copy: %d %s", code, errs.String())
 	}
 	if !strings.HasPrefix(out.String(), "https://atrium.example/login/link#") {
@@ -426,8 +434,8 @@ func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
 		}
 	}
 	var version, links int
-	if err := migrated.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 9").Scan(&version); err != nil || version != 1 {
-		t.Fatalf("migration 9 applied %d: %v", version, err)
+	if err := migrated.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 1").Scan(&version); err != nil || version != 1 {
+		t.Fatalf("baseline migration applied %d: %v", version, err)
 	}
 	if err := migrated.Read.QueryRow("SELECT COUNT(*) FROM auth_login_links").Scan(&links); err != nil || links != 1 {
 		t.Fatalf("links %d: %v", links, err)
@@ -440,7 +448,7 @@ func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
 		t.Fatalf("session origin %q: %v", origin, err)
 	}
 	out.Reset()
-	if code := newApp().Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitOK {
+	if code := defaultApp(t).Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitOK {
 		t.Fatalf("second login-link: %d %s", code, errs.String())
 	}
 }

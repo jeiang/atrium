@@ -3,13 +3,7 @@ package smtp
 import (
 	"fmt"
 	"strings"
-
-	"github.com/jeiang/atrium/internal/py"
 )
-
-type SendError string
-
-func (e SendError) Error() string { return string(e) }
 
 type OutcomeUnknown struct{ Err error }
 
@@ -21,14 +15,10 @@ type ResponseError struct {
 	Kind string
 	Code int
 	Msg  string
-	text bool
 }
 
 func (e *ResponseError) Error() string {
-	if e.text {
-		return fmt.Sprintf("(%d, %s)", e.Code, py.Repr(e.Msg))
-	}
-	return fmt.Sprintf("(%d, %s)", e.Code, py.ReprBytes([]byte(e.Msg)))
+	return fmt.Sprintf("SMTP %d: %s", e.Code, e.Msg)
 }
 
 type SenderRefused struct {
@@ -38,7 +28,7 @@ type SenderRefused struct {
 }
 
 func (e *SenderRefused) Error() string {
-	return fmt.Sprintf("(%d, %s, %s)", e.Code, py.ReprBytes([]byte(e.Msg)), py.Repr(e.Sender))
+	return fmt.Sprintf("SMTP %d: sender %s refused: %s", e.Code, e.Sender, e.Msg)
 }
 
 type RecipientsRefused struct{ Refused Refusals }
@@ -46,9 +36,9 @@ type RecipientsRefused struct{ Refused Refusals }
 func (e *RecipientsRefused) Error() string {
 	parts := make([]string, len(e.Refused))
 	for i, r := range e.Refused {
-		parts[i] = py.Repr(r.Addr) + ": " + r.Reply()
+		parts[i] = r.Addr + ": " + r.Reply()
 	}
-	return "{" + strings.Join(parts, ", ") + "}"
+	return strings.Join(parts, ", ")
 }
 
 type Failure struct {
@@ -64,7 +54,7 @@ type Refusal struct {
 	Msg  string
 }
 
-func (r Refusal) Reply() string { return fmt.Sprintf("(%d, %s)", r.Code, py.ReprBytes([]byte(r.Msg))) }
+func (r Refusal) Reply() string { return fmt.Sprintf("SMTP %d: %s", r.Code, r.Msg) }
 
 type Refusals []Refusal
 
@@ -84,8 +74,5 @@ const (
 )
 
 func osError(err error) error {
-	if e, ok := py.OSErrorOf(err); ok {
-		return e
-	}
 	return err
 }

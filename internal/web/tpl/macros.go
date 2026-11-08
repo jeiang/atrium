@@ -31,7 +31,7 @@ func pct(v any) (string, error) {
 
 func place(v any) string {
 	switch s := str(v); {
-	case v == nil:
+	case isNil(v):
 		return "Gone"
 	case s == "INBOX":
 		return "Inbox"
@@ -50,8 +50,8 @@ func proposal(action, dest any) string {
 	return str(dest)
 }
 
-func noun(account any) string {
-	if config.Preset(str(account)) == config.Gmail {
+func (e *Engine) noun(account any) string {
+	if e.state != nil && e.state.Preset(str(account)) == config.Gmail {
 		return "label"
 	}
 	return "folder"

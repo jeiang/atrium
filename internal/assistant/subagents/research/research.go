@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
@@ -24,8 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 const Name = loop.Research
@@ -38,8 +36,6 @@ const schemaFormat = `{"type":"object","properties":{"role":%s,"task":{"type":"s
 	`"description":"Self-contained brief: question, constraints, what to return."},` +
 	`"context_ids":{"type":"array","items":{"type":["string","integer"]},"maxItems":20}},` +
 	`"required":["role","task"],"additionalProperties":false}`
-
-var log = logx.Logger("atrium.agent.research")
 
 type gate struct {
 	mu     sync.Mutex
@@ -94,7 +90,10 @@ func (r *Research) Tool() tool.Tool {
 		InputSchema: json.RawMessage(fmt.Sprintf(schemaFormat, `{"type":"string","description":"Name of an enabled subagent (see Settings › Subagents)."}`)),
 		Handler:     r.handle,
 		Effect:      tool.Read,
+		Annotated:   true,
+		Flags:       tool.Flags{Web: true, UntrustedOutput: true, ExternalEffect: true},
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
+		Parallel:    true,
 	}
 }
 
@@ -125,7 +124,7 @@ func taskText(task string, contextIDs []string) string {
 	return task + "\n\nStarting points from the parent conversation (ids): " + strings.Join(contextIDs, ", ")
 }
 
-func cleanIDs(args py.Dict, maxIDs int) ([]string, error) {
+func cleanIDs(args tool.Args, maxIDs int) ([]string, error) {
 	value, _ := args.Get("context_ids")
 	if value == nil {
 		return nil, nil
@@ -138,9 +137,9 @@ func cleanIDs(args py.Dict, maxIDs int) ([]string, error) {
 	for _, item := range list {
 		switch v := item.(type) {
 		case string:
-			ids = append(ids, py.Clip(v, 200))
-		case int, int64, *big.Int:
-			ids = append(ids, py.Clip(py.ReprValue(v), 200))
+			ids = append(ids, textx.Clip(v, 200))
+		case int, int64, json.Number, *big.Int:
+			ids = append(ids, textx.Clip(fmt.Sprint(v), 200))
 		default:
 			return nil, tool.Error("context_ids must contain strings or integers")
 		}
@@ -152,7 +151,7 @@ func sortedURLs(allowed map[string]struct{}) []string {
 	return slices.Sorted(maps.Keys(allowed))
 }
 
-func (r *Research) handle(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func (r *Research) handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	roleValue, _ := args.Get("role")
 	task, _, err := tool.TextArg(args, "task", true)
 	if err != nil {
@@ -191,8 +190,17 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args py.Dict) (
 	}
 	now := tc.Now
 	if now == nil {
-		now = func() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
+		now = assistant.Now
 	}
+	limits := assistant.Read(ctx, tc.DB.Read)
+	maxConcurrent := limits.Int(assistant.KeySubagentMaxConcurrent)
+	if err := limits.Err(); err != nil {
+		return nil, err
+	}
+	if err := slots.acquire(ctx, maxConcurrent); err != nil {
+		return nil, err
+	}
+	defer slots.release()
 	var child int64
 	title := role + ": " + threads.TitleFrom(task)
 	if err := tc.DB.WithTx(ctx, func(tx *sql.Tx) (err error) {
@@ -232,24 +240,15 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args py.Dict) (
 		}
 		return nil, tool.Error(fmt.Sprintf("%s research stopped: %s (child thread %d)%s", role, reason, child, partial))
 	}
-	return py.Dict{
-		{Key: "untrusted", Value: true},
-		{Key: "role", Value: role},
-		{Key: "child_thread_id", Value: child},
-		{Key: "digest", Value: digest},
-	}, nil
+	return map[string]any{"untrusted": true, "role": role, "child_thread_id": child, "digest": digest}, nil
 }
 
 func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, text, role string, agent subagents.Agent) error {
 	set := assistant.Read(ctx, tc.DB.Read)
-	maxConcurrent, maxSteps, maxCost := set.Int(assistant.KeySubagentMaxConcurrent), set.Int(assistant.KeySubagentMaxSteps), set.Float(assistant.KeySubagentMaxCostUSD)
+	maxSteps, maxCost := set.Int(assistant.KeySubagentMaxSteps), set.Float(assistant.KeySubagentMaxCostUSD)
 	if err := set.Err(); err != nil {
 		return err
 	}
-	if err := slots.acquire(ctx, maxConcurrent); err != nil {
-		return err
-	}
-	defer slots.release()
 	svc := service.New(ctx, tc.DB, tc.Cfg, tc.Env, r.runner)
 	svc.Client = tc.Client
 	svc.Now = tc.Now
@@ -260,7 +259,7 @@ func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, 
 	}
 	steps, cost := int64(maxSteps), maxCost
 	_, err = svc.RunOnce(ctx, child, text, service.Start{
-		Kind:        threads.Sub,
+		Kind:        threads.Subagent,
 		ParentRunID: &parent,
 		Limits:      journal.Limits{MaxSteps: &steps, MaxCostUSD: &cost, SystemExtra: &extra, AllowedTools: agent.Tools},
 	})
@@ -269,51 +268,4 @@ func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, 
 		return tool.Error(fmt.Sprintf("%s research not started: %s", role, exceeded))
 	}
 	return err
-}
-
-func (r *Research) Batch(ctx context.Context, tc *tool.Context, uses []loop.ToolUse) (map[string]loop.Outcome, error) {
-	out := make(map[string]loop.Outcome, len(uses))
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	for _, use := range uses {
-		wg.Go(func() {
-			o := r.one(ctx, tc, use)
-			mu.Lock()
-			out[use.ID] = o
-			mu.Unlock()
-		})
-	}
-	wg.Wait()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (r *Research) one(ctx context.Context, tc *tool.Context, use loop.ToolUse) (o loop.Outcome) {
-	defer func() {
-		if p := recover(); p != nil {
-			log.Error("research panicked", logx.RunID, tc.RunID, logx.Err, fmt.Sprint(p))
-			o = loop.Outcome{Error: "research failed: RuntimeError"}
-		}
-	}()
-	_, input, err := use.Args()
-	if err != nil {
-		return loop.Outcome{Error: "research failed: " + loop.ClassName(err)}
-	}
-	args, ok := input.(py.Dict)
-	if !ok {
-		return loop.Outcome{Error: "research failed: AttributeError"}
-	}
-	value, err := r.handle(ctx, tc, args)
-	if err == nil {
-		return loop.Outcome{OK: true, Value: value}
-	}
-	if text, ok := tool.Message(err); ok {
-		return loop.Outcome{Error: text}
-	}
-	if ctx.Err() == nil {
-		log.Error("research failed", logx.RunID, tc.RunID, logx.Err, err)
-	}
-	return loop.Outcome{Error: "research failed: " + loop.ClassName(err)}
 }

@@ -6,12 +6,11 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 type crumb struct {
-	ID    *string `json:"id"`
-	Title string  `json:"title"`
+	Title string `json:"title"`
 }
 
 type property struct {
@@ -77,7 +76,7 @@ type hubView struct {
 func crumbs(path []notion.PathPart) []crumb {
 	out := make([]crumb, len(path))
 	for i, part := range path {
-		out[i] = crumb{ID: part.ID, Title: part.Title}
+		out[i] = crumb{Title: part.Title}
 	}
 	return out
 }
@@ -106,7 +105,7 @@ func newRelated(found []notion.Related) []related {
 var backLabels = map[string]string{"/chat": "Chat", "/triage": "Decisions"}
 
 func backTo(r *http.Request) backLink {
-	parts, err := py.URLSplit(r.Header.Get("Referer"))
+	parts, err := urlx.URLSplit(r.Header.Get("Referer"))
 	if label, ok := backLabels[parts.Path]; ok && err == nil && parts.Netloc == r.Host {
 		url := parts.Path
 		if parts.Query != "" {

@@ -21,7 +21,7 @@ func Command() *cli.Command {
 				if ttl <= 0 || ttl > MaxTTL {
 					return e.UsageError("--minutes must be between 1 and %d", int(MaxTTL/time.Minute))
 				}
-				cfg, err := config.Load(config.OS)
+				cfg, err := config.Load(e.Env)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
@@ -30,10 +30,10 @@ func Command() *cli.Command {
 					return cli.Fail(e, err)
 				}
 				defer func() { _ = d.Close() }()
-				if err := config.Migrate(e.Ctx, d, cfg); err != nil {
+				if err := config.Boot(e.Ctx, e.Env, d, cfg); err != nil {
 					return cli.Fail(e, err)
 				}
-				base := config.PublicURL(config.OS)
+				base := config.From(e.Ctx).PublicURL(e.Env)
 				if base == "" {
 					_, _ = fmt.Fprintf(e.Stderr, "error: %s is not set; the link needs the public URL\n", config.KeyPublicURL)
 					return cli.ExitError

@@ -5,13 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
@@ -20,10 +25,10 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/usage"
+	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -47,12 +52,11 @@ type LeaseLost string
 func (e LeaseLost) Error() string { return string(e) }
 
 type Runner struct {
-	Registry      *registry.Registry
-	Profile       func(ctx context.Context, q db.Querier) (string, error)
-	SkillsIndex   func(ctx context.Context, q db.Querier) (string, error)
-	ExpandSkills  func(ctx context.Context, q db.Querier, text string) (expanded string, used []string, err error)
-	ResearchBatch Batch
-	CommitSavings int64
+	Registry     *registry.Registry
+	Undoers      *writes.Registry
+	Profile      func(ctx context.Context, q db.Querier) (string, error)
+	SkillsIndex  func(ctx context.Context, q db.Querier) (string, error)
+	ExpandSkills func(ctx context.Context, q db.Querier, text string) (expanded string, used []string, err error)
 }
 
 func (r *Runner) Expand(ctx context.Context, q db.Querier, kind tool.Kind, text string) (string, []string, error) {
@@ -84,7 +88,6 @@ type state struct {
 	steps   int
 	maxCost float64
 	ttl     string
-	savings int64
 
 	callsKey string
 	repeats  int
@@ -106,6 +109,11 @@ func deref[T any](p *T) T {
 func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, client *anthropic.Client, runID int64, o Options) (*journal.Run, error) {
 	s, err := r.prepare(ctx, d, cfg, env, client, runID, o)
 	if err != nil {
+		now := assistant.Now()
+		if o.Now != nil {
+			now = o.Now()
+		}
+		_ = journal.FinishRun(ctx, d.Write, runID, journal.Failed, now, new(err.Error()))
 		return nil, err
 	}
 	final := journal.Failed
@@ -125,18 +133,28 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		return journal.GetRun(ctx, d.Read, runID)
 	case ctx.Err() != nil:
 		return nil, ctx.Err()
+	case errors.As(err, new(*tool.Park)):
+		final = journal.Parked
 	case errors.As(err, new(budget.BudgetExceeded)), errors.As(err, new(RunLimit)), errors.Is(err, progress.ErrStopped):
 		errText = new(err.Error())
 	default:
 		log.Error(fmt.Sprintf("run %d failed", runID), logx.RunID, runID, logx.Err, err)
-		errText = new(py.ExceptionText(err))
+		errText = new(err.Error())
 	}
 	if errText != nil {
+		if rerr := memory.Rebuild(ctx, d.Write, s.thread.ID, s.now()); rerr != nil {
+			log.Error(fmt.Sprintf("thread %d memory tree rebuild failed", s.thread.ID), logx.RunID, runID, logx.Err, rerr)
+		}
 		if err := journal.FinishRun(ctx, d.Write, runID, journal.Failed, s.now(), errText); err != nil {
 			return nil, err
 		}
 	}
-	if err := s.writer.Event(ctx, progress.RunDone, py.Dict{{Key: "state", Value: final}, {Key: "error", Value: optional(errText)}}); err != nil {
+	if final == journal.Parked {
+		if err := journal.ParkRun(ctx, d.Write, runID, s.now()); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.writer.Event(ctx, progress.RunDone, map[string]any{"state": final, "error": optional(errText)}); err != nil {
 		return nil, err
 	}
 	return journal.GetRun(ctx, d.Read, runID)
@@ -164,14 +182,20 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if thread == nil {
 		return nil, fmt.Errorf("loop: run %d: no thread %d", runID, found.ThreadID)
 	}
-	kind := tool.Kind(found.Kind)
-	allow := o.Limits.AllowedTools
-	tools, err := r.Registry.Run(ctx, kind, allow, d.Read)
+	kind, ok := tool.ParseKind(found.Kind)
+	if !ok {
+		return nil, fmt.Errorf("loop: run %d has unknown kind %q", runID, found.Kind)
+	}
+	allow := registry.All()
+	if o.Limits.AllowedTools != nil {
+		allow = registry.Only(o.Limits.AllowedTools)
+	}
+	set, err := r.Registry.Admit(ctx, found.ThreadID, kind, allow, d.Read)
 	if err != nil {
 		return nil, err
 	}
-	byName := make(map[string]tool.Tool, len(tools))
-	for _, t := range tools {
+	byName := make(map[string]tool.Tool, len(set.Dispatch))
+	for _, t := range set.Dispatch {
 		byName[t.Name] = t
 	}
 	ttl := prompts.TTL5m
@@ -196,6 +220,10 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if err != nil {
 		return nil, err
 	}
+	dynamicFiltering, err := readWebSearchDynamicFiltering(ctx, d.Read)
+	if err != nil {
+		return nil, err
+	}
 	model, err := pricing.Lookup(found.Model)
 	if err != nil {
 		return nil, err
@@ -205,7 +233,8 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		return nil, err
 	}
 	limits := actx.LimitsFor(min(threads.ContextLimitOf(*thread), model.ContextWindow), tuning)
-	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, tools, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), allow, limits, webSearchMaxUses)
+	extra := deref(o.Limits.SystemExtra) + memoryPrompt
+	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, set, prompts.PrefixCacheControl(kind, ttl), extra, webSearchMaxUses, dynamicFiltering)
 	if err != nil {
 		return nil, err
 	}
@@ -219,29 +248,26 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	now := o.Now
 	if now == nil {
-		now = func() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
+		now = assistant.Now
 	}
 	writer := progress.NewWriter(d.Write, runID, now)
 	tc := &tool.Context{
 		DB: d, Cfg: cfg, Env: env, Kind: kind, ThreadID: thread.ID, RunID: runID, AllowedURLs: allowed,
-		Embed: o.Embed, Now: now, Client: client, Progress: writer,
+		Embed: o.Embed, Now: now, Client: client, Progress: writer, Undoers: r.Undoers,
 	}
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
-		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl, savings: int64(tuning.CommitSavings),
-		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning},
+		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl,
+		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, tuning: tuning, reg: r.Registry},
 	}
 	s.x.guard = s.renew
 	s.x.lost, s.x.abort = context.WithCancel(context.Background())
 	if o.Limits.MaxSteps != nil {
 		s.steps = int(*o.Limits.MaxSteps)
 	}
-	s.toolChoice, s.invalid = forcedToolChoice(o.Limits.ToolChoice, model, byName)
+	s.toolChoice, s.invalid = forcedToolChoice(o.Limits.ToolChoice, model, set)
 	if o.Limits.MaxCostUSD != nil {
 		s.maxCost = *o.Limits.MaxCostUSD
-	}
-	if r.CommitSavings != 0 {
-		s.savings = r.CommitSavings
 	}
 	return s, nil
 }
@@ -274,7 +300,8 @@ func (s *state) heartbeat(ctx context.Context) func() {
 			case <-beatCtx.Done():
 				return
 			case <-t.C:
-				if err := s.renew(beatCtx); errors.As(err, new(LeaseLost)) {
+				if err := s.renew(beatCtx); err != nil {
+					log.Warn("could not renew the run lease; aborting its tools", logx.RunID, s.run.ID, logx.Err, err)
 					s.x.abort()
 					return
 				}
@@ -285,21 +312,7 @@ func (s *state) heartbeat(ctx context.Context) func() {
 }
 
 func (s *state) runStart(ctx context.Context) error {
-	return s.writer.Event(ctx, progress.RunStart, py.Dict{
-		{Key: "thread_id", Value: s.thread.ID},
-		{Key: "thread_kind", Value: s.thread.Kind},
-		{Key: "role", Value: optional(s.thread.Role)},
-		{Key: "title", Value: optional(s.thread.Title)},
-		{Key: "effort", Value: s.run.Effort},
-	})
-}
-
-func (s *state) freshTurn(ctx context.Context) (bool, error) {
-	last, err := journal.LastMessage(ctx, s.d.Read, s.thread.ID)
-	if err != nil || last == nil {
-		return false, err
-	}
-	return last.Role == journal.User && journal.HasText(last.Content), nil
+	return s.writer.Event(ctx, progress.RunStart, map[string]any{"thread_id": s.thread.ID, "thread_kind": string(s.thread.Kind), "role": optional(s.thread.Role), "title": optional(s.thread.Title), "effort": s.run.Effort})
 }
 
 func PendingUses(ctx context.Context, q db.Querier, threadID int64) (*journal.Message, []ToolUse, error) {
@@ -309,37 +322,6 @@ func PendingUses(ctx context.Context, q db.Querier, threadID int64) (*journal.Me
 	}
 	uses, err := toolUses(last.Content)
 	return last, uses, err
-}
-
-func searchURLs(blocks []json.RawMessage) []string {
-	var urls []string
-	for _, raw := range blocks {
-		if blockType(raw) != webSearchResult {
-			continue
-		}
-		var b struct {
-			Content json.RawMessage `json:"content"`
-		}
-		if json.Unmarshal(raw, &b) != nil {
-			continue
-		}
-		var items []json.RawMessage
-		if json.Unmarshal(b.Content, &items) != nil {
-			continue
-		}
-		for _, item := range items {
-			var r struct {
-				URL any `json:"url"`
-			}
-			if json.Unmarshal(item, &r) != nil {
-				continue
-			}
-			if u, ok := r.URL.(string); ok && u != "" {
-				urls = append(urls, u)
-			}
-		}
-	}
-	return urls
 }
 
 func (s *state) allowURLs(ctx context.Context, urls []string) error {
@@ -353,39 +335,59 @@ func (s *state) allowURLs(ctx context.Context, urls []string) error {
 }
 
 func (s *state) injectQueued(ctx context.Context) (bool, error) {
-	rows, err := journal.TakeQueued(ctx, s.d.Write, s.thread.ID, s.run.ID, s.now())
+	queued, err := journal.Queued(ctx, s.d.Read, s.thread.ID)
 	if err != nil {
 		return false, err
 	}
-	for _, row := range rows {
-		text := row.Text
-		if err := s.allowURLs(ctx, threads.URLsIn(text)); err != nil {
-			return false, err
-		}
-		if text, _, err = s.r.Expand(ctx, s.d.Write, s.kind, text); err != nil {
-			return false, err
-		}
-		content := append(append([]json.RawMessage{}, row.Files...), actx.TextBlock(text))
-		if _, err := journal.AppendMessage(ctx, s.d, s.thread.ID, &s.run.ID, journal.User, content, s.now(), nil); err != nil {
-			return false, err
-		}
-		if err := s.writer.Event(ctx, progress.User, py.Dict{{Key: "text", Value: text}, {Key: "queue_id", Value: row.ID}}); err != nil {
+	for _, row := range queued {
+		if err := s.allowURLs(ctx, threads.URLsIn(row.Text)); err != nil {
 			return false, err
 		}
 	}
-	return len(rows) > 0, nil
+	texts := make(map[int64]string, len(queued))
+	taken, err := journal.ConsumeQueued(ctx, s.d, s.thread.ID, s.run.ID, s.now(), func(q db.Querier, row journal.QueuedMessage) error {
+		text, _, err := s.r.Expand(ctx, q, s.kind, row.Text)
+		if err != nil {
+			return err
+		}
+		texts[row.ID] = text
+		content := append(append([]json.RawMessage{}, row.Files...), actx.TextBlock(text))
+		_, err = journal.AppendMessageTx(ctx, q, s.thread.ID, &s.run.ID, journal.User, content, s.now(), nil)
+		return err
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, row := range taken {
+		if err := s.writer.Event(ctx, progress.User, map[string]any{"text": texts[row.ID], "queue_id": row.ID}); err != nil {
+			return false, err
+		}
+	}
+	return len(taken) > 0, nil
 }
 
-func (s *state) active(ctx context.Context, loc *time.Location) ([]actx.Message, error) {
-	active, _, err := actx.ActiveMessages(ctx, s.d.Read, s.thread.ID, s.req.sig)
+const memoryPrompt = "\n\nMemory view: the history above is a memory tree, not raw messages. " +
+	"Each line carries a message range and a zoom id; call zoom(id, n) to open a summary's two children, " +
+	"or zoom(id, 1) to read one message's source, when the summary is not enough."
+
+func (s *state) viewMessages(ctx context.Context, loc *time.Location) ([]actx.Message, error) {
+	if err := memory.Rebuild(ctx, s.d.Write, s.thread.ID, s.now()); err != nil {
+		return nil, err
+	}
+	v, err := memory.Build(ctx, s.d.Write, s.thread.ID, s.now())
 	if err != nil {
 		return nil, err
 	}
-	runs, err := journal.RunsOf(ctx, s.d.Read, s.thread.ID)
-	if err != nil {
-		return nil, err
+	if v == nil || len(v.Lines) == 0 {
+		return nil, nil
 	}
-	return stampMessages(active, runs, loc), nil
+	var b strings.Builder
+	b.WriteString("Memory view of this thread (message ranges and zoom ids):")
+	for _, line := range v.Lines {
+		n := 1 << line.Level
+		fmt.Fprintf(&b, "\n\n[%d..%d] zoom id %d n %d (%s)\n%s", line.From, line.To, line.From, n, line.State, line.Text)
+	}
+	return []actx.Message{{Role: "user", Content: []json.RawMessage{actx.TextBlock(b.String())}}}, nil
 }
 
 func (s *state) size(ctx context.Context, active []actx.Message, a *anchor) (int64, error) {
@@ -396,16 +398,29 @@ func (s *state) size(ctx context.Context, active []actx.Message, a *anchor) (int
 	return s.req.estimate(sent, a)
 }
 
-func (s *state) stream(ctx context.Context, messages []json.RawMessage) (*anthropic.Message, error) {
+func (s *state) stream(ctx context.Context, messages []json.RawMessage) (*anthropic.Message, int64, error) {
 	params := s.req.params
 	params.Messages = messages
 	params.ToolChoice, s.toolChoice = s.toolChoice, nil
 	ledgerCtx := context.WithoutCancel(ctx)
+	started := time.Now()
 	response, err := s.client.Stream(ctx, params, func(ev anthropic.Event) error { return s.writer.Observe(ledgerCtx, ev) })
+	wall := time.Since(started).Milliseconds()
 	if err != nil {
-		return nil, err
+		return response, wall, err
 	}
-	return response, s.writer.Flush(context.WithoutCancel(ctx))
+	return response, wall, s.writer.Flush(context.WithoutCancel(ctx))
+}
+
+func (s *state) recordUsage(ctx context.Context, response *anthropic.Message, toolCalls, wall int64, partial bool) error {
+	clearEdits, cleared := actx.ClearsOf(response)
+	entry := usage.Entry{
+		TS: s.now(), RequestID: response.ID, ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: s.run.Model,
+		Effort: s.run.Effort, ToolCalls: toolCalls, WallMS: wall, Partial: partial,
+		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(response.StopReason == block.Compaction)),
+	}
+	_, err := usage.Record(context.WithoutCancel(ctx), s.d, entry, response.Usage)
+	return err
 }
 
 func (s *state) settlePending(ctx context.Context) error {
@@ -434,17 +449,10 @@ func (s *state) body(ctx context.Context) error {
 	if err := s.runStart(ctx); err != nil {
 		return err
 	}
-	boundary, err := s.freshTurn(ctx)
-	if err != nil {
-		return err
-	}
 	if err := s.settlePending(ctx); err != nil {
 		return err
 	}
-	if _, err := actx.Commit(ctx, s.d.Write, s.thread.ID, s.run.ID, s.now(), boundary); err != nil {
-		return err
-	}
-	loc, err := config.Location(s.env)
+	loc, err := config.From(ctx).Location(s.env)
 	if err != nil {
 		return err
 	}
@@ -491,36 +499,15 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, err
 	}
 	if spent >= s.maxCost {
-		return false, nil, RunLimit(fmt.Sprintf("run cost ceiling reached ($%s of $%s)", py.FormatFixed(spent, 2), py.FormatFixed(s.maxCost, 2)))
+		return false, nil, RunLimit(fmt.Sprintf("run cost ceiling reached ($%s of $%s)", strconv.FormatFloat(spent, 'f', 2, 64), strconv.FormatFloat(s.maxCost, 'f', 2, 64)))
 	}
-	active, err := s.active(ctx, loc)
+	active, err := s.viewMessages(ctx, loc)
 	if err != nil {
 		return false, nil, err
 	}
 	size, err := s.size(ctx, active, last)
 	if err != nil {
 		return false, nil, err
-	}
-	if size > s.limits.Preflight {
-		log.Info(fmt.Sprintf("run %d: next request ~%d tokens, compacting on the client", s.run.ID, size), logx.RunID, s.run.ID)
-		summaryIn := min(size, s.limits.Hard-int64(s.limits.Tuning.SummaryMaxTokens))
-		summary, err := budget.UncachedRequestUSD(s.run.Model, summaryIn, int64(s.limits.Tuning.SummaryMaxTokens))
-		if err != nil {
-			return false, nil, err
-		}
-		if err := s.reserveUSD(ctx, summary, fmt.Sprintf("the summary request is about %d tokens, up to $%s uncached", summaryIn, py.FormatFixed(summary, 2))); err != nil {
-			return false, nil, err
-		}
-		if _, err := actx.ClientCompact(ctx, s.d.Write, s.client, s.run.Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now(), s.limits.Tuning); err != nil {
-			return false, nil, err
-		}
-		last = nil
-		if active, err = s.active(ctx, loc); err != nil {
-			return false, nil, err
-		}
-		if size, err = s.size(ctx, active, last); err != nil {
-			return false, nil, err
-		}
 	}
 	if size > s.limits.Hard {
 		return false, nil, RunLimit(fmt.Sprintf("next request would be about %d tokens, over the %d limit", size, s.limits.Hard))
@@ -532,32 +519,30 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err != nil {
 		return false, nil, err
 	}
-	messages, err := s.req.buildMessages(ctx, s.d.Read, files.Scope{ThreadID: s.thread.ID, ProjectID: s.thread.ProjectID}, sent)
+	messages, err := s.req.buildMessages(ctx, s.d.Read, files.ScopeOf(s.thread.ID, s.thread.ProjectID), sent)
 	if err != nil {
 		return false, nil, err
 	}
-	response, err := s.stream(ctx, messages)
+	response, wall, err := s.stream(ctx, messages)
 	if err != nil {
+		if response != nil && response.ID != "" {
+			if rerr := s.recordUsage(ctx, response, 0, wall, true); rerr != nil {
+				return false, nil, rerr
+			}
+		}
 		return false, nil, err
 	}
 	if err := journal.BumpSteps(context.WithoutCancel(ctx), s.d.Write, s.run.ID); err != nil {
 		return false, nil, err
 	}
-	blocks, err := journalBlocks(response.Content)
+	blocks := response.Content
+	var stop error
+	blocks, stop = judge(response, blocks)
+	uses, err := toolUses(blocks)
 	if err != nil {
 		return false, nil, err
 	}
-	compacted := response.StopReason == actx.Compaction
-	var stop error
-	if !compacted {
-		blocks, stop = judge(response, blocks)
-	}
-	clearEdits, cleared := actx.ClearsOf(response)
-	entry := usage.Entry{
-		TS: s.now(), ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: s.run.Model, Effort: s.run.Effort,
-		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(compacted)),
-	}
-	if _, err := usage.Record(context.WithoutCancel(ctx), s.d.Write, entry, response.Usage); err != nil {
+	if err := s.recordUsage(ctx, response, int64(len(uses)), wall, false); err != nil {
 		return false, nil, err
 	}
 	if err := s.renew(ctx); err != nil {
@@ -570,24 +555,23 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if stop != nil {
 		return false, nil, stop
 	}
-	if compacted {
-		_, err := actx.ServerCompacted(ctx, s.d.Write, s.thread.ID, s.run.ID, blocks, active, s.now(), s.limits.Tuning)
-		return false, nil, err
-	}
 	next := &anchor{tokens: actx.HistoryTokens(response.Usage), seq: seq}
-	if err := s.allowURLs(ctx, searchURLs(blocks)); err != nil {
-		return false, nil, err
-	}
-	uses, err := toolUses(blocks)
+	urls, err := block.SearchURLs(blocks)
 	if err != nil {
 		return false, nil, err
 	}
+	if err := s.allowURLs(ctx, urls); err != nil {
+		return false, nil, err
+	}
 	if len(uses) > 0 {
-		err := s.answer(ctx, uses, &next)
+		err := s.answer(ctx, uses)
 		return false, next, err
 	}
 	if response.StopReason == anthropic.StopPauseTurn {
 		return false, next, nil
+	}
+	if err := memory.Rebuild(ctx, s.d.Write, s.thread.ID, s.now()); err != nil {
+		return false, next, err
 	}
 	done, err := journal.FinishUnlessQueued(ctx, s.d, s.run.ID, s.thread.ID, journal.Done, s.now())
 	return done, next, err
@@ -598,7 +582,7 @@ func (s *state) reserve(ctx context.Context, size int64) error {
 	if err != nil {
 		return err
 	}
-	return s.reserveUSD(ctx, cold, fmt.Sprintf("the next request is about %d tokens, up to $%s to write to the cache cold", size, py.FormatFixed(cold, 2)))
+	return s.reserveUSD(ctx, cold, fmt.Sprintf("the next request is about %d tokens, up to $%s to write to the cache cold", size, strconv.FormatFloat(cold, 'f', 2, 64)))
 }
 
 func (s *state) reserveUSD(ctx context.Context, next float64, what string) error {
@@ -608,12 +592,20 @@ func (s *state) reserveUSD(ctx context.Context, next float64, what string) error
 	}
 	if spent+next > s.maxCost {
 		return RunLimit(fmt.Sprintf("run cost cap: %s, with $%s of $%s already spent; raise %s to continue",
-			what, py.FormatFixed(spent, 2), py.FormatFixed(s.maxCost, 2), budget.RunCapKey(s.run.Model)))
+			what, strconv.FormatFloat(spent, 'f', 2, 64), strconv.FormatFloat(s.maxCost, 'f', 2, 64), budget.RunCapKey(s.run.Model)))
+	}
+	threadSpent, limit, err := budget.ThreadCap(ctx, s.d.Read, s.thread.ID)
+	if err != nil {
+		return err
+	}
+	if threadSpent+next > limit {
+		return RunLimit(fmt.Sprintf("thread cost cap: %s, with $%s of $%s already spent in this thread; raise %s to continue",
+			what, strconv.FormatFloat(threadSpent, 'f', 2, 64), strconv.FormatFloat(limit, 'f', 2, 64), budget.ThreadCapKey))
 	}
 	return nil
 }
 
-func (s *state) answer(ctx context.Context, uses []ToolUse, next **anchor) error {
+func (s *state) answer(ctx context.Context, uses []ToolUse) error {
 	results, err := s.x.executeAll(ctx, uses)
 	if err != nil {
 		return err
@@ -624,16 +616,5 @@ func (s *state) answer(ctx context.Context, uses []ToolUse, next **anchor) error
 	if _, err := journal.AppendMessage(ctx, s.d, s.thread.ID, &s.run.ID, journal.User, results, s.now(), nil); err != nil {
 		return err
 	}
-	if err := s.repeat(uses, results); err != nil {
-		return err
-	}
-	staged, err := actx.StagedSavings(ctx, s.d.Read, s.thread.ID)
-	if err != nil || staged < s.savings {
-		return err
-	}
-	committed, err := actx.Commit(ctx, s.d.Write, s.thread.ID, s.run.ID, s.now(), false)
-	if committed != nil {
-		*next = nil
-	}
-	return err
+	return s.repeat(uses, results)
 }

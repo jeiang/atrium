@@ -3,24 +3,37 @@ package rules
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
+	"golang.org/x/text/cases"
 )
 
 const (
 	AgeField      = "age_days"
 	AgeOp         = "gte"
 	secondsPerDay = 86400
-	ActionFile    = "file"
-	ActionDelete  = "delete"
 )
+
+type Action string
+
+const (
+	ActionFile   Action = "file"
+	ActionDelete Action = "delete"
+	ActionNone   Action = "none"
+)
+
+var log = logx.Logger("atrium.rules")
 
 var (
 	ListFields = map[string]string{
@@ -49,7 +62,6 @@ var (
 	}
 	Ops          = []string{"eq", "in", "suffix", "re", "present", "absent"}
 	ValuelessOps = []string{"present", "absent"}
-	Actions      = []string{ActionFile, ActionDelete}
 )
 
 type LearnedLevel struct {
@@ -63,42 +75,62 @@ var LearnedLevels = []LearnedLevel{
 	{"domain", []string{"from_domain"}},
 }
 
-type RuleError string
+type RuleError struct {
+	Code string
+	Msg  string
+}
 
-func (e RuleError) Error() string { return string(e) }
+func (e RuleError) Error() string { return e.Msg }
 
-func (RuleError) PyClass() string { return "RuleError" }
+func ruleErrorf(format string, args ...any) error {
+	return RuleError{Code: "rule", Msg: fmt.Sprintf(format, args...)}
+}
 
-func (RuleError) PyModule() string { return "atrium.rules" }
-
-func ruleErrorf(format string, args ...any) error { return RuleError(fmt.Sprintf(format, args...)) }
+func ruleErrorCode(code, format string, args ...any) error {
+	return RuleError{Code: code, Msg: fmt.Sprintf(format, args...)}
+}
 
 type Condition struct {
-	Field    string
-	Op       string
-	Value    any
-	HasValue bool
+	field    string
+	op       string
+	value    any
+	hasValue bool
+	matcher  *regexp.Regexp
 }
+
+func (c Condition) Field() string      { return c.field }
+func (c Condition) Op() string         { return c.op }
+func (c Condition) HasValue() bool     { return c.hasValue }
+func (c Condition) Value() (any, bool) { return c.value, c.hasValue }
 
 type Rule struct {
 	ID         string
 	Account    *string
-	Action     string
+	Action     Action
 	Dest       *string
 	Conditions []Condition
 }
 
-func (c Condition) Dict() py.Dict {
-	d := py.Dict{{Key: "field", Value: c.Field}, {Key: "op", Value: c.Op}}
-	if c.HasValue {
-		d = append(d, py.Pair{Key: "value", Value: c.Value})
+type conditionJSON struct {
+	Field string `json:"field"`
+	Op    string `json:"op"`
+	Value any    `json:"value,omitempty"`
+}
+
+func (c Condition) dict() conditionJSON {
+	d := conditionJSON{Field: c.field, Op: c.op}
+	if c.hasValue {
+		d.Value = c.value
 	}
 	return d
 }
 
-func (c Condition) JSON() string { return py.JSONDumps(c.Dict()) }
+func (c Condition) JSON() string {
+	b, _ := json.Marshal(c.dict())
+	return string(b)
+}
 
-func (c Condition) MarshalJSON() ([]byte, error) { return []byte(c.JSON()), nil }
+func (c Condition) MarshalJSON() ([]byte, error) { return json.Marshal(c.dict()) }
 
 func ConditionsJSON(conds []Condition) string {
 	parts := make([]string, len(conds))
@@ -132,11 +164,17 @@ type Message struct {
 	Embedded    bool
 	Folder      string
 	Location    string
+	Seen        bool
+	Flagged     bool
+	Digest      string
+	OTP6        bool
+	VCode       bool
+	Gone        bool
 }
 
 const MessageColumns = "id, account, from_addr, from_domain, from_name, reply_to, rpath_domain, list_id, subject, " +
 	"subject_tmpl, msgid_domain, precedence, category, to_addrs, dkim_d, esp, att_types, att_names, date_ts, " +
-	"in_inbox, embedded, COALESCE(folder, ''), location"
+	"in_inbox, embedded, COALESCE(folder, ''), location, seen, flagged, digest, k_otp6, k_vcode, gone_at IS NOT NULL"
 
 type Scanner interface{ Scan(dest ...any) error }
 
@@ -146,7 +184,8 @@ func ScanMessage(s Scanner) (Message, error) {
 	var inbox, embedded int64
 	err := s.Scan(&m.ID, &m.Account, &m.FromAddr, &m.FromDomain, &m.FromName, &m.ReplyTo, &m.RpathDomain, &m.ListID,
 		&m.Subject, &m.SubjectTmpl, &m.MsgidDomain, &m.Precedence, &m.Category, &m.ToAddrs, &m.DKIMD, &m.ESP,
-		&m.AttTypes, &m.AttNames, &dateTS, &inbox, &embedded, &m.Folder, &m.Location)
+		&m.AttTypes, &m.AttNames, &dateTS, &inbox, &embedded, &m.Folder, &m.Location,
+		&m.Seen, &m.Flagged, &m.Digest, &m.OTP6, &m.VCode, &m.Gone)
 	m.DateTS = dateTS.Float64
 	m.InInbox = inbox != 0
 	m.Embedded = embedded != 0
@@ -194,26 +233,30 @@ func (m *Message) list(field string) string {
 }
 
 func FieldValues(m *Message, field string) ([]string, error) {
-	if _, ok := ListFields[field]; ok {
-		raw, err := py.JSONLoads([]byte(m.list(field)))
+	if column, ok := ListFields[field]; ok {
+		var raw any
+		err := json.Unmarshal([]byte(m.list(field)), &raw)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", ListFields[field], err)
+			return nil, fmt.Errorf("%s: %w", column, err)
 		}
 		items, ok := raw.([]any)
 		if !ok {
-			return nil, fmt.Errorf("%s: %w", ListFields[field], errNotList)
+			return nil, fmt.Errorf("%s: %w", column, errNotList)
 		}
 		out := make([]string, len(items))
 		for i, item := range items {
 			s, ok := item.(string)
 			if !ok {
-				return nil, fmt.Errorf("%s: %w", ListFields[field], errNotStr)
+				return nil, fmt.Errorf("%s: %w", column, errNotStr)
 			}
 			out[i] = s
 		}
 		return out, nil
 	}
-	return []string{m.scalar(field)}, nil
+	if _, ok := ScalarFields[field]; ok {
+		return []string{m.scalar(field)}, nil
+	}
+	return nil, fmt.Errorf("unknown field %q", field)
 }
 
 var (
@@ -225,7 +268,7 @@ func ageMatches(m *Message, days, now float64) bool {
 	return m.DateTS != 0 && (now-m.DateTS)/secondsPerDay >= days
 }
 
-func DomainSuffix(value, suffix string) bool {
+func domainSuffix(value, suffix string) bool {
 	return value == suffix || strings.HasSuffix(value, "."+suffix)
 }
 
@@ -264,93 +307,89 @@ func number(v any) (float64, bool) {
 	return 0, false
 }
 
-func Pattern(value string) (*rx.Regexp, error) { return rx.Compile(value, rx.IgnoreCase) }
-
-func CheckPattern(value string) (*rx.Regexp, error) { return rx.Compile(value, 0) }
+func compilePattern(value string) (*regexp.Regexp, error) { return regexp.Compile("(?i)" + value) }
 
 func (c Condition) Matches(m *Message, now float64) (bool, error) {
-	if c.Field == AgeField {
-		days, ok := number(c.Value)
+	if c.field == AgeField {
+		days, ok := number(c.value)
 		if !ok {
-			return false, fmt.Errorf("age_days value %s: not a number", py.ReprValue(c.Value))
+			return false, fmt.Errorf("age_days value %s: not a number", fmt.Sprint(c.value))
 		}
 		return ageMatches(m, days, now), nil
 	}
-	values, err := FieldValues(m, c.Field)
+	values, err := FieldValues(m, c.field)
 	if err != nil {
 		return false, err
 	}
-	switch c.Op {
+	switch c.op {
 	case "present":
 		return anyNonEmpty(values), nil
 	case "absent":
 		return !anyNonEmpty(values), nil
 	case "eq":
-		target, ok := c.Value.(string)
+		target, ok := c.value.(string)
 		if !ok {
-			return false, fmt.Errorf("op eq: value %s: not a string", py.ReprValue(c.Value))
+			return false, fmt.Errorf("op eq: value %s: not a string", fmt.Sprint(c.value))
 		}
-		target = py.Casefold(target)
+		target = cases.Fold().String(target)
 		for _, v := range values {
-			if py.Casefold(v) == target {
+			if cases.Fold().String(v) == target {
 				return true, nil
 			}
 		}
 		return false, nil
 	case "in":
-		list, err := members(c.Value)
+		list, err := members(c.value)
 		if err != nil {
 			return false, err
 		}
 		targets := map[string]bool{}
 		for _, t := range list {
-			targets[py.Casefold(t)] = true
+			targets[cases.Fold().String(t)] = true
 		}
 		for _, v := range values {
-			if targets[py.Casefold(v)] {
+			if targets[cases.Fold().String(v)] {
 				return true, nil
 			}
 		}
 		return false, nil
 	case "suffix":
-		list, err := members(c.Value)
+		list, err := members(c.value)
 		if err != nil {
 			return false, err
 		}
 		targets := make([]string, len(list))
 		for i, t := range list {
-			targets[i] = py.Casefold(t)
+			targets[i] = cases.Fold().String(t)
 		}
 		for _, v := range values {
 			if v == "" {
 				continue
 			}
-			folded := py.Casefold(v)
+			folded := cases.Fold().String(v)
 			for _, t := range targets {
-				if DomainSuffix(folded, t) {
+				if domainSuffix(folded, t) {
 					return true, nil
 				}
 			}
 		}
 		return false, nil
-	}
-	pattern, ok := c.Value.(string)
-	if !ok {
-		return false, fmt.Errorf("op re: value %s: not a string", py.ReprValue(c.Value))
-	}
-	re, err := Pattern(pattern)
-	if err != nil {
-		return false, err
-	}
-	for _, v := range values {
-		if v == "" {
-			continue
+	case "re":
+		re := c.matcher
+		if re == nil {
+			return false, fmt.Errorf("op re: pattern %s was not compiled", fmt.Sprint(c.value))
 		}
-		if found, _ := re.Search(v); found != nil {
-			return true, nil
+		for _, v := range values {
+			if v == "" {
+				continue
+			}
+			if re.MatchString(v) {
+				return true, nil
+			}
 		}
+		return false, nil
 	}
-	return false, nil
+	return false, fmt.Errorf("unknown op %q", c.op)
 }
 
 func anyNonEmpty(values []string) bool {
@@ -387,8 +426,6 @@ func FirstMatch(m *Message, rules []Rule, now float64) (*Rule, error) {
 
 func object(v any) (get func(string) (any, bool), ok bool) {
 	switch v := v.(type) {
-	case py.Dict:
-		return v.Get, true
 	case map[string]any:
 		return func(k string) (any, bool) { x, found := v[k]; return x, found }, true
 	}
@@ -416,7 +453,7 @@ func valueList(v any) ([]string, bool) {
 	out := make([]string, len(items))
 	for i, item := range items {
 		s, ok := item.(string)
-		if !ok || py.Strip(s) == "" {
+		if !ok || strings.TrimSpace(s) == "" {
 			return nil, false
 		}
 		out[i] = s
@@ -436,7 +473,7 @@ func inList(s string, list []string) bool {
 func ValidateCondition(raw any) (Condition, error) {
 	get, ok := object(raw)
 	if !ok {
-		return Condition{}, ruleErrorf("condition must be an object: %s", py.ReprValue(raw))
+		return Condition{}, ruleErrorf("condition must be an object: %s", fmt.Sprint(raw))
 	}
 	fieldV, _ := get("field")
 	opV, _ := get("op")
@@ -448,43 +485,56 @@ func ValidateCondition(raw any) (Condition, error) {
 		if _, isBool := value.(bool); !opIsStr || op != AgeOp || isBool || !isNum || days <= 0 {
 			return Condition{}, ruleErrorf("%s needs op %s and a positive number of days", AgeField, AgeOp)
 		}
-		return Condition{field, op, value, true}, nil
+		return Condition{field: field, op: op, value: value, hasValue: true}, nil
 	}
 	if !fieldIsStr || (ListFields[field] == "" && ScalarFields[field] == "") {
-		return Condition{}, ruleErrorf("unknown field %s", py.ReprValue(fieldV))
+		return Condition{}, ruleErrorf("unknown field %s", fmt.Sprint(fieldV))
 	}
 	if !opIsStr || !inList(op, Ops) {
-		return Condition{}, ruleErrorf("unknown op %s", py.ReprValue(opV))
+		return Condition{}, ruleErrorf("unknown op %s", fmt.Sprint(opV))
 	}
 	if inList(op, ValuelessOps) {
 		if value != nil {
 			return Condition{}, ruleErrorf("op %s takes no value", op)
 		}
-		return Condition{Field: field, Op: op}, nil
+		return Condition{field: field, op: op}, nil
 	}
 	text, isStr := value.(string)
 	if (op == "eq" || op == "re") && !isStr {
 		return Condition{}, ruleErrorf("op %s needs a string value", op)
 	}
-	if isStr && py.Strip(text) == "" {
-		return Condition{}, ruleErrorf("op %s needs a value", op)
+	if isStr && strings.TrimSpace(text) == "" {
+		return Condition{}, ruleErrorCode("op-"+op+"-value", "op %s needs a value", op)
 	}
 	list, isList := valueList(value)
 	if op == "in" && !isList {
-		return Condition{}, ruleErrorf("op in needs a non-empty list of strings")
+		return Condition{}, ruleErrorCode("op-in-value", "op in needs a non-empty list of strings")
 	}
 	if op == "suffix" && !isStr && !isList {
-		return Condition{}, ruleErrorf("op suffix needs a string or list of strings")
+		return Condition{}, ruleErrorCode("op-suffix-value", "op suffix needs a string or list of strings")
 	}
 	if op == "re" {
-		if _, err := CheckPattern(text); err != nil {
-			return Condition{}, ruleErrorf("invalid regex %s: %s", py.Repr(text), err)
+		re, err := compilePattern(text)
+		if err != nil {
+			return Condition{}, ruleErrorf("invalid regex %s: %s", strconv.Quote(text), err)
 		}
+		if isList {
+			value = list
+		}
+		return Condition{field: field, op: op, value: value, hasValue: true, matcher: re}, nil
 	}
 	if isList {
 		value = list
 	}
-	return Condition{field, op, value, true}, nil
+	return Condition{field: field, op: op, value: value, hasValue: true}, nil
+}
+
+func NewCondition(field, op string, value any) (Condition, error) {
+	raw := map[string]any{"field": field, "op": op}
+	if value != nil {
+		raw["value"] = value
+	}
+	return ValidateCondition(raw)
 }
 
 func ValidateRule(raw any) (Rule, error) {
@@ -497,20 +547,20 @@ func ValidateRule(raw any) (Rule, error) {
 	if !ok || id == "" {
 		return Rule{}, ruleErrorf("rule needs a string id")
 	}
-	action := any(ActionFile)
+	action := any(string(ActionFile))
 	if v, found := get("action"); found {
 		action = v
 	}
 	act, _ := action.(string)
-	if !inList(act, Actions) {
-		return Rule{}, ruleErrorf("%s: unknown action %s", id, py.ReprValue(action))
+	if Action(act) != ActionFile && Action(act) != ActionDelete {
+		return Rule{}, ruleErrorf("%s: unknown action %s", id, fmt.Sprint(action))
 	}
 	destV, _ := get("dest")
 	dest, destIsStr := destV.(string)
-	if act == ActionFile && (!destIsStr || dest == "") {
-		return Rule{}, ruleErrorf("%s: file rule needs dest", id)
+	if Action(act) == ActionFile && (!destIsStr || dest == "") {
+		return Rule{}, ruleErrorCode("file-dest", "%s: file rule needs dest", id)
 	}
-	if act == ActionDelete && destV != nil {
+	if Action(act) == ActionDelete && destV != nil {
 		return Rule{}, ruleErrorf("%s: delete rule takes no dest", id)
 	}
 	accountV, _ := get("account")
@@ -529,9 +579,9 @@ func ValidateRule(raw any) (Rule, error) {
 		}
 	}
 	if len(items) == 0 {
-		return Rule{}, ruleErrorf("%s: when must be a non-empty list", id)
+		return Rule{}, ruleErrorCode("when-empty", "%s: when must be a non-empty list", id)
 	}
-	rule := Rule{ID: id, Action: act}
+	rule := Rule{ID: id, Action: Action(act)}
 	if accountIsStr {
 		rule.Account = &account
 	}
@@ -592,7 +642,7 @@ func ImportRules(ctx context.Context, d *db.DB, document any) (int, error) {
 		for i, r := range parsed {
 			if _, err := tx.ExecContext(ctx,
 				"INSERT INTO rules (position, id, account, action, dest, conditions) VALUES (?, ?, ?, ?, ?, ?)",
-				i, r.ID, nullable(r.Account), r.Action, nullable(r.Dest), ConditionsJSON(r.Conditions)); err != nil {
+				i, r.ID, nullable(r.Account), string(r.Action), nullable(r.Dest), ConditionsJSON(r.Conditions)); err != nil {
 				return err
 			}
 		}
@@ -601,10 +651,132 @@ func ImportRules(ctx context.Context, d *db.DB, document any) (int, error) {
 	return len(parsed), err
 }
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+type Execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
+
+type MessageInsert struct {
+	Account      string
+	MailboxID    int64
+	UIDValidity  int64
+	UID          uint32
+	MsgID        string
+	Digest       string
+	GmMsgID      string
+	GmThrID      string
+	InternalDate string
+	DateTS       float64
+	Size         int64
+	RawPath      string
+	Flags        string
+	Seen         int
+	Flagged      int
+	Labels       string
+	InInbox      int
+	Sent         int
+	Location     string
+	Folder       *string
+	FromAddr     string
+	FromDomain   string
+	FromName     string
+	ToAddrs      string
+	ReplyTo      string
+	RPathDomain  string
+	ListID       string
+	Precedence   string
+	Subject      string
+	SubjectTmpl  string
+	MsgIDDomain  string
+	InReplyTo    string
+	Refs         string
+	DKIMD        string
+	ESP          string
+	AttTypes     string
+	AttNames     string
+	KOrder       bool
+	KVCode       bool
+	KOTP6        bool
+	FirstSeen    float64
+}
+
+var messageInsertColumns = []struct {
+	name  string
+	value func(*MessageInsert) any
+}{
+	{"account", func(m *MessageInsert) any { return m.Account }},
+	{"mailbox_id", func(m *MessageInsert) any { return m.MailboxID }},
+	{"uidvalidity", func(m *MessageInsert) any { return m.UIDValidity }},
+	{"uid", func(m *MessageInsert) any { return m.UID }},
+	{"msgid", func(m *MessageInsert) any { return m.MsgID }},
+	{"digest", func(m *MessageInsert) any { return m.Digest }},
+	{"gm_msgid", func(m *MessageInsert) any { return nullableText(m.GmMsgID) }},
+	{"gm_thrid", func(m *MessageInsert) any { return nullableText(m.GmThrID) }},
+	{"internaldate", func(m *MessageInsert) any { return m.InternalDate }},
+	{"date_ts", func(m *MessageInsert) any { return m.DateTS }},
+	{"size", func(m *MessageInsert) any { return m.Size }},
+	{"raw_path", func(m *MessageInsert) any { return m.RawPath }},
+	{"flags", func(m *MessageInsert) any { return m.Flags }},
+	{"seen", func(m *MessageInsert) any { return m.Seen }},
+	{"flagged", func(m *MessageInsert) any { return m.Flagged }},
+	{"labels", func(m *MessageInsert) any { return m.Labels }},
+	{"in_inbox", func(m *MessageInsert) any { return m.InInbox }},
+	{"sent", func(m *MessageInsert) any { return m.Sent }},
+	{"location", func(m *MessageInsert) any { return m.Location }},
+	{"folder", func(m *MessageInsert) any { return m.Folder }},
+	{"from_addr", func(m *MessageInsert) any { return m.FromAddr }},
+	{"from_domain", func(m *MessageInsert) any { return m.FromDomain }},
+	{"from_name", func(m *MessageInsert) any { return m.FromName }},
+	{"to_addrs", func(m *MessageInsert) any { return m.ToAddrs }},
+	{"reply_to", func(m *MessageInsert) any { return m.ReplyTo }},
+	{"rpath_domain", func(m *MessageInsert) any { return m.RPathDomain }},
+	{"list_id", func(m *MessageInsert) any { return m.ListID }},
+	{"precedence", func(m *MessageInsert) any { return m.Precedence }},
+	{"subject", func(m *MessageInsert) any { return m.Subject }},
+	{"subject_tmpl", func(m *MessageInsert) any { return m.SubjectTmpl }},
+	{"msgid_domain", func(m *MessageInsert) any { return m.MsgIDDomain }},
+	{"in_reply_to", func(m *MessageInsert) any { return m.InReplyTo }},
+	{"refs", func(m *MessageInsert) any { return m.Refs }},
+	{"dkim_d", func(m *MessageInsert) any { return m.DKIMD }},
+	{"esp", func(m *MessageInsert) any { return m.ESP }},
+	{"att_types", func(m *MessageInsert) any { return m.AttTypes }},
+	{"att_names", func(m *MessageInsert) any { return m.AttNames }},
+	{"k_order", func(m *MessageInsert) any { return bit(m.KOrder) }},
+	{"k_vcode", func(m *MessageInsert) any { return bit(m.KVCode) }},
+	{"k_otp6", func(m *MessageInsert) any { return bit(m.KOTP6) }},
+	{"first_seen", func(m *MessageInsert) any { return m.FirstSeen }},
+}
+
+func bit(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func nullableText(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+func InsertMessage(ctx context.Context, q Execer, m MessageInsert) (int64, error) {
+	names := make([]string, len(messageInsertColumns))
+	marks := make([]string, len(messageInsertColumns))
+	args := make([]any, len(messageInsertColumns))
+	for i, c := range messageInsertColumns {
+		names[i] = c.name
+		marks[i] = "?"
+		args[i] = c.value(&m)
+	}
+	res, err := q.ExecContext(ctx, "INSERT INTO messages ("+strings.Join(names, ", ")+") VALUES ("+strings.Join(marks, ", ")+")", args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+type Querier = db.Querier
 
 func loadRules(ctx context.Context, q Querier, keep func(account sql.NullString) bool) ([]Rule, error) {
 	rows, err := q.QueryContext(ctx, "SELECT id, account, action, dest, conditions FROM rules ORDER BY position")
@@ -622,24 +794,54 @@ func loadRules(ctx context.Context, q Querier, keep func(account sql.NullString)
 		if !keep(account) {
 			continue
 		}
-		r := Rule{ID: id, Action: action}
+		r := Rule{ID: id, Action: Action(action)}
 		if account.Valid {
 			r.Account = &account.String
 		}
 		if dest.Valid {
 			r.Dest = &dest.String
 		}
-		if r.Conditions, err = parseStored(conds); err != nil {
-			return nil, fmt.Errorf("rule %s: %w", id, err)
+		conditions, err := parseStored(conds)
+		if err != nil {
+			log.Warn("skipping rule with invalid conditions", "rule", id, "error", err)
+			continue
 		}
+		r.Conditions = conditions
 		out = append(out, r)
 	}
 	return out, rows.Err()
 }
 
+type StoredRule struct {
+	ID         string
+	Account    *string
+	Action     string
+	Dest       *string
+	Conditions string
+}
+
+func ValidateStored(row StoredRule) error {
+	if row.ID == "" {
+		return ruleErrorf("rule needs a string id")
+	}
+	if Action(row.Action) != ActionFile && Action(row.Action) != ActionDelete {
+		return ruleErrorf("%s: unknown action %q", row.ID, row.Action)
+	}
+	if Action(row.Action) == ActionFile && (row.Dest == nil || *row.Dest == "") {
+		return ruleErrorf("%s: file rule needs dest", row.ID)
+	}
+	if Action(row.Action) == ActionDelete && row.Dest != nil {
+		return ruleErrorf("%s: delete rule takes no dest", row.ID)
+	}
+	if _, err := parseStored(row.Conditions); err != nil {
+		return ruleErrorf("%s: %s", row.ID, err)
+	}
+	return nil
+}
+
 func parseStored(text string) ([]Condition, error) {
-	raw, err := py.JSONLoads([]byte(text))
-	if err != nil {
+	var raw any
+	if err := json.Unmarshal([]byte(text), &raw); err != nil {
 		return nil, err
 	}
 	items, ok := raw.([]any)
@@ -648,38 +850,13 @@ func parseStored(text string) ([]Condition, error) {
 	}
 	out := make([]Condition, len(items))
 	for i, item := range items {
-		d, ok := item.(py.Dict)
-		if !ok {
-			return nil, fmt.Errorf("condition %s: not an object", py.ReprValue(item))
+		cond, err := ValidateCondition(item)
+		if err != nil {
+			return nil, fmt.Errorf("condition %d: %w", i, err)
 		}
-		field, _ := d.Get("field")
-		op, _ := d.Get("op")
-		value, has := d.Get("value")
-		f, fok := field.(string)
-		o, ook := op.(string)
-		if !fok || !ook {
-			return nil, fmt.Errorf("condition %s: field and op must be strings", py.ReprValue(item))
-		}
-		if list, ok := value.([]any); ok {
-			if strs, ok := valueListLoose(list); ok {
-				value = strs
-			}
-		}
-		out[i] = Condition{f, o, value, has}
+		out[i] = cond
 	}
 	return out, nil
-}
-
-func valueListLoose(list []any) ([]string, bool) {
-	out := make([]string, len(list))
-	for i, item := range list {
-		s, ok := item.(string)
-		if !ok {
-			return nil, false
-		}
-		out[i] = s
-	}
-	return out, true
 }
 
 func LoadRules(ctx context.Context, q Querier, account string) ([]Rule, error) {
@@ -690,28 +867,39 @@ func LoadAllRules(ctx context.Context, q Querier) ([]Rule, error) {
 	return loadRules(ctx, q, func(sql.NullString) bool { return true })
 }
 
-func ExportRules(ctx context.Context, q Querier) (py.Dict, error) {
+type exportedRule struct {
+	ID      string          `json:"id"`
+	Account string          `json:"account,omitempty"`
+	Action  string          `json:"action"`
+	Dest    string          `json:"dest,omitempty"`
+	When    []conditionJSON `json:"when"`
+}
+
+type exportedRules struct {
+	Rules []exportedRule `json:"rules"`
+}
+
+func ExportRules(ctx context.Context, q Querier) (exportedRules, error) {
 	loaded, err := LoadAllRules(ctx, q)
 	if err != nil {
-		return nil, err
+		return exportedRules{}, err
 	}
-	out := make([]any, len(loaded))
+	out := make([]exportedRule, len(loaded))
 	for i, r := range loaded {
-		d := py.Dict{{Key: "id", Value: r.ID}}
-		if r.Account != nil && *r.Account != "" {
-			d = append(d, py.Pair{Key: "account", Value: *r.Account})
+		e := exportedRule{ID: r.ID, Action: string(r.Action)}
+		if r.Account != nil {
+			e.Account = *r.Account
 		}
-		d = append(d, py.Pair{Key: "action", Value: r.Action})
-		if r.Dest != nil && *r.Dest != "" {
-			d = append(d, py.Pair{Key: "dest", Value: *r.Dest})
+		if r.Dest != nil {
+			e.Dest = *r.Dest
 		}
-		when := make([]any, len(r.Conditions))
+		e.When = make([]conditionJSON, len(r.Conditions))
 		for j, c := range r.Conditions {
-			when[j] = c.Dict()
+			e.When[j] = c.dict()
 		}
-		out[i] = append(d, py.Pair{Key: "when", Value: when})
+		out[i] = e
 	}
-	return py.Dict{{Key: "rules", Value: out}}, nil
+	return exportedRules{Rules: out}, nil
 }
 
 type Picked struct {
@@ -726,7 +914,7 @@ type Thresholds struct {
 }
 
 func ReadThresholds(ctx context.Context, q Querier) (Thresholds, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	t := Thresholds{MinN: r.Int(mail.KeyRuleMinN), MinPurity: r.Float(mail.KeyRuleMinPurity)}
 	return t, r.Err()
 }
@@ -753,7 +941,63 @@ func PickPure(counts map[string]int, t Thresholds) (Picked, bool) {
 	return Picked{folder, purity, total}, true
 }
 
-func LearnedCounts(ctx context.Context, q Querier, account string, columns []string, values []string, excludeID int64) (map[string]int, error) {
+type LearnedGroup struct {
+	Level  string
+	Key    string
+	Counts map[string]int
+}
+
+func LearnedGroups(ctx context.Context, q Querier, account string) ([]LearnedGroup, error) {
+	var out []LearnedGroup
+	for _, level := range LearnedLevels {
+		nonblank := make([]string, len(level.Columns))
+		for i, c := range level.Columns {
+			nonblank[i] = c + " != ''"
+		}
+		selectCols := strings.Join(level.Columns, ", ")
+		rows, err := q.QueryContext(ctx,
+			"SELECT "+selectCols+", folder, COUNT(*) AS n FROM filed_messages WHERE account = ? AND "+
+				strings.Join(nonblank, " AND ")+" GROUP BY "+selectCols+", folder", account)
+		if err != nil {
+			return nil, err
+		}
+		seen := map[string]*LearnedGroup{}
+		var order []string
+		err = func() error {
+			defer func() { _ = rows.Close() }()
+			for rows.Next() {
+				parts := make([]string, len(level.Columns))
+				var folder string
+				var n int
+				dest := make([]any, 0, len(parts)+2)
+				for i := range parts {
+					dest = append(dest, &parts[i])
+				}
+				if err := rows.Scan(append(dest, &folder, &n)...); err != nil {
+					return err
+				}
+				key := strings.Join(parts, " | ")
+				g := seen[key]
+				if g == nil {
+					g = &LearnedGroup{Level: level.Name, Key: key, Counts: map[string]int{}}
+					seen[key] = g
+					order = append(order, key)
+				}
+				g.Counts[folder] = n
+			}
+			return rows.Err()
+		}()
+		if err != nil {
+			return nil, err
+		}
+		for _, key := range order {
+			out = append(out, *seen[key])
+		}
+	}
+	return out, nil
+}
+
+func learnedCounts(ctx context.Context, q Querier, account string, columns []string, values []string, excludeID int64) (map[string]int, error) {
 	where := make([]string, len(columns))
 	for i, c := range columns {
 		where[i] = c + " = ?"
@@ -806,7 +1050,7 @@ func LearnedMatch(ctx context.Context, q Querier, m *Message, t Thresholds) (*Le
 		if !allNonEmpty(values) {
 			continue
 		}
-		counts, err := LearnedCounts(ctx, q, m.Account, level.Columns, values, m.ID)
+		counts, err := learnedCounts(ctx, q, m.Account, level.Columns, values, m.ID)
 		if err != nil {
 			return nil, err
 		}

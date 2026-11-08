@@ -2,11 +2,12 @@ package media
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
+	"regexp"
 )
 
 const (
@@ -14,11 +15,45 @@ const (
 	TV     = "tv"
 )
 
+func parseInt(s string) (int64, bool) {
+	body := strings.TrimSpace(s)
+	neg := false
+	if rest, ok := strings.CutPrefix(body, "-"); ok {
+		body, neg = rest, true
+	} else if rest, ok := strings.CutPrefix(body, "+"); ok {
+		body = rest
+	}
+	if body == "" || strings.HasPrefix(body, "_") || strings.HasSuffix(body, "_") || strings.Contains(body, "__") {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(strings.ReplaceAll(body, "_", ""), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	if neg {
+		n = -n
+	}
+	return n, true
+}
+
+func intOf(v any) (int64, bool) {
+	switch n := v.(type) {
+	case int64:
+		return n, true
+	case float64:
+		if math.IsNaN(n) || math.IsInf(n, 0) || n < math.MinInt64 || n >= math.MaxInt64 {
+			return 0, false
+		}
+		return int64(math.Trunc(n)), true
+	}
+	return 0, false
+}
+
 var (
-	episodeRe = rx.MustCompile(`\bS(\d{1,2}) ?E(\d{1,3})`, rx.IgnoreCase|rx.ASCII)
-	yearRe    = rx.MustCompile(`\b(19\d{2}|20\d{2})\b`, rx.ASCII)
-	leadTagRe = rx.MustCompile(`^\s*\[[^\]]*\]\s*`, rx.ASCII)
-	sampleRe  = rx.MustCompile(`\bsample\b`, rx.IgnoreCase|rx.ASCII)
+	episodeRe = regexp.MustCompile(`(?i)\bS(\d{1,2}) ?E(\d{1,3})`)
+	yearRe    = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
+	leadTagRe = regexp.MustCompile(`^\s*\[[^\]]*\]\s*`)
+	sampleRe  = regexp.MustCompile(`(?i)\bsample\b`)
 
 	unsafe = strings.NewReplacer("/", "", "\\", "", ":", " -", "*", "", "?", "", `"`, "", "<", "", ">", "", "|", "")
 )
@@ -34,13 +69,6 @@ type Parsed struct {
 	Episode int
 }
 
-func matched(m *rx.Match, err error) *rx.Match {
-	if err != nil {
-		return nil
-	}
-	return m
-}
-
 func Ext(name string) string {
 	if i := strings.LastIndexByte(name, '.'); i >= 0 {
 		return name[i:]
@@ -49,39 +77,35 @@ func Ext(name string) string {
 }
 
 func (t Tuning) IsVideo(name string) bool {
-	return t.VideoExts[py.Lower(Ext(name))] && matched(sampleRe.Search(name)) == nil
+	return t.VideoExts[strings.ToLower(Ext(name))] && !sampleRe.MatchString(name)
 }
 
-func (t Tuning) IsSubtitle(name string) bool { return t.SubtitleExts[py.Lower(Ext(name))] }
+func (t Tuning) IsSubtitle(name string) bool { return t.SubtitleExts[strings.ToLower(Ext(name))] }
 
 func (t Tuning) ParseRelease(name string) Parsed {
-	if t.VideoExts[py.Lower(Ext(name))] {
+	if t.VideoExts[strings.ToLower(Ext(name))] {
 		name = name[:len(name)-len(Ext(name))]
 	}
-	if stripped, err := leadTagRe.Sub("", name, 1); err == nil {
-		name = stripped
-	}
+	name = leadTagRe.ReplaceAllString(name, "")
 	name = strings.ReplaceAll(strings.ReplaceAll(name, ".", " "), "_", " ")
-	runes := []rune(name)
 	var season, episode int64
-	cut := len(runes)
-	if m := matched(episodeRe.Search(name)); m != nil {
-		season, _ = py.ParseInt(m.Group(1))
-		episode, _ = py.ParseInt(m.Group(2))
-		cut = m.Start()
+	cut := len(name)
+	if loc := episodeRe.FindStringSubmatchIndex(name); loc != nil {
+		season, _ = parseInt(name[loc[2]:loc[3]])
+		episode, _ = parseInt(name[loc[4]:loc[5]])
+		cut = loc[0]
 	}
 	year := ""
-	years, _ := yearRe.FindIterRange(name, 0, cut)
-	for _, m := range years {
-		if m.Start() > 0 {
-			year, cut = m.Group(1), m.Start()
+	for _, loc := range yearRe.FindAllStringSubmatchIndex(name[:cut], -1) {
+		if loc[0] > 0 {
+			year, cut = name[loc[2]:loc[3]], loc[0]
 		}
 	}
-	return Parsed{Title: strings.Trim(string(runes[:cut]), " -(["), Year: year, Season: int(season), Episode: int(episode)}
+	return Parsed{Title: strings.Trim(name[:cut], " -(["), Year: year, Season: int(season), Episode: int(episode)}
 }
 
 func cleanComponent(text string) (string, error) {
-	text = strings.Join(py.Split(unsafe.Replace(text)), " ")
+	text = strings.Join(strings.Fields(unsafe.Replace(text)), " ")
 	text = strings.Trim(text, " .")
 	if text == "" {
 		return "", ParseError("title is empty")
@@ -94,12 +118,12 @@ func named(title, year string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	year = py.Strip(year)
+	year = strings.TrimSpace(year)
 	if year == "" {
 		return title, nil
 	}
-	if utf8.RuneCountInString(year) != 4 || matched(yearRe.Search(year)) == nil {
-		return "", ParseError(fmt.Sprintf("year %s is not a year", py.Repr(year)))
+	if utf8.RuneCountInString(year) != 4 || !yearRe.MatchString(year) {
+		return "", ParseError(fmt.Sprintf("year %q is not a year", year))
 	}
 	return fmt.Sprintf("%s (%s)", title, year), nil
 }
@@ -109,7 +133,7 @@ func MoviePath(title, year, extension string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s/%s/%s%s", Movies, n, n, py.Lower(extension)), nil
+	return fmt.Sprintf("%s/%s/%s%s", Movies, n, n, strings.ToLower(extension)), nil
 }
 
 func EpisodePath(show, year string, season, episode int, extension string) (string, error) {
@@ -120,5 +144,5 @@ func EpisodePath(show, year string, season, episode int, extension string) (stri
 	if season < 0 || episode < 1 {
 		return "", ParseError(fmt.Sprintf("season %d episode %d is not an episode", season, episode))
 	}
-	return fmt.Sprintf("%s/%s/Season %02d/%s - S%02dE%02d%s", TV, n, season, n, season, episode, py.Lower(extension)), nil
+	return fmt.Sprintf("%s/%s/Season %02d/%s - S%02dE%02d%s", TV, n, season, n, season, episode, strings.ToLower(extension)), nil
 }

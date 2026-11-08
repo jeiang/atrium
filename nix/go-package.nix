@@ -7,37 +7,18 @@
   removeReferencesTo,
   atrium-static,
   sqlcipherLib,
+  stdenv,
 }: let
-  root = ../.;
-  noticesTemplate = builtins.toFile "third-party-notices.tmpl" ''
-    {{range .}}================================================================
-    {{.Name}} {{.Version}} ({{.LicenseName}})
-    ================================================================
-
-    {{.LicenseText}}
-    {{end}}'';
-  src = lib.fileset.toSource {
-    inherit root;
-    fileset = lib.fileset.unions [
-      (root + "/go.mod")
-      (root + "/go.sum")
-      (root + "/cmd")
-      (root + "/internal")
-      (root + "/sdk")
-      (root + "/nix/monitoring")
-      (root + "/third_party")
-      (root + "/LICENSE")
-      (root + "/testdata")
-    ];
-  };
+  goSrc = import ./go-src.nix {inherit lib;};
+  isx86_64 = stdenv.hostPlatform.isx86_64;
 in
   buildGo126Module (finalAttrs: {
     pname = "atrium";
     version = "0.1.0";
-    inherit src;
-    vendorHash = "sha256-6lVfSTy4LhejmYJ5Qh66nRgG82tWd880D32l0XmbkU8=";
+    inherit (goSrc) src vendorHash;
     proxyVendor = true;
-    excludedPackages = ["third_party"];
+    excludedPackages = ["third_party" "tools"];
+    doCheck = false;
     tags = ["libsqlite3" "sqlite_fts5"];
     ldflags = [
       "-s"
@@ -48,8 +29,7 @@ in
     ];
     env = {
       CGO_ENABLED = "1";
-      GOAMD64 = "v3";
-      CGO_CFLAGS = "-O2 -mavx2 -I${sqlcipherLib}/include";
+      CGO_CFLAGS = "-O2${lib.optionalString isx86_64 " -mavx2"}${lib.optionalString stdenv.hostPlatform.isAarch64 " -flax-vector-conversions"} -I${sqlcipherLib}/include";
       CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
     };
 
@@ -58,8 +38,8 @@ in
     preBuild = ''
       cp -r --no-preserve=mode ${atrium-static} internal/web/static
       export GOFLAGS="$GOFLAGS -tags=libsqlite3,sqlite_fts5"
-      go-licenses check ./... --disallowed_types=forbidden,unknown
-      go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --ignore github.com/jeiang/atrium/sdk --template ${noticesTemplate} > internal/about/THIRD_PARTY_NOTICES
+      ${goSrc.licenseCheck}
+      ${goSrc.licenseReport "internal/about/THIRD_PARTY_NOTICES"}
       ${sqlcipherLib.appendNotices "internal/about/THIRD_PARTY_NOTICES"}
     '';
 
@@ -67,29 +47,27 @@ in
       modules,
       hash ? lib.fakeHash,
     }: let
-      unversioned = lib.filter (m: !lib.hasInfix "@" m) modules;
-      imports = lib.concatMapStrings (m: "\t_ \"${lib.head (lib.splitString "@" m)}\"\n") modules;
+      imports = lib.concatMapStrings (m: "\t_ \"${m.path}\"\n") modules;
       goGet = ''
         export GOCACHE=$TMPDIR/go-cache GOPATH=$TMPDIR/go
-        go get ${lib.escapeShellArgs modules}
+        go get ${lib.escapeShellArgs (map (m: "${m.path}@${m.version}") modules)}
       '';
     in
-      assert lib.assertMsg (unversioned == []) "atrium modules need a version (path@version): ${lib.concatStringsSep ", " unversioned}";
-        finalAttrs.finalPackage.overrideAttrs (prev: {
-          vendorHash = hash;
-          postPatch = ''
-            printf 'package main\n\nimport (\n%s)\n' ${lib.escapeShellArg imports} > cmd/atrium/modules_ext.go
-          '';
-          postConfigure = goGet;
-          passthru =
-            prev.passthru
-            // {
-              overrideModAttrs = old: {
-                nativeBuildInputs = old.nativeBuildInputs ++ [buildPackages.git];
-                postPatch = old.postPatch + goGet;
-              };
+      finalAttrs.finalPackage.overrideAttrs (prev: {
+        vendorHash = hash;
+        postPatch = ''
+          printf 'package main\n\nimport (\n%s)\n' ${lib.escapeShellArg imports} > cmd/atrium/modules_ext.go
+        '';
+        postConfigure = goGet;
+        passthru =
+          prev.passthru
+          // {
+            overrideModAttrs = old: {
+              nativeBuildInputs = old.nativeBuildInputs ++ [buildPackages.git];
+              postPatch = old.postPatch + goGet;
             };
-        });
+          };
+      });
 
     postInstall = ''
       remove-references-to -t ${sqlcipherLib.openssl.etc} $out/bin/atrium
@@ -107,6 +85,6 @@ in
     meta = {
       mainProgram = "atrium";
       license = lib.licenses.mit;
-      platforms = ["x86_64-linux"];
+      platforms = lib.platforms.linux;
     };
   })

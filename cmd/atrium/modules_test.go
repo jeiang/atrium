@@ -17,8 +17,12 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 type moduleCase struct {
@@ -40,10 +44,7 @@ var moduleCases = []moduleCase{
 		command: []string{"rules", "export"}, output: nonEmpty},
 	{module: module.Calendar, tool: "calendar_list", table: "agent_events",
 		command: []string{"calendar", "candidates"}, output: nonEmpty},
-	{module: module.Notion, tool: "search_knowledge", table: "notion_pages", method: "POST", path: "/notion/missing/link", form: url.Values{}, status: http.StatusUnprocessableEntity,
-		command: []string{"notion", "wiki-plan"}, output: func(_, stderr string, code int) bool {
-			return code == cli.ExitError && strings.Contains(stderr, "wiki-plan")
-		}},
+	{module: module.Notion, tool: "search_knowledge", table: "notion_pages", method: "POST", path: "/notion/missing/link", form: url.Values{}, status: http.StatusUnprocessableEntity},
 	{module: module.Media, tool: "media_downloads", table: "media_channels", method: "GET", path: "/media/channels", status: http.StatusOK,
 		command: []string{"media", "poll"}, output: nonEmpty},
 	{module: module.Assistant, tool: "profile_set", table: "threads", method: "GET", path: "/projects", status: http.StatusOK,
@@ -52,7 +53,7 @@ var moduleCases = []moduleCase{
 		}},
 	{module: module.Notifications, tool: "notify", table: "notifications", method: "GET", path: "/settings/notifications", status: http.StatusOK},
 	{module: module.Grafana, tool: "grafana_datasources"},
-	{module: module.Contacts, tool: "contacts_lookup"},
+	{module: module.Contacts, tool: "contacts_lookup", command: []string{"contacts", "sync"}},
 }
 
 type appRun struct {
@@ -60,10 +61,34 @@ type appRun struct {
 	stdout, stderr string
 }
 
-func runApp(args ...string) appRun {
+func runApp(t *testing.T, args ...string) appRun { return runAppWith(t, nil, args...) }
+
+func runAppLogged(t *testing.T, args ...string) appRun {
 	var out bytes.Buffer
 	var errs lockedBuffer
-	code := newApp().Run(context.Background(), args, &out, &errs)
+	app := newTestApp(t, nil)
+	if f := fixtureFor(t); f != nil {
+		app = f.app
+	}
+	app.SetLogSetup(logx.Setup)
+	defer app.SetLogSetup(quietLog)
+	code := app.Run(context.Background(), args, &out, &errs)
+	return appRun{code, out.String(), errs.String()}
+}
+
+func runAppWith(t *testing.T, mods []module.Module, args ...string) appRun {
+	var out bytes.Buffer
+	var errs lockedBuffer
+	app := newTestApp(t, mods)
+	if f := fixtureFor(t); f != nil {
+		if len(mods) == 0 {
+			app = f.app
+		} else {
+			reg := settings.New()
+			app = newAppWith(f.lookup, reg, config.NewState(reg), mods, imapclient.Opener, nil, quietLog)
+		}
+	}
+	code := app.Run(context.Background(), args, &out, &errs)
 	return appRun{code, out.String(), errs.String()}
 }
 
@@ -79,7 +104,7 @@ func (m *modelLog) Requests() []anthropictest.Request {
 	return slices.Clone(m.seen)
 }
 
-func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *modelLog) {
+func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *modelLog, f *fixture) {
 	t.Helper()
 	dir = t.TempDir()
 	api = &modelLog{Server: anthropictest.New(t, anthropictest.Reply("end_turn", anthropictest.Text("hi")))}
@@ -88,20 +113,28 @@ func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *mode
 		defer api.mu.Unlock()
 		api.seen = append(api.seen, r)
 	}
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
-	t.Setenv("ATRIUM_CONFIG", "")
-	t.Setenv("ATRIUM_CORE_TZ", "America/Port_of_Spain")
-	for name, value := range requirementEnv(filepath.Join(dir, "media")) {
-		t.Setenv(name, value)
+	env := map[string]string{
+		"ATRIUM_DB":          filepath.Join(dir, "atrium.db"),
+		"ATRIUM_CACHE_DIR":   filepath.Join(dir, "cache"),
+		"ATRIUM_PUBLIC_HOST": "",
+		"ATRIUM_CONFIG":      "",
+		"ATRIUM_CORE_TZ":     "America/Port_of_Spain",
+		"ANTHROPIC_API_KEY":  anthropictest.APIKey,
+		anthropic.BaseURLEnv: api.URL,
 	}
-	t.Setenv("ANTHROPIC_API_KEY", anthropictest.APIKey)
-	t.Setenv(anthropic.BaseURLEnv, api.URL)
+	for name, value := range moduleEnv(dir) {
+		env[name] = value
+	}
 	for _, name := range moduleNames {
-		t.Setenv(flagEnv(name), flags[name])
+		env[flagEnv(name)] = flags[name]
 	}
-	return dir, api
+	reg := settings.New()
+	st := config.NewState(reg)
+	f = &fixture{t: t, dir: dir, env: env, settings: reg, state: st}
+	f.app = newAppWith(f.lookup, reg, st, nil, imapclient.Opener, nil, quietLog)
+	fixturesByTest.Store(t, f)
+	fixturesByTest.Store(testKey(t), f)
+	return dir, api, f
 }
 
 func flagsExcept(name string, value string) map[string]string {
@@ -160,21 +193,22 @@ func probe(t *testing.T, base string, c moduleCase) int {
 }
 
 func TestModuleTogglesThroughTheApplication(t *testing.T) {
+	t.Parallel()
 	for _, c := range moduleCases {
 		t.Run(c.module+"/disabled", func(t *testing.T) {
-			dir, api := moduleFixture(t, flagsExcept(c.module, "false"))
+			dir, api, _ := moduleFixture(t, flagsExcept(c.module, "false"))
 			if c.path != "" {
 				if status := probe(t, startServeIn(t, dir), c); status != http.StatusNotFound {
 					t.Errorf("%s %s = %d, want 404 while %s is off", c.method, c.path, status, c.module)
 				}
 			}
 			if c.command != nil {
-				if got := runApp(c.command...); got.code != cli.ExitOK || got.stdout != "" {
+				if got := runApp(t, c.command...); got.code != cli.ExitOK || got.stdout != "" {
 					t.Errorf("%v while off: exit %d stdout %q stderr %q, want a silent exit 0", c.command, got.code, got.stdout, got.stderr)
 				}
 			}
 			if c.module != module.Assistant {
-				if names := offeredTools(t, api, runApp("agent", "run", "--text", "hello", "--kind", "chat")); slices.Contains(names, c.tool) {
+				if names := offeredTools(t, api, runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")); slices.Contains(names, c.tool) {
 					t.Errorf("tool %s is offered while %s is off", c.tool, c.module)
 				}
 			} else if n := len(api.Requests()); n != 0 {
@@ -185,7 +219,7 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 			}
 		})
 		t.Run(c.module+"/enabled", func(t *testing.T) {
-			dir, api := moduleFixture(t, flagsExcept(c.module, "true"))
+			dir, api, _ := moduleFixture(t, flagsExcept(c.module, "true"))
 			if c.path != "" {
 				if status := probe(t, startServeIn(t, dir), c); status != c.status {
 					t.Errorf("%s %s = %d, want %d", c.method, c.path, status, c.status)
@@ -193,13 +227,13 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 			}
 			ran := appRun{}
 			if c.output != nil {
-				ran = runApp(c.command...)
+				ran = runApp(t, c.command...)
 				if !c.output(ran.stdout, ran.stderr, ran.code) {
 					t.Errorf("%v: exit %d stdout %q stderr %q", c.command, ran.code, ran.stdout, ran.stderr)
 				}
 			}
 			if c.module != module.Assistant {
-				ran = runApp("agent", "run", "--text", "hello", "--kind", "chat")
+				ran = runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")
 			}
 			if names := offeredTools(t, api, ran); !slices.Contains(names, c.tool) {
 				t.Errorf("tool %s is missing while %s is on: %v", c.tool, c.module, names)
@@ -214,18 +248,19 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 func clearModuleEnv(t *testing.T) {
 	t.Helper()
 	for name := range requirementEnv("") {
-		t.Setenv(name, "")
+		setEnv(t, name, "")
 	}
 	for _, name := range moduleNames {
-		t.Setenv(flagEnv(name), "")
+		setEnv(t, flagEnv(name), "")
 	}
 }
 
 func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	clearModuleEnv(t)
 	for _, tc := range []struct{ module, reason string }{
 		{module.Mail, "mail_chat_url is not set"},
@@ -234,6 +269,7 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		{module.Media, "media_root is not set"},
 		{module.Assistant, "anthropic_api_key is not set"},
 		{module.Notifications, "ntfy_url is not set"},
+		{module.Contacts, "contacts_dir is not set"},
 		{module.Grafana, "grafana_url and grafana_viewer_token"},
 		{module.Grafana, "needs assistant"},
 	} {
@@ -246,7 +282,7 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		}
 	}
 	for name, value := range requirementEnv(filepath.Join(dir, "media")) {
-		t.Setenv(name, value)
+		setEnv(t, name, value)
 	}
 	for _, name := range []string{module.Mail, module.Notifications} {
 		if got := runSettings(t, "set", module.FlagKey(name), "true"); got.code != cli.ExitOK || got.row(t).Value == nil || *got.row(t).Value != "true" {
@@ -265,11 +301,12 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 }
 
 func TestSettingsListWorksFromTheRootCommand(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	clearModuleEnv(t)
-	got := runApp("settings", "list")
+	got := runApp(t, "settings", "list")
 	var rows []settingRow
 	if err := json.Unmarshal([]byte(got.stdout), &rows); err != nil || got.code != cli.ExitOK {
 		t.Fatalf("settings list: exit %d stderr %q: %v", got.code, got.stderr, err)
@@ -292,16 +329,17 @@ func readFlag(t *testing.T, name string) string {
 }
 
 func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
+	t.Parallel()
 	phaseA := func(t *testing.T, populated bool) (base string, path string) {
 		dir := t.TempDir()
 		path = filepath.Join(dir, "atrium.db")
-		t.Setenv("ATRIUM_DB", path)
-		t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-		t.Setenv("ATRIUM_PUBLIC_HOST", "")
-		t.Setenv("ATRIUM_CONFIG", "")
+		setEnv(t, "ATRIUM_DB", path)
+		setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+		setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+		setEnv(t, "ATRIUM_CONFIG", "")
 		clearModuleEnv(t)
 		for name, value := range requirementEnv(filepath.Join(dir, "media")) {
-			t.Setenv(name, value)
+			setEnv(t, name, value)
 		}
 		if got := runSettings(t, "list"); got.code != cli.ExitOK {
 			t.Fatalf("settings list: exit %d %q", got.code, got.stderr)
@@ -359,10 +397,11 @@ func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 }
 
 func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
+	t.Parallel()
 	data := loadGoldenData(t)
 	candidates := func(flag string) int {
-		r := newRig(t, data, map[string]string{flagEnv(module.Calendar): flag}, "")
-		seed, err := db.Connect(filepath.Join(r.dir, "atrium.db"))
+		f := newFixture(t, data, map[string]string{flagEnv(module.Calendar): flag}, "")
+		seed, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -379,10 +418,10 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if code, _, stderr := r.run(ctx, "watch", "--account", "icloud"); code != cli.ExitOK {
+		if code, _, stderr := f.Run(ctx, "watch", "--account", "icloud"); code != cli.ExitOK {
 			t.Fatalf("watch with calendar %s: exit %d %q", flag, code, stderr)
 		}
-		d, err := db.Connect(filepath.Join(r.dir, "atrium.db"))
+		d, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -399,15 +438,16 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 }
 
 func TestMailPauseStaysAvailableWhileMailIsOff(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept(module.Mail, "false"))
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, "false"))
 	paused := func() bool {
-		got := runApp("live", "status")
+		got := runApp(t, "live", "status")
 		return got.code == cli.ExitOK && strings.Contains(got.stdout, `"paused": true`)
 	}
-	if got := runApp("live", "pause"); got.code != cli.ExitOK || !paused() {
+	if got := runApp(t, "live", "pause"); got.code != cli.ExitOK || !paused() {
 		t.Fatalf("live pause while mail is off: exit %d stderr %q, paused %v", got.code, got.stderr, paused())
 	}
-	if got := runApp("live", "resume"); got.code != cli.ExitOK || paused() {
+	if got := runApp(t, "live", "resume"); got.code != cli.ExitOK || paused() {
 		t.Fatalf("live resume while mail is off: exit %d stderr %q", got.code, got.stderr)
 	}
 	base := startServeIn(t, dir)

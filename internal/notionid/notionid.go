@@ -3,23 +3,22 @@ package notionid
 import (
 	"strings"
 
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
+	"regexp"
 )
 
 var (
-	uuidHex = rx.MustCompile(`[0-9a-fA-F]{32}`, 0)
-	dashed  = rx.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`, 0)
-	idRe    = rx.MustCompile(`[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}`, 0)
+	uuidHex = regexp.MustCompile(`[0-9a-fA-F]{32}`)
+	dashed  = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+	idRe    = regexp.MustCompile(`[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}`)
 )
 
 func Normalize(value string) string {
-	text := py.Strip(value)
-	if m, _ := dashed.FullMatch(text); m != nil {
+	text := strings.TrimSpace(value)
+	if loc := dashed.FindStringIndex(text); loc != nil && loc[0] == 0 && loc[1] == len(text) {
 		return strings.ToLower(text)
 	}
 	compact := strings.ReplaceAll(text, "-", "")
-	if m, _ := uuidHex.FullMatch(compact); m != nil {
+	if loc := uuidHex.FindStringIndex(compact); loc != nil && loc[0] == 0 && loc[1] == len(compact) {
 		h := strings.ToLower(compact)
 		return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:]
 	}
@@ -28,9 +27,8 @@ func Normalize(value string) string {
 
 func IDsInText(text string) []string {
 	var found []string
-	matches, _ := idRe.FindIter(text)
-	for _, m := range matches {
-		id := Normalize(m.Text())
+	for _, id := range idRe.FindAllString(text, -1) {
+		id = Normalize(id)
 		seen := false
 		for _, f := range found {
 			if f == id {

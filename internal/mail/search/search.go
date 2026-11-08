@@ -8,22 +8,21 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
-	"github.com/jeiang/atrium/internal/config"
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 const (
 	RRFK          = 60
 	MaxTerms      = 12
 	SnippetTokens = 24
-	DefaultLimit  = 20
 	start, end    = "\x02", "\x03"
 )
 
@@ -32,7 +31,7 @@ type limits struct {
 }
 
 func readLimits(ctx context.Context, q Querier) (limits, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	l := limits{
 		rrfK: r.Int(mail.KeySearchRRFK), branchLimit: r.Int(mail.KeySearchBranchLimit), maxTerms: r.Int(mail.KeySearchMaxTerms),
 		snippetTokens: r.Int(mail.KeySearchSnippetTokens), snippetChars: r.Int(mail.KeySearchSnippetChars), knnMax: r.Int(mail.KeyKNNMax),
@@ -41,38 +40,29 @@ func readLimits(ctx context.Context, q Querier) (limits, error) {
 }
 
 var (
-	tokenRe = rx.MustCompile(`"([^"]*)"|([^\W_]+)`, 0)
-	wordRe  = rx.MustCompile(`[^\W_]+`, 0)
-	truthy  = map[string]bool{"1": true, "true": true, "on": true, "yes": true}
+	tokenRe = regexp.MustCompile(`"([^"]*)"|([^\W_]+)`)
+	wordRe  = regexp.MustCompile(`[^\W_]+`)
 )
 
 const baseSelect = "SELECT m.id, m.account, COALESCE(c.folder, m.folder, m.location) AS folder, m.from_addr, m.from_name, " +
-	"m.subject, m.date_ts, m.seen, m.flagged, (m.att_types != '[]') AS has_attachment " +
-	"FROM messages m LEFT JOIN corrections c ON c.message_id = m.id"
+	"m.subject, m.date_ts FROM messages m LEFT JOIN corrections c ON c.message_id = m.id"
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type Querier = db.Querier
 
-func FTSQuery(text string) (string, error) { return FTSQueryLimit(text, MaxTerms) }
+func FTSQuery(text string) (string, error) { return ftsQuery(text, MaxTerms) }
 
-func FTSQueryLimit(text string, maxTerms int) (string, error) {
+func ftsQuery(text string, maxTerms int) (string, error) {
 	var terms []string
-	matches, err := tokenRe.FindIter(text)
-	if err != nil {
-		return "", err
-	}
-	for _, m := range matches {
-		if word, ok := m.GroupOK(2); ok && word != "" {
-			terms = append(terms, `"`+word+`"*`)
+	for _, loc := range tokenRe.FindAllStringSubmatchIndex(text, -1) {
+		if loc[4] >= 0 && text[loc[4]:loc[5]] != "" {
+			terms = append(terms, `"`+text[loc[4]:loc[5]]+`"*`)
 			continue
 		}
-		phrase, _ := m.GroupOK(1)
-		words, err := wordRe.FindAll(phrase)
-		if err != nil {
-			return "", err
+		phrase := ""
+		if loc[2] >= 0 {
+			phrase = text[loc[2]:loc[3]]
 		}
+		words := wordRe.FindAllString(phrase, -1)
 		if len(words) > 0 {
 			terms = append(terms, `"`+strings.Join(words, " ")+`"`)
 		}
@@ -85,9 +75,9 @@ type Scored struct {
 	Score float64
 }
 
-func RRF(rankings ...[]int64) []Scored { return RRFWith(RRFK, rankings...) }
+func RRF(rankings ...[]int64) []Scored { return rrfWith(RRFK, rankings...) }
 
-func RRFWith(k int, rankings ...[]int64) []Scored {
+func rrfWith(k int, rankings ...[]int64) []Scored {
 	scores := map[int64]float64{}
 	best := map[int64]int{}
 	var order []int64
@@ -138,104 +128,27 @@ type Filters struct {
 	Flagged       bool     `json:"flagged"`
 }
 
-func flag(v any) bool {
-	switch t := v.(type) {
-	case nil:
-		return false
-	case string:
-		return truthy[strings.ToLower(py.Strip(t))]
-	case bool:
-		return t
-	case float64:
-		return t != 0
-	case int:
-		return t != 0
-	case int64:
-		return t != 0
-	case json.Number:
-		f, _ := t.Float64()
-		return f != 0
-	case []any:
-		return len(t) > 0
-	case map[string]any:
-		return len(t) > 0
+func Text(value string) *string {
+	if value = strings.TrimSpace(value); value == "" {
+		return nil
 	}
-	return true
+	return &value
 }
 
-func text(v any) (*string, error) {
-	switch t := v.(type) {
-	case nil:
-		return nil, nil
-	case string:
-		if s := py.Strip(t); s != "" {
-			return &s, nil
-		}
+func Day(value string, endOfDay bool) (*float64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
 		return nil, nil
 	}
-	if !flag(v) {
-		return nil, nil
+	day, ok := timex.ParseDay(value)
+	if !ok {
+		return nil, fmt.Errorf("%w: invalid date %q, want YYYY-MM-DD", httpx.ErrPayload, value)
 	}
-	return nil, fmt.Errorf("%w: '%s' object has no attribute 'strip'", httpx.ErrType, httpx.TypeName(v))
-}
-
-func timestamp(v any, endOfDay bool) (*float64, error) {
-	var f float64
-	switch t := v.(type) {
-	case nil:
-		return nil, nil
-	case string:
-		if t == "" {
-			return nil, nil
-		}
-		day, ok := py.StrptimeDate(py.Strip(t))
-		if !ok {
-			return nil, fmt.Errorf("%w: time data %s does not match format '%%Y-%%m-%%d'", httpx.ErrValue, py.Repr(py.Strip(t)))
-		}
-		day.Aware = true
-		f = day.Timestamp(time.UTC)
-		if endOfDay {
-			f += 86400
-		}
-		return &f, nil
-	case float64:
-		f = t
-	case int:
-		f = float64(t)
-	case int64:
-		f = float64(t)
-	case bool:
-		if t {
-			f = 1
-		}
-	case json.Number:
-		f, _ = t.Float64()
-	default:
-		return nil, fmt.Errorf("%w: unsupported date value %v", httpx.ErrValue, v)
+	ts := float64(day.Unix())
+	if endOfDay {
+		ts += 86400
 	}
-	return &f, nil
-}
-
-func NormalizeFilters(filters map[string]any) (Filters, error) {
-	var f Filters
-	var err error
-	if f.Account, err = text(filters["account"]); err != nil {
-		return f, err
-	}
-	if f.Folder, err = text(filters["folder"]); err != nil {
-		return f, err
-	}
-	if f.From, err = text(filters["from"]); err != nil {
-		return f, err
-	}
-	if f.DateFrom, err = timestamp(filters["date_from"], false); err != nil {
-		return f, err
-	}
-	if f.DateTo, err = timestamp(filters["date_to"], true); err != nil {
-		return f, err
-	}
-	f.HasAttachment, f.Unread, f.Flagged = flag(filters["has_attachment"]), flag(filters["unread"]), flag(filters["flagged"])
-	return f, nil
+	return &ts, nil
 }
 
 func filterSQL(f Filters) (string, []any) {
@@ -277,8 +190,6 @@ type Part struct {
 	Text        string
 	Highlighted bool
 }
-
-func (p Part) MarshalJSON() ([]byte, error) { return json.Marshal([]any{p.Text, p.Highlighted}) }
 
 func SnippetParts(marked string) []Part {
 	parts := []Part{}
@@ -423,22 +334,19 @@ func bodyHead(ctx context.Context, q Querier, list []int64, snippetChars int) (m
 		return h, err
 	})
 	for _, h := range found {
-		heads[h.id] = strings.Join(py.Split(h.text.String), " ")
+		heads[h.id] = strings.Join(strings.Fields(h.text.String), " ")
 	}
 	return heads, err
 }
 
 type Info struct {
-	ID            int64   `json:"id"`
-	Account       string  `json:"account"`
-	Folder        string  `json:"folder"`
-	FromAddr      string  `json:"from_addr"`
-	FromName      string  `json:"from_name"`
-	Subject       string  `json:"subject"`
-	DateTS        float64 `json:"date_ts"`
-	Seen          bool    `json:"seen"`
-	Flagged       bool    `json:"flagged"`
-	HasAttachment bool    `json:"has_attachment"`
+	ID       int64   `json:"id"`
+	Account  string  `json:"account"`
+	Folder   string  `json:"folder"`
+	FromAddr string  `json:"from_addr"`
+	FromName string  `json:"from_name"`
+	Subject  string  `json:"subject"`
+	DateTS   float64 `json:"date_ts"`
 }
 
 func infoRows(rows *sql.Rows, err error) ([]Info, error) {
@@ -447,9 +355,7 @@ func infoRows(rows *sql.Rows, err error) ([]Info, error) {
 	}
 	return db.Collect(rows, func(r *sql.Rows) (Info, error) {
 		var i Info
-		var seen, flagged, att int64
-		err := r.Scan(&i.ID, &i.Account, &i.Folder, &i.FromAddr, &i.FromName, &i.Subject, &i.DateTS, &seen, &flagged, &att)
-		i.Seen, i.Flagged, i.HasAttachment = seen != 0, flagged != 0, att != 0
+		err := r.Scan(&i.ID, &i.Account, &i.Folder, &i.FromAddr, &i.FromName, &i.Subject, &i.DateTS)
 		return i, err
 	})
 }
@@ -468,14 +374,10 @@ func hydrate(ctx context.Context, q Querier, list []int64) (map[int64]Info, erro
 
 type Hit struct {
 	Info
-	Score        *float64 `json:"score"`
-	LexicalRank  *int     `json:"lexical_rank"`
-	SemanticRank *int     `json:"semantic_rank"`
-	Snippet      string   `json:"snippet"`
-	SnippetParts []Part   `json:"snippet_parts"`
+	Snippet string `json:"snippet"`
 }
 
-func newHit(info Info, score *float64, lexRank, semRank *int, head string, marked *string) Hit {
+func newHit(info Info, head string, marked *string) Hit {
 	parts := []Part{}
 	switch {
 	case marked != nil && *marked != "":
@@ -487,7 +389,7 @@ func newHit(info Info, score *float64, lexRank, semRank *int, head string, marke
 	for _, p := range parts {
 		snippet.WriteString(p.Text)
 	}
-	return Hit{info, score, lexRank, semRank, snippet.String(), parts}
+	return Hit{Info: info, Snippet: snippet.String()}
 }
 
 func recent(ctx context.Context, q Querier, f Filters, limit, snippetChars int) ([]Hit, error) {
@@ -507,52 +409,45 @@ func recent(ctx context.Context, q Querier, f Filters, limit, snippetChars int) 
 	}
 	hits := make([]Hit, len(infos))
 	for i, info := range infos {
-		hits[i] = newHit(info, nil, nil, nil, heads[info.ID], nil)
+		hits[i] = newHit(info, heads[info.ID], nil)
 	}
 	return hits, nil
 }
 
 type Result struct {
-	Hits     []Hit   `json:"hits"`
-	Semantic bool    `json:"semantic"`
-	Error    *string `json:"error"`
-	Filters  Filters `json:"filters"`
+	Hits     []Hit `json:"hits"`
+	Semantic bool  `json:"semantic"`
 }
 
-func rank(list []int64) map[int64]int {
-	out := make(map[int64]int, len(list))
-	for i, id := range list {
-		out[id] = i + 1
-	}
-	return out
+type Query struct {
+	Text    string
+	Filters Filters
+	Limit   int
 }
 
-func Search(ctx context.Context, q Querier, _ config.Config, query string, filters map[string]any, limit int, embedTexts embed.TextsFunc) (Result, error) {
+func Search(ctx context.Context, q Querier, req Query, embedTexts embed.TextsFunc) (Result, error) {
 	if embedTexts == nil {
 		embedTexts = embed.Texts
 	}
-	f, err := NormalizeFilters(filters)
-	if err != nil {
-		return Result{}, err
-	}
+	f, limit := req.Filters, req.Limit
 	lim, err := readLimits(ctx, q)
 	if err != nil {
 		return Result{}, err
 	}
-	embedURL, err := mail.EmbedURL(ctx, q)
+	embedURL, err := embed.EmbedURL(ctx, q)
 	if err != nil {
 		return Result{}, err
 	}
-	ctx, err = mail.WithModels(ctx, q)
+	ctx, err = embed.WithModels(ctx, q)
 	if err != nil {
 		return Result{}, err
 	}
-	query = py.Strip(query)
+	query := strings.TrimSpace(req.Text)
 	if query == "" {
 		hits, err := recent(ctx, q, f, limit, lim.snippetChars)
-		return Result{Hits: hits, Filters: f}, err
+		return Result{Hits: hits}, err
 	}
-	match, err := FTSQueryLimit(query, lim.maxTerms)
+	match, err := ftsQuery(query, lim.maxTerms)
 	if err != nil {
 		return Result{}, err
 	}
@@ -563,38 +458,30 @@ func Search(ctx context.Context, q Querier, _ config.Config, query string, filte
 		}
 	}
 	var sem []int64
-	var failure *string
 	available := true
 	vectors, err := embedTexts(ctx, embedURL, []string{embed.QueryText(query)})
 	if err == nil {
 		if len(vectors) == 0 {
-			err = fmt.Errorf("%w: list index out of range", httpx.ErrIndex)
+			err = fmt.Errorf("%w: list index out of range", httpx.ErrRange)
 		} else {
 			sem, err = semantic(ctx, q, vectors[0], f, lim.branchLimit, lim.knnMax)
 		}
 	}
 	if err != nil {
 		var unavailable *httpx.ServiceUnavailable
-		if !errors.As(err, &unavailable) && !errors.Is(err, httpx.ErrValue) && !errors.Is(err, httpx.ErrKey) {
+		if !errors.As(err, &unavailable) && !errors.Is(err, httpx.ErrPayload) && !errors.Is(err, httpx.ErrMissing) {
 			return Result{}, err
 		}
 		available = false
-		msg := httpx.Message(err)
-		failure = &msg
 		sem = nil
 	}
-	lexRank := map[int64]int{}
 	marked := map[int64]string{}
 	lexIDs := make([]int64, len(lex))
 	for i, h := range lex {
 		lexIDs[i] = h.id
-		if _, dup := lexRank[h.id]; !dup {
-			lexRank[h.id] = i + 1
-		}
 		marked[h.id] = h.snippet
 	}
-	semRank := rank(sem)
-	fused := RRFWith(lim.rrfK, lexIDs, sem)
+	fused := rrfWith(lim.rrfK, lexIDs, sem)
 	fused = fused[:min(len(fused), max(limit, 0))]
 	fusedIDs := make([]int64, len(fused))
 	for i, s := range fused {
@@ -620,19 +507,11 @@ func Search(ctx context.Context, q Querier, _ config.Config, query string, filte
 		if !ok {
 			continue
 		}
-		var lr, sr *int
-		if n, ok := lexRank[s.ID]; ok {
-			lr = &n
-		}
-		if n, ok := semRank[s.ID]; ok {
-			sr = &n
-		}
 		var m *string
 		if text, ok := marked[s.ID]; ok {
 			m = &text
 		}
-		score := s.Score
-		hits = append(hits, newHit(i, &score, lr, sr, heads[s.ID], m))
+		hits = append(hits, newHit(i, heads[s.ID], m))
 	}
-	return Result{Hits: hits, Semantic: available, Error: failure, Filters: f}, nil
+	return Result{Hits: hits, Semantic: available}, nil
 }

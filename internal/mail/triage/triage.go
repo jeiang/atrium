@@ -6,16 +6,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/report"
 	"github.com/jeiang/atrium/internal/mail/router"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var Agreements = [...]string{"agree", "disagree", "pending", "gone"}
@@ -27,7 +28,7 @@ const agreementSQL = "CASE WHEN actual IS NULL THEN 'gone' WHEN actual_inbox = 1
 var latestSQL = "SELECT d.id AS decision_id, d.ts, d.stage, d.key, d.action, d.dest, d.confidence, d.detail, " +
 	"m.id AS message_id, m.account, m.subject, m.from_addr, m.from_name, m.date_ts, m.seen, m.flagged, " +
 	report.ActualSQL + ", c.folder AS corrected_to, " +
-	"aa.id AS action_id, aa.kind AS action_kind, aa.ok AS action_ok, aa.error AS action_error, " +
+	"aa.id AS action_id, aa.kind AS action_kind, aa.state AS action_state, aa.error AS action_error, " +
 	"aa.undone_ts AS action_undone_ts, aa.undo IS NOT NULL AS action_has_undo " +
 	"FROM decisions d JOIN messages m ON m.id = d.message_id " +
 	"LEFT JOIN corrections c ON c.message_id = m.id " +
@@ -67,7 +68,7 @@ type Row struct {
 	CorrectedTo    *string  `json:"corrected_to"`
 	ActionID       *int64   `json:"action_id"`
 	ActionKind     *string  `json:"action_kind"`
-	ActionOK       *int64   `json:"action_ok"`
+	ActionState    *string  `json:"action_state"`
 	ActionError    *string  `json:"action_error"`
 	ActionUndoneTS *float64 `json:"action_undone_ts"`
 	ActionHasUndo  int64    `json:"action_has_undo"`
@@ -81,7 +82,7 @@ func scanRow(r *sql.Rows) (Row, error) {
 	var seen, flagged int64
 	if err := r.Scan(&row.DecisionID, &row.TS, &row.Stage, &row.Key, &row.Action, &row.Dest, &row.Confidence, &row.Detail,
 		&row.MessageID, &row.Account, &row.Subject, &row.FromAddr, &row.FromName, &row.DateTS, &seen, &flagged,
-		&row.Actual, &row.ActualInbox, &row.CorrectedTo, &row.ActionID, &row.ActionKind, &row.ActionOK, &row.ActionError,
+		&row.Actual, &row.ActualInbox, &row.CorrectedTo, &row.ActionID, &row.ActionKind, &row.ActionState, &row.ActionError,
 		&row.ActionUndoneTS, &row.ActionHasUndo, &row.Agreement); err != nil {
 		return row, err
 	}
@@ -106,8 +107,12 @@ func applied(r Row) *Applied {
 	if r.ActionID == nil {
 		return nil
 	}
-	a := &Applied{ID: *r.ActionID, Status: live.StateOf(r.ActionOK, r.ActionUndoneTS), Error: r.ActionError,
-		Undoable: r.ActionOK != nil && (*r.ActionOK == 0 || *r.ActionOK == 1) && r.ActionUndoneTS == nil && r.ActionHasUndo != 0}
+	state := ledger.State("")
+	if r.ActionState != nil {
+		state = ledger.State(*r.ActionState)
+	}
+	a := &Applied{ID: *r.ActionID, Status: string(state), Error: r.ActionError,
+		Undoable: (state == ledger.Applied || state == ledger.UndoFailed || state == ledger.UndoSettled) && r.ActionHasUndo != 0}
 	if r.ActionKind != nil {
 		a.Kind = *r.ActionKind
 	}
@@ -127,8 +132,6 @@ type FilterError string
 
 func (e FilterError) Error() string { return string(e) }
 
-func (FilterError) PyClass() string { return "ValueError" }
-
 type Page struct {
 	Total int   `json:"total"`
 	Rows  []Row `json:"rows"`
@@ -136,10 +139,10 @@ type Page struct {
 
 func Triage(ctx context.Context, q report.Querier, f Filter) (Page, error) {
 	if f.Stage != "" && !slices.Contains(router.Stages[:], f.Stage) {
-		return Page{}, FilterError("unknown stage " + py.Repr(f.Stage))
+		return Page{}, FilterError("unknown stage " + strconv.Quote(f.Stage))
 	}
 	if f.Agreement != "" && !slices.Contains(Agreements[:], f.Agreement) {
-		return Page{}, FilterError("unknown agreement " + py.Repr(f.Agreement))
+		return Page{}, FilterError("unknown agreement " + strconv.Quote(f.Agreement))
 	}
 	if f.Limit == 0 {
 		f.Limit = 50
@@ -223,12 +226,12 @@ type Summary struct {
 }
 
 func Summarize(ctx context.Context, q report.Querier, env config.Env, account string, since *string, at time.Time) (Summary, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	topDests := r.Int(mail.KeyTriageTopDests)
 	if err := r.Err(); err != nil {
 		return Summary{}, err
 	}
-	start, err := report.ParseSince(env, since, at)
+	start, err := report.ParseSince(ctx, env, since, at)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -258,7 +261,7 @@ func Summarize(ctx context.Context, q report.Querier, env config.Env, account st
 
 func Summaries(ctx context.Context, q report.Querier, env config.Env, since *string, at time.Time) ([]Summary, error) {
 	out := []Summary{}
-	for _, spec := range config.Accounts() {
+	for _, spec := range config.From(ctx).Accounts() {
 		ok, err := report.AccountExists(ctx, q, spec.Name)
 		if err != nil {
 			return nil, err

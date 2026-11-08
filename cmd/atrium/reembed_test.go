@@ -19,7 +19,8 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/db/dbtest"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
@@ -130,8 +131,8 @@ func embedProgress(t *testing.T, base string) (done, total int, page string) {
 
 func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, path string) {
 	t.Helper()
-	dir, _ = moduleFixture(t, flagsExcept("", ""))
-	data, err := os.ReadFile(filepath.Join(golden.Dir(), "atrium.db"))
+	dir, _, _ = moduleFixture(t, flagsExcept("", ""))
+	data, err := os.ReadFile(filepath.Join(golden.Dir(), "world.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,13 +140,28 @@ func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, pa
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(settingEnv(mail.KeyEmbedURL), fake.URL+"/v1")
-	t.Setenv(settingEnv(mail.KeyEmbedModel), model)
-	t.Setenv(settingEnv(mail.KeyEmbedBatch), "40")
+	seedNotionVectors(t, path)
+	seedPendingMessage(t, path)
+	setEnv(t, settingEnv(endpoint.KeyEmbedURL), fake.URL+"/v1")
+	setEnv(t, settingEnv(endpoint.KeyEmbedModel), model)
+	setEnv(t, settingEnv(endpoint.KeyEmbedBatch), "40")
 	return dir, path
 }
 
+func seedPendingMessage(t *testing.T, path string) {
+	t.Helper()
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	dbtest.AddMessage(t, d, 900000, "a pending message for the re-embedding build", map[string]any{
+		"subject": "Pending re-embedding message", "from_addr": "seed@x.test",
+	})
+}
+
 func TestAFirstServeWithANewDimensionRebuildsTheIndexInsteadOfAdoptingIt(t *testing.T) {
+	t.Parallel()
 	fake := newFakeEmbedder(t)
 	dir, path := goldenEmbedFixture(t, fake, bigModel)
 	fake.release(1000)
@@ -164,17 +180,18 @@ func TestAFirstServeWithANewDimensionRebuildsTheIndexInsteadOfAdoptingIt(t *test
 	if err := d.Read.QueryRow("SELECT generation FROM embed_index WHERE state = 'active' AND dimension = 1024").Scan(&generation); err != nil || generation != 1 {
 		t.Fatalf("active index after the first serve: generation %d (%v)", generation, err)
 	}
-	if got := runApp("notion", "search", "project notes"); got.code != cli.ExitOK || got.stdout == "" || fake.lastModel() != bigModel {
+	if got := runApp(t, "notion", "search", "project notes"); got.code != cli.ExitOK || got.stdout == "" || fake.lastModel() != bigModel {
 		t.Fatalf("search on the rebuilt index: %d %q %q (query model %q)", got.code, got.stdout, got.stderr, fake.lastModel())
 	}
 }
 
 func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testing.T) {
+	t.Parallel()
 	fake := newFakeEmbedder(t)
 	dir, path := goldenEmbedFixture(t, fake, "embeddinggemma")
 	search := func() string {
 		t.Helper()
-		got := runApp("notion", "search", "project notes")
+		got := runApp(t, "notion", "search", "project notes")
 		if got.code != cli.ExitOK {
 			t.Fatalf("notion search: %d %q", got.code, got.stderr)
 		}
@@ -195,16 +212,17 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 		t.Fatalf("search with an unchanged embedder: %q, was %q (model %q)", after, before, fake.lastModel())
 	}
 
-	t.Setenv(settingEnv(mail.KeyEmbedModel), bigModel)
+	setEnv(t, settingEnv(endpoint.KeyEmbedModel), bigModel)
 	fake.release(1)
 	base, _, stop = startServeStoppable(t, dir)
 	var first, total int
 	waitFor(t, func() bool {
-		first, total, _ = embedProgress(t, base)
-		return first > 0
+		var page string
+		first, total, page = embedProgress(t, base)
+		return first > 0 && first < total && strings.Contains(page, "embeddinggemma · 768 dimensions")
 	})
 	if during := search(); during != before || fake.lastModel() != "embeddinggemma" {
-		t.Fatalf("search while re-embedding: %q, was %q (query model %q)", during, before, fake.lastModel())
+		t.Fatalf("search while re-embedding (%d of %d): %q, was %q (query model %q)", first, total, during, before, fake.lastModel())
 	}
 	fake.release(1)
 	waitFor(t, func() bool {
@@ -228,7 +246,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	defer func() { _ = d.Close() }()
 	var rows, generations, oldTables int
 	if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM embed_message_1) + (SELECT COUNT(*) FROM embed_notion_1), "+
-		"(SELECT COUNT(*) FROM embed_index), (SELECT COUNT(*) FROM sqlite_master WHERE name IN ('message_vec', 'notion_vec'))").
+		"(SELECT COUNT(*) FROM embed_index), (SELECT COUNT(*) FROM sqlite_master WHERE name IN ('embed_message_0', 'embed_notion_0'))").
 		Scan(&rows, &generations, &oldTables); err != nil {
 		t.Fatal(err)
 	}

@@ -7,37 +7,37 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
+
+	"regexp"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
+	"github.com/jeiang/atrium/internal/textx"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 const (
-	checkedOccurrences  = 64
-	searchDays          = 366 * 5
-	KindDaily           = "daily"
-	KindWeekly          = "weekly"
-	KindCron            = "cron"
-	KindOnce            = "once"
-	errUnrecognised     = "unrecognised schedule; use an ISO datetime, 'daily HH:MM', 'weekly DOW HH:MM' or a 5-field cron expression"
-	errNeverFires       = "that schedule never fires in the future"
-	secondsPerDay       = 86400
-	microsecondsPerSec  = 1_000_000
-	dowBound            = 4
-	cronFieldCount      = 5
-	monthField          = 3
-	maxParsedCronNumber = 1 << 30
+	checkedOccurrences = 64
+	searchDays         = 366 * 5
+	KindDaily          = "daily"
+	KindWeekly         = "weekly"
+	KindCron           = "cron"
+	KindOnce           = "once"
+	errUnrecognised    = "unrecognised schedule; use an ISO datetime, 'daily HH:MM', 'weekly DOW HH:MM' or a 5-field cron expression"
+	errNeverFires      = "that schedule never fires in the future"
+	secondsPerDay      = 86400
+	microsecondsPerSec = 1_000_000
+	dowBound           = 4
+	cronFieldCount     = 5
+	monthField         = 3
 )
 
 type Error string
 
 func (e Error) Error() string { return string(e) }
 
-var timePattern = rx.MustCompile(`^(\d{1,2}):(\d{2})$`, 0)
+var timePattern = regexp.MustCompile(`^(\d{1,2}):(\d{2})$`)
 
 var (
 	days       = map[string]int{"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
@@ -64,38 +64,17 @@ type Spec struct {
 
 func (s Spec) Recurring() bool { return s.Kind != KindOnce }
 
-func isDecimal(s string) bool {
-	if s == "" {
-		return false
+func number(text string) (int, bool) {
+	if text == "" {
+		return 0, false
 	}
-	for _, r := range s {
-		if !unicode.Is(unicode.Nd, r) {
-			return false
+	for i := 0; i < len(text); i++ {
+		if text[i] < '0' || text[i] > '9' {
+			return 0, false
 		}
 	}
-	return true
-}
-
-func decimalValue(r rune) int {
-	for _, rg := range unicode.Nd.R16 {
-		if r >= rune(rg.Lo) && r <= rune(rg.Hi) {
-			return int(r-rune(rg.Lo)) % 10
-		}
-	}
-	for _, rg := range unicode.Nd.R32 {
-		if r >= rune(rg.Lo) && r <= rune(rg.Hi) {
-			return int(r-rune(rg.Lo)) % 10
-		}
-	}
-	return 0
-}
-
-func pyInt(s string) int {
-	n := 0
-	for _, r := range s {
-		n = min(n*10+decimalValue(r), maxParsedCronNumber)
-	}
-	return n
+	n, err := strconv.Atoi(text)
+	return n, err == nil
 }
 
 func Zone(name string) (*time.Location, error) {
@@ -107,24 +86,26 @@ func Zone(name string) (*time.Location, error) {
 }
 
 func clock(text string) (int, int, error) {
-	m, err := timePattern.Match(text)
-	if err == nil && m != nil {
-		h, mi := pyInt(m.Group(1)), pyInt(m.Group(2))
-		if h <= 23 && mi <= 59 {
+	loc := timePattern.FindStringSubmatchIndex(text)
+	if loc != nil {
+		h, hOK := number(text[loc[2]:loc[3]])
+		mi, miOK := number(text[loc[4]:loc[5]])
+		if hOK && miOK && h <= 23 && mi <= 59 {
 			return h, mi, nil
 		}
 	}
-	return 0, 0, Error(fmt.Sprintf("bad time %s; use HH:MM (24-hour)", py.Repr(text)))
+	return 0, 0, Error(fmt.Sprintf("bad time %s; use HH:MM (24-hour)", strconv.Quote(text)))
 }
 
 func cronValue(token string, index int) (int, error) {
-	if v, ok := cronNames[index][py.Lower(token)]; ok {
+	if v, ok := cronNames[index][strings.ToLower(token)]; ok {
 		return v, nil
 	}
-	if !isDecimal(token) {
-		return 0, Error("bad cron value " + py.Repr(token))
+	v, ok := number(token)
+	if !ok {
+		return 0, Error("bad cron value " + strconv.Quote(token))
 	}
-	return pyInt(token), nil
+	return v, nil
 }
 
 func cronField(text string, index int) ([]int, error) {
@@ -132,15 +113,16 @@ func cronField(text string, index int) ([]int, error) {
 	var found [64]bool
 	for part := range strings.SplitSeq(text, ",") {
 		body, stepText, _ := strings.Cut(part, "/")
-		if stepText != "" && !isDecimal(stepText) {
-			return nil, Error("bad cron step " + py.Repr(part))
-		}
 		step := 1
 		if stepText != "" {
-			step = pyInt(stepText)
+			var ok bool
+			step, ok = number(stepText)
+			if !ok {
+				return nil, Error("bad cron step " + strconv.Quote(part))
+			}
 		}
 		if step < 1 {
-			return nil, Error("bad cron step " + py.Repr(part))
+			return nil, Error("bad cron step " + strconv.Quote(part))
 		}
 		var start, end int
 		var err error
@@ -168,7 +150,7 @@ func cronField(text string, index int) ([]int, error) {
 			}
 		}
 		if start < low || end > high || start > end {
-			return nil, Error("cron value out of range in " + py.Repr(part))
+			return nil, Error("cron value out of range in " + strconv.Quote(part))
 		}
 		for v := start; v <= end; v += step {
 			if index == dowBound {
@@ -198,7 +180,7 @@ func newSpec(kind, tz string, loc *time.Location, minutes, hours, dom, months, d
 }
 
 func Parse(text, tz string) (Spec, error) {
-	text = py.Strip(text)
+	text = strings.TrimSpace(text)
 	if text == "" {
 		return Spec{}, Error("schedule is empty")
 	}
@@ -206,8 +188,8 @@ func Parse(text, tz string) (Spec, error) {
 	if err != nil {
 		return Spec{}, err
 	}
-	words := py.Split(text)
-	switch py.Lower(words[0]) {
+	words := strings.Fields(text)
+	switch strings.ToLower(words[0]) {
 	case KindDaily:
 		if len(words) != 2 {
 			return Spec{}, Error("daily schedules look like 'daily 07:30'")
@@ -221,7 +203,7 @@ func Parse(text, tz string) (Spec, error) {
 		var day int
 		var ok bool
 		if len(words) == 3 {
-			day, ok = days[py.Lower(py.Clip(words[1], 3))]
+			day, ok = days[strings.ToLower(textx.Clip(words[1], 3))]
 		}
 		if !ok {
 			return Spec{}, Error("weekly schedules look like 'weekly mon 07:30'")
@@ -247,18 +229,18 @@ func Parse(text, tz string) (Spec, error) {
 		}
 		return newSpec(KindCron, tz, loc, fields[0], fields[1], restricted(2), restricted(3), restricted(4)), nil
 	}
-	moment, ok := py.FromISOFormat(text)
+	moment, ok := timex.ParseISO(text)
 	if !ok {
 		return Spec{}, Error(errUnrecognised)
 	}
-	onceAt := moment.Timestamp(loc)
+	onceAt := timex.TimestampIn(moment, loc)
 	s := newSpec(KindOnce, tz, loc, []int{}, []int{}, nil, nil, nil)
 	s.OnceAt = onceAt
 	return s, nil
 }
 
 func localTime(ts float64, loc *time.Location) time.Time {
-	sec, us := py.SplitTimestamp(ts)
+	sec, us := timex.SplitTimestamp(ts)
 	return time.Unix(sec, us*1000).In(loc)
 }
 
@@ -283,7 +265,7 @@ func (s Spec) NextAfter(after float64) (float64, bool) {
 	for range searchDays {
 		if s.dayMatches(day) {
 			for _, t := range s.times {
-				stamp := float64(py.WallToUnix(s.Loc, day.Unix()+int64(t[0])*3600+int64(t[1])*60))
+				stamp := float64(timex.WallToUnix(s.Loc, day.Unix()+int64(t[0])*3600+int64(t[1])*60))
 				if stamp > after {
 					return stamp, true
 				}
@@ -377,9 +359,16 @@ func Validate(ctx context.Context, q db.Querier, text, tz string, now float64, e
 func describeInterval(seconds int) string {
 	switch {
 	case seconds%3600 == 0:
-		return fmt.Sprintf("%d hour", seconds/3600)
+		return plural(seconds/3600, "hour")
 	case seconds%60 == 0:
-		return fmt.Sprintf("%d minutes", seconds/60)
+		return plural(seconds/60, "minute")
 	}
-	return fmt.Sprintf("%d seconds", seconds)
+	return plural(seconds, "second")
+}
+
+func plural(n int, unit string) string {
+	if n == 1 {
+		return "1 " + unit
+	}
+	return fmt.Sprintf("%d %ss", n, unit)
 }

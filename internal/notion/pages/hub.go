@@ -4,12 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -17,8 +19,8 @@ const hubCreated = "Wiki hub created under Wiki Home."
 
 func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 	raw := web.PathParam(r, name)
-	id, ok := py.LaxInt64(raw)
-	if !ok {
+	id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil {
 		web.Unprocessable(w, web.BadInt("path", name, raw))
 		return 0, false
 	}
@@ -52,26 +54,30 @@ func (s *service) wikiHub(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusNotFound, "unknown project")
 		return
 	}
+	if project.Archived {
+		s.fail(w, r, http.StatusUnprocessableEntity, "project is archived")
+		return
+	}
 	if project.WikiHubID != nil && *project.WikiHubID != "" {
 		s.fragment(w, r, http.StatusOK, "_project_hub.gohtml", hubView{Project: project, HubID: *project.WikiHubID})
 		return
 	}
 	tc := &tool.Context{
 		DB: s.deps.DB, Cfg: s.deps.Cfg, Env: s.deps.Env, Kind: tool.Chat, AllowedURLs: map[string]struct{}{}, Now: s.now,
+		Undoers: toolset.Undoers(s.deps.Env),
 	}
-	made, err := notiontools.CreatePage(ctx, tc, py.Dict{
-		{Key: "title", Value: project.Name},
-		{Key: "markdown", Value: projects.HubMarkdown(*project)},
-		{Key: "sources", Value: []any{fmt.Sprintf("atrium project %d", id)}},
+	made, err := notiontools.CreatePage(ctx, tc, tool.Args{
+		"title":    project.Name,
+		"markdown": projects.HubMarkdown(*project),
+		"sources":  []any{fmt.Sprintf("atrium project %d", id)},
 	})
 	if reason, refused := refusal(err); refused {
 		s.fragment(w, r, http.StatusUnprocessableEntity, "_project_hub.gohtml", hubView{Project: project, Error: &reason})
 		return
 	}
 	check(err)
-	page, _ := made.(py.Dict)
-	value, _ := page.Get("page_id")
-	pageID, _ := value.(string)
+	page, _ := made.(map[string]any)
+	pageID, _ := page["page_id"].(string)
 	_, err = projects.SetHub(ctx, s.deps.DB.Write, id, pageID, s.now())
 	check(err)
 	project, err = projects.Get(ctx, s.deps.DB.Read, id)

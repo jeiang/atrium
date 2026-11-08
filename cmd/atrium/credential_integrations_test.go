@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/cli"
+
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations"
@@ -51,7 +53,6 @@ func TestCredentialIntegrationsTestWithSpecificReasonsAndSaveOnlyWorkingSecrets(
 	notionFake := &fakeNotionAccess{}
 	notionSrv := httptest.NewServer(http.HandlerFunc(notionFake.handler))
 	t.Cleanup(notionSrv.Close)
-	t.Cleanup(notion.UseBaseURL(notionSrv.URL))
 	grafana := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		switch {
@@ -71,12 +72,13 @@ func TestCredentialIntegrationsTestWithSpecificReasonsAndSaveOnlyWorkingSecrets(
 	gone := httptest.NewServer(http.NotFoundHandler())
 	gone.Close()
 
-	dir, api := moduleFixture(t, flagsExcept("", ""))
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_NOTION_BASE_URL", notionSrv.URL)
 	api.RejectKey = "sk-ant-bad"
-	t.Setenv("ATRIUM_DB_KEY", rightKeyHex)
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	unsetEnv(t, "ANTHROPIC_API_KEY", settingEnv(notion.TokenKey), settingEnv(grafanatools.KeyURL), settingEnv(grafanatools.KeyToken))
-	t.Setenv("NOTION_TOKEN", "ntn_legacy")
+	setEnv(t, "NOTION_TOKEN", "ntn_legacy")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 
@@ -137,7 +139,7 @@ func TestCredentialIntegrationsTestWithSpecificReasonsAndSaveOnlyWorkingSecrets(
 		t.Error("the working Anthropic key was not stored write-only")
 	}
 
-	if got := runApp("settings", "get", notion.TokenKey); strings.Contains(got.stdout, "ntn_legacy") || !strings.Contains(got.stderr, "ATRIUM_NOTION_NOTION_TOKEN") {
-		t.Errorf("NOTION_TOKEN is still read or not pointed at its replacement: %q %q", got.stdout, got.stderr)
+	if got := runApp(t, "settings", "get", notion.TokenKey); got.code != cli.ExitError || strings.Contains(got.stdout, "ntn_legacy") || !strings.Contains(got.stderr, "is a secret") {
+		t.Errorf("settings get of a secret: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 }

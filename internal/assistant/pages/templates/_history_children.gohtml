@@ -1,0 +1,13 @@
+<ol class="flex flex-col gap-1 ps-4 text-sm">
+  {{range .Data.Children}}
+  <li class="flex items-start gap-2">
+    {{if .Leaf}}
+    <button type="button" class="text-left underline underline-offset-4" hx-get="/chat/{{.ThreadID}}/history/{{.From}}/1" hx-target="next .history-detail" hx-swap="innerHTML">{{.Text}}</button>
+    {{else}}
+    <button type="button" class="text-left underline underline-offset-4" hx-get="/chat/{{.ThreadID}}/history/{{.From}}/{{.N}}" hx-target="next .history-detail" hx-swap="innerHTML">{{.Text}}</button>
+    {{end}}
+    <span class="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{.From}}..{{.To}}</span>
+    <div class="history-detail"></div>
+  </li>
+  {{end}}
+</ol>

@@ -7,18 +7,23 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
+	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 const (
@@ -29,13 +34,11 @@ const (
 	Interrupted = "interrupted"
 )
 
-var name = rx.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`, 0)
+var name = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 
 type Error string
 
 func (e Error) Error() string { return string(e) }
-
-func (Error) PyClass() string { return "SubagentError" }
 
 type Agent struct {
 	Name        string   `json:"name"`
@@ -99,19 +102,17 @@ func Pool(reg *registry.Registry) ([]PoolTool, error) {
 	if err != nil {
 		return nil, err
 	}
-	found := make([]PoolTool, 0, len(open)+1)
+	found := make([]PoolTool, 0, len(open))
 	for _, t := range open {
 		found = append(found, PoolTool{Name: t.Name, Description: t.Description})
 	}
-	found = append(found, PoolTool{Name: registry.WebSearchName, Description: "Anthropic web search (server tool); pair it with web_fetch to read results."})
-	slices.SortFunc(found, func(a, b PoolTool) int { return strings.Compare(a.Name, b.Name) })
 	return found, nil
 }
 
 func CleanTools(reg *registry.Registry, tools []string) ([]string, error) {
 	var names []string
 	for _, t := range tools {
-		if t = py.Strip(t); t != "" {
+		if t = strings.TrimSpace(t); t != "" {
 			names = append(names, t)
 		}
 	}
@@ -146,10 +147,10 @@ type Definition struct {
 }
 
 func Save(ctx context.Context, q db.Querier, reg *registry.Registry, d Definition, now float64) (*Agent, error) {
-	agent := py.Strip(d.Name)
-	description := strings.Join(py.Split(d.Description), " ")
-	prompt := py.Strip(d.Prompt)
-	if m, _ := name.Match(agent); m == nil {
+	agent := strings.TrimSpace(d.Name)
+	description := strings.Join(strings.Fields(d.Description), " ")
+	prompt := strings.TrimSpace(d.Prompt)
+	if !name.MatchString(agent) {
 		return nil, Error("name must be lowercase letters, digits, - or _ (max 32 characters)")
 	}
 	r := assistant.Read(ctx, q)
@@ -163,8 +164,8 @@ func Save(ctx context.Context, q db.Querier, reg *registry.Registry, d Definitio
 	if n := utf8.RuneCountInString(prompt); n == 0 || n > maxPrompt {
 		return nil, Error(fmt.Sprintf("prompt is required, at most %d characters", maxPrompt))
 	}
-	if !slices.Contains(threads.Efforts[:], d.Effort) {
-		return nil, Error("effort must be one of " + strings.Join(threads.Efforts[:], ", "))
+	if !slices.Contains(pricing.Efforts, d.Effort) {
+		return nil, Error("effort must be one of " + strings.Join(pricing.Efforts, ", "))
 	}
 	tools, err := CleanTools(reg, d.Tools)
 	if err != nil {
@@ -174,7 +175,7 @@ func Save(ctx context.Context, q db.Querier, reg *registry.Registry, d Definitio
 		"INSERT INTO subagents (name, description, prompt, effort, tools_json, enabled, builtin, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?) "+
 			"ON CONFLICT(name) DO UPDATE SET description = excluded.description, prompt = excluded.prompt, effort = excluded.effort, "+
 			"tools_json = excluded.tools_json, enabled = excluded.enabled, updated_at = excluded.updated_at",
-		agent, description, prompt, d.Effort, py.JSONDumps(tools), store.Bit(d.Enabled), now); err != nil {
+		agent, description, prompt, d.Effort, jsonx.Dumps(tools), store.Bit(d.Enabled), now); err != nil {
 		return nil, err
 	}
 	return Get(ctx, q, agent)
@@ -210,48 +211,33 @@ func SystemAddendum(ctx context.Context, q db.Querier, a Agent) (string, error) 
 }
 
 func CreateChild(ctx context.Context, q db.Querier, parentThread, parentRun int64, a Agent, title string, now float64) (int64, error) {
-	child, err := threads.Create(ctx, q, now, threads.NewThread{Kind: threads.Subagent, Title: &title, ParentID: &parentThread})
-	if err != nil {
-		return 0, err
-	}
-	if _, err := q.ExecContext(ctx, "UPDATE threads SET role = ?, parent_run_id = ?, effort = ? WHERE id = ?", a.Name, parentRun, a.Effort, child); err != nil {
-		return 0, err
-	}
-	if _, err := q.ExecContext(ctx, "INSERT INTO thread_fts (thread_id, text) VALUES (?, ?)", child, title); err != nil {
-		return 0, err
-	}
-	return child, nil
+	return threads.Create(ctx, q, now, threads.Spec{
+		Kind: threads.Subagent, Title: &title, ParentID: &parentThread,
+		Effort: a.Effort, Role: &a.Name, ParentRunID: &parentRun,
+	})
 }
 
 func DigestOf(ctx context.Context, q db.Querier, threadID int64) (string, error) {
-	messages, err := journal.MessagesOf(ctx, q, threadID, false)
+	history, err := journal.LoadHistory(ctx, q, threadID)
 	if err != nil {
 		return "", err
 	}
+	messages := history.Messages
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role != journal.Assistant {
 			continue
 		}
-		var texts []string
-		for _, raw := range messages[i].Content {
-			var b struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			}
-			if err := json.Unmarshal(raw, &b); err != nil {
-				return "", fmt.Errorf("subagents: thread %d message %d block: %w", threadID, messages[i].ID, err)
-			}
-			if b.Type == "text" {
-				texts = append(texts, b.Text)
-			}
+		texts, err := block.Texts(messages[i].Content)
+		if err != nil {
+			return "", fmt.Errorf("subagents: thread %d message %d: %w", threadID, messages[i].ID, err)
 		}
-		if text := py.Strip(strings.Join(texts, "\n")); text != "" {
+		if text := strings.TrimSpace(strings.Join(texts, "\n")); text != "" {
 			r := assistant.Read(ctx, q)
 			limit := r.Int(assistant.KeySubagentDigestChars)
 			if err := r.Err(); err != nil {
 				return "", err
 			}
-			return py.Clip(text, limit), nil
+			return textx.Clip(text, limit), nil
 		}
 	}
 	return "", nil
@@ -281,10 +267,10 @@ var statusOfRun = map[string]string{
 	journal.Running: Running, journal.Done: Done, journal.Failed: ErrorStatus, journal.Interrupted: Interrupted,
 }
 
-func RunCard(ctx context.Context, q db.Querier, t threads.Thread, run *journal.Run, now float64) (Card, error) {
+func runCard(ctx context.Context, q db.Querier, t threads.Thread, run *journal.Run, now float64) (Card, error) {
 	elapsed := max(now-t.CreatedAt, 0)
 	card := Card{
-		ThreadID: t.ID, Kind: t.Kind, Role: t.Role, Title: t.Title, Effort: t.Effort, ParentRunID: t.ParentRunID,
+		ThreadID: t.ID, Kind: string(t.Kind), Role: t.Role, Title: t.Title, Effort: t.Effort, ParentRunID: t.ParentRunID,
 		Status: Queued, Elapsed: &elapsed,
 	}
 	if run == nil {
@@ -292,7 +278,7 @@ func RunCard(ctx context.Context, q db.Querier, t threads.Thread, run *journal.R
 	}
 	status, ok := statusOfRun[run.State]
 	if !ok {
-		return Card{}, fmt.Errorf("subagents: run %d has unknown state %s", run.ID, py.Repr(run.State))
+		return Card{}, fmt.Errorf("subagents: run %d has unknown state %s", run.ID, strconv.Quote(run.State))
 	}
 	card.Effort, card.RunID, card.ParentRunID = run.Effort, &run.ID, run.ParentRunID
 	card.Status, card.Error, card.Steps = status, run.Error, run.Steps
@@ -330,5 +316,5 @@ func ChildCard(ctx context.Context, q db.Querier, t threads.Thread, now float64)
 	if len(runs) > 0 {
 		run = &runs[len(runs)-1]
 	}
-	return RunCard(ctx, q, t, run, now)
+	return runCard(ctx, q, t, run, now)
 }

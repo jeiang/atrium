@@ -1,21 +1,21 @@
 package backlog
 
 import (
+	"bytes"
 	"cmp"
 	"context"
-	"database/sql"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var log = logx.Logger("atrium.backlog")
@@ -27,30 +27,27 @@ var candidates = "SELECT m.id, m.subject, m.from_name, m.from_addr, m.date_ts, d
 	"WHERE m.account = :account AND m.in_inbox = 1 AND m.seen = 1 AND m.flagged = 0 AND m.sent = 0 " +
 	"AND m.gone_at IS NULL AND d.action = 'file' AND d.dest IS NOT NULL " +
 	"AND m.id IN (SELECT message_id FROM live_baseline) " +
-	"AND " + live.NoNewCorrection + " AND " + live.NotBlocked + " AND NOT " + mailops.UnresolvedSQL + " ORDER BY m.id"
+	"AND " + live.NoNewCorrection + " AND " + live.NotBlocked + " AND NOT " + ledger.MailUnresolvedSQL + " ORDER BY m.id"
 
 type Error string
 
 func (e Error) Error() string { return string(e) }
-
-func (Error) PyClass() string { return "BacklogError" }
-
-func (Error) PyModule() string { return "atrium.backlog" }
-
-type Proposal struct {
-	Fingerprint string
-	Account     string
-	Title       string
-	Payload     py.Dict
-	Preview     py.Dict
-}
 
 type group struct {
 	dest string
 	rows []scanutil.Message
 }
 
-func Build(ctx context.Context, q live.Querier, account string) (*Proposal, error) {
+type detection struct {
+	account    string
+	ids        []string
+	groups     []*group
+	goliveText string
+	folder     string
+	unit       string
+}
+
+func detect(ctx context.Context, q live.Querier, account string) (*detection, error) {
 	params, err := live.QueryParams(ctx, q, account)
 	if err != nil {
 		return nil, err
@@ -61,7 +58,7 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 	}
 	var groups []*group
 	byDest := map[string]*group{}
-	var ids []any
+	var ids []string
 	for rows.Next() {
 		var m scanutil.Message
 		var dest string
@@ -76,7 +73,7 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 			groups = append(groups, g)
 		}
 		g.rows = append(g.rows, m)
-		ids = append(ids, m.ID)
+		ids = append(ids, strconv.FormatInt(m.ID, 10))
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -94,22 +91,30 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 	if err != nil {
 		return nil, err
 	}
-	var goliveText any = "None"
+	goliveText := "None"
 	if golive != nil {
 		goliveText = *golive
 	}
-	gmail := config.Preset(account) == config.Gmail
+	gmail := config.From(ctx).Preset(account) == config.Gmail
 	folder, unit := config.Inbox, "folders"
 	if gmail {
 		folder, unit = mailops.InboxLabel, "labels"
 	}
-	payloadGroups := make([]any, len(groups))
-	previewGroups := make([]any, len(groups))
+	return &detection{account: account, ids: ids, groups: groups, goliveText: goliveText, folder: folder, unit: unit}, nil
+}
+
+func (d *detection) fingerprint() string {
+	return fmt.Sprintf("%s:%s:%s", Kind, d.account, scanutil.Digest(append([]string{d.goliveText}, d.ids...)...))
+}
+
+func (d *detection) draft(ctx context.Context, q live.Querier) (*scanutil.Draft, error) {
+	payloadGroups := make([]any, len(d.groups))
+	previewGroups := make([]any, len(d.groups))
 	lim, err := scanutil.ReadLimits(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	for i, g := range groups {
+	for i, g := range d.groups {
 		groupIDs := make([]int64, len(g.rows))
 		views := make([]any, len(g.rows))
 		senders := make([]string, len(g.rows))
@@ -120,33 +125,61 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 		if err != nil {
 			return nil, err
 		}
-		messages := make([]any, len(snaps))
-		for j, s := range snaps {
-			messages[j] = s.Dict()
-		}
-		payloadGroups[i] = py.Dict{{Key: "dest", Value: g.dest}, {Key: "messages", Value: messages}}
-		previewGroups[i] = py.Dict{
-			{Key: "name", Value: g.dest}, {Key: "count", Value: len(g.rows)}, {Key: "terms", Value: []any{}},
-			{Key: "senders", Value: lim.TopCounts(senders)}, {Key: "subjects", Value: lim.SampleSubjectsOf(g.rows)},
-			{Key: "messages", Value: views},
-		}
+		payloadGroups[i] = map[string]any{"dest": g.dest, "messages": scanutil.SnapshotList(snaps)}
+		previewGroups[i] = map[string]any{"name": g.dest, "count": len(g.rows), "senders": lim.TopCounts(senders), "subjects": lim.SampleSubjectsOf(g.rows), "messages": views}
 	}
-	return &Proposal{
-		Fingerprint: fmt.Sprintf("%s:%s:%s", Kind, account, scanutil.Digest(append([]any{goliveText}, ids...)...)),
-		Account:     account,
-		Title:       fmt.Sprintf("File %d read inbox messages into %d %s", len(ids), len(groups), unit),
-		Payload:     py.Dict{{Key: "folder", Value: folder}, {Key: "groups", Value: payloadGroups}},
-		Preview:     py.Dict{{Key: "folder", Value: folder}, {Key: "groups", Value: previewGroups}},
+	return &scanutil.Draft{
+		Title:   fmt.Sprintf("File %d read inbox messages into %d %s", len(d.ids), len(d.groups), d.unit),
+		Payload: map[string]any{"folder": d.folder, "groups": payloadGroups},
+		Preview: map[string]any{"folder": d.folder, "groups": previewGroups},
 	}, nil
 }
 
+type Accounts struct {
+	names  []string
+	values map[string]any
+}
+
+func (a *Accounts) Set(name string, value any) {
+	if a.values == nil {
+		a.values = map[string]any{}
+	}
+	if _, seen := a.values[name]; !seen {
+		a.names = append(a.names, name)
+	}
+	a.values[name] = value
+}
+
+func (a Accounts) MarshalJSON() ([]byte, error) {
+	var b bytes.Buffer
+	b.WriteByte('{')
+	for i, name := range a.names {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		key, err := json.Marshal(name)
+		if err != nil {
+			return nil, err
+		}
+		value, err := json.Marshal(a.values[name])
+		if err != nil {
+			return nil, err
+		}
+		b.Write(key)
+		b.WriteByte(':')
+		b.Write(value)
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
+}
+
 type Result struct {
-	Created  []int64 `json:"created"`
-	Accounts py.Dict `json:"accounts"`
+	Created  []int64  `json:"created"`
+	Accounts Accounts `json:"accounts"`
 }
 
 func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
-	out := Result{Created: []int64{}, Accounts: py.Dict{}}
+	out := Result{Created: []int64{}}
 	golive, err := live.GetState(ctx, d.Write, live.GoliveKey)
 	if err != nil {
 		return out, err
@@ -154,43 +187,34 @@ func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 	if golive == nil {
 		return out, Error("the live service has not run yet: no go-live baseline exists")
 	}
-	for _, spec := range config.Accounts() {
-		var one int
-		err := d.Write.QueryRowContext(ctx, "SELECT 1 FROM accounts WHERE name = ?", spec.Name).Scan(&one)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
+	accounts, err := config.ExistingAccounts(ctx, d.Read)
+	if err != nil {
+		return out, err
+	}
+	for _, spec := range accounts {
+		detected, err := detect(ctx, d.Read, spec.Name)
 		if err != nil {
 			return out, err
 		}
-		built, err := Build(ctx, d.Write, spec.Name)
+		if detected == nil {
+			out.Accounts.Set(spec.Name, nil)
+			continue
+		}
+		account := spec.Name
+		id, created, err := scanutil.Publish(ctx, d, ts, Kind, &account, detected.fingerprint(), func() (*scanutil.Draft, error) {
+			return detected.draft(ctx, d.Read)
+		})
 		if err != nil {
 			return out, err
 		}
-		if built == nil {
-			out.Accounts = append(out.Accounts, py.Pair{Key: spec.Name})
+		if !created {
+			out.Accounts.Set(spec.Name, nil)
 			continue
 		}
-		known, err := proposals.Known(ctx, d.Write, built.Fingerprint)
-		if err != nil {
-			return out, err
-		}
-		if known {
-			out.Accounts = append(out.Accounts, py.Pair{Key: spec.Name})
-			continue
-		}
-		id, ok, err := proposals.Create(ctx, d, Kind, new(spec.Name), built.Title, built.Payload, built.Preview, built.Fingerprint, ts)
-		if err != nil {
-			return out, err
-		}
-		if !ok {
-			out.Accounts = append(out.Accounts, py.Pair{Key: spec.Name})
-			continue
-		}
-		out.Accounts = append(out.Accounts, py.Pair{Key: spec.Name, Value: id})
+		out.Accounts.Set(spec.Name, id)
 		out.Created = append(out.Created, id)
 	}
-	log.Info("inbox backlog proposals: " + py.ReprValue(out.Accounts))
+	log.Info("inbox backlog proposals: " + fmt.Sprint(out.Accounts.values))
 	return out, nil
 }
 

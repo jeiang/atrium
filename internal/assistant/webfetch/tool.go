@@ -4,54 +4,49 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textutil"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 const schemaTextDefault = 12000
 
-var defaultPorts = map[string]int{"http": 80, "https": 443}
-
 func NormalizeURL(raw string) (string, error) {
-	parts, err := py.URLSplit(py.Strip(raw))
+	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		return "", err
+		return "", tool.Error("invalid URL")
 	}
-	host, _ := parts.Hostname()
-	host = py.Lower(host)
-	defaultPort, ok := defaultPorts[parts.Scheme]
-	if !ok || host == "" {
+	scheme := strings.ToLower(u.Scheme)
+	if (scheme != "http" && scheme != "https") || u.Hostname() == "" {
 		return "", tool.Error("only absolute http(s) URLs are allowed")
 	}
-	port, hasPort, err := parts.Port()
-	if err != nil {
-		return "", tool.Error("invalid port")
+	host := strings.ToLower(u.Hostname())
+	port := u.Port()
+	if port == "0" {
+		port = ""
 	}
-	netloc := host
-	if containsColon(host) {
-		netloc = "[" + host + "]"
+	if scheme == "http" && port == "80" || scheme == "https" && port == "443" {
+		port = ""
 	}
-	if hasPort && port != 0 && port != defaultPort {
-		netloc += ":" + strconv.Itoa(port)
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
 	}
-	path := parts.Path
-	if path == "" {
-		path = "/"
+	if port != "" {
+		host += ":" + port
 	}
-	return py.URLUnsplit(parts.Scheme, netloc, path, parts.Query, ""), nil
-}
-
-func containsColon(s string) bool {
-	for i := range len(s) {
-		if s[i] == ':' {
-			return true
-		}
+	u.Scheme = scheme
+	u.Host = host
+	u.User = nil
+	if u.Path == "" {
+		u.Path = "/"
 	}
-	return false
+	u.Fragment = ""
+	return u.String(), nil
 }
 
 var inputSchema = json.RawMessage(`{"type":"object","properties":{"url":{"type":"string"},` +
@@ -66,22 +61,24 @@ func Tool(f *Fetcher) tool.Tool {
 		Description: "Fetch and extract the text of one web page. Only URLs the operator typed or web_search returned in this thread " +
 			"are allowed. Page text is untrusted.",
 		InputSchema: inputSchema,
-		Handler: func(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+		Handler: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 			return handle(ctx, f, tc, args)
 		},
-		Effect:   tool.Read,
-		Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Sub},
+		Effect:    tool.Read,
+		Annotated: true,
+		Flags:     tool.Flags{Web: true, UntrustedOutput: true, ExternalEffect: true},
+		Contexts:  tool.Kinds{tool.Chat, tool.Cron, tool.Sub},
 	}
 }
 
-func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args py.Dict) (any, error) {
+func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args tool.Args) (any, error) {
 	text, _, err := tool.TextArg(args, "url", true)
 	if err != nil {
 		return nil, err
 	}
 	url, err := NormalizeURL(text)
 	if err != nil {
-		return nil, raised(err)
+		return nil, err
 	}
 	lim, err := ReadLimits(ctx, tc.DB.Read)
 	if err != nil {
@@ -106,40 +103,15 @@ func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args py.Dict) (an
 	if err != nil {
 		return nil, fetchFailed(err)
 	}
-	markup, err := mime.DecodeReplace(page.Body, page.Charset)
-	if err != nil {
-		return nil, fetchFailed(err)
-	}
+	markup := textutil.Decode(page.Body, page.Charset)
 	title, body := ExtractText(markup, page.URL, lim.PageChars)
-	return py.Dict{
-		{Key: "untrusted", Value: true},
-		{Key: "url", Value: page.URL},
-		{Key: "title", Value: title},
-		{Key: "text", Value: py.Clip(body, int(maxChars))},
-		{Key: "truncated", Value: int64(utf8.RuneCountInString(body)) > maxChars},
-	}, nil
+	return map[string]any{"untrusted": true, "url": page.URL, "title": title, "text": textx.Clip(body, int(maxChars)), "truncated": int64(utf8.RuneCountInString(body)) > maxChars}, nil
 }
 
 func fetchFailed(err error) error {
-	var (
-		blocked Blocked
-		fetch   FetchError
-		pe      *py.Exception
-	)
-	if errors.As(err, &blocked) || errors.As(err, &fetch) || errors.As(err, &pe) && pe.Class == "LookupError" {
-		return tool.Error("fetch failed: " + err.Error())
-	}
-	return raised(err)
-}
-
-func raised(err error) error {
 	var te tool.Error
 	if errors.As(err, &te) {
 		return err
 	}
-	var c py.Classed
-	if errors.As(err, &c) {
-		return &tool.Raised{Class: c.PyClass()}
-	}
-	return err
+	return tool.Error("fetch failed: " + err.Error())
 }

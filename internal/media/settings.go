@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -48,6 +47,8 @@ const (
 	KeyLinkKey           = "link_key"
 	KeyQbitAPIKey        = "media_qbittorrent_api_key"
 	KeyTMDBToken         = "media_tmdb_token"
+	KeyTMDBURL           = "media_tmdb_url"
+	KeyTMDBImagesURL     = "media_tmdb_images_url"
 )
 
 const (
@@ -57,20 +58,21 @@ const (
 )
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
 	adv := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
-		return settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check, Class: settings.Advanced, Scopes: instance}
+		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check})
 	}
 	between := func(key string, def string, lo, hi int64) settings.Def {
 		return adv(key, settings.Int, def, wholeBetween(lo, hi))
 	}
 	settings.MustRegister(
-		settings.Def{Key: KeyRoot, Module: module, Type: settings.String, Class: settings.Bootstrap},
-		settings.Def{Key: KeyQbitURL, Module: module, Type: settings.String, Check: httpURL, Class: settings.Bootstrap},
-		settings.Def{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL, Class: settings.UI, Scopes: instance},
+		settings.Deploy(settings.Def{Key: KeyRoot, Module: module, Type: settings.String}),
+		settings.Deploy(settings.Def{Key: KeyQbitURL, Module: module, Type: settings.String, Check: httpURL}),
+		settings.Value(settings.UI, settings.Def{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL}),
+		settings.Value(settings.UI, settings.Def{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL}),
 		between(KeyLinkTTL, "43200", 60, 30*86400),
 		adv(KeyEZTVURL, settings.String, defaultEZTVURL, requiredHTTPURL),
+		adv(KeyTMDBURL, settings.String, defaultTMDBAPI, requiredHTTPURL),
+		adv(KeyTMDBImagesURL, settings.String, defaultTMDBImages, requiredHTTPURL),
 		between(KeyEZTVLimit, "100", 1, 100),
 		between(KeyQbitTimeout, "15", 1, 300),
 		between(KeyEZTVTimeout, "30", 1, 300),
@@ -91,15 +93,15 @@ func init() {
 		adv(KeyVideoExts, settings.String, defaultVideoExts, extensionsCheck),
 		adv(KeySubtitleExts, settings.String, defaultSubtitleExt, extensionsCheck),
 		between(KeyTorrentUploadCap, "1048576", 1024, 32<<20),
-		settings.Def{Key: KeyLinkKey, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, Generated: true, Check: settings.NonEmpty},
-		settings.Def{Key: KeyQbitAPIKey, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
-		settings.Def{Key: KeyTMDBToken, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
+		settings.Secret(settings.SecretOpts{Generated: true}, settings.Def{Key: KeyLinkKey, Module: module, Type: settings.String, Check: settings.NonEmpty}),
+		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyQbitAPIKey, Module: module, Type: settings.String}),
+		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyTMDBToken, Module: module, Type: settings.String}),
 	)
 }
 
 func wholeBetween(lo, hi int64) func(string) error {
 	return func(value string) error {
-		n, ok := py.ParseInt(value)
+		n, ok := parseInt(value)
 		if !ok {
 			return settings.Invalid("must be a whole number")
 		}
@@ -111,7 +113,7 @@ func wholeBetween(lo, hi int64) func(string) error {
 }
 
 func httpURL(value string) error {
-	value = py.Strip(value)
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return nil
 	}
@@ -119,7 +121,7 @@ func httpURL(value string) error {
 }
 
 func requiredHTTPURL(value string) error {
-	u, err := url.Parse(py.Strip(value))
+	u, err := url.Parse(strings.TrimSpace(value))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return settings.Invalid("must be an http or https URL")
 	}
@@ -136,12 +138,12 @@ func extensionsCheck(value string) error {
 func extensionSet(value string) (map[string]bool, error) {
 	out := map[string]bool{}
 	for part := range strings.SplitSeq(value, ",") {
-		part = py.Strip(part)
+		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
-		if len(part) < 2 || part[0] != '.' || strings.ContainsAny(part, "/\\ \t") || part != py.Lower(part) {
-			return nil, settings.Invalid("must be comma-separated lowercase extensions such as .mkv, got " + py.Repr(part))
+		if len(part) < 2 || part[0] != '.' || strings.ContainsAny(part, "/\\ \t") || part != strings.ToLower(part) {
+			return nil, settings.Invalid("must be comma-separated lowercase extensions such as .mkv, got " + strconv.Quote(part))
 		}
 		out[part] = true
 	}
@@ -178,29 +180,32 @@ type Tuning struct {
 
 type Settings struct {
 	Tuning
-	Root      string
-	QbitURL   string
-	QbitKey   string
-	MoviesURL string
-	TVURL     string
-	PublicURL string
-	TMDBToken string
-	QbitHTTP  *http.Client
-	TMDBHTTP  *http.Client
+	Root       string
+	QbitURL    string
+	QbitKey    string
+	MoviesURL  string
+	TVURL      string
+	PublicURL  string
+	TMDBToken  string
+	TMDBURL    string
+	TMDBImages string
+	QbitHTTP   *http.Client
+	TMDBHTTP   *http.Client
+	EZTVHTTP   *http.Client
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
-	out := Settings{PublicURL: config.PublicURL(env)}
+	out := Settings{PublicURL: config.From(ctx).PublicURL(env)}
 	var failure error
 	resolve := func(key string) settings.Resolved {
 		if failure != nil {
 			return settings.Resolved{}
 		}
-		found, err := settings.Default.Resolve(ctx, q, key, 0)
+		found, err := settings.From(ctx).Resolve(ctx, q, key)
 		failure = err
 		return found
 	}
-	text := func(key string) string { return py.Strip(resolve(key).Value) }
+	text := func(key string) string { return strings.TrimSpace(resolve(key).Value) }
 	link := func(key string) string { return strings.TrimRight(text(key), "/") }
 	whole := func(key string) int64 {
 		found := resolve(key)
@@ -233,6 +238,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		return set
 	}
 	out.Root, out.QbitURL = link(KeyRoot), link(KeyQbitURL)
+	out.TMDBURL, out.TMDBImages = link(KeyTMDBURL), link(KeyTMDBImagesURL)
 	out.MoviesURL, out.TVURL = link(KeyMoviesURL), link(KeyTVURL)
 	out.Tuning = Tuning{
 		LinkTTL:         whole(KeyLinkTTL),
@@ -261,7 +267,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 	if failure != nil {
 		return Settings{}, failure
 	}
-	store := secrets.NewIn(nil, q, nil)
+	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
 	if out.QbitKey, failure = store.Value(ctx, KeyQbitAPIKey); failure != nil {
 		return Settings{}, failure
 	}
@@ -274,10 +280,13 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 	if out.TMDBHTTP, failure = transport.For(ctx, q, "tmdb", out.TMDBTimeout); failure != nil {
 		return Settings{}, failure
 	}
+	if out.EZTVHTTP, failure = transport.For(ctx, q, "eztv", out.EZTVTimeout); failure != nil {
+		return Settings{}, failure
+	}
 	return out, nil
 }
 
-func (s Settings) TMDB() *TMDB { return NewTMDB(s.TMDBToken, s.TMDBHTTP) }
+func (s Settings) TMDB() *TMDB { return NewTMDBAt(s.TMDBToken, s.TMDBHTTP, s.TMDBURL, s.TMDBImages) }
 
 func (s Settings) NeedRoot() (string, error) {
 	if s.Root == "" {
@@ -298,5 +307,5 @@ func (s Settings) Qbit() (*Qbit, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewQbit(base, s.QbitKey, s.QbitHTTP, s.Tuning), nil
+	return NewQbit(base, s.QbitKey, s.QbitHTTP), nil
 }

@@ -1,1 +1,2 @@
+warning: no authentication is configured. Authentication is recommended because this instance holds API keys and mailbox access. Configure proxy or OIDC authentication or bind a loopback address, or pass --force-disable-auth to start without authentication.
 proxy mode needs --allowed-host or ATRIUM_PUBLIC_HOST

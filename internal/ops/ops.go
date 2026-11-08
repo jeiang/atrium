@@ -35,8 +35,8 @@ var log = logx.Logger("atrium.ops")
 
 func init() {
 	settings.MustRegister(
-		settings.Def{Key: ListenKey, Module: "core", Type: settings.String, Default: DefaultListen, Check: checkListen, Class: settings.Bootstrap},
-		settings.Def{Key: PprofKey, Module: "core", Type: settings.Bool, Default: "false", Class: settings.Bootstrap},
+		settings.Deploy(settings.Def{Key: ListenKey, Module: "core", Type: settings.String, Default: DefaultListen, Check: checkListen}),
+		settings.Deploy(settings.Def{Key: PprofKey, Module: "core", Type: settings.Bool, Default: "false"}),
 	)
 }
 
@@ -95,13 +95,14 @@ func snapshot() ([]Metric, []Check) {
 }
 
 type server struct {
-	d *db.DB
+	d   *db.DB
+	env config.Env
+	ctx context.Context
 
-	mu       sync.Mutex
-	scraped  time.Time
-	body     []byte
-	third    map[string]result
-	thirdAge time.Time
+	mu      sync.Mutex
+	scraped time.Time
+	body    []byte
+	third   map[string]result
 }
 
 type result struct {
@@ -109,8 +110,8 @@ type result struct {
 	err error
 }
 
-func Handler(d *db.DB, withPprof bool) http.Handler {
-	s := &server{d: d, third: map[string]result{}}
+func Handler(ctx context.Context, d *db.DB, withPprof bool, env config.Env) http.Handler {
+	s := &server{d: d, env: env, ctx: config.WithEnv(ctx, env), third: map[string]result{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /metrics", s.metrics)
 	mux.HandleFunc("GET /readyz", s.readyz)
@@ -130,7 +131,7 @@ func (s *server) metrics(w http.ResponseWriter, r *http.Request) {
 	body := s.body
 	s.mu.Unlock()
 	if expired {
-		body = append(render(r.Context(), s.d), s.readiness(r.Context())...)
+		body = append(render(s.ctx, s.d), s.readiness(s.ctx)...)
 		s.mu.Lock()
 		s.body, s.scraped = body, time.Now()
 		s.mu.Unlock()
@@ -208,7 +209,7 @@ func (s *server) readyz(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"status": state, "checks": out})
 }
 
-func (s *server) run(ctx context.Context, c Check) error {
+func (s *server) run(_ context.Context, c Check) error {
 	if c.Remote {
 		s.mu.Lock()
 		got, ok := s.third[c.Name]
@@ -217,7 +218,7 @@ func (s *server) run(ctx context.Context, c Check) error {
 			return got.err
 		}
 	}
-	ctx, cancel := context.WithTimeout(ctx, checkWait)
+	ctx, cancel := context.WithTimeout(config.WithEnv(s.ctx, s.env), checkWait)
 	defer cancel()
 	err := c.Run(ctx, s.d)
 	if c.Remote {
@@ -235,24 +236,24 @@ func init() {
 		}
 		return db.RefuseFutureSchema(ctx, d.Read)
 	}})
-	Ready(Check{Name: "config", Critical: true, Run: func(context.Context, *db.DB) error {
-		if _, err := config.Load(config.OS); err != nil {
+	Ready(Check{Name: "config", Critical: true, Run: func(ctx context.Context, _ *db.DB) error {
+		if _, err := config.Load(config.EnvFrom(ctx)); err != nil {
 			return err
 		}
-		_, err := config.Location(config.OS)
+		_, err := config.From(ctx).Location(config.EnvFrom(ctx))
 		return err
 	}})
 }
 
-func Start(ctx context.Context, d *db.DB) (stop func(), err error) {
-	addr, err := settings.Default.Resolve(ctx, d.Read, ListenKey, 0)
+func Start(ctx context.Context, d *db.DB, env config.Env) (stop func(), err error) {
+	addr, err := settings.From(ctx).Resolve(ctx, d.Read, ListenKey)
 	if err != nil {
 		return nil, err
 	}
 	if addr.Value == Off {
 		return func() {}, nil
 	}
-	withPprof, err := settings.Default.Resolve(ctx, d.Read, PprofKey, 0)
+	withPprof, err := settings.From(ctx).Resolve(ctx, d.Read, PprofKey)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +261,7 @@ func Start(ctx context.Context, d *db.DB) (stop func(), err error) {
 	if err != nil {
 		return nil, fmt.Errorf("ops listener: %w", err)
 	}
-	srv := &http.Server{Handler: Handler(d, withPprof.Value == "true"), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: Handler(ctx, d, withPprof.Value == "true", env), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		if err := srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("ops listener stopped", logx.Err, err.Error())

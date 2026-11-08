@@ -34,7 +34,8 @@ type ChannelsPage struct {
 	Status   ChannelStatusView `json:"status"`
 	TMDB     bool              `json:"tmdb"`
 	Q        string            `json:"q"`
-	Results  *[]SearchHit      `json:"results"`
+	Results  []SearchHit       `json:"results"`
+	Searched bool              `json:"searched"`
 	Form     ChannelForm       `json:"form"`
 }
 
@@ -45,7 +46,7 @@ type ReleaseView struct {
 }
 
 type PreviewView struct {
-	Error    string         `json:"error"`
-	Matched  int            `json:"matched"`
-	Releases *[]ReleaseView `json:"releases"`
+	Error    string        `json:"error"`
+	Matched  int           `json:"matched"`
+	Releases []ReleaseView `json:"releases"`
 }

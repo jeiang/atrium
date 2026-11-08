@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
@@ -122,11 +121,11 @@ func TestLibE2ELinkTTLFollowsTheRegistry(t *testing.T) {
 	s := newSite(t, vars, Options{})
 	ctx := audit.With(context.Background(), "test", audit.CLI)
 
-	err := settings.Default.Set(ctx, s.db.Write, media.KeyLinkTTL, "59", 0)
+	err := s.settings.Set(ctx, s.db.Write, media.KeyLinkTTL, "59")
 	if err == nil || !strings.Contains(err.Error(), "media_link_ttl_seconds must be between 60 and 2592000") {
 		t.Fatalf("ttl 59: %v", err)
 	}
-	if err := settings.Default.Set(ctx, s.db.Write, media.KeyLinkTTL, "7200", 0); err != nil {
+	if err := s.settings.Set(ctx, s.db.Write, media.KeyLinkTTL, "7200"); err != nil {
 		t.Fatal(err)
 	}
 	movie := status(t, s.get("/media/library/movie/Dune%20%282021%29"), 200, "movie")
@@ -155,7 +154,7 @@ func TestLibE2ELinkTTLReadsAsAHumanDuration(t *testing.T) {
 		"1800": "expire after 30 minutes", "3540": "expire after 59 minutes", "5400": "expire after 90 minutes",
 		"60": "expire after 1 minute;", "3600": "expire after 1 hour;", "172800": "expire after 2 days",
 	} {
-		if err := settings.Default.Set(ctx, s.db.Write, media.KeyLinkTTL, ttl, 0); err != nil {
+		if err := s.settings.Set(ctx, s.db.Write, media.KeyLinkTTL, ttl); err != nil {
 			t.Fatal(err)
 		}
 		contains(t, status(t, s.get("/media/library/movie/Dune%20%282021%29"), 200, "movie "+ttl), want)

@@ -3,26 +3,27 @@ package media
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"regexp"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
 	DownloadsPage = "/media/downloads"
 	Import        = "import"
 
-	lastCheck  = "last_check"
-	lastErrors = "last_errors"
+	stateKey = "channels"
 )
 
 var log = logx.Logger("atrium.media")
@@ -43,7 +44,12 @@ type Channel struct {
 }
 
 type Status struct {
-	LastCheck any      `json:"last_check"`
+	LastCheck *float64 `json:"last_check"`
+	Errors    []string `json:"errors"`
+}
+
+type channelState struct {
+	LastCheck float64  `json:"last_check"`
 	Errors    []string `json:"errors"`
 }
 
@@ -67,21 +73,21 @@ type PollOptions struct {
 
 func Now() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
 
-func (t Tuning) CompilePattern(pattern string, caseSensitive bool) (*rx.Regexp, error) {
-	pattern = py.Strip(pattern)
+func (t Tuning) CompilePattern(pattern string, caseSensitive bool) (*regexp.Regexp, error) {
+	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {
 		return nil, ChannelError("pattern is empty")
 	}
 	if utf8.RuneCountInString(pattern) > t.PatternChars {
 		return nil, ChannelError(fmt.Sprintf("pattern is longer than %d characters", t.PatternChars))
 	}
-	var flags rx.Flags
+	expr := pattern
 	if !caseSensitive {
-		flags = rx.IgnoreCase
+		expr = "(?i)" + expr
 	}
-	re, err := rx.Compile(pattern, flags)
+	re, err := regexp.Compile(expr)
 	if err != nil {
-		return nil, ChannelError(fmt.Sprintf("pattern %s: %v", py.Repr(pattern), err))
+		return nil, ChannelError(fmt.Sprintf("pattern %q: %v", pattern, err))
 	}
 	return re, nil
 }
@@ -128,8 +134,8 @@ func flag(b bool) int {
 	return 0
 }
 
-func (t Tuning) AddChannel(ctx context.Context, q db.Querier, name, imdb, pattern string, caseSensitive bool, tmdbID *int64, now func() float64, primed bool) (*Channel, error) {
-	name = strings.Join(py.Split(name), " ")
+func (t Tuning) AddChannel(ctx context.Context, q db.Querier, name, imdb, pattern string, caseSensitive bool, tmdbID *int64) (*Channel, error) {
+	name = strings.Join(strings.Fields(name), " ")
 	if runes := []rune(name); len(runes) > t.NameChars {
 		name = string(runes[:t.NameChars])
 	}
@@ -138,21 +144,18 @@ func (t Tuning) AddChannel(ctx context.Context, q db.Querier, name, imdb, patter
 		return nil, ChannelError("name is empty")
 	}
 	if !ok {
-		return nil, ChannelError(fmt.Sprintf("IMDb ID %s is not tt followed by 7 to 9 digits", py.Repr(imdb)))
+		return nil, ChannelError(fmt.Sprintf("IMDb ID %q is not tt followed by 7 to 9 digits", imdb))
 	}
 	if _, err := t.CompilePattern(pattern, caseSensitive); err != nil {
 		return nil, err
-	}
-	if now == nil {
-		now = Now
 	}
 	var tmdb any
 	if tmdbID != nil {
 		tmdb = *tmdbID
 	}
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO media_channels (name, imdb, tmdb_id, pattern, case_sensitive, primed, created) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		name, digits, tmdb, py.Strip(pattern), flag(caseSensitive), flag(primed), now())
+		"INSERT INTO media_channels (name, imdb, tmdb_id, pattern, case_sensitive, primed, created) VALUES (?, ?, ?, ?, ?, 0, ?)",
+		name, digits, tmdb, strings.TrimSpace(pattern), flag(caseSensitive), Now())
 	if err != nil {
 		return nil, err
 	}
@@ -209,11 +212,7 @@ func (t Tuning) Preview(releases []Release, pattern string, caseSensitive bool) 
 	}
 	out := make([]PreviewRow, 0, len(releases))
 	for _, r := range releases {
-		m, err := re.Search(r.Title)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, PreviewRow{Release: r, Match: m != nil})
+		out = append(out, PreviewRow{Release: r, Match: re.MatchString(r.Title)})
 	}
 	return out, nil
 }
@@ -237,40 +236,31 @@ func (t Tuning) expireSeen(ctx context.Context, q db.Querier, now float64) error
 	return err
 }
 
-func setState(ctx context.Context, q db.Querier, key string, value any) error {
-	_, err := q.ExecContext(ctx, "INSERT OR REPLACE INTO media_state (key, value) VALUES (?, ?)", key, py.JSONDumps(value))
+func saveChannelState(ctx context.Context, q db.Querier, state channelState) error {
+	body, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	_, err = q.ExecContext(ctx, "INSERT OR REPLACE INTO media_state (key, value) VALUES (?, ?)", stateKey, string(body))
 	return err
 }
 
 func ChannelStatus(ctx context.Context, q db.Querier) (Status, error) {
-	rows, err := q.QueryContext(ctx, "SELECT key, value FROM media_state")
-	if err != nil {
-		return Status{}, err
-	}
-	state, err := db.Collect(rows, func(r *sql.Rows) ([2]string, error) {
-		var kv [2]string
-		return kv, r.Scan(&kv[0], &kv[1])
-	})
-	if err != nil {
-		return Status{}, err
-	}
 	out := Status{Errors: []string{}}
-	for _, kv := range state {
-		v, err := py.JSONLoads([]byte(kv[1]))
-		if err != nil {
-			return Status{}, err
-		}
-		switch kv[0] {
-		case lastCheck:
-			out.LastCheck = v
-		case lastErrors:
-			items, _ := v.([]any)
-			for _, item := range items {
-				text, _ := item.(string)
-				out.Errors = append(out.Errors, text)
-			}
-		}
+	var body string
+	err := q.QueryRowContext(ctx, "SELECT value FROM media_state WHERE key = ?", stateKey).Scan(&body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return out, nil
 	}
+	if err != nil {
+		return Status{}, err
+	}
+	var state channelState
+	if err := json.Unmarshal([]byte(body), &state); err != nil {
+		return Status{}, err
+	}
+	out.LastCheck = &state.LastCheck
+	out.Errors = append(out.Errors, state.Errors...)
 	return out, nil
 }
 
@@ -278,28 +268,44 @@ func gb(size int64) string {
 	if size <= 0 {
 		return ""
 	}
-	return " (" + py.FormatFixed(float64(size)/1e9, 1) + " GB)"
+	return " (" + strconv.FormatFloat(float64(size)/1e9, 'f', 1, 64) + " GB)"
 }
 
-func (r PollResult) Dict() py.Dict {
-	added := make([]any, len(r.Added))
+type addedView struct {
+	Channel   string `json:"channel"`
+	Title     string `json:"title"`
+	Hash      string `json:"hash"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+type pollView struct {
+	Added  []addedView `json:"added"`
+	Errors []string    `json:"errors"`
+}
+
+func (r PollResult) Dict() pollView {
+	added := make([]addedView, len(r.Added))
 	for i, a := range r.Added {
-		added[i] = py.Dict{{Key: "channel", Value: a.Channel}, {Key: "title", Value: a.Title}, {Key: "hash", Value: a.Hash}, {Key: "size_bytes", Value: a.SizeBytes}}
+		added[i] = addedView(a)
 	}
-	errs := make([]any, len(r.Errors))
-	for i, e := range r.Errors {
-		errs[i] = e
+	errors := r.Errors
+	if errors == nil {
+		errors = []string{}
 	}
-	return py.Dict{{Key: "added", Value: added}, {Key: "errors", Value: errs}}
+	return pollView{Added: added, Errors: errors}
 }
 
-func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings Settings, opts PollOptions) (PollResult, error) {
+func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, opts PollOptions) (PollResult, error) {
 	now := opts.Now
 	if now == nil {
 		now = Now
 	}
 	stamp := now()
 	result := PollResult{Added: []Added{}, Errors: []string{}}
+	qb, err := settings.Qbit()
+	if err != nil {
+		return result, err
+	}
 	channels, err := ListChannels(ctx, q)
 	if err != nil {
 		return result, err
@@ -323,12 +329,7 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings 
 			continue
 		}
 		for _, t := range releases {
-			m, err := regex.Search(t.Title)
-			if err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", rule.Name, err))
-				continue
-			}
-			if m == nil {
+			if !regex.MatchString(t.Title) {
 				continue
 			}
 			seen, err := isSeen(ctx, q, t.Hash)
@@ -369,36 +370,24 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings 
 		if len(result.Added) != 1 {
 			title = fmt.Sprintf("Added %d releases", len(result.Added))
 		}
-		on, err := notify.Enabled(ctx, q)
-		if err != nil {
-			return result, err
-		}
-		if on {
+		if notify.Enabled(ctx) {
 			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: notify.Media}
 			if settings.PublicURL != "" {
 				message.Click = settings.PublicURL + DownloadsPage
 			}
 			sent, err := notify.Send(ctx, q, env, message)
 			if err != nil {
-				return result, err
-			}
-			if !sent.Delivered {
+				result.Errors = append(result.Errors, "ntfy: "+err.Error())
+			} else if !sent.Delivered {
 				result.Errors = append(result.Errors, "ntfy: "+sent.Error)
 			}
 		}
-		if _, err := SelectFiles(ctx, qb, nil); err != nil {
+		if _, err := settings.SelectFiles(ctx, qb, nil); err != nil {
 			return result, err
 		}
 	}
 	if opts.Only == nil {
-		errs := make([]any, len(result.Errors))
-		for i, e := range result.Errors {
-			errs[i] = e
-		}
-		if err := setState(ctx, q, lastCheck, stamp); err != nil {
-			return result, err
-		}
-		if err := setState(ctx, q, lastErrors, errs); err != nil {
+		if err := saveChannelState(ctx, q, channelState{LastCheck: stamp, Errors: result.Errors}); err != nil {
 			return result, err
 		}
 	}

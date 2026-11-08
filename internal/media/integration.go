@@ -14,10 +14,12 @@ import (
 func init() {
 	integrations.Register(integrations.Integration{
 		Name: "qbittorrent", Label: "qBittorrent", Module: module, URLKey: KeyQbitURL, SecretKey: KeyQbitAPIKey,
+		Help: "API key from qBittorrent 5.2 or newer.",
 		Test: testQbit,
 	})
 	integrations.Register(integrations.Integration{
-		Name: "tmdb", Label: "TMDB", Module: module, SecretKey: KeyTMDBToken,
+		Name: "tmdb", Label: "TMDB", Module: module, URLKey: KeyTMDBURL, SecretKey: KeyTMDBToken,
+		Help: "API read access token from your TMDB account settings.",
 		Test: testTMDB,
 	})
 }
@@ -49,7 +51,7 @@ func apiKeys(version string) bool {
 }
 
 func testTMDB(ctx context.Context, c integrations.Conn) (string, error) {
-	status, _, err := bearerGet(ctx, c, TMDBAPI+"/configuration")
+	status, _, err := bearerGet(ctx, c, c.URL+"/configuration")
 	if err != nil {
 		return "", err
 	}

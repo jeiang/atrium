@@ -9,21 +9,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
-
-	"github.com/jeiang/atrium/internal/py"
 )
-
-type readError string
-
-func (e readError) Error() string { return string(e) }
-
-func errorName(err error) string {
-	var re readError
-	if errors.As(err, &re) {
-		return string(re)
-	}
-	return "Exception"
-}
 
 type limitError string
 
@@ -37,14 +23,14 @@ const (
 	errTooLarge   = limitError("the document is too large to read")
 )
 
-const (
-	errBadZip = readError("BadZipFile")
-	errKey    = readError("KeyError")
-	errValue  = readError("ValueError")
-	errOS     = readError("OSError")
-	errSyntax = readError("XMLSyntaxError")
-	errParse  = readError("ParseError")
-	errIndex  = readError("IndexError")
+var (
+	errBadZip = errors.New("not a zip archive")
+	errKey    = errors.New("missing document part")
+	errValue  = errors.New("invalid value")
+	errOS     = errors.New("read error")
+	errSyntax = errors.New("invalid XML")
+	errParse  = errors.New("invalid document")
+	errIndex  = errors.New("missing entry")
 )
 
 type element struct {
@@ -57,38 +43,18 @@ type element struct {
 
 func parseXML(data []byte) (*element, error) {
 	dec := xml.NewDecoder(bytes.NewReader(data))
-	var root, cur *element
 	for {
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
-			break
+			return nil, errSyntax
 		}
 		if err != nil {
 			return nil, errSyntax
 		}
-		switch t := tok.(type) {
-		case xml.StartElement:
-			e := &element{space: t.Name.Space, local: t.Name.Local, attrs: normalizeAttrs(t.Attr), parent: cur}
-			if cur != nil {
-				cur.children = append(cur.children, e)
-			} else if root == nil {
-				root = e
-			}
-			cur = e
-		case xml.EndElement:
-			if cur != nil {
-				cur = cur.parent
-			}
-		case xml.CharData:
-			if cur != nil && len(cur.children) == 0 {
-				cur.text += string(t)
-			}
+		if start, ok := tok.(xml.StartElement); ok {
+			return subtree(dec, start, nil)
 		}
 	}
-	if root == nil {
-		return nil, errSyntax
-	}
-	return root, nil
 }
 
 var attrSpace = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ")
@@ -129,7 +95,7 @@ func (e *element) kid(space, local string) *element {
 }
 
 func decimal(s string) (int, error) {
-	n, err := strconv.Atoi(py.Strip(s))
+	n, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil {
 		return 0, errValue
 	}

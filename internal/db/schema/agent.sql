@@ -8,9 +8,30 @@ CREATE TABLE IF NOT EXISTS threads (
     allowed_urls TEXT NOT NULL DEFAULT '[]',
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL,
-    archived INTEGER NOT NULL DEFAULT 0
+    archived INTEGER NOT NULL DEFAULT 0,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    context_limit INTEGER,
+    branched_from_thread_id INTEGER,
+    branched_from_seq INTEGER,
+    role TEXT,
+    parent_run_id INTEGER,
+    project_id INTEGER,
+    deleted_at REAL,
+    model TEXT NOT NULL DEFAULT 'claude-haiku-5-5',
+    thinking TEXT NOT NULL DEFAULT 'adaptive',
+    web_search INTEGER NOT NULL DEFAULT 1,
+    cost_cap_usd REAL,
+    environment TEXT,
+    repo TEXT,
+    base_branch TEXT,
+    agent TEXT,
+    beta_set TEXT,
+    speed TEXT
 );
 CREATE INDEX IF NOT EXISTS threads_updated ON threads (archived, updated_at);
+CREATE INDEX IF NOT EXISTS threads_parent_run ON threads (parent_run_id);
+CREATE INDEX IF NOT EXISTS threads_parent_thread ON threads (parent_thread_id);
+CREATE INDEX IF NOT EXISTS threads_project ON threads (project_id, archived, updated_at);
 CREATE TABLE IF NOT EXISTS thread_messages (
     id INTEGER PRIMARY KEY,
     thread_id INTEGER NOT NULL REFERENCES threads(id),
@@ -19,6 +40,8 @@ CREATE TABLE IF NOT EXISTS thread_messages (
     role TEXT NOT NULL,
     content_json TEXT NOT NULL,
     created_at REAL NOT NULL,
+    system_sig TEXT,
+    superseded INTEGER NOT NULL DEFAULT 0,
     UNIQUE (thread_id, seq)
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS thread_fts USING fts5(thread_id UNINDEXED, text);
@@ -33,9 +56,17 @@ CREATE TABLE IF NOT EXISTS runs (
     error TEXT,
     steps INTEGER NOT NULL DEFAULT 0,
     started_at REAL NOT NULL,
-    ended_at REAL
+    ended_at REAL,
+    limits_json TEXT,
+    owner TEXT,
+    lease_until REAL,
+    skills_json TEXT,
+    superseded INTEGER NOT NULL DEFAULT 0,
+    stop_requested INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS runs_thread ON runs (thread_id, id);
+CREATE INDEX IF NOT EXISTS runs_parent ON runs (parent_run_id);
+CREATE UNIQUE INDEX IF NOT EXISTS runs_active ON runs (thread_id) WHERE state IN ('running', 'interrupted');
 CREATE TABLE IF NOT EXISTS tool_calls (
     id INTEGER PRIMARY KEY,
     run_id INTEGER NOT NULL REFERENCES runs(id),
@@ -57,29 +88,44 @@ CREATE TABLE IF NOT EXISTS tool_results (
     tool_call_id INTEGER NOT NULL REFERENCES tool_calls(id),
     tool TEXT NOT NULL,
     tokens INTEGER NOT NULL,
-    bytes INTEGER NOT NULL,
-    sha256 TEXT NOT NULL,
     body TEXT NOT NULL,
     created_at REAL NOT NULL
 );
+CREATE INDEX IF NOT EXISTS tool_results_run ON tool_results (run_id);
 CREATE TABLE IF NOT EXISTS usage (
     id INTEGER PRIMARY KEY,
     ts REAL NOT NULL,
-    thread_id INTEGER NOT NULL REFERENCES threads(id),
-    run_id INTEGER NOT NULL REFERENCES runs(id),
+    request_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    thread_id INTEGER REFERENCES threads(id),
+    run_id INTEGER REFERENCES runs(id),
     kind TEXT NOT NULL,
+    job_name TEXT,
     model TEXT NOT NULL,
     effort TEXT NOT NULL,
+    iterations TEXT NOT NULL,
     input_tokens INTEGER NOT NULL,
     cache_write_5m INTEGER NOT NULL,
     cache_write_1h INTEGER NOT NULL,
     cache_read INTEGER NOT NULL,
     output_tokens INTEGER NOT NULL,
+    reasoning_tokens INTEGER NOT NULL DEFAULT 0,
     searches INTEGER NOT NULL,
+    tool_calls INTEGER NOT NULL DEFAULT 0,
+    wall_ms INTEGER NOT NULL DEFAULT 0,
     tier TEXT NOT NULL,
-    cost_usd REAL NOT NULL
+    cost_usd REAL NOT NULL,
+    partial INTEGER NOT NULL DEFAULT 0,
+    unpriced INTEGER NOT NULL DEFAULT 0,
+    clear_edits INTEGER NOT NULL DEFAULT 0,
+    cleared_tokens INTEGER NOT NULL DEFAULT 0,
+    compaction INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (request_id)
 );
 CREATE INDEX IF NOT EXISTS usage_ts ON usage (ts);
+CREATE INDEX IF NOT EXISTS usage_thread ON usage (thread_id);
+CREATE INDEX IF NOT EXISTS usage_run ON usage (run_id);
 CREATE TABLE IF NOT EXISTS agent_writes (
     id INTEGER PRIMARY KEY,
     ts REAL NOT NULL,
@@ -90,16 +136,10 @@ CREATE TABLE IF NOT EXISTS agent_writes (
     before_json TEXT,
     after_json TEXT,
     undo_json TEXT,
-    undone_at REAL
-);
-CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS agent_profile (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    updated_at REAL NOT NULL
+    undone_at REAL,
+    state TEXT NOT NULL DEFAULT 'ok',
+    error TEXT,
+    resolved_at REAL
 );
 CREATE TABLE IF NOT EXISTS context_ledger (
     id INTEGER PRIMARY KEY,
@@ -113,5 +153,7 @@ CREATE TABLE IF NOT EXISTS context_ledger (
     state TEXT NOT NULL,
     staged_at REAL,
     committed_at REAL,
+    from_seq INTEGER,
+    to_seq INTEGER,
     UNIQUE (run_id, item_id)
 );

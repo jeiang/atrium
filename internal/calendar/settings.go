@@ -2,11 +2,12 @@ package calendar
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -27,33 +28,27 @@ const (
 )
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
 	settings.MustRegister(
-		settings.Def{Key: AppleIDKey, Module: "calendar", Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: AccountKey, Module: "calendar", Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: ICloudCalendarKey, Module: "calendar", Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: GoogleClientIDKey, Module: "calendar", Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{
+		settings.Value(settings.UI, settings.Def{Key: AppleIDKey, Module: "calendar", Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: AccountKey, Module: "calendar", Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: ICloudCalendarKey, Module: "calendar", Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: GoogleClientIDKey, Module: "calendar", Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{
 			Key: DefaultMinutesKey, Module: "calendar", Type: settings.Int, Default: defaultEventMinutes,
-			Check: settings.Between(5, 1440), Class: settings.UI, Scopes: instance,
-		},
-		settings.Def{Key: CalendarDirKey, Module: "calendar", Type: settings.String, Class: settings.Advanced, Scopes: instance},
-		settings.Def{
+			Check: settings.Between(5, 1440)}),
+		settings.Value(settings.Advanced, settings.Def{Key: CalendarDirKey, Module: "calendar", Type: settings.String}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: MaxEventsKey, Module: "calendar", Type: settings.Int, Default: defaultMaxEvents,
-			Check: settings.Between(1, 10000), Class: settings.Advanced, Scopes: instance,
-		},
-		settings.Def{
+			Check: settings.Between(1, 10000)}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: MaxOccurrencesKey, Module: "calendar", Type: settings.Int, Default: defaultMaxOccur,
-			Check: settings.Between(1, 100000), Class: settings.Advanced, Scopes: instance,
-		},
-		settings.Def{
+			Check: settings.Between(1, 100000)}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: CandidateScanKey, Module: "calendar", Type: settings.Int, Default: "50",
-			Check: settings.Between(1, 1000), Class: settings.Advanced, Scopes: instance,
-		},
-		settings.Def{
+			Check: settings.Between(1, 1000)}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: CandidateDraftKey, Module: "calendar", Type: settings.Int, Default: "10",
-			Check: settings.Between(1, 100), Class: settings.Advanced, Scopes: instance,
-		},
+			Check: settings.Between(1, 100)}),
 	)
 }
 
@@ -63,6 +58,7 @@ type Settings struct {
 	ICloudCalendar string
 	CalendarDir    string
 	GoogleClientID string
+	RefreshToken   string
 	MaxEvents      int
 	MaxOccurrences int
 	DefaultMinutes int
@@ -71,12 +67,12 @@ type Settings struct {
 func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 	var out Settings
 	text := func(key string, into *string) error {
-		found, err := settings.Default.Resolve(ctx, q, key, 0)
+		found, err := settings.From(ctx).Resolve(ctx, q, key)
 		*into = found.Value
 		return err
 	}
 	whole := func(key string, into *int) error {
-		found, err := settings.Default.Resolve(ctx, q, key, 0)
+		found, err := settings.From(ctx).Resolve(ctx, q, key)
 		if err != nil {
 			return err
 		}
@@ -90,6 +86,10 @@ func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 		func() error { return text(ICloudCalendarKey, &out.ICloudCalendar) },
 		func() error { return text(CalendarDirKey, &out.CalendarDir) },
 		func() error { return text(GoogleClientIDKey, &out.GoogleClientID) },
+		func() error {
+			out.RefreshToken, _ = secrets.Credential(ctx, q, secrets.GoogleCalendarRefreshToken)
+			return nil
+		},
 		func() error { return whole(MaxEventsKey, &out.MaxEvents) },
 		func() error { return whole(MaxOccurrencesKey, &out.MaxOccurrences) },
 		func() error { return whole(DefaultMinutesKey, &out.DefaultMinutes) },
@@ -98,7 +98,9 @@ func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 			return Settings{}, err
 		}
 	}
-	out.ICloudCalendar = strings.ToLower(py.Strip(out.ICloudCalendar))
+	out.AppleID = strings.TrimSpace(out.AppleID)
+	out.Account = strings.TrimSpace(out.Account)
+	out.ICloudCalendar = strings.ToLower(strings.TrimSpace(out.ICloudCalendar))
 	return out, nil
 }
 
@@ -107,7 +109,7 @@ func CandidateLimits(ctx context.Context, q db.Querier) (scan, draft int, err er
 		key  string
 		into *int
 	}{{CandidateScanKey, &scan}, {CandidateDraftKey, &draft}} {
-		found, err := settings.Default.Resolve(ctx, q, step.key, 0)
+		found, err := settings.From(ctx).Resolve(ctx, q, step.key)
 		if err != nil {
 			return 0, 0, err
 		}
@@ -127,16 +129,16 @@ func missingCredentials(missing []string) error {
 	return NotConfigured(strings.Join(missing, ", ") + " not set")
 }
 
-func ICloudLogin(set Settings) (config.CalDAVLogin, error) {
+func ICloudLogin(ctx context.Context, set Settings) (config.CalDAVLogin, error) {
 	var found []config.AccountSpec
-	for _, a := range config.Accounts() {
+	for _, a := range config.From(ctx).Accounts() {
 		if a.Enabled && a.Preset == config.ICloud && (set.Account == "" || a.Name == set.Account) {
 			found = append(found, a)
 		}
 	}
 	switch {
 	case len(found) == 0 && set.Account != "":
-		return config.CalDAVLogin{}, NotConfigured(AccountKey + " " + py.Repr(set.Account) + " is not an enabled iCloud mail account")
+		return config.CalDAVLogin{}, NotConfigured(AccountKey + " " + strconv.Quote(set.Account) + " is not an enabled iCloud mail account")
 	case len(found) == 0:
 		return config.CalDAVLogin{}, NotConfigured("no enabled iCloud mail account")
 	case len(found) > 1:
@@ -146,12 +148,16 @@ func ICloudLogin(set Settings) (config.CalDAVLogin, error) {
 	if apple == "" {
 		apple = found[0].Login
 	}
-	return config.CalDAVLogin{AppleID: apple, Password: found[0].Password}, nil
+	password, _ := config.From(ctx).Password(found[0].Name)
+	return config.CalDAVLogin{AppleID: apple, Password: password}, nil
 }
 
 func googleCredentials(env config.Env, set Settings) (config.GoogleCredentials, error) {
 	secret := config.GoogleOAuthSecret(env)
-	refresh, _ := env("GOOGLE_REFRESH_TOKEN")
+	refresh := set.RefreshToken
+	if refresh == "" {
+		refresh, _ = env("GOOGLE_REFRESH_TOKEN")
+	}
 	var missing []string
 	if set.GoogleClientID == "" {
 		missing = append(missing, "ATRIUM_CALENDAR_GOOGLE_CLIENT_ID")

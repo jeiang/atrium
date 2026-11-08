@@ -1,7 +1,6 @@
 package pages
 
 import (
-	"database/sql"
 	"errors"
 	"net/http"
 	"time"
@@ -10,7 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -67,7 +66,7 @@ func stamp(epoch *float64, loc *time.Location) *string {
 	if epoch == nil || *epoch == 0 {
 		return nil
 	}
-	sec, us := py.SplitTimestamp(*epoch)
+	sec, us := timex.SplitTimestamp(*epoch)
 	text := time.Unix(sec, us*1000).In(loc).Format(stampLayout)
 	return &text
 }
@@ -75,9 +74,9 @@ func stamp(epoch *float64, loc *time.Location) *string {
 func jobView(j scheduler.ListedJob, zone *time.Location) JobView {
 	v := JobView{
 		ID: j.ID, Name: j.Name, Kind: j.Kind, CreatedBy: j.CreatedBy, Cadence: scheduler.Describe(j.Schedule, j.TZ), Schedule: j.Schedule,
-		Prompt: j.Prompt, Enabled: j.Enabled, LastStatus: j.LastStatus, LastError: j.LastError, LastStartedText: stamp(j.LastStarted, zone),
+		Prompt: j.Prompt, Enabled: j.State.Active(), LastStatus: j.LastStatus, LastError: j.LastError, LastStartedText: stamp(j.LastStarted, zone),
 	}
-	if j.Enabled {
+	if j.State.Active() {
 		v.NextDueText = stamp(j.NextDue, zone)
 	}
 	return v
@@ -113,10 +112,6 @@ func formValues(job *scheduler.Job, submitted *ScheduleFormValues) ScheduleFormV
 	return ScheduleFormValues{}
 }
 
-func fixedJob(job *scheduler.Job) bool {
-	return job.Kind == scheduler.JobNightly || job.Kind == scheduler.JobBuiltin
-}
-
 func (p *pages) scheduledRoutes(r chi.Router) {
 	r.Get("/scheduled", p.scheduledIndex)
 	r.Get("/scheduled/new", p.scheduleNewForm)
@@ -129,19 +124,12 @@ func (p *pages) scheduledRoutes(r chi.Router) {
 
 func (p *pages) scheduledData(r *http.Request) ScheduledData {
 	ctx := detached(r)
-	tz := config.TZName(p.deps.Env)
+	tz := config.From(ctx).TZName(p.deps.Env)
 	zone, err := scheduler.Zone(tz)
 	check(err)
-	now := p.now()
-	check(p.deps.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := scheduler.EnsureNightly(ctx, tx, tz, now); err != nil {
-			return err
-		}
-		return scheduler.EnsureBuiltins(ctx, tx, tz, now)
-	}))
 	jobs, err := scheduler.ListJobs(ctx, p.deps.DB.Read, false)
 	check(err)
-	history, err := config.Limit(ctx, p.deps.DB.Read, config.KeyRunHistory)
+	history, err := config.From(ctx).Limit(ctx, p.deps.DB.Read, config.KeyRunHistory)
 	check(err)
 	runs, err := scheduler.ListRuns(ctx, p.deps.DB.Read, 0, history)
 	check(err)
@@ -176,10 +164,10 @@ func listHeaders(closeDialogs bool) func(http.Header) {
 
 func (p *pages) scheduleForm(w http.ResponseWriter, r *http.Request, status int, job *scheduler.Job, problem string, submitted *ScheduleFormValues) {
 	ctx := r.Context()
-	tz := config.TZName(p.deps.Env)
+	tz := config.From(ctx).TZName(p.deps.Env)
 	var runs []scheduler.ListedRun
 	if job != nil {
-		history, err := config.Limit(ctx, p.deps.DB.Read, config.KeyJobHistory)
+		history, err := config.From(ctx).Limit(ctx, p.deps.DB.Read, config.KeyJobHistory)
 		check(err)
 		found, err := scheduler.ListRuns(ctx, p.deps.DB.Read, job.ID, history)
 		check(err)
@@ -201,7 +189,7 @@ func (p *pages) scheduleForm(w http.ResponseWriter, r *http.Request, status int,
 func (p *pages) loadJob(w http.ResponseWriter, r *http.Request, jobID int64) (*scheduler.Job, bool) {
 	job, err := scheduler.GetJob(r.Context(), p.deps.DB.Read, jobID)
 	check(err)
-	if job == nil || job.Cancelled {
+	if job == nil {
 		p.fail(w, r, http.StatusNotFound, "unknown schedule")
 		return nil, false
 	}
@@ -260,8 +248,8 @@ func submittedSchedule(r *http.Request) ScheduleFormValues {
 func (p *pages) scheduleCreate(w http.ResponseWriter, r *http.Request) {
 	values := submittedSchedule(r)
 	_, err := scheduler.CreateJob(detached(r), p.deps.DB.Write, scheduler.NewJob{
-		Name: values.Name, Prompt: values.Prompt, Schedule: values.Schedule, TZ: config.TZName(p.deps.Env), Now: p.now(),
-		SkipLimits: true, PromptBy: scheduler.Operator,
+		Name: values.Name, Prompt: values.Prompt, Schedule: values.Schedule, TZ: config.From(r.Context()).TZName(p.deps.Env), Now: p.now(),
+		CreatedBy: scheduler.Operator, PromptBy: scheduler.Operator,
 	})
 	p.attempted(w, r, err, "Schedule created", nil, &values, true)
 }
@@ -276,8 +264,8 @@ func (p *pages) scheduleUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	update := scheduler.JobUpdate{Schedule: &values.Schedule, SkipLimits: true, PromptBy: scheduler.Operator}
-	if !fixedJob(job) {
+	update := scheduler.JobUpdate{Schedule: &values.Schedule, Actor: scheduler.Operator, PromptBy: scheduler.Operator}
+	if job.AgentEditable() {
 		update.Name, update.Prompt = &values.Name, &values.Prompt
 	}
 	_, err := scheduler.UpdateJob(detached(r), p.deps.DB.Write, id, p.now(), update)
@@ -293,8 +281,8 @@ func (p *pages) scheduleToggle(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	enabled := !job.Enabled
-	_, err := scheduler.UpdateJob(detached(r), p.deps.DB.Write, id, p.now(), scheduler.JobUpdate{Enabled: &enabled, SkipLimits: true})
+	enabled := !job.State.Active()
+	_, err := scheduler.UpdateJob(detached(r), p.deps.DB.Write, id, p.now(), scheduler.JobUpdate{Enabled: &enabled, Actor: scheduler.Operator})
 	p.attempted(w, r, err, "Schedule updated", nil, nil, false)
 }
 

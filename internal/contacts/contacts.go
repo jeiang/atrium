@@ -3,12 +3,12 @@ package contacts
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
+	"github.com/jeiang/atrium/internal/textutil"
 )
 
 const (
@@ -17,11 +17,10 @@ const (
 )
 
 var (
-	unfoldRe   = rx.MustCompile(`\r?\n[ \t]`, 0)
-	escapeRe   = rx.MustCompile(`\\([nN,;\\])`, 0)
-	splitRe    = rx.MustCompile(`(?<!\\);`, 0)
-	dateRe     = rx.MustCompile(`^(?:(\d{4})-?|--)(\d{2})-?(\d{2})(?!\d)`, 0)
-	appleLabel = rx.MustCompile(`^_\$!<(.*)>!\$_$`, 0)
+	unfoldRe   = regexp.MustCompile(`\r?\n[ \t]`)
+	escapeRe   = regexp.MustCompile(`\\([nN,;\\])`)
+	dateRe     = regexp.MustCompile(`^(?:(\d{4})-?|--)(\d{2})-?(\d{2})`)
+	appleLabel = regexp.MustCompile(`^_\$!<(.*)>!\$_$`)
 )
 
 var unknownYears = map[int]bool{1604: true, 1900: true}
@@ -57,36 +56,59 @@ type card struct {
 }
 
 func Unfold(text string) string {
-	out, _ := unfoldRe.Sub("", text, 0)
-	return out
+	return unfoldRe.ReplaceAllString(text, "")
+}
+
+func splitLines(text string) []string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	return strings.Split(strings.ReplaceAll(text, "\r", "\n"), "\n")
 }
 
 func unescape(value string) string {
-	out, _ := escapeRe.SubFunc(value, func(m *rx.Match) string {
-		if g := m.Group(1); g != "n" && g != "N" {
-			return g
+	var b strings.Builder
+	last := 0
+	for _, loc := range escapeRe.FindAllStringSubmatchIndex(value, -1) {
+		b.WriteString(value[last:loc[0]])
+		g := value[loc[2]:loc[3]]
+		if g == "n" || g == "N" {
+			b.WriteString("\n")
+		} else {
+			b.WriteString(g)
 		}
-		return "\n"
-	}, 0)
-	return py.Strip(out)
+		last = loc[1]
+	}
+	b.WriteString(value[last:])
+	return strings.TrimSpace(b.String())
 }
 
 func split(value string) []string {
-	parts, _ := splitRe.Split(value, 0)
-	return parts
+	var out []string
+	last := 0
+	for i := range len(value) {
+		if value[i] == ';' && (i == 0 || value[i-1] != '\\') {
+			out = append(out, value[last:i])
+			last = i + 1
+		}
+	}
+	return append(out, value[last:])
 }
 
 func ParseDate(value string) (month, day int, year *int, ok bool) {
-	m, _ := dateRe.Match(py.Strip(value))
-	if m == nil {
+	text := strings.TrimSpace(value)
+	loc := dateRe.FindStringSubmatchIndex(text)
+	if loc == nil {
 		return 0, 0, nil, false
 	}
-	month, day = py.DecimalValue(m.Group(2)), py.DecimalValue(m.Group(3))
+	if loc[1] < len(text) && text[loc[1]] >= '0' && text[loc[1]] <= '9' {
+		return 0, 0, nil, false
+	}
+	month, _ = strconv.Atoi(text[loc[4]:loc[5]])
+	day, _ = strconv.Atoi(text[loc[6]:loc[7]])
 	if month < 1 || month > 12 || day < 1 || day > monthDays(month) {
 		return 0, 0, nil, false
 	}
-	if g, found := m.GroupOK(1); found {
-		if y := py.DecimalValue(g); y != 0 && !unknownYears[y] {
+	if loc[2] >= 0 {
+		if y, _ := strconv.Atoi(text[loc[2]:loc[3]]); y != 0 && !unknownYears[y] {
 			year = new(y)
 		}
 	}
@@ -104,14 +126,14 @@ func monthDays(month int) int {
 }
 
 func dateKind(label string) string {
-	low := py.Casefold(label)
+	low := textutil.Casefold(label)
 	switch {
 	case strings.Contains(low, "anniversary"):
 		return Anniversary
 	case strings.Contains(low, "birth"):
 		return Birthday
 	}
-	if s := py.Strip(label); s != "" {
+	if s := strings.TrimSpace(label); s != "" {
 		return s
 	}
 	return "date"
@@ -119,16 +141,16 @@ func dateKind(label string) string {
 
 func cleanLabel(text string) string {
 	text = unescape(text)
-	if m, _ := appleLabel.Match(text); m != nil {
-		text = m.Group(1)
+	if loc := appleLabel.FindStringSubmatchIndex(text); loc != nil {
+		text = text[loc[2]:loc[3]]
 	}
-	return py.Strip(text)
+	return strings.TrimSpace(text)
 }
 
 func Parse(text string) []Card {
 	cards := []Card{}
 	var c *card
-	for _, line := range py.SplitLines(Unfold(text)) {
+	for _, line := range splitLines(Unfold(text)) {
 		head, value, ok := strings.Cut(line, ":")
 		if !ok {
 			continue
@@ -140,13 +162,13 @@ func Parse(text string) []Card {
 		}
 		name = strings.ToUpper(name)
 		switch {
-		case name == "BEGIN" && strings.ToUpper(py.Strip(value)) == "VCARD":
+		case name == "BEGIN" && strings.ToUpper(strings.TrimSpace(value)) == "VCARD":
 			c = &card{labels: map[string]string{}}
 		case name == "END" && c != nil:
 			cards = append(cards, c.finish())
 			c = nil
 		case c != nil:
-			c.collect(name, value, mime.Lower(group))
+			c.collect(name, value, strings.ToLower(group))
 		}
 	}
 	return cards
@@ -164,7 +186,7 @@ func (c *card) collect(name, value, group string) {
 		}
 		c.n = joinNonEmpty(" ", unescape(given), unescape(family))
 	case "EMAIL":
-		email := mime.Lower(strings.TrimPrefix(unescape(value), "mailto:"))
+		email := strings.ToLower(strings.TrimPrefix(unescape(value), "mailto:"))
 		if strings.Contains(email, "@") && !slices.Contains(c.emails, email) {
 			c.emails = append(c.emails, email)
 		}
@@ -260,7 +282,7 @@ func Load(dir string) []Card {
 	}
 	keys := make(map[string]string, len(found))
 	for _, c := range found {
-		keys[c.Name] = py.Casefold(c.Name)
+		keys[c.Name] = textutil.Casefold(c.Name)
 	}
 	slices.SortStableFunc(found, func(a, b Card) int { return strings.Compare(keys[a.Name], keys[b.Name]) })
 	return found
@@ -286,10 +308,10 @@ func Search(dir, query string, limit int) []Card {
 }
 
 func Filter(cards []Card, query string, limit int) []Card {
-	terms := py.Split(py.Casefold(query))
+	terms := strings.Fields(textutil.Casefold(query))
 	out := []Card{}
 	for _, c := range cards {
-		haystack := py.Casefold(strings.Join(slices.Concat([]string{c.Name, c.Org}, c.Emails, c.Phones), " "))
+		haystack := textutil.Casefold(strings.Join(slices.Concat([]string{c.Name, c.Org}, c.Emails, c.Phones), " "))
 		if !slices.ContainsFunc(terms, func(t string) bool { return !strings.Contains(haystack, t) }) {
 			out = append(out, c)
 			if limit != 0 && len(out) >= limit {

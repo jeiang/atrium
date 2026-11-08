@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	WizardPath = "/settings/auth"
+	wizardPath = "/settings/auth"
 	testCookie = "atrium_oidc_test"
-	testPath   = WizardPath + "/test"
+	testPath   = wizardPath + "/test"
 )
 
 var stepToken = regexp.MustCompile(`\{(redirect|access|admin)\}`)
@@ -30,40 +30,24 @@ type stepView struct {
 	Parts []partView `json:"parts"`
 }
 
-type pinnedView struct {
-	Issuer        bool `json:"issuer"`
-	ClientID      bool `json:"client_id"`
-	Scopes        bool `json:"scopes"`
-	GroupsClaim   bool `json:"groups_claim"`
-	AccessGroup   bool `json:"access_group"`
-	AdminGroup    bool `json:"admin_group"`
-	AccessEmails  bool `json:"access_emails"`
-	AdminEmails   bool `json:"admin_emails"`
-	AccessDomains bool `json:"access_domains"`
-	AdminDomains  bool `json:"admin_domains"`
+type fieldView struct {
+	Key         string `json:"key"`
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Type        string `json:"type"`
+	Group       string `json:"group"`
+	Value       string `json:"value"`
+	Placeholder string `json:"placeholder"`
+	Pinned      bool   `json:"pinned"`
+	Disabled    bool   `json:"disabled"`
+	Required    bool   `json:"required"`
 }
 
 type setupView struct {
-	Preset        string     `json:"preset"`
-	Steps         []stepView `json:"steps"`
-	IssuerLabel   string     `json:"issuer_label"`
-	Issuer        string     `json:"issuer"`
-	ClientID      string     `json:"client_id"`
-	Scopes        string     `json:"scopes"`
-	GroupsClaim   string     `json:"groups_claim"`
-	AccessGroup   string     `json:"access_group"`
-	AdminGroup    string     `json:"admin_group"`
-	AccessEmails  string     `json:"access_emails"`
-	AdminEmails   string     `json:"admin_emails"`
-	AccessDomains string     `json:"access_domains"`
-	AdminDomains  string     `json:"admin_domains"`
-	Groups        bool       `json:"groups"`
-	Lists         bool       `json:"lists"`
-	Placeholder   string     `json:"placeholder"`
-	Open          bool       `json:"open"`
-	SecretSet     bool       `json:"secret_set"`
-	SecretPinned  bool       `json:"secret_pinned"`
-	Pinned        pinnedView `json:"pinned"`
+	Preset string      `json:"preset"`
+	Steps  []stepView  `json:"steps"`
+	Fields []fieldView `json:"fields"`
+	Open   bool        `json:"open"`
 }
 
 type presetOption struct {
@@ -110,7 +94,7 @@ func (s *Server) steps(v oidc.View) []stepView {
 		"admin":    v.Values[oidc.KeyAdminGroup],
 	}
 	if v.Public != "" {
-		chips["redirect"] = v.Public + CallbackPath
+		chips["redirect"] = v.Public + callbackPath
 	}
 	if chips["access"] == "" {
 		chips["access"] = oidc.DefaultAccessGroup
@@ -148,22 +132,35 @@ func (s *Server) steps(v oidc.View) []stepView {
 
 func (s *Server) setupFor(v oidc.View) setupView {
 	p, val := v.Preset, v.Values
-	pin := func(key string) bool { return v.Pinned[key] }
-	view := setupView{
-		Preset: p.Name, Steps: s.steps(v), IssuerLabel: p.IssuerLabel, Issuer: val[oidc.KeyIssuer],
-		ClientID: val[oidc.KeyClientID], Scopes: val[oidc.KeyScopes], GroupsClaim: val[oidc.KeyGroupsClaim],
-		AccessGroup: val[oidc.KeyAccessGroup], AdminGroup: val[oidc.KeyAdminGroup],
-		AccessEmails: val[oidc.KeyAccessEmails], AdminEmails: val[oidc.KeyAdminEmails],
-		AccessDomains: val[oidc.KeyAccessDomains], AdminDomains: val[oidc.KeyAdminDomains],
-		Groups: p.Groups, Lists: p.Lists, Placeholder: p.Placeholder, Open: p.Open,
-		SecretSet: v.SecretSet, SecretPinned: v.SecretPinned,
-		Pinned: pinnedView{
-			Issuer: pin(oidc.KeyIssuer), ClientID: pin(oidc.KeyClientID), Scopes: pin(oidc.KeyScopes), GroupsClaim: pin(oidc.KeyGroupsClaim),
-			AccessGroup: pin(oidc.KeyAccessGroup), AdminGroup: pin(oidc.KeyAdminGroup), AccessEmails: pin(oidc.KeyAccessEmails),
-			AdminEmails: pin(oidc.KeyAdminEmails), AccessDomains: pin(oidc.KeyAccessDomains), AdminDomains: pin(oidc.KeyAdminDomains),
-		},
+	fields := make([]fieldView, 0, len(oidc.Fields))
+	for _, f := range oidc.Fields {
+		if f.Show != nil && !f.Show(p) {
+			continue
+		}
+		field := fieldView{
+			Key: f.Key, ID: f.ID, Label: f.Label, Type: f.Type, Group: f.Group,
+			Value: val[f.Key], Pinned: v.Pinned[f.Key], Disabled: v.Pinned[f.Key], Required: f.Required,
+		}
+		if f.Key == oidc.KeyIssuer {
+			field.Label = p.IssuerLabel
+			if p.Name == oidc.PresetEntra {
+				field.Type = "text"
+			}
+		}
+		if f.Secret {
+			field.Value = ""
+			field.Pinned, field.Disabled = v.SecretPinned, v.SecretPinned
+			field.Required = !v.SecretSet
+			if v.SecretSet {
+				field.Placeholder = "Stored"
+			}
+		}
+		if f.Group == "groups" || f.Group == "lists" {
+			field.Placeholder = p.Placeholder
+		}
+		fields = append(fields, field)
 	}
-	return view
+	return setupView{Preset: p.Name, Steps: s.steps(v), Fields: fields, Open: p.Open}
 }
 
 func (s *Server) stateFor(v oidc.View) stateView {
@@ -174,7 +171,7 @@ func (s *Server) stateFor(v oidc.View) stateView {
 		}
 	}
 	modes := []string{"OIDC"}
-	if s.auth.Proxy {
+	if s.auth.Proxy() {
 		modes = append(modes, "Proxy")
 	}
 	return stateView{Name: name, Active: v.Active, Modes: modes}
@@ -319,7 +316,9 @@ func (s *Server) wizardTest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) testWaitPage(w http.ResponseWriter, r *http.Request, target string) {
-	f, err := s.render.Frame(r, "login", map[string]any{"url": target})
+	f, err := s.render.Frame(r, "login", struct {
+		URL string `json:"url"`
+	}{URL: target})
 	if err == nil {
 		err = s.render.Page(w, r, http.StatusOK, "auth_test_wait.gohtml", f)
 	}

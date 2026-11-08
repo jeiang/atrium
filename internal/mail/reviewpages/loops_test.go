@@ -65,7 +65,7 @@ func TestSnoozeClampsItsDays(t *testing.T) {
 	mustContain(t, status(t, s.post(target, form("days", "0")), http.StatusOK), "Hidden for 1 day.")
 	mustContain(t, status(t, s.post(target, form("days", "500")), http.StatusOK), "Hidden for 60 days.")
 	var until float64
-	if err := s.db.Write.QueryRow("SELECT snoozed_until FROM open_loops WHERE rowid = ?", id).Scan(&until); err != nil {
+	if err := s.db.Write.QueryRow("SELECT snoozed_until FROM loop_overrides WHERE thread_key = ?", "a").Scan(&until); err != nil {
 		t.Fatal(err)
 	}
 	if want := s.clock + 60*day; until < want-100 || until > want+100 {
@@ -129,7 +129,7 @@ func TestWatchesPageAndPackageDismissal(t *testing.T) {
 	s.package_("DELIVERED1", "delivered", s.clock-3600, 0)
 	page := status(t, s.get("/watches"), http.StatusOK)
 	mustContain(t, page, "1Z999AA10123456784", "Address book not configured", "ATRIUM_CONTACTS_CONTACTS_DIR is not set.",
-		"Packages in transit (1)", "in transit", `href="/messages/2"`, "Birthdays and anniversaries, next 60 days</h2>")
+		"Packages in transit (1)", "in transit", `href="/messages/2"`, "Birthdays and anniversaries, next 14 days</h2>")
 	mustNotContain(t, page, "DELIVERED1", "Renewals", "/money/")
 	body := status(t, s.post("/watches/packages/1/dismiss", nil), http.StatusOK)
 	mustContain(t, body, "Dismissed", "No packages in transit")
@@ -144,7 +144,7 @@ func TestWatchesPageListsAndDismissesBirthdays(t *testing.T) {
 	if err := os.Mkdir(cards, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	zone, err := config.Location(config.Map(nil))
+	zone, err := config.NewState(settings.New()).Location(config.Map(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func enableContacts(t *testing.T, s *site, dir string) {
 	t.Helper()
 	ctx := audit.With(t.Context(), "test", audit.CLI)
 	for key, value := range map[string]string{contacts.DirKey: dir, module.FlagKey(module.Contacts): "true"} {
-		if err := settings.Default.Set(ctx, s.db.Write, key, value, 0); err != nil {
+		if err := s.settings.Set(ctx, s.db.Write, key, value); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -221,9 +221,10 @@ func TestPathAndBodyErrorsAreReportedTogether(t *testing.T) {
 	}
 }
 
-func TestKindFilterAcceptsCalendarReminderAndWikiPlan(t *testing.T) {
+func TestKindFilterAcceptsEveryRegisteredKind(t *testing.T) {
 	s := newSite(t)
-	for _, kind := range []string{"calendar_event", "reminder", "notion_wiki_plan"} {
-		status(t, s.get("/proposals?kind="+kind), http.StatusOK)
+	for _, kind := range s.registry.Kinds() {
+		status(t, s.get("/proposals?kind="+kind.Name), http.StatusOK)
 	}
+	status(t, s.get("/proposals?kind=bogus"), http.StatusUnprocessableEntity)
 }

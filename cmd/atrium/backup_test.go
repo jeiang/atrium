@@ -26,10 +26,10 @@ import (
 
 func backupEnv(t *testing.T, dir string) {
 	t.Helper()
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_DB_KEY", "")
-	t.Setenv("ATRIUM_CONFIG", "")
-	t.Setenv("CREDENTIALS_DIRECTORY", "")
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_DB_KEY", "")
+	setEnv(t, "ATRIUM_CONFIG", "")
+	setEnv(t, "CREDENTIALS_DIRECTORY", "")
 }
 
 func seedBackupDB(t *testing.T, path string, key db.Key) {
@@ -52,7 +52,7 @@ func seedBackupDB(t *testing.T, path string, key db.Key) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := d.Write.Exec("INSERT INTO notion_vec (rowid, visibility, embedding) VALUES (1, 'public', ?)", embed.Serialize(vector)); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO embed_notion_0 (rowid, visibility, embedding) VALUES (1, 'public', ?)", embed.Serialize(vector)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -104,6 +104,7 @@ func dirListing(t *testing.T, dir string) []string {
 }
 
 func TestBackupRestoreEncryptedDatabase(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	backupEnv(t, dir)
 	live := filepath.Join(dir, "state", "atrium.db")
@@ -177,7 +178,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	for n := range entries {
 		names[n] = true
 	}
-	for _, want := range []string{"header.json", "entries.json", "manifest.mac", "atrium.db", "files/threads/1/report.txt", "files/empty.bin", "files/projects/2/notes/a.txt"} {
+	for _, want := range []string{"header.json", "entries.json", "manifest.mac", "atrium.db", "files/threads/", "files/threads/1/", "files/threads/1/report.txt", "files/empty.bin", "files/projects/", "files/projects/2/", "files/projects/2/notes/", "files/projects/2/notes/a.txt"} {
 		if !names[want] {
 			t.Errorf("the archive lacks %s; has %v", want, names)
 		}
@@ -196,7 +197,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 
 	before := dirListing(t, state)
 	verify := runProcess(t, "restore --verify "+archive, env...)
-	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 notion_vec: 1\n", "knn notion_vec: ok\n", "files: 3\n", "nothing was written"} {
+	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 embed_notion_0: 1\n", "knn embed_notion_0: ok\n", "files: 3\n", "nothing was written"} {
 		if verify.code != cli.ExitOK || !strings.Contains(verify.stdout, want) {
 			t.Errorf("restore --verify exited %d with stdout %q, stderr %q; want %q", verify.code, verify.stdout, verify.stderr, want)
 		}
@@ -325,7 +326,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	if left, _ := filepath.Glob(filepath.Join(state, ".atrium-restore-*")); len(left) != 0 {
 		t.Errorf("restore left %v", left)
 	}
-	if knn := runProcess(t, "db check", env...); knn.code != cli.ExitOK || !strings.Contains(knn.stdout, "vec0 notion_vec: 1\n") {
+	if knn := runProcess(t, "db check", env...); knn.code != cli.ExitOK || !strings.Contains(knn.stdout, "vec0 embed_notion_0: 1\n") {
 		t.Errorf("db check after restore exited %d with stdout %q, stderr %q", knn.code, knn.stdout, knn.stderr)
 	}
 	restored, err := db.Connect(live, db.WithKey(key))
@@ -386,13 +387,14 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 }
 
 func TestBackupRestorePlaintextMigratesOlderArchiveAndRefusesNewer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	backupEnv(t, dir)
 	live := filepath.Join(dir, "state", "atrium.db")
 	if err := os.MkdirAll(filepath.Dir(live), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	copyGoldenFile(t, filepath.Join(golden.Dir(), "atrium.db"), live)
+	copyFile(t, filepath.Join(golden.Dir(), "atrium.db"), live)
 	writeStateFiles(t, filepath.Dir(live), map[string]string{"files/threads/9/a.txt": "plain file"})
 	env := []string{"ATRIUM_DB=" + live}
 	archive := filepath.Join(dir, "plain.backup")

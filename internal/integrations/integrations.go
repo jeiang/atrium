@@ -35,6 +35,7 @@ type Conn struct {
 	URL, Secret string
 	HTTP        *http.Client
 	DB          *db.DB
+	Env         config.Env
 }
 
 type Integration struct {
@@ -59,11 +60,11 @@ func Register(i Integration) {
 	if slices.ContainsFunc(registry, func(r Integration) bool { return r.Name == i.Name }) {
 		return
 	}
-	instance := []settings.Scope{settings.Instance}
 	settings.MustRegister(
-		settings.Def{Key: transport.CAKey(i.Name), Module: i.Module, Type: settings.String, Class: settings.Advanced, Scopes: instance},
-		settings.Def{Key: transport.ProxyKey(i.Name), Module: i.Module, Type: settings.String, Class: settings.Advanced, Scopes: instance, Check: proxyCheck},
+		settings.Value(settings.Advanced, settings.Def{Key: transport.CAKey(i.Name), Module: i.Module, Type: settings.String}),
+		settings.Value(settings.Advanced, settings.Def{Key: transport.ProxyKey(i.Name), Module: i.Module, Type: settings.String, Check: proxyCheck}),
 	)
+	settings.Claim(path, i.URLKey, i.SecretKey)
 	registry = append(registry, i)
 }
 
@@ -101,7 +102,7 @@ func text(ctx context.Context, q db.Querier, key string) (string, error) {
 	if key == "" {
 		return "", nil
 	}
-	found, err := settings.Default.Resolve(ctx, q, key, 0)
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	return strings.TrimSpace(found.Value), err
 }
 
@@ -126,23 +127,23 @@ func (r Record) Configured() bool { return r.URLKey == "" && r.SecretSet || r.UR
 
 func Records(ctx context.Context, q db.Querier) ([]Record, error) {
 	var out []Record
-	store := secrets.NewIn(nil, q, nil)
+	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
 	for _, i := range All() {
 		r := Record{Name: i.Name, Label: i.Label, Module: i.Module, Help: i.Help, URLKey: i.URLKey, SecretKey: i.SecretKey, State: Untested}
 		if i.URLKey != "" {
-			found, err := settings.Default.Resolve(ctx, q, i.URLKey, 0)
+			found, err := settings.From(ctx).Resolve(ctx, q, i.URLKey)
 			if err != nil {
 				return nil, err
 			}
-			def, _ := settings.Default.Lookup(i.URLKey)
-			r.URL, r.URLPinned = found.Value, found.Pinned() || (def.Class != settings.UI && def.Class != settings.Advanced)
+			def, _ := settings.From(ctx).Lookup(i.URLKey)
+			r.URL, r.URLPinned = found.Value, found.Pinned() || !def.Editable()
 		}
 		if i.SecretKey != "" {
-			status, err := store.IsSet(ctx, i.SecretKey)
+			status, err := store.Status(ctx, i.SecretKey)
 			if err != nil {
 				return nil, err
 			}
-			r.SecretSet, r.SecretPinned = status != secrets.Unset, status == secrets.Pinned
+			r.SecretSet, r.SecretPinned = status != settings.Unset, status == settings.Pinned
 		}
 		var expires *float64
 		err := q.QueryRowContext(ctx, "SELECT state, reason, checked_at, expires_at FROM integration_health WHERE name = ?", i.Name).
@@ -159,18 +160,18 @@ func Records(ctx context.Context, q db.Querier) ([]Record, error) {
 	return out, nil
 }
 
-func current(ctx context.Context, d *db.DB, i Integration) (Conn, error) {
-	u, err := text(ctx, d.Read, i.URLKey)
+func current(ctx context.Context, d *db.DB, q db.Querier, i Integration, env config.Env) (Conn, error) {
+	u, err := text(ctx, q, i.URLKey)
 	if err != nil {
 		return Conn{}, err
 	}
 	var secret string
 	if i.SecretKey != "" {
-		if secret, err = secrets.NewIn(nil, d.Read, nil).Value(ctx, i.SecretKey); err != nil {
+		if secret, err = secrets.NewIn(settings.From(ctx), nil, q, nil).Value(ctx, i.SecretKey); err != nil {
 			return Conn{}, err
 		}
 	}
-	return Conn{URL: strings.TrimRight(u, "/"), Secret: secret, DB: d}, nil
+	return Conn{URL: strings.TrimRight(u, "/"), Secret: secret, DB: d, Env: env}, nil
 }
 
 func run(ctx context.Context, q db.Querier, i Integration, c Conn) (state, reason string, expires *time.Time, err error) {
@@ -206,19 +207,32 @@ func run(ctx context.Context, q db.Querier, i Integration, c Conn) (state, reaso
 	return OK, detail, expires, nil
 }
 
-func record(ctx context.Context, d *db.DB, env config.Env, i Integration, state, reason string, expires *time.Time, now float64) error {
+func record(ctx context.Context, d *db.DB, env config.Env, i Integration, state, reason string, expires *time.Time, now float64, tested *Conn) error {
 	var previous string
-	err := d.Read.QueryRowContext(ctx, "SELECT state FROM integration_health WHERE name = ?", i.Name).Scan(&previous)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
 	var exp any
 	if expires != nil {
 		exp = float64(expires.Unix())
 	}
-	if _, err := d.Write.ExecContext(ctx, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES (?, ?, ?, ?, ?) "+
-		"ON CONFLICT(name) DO UPDATE SET state = excluded.state, reason = excluded.reason, checked_at = excluded.checked_at, expires_at = excluded.expires_at",
-		i.Name, state, reason, now, exp); err != nil {
+	stale := false
+	if err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		if tested != nil {
+			c, err := current(ctx, d, tx, i, env)
+			if err != nil {
+				return err
+			}
+			if stale = c.URL != tested.URL || c.Secret != tested.Secret; stale {
+				return nil
+			}
+		}
+		err := tx.QueryRowContext(ctx, "SELECT state FROM integration_health WHERE name = ?", i.Name).Scan(&previous)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES (?, ?, ?, ?, ?) "+
+			"ON CONFLICT(name) DO UPDATE SET state = excluded.state, reason = excluded.reason, checked_at = excluded.checked_at, expires_at = excluded.expires_at",
+			i.Name, state, reason, now, exp)
+		return err
+	}); err != nil || stale {
 		return err
 	}
 	mu.Lock()
@@ -235,7 +249,7 @@ func record(ctx context.Context, d *db.DB, env config.Env, i Integration, state,
 }
 
 func RecordResult(ctx context.Context, d *db.DB, env config.Env, name, label, state, reason string, now float64) error {
-	return record(ctx, d, env, Integration{Name: name, Label: label}, state, reason, nil, now)
+	return record(ctx, d, env, Integration{Name: name, Label: label}, state, reason, nil, now, nil)
 }
 
 func Check(ctx context.Context, d *db.DB, env config.Env, name string, now float64) (string, error) {
@@ -243,7 +257,7 @@ func Check(ctx context.Context, d *db.DB, env config.Env, name string, now float
 	if !ok {
 		return "", Unknown(name)
 	}
-	c, err := current(ctx, d, i)
+	c, err := current(ctx, d, d.Read, i, env)
 	if err != nil {
 		return "", err
 	}
@@ -254,7 +268,7 @@ func Check(ctx context.Context, d *db.DB, env config.Env, name string, now float
 	if err != nil {
 		return "", err
 	}
-	return state, record(ctx, d, env, i, state, reason, expires, now)
+	return state, record(ctx, d, env, i, state, reason, expires, now, &c)
 }
 
 func CheckAll(ctx context.Context, d *db.DB, env config.Env, now float64) error {
@@ -288,7 +302,7 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 	if !ok {
 		return Unknown(name)
 	}
-	c, err := current(ctx, d, i)
+	c, err := current(ctx, d, d.Read, i, env)
 	if err != nil {
 		return err
 	}
@@ -305,7 +319,7 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 	}
 	changed := urlChanged || cand.HasSecret
 	if !changed {
-		if err := record(ctx, d, env, i, state, reason, expires, now); err != nil {
+		if err := record(ctx, d, env, i, state, reason, expires, now, &c); err != nil {
 			return err
 		}
 	}
@@ -317,19 +331,19 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 	}
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		if urlChanged {
-			if err := settings.Default.Set(ctx, tx, i.URLKey, c.URL, 0); err != nil {
+			if err := settings.From(ctx).Set(ctx, tx, i.URLKey, c.URL); err != nil {
 				return err
 			}
 		}
 		if cand.HasSecret {
-			return secrets.NewIn(d, tx, d).Set(ctx, i.SecretKey, c.Secret, by)
+			return secrets.NewIn(settings.From(ctx), d, tx, d).Set(ctx, i.SecretKey, c.Secret, by)
 		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	return record(ctx, d, env, i, state, reason, expires, now)
+	return record(ctx, d, env, i, state, reason, expires, now, &c)
 }
 
 func Disconnect(ctx context.Context, d *db.DB, name string) error {
@@ -339,15 +353,15 @@ func Disconnect(ctx context.Context, d *db.DB, name string) error {
 	}
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
 		if i.URLKey != "" {
-			if err := settings.Default.Unset(ctx, tx, i.URLKey, 0); err != nil {
+			if err := settings.From(ctx).Unset(ctx, tx, i.URLKey); err != nil {
 				return err
 			}
 		}
 		if i.SecretKey != "" {
-			store := secrets.NewIn(d, tx, d)
-			if status, err := store.IsSet(ctx, i.SecretKey); err != nil {
+			store := secrets.NewIn(settings.From(ctx), d, tx, d)
+			if status, err := store.Status(ctx, i.SecretKey); err != nil {
 				return err
-			} else if status == secrets.Pinned {
+			} else if status == settings.Pinned {
 				return &settings.PinnedError{Key: i.SecretKey, Source: "deployment"}
 			}
 			if err := store.Delete(ctx, i.SecretKey); err != nil {
@@ -362,26 +376,3 @@ func Disconnect(ctx context.Context, d *db.DB, name string) error {
 type Unknown string
 
 func (e Unknown) Error() string { return fmt.Sprintf("unknown integration %q", string(e)) }
-
-func Alerts(ctx context.Context, q db.Querier) ([]string, error) {
-	rows, err := q.QueryContext(ctx, "SELECT name, state FROM integration_health WHERE state IN (?, ?, ?) ORDER BY name", Failing, NeedsReauth, Expiring)
-	if err != nil {
-		return nil, err
-	}
-	pairs, err := db.Collect(rows, func(r *sql.Rows) ([2]string, error) {
-		var p [2]string
-		return p, r.Scan(&p[0], &p[1])
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(pairs))
-	for _, p := range pairs {
-		label := p[0]
-		if i, ok := Get(p[0]); ok {
-			label = i.Label
-		}
-		out = append(out, label+" "+strings.ReplaceAll(p[1], "_", " "))
-	}
-	return out, nil
-}

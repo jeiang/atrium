@@ -23,11 +23,13 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/nightly"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	askoperatortools "github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
-	contexttools "github.com/jeiang/atrium/internal/assistant/tools/context"
+	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
+	memorytools "github.com/jeiang/atrium/internal/assistant/tools/memory"
 	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
@@ -35,12 +37,14 @@ import (
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
 	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -48,24 +52,35 @@ import (
 const zone = "America/Port_of_Spain"
 
 type site struct {
-	t      *testing.T
-	db     *db.DB
-	cfg    config.Config
-	api    *anthropictest.Server
-	srv    *web.Server
-	http   *httptest.Server
-	token  string
-	mu     sync.Mutex
-	clock  float64
-	runner *loop.Runner
+	t        *testing.T
+	db       *db.DB
+	cfg      config.Config
+	settings *settings.Registry
+	state    *config.State
+	api      *anthropictest.Server
+	srv      *web.Server
+	http     *httptest.Server
+	token    string
+	mu       sync.Mutex
+	clock    float64
+	runner   *loop.Runner
+	fetch    *webfetch.Fetcher
 }
 
-func allTools(t *testing.T) *registry.Registry {
+func (s *site) ctx() context.Context {
+	return config.With(settings.With(context.Background(), s.settings), s.state)
+}
+
+func allTools(t *testing.T, fetchers ...*webfetch.Fetcher) *registry.Registry {
 	t.Helper()
-	r := registry.New()
+	fetch := webfetch.Tools()
+	if len(fetchers) > 0 && fetchers[0] != nil {
+		fetch = []tool.Tool{webfetch.Tool(fetchers[0])}
+	}
+	r := registry.New(settings.New())
 	for _, tools := range [][]tool.Tool{
-		mailtools.Tools(), mediatools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
-		contexttools.Tools(), recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
+		askoperatortools.Tools(), filetools.Tools(), memorytools.Tools(), mailtools.Tools(), mediatools.Tools(), notify.Tools(), fetch, nightly.Tools(),
+		recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
 		scheduletools.Tools(), skillstools.Tools(), notiontools.Tools(),
 		grafanatools.Tools(), calendartools.Tools(), contactsmodule.Tools(),
 	} {
@@ -78,7 +93,21 @@ func allTools(t *testing.T) *registry.Registry {
 
 type siteOption func(*site)
 
-func withRunner(r *loop.Runner) siteOption { return func(s *site) { s.runner = r } }
+func withWebfetch(f *webfetch.Fetcher) siteOption { return func(s *site) { s.fetch = f } }
+
+func assistantNav() []web.NavItem {
+	return []web.NavItem{
+		{Group: "Assistant", Label: "Chat", URL: "/chat", Icon: "messages-square", Page: "chat", Order: 10},
+		{Group: "Assistant", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 10},
+		{Group: "Assistant", Label: "Projects", URL: "/projects", Icon: "folder", Page: "projects", Order: 10},
+		{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
+		{Label: "Skills", URL: "/settings/skills", Page: "skills", Settings: true, Order: 20},
+		{Label: "Subagents", URL: "/settings/subagents", Page: "subagents", Settings: true, Order: 30},
+		{Label: "Prompts", URL: "/settings/prompts", Page: "prompts", Settings: true, Order: 40},
+		{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Order: 60},
+		{Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 80},
+	}
+}
 
 func newSite(t *testing.T, options ...siteOption) *site {
 	t.Helper()
@@ -95,16 +124,21 @@ func newSiteOn(t *testing.T, d *db.DB, options ...siteOption) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &site{t: t, db: d, cfg: cfg, api: anthropictest.New(t), clock: 1_780_000_000, runner: &loop.Runner{Registry: registry.New()}}
+	settingsReg := settings.New()
+	st := config.NewState(settingsReg)
+	s := &site{t: t, db: d, cfg: cfg, settings: settingsReg, state: st, api: anthropictest.New(t), clock: 1_780_000_000, runner: &loop.Runner{Registry: registry.New(settingsReg)}}
 	for _, o := range options {
 		o(s)
 	}
-	render, err := web.NewRenderer(cfg, d, tpl.Config{Modules: []fs.FS{Templates()}})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}, State: st}, assistantNav()...)
 	if err != nil {
 		t.Fatal(err)
 	}
-	module := Module(Options{Runner: s.runner, Registry: allTools(t), Client: s.api.Client(), Now: s.now, Poll: 10 * time.Millisecond, KeepAlive: 200 * time.Millisecond})
-	s.srv, err = web.New(web.Options{Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, Render: render, Modules: []web.Module{module}})
+	reg := allTools(t, s.fetch)
+	s.runner.Registry = reg
+	s.runner.Undoers = toolset.Undoers(config.OS)
+	module := Module(Options{Runner: s.runner, Registry: reg, Client: s.api.Client(), Now: s.now, Poll: 10 * time.Millisecond, KeepAlive: 200 * time.Millisecond})
+	s.srv, err = web.New(web.Options{Cfg: cfg, Env: env, DB: d, Settings: settingsReg, State: st, Auth: []string{web.AuthLocal}, Render: render, Modules: []web.Module{module}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,12 +164,6 @@ func (s *site) now() float64 {
 	defer s.mu.Unlock()
 	s.clock++
 	return s.clock
-}
-
-func (s *site) setClock(at float64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.clock = at
 }
 
 type reply struct {
@@ -297,15 +325,6 @@ func mustNotContain(t *testing.T, body string, unwanted ...string) {
 			t.Errorf("body contains %q", bad)
 		}
 	}
-}
-
-func detail(t *testing.T, body string) any {
-	t.Helper()
-	var out map[string]any
-	if err := json.Unmarshal([]byte(body), &out); err != nil {
-		t.Fatalf("not JSON: %s", body)
-	}
-	return out["detail"]
 }
 
 func reply1(blocks ...json.RawMessage) anthropictest.Response {

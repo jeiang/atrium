@@ -5,41 +5,53 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
+	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	"github.com/jeiang/atrium/internal/assistant/nightly"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/skills/skillscmd"
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	contexttools "github.com/jeiang/atrium/internal/assistant/tools/context"
+	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
+	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
+	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
+	memorytools "github.com/jeiang/atrium/internal/assistant/tools/memory"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
 	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
+	taskstools "github.com/jeiang/atrium/internal/assistant/tools/tasks"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
+	"github.com/jeiang/atrium/internal/attention"
+	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/tasks"
 	"github.com/jeiang/atrium/internal/web"
 )
 
 func init() {
 	integrations.Register(integrations.Integration{
 		Name: "anthropic", Label: "Anthropic", Module: module.Assistant, SecretKey: secrets.AnthropicAPIKey,
-		Help: "Console API key from a workspace with a monthly spend limit, so a leaked key cannot spend beyond it.",
+		Help: "Console API key from a workspace with a monthly spend limit; use one workspace per instance.",
 		Test: testAnthropic,
 	})
 }
 
 func testAnthropic(ctx context.Context, c integrations.Conn) (string, error) {
-	client, err := anthropic.New(c.Secret, config.OS, anthropic.HTTPClient(c.HTTP))
+	env := c.Env
+	if env == nil {
+		env = config.OS
+	}
+	client, err := anthropic.New(c.Secret, env, anthropic.HTTPClient(c.HTTP))
 	if err != nil {
 		return "", err
 	}
@@ -64,10 +76,25 @@ func (m Module) Register(mc module.Context) module.Registration {
 	chat := m.Chat
 	chat.Tools = mc.Tools
 	return module.Registration{
-		Name:     module.Assistant,
-		Requires: []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
-		Pages:    []web.Page{{Module: chatpages.Module(chat), Templates: chatpages.Templates()}},
-		Commands: []*cli.Command{agentcmd.Command(mc.Tools, mc.Enabled), skillscmd.Command()},
+		Name:      module.Assistant,
+		Attention: []attention.Source{attentionsources.Plans(), tasks.AttentionSource()},
+		Requires:  []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
+		Pages: []web.Page{{
+			Module:    chatpages.Module(chat),
+			Templates: chatpages.Templates(),
+			Home:      "/chat",
+			Nav: []web.NavItem{
+				{Group: "Assistant", Label: "Chat", URL: "/chat", Icon: "messages-square", Page: "chat", Brand: true, Order: 10},
+				{Group: "Assistant", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 10},
+				{Group: "Assistant", Label: "Projects", URL: "/projects", Icon: "folder", Page: "projects", Order: 10},
+				{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
+				{Label: "Skills", URL: "/settings/skills", Page: "skills", Settings: true, Order: 20},
+				{Label: "Subagents", URL: "/settings/subagents", Page: "subagents", Settings: true, Order: 30},
+				{Label: "Prompts", URL: "/settings/prompts", Page: "prompts", Settings: true, Order: 40},
+				{Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 80},
+			},
+		}},
+		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled), skillscmd.Command(mc.Env), memorycmd.Command(mc.Env)},
 		Tools:    addTools,
 	}
 }
@@ -77,7 +104,7 @@ func anthropicKey(ctx context.Context, p module.Probe) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if py.Strip(key) == "" {
+	if strings.TrimSpace(key) == "" {
 		return secrets.AnthropicAPIKey + " is not set", nil
 	}
 	return "", nil
@@ -85,8 +112,9 @@ func anthropicKey(ctx context.Context, p module.Probe) (string, error) {
 
 func addTools(r *registry.Registry) error {
 	for _, tools := range [][]tool.Tool{
-		nightly.Tools(), webfetch.Tools(), contexttools.Tools(), recalltools.Tools(), plantools.Tools(),
-		profiletools.Tools(), proposetools.Tools(), scheduletools.Tools(), skillstools.Tools(),
+		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(), memorytools.Tools(),
+		nightly.Tools(), webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
+		profiletools.Tools(), proposetools.Tools(), scheduletools.Tools(), skillstools.Tools(), taskstools.Tools(),
 	} {
 		if err := r.Add(tools...); err != nil {
 			return err

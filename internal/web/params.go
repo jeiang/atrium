@@ -21,16 +21,23 @@ func PathParam(r *http.Request, name string) string {
 	return v
 }
 
-func FormField(form url.Values, name string) (value string, ok bool) {
+func Value(form url.Values, name string) (value string, ok bool) {
 	values := form[name]
-	if len(values) == 0 || values[len(values)-1] == "" {
+	if len(values) == 0 {
 		return "", false
 	}
 	return values[len(values)-1], true
 }
 
+func ValueOr(form url.Values, name, def string) string {
+	if value, ok := Value(form, name); ok {
+		return value
+	}
+	return def
+}
+
 func FormString(form url.Values, name, def string) string {
-	if value, ok := FormField(form, name); ok {
+	if value, ok := Value(form, name); ok && value != "" {
 		return value
 	}
 	return def
@@ -73,14 +80,7 @@ func Unprocessable(w http.ResponseWriter, errs ...FieldError) {
 	_, _ = w.Write(bytes.TrimRight(body.Bytes(), "\n"))
 }
 
-func LastValue(values []string, def string) string {
-	if len(values) == 0 {
-		return def
-	}
-	return values[len(values)-1]
-}
-
-func QueryValue(q url.Values, name string) string { return LastValue(q[name], "") }
+func QueryValue(q url.Values, name string) string { return ValueOr(q, name, "") }
 
 func FormValues(r *http.Request) url.Values {
 	if media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err == nil && strings.HasPrefix(media, "multipart/") {
@@ -91,12 +91,4 @@ func FormValues(r *http.Request) url.Values {
 	}
 	_ = r.ParseForm()
 	return r.PostForm
-}
-
-func FormLast(form url.Values, name string) (value string, ok bool) {
-	values := form[name]
-	if len(values) == 0 {
-		return "", false
-	}
-	return values[len(values)-1], true
 }

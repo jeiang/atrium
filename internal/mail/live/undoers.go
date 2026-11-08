@@ -6,10 +6,10 @@ import (
 	"slices"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -57,21 +57,30 @@ type Unflag struct {
 	UIDs        []uint32 `json:"uids"`
 }
 
-func RegisterUndoers(r *proposals.Registry, open mailops.Opener) {
-	r.Undoers[OpMoveBack] = plan(func(ctx context.Context, p MoveBack) (py.Dict, error) { return undoMoveBack(ctx, open, p) })
-	r.Undoers[OpGmailLabels] = plan(func(ctx context.Context, p GmailLabels) (py.Dict, error) { return undoGmailLabels(ctx, open, p) })
-	r.Undoers[OpGmailUntrash] = plan(func(ctx context.Context, p GmailUntrash) (py.Dict, error) { return undoGmailUntrash(ctx, open, p) })
-	r.Undoers[OpUnflag] = plan(func(ctx context.Context, p Unflag) (py.Dict, error) { return undoUnflag(ctx, open, p) })
+func RegisterUndoers(r *proposals.Registry, open mail.OpenFunc, q db.Querier) {
+	r.Undoers[OpMoveBack] = plan(func(ctx context.Context, p MoveBack) (any, error) { return undoMoveBack(ctx, open, q, p) })
+	r.Undoers[OpGmailLabels] = plan(func(ctx context.Context, p GmailLabels) (any, error) { return undoGmailLabels(ctx, open, q, p) })
+	r.Undoers[OpGmailUntrash] = plan(func(ctx context.Context, p GmailUntrash) (any, error) { return undoGmailUntrash(ctx, open, q, p) })
+	r.Undoers[OpUnflag] = plan(func(ctx context.Context, p Unflag) (any, error) { return undoUnflag(ctx, open, q, p) })
 }
 
-func plan[T any](fn func(context.Context, T) (py.Dict, error)) proposals.Undoer {
-	return func(ctx context.Context, raw json.RawMessage) (py.Dict, error) {
+func plan[T any](fn func(context.Context, T) (any, error)) proposals.Undoer {
+	return func(ctx context.Context, raw json.RawMessage) (any, error) {
 		var p T
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
 		}
 		return fn(ctx, p)
 	}
+}
+
+type moveBackResult struct {
+	Restored int `json:"restored"`
+	Missing  int `json:"missing"`
+}
+
+type messagesResult struct {
+	Messages int `json:"messages"`
 }
 
 func gmailAccount(recorded string) string {
@@ -86,9 +95,9 @@ func validity(ctx context.Context, client mail.Client, imapName string) (uint32,
 	return st.UIDValidity, err
 }
 
-func undoMoveBack(ctx context.Context, open mailops.Opener, p MoveBack) (py.Dict, error) {
+func undoMoveBack(ctx context.Context, open mail.OpenFunc, q db.Querier, p MoveBack) (any, error) {
 	var restored, missing int
-	err := mailops.Session(ctx, open, p.Account, func(client mail.Client) error {
+	err := mailops.Session(ctx, open, q, p.Account, func(client mail.Client) error {
 		current, err := validity(ctx, client, p.DestIMAP)
 		if err != nil {
 			return err
@@ -152,11 +161,11 @@ func undoMoveBack(ctx context.Context, open mailops.Opener, p MoveBack) (py.Dict
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "restored", Value: restored}, {Key: "missing", Value: missing}}, nil
+	return moveBackResult{Restored: restored, Missing: missing}, nil
 }
 
-func undoGmailLabels(ctx context.Context, open mailops.Opener, p GmailLabels) (py.Dict, error) {
-	err := mailops.Session(ctx, open, gmailAccount(p.Account), func(client mail.Client) error {
+func undoGmailLabels(ctx context.Context, open mail.OpenFunc, q db.Querier, p GmailLabels) (any, error) {
+	err := mailops.Session(ctx, open, q, gmailAccount(p.Account), func(client mail.Client) error {
 		v, err := validity(ctx, client, p.IMAPName)
 		if err != nil {
 			return err
@@ -173,11 +182,11 @@ func undoGmailLabels(ctx context.Context, open mailops.Opener, p GmailLabels) (p
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "messages", Value: len(p.UIDs)}}, nil
+	return messagesResult{Messages: len(p.UIDs)}, nil
 }
 
-func undoGmailUntrash(ctx context.Context, open mailops.Opener, p GmailUntrash) (py.Dict, error) {
-	err := mailops.Session(ctx, open, gmailAccount(p.Account), func(client mail.Client) error {
+func undoGmailUntrash(ctx context.Context, open mail.OpenFunc, q db.Querier, p GmailUntrash) (any, error) {
+	err := mailops.Session(ctx, open, q, gmailAccount(p.Account), func(client mail.Client) error {
 		if p.DestUIDValidity != nil {
 			v, err := validity(ctx, client, p.TrashIMAP)
 			if err != nil {
@@ -196,11 +205,11 @@ func undoGmailUntrash(ctx context.Context, open mailops.Opener, p GmailUntrash) 
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "messages", Value: len(p.UIDs)}}, nil
+	return messagesResult{Messages: len(p.UIDs)}, nil
 }
 
-func undoUnflag(ctx context.Context, open mailops.Opener, p Unflag) (py.Dict, error) {
-	err := mailops.Session(ctx, open, p.Account, func(client mail.Client) error {
+func undoUnflag(ctx context.Context, open mail.OpenFunc, q db.Querier, p Unflag) (any, error) {
+	err := mailops.Session(ctx, open, q, p.Account, func(client mail.Client) error {
 		v, err := validity(ctx, client, p.IMAPName)
 		if err != nil {
 			return err
@@ -217,7 +226,7 @@ func undoUnflag(ctx context.Context, open mailops.Opener, p Unflag) (py.Dict, er
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "messages", Value: len(p.UIDs)}}, nil
+	return messagesResult{Messages: len(p.UIDs)}, nil
 }
 
 func derefOr0(v *uint32) uint32 {

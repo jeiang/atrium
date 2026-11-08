@@ -42,12 +42,9 @@ func editable(key string) (prompts.Editable, bool) {
 func (p *pages) promptsPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, draft *PromptView) {
 	views := make([]PromptView, len(prompts.Editables))
 	for i, e := range prompts.Editables {
-		found, err := settings.Default.Resolve(r.Context(), p.deps.DB.Read, e.Key, 0)
+		text, custom, pinned, err := prompts.Effective(r.Context(), p.deps.DB.Read, e.Key)
 		check(err)
-		views[i] = PromptView{Key: e.Key, Label: e.Label, Text: e.Default, Custom: found.Value != "", Pinned: found.Pinned()}
-		if found.Value != "" {
-			views[i].Text = found.Value
-		}
+		views[i] = PromptView{Key: e.Key, Label: e.Label, Text: text, Custom: custom, Pinned: pinned}
 		if draft != nil && draft.Key == e.Key {
 			views[i].Text, views[i].Error = draft.Text, draft.Error
 		}
@@ -69,9 +66,9 @@ func (p *pages) promptChange(w http.ResponseWriter, r *http.Request, e prompts.E
 	ctx := audit.With(detached(r), "operator", audit.UI)
 	var err error
 	if reset || text == e.Default {
-		err = settings.Default.Unset(ctx, p.deps.DB.Write, e.Key, 0)
+		err = settings.From(ctx).Unset(ctx, p.deps.DB.Write, e.Key)
 	} else {
-		err = settings.Default.Set(ctx, p.deps.DB.Write, e.Key, text, 0)
+		err = settings.From(ctx).Set(ctx, p.deps.DB.Write, e.Key, text)
 	}
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError

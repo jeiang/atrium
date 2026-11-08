@@ -53,6 +53,7 @@ func (f *fakeQbit) saw(path string) bool {
 }
 
 func TestMediaCredentialsTestThroughIntegrationsAndAuthenticateEveryRequest(t *testing.T) {
+	t.Parallel()
 	qb := &fakeQbit{version: "v5.2.0"}
 	qbSrv := httptest.NewServer(http.HandlerFunc(qb.handler))
 	t.Cleanup(qbSrv.Close)
@@ -69,14 +70,12 @@ func TestMediaCredentialsTestThroughIntegrationsAndAuthenticateEveryRequest(t *t
 		_, _ = w.Write([]byte(`{}`))
 	}))
 	t.Cleanup(tmdb.Close)
-	previous := media.TMDBAPI
-	media.TMDBAPI = tmdb.URL + "/3"
-	t.Cleanup(func() { media.TMDBAPI = previous })
+	setEnv(t, settingEnv(media.KeyTMDBURL), tmdb.URL+"/3")
 
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(settingEnv(media.KeyQbitURL), qbSrv.URL)
-	t.Setenv(settingEnv(media.KeyQbitAPIKey), "qbt_good")
-	t.Setenv(settingEnv(media.KeyTMDBToken), "tmdb_good")
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(media.KeyQbitURL), qbSrv.URL)
+	setEnv(t, settingEnv(media.KeyQbitAPIKey), "qbt_good")
+	setEnv(t, settingEnv(media.KeyTMDBToken), "tmdb_good")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 
@@ -105,7 +104,7 @@ func TestMediaCredentialsTestThroughIntegrationsAndAuthenticateEveryRequest(t *t
 		t.Errorf("qBittorrent 5.1 with a key: state %s, want failing", health(t, dir, "qbittorrent"))
 	}
 
-	t.Setenv(settingEnv(media.KeyTMDBToken), "tmdb_wrong")
+	setEnv(t, settingEnv(media.KeyTMDBToken), "tmdb_wrong")
 	s.start()
 	if code, _ := s.post("/tmdb/test", nil); code != http.StatusUnprocessableEntity || health(t, dir, "tmdb") != integrations.NeedsReauth {
 		t.Errorf("a refused TMDB token: %d, state %s, want needs_reauth", code, health(t, dir, "tmdb"))

@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
@@ -37,15 +38,31 @@ var (
 
 type Service struct {
 	d   *db.DB
-	Now func() time.Time
+	now func() time.Time
 }
 
-func New(d *db.DB) *Service { return &Service{d: d, Now: time.Now} }
+type Option func(*Service)
 
-func (s *Service) unix() float64 { return float64(s.Now().UnixNano()) / 1e9 }
+func WithNow(now func() time.Time) Option {
+	return func(s *Service) {
+		if now != nil {
+			s.now = now
+		}
+	}
+}
+
+func New(d *db.DB, opts ...Option) *Service {
+	s := &Service{d: d, now: time.Now}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func (s *Service) unix() float64 { return float64(s.now().UnixNano()) / 1e9 }
 
 func (s *Service) mac(ctx context.Context, nonce string) ([]byte, error) {
-	key, err := secrets.New(s.d, s.d).GeneratedKey(ctx, secrets.ActionLinkKey)
+	key, err := secrets.New(settings.From(ctx), s.d, s.d).Generate(ctx, secrets.ActionLinkKey)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +120,9 @@ func (s *Service) Issue(ctx context.Context, ttl time.Duration) (string, error) 
 	return token, nil
 }
 
-func (s *Service) Redeem(ctx context.Context, token string) error {
+type RedeemFunc func(context.Context, *sql.Tx) error
+
+func (s *Service) Redeem(ctx context.Context, token string, after RedeemFunc) error {
 	ctx = audit.With(ctx, "login-link", audit.UI)
 	nonce, given, ok := strings.Cut(token, ".")
 	if !ok || len(nonce) > 128 || len(given) > 128 {
@@ -135,6 +154,11 @@ func (s *Service) Redeem(ctx context.Context, token string) error {
 		case s.unix() >= expires:
 			outcome = ErrExpired
 			return note(ctx, tx, "refused: #%d expired", id)
+		}
+		if after != nil {
+			if err := after(ctx, tx); err != nil {
+				return err
+			}
 		}
 		if _, err := tx.ExecContext(ctx, "UPDATE auth_login_links SET used_at = ? WHERE id = ?", s.unix(), id); err != nil {
 			return err

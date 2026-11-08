@@ -18,8 +18,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const FilePrefix = "/media/file/"
@@ -29,6 +29,7 @@ const linkKeyTTL = 30 * time.Second
 var errEmptyLinkKey = errors.New("media: the link key is empty")
 
 type Links struct {
+	reg        *settings.Registry
 	d          *db.DB
 	legacyPath string
 	mu         sync.Mutex
@@ -36,8 +37,8 @@ type Links struct {
 	loaded     time.Time
 }
 
-func NewLinks(d *db.DB, legacyPath string) *Links {
-	return &Links{d: d, legacyPath: legacyPath}
+func NewLinks(reg *settings.Registry, d *db.DB, legacyPath string) *Links {
+	return &Links{reg: reg, d: d, legacyPath: legacyPath}
 }
 
 func trimKey(b []byte) []byte { return bytes.Trim(b, " \t\n\r\v\f") }
@@ -70,7 +71,7 @@ func (l *Links) secretKey(ctx context.Context) (key []byte, fresh bool, err erro
 }
 
 func (l *Links) reread(ctx context.Context) []byte {
-	value, err := secrets.New(l.d, l.d).Reading().Value(ctx, KeyLinkKey)
+	value, err := secrets.New(l.reg, l.d, l.d).Reading().Value(ctx, KeyLinkKey)
 	if err != nil || value == "" {
 		return nil
 	}
@@ -78,7 +79,7 @@ func (l *Links) reread(ctx context.Context) []byte {
 }
 
 func (l *Links) load(ctx context.Context) ([]byte, error) {
-	store := secrets.New(l.d, l.d)
+	store := secrets.New(l.reg, l.d, l.d)
 	value, err := store.Reading().Value(ctx, KeyLinkKey)
 	if err != nil {
 		return nil, err
@@ -88,7 +89,7 @@ func (l *Links) load(ctx context.Context) ([]byte, error) {
 	}
 	var legacy []byte
 	adopted := false
-	err = store.InTx(ctx, func(w *secrets.Store) error {
+	err = store.InTx(ctx, func(w *settings.Store) error {
 		if value, err = w.Value(ctx, KeyLinkKey); err != nil || value != "" {
 			return err
 		}
@@ -102,7 +103,7 @@ func (l *Links) load(ctx context.Context) ([]byte, error) {
 				return err
 			}
 		}
-		value, err = w.GeneratedKey(ctx, KeyLinkKey)
+		value, err = w.Generate(ctx, KeyLinkKey)
 		return err
 	})
 	if err != nil {
@@ -119,26 +120,42 @@ func (l *Links) load(ctx context.Context) ([]byte, error) {
 	return []byte(value), nil
 }
 
+func urlQuote(s string) string {
+	const hex = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := range len(s) {
+		c := s[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '.' || c == '-' || c == '~' || c == '/' {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(hex[c>>4])
+		b.WriteByte(hex[c&15])
+	}
+	return b.String()
+}
+
 func signText(secret []byte, rel, exp string) string {
 	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte(rel + "\n" + exp))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func Sign(secret []byte, rel string, exp int64) string {
+func sign(secret []byte, rel string, exp int64) string {
 	return signText(secret, rel, strconv.FormatInt(exp, 10))
 }
 
 func verifyWith(secret []byte, rel, exp, sig string, now float64) bool {
-	n, err := py.IntString(exp)
-	if err != nil {
+	n, ok := new(big.Int).SetString(strings.TrimSpace(exp), 10)
+	if !ok {
 		return false
 	}
 	if new(big.Float).SetInt(n).Cmp(big.NewFloat(now)) <= 0 {
 		return false
 	}
 	want := signText(secret, rel, n.String())
-	return hmac.Equal([]byte(want), []byte(py.Lower(py.Strip(sig))))
+	return hmac.Equal([]byte(want), []byte(strings.ToLower(strings.TrimSpace(sig))))
 }
 
 func (l *Links) Verify(ctx context.Context, rel, exp, sig string, now float64) bool {
@@ -169,7 +186,7 @@ func (l *Links) PublicURL(ctx context.Context, base, rel string, now float64, tt
 		return "", errEmptyLinkKey
 	}
 	exp := int64(now + float64(ttl))
-	return base + FilePrefix + py.URLQuote(rel) + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + Sign(secret, rel, exp), nil
+	return base + FilePrefix + urlQuote(rel) + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + sign(secret, rel, exp), nil
 }
 
 func (s Settings) VPNURL(rel string) string {
@@ -184,16 +201,14 @@ func (s Settings) VPNURL(rel string) string {
 	if base == "" {
 		return ""
 	}
-	return base + "/" + py.URLQuote(rest)
+	return base + "/" + urlQuote(rest)
 }
 
-func firstQuery(values []string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
+func QueryValue(values []string) string {
+	if len(values) == 0 {
+		return ""
 	}
-	return ""
+	return values[len(values)-1]
 }
 
 func (l *Links) Verifier() func(*http.Request) bool {
@@ -203,6 +218,6 @@ func (l *Links) Verifier() func(*http.Request) bool {
 			return false
 		}
 		query := r.URL.Query()
-		return l.Verify(r.Context(), rest, firstQuery(query["exp"]), firstQuery(query["sig"]), Now())
+		return l.Verify(r.Context(), rest, QueryValue(query["exp"]), QueryValue(query["sig"]), Now())
 	}
 }

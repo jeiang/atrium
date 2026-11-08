@@ -3,7 +3,6 @@ CREATE TABLE IF NOT EXISTS context_projections (
     thread_id INTEGER NOT NULL REFERENCES threads(id),
     run_id INTEGER,
     ts REAL NOT NULL,
-    kind TEXT NOT NULL,
     base_seq INTEGER NOT NULL,
     strip_from_seq INTEGER NOT NULL DEFAULT 0,
     strip_before_seq INTEGER NOT NULL DEFAULT 0,

@@ -1,22 +1,36 @@
-{{template "composer_options" (dict "c" .Data.composer)}}
+{{template "composer_options" (dict "c" .Data.Composer)}}
 
-{{define "composer_options"}}{{$c := .c}}{{$live := $c.live}}
+{{define "composer_options"}}{{$c := .c}}{{$live := $c.Live}}
 <span id="composer-options" class="contents"{{if opt . "oob" false}} hx-swap-oob="true"{{end}}>
   <label class="flex items-center gap-1 text-muted-foreground">Model
-    <select id="composer-model" name="model" class="select h-7 py-0 text-xs" data-option{{if $live}} hx-post="/chat/{{$live}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML"{{else}} hx-get="/chat/composer-options" hx-trigger="change" hx-include="[data-option]" hx-target="#composer-options" hx-swap="outerHTML"{{end}}>
-      {{if not $c.known}}<option value="{{$c.model}}" selected disabled>{{$c.model}}</option>{{end}}
-      {{range $c.models}}<option value="{{.id}}"{{if eq .id $c.model}} selected{{end}}>{{.name}}</option>{{end}}
+    <select id="composer-model" name="model" class="select h-7 py-0 text-xs" data-option{{if $live}} hx-post="/chat/{{$live}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML"{{else}} hx-get="/chat/composer-options" hx-trigger="change" hx-include="[data-option]" hx-vals='{"reset":"1"}' hx-target="#composer-options" hx-swap="outerHTML"{{end}}>
+      {{if not $c.Known}}<option value="{{$c.Model}}" selected disabled>{{$c.Model}}</option>{{end}}
+      {{range $c.Models}}<option value="{{.ID}}"{{if eq .ID $c.Model}} selected{{end}}>{{.Name}}</option>{{end}}
     </select>
   </label>
   <label class="flex items-center gap-1 text-muted-foreground">Effort
-    <select id="composer-effort" name="effort" class="select h-7 py-0 text-xs" data-option{{if $live}} hx-post="/chat/{{$live}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML"{{end}}>
-      {{range $c.efforts}}<option value="{{.}}"{{if eq . $c.effort}} selected{{end}}>{{.}}</option>{{end}}
-    </select>
+    {{if $c.EffortFixed}}<span class="badge" data-variant="outline" title="Effort is fixed on this thinking mode">{{icon "lock"}}{{$c.Effort}}</span>{{else}}<select id="composer-effort" name="effort" class="select h-7 py-0 text-xs" data-option{{if $live}} hx-post="/chat/{{$live}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML"{{end}}>
+      {{range $c.Efforts}}<option value="{{.Value}}"{{if .Disabled}} disabled{{end}}{{if eq .Value $c.Effort}} selected{{end}}>{{.Value}}</option>{{end}}
+    </select>{{end}}
   </label>
   <label class="flex items-center gap-1 text-muted-foreground">Context
     <select id="composer-context" name="context_limit" class="select h-7 py-0 text-xs" data-option{{if $live}} hx-post="/chat/{{$live}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML"{{end}}>
-      {{range $c.context_limits}}<option value="{{.}}"{{if eq . $c.context}} selected{{end}}>{{ctxlabel .}}</option>{{end}}
+      {{range $c.ContextLimits}}<option value="{{.}}"{{if eq . $c.Context}} selected{{end}}>{{ctxlabel .}}</option>{{end}}
     </select>
   </label>
+  <details class="text-xs text-muted-foreground">
+    <summary class="cursor-pointer">Advanced</summary>
+    <div class="mt-2 flex flex-wrap items-center gap-3">
+      <label class="flex items-center gap-1">Thinking
+        <select id="composer-thinking" name="thinking" class="select h-7 py-0 text-xs" data-option{{if $live}} hx-post="/chat/{{$live}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML"{{end}}>
+          {{range $c.ThinkingOptions}}<option value="{{.Type}}"{{if eq .Type $c.Thinking}} selected{{end}}>{{.Type}}{{if .MaxEffort}} ≤ {{.MaxEffort}}{{end}}</option>{{end}}
+        </select>
+      </label>
+      <label class="flex items-center gap-1"><input type="hidden" name="web_search" value="0"><input type="checkbox" name="web_search" value="1" data-option{{if $c.WebSearch}} checked{{end}}> Web search</label>
+      <label class="flex items-center gap-1">Cost cap <input type="number" name="cost_cap" step="0.01" min="0" class="input h-7 w-24 py-0 text-xs" data-option value="{{if $c.CostCap}}{{$c.CostCap}}{{end}}"></label>
+    </div>
+  </details>
+  {{if $c.Cliff}}<p class="text-xs text-amber-600">Haiku bills prompts over 100K at the long-context rate.</p>{{end}}
+  {{if $c.Coding}}<label class="flex items-center gap-1 text-xs text-muted-foreground"><input type="checkbox" name="coding" value="1"> Coding</label>{{end}}
 </span>
 {{- end}}

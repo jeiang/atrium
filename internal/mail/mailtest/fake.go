@@ -1,18 +1,16 @@
 package mailtest
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	netmail "net/mail"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/mail"
 )
-
-func Raw(subject string) (header, text []byte) {
-	return RawWith(subject, "a@x.test", subject, "hello")
-}
 
 func RawWith(subject, sender, msgid, body string) (header, text []byte) {
 	h := fmt.Sprintf("From: %s\r\nTo: me@x.test\r\nSubject: %s\r\nMessage-ID: <%s@x.test>\r\n"+
@@ -26,6 +24,7 @@ type FakeMessage struct {
 	Flags  []string
 	Labels []string
 	ModSeq uint64
+	Date   time.Time
 }
 
 type FakeBox struct {
@@ -43,7 +42,7 @@ func (b *FakeBox) Add(header, text []byte, flags, labels []string) uint32 {
 	uid := b.NextUID
 	b.NextUID++
 	b.ModSeq++
-	b.Messages[uid] = &FakeMessage{Header: header, Text: text, Flags: slices.Clone(flags), Labels: cloneOrNil(labels), ModSeq: b.ModSeq}
+	b.Messages[uid] = &FakeMessage{Header: header, Text: text, Flags: slices.Clone(flags), Labels: cloneOrNil(labels), ModSeq: b.ModSeq, Date: headerDate(header)}
 	return uid
 }
 
@@ -75,7 +74,14 @@ func (b *FakeBox) UIDs() []uint32 {
 
 type FakeFetch struct {
 	UIDs  mail.UIDSet
-	Items mail.FetchItems
+	Items mail.FetchRequest
+}
+
+type FakeMailbox struct {
+	Box        *FakeBox
+	Name       string
+	Flags      []string
+	RWValidity *uint32
 }
 
 type FakeWrite struct {
@@ -92,17 +98,13 @@ type FakeAppend struct {
 }
 
 type FakeClient struct {
-	mail.Client
+	fakeConn
 
-	Boxes        map[string]*FakeBox
+	Boxes        map[string]*FakeMailbox
 	Order        []string
-	Names        map[string]string
-	BoxFlags     map[string][]string
-	Caps         map[string]bool
 	Gmail        bool
 	CategoryUIDs map[string][]uint32
 	FailWrite    func(FakeWrite) error
-	RWValidity   map[string]uint32
 	Idle         bool
 
 	Selected  string
@@ -120,43 +122,38 @@ type FakeClient struct {
 
 func NewFakeClient() *FakeClient {
 	f := &FakeClient{
-		Boxes:        map[string]*FakeBox{},
-		Names:        map[string]string{},
-		BoxFlags:     map[string][]string{},
-		Caps:         map[string]bool{"IDLE": true, "CONDSTORE": true, "UIDPLUS": true},
+		Boxes:        map[string]*FakeMailbox{},
 		CategoryUIDs: map[string][]uint32{},
 	}
-	f.Client = mail.Gated(fakeConn{f})
+	f.fakeConn = fakeConn{f}
 	return f
 }
 
-func (f *FakeClient) BindMode(q mail.Querier) mail.Client {
-	f.Client = f.Client.BindMode(q)
-	return f
+func (f *FakeClient) Open(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
+	return mail.Gated(f, opts.Q), nil
 }
 
 func (f *FakeClient) AddBox(imapName string, box *FakeBox, flags ...string) *FakeBox {
 	if _, ok := f.Boxes[imapName]; !ok {
 		f.Order = append(f.Order, imapName)
 	}
-	f.Boxes[imapName] = box
-	if len(flags) > 0 {
-		f.BoxFlags[imapName] = flags
-	}
+	f.Boxes[imapName] = &FakeMailbox{Box: box, Name: imapName, Flags: flags}
 	return box
 }
 
 func (f *FakeClient) name(imapName string) string {
-	if n, ok := f.Names[imapName]; ok {
-		return n
+	if m, ok := f.Boxes[imapName]; ok && m.Name != "" {
+		return m.Name
 	}
 	return imapName
 }
 
+var caps = map[string]bool{"IDLE": true, "CONDSTORE": true, "UIDPLUS": true}
+
 func (f *FakeClient) labelCount(label string) uint32 {
 	var n uint32
 	for _, box := range f.Boxes {
-		for _, m := range box.Messages {
+		for _, m := range box.Box.Messages {
 			if m.Labels != nil && slices.Contains(m.Labels, label) {
 				n++
 			}
@@ -175,11 +172,11 @@ func cloneOrNil(s []string) []string {
 type fakeConn struct{ f *FakeClient }
 
 func (c fakeConn) box(imapName string) (*FakeBox, error) {
-	box, ok := c.f.Boxes[imapName]
+	m, ok := c.f.Boxes[imapName]
 	if !ok {
 		return nil, fmt.Errorf("fake IMAP: no mailbox %q", imapName)
 	}
-	return box, nil
+	return m.Box, nil
 }
 
 func (c fakeConn) Connect(context.Context) error {
@@ -189,18 +186,18 @@ func (c fakeConn) Connect(context.Context) error {
 
 func (c fakeConn) Close() { c.f.Closed = true }
 
-func (c fakeConn) HasCapability(name string) bool { return c.f.Caps[strings.ToUpper(name)] }
+func (c fakeConn) HasCapability(name string) bool { return caps[strings.ToUpper(name)] }
 
 func (c fakeConn) ListMailboxes(context.Context) ([]mail.MailboxInfo, error) {
 	out := make([]mail.MailboxInfo, 0, len(c.f.Order))
 	for _, n := range c.f.Order {
-		out = append(out, mail.MailboxInfo{Name: c.f.name(n), IMAPName: n, Flags: slices.Clone(c.f.BoxFlags[n]), Delimiter: "/"})
+		out = append(out, mail.MailboxInfo{Name: c.f.name(n), IMAPName: n, Flags: slices.Clone(c.f.Boxes[n].Flags), Delimiter: "/"})
 	}
 	return out, nil
 }
 
 func (c fakeConn) Status(_ context.Context, imapName string) (mail.Status, error) {
-	box, ok := c.f.Boxes[imapName]
+	m, ok := c.f.Boxes[imapName]
 	if !ok && c.f.Gmail {
 		one := uint64(1)
 		return mail.Status{UIDValidity: 1, UIDNext: 1, HighestModSeq: &one, Messages: c.f.labelCount(c.f.name(imapName))}, nil
@@ -208,13 +205,34 @@ func (c fakeConn) Status(_ context.Context, imapName string) (mail.Status, error
 	if !ok {
 		return mail.Status{}, fmt.Errorf("fake IMAP: no mailbox %q", imapName)
 	}
-	modseq := box.ModSeq
-	return mail.Status{UIDValidity: box.Validity, UIDNext: box.NextUID, HighestModSeq: &modseq, Messages: uint32(len(box.Messages))}, nil
+	modseq := m.Box.ModSeq
+	return mail.Status{UIDValidity: m.Box.Validity, UIDNext: m.Box.NextUID, HighestModSeq: &modseq, Messages: uint32(len(m.Box.Messages))}, nil
 }
 
 func (c fakeConn) Select(_ context.Context, imapName string) error {
 	c.f.Selected = imapName
 	return nil
+}
+
+func headerDate(header []byte) time.Time {
+	for _, line := range strings.Split(string(header), "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if !strings.HasPrefix(strings.ToLower(line), "date:") {
+			continue
+		}
+		value := strings.TrimSpace(line[len("date:"):])
+		if t, err := netmail.ParseDate(value); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+func messageDate(m *FakeMessage) time.Time {
+	if !m.Date.IsZero() {
+		return m.Date
+	}
+	return headerDate(m.Header)
 }
 
 func (c fakeConn) UIDSearch(_ context.Context, criteria mail.SearchCriteria) ([]uint32, error) {
@@ -229,41 +247,35 @@ func (c fakeConn) UIDSearch(_ context.Context, criteria mail.SearchCriteria) ([]
 	if err != nil {
 		return nil, err
 	}
-	if criteria.UID != nil {
-		var out []uint32
-		for _, uid := range box.UIDs() {
-			if criteria.UID.All() || slices.Contains(criteria.UID.List(), uid) {
-				out = append(out, uid)
-			}
+	var out []uint32
+	for _, uid := range box.UIDs() {
+		switch {
+		case criteria.UID != nil && !criteria.UID.All() && !slices.Contains(criteria.UID.List(), uid):
+			continue
+		case criteria.HeaderName != "" && !strings.Contains(string(box.Messages[uid].Header), criteria.HeaderValue):
+			continue
+		case !criteria.Since.IsZero() && messageDate(box.Messages[uid]).Before(criteria.Since):
+			continue
 		}
-		return out, nil
+		out = append(out, uid)
 	}
-	if criteria.HeaderName != "" {
-		var out []uint32
-		for _, uid := range box.UIDs() {
-			if strings.Contains(string(box.Messages[uid].Header), criteria.HeaderValue) {
-				out = append(out, uid)
-			}
-		}
-		return out, nil
-	}
-	return box.UIDs(), nil
+	return out, nil
 }
 
-func (c fakeConn) UIDFetch(_ context.Context, uids mail.UIDSet, items mail.FetchItems) ([]mail.Message, error) {
+func (c fakeConn) UIDFetch(_ context.Context, uids mail.UIDSet, req mail.FetchRequest) ([]mail.Message, error) {
 	box, err := c.box(c.f.Selected)
 	if err != nil {
 		return nil, err
 	}
-	c.f.Fetches = append(c.f.Fetches, FakeFetch{uids, items})
-	full := items.Header || items.Body
+	c.f.Fetches = append(c.f.Fetches, FakeFetch{uids, req})
+	full := req.Mode == mail.FetchFull
 	var out []mail.Message
 	for _, uid := range box.UIDs() {
 		if !uids.All() && !slices.Contains(uids.List(), uid) {
 			continue
 		}
 		m := box.Messages[uid]
-		if items.ChangedSince != 0 && m.ModSeq <= items.ChangedSince {
+		if req.ChangedSince != 0 && m.ModSeq <= req.ChangedSince {
 			continue
 		}
 		msg := mail.Message{UID: uid, Flags: slices.Clone(m.Flags), Labels: cloneOrNil(m.Labels), ModSeq: m.ModSeq}
@@ -278,7 +290,7 @@ func (c fakeConn) UIDFetch(_ context.Context, uids mail.UIDSet, items mail.Fetch
 			msg.Attachments = []mail.Attachment{}
 			msg.Header = m.Header
 			msg.Text = m.Text
-		case items.HeaderOnly:
+		case req.Mode == mail.FetchHeaders:
 			msg.Header = m.Header
 		}
 		out = append(out, msg)
@@ -296,11 +308,11 @@ func (c fakeConn) Noop(context.Context) error {
 func (c fakeConn) SelectRW(_ context.Context, imapName string) (uint32, error) {
 	c.f.Selected = imapName
 	c.f.RW = imapName
-	if v, ok := c.f.RWValidity[imapName]; ok {
-		return v, nil
-	}
-	if box, ok := c.f.Boxes[imapName]; ok {
-		return box.Validity, nil
+	if m, ok := c.f.Boxes[imapName]; ok {
+		if m.RWValidity != nil {
+			return *m.RWValidity, nil
+		}
+		return m.Box.Validity, nil
 	}
 	return 1, nil
 }
@@ -420,11 +432,24 @@ func (c fakeConn) UIDExpunge(_ context.Context, uids mail.UIDSet) error {
 }
 
 func (c fakeConn) Append(_ context.Context, imapName string, raw []byte, flags ...string) error {
+	m, ok := c.f.Boxes[imapName]
+	if !ok {
+		return fmt.Errorf("fake IMAP: no mailbox %q", imapName)
+	}
 	if err := c.record(FakeWrite{Verb: "APPEND", Mailbox: imapName, Args: slices.Clone(flags)}); err != nil {
 		return err
 	}
+	header, text := splitRaw(raw)
+	m.Box.Add(header, text, flags, nil)
 	c.f.Appended = append(c.f.Appended, FakeAppend{Mailbox: imapName, Raw: slices.Clone(raw), Flags: slices.Clone(flags)})
 	return nil
+}
+
+func splitRaw(raw []byte) (header, text []byte) {
+	if i := bytes.Index(raw, []byte("\r\n\r\n")); i >= 0 {
+		return raw[:i+4], raw[i+4:]
+	}
+	return raw, nil
 }
 
 func (c fakeConn) CreateMailbox(_ context.Context, imapName string) error {

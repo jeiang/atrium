@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -38,15 +37,13 @@ type (
 	Tool        = tool.Tool
 	ToolContext = tool.Context
 	ToolHandler = tool.Handler
-	ToolArgs    = py.Dict
+	ToolArgs    = tool.Args
 	Effect      = tool.Effect
 	Kind        = tool.Kind
 	Kinds       = tool.Kinds
 
-	Setting      = settings.Def
-	SettingType  = settings.Type
-	SettingClass = settings.Class
-	SettingScope = settings.Scope
+	Setting     = settings.Def
+	SettingType = settings.Type
 
 	DB        = db.DB
 	Querier   = db.Querier
@@ -77,13 +74,7 @@ const (
 
 	UI       = settings.UI
 	Advanced = settings.Advanced
-	Secret   = settings.Secret
-
-	Instance = settings.Instance
-	Thread   = settings.Thread
 )
-
-var Settings = settings.Default
 
 var modules []Module
 
@@ -101,7 +92,7 @@ func RegisterMigrations(module string, ms ...Migration) { db.RegisterModuleMigra
 func RequireSetting(key string) Requirement { return module.Setting(key) }
 
 func OpenDB(env *Env) (*DB, Config, error) {
-	cfg, err := config.Load(config.OS)
+	cfg, err := config.Load(env.Env)
 	if err != nil {
 		return nil, cfg, err
 	}
@@ -109,7 +100,7 @@ func OpenDB(env *Env) (*DB, Config, error) {
 	if err != nil {
 		return nil, cfg, err
 	}
-	if err := config.Migrate(env.Ctx, d, cfg); err != nil {
+	if err := config.Boot(env.Ctx, env.Env, d, cfg); err != nil {
 		_ = d.Close()
 		return nil, cfg, err
 	}

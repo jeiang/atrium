@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net"
 	"os"
 	"os/exec"
@@ -16,17 +17,29 @@ import (
 )
 
 func TestCLIExitProcess(t *testing.T) {
-	if os.Getenv("ATRIUM_CLI_EXIT_E2E") != "1" {
-		return
+	if os.Getenv("ATRIUM_CLI_EXIT_E2E") == "1" {
+		var args []string
+		if err := json.Unmarshal([]byte(os.Getenv("ATRIUM_CLI_EXIT_ARGS")), &args); err != nil {
+			os.Exit(cli.ExitError)
+		}
+		ctx, stop := cli.SignalContext(context.Background())
+		code := defaultApp(t).Run(ctx, args, os.Stdout, os.Stderr)
+		stop()
+		os.Exit(code)
 	}
-	args := strings.Fields(os.Getenv("ATRIUM_CLI_EXIT_ARGS"))
-	ctx, stop := cli.SignalContext(context.Background())
-	code := newApp().Run(ctx, args, os.Stdout, os.Stderr)
-	stop()
-	os.Exit(code)
+	cmd := cliExitProcessArgs(t, []string{"--version"})
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("--version exited with %v; stderr %q", err, stderr.String())
+	}
+	if stdout.Len() == 0 {
+		t.Fatal("--version printed nothing")
+	}
 }
 
 func TestCLISignalExitCodes(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		sig  syscall.Signal
@@ -36,10 +49,8 @@ func TestCLISignalExitCodes(t *testing.T) {
 		{name: "hangup", sig: syscall.SIGHUP},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
-			t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-			t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-			t.Setenv("ATRIUM_PUBLIC_HOST", "")
 			listener, err := net.Listen("tcp", "127.0.0.1:0")
 			if err != nil {
 				t.Fatal(err)
@@ -51,7 +62,8 @@ func TestCLISignalExitCodes(t *testing.T) {
 			if err := listener.Close(); err != nil {
 				t.Fatal(err)
 			}
-			cmd := cliExitProcess(t, "serve --host 127.0.0.1 --port "+port+" --auth local")
+			cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", port, "--auth", "local"})
+			cmd.Env = append(cmd.Env, "ATRIUM_DB="+filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR="+filepath.Join(dir, "cache"), "ATRIUM_PUBLIC_HOST=")
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &stdout, &stderr
 			if err := cmd.Start(); err != nil {
@@ -95,8 +107,26 @@ func TestCLISignalExitCodes(t *testing.T) {
 
 func cliExitProcess(t *testing.T, args string) *exec.Cmd {
 	t.Helper()
+	return cliExitProcessArgs(t, strings.Fields(args))
+}
+
+func cliExitProcessArgs(t *testing.T, args []string) *exec.Cmd {
+	t.Helper()
+	encoded, err := json.Marshal(args)
+	if err != nil {
+		t.Fatal(err)
+	}
 	cmd := exec.Command(os.Args[0], "-test.run=^TestCLIExitProcess$")
-	cmd.Env = append(os.Environ(), "ATRIUM_CLI_EXIT_E2E=1", "ATRIUM_CLI_EXIT_ARGS="+args)
+	cmd.Env = append(os.Environ(), "ATRIUM_CLI_EXIT_E2E=1", "ATRIUM_CLI_EXIT_ARGS="+string(encoded))
+	var inherited map[string]string
+	if f := fixtureFor(t); f != nil {
+		inherited = f.env
+	} else {
+		inherited = varsFor(t).snapshot()
+	}
+	for name, value := range inherited {
+		cmd.Env = append(cmd.Env, name+"="+value)
+	}
 	return cmd
 }
 

@@ -16,6 +16,7 @@ import (
 )
 
 func TestIntegrationClientsUseTheRecordTransportAndAFailedRequestChecksAtOnce(t *testing.T) {
+	t.Parallel()
 	qb := &fakeQbit{version: "v5.2.0"}
 	var broken atomic.Bool
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -27,9 +28,9 @@ func TestIntegrationClientsUseTheRecordTransportAndAFailedRequestChecksAtOnce(t 
 	}))
 	t.Cleanup(srv.Close)
 
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(settingEnv(media.KeyQbitURL), srv.URL)
-	t.Setenv(settingEnv(media.KeyQbitAPIKey), "qbt_good")
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(media.KeyQbitURL), srv.URL)
+	setEnv(t, settingEnv(media.KeyQbitAPIKey), "qbt_good")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 	waitFor(t, func() bool { return health(t, dir, "qbittorrent") == integrations.Failing })

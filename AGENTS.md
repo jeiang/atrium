@@ -1,8 +1,9 @@
 # atrium
 
 atrium is a single-operator assistant: Go application, embedded web UI,
-SQLite state, and a NixOS service module. The host supplies credentials,
-external services, reverse proxy, persistence, and backups.
+SQLite state, and a NixOS service module. The host supplies external
+services, the reverse proxy, persistence, and backups; credentials are
+settings the operator edits in the UI or pins from the host.
 
 ## Planning context
 
@@ -11,6 +12,8 @@ external services, reverse proxy, persistence, and backups.
   direction, and open decisions.
 - Keep development rules in this file, product goals in `docs/vision.md`,
   and application context in `context.md`. Do not duplicate their contents.
+- v2 is not a port of the Python application and has no parity target; do
+  not add parity tests or parity notes.
 - Update `context.md` when a change alters the behavior, boundaries, or
   decisions it records. Distinguish implemented behavior from planned
   capabilities; remove superseded statements.
@@ -28,7 +31,12 @@ external services, reverse proxy, persistence, and backups.
   before closing.
 - Use the declared Nix development environment. Nix selects the Go release;
   do not add a go.mod toolchain directive.
-- Use justfile recipes and flake checks as the command reference.
+- Fast loop: `just verify` (vet + build) after each edit, `just e2e <pattern>`
+  for the targeted CLI/HTTP test, `just changed` for the Go packages touched.
+- Before hand-off: `just check-quick` (statix, treefmt, gofmt, module
+  assertions), `just check-eval` after Nix changes, `just check` for everything;
+  Linux-only checks use `just linux <check>`. Recipes re-enter the dev shell
+  with `nix develop -c` (no `--impure`).
 - Keep the required CI check passing. For an authorized merge, use
   `gh pr merge --auto --merge`.
 - Deployment consumes this repository from a separate host configuration.
@@ -37,7 +45,7 @@ external services, reverse proxy, persistence, and backups.
 ## Tests: e2e only
 
 - Do not create or retain unit or integration tests. This includes temporary
-  tests and tests disguised as golden, parity, corpus, or module-level e2e.
+  tests and tests disguised as golden, corpus, or module-level e2e.
 - A qualifying test exercises an operator-visible workflow through the real
   CLI command or HTTP application entry point, follows production code, and
   uses a real temporary database when persistence is involved.
@@ -105,13 +113,14 @@ external services, reverse proxy, persistence, and backups.
   CSP, and loopback listener defaults.
 - Media writes touch only torrents tagged media. Preserve library group
   permissions and expiring signed file links; public links still check Host.
-- Never edit or renumber a shipped database migration. New migrations are
-  additive by default. Row rewrites require explicit approval and validation
-  on a database copy. Refuse unknown future schema versions before writes.
-  `initSchema` in `internal/db` is migration 1 and never runs on an
-  existing database: every schema change is a new numbered migration in
-  `internal/db/migrate.go`, with an e2e that migrates a copy of the golden
-  Phase A database.
+- The v2 baseline schema files in `internal/db/schema/` are edited in place
+  until v2 first ships to artemis; `internal/db/migrate.go` holds only
+  migration 1 (the baseline) until then. Afterwards every schema change is
+  a new additive migration in `internal/db/migrate.go` with an e2e. Row
+  rewrites require explicit approval and validation on a database copy.
+  Refuse unknown future schema versions before writes. `atrium db import-v1`
+  is the only path from v1 data: it copies the learned-rule data into a
+  fresh v2 database; everything else is rebuilt.
 - A binary downgrade can require restoring the pre-migration database,
   losing later writes. Do not imply that changing the binary reverses data.
 - Unit names, environment variable names, and `atrium-run` are host-facing

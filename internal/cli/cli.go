@@ -11,8 +11,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
+	"regexp"
+
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
@@ -148,12 +150,14 @@ func (a *Args) Has(name string) bool {
 }
 
 type Env struct {
-	Ctx    context.Context
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-	p      *parser
-	width  int
+	Ctx      context.Context
+	Stdin    io.Reader
+	Stdout   io.Writer
+	Stderr   io.Writer
+	Env      config.Env
+	Settings *settings.Registry
+	p        *parser
+	width    int
 }
 
 func (e *Env) UsageError(format string, a ...any) int {
@@ -163,11 +167,18 @@ func (e *Env) UsageError(format string, a ...any) int {
 }
 
 type App struct {
-	Version string
-	Stdin   io.Reader
-	root    Command
-	setup   func(stderr io.Writer)
+	Version      string
+	Stdin        io.Reader
+	Env          config.Env
+	Settings     *settings.Registry
+	State        *config.State
+	SetupContext func(context.Context) context.Context
+	Bootstrap    func(ctx context.Context, stderr io.Writer) error
+	root         Command
+	setup        func(stderr io.Writer)
 }
+
+func (a *App) SetLogSetup(setup func(stderr io.Writer)) { a.setup = setup }
 
 func New(name string, setup func(stderr io.Writer)) *App {
 	return &App{root: Command{Name: name}, setup: setup}
@@ -183,7 +194,7 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	root.version = a.Version
 	extras, err := s.parse(root, args)
 	if err == nil && len(extras) > 0 {
-		msg := "unrecognized arguments: " + strings.Join(extras, " ")
+		msg := "unknown arguments: " + strings.Join(extras, " ")
 		if s.leaf != nil && s.leaf.extras != "" {
 			msg = s.leaf.extras
 		}
@@ -195,15 +206,34 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if a.setup != nil {
 		a.setup(stderr)
 	}
+	if a.Settings != nil {
+		ctx = settings.With(ctx, a.Settings)
+	}
+	if a.State != nil {
+		ctx = config.With(ctx, a.State)
+	}
+	if a.SetupContext != nil {
+		ctx = a.SetupContext(ctx)
+	}
+	if a.Bootstrap != nil {
+		if err := a.Bootstrap(ctx, stderr); err != nil {
+			_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
+			return ExitError
+		}
+	}
 	stdin := a.Stdin
 	if stdin == nil {
 		stdin = os.Stdin
 	}
-	return s.handler(&Env{Ctx: ctx, Stdin: stdin, Stdout: stdout, Stderr: stderr, p: s.leaf, width: s.width})
+	env := a.Env
+	if env == nil {
+		env = config.OS
+	}
+	return s.handler(&Env{Ctx: ctx, Stdin: stdin, Stdout: stdout, Stderr: stderr, Env: env, Settings: a.Settings, p: s.leaf, width: s.width})
 }
 
 func formatWidth() int {
-	if n, ok := py.ParseInt(os.Getenv("COLUMNS")); ok && n > 0 && n <= 1<<20 {
+	if n, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("COLUMNS")), 10, 64); err == nil && n > 0 && n <= 1<<20 {
 		return int(n) - 2
 	}
 	return 80 - 2
@@ -290,7 +320,7 @@ type optTuple struct {
 	hasExplicit bool
 }
 
-var negativeNumber = rx.MustCompile(`-\.?\d`, 0)
+var negativeNumber = regexp.MustCompile(`-\.?\d`)
 
 func (p *parser) parseOptional(s string) []optTuple {
 	if s == "" || s[0] != '-' {
@@ -313,7 +343,7 @@ func (p *parser) parseOptional(s string) []optTuple {
 	if tuples := p.optionTuples(s); len(tuples) > 0 {
 		return tuples
 	}
-	if m, _ := negativeNumber.Match(s); m != nil {
+	if loc := negativeNumber.FindStringIndex(s); loc != nil && loc[0] == 0 {
 		return nil
 	}
 	if strings.Contains(s, " ") {
@@ -458,7 +488,7 @@ func (s *session) parse(p *parser, args []string) ([]string, error) {
 				break
 			}
 			if t.opt[1] == '-' || t.explicit == "" || t.sep != "" || t.explicit[0] == '-' {
-				return 0, s.argError(p, t.a, "ignored explicit argument %s", py.Repr(t.explicit))
+				return 0, s.argError(p, t.a, "does not take a value")
 			}
 			todo = append(todo, taken{t.a, nil})
 			_, size := utf8.DecodeRuneInString(t.explicit)
@@ -541,7 +571,7 @@ func (s *session) parse(p *parser, args []string) ([]string, error) {
 		}
 	}
 	if len(required) > 0 {
-		return nil, s.fail(p, "the following arguments are required: "+strings.Join(required, ", "))
+		return nil, s.fail(p, "missing required arguments: "+strings.Join(required, ", "))
 	}
 	return append(extras, subExtras...), nil
 }
@@ -550,9 +580,9 @@ func (s *session) store(p *parser, a *action, str string, keep bool) error {
 	value := str
 	var n int
 	if a.isInt {
-		v, ok := py.ParseInt(str)
-		if !ok || int64(int(v)) != v {
-			return s.argError(p, a, "invalid int value: %s", py.Repr(str))
+		v, err := strconv.ParseInt(strings.TrimSpace(str), 10, 64)
+		if err != nil || int64(int(v)) != v {
+			return s.argError(p, a, "invalid integer %q", str)
 		}
 		n, value = int(v), strconv.Itoa(int(v))
 	}
@@ -577,9 +607,9 @@ func (s *session) checkChoice(p *parser, a *action, value string) error {
 	}
 	quoted := make([]string, len(a.Choices))
 	for i, c := range a.Choices {
-		quoted[i] = py.Repr(c)
+		quoted[i] = strconv.Quote(c)
 	}
-	return s.argError(p, a, "invalid choice: %s (choose from %s)", py.Repr(value), strings.Join(quoted, ", "))
+	return s.argError(p, a, "invalid choice %q (choose from %s)", value, strings.Join(quoted, ", "))
 }
 
 func matchPartial(actions []*action, pattern string) []int {
@@ -588,16 +618,19 @@ func matchPartial(actions []*action, pattern string) []int {
 		for _, a := range actions[:i] {
 			b.WriteString(a.nargsPattern())
 		}
-		m, _ := rx.MustCompile(b.String(), 0).Match(pattern)
-		if m == nil {
+		loc := regexp.MustCompile(b.String()).FindStringSubmatchIndex(pattern)
+		if loc == nil || loc[0] != 0 {
 			continue
 		}
 		counts := make([]int, i)
 		for g := range counts {
-			from, to := m.Span(g + 1)
+			from, to := loc[2*(g+1)], loc[2*(g+1)+1]
+			if from < 0 {
+				from, to = 0, 0
+			}
 			counts[g] = to - from
 		}
-		if m.End() < len(pattern) && pattern[m.End()] == 'O' {
+		if loc[1] < len(pattern) && pattern[loc[1]] == 'O' {
 			for len(counts) > 0 && counts[len(counts)-1] == 0 {
 				counts = counts[:len(counts)-1]
 			}
@@ -614,7 +647,7 @@ func (a *action) metavar() string {
 	case a.Choices != nil:
 		return "{" + strings.Join(a.Choices, ",") + "}"
 	case len(a.opts) > 0:
-		return py.Upper(a.dest)
+		return strings.ToUpper(a.dest)
 	}
 	return a.dest
 }
@@ -717,7 +750,7 @@ type helpItem struct {
 	subs       []helpItem
 }
 
-var longBreak = rx.MustCompile(`\n\n\n+`, 0)
+var longBreak = regexp.MustCompile(`\n\n\n+`)
 
 func (p *parser) help(width int) string {
 	maxHelp := min(24, max(width-20, 4))
@@ -756,7 +789,7 @@ func (p *parser) help(width int) string {
 		}
 		b.WriteString("\n")
 	}
-	out, _ := longBreak.Sub("\n\n", b.String(), 0)
+	out := longBreak.ReplaceAllString(b.String(), "\n\n")
 	return strings.Trim(out, "\n") + "\n"
 }
 
@@ -775,7 +808,7 @@ func formatItem(b *strings.Builder, item helpItem, helpPos, width int) {
 		indentFirst = helpPos
 	}
 	if item.help != "" {
-		if py.Strip(item.help) != "" {
+		if strings.TrimSpace(item.help) != "" {
 			lines := splitLines(item.help, helpWidth)
 			b.WriteString(strings.Repeat(" ", indentFirst) + lines[0] + "\n")
 			for _, line := range lines[1:] {
@@ -791,20 +824,69 @@ func formatItem(b *strings.Builder, item helpItem, helpPos, width int) {
 }
 
 var (
-	asciiSpace = rx.MustCompile(`\s+`, rx.ASCII)
-	wordSep    = rx.MustCompile(`([\t\n\x0b\x0c\r ]+|(?<=[\w!"'&.,?])-{2,}(?=\w)|[^\t\n\x0b\x0c\r ]+?(?:-(?:(?<=[^\d\W]{2}-)|(?<=[^\d\W]-[^\d\W]-))(?=[^\d\W]-?[^\d\W])|(?=[\t\n\x0b\x0c\r ]|\z)|(?<=[\w!"'&.,?])(?=-{2,}\w)))`, 0)
+	asciiSpace = regexp.MustCompile(`\s+`)
 )
 
+func splitHelp(text string) []string {
+	var out []string
+	start := 0
+	flush := func(end int) {
+		if end > start {
+			out = append(out, text[start:end])
+			start = end
+		}
+	}
+	space := func(c byte) bool { return c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r' || c == ' ' }
+	word := func(c byte) bool {
+		return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || strings.ContainsRune(`!"'&.,?`, rune(c))
+	}
+	for i := 0; i < len(text); {
+		c := text[i]
+		if space(c) {
+			j := i + 1
+			for j < len(text) && space(text[j]) {
+				j++
+			}
+			flush(i)
+			flush(j)
+			i = j
+			continue
+		}
+		if c == '-' && i > start && word(text[i-1]) {
+			if i+1 < len(text) && text[i+1] == '-' {
+				j := i + 2
+				for j < len(text) && text[j] == '-' {
+					j++
+				}
+				if j < len(text) && word(text[j]) {
+					flush(i)
+					flush(j)
+					i = j
+					continue
+				}
+			}
+			if i+1 == len(text) || space(text[i+1]) || word(text[i+1]) {
+				flush(i + 1)
+				i++
+				continue
+			}
+		}
+		i++
+	}
+	flush(len(text))
+	return out
+}
+
 func splitLines(text string, width int) []string {
-	text, _ = asciiSpace.Sub(" ", text, 0)
-	split, _ := wordSep.Split(py.Strip(text), 0)
+	text = asciiSpace.ReplaceAllString(text, " ")
+	split := splitHelp(strings.TrimSpace(text))
 	var chunks [][]rune
 	for i := len(split) - 1; i >= 0; i-- {
 		if split[i] != "" {
 			chunks = append(chunks, []rune(split[i]))
 		}
 	}
-	blank := func(c []rune) bool { return py.Strip(string(c)) == "" }
+	blank := func(c []rune) bool { return strings.TrimSpace(string(c)) == "" }
 	var lines []string
 	for len(chunks) > 0 {
 		var line [][]rune

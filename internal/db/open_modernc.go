@@ -56,3 +56,10 @@ func backupConns(ctx context.Context, src, _ *sql.DB, dest string) (err error) {
 	_, err = conn.ExecContext(ctx, "VACUUM INTO '"+strings.ReplaceAll(dest, "'", "''")+"'")
 	return err
 }
+
+func readOnlyDSN(path string, key Key) (string, error) {
+	if !key.IsZero() {
+		return "", ErrNoCipher
+	}
+	return "file:" + escapeURIPath(path) + "?mode=ro", nil
+}

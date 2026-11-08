@@ -22,12 +22,12 @@ const (
 
 func init() {
 	settings.MustRegister(
-		settings.Def{Key: KeyURL, Module: "grafana", Type: settings.String, Class: settings.UI, Scopes: []settings.Scope{settings.Instance}},
-		settings.Def{Key: KeyToken, Module: "grafana", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
+		settings.Value(settings.UI, settings.Def{Key: KeyURL, Module: "grafana", Type: settings.String}),
+		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyToken, Module: "grafana", Type: settings.String}),
 	)
 	integrations.Register(integrations.Integration{
 		Name: "grafana", Label: "Grafana", Module: "grafana", URLKey: KeyURL, SecretKey: KeyToken,
-		Help: "Service account token with the Viewer role.",
+		Help: "Service account token with the Viewer role; Viewer can query datasources.",
 		Test: testAccess,
 	})
 }
@@ -38,11 +38,11 @@ type Access struct {
 }
 
 func Load(ctx context.Context, q db.Querier) (Access, error) {
-	found, err := settings.Default.Resolve(ctx, q, KeyURL, 0)
+	found, err := settings.From(ctx).Resolve(ctx, q, KeyURL)
 	if err != nil {
 		return Access{}, err
 	}
-	token, err := secrets.NewIn(nil, q, nil).Value(ctx, KeyToken)
+	token, err := secrets.NewIn(settings.From(ctx), nil, q, nil).Value(ctx, KeyToken)
 	if err != nil {
 		return Access{}, err
 	}
@@ -68,7 +68,12 @@ func testAccess(ctx context.Context, c integrations.Conn) (string, error) {
 		return "", fmt.Errorf("grafana answered %d", status)
 	}
 	var user struct{ Login string }
-	_ = json.Unmarshal([]byte(body), &user)
+	if err := json.Unmarshal([]byte(body), &user); err != nil {
+		return "", fmt.Errorf("grafana returned an unreadable user profile: %w", err)
+	}
+	if user.Login == "" {
+		return "", fmt.Errorf("grafana returned a user profile without a login")
+	}
 	status, _, err = viewerGet(ctx, c, "/api/search?limit=1")
 	if err != nil {
 		return "", err

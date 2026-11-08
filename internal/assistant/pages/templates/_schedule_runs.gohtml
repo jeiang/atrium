@@ -1,17 +1,17 @@
-{{template "schedule_runs" (dict "runs" .Data.runs "show_job" (opt .Data "show_job" true))}}
+{{template "schedule_runs" (dict "runs" .Data.Runs "show_job" (.Data.ShowJob))}}
 
 {{define "schedule_runs"}}{{$show_job := opt . "show_job" true}}
 {{if .runs}}
 <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card text-sm" role="list" aria-label="Run history">
   {{range .runs}}
   <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
-    {{if $show_job}}<span class="font-medium">{{.job_name}}</span>{{end}}
-    {{$title := lbl "job_run_hint" .status ""}}{{if .error}}{{$title = .error}}{{end}}{{template "scheduled_status" (dict "status" .status "title" $title)}}
-    <span class="text-xs text-muted-foreground tabular-nums">{{.started_text}}</span>
-    {{if .cost}}<span class="text-xs text-muted-foreground tabular-nums">${{printf "%.3f" .cost}}</span>{{end}}
-    {{if .error}}<span class="min-w-0 max-w-full truncate text-xs text-muted-foreground" title="{{.error}}">{{.error}}</span>{{end}}
+    {{if $show_job}}<span class="font-medium">{{.JobName}}</span>{{end}}
+    {{$title := lbl "job_run_hint" .Status ""}}{{if .Error}}{{$title = (str .Error)}}{{end}}{{template "scheduled_status" (dict "status" .Status "title" $title)}}
+    <span class="text-xs text-muted-foreground tabular-nums">{{str .StartedText}}</span>
+    {{if .Cost}}<span class="text-xs text-muted-foreground tabular-nums">${{printf "%.3f" .Cost}}</span>{{end}}
+    {{if .Error}}<span class="min-w-0 max-w-full truncate text-xs text-muted-foreground" title="{{str .Error}}">{{str .Error}}</span>{{end}}
     <span class="ms-auto flex items-center gap-1">
-      {{if .thread_id}}<a class="btn" data-size="sm" data-variant="ghost" href="/chat/{{.thread_id}}">{{icon "messages-square"}}Thread</a>{{end}}
+      {{if .ThreadID}}<a class="btn" data-size="sm" data-variant="ghost" href="/chat/{{str .ThreadID}}">{{icon "messages-square"}}Thread</a>{{end}}
     </span>
   </li>
   {{end}}

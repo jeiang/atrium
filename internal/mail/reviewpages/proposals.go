@@ -1,17 +1,15 @@
 package reviewpages
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"math/big"
+	"strconv"
+
 	"net/http"
 	"net/url"
 	"slices"
 
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/proposals/executors"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -22,16 +20,10 @@ var proposalStatuses = []string{
 	proposals.Pending, proposals.Applied, proposals.Failed, proposals.Dismissed, proposals.Suppressed, allStatuses,
 }
 
-var proposalKinds = []string{
-	executors.RebalanceSplit, executors.RebalanceMerge, executors.InboxBacklog, executors.DeletionRule, executors.GmailLabelMerge,
-	"notion_link", "notion_edit", "calendar_event", "calendar_update", "calendar_rsvp", "reminder", kindWikiPlan,
+func (s *service) kindLabel(name string) string {
+	kind, _ := s.registry.Kind(name)
+	return kind.Label
 }
-
-var (
-	groupedKinds = []string{executors.RebalanceSplit, executors.InboxBacklog}
-	splitKinds   = []string{executors.RebalanceSplit, executors.RebalanceMerge, executors.InboxBacklog}
-	messageKinds = []string{executors.DeletionRule, executors.GmailLabelMerge}
-)
 
 func (s *service) proposalsPage(w http.ResponseWriter, r *http.Request) {
 	status := web.QueryValue(r.URL.Query(), "status")
@@ -43,7 +35,7 @@ func (s *service) proposalsPage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusUnprocessableEntity, "unknown status")
 		return
 	}
-	if kind != "" && !slices.Contains(proposalKinds, kind) {
+	if kind != "" && !s.registry.Known(kind) {
 		s.fail(w, r, http.StatusUnprocessableEntity, "unknown kind")
 		return
 	}
@@ -56,9 +48,8 @@ func (s *service) proposalsPage(w http.ResponseWriter, r *http.Request) {
 	check(err)
 	counts, err := proposals.CountsByStatus(ctx, s.deps.DB.Read)
 	check(err)
-	views := proposalViews(list)
-	check(s.markBlocked(ctx, views))
-	data := proposalListData{Proposals: views, Status: status, Kind: kind, Counts: counts}
+	views := proposalViews(list, s.registry)
+	data := proposalListData{Proposals: views, Status: status, Kind: kind, KindLabel: s.kindLabel(kind), Counts: counts}
 	if web.IsPartial(r) {
 		data.Partial = true
 		s.fragment(w, r, http.StatusOK, "_proposal_list.gohtml", data, nil)
@@ -68,61 +59,56 @@ func (s *service) proposalsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) card(w http.ResponseWriter, r *http.Request, id int64, notice *tpl.Toast) {
-	found, err := proposals.Get(r.Context(), s.deps.DB.Write, id)
+	found, err := proposals.Get(r.Context(), s.deps.DB.Read, id)
 	check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown proposal")
 		return
 	}
-	view := []ProposalView{proposalView(found)}
-	check(s.markBlocked(r.Context(), view))
+	kind, _ := s.registry.Kind(found.Kind)
+	view := []ProposalView{proposalView(found, kind)}
 	s.fragment(w, r, http.StatusOK, "_proposal.gohtml", proposalCardData{Proposal: view[0], PendingOOB: true}, notice)
 }
 
 func picked(form url.Values, index int, messages any) ([]any, error) {
-	if !py.Truthy(messages) {
+	if !truthy(messages) {
 		return nil, nil
 	}
 	ids := []any{}
 	for _, value := range form[fmt.Sprintf("msg-%d", index)] {
-		n, err := py.IntString(value)
+		n, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
 			return nil, proposals.SelectionError("invalid message selection")
 		}
-		if n.IsInt64() {
-			ids = append(ids, n.Int64())
-		} else {
-			ids = append(ids, new(big.Int).Set(n))
-		}
+		ids = append(ids, n)
 	}
 	return ids, nil
 }
 
 func previewGet(preview any, key string) any {
-	if d, ok := preview.(py.Dict); ok {
-		v, _ := d.Get(key)
-		return v
+	if d, ok := preview.(map[string]any); ok {
+		return d[key]
 	}
 	return nil
 }
 
-func selectionOf(p *proposals.Proposal, form url.Values) (py.Dict, error) {
+func selectionOf(p *proposals.Proposal, kind proposals.Kind, form url.Values) (map[string]any, error) {
 	switch {
-	case slices.Contains(splitKinds, p.Kind):
+	case kind.Groups || kind.Group:
 		var groups []any
-		if slices.Contains(groupedKinds, p.Kind) {
+		if kind.Groups {
 			groups, _ = previewGet(p.Preview, "groups").([]any)
 		} else {
 			groups = []any{previewGet(p.Preview, "group")}
 		}
 		out := make([]any, len(groups))
 		for i, g := range groups {
-			group, _ := g.(py.Dict)
+			group, _ := g.(map[string]any)
 			var name any
-			if v, ok := web.FormLast(form, fmt.Sprintf("name-%d", i)); ok {
+			if v, ok := web.Value(form, fmt.Sprintf("name-%d", i)); ok {
 				name = v
 			}
-			messages, _ := group.Get("messages")
+			messages := group["messages"]
 			ids, err := picked(form, i, messages)
 			if err != nil {
 				return nil, err
@@ -131,10 +117,11 @@ func selectionOf(p *proposals.Proposal, form url.Values) (py.Dict, error) {
 			if ids != nil {
 				chosen = ids
 			}
-			out[i] = py.Dict{{Key: "name", Value: name}, {Key: "message_ids", Value: chosen}}
+			id := group["name"]
+			out[i] = map[string]any{"id": id, "name": name, "message_ids": chosen}
 		}
-		return py.Dict{{Key: "groups", Value: out}}, nil
-	case slices.Contains(messageKinds, p.Kind):
+		return map[string]any{"groups": out}, nil
+	case kind.Messages:
 		ids, err := picked(form, 0, previewGet(p.Preview, "messages"))
 		if err != nil {
 			return nil, err
@@ -143,7 +130,7 @@ func selectionOf(p *proposals.Proposal, form url.Values) (py.Dict, error) {
 		if ids != nil {
 			chosen = ids
 		}
-		return py.Dict{{Key: "message_ids", Value: chosen}}, nil
+		return map[string]any{"message_ids": chosen}, nil
 	}
 	return nil, nil
 }
@@ -154,7 +141,7 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	found, err := proposals.Get(ctx, s.deps.DB.Write, id)
+	found, err := proposals.Get(ctx, s.deps.DB.Read, id)
 	check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown proposal")
@@ -163,14 +150,15 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	var selection any
 	var done *proposals.Proposal
-	if all, _ := web.FormLast(form, "all"); all == "" {
-		var picked py.Dict
-		if picked, err = selectionOf(found, form); picked != nil {
+	if all, _ := web.Value(form, "all"); all == "" {
+		var picked map[string]any
+		kind, _ := s.registry.Kind(found.Kind)
+		if picked, err = selectionOf(found, kind, form); picked != nil {
 			selection = picked
 		}
 	}
 	if err == nil {
-		done, err = s.pipeline.ApproveAndApply(ctx, id, selection)
+		done, err = s.pipeline.ApproveAndApply(ctx, id, selection, proposals.Resolver{Actor: "operator", Source: "ui"})
 	}
 	var refused proposals.ProposalError
 	if errors.As(err, &refused) {
@@ -178,14 +166,11 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	check(err)
-	result, _ := plainJSON(done.Result).(map[string]any)
 	if done.Status == proposals.Applied {
-		summary, _ := result["summary"].(string)
-		s.card(w, r, id, toast("success", "Applied", summary))
+		s.card(w, r, id, toast("success", "Applied", resultString(done.Result, "summary")))
 		return
 	}
-	failure, _ := result["error"].(string)
-	s.card(w, r, id, toast("error", "It did not finish", failure))
+	s.card(w, r, id, toast("error", "It did not finish", resultString(done.Result, "error")))
 }
 
 func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
@@ -193,8 +178,12 @@ func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	forever, _ := web.FormField(web.FormValues(r), "forever")
-	err := proposals.Dismiss(detached(r), s.deps.DB.Write, id, forever != "", s.now())
+	forever, _ := web.Value(web.FormValues(r), "forever")
+	status := proposals.Dismissed
+	if forever != "" {
+		status = proposals.Suppressed
+	}
+	err := proposals.Dismiss(detached(r), s.deps.DB, id, status, proposals.Resolver{Actor: "operator", Source: "ui"}, s.now())
 	var refused proposals.ProposalError
 	if errors.As(err, &refused) {
 		s.card(w, r, id, toast("error", "Not dismissed", err.Error()))
@@ -226,27 +215,13 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 	}
 	failed := ""
 	for _, o := range outcome.Outcomes {
-		if okOutcome, _ := o.Get("ok"); okOutcome != true {
-			text, _ := o.Get("error")
+		if okOutcome := o["ok"]; okOutcome != true {
+			text := o["error"]
 			failed, _ = text.(string)
 			break
 		}
 	}
 	s.card(w, r, id, toast("error", "Undo did not finish", failed))
-}
-
-func (s *service) markBlocked(ctx context.Context, views []ProposalView) error {
-	for i := range views {
-		if views[i].Status != proposals.Failed && views[i].Status != proposals.Applied {
-			continue
-		}
-		blocked, undo, err := proposals.Blocked(ctx, s.deps.DB.Read, views[i].ID)
-		if err != nil {
-			return err
-		}
-		views[i].Blocked, views[i].BlockedUndo = blocked, undo
-	}
-	return nil
 }
 
 func resolvedToast(outcome string) *tpl.Toast {
@@ -256,6 +231,10 @@ func resolvedToast(outcome string) *tpl.Toast {
 		return toast("success", "Undo recorded as done", "You checked that the messages are back."+untouched)
 	case proposals.OutcomeNotUndone:
 		return toast("success", "Undo recorded as not done", "You checked that the messages were not moved back, so the undo can be tried again."+untouched)
+	case proposals.OutcomeApplied:
+		return toast("success", "Write recorded as done", "You checked that the write happened."+untouched)
+	case proposals.OutcomeNotApplied:
+		return toast("success", "Write recorded as not done", "You checked that the write did not happen, so the action can be tried again."+untouched)
 	}
 	return toast("success", "Marked as checked", "The blocked write is recorded as checked by you."+untouched)
 }
@@ -265,7 +244,7 @@ func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	outcome, _ := web.FormField(web.FormValues(r), "outcome")
+	outcome, _ := web.Value(web.FormValues(r), "outcome")
 	_, err := s.pipeline.Resolve(detached(r), id, outcome, proposals.Resolver{Actor: "operator", Source: "ui"})
 	var refused proposals.ProposalError
 	if errors.As(err, &refused) {
@@ -274,4 +253,13 @@ func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
 	}
 	check(err)
 	s.card(w, r, id, resolvedToast(outcome))
+}
+
+func resultString(v any, key string) string {
+	switch x := v.(type) {
+	case map[string]any:
+		s, _ := x[key].(string)
+		return s
+	}
+	return ""
 }

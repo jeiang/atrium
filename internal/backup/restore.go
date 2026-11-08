@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -45,11 +46,11 @@ func restoreSetup(a *cli.Args) cli.Handler {
 	replaceUnopenable := a.Bool("replace-unopenable", cli.Opt{Help: "replace an existing database that cannot be opened and locked with an available key; it is kept aside"})
 	archive := a.Arg("archive", cli.Opt{Help: "path of the backup archive"})
 	return func(e *cli.Env) int {
-		cfg, err := config.Load(config.OS)
+		cfg, err := config.Load(e.Env)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		configured, err := dbkey.Load(config.OS, settings.Default)
+		configured, err := dbkey.Load(e.Env, settings.From(e.Ctx))
 		if err != nil {
 			return cli.Fail(e, err)
 		}
@@ -65,7 +66,7 @@ func restoreSetup(a *cli.Args) cli.Handler {
 		if o.header.Schema > db.LatestSchemaVersion() {
 			return cli.Fail(e, fmt.Errorf("%w (archive schema %04d, newest known %04d); nothing was changed", ErrNewerSchema, o.header.Schema, db.LatestSchemaVersion()))
 		}
-		stage, err := stagingDir(cfg, *verify)
+		stage, err := stagingDir(cfg, *archive, *verify)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
@@ -78,7 +79,7 @@ func restoreSetup(a *cli.Args) cli.Handler {
 			return cli.Fail(e, fmt.Errorf("restore %s: %w", *archive, err))
 		}
 		defer func() { _ = o.Close() }()
-		if !sameBytes(o.rawHead, firstHead) {
+		if !bytes.Equal(o.rawHead, firstHead) {
 			return cli.Fail(e, fmt.Errorf("restore %s: %w: the archive changed while it was being read; nothing was changed", *archive, ErrTampered))
 		}
 		entries, err := o.unpack(e.Ctx, key, stage)
@@ -89,7 +90,12 @@ func restoreSetup(a *cli.Args) cli.Handler {
 		if err != nil {
 			return cli.Fail(e, fmt.Errorf("restore %s: %w; nothing was changed", *archive, err))
 		}
-		rep.header, rep.files = o.header, len(entries)-1
+		rep.header = o.header
+		for name, entry := range entries {
+			if !entry.Dir && name != dbEntry {
+				rep.files++
+			}
+		}
 		printReport(e.Stdout, *archive, rep)
 		if *verify {
 			_, _ = fmt.Fprintln(e.Stdout, "verified; nothing was written")
@@ -110,11 +116,11 @@ func restoreSetup(a *cli.Args) cli.Handler {
 	}
 }
 
-func stagingDir(cfg config.Config, verify bool) (string, error) {
+func stagingDir(cfg config.Config, archive string, verify bool) (string, error) {
 	dir := filepath.Dir(cfg.DBPath)
 	if verify {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-			dir = ""
+			dir = filepath.Dir(archive)
 		}
 	} else if err := os.MkdirAll(dir, 0o777); err != nil {
 		return "", err
@@ -144,7 +150,10 @@ func readKeyFile(path string) (db.Key, error) {
 }
 
 func archiveKey(h Header, configured db.Key, keyFile string) (db.Key, error) {
-	if !h.Encrypted {
+	if h.Seal == nil {
+		if keyFile != "" {
+			return db.Key{}, errors.New("--key-file was given but the archive is plaintext")
+		}
 		if !configured.IsZero() {
 			return db.Key{}, ErrPlaintextKeyed
 		}
@@ -159,9 +168,9 @@ func archiveKey(h Header, configured db.Key, keyFile string) (db.Key, error) {
 	}
 	switch {
 	case key.IsZero():
-		return db.Key{}, fmt.Errorf("%w: the archive is encrypted under key id %s and no key is configured; set the %s setting or pass --key-file", ErrArchiveKey, h.KeyID, db.KeySetting)
-	case dbkey.ID(key) != h.KeyID:
-		return db.Key{}, fmt.Errorf("%w: the archive is encrypted under key id %s (key ids it records: %s) but the key given has id %s; pass --key-file with the key whose id is %s", ErrArchiveKey, h.KeyID, strings.Join(h.KeyIDs, ", "), dbkey.ID(key), h.KeyID)
+		return db.Key{}, fmt.Errorf("%w: the archive is encrypted under key id %s and no key is configured; set the %s setting or pass --key-file", ErrArchiveKey, h.Seal.KeyID, db.KeySetting)
+	case dbkey.ID(key) != h.Seal.KeyID:
+		return db.Key{}, fmt.Errorf("%w: the archive is encrypted under key id %s (key ids it records: %s) but the key given has id %s; pass --key-file with the key whose id is %s", ErrArchiveKey, h.Seal.KeyID, strings.Join(h.Seal.KeyIDs, ", "), dbkey.ID(key), h.Seal.KeyID)
 	}
 	if err := checkKey(h, key); err != nil {
 		return db.Key{}, err
@@ -212,6 +221,9 @@ func migrateStaged(ctx context.Context, staged string, key db.Key, rep *report) 
 		return err
 	}
 	err = db.Migrate(ctx, m, staged)
+	if err == nil {
+		err = settings.NewStore(settings.From(ctx), m, m).Load(ctx)
+	}
 	if err = errors.Join(wrapMigrate(err), m.Close()); err != nil {
 		return err
 	}
@@ -249,8 +261,8 @@ func printReport(w io.Writer, archive string, rep report) {
 	} else {
 		_, _ = fmt.Fprintf(w, "schema: %04d, migrated to %04d\n", rep.from, rep.to)
 	}
-	if h.Encrypted {
-		_, _ = fmt.Fprintf(w, "encryption: encrypted, key id %s (key ids: %s)\n", h.KeyID, strings.Join(h.KeyIDs, ", "))
+	if h.Seal != nil {
+		_, _ = fmt.Fprintf(w, "encryption: encrypted, key id %s (key ids: %s)\n", h.Seal.KeyID, strings.Join(h.Seal.KeyIDs, ", "))
 	} else {
 		_, _ = fmt.Fprintln(w, "encryption: plaintext")
 	}
@@ -264,13 +276,9 @@ func printReport(w io.Writer, archive string, rep report) {
 	_, _ = fmt.Fprintf(w, "files: %d\n", rep.files)
 }
 
-func isKeyError(err error) bool {
-	return errors.Is(err, db.ErrWrongKey) || errors.Is(err, db.ErrKeyMissing) || errors.Is(err, db.ErrPlaintextDB)
-}
-
-func holdExisting(ctx context.Context, path string, replaceUnopenable bool, keys ...db.Key) (func(), error) {
+func holdExisting(ctx context.Context, path string, replaceUnopenable bool, keys ...db.Key) (func(), bool, error) {
 	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
-		return func() {}, nil
+		return func() {}, false, nil
 	}
 	var last error
 	for _, k := range keys {
@@ -282,17 +290,17 @@ func holdExisting(ctx context.Context, path string, replaceUnopenable bool, keys
 		if err := db.HoldExclusive(ctx, held); err != nil {
 			_ = held.Close()
 			if errors.Is(err, db.ErrInUse) {
-				return nil, fmt.Errorf("restore refused: %w; the database and files are unchanged", err)
+				return nil, false, fmt.Errorf("restore refused: %w; the database and files are unchanged", err)
 			}
 			last = err
 			continue
 		}
-		return func() { _ = held.Close() }, nil
+		return func() { _ = held.Close() }, true, nil
 	}
 	if replaceUnopenable {
-		return func() {}, nil
+		return func() {}, false, nil
 	}
-	return nil, fmt.Errorf("restore refused: the existing database %s cannot be opened and locked with the configured key or the archive's key (%v), so a running instance cannot be ruled out; fix the key or pass --replace-unopenable to replace it, which keeps the old database aside; the database and files are unchanged", path, last)
+	return nil, false, fmt.Errorf("restore refused: the existing database %s cannot be opened and locked with the configured key or the archive's key (%v), so a running instance cannot be ruled out; fix the key or pass --replace-unopenable to replace it, which keeps the old database aside; the database and files are unchanged", path, last)
 }
 
 func chownLike(path string, info os.FileInfo) error {
@@ -317,7 +325,7 @@ func install(ctx context.Context, cfg config.Config, configured, key db.Key, sta
 		return nil, err
 	}
 	defer func() { _ = lock.Close() }()
-	release, err := holdExisting(ctx, path, replaceUnopenable, configured, key)
+	release, _, err := holdExisting(ctx, path, replaceUnopenable, configured, key)
 	if err != nil {
 		return nil, err
 	}
@@ -345,7 +353,7 @@ func install(ctx context.Context, cfg config.Config, configured, key db.Key, sta
 		if err != nil {
 			return err
 		}
-		if d.IsDir() {
+		if d.IsDir() && (p == stage || p == stagedFiles) {
 			if err := os.Chmod(p, dirMode); err != nil {
 				return err
 			}

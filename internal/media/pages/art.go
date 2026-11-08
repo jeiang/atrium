@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -67,7 +66,7 @@ func (s *service) serveArt(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) serveSeasonArt(w http.ResponseWriter, r *http.Request) {
 	name, raw := web.PathParam(r, "name"), web.PathParam(r, "number")
-	number, valid := py.LaxInt64(raw)
+	number, valid := laxInt64(raw)
 	if !valid {
 		web.Unprocessable(w, web.BadInt("path", "number", raw))
 		return

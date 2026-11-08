@@ -1,12 +1,12 @@
-{{template "chat_work" .Data.work}}
+{{template "chat_work" .Data.Work}}
 
 {{define "chat_work"}}{{$w := .}}
 <section class="flex flex-col gap-2" aria-labelledby="work-plan">
   <h2 id="work-plan" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "list-checks" "size-3.5"}}Plan</h2>
-  {{if $w.plan}}
+  {{if $w.Plan}}
   <ol class="flex flex-col gap-1 text-sm" data-plan>
-    {{range $w.plan.items}}
-    <li class="flex items-start gap-2">{{if .done}}{{icon "check" "mt-0.5 size-3.5 shrink-0 text-success"}}{{else}}{{icon "circle-dot" "mt-0.5 size-3.5 shrink-0 text-muted-foreground"}}{{end}}<span class="{{if .done}}text-muted-foreground line-through{{end}}">{{.text}}</span></li>
+    {{range $w.Plan.items}}
+    <li class="flex items-start gap-2">{{if .Done}}{{icon "check" "mt-0.5 size-3.5 shrink-0 text-success"}}{{else}}{{icon "circle-dot" "mt-0.5 size-3.5 shrink-0 text-muted-foreground"}}{{end}}<span class="{{if .Done}}text-muted-foreground line-through{{end}}">{{.Text}}</span></li>
     {{end}}
   </ol>
   {{else}}
@@ -16,14 +16,14 @@
 
 <section class="flex flex-col gap-2" aria-labelledby="work-sources">
   <h2 id="work-sources" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "globe" "size-3.5"}}Sources</h2>
-  {{if $w.sources}}
+  {{if $w.Sources}}
   <ul class="flex flex-col gap-1 text-sm" data-sources>
-    {{range $w.sources}}
+    {{range $w.Sources}}
     <li class="flex min-w-0 items-center gap-2">
-      {{if eq .kind "mail"}}{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}{{else if eq .kind "notion"}}{{icon "book-user" "size-3.5 shrink-0 text-muted-foreground"}}{{else}}{{icon "globe" "size-3.5 shrink-0 text-muted-foreground"}}{{end}}
-      {{if eq .kind "web"}}<a class="truncate underline-offset-4 hover:underline" {{template "external" .url}}>{{.title}}</a>
-      {{else}}<a class="truncate underline-offset-4 hover:underline" {{template "preview_attrs" .url}}>{{.title}}</a>{{end}}
-      {{if .via}}<span class="badge shrink-0" data-variant="outline">{{.via}}</span>{{end}}
+      {{if eq .Kind "mail"}}{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}{{else if eq .Kind "notion"}}{{icon "book-user" "size-3.5 shrink-0 text-muted-foreground"}}{{else}}{{icon "globe" "size-3.5 shrink-0 text-muted-foreground"}}{{end}}
+      {{if eq .Kind "web"}}<a class="truncate underline-offset-4 hover:underline" {{template "external" .URL}}>{{.Title}}</a>
+      {{else}}<a class="truncate underline-offset-4 hover:underline" {{template "preview_attrs" .URL}}>{{.Title}}</a>{{end}}
+      {{if .Via}}<span class="badge shrink-0" data-variant="outline">{{.Via}}</span>{{end}}
     </li>
     {{end}}
   </ul>
@@ -34,18 +34,18 @@
 
 <section class="flex flex-col gap-2" aria-labelledby="work-subagents">
   <h2 id="work-subagents" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "users" "size-3.5"}}Subagents</h2>
-  {{if $w.subagents}}
+  {{if $w.Subagents}}
   <ul class="flex flex-col gap-2" data-subagents>
-    {{range $w.subagents}}
-    <li class="flex flex-col gap-1 rounded-md border px-3 py-2 text-xs" data-child="{{.thread_id}}" data-status="{{.status}}">
+    {{range $w.Subagents}}
+    <li class="flex flex-col gap-1 rounded-md border px-3 py-2 text-xs" data-child="{{.ThreadID}}" data-status="{{.Status}}">
       <span class="flex flex-wrap items-center gap-1.5">
-        <span class="badge" data-variant="secondary">{{or .role .kind}}</span>
-        <span class="badge" data-variant="outline">effort {{.effort}}</span>
-        {{$st := .status}}{{with badge "subagent_status" $st}}<span class="badge" data-variant="{{.Variant}}">{{if eq $st "running"}}{{icon "loader-circle" "animate-spin"}}{{end}}{{.Label}}</span>{{else}}<span class="badge" data-variant="outline">{{$st}}</span>{{end}}
-        {{if .current}}<code class="font-mono">{{.current}}</code>{{end}}
+        <span class="badge" data-variant="secondary">{{or (str .Role) .Kind}}</span>
+        <span class="badge" data-variant="outline">effort {{.Effort}}</span>
+        {{$st := .Status}}{{with badge "subagent_status" $st}}<span class="badge" data-variant="{{.Variant}}">{{if eq $st "running"}}{{icon "loader-circle" "animate-spin"}}{{end}}{{.Label}}</span>{{else}}<span class="badge" data-variant="outline">{{$st}}</span>{{end}}
+        {{if .Current}}<code class="font-mono">{{str .Current}}</code>{{end}}
       </span>
-      <a class="truncate underline-offset-4 hover:underline" href="/chat/{{.thread_id}}">{{or .title "Untitled"}}</a>
-      <span class="flex gap-2 text-muted-foreground tabular-nums"><span>${{printf "%.4f" .cost}}</span>{{if not (isnil .elapsed)}}<span>{{printf "%.0f" .elapsed}}s</span>{{end}}{{if .error}}<span class="truncate text-destructive" title="{{.error}}">{{truncate 80 .error}}</span>{{end}}</span>
+      <a class="truncate underline-offset-4 hover:underline" href="/chat/{{.ThreadID}}">{{or (str .Title) "Untitled"}}</a>
+      <span class="flex gap-2 text-muted-foreground tabular-nums"><span>${{printf "%.4f" .Cost}}</span>{{if not (isnil .Elapsed)}}<span>{{printf "%.0f" (float .Elapsed)}}s</span>{{end}}{{if .Error}}<span class="truncate text-destructive" title="{{str .Error}}">{{truncate 80 (str .Error)}}</span>{{end}}</span>
     </li>
     {{end}}
   </ul>
@@ -56,16 +56,16 @@
 
 <section class="flex flex-col gap-2" aria-labelledby="work-files">
   <h2 id="work-files" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "file-text" "size-3.5"}}Files</h2>
-  {{if or $w.files $w.drafts}}
+  {{if or $w.Files $w.Drafts}}
   <ul class="flex flex-col gap-1 text-sm" data-files>
-    {{range $w.files}}
-    <li class="flex items-center gap-1 rounded-md border px-3 py-2 hover:bg-accent" data-file="{{.id}}">
-      <a class="flex min-w-0 flex-1 items-center gap-2" {{template "preview_attrs" (printf "/chat/%v/files/%v" .thread_id .id)}}>{{template "file_icon" (dict "media_type" .media_type)}}<span class="truncate">{{.name}}</span><span class="badge shrink-0" data-variant="{{if eq .origin "generated"}}secondary{{else}}outline{{end}}">{{lbl "file_origin" .origin}}</span><span class="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{filesizeformat .bytes}}</span></a>
-      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/chat/{{.thread_id}}/files/{{.id}}/download" download aria-label="Download {{.name}}">{{icon "download" "size-3.5"}}</a>
+    {{range $w.Files}}
+    <li class="flex items-center gap-1 rounded-md border px-3 py-2 hover:bg-accent" data-file="{{.ID}}">
+      <a class="flex min-w-0 flex-1 items-center gap-2" {{template "preview_attrs" (printf "/chat/%v/files/%v" .ThreadID .ID)}}>{{template "file_icon" (dict "media_type" .MediaType)}}<span class="truncate">{{.Name}}</span><span class="badge shrink-0" data-variant="{{if eq .Origin "generated"}}secondary{{else}}outline{{end}}">{{lbl "file_origin" .Origin}}</span><span class="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{filesizeformat .Bytes}}</span></a>
+      <a class="btn shrink-0" data-size="icon-sm" data-variant="ghost" href="/chat/{{.ThreadID}}/files/{{.ID}}/download" download aria-label="Download {{.Name}}">{{icon "download" "size-3.5"}}</a>
     </li>
     {{end}}
-    {{range $w.drafts}}
-    <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{template "preview_attrs" (printf "/drafts/%v" .id)}}>{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}<span class="truncate">{{or .subject "(no subject)"}}</span>{{$ds := .status}}{{with badge "draft_status" $ds}}<span class="badge ms-auto shrink-0" data-variant="{{.Variant}}">{{.Label}}</span>{{else}}<span class="badge ms-auto shrink-0" data-variant="outline">{{$ds}}</span>{{end}}</a></li>
+    {{range $w.Drafts}}
+    <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{template "preview_attrs" (printf "/drafts/%v" .ID)}}>{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}<span class="truncate">{{or .Subject "(no subject)"}}</span>{{$ds := .Status}}{{with badge "draft_status" $ds}}<span class="badge ms-auto shrink-0" data-variant="{{.Variant}}">{{.Label}}</span>{{else}}<span class="badge ms-auto shrink-0" data-variant="outline">{{$ds}}</span>{{end}}</a></li>
     {{end}}
   </ul>
   {{else}}

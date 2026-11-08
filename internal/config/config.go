@@ -1,8 +1,8 @@
 package config
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -58,26 +58,21 @@ func (c Config) MediaLinkKeyPath() string { return c.sibling(MediaLinkKeyFile) }
 
 func (c Config) MediaCacheDir() string { return filepath.Join(c.CacheDir, MediaCacheSubdir) }
 
-func (c Config) LockPath() string { return LockPath(c.DBPath) }
-
-func (c Config) NotionLockPath() string { return LockPath(c.sibling(NotionLockName)) }
-
 func (c Config) sibling(name string) string {
 	return filepath.Join(filepath.Dir(c.DBPath), name)
 }
 
-func LockPath(path string) string { return path + ".lock" }
-
-func (c Config) Credential(account string) (user, password string, ok bool) {
-	a, found := Account(account)
-	if !found || !a.Enabled || a.Login == "" || a.Password == "" {
+func Credential(ctx context.Context, account string) (user, password string, ok bool) {
+	st := From(ctx)
+	a, found := st.Account(account)
+	if !found || !a.Enabled || a.Login == "" {
 		return "", "", false
 	}
-	return a.Login, a.Password, true
-}
-
-func (c Config) String() string {
-	return fmt.Sprintf("Config(db_path=%s, cache_dir=%s)", c.DBPath, c.CacheDir)
+	password, ok = st.Password(a.Name)
+	if !ok {
+		return "", "", false
+	}
+	return a.Login, password, true
 }
 
 func (c Config) LogValue() slog.Value {
@@ -104,12 +99,6 @@ func Load(env Env) (Config, error) {
 	if cache == "" {
 		return Config{}, errors.New("ATRIUM_CACHE_DIR or STATE_DIRECTORY is required")
 	}
-	accounts, err := loadAccounts(env)
-	if err != nil {
-		return Config{}, err
-	}
-	fileAccounts.Store(&accounts)
-	liveAccounts.Store(&accounts)
 	return Config{
 		DBPath:   filepath.Clean(db),
 		CacheDir: filepath.Clean(cache),

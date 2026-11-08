@@ -19,33 +19,31 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func resolveAuth(stderr io.Writer, a serveArgs, hosts []string) (serveArgs, bool) {
-	set, err := ParseAuth(a.auth)
+func resolveAuth(stderr io.Writer, a serveArgs, hosts []string) (serveArgs, Policy, bool) {
+	policy, err := parseAuth(a.auth)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
-		return a, false
+		return a, Policy{}, false
 	}
-	configured := set.Local && isLoopbackHost(a.host) || !set.Local && len(hosts) > 0
+	configured := policy.Local() && isLoopbackHost(a.host) || !policy.Local() && len(hosts) > 0
 	if configured {
-		return a, true
+		return a, policy, true
 	}
 	if !a.forceDisableAuth {
 		_, _ = fmt.Fprintln(stderr, authWarning)
-		if !set.Local {
+		if !policy.Local() {
 			name := AuthProxy
-			if !set.Proxy {
+			if !policy.Proxy() {
 				name = AuthOIDC
 			}
 			_, _ = fmt.Fprintf(stderr, "%s mode needs --allowed-host or ATRIUM_PUBLIC_HOST\n", name)
 		}
-		return a, false
+		return a, Policy{}, false
 	}
 	if len(hosts) == 0 && !isLoopbackHost(a.host) {
 		_, _ = fmt.Fprintln(stderr, "error: --force-disable-auth on a non-loopback address needs --allowed-host or ATRIUM_PUBLIC_HOST, otherwise every non-loopback Host is refused")
-		return a, false
+		return a, Policy{}, false
 	}
 	log.Warn(authDisabledLog)
-	a.auth = []string{AuthLocal}
-	a.authDisabled = true
-	return a, true
+	return a, Policy{Mode: ModeLocal, Open: true}, true
 }

@@ -191,6 +191,14 @@ func (f *dlQbitFake) handle(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+	case "torrents/removeTags":
+		for _, h := range strings.Split(form.Get("hashes"), "|") {
+			if t, ok := f.items[h]; ok {
+				for _, tag := range dlSplitTags(form.Get("tags")) {
+					t.tags = slices.DeleteFunc(t.tags, func(existing string) bool { return existing == tag })
+				}
+			}
+		}
 	case "torrents/filePrio":
 		t := f.items[form.Get("hash")]
 		priority, _ := strconv.Atoi(form.Get("priority"))
@@ -239,7 +247,7 @@ func dlWorld(t *testing.T, extra map[string]string) (*site, *dlQbitFake, string)
 func dlCompletedMedia(t *testing.T, root string, qb *dlQbitFake, hash, name string) string {
 	t.Helper()
 	content := filepath.Join(root, "downloads", name)
-	for _, f := range []string{name + ".mkv", "Sample/sample.mkv", "info.nfo"} {
+	for _, f := range []string{name + ".mkv", name + ".en.srt", "Sample/sample.mkv", "info.nfo"} {
 		full := filepath.Join(content, f)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
@@ -259,8 +267,8 @@ func dlCompletedMedia(t *testing.T, root string, qb *dlQbitFake, hash, name stri
 func TestDlAddPagePrefillAndSubmit(t *testing.T) {
 	s, qb, _ := dlWorld(t, nil)
 	magnet := "magnet:?xt=urn:btih:" + dlHashA + "&dn=Lanterns.S01E08"
-	page := status(t, s.get("/media/add?magnet="+url.QueryEscape(magnet)), 200, "add page")
-	contains(t, page, `value="`+strings.ReplaceAll(magnet, "&", "&amp;")+`"`, `name="torrent"`, `value="media" checked`)
+	page := status(t, s.get("/media/add?magnet="+url.QueryEscape(magnet)+"&name=Lanterns.S01E08.torrent"), 200, "add page")
+	contains(t, page, `value="`+strings.ReplaceAll(magnet, "&", "&amp;")+`"`, `name="torrent"`, `value="media" checked`, `value="Lanterns.S01E08.torrent"`)
 
 	done := status(t, s.post("/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}), 200, "add magnet")
 	contains(t, done, "Added the magnet link")
@@ -355,8 +363,8 @@ func TestDlDownloadsPageListsTorrentsQueueAndFiles(t *testing.T) {
 	lacks(t, down, `hx-get="/media/torrents"`)
 	fragment := status(t, s.get("/media/torrents/"+dlHashB+"/files"), 502, "files qbit down")
 	contains(t, fragment, "qBittorrent: torrents/info: 500")
-	toggleDown := status(t, s.post("/media/torrents/"+dlHashB+"/files", url.Values{"index": {"0"}}), 502, "toggle qbit down")
-	contains(t, toggleDown, "qBittorrent: torrents/filePrio: 500")
+	toggleDown := status(t, s.post("/media/torrents/"+dlHashB+"/files", url.Values{"index": {"0"}, "wanted": {"0"}}), 502, "toggle qbit down")
+	contains(t, toggleDown, "qBittorrent: torrents/info: 500")
 }
 
 func TestDlDownloadsPageWithoutQbittorrent(t *testing.T) {
@@ -408,6 +416,9 @@ func TestDlFilingFromTheWeb(t *testing.T) {
 	if !os.SameFile(src, dst) {
 		t.Fatal("filing did not hardlink the source")
 	}
+	if _, err := os.Stat(filepath.Join(root, "tv", "Lanterns (2026)", "Season 01", "Lanterns (2026) - S01E08.en.srt")); err != nil {
+		t.Fatalf("the subtitle was not filed: %v", err)
+	}
 	if !slices.Contains(qb.tagsOf(dlHashA), "filed") {
 		t.Fatalf("tags %v", qb.tagsOf(dlHashA))
 	}
@@ -448,7 +459,7 @@ func TestDlImportEntryIsMovedNotIgnored(t *testing.T) {
 	}
 }
 
-func TestDlSelectFilesRunsOnGetAndPoll(t *testing.T) {
+func TestDlPollDoesNotWriteToQbit(t *testing.T) {
 	s, qb, _ := dlWorld(t, nil)
 	qb.add(dlTorrent{
 		hash: dlHashA, name: "Show.S01E01", tags: []string{"media"}, state: "stoppedDL",
@@ -464,13 +475,13 @@ func TestDlSelectFilesRunsOnGetAndPoll(t *testing.T) {
 	})
 
 	status(t, s.get("/media/downloads"), 200, "downloads")
-	if got := qb.prioritiesOf(dlHashA); !slices.Equal(got, []int{1, 0, 1}) {
+	if got := qb.prioritiesOf(dlHashA); !slices.Equal(got, []int{0, 1, 0}) {
 		t.Fatalf("priorities after the page GET %v", got)
 	}
-	if !slices.Contains(qb.tagsOf(dlHashA), "selected") || !slices.Contains(qb.started, dlHashA) {
-		t.Fatalf("tags %v started %v", qb.tagsOf(dlHashA), qb.started)
+	if slices.Contains(qb.tagsOf(dlHashA), "selected") || slices.Contains(qb.started, dlHashA) {
+		t.Fatalf("the page GET wrote to qBittorrent: tags %v started %v", qb.tagsOf(dlHashA), qb.started)
 	}
-	if got := qb.prioritiesOf(dlHashB); !slices.Equal(got, []int{1, 0}) {
+	if got := qb.prioritiesOf(dlHashB); !slices.Equal(got, []int{0, 1}) {
 		t.Fatalf("priorities after the page GET %v", got)
 	}
 
@@ -479,8 +490,11 @@ func TestDlSelectFilesRunsOnGetAndPoll(t *testing.T) {
 		files: []dlFile{{Index: 0, Name: "d.mkv", Priority: 0}, {Index: 1, Name: "d.txt", Priority: 1}},
 	})
 	status(t, s.get("/media/torrents"), 200, "poll")
-	if got := qb.prioritiesOf("dddddddddddddddddddddddddddddddddddddddd"); !slices.Equal(got, []int{1, 0}) {
+	if got := qb.prioritiesOf("dddddddddddddddddddddddddddddddddddddddd"); !slices.Equal(got, []int{0, 1}) {
 		t.Fatalf("priorities after the poll %v", got)
+	}
+	if slices.Contains(qb.tagsOf("dddddddddddddddddddddddddddddddddddddddd"), "selected") || slices.Contains(qb.started, "dddddddddddddddddddddddddddddddddddddddd") {
+		t.Fatalf("the poll wrote to qBittorrent")
 	}
 
 	if got := qb.prioritiesOf(dlHashC); !slices.Equal(got, []int{0, 1}) {

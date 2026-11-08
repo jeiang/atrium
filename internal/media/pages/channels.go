@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -25,20 +24,7 @@ func chToast(category, title, description string) *tpl.Toast {
 	return &tpl.Toast{Category: category, Title: title, Description: description}
 }
 
-func chLastCheck(v any) *float64 {
-	var f float64
-	switch x := v.(type) {
-	case float64:
-		f = x
-	case int64:
-		f = float64(x)
-	default:
-		return nil
-	}
-	return &f
-}
-
-func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toast, status int, q string, form *ChannelForm, results *[]SearchHit) {
+func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toast, status int, q string, form *ChannelForm, results []SearchHit, searched bool) {
 	ctx := r.Context()
 	set := s.settings(ctx)
 	rows, err := media.ListChannels(ctx, s.deps.DB.Read)
@@ -59,10 +45,11 @@ func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toa
 	}
 	data := ChannelsPage{
 		Channels: channels,
-		Status:   ChannelStatusView{LastCheck: chLastCheck(state.LastCheck), Errors: errs},
+		Status:   ChannelStatusView{LastCheck: state.LastCheck, Errors: errs},
 		TMDB:     set.TMDBToken != "",
 		Q:        q,
 		Results:  results,
+		Searched: searched,
 		Form:     ChannelForm{Backfill: true},
 	}
 	if form != nil {
@@ -80,14 +67,15 @@ func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toa
 
 func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	q := py.Strip(web.QueryValue(query, "q"))
-	imdb := py.Strip(web.QueryValue(query, "imdb"))
+	q := strings.TrimSpace(web.QueryValue(query, "q"))
+	imdb := strings.TrimSpace(web.QueryValue(query, "imdb"))
 	name := web.QueryValue(query, "name")
-	tmdbID := py.Strip(web.QueryValue(query, "tmdb_id"))
+	tmdbID := strings.TrimSpace(web.QueryValue(query, "tmdb_id"))
 	pattern := web.QueryValue(query, "pattern")
 	set := s.settings(r.Context())
 	client := set.TMDB()
-	var results *[]SearchHit
+	var results []SearchHit
+	searched := false
 	var notice *tpl.Toast
 	err := func() error {
 		ctx := r.Context()
@@ -96,13 +84,13 @@ func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			hits := make([]SearchHit, len(found))
+			results = make([]SearchHit, len(found))
 			for i, f := range found {
-				hits[i] = SearchHit{TmdbID: f.TmdbID, Name: f.Name, Year: f.Year}
+				results[i] = SearchHit{TmdbID: f.TmdbID, Name: f.Name, Year: f.Year}
 			}
-			results = &hits
+			searched = true
 		}
-		if id, ok := py.ParseInt(tmdbID); py.IsDigits(tmdbID) && ok && imdb == "" && client != nil {
+		if id, ok := parseInt(tmdbID); isDigits(tmdbID) && ok && imdb == "" && client != nil {
 			digits, found, err := client.ImdbOf(ctx, id)
 			if err != nil {
 				return err
@@ -116,14 +104,14 @@ func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}()
 	if err != nil {
-		var failed media.TmdbError
-		if !errors.As(err, &failed) {
+		text, kind := mustClassify(err)
+		if kind != tmdbError {
 			panic(err)
 		}
-		notice = chToast("error", "TMDB failed", failed.Error())
+		notice = chToast("error", "TMDB failed", text)
 	}
-	form := ChannelForm{IMDb: imdb, Name: py.Strip(name), TmdbID: tmdbID, Pattern: pattern, Backfill: true}
-	s.chPage(w, r, notice, http.StatusOK, q, &form, results)
+	form := ChannelForm{IMDb: imdb, Name: strings.TrimSpace(name), TmdbID: tmdbID, Pattern: pattern, Backfill: true}
+	s.chPage(w, r, notice, http.StatusOK, q, &form, results, searched)
 }
 
 func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
@@ -137,35 +125,35 @@ func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
 	form := ChannelForm{TmdbID: tmdbID, Name: name, IMDb: imdb, Pattern: pattern, CaseSensitive: caseSensitive, Backfill: backfill}
 	ctx := r.Context()
 	var tmdb *int64
-	if trimmed := py.Strip(tmdbID); py.IsDigits(trimmed) {
-		if id, ok := py.ParseInt(trimmed); ok {
+	if trimmed := strings.TrimSpace(tmdbID); isDigits(trimmed) {
+		if id, ok := parseInt(trimmed); ok {
 			tmdb = &id
 		}
 	}
-	row, err := s.settings(ctx).AddChannel(ctx, s.deps.DB.Write, name, imdb, pattern, caseSensitive, tmdb, s.now, false)
+	set := s.settings(ctx)
+	row, err := set.AddChannel(ctx, s.deps.DB.Write, name, imdb, pattern, caseSensitive, tmdb)
 	if err != nil {
-		var refused media.ChannelError
-		if !errors.As(err, &refused) {
+		text, kind := mustClassify(err)
+		if kind != channelError {
 			panic(err)
 		}
-		s.chPage(w, r, chToast("error", "Not saved", refused.Error()), http.StatusUnprocessableEntity, "", &form, nil)
+		s.chPage(w, r, chToast("error", "Not saved", text), http.StatusUnprocessableEntity, "", &form, nil, false)
 		return
 	}
 	if !backfill {
-		s.chPage(w, r, chToast("success", "Watching "+row.Name, "The first poll only records what is already out; later matches are downloaded."), http.StatusOK, "", nil, nil)
+		s.chPage(w, r, chToast("success", "Watching "+row.Name, "The first poll only records what is already out; later matches are downloaded."), http.StatusOK, "", nil, nil, false)
 		return
 	}
-	settings := s.settings(ctx)
-	qb, err := settings.Qbit()
+	out, err := media.Poll(ctx, s.deps.DB.Write, s.deps.Env, set, media.PollOptions{Now: s.now, Only: &row.ID, Force: true})
 	if err != nil {
-		s.chPage(w, r, chToast("error", "Watching "+row.Name, "Nothing downloaded: "+err.Error()), http.StatusOK, "", nil, nil)
+		text, kind := mustClassify(err)
+		if kind != backendError {
+			panic(err)
+		}
+		s.chPage(w, r, chToast("error", "Watching "+row.Name, "Nothing downloaded: "+text), http.StatusOK, "", nil, nil, false)
 		return
 	}
-	out, err := media.Poll(ctx, s.deps.DB.Write, s.deps.Env, qb, settings, media.PollOptions{Now: s.now, Only: &row.ID, Force: true})
-	if err != nil {
-		panic(err)
-	}
-	s.chPage(w, r, chPolled("Watching "+row.Name, "no matching releases yet", out), http.StatusOK, "", nil, nil)
+	s.chPage(w, r, chPolled("Watching "+row.Name, "no matching releases yet", out), http.StatusOK, "", nil, nil, false)
 }
 
 func chPolled(title, idle string, out media.PollResult) *tpl.Toast {
@@ -207,7 +195,7 @@ func (s *service) channelPreview(w http.ResponseWriter, r *http.Request) {
 				view.Matched++
 			}
 		}
-		view.Releases = &releases
+		view.Releases = releases
 	}
 	f, err := s.deps.Render.Frame(r, "", view)
 	if err != nil {
@@ -224,7 +212,7 @@ func (s *service) chReleases(r *http.Request, digits, pattern string, caseSensit
 	if err != nil {
 		return nil, chExpected(err)
 	}
-	if py.Strip(pattern) == "" {
+	if strings.TrimSpace(pattern) == "" {
 		rows := make([]media.PreviewRow, len(releases))
 		for i, release := range releases {
 			rows[i] = media.PreviewRow{Release: release}
@@ -239,17 +227,15 @@ func chExpected(err error) error {
 	if err == nil {
 		return nil
 	}
-	var eztv media.EztvError
-	var refused media.ChannelError
-	if errors.As(err, &eztv) || errors.As(err, &refused) {
-		return err
+	if _, kind, ok := classifyError(err); !ok || kind != channelError {
+		panic(err)
 	}
-	panic(err)
+	return err
 }
 
 func (s *service) channelDelete(w http.ResponseWriter, r *http.Request) {
 	raw := web.PathParam(r, "channel_id")
-	id, ok := py.LaxInt64(raw)
+	id, ok := laxInt64(raw)
 	if !ok {
 		web.Unprocessable(w, web.BadInt("path", "channel_id", raw))
 		return
@@ -263,19 +249,19 @@ func (s *service) channelDelete(w http.ResponseWriter, r *http.Request) {
 		s.deps.Error(w, r, http.StatusNotFound, refused.Error())
 		return
 	}
-	s.chPage(w, r, chToast("success", "Removed "+row.Name, ""), http.StatusOK, "", nil, nil)
+	s.chPage(w, r, chToast("success", "Removed "+row.Name, ""), http.StatusOK, "", nil, nil, false)
 }
 
 func (s *service) channelPoll(w http.ResponseWriter, r *http.Request) {
 	settings := s.settings(r.Context())
-	qb, err := settings.Qbit()
+	out, err := media.Poll(r.Context(), s.deps.DB.Write, s.deps.Env, settings, media.PollOptions{Now: s.now})
 	if err != nil {
-		s.chPage(w, r, chToast("error", "Not polled", err.Error()), http.StatusUnprocessableEntity, "", nil, nil)
+		text, kind := mustClassify(err)
+		if kind != backendError {
+			panic(err)
+		}
+		s.chPage(w, r, chToast("error", "Not polled", text), http.StatusUnprocessableEntity, "", nil, nil, false)
 		return
 	}
-	out, err := media.Poll(r.Context(), s.deps.DB.Write, s.deps.Env, qb, settings, media.PollOptions{Now: s.now})
-	if err != nil {
-		panic(err)
-	}
-	s.chPage(w, r, chPolled("Polled", "nothing new", out), http.StatusOK, "", nil, nil)
+	s.chPage(w, r, chPolled("Polled", "nothing new", out), http.StatusOK, "", nil, nil, false)
 }

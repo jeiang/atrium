@@ -5,25 +5,26 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 )
 
 func detached(r *http.Request) context.Context { return context.WithoutCancel(r.Context()) }
 
-func (p *pages) loadThread(w http.ResponseWriter, r *http.Request, threadID int64) (map[string]any, bool) {
+func (p *pages) loadThread(w http.ResponseWriter, r *http.Request, threadID int64) (*ThreadData, bool) {
 	v, err := service.View(r.Context(), p.deps.DB.Read, threadID)
 	check(err)
 	if v == nil {
 		p.fail(w, r, http.StatusNotFound, "unknown thread")
 		return nil, false
 	}
-	view, err := threadViewDict(v)
+	view, err := threadView(v)
 	check(err)
 	return view, true
 }
@@ -38,29 +39,27 @@ func (p *pages) loadRun(w http.ResponseWriter, r *http.Request, threadID, runID 
 	return found, true
 }
 
-func threadOf(view map[string]any) threads.Thread { return view["thread"].(threads.Thread) }
+func threadOf(view *ThreadData) threads.Thread { return view.Thread }
 
-func itemsOf(view map[string]any) []map[string]any { return view["items"].([]map[string]any) }
+func itemsOf(view *ThreadData) []*service.Item { return view.Items }
 
-func seqOf(item map[string]any) int64 { return item["seq"].(int64) }
+func seqOf(item *service.Item) int64 { return item.Seq }
 
-func runOf(item map[string]any) int64 {
-	if id, ok := item["run_id"].(*int64); ok && id != nil {
-		return *id
+func runOf(item *service.Item) int64 {
+	if item.RunID != nil {
+		return *item.RunID
 	}
 	return 0
 }
 
-func (p *pages) threadContext(w http.ResponseWriter, r *http.Request, threadID int64) (map[string]any, bool) {
+func (p *pages) threadContext(w http.ResponseWriter, r *http.Request, threadID int64) (*ThreadPage, bool) {
 	view, ok := p.loadThread(w, r, threadID)
 	if !ok {
 		return nil, false
 	}
 	t := threadOf(view)
-	return map[string]any{
-		"view": view, "thread_id": threadID,
-		"composer": composerData(t.Model, t.Effort, threads.ContextLimitOf(t), threadID),
-	}, true
+	return &ThreadPage{View: view, ThreadID: threadID, History: p.hasHistory(r.Context(), threadID),
+		Composer: composerData(r.Context(), t.Model, t.Effort, t.Thinking, threads.ContextLimitOf(t), bool(t.WebSearch), t.CostCapUSD, threadID)}, true
 }
 
 func (p *pages) transcript(w http.ResponseWriter, r *http.Request, threadID int64, reswap string) {
@@ -91,11 +90,11 @@ func (p *pages) chatThread(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []projects.Project{}
 	}
-	data["work"], data["projects"], data["project"] = work, list, nil
-	if t := threadOf(data["view"].(map[string]any)); t.ProjectID != nil && *t.ProjectID != 0 {
+	data.Work, data.Projects, data.Project = work, list, nil
+	if t := threadOf(data.View); t.ProjectID != nil && *t.ProjectID != 0 {
 		project, err := projects.Get(ctx, p.deps.DB.Read, *t.ProjectID)
 		check(err)
-		data["project"] = project
+		data.Project = project
 	}
 	if web.IsPartial(r) {
 		p.fragment(w, r, http.StatusOK, "_thread.gohtml", data)
@@ -114,7 +113,7 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	text := py.Strip(web.FormString(form, "text", ""))
+	text := strings.TrimSpace(web.FormString(form, "text", ""))
 	if text == "" {
 		p.failure(w, r, "Nothing sent", emptyMessage)
 		return
@@ -135,7 +134,7 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	back := "/chat/" + strconv.FormatInt(threadID, 10)
-	if _, edit := web.FormField(form, "edit"); edit {
+	if _, edit := web.Value(form, "edit"); edit {
 		_, err := p.svc.EditLast(ctx, threadID, text, attached)
 		if p.refused(w, r, err) {
 			return
@@ -160,16 +159,16 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sent.Queued {
-		queued := []map[string]any{}
-		for _, q := range view["queued"].([]map[string]any) {
-			if q["id"] == sent.ID {
+		queued := []QueuedView{}
+		for _, q := range view.Queued {
+			if q.ID == sent.ID {
 				queued = append(queued, q)
 			}
 		}
-		p.fragment(w, r, http.StatusOK, "_queued.gohtml", map[string]any{"view": view, "queued": queued})
+		p.fragment(w, r, http.StatusOK, "_queued.gohtml", QueuedData{Queued: queued})
 		return
 	}
-	items := []map[string]any{}
+	items := []*service.Item{}
 	var after int64
 	for _, item := range itemsOf(view) {
 		if runOf(item) == sent.ID {
@@ -177,9 +176,7 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 			after = max(after, seqOf(item))
 		}
 	}
-	p.fragment(w, r, http.StatusOK, "_run_started.gohtml", map[string]any{
-		"view": view, "thread_id": threadID, "run_id": sent.ID, "items": items, "after": after,
-	})
+	p.fragment(w, r, http.StatusOK, "_run_started.gohtml", RunStarted{View: view, ThreadID: threadID, RunID: sent.ID, Items: items, After: after})
 }
 
 func (p *pages) chatRegenerate(w http.ResponseWriter, r *http.Request) {
@@ -221,11 +218,11 @@ func (p *pages) chatStop(w http.ResponseWriter, r *http.Request) {
 func (p *pages) chatBranch(w http.ResponseWriter, r *http.Request) {
 	threadID, errs := pathInt(r, "thread_id")
 	form := web.FormValues(r)
-	raw, found := web.FormField(form, "seq")
+	raw, found := web.Value(form, "seq")
 	var seq int64
-	if !found {
+	if !found || raw == "" {
 		errs = append(errs, web.Missing("body", "seq"))
-	} else if n, ok := py.LaxInt64(raw); ok {
+	} else if n, ok := numx.LaxInt64(raw); ok {
 		seq = n
 	} else {
 		errs = append(errs, web.BadInt("body", "seq", raw))
@@ -272,7 +269,7 @@ func (p *pages) chatWork(w http.ResponseWriter, r *http.Request) {
 	}
 	work, err := workView(r.Context(), p.deps.DB.Read, threadID, p.now())
 	check(err)
-	data["work"] = work
+	data.Work = work
 	p.fragment(w, r, http.StatusOK, "_work_update.gohtml", data)
 }
 
@@ -282,7 +279,7 @@ func queryAfter(r *http.Request, errs *[]web.FieldError) int64 {
 		return 0
 	}
 	value := raw[len(raw)-1]
-	n, ok := py.LaxInt64(value)
+	n, ok := numx.LaxInt64(value)
 	if !ok {
 		*errs = append(*errs, web.BadInt("query", "after", value))
 	}
@@ -307,16 +304,16 @@ func (p *pages) chatRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found.State == journal.Running {
-		p.fragment(w, r, http.StatusOK, "_run_live.gohtml", map[string]any{"view": view, "thread_id": threadID, "run_id": runID, "after": after})
+		p.fragment(w, r, http.StatusOK, "_run_live.gohtml", RunLive{View: view, ThreadID: threadID, RunID: runID, After: after})
 		return
 	}
-	items := []map[string]any{}
+	items := []*service.Item{}
 	for _, item := range itemsOf(view) {
 		if seqOf(item) > after && runOf(item) == runID {
 			items = append(items, item)
 		}
 	}
-	p.fragment(w, r, http.StatusOK, "_run_done.gohtml", map[string]any{"view": view, "thread_id": threadID, "run": found, "items": items})
+	p.fragment(w, r, http.StatusOK, "_run_done.gohtml", RunDone{View: view, ThreadID: threadID, Run: found, Items: items})
 }
 
 func (p *pages) chatResume(w http.ResponseWriter, r *http.Request) {
@@ -347,5 +344,27 @@ func (p *pages) chatResume(w http.ResponseWriter, r *http.Request) {
 	for _, item := range itemsOf(view) {
 		last = max(last, seqOf(item))
 	}
-	p.fragment(w, r, http.StatusOK, "_run_live.gohtml", map[string]any{"view": view, "thread_id": threadID, "run_id": runID, "after": last})
+	p.fragment(w, r, http.StatusOK, "_run_live.gohtml", RunLive{View: view, ThreadID: threadID, RunID: runID, After: last})
+}
+
+func (p *pages) chatAnswer(w http.ResponseWriter, r *http.Request) {
+	threadID, ok := pathID(w, r, "thread_id")
+	if !ok {
+		return
+	}
+	form := web.FormValues(r)
+	text := web.FormString(form, "text", "")
+	if strings.TrimSpace(text) == "" {
+		web.Unprocessable(w, web.FieldError{Loc: []string{"body", "text"}, Msg: "Type an answer first."})
+		return
+	}
+	if err := p.svc.Answer(detached(r), threadID, text); err != nil {
+		p.fail(w, r, http.StatusConflict, err.Error())
+		return
+	}
+	if !web.IsPartial(r) {
+		redirect(w, r, "/chat/"+strconv.FormatInt(threadID, 10))
+		return
+	}
+	p.transcript(w, r, threadID, "")
 }

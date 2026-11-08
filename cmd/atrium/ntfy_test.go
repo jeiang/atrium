@@ -94,12 +94,12 @@ func (f *fakeNtfy) last() (ntfyPublish, int) {
 
 func TestNtfyChannelsMintTokensProbePrivacyAndTrackHealth(t *testing.T) {
 	f := newFakeNtfy(t)
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv("ATRIUM_DB_KEY", rightKeyHex)
-	t.Setenv(settingEnv(notify.KeyURL), f.URL)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	setEnv(t, settingEnv(notify.KeyURL), f.URL)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	t.Setenv(settingEnv(notify.KeyTopic), "phase-a-topic")
-	if got := runApp("settings", "list"); got.code != 0 {
+	setEnv(t, settingEnv(notify.KeyTopic), "phase-a-topic")
+	if got := runApp(t, "settings", "list"); got.code != 0 {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}
 	key, err := db.ParseKey(rightKeyHex)
@@ -119,8 +119,8 @@ func TestNtfyChannelsMintTokensProbePrivacyAndTrackHealth(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := d.Write.Exec("INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) "+
-		"VALUES (?, 1, 1, 'chat', 'claude-haiku-5-5', 'low', 1, 0, 0, 0, 1, 0, '<=100K', 130)", float64(time.Now().Unix())); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) "+
+		"VALUES (?, lower(hex(randomblob(16))), 'loop', 'anthropic', 1, 1, 'chat', 'claude-haiku-5-5', 'low', '[]', 1, 0, 0, 0, 1, 0, '<=100K', 130)", float64(time.Now().Unix())); err != nil {
 		t.Fatal(err)
 	}
 

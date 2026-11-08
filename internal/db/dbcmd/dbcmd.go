@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/cli"
@@ -20,8 +19,8 @@ import (
 
 const maxKeyInput = 1024
 
-func Command() *cli.Command {
-	s := &service{env: config.OS}
+func Command(env config.Env) *cli.Command {
+	s := &service{env: env}
 	return &cli.Command{
 		Name: "db",
 		Commands: []*cli.Command{
@@ -30,6 +29,7 @@ func Command() *cli.Command {
 			{Name: "backup", Help: "write a consistent copy of the database, encrypted like the source", Setup: s.backup},
 			{Name: "shell", Help: "run SQL statements from standard input against the database", Setup: s.shell},
 			{Name: "check", Help: "verify database integrity and report FTS5 and vec0 table counts", Setup: s.check},
+			{Name: "import-v1", Help: "copy the learned-rule data from a v1 database into this fresh v2 database", Setup: s.importV1},
 		},
 	}
 }
@@ -47,20 +47,24 @@ func (s *service) path() (string, error) {
 	return cfg.DBPath, nil
 }
 
-func (s *service) open(e *cli.Env) (*db.DB, string, int) {
+func (s *service) open(e *cli.Env) (*db.DB, string, db.Key, int) {
 	path, err := s.path()
 	if err != nil {
-		return nil, "", cli.Fail(e, err)
+		return nil, "", db.Key{}, cli.Fail(e, err)
 	}
-	d, err := db.Connect(path)
+	key, err := s.currentKey(e)
 	if err != nil {
-		return nil, "", cli.Fail(e, err)
+		return nil, "", db.Key{}, cli.Fail(e, err)
 	}
-	return d, path, cli.ExitOK
+	d, err := db.Connect(path, db.WithKey(key))
+	if err != nil {
+		return nil, "", db.Key{}, cli.Fail(e, err)
+	}
+	return d, path, key, cli.ExitOK
 }
 
-func (s *service) currentKey() (db.Key, error) {
-	return dbkey.Load(s.env, settings.Default)
+func (s *service) currentKey(e *cli.Env) (db.Key, error) {
+	return dbkey.Load(s.env, settings.From(e.Ctx))
 }
 
 func readKey(path string, stdin io.Reader) (db.Key, error) {
@@ -83,90 +87,38 @@ func readKey(path string, stdin io.Reader) (db.Key, error) {
 	return db.ParseKey(strings.TrimSpace(string(raw)))
 }
 
-func removeCopy(path string) {
-	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
-		_ = os.Remove(path + suffix)
-	}
-}
-
-func exclusiveTemp(path string, perm os.FileMode) error {
-	removeCopy(path)
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
-	if err != nil {
-		return err
-	}
-	return f.Close()
-}
-
-func sameCounts(want, got map[string]int64, ignore string) error {
-	for name, n := range want {
-		if name != ignore && got[name] != n {
-			return fmt.Errorf("table %s has %d rows in the copy, %d in the source", name, got[name], n)
-		}
-	}
-	for name := range got {
-		if _, ok := want[name]; !ok && name != ignore {
-			return fmt.Errorf("table %s exists only in the copy", name)
-		}
-	}
-	return nil
-}
-
-func verifyCopy(ctx context.Context, path string, key db.Key, want map[string]int64, ignore string) error {
-	c, err := db.OpenFile(path, key)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = c.Close() }()
-	if err := db.IntegrityCheck(ctx, c); err != nil {
-		return err
-	}
-	if want == nil {
-		return nil
-	}
-	got, err := db.TableCounts(ctx, c)
-	if err != nil {
-		return err
-	}
-	return sameCounts(want, got, ignore)
-}
-
 func (s *service) backup(a *cli.Args) cli.Handler {
 	dest := a.Arg("dest", cli.Opt{Help: "path of the new backup file; must not exist"})
 	return func(e *cli.Env) int {
-		d, _, code := s.open(e)
+		d, _, key, code := s.open(e)
 		if code != cli.ExitOK {
 			return code
 		}
 		defer func() { _ = d.Close() }()
-		key, err := s.currentKey()
-		if err != nil {
-			return cli.Fail(e, err)
-		}
 		if _, err := os.Lstat(*dest); err == nil {
 			return cli.Fail(e, fmt.Errorf("backup destination %s already exists", *dest))
 		}
-		tmp := *dest + ".partial"
-		if err := exclusiveTemp(tmp, 0o600); err != nil {
+		staged, err := db.Stage(*dest, 0o600)
+		if err != nil {
 			return cli.Fail(e, err)
 		}
-		defer removeCopy(tmp)
-		if err := d.BackupTo(e.Ctx, tmp, key); err != nil {
+		defer staged.Discard()
+		if err := d.BackupTo(e.Ctx, staged.Path(), key); err != nil {
 			return cli.Fail(e, err)
 		}
-		if err := verifyCopy(e.Ctx, tmp, key, nil, ""); err != nil {
+		if err := db.Verify(e.Ctx, staged.Path(), key, nil); err != nil {
 			return cli.Fail(e, fmt.Errorf("backup verification: %w", err))
 		}
-		if err := os.Link(tmp, *dest); err != nil {
+		if err := staged.PublishLink(); err != nil {
 			return cli.Fail(e, err)
 		}
-		_, _ = fmt.Fprintf(e.Stdout, "backup written to %s (%s)\n", *dest, encryption(d, key))
+		_, _ = fmt.Fprintf(e.Stdout, "backup written to %s (%s)\n", *dest, encryption(key))
 		return cli.ExitOK
 	}
 }
 
-func encryption(d *db.DB, key db.Key) string {
-	if !d.Encrypted() {
+func encryption(key db.Key) string {
+	if key.IsZero() {
 		return "plaintext"
 	}
 	return "encrypted, key id " + dbkey.ID(key)
@@ -174,22 +126,26 @@ func encryption(d *db.DB, key db.Key) string {
 
 func (s *service) check(*cli.Args) cli.Handler {
 	return func(e *cli.Env) int {
-		d, path, code := s.open(e)
-		if code != cli.ExitOK {
-			return code
-		}
-		defer func() { _ = d.Close() }()
-		key, err := s.currentKey()
+		path, err := s.path()
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		_, _ = fmt.Fprintf(e.Stdout, "database: %s\nencryption: %s\n", path, encryption(d, key))
-		if err := db.IntegrityCheck(e.Ctx, d.Read); err != nil {
+		key, err := s.currentKey(e)
+		if err != nil {
+			return cli.Fail(e, err)
+		}
+		d, err := db.OpenFile(path, key)
+		if err != nil {
+			return cli.Fail(e, err)
+		}
+		defer func() { _ = d.Close() }()
+		_, _ = fmt.Fprintf(e.Stdout, "database: %s\nencryption: %s\n", path, encryption(key))
+		if err := db.IntegrityCheck(e.Ctx, d); err != nil {
 			_, _ = fmt.Fprintf(e.Stdout, "integrity_check: FAILED\n")
 			return cli.Fail(e, err)
 		}
 		_, _ = fmt.Fprintf(e.Stdout, "integrity_check: ok\n")
-		tables, err := db.VirtualTables(e.Ctx, d.Read)
+		tables, err := db.VirtualTables(e.Ctx, d)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
@@ -204,7 +160,7 @@ func (s *service) rekey(a *cli.Args) cli.Handler {
 	keyFile := a.String("new-key-file", "", cli.Opt{Metavar: "PATH", Help: "file holding the new 64-hex-digit key; standard input is read when omitted"})
 	a.RejectExtras("the new key must come from --new-key-file or standard input, not the command line")
 	return func(e *cli.Env) int {
-		old, err := s.currentKey()
+		old, err := s.currentKey(e)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
@@ -247,44 +203,33 @@ func (s *service) rekey(a *cli.Args) cli.Handler {
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		tmp := path + ".rekey"
-		if err := exclusiveTemp(tmp, info.Mode().Perm()); err != nil {
+		staged, err := db.Stage(path, info.Mode().Perm())
+		if err != nil {
 			return cli.Fail(e, err)
 		}
-		defer removeCopy(tmp)
-		if err := chownLike(tmp, info); err != nil {
+		defer staged.Discard()
+		if err := chownLike(staged.Path(), info); err != nil {
 			return cli.Fail(e, err)
 		}
-		if err := db.Backup(e.Ctx, held, tmp, next); err != nil {
+		if err := db.Backup(e.Ctx, held, staged.Path(), next); err != nil {
 			return cli.Fail(e, err)
 		}
 		want, err := db.TableCounts(e.Ctx, held)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		if err := recordRetired(e.Ctx, tmp, next, oldID, newID); err != nil {
-			return cli.Fail(e, err)
-		}
-		if err := verifyCopy(e.Ctx, tmp, next, want, "db_key_history"); err != nil {
+		if err := db.Verify(e.Ctx, staged.Path(), next, want); err != nil {
 			return cli.Fail(e, fmt.Errorf("db rekey: verification of the re-encrypted copy failed, the database is unchanged: %w", err))
 		}
-		if err := os.Rename(tmp, path); err != nil {
+		if err := recordRetired(e.Ctx, staged.Path(), next, oldID, newID); err != nil {
 			return cli.Fail(e, err)
 		}
-		if err := syncDir(filepath.Dir(path)); err != nil {
+		if err := staged.PublishRename(); err != nil {
 			return cli.Fail(e, err)
 		}
 		_, _ = fmt.Fprintf(e.Stdout, "rekeyed %s: key id %s -> %s\n", path, oldID, newID)
 		return cli.ExitOK
 	}
-}
-
-func syncDir(dir string) error {
-	f, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	return errors.Join(f.Sync(), f.Close())
 }
 
 func recordRetired(ctx context.Context, path string, key db.Key, oldID, newID string) error {

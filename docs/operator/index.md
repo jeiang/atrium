@@ -15,4 +15,4 @@ The two config pages and the schema are generated from the settings registry and
 
 ## Current behavior
 
-[Operator-visible behavior and boundaries](behavior.md) states what the running application does and refuses to do: [access](behavior.md#access), [mail safety](behavior.md#mail-safety), [assistant limits](behavior.md#assistant-limits), [settings and secrets](behavior.md#settings-and-secrets) and the [database](behavior.md#database).
+[Operator-visible behavior and boundaries](behavior.md) states what the running application does and refuses to do: [access](behavior.md#access), [phone actions](behavior.md#phone-actions), [mail safety](behavior.md#mail-safety), [assistant limits](behavior.md#assistant-limits), [attention and tasks](behavior.md#attention-and-tasks), [settings and secrets](behavior.md#settings-and-secrets) and the [database](behavior.md#database).

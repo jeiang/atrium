@@ -38,11 +38,12 @@ func passRows(t *testing.T, dir, job string) (ok, failed int, message string) {
 
 func davFixture(t *testing.T) (dir string, srv *caldavtest.Server) {
 	t.Helper()
-	dir, _ = moduleFixture(t, flagsExcept("", ""))
+	dir, _, _ = moduleFixture(t, flagsExcept("", ""))
 	srv = caldavtest.New(t, "operator@icloud.invalid", davPassword, "Home")
-	t.Cleanup(calendar.UseEndpoints(calendar.Endpoints{CalDAV: srv.URL + "/", CardDAV: srv.URL + "/"}))
-	t.Setenv(settingEnv(contacts.DirKey), filepath.Join(dir, "contacts"))
-	t.Setenv(settingEnv(calendar.CalendarDirKey), filepath.Join(dir, "calendars"))
+	setEnv(t, calendar.CalDAVEnv, srv.URL+"/")
+	setEnv(t, calendar.CardDAVEnv, srv.URL+"/")
+	setEnv(t, settingEnv(contacts.DirKey), filepath.Join(dir, "contacts"))
+	setEnv(t, settingEnv(calendar.CalendarDirKey), filepath.Join(dir, "calendars"))
 	return dir, srv
 }
 
@@ -57,8 +58,8 @@ func lookup(t *testing.T, query string) string {
 		defer api.mu.Unlock()
 		api.seen = append(api.seen, r)
 	}
-	t.Setenv(anthropic.BaseURLEnv, api.URL)
-	if ran := runApp("agent", "run", "--text", "who is "+query, "--kind", "chat"); ran.code != cli.ExitOK {
+	setEnv(t, anthropic.BaseURLEnv, api.URL)
+	if ran := runApp(t, "agent", "run", "--text", "who is "+query, "--kind", "chat"); ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
 	requests := api.Requests()
@@ -72,7 +73,7 @@ func TestContactsSyncMirrorsTheAddressBookForLookup(t *testing.T) {
 	dir, srv := davFixture(t)
 	srv.SetObject(caldavtest.BookPath+"alice.vcf", aliceCard)
 
-	if got := runApp("contacts", "sync"); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"written":1`) {
+	if got := runApp(t, "contacts", "sync"); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"written":1`) {
 		t.Fatalf("first sync: %d %q %q", got.code, got.stdout, got.stderr)
 	}
 	if result := lookup(t, "Alice"); !strings.Contains(result, "alice@example.com") {
@@ -81,7 +82,7 @@ func TestContactsSyncMirrorsTheAddressBookForLookup(t *testing.T) {
 
 	srv.SetObject(caldavtest.BookPath+"alice.vcf", aliceMoved)
 	srv.SetObject(caldavtest.BookPath+"bob.vcf", bobCard)
-	if got := runApp("contacts", "sync"); got.code != cli.ExitOK {
+	if got := runApp(t, "contacts", "sync"); got.code != cli.ExitOK {
 		t.Fatalf("second sync: %d %q", got.code, got.stderr)
 	}
 	if result := lookup(t, "Alice"); !strings.Contains(result, "alice@new.example") || strings.Contains(result, "alice@example.com") {
@@ -92,13 +93,13 @@ func TestContactsSyncMirrorsTheAddressBookForLookup(t *testing.T) {
 	}
 
 	srv.RemoveObject(caldavtest.BookPath + "bob.vcf")
-	if got := runApp("contacts", "sync"); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"removed":1`) {
+	if got := runApp(t, "contacts", "sync"); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"removed":1`) {
 		t.Fatalf("third sync: %d %q %q", got.code, got.stdout, got.stderr)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "contacts", "card", "bob.vcf")); !os.IsNotExist(err) {
 		t.Errorf("a contact deleted on the server is still mirrored: %v", err)
 	}
-	if got := runApp("contacts", "sync"); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"written":0`) {
+	if got := runApp(t, "contacts", "sync"); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"written":0`) {
 		t.Errorf("an unchanged address book was rewritten: %q", got.stdout)
 	}
 	if ok, _, _ := passRows(t, dir, passrun.CardDAV); ok != 4 {
@@ -109,7 +110,7 @@ func TestContactsSyncMirrorsTheAddressBookForLookup(t *testing.T) {
 func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothing(t *testing.T) {
 	dir, srv := davFixture(t)
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)
-	if got := runApp("calendar", "sync"); got.code != cli.ExitOK {
+	if got := runApp(t, "calendar", "sync"); got.code != cli.ExitOK {
 		t.Fatalf("calendar sync: %d %q", got.code, got.stderr)
 	}
 	mirrored := filepath.Join(dir, "calendars", "cal0", "dentist.ics")
@@ -119,9 +120,9 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 	}
 
 	srv.RemoveObject(caldavtest.CalendarPath(0) + "dentist.ics")
-	t.Setenv("ICLOUD_APP_PASSWORD", davPassword)
-	t.Setenv(settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"icloud", "icloud", "operator@icloud.invalid", "wrong", false}))
-	if got := runApp("calendar", "sync"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "401") {
+	setEnv(t, "ICLOUD_APP_PASSWORD", davPassword)
+	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"icloud", "icloud", "operator@icloud.invalid", "wrong", false}))
+	if got := runApp(t, "calendar", "sync"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "401") {
 		t.Fatalf("sync with a bad password: %d %q", got.code, got.stderr)
 	}
 	if _, err := os.Stat(mirrored); err != nil {
@@ -131,15 +132,15 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 		t.Errorf("caldav failed rows = %d, want 1", failed)
 	}
 
-	t.Setenv(settingEnv(calendar.AppleIDKey), "")
-	t.Setenv(settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir,
+	setEnv(t, settingEnv(calendar.AppleIDKey), "")
+	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir,
 		mailAccount{"work", "icloud", "work@icloud.invalid", "wrong", false},
 		mailAccount{"home", "icloud", "operator@icloud.invalid", davPassword, false}))
-	if got := runApp("calendar", "sync"); !strings.Contains(got.stderr, "needs-settings") || !strings.Contains(got.stderr, "several iCloud mail accounts; set calendar_account") {
+	if got := runAppLogged(t, "calendar", "sync"); !strings.Contains(got.stderr, "needs-settings") || !strings.Contains(got.stderr, "several iCloud mail accounts; set calendar_account") {
 		t.Fatalf("sync with two iCloud accounts and no calendar_account was not held for settings: %d %q", got.code, got.stderr)
 	}
-	t.Setenv(settingEnv(calendar.AccountKey), "home")
-	if got := runApp("calendar", "sync"); got.code != cli.ExitOK {
+	setEnv(t, settingEnv(calendar.AccountKey), "home")
+	if got := runApp(t, "calendar", "sync"); got.code != cli.ExitOK {
 		t.Fatalf("calendar sync: %d %q", got.code, got.stderr)
 	}
 	if _, err := os.Stat(mirrored); !os.IsNotExist(err) {
@@ -150,7 +151,7 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 func TestTriageSaysSoWhenThereIsNoContactSource(t *testing.T) {
 	for _, on := range []string{"true", "false"} {
 		t.Run("contacts_"+on, func(t *testing.T) {
-			dir, _ := moduleFixture(t, flagsExcept(module.Contacts, on))
+			dir, _, _ := moduleFixture(t, flagsExcept(module.Contacts, on))
 			base := startServeIn(t, dir)
 			status, body, _ := fetch(t, http.DefaultClient, "GET", base+"/triage", nil)
 			if status != http.StatusOK {

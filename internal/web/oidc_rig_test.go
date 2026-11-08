@@ -36,23 +36,25 @@ type rigOpts struct {
 }
 
 type rig struct {
-	t   *testing.T
-	db  *db.DB
-	idp *oidctest.Provider
-	svc *oidc.Service
-	srv *httptest.Server
-	url string
+	t        *testing.T
+	db       *db.DB
+	idp      *oidctest.Provider
+	svc      *oidc.Service
+	srv      *httptest.Server
+	url      string
+	settings *settings.Registry
+	state    *config.State
 }
 
-func probe(r chi.Router, _ *web.Deps) {
+func probe(r chi.Router, d *web.Deps) {
 	who := func(w http.ResponseWriter, r *http.Request) {
 		id, ok := web.IdentityOf(r.Context())
 		_, _ = io.WriteString(w, "who="+boolText(ok)+" source="+id.Source+" admin="+boolText(id.Admin)+" sub="+id.Subject)
 	}
 	r.Get("/ping", who)
-	r.Get("/settings/ping", who)
-	r.Post("/settings/ping", who)
-	r.Post("/live/resume", who)
+	d.Admin(http.MethodGet, "/settings/ping", who)
+	d.Admin(http.MethodPost, "/settings/ping", who)
+	d.Admin(http.MethodPost, "/live/resume", who)
 	r.Get("/public/file", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "public") })
 }
 
@@ -87,7 +89,9 @@ func newRig(t *testing.T, o rigOpts) *rig {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := audit.With(context.Background(), "test", audit.CLI)
+	reg := settings.New()
+	st := config.NewState(reg)
+	ctx := config.With(settings.With(audit.With(context.Background(), "test", audit.CLI), reg), st)
 	if !o.bare {
 		values := map[string]string{
 			oidc.KeyIssuer: idp.Issuer(), oidc.KeyClientID: idp.ClientID(),
@@ -99,21 +103,20 @@ func newRig(t *testing.T, o rigOpts) *rig {
 			values[k] = v
 		}
 		for k, v := range values {
-			if err := settings.Default.Set(ctx, d.Write, k, v, 0); err != nil {
+			if err := reg.Set(ctx, d.Write, k, v); err != nil {
 				t.Fatalf("set %s: %v", k, err)
 			}
 		}
-		settings.Default.SetPins(secretPin{secrets.OIDCClientSecret: o.idp.ClientSecret})
-		t.Cleanup(func() { settings.Default.SetPins(nil) })
+		reg.SetPins(secretPin{secrets.OIDCClientSecret: o.idp.ClientSecret})
+		t.Cleanup(func() { reg.SetPins(nil) })
 	}
-	svc := oidc.New(d, env)
-	svc.KeyRefetchGap = 0
-	render, err := web.NewRenderer(cfg, d, tpl.Config{})
+	svc := oidc.New(d, env, oidc.WithKeyRefetchGap(0))
+	render, err := web.NewRenderer(tpl.Config{State: st})
 	if err != nil {
 		t.Fatal(err)
 	}
 	app, err := web.New(web.Options{
-		Cfg: cfg, Env: env, DB: d, Auth: o.auth, AllowedHosts: []string{"127.0.0.1"}, Render: render,
+		Cfg: cfg, Env: env, DB: d, Settings: reg, State: st, Auth: o.auth, AllowedHosts: []string{"127.0.0.1"}, Render: render,
 		Modules: []web.Module{probe}, OIDC: svc, Public: o.public,
 	})
 	if err != nil {
@@ -125,7 +128,7 @@ func newRig(t *testing.T, o rigOpts) *rig {
 		listener.Close()
 		app.Close()
 	})
-	return &rig{t: t, db: d, idp: idp, svc: svc, srv: listener, url: base}
+	return &rig{t: t, db: d, idp: idp, svc: svc, srv: listener, url: base, settings: reg, state: st}
 }
 
 type secretPin map[string]string

@@ -1,6 +1,6 @@
 {{define "proposal_counted"}}<ul class="flex flex-col gap-1 text-sm sm:max-w-xs" role="list">
   {{range .}}
-  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">{{pyattr . "label"}}</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{pyattr . "count"}}</span></li>
+  <li class="flex min-w-0 items-baseline gap-2"><span class="truncate">{{attr . "label"}}</span><span class="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">{{attr . "count"}}</span></li>
   {{end}}
 </ul>{{end}}
 
@@ -10,7 +10,7 @@
 
 {{define "proposal_toggle"}}<div role="group" class="field w-auto" data-orientation="horizontal">
   <input id="group-{{.uid}}" type="checkbox" checked data-group-toggle>
-  <label for="group-{{.uid}}" class="font-normal"><span class="tabular-nums"><span data-picked>{{pylen (get .g "messages")}}</span> of {{pyattr .g "count"}} messages</span></label>
+  <label for="group-{{.uid}}" class="font-normal"><span class="tabular-nums"><span data-picked>{{length (get .g "messages")}}</span> of {{attr .g "count"}} messages</span></label>
 </div>{{end}}
 
 {{define "proposal_message_list"}}{{$i := .i}}<details class="group/list">
@@ -21,7 +21,7 @@
     {{range .messages}}
     <li class="flex items-center gap-1 pe-2 hover:bg-accent/60 has-[input:focus-visible]:bg-accent/60">
       <label class="flex min-w-0 flex-1 items-center gap-3 py-2 ps-3">
-        <input class="input shrink-0" type="checkbox" name="msg-{{$i}}" value="{{pyattr . "id"}}" checked data-message>
+        <input class="input shrink-0" type="checkbox" name="msg-{{$i}}" value="{{attr . "id"}}" checked data-message>
         <span class="flex min-w-0 flex-1 flex-col">
           <span class="truncate text-sm">{{or (get . "subject") "(no subject)"}}</span>
           <span class="truncate text-xs text-muted-foreground">{{sender .}} · {{template "when" (dict "epoch" (get . "date_ts"))}}</span>
@@ -33,23 +33,23 @@
   </ul>
 </details>{{end}}
 
-{{define "proposal_group_picker"}}{{$p := .p}}{{$g := .g}}{{$uid := printf "%v-%v" $p.id .i}}
+{{define "proposal_group_picker"}}{{$p := .p}}{{$g := .g}}{{$uid := printf "%v-%v" $p.ID .i}}
 <fieldset class="flex flex-col gap-3 border-t pt-4"{{if .picker}} data-group{{end}}>
-  <legend class="sr-only">{{pyattr $g "name"}}</legend>
+  <legend class="sr-only">{{attr $g "name"}}</legend>
   <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
     {{if and .editable .pending}}
     <div role="group" class="field min-w-0 flex-1 sm:max-w-sm">
-      <label for="name-{{$uid}}">New {{noun $p.account}}</label>
-      <input id="name-{{$uid}}" name="name-{{.i}}" type="text" value="{{pyattr $g "name"}}" required autocomplete="off" spellcheck="false">
+      <label for="name-{{$uid}}">New {{noun $p.Account}}</label>
+      <input id="name-{{$uid}}" name="name-{{.i}}" type="text" value="{{attr $g "name"}}" required autocomplete="off" spellcheck="false">
     </div>
     {{else}}
     <p class="min-w-0 flex-1 text-sm"><span class="text-muted-foreground">Into</span> <span class="font-medium">{{place (get $g "name")}}</span></p>
     {{end}}
-    {{if and .picker (get $g "messages")}}{{template "proposal_toggle" (dict "uid" $uid "g" $g)}}{{else}}<p class="text-sm text-muted-foreground tabular-nums">{{pyattr $g "count"}} messages</p>{{end}}
+    {{if and .picker (get $g "messages")}}{{template "proposal_toggle" (dict "uid" $uid "g" $g)}}{{else}}<p class="text-sm text-muted-foreground tabular-nums">{{attr $g "count"}} messages</p>{{end}}
   </div>
   {{if get $g "terms"}}
   <ul class="flex flex-wrap gap-1.5" role="list" aria-label="Common words">
-    {{range get $g "terms"}}<li class="badge" data-variant="outline">{{pystr .}}</li>{{end}}
+    {{range get $g "terms"}}<li class="badge" data-variant="outline">{{scalar .}}</li>{{end}}
   </ul>
   {{end}}
   <div class="grid gap-4 sm:grid-cols-2">
@@ -72,7 +72,7 @@
 {{define "proposal_plain_picker"}}{{$g := index .picks 0}}
 <fieldset class="flex flex-col gap-2" data-group>
   <legend class="sr-only">Messages</legend>
-  {{template "proposal_toggle" (dict "uid" (printf "%v-0" .p.id) "g" $g)}}
+  {{template "proposal_toggle" (dict "uid" (printf "%v-0" .p.ID) "g" $g)}}
   {{template "proposal_message_list" (dict "i" 0 "messages" (get $g "messages") "verb" .verb)}}
 </fieldset>{{end}}
 
@@ -81,18 +81,18 @@
   {{if get . "path"}}<span class="truncate text-xs text-muted-foreground">{{page_path (get . "path")}}</span>{{end}}
 </div>{{end}}
 
-{{define "proposal_body"}}{{$p := .p}}{{$v := .v}}{{$kind := $p.kind}}
-{{if and (eq $p.status "failed") (get $p.result "error")}}
+{{define "proposal_body"}}{{$p := .p}}{{$v := .v}}{{$kind := $p.Kind}}
+{{if and (eq $p.Status "failed") (get $p.Result "error")}}
 <div class="alert" data-variant="destructive" role="alert">
   {{icon "circle-alert"}}
   <h4>It did not finish</h4>
-  <section><p>{{pyattr $p.result "error"}}</p></section>
+  <section><p>{{attr $p.Result "error"}}</p></section>
 </div>
 {{end}}
 
 {{if eq $kind "rebalance_split"}}
 {{$groups := get $v "groups"}}
-<p class="text-sm"><span class="text-muted-foreground">Split</span> <span class="font-medium">{{place (get $v "folder")}}</span> <span class="text-muted-foreground">into {{pylen $groups}} new {{noun $p.account}}{{if ne (pylen $groups) 1}}s{{end}}. Anything not moved stays where it is.</span></p>
+<p class="text-sm"><span class="text-muted-foreground">Split</span> <span class="font-medium">{{place (get $v "folder")}}</span> <span class="text-muted-foreground">into {{length $groups}} new {{noun $p.Account}}{{if ne (length $groups) 1}}s{{end}}. Anything not moved stays where it is.</span></p>
 <div class="flex flex-col gap-3">
   {{range $i, $g := $groups}}{{template "proposal_group_picker" (dict "p" $p "i" $i "g" $g "editable" true "pending" $.pending "picker" $.picker)}}{{end}}
 </div>
@@ -105,28 +105,36 @@
 
 {{else if eq $kind "rebalance_merge"}}
 <div class="flex flex-wrap items-center gap-2 text-sm">
-  {{range get $v "sources"}}<span class="badge" data-variant="secondary">{{place (get . "folder")}} <span class="tabular-nums text-muted-foreground">{{pyattr . "count"}}</span></span>{{end}}
+  {{range get $v "sources"}}<span class="badge" data-variant="secondary">{{place (get . "folder")}} <span class="tabular-nums text-muted-foreground">{{attr . "count"}}</span></span>{{end}}
   {{icon "arrow-right" "size-3.5 text-muted-foreground"}}
   <span class="font-medium">{{place (get $v "into")}}</span>
-  <span class="text-xs text-muted-foreground">{{if get $v "into_exists"}}existing {{noun $p.account}}{{else}}new {{noun $p.account}}{{end}}</span>
+  <span class="text-xs text-muted-foreground">existing {{noun $p.Account}}</span>
 </div>
-{{template "proposal_group_picker" (dict "p" $p "i" 0 "g" (get $v "group") "editable" (not (get $v "into_exists")) "pending" $.pending "picker" $.picker)}}
+{{template "proposal_group_picker" (dict "p" $p "i" 0 "g" (get $v "group") "editable" false "pending" $.pending "picker" $.picker)}}
+
+{{else if eq $kind "mail_triage"}}
+<p class="text-sm text-muted-foreground">Archive, label or snooze the messages below. Anything not picked stays where it is.</p>
+<fieldset class="flex flex-col gap-2" data-group>
+  <legend class="sr-only">Messages</legend>
+  {{template "proposal_toggle" (dict "uid" (printf "%v-0" $p.ID) "g" (dict "messages" (get $v "messages") "count" (get $v "count")))}}
+  {{template "proposal_message_list" (dict "i" 0 "messages" (get $v "messages") "verb" "change")}}
+</fieldset>
 
 {{else if eq $kind "deletion_rule"}}
-{{$rule := get $v "rule"}}{{$reason := pyattr $v "reason"}}
+{{$rule := get $v "rule"}}{{$reason := attr $v "reason"}}
 <div class="grid gap-4 md:grid-cols-2">
   <div class="flex flex-col gap-3">
     <div class="flex flex-col gap-1.5">
-      <h4 class="text-xs font-medium text-muted-foreground">Rule{{if get $rule "account"}} for {{pyattr $rule "account"}}{{end}}</h4>
+      <h4 class="text-xs font-medium text-muted-foreground">Rule{{if get $rule "account"}} for {{attr $rule "account"}}{{end}}</h4>
       <ul class="flex flex-col gap-1 text-sm" role="list" aria-label="Conditions, all must hold">
         {{range $i, $c := get $rule "when"}}
-        <li class="flex flex-wrap items-baseline gap-x-1.5">{{if ne $i 0}}<span class="text-xs text-muted-foreground">and</span>{{end}}{{template "condition_text" $c}}</li>
+        <li class="flex flex-wrap items-baseline gap-x-1.5">{{if ne $i 0}}<span class="text-xs text-muted-foreground">and</span>{{end}}{{template "condition_text" (dict "Field" (attr $c "field") "Op" (attr $c "op") "Value" (get $c "value"))}}</li>
         {{end}}
       </ul>
       <p class="flex items-center gap-1.5 text-sm">{{icon "arrow-right" "size-3.5 text-muted-foreground"}}<span class="font-medium text-destructive">Delete</span></p>
     </div>
     {{if eq $reason "operator_deleted"}}<p class="text-sm text-muted-foreground">You have deleted mail like this before.</p>{{else if eq $reason "otp"}}<p class="text-sm text-muted-foreground">One-time codes are useless once they expire.</p>{{end}}
-    <p class="text-sm"><span class="text-2xl font-semibold tabular-nums">{{pyattr $v "backlog"}}</span> <span class="text-muted-foreground">existing {{if eq (pyattr $v "backlog") "1"}}message matches{{else}}messages match{{end}}</span></p>
+    <p class="text-sm"><span class="text-2xl font-semibold tabular-nums">{{attr $v "backlog"}}</span> <span class="text-muted-foreground">existing {{if eq (attr $v "backlog") "1"}}message matches{{else}}messages match{{end}}</span></p>
   </div>
   <div class="flex min-w-0 flex-col gap-4">
     {{if get $v "senders"}}
@@ -151,11 +159,11 @@
 
 {{else if eq $kind "gmail_label_merge"}}
 <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-  <span class="inline-flex items-center gap-1.5">{{icon "tag" "size-3.5 text-muted-foreground"}}<span class="font-medium">{{pyattr $v "from"}}</span><span class="text-xs text-muted-foreground tabular-nums">{{pyattr $v "from_count"}}</span></span>
+  <span class="inline-flex items-center gap-1.5">{{icon "tag" "size-3.5 text-muted-foreground"}}<span class="font-medium">{{attr $v "from"}}</span><span class="text-xs text-muted-foreground tabular-nums">{{attr $v "from_count"}}</span></span>
   {{icon "arrow-right" "size-3.5 text-muted-foreground"}}
-  <span class="inline-flex items-center gap-1.5">{{icon "tag" "size-3.5 text-muted-foreground"}}<span class="font-medium">{{pyattr $v "into"}}</span><span class="text-xs text-muted-foreground tabular-nums">{{pyattr $v "into_count"}}</span></span>
+  <span class="inline-flex items-center gap-1.5">{{icon "tag" "size-3.5 text-muted-foreground"}}<span class="font-medium">{{attr $v "into"}}</span><span class="text-xs text-muted-foreground tabular-nums">{{attr $v "into_count"}}</span></span>
 </div>
-<p class="text-xs text-muted-foreground">Adds “{{pyattr $v "into"}}” to the messages labelled “{{pyattr $v "from"}}”, then removes “{{pyattr $v "from"}}” from them. No mail is deleted.</p>
+<p class="text-xs text-muted-foreground">Adds “{{attr $v "into"}}” to the messages labelled “{{attr $v "from"}}”, then removes “{{attr $v "from"}}” from them. No mail is deleted.</p>
 {{if $.picker}}{{template "proposal_plain_picker" (dict "p" $p "picks" $.picks "verb" "are relabelled")}}{{end}}
 
 {{else if eq $kind "notion_link"}}
@@ -165,14 +173,14 @@
   {{template "proposal_page_ref" (get $v "b")}}
 </div>
 <p class="text-xs text-muted-foreground">Adds a link to the page text under a “Related” heading.</p>
-{{if get $v "reason"}}<blockquote class="border-s-2 ps-3 text-sm text-muted-foreground">{{pyattr $v "reason"}}</blockquote>{{end}}
+{{if get $v "reason"}}<blockquote class="border-s-2 ps-3 text-sm text-muted-foreground">{{attr $v "reason"}}</blockquote>{{end}}
 
 {{else if eq $kind "calendar_rsvp"}}
 <dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
   <dt class="text-muted-foreground">Calendar</dt>
-  <dd>{{if eq (pyattr $v "calendar") "google"}}Google{{else}}iCloud{{end}}</dd>
+  <dd>{{if eq (attr $v "calendar") "google"}}Google{{else}}iCloud{{end}}</dd>
   <dt class="text-muted-foreground">Reply</dt>
-  <dd>{{pyattr $v "response"}}</dd>
+  <dd>{{attr $v "response"}}</dd>
 </dl>
 <p class="text-xs text-muted-foreground">Only your own response changes.</p>
 
@@ -180,24 +188,24 @@
 {{$source := get $v "source"}}
 <dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
   <dt class="text-muted-foreground">Calendar</dt>
-  <dd>{{if eq (pyattr $v "calendar") "google"}}Google{{else}}iCloud{{end}}</dd>
+  <dd>{{if eq (attr $v "calendar") "google"}}Google{{else}}iCloud{{end}}</dd>
   <dt class="text-muted-foreground">{{if get $v "all_day"}}Date{{else}}When{{end}}</dt>
-  <dd class="tabular-nums">{{pyattr $v "start"}} → {{pyattr $v "end"}}</dd>
-  {{if get $v "location"}}<dt class="text-muted-foreground">Where</dt><dd>{{pyattr $v "location"}}</dd>{{end}}
-  {{if get $v "notes"}}<dt class="text-muted-foreground">Notes</dt><dd class="whitespace-pre-wrap">{{pyattr $v "notes"}}</dd>{{end}}
-  {{if and $source (get $source "subject")}}<dt class="text-muted-foreground">From mail</dt><dd>{{pyattr $source "subject"}}</dd>{{end}}
+  <dd class="tabular-nums">{{attr $v "start"}} → {{attr $v "end"}}</dd>
+  {{if get $v "location"}}<dt class="text-muted-foreground">Where</dt><dd>{{attr $v "location"}}</dd>{{end}}
+  {{if get $v "notes"}}<dt class="text-muted-foreground">Notes</dt><dd class="whitespace-pre-wrap">{{attr $v "notes"}}</dd>{{end}}
+  {{if and $source (get $source "subject")}}<dt class="text-muted-foreground">From mail</dt><dd>{{attr $source "subject"}}</dd>{{end}}
 </dl>
 <p class="text-xs text-muted-foreground">Nobody is invited and no notification is sent.</p>
 
 {{else if eq $kind "reminder"}}
 <dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
   <dt class="text-muted-foreground">Reminder</dt>
-  <dd>{{pyattr $v "text"}}</dd>
+  <dd>{{attr $v "text"}}</dd>
   <dt class="text-muted-foreground">Due</dt>
-  <dd class="tabular-nums">{{pyattr $v "due"}}</dd>
+  <dd class="tabular-nums">{{attr $v "due"}}</dd>
   <dt class="text-muted-foreground">Remind at</dt>
-  <dd class="tabular-nums">{{pyattr $v "remind_at"}}</dd>
-  {{if get $v "subject"}}<dt class="text-muted-foreground">From mail</dt><dd>{{pyattr $v "subject"}}</dd>{{end}}
+  <dd class="tabular-nums">{{attr $v "remind_at"}}</dd>
+  {{if get $v "subject"}}<dt class="text-muted-foreground">From mail</dt><dd>{{attr $v "subject"}}</dd>{{end}}
 </dl>
 <p class="text-xs text-muted-foreground">Approving creates a one-time schedule that notifies you.</p>
 
@@ -206,10 +214,10 @@
 {{template "proposal_page_ref" (get $v "page")}}
 <dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
   <dt class="text-muted-foreground">You asked</dt>
-  <dd>{{pyattr $v "instruction"}}</dd>
+  <dd>{{attr $v "instruction"}}</dd>
   {{if get $v "summary"}}
   <dt class="text-muted-foreground">The 9B changed</dt>
-  <dd>{{pyattr $v "summary"}}</dd>
+  <dd>{{attr $v "summary"}}</dd>
   {{end}}
 </dl>
 <div class="flex flex-col overflow-hidden rounded-md border">
@@ -219,137 +227,89 @@
   </p>
   <div class="max-h-96 overflow-auto bg-background py-1 font-mono text-xs/5" role="group" aria-label="Changes">
     {{range $diff}}
-    {{$op := pyattr . "op"}}
+    {{$op := attr . "op"}}
     {{if eq $op "add"}}
-    <ins class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] bg-success/10 no-underline"><span class="select-none text-center text-success" aria-hidden="true">+</span><span class="whitespace-pre-wrap break-words pe-3">{{pyattr . "text"}}</span></ins>
+    <ins class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] bg-success/10 no-underline"><span class="select-none text-center text-success" aria-hidden="true">+</span><span class="whitespace-pre-wrap break-words pe-3">{{attr . "text"}}</span></ins>
     {{else if eq $op "del"}}
-    <del class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] bg-destructive/10 no-underline"><span class="select-none text-center text-destructive" aria-hidden="true">−</span><span class="whitespace-pre-wrap break-words pe-3 text-muted-foreground line-through decoration-destructive/40">{{pyattr . "text"}}</span></del>
+    <del class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] bg-destructive/10 no-underline"><span class="select-none text-center text-destructive" aria-hidden="true">−</span><span class="whitespace-pre-wrap break-words pe-3 text-muted-foreground line-through decoration-destructive/40">{{attr . "text"}}</span></del>
     {{else}}
-    <div class="grid grid-cols-[--spacing(6)_minmax(0,1fr)]"><span aria-hidden="true"></span><span class="whitespace-pre-wrap break-words pe-3 text-muted-foreground">{{pyattr . "text"}}</span></div>
+    <div class="grid grid-cols-[--spacing(6)_minmax(0,1fr)]"><span aria-hidden="true"></span><span class="whitespace-pre-wrap break-words pe-3 text-muted-foreground">{{attr . "text"}}</span></div>
     {{end}}
     {{end}}
   </div>
 </div>
 
-{{else if eq $kind "notion_wiki_plan"}}
-{{$decisions := dict "convert" "Convert" "merge" "Merge" "drop" "Drop" "keep" "Keep"}}
-{{$counts := get $v "counts"}}{{$entries := get $v "items"}}
-<p class="text-sm text-muted-foreground">Turns the Notion workspace into the wiki page tree under Wiki Home. Dropped rows and emptied databases are archived (never deleted); every step is undoable.</p>
-<div class="flex flex-wrap gap-1.5">
-  {{if $counts}}{{range items $counts}}<span class="badge" data-variant="{{if eq .Key "drop"}}destructive{{else}}secondary{{end}}">{{pystr .Value}} {{lower (or (get $decisions .Key) .Key)}}</span>{{end}}{{end}}
-</div>
-<div class="grid gap-4 md:grid-cols-2">
-  <div class="flex min-w-0 flex-col gap-1.5">
-    <h4 class="text-xs font-medium text-muted-foreground">Hubs under Wiki Home</h4>
-    <ul class="flex flex-col gap-1 text-sm" role="list">
-      {{range get $v "hubs"}}<li><span class="font-medium">{{pyattr . "title"}}</span>{{if get . "description"}} <span class="text-muted-foreground">{{pyattr . "description"}}</span>{{end}}</li>{{end}}
-    </ul>
-  </div>
-  <div class="flex min-w-0 flex-col gap-1.5">
-    <h4 class="text-xs font-medium text-muted-foreground">Databases</h4>
-    <ul class="flex flex-col gap-1 text-sm" role="list">
-      {{range get $v "databases"}}
-      <li class="flex min-w-0 flex-col"><span><span class="font-medium">{{pyattr . "title"}}</span> <span class="text-muted-foreground">→ {{if eq (pyattr . "mode") "table"}}one page with a table{{else}}hub with child pages{{end}} under {{pyattr . "hub"}}</span></span><span class="truncate text-xs text-muted-foreground">{{pyattr . "reason"}}</span></li>
-      {{end}}
-    </ul>
-  </div>
-</div>
-<details class="group/list">
-  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-    {{icon "chevron-down" "size-3.5 transition-transform group-open/list:rotate-180"}}Every row and page ({{pylen $entries}})
-  </summary>
-  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
-    {{range $entries}}
-    {{$decision := pyattr . "decision"}}
-    <li class="flex min-w-0 flex-col gap-0.5 px-3 py-2">
-      <span class="flex min-w-0 items-center gap-2">
-        <span class="badge shrink-0" data-variant="{{if eq $decision "drop"}}destructive{{else if eq $decision "keep"}}outline{{else}}secondary{{end}}">{{or (get $decisions $decision) $decision}}</span>
-        <a class="truncate text-sm hover:underline" href="/notion/{{pyattr . "id"}}">{{or (get . "title") "Untitled"}}</a>
-        {{if get . "source"}}<span class="shrink-0 text-xs text-muted-foreground">{{pyattr . "source"}}</span>{{end}}
-        {{if get . "hub"}}<span class="shrink-0 text-xs text-muted-foreground">→ {{pyattr . "hub"}}</span>{{end}}
-        {{if get . "merge_into"}}<span class="truncate text-xs text-muted-foreground">→ into {{pyattr . "merge_into"}}</span>{{end}}
-      </span>
-      <span class="text-xs text-muted-foreground">{{pyattr . "reason"}}</span>
-    </li>
-    {{end}}
-  </ul>
-</details>
 {{end}}{{end}}
 
-{{define "proposal_blocked"}}{{if .blocked}}
+{{define "proposal_blocked"}}{{if .Blocked}}
 <div class="flex w-full flex-col gap-2 rounded-md border p-3 text-sm">
   <p class="text-muted-foreground">A write has an unknown or partial outcome, so atrium refuses to retry it. Check the mailbox, then record what you found. atrium does not touch the mailbox.</p>
-  {{template "resolve_controls" (dict "path" (printf "/proposals/%v/resolve" .id) "target" (printf "#proposal-%v" .id) "undo" .blocked_undo)}}
+  {{template "resolve_controls" (dict "path" (printf "/proposals/%v/resolve" .ID) "target" (printf "#proposal-%v" .ID) "undo" .BlockedUndo "forward" false)}}
 </div>
 {{end}}{{end}}
 
 {{define "proposal_footer"}}{{$p := .p}}
 {{if .pending}}
 <div class="flex flex-wrap items-center gap-2">
-  {{$deletes := eq $p.kind "deletion_rule"}}
+  {{$deletes := eq $p.Kind "deletion_rule"}}
   <button type="submit" class="btn" data-size="sm" name="all" value="1"{{if $deletes}} data-confirm="{{if .picker}}Move all matching messages to Trash now and save the rule?{{else}}Save the rule? Nothing moves to Trash now.{{end}}"{{end}}>
     {{icon (ternary .picker "check-check" "check")}}{{if .picker}}Approve all{{else}}Approve{{end}}
   </button>
   {{if .picker}}
   <button type="submit" class="btn" data-size="sm" data-variant="outline" data-approve-picked{{if $deletes}} data-confirm="Move the selected messages to Trash now and save the rule?" data-confirm-none="Save the rule without moving any messages to Trash?"{{end}}>{{icon "check"}}<span data-some>Approve <span class="tabular-nums" data-picked-total>{{sumlens "messages" .picks}}</span> selected</span>{{if $deletes}}<span data-none hidden>Save rule only</span>{{end}}</button>
   {{end}}
-  <span id="proposal-spinner-{{$p.id}}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{icon "loader-circle" "size-4 animate-spin"}}Applying…</span>
+  <span id="proposal-spinner-{{$p.ID}}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{icon "loader-circle" "size-4 animate-spin"}}Applying…</span>
   <div class="ml-auto flex gap-1">
-    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.id}}/dismiss" hx-indicator="unset">Dismiss</button>
-    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.id}}/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
             title="Never propose this again">Dismiss forever</button>
   </div>
 </div>
-{{else if eq $p.status "applied"}}
+{{else if eq $p.Status "applied"}}
 <div class="flex flex-wrap items-center gap-2">
   {{template "proposal_blocked" $p}}
-  <p class="flex min-w-0 flex-1 items-start gap-2 text-sm text-success">{{icon "check" "mt-0.5 size-4 shrink-0"}}<span>{{or (get $p.result "summary") "Applied"}} <span class="text-xs text-muted-foreground">{{template "when" (dict "epoch" $p.applied_ts "style" "datetime")}}</span></span></p>
-  {{if $p.undoable}}
-  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.id}}/undo" hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+  <p class="flex min-w-0 flex-1 items-start gap-2 text-sm text-success">{{icon "check" "mt-0.5 size-4 shrink-0"}}<span>{{or (get $p.Result "summary") "Applied"}} <span class="text-xs text-muted-foreground">{{template "when" (dict "epoch" $p.AppliedTS "style" "datetime")}}</span></span></p>
+  {{if $p.Undoable}}
+  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.ID}}/undo" hx-target="#proposal-{{$p.ID}}" hx-swap="outerHTML" hx-disabled-elt="this"
           hx-confirm="Undo this proposal and put everything back?">{{icon "undo-2"}}Undo</button>
   {{end}}
 </div>
-{{else if eq $p.status "failed"}}
+{{else if eq $p.Status "failed"}}
 <div class="flex flex-wrap items-center gap-2">
   {{template "proposal_blocked" $p}}
-  <p class="flex-1 text-xs whitespace-nowrap text-muted-foreground">Tried {{template "when" (dict "epoch" $p.decided_ts "style" "datetime")}}</p>
-  {{if eq $p.kind "notion_wiki_plan"}}
-  <span id="proposal-spinner-{{$p.id}}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{icon "loader-circle" "size-4 animate-spin"}}Applying…</span>
-  <button type="button" class="btn" data-size="sm" hx-post="/proposals/{{$p.id}}/approve" hx-vals='{"all": "1"}' hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="#proposal-spinner-{{$p.id}}"
-          title="Skips the steps the earlier attempt finished">{{icon "play"}}Resume</button>
+  <p class="flex-1 text-xs whitespace-nowrap text-muted-foreground">Tried {{template "when" (dict "epoch" $p.DecidedTS "style" "datetime")}}</p>
+  {{if $p.Undoable}}
+  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.ID}}/undo" hx-target="#proposal-{{$p.ID}}" hx-swap="outerHTML" hx-disabled-elt="this">{{icon "undo-2"}}Undo what it did</button>
   {{end}}
-  {{if $p.undoable}}
-  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.id}}/undo" hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this">{{icon "undo-2"}}Undo what it did</button>
-  {{end}}
-  <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.id}}/dismiss" hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML">Dismiss</button>
+  <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-target="#proposal-{{$p.ID}}" hx-swap="outerHTML">Dismiss</button>
 </div>
 {{else}}
-<p class="text-xs text-muted-foreground">{{if or (eq $p.status "dismissed") (eq $p.status "suppressed")}}Dismissed{{else}}Decided{{end}} {{template "when" (dict "epoch" $p.decided_ts "style" "datetime")}}{{if eq $p.status "suppressed"}}. atrium will not propose this again.{{end}}</p>
+<p class="text-xs text-muted-foreground">{{if or (eq $p.Status "dismissed") (eq $p.Status "suppressed")}}Dismissed{{else}}Decided{{end}} {{template "when" (dict "epoch" $p.DecidedTS "style" "datetime")}}{{if eq $p.Status "suppressed"}}. atrium will not propose this again.{{end}}</p>
 {{end}}
 {{end}}
 
-{{define "proposal_card"}}{{$p := .p}}{{$v := $p.preview}}{{$pending := eq $p.status "pending"}}
+{{define "proposal_card"}}{{$p := .p}}{{$v := $p.Preview}}{{$pending := eq $p.Status "pending"}}
 {{$picks := list}}
-{{if or (eq $p.kind "rebalance_split") (eq $p.kind "inbox_backlog")}}{{$picks = selattr "messages" (get $v "groups")}}
-{{else if eq $p.kind "rebalance_merge"}}{{$picks = selattr "messages" (list (get $v "group"))}}
-{{else if eq $p.kind "deletion_rule"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "backlog")))}}
-{{else if eq $p.kind "gmail_label_merge"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "from_count")))}}{{end}}
+{{if or (eq $p.Kind "rebalance_split") (eq $p.Kind "inbox_backlog")}}{{$picks = selattr "messages" (get $v "groups")}}
+{{else if eq $p.Kind "rebalance_merge"}}{{$picks = selattr "messages" (list (get $v "group"))}}
+{{else if eq $p.Kind "deletion_rule"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "backlog")))}}
+{{else if eq $p.Kind "gmail_label_merge"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "from_count")))}}{{else if eq $p.Kind "mail_triage"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "count")))}}{{end}}
 {{$picker := and $pending (gt (len $picks) 0)}}
 {{$ctx := dict "p" $p "v" $v "pending" $pending "picks" $picks "picker" $picker "mode" .mode}}
-<li id="proposal-{{$p.id}}" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring {{if or (eq $p.status "dismissed") (eq $p.status "suppressed")}}opacity-80{{end}}">
-  <article aria-labelledby="proposal-title-{{$p.id}}">
+<li id="proposal-{{$p.ID}}" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring {{if or (eq $p.Status "dismissed") (eq $p.Status "suppressed")}}opacity-80{{end}}">
+  <article aria-labelledby="proposal-title-{{$p.ID}}">
     {{if $pending}}
-    <form class="flex flex-col" hx-post="/proposals/{{$p.id}}/approve" hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML"
-          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-{{$p.id}}"{{if $picker}} data-selection{{end}}>
+    <form class="flex flex-col" hx-post="/proposals/{{$p.ID}}/approve" hx-target="#proposal-{{$p.ID}}" hx-swap="outerHTML"
+          hx-disabled-elt="find button" hx-indicator="#proposal-spinner-{{$p.ID}}"{{if $picker}} data-selection{{end}}>
     {{end}}
     <header class="flex flex-col gap-2 p-4 pb-3">
       <div class="flex flex-wrap items-center gap-2">
-        <span class="badge" data-variant="secondary">{{icon (lbl "kind_icon" $p.kind "list-checks")}}{{lbl "kind" $p.kind}}</span>
-        {{if $p.account}}<span class="badge" data-variant="outline">{{$p.account}}</span>{{end}}
-        {{template "status_badge" $p.status}}
-        <span class="ml-auto text-xs text-muted-foreground">#{{$p.id}} · {{template "when" (dict "epoch" $p.created_ts)}}</span>
+        <span class="badge" data-variant="secondary">{{icon (or $p.KindIcon "list-checks")}}{{$p.KindLabel}}</span>
+        {{if $p.Account}}<span class="badge" data-variant="outline">{{str $p.Account}}</span>{{end}}
+        {{template "status_badge" $p.Status}}
+        <span class="ml-auto text-xs text-muted-foreground">#{{$p.ID}} · {{template "when" (dict "epoch" $p.CreatedTS)}}</span>
       </div>
-      <h3 id="proposal-title-{{$p.id}}" class="font-medium text-pretty">{{$p.title}}</h3>
+      <h3 id="proposal-title-{{$p.ID}}" class="font-medium text-pretty">{{$p.Title}}</h3>
     </header>
     <div class="flex flex-col gap-4 px-4 pb-4">{{template "proposal_body" $ctx}}</div>
     <footer class="border-t px-4 py-3">{{template "proposal_footer" $ctx}}</footer>
@@ -360,4 +320,4 @@
 {{with .toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
 {{end}}
 
-{{template "proposal_card" (dict "p" .Data.proposal "mode" .Mode "toast" .Toast "pending_oob" .Data.pending_oob "pending_count" .PendingCount)}}
+{{template "proposal_card" (dict "p" .Data.Proposal "mode" .Mode "toast" .Toast "pending_oob" .Data.PendingOOB "pending_count" .PendingCount)}}

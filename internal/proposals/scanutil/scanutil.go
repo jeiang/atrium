@@ -6,11 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
-	"strconv"
+	"strings"
 
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 type Limits struct {
@@ -18,23 +21,16 @@ type Limits struct {
 	TopLabels      int
 }
 
-func ReadLimits(ctx context.Context, q mail.Querier) (Limits, error) {
-	r := mail.Read(ctx, q)
+func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
+	r := endpoint.Read(ctx, q)
 	l := Limits{SampleSubjects: r.Int(mail.KeyScanSampleSubjects), TopLabels: r.Int(mail.KeyScanTopLabels)}
 	return l, r.Err()
 }
 
-func Digest(parts ...any) string {
+func Digest(parts ...string) string {
 	h := sha256.New()
 	for _, part := range parts {
-		switch v := part.(type) {
-		case string:
-			h.Write([]byte(v))
-		case int64:
-			h.Write([]byte(strconv.FormatInt(v, 10)))
-		default:
-			panic("scanutil: Digest part must be a string or an int64")
-		}
+		h.Write([]byte(part))
 		h.Write([]byte{0})
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
@@ -48,14 +44,11 @@ type Message struct {
 	DateTS   float64
 }
 
-func (m Message) View() py.Dict {
-	return py.Dict{
-		{Key: "id", Value: m.ID}, {Key: "subject", Value: m.Subject}, {Key: "from_name", Value: m.FromName},
-		{Key: "from_addr", Value: m.FromAddr}, {Key: "date_ts", Value: m.DateTS},
-	}
+func (m Message) View() map[string]any {
+	return map[string]any{"id": m.ID, "subject": m.Subject, "from_name": m.FromName, "from_addr": m.FromAddr, "date_ts": m.DateTS}
 }
 
-func (l Limits) TopCounts(values []string) []any {
+func (l Limits) ranked(values []string) ([]string, map[string]int) {
 	counts := map[string]int{}
 	var order []string
 	for _, v := range values {
@@ -70,9 +63,19 @@ func (l Limits) TopCounts(values []string) []any {
 	slices.SortFunc(order, func(a, b string) int {
 		return cmp.Or(cmp.Compare(counts[b], counts[a]), cmp.Compare(a, b))
 	})
-	out := []any{}
-	for _, label := range order[:min(len(order), l.TopLabels)] {
-		out = append(out, py.Dict{{Key: "label", Value: label}, {Key: "count", Value: counts[label]}})
+	return order[:min(len(order), l.TopLabels)], counts
+}
+
+func (l Limits) TopLabelsOf(values []string) []string {
+	labels, _ := l.ranked(values)
+	return labels
+}
+
+func (l Limits) TopCounts(values []string) []any {
+	labels, counts := l.ranked(values)
+	out := make([]any, len(labels))
+	for i, label := range labels {
+		out[i] = map[string]any{"label": label, "count": counts[label]}
 	}
 	return out
 }
@@ -85,10 +88,10 @@ func (l Limits) SampleSubjectsOf(rows []Message) []string {
 	seen := map[string]bool{}
 	out := []string{}
 	for _, r := range sorted {
-		subject := py.Strip(r.Subject)
+		subject := strings.TrimSpace(r.Subject)
 		if subject != "" && !seen[subject] {
 			seen[subject] = true
-			out = append(out, py.Clip(subject, 120))
+			out = append(out, textx.Clip(subject, 120))
 		}
 		if len(out) >= l.SampleSubjects {
 			break
@@ -97,16 +100,32 @@ func (l Limits) SampleSubjectsOf(rows []Message) []string {
 	return out
 }
 
+type Draft struct {
+	Title   string
+	Payload map[string]any
+	Preview map[string]any
+}
+
+func Publish(ctx context.Context, d *db.DB, ts float64, kind string, account *string, fingerprint string, build func() (*Draft, error)) (int64, bool, error) {
+	known, err := proposals.Known(ctx, d.Write, fingerprint)
+	if err != nil || known {
+		return 0, false, err
+	}
+	draft, err := build()
+	if err != nil || draft == nil {
+		return 0, false, err
+	}
+	return proposals.Create(ctx, d, kind, account, draft.Title, draft.Payload, draft.Preview, fingerprint, ts)
+}
+
 type Result struct {
 	Candidates int
 	Created    int
 }
 
-func (r Result) Dict() py.Dict {
-	return py.Dict{{Key: "candidates", Value: r.Candidates}, {Key: "created", Value: r.Created}}
+func (r Result) Dict() map[string]any {
+	return map[string]any{"candidates": r.Candidates, "created": r.Created}
 }
-
-func (r Result) MarshalJSON() ([]byte, error) { return []byte(py.JSONDumps(r.Dict())), nil }
 
 func SnapshotList(snaps []mailops.Snapshot) []any {
 	out := make([]any, len(snaps))

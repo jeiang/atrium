@@ -10,31 +10,33 @@ import (
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 func MaxTokensFor(effort string) int64 {
-	if effort == threads.XHigh || effort == threads.Max {
+	if effort == pricing.XHigh || effort == pricing.Max {
 		return MaxTokensDeep
 	}
 	return MaxTokens
 }
 
 func TimeStamp(startedAt float64, loc *time.Location) string {
-	sec, us := py.SplitTimestamp(startedAt)
+	sec, us := timex.SplitTimestamp(startedAt)
 	return "Current date and time: " + time.Unix(sec, us*1000).In(loc).Format("Monday 2006-01-02 15:04 MST")
 }
 
-func cacheControlDict(cc prompts.CacheControl) py.Dict {
-	d := py.Dict{{Key: "type", Value: cc.Type}}
+func cacheControlDict(cc prompts.CacheControl) map[string]any {
+	d := map[string]any{"type": cc.Type}
 	if cc.TTL != "" {
-		d = append(d, py.Pair{Key: "ttl", Value: cc.TTL})
+		d["ttl"] = cc.TTL
 	}
 	return d
 }
@@ -73,13 +75,17 @@ func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.
 	return prompts.SystemBlocks(p, cc), nil
 }
 
-func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Thread, kind tool.Kind, model, effort string, tools []tool.Tool,
-	cc prompts.CacheControl, extra string, allow []string, limits actx.Limits, webSearchMaxUses int) (request, error) {
+func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Thread, kind tool.Kind, model, effort string, set registry.Set,
+	cc prompts.CacheControl, extra string, webSearchMaxUses int, dynamicFiltering bool) (request, error) {
 	system, err := r.systemBlocks(ctx, q, thread, cc, extra)
 	if err != nil {
 		return request{}, err
 	}
-	toolParams, err := registry.RequestTools(tools, kind, allow, cc.JSON(), webSearchMaxUses)
+	cacheControl, err := cc.JSON()
+	if err != nil {
+		return request{}, err
+	}
+	toolParams, err := set.Params(webSearchMaxUses, cacheControl, dynamicFiltering)
 	if err != nil {
 		return request{}, err
 	}
@@ -95,16 +101,18 @@ func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Threa
 	if err != nil {
 		return request{}, err
 	}
+	thinking := &anthropic.Thinking{Type: "adaptive", Display: "summarized"}
+	if thread.Thinking == "disabled" {
+		thinking = nil
+	}
 	return request{
 		params: anthropic.Params{
-			Model:             model,
-			MaxTokens:         MaxTokensFor(effort),
-			Thinking:          &anthropic.Thinking{Type: "adaptive", Display: "summarized"},
-			OutputConfig:      &anthropic.OutputConfig{Effort: effort},
-			System:            systemJSON,
-			ContextManagement: actx.ContextManagement(limits),
-			Tools:             toolParams,
-			Betas:             actx.Betas(),
+			Model:        model,
+			MaxTokens:    MaxTokensFor(effort),
+			Thinking:     thinking,
+			OutputConfig: &anthropic.OutputConfig{Effort: effort},
+			System:       systemJSON,
+			Tools:        toolParams,
 		},
 		cc:          cc,
 		sig:         sig,
@@ -112,42 +120,23 @@ func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Threa
 	}, nil
 }
 
-func fixedPart(system json.RawMessage, tools []json.RawMessage) (py.Dict, error) {
-	sys, err := py.JSONLoads(system)
+func fixedPart(system json.RawMessage, tools []json.RawMessage) (map[string]any, error) {
+	sys, err := jsonx.Loads(system)
 	if err != nil {
 		return nil, err
 	}
-	fixed := py.Dict{{Key: "system", Value: sys}}
+	fixed := map[string]any{"system": sys}
 	if len(tools) == 0 {
 		return fixed, nil
 	}
 	list := make([]any, len(tools))
 	for i, raw := range tools {
-		if list[i], err = py.JSONLoads(raw); err != nil {
+		if list[i], err = jsonx.Loads(raw); err != nil {
 			return nil, err
 		}
 	}
-	return append(fixed, py.Pair{Key: "tools", Value: list}), nil
-}
-
-func stampMessages(active []actx.Message, runs []journal.Run, loc *time.Location) []actx.Message {
-	started := make(map[int64]float64, len(runs))
-	for _, r := range runs {
-		started[r.ID] = r.StartedAt
-	}
-	out := make([]actx.Message, len(active))
-	for i, m := range active {
-		out[i] = m
-		if m.Role != journal.User || m.RunID == nil || !journal.HasText(m.Content) {
-			continue
-		}
-		at, ok := started[*m.RunID]
-		if !ok {
-			continue
-		}
-		out[i].Content = append(slices.Clone(m.Content), actx.TextBlock(TimeStamp(at, loc)))
-	}
-	return out
+	fixed["tools"] = list
+	return fixed, nil
 }
 
 func withProjectFiles(ctx context.Context, q db.Querier, thread threads.Thread, active []actx.Message) ([]actx.Message, error) {

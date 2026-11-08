@@ -3,17 +3,17 @@ package notify
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func PauseChanged(ctx context.Context, d *db.DB, env config.Env, paused bool) error {
-	if on, err := Enabled(ctx, d.Read); err != nil || !on {
-		return err
+	if !Enabled(ctx) {
+		return nil
 	}
 	title := "atrium: mail writes resumed"
 	if paused {
@@ -24,7 +24,7 @@ func PauseChanged(ctx context.Context, d *db.DB, env config.Env, paused bool) er
 }
 
 func noticeBudget(ctx context.Context, d *db.DB, env config.Env, now float64) error {
-	loc, err := config.Location(env)
+	loc, err := config.From(ctx).Location(env)
 	if err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func noticeBudget(ctx context.Context, d *db.DB, env config.Env, now float64) er
 		if status.Share < threshold {
 			continue
 		}
-		title := fmt.Sprintf("atrium: %s of the monthly budget used", py.FormatPercent(threshold, 0))
+		title := fmt.Sprintf("atrium: %s of the monthly budget used", strconv.FormatFloat(threshold*100, 'f', 0, 64)+"%")
 		var n int
 		if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications WHERE channel = ? AND title = ? AND ts >= ?", System, title, monthStart).Scan(&n); err != nil {
 			return err
@@ -46,7 +46,7 @@ func noticeBudget(ctx context.Context, d *db.DB, env config.Env, now float64) er
 		if n > 0 {
 			continue
 		}
-		body := fmt.Sprintf("$%s of $%s spent this month.", py.FormatFixed(status.SpentUSD, 2), py.FormatFixed(status.BudgetUSD, 2))
+		body := fmt.Sprintf("$%s of $%s spent this month.", strconv.FormatFloat(status.SpentUSD, 'f', 2, 64), strconv.FormatFloat(status.BudgetUSD, 'f', 2, 64))
 		if _, err := Send(ctx, d.Write, env, Message{Channel: System, Title: title, Body: body, Now: func() float64 { return now }}); err != nil {
 			return err
 		}

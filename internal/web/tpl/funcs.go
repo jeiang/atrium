@@ -2,18 +2,22 @@ package tpl
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
 	"maps"
+	"math"
+	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	ttemplate "text/template"
 	"time"
+	"unicode/utf8"
 
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 var extraFuncs = template.FuncMap{}
@@ -54,23 +58,24 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 		"fail":     func(msg string, args ...any) (string, error) { return "", fmt.Errorf(msg, args...) },
 		"markdown": func(v any) template.HTML { return Markdown(str(v)) },
 		"ts":       ts,
-		"truncate": func(n int, v any) string { return py.Truncate(str(v), n) },
+		"truncate": func(n int, v any) string { return truncate(str(v), n) },
+		"str":      str,
 		"filesizeformat": func(v any) (string, error) {
 			f, err := toFloat(v)
-			return py.FileSizeFormat(f), err
+			return fileSizeFormat(f), err
 		},
 		"urlencode": urlencode,
 		"items":     items,
 		"odict":     odict,
 		"get":       get,
-		"tojson":    py.JSONHTMLSafe,
+		"tojson":    jsonHTMLSafe,
 		"round": func(v any, digits ...int) (float64, error) {
 			f, err := toFloat(v)
 			n := 0
 			if len(digits) > 0 {
 				n = digits[0]
 			}
-			return py.Round(f, n), err
+			return roundTo(f, n), err
 		},
 		"int": func(v any) (int64, error) {
 			f, err := toFloat(v)
@@ -80,12 +85,13 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 			return arith(a, b, func(x, y float64) float64 { return float64(x * y) })
 		},
 		"fdiv":  func(a, b any) (float64, error) { return arith(a, b, func(x, y float64) float64 { return x / y }) },
+		"float": func(v any) (float64, error) { return toFloat(v) },
 		"inc":   func(i int) int { return i + 1 },
-		"lower": func(v any) string { return py.Lower(str(v)) },
+		"lower": func(v any) string { return strings.ToLower(str(v)) },
 		"capitalize": func(v any) string {
 			s := str(v)
 			for i, r := range s {
-				return strings.ToUpper(string(r)) + py.Lower(s[i+len(string(r)):])
+				return strings.ToUpper(string(r)) + strings.ToLower(s[i+len(string(r)):])
 			}
 			return s
 		},
@@ -96,7 +102,6 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 			}
 			return strings.Join(strs(l), sep)
 		},
-		"string":  str,
 		"last":    last,
 		"selattr": func(key string, l any) []any { return filter(l, key, true) },
 		"rejattr": func(key string, l any) []any { return filter(l, key, false) },
@@ -132,10 +137,10 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 		"pct":       pct,
 		"place":     place,
 		"proposal":  proposal,
-		"noun":      noun,
+		"noun":      e.noun,
 		"sender":    sender,
 		"page_path": pagePath,
-		"isnil":     func(v any) bool { return v == nil },
+		"isnil":     isNil,
 		"haskey":    haskey,
 	}
 	for name, fn := range extraFuncs {
@@ -159,10 +164,43 @@ func dict(kv ...any) (map[string]any, error) {
 	return m, nil
 }
 
+func isNil(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
+		return rv.IsNil()
+	}
+	return false
+}
+
 func opt(m any, key string, def any) any {
 	if mm, ok := m.(map[string]any); ok {
 		if v, ok := mm[key]; ok {
 			return v
+		}
+	}
+	rv := reflect.ValueOf(m)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if rv.IsNil() {
+			return def
+		}
+		rv = rv.Elem()
+	}
+	if rv.IsValid() && rv.Kind() == reflect.Struct {
+		want := strings.ReplaceAll(strings.ToLower(key), "_", "")
+		t := rv.Type()
+		for i := range t.NumField() {
+			f := t.Field(i)
+			if f.PkgPath != "" {
+				continue
+			}
+			tag, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+			if tag == key || strings.EqualFold(f.Name, key) || strings.ReplaceAll(strings.ToLower(f.Name), "_", "") == want {
+				return rv.Field(i).Interface()
+			}
 		}
 	}
 	return def
@@ -190,7 +228,7 @@ func ts(v any, style ...string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	sec, us := py.SplitTimestamp(epoch)
+	sec, us := timex.SplitTimestamp(epoch)
 	moment := time.Unix(sec, us*1000).UTC()
 	kind := "datetime"
 	if len(style) > 0 {
@@ -211,15 +249,23 @@ func ts(v any, style ...string) (string, error) {
 }
 
 func str(v any) string {
-	switch x := v.(type) {
-	case nil:
+	rv := reflect.ValueOf(v)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if rv.IsNil() {
+			return ""
+		}
+		rv = rv.Elem()
+	}
+	if !rv.IsValid() {
 		return ""
+	}
+	switch x := rv.Interface().(type) {
 	case string:
 		return x
 	case template.HTML:
 		return string(x)
 	}
-	return fmt.Sprint(v)
+	return fmt.Sprint(rv.Interface())
 }
 
 func strs(l any) []string {
@@ -236,6 +282,12 @@ func strs(l any) []string {
 
 func toFloat(v any) (float64, error) {
 	rv := reflect.ValueOf(v)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if rv.IsNil() {
+			return 0, fmt.Errorf("not a number: %T", v)
+		}
+		rv = rv.Elem()
+	}
 	switch rv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return float64(rv.Int()), nil
@@ -278,8 +330,34 @@ func elems(l any) []map[string]any {
 	var out []map[string]any
 	if rv := reflect.ValueOf(l); l != nil && rv.Kind() == reflect.Slice {
 		for i := range rv.Len() {
-			if m, ok := rv.Index(i).Interface().(map[string]any); ok {
+			elem := rv.Index(i).Interface()
+			erv := reflect.ValueOf(elem)
+			for erv.IsValid() && (erv.Kind() == reflect.Pointer || erv.Kind() == reflect.Interface) {
+				if erv.IsNil() {
+					break
+				}
+				erv = erv.Elem()
+			}
+			switch m := elem.(type) {
+			case map[string]any:
 				out = append(out, m)
+			default:
+				if erv.IsValid() && erv.Kind() == reflect.Struct {
+					row := make(map[string]any, erv.NumField())
+					t := erv.Type()
+					for j := range t.NumField() {
+						f := t.Field(j)
+						if f.PkgPath != "" {
+							continue
+						}
+						key, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+						if key == "" {
+							key = f.Name
+						}
+						row[key] = erv.Field(j).Interface()
+					}
+					out = append(out, row)
+				}
 			}
 		}
 	}
@@ -293,9 +371,14 @@ func truthy(v any) bool {
 
 func filter(l any, key string, want bool) []any {
 	var out []any
-	for _, m := range elems(l) {
-		if truthy(m[key]) == want {
-			out = append(out, m)
+	rv := reflect.ValueOf(l)
+	if l == nil || rv.Kind() != reflect.Slice {
+		return out
+	}
+	for i := range rv.Len() {
+		elem := rv.Index(i).Interface()
+		if truthy(opt(elem, key, nil)) == want {
+			out = append(out, elem)
 		}
 	}
 	return out
@@ -320,6 +403,16 @@ func sumlens(key string, l any) int {
 }
 
 func pyStr(v any) (string, error) {
+	rv := reflect.ValueOf(v)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if rv.IsNil() {
+			return "None", nil
+		}
+		rv = rv.Elem()
+	}
+	if rv.IsValid() {
+		v = rv.Interface()
+	}
 	switch x := v.(type) {
 	case nil:
 		return "None", nil
@@ -329,9 +422,9 @@ func pyStr(v any) (string, error) {
 		}
 		return "False", nil
 	case float64:
-		return py.FloatRepr(x), nil
+		return floatString(x), nil
 	case float32:
-		return py.FloatRepr(float64(x)), nil
+		return floatString(float64(x)), nil
 	case string:
 		return x, nil
 	case template.HTML:
@@ -345,17 +438,20 @@ func pyStr(v any) (string, error) {
 	return "", fmt.Errorf("urlencode: cannot quote %T", v)
 }
 
-func items(v any) ([]py.Pair, error) {
+type entry struct {
+	Key   string
+	Value any
+}
+
+func items(v any) ([]entry, error) {
 	switch x := v.(type) {
 	case map[string]any:
-		pairs := make([]py.Pair, 0, len(x))
+		out := make([]entry, 0, len(x))
 		for _, k := range slices.Sorted(maps.Keys(x)) {
-			pairs = append(pairs, py.Pair{Key: k, Value: x[k]})
+			out = append(out, entry{Key: k, Value: x[k]})
 		}
-		return pairs, nil
-	case py.Dict:
-		return x, nil
-	case []py.Pair:
+		return out, nil
+	case []entry:
 		return x, nil
 	}
 	return nil, fmt.Errorf("items: not a mapping: %T", v)
@@ -363,7 +459,7 @@ func items(v any) ([]py.Pair, error) {
 
 func urlencode(v any) (string, error) {
 	switch v.(type) {
-	case map[string]any, py.Dict, []py.Pair:
+	case map[string]any, []entry:
 		pairs, err := items(v)
 		if err != nil {
 			return "", err
@@ -374,36 +470,143 @@ func urlencode(v any) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			parts[i] = py.URLQuotePlus(p.Key) + "=" + py.URLQuotePlus(value)
+			parts[i] = url.QueryEscape(p.Key) + "=" + url.QueryEscape(value)
 		}
 		return strings.Join(parts, "&"), nil
 	}
 	s, err := pyStr(v)
-	return py.URLQuote(s), err
+	return urlQuote(s), err
 }
 
-func odict(kv ...any) (py.Dict, error) {
+func odict(kv ...any) ([]entry, error) {
 	if len(kv)%2 != 0 {
 		return nil, errors.New("odict: odd number of arguments")
 	}
-	out := make(py.Dict, 0, len(kv)/2)
+	out := make([]entry, 0, len(kv)/2)
 	for i := 0; i < len(kv); i += 2 {
 		k, ok := kv[i].(string)
 		if !ok {
 			return nil, fmt.Errorf("odict: key %v is not a string", kv[i])
 		}
-		out = out.Set(k, kv[i+1])
+		out = setEntry(out, k, kv[i+1])
 	}
 	return out, nil
+}
+
+func setEntry(list []entry, key string, value any) []entry {
+	for i := range list {
+		if list[i].Key == key {
+			list[i].Value = value
+			return list
+		}
+	}
+	return append(list, entry{Key: key, Value: value})
 }
 
 func get(m any, key string) any {
 	switch x := m.(type) {
 	case map[string]any:
 		return x[key]
-	case py.Dict:
-		v, _ := x.Get(key)
-		return v
+	case []entry:
+		for i := len(x) - 1; i >= 0; i-- {
+			if x[i].Key == key {
+				return x[i].Value
+			}
+		}
 	}
 	return nil
+}
+
+func truncate(s string, length int) string {
+	const end, leeway = "...", 5
+	if utf8.RuneCountInString(s) <= length+leeway {
+		return s
+	}
+	cut := clip(s, max(length-len(end), 0))
+	if i := strings.LastIndex(cut, " "); i >= 0 {
+		cut = cut[:i]
+	}
+	return cut + end
+}
+
+func clip(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	i := 0
+	for pos := range s {
+		if i == n {
+			return s[:pos]
+		}
+		i++
+	}
+	return s
+}
+
+func fileSizeFormat(value float64) string {
+	if value == 1 {
+		return "1 Byte"
+	}
+	if value < 1000 {
+		return fmt.Sprintf("%d Bytes", int64(value))
+	}
+	prefixes := []string{"kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"}
+	unit := 1000.0
+	for i, prefix := range prefixes {
+		unit *= 1000
+		if value < unit || i == len(prefixes)-1 {
+			return strconv.FormatFloat(1000*value/unit, 'f', 1, 64) + " " + prefix
+		}
+	}
+	return ""
+}
+
+func jsonHTMLSafe(v any) (string, error) {
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(true)
+	if err := enc.Encode(v); err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
+func roundTo(x float64, ndigits int) float64 {
+	if math.IsNaN(x) || math.IsInf(x, 0) {
+		return x
+	}
+	if ndigits == 0 {
+		return math.RoundToEven(x)
+	}
+	out, err := strconv.ParseFloat(strconv.FormatFloat(x, 'f', ndigits, 64), 64)
+	if err != nil {
+		return x
+	}
+	return out
+}
+
+func floatString(f float64) string {
+	switch {
+	case math.IsNaN(f):
+		return "nan"
+	case math.IsInf(f, 1):
+		return "inf"
+	case math.IsInf(f, -1):
+		return "-inf"
+	}
+	exp := strconv.FormatFloat(f, 'e', -1, 64)
+	at := strings.IndexByte(exp, 'e')
+	e, _ := strconv.Atoi(exp[at+1:])
+	if e < -4 || e >= 16 {
+		return exp
+	}
+	s := strconv.FormatFloat(f, 'f', -1, 64)
+	if !strings.Contains(s, ".") {
+		s += ".0"
+	}
+	return s
+}
+
+func urlQuote(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(url.QueryEscape(s), "+", "%20"), "%2F", "/")
 }

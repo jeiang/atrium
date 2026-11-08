@@ -8,10 +8,19 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var readKinds = tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub}
+
+func clip(s string, n int) string {
+	for i := range s {
+		if n == 0 {
+			return s[:i]
+		}
+		n--
+	}
+	return s
+}
 
 func meta(ctx context.Context, tc *tool.Context, pageID string) ([]any, string, error) {
 	local, err := notion.GetWiki(ctx, tc.DB.Read, pageID)
@@ -25,15 +34,17 @@ func meta(ctx context.Context, tc *tool.Context, pageID string) ([]any, string, 
 	return aliases, local.LastReviewed, nil
 }
 
-func withMeta(ctx context.Context, tc *tool.Context, d py.Dict, pageID string) (py.Dict, error) {
+func withMeta(ctx context.Context, tc *tool.Context, d map[string]any, pageID string) (map[string]any, error) {
 	aliases, reviewed, err := meta(ctx, tc, pageID)
 	if err != nil {
 		return nil, err
 	}
-	return append(d, py.Pair{Key: "aliases", Value: aliases}, py.Pair{Key: "last_reviewed", Value: reviewed}), nil
+	d["aliases"] = aliases
+	d["last_reviewed"] = reviewed
+	return d, nil
 }
 
-func aliasHits(ctx context.Context, tc *tool.Context, query string, snippetChars int) ([]py.Dict, error) {
+func aliasHits(ctx context.Context, tc *tool.Context, query string, snippetChars int) ([]map[string]any, error) {
 	ids, err := notion.AliasMatches(ctx, tc.DB.Read, query)
 	if err != nil {
 		return nil, err
@@ -42,7 +53,7 @@ func aliasHits(ctx context.Context, tc *tool.Context, query string, snippetChars
 	if err != nil {
 		return nil, err
 	}
-	hits := []py.Dict{}
+	hits := []map[string]any{}
 	for _, id := range ids {
 		row, err := notion.GetPage(ctx, tc.DB.Read, id)
 		if err != nil {
@@ -55,19 +66,24 @@ func aliasHits(ctx context.Context, tc *tool.Context, query string, snippetChars
 		if err != nil {
 			return nil, err
 		}
-		hit := py.Dict{{Key: "page_id", Value: id}}
+		hit := map[string]any{"page_id": id}
 		if row != nil {
-			head := py.Clip(row.Markdown, limits.HeadSource)
-			hit = append(hit, py.Pair{Key: "title", Value: row.Title}, py.Pair{Key: "path", Value: row.Path}, py.Pair{Key: "url", Value: row.URL},
-				py.Pair{Key: "snippet", Value: tool.Clip(notion.Plain(head, map[string]string{}), snippetChars)})
+			head := clip(row.Markdown, limits.HeadSource)
+			hit["title"] = row.Title
+			hit["path"] = row.Path
+			hit["url"] = row.URL
+			hit["snippet"] = tool.Clip(notion.Plain(head, map[string]string{}), snippetChars)
 		} else {
 			title := ""
 			if local != nil {
 				title = local.Title
 			}
-			hit = append(hit, py.Pair{Key: "title", Value: title}, py.Pair{Key: "path", Value: ""}, py.Pair{Key: "url", Value: ""}, py.Pair{Key: "snippet", Value: ""})
+			hit["title"] = title
+			hit["path"] = ""
+			hit["url"] = ""
+			hit["snippet"] = ""
 		}
-		hit = append(hit, py.Pair{Key: "match", Value: "alias"})
+		hit["match"] = "alias"
 		if hit, err = withMeta(ctx, tc, hit, id); err != nil {
 			return nil, err
 		}
@@ -76,18 +92,17 @@ func aliasHits(ctx context.Context, tc *tool.Context, query string, snippetChars
 	return hits, nil
 }
 
-func searchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func searchKnowledge(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	query, err := required(args, "query")
 	if err != nil {
 		return nil, err
 	}
 	r := assistant.Read(ctx, tc.DB.Read)
-	maxResults := r.Int(assistant.KeyNotionMaxResults)
 	snippetChars := r.Int(assistant.KeyNotionSnippet)
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 5, int64(maxResults), 1)
+	limit, err := notionLimitBound.Clamp(ctx, tc.DB.Read, args, "limit")
 	if err != nil {
 		return nil, err
 	}
@@ -113,10 +128,7 @@ func searchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 		if seen[h.ID] {
 			continue
 		}
-		hit, err := withMeta(ctx, tc, py.Dict{
-			{Key: "page_id", Value: h.ID}, {Key: "title", Value: h.Title}, {Key: "path", Value: h.Folder}, {Key: "url", Value: h.URL},
-			{Key: "snippet", Value: tool.Clip(h.Snippet, snippetChars)}, {Key: "match", Value: "search"},
-		}, h.ID)
+		hit, err := withMeta(ctx, tc, map[string]any{"page_id": h.ID, "title": h.Title, "path": h.Folder, "url": h.URL, "snippet": tool.Clip(h.Snippet, snippetChars), "match": "search"}, h.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -126,11 +138,11 @@ func searchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 	for i := 0; i < len(results) && int64(i) < limit; i++ {
 		out = append(out, results[i])
 	}
-	return py.Dict{{Key: "semantic", Value: found.Semantic}, {Key: "results", Value: out}}, nil
+	return map[string]any{"semantic": found.Semantic, "results": out}, nil
 }
 
-func livePage(ctx context.Context, tc *tool.Context, pageID string) (py.Dict, error) {
-	client, err := makeClient(ctx, tc.DB.Read)
+func livePage(ctx context.Context, tc *tool.Context, pageID string) (map[string]any, error) {
+	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
 	if err != nil {
 		return nil, err
 	}
@@ -138,37 +150,32 @@ func livePage(ctx context.Context, tc *tool.Context, pageID string) (py.Dict, er
 	if err != nil {
 		return nil, notionError(err)
 	}
-	properties, _ := dictGet(page, "properties").(py.Dict)
 	sensitivity, err := notion.LoadSensitivity(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
-	if sensitivity.IsPrivate(sensitivity.Of(properties)) {
+	if sensitivity.IsPrivate(sensitivity.Of(page.Properties)) {
 		return nil, tool.Error("page is private")
 	}
 	markdown, err := notion.FetchMarkdown(ctx, client, pageID)
 	if err != nil {
 		return nil, notionError(err)
 	}
-	return py.Dict{
-		{Key: "page_id", Value: normalize(pageID)}, {Key: "title", Value: notion.PageTitle(page)},
-		{Key: "url", Value: str(page, "url")}, {Key: "markdown", Value: markdown},
-	}, nil
+	return map[string]any{"page_id": normalize(pageID), "title": page.Title(), "url": page.URL, "markdown": markdown}, nil
 }
 
-func fetchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func fetchKnowledge(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, err := required(args, "page_id")
 	if err != nil {
 		return nil, err
 	}
 	pageID := normalize(raw)
 	r := assistant.Read(ctx, tc.DB.Read)
-	pageChars := r.Int(assistant.KeyNotionPageChars)
 	staleSecs := r.Int(assistant.KeyNotionStaleSecs)
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	maxChars, err := tool.BoundedInt(args, "max_chars", int64(pageChars), int64(pageChars), 1)
+	maxChars, err := notionCharsBound.Clamp(ctx, tc.DB.Read, args, "max_chars")
 	if err != nil {
 		return nil, err
 	}
@@ -179,36 +186,46 @@ func fetchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, e
 	if row != nil && row.Private != 0 {
 		return nil, tool.Error("page is private")
 	}
-	var page py.Dict
+	var page map[string]any
 	source := "live"
 	if row != nil && row.InTrash == 0 && tc.Now()-row.SyncedAt < float64(staleSecs) && row.Markdown != "" {
-		page = py.Dict{{Key: "page_id", Value: row.ID}, {Key: "title", Value: row.Title}, {Key: "url", Value: row.URL}, {Key: "markdown", Value: row.Markdown}}
+		page = map[string]any{"page_id": row.ID, "title": row.Title, "url": row.URL, "markdown": row.Markdown}
 		source = "mirror"
 	} else if page, err = livePage(ctx, tc, pageID); err != nil {
 		return nil, err
 	}
 	text := str(page, "markdown")
-	page = page.Set("markdown", py.Clip(text, int(maxChars)))
-	page = append(page, py.Pair{Key: "truncated", Value: int64(len([]rune(text))) > maxChars}, py.Pair{Key: "source", Value: source})
+	page["markdown"] = clip(text, int(maxChars))
+	page["truncated"] = int64(len([]rune(text))) > maxChars
+	page["source"] = source
 	return withMeta(ctx, tc, page, pageID)
 }
+
+var (
+	notionLimitBound = tool.NewBound(assistant.KeyNotionMaxResults, "")
+	notionCharsBound = tool.NewBound(assistant.KeyNotionPageChars, "")
+)
 
 func readTools() []tool.Tool {
 	return []tool.Tool{
 		{
 			Name:        "search_knowledge",
 			Description: "Search the operator's Notion wiki mirror: exact title/alias matches first, then full-text plus semantic hits. Private pages are never returned. Use fetch_knowledge for a full page.",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 10}}, "required": ["query"], "additionalProperties": false}`),
+			InputSchema: json.RawMessage(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": ` + notionLimitBound.Schema() + `}, "required": ["query"], "additionalProperties": false}`),
 			Handler:     searchKnowledge,
 			Effect:      tool.Read,
+			Annotated:   true,
+			Flags:       tool.Flags{PrivateData: true},
 			Contexts:    readKinds,
 		},
 		{
 			Name:        "fetch_knowledge",
 			Description: "Fetch a Notion page's markdown by page_id from the local mirror, falling back to live Notion when the mirror is missing or stale.",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"page_id": {"type": "string"}, "max_chars": {"type": "integer", "minimum": 1, "maximum": 12000}}, "required": ["page_id"], "additionalProperties": false}`),
+			InputSchema: json.RawMessage(`{"type": "object", "properties": {"page_id": {"type": "string"}, "max_chars": ` + notionCharsBound.Schema() + `}, "required": ["page_id"], "additionalProperties": false}`),
 			Handler:     fetchKnowledge,
 			Effect:      tool.Read,
+			Annotated:   true,
+			Flags:       tool.Flags{PrivateData: true},
 			Contexts:    readKinds,
 		},
 	}

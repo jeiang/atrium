@@ -3,6 +3,16 @@ CREATE TABLE IF NOT EXISTS accounts (
     kind TEXT NOT NULL,
     last_sync_at REAL
 );
+CREATE TABLE IF NOT EXISTS mail_accounts (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    preset TEXT NOT NULL CHECK (preset IN ('icloud', 'gmail')),
+    login TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
+    auth_method TEXT NOT NULL DEFAULT 'password' CHECK (auth_method IN ('password', 'xoauth2')),
+    created_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS mailboxes (
     id INTEGER PRIMARY KEY,
     account TEXT NOT NULL REFERENCES accounts(name),
@@ -55,13 +65,9 @@ CREATE TABLE IF NOT EXISTS messages (
     esp TEXT NOT NULL DEFAULT '[]',
     att_types TEXT NOT NULL DEFAULT '[]',
     att_names TEXT NOT NULL DEFAULT '[]',
-    has_money INTEGER NOT NULL DEFAULT 0,
-    k_statement INTEGER NOT NULL DEFAULT 0,
-    k_receipt INTEGER NOT NULL DEFAULT 0,
     k_order INTEGER NOT NULL DEFAULT 0,
     k_vcode INTEGER NOT NULL DEFAULT 0,
     k_otp6 INTEGER NOT NULL DEFAULT 0,
-    body_len INTEGER NOT NULL DEFAULT 0,
     embedded INTEGER NOT NULL DEFAULT 0,
     first_seen REAL NOT NULL,
     gone_at REAL,
@@ -74,10 +80,6 @@ CREATE INDEX IF NOT EXISTS messages_msgid ON messages (account, msgid);
 CREATE INDEX IF NOT EXISTS messages_gm ON messages (account, gm_msgid);
 CREATE INDEX IF NOT EXISTS messages_mailbox ON messages (mailbox_id, gone_at);
 CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(subject, sender, body);
-CREATE VIRTUAL TABLE IF NOT EXISTS message_vec USING vec0(
-    account TEXT PARTITION KEY,
-    embedding FLOAT[768] DISTANCE_METRIC=cosine
-);
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY,
     ts REAL NOT NULL,
@@ -125,3 +127,14 @@ CREATE TABLE IF NOT EXISTS corrections (
     ts REAL NOT NULL,
     source TEXT NOT NULL DEFAULT 'operator'
 );
+CREATE VIEW IF NOT EXISTS filed_messages AS SELECT m.id, m.account, m.mailbox_id, m.uidvalidity, m.uid, m.msgid,
+    m.digest, m.gm_msgid, m.gm_thrid, m.internaldate, m.date_ts, m.size, m.raw_path, m.flags, m.seen, m.flagged,
+    m.labels, CASE WHEN c.folder IS NULL THEN m.in_inbox ELSE 0 END AS in_inbox, m.sent, m.location,
+    COALESCE(c.folder, m.folder) AS folder, m.category, m.from_addr, m.from_domain, m.from_name, m.to_addrs,
+    m.reply_to, m.rpath_domain, m.list_id, m.precedence, m.subject, m.subject_tmpl, m.msgid_domain, m.in_reply_to,
+    m.refs, m.dkim_d, m.esp, m.att_types, m.att_names, m.k_order, m.k_vcode, m.k_otp6, m.embedded, m.first_seen,
+    m.gone_at
+FROM messages m LEFT JOIN corrections c ON c.message_id = m.id
+WHERE m.gone_at IS NULL AND m.sent = 0
+AND COALESCE(c.folder, m.folder) IS NOT NULL AND COALESCE(c.folder, m.folder) != ''
+AND (c.folder IS NOT NULL OR m.in_inbox = 0);

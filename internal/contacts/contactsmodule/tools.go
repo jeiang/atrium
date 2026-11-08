@@ -5,46 +5,51 @@ import (
 	"encoding/json"
 	"strconv"
 
-	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Module struct{}
 
-func (Module) Register(module.Context) module.Registration {
+func (Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name:     module.Contacts,
 		Requires: []module.Requirement{module.Setting(contacts.DirKey)},
-		Commands: []*cli.Command{{Name: "contacts", Commands: []*cli.Command{syncCommand()}}},
+		Commands: []*cli.Command{{Name: "contacts", Commands: []*cli.Command{syncCommand(mc.Env)}}},
 		Tools:    func(r *registry.Registry) error { return r.Add(Tools()...) },
 	}
 }
 
-func syncCommand() *cli.Command {
+func syncCommand(env config.Env) *cli.Command {
 	return davmirror.SyncCommand("mirror the iCloud address books into the contacts directory (read-only)", passrun.CardDAV,
 		func(ctx context.Context, d *db.DB) (davmirror.Stats, error) {
 			set, err := calendar.LoadSettings(ctx, d.Read)
 			if err != nil {
 				return davmirror.Stats{}, err
 			}
-			dir, err := contacts.Dir(ctx, d.Read)
+			src, err := contacts.Resolve(ctx, d.Read)
 			if err != nil {
 				return davmirror.Stats{}, err
 			}
-			return calendar.SyncContactsMirror(ctx, set, dir)
+			if src.State == contacts.Off {
+				return davmirror.Stats{}, nil
+			}
+			if src.State == contacts.Unset {
+				return davmirror.Stats{}, calendar.Error(contacts.DirKey + " is not set")
+			}
+			return calendar.SyncContactsMirror(ctx, env, set, src.Dir)
 		})
 }
 
-const schemaMaxContacts = 10
+const schemaMaxContacts = 100
 
 var contactsSchema = json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"},` +
 	`"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxContacts) + `}},` +
@@ -57,46 +62,47 @@ func Tools() []tool.Tool {
 		InputSchema: contactsSchema,
 		Handler:     contactsLookup,
 		Effect:      tool.Read,
+		Annotated:   true,
+		Flags:       tool.Flags{PrivateData: true},
 		Contexts:    tool.AllKinds,
 	}}
 }
 
-func contactsLookup(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func contactsLookup(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	query, _, err := tool.TextArg(args, "query", true)
 	if err != nil {
 		return nil, err
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	maxContacts := r.Int(assistant.KeyMailMaxContacts)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
-	limit, err := tool.BoundedInt(args, "limit", 5, int64(maxContacts), 1)
+	maxContacts, err := contacts.MaxResults(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
-	dir, err := contacts.Dir(ctx, tc.DB.Read)
+	limit, err := tool.BoundedInt(args, "limit", 5, maxContacts, 1)
 	if err != nil {
 		return nil, err
 	}
-	if dir == "" {
-		return nil, tool.NotConfigured("ATRIUM_CONTACTS_CONTACTS_DIR is not set")
+	src, err := contacts.Resolve(ctx, tc.DB.Read)
+	if err != nil {
+		return nil, err
 	}
-	found := contacts.Search(dir, query, int(limit))
+	if src.State != contacts.Ready {
+		return nil, tool.NotConfigured(contacts.DirKey + " is not set")
+	}
+	found := contacts.Search(src.Dir, query, int(limit))
 	results := make([]any, len(found))
 	for i, c := range found {
-		card := py.Dict{}
+		card := map[string]any{}
 		if c.Name != "" {
-			card = append(card, py.Pair{Key: "name", Value: c.Name})
+			card["name"] = c.Name
 		}
 		if len(c.Emails) > 0 {
-			card = append(card, py.Pair{Key: "emails", Value: c.Emails})
+			card["emails"] = c.Emails
 		}
 		if len(c.Phones) > 0 {
-			card = append(card, py.Pair{Key: "phones", Value: c.Phones})
+			card["phones"] = c.Phones
 		}
 		if c.Org != "" {
-			card = append(card, py.Pair{Key: "org", Value: c.Org})
+			card["org"] = c.Org
 		}
 		if len(c.Dates) > 0 {
 			dates := make([]any, len(c.Dates))
@@ -105,12 +111,12 @@ func contactsLookup(ctx context.Context, tc *tool.Context, args py.Dict) (any, e
 				if d.Year != nil {
 					year = int64(*d.Year)
 				}
-				dates[j] = py.Dict{{Key: "kind", Value: d.Kind}, {Key: "label", Value: d.Label}, {Key: "month", Value: int64(d.Month)},
-					{Key: "day", Value: int64(d.Day)}, {Key: "year", Value: year}}
+				dates[j] = map[string]any{"kind": d.Kind, "label": d.Label, "month": int64(d.Month),
+					"day": int64(d.Day), "year": year}
 			}
-			card = append(card, py.Pair{Key: "dates", Value: dates})
+			card["dates"] = dates
 		}
 		results[i] = card
 	}
-	return py.Dict{{Key: "results", Value: results}}, nil
+	return map[string]any{"results": results}, nil
 }

@@ -60,6 +60,7 @@ func fakeGrafana(t *testing.T) (*httptest.Server, func() []dsQuery) {
 }
 
 func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		dialect, want string
 	}{
@@ -69,10 +70,10 @@ func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
 		t.Run(tc.dialect, func(t *testing.T) {
 			moduleFixture(t, flagsExcept("", ""))
 			grafana, seen := fakeGrafana(t)
-			t.Setenv(settingEnv(grafanatools.KeyURL), grafana.URL)
-			t.Setenv(settingEnv(grafanatools.KeyMetricsUID), "vm-uid")
-			t.Setenv(settingEnv(grafanatools.KeyLogsUID), "logs-uid")
-			t.Setenv(settingEnv(grafanatools.KeyLogsType), tc.dialect)
+			setEnv(t, settingEnv(grafanatools.KeyURL), grafana.URL)
+			setEnv(t, settingEnv(grafanatools.KeyMetricsUID), "vm-uid")
+			setEnv(t, settingEnv(grafanatools.KeyLogsUID), "logs-uid")
+			setEnv(t, settingEnv(grafanatools.KeyLogsType), tc.dialect)
 			api := &modelLog{Server: anthropictest.New(t,
 				anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "atrium_self_diagnose", map[string]any{"scope": "both", "minutes": 30})),
 				anthropictest.Reply("end_turn", anthropictest.Text("healthy")),
@@ -82,9 +83,9 @@ func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
 				defer api.mu.Unlock()
 				api.seen = append(api.seen, r)
 			}
-			t.Setenv(anthropic.BaseURLEnv, api.URL)
+			setEnv(t, anthropic.BaseURLEnv, api.URL)
 
-			ran := runApp("agent", "run", "--text", "how are you doing?", "--kind", "chat")
+			ran := runApp(t, "agent", "run", "--text", "how are you doing?", "--kind", "chat")
 			if ran.code != cli.ExitOK {
 				t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 			}
@@ -108,9 +109,9 @@ func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
 				t.Fatalf("%d model requests, want 2", len(requests))
 			}
 			result := string(requests[1].Body)
-			for _, want := range []string{"row-for-stale_jobs", "row-for-logs", "untrusted"} {
+			for _, want := range []string{"[tool_result]", "zoom id"} {
 				if !strings.Contains(result, want) {
-					t.Errorf("tool result lacks %q", want)
+					t.Errorf("next request lacks %q", want)
 				}
 			}
 		})

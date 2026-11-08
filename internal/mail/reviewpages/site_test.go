@@ -21,9 +21,11 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
+	mailpages "github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/smtp/smtptest"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/proposals/handlers"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -45,9 +47,21 @@ type site struct {
 	imap     *mailtest.FakeClient
 	clock    float64
 	store    *drafts.Store
+	settings *settings.Registry
+	state    *config.State
 }
 
 type siteOption func(env map[string]string)
+
+func reviewNav() []web.NavItem {
+	return []web.NavItem{
+		{Group: "Review", Label: "Proposals", URL: "/proposals", Icon: "list-checks", Page: "proposals", Order: 20, Badge: true},
+		{Group: "Review", Label: "Activity", URL: "/activity", Icon: "history", Page: "activity", Order: 20},
+		{Group: "Mail", Label: "Drafts", URL: "/drafts", Icon: "mail", Page: "drafts", Order: 30},
+		{Group: "Life", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 40},
+		{Group: "Life", Label: "Watches", URL: "/watches", Icon: "package", Page: "watches", Order: 40},
+	}
+}
 
 func newSite(t *testing.T, options ...siteOption) *site {
 	t.Helper()
@@ -65,32 +79,35 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mailtest.PinMode(t, vars["ATRIUM_MODE"])
-	mailtest.UseAccounts(t, map[string]string{config.ICloud: vars[config.ICloud], config.Gmail: vars[config.Gmail]})
+	reg := settings.New()
+	st := config.NewState(reg)
+	mailtest.PinMode(t, reg, vars["ATRIUM_MODE"])
+	mailtest.UseAccounts(t, st, map[string]string{config.ICloud: vars[config.ICloud], config.Gmail: vars[config.Gmail]})
 	s := &site{
 		t: t, db: d, cfg: cfg, env: env, registry: proposals.NewRegistry(), writes: toolset.Undoers(env), smtp: &smtptest.Server{},
-		imap: mailtest.NewFakeClient(), clock: 1_000_000,
+		imap: mailtest.NewFakeClient(), clock: 1_000_000, settings: reg, state: st,
 	}
 	s.imap.AddBox("INBOX", mailtest.NewBox(1))
 	s.imap.AddBox("Sent Messages", mailtest.NewBox(1), `\Sent`)
-	open := func(ctx context.Context, account string) (mail.Client, error) {
+	open := func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
 		if err := s.imap.Connect(ctx); err != nil {
 			return nil, err
 		}
-		return s.imap, nil
+		return mail.Gated(s.imap, opts.Q), nil
 	}
 	tick := func() float64 {
 		s.clock++
 		return s.clock
 	}
+	handlers.Register(s.registry, handlers.Deps{DB: d, Open: open, Now: tick, Env: env})
 	s.store = &drafts.Store{DB: d, Cfg: cfg, Now: tick}
-	render, err := web.NewRenderer(cfg, d, tpl.Config{Modules: []fs.FS{Templates()}})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}, State: st}, reviewNav()...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv, err := web.New(web.Options{
-		Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, AllowedHosts: []string{"testserver"}, Render: render,
-		Modules: []web.Module{Module(Options{Open: open, Now: tick, Writes: s.writes, Registry: s.registry, SMTP: s.smtp.Factory})},
+		Cfg: cfg, Env: env, DB: d, Settings: reg, State: st, Auth: []string{web.AuthLocal}, AllowedHosts: []string{"testserver"}, Render: render,
+		Modules: []web.Module{Module(Options{Open: open, Now: tick, Writes: s.writes, Registry: s.registry, SMTP: s.smtp.Factory}), mailpages.PauseModule},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -98,6 +115,10 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	s.srv = srv
 	s.token = s.fetchToken()
 	return s
+}
+
+func (s *site) ctx() context.Context {
+	return config.With(settings.With(context.Background(), s.settings), s.state)
 }
 
 func (s *site) fetchToken() string {
@@ -190,25 +211,18 @@ func form(pairs ...string) url.Values {
 	return v
 }
 
-func message(id int) py.Dict {
-	return py.Dict{
-		{Key: "id", Value: int64(id)}, {Key: "subject", Value: "Subject " + itoa(id)}, {Key: "from_name", Value: "Shop"},
-		{Key: "from_addr", Value: "s@shop.test"}, {Key: "date_ts", Value: 1.0},
-	}
+func message(id int) map[string]any {
+	return map[string]any{"id": int64(id), "subject": "Subject " + itoa(id), "from_name": "Shop", "from_addr": "s@shop.test", "date_ts": 1.0}
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
 
-func group(name string, ids ...int) py.Dict {
+func group(name string, ids ...int) map[string]any {
 	messages := make([]any, len(ids))
 	for i, id := range ids {
 		messages[i] = message(id)
 	}
-	return py.Dict{
-		{Key: "name", Value: name}, {Key: "count", Value: int64(len(ids))},
-		{Key: "senders", Value: []any{py.Dict{{Key: "label", Value: "shop.test"}, {Key: "count", Value: int64(len(ids))}}}},
-		{Key: "terms", Value: []any{}}, {Key: "subjects", Value: []any{"Subject"}}, {Key: "messages", Value: messages},
-	}
+	return map[string]any{"name": name, "count": int64(len(ids)), "senders": []any{map[string]any{"label": "shop.test", "count": int64(len(ids))}}, "terms": []any{}, "subjects": []any{"Subject"}, "messages": messages}
 }
 
 func (s *site) propose(kind, account, title string, preview any, fingerprint string) int64 {
@@ -217,7 +231,7 @@ func (s *site) propose(kind, account, title string, preview any, fingerprint str
 	if account != "" {
 		acct = &account
 	}
-	id, ok, err := proposals.Create(s.t.Context(), s.db, kind, acct, title, py.Dict{}, preview, fingerprint, 1_000.0)
+	id, ok, err := proposals.Create(settings.With(s.t.Context(), s.settings), s.db, kind, acct, title, map[string]any{}, preview, fingerprint, 1_000.0)
 	if err != nil || !ok {
 		s.t.Fatalf("create %s: %v %v", kind, ok, err)
 	}
@@ -234,7 +248,7 @@ func (s *site) proposal(id int64) *proposals.Proposal {
 }
 
 func (s *site) splitProposal(fingerprint string) int64 {
-	preview := py.Dict{{Key: "folder", Value: "INBOX/Shop"}, {Key: "groups", Value: []any{group("Shop/Orders", 1, 2), group("Shop/Ads", 3, 4)}}}
+	preview := map[string]any{"folder": "INBOX/Shop", "groups": []any{group("Shop/Orders", 1, 2), group("Shop/Ads", 3, 4)}}
 	return s.propose("rebalance_split", "icloud", "Split Shop", preview, fingerprint)
 }
 

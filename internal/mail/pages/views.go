@@ -3,12 +3,13 @@ package pages
 import (
 	"math/big"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/mail/triage"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -16,6 +17,43 @@ import (
 type backLink struct {
 	URL   string `json:"url"`
 	Label string `json:"label"`
+}
+
+func laxInt64(s string) (int64, bool) {
+	body := strings.TrimSpace(s)
+	neg := false
+	if rest, ok := strings.CutPrefix(body, "-"); ok {
+		body, neg = rest, true
+	} else if rest, ok := strings.CutPrefix(body, "+"); ok {
+		body = rest
+	}
+	whole, fraction, hasFraction := strings.Cut(body, ".")
+	if hasFraction && (fraction == "" || strings.Trim(fraction, "0") != "") {
+		return 0, false
+	}
+	if whole == "" || strings.HasPrefix(whole, "_") || strings.HasSuffix(whole, "_") || strings.Contains(whole, "__") {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(strings.ReplaceAll(whole, "_", ""), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	if neg {
+		n = -n
+	}
+	return n, true
+}
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 type messageData struct {
@@ -58,12 +96,18 @@ type triageData struct {
 	Q           string            `json:"q"`
 }
 
+type conditionView struct {
+	Field string `json:"field"`
+	Op    string `json:"op"`
+	Value any    `json:"value,omitempty"`
+}
+
 type ruleView struct {
-	ID      string           `json:"id"`
-	Account *string          `json:"account"`
-	Action  string           `json:"action"`
-	Dest    *string          `json:"dest"`
-	When    []map[string]any `json:"when"`
+	ID      string          `json:"id"`
+	Account *string         `json:"account"`
+	Action  string          `json:"action"`
+	Dest    *string         `json:"dest"`
+	When    []conditionView `json:"when"`
 }
 
 type learnedView struct {
@@ -104,33 +148,34 @@ type ruleEditData struct {
 	Rule          ruleView                   `json:"rule"`
 	IsNew         bool                       `json:"is_new"`
 	Folders       map[string][]triage.Folder `json:"folders"`
-	Suggestions   []map[string]any           `json:"suggestions"`
+	Suggestions   []conditionView            `json:"suggestions"`
 	SourceMessage *sourceMessage             `json:"source_message"`
 	Errors        []string                   `json:"errors"`
 }
 
 type conditionData struct {
-	C     map[string]any `json:"c"`
-	Focus string         `json:"focus"`
+	C     conditionView `json:"c"`
+	Focus string        `json:"focus"`
 }
 
-func conditionView(c rules.Condition) map[string]any {
-	out := map[string]any{"field": c.Field, "op": c.Op}
-	if !c.HasValue {
+func conditionViewOf(c rules.Condition) conditionView {
+	out := conditionView{Field: c.Field(), Op: c.Op()}
+	value, ok := c.Value()
+	if !ok {
 		return out
 	}
-	if n, ok := c.Value.(*big.Int); ok {
-		out["value"] = n.String()
+	if n, ok := value.(*big.Int); ok {
+		out.Value = n.String()
 	} else {
-		out["value"] = c.Value
+		out.Value = value
 	}
 	return out
 }
 
-func conditionViews(cs []rules.Condition) []map[string]any {
-	out := make([]map[string]any, len(cs))
+func conditionViews(cs []rules.Condition) []conditionView {
+	out := make([]conditionView, len(cs))
 	for i, c := range cs {
-		out[i] = conditionView(c)
+		out[i] = conditionViewOf(c)
 	}
 	return out
 }
@@ -141,7 +186,7 @@ func toast(category, title, description string) *tpl.Toast {
 
 func pathInt(r *http.Request, name string) (int64, []web.FieldError) {
 	text := web.PathParam(r, name)
-	n, ok := py.LaxInt64(text)
+	n, ok := laxInt64(text)
 	if !ok {
 		return 0, []web.FieldError{web.BadInt("path", name, text)}
 	}

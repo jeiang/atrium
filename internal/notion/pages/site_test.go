@@ -19,12 +19,11 @@ import (
 	assistantpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/registry"
-	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -65,23 +64,25 @@ func newSite(t *testing.T, extra map[string]string) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pins, err := config.LoadPins(env, settings.Default)
+	reg := settings.New()
+	st := config.NewState(reg)
+	pins, err := config.LoadPins(env, reg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	settings.Default.SetPins(pins)
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	reg.SetPins(pins)
+	t.Cleanup(func() { reg.SetPins(nil) })
 	s := &site{t: t, db: d, cfg: cfg, clock: 1_780_000_000}
-	render, err := web.NewRenderer(cfg, d, tpl.Config{Modules: []fs.FS{Templates(), assistantpages.Templates()}})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates(), assistantpages.Templates()}, State: st})
 	if err != nil {
 		t.Fatal(err)
 	}
 	chat := func(_ context.Context, _, system, user string, _ any, _ int) (json.RawMessage, error) {
 		return s.chat(system, user)
 	}
-	assistant := assistantpages.Module(assistantpages.Options{Runner: &loop.Runner{Registry: registry.New()}, Registry: registry.New(), Now: s.now})
+	assistant := assistantpages.Module(assistantpages.Options{Runner: &loop.Runner{Registry: registry.New(reg), Undoers: toolset.Undoers(config.OS)}, Registry: registry.New(reg), Now: s.now})
 	s.srv, err = web.New(web.Options{
-		Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, AllowedHosts: []string{"testserver"}, Render: render,
+		Cfg: cfg, Env: env, DB: d, Settings: reg, State: st, Auth: []string{web.AuthLocal}, AllowedHosts: []string{"testserver"}, Render: render,
 		Modules: []web.Module{Module(Options{Chat: chat, Now: s.now}), assistant},
 	})
 	if err != nil {
@@ -157,7 +158,7 @@ func (s *site) addPage(id, title, markdown string, private int) {
 
 func (s *site) addVector(rid int64, vector []float64) {
 	s.t.Helper()
-	s.exec("INSERT INTO notion_vec (rowid, visibility, embedding) VALUES (?, 'public', ?)", rid, embed.Serialize(vector))
+	s.exec("INSERT INTO embed_notion_0 (rowid, visibility, embedding) VALUES (?, 'public', ?)", rid, embed.Serialize(vector))
 }
 
 func unit(index, other int, weight float64) []float64 {
@@ -227,6 +228,7 @@ func (s *site) hubOf(id string) *string { return s.projectOf(id).WikiHubID }
 
 type fakeNotion struct {
 	mu       sync.Mutex
+	srv      *httptest.Server
 	pages    map[string]map[string]any
 	titles   map[string]string
 	parents  map[string]string
@@ -238,15 +240,8 @@ func newFakeNotion(t *testing.T) *fakeNotion {
 	t.Helper()
 	f := &fakeNotion{pages: map[string]map[string]any{}, titles: map[string]string{}, parents: map[string]string{}, markdown: map[string]string{}}
 	srv := httptest.NewServer(f)
+	f.srv = srv
 	t.Cleanup(srv.Close)
-	previous := notiontools.NewClient
-	notiontools.NewClient = func(token string) *notion.Client {
-		c := notion.NewClient(token)
-		c.BaseURL = srv.URL
-		c.Sleep = func(context.Context, float64) error { return nil }
-		return c
-	}
-	t.Cleanup(func() { notiontools.NewClient = previous })
 	return f
 }
 

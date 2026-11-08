@@ -1,8 +1,11 @@
 package mail
 
 import (
+	"strings"
+
+	"golang.org/x/text/cases"
+
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var systemFlags = map[string]string{`\trash`: "trash", `\sent`: "sent", `\drafts`: "drafts", `\junk`: "junk"}
@@ -21,12 +24,12 @@ var systemNames = [...][2]string{
 }
 
 func IsSystemFlag(flag string) bool {
-	_, ok := systemFlags[py.Lower(flag)]
+	_, ok := systemFlags[strings.ToLower(flag)]
 	return ok
 }
 
 func IsSystemName(name string) bool {
-	folded := py.Casefold(name)
+	folded := cases.Fold().String(name)
 	for _, n := range systemNames {
 		if folded == n[0] {
 			return true
@@ -35,20 +38,20 @@ func IsSystemName(name string) bool {
 	return false
 }
 
-func MailboxRole(name string, flags []string, account string) string {
-	if config.Preset(account) == config.Gmail {
+func MailboxRole(name string, flags []string, preset string) string {
+	if preset == config.Gmail {
 		if name == config.GmailAllMail {
 			return "allmail"
 		}
 		return "system"
 	}
 	for _, flag := range flags {
-		if role, ok := systemFlags[py.Lower(flag)]; ok {
+		if role, ok := systemFlags[strings.ToLower(flag)]; ok {
 			return role
 		}
 	}
-	folded := py.Casefold(name)
-	if folded == py.Casefold(config.Inbox) {
+	folded := cases.Fold().String(name)
+	if folded == cases.Fold().String(config.Inbox) {
 		return "inbox"
 	}
 	if folded == "misc" {

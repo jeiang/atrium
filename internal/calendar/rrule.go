@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/teambition/rrule-go"
 )
 
@@ -24,10 +24,8 @@ type ruleError string
 
 func (e ruleError) Error() string { return string(e) }
 
-func (e ruleError) PyClass() string { return "ValueError" }
-
 func invalid(name, value string) error {
-	return ruleError(fmt.Sprintf("invalid %s: %s", py.Repr(name), value))
+	return ruleError(fmt.Sprintf("invalid %q: %s", name, value))
 }
 
 type parsedRule struct {
@@ -42,8 +40,8 @@ type parsedRule struct {
 func intList(value string) ([]int, bool) {
 	var out []int
 	for _, part := range strings.Split(value, ",") {
-		n, ok := py.ParseInt(part)
-		if !ok {
+		n, err := strconv.ParseInt(part, 10, 64)
+		if err != nil {
 			return nil, false
 		}
 		out = append(out, int(n))
@@ -70,7 +68,7 @@ func parseByDay(value string) ([]rrule.Weekday, error) {
 	var out []rrule.Weekday
 	for _, item := range strings.Split(value, ",") {
 		if item == "" {
-			return nil, ruleError("Invalid (empty) BYDAY specification.")
+			return nil, ruleError("empty BYDAY specification")
 		}
 		var w string
 		var n int
@@ -80,8 +78,8 @@ func parseByDay(value string) ([]rrule.Weekday, error) {
 			if len(rest) == 0 {
 				return nil, invalid("BYDAY", value)
 			}
-			parsed, ok := py.ParseInt(rest[:len(rest)-1])
-			if !ok {
+			parsed, err := strconv.ParseInt(rest[:len(rest)-1], 10, 64)
+			if err != nil {
 				return nil, invalid("BYDAY", value)
 			}
 			n = int(parsed)
@@ -98,8 +96,8 @@ func parseByDay(value string) ([]rrule.Weekday, error) {
 			}
 			w = item[i:]
 			if i > 0 {
-				parsed, ok := py.ParseInt(item[:i])
-				if !ok || parsed == 0 {
+				parsed, err := strconv.ParseInt(item[:i], 10, 64)
+				if err != nil || parsed == 0 {
 					return nil, invalid("BYDAY", value)
 				}
 				n = int(parsed)
@@ -134,7 +132,7 @@ func parseRule(text string) (*parsedRule, error) {
 	for _, pair := range strings.Split(value, ";") {
 		name, val, ok := strings.Cut(pair, "=")
 		if !ok || strings.Contains(val, "=") {
-			return nil, ruleError("not enough values to unpack (expected 2, got 1)")
+			return nil, ruleError("expected two values")
 		}
 		var good = true
 		switch name {
@@ -142,8 +140,8 @@ func parseRule(text string) (*parsedRule, error) {
 			rule.opt.Freq, good = frequencies[val]
 			rule.hasFreq = good
 		case "COUNT", "INTERVAL":
-			n, ok := py.ParseInt(val)
-			good = ok
+			n, err := strconv.ParseInt(val, 10, 64)
+			good = err == nil
 			if name == "COUNT" {
 				rule.opt.Count = int(n)
 				rule.empty = n <= 0
@@ -187,7 +185,7 @@ func parseRule(text string) (*parsedRule, error) {
 		}
 	}
 	if !rule.hasFreq {
-		return nil, ruleError("rrule.__init__() missing 1 required positional argument: 'freq'")
+		return nil, ruleError("recurrence rule is missing freq")
 	}
 	return rule, nil
 }
@@ -228,9 +226,9 @@ func ruleSource(r *rrule.RRule, convert func(time.Time) time.Time) *source {
 
 func mixError(dts, v Value) error {
 	if v.isDatetime() {
-		return ruleError("can't compare offset-naive and offset-aware datetimes")
+		return ruleError("cannot compare a naive and an aware datetime")
 	}
-	return ruleError("can't compare datetime.datetime to datetime.date")
+	return ruleError("cannot compare a datetime to a date")
 }
 
 func occurrences(m *icsEvent, start Value, ws, we time.Time, tz *time.Location, notes *[]string, maxOccurrences int) ([]Value, error) {

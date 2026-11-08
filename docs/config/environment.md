@@ -13,12 +13,10 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_CLEAR_AT_LEAST_SHARE` | `assistant.agent_clear_at_least_share` |
 | `ATRIUM_ASSISTANT_AGENT_CLEAR_KEEP` | `assistant.agent_clear_keep` |
 | `ATRIUM_ASSISTANT_AGENT_CLEAR_SHARE` | `assistant.agent_clear_share` |
-| `ATRIUM_ASSISTANT_AGENT_COMMIT_SAVINGS` | `assistant.agent_commit_savings` |
 | `ATRIUM_ASSISTANT_AGENT_COMPACT_SHARE` | `assistant.agent_compact_share` |
 | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_IDS` | `assistant.agent_context_max_ids` |
 | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_SOURCES` | `assistant.agent_context_max_sources` |
 | `ATRIUM_ASSISTANT_AGENT_CONTEXT_SUMMARY_CHARS` | `assistant.agent_context_summary_chars` |
-| `ATRIUM_ASSISTANT_AGENT_DASHBOARD_ITEMS` | `assistant.agent_dashboard_items` |
 | `ATRIUM_ASSISTANT_AGENT_EFFORT_CRON` | `assistant.agent_effort_cron` |
 | `ATRIUM_ASSISTANT_AGENT_EFFORT_NIGHTLY` | `assistant.agent_effort_nightly` |
 | `ATRIUM_ASSISTANT_AGENT_EFFORT_SUB` | `assistant.agent_effort_sub` |
@@ -34,7 +32,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_GRAFANA_TIMEOUT_SECONDS` | `assistant.agent_grafana_timeout_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_JOURNAL_LEASE_SECONDS` | `assistant.agent_journal_lease_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_MAIL_BODY_CHARS` | `assistant.agent_mail_body_chars` |
-| `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_CONTACTS` | `assistant.agent_mail_max_contacts` |
 | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_LOOPS_LIMIT` | `assistant.agent_mail_max_loops_limit` |
 | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_RESULTS` | `assistant.agent_mail_max_results` |
 | `ATRIUM_ASSISTANT_AGENT_MAIL_SNIPPET_CHARS` | `assistant.agent_mail_snippet_chars` |
@@ -60,11 +57,14 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_RECALL_PAGE_CHARS` | `assistant.agent_recall_page_chars` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_CALENDAR_CANDIDATES` | `assistant.agent_schedule_calendar_candidates` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_DAILY_NUDGES` | `assistant.agent_schedule_daily_nudges` |
+| `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MAX_ACTIVE_JOBS` | `assistant.agent_schedule_max_active_jobs` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_CHANNELS` | `assistant.agent_schedule_media_channels` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_SWEEP` | `assistant.agent_schedule_media_sweep` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_THUMBNAILS` | `assistant.agent_schedule_media_thumbnails` |
+| `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEMORY_WORK` | `assistant.agent_schedule_memory_work` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MIN_INTERVAL_SECONDS` | `assistant.agent_schedule_min_interval_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_NIGHTLY` | `assistant.agent_schedule_nightly` |
+| `ATRIUM_ASSISTANT_AGENT_SCHEDULE_TASK_REMINDERS` | `assistant.agent_schedule_task_reminders` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_WEEKLY_REVIEW` | `assistant.agent_schedule_weekly_review` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_LEASE_SECONDS` | `assistant.agent_scheduler_lease_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_MISSED_GRACE_SECONDS` | `assistant.agent_scheduler_missed_grace_seconds` |
@@ -109,9 +109,11 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_MAX_STEPS_CRON` | `assistant.max_steps_cron` |
 | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` | `assistant.max_steps_nightly` |
 | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` | `assistant.monthly_budget_usd` |
+| `ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS` | `assistant.nightly_stale_months` |
 | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` | `assistant.prompt_subagent` |
 | `ATRIUM_ASSISTANT_PROMPT_SUMMARY` | `assistant.prompt_summary` |
 | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` | `assistant.prompt_system` |
+| `ATRIUM_ASSISTANT_THREAD_COST_CAP_USD` | `assistant.thread_cost_cap_usd` |
 | `ATRIUM_AUTH_OIDC_ACCESS_DOMAINS` | `auth.oidc_access_domains` |
 | `ATRIUM_AUTH_OIDC_ACCESS_EMAILS` | `auth.oidc_access_emails` |
 | `ATRIUM_AUTH_OIDC_ACCESS_GROUP` | `auth.oidc_access_group` |
@@ -132,7 +134,11 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_CALENDAR_CANDIDATE_DRAFT_LIMIT` | `calendar.candidate_draft_limit` |
 | `ATRIUM_CALENDAR_CANDIDATE_SCAN_LIMIT` | `calendar.candidate_scan_limit` |
 | `ATRIUM_CALENDAR_DEFAULT_EVENT_MINUTES` | `calendar.default_event_minutes` |
+| `ATRIUM_CALENDAR_GOOGLE_CALENDAR_REFRESH_TOKEN` | `calendar.google_calendar_refresh_token` |
+| `GOOGLE_REFRESH_TOKEN` | `calendar.google_calendar_refresh_token` |
 | `ATRIUM_CALENDAR_GOOGLE_CLIENT_ID` | `calendar.google_client_id` |
+| `ATRIUM_CALENDAR_GOOGLE_OAUTH_CLIENT_SECRET` | `calendar.google_oauth_client_secret` |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | `calendar.google_oauth_client_secret` |
 | `ATRIUM_CALENDAR_ICLOUD_APPLE_ID` | `calendar.icloud_apple_id` |
 | `ATRIUM_CALENDAR_ICLOUD_CALENDAR` | `calendar.icloud_calendar` |
 | `ATRIUM_CALENDAR_MAX_EVENTS` | `calendar.max_events` |
@@ -140,6 +146,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_CALENDAR_WORK_DAYS` | `calendar.work_days` |
 | `ATRIUM_CALENDAR_WORK_HOURS` | `calendar.work_hours` |
 | `ATRIUM_CONTACTS_CONTACTS_DIR` | `contacts.contacts_dir` |
+| `ATRIUM_CONTACTS_CONTACTS_MAX_RESULTS` | `contacts.contacts_max_results` |
 | `ATRIUM_CORE_ASSISTANT_ENABLED` | `core.assistant_enabled` |
 | `ATRIUM_CORE_CALENDAR_ENABLED` | `core.calendar_enabled` |
 | `ATRIUM_CORE_CONTACTS_ENABLED` | `core.contacts_enabled` |
@@ -176,6 +183,8 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MAIL_GMAIL_LABELS_MAX_MESSAGES` | `mail.gmail_labels_max_messages` |
 | `ATRIUM_MAIL_GMAIL_LABELS_MIN_OVERLAP` | `mail.gmail_labels_min_overlap` |
 | `ATRIUM_MAIL_GMAIL_LABELS_MIN_TARGET_MESSAGES` | `mail.gmail_labels_min_target_messages` |
+| `ATRIUM_MAIL_GOOGLE_GMAIL_REFRESH_TOKEN` | `mail.google_gmail_refresh_token` |
+| `GOOGLE_GMAIL_REFRESH_TOKEN` | `mail.google_gmail_refresh_token` |
 | `ATRIUM_MAIL_KNN_K` | `mail.knn_k` |
 | `ATRIUM_MAIL_KNN_MAX` | `mail.knn_max` |
 | `ATRIUM_MAIL_KNN_MIN_SHARE` | `mail.knn_min_share` |
@@ -212,7 +221,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_CHARS` | `mail.mail_search_snippet_chars` |
 | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_TOKENS` | `mail.mail_search_snippet_tokens` |
 | `ATRIUM_MAIL_MAILOPS_BATCH` | `mail.mailops_batch` |
-| `ATRIUM_MAIL_OPENLOOPS_BACKFILL_LIMIT` | `mail.openloops_backfill_limit` |
 | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_SCAN_LIMIT` | `mail.openloops_commitment_scan_limit` |
 | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_WINDOW_DAYS` | `mail.openloops_commitment_window_days` |
 | `ATRIUM_MAIL_OPENLOOPS_COMMITMENTS_PER_MESSAGE` | `mail.openloops_commitments_per_message` |
@@ -275,9 +283,11 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_PASS_LIMIT` | `media.media_thumbnail_pass_limit` |
 | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_POSITION` | `media.media_thumbnail_position` |
 | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_WIDTH` | `media.media_thumbnail_width` |
+| `ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL` | `media.media_tmdb_images_url` |
 | `ATRIUM_MEDIA_MEDIA_TMDB_SEARCH_LIMIT` | `media.media_tmdb_search_limit` |
 | `ATRIUM_MEDIA_MEDIA_TMDB_TIMEOUT_SECONDS` | `media.media_tmdb_timeout_seconds` |
 | `ATRIUM_MEDIA_MEDIA_TMDB_TOKEN` | `media.media_tmdb_token` |
+| `ATRIUM_MEDIA_MEDIA_TMDB_URL` | `media.media_tmdb_url` |
 | `ATRIUM_MEDIA_MEDIA_TORRENT_UPLOAD_BYTES` | `media.media_torrent_upload_bytes` |
 | `ATRIUM_MEDIA_MEDIA_TV_URL` | `media.media_tv_url` |
 | `ATRIUM_MEDIA_MEDIA_VIDEO_EXTENSIONS` | `media.media_video_extensions` |
@@ -285,6 +295,14 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MEDIA_QBITTORRENT_PROXY` | `media.qbittorrent_proxy` |
 | `ATRIUM_MEDIA_TMDB_CA_FILE` | `media.tmdb_ca_file` |
 | `ATRIUM_MEDIA_TMDB_PROXY` | `media.tmdb_proxy` |
+| `ATRIUM_MEMORY_BACKFILL_DONE` | `memory.backfill_done` |
+| `ATRIUM_MEMORY_CONCURRENCY` | `memory.concurrency` |
+| `ATRIUM_MEMORY_EFFORT` | `memory.effort` |
+| `ATRIUM_MEMORY_MODEL` | `memory.model` |
+| `ATRIUM_MEMORY_NODE_BYTES` | `memory.node_bytes` |
+| `ATRIUM_MEMORY_TAIL_MESSAGES` | `memory.tail_messages` |
+| `ATRIUM_MEMORY_VIEW_HIGH` | `memory.view_high` |
+| `ATRIUM_MEMORY_VIEW_LOW` | `memory.view_low` |
 | `ATRIUM_NOTIFY_NOTIFY_BODY_CHARS` | `notify.notify_body_chars` |
 | `ATRIUM_NOTIFY_NOTIFY_NIGHTLY_CAP` | `notify.notify_nightly_cap` |
 | `ATRIUM_NOTIFY_NOTIFY_PER_RUN_CAP` | `notify.notify_per_run_cap` |
@@ -335,3 +353,4 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_WEB_PROJECT_THREAD_LIMIT` | `web.project_thread_limit` |
 | `ATRIUM_WEB_RUN_HISTORY` | `web.run_history` |
 | `ATRIUM_WEB_SNOOZE_CHOICES` | `web.snooze_choices` |
+| `ATRIUM_WEB_SEARCH_DYNAMIC_FILTERING` | `web_search.dynamic_filtering` |

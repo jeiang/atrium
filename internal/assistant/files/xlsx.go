@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 )
 
 const (
@@ -81,7 +81,7 @@ func subtree(dec *xml.Decoder, start xml.StartElement, parent *element) (*elemen
 	for {
 		tok, err := dec.Token()
 		if err != nil {
-			return nil, parseFailure(err)
+			return nil, errParse
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
@@ -207,7 +207,7 @@ func sheetsOf(a *archive, types *element) ([]sheetRef, []string, bool, error) {
 		for _, s := range list.kids(nsSheet, "sheet") {
 			title, ok := s.attr("", "name")
 			if !ok {
-				return nil, nil, false, readError("TypeError")
+				return nil, nil, false, errValue
 			}
 			id, _ := s.attr(nsOfficeRels, "id")
 			if id == "" {
@@ -238,7 +238,7 @@ func sheetsOf(a *archive, types *element) ([]sheetRef, []string, bool, error) {
 			}
 			if strings.Contains(found.kind, "chartsheet") {
 				if !a.has(relsPath(target)) {
-					return nil, nil, false, readError("AttributeError")
+					return nil, nil, false, errValue
 				}
 				continue
 			}
@@ -272,7 +272,7 @@ func readStyles(a *archive) (styleFormats, error) {
 			}
 			code, ok := f.attr("", "formatCode")
 			if !ok {
-				return formats, readError("TypeError")
+				return formats, errValue
 			}
 			custom[id] = code
 		}
@@ -341,7 +341,7 @@ func xlsxText(data []byte, maxText int) (string, error) {
 		}
 		out.WriteString("\n")
 	}
-	return py.Strip(out.String()), nil
+	return strings.TrimSpace(out.String()), nil
 }
 
 func writeCSVRow(out *strings.Builder, fields []string, maxText int) error {
@@ -423,7 +423,7 @@ func (p *sheetParser) run(r io.Reader) error {
 func (p *sheetParser) setDimension(e *element) error {
 	ref, ok := e.attr("", "ref")
 	if !ok {
-		return readError("TypeError")
+		return errValue
 	}
 	_, _, col, row, err := rangeBoundaries(ref)
 	if err != nil {
@@ -507,10 +507,10 @@ func (p *sheetParser) row(e *element) error {
 var errStop = errors.New("stop")
 
 func rowNumber(raw string) (int, error) {
-	if n, err := strconv.Atoi(py.Strip(raw)); err == nil {
+	if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {
 		return n, nil
 	}
-	f, err := strconv.ParseFloat(py.Strip(raw), 64)
+	f, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
 	if err != nil || f != math.Trunc(f) || math.Abs(f) > 1<<40 {
 		return 0, errValue
 	}
@@ -646,7 +646,7 @@ func (p *sheetParser) cell(e *element) (cell, error) {
 	if s, ok := e.attr("", "s"); ok {
 		style = none
 		if s != "" {
-			n, err := strconv.Atoi(py.Strip(s))
+			n, err := strconv.Atoi(strings.TrimSpace(s))
 			if err != nil {
 				return cell{}, errValue
 			}
@@ -706,7 +706,7 @@ func (p *sheetParser) convert(kind, value string, style int) (string, error) {
 		}
 		return number.String(), nil
 	case "s":
-		n, err := strconv.Atoi(py.Strip(value))
+		n, err := strconv.Atoi(strings.TrimSpace(value))
 		if err != nil {
 			return "", errValue
 		}
@@ -718,7 +718,7 @@ func (p *sheetParser) convert(kind, value string, style int) (string, error) {
 		}
 		return p.shared[n], nil
 	case "b":
-		n, err := strconv.Atoi(py.Strip(value))
+		n, err := strconv.Atoi(strings.TrimSpace(value))
 		if err != nil {
 			return "", errValue
 		}
@@ -742,7 +742,7 @@ func (n number) String() string {
 	if n.isInt {
 		return n.i.String()
 	}
-	return py.FloatRepr(n.f)
+	return numx.FloatRepr(n.f)
 }
 
 func (n number) float() float64 {
@@ -756,7 +756,7 @@ func (n number) float() float64 {
 const pyIntDigits = 4300
 
 func castNumber(value string) (number, error) {
-	s := py.Strip(value)
+	s := strings.TrimSpace(value)
 	if strings.ContainsAny(value, ".Ee") {
 		f, err := strconv.ParseFloat(s, 64)
 		if err != nil && !errors.Is(err, strconv.ErrRange) {

@@ -14,13 +14,13 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 )
 
-func liveSite(t *testing.T, w *livetest.World, open func(context.Context, string) (mail.Client, error)) *site {
+func liveSite(t *testing.T, w *livetest.World, open mail.OpenFunc) *site {
 	t.Helper()
 	env := config.Map(map[string]string{"ATRIUM_MODE": "live", "ATRIUM_DB": w.Cfg.DBPath, "ATRIUM_CACHE_DIR": w.Cfg.CacheDir})
 	if open == nil {
 		open = w.Open
 	}
-	s := &site{t: t, db: w.DB, cfg: w.Cfg, env: env, srv: newServer(t, w.Cfg, env, w.DB, Options{Open: open, Now: func() float64 { return w.Clock }})}
+	s := &site{t: t, db: w.DB, cfg: w.Cfg, env: env, settings: w.Settings, state: w.State, srv: newServer(t, w.Cfg, env, w.DB, w.Settings, w.State, Options{Open: open, Now: func() float64 { return w.Clock }})}
 	s.handshake()
 	return s
 }
@@ -38,7 +38,7 @@ func liveWorld(t *testing.T) *livetest.World {
 
 func TestTriageShowsStatusUndoAndHeaderControls(t *testing.T) {
 	w := liveWorld(t)
-	if _, err := applier.New(w.Live, w.Open, w.Syncer).ApplyAccount(context.Background(), "icloud"); err != nil {
+	if _, err := applier.New(w.Live, w.Open, w.Syncer).ApplyAccount(w.Context(), "icloud"); err != nil {
 		t.Fatal(err)
 	}
 	var action = -1
@@ -79,7 +79,7 @@ func TestUICorrectionMovesTheMessageInLiveModeAndDefersWhenPaused(t *testing.T) 
 	}
 	moved := status(t, s.post(path, url.Values{"dest": {"Bills"}, "context": {"row"}}, hx), 200, "moved")
 	contains(t, moved, "The message was moved.")
-	if got := w.Fake.Boxes["Bills"].UIDs(); !slices.Equal(got, []uint32{1}) {
+	if got := w.Fake.Boxes["Bills"].Box.UIDs(); !slices.Equal(got, []uint32{1}) {
 		t.Errorf("Bills = %v", got)
 	}
 }
@@ -94,10 +94,12 @@ func TestUICorrectionFromTheCardShowsTheMoveInline(t *testing.T) {
 
 func TestUICorrectionWhenTheMailboxIsDownStillRecords(t *testing.T) {
 	w := liveWorld(t)
-	s := liveSite(t, w, func(context.Context, string) (mail.Client, error) { return nil, errors.New("imap unreachable") })
+	s := liveSite(t, w, func(context.Context, mail.OpenOptions) (mail.Client, error) {
+		return nil, errors.New("imap unreachable")
+	})
 	id := w.MID("fix-me")
 	body := status(t, s.post("/messages/"+s.id(id)+"/correct", url.Values{"dest": {"Bills"}, "context": {"row"}}, hx), 200, "down")
-	contains(t, body, "Correction recorded", "It could not be moved yet: RuntimeError.")
+	contains(t, body, "Correction recorded", "It could not be moved yet: imap unreachable.")
 	if got := s.column("SELECT folder FROM corrections WHERE message_id = ?", id); len(got) != 1 || got[0] != "Bills" {
 		t.Errorf("corrections = %v", got)
 	}
@@ -110,12 +112,12 @@ func TestPageFrameFollowsTheMailModePin(t *testing.T) {
 	contains(t, live, "Live", "/live/pause")
 	lacks(t, live, "Shadow")
 
-	mailtest.PinMode(t, "shadow")
+	mailtest.PinMode(t, s.settings, "shadow")
 	shadow := status(t, s.get("/triage?account=icloud"), 200, "shadow")
 	contains(t, shadow, "Shadow")
 	lacks(t, shadow, "/live/pause", "/live/resume")
 
-	mailtest.PinMode(t, "live")
+	mailtest.PinMode(t, s.settings, "live")
 	again := status(t, s.get("/triage?account=icloud"), 200, "live again")
 	contains(t, again, "/live/pause")
 }

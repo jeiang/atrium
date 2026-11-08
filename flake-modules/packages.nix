@@ -3,8 +3,13 @@
   lib,
   ...
 }: {
-  perSystem = {pkgs, ...}: {
+  perSystem = {
+    pkgs,
+    go,
+    ...
+  }: {
     packages = {
+      inherit go;
       atrium-static = pkgs.callPackage ../nix/static.nix {};
       atrium-docs = pkgs.callPackage ../nix/docs.nix {};
     };

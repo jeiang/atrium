@@ -10,9 +10,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/settings"
+
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
@@ -41,13 +41,14 @@ func accountsFile(t *testing.T, dir string, accounts ...mailAccount) string {
 }
 
 func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	srv := llmstub.Server(t, nil)
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	t.Setenv("ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "shadow")
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
+	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
+	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "shadow")
 
 	home := mailtest.NewFakeClient()
 	inbox := home.AddBox("INBOX", mailtest.NewBox(7))
@@ -63,19 +64,19 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	var mu sync.Mutex
 	opened := map[string]int{}
 	clients := func(config.Config) mail.OpenFunc {
-		return func(_ context.Context, account string) (mail.Client, error) {
+		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
 			mu.Lock()
 			defer mu.Unlock()
-			opened[account]++
-			if f, ok := fakes[account]; ok {
-				return f, nil
+			opened[opts.Account]++
+			if f, ok := fakes[opts.Account]; ok {
+				return mail.Gated(f, opts.Q), nil
 			}
-			return nil, fmt.Errorf("unexpected account %q", account)
+			return nil, fmt.Errorf("unexpected account %q", opts.Account)
 		}
 	}
 	run := func(args ...string) appRun {
-		app := cli.New("atrium", logx.Setup)
-		app.Add(commands(clients, nil)...)
+		reg := settings.New()
+		app := newAppWith(testLookupFor(t), reg, config.NewState(reg), nil, clients, nil, quietLog)
 		var out, errs bytes.Buffer
 		code := app.Run(context.Background(), args, &out, &errs)
 		return appRun{code, out.String(), errs.String()}
@@ -85,7 +86,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 		mailAccount{"home", "icloud", "me@icloud.test", "home pass", false},
 		mailAccount{"work", "gmail", "me@work.test", "work-pass", false},
 		mailAccount{"off", "gmail", "off@gmail.test", "off-pass", true})
-	t.Setenv(key, path)
+	setEnv(t, key, path)
 
 	counts := func() map[string]int {
 		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -124,7 +125,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 		}
 	}
 
-	t.Setenv(key, accountsFile(t, t.TempDir(), mailAccount{"home", "icloud", "me@icloud.test", "home pass", false}))
+	setEnv(t, key, accountsFile(t, t.TempDir(), mailAccount{"home", "icloud", "me@icloud.test", "home pass", false}))
 	opened = map[string]int{}
 	if got := run("sync"); got.code != 0 || opened["work"] != 0 {
 		t.Fatalf("sync after removing work: %+v, opened %v", got, opened)
@@ -137,7 +138,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	if err := os.WriteFile(bad, []byte("[[account]]\nid = \"x\"\npreset = \"yahoo\"\nlogin = \"a\"\npassword_file = \""+filepath.Join(dir, "home.password")+"\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(key, bad)
+	setEnv(t, key, bad)
 	if got := run("sync"); got.code == 0 || !strings.Contains(got.stderr, "preset must be icloud or gmail") {
 		t.Errorf("an unknown preset: %+v", got)
 	}

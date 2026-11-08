@@ -195,7 +195,7 @@
     ]
   },
   "result": {
-    "error": "AttributeError: 'list' object has no attribute 'get'"
+    "error": "selection is not an object"
   },
   "fingerprint": "rebalance_split:icloud:Receipts::domain:ce3ee3def4f604a2",
   "payload": {

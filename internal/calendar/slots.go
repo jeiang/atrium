@@ -23,12 +23,11 @@ var workWeekdays = map[string]time.Weekday{
 }
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
 	settings.MustRegister(
-		settings.Def{Key: WorkHoursKey, Module: "calendar", Type: settings.String, Default: "09:00-17:00",
-			Check: func(v string) error { _, _, err := parseHours(v); return err }, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: WorkDaysKey, Module: "calendar", Type: settings.String, Default: "mon,tue,wed,thu,fri",
-			Check: func(v string) error { _, err := parseDays(v); return err }, Class: settings.UI, Scopes: instance},
+		settings.Value(settings.UI, settings.Def{Key: WorkHoursKey, Module: "calendar", Type: settings.String, Default: "09:00-17:00",
+			Check: func(v string) error { _, _, err := parseHours(v); return err }}),
+		settings.Value(settings.UI, settings.Def{Key: WorkDaysKey, Module: "calendar", Type: settings.String, Default: "mon,tue,wed,thu,fri",
+			Check: func(v string) error { _, err := parseDays(v); return err }}),
 	)
 }
 
@@ -111,12 +110,12 @@ type Slots struct {
 	Notes   []string
 }
 
-func FindSlots(ctx context.Context, q db.Querier, env config.Env, set Settings, start, end any, need time.Duration, target string) (Slots, error) {
-	tz, err := Zone(env)
+func FindSlots(ctx context.Context, q db.Querier, env config.Env, set Settings, start, end any, need time.Duration, filter Filter) (Slots, error) {
+	tz, err := Zone(ctx, env)
 	if err != nil {
 		return Slots{}, err
 	}
-	hours, err := settings.Default.Resolve(ctx, q, WorkHoursKey, 0)
+	hours, err := settings.From(ctx).Resolve(ctx, q, WorkHoursKey)
 	if err != nil {
 		return Slots{}, err
 	}
@@ -124,7 +123,7 @@ func FindSlots(ctx context.Context, q db.Querier, env config.Env, set Settings, 
 	if err != nil {
 		return Slots{}, err
 	}
-	daysSetting, err := settings.Default.Resolve(ctx, q, WorkDaysKey, 0)
+	daysSetting, err := settings.From(ctx).Resolve(ctx, q, WorkDaysKey)
 	if err != nil {
 		return Slots{}, err
 	}
@@ -140,24 +139,16 @@ func FindSlots(ctx context.Context, q db.Querier, env config.Env, set Settings, 
 	if err != nil {
 		return Slots{}, err
 	}
-	listing, err := ListEvents(ctx, env, set, start, end, target)
+	listing, err := ListEvents(ctx, env, set, start, end, filter)
 	if err != nil {
 		return Slots{}, err
 	}
 	var busy []Window
 	for _, row := range listing.Events {
-		s, err := ParseWhen(row.Start, tz, false)
-		if err != nil {
-			return Slots{}, err
-		}
-		if !strings.Contains(row.Start, "T") {
+		if row.Start.isDate() {
 			continue
 		}
-		e, err := ParseWhen(row.End, tz, false)
-		if err != nil {
-			return Slots{}, err
-		}
-		busy = append(busy, Window{asDT(s, tz), asDT(e, tz)})
+		busy = append(busy, Window{asDT(row.Start, tz).In(tz), asDT(row.End, tz).In(tz)})
 	}
 	notes := listing.Notes
 	if listing.Truncated {

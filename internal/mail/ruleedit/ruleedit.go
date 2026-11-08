@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail/rules"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -39,12 +38,10 @@ var featureFields = []featureField{
 
 var listFeatures = []featureField{{"dkim_d", "in"}, {"esp", "in"}}
 
-func ruleErrorf(msg string) error { return rules.RuleError(msg) }
+func ruleErrorf(msg string) error { return rules.RuleError{Code: "rule", Msg: msg} }
 
 func withID(raw any, id string) (any, bool) {
 	switch raw := raw.(type) {
-	case py.Dict:
-		return raw.Set("id", id), true
 	case map[string]any:
 		out := make(map[string]any, len(raw)+1)
 		for k, v := range raw {
@@ -58,27 +55,24 @@ func withID(raw any, id string) (any, bool) {
 
 func get(raw any, key string) any {
 	switch raw := raw.(type) {
-	case py.Dict:
-		v, _ := raw.Get(key)
-		return v
 	case map[string]any:
 		return raw[key]
 	}
 	return nil
 }
 
-func checked(raw any, id string) (rules.Rule, error) {
+func checked(ctx context.Context, raw any, id string) (rules.Rule, error) {
 	doc, ok := withID(raw, id)
 	if !ok {
-		return rules.Rule{}, fmt.Errorf("%w: 'raw' object is not a mapping", httpx.ErrType)
+		return rules.Rule{}, fmt.Errorf("%w: 'raw' object is not a mapping", httpx.ErrShape)
 	}
 	rule, err := rules.ValidateRule(doc)
 	if err != nil {
 		return rules.Rule{}, err
 	}
 	if rule.Account != nil {
-		if _, known := config.Account(*rule.Account); !known {
-			return rules.Rule{}, ruleErrorf("unknown account " + py.Repr(*rule.Account))
+		if _, known := config.From(ctx).Account(*rule.Account); !known {
+			return rules.Rule{}, ruleErrorf("unknown account " + strconv.Quote(*rule.Account))
 		}
 	}
 	return rule, nil
@@ -92,7 +86,7 @@ func store(r rules.Rule) []any {
 	if r.Dest != nil {
 		dest = *r.Dest
 	}
-	return []any{account, r.Action, dest, rules.ConditionsJSON(r.Conditions)}
+	return []any{account, string(r.Action), dest, rules.ConditionsJSON(r.Conditions)}
 }
 
 type RuleDict struct {
@@ -104,7 +98,7 @@ type RuleDict struct {
 }
 
 func ruleDict(r rules.Rule) RuleDict {
-	return RuleDict{r.ID, r.Account, r.Action, r.Dest, slices.Clone(r.Conditions)}
+	return RuleDict{r.ID, r.Account, string(r.Action), r.Dest, slices.Clone(r.Conditions)}
 }
 
 func ListRules(ctx context.Context, q rules.Querier, account *string) ([]RuleDict, error) {
@@ -127,14 +121,14 @@ func ListRules(ctx context.Context, q rules.Querier, account *string) ([]RuleDic
 
 func CreateRule(ctx context.Context, d *db.DB, raw any) (rules.Rule, error) {
 	id := "r-" + randomHex()
-	if py.Truthy(get(raw, "id")) {
-		s, ok := get(raw, "id").(string)
+	if v := get(raw, "id"); v != nil && v != "" {
+		s, ok := v.(string)
 		if !ok {
 			return rules.Rule{}, ruleErrorf("rule needs a string id")
 		}
 		id = s
 	}
-	rule, err := checked(raw, id)
+	rule, err := checked(ctx, raw, id)
 	if err != nil {
 		return rules.Rule{}, err
 	}
@@ -142,7 +136,7 @@ func CreateRule(ctx context.Context, d *db.DB, raw any) (rules.Rule, error) {
 		var one int
 		switch err := tx.QueryRowContext(ctx, "SELECT 1 FROM rules WHERE id = ?", rule.ID).Scan(&one); {
 		case err == nil:
-			return ruleErrorf("rule " + py.Repr(rule.ID) + " already exists")
+			return ruleErrorf("rule " + strconv.Quote(rule.ID) + " already exists")
 		case !errors.Is(err, sql.ErrNoRows):
 			return err
 		}
@@ -165,7 +159,7 @@ func randomHex() string {
 }
 
 func UpdateRule(ctx context.Context, d *db.DB, id string, raw any) (rules.Rule, error) {
-	rule, err := checked(raw, id)
+	rule, err := checked(ctx, raw, id)
 	if err != nil {
 		return rules.Rule{}, err
 	}
@@ -175,7 +169,7 @@ func UpdateRule(ctx context.Context, d *db.DB, id string, raw any) (rules.Rule, 
 		return rules.Rule{}, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return rules.Rule{}, ruleErrorf("unknown rule " + py.Repr(id))
+		return rules.Rule{}, ruleErrorf("unknown rule " + strconv.Quote(id))
 	}
 	return rule, nil
 }
@@ -248,14 +242,14 @@ type Preview struct {
 
 func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int, now float64) (Preview, error) {
 	id := PreviewID
-	if py.Truthy(get(raw, "id")) {
-		s, ok := get(raw, "id").(string)
+	if v := get(raw, "id"); v != nil && v != "" {
+		s, ok := v.(string)
 		if !ok {
 			return Preview{}, ruleErrorf("rule needs a string id")
 		}
 		id = s
 	}
-	rule, err := checked(raw, id)
+	rule, err := checked(ctx, raw, id)
 	if err != nil {
 		return Preview{}, err
 	}
@@ -265,19 +259,37 @@ func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int, now f
 		query += " AND account = ?"
 		args = append(args, *rule.Account)
 	}
+	for _, c := range rule.Conditions {
+		if c.Field() != rules.AgeField {
+			continue
+		}
+		value, _ := c.Value()
+		var days float64
+		switch v := value.(type) {
+		case int64:
+			days = float64(v)
+		case float64:
+			days = v
+		}
+		if days > 0 {
+			query += " AND date_ts != 0 AND (? - date_ts) / 86400.0 >= ?"
+			args = append(args, now, days)
+		}
+	}
 	query += " ORDER BY date_ts DESC, id DESC"
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Preview{}, err
 	}
-	all, err := db.Collect(rows, func(r *sql.Rows) (rules.Message, error) { return rules.ScanMessage(r) })
-	if err != nil {
-		return Preview{}, err
-	}
-	out := Preview{Total: len(all), Sample: []PreviewSample{}}
-	for i := range all {
-		m := &all[i]
-		ok, err := rule.Matches(m, now)
+	defer func() { _ = rows.Close() }()
+	out := Preview{Sample: []PreviewSample{}}
+	for rows.Next() {
+		m, err := rules.ScanMessage(rows)
+		if err != nil {
+			return Preview{}, err
+		}
+		out.Total++
+		ok, err := rule.Matches(&m, now)
 		if err != nil {
 			return Preview{}, err
 		}
@@ -296,7 +308,7 @@ func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int, now f
 			out.Sample = append(out.Sample, PreviewSample{m.ID, m.Account, m.Subject, m.FromAddr, m.FromName, folder, m.DateTS})
 		}
 	}
-	return out, nil
+	return out, rows.Err()
 }
 
 type Features struct {
@@ -318,7 +330,11 @@ func MessageFeatures(ctx context.Context, q rules.Querier, messageID int64) (Fea
 	found := []rules.Condition{}
 	for _, f := range featureFields {
 		if v := scalarOf(&m, f.field); v != "" {
-			found = append(found, rules.Condition{Field: f.field, Op: f.op, Value: v, HasValue: true})
+			cond, err := rules.NewCondition(f.field, f.op, v)
+			if err != nil {
+				return Features{}, err
+			}
+			found = append(found, cond)
 		}
 	}
 	for _, f := range listFeatures {
@@ -327,7 +343,11 @@ func MessageFeatures(ctx context.Context, q rules.Querier, messageID int64) (Fea
 			return Features{}, err
 		}
 		if len(values) > 0 {
-			found = append(found, rules.Condition{Field: f.field, Op: f.op, Value: values, HasValue: true})
+			cond, err := rules.NewCondition(f.field, f.op, values)
+			if err != nil {
+				return Features{}, err
+			}
+			found = append(found, cond)
 		}
 	}
 	var dest sql.NullString
@@ -341,7 +361,7 @@ func MessageFeatures(ctx context.Context, q rules.Querier, messageID int64) (Fea
 		out.Dest = &dest.String
 	}
 	for _, c := range found {
-		if c.Field == "from_addr" {
+		if c.Field() == "from_addr" {
 			out.Default = append(out.Default, c)
 			break
 		}
@@ -362,65 +382,19 @@ type LearnedRule struct {
 	N      int     `json:"n"`
 }
 
-const DefaultLearnedLimit = 50
-
 func LearnedRulesSummary(ctx context.Context, q rules.Querier, account string, limit int) ([]LearnedRule, error) {
 	thresholds, err := rules.ReadThresholds(ctx, q)
 	if err != nil {
 		return nil, err
 	}
+	groups, err := rules.LearnedGroups(ctx, q, account)
+	if err != nil {
+		return nil, err
+	}
 	found := []LearnedRule{}
-	for _, level := range rules.LearnedLevels {
-		nonblank := make([]string, len(level.Columns))
-		for i, c := range level.Columns {
-			nonblank[i] = c + " != ''"
-		}
-		selectCols := strings.Join(level.Columns, ", ")
-		rows, err := q.QueryContext(ctx,
-			"SELECT "+selectCols+", folder, COUNT(*) AS n FROM filed_messages WHERE account = ? AND "+
-				strings.Join(nonblank, " AND ")+" GROUP BY "+selectCols+", folder", account)
-		if err != nil {
-			return nil, err
-		}
-		type group struct {
-			key    string
-			counts map[string]int
-		}
-		var order [][2]string
-		groups := map[[2]string]*group{}
-		err = func() error {
-			defer func() { _ = rows.Close() }()
-			for rows.Next() {
-				parts := make([]string, len(level.Columns))
-				var folder string
-				var n int
-				dest := make([]any, 0, len(parts)+2)
-				for i := range parts {
-					dest = append(dest, &parts[i])
-				}
-				if err := rows.Scan(append(dest, &folder, &n)...); err != nil {
-					return err
-				}
-				var tuple [2]string
-				copy(tuple[:], parts)
-				g := groups[tuple]
-				if g == nil {
-					g = &group{strings.Join(parts, " | "), map[string]int{}}
-					groups[tuple] = g
-					order = append(order, tuple)
-				}
-				g.counts[folder] = n
-			}
-			return rows.Err()
-		}()
-		if err != nil {
-			return nil, err
-		}
-		for _, k := range order {
-			g := groups[k]
-			if p, ok := rules.PickPure(g.counts, thresholds); ok {
-				found = append(found, LearnedRule{level.Name, g.key, p.Folder, p.Purity, p.Total})
-			}
+	for _, g := range groups {
+		if p, ok := rules.PickPure(g.Counts, thresholds); ok {
+			found = append(found, LearnedRule{g.Level, g.Key, p.Folder, p.Purity, p.Total})
 		}
 	}
 	slices.SortStableFunc(found, func(a, b LearnedRule) int {

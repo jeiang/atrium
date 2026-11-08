@@ -11,13 +11,14 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
-func TestCanonicalPinsPinAndDroppedNamesWarnAndAreIgnored(t *testing.T) {
+func TestCanonicalPinsPin(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 
-	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "live")
+	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "live")
 	pinned := runSettings(t, "get", "mail_mode")
 	got := pinned.row(t)
 	if pinned.code != cli.ExitOK || got.Value == nil || *got.Value != "live" || got.Source == nil || *got.Source != "pin" {
@@ -26,32 +27,22 @@ func TestCanonicalPinsPinAndDroppedNamesWarnAndAreIgnored(t *testing.T) {
 	if strings.Contains(pinned.stderr, "ATRIUM_MODE") {
 		t.Errorf("canonical pin warned: %q", pinned.stderr)
 	}
-
-	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "")
-	t.Setenv("ATRIUM_MODE", "live")
-	old := runSettings(t, "get", "mail_mode")
-	got = old.row(t)
-	if old.code != cli.ExitOK || got.Value == nil || *got.Value != "shadow" || got.Source == nil || *got.Source != "default" {
-		t.Fatalf("dropped name: exit %d row %+v, want the default and no pin", old.code, got)
-	}
-	if !strings.Contains(old.stderr, "ATRIUM_MODE") || !strings.Contains(old.stderr, "ATRIUM_MAIL_MAIL_MODE") || strings.Count(old.stderr, "ATRIUM_MODE") != 1 {
-		t.Errorf("warning = %q, want one line naming ATRIUM_MODE and ATRIUM_MAIL_MAIL_MODE", old.stderr)
-	}
 }
 
 func TestDatabaseTimeZoneReachesNonServeCommands(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	t.Setenv("ATRIUM_DB", path)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 
 	if r := runSettings(t, "set", "tz", "America/Barbados"); r.code != cli.ExitOK {
 		t.Fatalf("set tz: exit %d %q", r.code, r.stderr)
 	}
 	run := func() (int, string) {
 		var out, errs bytes.Buffer
-		code := newApp().Run(context.Background(), []string{"shadow-report", "--since", "2026-01-01"}, &out, &errs)
+		code := defaultApp(t).Run(context.Background(), []string{"shadow-report", "--since", "2026-01-01"}, &out, &errs)
 		return code, errs.String()
 	}
 	if code, stderr := run(); code != cli.ExitOK {

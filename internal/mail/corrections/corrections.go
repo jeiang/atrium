@@ -5,12 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/mail/message"
 )
 
 const (
@@ -32,10 +33,7 @@ type Correction struct {
 	Source    string  `json:"source"`
 }
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type Querier = db.Querier
 
 func Get(ctx context.Context, q Querier, messageID int64) (*Correction, error) {
 	var c Correction
@@ -51,9 +49,9 @@ func Get(ctx context.Context, q Querier, messageID int64) (*Correction, error) {
 }
 
 func Record(ctx context.Context, d *db.DB, messageID int64, folder, source string, ts float64) (Correction, error) {
-	folder = py.Strip(folder)
+	folder = strings.TrimSpace(folder)
 	if folder == "" || utf8.RuneCountInString(folder) > MaxFolderChars || strings.Contains(folder, "|") || folder == config.Inbox {
-		return Correction{}, errorf("invalid destination %s", py.Repr(folder))
+		return Correction{}, errorf("invalid destination %s", strconv.Quote(folder))
 	}
 	var out Correction
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
@@ -74,10 +72,11 @@ func Record(ctx context.Context, d *db.DB, messageID int64, folder, source strin
 			messageID, account, folder, ts, source); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO decisions (message_id, account, ts, stage, key, action, dest, confidence, detail) "+
-				"VALUES (?, ?, ?, 'correction', ?, 'file', ?, 1.0, ?)",
-			messageID, account, ts, source, folder, "{}"); err != nil {
+		confidence := 1.0
+		if err := message.RecordDecision(ctx, tx, message.DecisionRecord{
+			MessageID: messageID, Account: account, TS: ts, Stage: "correction", Key: &source, Action: "file", Dest: &folder,
+			Confidence: &confidence, Detail: map[string]any{},
+		}); err != nil {
 			return err
 		}
 		out = Correction{messageID, account, folder, ts, source}
@@ -103,28 +102,3 @@ func Clear(ctx context.Context, x Execer, messageID int64, folder *string) (bool
 	n, err := res.RowsAffected()
 	return n > 0, err
 }
-
-func List(ctx context.Context, q Querier, account string, limit int) ([]Correction, error) {
-	query, args := "SELECT message_id, account, folder, ts, source FROM corrections", []any{}
-	if account != "" {
-		query += " WHERE account = ?"
-		args = append(args, account)
-	}
-	query += " ORDER BY ts DESC LIMIT ?"
-	args = append(args, limit)
-	rows, err := q.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	out, err := db.Collect(rows, func(r *sql.Rows) (Correction, error) {
-		var c Correction
-		err := r.Scan(&c.MessageID, &c.Account, &c.Folder, &c.TS, &c.Source)
-		return c, err
-	})
-	if out == nil {
-		out = []Correction{}
-	}
-	return out, err
-}
-
-const DefaultListLimit = 100

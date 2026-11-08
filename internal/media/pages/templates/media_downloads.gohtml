@@ -2,7 +2,7 @@
 {{define "heading"}}Media · Downloads{{end}}
 {{define "content"}}{{$csrf := .CSRF}}
 <div class="flex flex-wrap items-center justify-between gap-3">
-  <p class="text-sm text-muted-foreground">qBittorrent on artemis. <strong>media</strong> torrents are filed into the library from here once complete; <strong>plain</strong> ones stay in downloads/.</p>
+  <p class="text-sm text-muted-foreground"><strong>media</strong> torrents are filed into the library from here once complete; <strong>plain</strong> ones stay in downloads/.</p>
   <a class="btn" data-size="sm" href="/media/add">{{icon "plus"}}Add torrent</a>
 </div>
 
@@ -12,58 +12,58 @@
 </dialog>
 
 <section class="flex flex-col gap-3" aria-labelledby="queue-h">
-  <h2 id="queue-h" class="text-sm font-medium">Ready to file ({{len .Data.queue}})</h2>
-  {{if .Data.queue_error}}
-  <p class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{{.Data.queue_error}}</p>
+  <h2 id="queue-h" class="text-sm font-medium">Ready to file ({{len .Data.Queue}})</h2>
+  {{if .Data.QueueError}}
+  <p class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{{.Data.QueueError}}</p>
   {{end}}
-  {{$kinds := .Data.kinds}}
-  {{range $i, $v := .Data.queue}}
+  {{$kinds := .Data.Kinds}}
+  {{range $i, $v := .Data.Queue}}
   {{$n := inc $i}}
-  <form method="post" action="/media/file" class="flex flex-col gap-3 rounded-lg border bg-card p-4" aria-label="{{$v.item.name}}">
+  <form method="post" action="/media/file" class="flex flex-col gap-3 rounded-lg border bg-card p-4" aria-label="{{$v.Item.Name}}">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
-    <input type="hidden" name="id" value="{{$v.item.id}}">
+    <input type="hidden" name="id" value="{{$v.Item.ID}}">
     <header class="flex flex-col gap-1">
-      <h3 class="break-all text-sm font-medium">{{$v.item.name}}</h3>
-      <p class="text-xs text-muted-foreground">{{if $v.item.torrent}}torrent: hardlinked, keeps seeding{{else}}import: moved{{end}}</p>
+      <h3 class="break-all text-sm font-medium">{{$v.Item.Name}}</h3>
+      <p class="text-xs text-muted-foreground">{{if $v.Item.Torrent}}torrent: hardlinked, keeps seeding{{else}}import: moved{{end}}</p>
     </header>
     <div class="grid gap-3 sm:grid-cols-[8rem_1fr_6rem]">
       <div role="group" class="field">
         <label for="kind-{{$n}}">Kind</label>
         <select id="kind-{{$n}}" name="kind" class="select">
-          {{range $kinds}}<option value="{{.}}"{{if eq $v.kind .}} selected{{end}}>{{if eq . "movie"}}Movie{{else}}TV{{end}}</option>{{end}}
+          {{range $kinds}}<option value="{{.}}"{{if eq $v.Kind .}} selected{{end}}>{{if eq . "movie"}}Movie{{else}}TV{{end}}</option>{{end}}
         </select>
       </div>
       <div role="group" class="field">
         <label for="title-{{$n}}">Title</label>
-        <input id="title-{{$n}}" name="title" type="text" value="{{$v.title}}" required>
+        <input id="title-{{$n}}" name="title" type="text" value="{{$v.Title}}" required>
       </div>
       <div role="group" class="field">
         <label for="year-{{$n}}">Year</label>
-        <input id="year-{{$n}}" name="year" type="text" value="{{$v.year}}" inputmode="numeric" placeholder="optional">
+        <input id="year-{{$n}}" name="year" type="text" value="{{$v.Year}}" inputmode="numeric" placeholder="optional">
       </div>
     </div>
     <table class="w-full text-xs">
       <thead><tr class="text-left text-muted-foreground"><th class="py-1 pr-2 font-medium">File</th><th class="py-1 pr-2 font-medium">S</th><th class="py-1 pr-2 font-medium">E</th><th class="py-1 font-medium">Destination</th></tr></thead>
       <tbody>
-        {{range $j, $f := $v.files}}
+        {{range $j, $f := $v.Files}}
         <tr class="border-t align-top">
-          <td class="break-all py-1 pr-2 font-mono">{{$f.rel}}</td>
-          <td class="py-1 pr-2"><input class="w-14 font-mono" type="number" min="0" name="s{{$j}}" value="{{$f.season}}" aria-label="Season of {{$f.rel}}"></td>
-          <td class="py-1 pr-2"><input class="w-14 font-mono" type="number" min="1" name="e{{$j}}" value="{{$f.episode}}" aria-label="Episode of {{$f.rel}}"></td>
-          <td class="break-all py-1 font-mono">{{if eq $v.kind "movie"}}{{if eq $f.rel $v.movie_file}}{{$v.movie_dest}}{{else}}(not the movie){{end}}{{else}}{{$f.dest}}{{end}}</td>
+          <td class="break-all py-1 pr-2 font-mono">{{$f.Rel}}</td>
+          <td class="py-1 pr-2"><input class="w-14 font-mono" type="number" min="0" name="s{{$j}}" value="{{$f.Season}}" aria-label="Season of {{$f.Rel}}"></td>
+          <td class="py-1 pr-2"><input class="w-14 font-mono" type="number" min="1" name="e{{$j}}" value="{{$f.Episode}}" aria-label="Episode of {{$f.Rel}}"></td>
+          <td class="break-all py-1 font-mono">{{if eq $v.Kind "movie"}}{{if eq $f.Rel $v.MovieFile}}{{$v.MovieDest}}{{else}}(not the movie){{end}}{{else}}{{$f.Dest}}{{end}}</td>
         </tr>
         {{end}}
       </tbody>
     </table>
-    {{if $v.error}}<p class="text-sm text-destructive" role="alert">{{$v.error}}</p>{{end}}
+    {{if $v.Error}}<p class="text-sm text-destructive" role="alert">{{$v.Error}}</p>{{end}}
     <div class="flex flex-wrap gap-2">
       <button type="submit" name="action" value="preview" class="btn" data-size="sm" data-variant="outline">Preview</button>
-      <button type="submit" name="action" value="file" class="btn" data-size="sm"{{if $v.error}} disabled{{end}}>{{icon "folder-input"}}File</button>
-      {{if $v.item.torrent}}<button type="submit" class="btn" data-size="sm" data-variant="ghost" formaction="/media/ignore" formnovalidate>Ignore</button>{{end}}
+      <button type="submit" name="action" value="file" class="btn" data-size="sm"{{if $v.Error}} disabled{{end}}>{{icon "folder-input"}}File</button>
+      {{if $v.Item.Torrent}}<button type="submit" class="btn" data-size="sm" data-variant="ghost" formaction="/media/ignore" formnovalidate>Ignore</button>{{end}}
     </div>
   </form>
   {{else}}
-  {{if not .Data.queue_error}}{{template "empty_state" (dict "icon_name" "folder-input" "title" "Nothing is waiting" "body" "Completed media torrents and folders dropped into import/ appear here.")}}{{end}}
+  {{if not .Data.QueueError}}{{template "empty_state" (dict "icon_name" "folder-input" "title" "Nothing is waiting" "body" "Completed media torrents and folders dropped into import/ appear here.")}}{{end}}
   {{end}}
 </section>
 {{end}}

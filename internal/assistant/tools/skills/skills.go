@@ -3,24 +3,24 @@ package skillstools
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/skills"
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const Name = "load_skill"
 
-func load(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func load(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	name, ok, err := tool.TextArg(args, "name", true)
 	if err != nil {
 		return nil, err
 	}
-	shown := "None"
+	shown := "unknown"
 	var found *skills.Skill
 	if ok {
-		shown = py.Repr(name)
+		shown = strconv.Quote(name)
 		if found, err = skills.Get(ctx, tc.DB.Read, name); err != nil {
 			return nil, err
 		}
@@ -50,12 +50,7 @@ func load(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if len(unknown) > 0 {
 		body += "\n\nReferenced skills that do not exist: " + strings.Join(unknown, ", ")
 	}
-	return py.Dict{
-		{Key: "name", Value: found.Name},
-		{Key: "description", Value: found.Description},
-		{Key: "body", Value: body},
-		{Key: "references", Value: references},
-	}, nil
+	return map[string]any{"name": found.Name, "description": found.Description, "body": body, "references": references}, nil
 }
 
 func Tools() []tool.Tool {
@@ -65,6 +60,7 @@ func Tools() []tool.Tool {
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"], "additionalProperties": false}`),
 		Handler:     load,
 		Effect:      tool.Read,
+		Annotated:   true,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron, tool.Nightly},
 	}}
 }

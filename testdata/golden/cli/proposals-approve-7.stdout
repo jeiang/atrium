@@ -40,6 +40,7 @@
     "summary": "3 relabelled, label deleted, 0 skipped as changed",
     "relabelled": 3,
     "label_deleted": true,
+    "label_kept_reason": null,
     "skipped": []
   },
   "fingerprint": "gmail_label_merge:19cde32c435d3341",

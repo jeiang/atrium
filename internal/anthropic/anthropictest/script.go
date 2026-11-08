@@ -10,6 +10,7 @@ type Usage struct {
 	CacheCreation int64
 	CacheRead     int64
 	Output        int64
+	Reasoning     int64
 	Searches      int64
 	Cache1h       int64
 	Iterations    []Iteration
@@ -59,6 +60,7 @@ func (u Usage) JSON() json.RawMessage {
 		"cache_creation":              map[string]int64{"ephemeral_5m_input_tokens": u.CacheCreation - u.Cache1h, "ephemeral_1h_input_tokens": u.Cache1h},
 		"cache_read_input_tokens":     u.CacheRead,
 		"output_tokens":               u.Output,
+		"output_tokens_details":       map[string]int64{"thinking_tokens": u.Reasoning},
 		"server_tool_use":             map[string]int64{"web_search_requests": u.Searches, "web_fetch_requests": 0},
 		"iterations":                  iterations,
 	})
@@ -76,12 +78,6 @@ func (r Response) WithUsage(u Usage) Response {
 func (r Response) WithContextManagement(cm json.RawMessage) Response {
 	r.ContextManagement = cm
 	return r
-}
-
-func FromGolden(raw json.RawMessage) (Response, error) {
-	var r Response
-	err := json.Unmarshal(raw, &r)
-	return r, err
 }
 
 func Failure(status int, errType, message string) Response {
@@ -109,12 +105,6 @@ func Fallback(from, to, category string) json.RawMessage {
 	})
 }
 
-func Cleared(clearedInputTokens, clearedToolUses int64) json.RawMessage {
-	return mustJSON(map[string]any{"applied_edits": []map[string]any{{
-		"type": "clear_tool_uses_20250919", "cleared_input_tokens": clearedInputTokens, "cleared_tool_uses": clearedToolUses,
-	}}})
-}
-
 func Text(value string, citations ...json.RawMessage) json.RawMessage {
 	block := map[string]any{"type": "text", "text": value}
 	if len(citations) > 0 {
@@ -132,19 +122,4 @@ func ToolUse(id, name string, input map[string]any) json.RawMessage {
 		input = map[string]any{}
 	}
 	return mustJSON(map[string]any{"type": "tool_use", "id": id, "name": name, "input": input})
-}
-
-func Compaction(summary, signature string) json.RawMessage {
-	return mustJSON(map[string]string{"type": "compaction", "content": summary, "encrypted_content": "enc", "signature": signature})
-}
-
-func WebSearch(id, query string, urls ...string) []json.RawMessage {
-	results := make([]map[string]any, len(urls))
-	for i, u := range urls {
-		results[i] = map[string]any{"type": "web_search_result", "url": u, "title": fmt.Sprintf("Page %d", i), "encrypted_content": "x", "page_age": nil}
-	}
-	return []json.RawMessage{
-		mustJSON(map[string]any{"type": "server_tool_use", "id": id, "name": "web_search", "input": map[string]string{"query": query}}),
-		mustJSON(map[string]any{"type": "web_search_tool_result", "tool_use_id": id, "content": results}),
-	}
 }

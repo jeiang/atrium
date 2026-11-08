@@ -12,10 +12,11 @@ import (
 )
 
 func TestCoreSettingsRejectBadValuesAndDriveTheWebLayer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 
 	for _, tc := range []struct{ key, value string }{
 		{"tz", "Mars/Olympus"},

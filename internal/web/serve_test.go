@@ -12,26 +12,56 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
-func runServe(t *testing.T, ctx context.Context, args ...string) (int, string, string) {
+func testBoot(env config.Env) Boot {
+	return BootFunc{OpenFunc: func(ctx context.Context) (*db.DB, config.Config, error) {
+		cfg, err := config.Load(env)
+		if err != nil {
+			return nil, config.Config{}, err
+		}
+		d, err := db.Connect(cfg.DBPath)
+		if err != nil {
+			return nil, config.Config{}, err
+		}
+		if err := config.Boot(ctx, env, d, cfg); err != nil {
+			_ = d.Close()
+			return nil, config.Config{}, err
+		}
+		return d, cfg, nil
+	}}
+}
+
+func serveEnv(extra map[string]string) config.Env {
+	vars := map[string]string{"ATRIUM_PUBLIC_HOST": "", "COLUMNS": ""}
+	for k, v := range extra {
+		vars[k] = v
+	}
+	return config.Map(vars)
+}
+
+func runServe(t *testing.T, ctx context.Context, env config.Env, args ...string) (int, string, string) {
 	t.Helper()
-	t.Setenv("COLUMNS", "")
 	app := cli.New("atrium", nil)
-	app.Add(ServeCommand())
+	app.Env = env
+	reg := settings.New()
+	app.Settings = reg
+	app.State = config.NewState(reg)
+	app.Add(ServeCommand(testBoot(env)))
 	var stdout, stderr bytes.Buffer
 	code := app.Run(ctx, append([]string{"serve"}, args...), &stdout, &stderr)
 	return code, stdout.String(), stderr.String()
 }
 
 func TestServeProxyNeedsAllowedHost(t *testing.T) {
-	t.Setenv("ATRIUM_PUBLIC_HOST", "  ")
-	code, _, stderr := runServe(t, context.Background(), "--port", "1")
+	env := serveEnv(map[string]string{"ATRIUM_PUBLIC_HOST": "  "})
+	code, _, stderr := runServe(t, context.Background(), env, "--port", "1")
 	if code != cli.ExitError || !strings.Contains(stderr, "proxy mode needs --allowed-host or ATRIUM_PUBLIC_HOST") {
 		t.Errorf("code %d stderr %q", code, stderr)
 	}
@@ -70,10 +100,12 @@ func waitForHealthz(t *testing.T, url string) {
 
 func TestServeRecoversStuckDraftsAndStopsOnCancel(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
 	notify := sdnotifytest.Listen(t, 200*time.Millisecond)
+	vars := map[string]string{"ATRIUM_DB": filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache")}
+	for name, value := range notify.Env() {
+		vars[name] = value
+	}
+	env := serveEnv(vars)
 	ctx := context.Background()
 	seed, err := db.Connect(filepath.Join(dir, "atrium.db"))
 	if err != nil {
@@ -91,7 +123,7 @@ func TestServeRecoversStuckDraftsAndStopsOnCancel(t *testing.T) {
 	port := freePort(t)
 	done := make(chan int, 1)
 	go func() {
-		code, _, _ := runServe(t, cancelCtx, "--port", port, "--auth", "local")
+		code, _, _ := runServe(t, cancelCtx, env, "--port", port, "--auth", "local")
 		done <- code
 	}()
 	url := "http://127.0.0.1:" + port
@@ -115,16 +147,14 @@ func TestServeRecoversStuckDraftsAndStopsOnCancel(t *testing.T) {
 	}
 	defer func() { _ = after.Close() }()
 	var status string
-	if err := after.Read.QueryRow("SELECT status FROM drafts").Scan(&status); err != nil || status != drafts.Unknown {
+	if err := after.Read.QueryRow("SELECT status FROM drafts").Scan(&status); err != nil || status != string(drafts.Unknown) {
 		t.Errorf("stuck draft status = %q, %v", status, err)
 	}
 }
 
 func TestServeRecoversAStuckApprovedProposalOnlyOnceItIsOlderThanTheBound(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	env := serveEnv(map[string]string{"ATRIUM_DB": filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache")})
 	ctx := context.Background()
 	const base = 1_792_080_000.0
 	var advance atomic.Int64
@@ -139,14 +169,14 @@ func TestServeRecoversAStuckApprovedProposalOnlyOnceItIsOlderThanTheBound(t *tes
 	if err := db.Migrate(ctx, seed, filepath.Join(dir, "atrium.db")); err != nil {
 		t.Fatal(err)
 	}
-	pid, _, err := proposals.Create(ctx, seed, "rebalance_split", nil, "title", py.Dict{}, py.Dict{}, "fp", base)
+	pid, _, err := proposals.Create(ctx, seed, "rebalance_split", nil, "title", map[string]any{}, map[string]any{}, "fp", base)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := seed.Write.Exec("UPDATE proposals SET status = 'approved' WHERE id = ?", pid); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := proposals.BeginAction(ctx, seed.Write, pid, py.Dict{{Key: "op", Value: "move"}}, base); err != nil {
+	if _, err := proposals.BeginAction(ctx, seed.Write, pid, map[string]any{"op": "move"}, base); err != nil {
 		t.Fatal(err)
 	}
 	_ = seed.Close()
@@ -167,7 +197,7 @@ func TestServeRecoversAStuckApprovedProposalOnlyOnceItIsOlderThanTheBound(t *tes
 	port := freePort(t)
 	done := make(chan int, 1)
 	go func() {
-		code, _, _ := runServe(t, cancelCtx, "--port", port, "--auth", "local")
+		code, _, _ := runServe(t, cancelCtx, env, "--port", port, "--auth", "local")
 		done <- code
 	}()
 	waitForHealthz(t, "http://127.0.0.1:"+port)
@@ -199,9 +229,7 @@ func TestServeRecoversAStuckApprovedProposalOnlyOnceItIsOlderThanTheBound(t *tes
 func TestServeRecoversADraftThatGoesStaleWhileRunning(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "atrium.db")
-	t.Setenv("ATRIUM_DB", dbPath)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	env := serveEnv(map[string]string{"ATRIUM_DB": dbPath, "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache")})
 	oldInterval := recoverInterval
 	recoverInterval = 50 * time.Millisecond
 	t.Cleanup(func() { recoverInterval = oldInterval })
@@ -222,20 +250,20 @@ func TestServeRecoversADraftThatGoesStaleWhileRunning(t *testing.T) {
 	port := freePort(t)
 	done := make(chan struct{})
 	go func() {
-		runServe(t, cancelCtx, "--port", port, "--auth", "local")
+		runServe(t, cancelCtx, env, "--port", port, "--auth", "local")
 		close(done)
 	}()
 	waitForHealthz(t, "http://127.0.0.1:"+port)
 	status := ""
 	for range 200 {
-		if err := d.Read.QueryRow("SELECT status FROM drafts").Scan(&status); err == nil && status == drafts.Unknown {
+		if err := d.Read.QueryRow("SELECT status FROM drafts").Scan(&status); err == nil && status == string(drafts.Unknown) {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	cancel()
 	<-done
-	if status != drafts.Unknown {
+	if status != string(drafts.Unknown) {
 		t.Errorf("draft status = %q, want %q", status, drafts.Unknown)
 	}
 }
@@ -245,14 +273,12 @@ const bannerText = "Authentication is disabled"
 func startServe(t *testing.T, args ...string) (string, func() int) {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	env := serveEnv(map[string]string{"ATRIUM_DB": filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache")})
 	ctx, cancel := context.WithCancel(context.Background())
 	port := freePort(t)
 	done := make(chan int, 1)
 	go func() {
-		code, _, _ := runServe(t, ctx, append([]string{"--port", port}, args...)...)
+		code, _, _ := runServe(t, ctx, env, append([]string{"--port", port}, args...)...)
 		done <- code
 	}()
 	url := "http://127.0.0.1:" + port
@@ -284,8 +310,7 @@ func getPage(t *testing.T, url string, header http.Header) (int, string) {
 }
 
 func TestServeRefusesWithoutAuthOnANonLoopbackInterface(t *testing.T) {
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
-	code, _, stderr := runServe(t, context.Background(), "--port", "1", "--host", "0.0.0.0", "--auth", "local")
+	code, _, stderr := runServe(t, context.Background(), serveEnv(nil), "--port", "1", "--host", "0.0.0.0", "--auth", "local")
 	if code != cli.ExitError || !strings.Contains(stderr, "Authentication is recommended because this instance holds API keys and mailbox access") {
 		t.Errorf("code %d stderr %q", code, stderr)
 	}
@@ -345,8 +370,7 @@ func TestServeOIDCModeHasNoBanner(t *testing.T) {
 }
 
 func TestServeForceDisableAuthOnAllInterfacesNeedsAllowedHost(t *testing.T) {
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
-	code, _, stderr := runServe(t, context.Background(), "--port", "1", "--host", "0.0.0.0", "--auth", "local", "--force-disable-auth")
+	code, _, stderr := runServe(t, context.Background(), serveEnv(nil), "--port", "1", "--host", "0.0.0.0", "--auth", "local", "--force-disable-auth")
 	if code != cli.ExitError || !strings.Contains(stderr, "--force-disable-auth on a non-loopback address needs --allowed-host") {
 		t.Errorf("code %d stderr %q", code, stderr)
 	}

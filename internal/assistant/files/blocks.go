@@ -10,7 +10,7 @@ import (
 	"os"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 )
 
 type citations struct {
@@ -53,22 +53,22 @@ func marshal(v any) (json.RawMessage, error) {
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
-func decodeBlock(raw json.RawMessage) (py.Dict, error) {
-	v, err := py.JSONLoads(raw)
+func decodeBlock(raw json.RawMessage) (map[string]any, error) {
+	v, err := jsonx.Loads(raw)
 	if err != nil {
 		return nil, fmt.Errorf("files: content block: %w", err)
 	}
-	d, _ := v.(py.Dict)
+	d, _ := v.(map[string]any)
 	return d, nil
 }
 
-func isAttachment(d py.Dict) bool {
-	t, _ := d.Get("type")
+func isAttachment(d map[string]any) bool {
+	t := d["type"]
 	return t == Attachment
 }
 
-func fileIDOf(d py.Dict) (int64, error) {
-	v, ok := d.Get("file_id")
+func fileIDOf(d map[string]any) (int64, error) {
+	v, ok := d["file_id"]
 	id, isInt := v.(int64)
 	if !ok || !isInt {
 		return 0, errors.New("files: attachment block without a file_id")
@@ -76,31 +76,35 @@ func fileIDOf(d py.Dict) (int64, error) {
 	return id, nil
 }
 
-func unavailable(d py.Dict) (json.RawMessage, error) {
+func unavailable(d map[string]any) (json.RawMessage, error) {
 	name := "?"
-	if v, ok := d.Get("name"); ok {
+	if v, ok := d["name"]; ok {
 		if s, isString := v.(string); isString {
 			name = s
 		} else {
-			name = py.ReprValue(v)
+			name = fmt.Sprint(v)
 		}
 	}
 	return marshal(textBlock{Type: "text", Text: "[attachment " + name + " is no longer available]"})
 }
 
 type Scope struct {
-	ThreadID  int64
-	ProjectID *int64
+	thread  int64
+	project *int64
+}
+
+func ScopeOf(threadID int64, projectID *int64) Scope {
+	return Scope{thread: threadID, project: projectID}
 }
 
 func (s Scope) owns(r *Row) bool {
-	if r.ThreadID != nil && *r.ThreadID == s.ThreadID {
+	if r.ThreadID != nil && *r.ThreadID == s.thread {
 		return true
 	}
-	return s.ProjectID != nil && r.ProjectID != nil && *r.ProjectID == *s.ProjectID
+	return s.project != nil && r.ProjectID != nil && *r.ProjectID == *s.project
 }
 
-func apiBlocks(ctx context.Context, q db.Querier, scope Scope, d py.Dict) ([]json.RawMessage, error) {
+func apiBlocks(ctx context.Context, q db.Querier, scope Scope, d map[string]any) ([]json.RawMessage, error) {
 	id, err := fileIDOf(d)
 	if err != nil {
 		return nil, err
@@ -114,14 +118,14 @@ func apiBlocks(ctx context.Context, q db.Querier, scope Scope, d py.Dict) ([]jso
 		return []json.RawMessage{b}, err
 	}
 	var cache json.RawMessage
-	if v, ok := d.Get("cache_control"); ok {
-		cache = json.RawMessage(py.JSONDumps(v))
+	if v, ok := d["cache_control"]; ok {
+		cache = json.RawMessage(jsonx.Dumps(v))
 	}
 	var block any
 	if found.Text != nil {
 		block = documentBlock{
 			Type: "document", Source: textSource{Type: "text", MediaType: "text/plain", Data: *found.Text},
-			Title: found.Name, Context: DocumentContext, Citations: citations{Enabled: true}, CacheControl: cache,
+			Title: found.Name, Context: documentContext, Citations: citations{Enabled: true}, CacheControl: cache,
 		}
 	} else {
 		raw, err := os.ReadFile(found.Path)
@@ -134,7 +138,7 @@ func apiBlocks(ctx context.Context, q db.Querier, scope Scope, d py.Dict) ([]jso
 		}
 		source := textSource{Type: "base64", MediaType: found.MediaType, Data: base64.StdEncoding.EncodeToString(raw)}
 		if found.MediaType == PDFType {
-			block = documentBlock{Type: "document", Source: source, Title: found.Name, Context: DocumentContext, Citations: citations{Enabled: true}, CacheControl: cache}
+			block = documentBlock{Type: "document", Source: source, Title: found.Name, Context: documentContext, Citations: citations{Enabled: true}, CacheControl: cache}
 		} else {
 			block = imageBlock{Type: "image", Source: source, CacheControl: cache}
 		}
@@ -186,7 +190,8 @@ func CloneContent(ctx context.Context, q db.Querier, from Scope, content []json.
 			out = append(out, raw)
 			continue
 		}
-		out = append(out, json.RawMessage(py.JSONDumps(d.Set("file_id", copied))))
+		d["file_id"] = copied
+		out = append(out, json.RawMessage(jsonx.Dumps(d)))
 	}
 	return out, nil
 }
@@ -201,7 +206,7 @@ func HiddenTokens(content []json.RawMessage) (int64, error) {
 		if !isAttachment(d) {
 			continue
 		}
-		switch v, _ := d.Get("tokens"); n := v.(type) {
+		switch n := d["tokens"].(type) {
 		case int64:
 			total += n
 		case float64:
@@ -218,13 +223,13 @@ func ProjectBlocks(ctx context.Context, q db.Querier, projectID int64) ([]json.R
 	}
 	out := make([]json.RawMessage, 0, len(rows)+1)
 	for _, r := range rows {
-		b, err := marshal(newAttachment(r.ID, r.Name, r.MediaType, KindOf(r.MediaType), r.Tokens))
+		b, err := marshal(newAttachment(r.ID, r.Name, r.MediaType, kindOf(r.MediaType), r.Tokens))
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, b)
 	}
-	b, err := marshal(textBlock{Type: "text", Text: ProjectNotice})
+	b, err := marshal(textBlock{Type: "text", Text: projectNotice})
 	if err != nil {
 		return nil, err
 	}

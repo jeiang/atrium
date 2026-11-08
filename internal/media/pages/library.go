@@ -2,12 +2,10 @@ package pages
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -77,14 +75,6 @@ func (s *service) libraryMovie(w http.ResponseWriter, r *http.Request) {
 	s.libRender(w, r, "media_movie.gohtml", MoviePage{Movie: view, TTL: linkSpan(set.LinkTTL)})
 }
 
-func libNumber(n *int) *int64 {
-	if n == nil {
-		return nil
-	}
-	v := int64(*n)
-	return &v
-}
-
 func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
 	set := s.settings(r.Context())
 	root, err := set.NeedRoot()
@@ -103,19 +93,18 @@ func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
 			public, vpn := s.libLinks(r.Context(), set, e.Rel)
 			episodes[j] = EpisodeView{
 				Rel: e.Rel, Name: e.Name, Size: e.Size, Public: public, VPN: vpn,
-				Season: libNumber(e.Season), Episode: libNumber(e.Episode),
+				Season: e.Season, Episode: e.Episode,
 			}
 		}
-		seasons[i] = SeasonView{Number: libNumber(season.Number), Dir: season.Dir, Episodes: episodes}
+		seasons[i] = SeasonView{Number: season.Number, Dir: season.Dir, Episodes: episodes}
 	}
 	view := ShowView{Dir: found.Dir, Title: found.Title, Year: found.Year, Seasons: seasons}
 	s.libRender(w, r, "media_show.gohtml", ShowPage{Show: view, TTL: linkSpan(set.LinkTTL)})
 }
 
 func (s *service) libMissing(w http.ResponseWriter, r *http.Request, err error) {
-	var gone media.NotFound
-	var unset config.NotConfigured
-	if !errors.As(err, &gone) && !errors.As(err, &unset) {
+	_, kind := mustClassify(err)
+	if kind != notFoundError && kind != backendError {
 		panic(err)
 	}
 	s.deps.Error(w, r, http.StatusNotFound, "not found")

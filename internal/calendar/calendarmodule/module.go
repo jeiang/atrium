@@ -7,6 +7,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
+	"github.com/jeiang/atrium/internal/attention"
+	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
@@ -17,12 +19,12 @@ import (
 type Module struct{}
 
 func (Module) Register(mc module.Context) module.Registration {
-	command := calendarcmd.Command(mc.Tools)
+	command := calendarcmd.Command(mc.Env, mc.Tools, calendar.AuthOptions{})
 	return module.Registration{
-		Name:     module.Calendar,
-		Soft:     []string{module.Mail},
-		Requires: []module.Requirement{{Name: "calendar credentials", Check: credentials}},
-		Commands: []*cli.Command{command},
+		Name:      module.Calendar,
+		Attention: []attention.Source{attentionsources.Candidates()},
+		Requires:  []module.Requirement{{Name: "calendar credentials", Check: credentials}},
+		Commands:  []*cli.Command{command},
 		Leaves: map[string]module.Leaf{
 			"calendar candidates":  {Needs: []string{module.Mail}},
 			"calendar google-auth": {Always: true},
@@ -32,7 +34,7 @@ func (Module) Register(mc module.Context) module.Registration {
 }
 
 func credentials(ctx context.Context, p module.Probe) (string, error) {
-	icloud, err := p.Settings.Resolve(ctx, p.Q, calendar.AppleIDKey, 0)
+	icloud, err := p.Settings.Resolve(ctx, p.Q, calendar.AppleIDKey)
 	if err != nil {
 		return "", err
 	}
@@ -43,16 +45,16 @@ func credentials(ctx context.Context, p module.Probe) (string, error) {
 		}
 		icloud.Value = ""
 	}
-	account, err := p.Settings.Resolve(ctx, p.Q, calendar.AccountKey, 0)
+	account, err := p.Settings.Resolve(ctx, p.Q, calendar.AccountKey)
 	if err != nil {
 		return "", err
 	}
-	_, icloudErr := calendar.ICloudLogin(calendar.Settings{AppleID: icloud.Value, Account: strings.TrimSpace(account.Value)})
+	_, icloudErr := calendar.ICloudLogin(ctx, calendar.Settings{AppleID: icloud.Value, Account: strings.TrimSpace(account.Value)})
 	if icloudErr == nil {
 		return "", nil
 	}
 
-	google, err := p.Settings.Resolve(ctx, p.Q, calendar.GoogleClientIDKey, 0)
+	google, err := p.Settings.Resolve(ctx, p.Q, calendar.GoogleClientIDKey)
 	if err != nil {
 		return "", err
 	}

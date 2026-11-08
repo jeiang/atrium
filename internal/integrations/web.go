@@ -12,7 +12,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -56,13 +55,37 @@ func Module(r chi.Router, d *web.Deps) {
 	}()
 	d.OnClose(func() { <-done })
 	h := handlers{d}
-	r.Get(path, h.index)
-	r.Post(path+"/{name}/test", h.test)
-	r.Post(path+"/{name}/disconnect", h.disconnect)
+	d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
+		if !f.Auth.Admin {
+			return nil
+		}
+		rows, err := d.DB.Read.QueryContext(ctx, "SELECT name || ' ' || replace(state, '_', ' ') FROM integration_health WHERE state <> 'ok' ORDER BY name")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				return err
+			}
+			f.IntegrationAlerts = append(f.IntegrationAlerts, name)
+		}
+		return rows.Err()
+	})
+	d.Admin(http.MethodGet, path, h.index)
+	d.Admin(http.MethodPost, path+"/{name}/test", h.test)
+	d.Admin(http.MethodPost, path+"/{name}/disconnect", h.disconnect)
+	d.Admin(http.MethodGet, googlePath, h.google)
+	d.Admin(http.MethodPost, googlePath, h.googleSave)
+	d.Admin(http.MethodPost, googlePath+"/start", h.googleStart)
+	d.Admin(http.MethodGet, googleCallbackPath, h.googleCallback)
+	d.Admin(http.MethodPost, googlePastePath, h.googlePaste)
+	d.Admin(http.MethodPost, googleTestPath, h.googleTest)
 }
 
 func watch(d *web.Deps) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(d.Ctx)
 	defer cancel()
 	go func() {
 		<-d.Stopping
@@ -131,9 +154,9 @@ func (h handlers) refuse(w http.ResponseWriter, r *http.Request, name string, er
 	var failed *TestFailed
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError
-	var scope *settings.ScopeError
-	var encryption secrets.EncryptionRequired
-	var empty secrets.EmptyValue
+	var scope *settings.NotEditable
+	var encryption settings.EncryptionRequired
+	var empty settings.EmptyValue
 	var unknown Unknown
 	switch {
 	case errors.As(err, &unknown):

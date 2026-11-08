@@ -17,7 +17,7 @@ func gauge(name, help string, collect func(ctx context.Context, q db.Querier) ([
 func one(v float64) []Sample { return []Sample{{Value: v}} }
 
 func budgetStatus(ctx context.Context, q db.Querier) (budget.Status, error) {
-	loc, err := config.Location(config.OS)
+	loc, err := config.From(ctx).Location(config.EnvFrom(ctx))
 	if err != nil {
 		return budget.Status{}, err
 	}
@@ -41,7 +41,7 @@ func init() {
 		jobs, err := scheduler.ListJobs(ctx, q, false)
 		var on, off float64
 		for _, j := range jobs {
-			if j.Enabled {
+			if j.State.Active() {
 				on++
 			} else {
 				off++
@@ -53,7 +53,7 @@ func init() {
 		jobs, err := scheduler.ListJobs(ctx, q, false)
 		var out []Sample
 		for _, j := range jobs {
-			if j.Enabled && j.NextDue != nil {
+			if j.State.Active() && j.NextDue != nil {
 				out = append(out, Sample{Labels: [][2]string{{"scheduled_job", j.Name}}, Value: *j.NextDue})
 			}
 		}

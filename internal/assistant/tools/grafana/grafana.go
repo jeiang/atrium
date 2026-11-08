@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"math/big"
@@ -20,8 +21,11 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/integrations/transport"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/timex"
 )
+
+var queryLimitBound = tool.NewCeiling(100, 1, 200)
 
 type limits struct {
 	timeout    time.Duration
@@ -61,31 +65,33 @@ func errorClass(err error) string {
 	var dns *net.DNSError
 	switch {
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
-		return "RemoteProtocolError"
-	case strings.Contains(err.Error(), "TLS handshake timeout"):
-		return "ConnectTimeout"
+		return "protocol error"
 	case errors.As(err, &op) && op.Op == "dial":
 		if op.Timeout() {
-			return "ConnectTimeout"
+			return "connect timeout"
 		}
-		return "ConnectError"
+		return "connect failed"
 	case errors.As(err, &cert), errors.As(err, &host), errors.As(err, &invalid), errors.As(err, &dns):
-		return "ConnectError"
+		return "connect failed"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() && !errors.As(err, &op) {
+		return "connect timeout"
 	}
 	var timeouter interface{ Timeout() bool }
 	if errors.As(err, &timeouter) && timeouter.Timeout() {
-		return "ReadTimeout"
+		return "read timeout"
 	}
-	return "ReadError"
+	return "read failed"
 }
 
 func urlClass(target string) string {
 	scheme, _, found := strings.Cut(target, ":")
 	if !found || !strings.EqualFold(scheme, "http") && !strings.EqualFold(scheme, "https") {
-		return "UnsupportedProtocol"
+		return "unsupported protocol"
 	}
 	if u, err := url.Parse(target); err != nil || u.Host == "" {
-		return "ConnectError"
+		return "connect failed"
 	}
 	return ""
 }
@@ -108,14 +114,18 @@ func request(ctx context.Context, tc *tool.Context, lim limits, method, path, ra
 	}
 	var reader io.Reader
 	if body != nil {
-		reader = strings.NewReader(py.JSONDumps(body, py.JSONOpts{NoEnsureASCII: true, Compact: true}))
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		reader = strings.NewReader(string(encoded))
 	}
 	if class := urlClass(target); class != "" {
 		return nil, tool.Error("grafana unreachable: " + class)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, target, reader)
 	if err != nil {
-		return nil, tool.Error("grafana unreachable: ConnectError")
+		return nil, tool.Error("grafana unreachable: connect failed")
 	}
 	req.Header.Set("Authorization", "Bearer "+access.Token)
 	req.Header.Set("Accept", "application/json")
@@ -149,17 +159,17 @@ func request(ctx context.Context, tc *tool.Context, lim limits, method, path, ra
 	if resp.StatusCode >= 400 {
 		return nil, tool.Error("grafana " + strconv.Itoa(resp.StatusCode) + ": " + tool.Clip(strings.ToValidUTF8(string(raw), "\ufffd"), lim.cellChars))
 	}
-	value, err := py.JSONLoads(raw)
+	value, err := jsonx.Loads(raw)
 	if err != nil {
 		return nil, tool.Error("grafana returned non-JSON")
 	}
 	return value, nil
 }
 
-func attr(v any) (py.Dict, error) {
-	d, ok := v.(py.Dict)
+func attr(v any) (map[string]any, error) {
+	d, ok := v.(map[string]any)
 	if !ok {
-		return nil, &tool.Raised{Class: "AttributeError"}
+		return nil, tool.Error("grafana returned an unexpected object")
 	}
 	return d, nil
 }
@@ -167,7 +177,7 @@ func attr(v any) (py.Dict, error) {
 func items(v any) ([]any, error) {
 	l, ok := v.([]any)
 	if !ok {
-		return nil, &tool.Raised{Class: "TypeError"}
+		return nil, tool.Error("grafana returned an unexpected value")
 	}
 	return l, nil
 }
@@ -188,19 +198,18 @@ func truthy(v any) bool {
 		return v != ""
 	case []any:
 		return len(v) > 0
-	case py.Dict:
+	case map[string]any:
 		return len(v) > 0
 	}
 	return true
 }
 
-func get(d py.Dict, key string) any {
-	v, _ := d.Get(key)
-	return v
+func get(d map[string]any, key string) any {
+	return d[key]
 }
 
-func orDefault(d py.Dict, key string, def any) any {
-	if v, ok := d.Get(key); ok {
+func orDefault(d map[string]any, key string, def any) any {
+	if v, ok := d[key]; ok {
 		return v
 	}
 	return def
@@ -210,17 +219,17 @@ func pyStr(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
-	return py.ReprValue(v)
+	return fmt.Sprintf("%v", v)
 }
 
 func cell(v any, cellChars int) any {
 	switch v := v.(type) {
 	case float64:
-		return py.Round(v, 6)
+		return roundTo(v, 6)
 	case string:
 		return tool.Clip(v, cellChars)
-	case py.Dict, []any:
-		return tool.Clip(py.ReprValue(v), cellChars)
+	case map[string]any, []any:
+		return tool.Clip(fmt.Sprintf("%v", v), cellChars)
 	}
 	return v
 }
@@ -240,8 +249,22 @@ func timeCell(v any, cellChars int) any {
 	if !(ms > 1e11) {
 		return cell(v, cellChars)
 	}
-	sec, us := py.SplitTimestamp(ms / 1000)
-	return py.ISOFormat(time.Unix(sec, us*1000).UTC(), "seconds")
+	sec, us := timex.SplitTimestamp(ms / 1000)
+	return time.Unix(sec, us*1000).UTC().Format("2006-01-02T15:04:05-07:00")
+}
+
+func roundTo(x float64, n int) float64 {
+	if math.IsNaN(x) || math.IsInf(x, 0) {
+		return x
+	}
+	if n == 0 {
+		return math.RoundToEven(x)
+	}
+	out, err := strconv.ParseFloat(strconv.FormatFloat(x, 'f', n, 64), 64)
+	if err != nil {
+		return x
+	}
+	return out
 }
 
 func sample(count, limit int) ([]int, error) {
@@ -253,7 +276,7 @@ func sample(count, limit int) ([]int, error) {
 		return out, nil
 	}
 	if limit == 1 {
-		return nil, &tool.Raised{Class: "ZeroDivisionError"}
+		return []int{0}, nil
 	}
 	for i := range limit {
 		out = append(out, int(math.RoundToEven(float64(i*(count-1))/float64(limit-1))))
@@ -262,12 +285,12 @@ func sample(count, limit int) ([]int, error) {
 	return slices.Compact(out), nil
 }
 
-func compactFrame(frameValue any, rowCap, cellChars int) (py.Dict, error) {
+func compactFrame(frameValue any, rowCap, cellChars int) (map[string]any, error) {
 	frame, err := attr(frameValue)
 	if err != nil {
 		return nil, err
 	}
-	schema, err := attr(orDefault(frame, "schema", py.Dict{}))
+	schema, err := attr(orDefault(frame, "schema", map[string]any{}))
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +298,7 @@ func compactFrame(frameValue any, rowCap, cellChars int) (py.Dict, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := attr(orDefault(frame, "data", py.Dict{}))
+	data, err := attr(orDefault(frame, "data", map[string]any{}))
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +306,7 @@ func compactFrame(frameValue any, rowCap, cellChars int) (py.Dict, error) {
 	if err != nil {
 		return nil, err
 	}
-	fields := make([]py.Dict, len(fieldList))
+	fields := make([]map[string]any, len(fieldList))
 	var keep []int
 	for i, f := range fieldList {
 		if fields[i], err = attr(f); err != nil {
@@ -315,7 +338,7 @@ func compactFrame(frameValue any, rowCap, cellChars int) (py.Dict, error) {
 				return nil, err
 			}
 			if r >= len(column) {
-				return nil, &tool.Raised{Class: "IndexError"}
+				return nil, tool.Error("grafana returned a short column")
 			}
 			if get(fields[i], "type") == "time" {
 				row = append(row, timeCell(column[r], cellChars))
@@ -325,7 +348,7 @@ func compactFrame(frameValue any, rowCap, cellChars int) (py.Dict, error) {
 		}
 		rows = append(rows, row)
 	}
-	var labels py.Dict
+	labels := map[string]any{}
 	names := make([]any, 0, len(keep))
 	for _, i := range keep {
 		if l := get(fields[i], "labels"); truthy(l) {
@@ -333,18 +356,18 @@ func compactFrame(frameValue any, rowCap, cellChars int) (py.Dict, error) {
 			if err != nil {
 				return nil, err
 			}
-			for _, p := range ld {
-				labels = labels.Set(p.Key, p.Value)
+			for k, v := range ld {
+				labels[k] = v
 			}
 		}
 		names = append(names, orDefault(fields[i], "name", ""))
 	}
-	out := py.Dict{{Key: "fields", Value: names}, {Key: "rows", Value: rows}, {Key: "total_rows", Value: int64(total)}}
+	out := map[string]any{"fields": names, "rows": rows, "total_rows": int64(total)}
 	if name := get(schema, "name"); truthy(name) {
-		out = append(out, py.Pair{Key: "name", Value: name})
+		out["name"] = name
 	}
 	if len(labels) > 0 {
-		out = append(out, py.Pair{Key: "labels", Value: labels})
+		out["labels"] = labels
 	}
 	return out, nil
 }
@@ -361,7 +384,7 @@ func compactResults(payloadValue any, rowCap int, lim limits) (any, error) {
 			return nil, err
 		}
 		for _, p := range rd {
-			result, err := attr(p.Value)
+			result, err := attr(p)
 			if err != nil {
 				return nil, err
 			}
@@ -385,10 +408,10 @@ func compactResults(payloadValue any, rowCap int, lim limits) (any, error) {
 		}
 		series = append(series, c)
 	}
-	return py.Dict{{Key: "series", Value: series}, {Key: "total_series", Value: int64(len(frames))}}, nil
+	return map[string]any{"series": series, "total_series": int64(len(frames))}, nil
 }
 
-func datasources(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
+func datasources(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	lim, err := readLimits(ctx, tc)
 	if err != nil {
 		return nil, err
@@ -407,12 +430,12 @@ func datasources(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) 
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, py.Dict{{Key: "uid", Value: get(d, "uid")}, {Key: "name", Value: get(d, "name")}, {Key: "type", Value: get(d, "type")}})
+		out = append(out, map[string]any{"uid": get(d, "uid"), "name": get(d, "name"), "type": get(d, "type")})
 	}
-	return py.Dict{{Key: "datasources", Value: out}}, nil
+	return map[string]any{"datasources": out}, nil
 }
 
-func query(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func query(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	uid, _, err := tool.TextArg(args, "datasource_uid", true)
 	if err != nil {
 		return nil, err
@@ -435,27 +458,24 @@ func query(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 100, 200, 1)
+	limit, err := queryLimitBound.Clamp(ctx, tc.DB.Read, args, "limit")
 	if err != nil {
 		return nil, err
 	}
-	q := py.Dict{
-		{Key: "refId", Value: "A"},
-		{Key: "datasource", Value: py.Dict{{Key: "uid", Value: uid}}},
-		{Key: "expr", Value: expr},
-		{Key: "maxDataPoints", Value: int64(lim.metricRows)},
-	}
+	q := map[string]any{"refId": "A", "datasource": map[string]any{"uid": uid}, "expr": expr, "maxDataPoints": int64(lim.metricRows)}
 	var rowCap int
 	if kind == "prometheus" {
-		q = q.Set("range", true).Set("instant", false)
+		q["range"] = true
+		q["instant"] = false
 		if step, ok, err := tool.TextArg(args, "step", false); err != nil {
 			return nil, err
 		} else if ok {
-			q = q.Set("interval", step)
+			q["interval"] = step
 		}
 		rowCap = int(min(limit, int64(lim.metricRows)))
 	} else {
-		q = q.Set("queryType", "range").Set("maxLines", limit)
+		q["queryType"] = "range"
+		q["maxLines"] = limit
 		rowCap = int(min(limit, int64(lim.logRows)))
 	}
 	start, ok, err := tool.TextArg(args, "start", false)
@@ -472,7 +492,7 @@ func query(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if !ok {
 		end = "now"
 	}
-	body := py.Dict{{Key: "queries", Value: []any{q}}, {Key: "from", Value: start}, {Key: "to", Value: end}}
+	body := map[string]any{"queries": []any{q}, "from": start, "to": end}
 	payload, err := request(ctx, tc, lim, http.MethodPost, "/api/ds/query", "", body)
 	if err != nil {
 		return nil, err
@@ -480,7 +500,7 @@ func query(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	return compactResults(payload, rowCap, lim)
 }
 
-func alerts(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
+func alerts(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	lim, err := readLimits(ctx, tc)
 	if err != nil {
 		return nil, err
@@ -503,7 +523,7 @@ func alerts(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
 			return nil, err
 		}
 	}
-	var firing []py.Dict
+	var firing []map[string]any
 	for _, v := range list {
 		a, err := attr(v)
 		if err != nil {
@@ -525,19 +545,19 @@ func alerts(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
 		}
 		text, ok := summary.(string)
 		if !ok {
-			return nil, &tool.Raised{Class: "TypeError"}
+			return nil, tool.Error("grafana returned an unexpected value")
 		}
-		out = append(out, py.Dict{
-			{Key: "labels", Value: orDefault(a, "labels", py.Dict{})},
-			{Key: "summary", Value: tool.Clip(text, lim.cellChars)},
-			{Key: "active_at", Value: get(a, "activeAt")},
-			{Key: "value", Value: get(a, "value")},
+		out = append(out, map[string]any{
+			"labels":    orDefault(a, "labels", map[string]any{}),
+			"summary":   tool.Clip(text, lim.cellChars),
+			"active_at": get(a, "activeAt"),
+			"value":     get(a, "value"),
 		})
 	}
-	return py.Dict{{Key: "total_firing", Value: int64(len(firing))}, {Key: "alerts", Value: out}}, nil
+	return map[string]any{"total_firing": int64(len(firing)), "alerts": out}, nil
 }
 
-func searchDashboards(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func searchDashboards(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	text, _, err := tool.TextArg(args, "query", false)
 	if err != nil {
 		return nil, err
@@ -561,15 +581,15 @@ func searchDashboards(ctx context.Context, tc *tool.Context, args py.Dict) (any,
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, py.Dict{
-			{Key: "title", Value: get(d, "title")},
-			{Key: "uid", Value: get(d, "uid")},
-			{Key: "url", Value: get(d, "url")},
-			{Key: "folder", Value: get(d, "folderTitle")},
-			{Key: "tags", Value: orDefault(d, "tags", []any{})},
+		out = append(out, map[string]any{
+			"title":  get(d, "title"),
+			"uid":    get(d, "uid"),
+			"url":    get(d, "url"),
+			"folder": get(d, "folderTitle"),
+			"tags":   orDefault(d, "tags", []any{}),
 		})
 	}
-	return py.Dict{{Key: "dashboards", Value: out}}, nil
+	return map[string]any{"dashboards": out}, nil
 }
 
 const emptySchema = `{"type": "object", "properties": {}, "required": [], "additionalProperties": false}`
@@ -582,6 +602,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(emptySchema),
 			Handler:     datasources,
 			Effect:      tool.Read,
+			Annotated:   true,
 			Contexts:    contexts,
 		},
 		{
@@ -590,10 +611,11 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"datasource_uid": {"type": "string"}, "expr": {"type": "string"}, ` +
 				`"kind": {"type": "string", "enum": ["prometheus", "logs"]}, "start": {"type": "string", "description": "e.g. now-1h or epoch ms"}, ` +
 				`"end": {"type": "string"}, "step": {"type": "string", "description": "Prometheus step, e.g. 60s"}, ` +
-				`"limit": {"type": "integer", "minimum": 1, "maximum": 200}}, "required": ["datasource_uid", "expr"], "additionalProperties": false}`),
-			Handler:  query,
-			Effect:   tool.Read,
-			Contexts: contexts,
+				`"limit": ` + queryLimitBound.Schema() + `}, "required": ["datasource_uid", "expr"], "additionalProperties": false}`),
+			Handler:   query,
+			Effect:    tool.Read,
+			Annotated: true,
+			Contexts:  contexts,
 		},
 		{
 			Name:        "grafana_alerts",
@@ -601,6 +623,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(emptySchema),
 			Handler:     alerts,
 			Effect:      tool.Read,
+			Annotated:   true,
 			Contexts:    contexts,
 		},
 		{
@@ -609,6 +632,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"query": {"type": "string"}}, "required": [], "additionalProperties": false}`),
 			Handler:     searchDashboards,
 			Effect:      tool.Read,
+			Annotated:   true,
 			Contexts:    contexts,
 		},
 		selfDiagnoseTool,

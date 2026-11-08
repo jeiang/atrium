@@ -7,31 +7,31 @@
   <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "x"}}Dismiss all</button>
 </form>
 {{end}}{{end}}
-{{define "loops_list"}}{{$csrf := .csrf}}{{$choices := .snooze_choices}}
+{{define "loops_list"}}{{$csrf := .csrf}}{{$choices := .snooze_choices}}{{$default := .snooze_default}}
 {{if .items}}
 <ul class="flex flex-col gap-3" role="list" aria-label="{{.label}}">
   {{range .items}}
   <li class="flex flex-col gap-2 rounded-lg border bg-card p-4">
     <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      <span class="badge" data-variant="outline">{{.account}}</span>
-      <span class="tabular-nums">{{.days}} day{{if ne .days 1}}s{{end}}</span>
-      <span>{{.counterpart}}</span>
+      <span class="badge" data-variant="outline">{{.Account}}</span>
+      <span class="tabular-nums">{{.Days}} day{{if ne .Days 1}}s{{end}}</span>
+      <span>{{.Counterpart}}</span>
     </div>
-    <a class="text-sm font-medium underline-offset-4 hover:underline" href="/messages/{{.last_message_id}}">{{or .subject "(no subject)"}}</a>
+    <a class="text-sm font-medium underline-offset-4 hover:underline" href="/messages/{{.LastMessageID}}">{{or (str .Subject) "(no subject)"}}</a>
     <div class="flex flex-wrap items-center gap-2">
       <form method="post" action="/chat">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">
-        <input type="hidden" name="text" value="Draft a reply to mail {{.last_message_id}}">
+        <input type="hidden" name="text" value="Draft a reply to mail {{.LastMessageID}}">
         <button type="submit" class="btn" data-size="sm">{{icon "pencil"}}Draft reply</button>
       </form>
-      <form method="post" action="/loops/{{.id}}/snooze" class="flex items-center gap-2">
+      <form method="post" action="/loops/{{.ID}}/snooze" class="flex items-center gap-2">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">
         <select name="days" aria-label="Snooze for" class="select">
-          {{range $choices}}<option value="{{.}}"{{if eq . 3}} selected{{end}}>{{.}} day{{if ne . 1}}s{{end}}</option>{{end}}
+          {{range $choices}}<option value="{{.}}"{{if eq . $default}} selected{{end}}>{{.}} day{{if ne . 1}}s{{end}}</option>{{end}}
         </select>
         <button type="submit" class="btn" data-size="sm" data-variant="outline">Snooze</button>
       </form>
-      <form method="post" action="/loops/{{.id}}/dismiss">
+      <form method="post" action="/loops/{{.ID}}/dismiss">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">
         <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "x"}}Dismiss</button>
       </form>
@@ -45,36 +45,36 @@
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
 <section class="flex flex-col gap-3" aria-labelledby="owe-h">
   <div class="flex items-center justify-between gap-2">
-    <h2 id="owe-h" class="text-sm font-medium">You owe a reply ({{len $d.owe}})</h2>
-    {{template "loops_dismiss_all" (dict "state" "owe_reply" "items" $d.owe "csrf" $csrf)}}
+    <h2 id="owe-h" class="text-sm font-medium">You owe a reply ({{len $d.Owe}})</h2>
+    {{template "loops_dismiss_all" (dict "state" "owe_reply" "items" $d.Owe "csrf" $csrf)}}
   </div>
-  {{template "loops_list" (dict "items" $d.owe "label" "Owe a reply" "empty" "No one is waiting on you." "csrf" $csrf "snooze_choices" $d.snooze_choices)}}
+  {{template "loops_list" (dict "items" $d.Owe "label" "Owe a reply" "empty" "No one is waiting on you." "csrf" $csrf "snooze_choices" $d.SnoozeChoices "snooze_default" $d.SnoozeDefault)}}
 </section>
 <section class="flex flex-col gap-3" aria-labelledby="waiting-h">
   <div class="flex items-center justify-between gap-2">
-    <h2 id="waiting-h" class="text-sm font-medium">Waiting on them ({{len $d.waiting}})</h2>
-    {{template "loops_dismiss_all" (dict "state" "waiting_on_them" "items" $d.waiting "csrf" $csrf)}}
+    <h2 id="waiting-h" class="text-sm font-medium">Waiting on them ({{len $d.Waiting}})</h2>
+    {{template "loops_dismiss_all" (dict "state" "waiting_on_them" "items" $d.Waiting "csrf" $csrf)}}
   </div>
-  {{template "loops_list" (dict "items" $d.waiting "label" "Waiting on them" "empty" "No sent mail is waiting for an answer." "csrf" $csrf "snooze_choices" $d.snooze_choices)}}
+  {{template "loops_list" (dict "items" $d.Waiting "label" "Waiting on them" "empty" "No sent mail is waiting for an answer." "csrf" $csrf "snooze_choices" $d.SnoozeChoices "snooze_default" $d.SnoozeDefault)}}
 </section>
 <section class="flex flex-col gap-3" aria-labelledby="commit-h">
-  <h2 id="commit-h" class="text-sm font-medium">Commitments ({{len $d.commitments}})</h2>
-  {{if $d.commitments}}
+  <h2 id="commit-h" class="text-sm font-medium">Commitments ({{len $d.Commitments}})</h2>
+  {{if $d.Commitments}}
   <ul class="flex flex-col gap-3" role="list" aria-label="Commitments">
-    {{range $d.commitments}}
+    {{range $d.Commitments}}
     <li class="flex flex-col gap-2 rounded-lg border bg-card p-4">
       <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span class="badge" data-variant="{{if eq .owner "me"}}secondary{{else}}outline{{end}}">{{if eq .owner "me"}}You{{else}}Them{{end}}</span>
-        <span class="tabular-nums">{{if .due}}Due {{.due}}{{else}}No date{{end}}</span>
-        {{if .subject}}<a class="underline" href="/messages/{{.message_id}}">{{.subject}}</a>{{end}}
+        <span class="badge" data-variant="{{if eq .Owner "me"}}secondary{{else}}outline{{end}}">{{if eq .Owner "me"}}You{{else}}Them{{end}}</span>
+        <span class="tabular-nums">{{if .Due}}Due {{str .Due}}{{else}}No date{{end}}</span>
+        {{if .Subject}}<a class="underline" href="/messages/{{.MessageID}}">{{str .Subject}}</a>{{end}}
       </div>
-      <p class="text-sm">{{.text}}</p>
+      <p class="text-sm">{{.Text}}</p>
       <div class="flex flex-wrap gap-2">
-        <form method="post" action="/loops/commitments/{{.id}}/done">
+        <form method="post" action="/loops/commitments/{{.ID}}/done">
           <input type="hidden" name="csrf_token" value="{{$csrf}}">
           <button type="submit" class="btn" data-size="sm">{{icon "check"}}Done</button>
         </form>
-        <form method="post" action="/loops/commitments/{{.id}}/dismiss">
+        <form method="post" action="/loops/commitments/{{.ID}}/dismiss">
           <input type="hidden" name="csrf_token" value="{{$csrf}}">
           <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "x"}}Dismiss</button>
         </form>

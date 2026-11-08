@@ -3,13 +3,14 @@ package reviewpages
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/smtp"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/mail/smtp/smtptest"
 )
 
 func (s *site) mailAccounts() {
@@ -35,7 +36,7 @@ func (s *site) draft(account string, to, cc any, subject, body string, replyTo *
 	if replyTo != nil {
 		reply = *replyTo
 	}
-	id, err := s.store.Create(s.t.Context(), nil, account, to, cc, subject, body, reply)
+	id, err := s.store.Create(s.ctx(), nil, account, to, cc, subject, body, reply)
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -51,7 +52,7 @@ func (s *site) row(id int64) drafts.Row {
 	return *row
 }
 
-func reviewed(row drafts.Row) string { return py.FloatRepr(row.UpdatedAt) }
+func reviewed(row drafts.Row) string { return strconv.FormatInt(row.Revision, 10) }
 
 func TestSendRequiresTheReviewedVersionAndConfirmationIsNotInline(t *testing.T) {
 	s := newSite(t)
@@ -60,23 +61,31 @@ func TestSendRequiresTheReviewedVersionAndConfirmationIsNotInline(t *testing.T) 
 	mustNotContain(t, page, "onsubmit")
 	mustContain(t, page, `hx-confirm="Send this email now?"`)
 	stale := reviewed(s.row(id))
-	if !strings.Contains(page, `name="updated_at" value="`+stale+`"`) || !strings.HasSuffix(stale, ".0") {
-		t.Errorf("page misses the Python repr %s of updated_at", stale)
+	if !strings.Contains(page, `name="revision" value="`+stale+`"`) {
+		t.Errorf("page misses the revision %s", stale)
 	}
-	if _, err := s.store.Update(t.Context(), id, map[string]any{"to": []any{"attacker@x.test"}}); err != nil {
+	if _, err := s.store.Update(s.ctx(), id, map[string]any{"to": []any{"attacker@x.test"}}); err != nil {
 		t.Fatal(err)
 	}
 	target := fmt.Sprintf("/drafts/%d/send", id)
-	mustContain(t, status(t, s.post(target, form("updated_at", stale)), http.StatusConflict), "draft changed, review again")
+	mustContain(t, status(t, s.post(target, form("revision", stale)), http.StatusConflict), "draft changed, review again")
 	status(t, s.post(target, nil), http.StatusConflict)
-	status(t, s.post(target, form("updated_at", "0x1p3")), http.StatusConflict)
+	status(t, s.post(target, form("revision", "0x1p3")), http.StatusConflict)
 	if len(s.smtp.Sent) != 0 || s.row(id).Status != drafts.Draft {
 		t.Fatalf("a stale send went out: %+v", s.smtp.Sent)
 	}
-	status(t, s.post(target, form("updated_at", reviewed(s.row(id)))), http.StatusOK)
+	status(t, s.post(target, form("revision", reviewed(s.row(id)))), http.StatusOK)
 	if got := s.smtp.Sent[0].To; len(got) != 1 || got[0] != "attacker@x.test" {
 		t.Errorf("sent to %v", got)
 	}
+}
+
+func TestAValidationErrorKeepsTheSubmittedText(t *testing.T) {
+	s := newSite(t)
+	id := s.draft(config.Gmail, "a@x.test", nil, "Hi", "body", nil)
+	page := status(t, s.post(fmt.Sprintf("/drafts/%d", id),
+		form("account", config.Gmail, "to", "not-an-address", "cc", "", "subject", "Hi", "body", "the text I typed")), http.StatusUnprocessableEntity)
+	mustContain(t, page, "the text I typed", "Not saved")
 }
 
 func TestSendICloudUsesSMTPAndFilesTheSentCopy(t *testing.T) {
@@ -84,7 +93,7 @@ func TestSendICloudUsesSMTPAndFilesTheSentCopy(t *testing.T) {
 	mid := s.original()
 	id := s.draft(config.ICloud, []any{"friend@x.test"}, []any{"boss@x.test"}, "Re: Lunch?", "Yes", &mid)
 	target := fmt.Sprintf("/drafts/%d/send", id)
-	body := status(t, s.post(target, form("updated_at", reviewed(s.row(id))), hx, "true"), http.StatusOK)
+	body := status(t, s.post(target, form("revision", reviewed(s.row(id))), hx, "true"), http.StatusOK)
 	mustContain(t, body, "Sent", "copy filed in Sent", `id="draft-`+fmt.Sprint(id)+`"`, "sent; copy filed in Sent")
 	sent := s.smtp.Sent[0]
 	if sent.Host != "smtp.mail.me.com" || sent.From != "me@icloud.com" || strings.Join(sent.To, ",") != "friend@x.test,boss@x.test" {
@@ -93,10 +102,19 @@ func TestSendICloudUsesSMTPAndFilesTheSentCopy(t *testing.T) {
 	if len(s.imap.Appended) != 1 || s.imap.Appended[0].Mailbox != "Sent Messages" || !s.imap.Closed {
 		t.Errorf("appended %+v closed %v", s.imap.Appended, s.imap.Closed)
 	}
+	if got := sent.Msg.Get("In-Reply-To"); got != "<orig@x.test>" {
+		t.Errorf("In-Reply-To = %q", got)
+	}
+	if got := sent.Msg.Get("References"); got != "<orig@x.test>" {
+		t.Errorf("References = %q", got)
+	}
+	if got := s.imap.Boxes["Sent Messages"].Box.UIDs(); len(got) != 1 {
+		t.Errorf("the sent copy is not in the mailbox: %v", got)
+	}
 	if row := s.row(id); row.Status != drafts.Sent || row.SentAt == nil {
 		t.Errorf("row %+v", row)
 	}
-	status(t, s.post(target, form("updated_at", reviewed(s.row(id)))), http.StatusConflict)
+	status(t, s.post(target, form("revision", reviewed(s.row(id)))), http.StatusConflict)
 	if len(s.smtp.Sent) != 1 {
 		t.Errorf("sent %d times", len(s.smtp.Sent))
 	}
@@ -105,7 +123,7 @@ func TestSendICloudUsesSMTPAndFilesTheSentCopy(t *testing.T) {
 func TestSendGmailDoesNotAppend(t *testing.T) {
 	s := newSite(t)
 	id := s.draft(config.Gmail, "a@x.test", nil, "Hi", "body", nil)
-	status(t, s.post(fmt.Sprintf("/drafts/%d/send", id), form("updated_at", reviewed(s.row(id)))), http.StatusOK)
+	status(t, s.post(fmt.Sprintf("/drafts/%d/send", id), form("revision", reviewed(s.row(id)))), http.StatusOK)
 	if sent := s.smtp.Sent[0]; sent.Host != "smtp.gmail.com" || sent.From != "me@gmail.test" {
 		t.Errorf("sent %+v", sent)
 	}
@@ -118,46 +136,46 @@ func TestSendReportsRefusedRecipients(t *testing.T) {
 	s := newSite(t)
 	s.smtp.Refused = smtp.Refusals{{Addr: "b@x.test", Code: 550, Msg: "no"}}
 	id := s.draft(config.Gmail, "a@x.test, b@x.test", nil, "Hi", "body", nil)
-	body := status(t, s.post(fmt.Sprintf("/drafts/%d/send", id), form("updated_at", reviewed(s.row(id))), hx, "true"), http.StatusOK)
+	body := status(t, s.post(fmt.Sprintf("/drafts/%d/send", id), form("revision", reviewed(s.row(id))), hx, "true"), http.StatusOK)
 	mustContain(t, body, "gmail files Sent itself; refused: b@x.test")
 }
 
 func TestSMTPFailureRevertsToDraft(t *testing.T) {
 	s := newSite(t)
-	s.smtp.Fail = func(stage string) error {
-		if stage == "login" {
+	s.smtp.Fail = func(stage smtptest.Stage) error {
+		if stage == smtptest.StageLogin {
 			return &smtp.ResponseError{Kind: "SMTPAuthenticationError", Code: 535, Msg: "bad"}
 		}
 		return nil
 	}
 	id := s.draft(config.Gmail, "a@x.test", nil, "Hi", "body", nil)
-	rec := s.post(fmt.Sprintf("/drafts/%d/send", id), form("updated_at", reviewed(s.row(id))), hx, "true")
+	rec := s.post(fmt.Sprintf("/drafts/%d/send", id), form("revision", reviewed(s.row(id))), hx, "true")
 	body := status(t, rec, http.StatusConflict)
-	mustContain(t, body, "Not sent", "(535, b&#39;bad&#39;)")
+	mustContain(t, body, "Not sent", "SMTP 535: bad")
 	if row := s.row(id); row.Status != drafts.Draft || row.SMTPResult == nil || !strings.Contains(*row.SMTPResult, "failed") {
 		t.Errorf("row %+v", row)
 	}
-	plain := s.post(fmt.Sprintf("/drafts/%d/send", id), form("updated_at", "1"))
+	plain := s.post(fmt.Sprintf("/drafts/%d/send", id), form("revision", "1"))
 	status(t, plain, http.StatusConflict)
 }
 
 func TestSMTPLossAfterDataShowsTheUnknownCard(t *testing.T) {
 	s := newSite(t)
-	s.smtp.Fail = func(stage string) error {
-		if stage == "send" {
+	s.smtp.Fail = func(stage smtptest.Stage) error {
+		if stage == smtptest.StageSend {
 			return &smtp.OutcomeUnknown{Err: &smtp.Failure{Kind: "SMTPServerDisconnected", Msg: "Connection unexpectedly closed"}}
 		}
 		return nil
 	}
 	id := s.draft(config.Gmail, "a@x.test", nil, "Hi", "body", nil)
 	target := fmt.Sprintf("/drafts/%d/send", id)
-	body := status(t, s.post(target, form("updated_at", reviewed(s.row(id))), hx, "true"), http.StatusConflict)
+	body := status(t, s.post(target, form("revision", reviewed(s.row(id))), hx, "true"), http.StatusConflict)
 	mustContain(t, body, "Send outcome unknown", "Check if the mail went out", "Mark sent", "Back to draft")
 	mustNotContain(t, body, "Not sent")
 	if row := s.row(id); row.Status != drafts.Unknown {
 		t.Errorf("row %+v", row)
 	}
-	full := status(t, s.post(fmt.Sprintf("/drafts/%d/send", id), form("updated_at", "1")), http.StatusConflict)
+	full := status(t, s.post(fmt.Sprintf("/drafts/%d/send", id), form("revision", "1")), http.StatusConflict)
 	mustContain(t, full, "<html", "Not sent")
 }
 
@@ -189,14 +207,14 @@ func TestEditFormUpdatesTheDraft(t *testing.T) {
 		t.Errorf("row %+v", row)
 	}
 	fragment := status(t, s.post(target, form("account", "gmail", "to", "", "body", "B"), hx, "true"), http.StatusUnprocessableEntity)
-	mustContain(t, fragment, "Not saved", "to is required", `<textarea id="body-`+fmt.Sprint(id)+`"`)
+	mustContain(t, fragment, "Not saved", "to is required", `<textarea id="body-`+fmt.Sprint(id)+`"`, ">B</textarea>")
 	mustNotContain(t, fragment, "<html")
 	missing := s.post(target, form("to", "x"))
 	if detail := jsonOf(t, status(t, missing, http.StatusUnprocessableEntity))["detail"].([]any)[0].(map[string]any); detail["type"] != "missing" {
 		t.Errorf("detail = %v", detail)
 	}
 	full := status(t, s.post(target, form("account", "gmail", "to", "", "body", "B")), http.StatusUnprocessableEntity)
-	mustContain(t, full, "<html", "to is required", "Drafts")
+	mustContain(t, full, "<html", "to is required", "Drafts", ">B</textarea>")
 }
 
 func TestBodyAndRecipientsAreVerbatim(t *testing.T) {

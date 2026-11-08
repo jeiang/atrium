@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 
 	"github.com/jeiang/atrium/internal/cli"
@@ -19,7 +18,7 @@ const knnSample = 10
 func (s *service) encrypt(a *cli.Args) cli.Handler {
 	a.RejectExtras("db encrypt takes no arguments; the key comes from the " + db.KeySetting + " setting")
 	return func(e *cli.Env) int {
-		key, err := s.currentKey()
+		key, err := s.currentKey(e)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
@@ -56,28 +55,25 @@ func (s *service) encrypt(a *cli.Args) cli.Handler {
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		tmp := path + ".encrypt"
-		if err := exclusiveTemp(tmp, info.Mode().Perm()); err != nil {
+		staged, err := db.Stage(path, info.Mode().Perm())
+		if err != nil {
 			return cli.Fail(e, err)
 		}
-		defer removeCopy(tmp)
-		if err := chownLike(tmp, info); err != nil {
+		defer staged.Discard()
+		if err := chownLike(staged.Path(), info); err != nil {
 			return cli.Fail(e, err)
 		}
-		if err := db.Export(e.Ctx, held, tmp, key); err != nil {
+		if err := db.Export(e.Ctx, held, staged.Path(), key); err != nil {
 			return cli.Fail(e, err)
 		}
 		want, err := db.TableCounts(e.Ctx, held)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		if err := verifyEncrypted(e.Ctx, held, tmp, key, want); err != nil {
+		if err := verifyEncrypted(e.Ctx, held, staged.Path(), key, want); err != nil {
 			return cli.Fail(e, fmt.Errorf("db encrypt: verification of the encrypted copy failed, the database is unchanged: %w", err))
 		}
-		if err := os.Rename(tmp, path); err != nil {
-			return cli.Fail(e, err)
-		}
-		if err := syncDir(filepath.Dir(path)); err != nil {
+		if err := staged.PublishRename(); err != nil {
 			return cli.Fail(e, err)
 		}
 		var rows int64
@@ -90,7 +86,7 @@ func (s *service) encrypt(a *cli.Args) cli.Handler {
 }
 
 func verifyEncrypted(ctx context.Context, src *sql.DB, path string, key db.Key, want map[string]int64) error {
-	if err := verifyCopy(ctx, path, key, want, ""); err != nil {
+	if err := db.Verify(ctx, path, key, want); err != nil {
 		return err
 	}
 	if _, err := db.OpenFile(path, db.Key{}); !errors.Is(err, db.ErrKeyMissing) {

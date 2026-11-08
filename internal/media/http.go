@@ -9,35 +9,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
-	"time"
 )
 
 type httpFailure struct{ class string }
 
 func (e *httpFailure) Error() string { return e.class }
-
-var clients sync.Map
-
-func clientFor(timeout time.Duration) *http.Client {
-	if found, ok := clients.Load(timeout); ok {
-		return found.(*http.Client)
-	}
-	made, _ := clients.LoadOrStore(timeout, newClient(timeout))
-	return made.(*http.Client)
-}
-
-func newClient(timeout time.Duration) *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			Proxy:                 http.ProxyFromEnvironment,
-			DialContext:           (&net.Dialer{Timeout: timeout}).DialContext,
-			TLSHandshakeTimeout:   timeout,
-			ResponseHeaderTimeout: timeout,
-		},
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
-}
 
 type reply struct {
 	status int
@@ -71,22 +47,20 @@ func errorClass(err error) string {
 	var dns *net.DNSError
 	switch {
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
-		return "RemoteProtocolError"
-	case strings.Contains(err.Error(), "TLS handshake timeout"):
-		return "ConnectTimeout"
+		return "protocol error"
 	case errors.As(err, &op) && op.Op == "dial":
 		if op.Timeout() {
-			return "ConnectTimeout"
+			return "connect timeout"
 		}
-		return "ConnectError"
+		return "connect failed"
 	case errors.As(err, &cert), errors.As(err, &host), errors.As(err, &invalid), errors.As(err, &dns):
-		return "ConnectError"
+		return "connect failed"
 	}
 	var timeouter interface{ Timeout() bool }
 	if errors.As(err, &timeouter) && timeouter.Timeout() {
-		return "ReadTimeout"
+		return "read timeout"
 	}
-	return "ReadError"
+	return "read failed"
 }
 
 type param struct{ key, value string }

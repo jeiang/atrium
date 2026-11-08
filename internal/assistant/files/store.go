@@ -4,58 +4,89 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Row struct {
-	ID              int64   `json:"id"`
-	ThreadID        *int64  `json:"thread_id"`
-	RunID           *int64  `json:"run_id"`
-	Name            string  `json:"name"`
-	MediaType       string  `json:"media_type"`
-	Bytes           int64   `json:"bytes"`
-	Path            string  `json:"path"`
-	Origin          string  `json:"origin"`
-	CreatedAt       float64 `json:"created_at"`
-	AnthropicFileID *string `json:"anthropic_file_id"`
-	Text            *string `json:"text"`
-	Tokens          int64   `json:"tokens"`
-	ProjectID       *int64  `json:"project_id"`
+	ID        int64   `json:"id"`
+	ThreadID  *int64  `json:"thread_id"`
+	RunID     *int64  `json:"run_id"`
+	Name      string  `json:"name"`
+	MediaType string  `json:"media_type"`
+	Bytes     int64   `json:"bytes"`
+	Path      string  `json:"path"`
+	Origin    string  `json:"origin"`
+	CreatedAt float64 `json:"created_at"`
+	Text      *string `json:"text"`
+	Tokens    int64   `json:"tokens"`
+	ProjectID *int64  `json:"project_id"`
 }
 
-const columns = "id, thread_id, run_id, name, media_type, bytes, path, origin, created_at, anthropic_file_id, text, tokens, project_id"
+const columns = "id, thread_id, run_id, name, media_type, bytes, path, origin, created_at, text, tokens, project_id"
 
 func scan(r interface{ Scan(...any) error }) (Row, error) {
 	var f Row
 	err := r.Scan(&f.ID, &f.ThreadID, &f.RunID, &f.Name, &f.MediaType, &f.Bytes, &f.Path, &f.Origin, &f.CreatedAt,
-		&f.AnthropicFileID, &f.Text, &f.Tokens, &f.ProjectID)
+		&f.Text, &f.Tokens, &f.ProjectID)
 	return f, err
 }
 
+type ownerKind uint8
+
+const (
+	threadOwner ownerKind = iota + 1
+	projectOwner
+)
+
 type Owner struct {
-	ThreadID  int64
-	ProjectID int64
+	kind ownerKind
+	id   int64
 }
+
+func ThreadOwner(id int64) Owner  { return Owner{kind: threadOwner, id: id} }
+func ProjectOwner(id int64) Owner { return Owner{kind: projectOwner, id: id} }
+
+// Dir returns the owner's directory name under the files root.
+func (o Owner) Dir() string { return o.dirName() }
 
 func (o Owner) dirName() string {
-	if o.ProjectID != 0 {
-		return "p" + strconv.FormatInt(o.ProjectID, 10)
+	if o.kind == projectOwner {
+		return "p" + strconv.FormatInt(o.id, 10)
 	}
-	return strconv.FormatInt(o.ThreadID, 10)
+	return strconv.FormatInt(o.id, 10)
 }
 
-func (o Owner) column() (string, int64) {
-	if o.ProjectID != 0 {
-		return "project_id", o.ProjectID
+func (o Owner) where() (string, int64) {
+	if o.kind == projectOwner {
+		return "project_id", o.id
 	}
-	return "thread_id", o.ThreadID
+	return "thread_id", o.id
+}
+
+func (o Owner) columns() (any, any) {
+	switch o.kind {
+	case threadOwner:
+		return o.id, nil
+	case projectOwner:
+		return nil, o.id
+	}
+	return nil, nil
+}
+
+func OwnerOf(r *Row) (Owner, bool) {
+	switch {
+	case r.ThreadID != nil:
+		return ThreadOwner(*r.ThreadID), true
+	case r.ProjectID != nil:
+		return ProjectOwner(*r.ProjectID), true
+	}
+	return Owner{}, false
 }
 
 func nullable(n int64) any {
@@ -76,6 +107,14 @@ func Get(ctx context.Context, q db.Querier, fileID int64) (*Row, error) {
 	return &f, nil
 }
 
+func OfThread(ctx context.Context, q db.Querier, threadID int64) ([]Row, error) {
+	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE thread_id = ? ORDER BY id", threadID)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scan(r) })
+}
+
 func OfProject(ctx context.Context, q db.Querier, projectID int64) ([]Row, error) {
 	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE project_id = ? ORDER BY id", projectID)
 	if err != nil {
@@ -84,7 +123,7 @@ func OfProject(ctx context.Context, q db.Querier, projectID int64) ([]Row, error
 	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scan(r) })
 }
 
-type NewFile struct {
+type newFile struct {
 	Name      string
 	Data      []byte
 	MediaType string
@@ -96,22 +135,23 @@ type NewFile struct {
 }
 
 func writeStored(dir string, owner Owner, fileID int64, name string, data []byte, chars int) (string, error) {
-	path := filepath.Join(dir, owner.dirName(), strconv.FormatInt(fileID, 10)+"-"+SafeName(name, chars))
+	path := filepath.Join(dir, owner.dirName(), strconv.FormatInt(fileID, 10)+"-"+safeName(name, chars))
 	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		return "", err
 	}
 	return path, os.WriteFile(path, data, 0o666)
 }
 
-func Store(ctx context.Context, q db.Querier, dir string, f NewFile, now float64) (int64, error) {
+func store(ctx context.Context, q db.Querier, dir string, f newFile, now float64) (int64, error) {
 	chars, err := nameChars(ctx, q)
 	if err != nil {
 		return 0, err
 	}
+	threadID, projectID := f.Owner.columns()
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO thread_files (thread_id, project_id, run_id, name, media_type, bytes, path, origin, created_at, anthropic_file_id, text, tokens) "+
-			"VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, NULL, ?, ?)",
-		nullable(f.Owner.ThreadID), nullable(f.Owner.ProjectID), nullable(f.RunID), f.Name, f.MediaType, len(f.Data), f.Origin, now, f.Text, f.Tokens)
+		"INSERT INTO thread_files (thread_id, project_id, run_id, name, media_type, bytes, path, origin, created_at, text, tokens) "+
+			"VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)",
+		threadID, projectID, nullable(f.RunID), f.Name, f.MediaType, len(f.Data), f.Origin, now, f.Text, f.Tokens)
 	if err != nil {
 		return 0, err
 	}
@@ -134,27 +174,23 @@ type UploadedFile struct {
 }
 
 type AttachmentBlock struct {
-	Type      string  `json:"type"`
-	FileID    int64   `json:"file_id"`
-	Name      string  `json:"name"`
-	MediaType string  `json:"media_type"`
-	Kind      *string `json:"kind"`
-	Tokens    int64   `json:"tokens"`
+	Type      string `json:"type"`
+	FileID    int64  `json:"file_id"`
+	Name      string `json:"name"`
+	MediaType string `json:"media_type"`
+	Kind      string `json:"kind,omitempty"`
+	Tokens    int64  `json:"tokens"`
 }
 
 func newAttachment(id int64, name, mediaType, kind string, tokens int64) AttachmentBlock {
-	b := AttachmentBlock{Type: Attachment, FileID: id, Name: name, MediaType: mediaType, Tokens: tokens}
-	if kind != "" {
-		b.Kind = &kind
-	}
-	return b
+	return AttachmentBlock{Type: Attachment, FileID: id, Name: name, MediaType: mediaType, Kind: kind, Tokens: tokens}
 }
 
-func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []UploadedFile, now float64, owner Owner, contextLimit *int64) ([]AttachmentBlock, error) {
+func IngestUploads(ctx context.Context, d *db.DB, dir string, uploads []UploadedFile, now float64, owner Owner, contextLimit *int64) ([]AttachmentBlock, error) {
 	if len(uploads) == 0 {
 		return nil, nil
 	}
-	limits, err := ReadLimits(ctx, q)
+	limits, err := ReadLimits(ctx, d.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +199,7 @@ func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []Uplo
 		total += len(u.Data)
 	}
 	if total > limits.MessageCap {
-		return nil, FileError(fmt.Sprintf("files in one message must total under %d MB", limits.MessageCap>>20))
+		return nil, MessageCapError(limits.MessageCap)
 	}
 	type inspected struct {
 		name string
@@ -172,11 +208,11 @@ func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []Uplo
 	}
 	found := make([]inspected, 0, len(uploads))
 	for _, u := range uploads {
-		info, err := Inspect(u.Name, u.Data, u.Type, limits)
+		info, err := inspect(u.Name, u.Data, u.Type, limits)
 		if err != nil {
 			return nil, err
 		}
-		name := py.PathName(u.Name)
+		name := path.Base(u.Name)
 		if name == "" {
 			name = "file"
 		}
@@ -192,14 +228,20 @@ func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []Uplo
 		}
 	}
 	blocks := make([]AttachmentBlock, 0, len(found))
-	for _, f := range found {
-		id, err := Store(ctx, q, dir, NewFile{
-			Name: f.name, Data: f.data, MediaType: f.info.MediaType, Origin: Upload, Owner: owner, Text: f.info.Text, Tokens: f.info.Tokens,
-		}, now)
-		if err != nil {
-			return nil, err
+	err = d.WithTx(ctx, func(tx *sql.Tx) error {
+		for _, f := range found {
+			id, err := store(ctx, tx, dir, newFile{
+				Name: f.name, Data: f.data, MediaType: f.info.MediaType, Origin: Upload, Owner: owner, Text: f.info.Text, Tokens: f.info.Tokens,
+			}, now)
+			if err != nil {
+				return err
+			}
+			blocks = append(blocks, newAttachment(id, f.name, f.info.MediaType, f.info.Kind, f.info.Tokens))
 		}
-		blocks = append(blocks, newAttachment(id, f.name, f.info.MediaType, f.info.Kind, f.info.Tokens))
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return blocks, nil
 }
@@ -223,7 +265,7 @@ func clone(ctx context.Context, q db.Querier, from Scope, fileID, threadID int64
 	if err != nil {
 		return 0, false, err
 	}
-	path := filepath.Join(filepath.Dir(filepath.Dir(found.Path)), strconv.FormatInt(threadID, 10), strconv.FormatInt(id, 10)+"-"+SafeName(found.Name, chars))
+	path := filepath.Join(filepath.Dir(filepath.Dir(found.Path)), ThreadOwner(threadID).dirName(), strconv.FormatInt(id, 10)+"-"+safeName(found.Name, chars))
 	if info, err := os.Stat(found.Path); err == nil && info.Mode().IsRegular() {
 		if err := copyFile(found.Path, path); err != nil {
 			return 0, false, err
@@ -253,42 +295,26 @@ func copyFile(from, to string) error {
 	return dst.Close()
 }
 
-type RemoteDeleter interface {
-	DeleteFile(ctx context.Context, fileID string)
-}
-
-func deleteRemote(ctx context.Context, remote RemoteDeleter, id *string) {
-	if remote != nil && id != nil && *id != "" {
-		remote.DeleteFile(ctx, *id)
-	}
-}
-
-func DeleteOwned(ctx context.Context, q db.Querier, dir string, remote RemoteDeleter, owner Owner) (int, error) {
-	column, id := owner.column()
-	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE "+column+" = ?", id)
-	if err != nil {
+func DeleteOwned(ctx context.Context, q db.Querier, dir string, owner Owner) (int, error) {
+	column, id := owner.where()
+	var n int
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM thread_files WHERE "+column+" = ?", id).Scan(&n); err != nil {
 		return 0, err
 	}
-	found, err := db.Collect(rows, func(r *sql.Rows) (Row, error) { return scan(r) })
-	if err != nil {
-		return 0, err
-	}
-	for _, r := range found {
-		deleteRemote(ctx, remote, r.AnthropicFileID)
-	}
-	_ = os.RemoveAll(filepath.Join(dir, owner.dirName()))
 	if _, err := q.ExecContext(ctx, "DELETE FROM thread_files WHERE "+column+" = ?", id); err != nil {
 		return 0, err
 	}
-	return len(found), nil
+	if err := os.RemoveAll(filepath.Join(dir, owner.dirName())); err != nil {
+		return n, err
+	}
+	return n, nil
 }
 
-func DeleteOne(ctx context.Context, q db.Querier, remote RemoteDeleter, fileID int64) (bool, error) {
+func DeleteOne(ctx context.Context, q db.Querier, fileID int64) (bool, error) {
 	found, err := Get(ctx, q, fileID)
 	if err != nil || found == nil {
 		return false, err
 	}
-	deleteRemote(ctx, remote, found.AnthropicFileID)
 	if err := os.Remove(found.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}

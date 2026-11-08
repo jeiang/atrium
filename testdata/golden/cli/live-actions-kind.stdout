@@ -1,7 +1,7 @@
 [
   {
     "id": 9,
-    "ts": 1792090800.0,
+    "ts": 1792090800,
     "account": "gmail",
     "kind": "file",
     "status": "applied",
@@ -13,7 +13,7 @@
   },
   {
     "id": 8,
-    "ts": 1792090800.0,
+    "ts": 1792090800,
     "account": "gmail",
     "kind": "file",
     "status": "applied",
@@ -25,7 +25,7 @@
   },
   {
     "id": 7,
-    "ts": 1792090800.0,
+    "ts": 1792090800,
     "account": "icloud",
     "kind": "file",
     "status": "applied",

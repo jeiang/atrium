@@ -6,27 +6,27 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 func (s *service) dlAddPage(w http.ResponseWriter, r *http.Request, magnet, name, mode, errText string, status int) {
-	view := addView{Magnet: magnet, TorrentName: name, AddMode: mode, Error: errText, Modes: dlAddModes}
+	view := addView{Magnet: magnet, TorrentName: name, AddMode: mode, Error: errText}
 	s.dlPageOut(w, r, status, "media_add", "media_add.gohtml", view, nil)
 }
 
 func (s *service) dlAddGet(w http.ResponseWriter, r *http.Request) {
-	s.dlAddPage(w, r, py.Strip(web.QueryValue(r.URL.Query(), "magnet")), "", dlModeMedia, "", http.StatusOK)
+	query := r.URL.Query()
+	s.dlAddPage(w, r, strings.TrimSpace(web.QueryValue(query, "magnet")), strings.TrimSpace(web.QueryValue(query, "name")), dlModeMedia, "", http.StatusOK)
 }
 
 func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	magnet, _ := web.FormField(form, "magnet")
-	torrent, _ := web.FormField(form, "torrent")
-	name, _ := web.FormField(form, "name")
+	magnet, _ := web.Value(form, "magnet")
+	torrent, _ := web.Value(form, "torrent")
+	name, _ := web.Value(form, "name")
 	mode := web.FormString(form, "mode", dlModeMedia)
-	magnet = py.Strip(magnet)
+	magnet = strings.TrimSpace(magnet)
 	if !slices.Contains(dlAddModes, mode) {
 		mode = dlModeMedia
 	}
@@ -34,7 +34,8 @@ func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
 	if mode == dlModeMedia {
 		tags = media.TagMedia
 	}
-	data, present, err := dlDecodeTorrent(torrent, s.settings(r.Context()).TorrentUpload)
+	set := s.settings(r.Context())
+	data, present, err := dlDecodeTorrent(torrent, set.TorrentUpload)
 	if err == nil && present {
 		_, err = media.TorrentHash(data)
 	}
@@ -50,10 +51,10 @@ func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
 		s.dlAddPage(w, r, magnet, name, mode, "That is not a magnet link.", http.StatusUnprocessableEntity)
 		return
 	}
-	shown, err := s.dlAdd(r, magnet, name, data, present, tags)
+	shown, err := s.dlAdd(r, set, magnet, name, data, present, tags)
 	if err != nil {
-		text, soft := dlSoft(err)
-		if !soft {
+		text, kind := mustClassify(err)
+		if kind != backendError {
 			panic(err)
 		}
 		s.dlAddPage(w, r, magnet, name, mode, text, http.StatusBadGateway)
@@ -66,19 +67,19 @@ func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
 	s.dlDownloads(w, r, &tpl.Toast{Category: "success", Title: "Added " + shown, Description: detail}, http.StatusOK, nil)
 }
 
-func (s *service) dlAdd(r *http.Request, magnet, name string, data []byte, present bool, tags string) (string, error) {
+func (s *service) dlAdd(r *http.Request, set media.Settings, magnet, name string, data []byte, present bool, tags string) (string, error) {
 	ctx := r.Context()
-	client, err := s.dlQbit(ctx)
+	client, err := set.Qbit()
 	if err != nil {
 		return "", err
 	}
 	shown := "the magnet link"
 	if present {
-		file := py.Strip(name)
+		file := strings.TrimSpace(name)
 		if file == "" {
 			file = "upload.torrent"
 		}
-		shown = py.Strip(name)
+		shown = strings.TrimSpace(name)
 		if shown == "" {
 			shown = "the torrent"
 		}
@@ -87,7 +88,7 @@ func (s *service) dlAdd(r *http.Request, magnet, name string, data []byte, prese
 		err = client.AddMagnet(ctx, magnet, tags)
 	}
 	if err == nil && tags != "" {
-		_, err = media.SelectFiles(ctx, client, nil)
+		_, err = set.SelectFiles(ctx, client, nil)
 	}
 	if err != nil {
 		return "", err

@@ -9,62 +9,90 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/accounts"
+	"github.com/jeiang/atrium/internal/mail/gmailauth"
+	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/mail/smtp"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
-type Result struct {
-	Refused smtp.Refusals
-	Filed   string
+type Filed int
+
+const (
+	FiledNone Filed = iota
+	FiledCopy
+	FiledByServer
+	FiledNoMailbox
+	FiledFailed
+)
+
+func (f Filed) String() string {
+	switch f {
+	case FiledCopy:
+		return "copy filed in Sent"
+	case FiledByServer:
+		return "gmail files Sent itself"
+	case FiledNoMailbox:
+		return "no Sent mailbox found; copy not filed"
+	case FiledFailed:
+		return "Sent copy failed"
+	}
+	return ""
 }
 
-func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Message) (string, error) {
-	if config.Preset(account) != config.ICloud {
-		return "gmail files Sent itself", nil
+type Result struct {
+	Refused    smtp.Refusals
+	Filed      Filed
+	FiledError string
+}
+
+func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Message) (Filed, error) {
+	if config.From(ctx).Preset(account) != config.ICloud {
+		return FiledByServer, nil
 	}
 	if s.Open == nil {
-		return "", errors.New("no IMAP opener")
+		return FiledFailed, errors.New("no IMAP opener")
 	}
-	client, err := s.Open(ctx, account)
+	client, err := s.Open(ctx, mail.OpenOptions{Account: account, Q: s.DB.Read})
 	if err != nil {
-		return "", err
+		return FiledFailed, err
 	}
 	defer client.Close()
 	boxes, err := client.ListMailboxes(ctx)
 	if err != nil {
-		return "", err
+		return FiledFailed, err
 	}
 	sent := ""
 	for _, b := range boxes {
-		if mail.MailboxRole(b.Name, b.Flags, account) == "sent" {
+		if mail.MailboxRole(b.Name, b.Flags, config.From(ctx).Preset(account)) == "sent" {
 			sent = b.IMAPName
 			break
 		}
 	}
 	if sent == "" {
-		return "no Sent mailbox found; copy not filed", nil
+		return FiledNoMailbox, nil
 	}
-	raw, err := msg.Bytes("\r\n", false)
-	if err != nil {
-		return "", err
-	}
+	raw := msg.Bytes("\r\n", false)
 	if err := client.Append(safety.OperatorSend(ctx, sent), sent, raw, `\Seen`); err != nil {
 		if _, unknown := errors.AsType[*mail.WriteInterrupted](err); unknown {
-			return "", errors.New("the copy in Sent may exist: check Sent before filing it again")
+			return FiledFailed, errors.New("the copy in Sent may exist: check Sent before filing it again")
 		}
-		return "", err
+		return FiledFailed, err
 	}
-	return "copy filed in Sent", nil
+	return FiledCopy, nil
 }
 
-func stripMsgID(id string) string {
-	out, _ := msgidJunkRE.Sub("", id, 0)
-	return out
+func (s *Store) abandon(ctx context.Context, id int64, cause error) {
+	if err := s.transition(ctx, id, Sending, Draft, func(u *updateSet) {
+		u.set("smtp_result", "send failed: "+cause.Error())
+	}); err != nil {
+		log.Warn(fmt.Sprintf("draft %d could not be reset after a failed send: %s", id, err))
+	}
 }
 
-func (s *Store) Send(ctx context.Context, id int64, reviewedAt float64) (Result, error) {
-	n, err := s.exec(ctx, "UPDATE drafts SET status = ?, updated_at = ? WHERE id = ? AND status = ? AND updated_at = ?",
-		Sending, s.now(), id, Draft, reviewedAt)
+func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Result, error) {
+	n, err := s.exec(ctx, "UPDATE drafts SET status = ?, updated_at = ?, revision = revision + 1 WHERE id = ? AND status = ? AND revision = ?",
+		string(Sending), s.now(), id, string(Draft), reviewedRevision)
 	if err != nil {
 		return Result{}, err
 	}
@@ -80,53 +108,70 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedAt float64) (Result,
 	}
 	draft, err := s.Get(ctx, id)
 	if err != nil {
+		s.abandon(ctx, id, err)
 		return Result{}, err
 	}
 	msg, refused, err := s.submit(ctx, draft)
 	var unknown *smtp.OutcomeUnknown
 	if errors.As(err, &unknown) {
-		if _, uerr := s.exec(ctx, "UPDATE drafts SET status = ?, smtp_result = ?, updated_at = ? WHERE id = ?",
-			Unknown, "send outcome unknown: "+unknown.Error(), s.now(), id); uerr != nil {
+		if uerr := s.transition(ctx, id, Sending, Unknown, func(u *updateSet) {
+			u.set("smtp_result", "send outcome unknown: "+unknown.Error())
+		}); uerr != nil {
 			return Result{}, uerr
 		}
 		return Result{}, OutcomeUnknown("the mail may have been sent (" + unknown.Error() + "); check before you choose Back to draft")
 	}
-	var serr smtp.SendError
-	if errors.As(err, &serr) {
-		if _, uerr := s.exec(ctx, "UPDATE drafts SET status = ?, smtp_result = ?, updated_at = ? WHERE id = ?",
-			Draft, "send failed: "+serr.Error(), s.now(), id); uerr != nil {
+	if err != nil {
+		if uerr := s.transition(ctx, id, Sending, Draft, func(u *updateSet) {
+			u.set("smtp_result", "send failed: "+err.Error())
+		}); uerr != nil {
 			return Result{}, uerr
 		}
-		return Result{}, serr
-	}
-	if err != nil {
 		return Result{}, err
 	}
 	result := "sent"
 	if len(refused) > 0 {
 		result += "; refused: " + refusalsJSON(refused)
 	}
-	if _, err := s.exec(ctx, "UPDATE drafts SET status = ?, sent_at = ?, smtp_result = ?, updated_at = ?, sent_msgid = ? WHERE id = ?",
-		Sent, s.now(), result, s.now(), stripMsgID(msg.Get("Message-ID")), id); err != nil {
+	if err := s.transition(ctx, id, Sending, Sent, func(u *updateSet) {
+		u.set("sent_at", s.now())
+		u.set("smtp_result", result)
+		u.set("sent_msgid", mime.ParseMsgID(msg.Get("Message-ID")).Bare())
+	}); err != nil {
 		return Result{}, err
 	}
-	filed, err := s.fileSentCopy(ctx, draft.Account, msg)
-	if err != nil {
-		log.Warn(fmt.Sprintf("sent copy for draft %d not filed: %s", id, err))
-		filed = "Sent copy failed: " + err.Error()
+	filed, ferr := s.fileSentCopy(ctx, draft.Account, msg)
+	filedError := ""
+	if ferr != nil {
+		log.Warn(fmt.Sprintf("sent copy for draft %d not filed: %s", id, ferr))
+		filed = FiledFailed
+		filedError = ferr.Error()
 	}
-	if _, err := s.exec(ctx, "UPDATE drafts SET smtp_result = ? WHERE id = ?", result+"; "+filed, id); err != nil {
+	detail := filed.String()
+	if filedError != "" {
+		detail += ": " + filedError
+	}
+	if _, err := s.exec(ctx, "UPDATE drafts SET smtp_result = ? WHERE id = ? AND status = ?", result+"; "+detail, id, string(Sent)); err != nil {
 		return Result{}, err
 	}
-	return Result{Refused: refused, Filed: filed}, nil
+	return Result{Refused: refused, Filed: filed, FiledError: filedError}, nil
 }
 
 func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusals, error) {
-	user, _, ok := s.Cfg.Credential(d.Account)
-	if !ok {
-		return nil, nil, smtp.SendError(d.Account + " is not configured")
+	method, source, err := gmailauth.Resolve(ctx, s.DB.Read, d.Account)
+	if err != nil {
+		return nil, nil, err
 	}
-	sender := smtp.SenderAddress(d.Account, user)
+	user, _, ok := config.Credential(ctx, d.Account)
+	if !ok && method != accounts.XOAUTH2 {
+		return nil, nil, &smtp.Failure{Kind: "Config", Msg: d.Account + " is not configured"}
+	}
+	if user == "" {
+		if spec, known := config.From(ctx).Account(d.Account); known {
+			user = spec.Login
+		}
+	}
+	sender := smtp.SenderAddress(config.From(ctx).Preset(d.Account), user)
 	makeID := s.MsgID
 	if makeID == nil {
 		makeID = smtp.MakeMsgID
@@ -135,7 +180,13 @@ func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusal
 	msg := smtp.BuildMessage(sender, smtp.Fields{
 		ToAddrs: d.ToAddrs, CcAddrs: d.CcAddrs, Subject: d.Subject, Body: d.Body, InReplyTo: d.InReplyTo, Refs: d.Refs,
 	}, s.now(), makeID(domain))
-	refused, err := smtp.Send(ctx, s.Cfg, d.Account, msg, s.SMTP)
+	recipients := append(addresses(d.ToAddrs), addresses(d.CcAddrs)...)
+	var refused smtp.Refusals
+	if method == accounts.XOAUTH2 {
+		refused, err = smtp.SendXOAUTH2(ctx, d.Account, user, msg, recipients, s.SMTP, source.Token, source.Invalidate)
+	} else {
+		refused, err = smtp.Send(ctx, config.Credential, d.Account, msg, recipients, s.SMTP)
+	}
 	return msg, refused, err
 }
 

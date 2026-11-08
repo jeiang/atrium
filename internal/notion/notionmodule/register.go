@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations"
+	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notion/pages"
@@ -22,13 +23,13 @@ import (
 func init() {
 	integrations.Register(integrations.Integration{
 		Name: "notion", Label: "Notion", Module: module.Notion, SecretKey: notion.TokenKey,
-		Help: "Internal integration token or a personal access token. Share the wiki pages with the integration in Notion.",
+		Help: "Internal integration token with the wiki pages shared with it; a personal access token also works.",
 		Test: testToken,
 	})
 }
 
 func testToken(ctx context.Context, c integrations.Conn) (string, error) {
-	shared, more, err := notion.SharedPages(ctx, c.Secret, c.HTTP)
+	shared, more, err := notion.SharedPages(ctx, c.DB.Read, c.Env, c.Secret, c.HTTP)
 	var failure *notion.Error
 	switch {
 	case errors.As(err, &failure) && failure.Status == http.StatusUnauthorized:
@@ -67,7 +68,7 @@ func (m Module) Register(module.Context) module.Registration {
 				return "", err
 			},
 		}},
-		Pages:    []web.Page{{Module: pages.Module(pages.Options{}), Templates: pages.Templates()}},
+		Pages:    []web.Page{{Module: pages.Module(pages.Options{Chat: llm.ChatJSON}), Templates: pages.Templates()}},
 		Commands: []*cli.Command{notion.Command(notion.Options{Env: env})},
 		Tools: func(r *registry.Registry) error {
 			notiontools.RegisterProposalKinds()

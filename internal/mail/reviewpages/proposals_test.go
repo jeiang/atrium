@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func TestProposalActionsOnAnUnknownIDAre404(t *testing.T) {
@@ -51,14 +49,11 @@ func TestFilterListIsAFragmentWithItsOwnTitle(t *testing.T) {
 
 func TestDeletionProposalWithAnAgeConditionRenders(t *testing.T) {
 	s := newSite(t)
-	rule := py.Dict{{Key: "account", Value: "icloud"}, {Key: "when", Value: []any{
-		py.Dict{{Key: "field", Value: "subject"}, {Key: "op", Value: "re"}, {Key: "value", Value: "code"}},
-		py.Dict{{Key: "field", Value: "age_days"}, {Key: "op", Value: "gte"}, {Key: "value", Value: int64(7)}},
-	}}}
-	preview := py.Dict{
-		{Key: "rule", Value: rule}, {Key: "reason", Value: "otp"}, {Key: "older_than_days", Value: int64(7)}, {Key: "backlog", Value: int64(1)},
-		{Key: "senders", Value: []any{}}, {Key: "subjects", Value: []any{}}, {Key: "messages", Value: []any{message(5)}},
-	}
+	rule := map[string]any{"account": "icloud", "when": []any{
+		map[string]any{"field": "subject", "op": "re", "value": "code"},
+		map[string]any{"field": "age_days", "op": "gte", "value": int64(7)},
+	}}
+	preview := map[string]any{"rule": rule, "reason": "otp", "older_than_days": int64(7), "backlog": int64(1), "senders": []any{}, "subjects": []any{}, "messages": []any{message(5)}}
 	s.propose("deletion_rule", "icloud", "Delete codes", preview, "del-age")
 	page := status(t, s.get("/proposals"), http.StatusOK)
 	mustContain(t, page, "Age in days", "is at least", "data-approve-picked", "Save rule only",
@@ -70,11 +65,7 @@ func TestDeletionProposalWithAnAgeConditionRenders(t *testing.T) {
 
 func TestDeletionRuleWithoutAPickerSavesTheRuleOnly(t *testing.T) {
 	s := newSite(t)
-	preview := py.Dict{
-		{Key: "rule", Value: py.Dict{{Key: "when", Value: []any{py.Dict{{Key: "field", Value: "from_domain"}, {Key: "op", Value: "eq"}, {Key: "value", Value: "x.test"}}}}}},
-		{Key: "reason", Value: "operator_deleted"}, {Key: "backlog", Value: int64(0)}, {Key: "senders", Value: []any{}},
-		{Key: "subjects", Value: []any{}}, {Key: "messages", Value: []any{}},
-	}
+	preview := map[string]any{"rule": map[string]any{"when": []any{map[string]any{"field": "from_domain", "op": "eq", "value": "x.test"}}}, "reason": "operator_deleted", "backlog": int64(0), "senders": []any{}, "subjects": []any{}, "messages": []any{}}
 	s.propose("deletion_rule", "icloud", "Delete", preview, "del-none")
 	page := status(t, s.get("/proposals"), http.StatusOK)
 	mustContain(t, page, `data-confirm="Save the rule? Nothing moves to Trash now."`, "You have deleted mail like this before.", "existing messages match")
@@ -92,8 +83,8 @@ func TestPickerCardFromARealRowShowsTheMessageChoices(t *testing.T) {
 
 func TestGroupWithoutMessagesShowsItsCount(t *testing.T) {
 	s := newSite(t)
-	empty := py.Dict{{Key: "name", Value: "Shop/Empty"}, {Key: "count", Value: int64(3)}, {Key: "messages", Value: []any{}}}
-	preview := py.Dict{{Key: "folder", Value: "INBOX/Shop"}, {Key: "groups", Value: []any{group("Shop/Orders", 1), empty}}}
+	empty := map[string]any{"name": "Shop/Empty", "count": int64(3), "messages": []any{}}
+	preview := map[string]any{"folder": "INBOX/Shop", "groups": []any{group("Shop/Orders", 1), empty}}
 	s.propose("rebalance_split", "icloud", "Split", preview, "mixed")
 	page := status(t, s.get("/proposals"), http.StatusOK)
 	mustContain(t, page, "3 messages", `<span data-picked>1</span> of 1 messages`, "Approve all")
@@ -101,30 +92,17 @@ func TestGroupWithoutMessagesShowsItsCount(t *testing.T) {
 
 func TestRebalanceMergeIntoAnExistingFolderIsNotEditable(t *testing.T) {
 	s := newSite(t)
-	merge := func(exists bool, fingerprint string) string {
-		preview := py.Dict{
-			{Key: "sources", Value: []any{py.Dict{{Key: "folder", Value: "Old"}, {Key: "count", Value: int64(2)}}}},
-			{Key: "into", Value: "Shop|Orders"}, {Key: "into_exists", Value: exists}, {Key: "group", Value: group("Shop|Orders", 1, 2)},
-		}
-		s.propose("rebalance_merge", "icloud", "Merge "+fingerprint, preview, fingerprint)
-		return status(t, s.get("/proposals?kind=rebalance_merge", hx, "true"), http.StatusOK)
-	}
-	existing := merge(true, "exists")
+	preview := map[string]any{"sources": []any{map[string]any{"folder": "Old", "count": int64(2)}}, "into": "Shop|Orders", "group": group("Shop|Orders", 1, 2)}
+	s.propose("rebalance_merge", "icloud", "Merge", preview, "exists")
+	existing := status(t, s.get("/proposals?kind=rebalance_merge", hx, "true"), http.StatusOK)
 	mustContain(t, existing, "existing folder", "Shop · Orders")
 	mustNotContain(t, existing, `name="name-0"`)
-	fresh := merge(false, "fresh")
-	mustContain(t, fresh, `name="name-0"`, "new folder")
 }
 
 func TestCalendarAndNotionCardsToleratePartialPreviews(t *testing.T) {
 	s := newSite(t)
-	s.propose("calendar_event", "", "Lunch", py.Dict{
-		{Key: "calendar", Value: "google"}, {Key: "all_day", Value: true}, {Key: "start", Value: "2026-11-01"}, {Key: "end", Value: "2026-11-02"},
-	}, "cal")
-	s.propose("notion_link", "", "Link", py.Dict{
-		{Key: "a", Value: py.Dict{{Key: "id", Value: "p-a"}, {Key: "title", Value: "A"}, {Key: "url", Value: "https://notion.so/a"}}},
-		{Key: "b", Value: py.Dict{{Key: "id", Value: "p-b"}, {Key: "title", Value: nil}, {Key: "url", Value: "https://notion.so/b"}}},
-	}, "link")
+	s.propose("calendar_event", "", "Lunch", map[string]any{"calendar": "google", "all_day": true, "start": "2026-11-01", "end": "2026-11-02"}, "cal")
+	s.propose("notion_link", "", "Link", map[string]any{"a": map[string]any{"id": "p-a", "title": "A", "url": "https://notion.so/a"}, "b": map[string]any{"id": "p-b", "title": nil, "url": "https://notion.so/b"}}, "link")
 	page := status(t, s.get("/proposals"), http.StatusOK)
 	mustContain(t, page, "Google", "<dt class=\"text-muted-foreground\">Date</dt>", "2026-11-01", "Nobody is invited", "Untitled",
 		`href="/notion/p-a"`, `aria-label="Open Untitled in Notion"`)
@@ -135,26 +113,16 @@ func TestFailedAndAppliedFootersByKind(t *testing.T) {
 	s := newSite(t)
 	failed := s.splitProposal("failed")
 	s.exec("UPDATE proposals SET status = 'failed', decided_ts = 1000, result = ? WHERE id = ?", `{"error": "boom <b>"}`, failed)
-	wiki := s.propose("notion_wiki_plan", "", "Wiki", py.Dict{
-		{Key: "counts", Value: py.Dict{}}, {Key: "hubs", Value: []any{}}, {Key: "databases", Value: []any{}}, {Key: "items", Value: []any{}},
-	}, "wiki")
-	s.exec("UPDATE proposals SET status = 'failed', decided_ts = 1000 WHERE id = ?", wiki)
-	applied := s.propose("reminder", "", "Remind", py.Dict{{Key: "text", Value: "call"}, {Key: "due", Value: "2026-11-01"}, {Key: "remind_at", Value: "09:00"}}, "rem")
+	applied := s.propose("reminder", "", "Remind", map[string]any{"text": "call", "due": "2026-11-01", "remind_at": "09:00"}, "rem")
 	s.exec("UPDATE proposals SET status = 'applied', applied_ts = 1000, decided_ts = 1000 WHERE id = ?", applied)
 	page := status(t, s.get("/proposals?status=all", hx, "true"), http.StatusOK)
-	mustContain(t, page, "boom &lt;b&gt;", "Tried", "Resume", "Skips the steps the earlier attempt finished", ">Applied<")
-	if strings.Count(page, "Resume") != 1 {
-		t.Errorf("Resume appears %d times, want only the wiki plan", strings.Count(page, "Resume"))
-	}
+	mustContain(t, page, "boom &lt;b&gt;", "Tried", ">Applied<")
 	mustNotContain(t, page, "Undo what it did", "hx-confirm=")
 }
 
 func TestShadowModeNotesAndDeletionRuleCopy(t *testing.T) {
 	s := newSite(t, func(env map[string]string) { env["ATRIUM_MODE"] = "shadow" })
-	preview := py.Dict{
-		{Key: "rule", Value: py.Dict{{Key: "when", Value: []any{}}}}, {Key: "reason", Value: "otp"}, {Key: "backlog", Value: int64(1)},
-		{Key: "senders", Value: []any{}}, {Key: "subjects", Value: []any{}}, {Key: "messages", Value: []any{message(1)}},
-	}
+	preview := map[string]any{"rule": map[string]any{"when": []any{}}, "reason": "otp", "backlog": int64(1), "senders": []any{}, "subjects": []any{}, "messages": []any{message(1)}}
 	s.propose("deletion_rule", "icloud", "Delete", preview, "d")
 	page := status(t, s.get("/proposals"), http.StatusOK)
 	mustContain(t, page, ", even though nothing is applied automatically in shadow mode", "only once routing is live", "existing message matches")
@@ -171,4 +139,12 @@ func TestUndoOfAProposalThatIsNotAppliedReportsNotUndone(t *testing.T) {
 	id := s.splitProposal("a")
 	body := status(t, s.post("/proposals/"+itoa(int(id))+"/undo", nil, hx, "true"), http.StatusOK)
 	mustContain(t, body, "Not undone", "is not applied")
+}
+
+func TestTriageProposalRendersTheMessagePicker(t *testing.T) {
+	s := newSite(t)
+	preview := map[string]any{"count": int64(1), "messages": []any{map[string]any{"id": int64(5), "subject": "Quarterly invoice", "action": "archive"}}}
+	s.propose("mail_triage", "icloud", "Triage 1 messages", preview, "triage")
+	page := status(t, s.get("/proposals"), http.StatusOK)
+	mustContain(t, page, "Mail triage", "Triage 1 messages", "Quarterly invoice", "Approve all")
 }

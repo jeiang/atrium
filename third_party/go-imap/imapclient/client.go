@@ -785,7 +785,11 @@ func (c *Client) readResponseTagged(tag, typ string) (startTLS *startTLSCommand,
 	var cmdErr error
 	switch typ {
 	case "OK":
-		// nothing to do
+		if code == "READ-ONLY" {
+			if sel, ok := cmd.(*SelectCommand); ok {
+				sel.data.ReadOnly = true
+			}
+		}
 	case "NO", "BAD":
 		cmdErr = &imap.Error{
 			Type: imap.StatusResponseType(typ),

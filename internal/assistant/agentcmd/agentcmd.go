@@ -1,6 +1,7 @@
 package agentcmd
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -8,16 +9,30 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 )
 
-var Kinds = []string{threads.Chat, threads.Cron, threads.Nightly, threads.Sub}
+var Kinds = func() []string {
+	out := make([]string, len(tool.AllKinds))
+	for i, k := range tool.AllKinds {
+		out[i] = string(k)
+	}
+	return out
+}()
 
-func Command(tools registry.Source, enabled func(module string) bool) *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(config.OS, tools, enabled), runCommand(config.OS, tools)}}
+func threadKind(run string) threads.Kind {
+	if run == string(tool.Sub) {
+		return threads.Subagent
+	}
+	return threads.Kind(run)
+}
+
+func Command(env config.Env, tools registry.Source, enabled func(module string) bool) *cli.Command {
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, tools, enabled), runCommand(env, tools)}}
 }
 
 func runCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {
@@ -26,7 +41,7 @@ func runCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {
 		Setup: func(args *cli.Args) cli.Handler {
 			thread := args.Int("thread", 0, cli.Opt{Help: "existing thread id; omitted creates a new thread of --kind"})
 			text := args.String("text", "", cli.Opt{Required: true})
-			kind := args.String("kind", threads.Chat, cli.Opt{Choices: Kinds})
+			kind := args.String("kind", string(threads.Chat), cli.Opt{Choices: Kinds})
 			toolChoice := args.String("tool-choice", "", cli.Opt{Help: "force the first request to call a tool: any, or a tool name; models that reject forcing get the request without it"})
 			return func(env *cli.Env) int {
 				var threadID *int64
@@ -34,7 +49,7 @@ func runCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {
 					id := int64(*thread)
 					threadID = &id
 				}
-				if err := run(env, cfgEnv, tools, threadID, *text, *kind, *toolChoice); err != nil {
+				if err := run(env, cfgEnv, tools, threadID, *text, *kind, *toolChoice, args.Has("kind")); err != nil {
 					_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
 					return cli.ExitError
 				}
@@ -44,34 +59,59 @@ func runCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {
 	}
 }
 
-func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64, text, kind, toolChoice string) error {
-	ctx := env.Ctx
+func bootstrap(ctx context.Context, cfgEnv config.Env, tools registry.Source) (*service.Service, func(), error) {
 	cfg, err := config.Load(cfgEnv)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	d, err := db.Connect(cfg.DBPath)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	defer func() { _ = d.Close() }()
-	if err := config.Migrate(ctx, d, cfg); err != nil {
-		return err
+	if err := config.Boot(ctx, cfgEnv, d, cfg); err != nil {
+		_ = d.Close()
+		return nil, nil, err
 	}
 	r, err := runner.New(tools)
 	if err != nil {
-		return err
+		_ = d.Close()
+		return nil, nil, err
 	}
 	svc := service.New(ctx, d, cfg, cfgEnv, r)
+	return svc, func() {
+		svc.Close()
+		_ = d.Close()
+	}, nil
+}
+
+func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64, text, kind, toolChoice string, explicitKind bool) error {
+	ctx := env.Ctx
+	svc, closeApp, err := bootstrap(ctx, cfgEnv, tools)
+	if err != nil {
+		return err
+	}
+	defer closeApp()
 	if threadID == nil {
 		now := float64(time.Now().UnixMicro()) / 1e6
-		id, err := service.CreateThread(ctx, d.Write, now, threads.NewThread{Kind: kind})
+		id, err := threads.Create(ctx, svc.DB.Write, now, threads.Spec{Kind: threadKind(kind)})
 		if err != nil {
 			return err
 		}
 		threadID = &id
+	} else {
+		thread, err := threads.Get(ctx, svc.DB.Read, *threadID)
+		if err != nil {
+			return err
+		}
+		if thread == nil {
+			return fmt.Errorf("no thread %d", *threadID)
+		}
+		if explicitKind && threadKind(kind) != thread.Kind {
+			return fmt.Errorf("thread %d is a %s thread; --kind %s contradicts it", *threadID, thread.Kind, kind)
+		}
+		kind = string(thread.Kind)
 	}
-	start := service.Start{Kind: kind}
+	start := service.Start{Kind: threadKind(kind)}
 	if toolChoice != "" {
 		start.Limits.ToolChoice = &toolChoice
 	}
@@ -79,16 +119,10 @@ func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64
 	if err != nil {
 		return err
 	}
-	view, err := service.ViewRun(ctx, d.Read, runID)
+	out, err := service.RunDict(ctx, svc.DB.Read, runID)
 	if err != nil {
 		return err
 	}
-	var out any
-	if view != nil {
-		if out, err = view.Dict(ctx, d.Read); err != nil {
-			return err
-		}
-	}
-	_, err = fmt.Fprintln(env.Stdout, py.JSONDumps(out, py.JSONOpts{Indent: 2}))
+	_, err = fmt.Fprintln(env.Stdout, jsonx.Dumps(out, jsonx.Opts{Indent: 2}))
 	return err
 }

@@ -32,18 +32,19 @@ func runProcessStdin(t *testing.T, stdin, args string, env ...string) cliRun {
 }
 
 func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_DB_KEY", "")
-	t.Setenv("ATRIUM_CONFIG", "")
-	t.Setenv("CREDENTIALS_DIRECTORY", "")
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_DB_KEY", "")
+	setEnv(t, "ATRIUM_CONFIG", "")
+	setEnv(t, "CREDENTIALS_DIRECTORY", "")
 	vector := make([]float64, config.EmbedDim)
 	vector[0] = 1
 	embedder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{"index": 0, "embedding": vector}}})
 	}))
 	defer embedder.Close()
-	t.Setenv("ATRIUM_MAIL_MAIL_EMBED_URL", embedder.URL)
+	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", embedder.URL)
 	keyEnv := func(hex string) string { return "ATRIUM_DB_KEY=" + hex }
 	dbEnv := func(path string) string { return "ATRIUM_DB=" + path }
 	const hit = "Alpha page\thttps://notion.example/p1\n"
@@ -68,7 +69,7 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 			t.Fatal(err)
 		}
 	}
-	if _, err := seed.Write.Exec("INSERT INTO notion_vec (rowid, visibility, embedding) VALUES (1, 'public', ?)", embed.Serialize(vector)); err != nil {
+	if _, err := seed.Write.Exec("INSERT INTO embed_notion_0 (rowid, visibility, embedding) VALUES (1, 'public', ?)", embed.Serialize(vector)); err != nil {
 		t.Fatal(err)
 	}
 	if err := seed.Close(); err != nil {
@@ -76,7 +77,7 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 	}
 
 	check := runProcess(t, "db check", dbEnv(live), keyEnv(rightKeyHex))
-	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 notion_vec: 1\n", "key id " + dbkey.ID(k)} {
+	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 embed_notion_0: 1\n", "key id " + dbkey.ID(k)} {
 		if check.code != cli.ExitOK || !strings.Contains(check.stdout, want) {
 			t.Errorf("db check exited %d with stdout %q, stderr %q; want 0 and %q", check.code, check.stdout, check.stderr, want)
 		}
@@ -234,7 +235,7 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 		t.Errorf("old key after rekey exited %d, stderr %q; want %d and %q", old.code, old.stderr, cli.ExitError, db.ErrWrongKey)
 	}
 	reopened := runProcess(t, "db check", dbEnv(live), keyEnv(otherKeyHex))
-	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 notion_vec: 1\n", "key id " + dbkey.ID(other)} {
+	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 embed_notion_0: 1\n", "key id " + dbkey.ID(other)} {
 		if reopened.code != cli.ExitOK || !strings.Contains(reopened.stdout, want) {
 			t.Errorf("db check with the new key exited %d with stdout %q, stderr %q; want 0 and %q", reopened.code, reopened.stdout, reopened.stderr, want)
 		}

@@ -14,8 +14,6 @@ import (
 	"github.com/mattn/go-sqlite3"
 )
 
-const driverName = "mattn"
-
 func init() {
 	sqlitevec.Auto()
 	conn, err := openDriver().Open("file::memory:")
@@ -83,4 +81,15 @@ func backupConns(ctx context.Context, src, dst *sql.DB, _ string) error {
 			return b.Finish()
 		})
 	})
+}
+
+func readOnlyDSN(path string, key Key) (string, error) {
+	s, err := dsn(path, false, key)
+	if err != nil {
+		return "", err
+	}
+	if strings.Contains(s, "?") {
+		return s + "&mode=ro", nil
+	}
+	return s + "?mode=ro", nil
 }

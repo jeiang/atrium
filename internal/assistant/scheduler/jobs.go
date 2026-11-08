@@ -9,7 +9,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -20,16 +19,24 @@ const (
 	JobBuiltin = "builtin"
 )
 
+type State string
+
+const (
+	StateActive    State = "active"
+	StateDisabled  State = "disabled"
+	StateCancelled State = "cancelled"
+)
+
+func (s State) Active() bool { return s == StateActive }
+
 type Job struct {
 	ID              int64
 	Name            string
 	Prompt          string
 	Schedule        string
 	TZ              string
-	Effort          string
 	Kind            string
-	Enabled         bool
-	Cancelled       bool
+	State           State
 	NextDue         *float64
 	LeaseOwner      *string
 	LeaseUntil      *float64
@@ -40,6 +47,10 @@ type Job struct {
 	PromptBy        *string
 }
 
+func (j Job) Fixed() bool { return j.Kind == JobNightly || j.Kind == JobBuiltin }
+
+func (j Job) AgentEditable() bool { return !j.Fixed() }
+
 type ListedJob struct {
 	Job
 	LastStatus   *string
@@ -48,11 +59,11 @@ type ListedJob struct {
 	LastError    *string
 }
 
-const jobColumns = "id, name, prompt, schedule, tz, effort, kind, enabled, cancelled, next_due, lease_owner, lease_until, " +
+const jobColumns = "id, name, prompt, schedule, tz, kind, state, next_due, lease_owner, lease_until, " +
 	"created_by, created_in_thread, created_at, last_run_id, prompt_by"
 
 func (j *Job) fields() []any {
-	return []any{&j.ID, &j.Name, &j.Prompt, &j.Schedule, &j.TZ, &j.Effort, &j.Kind, &j.Enabled, &j.Cancelled, &j.NextDue,
+	return []any{&j.ID, &j.Name, &j.Prompt, &j.Schedule, &j.TZ, &j.Kind, &j.State, &j.NextDue,
 		&j.LeaseOwner, &j.LeaseUntil, &j.CreatedBy, &j.CreatedInThread, &j.CreatedAt, &j.LastRunID, &j.PromptBy}
 }
 
@@ -71,7 +82,7 @@ func errTooMany(limit int) error {
 
 func GetJob(ctx context.Context, q db.Querier, id int64) (*Job, error) {
 	var j Job
-	err := q.QueryRowContext(ctx, "SELECT "+jobColumns+" FROM jobs WHERE id = ?", id).Scan(j.fields()...)
+	err := q.QueryRowContext(ctx, "SELECT "+jobColumns+" FROM jobs WHERE id = ? AND state != ?", id, StateCancelled).Scan(j.fields()...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -83,7 +94,7 @@ func GetJob(ctx context.Context, q db.Querier, id int64) (*Job, error) {
 
 func ActiveCount(ctx context.Context, q db.Querier) (int, error) {
 	var n int
-	err := q.QueryRowContext(ctx, "SELECT COUNT(*) AS n FROM jobs WHERE enabled = 1 AND cancelled = 0 AND kind = ?", JobCron).Scan(&n)
+	err := q.QueryRowContext(ctx, "SELECT COUNT(*) AS n FROM jobs WHERE state = ? AND kind = ?", StateActive, JobCron).Scan(&n)
 	return n, err
 }
 
@@ -104,20 +115,19 @@ func atCap(ctx context.Context, q db.Querier) error {
 }
 
 type NewJob struct {
-	Name       string
-	Prompt     string
-	Schedule   string
-	TZ         string
-	Now        float64
-	CreatedBy  string
-	ThreadID   *int64
-	Kind       string
-	SkipLimits bool
-	PromptBy   string
+	Name      string
+	Prompt    string
+	Schedule  string
+	TZ        string
+	Now       float64
+	CreatedBy string
+	ThreadID  *int64
+	Kind      string
+	PromptBy  string
 }
 
 func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
-	name, prompt := py.Strip(n.Name), py.Strip(n.Prompt)
+	name, prompt := strings.TrimSpace(n.Name), strings.TrimSpace(n.Prompt)
 	if name == "" || prompt == "" {
 		return 0, Error("name and prompt are required")
 	}
@@ -127,19 +137,20 @@ func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
 	if n.Kind == "" {
 		n.Kind = JobCron
 	}
-	_, due, err := Validate(ctx, q, n.Schedule, n.TZ, n.Now, !n.SkipLimits)
+	bypass := n.CreatedBy == Operator
+	_, due, err := Validate(ctx, q, n.Schedule, n.TZ, n.Now, !bypass)
 	if err != nil {
 		return 0, err
 	}
-	if !n.SkipLimits && n.Kind == JobCron {
+	if !bypass && n.Kind == JobCron {
 		if err := atCap(ctx, q); err != nil {
 			return 0, err
 		}
 	}
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO jobs (name, prompt, schedule, tz, kind, next_due, created_by, created_in_thread, created_at, prompt_by) "+
-			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		name, prompt, py.Strip(n.Schedule), n.TZ, n.Kind, due, n.CreatedBy, n.ThreadID, n.Now, nullable(n.PromptBy))
+		"INSERT INTO jobs (name, prompt, schedule, tz, kind, state, next_due, created_by, created_in_thread, created_at, prompt_by) "+
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		name, prompt, strings.TrimSpace(n.Schedule), n.TZ, n.Kind, StateActive, due, n.CreatedBy, n.ThreadID, n.Now, nullable(n.PromptBy))
 	if err != nil {
 		return 0, err
 	}
@@ -147,12 +158,12 @@ func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
 }
 
 type JobUpdate struct {
-	Name       *string
-	Prompt     *string
-	Schedule   *string
-	Enabled    *bool
-	SkipLimits bool
-	PromptBy   string
+	Name     *string
+	Prompt   *string
+	Schedule *string
+	Enabled  *bool
+	Actor    string
+	PromptBy string
 }
 
 func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUpdate) (*Job, error) {
@@ -160,7 +171,7 @@ func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUp
 	if err != nil {
 		return nil, err
 	}
-	if job == nil || job.Cancelled {
+	if job == nil {
 		return nil, errNoActive(id)
 	}
 	var cols []string
@@ -170,14 +181,14 @@ func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUp
 		args = append(args, v)
 	}
 	if u.Name != nil {
-		name := py.Strip(*u.Name)
+		name := strings.TrimSpace(*u.Name)
 		if name == "" {
 			return nil, Error("name is empty")
 		}
 		set("name", name)
 	}
 	if u.Prompt != nil {
-		prompt := py.Strip(*u.Prompt)
+		prompt := strings.TrimSpace(*u.Prompt)
 		if prompt == "" {
 			return nil, Error("prompt is empty")
 		}
@@ -188,40 +199,42 @@ func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUp
 	if u.Schedule != nil {
 		schedule = *u.Schedule
 	}
-	willEnable := job.Enabled
+	state := job.State
 	if u.Enabled != nil {
-		willEnable = *u.Enabled
+		if *u.Enabled {
+			state = StateActive
+		} else {
+			state = StateDisabled
+		}
 	}
-	nextDue := job.NextDue
-	setNextDue := false
-	if u.Schedule != nil {
-		_, due, err := Validate(ctx, q, *u.Schedule, job.TZ, now, !u.SkipLimits)
+	bypass := u.Actor == Operator
+	enabling := state == StateActive && job.State != StateActive
+	disabling := u.Enabled != nil && !*u.Enabled
+	needsDue := u.Schedule != nil || enabling || disabling
+	var due float64
+	if needsDue && state == StateActive {
+		_, due, err = Validate(ctx, q, schedule, job.TZ, now, !bypass)
 		if err != nil {
 			return nil, err
 		}
-		set("schedule", py.Strip(*u.Schedule))
-		if willEnable {
-			nextDue = &due
-		}
-		setNextDue = true
+	}
+	if u.Schedule != nil {
+		set("schedule", strings.TrimSpace(*u.Schedule))
 	}
 	if u.Enabled != nil {
-		set("enabled", willEnable)
-		if willEnable && !job.Enabled {
-			if !u.SkipLimits && job.Kind == JobCron {
-				if err := atCap(ctx, q); err != nil {
-					return nil, err
-				}
-			}
-			_, due, err := Validate(ctx, q, schedule, job.TZ, now, false)
-			if err != nil {
+		set("state", state)
+		if enabling && !bypass && job.Kind == JobCron {
+			if err := atCap(ctx, q); err != nil {
 				return nil, err
 			}
-			nextDue, setNextDue = &due, true
 		}
 	}
-	if setNextDue {
-		set("next_due", nextDue)
+	if needsDue {
+		if state == StateActive {
+			set("next_due", due)
+		} else {
+			set("next_due", nil)
+		}
 	}
 	if len(cols) > 0 {
 		if _, err := q.ExecContext(ctx, "UPDATE jobs SET "+strings.Join(cols, ", ")+" WHERE id = ?", append(args, id)...); err != nil {
@@ -236,24 +249,26 @@ func CancelJob(ctx context.Context, q db.Querier, id int64) error {
 	if err != nil {
 		return err
 	}
-	if job == nil || job.Cancelled {
+	if job == nil {
 		return errNoActive(id)
 	}
-	if job.Kind == JobNightly || job.Kind == JobBuiltin {
+	if job.Fixed() {
 		return Error("built-in runs cannot be cancelled; disable them instead")
 	}
-	_, err = q.ExecContext(ctx, "UPDATE jobs SET cancelled = 1, enabled = 0, next_due = NULL WHERE id = ?", id)
+	_, err = q.ExecContext(ctx, "UPDATE jobs SET state = ?, next_due = NULL WHERE id = ?", StateCancelled, id)
 	return err
 }
 
 func ListJobs(ctx context.Context, q db.Querier, includeCancelled bool) ([]ListedJob, error) {
-	where := "WHERE j.cancelled = 0"
+	where := "WHERE j.state != ?"
+	args := []any{StateCancelled}
 	if includeCancelled {
 		where = ""
+		args = nil
 	}
 	rows, err := q.QueryContext(ctx, "SELECT j."+strings.ReplaceAll(jobColumns, ", ", ", j.")+
 		", r.status, r.thread_id, r.started_at, r.error "+
-		"FROM jobs j LEFT JOIN job_runs r ON r.id = j.last_run_id "+where+" ORDER BY j.kind DESC, j.id")
+		"FROM jobs j LEFT JOIN job_runs r ON r.id = j.last_run_id "+where+" ORDER BY j.id", args...)
 	if err != nil {
 		return nil, err
 	}

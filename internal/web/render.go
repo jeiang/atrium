@@ -3,44 +3,54 @@ package web
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"net/http"
+	"sort"
+	"sync"
 	"sync/atomic"
 
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
+type FrameFunc func(context.Context, *tpl.Frame) error
+
 type Renderer struct {
-	oidcOn atomic.Bool
-	engine *tpl.Engine
-	cfg    config.Config
-	db     *db.DB
+	oidcOn        atomic.Bool
+	engine        *tpl.Engine
+	nav           []tpl.NavItem
+	moduleEnabled func(string) bool
+	frame         []FrameFunc
+	mu            sync.Mutex
 }
 
-func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, error) {
-	accounts := make([]string, len(config.Accounts()))
-	for i, spec := range config.Accounts() {
-		accounts[i] = spec.Name
+func (rd *Renderer) OnFrame(fn FrameFunc) {
+	if fn == nil {
+		return
 	}
+	rd.mu.Lock()
+	defer rd.mu.Unlock()
+	rd.frame = append(rd.frame, fn)
+}
+
+func NewRenderer(extra tpl.Config, nav ...tpl.NavItem) (*Renderer, error) {
+	rd := &Renderer{nav: nav}
 	extra.AssetVersion = AssetVersion
 	if extra.Globals == nil {
 		extra.Globals = map[string]any{}
+	}
+	var accounts []string
+	if extra.State != nil {
+		specs := extra.State.Accounts()
+		accounts = make([]string, len(specs))
+		for i, spec := range specs {
+			accounts[i] = spec.Name
+		}
 	}
 	extra.Globals["accounts"] = accounts
 	if _, ok := extra.Globals["module_enabled"]; !ok {
 		extra.Globals["module_enabled"] = func(string) bool { return true }
 	}
-	rd := &Renderer{cfg: cfg, db: d}
-	enabled, _ := extra.Globals["module_enabled"].(func(string) bool)
-	extra.Globals["module_enabled"] = func(name string) bool {
-		if name == "auth" {
-			return rd.oidcOn.Load()
-		}
-		return enabled(name)
+	if enabled, ok := extra.Globals["module_enabled"].(func(string) bool); ok {
+		rd.moduleEnabled = enabled
 	}
 	engine, err := tpl.New(extra)
 	if err != nil {
@@ -51,68 +61,91 @@ func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, erro
 }
 
 func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, error) {
-	pending, err := rd.pending(r.Context())
-	if err != nil {
-		return nil, err
-	}
-	mode, err := rd.mode(r.Context())
-	if err != nil {
-		return nil, err
-	}
-	var auth tpl.AuthView
+	auth := tpl.AuthView{Settings: rd.oidcOn.Load()}
 	if who, ok := IdentityOf(r.Context()); ok {
-		auth = tpl.AuthView{Admin: who.Admin, SignOut: who.Source == SourceOIDC, NoAuth: who.NoAuth}
+		auth.Admin, auth.SignOut, auth.NoAuth = who.Admin, who.Source == SourceOIDC, who.NoAuth
 	}
-	var failing, alerts []string
-	if auth.Admin {
-		if failing, err = rd.names(r.Context(), "SELECT name FROM ntfy_channels WHERE failures >= 3 ORDER BY name"); err != nil {
-			return nil, err
-		}
-		if alerts, err = rd.names(r.Context(), "SELECT name || ' ' || replace(state, '_', ' ') FROM integration_health WHERE state <> 'ok' ORDER BY name"); err != nil {
-			return nil, err
+	nav, settings, settingsURL, brandURL, footer := rd.navFor(page)
+	f := &tpl.Frame{
+		Auth:        auth,
+		CSRF:        CSRFToken(r.Context()),
+		Page:        page,
+		Nav:         nav,
+		Settings:    settings,
+		SettingsURL: settingsURL,
+		BrandURL:    brandURL,
+		Footer:      footer,
+		Data:        data,
+	}
+	rd.mu.Lock()
+	contributions := append([]FrameFunc(nil), rd.frame...)
+	rd.mu.Unlock()
+	for _, fn := range contributions {
+		if err := fn(r.Context(), f); err != nil {
+			log.Error("frame contribution failed", "err", err.Error())
 		}
 	}
-	return &tpl.Frame{
-		Auth:              auth,
-		CSRF:              CSRFToken(r.Context()),
-		Mode:              mode,
-		Paused:            safety.IsPaused(rd.cfg.PausePath()),
-		PendingCount:      pending,
-		NotifyFailing:     failing,
-		IntegrationAlerts: alerts,
-		Page:              page,
-		Data:              data,
-	}, nil
+	return f, nil
 }
 
-func (rd *Renderer) names(ctx context.Context, query string) ([]string, error) {
-	if rd.db == nil {
-		return nil, nil
+func (rd *Renderer) navFor(page string) ([]tpl.NavGroup, []tpl.NavItem, string, string, []tpl.NavItem) {
+	var groups []tpl.NavGroup
+	index := map[string]int{}
+	var settings, footer []tpl.NavItem
+	settingsURL, brandURL := "", ""
+	primarySet := false
+	for _, item := range rd.nav {
+		if item.Module != "" && rd.moduleEnabled != nil && !rd.moduleEnabled(item.Module) {
+			continue
+		}
+		if item.Auth && !rd.oidcOn.Load() {
+			continue
+		}
+		item.Current = item.Page == page
+		if item.Brand {
+			brandURL = item.URL
+			continue
+		}
+		if item.Footer {
+			footer = append(footer, item)
+			continue
+		}
+		if item.Settings {
+			settings = append(settings, item)
+			if settingsURL == "" {
+				settingsURL = item.URL
+			}
+			if item.Primary && !primarySet {
+				settingsURL, primarySet = item.PrimaryURL, true
+				if settingsURL == "" {
+					settingsURL = item.URL
+				}
+			}
+			continue
+		}
+		at, ok := index[item.Group]
+		if !ok {
+			at = len(groups)
+			index[item.Group] = at
+			groups = append(groups, tpl.NavGroup{Label: item.Group})
+		}
+		groups[at].Items = append(groups[at].Items, item)
 	}
-	rows, err := rd.db.Read.QueryContext(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var name string
-		return name, r.Scan(&name)
+	sort.SliceStable(groups, func(i, j int) bool {
+		return groupOrder(groups[i]) < groupOrder(groups[j])
 	})
+	sort.SliceStable(settings, func(i, j int) bool {
+		return settings[i].Order < settings[j].Order
+	})
+	sort.SliceStable(footer, func(i, j int) bool { return footer[i].Order < footer[j].Order })
+	return groups, settings, settingsURL, brandURL, footer
 }
 
-func (rd *Renderer) mode(ctx context.Context) (string, error) {
-	if rd.db == nil {
-		return config.Shadow, nil
+func groupOrder(g tpl.NavGroup) int {
+	if len(g.Items) == 0 {
+		return 0
 	}
-	return mail.Mode(ctx, rd.db.Read)
-}
-
-func (rd *Renderer) pending(ctx context.Context) (int, error) {
-	if rd.db == nil {
-		return 0, nil
-	}
-	var n int
-	err := rd.db.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE status = 'pending'").Scan(&n)
-	return n, err
+	return g.Items[0].Order
 }
 
 func (rd *Renderer) Page(w http.ResponseWriter, r *http.Request, status int, name string, f *tpl.Frame) error {
@@ -139,7 +172,7 @@ func write(w http.ResponseWriter, status int, b *bytes.Buffer) error {
 }
 
 func (rd *Renderer) ErrorPage(w http.ResponseWriter, r *http.Request, status int, problem string) {
-	view := tpl.ErrorView{Status: status, Problem: problem, Path: r.URL.Path, AdminOnly: AdminOnly(r.Context())}
+	view := tpl.ErrorView{Status: status, Problem: problem, Path: r.URL.Path, AdminOnly: adminOnly(r.Context())}
 	f, err := rd.Frame(r, "", view)
 	if err == nil && !IsPartial(r) {
 		err = rd.Page(w, r, status, "error.gohtml", f)

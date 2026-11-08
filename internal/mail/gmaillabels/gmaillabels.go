@@ -10,12 +10,12 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var log = logx.Logger("atrium.gmail_labels")
@@ -44,7 +44,7 @@ func (m mailbox) labels() []string {
 
 func load(ctx context.Context, q proposals.Querier, account string) (mailbox, error) {
 	m := mailbox{members: map[string][]int64{}, rows: map[int64]scanutil.Message{}}
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	m.maxMessages = r.Int(mail.KeyGmailLabelsMaxMessages)
 	m.minTarget = r.Int(mail.KeyGmailLabelsMinTarget)
 	m.minOverlap = r.Float(mail.KeyGmailLabelsMinOverlap)
@@ -159,7 +159,11 @@ func (m mailbox) candidates() []candidate {
 
 func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
 	var total scanutil.Result
-	for _, a := range config.Accounts() {
+	accounts, err := config.ExistingAccounts(ctx, d.Read)
+	if err != nil {
+		return total, err
+	}
+	for _, a := range accounts {
 		if a.Preset != config.Gmail {
 			continue
 		}
@@ -182,33 +186,23 @@ func scan(ctx context.Context, d *db.DB, account string, ts float64) (scanutil.R
 	found := m.candidates()
 	created := 0
 	for _, c := range found {
-		digest := scanutil.Digest(c.label, c.into)
-		if account != config.Gmail {
-			digest = scanutil.Digest(account, c.label, c.into)
-		}
-		fingerprint := Kind + ":" + digest
-		known, err := proposals.Known(ctx, d.Write, fingerprint)
-		if err != nil {
-			return scanutil.Result{Candidates: len(found), Created: created}, err
-		}
-		if known {
-			continue
-		}
-		snaps, err := mailops.Snapshots(ctx, d.Read, c.ids)
-		if err != nil {
-			return scanutil.Result{Candidates: len(found), Created: created}, err
-		}
-		ids := distinct(c.ids)
-		views := make([]any, len(ids))
-		for i, id := range ids {
-			views[i] = m.rows[id].View()
-		}
-		_, ok, err := proposals.Create(ctx, d, Kind, &account, fmt.Sprintf("Merge label %s into %s", c.label, c.into),
-			py.Dict{{Key: "label", Value: c.label}, {Key: "into", Value: c.into}, {Key: "messages", Value: scanutil.SnapshotList(snaps)}},
-			py.Dict{
-				{Key: "from", Value: c.label}, {Key: "into", Value: c.into}, {Key: "from_count", Value: len(c.ids)},
-				{Key: "into_count", Value: len(m.members[c.into])}, {Key: "messages", Value: views},
-			}, fingerprint, ts)
+		fingerprint := Kind + ":" + scanutil.Digest(account, c.label, c.into)
+		_, ok, err := scanutil.Publish(ctx, d, ts, Kind, &account, fingerprint, func() (*scanutil.Draft, error) {
+			snaps, err := mailops.Snapshots(ctx, d.Read, c.ids)
+			if err != nil {
+				return nil, err
+			}
+			ids := distinct(c.ids)
+			views := make([]any, len(ids))
+			for i, id := range ids {
+				views[i] = m.rows[id].View()
+			}
+			return &scanutil.Draft{
+				Title:   fmt.Sprintf("Merge label %s into %s", c.label, c.into),
+				Payload: map[string]any{"label": c.label, "into": c.into, "messages": scanutil.SnapshotList(snaps)},
+				Preview: map[string]any{"from": c.label, "into": c.into, "from_count": len(c.ids), "into_count": len(m.members[c.into]), "messages": views},
+			}, nil
+		})
 		if err != nil {
 			return scanutil.Result{Candidates: len(found), Created: created}, err
 		}

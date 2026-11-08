@@ -19,8 +19,9 @@ import (
 )
 
 func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	if got := runApp("settings", "list"); got.code != cli.ExitOK {
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -28,9 +29,9 @@ func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT INTO pass_runs (job, started_at, finished_at, outcome) VALUES ('scan', ?, ?, 'ok')", old, old); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(settingEnv(passrun.RetentionKey), "1")
+	setEnv(t, settingEnv(passrun.RetentionKey), "1")
 
-	if got := runApp("proposals", "scan-all"); got.code != cli.ExitOK {
+	if got := runApp(t, "proposals", "scan-all"); got.code != cli.ExitOK {
 		t.Fatalf("scan-all: %d %s", got.code, got.stderr)
 	}
 	if ok, failed, _ := passRows(t, dir, passrun.Scan); ok != 1 || failed != 0 {
@@ -38,13 +39,13 @@ func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 	}
 
 	missing := filepath.Join(dir, "no-such-dir", "out.backup")
-	if got := runApp("backup", missing); got.code == cli.ExitOK {
+	if got := runApp(t, "backup", missing); got.code == cli.ExitOK {
 		t.Fatal("backup into a missing directory succeeded")
 	}
 	if ok, failed, msg := passRows(t, dir, passrun.Backup); ok != 0 || failed != 1 || !strings.Contains(msg, "no-such-dir") {
 		t.Errorf("backup rows ok=%d failed=%d message %q, want one failure naming the path", ok, failed, msg)
 	}
-	if got := runApp("backup", filepath.Join(dir, "out.backup")); got.code != cli.ExitOK {
+	if got := runApp(t, "backup", filepath.Join(dir, "out.backup")); got.code != cli.ExitOK {
 		t.Fatalf("backup: %d %s", got.code, got.stderr)
 	}
 	if ok, failed, _ := passRows(t, dir, passrun.Backup); ok != 1 || failed != 1 {
@@ -53,6 +54,7 @@ func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 }
 
 func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var notices []string
 	ntfy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -73,12 +75,12 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 		defer mu.Unlock()
 		return len(notices)
 	}
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(settingEnv(notify.KeyURL), ntfy.URL)
-	if got := runApp("settings", "list"); got.code != cli.ExitOK {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(notify.KeyURL), ntfy.URL)
+	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}
-	if got := runApp("backup", filepath.Join(dir, "missing", "x.backup")); got.code == cli.ExitOK {
+	if got := runApp(t, "backup", filepath.Join(dir, "missing", "x.backup")); got.code == cli.ExitOK {
 		t.Fatal("failing backup succeeded")
 	}
 
@@ -110,7 +112,7 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 		}
 	})
 
-	if got := runApp("backup", filepath.Join(dir, "ok.backup")); got.code != cli.ExitOK {
+	if got := runApp(t, "backup", filepath.Join(dir, "ok.backup")); got.code != cli.ExitOK {
 		t.Fatalf("backup: %d %s", got.code, got.stderr)
 	}
 

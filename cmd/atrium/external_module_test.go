@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/testutil/golden"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/sdk"
 )
 
@@ -18,12 +20,17 @@ const extName = "extdemo"
 
 type extModule struct{}
 
-func init() {
-	sdk.Register(extName, extModule{})
-	sdk.RegisterMigrations(extName, sdk.Migration{Version: 1, Apply: func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, "CREATE TABLE extdemo_pings (id INTEGER PRIMARY KEY, note TEXT NOT NULL)")
-		return err
-	}})
+var extOnce sync.Once
+
+func extModules() []module.Module {
+	extOnce.Do(func() {
+		settings.MustRegister(module.FlagDef(extName))
+		sdk.RegisterMigrations(extName, sdk.Migration{Version: 1, Apply: func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, "CREATE TABLE extdemo_pings (id INTEGER PRIMARY KEY, note TEXT NOT NULL)")
+			return err
+		}})
+	})
+	return []module.Module{extModule{}}
 }
 
 func (extModule) Register(sdk.Context) sdk.Registration {
@@ -64,10 +71,12 @@ func extPings(t *testing.T, dir string) int {
 }
 
 func TestExternalModuleMigratesAndRunsOnlyWhenEnabled(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(flagEnv(extName), "")
+	t.Parallel()
+	mods := extModules()
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, flagEnv(extName), "")
 
-	off := runApp(extName)
+	off := runAppWith(t, mods, extName)
 	if off.code != cli.ExitOK || off.stdout != "" {
 		t.Fatalf("disabled module: exit %d stdout %q stderr %q", off.code, off.stdout, off.stderr)
 	}
@@ -78,10 +87,10 @@ func TestExternalModuleMigratesAndRunsOnlyWhenEnabled(t *testing.T) {
 		t.Fatalf("disabled module wrote %d rows", n)
 	}
 
-	if set := runApp("settings", "set", extName+"_enabled", "true"); set.code != cli.ExitOK {
+	if set := runAppWith(t, mods, "settings", "set", extName+"_enabled", "true"); set.code != cli.ExitOK {
 		t.Fatalf("enable: exit %d stderr %q", set.code, set.stderr)
 	}
-	on := runApp(extName)
+	on := runAppWith(t, mods, extName)
 	if on.code != cli.ExitOK || on.stdout != "pong\n" {
 		t.Fatalf("enabled module: exit %d stdout %q stderr %q", on.code, on.stdout, on.stderr)
 	}
@@ -90,47 +99,12 @@ func TestExternalModuleMigratesAndRunsOnlyWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestExternalModuleMigratesAGoldenDatabaseCopy(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(flagEnv(extName), "")
-	copyGoldenFile(t, filepath.Join(golden.Dir(), "atrium.db"), filepath.Join(dir, "atrium.db"))
-
-	ran := runApp(extName)
-	if ran.code != cli.ExitOK {
-		t.Fatalf("golden copy: exit %d stderr %q", ran.code, ran.stderr)
-	}
-	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = d.Close() }()
-	var core, mod int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version IN (10, 11, 12, 13, 14, 15)").Scan(&core); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM module_migrations WHERE module = ? AND version = 1", extName).Scan(&mod); err != nil {
-		t.Fatal(err)
-	}
-	var notified int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications WHERE channel IS NULL").Scan(&notified); err != nil {
-		t.Fatalf("notifications after migration 12: %v", err)
-	}
-	var messages, stored int
-	if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM messages), (SELECT COUNT(*) FROM mail_accounts)").Scan(&messages, &stored); err != nil {
-		t.Fatalf("mail tables after migration 15: %v", err)
-	}
-	if messages != 158 || stored != 0 {
-		t.Errorf("golden copy after migration 15: %d messages, %d stored accounts; want 158 and 0", messages, stored)
-	}
-	if core != 6 || mod != 1 || !tableExists(t, dir, "pass_runs") || !tableExists(t, dir, "pass_run_alerts") || !tableExists(t, dir, "ntfy_channels") || !tableExists(t, dir, "endpoint_probes") || !tableExists(t, dir, "integration_health") {
-		t.Fatalf("golden copy: core migrations 10-15 recorded %d, module migration recorded %d", core, mod)
-	}
-}
-
 func TestNewerExternalModuleSchemaIsRefusedBeforeWrites(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(flagEnv(extName), "true")
-	if first := runApp(extName); first.code != cli.ExitOK {
+	t.Parallel()
+	mods := extModules()
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, flagEnv(extName), "true")
+	if first := runAppWith(t, mods, extName); first.code != cli.ExitOK {
 		t.Fatalf("first run: exit %d stderr %q", first.code, first.stderr)
 	}
 	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
@@ -142,7 +116,7 @@ func TestNewerExternalModuleSchemaIsRefusedBeforeWrites(t *testing.T) {
 	}
 	_ = d.Close()
 
-	refused := runApp(extName)
+	refused := runAppWith(t, mods, extName)
 	if refused.code == cli.ExitOK || !strings.Contains(refused.stderr, "newer "+extName+" module") {
 		t.Fatalf("newer module schema: exit %d stderr %q", refused.code, refused.stderr)
 	}

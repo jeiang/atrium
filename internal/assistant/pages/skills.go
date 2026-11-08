@@ -13,7 +13,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/skills"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -70,7 +69,7 @@ func (p *pages) skillsPage(w http.ResponseWriter, r *http.Request, status int, t
 
 func (p *pages) skillsIndex(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	q := py.Strip(web.QueryValue(r.URL.Query(), "q"))
+	q := strings.TrimSpace(web.QueryValue(r.URL.Query(), "q"))
 	var toast *tpl.Toast
 	var focus string
 	saved := web.QueryValue(r.URL.Query(), "saved")
@@ -113,7 +112,7 @@ func (p *pages) skillSave(w http.ResponseWriter, r *http.Request) {
 	if errors.As(err, &refused) {
 		editing := ""
 		if web.FormString(form, "from", "") == "edit" {
-			existing, getErr := skills.Get(ctx, p.deps.DB.Read, py.Strip(draft.Name))
+			existing, getErr := skills.Get(ctx, p.deps.DB.Read, strings.TrimSpace(draft.Name))
 			check(getErr)
 			if existing != nil {
 				editing = existing.Name
@@ -123,7 +122,7 @@ func (p *pages) skillSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	check(err)
-	saved := py.Strip(draft.Name)
+	saved := strings.TrimSpace(draft.Name)
 	settingsRedirect(w, "/settings/skills?saved="+url.QueryEscape(saved))
 }
 

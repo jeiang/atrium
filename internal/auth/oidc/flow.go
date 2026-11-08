@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 const (
@@ -29,7 +30,6 @@ const (
 	slideInterval = time.Minute
 	recheckGrace  = time.Hour
 	retryGap      = time.Minute
-	maxReturnLen  = 2048
 )
 
 var (
@@ -48,7 +48,7 @@ type Service struct {
 	hc  *http.Client
 	now func() time.Time
 
-	KeyRefetchGap time.Duration
+	keyRefetchGap time.Duration
 
 	mu        sync.Mutex
 	sealed    *sealer
@@ -56,12 +56,19 @@ type Service struct {
 	providers map[string]*provider
 	locks     map[int64]*sync.Mutex
 	retry     map[int64]time.Time
-	test      *testRun
-	testSeq   int
 }
 
-func New(d *db.DB, env config.Env) *Service {
-	s := &Service{d: d, env: env, now: time.Now, KeyRefetchGap: jwksMinGap, providers: map[string]*provider{}, locks: map[int64]*sync.Mutex{}, retry: map[int64]time.Time{}}
+type Option func(*Service)
+
+func WithKeyRefetchGap(gap time.Duration) Option {
+	return func(s *Service) { s.keyRefetchGap = gap }
+}
+
+func New(d *db.DB, env config.Env, opts ...Option) *Service {
+	s := &Service{d: d, env: env, now: time.Now, keyRefetchGap: jwksMinGap, providers: map[string]*provider{}, locks: map[int64]*sync.Mutex{}, retry: map[int64]time.Time{}}
+	for _, opt := range opts {
+		opt(s)
+	}
 	s.hc = s.client()
 	return s
 }
@@ -95,16 +102,7 @@ func challenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-func SafeReturn(target string) string {
-	if target == "" || len(target) > maxReturnLen || target[0] != '/' || strings.HasPrefix(target, "//") || strings.ContainsAny(target, "\\\r\n\t") {
-		return "/"
-	}
-	u, err := url.Parse(target)
-	if err != nil || u.Scheme != "" || u.Host != "" || strings.HasPrefix(u.Path, "/auth/") {
-		return "/"
-	}
-	return target
-}
+func SafeReturn(target string) string { return urlx.SafeReturn(target) }
 
 type Login struct {
 	URL     string
@@ -122,12 +120,13 @@ func (s *Service) Begin(ctx context.Context, returnTo string) (Login, error) {
 	}
 	state, nonce, verifier, binding := randomToken(), randomToken(), randomToken(), randomToken()
 	now := s.unix()
+	sl := s.sealerFor(cfg)
 	err = s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM auth_logins WHERE created_at < ?", now-loginTTL.Seconds()); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO auth_logins (state_hash, binding_hash, nonce, verifier, return_to, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-			digest(state), digest(binding), nonce, verifier, SafeReturn(returnTo), now); err != nil {
+			digest(state), digest(binding), sl.sealPending(nonce), sl.sealPending(verifier), SafeReturn(returnTo), now); err != nil {
 			return err
 		}
 		_, err := tx.ExecContext(ctx, "DELETE FROM auth_logins WHERE state_hash NOT IN (SELECT state_hash FROM auth_logins ORDER BY created_at DESC LIMIT ?)", loginCap)
@@ -174,7 +173,6 @@ func (s *Service) authorizeURL(cfg Config, p *provider, state, nonce, verifier s
 }
 
 type Session struct {
-	ID      int64
 	Subject string
 	Email   string
 	Name    string
@@ -185,7 +183,6 @@ type Grant struct {
 	Token    string
 	ReturnTo string
 	MaxAge   time.Duration
-	Session  Session
 }
 
 type pendingLogin struct {
@@ -193,12 +190,18 @@ type pendingLogin struct {
 	created                            float64
 }
 
-func (s *Service) consumeLogin(ctx context.Context, state string) (pendingLogin, error) {
+func (s *Service) consumeLogin(ctx context.Context, state, binding string, cfg Config) (pendingLogin, error) {
 	var p pendingLogin
 	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
-		row := tx.QueryRowContext(ctx, "SELECT binding_hash, nonce, verifier, return_to, created_at FROM auth_logins WHERE state_hash = ?", digest(state))
+		row := tx.QueryRowContext(ctx, "SELECT binding_hash, nonce, verifier, return_to, created_at FROM auth_logins WHERE state_hash = ? AND purpose = 'login'", digest(state))
 		if err := row.Scan(&p.binding, &p.nonce, &p.verifier, &p.returnTo, &p.created); err != nil {
 			return err
+		}
+		if subtle.ConstantTimeCompare([]byte(p.binding), []byte(digest(binding))) != 1 {
+			return ErrLogin
+		}
+		if s.unix()-p.created > loginTTL.Seconds() {
+			return ErrLoginTimeout
 		}
 		_, err := tx.ExecContext(ctx, "DELETE FROM auth_logins WHERE state_hash = ?", digest(state))
 		return err
@@ -206,24 +209,23 @@ func (s *Service) consumeLogin(ctx context.Context, state string) (pendingLogin,
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, ErrLogin
 	}
-	return p, err
+	if err != nil {
+		return p, err
+	}
+	sl := s.sealerFor(cfg)
+	p.nonce, p.verifier = sl.openPending(p.nonce), sl.openPending(p.verifier)
+	return p, nil
 }
 
 func (s *Service) Complete(ctx context.Context, state, code, binding string) (Grant, error) {
 	if state == "" || code == "" || binding == "" {
 		return Grant{}, ErrLogin
 	}
-	pending, err := s.consumeLogin(ctx, state)
+	cfg, err := load(ctx, s.d.Read, s.env, s.d.Encrypted())
 	if err != nil {
 		return Grant{}, err
 	}
-	if subtle.ConstantTimeCompare([]byte(pending.binding), []byte(digest(binding))) != 1 {
-		return Grant{}, ErrLogin
-	}
-	if s.unix()-pending.created > loginTTL.Seconds() {
-		return Grant{}, ErrLoginTimeout
-	}
-	cfg, err := load(ctx, s.d.Read, s.env, s.d.Encrypted())
+	pending, err := s.consumeLogin(ctx, state, binding, cfg)
 	if err != nil {
 		return Grant{}, err
 	}
@@ -247,26 +249,28 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 	if reply.ExpiresIn > 0 {
 		accessExpires = now + float64(reply.ExpiresIn)
 	}
-	var sess Session
 	err = s.d.WithTx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, "DELETE FROM auth_sessions WHERE absolute_expires_at < ? OR idle_expires_at < ?", now, now); err != nil {
-			return err
-		}
-		absolute := now + cfg.Max.Seconds()
-		idle := min(now+cfg.Idle.Seconds(), absolute)
-		res, err := tx.ExecContext(ctx, "INSERT INTO auth_sessions (token_hash, subject, email, name, admin, created_at, last_seen_at, idle_expires_at, absolute_expires_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			digest(token), id.Subject, id.Email, id.Name, boolInt(admin), now, now, idle, absolute, now, sl.seal(reply.AccessToken), accessExpires, sl.seal(reply.RefreshToken), boolInt(id.EmailVerified), id.Hosted)
+		expired, err := expiredIDs(ctx, tx, now)
 		if err != nil {
 			return err
 		}
-		sess.ID, err = res.LastInsertId()
-		return err
+		if _, err := tx.ExecContext(ctx, "DELETE FROM auth_sessions WHERE absolute_expires_at < ? OR idle_expires_at < ?", now, now); err != nil {
+			return err
+		}
+		s.forget(expired...)
+		absolute := now + cfg.Max.Seconds()
+		idle := min(now+cfg.Idle.Seconds(), absolute)
+		return insertSession(ctx, tx, sessionInsert{
+			tokenHash: digest(token), subject: id.Subject, email: id.Email, name: id.Name, admin: admin,
+			now: now, idle: idle, absolute: absolute, rechecked: now,
+			accessToken: sl.seal(reply.AccessToken), accessExpires: accessExpires,
+			refreshToken: sl.seal(reply.RefreshToken), verified: id.EmailVerified, hosted: id.Hosted, origin: originOIDC,
+		})
 	})
 	if err != nil {
 		return Grant{}, err
 	}
-	sess.Subject, sess.Email, sess.Name, sess.Admin = id.Subject, id.Email, id.Name, admin
-	return Grant{Token: token, ReturnTo: pending.returnTo, MaxAge: cfg.Max, Session: sess}, nil
+	return Grant{Token: token, ReturnTo: pending.returnTo, MaxAge: cfg.Max}, nil
 }
 
 func (s *Service) exchange(ctx context.Context, cfg Config, p *provider, code, verifier, nonce string) (tokenReply, identity, error) {
@@ -298,8 +302,8 @@ func boolInt(b bool) int {
 }
 
 func (s *Service) resolveIdentity(ctx context.Context, p *provider, cfg Config, claims map[string]any, accessToken string) (identity, error) {
-	id := identityOf(claims, cfg)
-	if cfg.GroupsClaim == "" || id.HasGroups || p.userinfoURL == "" || accessToken == "" {
+	id := identity{}.signed(claims, cfg)
+	if !needsUserinfo(id, cfg) || p.userinfoURL == "" || accessToken == "" {
 		return id, nil
 	}
 	info, err := s.userinfo(ctx, p, accessToken)
@@ -309,15 +313,7 @@ func (s *Service) resolveIdentity(ctx context.Context, p *provider, cfg Config, 
 	if claimString(info, "sub") != id.Subject {
 		return id, fmt.Errorf("%w: userinfo subject differs from the id token", ErrToken)
 	}
-	extra := identityOf(info, cfg)
-	id.Groups, id.HasGroups = extra.Groups, extra.HasGroups
-	if id.Email == "" {
-		id.Email, id.EmailVerified = extra.Email, extra.EmailVerified
-	}
-	if id.Name == "" {
-		id.Name = extra.Name
-	}
-	return id, nil
+	return id.absorb(info, cfg), nil
 }
 
 type tokenReply struct {

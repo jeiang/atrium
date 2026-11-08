@@ -52,9 +52,8 @@ func TokenKey(channel string) string { return "ntfy_token_" + channel }
 
 func init() {
 	for _, name := range Channels {
-		settings.MustRegister(settings.Def{
-			Key: TokenKey(name), Module: module, Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true,
-		})
+		settings.MustRegister(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{
+			Key: TokenKey(name), Module: module, Type: settings.String, Page: "/settings/notifications"}))
 	}
 }
 
@@ -129,13 +128,11 @@ func ListChannels(ctx context.Context, q db.Querier) ([]Channel, error) {
 		if err != nil {
 			return nil, err
 		}
-		var one int
-		switch err := q.QueryRowContext(ctx, "SELECT 1 FROM secrets WHERE name = ?", TokenKey(name)).Scan(&one); {
-		case err == nil:
-			c.Token = true
-		case !errors.Is(err, sql.ErrNoRows):
+		status, err := settings.NewStoreIn(settings.From(ctx), nil, q, nil).Status(ctx, TokenKey(name))
+		if err != nil {
 			return nil, err
 		}
+		c.Token = status != settings.Unset
 		out = append(out, c)
 	}
 	return out, nil
@@ -149,17 +146,6 @@ func (c Channel) FullText() bool {
 		return false
 	}
 	return c.Privacy == Private
-}
-
-func Failing(ctx context.Context, q db.Querier) ([]string, error) {
-	rows, err := q.QueryContext(ctx, "SELECT name FROM ntfy_channels WHERE failures >= ? ORDER BY name", FailingAfter)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var name string
-		return name, r.Scan(&name)
-	})
 }
 
 func recordDelivery(ctx context.Context, q db.Querier, channel string, failure string) (int, error) {

@@ -29,12 +29,12 @@ type EpisodeView struct {
 	Size    int64  `json:"size"`
 	Public  string `json:"public"`
 	VPN     string `json:"vpn"`
-	Season  *int64 `json:"season"`
-	Episode *int64 `json:"episode"`
+	Season  *int   `json:"season"`
+	Episode *int   `json:"episode"`
 }
 
 type SeasonView struct {
-	Number   *int64        `json:"number"`
+	Number   *int          `json:"number"`
 	Dir      string        `json:"dir"`
 	Episodes []EpisodeView `json:"episodes"`
 }

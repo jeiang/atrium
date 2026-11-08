@@ -5,9 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"strings"
 
-	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
 )
@@ -17,9 +15,9 @@ const (
 	SourceLocal = "local"
 	SourceOIDC  = "oidc"
 
-	LoginPath    = "/login"
-	CallbackPath = oidc.CallbackPath
-	LogoutPath   = "/logout"
+	loginPath    = "/login"
+	callbackPath = oidc.CallbackPath
+	logoutPath   = "/logout"
 
 	sessionCookie = "atrium_session"
 	bindingCookie = "atrium_oidc_state"
@@ -49,26 +47,19 @@ func IdentityOf(ctx context.Context) (Identity, bool) {
 	return who, ok
 }
 
-func signInPath(r *http.Request) bool {
-	switch r.URL.Path {
-	case LoginPath:
-		return r.Method == http.MethodGet || r.Method == http.MethodPost
-	case CallbackPath:
-		return r.Method == http.MethodGet
-	case loginlink.Path:
-		return r.Method == http.MethodGet || r.Method == http.MethodPost
-	}
-	return false
-}
-
 func (g *Guard) identify(r *http.Request) (Identity, error) {
-	if g.auth.Local {
+	if g.auth.Local() {
 		return Identity{Source: SourceLocal, Admin: true}, nil
 	}
-	if g.auth.Proxy && hasGroup(r.Header.Get("Remote-Groups"), Group) {
-		return Identity{Source: SourceProxy, Admin: hasGroup(r.Header.Get("Remote-Groups"), g.adminGroup(r.Context()))}, nil
+	if g.auth.Proxy() && hasGroup(r.Header.Get("Remote-Groups"), group) {
+		adminGroup, err := g.adminGroup(r.Context())
+		if err != nil {
+			log.Error("admin group lookup failed", logx.Err, err.Error())
+			return Identity{}, errUnavailable
+		}
+		return Identity{Source: SourceProxy, Admin: hasGroup(r.Header.Get("Remote-Groups"), adminGroup)}, nil
 	}
-	if g.auth.OIDC {
+	if g.auth.OIDC() {
 		if token := cookieValue(r, sessionCookie, g.secure(r)); token != "" {
 			s, err := g.sessions.Authenticate(r.Context(), token)
 			switch {
@@ -88,7 +79,7 @@ func (g *Guard) identify(r *http.Request) (Identity, error) {
 }
 
 func (g *Guard) unauthenticated(w http.ResponseWriter, r *http.Request, why error) {
-	if !g.auth.OIDC {
+	if !g.auth.OIDC() {
 		deny(w, http.StatusForbidden, "Forbidden")
 		return
 	}
@@ -110,7 +101,7 @@ func (g *Guard) unauthenticated(w http.ResponseWriter, r *http.Request, why erro
 			q.Set("next", next)
 		}
 	}
-	target := LoginPath
+	target := loginPath
 	if len(q) > 0 {
 		target += "?" + q.Encode()
 	}
@@ -145,23 +136,6 @@ func setCookie(w http.ResponseWriter, name, value string, maxAge int, secure boo
 
 func expireCookie(w http.ResponseWriter, name string, secure bool) {
 	setCookie(w, name, "", -1, secure)
-	if secure {
-		setCookie(w, name, "", -1, false)
-	}
 }
 
 func hasSecureTransport(r *http.Request, publicSecure bool) bool { return publicSecure || isHTTPS(r) }
-
-func routeMatches(pattern, path string) bool {
-	want := strings.Split(strings.Trim(pattern, "/"), "/")
-	got := strings.Split(strings.Trim(strings.ToLower(path), "/"), "/")
-	for i, seg := range want {
-		if seg == "*" {
-			return true
-		}
-		if i >= len(got) || got[i] != seg {
-			return false
-		}
-	}
-	return len(got) == len(want)
-}

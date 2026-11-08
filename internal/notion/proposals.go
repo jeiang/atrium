@@ -5,23 +5,27 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"slices"
 	"strings"
 	"time"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/difflib"
+	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/llm"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
 	KindLink       = "notion_link"
 	KindEdit       = "notion_edit"
+	KindCapture    = "notion_capture"
 	UndoRestoreOp  = "notion_restore"
 	relatedHeading = "Related"
 	diffContext    = 2
@@ -32,40 +36,28 @@ const (
 )
 
 var (
-	propHeadRe = rx.MustCompile(`^#{1,6}\s+(.*?)\s*#*\s*$`, 0)
-	listItemRe = rx.MustCompile(`^\s*(?:[-*+]|\d+\.)\s`, 0)
+	propHeadRe = regexp.MustCompile(`^#{1,6}\s+(.*?)\s*#*\s*$`)
+	listItemRe = regexp.MustCompile(`^\s*(?:[-*+]|\d+\.)\s`)
 )
 
 type ProposalError string
 
 func (e ProposalError) Error() string { return string(e) }
 
-func (ProposalError) PyClass() string { return "ProposalError" }
-
-func (ProposalError) PyModule() string { return "atrium.notion_proposals" }
-
 type StaleError string
 
 func (e StaleError) Error() string { return string(e) }
-
-func (StaleError) PyClass() string { return "StaleError" }
-
-func (StaleError) PyModule() string { return "atrium.notion_proposals" }
 
 type ChatFunc func(ctx context.Context, url, system, user string, schema any, maxTokens int) (json.RawMessage, error)
 
 func (p *Page) Ref() PageRef { return pageRef(p.ID, p.Title, p.URL, p.Path, p.Private != 0) }
 
-func (r PageRef) Dict() py.Dict {
+func (r PageRef) Map() map[string]any {
 	path := make([]any, len(r.Path))
 	for i, part := range r.Path {
-		var id any
-		if part.ID != nil {
-			id = *part.ID
-		}
-		path[i] = py.Dict{{Key: "id", Value: id}, {Key: "title", Value: part.Title}}
+		path[i] = map[string]any{"title": part.Title}
 	}
-	return py.Dict{{Key: "id", Value: r.ID}, {Key: "title", Value: r.Title}, {Key: "url", Value: r.URL}, {Key: "path", Value: path}, {Key: "private", Value: r.Private}}
+	return map[string]any{"id": r.ID, "title": r.Title, "url": r.URL, "path": path, "private": r.Private}
 }
 
 type Proposer struct {
@@ -81,16 +73,16 @@ func (p *Proposer) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-func (p *Proposer) chat(ctx context.Context, system, user, schema string, maxTokens int) (py.Dict, error) {
+func (p *Proposer) chat(ctx context.Context, system, user, schema string, maxTokens int) (map[string]any, error) {
 	call := p.Chat
 	if call == nil {
 		call = llm.ChatJSON
 	}
-	chatURL, err := mail.ChatURL(ctx, p.DB.Read)
+	chatURL, err := endpoint.ChatURL(ctx, p.DB.Read)
 	if err != nil {
 		return nil, err
 	}
-	ctx, err = mail.WithModels(ctx, p.DB.Read)
+	ctx, err = embed.WithModels(ctx, p.DB.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -98,20 +90,43 @@ func (p *Proposer) chat(ctx context.Context, system, user, schema string, maxTok
 	if err != nil {
 		return nil, err
 	}
-	v, err := py.JSONLoads(raw)
-	if err != nil {
+	var answer map[string]any
+	if err := json.Unmarshal(raw, &answer); err != nil {
 		return nil, err
 	}
-	d, ok := v.(py.Dict)
-	if !ok {
-		return nil, py.AttributeError(v, "get")
+	if answer == nil {
+		return nil, errors.New("proposal payload is not an object")
 	}
-	return d, nil
+	return answer, nil
 }
 
 func fingerprint(parts ...any) string {
-	sum := sha256.Sum256([]byte(py.JSONDumps(parts)))
+	quoted := make([]string, len(parts))
+	for i, part := range parts {
+		encoded, _ := json.Marshal(part)
+		quoted[i] = string(encoded)
+	}
+	sum := sha256.Sum256([]byte("[" + strings.Join(quoted, ", ") + "]"))
 	return hex.EncodeToString(sum[:])[:32]
+}
+
+func clip(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	i := 0
+	for pos := range s {
+		if i == n {
+			return s[:pos]
+		}
+		i++
+	}
+	return s
+}
+
+func splitLines(text string) []string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	return strings.Split(strings.ReplaceAll(text, "\r", "\n"), "\n")
 }
 
 func (p *Proposer) load(ctx context.Context, id string) (*Page, error) {
@@ -132,7 +147,7 @@ func orUntitledTitle(title string) string {
 	return title
 }
 
-func (p *Proposer) create(ctx context.Context, kind, title string, payload, preview py.Dict, fp string) (*int64, error) {
+func (p *Proposer) create(ctx context.Context, kind, title string, payload, preview map[string]any, fp string) (*int64, error) {
 	account := Account
 	id, ok, err := proposals.Create(ctx, p.DB, kind, &account, title, payload, preview, fp, p.now())
 	if err != nil || !ok {
@@ -156,11 +171,11 @@ func (p *Proposer) ProposeLink(ctx context.Context, sourceID, targetID string) (
 	if (source.Private != 0) != (target.Private != 0) {
 		return nil, ProposalError("private and non-private pages are never compared")
 	}
-	links, err := py.JSONLoads([]byte(source.Links))
-	if err != nil {
+	var links []string
+	if err := json.Unmarshal([]byte(source.Links), &links); err != nil {
 		return nil, err
 	}
-	if items, _ := links.([]any); slices.Contains(items, any(target.ID)) {
+	if slices.Contains(links, target.ID) {
 		return nil, nil
 	}
 	limits, err := LoadProposals(ctx, p.DB.Read)
@@ -168,52 +183,45 @@ func (p *Proposer) ProposeLink(ctx context.Context, sourceID, targetID string) (
 		return nil, err
 	}
 	block := func(label string, page *Page) string {
-		return label + ":\nTitle: " + page.Title + "\nLocation: " + page.Path + "\nText:\n" + py.Clip(page.Markdown, limits.LinkPageChars)
+		return label + ":\nTitle: " + page.Title + "\nLocation: " + page.Path + "\nText:\n" + clip(page.Markdown, limits.LinkPageChars)
 	}
 	answer, err := p.chat(ctx, linkSystem, block("Page A", source)+"\n\n"+block("Page B", target), linkSchemaJSON, limits.LinkMaxTokens)
 	if err != nil {
 		return nil, err
 	}
-	if v, _ := answer.Get("link"); !py.Truthy(v) {
+	if !present(answer["link"]) {
 		return nil, nil
 	}
-	reason := ""
-	if v, ok := answer.Get("reason"); ok {
-		reason = fmt.Sprint(v)
-		if s, isString := v.(string); isString {
-			reason = s
-		}
+	reason, _ := answer["reason"].(string)
+	payload := map[string]any{
+		"source_id": source.ID, "target_id": target.ID,
+		"source_title": source.Title, "target_title": target.Title,
+		"target_url": target.URL, "reason": reason, "snapshot": source.LastEditedTime,
 	}
-	payload := py.Dict{
-		{Key: "source_id", Value: source.ID}, {Key: "target_id", Value: target.ID},
-		{Key: "source_title", Value: source.Title}, {Key: "target_title", Value: target.Title},
-		{Key: "target_url", Value: target.URL}, {Key: "reason", Value: reason}, {Key: "snapshot", Value: source.LastEditedTime},
-	}
-	preview := py.Dict{{Key: "a", Value: source.Ref().Dict()}, {Key: "b", Value: target.Ref().Dict()}, {Key: "reason", Value: reason}}
+	preview := map[string]any{"a": source.Ref().Map(), "b": target.Ref().Map(), "reason": reason}
 	return p.create(ctx, KindLink, "Link "+orUntitledTitle(source.Title)+" to "+orUntitledTitle(target.Title), payload, preview,
 		fingerprint(KindLink, source.ID, target.ID))
 }
 
-type update struct{ oldStr, newStr string }
-
-func (u update) dict() py.Dict {
-	return py.Dict{{Key: "old_str", Value: u.oldStr}, {Key: "new_str", Value: u.newStr}}
+type update struct {
+	OldStr string `json:"old_str"`
+	NewStr string `json:"new_str"`
 }
 
 func updateDicts(updates []update) []any {
 	out := make([]any, len(updates))
 	for i, u := range updates {
-		out[i] = u.dict()
+		out[i] = map[string]any{"old_str": u.OldStr, "new_str": u.NewStr}
 	}
 	return out
 }
 
 func applyUpdates(markdown string, updates []update) (string, bool) {
 	for _, u := range updates {
-		if strings.Count(markdown, u.oldStr) != 1 {
+		if strings.Count(markdown, u.OldStr) != 1 {
 			return "", false
 		}
-		markdown = strings.Replace(markdown, u.oldStr, u.newStr, 1)
+		markdown = strings.Replace(markdown, u.OldStr, u.NewStr, 1)
 	}
 	return markdown, true
 }
@@ -222,10 +230,10 @@ func validUpdates(markdown string, raw []any) []update {
 	kept := []update{}
 	working := markdown
 	for _, item := range raw {
-		d := asDict(item)
-		u := update{text(d, "old_str"), text(d, "new_str")}
-		if u.oldStr != "" && u.oldStr != u.newStr && strings.Count(working, u.oldStr) == 1 {
-			working = strings.Replace(working, u.oldStr, u.newStr, 1)
+		d, _ := item.(map[string]any)
+		u := update{mapString(d, "old_str"), mapString(d, "new_str")}
+		if u.OldStr != "" && u.OldStr != u.NewStr && strings.Count(working, u.OldStr) == 1 {
+			working = strings.Replace(working, u.OldStr, u.NewStr, 1)
 			kept = append(kept, u)
 		}
 	}
@@ -233,10 +241,10 @@ func validUpdates(markdown string, raw []any) []update {
 }
 
 func diffLines(before, after string) []any {
-	old, updated := py.SplitLines(before), py.SplitLines(after)
+	old, updated := splitLines(before), splitLines(after)
 	out := []any{}
-	line := func(op, text string) any { return py.Dict{{Key: "op", Value: op}, {Key: "text", Value: text}} }
-	for _, group := range py.GroupedOpcodes(old, updated, diffContext) {
+	line := func(op, text string) any { return map[string]any{"op": op, "text": text} }
+	for _, group := range difflib.GroupedOpcodes(old, updated, diffContext) {
 		if len(out) > 0 {
 			out = append(out, line("same", "…"))
 		}
@@ -263,7 +271,7 @@ func (p *Proposer) ProposeEdit(ctx context.Context, pageID, instruction string) 
 	if err != nil {
 		return nil, err
 	}
-	instruction = py.Strip(instruction)
+	instruction = strings.TrimSpace(instruction)
 	if instruction == "" {
 		return nil, ProposalError("empty instruction")
 	}
@@ -272,38 +280,34 @@ func (p *Proposer) ProposeEdit(ctx context.Context, pageID, instruction string) 
 		return nil, err
 	}
 	markdown := page.Markdown
-	user := "Instruction: " + instruction + "\n\nPage title: " + page.Title + "\nPage Markdown:\n" + py.Clip(markdown, limits.EditPageChars)
+	user := "Instruction: " + instruction + "\n\nPage title: " + page.Title + "\nPage Markdown:\n" + clip(markdown, limits.EditPageChars)
 	answer, err := p.chat(ctx, editSystem, user, editSchemaJSON, limits.EditMaxTokens)
 	if err != nil {
 		return nil, err
 	}
-	raw, _ := field(answer, "updates").([]any)
+	raw, _ := answer["updates"].([]any)
 	updates := validUpdates(markdown, raw)
 	if len(updates) == 0 {
 		return nil, ProposalError("the model proposed no applicable edit")
 	}
 	after, _ := applyUpdates(markdown, updates)
-	summary := ""
-	if s, ok := field(answer, "summary").(string); ok {
-		summary = s
+	summary, _ := answer["summary"].(string)
+	payload := map[string]any{
+		"page_id": page.ID, "title": page.Title, "instruction": instruction,
+		"updates": updateDicts(updates), "summary": summary, "snapshot": page.LastEditedTime,
 	}
-	payload := py.Dict{
-		{Key: "page_id", Value: page.ID}, {Key: "title", Value: page.Title}, {Key: "instruction", Value: instruction},
-		{Key: "updates", Value: updateDicts(updates)}, {Key: "summary", Value: summary}, {Key: "snapshot", Value: page.LastEditedTime},
-	}
-	preview := py.Dict{
-		{Key: "page", Value: page.Ref().Dict()}, {Key: "summary", Value: summary}, {Key: "instruction", Value: instruction},
-		{Key: "diff", Value: diffLines(markdown, after)}, {Key: "changes", Value: updateDicts(updates)},
+	preview := map[string]any{
+		"page": page.Ref().Map(), "summary": summary, "instruction": instruction,
+		"diff": diffLines(markdown, after), "changes": updateDicts(updates),
 	}
 	return p.create(ctx, KindEdit, "Edit "+orUntitledTitle(page.Title), payload, preview,
 		fingerprint(KindEdit, page.ID, instruction, page.LastEditedTime, updateDicts(updates)))
 }
 
 type Applier struct {
-	DB        *db.DB
-	Env       config.Env
-	NewClient func(token string) *Client
-	Now       func() float64
+	DB  *db.DB
+	Env config.Env
+	Now func() float64
 }
 
 func (a *Applier) now() float64 {
@@ -314,15 +318,7 @@ func (a *Applier) now() float64 {
 }
 
 func (a *Applier) client(ctx context.Context) (*Client, error) {
-	token, err := Token(ctx, a.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	client := NewClient(token)
-	if a.NewClient != nil {
-		client = a.NewClient(token)
-	}
-	return client, client.Configure(ctx, a.DB.Read)
+	return NewClient(ctx, a.DB.Read, a.Env)
 }
 
 func freshPage(ctx context.Context, client *Client, pageID, snapshot string) error {
@@ -330,11 +326,11 @@ func freshPage(ctx context.Context, client *Client, pageID, snapshot string) err
 	if err != nil {
 		return err
 	}
-	if py.Truthy(field(live, "in_trash")) {
+	if live.InTrash {
 		return StaleError("page is in the trash")
 	}
-	if edited := field(live, "last_edited_time"); edited != any(snapshot) {
-		return StaleError("page changed since the proposal: " + snapshot + " -> " + pyStr(edited))
+	if live.LastEditedTime != snapshot {
+		return StaleError("page changed since the proposal: " + snapshot + " -> " + live.LastEditedTime)
 	}
 	return nil
 }
@@ -343,15 +339,12 @@ func relatedAnchor(markdown string) (string, bool, error) {
 	lines := strings.Split(markdown, "\n")
 	start := -1
 	for i, line := range lines {
-		m, err := propHeadRe.Match(line)
-		if err != nil {
-			return "", false, err
-		}
+		loc := propHeadRe.FindStringSubmatchIndex(line)
 		if start < 0 {
-			if m != nil && strings.EqualFold(py.Strip(m.Group(1)), relatedHeading) {
+			if loc != nil && strings.EqualFold(strings.TrimSpace(line[loc[2]:loc[3]]), relatedHeading) {
 				start = i
 			}
-		} else if m != nil {
+		} else if loc != nil {
 			return lastListLine(lines, start, i)
 		}
 	}
@@ -363,14 +356,10 @@ func relatedAnchor(markdown string) (string, bool, error) {
 
 func lastListLine(lines []string, start, end int) (string, bool, error) {
 	for i := end - 1; i > start; i-- {
-		m, err := listItemRe.Match(lines[i])
-		if err != nil {
-			return "", false, err
-		}
-		if m != nil {
+		if loc := listItemRe.FindStringIndex(lines[i]); loc != nil && loc[0] == 0 {
 			return lines[i], true, nil
 		}
-		if py.Strip(lines[i]) != "" {
+		if strings.TrimSpace(lines[i]) != "" {
 			return "", false, nil
 		}
 	}
@@ -379,11 +368,8 @@ func lastListLine(lines []string, start, end int) (string, bool, error) {
 
 func hasRelatedSection(markdown string) (bool, error) {
 	for _, line := range strings.Split(markdown, "\n") {
-		m, err := propHeadRe.Match(line)
-		if err != nil {
-			return false, err
-		}
-		if m != nil && strings.EqualFold(py.Strip(m.Group(1)), relatedHeading) {
+		loc := propHeadRe.FindStringSubmatchIndex(line)
+		if loc != nil && strings.EqualFold(strings.TrimSpace(line[loc[2]:loc[3]]), relatedHeading) {
 			return true, nil
 		}
 	}
@@ -395,13 +381,13 @@ func linkMarkdown(title, url string) string {
 }
 
 func linkBlocks(title, url string, withHeading bool) []any {
-	bullet := py.Dict{{Key: "type", Value: "bulleted_list_item"}, {Key: "bulleted_list_item", Value: py.Dict{{Key: "rich_text", Value: []any{
-		py.Dict{{Key: "type", Value: "text"}, {Key: "text", Value: py.Dict{{Key: "content", Value: orUntitledTitle(title)}, {Key: "link", Value: py.Dict{{Key: "url", Value: url}}}}}}}}}}}
+	bullet := map[string]any{"type": "bulleted_list_item", "bulleted_list_item": map[string]any{"rich_text": []any{
+		map[string]any{"type": "text", "text": map[string]any{"content": orUntitledTitle(title), "link": map[string]any{"url": url}}}}}}
 	if !withHeading {
 		return []any{bullet}
 	}
-	heading := py.Dict{{Key: "type", Value: "heading_2"}, {Key: "heading_2", Value: py.Dict{{Key: "rich_text", Value: []any{
-		py.Dict{{Key: "type", Value: "text"}, {Key: "text", Value: py.Dict{{Key: "content", Value: relatedHeading}}}}}}}}}
+	heading := map[string]any{"type": "heading_2", "heading_2": map[string]any{"rich_text": []any{
+		map[string]any{"type": "text", "text": map[string]any{"content": relatedHeading}}}}}
 	return []any{heading, bullet}
 }
 
@@ -411,30 +397,68 @@ func (a *Applier) record(ctx context.Context, p *proposals.Proposal, action, und
 		s := failure.Error()
 		text = &s
 	}
-	_, err := proposals.RecordAction(ctx, a.DB.Write, p.ID, action, undo, applied, text, a.now())
+	state := ledger.OK
+	if !applied {
+		state = ledger.Failed
+	}
+	_, err := proposals.RecordAction(ctx, a.DB.Write, p.ID, "write", nil, action, undo, state, text, a.now())
 	return err
 }
 
-func payloadOf(p *proposals.Proposal) (py.Dict, error) {
-	v, err := py.JSONLoads(p.Payload)
-	if err != nil {
+func present(v any) bool {
+	switch v := v.(type) {
+	case nil:
+		return false
+	case string:
+		return strings.TrimSpace(v) != ""
+	case bool:
+		return v
+	}
+	return true
+}
+
+func mapString(m map[string]any, key string) string {
+	s, _ := m[key].(string)
+	return s
+}
+
+func payloadOf(p *proposals.Proposal) (map[string]any, error) {
+	var payload map[string]any
+	if err := json.Unmarshal(p.Payload, &payload); err != nil {
 		return nil, err
 	}
-	return asDict(v), nil
+	return payload, nil
 }
 
-func restoreUndo(pageID, previous string, edited any) py.Dict {
-	return py.Dict{{Key: "op", Value: UndoRestoreOp}, {Key: "page_id", Value: pageID}, {Key: "previous_markdown", Value: previous}, {Key: "applied_edited_time", Value: edited}}
+func restoreUndo(pageID, previous, edited string) map[string]any {
+	return map[string]any{"op": UndoRestoreOp, "page_id": pageID, "previous_markdown": previous, "applied_edited_time": edited}
 }
 
-func (a *Applier) failed(ctx context.Context, p *proposals.Proposal, action any, err error) (py.Dict, error) {
+type LinkResult struct {
+	Linked any `json:"linked"`
+}
+
+type EditResult struct {
+	EditedTime string `json:"edited_time"`
+}
+
+type RestoreResult struct {
+	Restored string `json:"restored"`
+}
+
+type CaptureResult struct {
+	Summary string `json:"summary"`
+	PageID  string `json:"page_id"`
+}
+
+func (a *Applier) failed(ctx context.Context, p *proposals.Proposal, action any, err error) (any, error) {
 	if rerr := a.record(ctx, p, action, nil, false, err); rerr != nil {
 		return nil, rerr
 	}
 	return nil, err
 }
 
-func (a *Applier) ExecuteLink(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
+func (a *Applier) ExecuteLink(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
 	client, err := a.client(ctx)
 	if err != nil {
 		return nil, err
@@ -443,54 +467,54 @@ func (a *Applier) ExecuteLink(ctx context.Context, p *proposals.Proposal, _ any)
 	if err != nil {
 		return nil, err
 	}
-	failure := py.Dict{{Key: "type", Value: KindLink}, {Key: "payload", Value: payload}}
-	source := text(payload, "source_id")
+	failure := map[string]any{"type": KindLink, "payload": payload}
+	source := mapString(payload, "source_id")
 	previous, after, err := a.applyLink(ctx, client, payload)
 	if err != nil {
 		return a.failed(ctx, p, failure, err)
 	}
-	undo := restoreUndo(source, previous, field(after, "last_edited_time"))
-	if err := a.record(ctx, p, py.Dict{{Key: "type", Value: KindLink}, {Key: "page_id", Value: source}}, undo, true, nil); err != nil {
+	undo := restoreUndo(source, previous, after.LastEditedTime)
+	if err := a.record(ctx, p, map[string]any{"type": KindLink, "page_id": source}, undo, true, nil); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "linked", Value: field(payload, "target_id")}}, nil
+	return LinkResult{Linked: payload["target_id"]}, nil
 }
 
-func (a *Applier) applyLink(ctx context.Context, client *Client, payload py.Dict) (string, py.Dict, error) {
-	source := text(payload, "source_id")
-	if err := freshPage(ctx, client, source, text(payload, "snapshot")); err != nil {
-		return "", nil, err
+func (a *Applier) applyLink(ctx context.Context, client *Client, payload map[string]any) (string, RemotePage, error) {
+	source := mapString(payload, "source_id")
+	if err := freshPage(ctx, client, source, mapString(payload, "snapshot")); err != nil {
+		return "", RemotePage{}, err
 	}
 	current, err := client.PageMarkdown(ctx, source)
 	if err != nil {
-		return "", nil, err
+		return "", RemotePage{}, err
 	}
-	previous := text(current, "markdown")
-	line := linkMarkdown(text(payload, "target_title"), text(payload, "target_url"))
+	previous := current.Markdown
+	line := linkMarkdown(mapString(payload, "target_title"), mapString(payload, "target_url"))
 	anchor, found, err := relatedAnchor(previous)
 	if err != nil {
-		return "", nil, err
+		return "", RemotePage{}, err
 	}
 	if found && strings.Count(previous, anchor) == 1 {
-		_, err = client.UpdateMarkdown(ctx, source, py.Dict{
-			{Key: "type", Value: "update_content"},
-			{Key: "update_content", Value: py.Dict{{Key: "content_updates", Value: []any{
-				py.Dict{{Key: "old_str", Value: anchor}, {Key: "new_str", Value: anchor + "\n" + line}}}}}},
+		err = client.UpdateMarkdown(ctx, source, map[string]any{
+			"type": "update_content",
+			"update_content": map[string]any{"content_updates": []any{
+				map[string]any{"old_str": anchor, "new_str": anchor + "\n" + line}}},
 		})
 	} else {
 		var related bool
 		if related, err = hasRelatedSection(previous); err == nil {
-			_, err = client.AppendChildren(ctx, source, linkBlocks(text(payload, "target_title"), text(payload, "target_url"), !related))
+			err = client.AppendChildren(ctx, source, linkBlocks(mapString(payload, "target_title"), mapString(payload, "target_url"), !related))
 		}
 	}
 	if err != nil {
-		return "", nil, err
+		return "", RemotePage{}, err
 	}
 	after, err := client.GetPage(ctx, source)
 	return previous, after, err
 }
 
-func (a *Applier) ExecuteEdit(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
+func (a *Applier) ExecuteEdit(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
 	client, err := a.client(ctx)
 	if err != nil {
 		return nil, err
@@ -499,77 +523,137 @@ func (a *Applier) ExecuteEdit(ctx context.Context, p *proposals.Proposal, _ any)
 	if err != nil {
 		return nil, err
 	}
-	pageID := text(payload, "page_id")
-	action := py.Dict{{Key: "type", Value: KindEdit}, {Key: "page_id", Value: pageID}}
+	pageID := mapString(payload, "page_id")
+	action := map[string]any{"type": KindEdit, "page_id": pageID}
 	previous, after, err := a.applyEdit(ctx, client, payload)
 	if err != nil {
 		return a.failed(ctx, p, action, err)
 	}
-	edited := field(after, "last_edited_time")
-	if err := a.record(ctx, p, action, restoreUndo(pageID, previous, edited), true, nil); err != nil {
+	if err := a.record(ctx, p, action, restoreUndo(pageID, previous, after.LastEditedTime), true, nil); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "edited_time", Value: edited}}, nil
+	return EditResult{EditedTime: after.LastEditedTime}, nil
 }
 
-func (a *Applier) applyEdit(ctx context.Context, client *Client, payload py.Dict) (string, py.Dict, error) {
-	pageID := text(payload, "page_id")
-	if err := freshPage(ctx, client, pageID, text(payload, "snapshot")); err != nil {
-		return "", nil, err
+func (a *Applier) applyEdit(ctx context.Context, client *Client, payload map[string]any) (string, RemotePage, error) {
+	pageID := mapString(payload, "page_id")
+	if err := freshPage(ctx, client, pageID, mapString(payload, "snapshot")); err != nil {
+		return "", RemotePage{}, err
 	}
 	current, err := client.PageMarkdown(ctx, pageID)
 	if err != nil {
-		return "", nil, err
+		return "", RemotePage{}, err
 	}
-	previous := text(current, "markdown")
-	updates := validPayloadUpdates(list(payload, "updates"))
+	previous := current.Markdown
+	updates := validPayloadUpdates(payload["updates"])
 	if _, ok := applyUpdates(previous, updates); !ok {
-		return "", nil, StaleError("page text no longer matches the drafted edit")
+		return "", RemotePage{}, StaleError("page text no longer matches the drafted edit")
 	}
-	if _, err := client.UpdateMarkdown(ctx, pageID, py.Dict{
-		{Key: "type", Value: "update_content"},
-		{Key: "update_content", Value: py.Dict{{Key: "content_updates", Value: field(payload, "updates")}}},
+	if err := client.UpdateMarkdown(ctx, pageID, map[string]any{
+		"type":           "update_content",
+		"update_content": map[string]any{"content_updates": payload["updates"]},
 	}); err != nil {
-		return "", nil, err
+		return "", RemotePage{}, err
 	}
 	after, err := client.GetPage(ctx, pageID)
 	return previous, after, err
 }
 
-func validPayloadUpdates(raw []any) []update {
-	out := make([]update, len(raw))
-	for i, item := range raw {
-		d := asDict(item)
-		out[i] = update{text(d, "old_str"), text(d, "new_str")}
+func validPayloadUpdates(raw any) []update {
+	items, _ := raw.([]any)
+	out := make([]update, len(items))
+	for i, item := range items {
+		d, _ := item.(map[string]any)
+		out[i] = update{mapString(d, "old_str"), mapString(d, "new_str")}
 	}
 	return out
 }
 
-func (a *Applier) UndoRestore(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
-	v, err := py.JSONLoads(plan)
-	if err != nil {
+func (a *Applier) UndoRestore(ctx context.Context, plan json.RawMessage) (any, error) {
+	var info struct {
+		PageID            string `json:"page_id"`
+		PreviousMarkdown  string `json:"previous_markdown"`
+		AppliedEditedTime string `json:"applied_edited_time"`
+	}
+	if err := json.Unmarshal(plan, &info); err != nil {
 		return nil, err
 	}
-	info := asDict(v)
 	client, err := a.client(ctx)
 	if err != nil {
 		return nil, err
 	}
-	pageID := text(info, "page_id")
-	if err := freshPage(ctx, client, pageID, pyStr(field(info, "applied_edited_time"))); err != nil {
+	pageID := info.PageID
+	if err := freshPage(ctx, client, pageID, info.AppliedEditedTime); err != nil {
 		return nil, err
 	}
-	if _, err := client.UpdateMarkdown(ctx, pageID, py.Dict{
-		{Key: "type", Value: "replace_content"},
-		{Key: "replace_content", Value: py.Dict{{Key: "new_str", Value: field(info, "previous_markdown")}}},
+	if err := client.UpdateMarkdown(ctx, pageID, map[string]any{
+		"type":            "replace_content",
+		"replace_content": map[string]any{"new_str": info.PreviousMarkdown},
 	}); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "restored", Value: pageID}}, nil
+	return RestoreResult{Restored: pageID}, nil
 }
 
-func (a *Applier) Register(r *proposals.Registry) {
+func (a *Applier) ExecuteCapture(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
+	var payload struct {
+		Note string `json:"note"`
+	}
+	if err := json.Unmarshal([]byte(p.Payload), &payload); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(payload.Note) == "" {
+		return nil, ProposalError("the wiki note is empty")
+	}
+	client, err := a.client(ctx)
+	if err != nil {
+		return nil, err
+	}
+	wiki, err := LoadWiki(ctx, a.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	logID, err := wiki.LogPageID(ctx, a.DB, client, wiki.Root)
+	if err != nil {
+		return nil, err
+	}
+	before, err := client.PageMarkdown(ctx, logID)
+	if err != nil {
+		return nil, err
+	}
+	if before.Truncated {
+		return nil, WikiError("the Wiki Log page is too large to update safely; archive it and let atrium start a new one")
+	}
+	action := map[string]any{"type": KindCapture, "page_id": logID, "note": payload.Note}
+	id, err := proposals.BeginAction(ctx, a.DB.Write, p.ID, action, a.now())
+	if err != nil {
+		return nil, err
+	}
+	writer := &Writer{DB: a.DB, Client: client}
+	date := time.Unix(int64(a.now()), 0).UTC().Format("2006-01-02")
+	if err := writer.Capture(ctx, []string{LogLine(date, "note", payload.Note, "")}); err != nil {
+		text := err.Error()
+		_ = proposals.SettleAction(ctx, a.DB.Write, id, action, nil, ledger.Failed, &text, a.now())
+		return nil, err
+	}
+	after, err := client.GetPage(ctx, logID)
+	if err != nil {
+		text := err.Error()
+		_ = proposals.SettleAction(ctx, a.DB.Write, id, action, nil, ledger.Failed, &text, a.now())
+		return nil, err
+	}
+	if err := proposals.SettleAction(ctx, a.DB.Write, id, action, restoreUndo(logID, before.Markdown, after.LastEditedTime), ledger.OK, nil, a.now()); err != nil {
+		return nil, err
+	}
+	return CaptureResult{Summary: "Wiki note added: " + payload.Note, PageID: logID}, nil
+}
+
+func (a *Applier) Register(r *proposals.Registry, owner string) {
 	r.Executors[KindLink] = a.ExecuteLink
 	r.Executors[KindEdit] = a.ExecuteEdit
 	r.Undoers[UndoRestoreOp] = a.UndoRestore
+	r.Executors[KindCapture] = a.ExecuteCapture
+	r.AddKind(proposals.Kind{Name: KindCapture, Module: owner, Label: "Wiki note", Icon: "notebook-pen"})
+	r.AddKind(proposals.Kind{Name: KindLink, Module: owner, Label: "Notion link", Icon: "link"})
+	r.AddKind(proposals.Kind{Name: KindEdit, Module: owner, Label: "Notion edit", Icon: "pencil"})
 }

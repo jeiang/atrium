@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"net/http"
@@ -14,13 +15,14 @@ import (
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/handlers"
+	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 //go:embed templates/*.gohtml
@@ -36,8 +38,17 @@ func Templates() fs.FS {
 
 func PauseModule(r chi.Router, d *web.Deps) {
 	s := &service{deps: d, live: &live.Live{DB: d.DB, Cfg: d.Cfg}}
+	d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
+		mode, err := mail.Mode(ctx, d.DB.Read)
+		if err != nil {
+			return err
+		}
+		f.Mode = mode
+		f.Paused = safety.IsPaused(d.Cfg.PausePath())
+		return nil
+	})
 	r.Post("/live/pause", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, true) })
-	r.Post("/live/resume", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })
+	d.Admin(http.MethodPost, "/live/resume", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })
 }
 
 func Globals() map[string]any {
@@ -50,19 +61,21 @@ func Globals() map[string]any {
 }
 
 type Options struct {
-	Open mailops.Opener
-	Now  func() float64
+	Open     mail.OpenFunc
+	Now      func() float64
+	PageSize int
 }
 
 type service struct {
-	deps    *web.Deps
-	now     func() float64
-	live    *live.Live
-	applier *applier.Applier
-	drafts  *drafts.Store
+	deps     *web.Deps
+	now      func() float64
+	live     *live.Live
+	applier  *applier.Applier
+	drafts   *drafts.Store
+	pageSize int
 }
 
-var pageSize = 50
+const defaultPageSize = 50
 
 const learnedLimit = 50
 
@@ -74,16 +87,19 @@ func Module(o Options) web.Module {
 		if open == nil {
 			open = imapclient.Opener(d.Cfg)
 		}
-		open = mailops.Opener(mail.BindMode(open, d.DB.Read))
 		now := o.Now
 		if now == nil {
 			now = wallClock
+		}
+		pageSize := o.PageSize
+		if pageSize <= 0 {
+			pageSize = defaultPageSize
 		}
 		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
 		registry := proposals.NewRegistry()
 		handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now, Env: d.Env})
 		l := &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: now}
-		s := &service{deps: d, now: now, live: l, applier: applier.New(l, open, syncer), drafts: &drafts.Store{DB: d.DB, Cfg: d.Cfg}}
+		s := &service{deps: d, now: now, live: l, applier: applier.New(l, open, syncer), drafts: &drafts.Store{DB: d.DB, Cfg: d.Cfg}, pageSize: pageSize}
 
 		r.Get("/messages/{message_id}", s.messagePage)
 		r.Get("/messages/{message_id}/correct", s.correctForm)

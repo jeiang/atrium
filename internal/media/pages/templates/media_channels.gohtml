@@ -1,32 +1,32 @@
 {{define "title"}}Channels{{end}}
 {{define "heading"}}Media · Channels{{end}}
-{{define "content"}}{{$csrf := .CSRF}}{{$q := .Data.q}}{{$form := .Data.form}}{{$status := .Data.status}}
+{{define "content"}}{{$csrf := .CSRF}}{{$q := .Data.Q}}{{$form := .Data.Form}}{{$status := .Data.Status}}
 <p class="text-sm text-muted-foreground">A channel is a show plus a regex over its EZTV release titles, checked every 30 minutes. New matches are downloaded as media torrents and announced on ntfy. Adding a channel also downloads the matching releases that are already out; untick the download box below to only record them.</p>
 
 <section class="flex flex-col gap-3" aria-labelledby="channels-h">
   <div class="flex flex-wrap items-center justify-between gap-2">
-    <h2 id="channels-h" class="text-sm font-medium">Watching ({{len .Data.channels}})</h2>
+    <h2 id="channels-h" class="text-sm font-medium">Watching ({{len .Data.Channels}})</h2>
     <form method="post" action="/media/channels/poll">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "play"}}Check now</button>
     </form>
   </div>
-  <p class="text-xs text-muted-foreground">{{if $status.last_check}}Last check {{template "when" (dict "epoch" $status.last_check "style" "datetime")}}.{{else}}Not checked yet.{{end}}</p>
-  {{range $status.errors}}<p class="text-xs text-destructive" role="alert">{{.}}</p>{{end}}
-  {{if .Data.channels}}
+  <p class="text-xs text-muted-foreground">{{if $status.LastCheck}}Last check {{template "when" (dict "epoch" $status.LastCheck "style" "datetime")}}.{{else}}Not checked yet.{{end}}</p>
+  {{range $status.Errors}}<p class="text-xs text-destructive" role="alert">{{.}}</p>{{end}}
+  {{if .Data.Channels}}
   <ul class="flex flex-col gap-3" role="list" aria-label="Channels">
-    {{range .Data.channels}}
+    {{range .Data.Channels}}
     <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
       <div class="flex min-w-0 grow basis-64 flex-col gap-1">
         <div class="flex flex-wrap items-center gap-2">
-          <span class="text-sm font-medium">{{.name}}</span>
-          <span class="badge" data-variant="outline">tt{{.imdb}}</span>
-          {{if .case_sensitive}}<span class="badge" data-variant="secondary">case-sensitive</span>{{end}}
-          {{if not .primed}}<span class="badge" data-variant="outline">first check pending</span>{{end}}
+          <span class="text-sm font-medium">{{.Name}}</span>
+          <span class="badge" data-variant="outline">tt{{.IMDb}}</span>
+          {{if .CaseSensitive}}<span class="badge" data-variant="secondary">case-sensitive</span>{{end}}
+          {{if not .Primed}}<span class="badge" data-variant="outline">first check pending</span>{{end}}
         </div>
-        <code class="break-all font-mono text-xs">{{.pattern}}</code>
+        <code class="break-all font-mono text-xs">{{.Pattern}}</code>
       </div>
-      <form method="post" action="/media/channels/{{.id}}/delete">
+      <form method="post" action="/media/channels/{{.ID}}/delete">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">
         <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "trash-2"}}Remove</button>
       </form>
@@ -40,7 +40,7 @@
 
 <section class="flex flex-col gap-3" aria-labelledby="find-h">
   <h2 id="find-h" class="text-sm font-medium">Find a show</h2>
-  {{if .Data.tmdb}}
+  {{if .Data.TMDB}}
   <form method="get" action="/media/channels" class="flex flex-wrap items-end gap-2">
     <div role="group" class="field min-w-64 flex-1">
       <label for="q">TMDB search</label>
@@ -48,12 +48,12 @@
     </div>
     <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "search"}}Search</button>
   </form>
-  {{if not (isnil .Data.results)}}
+  {{if .Data.Searched}}
   <ul class="flex flex-col divide-y rounded-lg border text-sm" role="list" aria-label="Search results">
-    {{range .Data.results}}
+    {{range .Data.Results}}
     <li class="flex flex-wrap items-center gap-3 px-3 py-2">
-      <span class="flex-1">{{.name}}{{if .year}} <span class="text-muted-foreground">({{.year}})</span>{{end}}</span>
-      <a class="btn" data-size="sm" href="/media/channels?tmdb_id={{.tmdb_id}}&amp;name={{queryval .name}}&amp;q={{queryval $q}}#new-channel">Use</a>
+      <span class="flex-1">{{.Name}}{{if .Year}} <span class="text-muted-foreground">({{.Year}})</span>{{end}}</span>
+      <a class="btn" data-size="sm" href="/media/channels?tmdb_id={{.TmdbID}}&amp;name={{queryval .Name}}&amp;q={{queryval $q}}#new-channel">Use</a>
     </li>
     {{else}}
     <li class="px-3 py-2 text-muted-foreground">No shows found.</li>
@@ -68,31 +68,31 @@
 <form id="new-channel" method="post" action="/media/channels" class="flex flex-col gap-3 rounded-lg border p-4" aria-labelledby="new-h">
   <h2 id="new-h" class="text-sm font-medium">New channel</h2>
   <input type="hidden" name="csrf_token" value="{{$csrf}}">
-  <input type="hidden" name="tmdb_id" value="{{$form.tmdb_id}}">
+  <input type="hidden" name="tmdb_id" value="{{$form.TmdbID}}">
   <div class="grid gap-3 sm:grid-cols-2">
     <div role="group" class="field">
       <label for="name">Show</label>
-      <input id="name" name="name" type="text" value="{{$form.name}}" placeholder="Lanterns" required>
+      <input id="name" name="name" type="text" value="{{$form.Name}}" placeholder="Lanterns" required>
     </div>
     <div role="group" class="field">
       <label for="imdb">IMDb id</label>
-      <input id="imdb" name="imdb" type="text" value="{{$form.imdb}}" class="font-mono" placeholder="tt1234567" required>
+      <input id="imdb" name="imdb" type="text" value="{{$form.IMDb}}" class="font-mono" placeholder="tt1234567" required>
     </div>
   </div>
   <div class="grid gap-3 sm:grid-cols-[1fr_auto]">
     <div role="group" class="field">
       <label for="pattern">Title regex</label>
-      <input id="pattern" name="pattern" type="text" value="{{$form.pattern}}" class="font-mono" placeholder="^Lanterns S\d+E\d+ 1080p" spellcheck="false" autocomplete="off" required>
+      <input id="pattern" name="pattern" type="text" value="{{$form.Pattern}}" class="font-mono" placeholder="^Lanterns S\d+E\d+ 1080p" spellcheck="false" autocomplete="off" required>
     </div>
-    <label class="flex h-8 items-center gap-2 self-end text-sm"><input id="case" class="input" type="checkbox" name="case_sensitive" value="1"{{if $form.case_sensitive}} checked{{end}}>Case-sensitive</label>
+    <label class="flex h-8 items-center gap-2 self-end text-sm"><input id="case" class="input" type="checkbox" name="case_sensitive" value="1"{{if $form.CaseSensitive}} checked{{end}}>Case-sensitive</label>
   </div>
-  <label class="flex items-start gap-2 text-sm"><input class="input mt-0.5" type="checkbox" name="backfill" value="1"{{if $form.backfill}} checked{{end}}>Download matching releases that are already out</label>
+  <label class="flex items-start gap-2 text-sm"><input class="input mt-0.5" type="checkbox" name="backfill" value="1"{{if $form.Backfill}} checked{{end}}>Download matching releases that are already out</label>
   <div class="flex flex-wrap items-center gap-2">
     <button type="submit" class="btn" data-size="sm">{{icon "plus"}}Watch</button>
     <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/media/channels/preview" hx-include="#new-channel" hx-target="#preview" hx-indicator="#preview-spinner">{{icon "search"}}Preview against EZTV</button>
     {{template "spinner" (dict "id" "preview-spinner" "label" "Fetching releases")}}
   </div>
-  <div id="preview" hx-post="/media/channels/preview" hx-include="#new-channel" hx-trigger="{{if $form.imdb}}load, {{end}}input changed delay:500ms from:#pattern, change from:#case, change from:#imdb" hx-indicator="#preview-spinner"></div>
+  <div id="preview" hx-post="/media/channels/preview" hx-include="#new-channel" hx-trigger="{{if $form.IMDb}}load, {{end}}input changed delay:500ms from:#pattern, change from:#case, change from:#imdb" hx-indicator="#preview-spinner"></div>
 </form>
 {{template "tmdb_attribution"}}
 {{end}}

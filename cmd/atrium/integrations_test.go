@@ -62,8 +62,10 @@ func (h *healthServer) notices() []string {
 func unsetEnv(t *testing.T, names ...string) {
 	t.Helper()
 	for _, name := range names {
-		t.Setenv(name, "")
-		_ = os.Unsetenv(name)
+		if f := fixtureFor(t); f != nil {
+			f.unset(name)
+		}
+		setEnv(t, name, "")
 	}
 }
 
@@ -72,11 +74,12 @@ type integrationSite struct {
 	dir    string
 	base   string
 	client *http.Client
+	stop   func()
 }
 
 func (s *integrationSite) start() {
 	s.t.Helper()
-	s.base = startServeIn(s.t, s.dir)
+	s.base, _, s.stop = startServeStoppable(s.t, s.dir)
 	jar, _ := cookiejar.New(nil)
 	s.client = &http.Client{Jar: jar}
 }
@@ -117,6 +120,7 @@ func storedURL(t *testing.T, dir string) string {
 }
 
 func TestIntegrationTestSavesOnlyWorkingConfigAndHealthNotifiesOncePerChange(t *testing.T) {
+	t.Parallel()
 	good := &healthServer{status: http.StatusOK}
 	goodSrv := httptest.NewServer(http.HandlerFunc(good.handler))
 	t.Cleanup(goodSrv.Close)
@@ -124,9 +128,9 @@ func TestIntegrationTestSavesOnlyWorkingConfigAndHealthNotifiesOncePerChange(t *
 	badSrv := httptest.NewServer(http.HandlerFunc(bad.handler))
 	t.Cleanup(badSrv.Close)
 
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(settingEnv(notify.KeyURL), "")
-	t.Setenv(settingEnv(media.KeyQbitURL), "")
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(notify.KeyURL), "")
+	setEnv(t, settingEnv(media.KeyQbitURL), "")
 	s := &integrationSite{t: t, dir: dir}
 
 	t.Run("a failed test keeps the stored config", func(t *testing.T) {
@@ -200,6 +204,7 @@ func TestIntegrationTestSavesOnlyWorkingConfigAndHealthNotifiesOncePerChange(t *
 		if got := storedURL(t, dir); got != "" || health(t, dir, "ntfy") != integrations.Untested {
 			t.Fatalf("after disconnect: url %q state %s", got, health(t, dir, "ntfy"))
 		}
+		s.stop()
 		restarted := startServeIn(t, dir)
 		if code, _, _ := fetch(t, http.DefaultClient, http.MethodGet, restarted+"/settings/notifications", nil); code != http.StatusNotFound {
 			t.Errorf("notifications page after disconnect and restart: %d, want 404 (needs settings)", code)
@@ -223,6 +228,7 @@ func waitFor(t *testing.T, ok func() bool) {
 }
 
 func TestIntegrationTransportTrustsOnlyTheConfiguredCAAndUsesTheProxy(t *testing.T) {
+	t.Parallel()
 	tlsHealth := &healthServer{status: http.StatusOK}
 	tlsSrv := httptest.NewTLSServer(http.HandlerFunc(tlsHealth.handler))
 	t.Cleanup(tlsSrv.Close)
@@ -252,8 +258,8 @@ func TestIntegrationTransportTrustsOnlyTheConfiguredCAAndUsesTheProxy(t *testing
 	}))
 	t.Cleanup(proxy.Close)
 
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(settingEnv(notify.KeyURL), "")
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(notify.KeyURL), "")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 

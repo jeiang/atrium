@@ -5,10 +5,8 @@ go 1.26.0
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/anthropics/anthropic-sdk-go v1.82.0
-	github.com/dlclark/regexp2 v1.12.0
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/emersion/go-imap/v2 v2.0.0-beta.8
-	github.com/emersion/go-webdav v0.7.0
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/jeiang/atrium/third_party/sqlite-vec v0.0.0
 	github.com/markusmobius/go-trafilatura v1.12.2
@@ -17,7 +15,7 @@ require (
 	github.com/systemd/slog-journal v0.1.2
 	github.com/teambition/rrule-go v1.8.2
 	github.com/yuin/goldmark v1.8.6
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.43.0
 	google.golang.org/api v0.278.0

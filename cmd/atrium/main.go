@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
@@ -13,9 +14,9 @@ import (
 	"github.com/jeiang/atrium/internal/core/coremodule"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailmodule"
-	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/media/mediamodule"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify/notifymodule"
@@ -29,43 +30,48 @@ var version = "dev"
 
 func main() {
 	ctx, stop := cli.SignalContext(context.Background())
-	code := newApp().Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	reg := settings.New()
+	code := newApp(config.OS, reg, config.NewState(reg), sdk.Modules()).Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
 }
 
-func newApp() *cli.App {
-	app := cli.New("atrium", logx.Setup)
+func newApp(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module) *cli.App {
+	return newAppWith(env, reg, st, mods, imapclient.Opener, nil, logx.Setup)
+}
+
+func newAppWith(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64, setup func(io.Writer)) *cli.App {
+	set := newSet(env, reg, st, mods, clients, now)
+	app := cli.New("atrium", setup)
 	app.Version = version
-	app.Add(commands(imapclient.Opener, nil)...)
+	app.Env = env
+	app.Settings = reg
+	app.State = st
+	app.SetupContext = func(ctx context.Context) context.Context { return module.WithSet(ctx, set) }
+	app.Bootstrap = bootstrap(env, reg)
+	app.Add(append(set.Commands(), web.ServeCommand(set, set.Pages()...))...)
 	return app
 }
 
-func newSet(clients run.Clients, now func() float64) *module.Set {
+func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) *module.Set {
 	var set *module.Set
 	guard := func(ctx context.Context, q db.Querier, key, value string) error {
 		return set.Guard(ctx, q, key, value)
 	}
-	mods := append([]module.Module{
-		coremodule.Module{Version: version, Guard: guard},
+	all := append([]module.Module{
+		coremodule.Module{Version: version, Guard: guard, Clients: clients, Now: now},
 		contactsmodule.Module{},
 		mailmodule.Module{Clients: clients, Now: now},
 		calendarmodule.Module{},
-		notionmodule.Module{},
+		notionmodule.Module{Env: env},
 		mediamodule.Module{Now: now},
 		assistantmodule.Module{},
 		notifymodule.Module{},
 		grafanamodule.Module{},
-	}, sdk.Modules()...)
-	set, err := module.NewSet(settings.Default, config.OS, mods...)
+	}, mods...)
+	set, err := module.NewSet(reg, st, env, all...)
 	if err != nil {
 		panic(err)
 	}
 	return set
-}
-
-func commands(clients run.Clients, now func() float64) []*cli.Command {
-	set := newSet(clients, now)
-	cmds := append(set.Commands(), web.ServeCommand(set.Pages()...))
-	return pinned(cmds)
 }

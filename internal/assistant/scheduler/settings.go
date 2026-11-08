@@ -2,9 +2,9 @@ package scheduler
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -21,51 +21,35 @@ const (
 	KeyMediaChannels   = "agent_schedule_media_channels"
 	KeyMediaSweep      = "agent_schedule_media_sweep"
 	KeyMediaThumbnails = "agent_schedule_media_thumbnails"
+	KeyTaskReminders   = "agent_schedule_task_reminders"
+	KeyMemoryWork      = "agent_schedule_memory_work"
 )
 
-var scheduleKeys = map[string]string{
-	NightlyName:            KeyNightlySchedule,
-	"weekly-review":        KeyWeeklyReview,
-	"daily-nudges":         KeyDailyNudges,
-	CalendarCandidatesName: KeyCalendarCands,
-	MediaChannelsName:      KeyMediaChannels,
-	MediaSweepName:         KeyMediaSweep,
-	MediaThumbnailsName:    KeyMediaThumbnails,
-}
-
 func init() {
-	instance := []settings.Scope{settings.Instance}
-	adv := func(key string, kind settings.Type, class settings.Class, value string, check func(string) error) settings.Def {
-		return settings.Def{Key: key, Module: "assistant", Type: kind, Default: value, Check: check, Class: class, Scopes: instance}
+	adv := func(key string, kind settings.Type, value string, check func(string) error) settings.Def {
+		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: "assistant", Type: kind, Default: value, Check: check})
 	}
 	timing := func(key, value string, lo, hi float64) settings.Def {
-		return adv(key, settings.Int, settings.Advanced, value, settings.Between(lo, hi))
+		return adv(key, settings.Int, value, settings.Between(lo, hi))
 	}
 	tick := timing(KeyTickSeconds, "30", 5, 3600)
-	tick.Restart = true
-	recurring := func(key, value string) settings.Def {
-		return adv(key, settings.String, settings.Advanced, value, recurringSchedule)
-	}
-	modelRun := func(key, value string) settings.Def {
-		d := recurring(key, value)
-		d.Peers = minimumGap
-		return d
-	}
 	minimum := timing(KeyMinInterval, "3600", 60, 604800)
 	minimum.Peers = minimumIntervals
-	settings.MustRegister(
+	defs := []settings.Def{
 		tick,
 		timing(KeyLeaseSeconds, "1800", 60, 86400),
 		timing(KeyMissedGrace, "120", 0, 86400),
 		minimum,
-		modelRun(KeyNightlySchedule, "daily 02:30"),
-		modelRun(KeyWeeklyReview, "weekly sun 18:00"),
-		modelRun(KeyDailyNudges, "daily 08:00"),
-		recurring(KeyCalendarCands, "0 * * * *"),
-		recurring(KeyMediaChannels, "*/30 * * * *"),
-		recurring(KeyMediaSweep, "*/10 * * * *"),
-		recurring(KeyMediaThumbnails, "daily 04:00"),
-	)
+		timing(KeyMaxActiveJobs, "20", 1, 1000),
+	}
+	for _, b := range Builtins {
+		def := adv(b.Setting, settings.String, b.Default, recurringSchedule)
+		if b.Run == PromptRun {
+			def.Peers = minimumGap
+		}
+		defs = append(defs, def)
+	}
+	settings.MustRegister(defs...)
 }
 
 func recurringSchedule(value string) error {
@@ -88,22 +72,26 @@ func minimumGap(value string, peer func(string) (string, error)) error {
 	if err != nil {
 		return err
 	}
-	floor, err := py.ParseFloat(text)
+	floor, err := strconv.Atoi(text)
 	if err != nil {
-		return nil
+		return settings.Invalid("must be a number")
 	}
-	if gap, ok := spec.MinGap(float64(time.Now().Unix())); ok && gap < floor {
+	if gap, ok := spec.MinGap(float64(time.Now().Unix())); ok && gap < float64(floor) {
 		return settings.Invalid(fmt.Sprintf("must run at least %s seconds apart (%s)", text, KeyMinInterval))
 	}
 	return nil
 }
+
 func minimumIntervals(value string, peer func(string) (string, error)) error {
-	floor, err := py.ParseFloat(value)
+	floor, err := strconv.Atoi(value)
 	if err != nil {
 		return settings.Invalid("must be a number")
 	}
-	for _, key := range []string{KeyNightlySchedule, KeyWeeklyReview, KeyDailyNudges} {
-		text, err := peer(key)
+	for _, b := range Builtins {
+		if b.Run != PromptRun {
+			continue
+		}
+		text, err := peer(b.Setting)
 		if err != nil {
 			return err
 		}
@@ -111,8 +99,8 @@ func minimumIntervals(value string, peer func(string) (string, error)) error {
 		if err != nil {
 			return settings.Invalid(err.Error())
 		}
-		if gap, ok := spec.MinGap(float64(time.Now().Unix())); ok && gap < floor {
-			return settings.Invalid(fmt.Sprintf("%s must run at least %s seconds apart", key, value))
+		if gap, ok := spec.MinGap(float64(time.Now().Unix())); ok && gap < float64(floor) {
+			return settings.Invalid(fmt.Sprintf("%s must run at least %s seconds apart", b.Setting, value))
 		}
 	}
 	return nil

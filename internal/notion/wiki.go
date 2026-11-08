@@ -3,16 +3,20 @@ package notion
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+
+	"regexp"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notionid"
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
+	"github.com/jeiang/atrium/internal/textutil"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 const (
@@ -21,33 +25,29 @@ const (
 )
 
 var (
-	footerRe    = rx.MustCompile(`^Last reviewed (\d{4}-\d{2}-\d{2})(?: · sources: (.*))?\s*$`, 0)
-	wikiLinkRe  = rx.MustCompile(`\[([^\]]*)\]\(([^)\s]+)\)`, 0)
-	wikiHeadRe  = rx.MustCompile(`^(#{1,6})\s+(.*?)\s*#*\s*$`, 0)
-	wikiURLRe   = rx.MustCompile(`^[a-z][a-z0-9+.-]*://`, rx.IgnoreCase)
-	aliasSplit  = rx.MustCompile(`[,;\n]`, 0)
-	labelSchema = rx.MustCompile(`^[a-z][a-z0-9+.-]*://(www\.)?`, rx.IgnoreCase)
+	footerRe    = regexp.MustCompile(`^Last reviewed (\d{4}-\d{2}-\d{2})(?: · sources: (.*))?\s*$`)
+	wikiLinkRe  = regexp.MustCompile(`\[([^\]]*)\]\(([^)\s]+)\)`)
+	wikiHeadRe  = regexp.MustCompile(`^(#{1,6})\s+(.*?)\s*#*\s*$`)
+	wikiURLRe   = regexp.MustCompile(`(?i)^[a-z][a-z0-9+.-]*://`)
+	aliasSplit  = regexp.MustCompile(`[,;\n]`)
+	labelSchema = regexp.MustCompile(`(?i)^[a-z][a-z0-9+.-]*://(www\.)?`)
 )
 
 type WikiError string
 
 func (e WikiError) Error() string { return string(e) }
 
-func (WikiError) PyClass() string { return "WikiError" }
-
-func (WikiError) PyModule() string { return "atrium.notion_wiki" }
-
-func LocalDate(ts float64, env config.Env) (string, error) {
-	loc, err := config.Location(env)
+func LocalDate(ctx context.Context, ts float64, env config.Env) (string, error) {
+	loc, err := config.From(ctx).Location(env)
 	if err != nil {
 		return "", err
 	}
-	sec, us := py.SplitTimestamp(ts)
+	sec, us := timex.SplitTimestamp(ts)
 	return time.Unix(sec, us*1000).In(loc).Format("2006-01-02"), nil
 }
 
 func NormalizeKey(value string) string {
-	return strings.Join(py.Split(py.Casefold(value)), " ")
+	return strings.Join(strings.Fields(textutil.Casefold(value)), " ")
 }
 
 func stringList(values any, what string) ([]string, error) {
@@ -69,10 +69,7 @@ func stringList(values any, what string) ([]string, error) {
 func (w Wiki) CleanAliases(values any) ([]string, error) {
 	var raw []string
 	if s, ok := values.(string); ok {
-		parts, err := aliasSplit.Split(s, 0)
-		if err != nil {
-			return nil, err
-		}
+		parts := aliasSplit.Split(s, -1)
 		raw = parts
 	} else {
 		var err error
@@ -83,7 +80,7 @@ func (w Wiki) CleanAliases(values any) ([]string, error) {
 	out := []string{}
 	seen := map[string]bool{}
 	for _, v := range raw {
-		text := strings.Join(py.Split(v), " ")
+		text := strings.Join(strings.Fields(v), " ")
 		if text != "" && !seen[NormalizeKey(text)] {
 			seen[NormalizeKey(text)] = true
 			out = append(out, text)
@@ -102,10 +99,10 @@ func (w Wiki) CleanSources(values any) ([]string, error) {
 	}
 	out := []string{}
 	for _, v := range raw {
-		if py.Strip(v) == "" {
+		if strings.TrimSpace(v) == "" {
 			continue
 		}
-		if text := strings.Join(py.Split(v), " "); !slices.Contains(out, text) {
+		if text := strings.Join(strings.Fields(v), " "); !slices.Contains(out, text) {
 			out = append(out, text)
 		}
 	}
@@ -124,17 +121,12 @@ type WikiPage struct {
 }
 
 func decodeStrings(text string) ([]string, error) {
-	v, err := py.JSONLoads([]byte(text))
-	if err != nil {
+	var items []string
+	if err := json.Unmarshal([]byte(text), &items); err != nil {
 		return nil, err
 	}
-	items, _ := v.([]any)
 	out := make([]string, 0, len(items))
-	for _, item := range items {
-		s, _ := item.(string)
-		out = append(out, s)
-	}
-	return out, nil
+	return append(out, items...), nil
 }
 
 func GetWiki(ctx context.Context, q db.Querier, pageID string) (*WikiPage, error) {
@@ -185,13 +177,21 @@ func UpsertWiki(ctx context.Context, q db.Querier, pageID string, now float64, f
 		add("hub_id", *f.HubID)
 	}
 	if f.SetAliases {
-		add("aliases", py.JSONDumps(orEmpty(f.Aliases)))
+		encoded, err := json.Marshal(orEmpty(f.Aliases))
+		if err != nil {
+			return err
+		}
+		add("aliases", string(encoded))
 	}
 	if f.LastReviewed != nil {
 		add("last_reviewed", *f.LastReviewed)
 	}
 	if f.SetSources {
-		add("sources", py.JSONDumps(orEmpty(f.Sources)))
+		encoded, err := json.Marshal(orEmpty(f.Sources))
+		if err != nil {
+			return err
+		}
+		add("sources", string(encoded))
 	}
 	if f.InTrash != nil {
 		add("in_trash", b2i(*f.InTrash))
@@ -386,13 +386,10 @@ func AliasMatches(ctx context.Context, q db.Querier, query string) ([]string, er
 	return out, nil
 }
 
-func rstrip(s string) string { return strings.TrimRightFunc(s, py.IsSpace) }
+func rstrip(s string) string { return strings.TrimRightFunc(s, unicode.IsSpace) }
 
 func (w Wiki) linkLabel(url string) (string, error) {
-	text, err := labelSchema.Sub("", url, 0)
-	if err != nil {
-		return "", err
-	}
+	text := labelSchema.ReplaceAllString(url, "")
 	text = strings.TrimRight(text, "/")
 	if r := []rune(text); len(r) > w.LabelChars {
 		return string(r[:w.LabelChars-1]) + "…", nil
@@ -401,11 +398,7 @@ func (w Wiki) linkLabel(url string) (string, error) {
 }
 
 func (w Wiki) renderSource(value string) (string, error) {
-	m, err := wikiURLRe.Match(value)
-	if err != nil {
-		return "", err
-	}
-	if m != nil {
+	if wikiURLRe.MatchString(value) {
 		label, err := w.linkLabel(value)
 		return "[" + label + "](" + value + ")", err
 	}
@@ -414,19 +407,12 @@ func (w Wiki) renderSource(value string) (string, error) {
 
 func parseSources(text string) ([]string, error) {
 	var out []string
-	found, err := wikiLinkRe.FindIter(text)
-	if err != nil {
-		return nil, err
+	for _, loc := range wikiLinkRe.FindAllStringSubmatchIndex(text, -1) {
+		out = append(out, text[loc[4]:loc[5]])
 	}
-	for _, m := range found {
-		out = append(out, m.Group(2))
-	}
-	rest, err := wikiLinkRe.Sub("", text, 0)
-	if err != nil {
-		return nil, err
-	}
+	rest := wikiLinkRe.ReplaceAllString(text, "")
 	for _, part := range strings.Split(rest, ",") {
-		if p := py.Strip(part); p != "" {
+		if p := strings.TrimSpace(part); p != "" {
 			out = append(out, p)
 		}
 	}
@@ -446,21 +432,19 @@ func dedupe(values []string) []string {
 func SplitFooter(markdown string) (body, reviewed string, sources []string, err error) {
 	trimmed := rstrip(markdown)
 	lines := strings.Split(trimmed, "\n")
-	m, err := footerRe.Match(py.Strip(lines[len(lines)-1]))
-	if err != nil {
-		return "", "", nil, err
-	}
-	if m == nil {
+	last := strings.TrimSpace(lines[len(lines)-1])
+	loc := footerRe.FindStringSubmatchIndex(last)
+	if loc == nil {
 		return trimmed, "", []string{}, nil
 	}
-	sources, err = parseSources(m.Group(2))
+	sources, err = parseSources(last[loc[4]:loc[5]])
 	if err != nil {
 		return "", "", nil, err
 	}
 	if sources == nil {
 		sources = []string{}
 	}
-	return rstrip(strings.Join(lines[:len(lines)-1], "\n")), m.Group(1), sources, nil
+	return rstrip(strings.Join(lines[:len(lines)-1], "\n")), last[loc[2]:loc[3]], sources, nil
 }
 
 func (w Wiki) footerLine(date string, sources []string) (string, error) {
@@ -500,18 +484,15 @@ func sectionSpan(markdown, heading string) (start, end int, ok bool, err error) 
 	wanted := NormalizeKey(heading)
 	start, level := -1, 0
 	for i, line := range lines {
-		m, err := wikiHeadRe.Match(line)
-		if err != nil {
-			return 0, 0, false, err
-		}
-		if m == nil {
+		loc := wikiHeadRe.FindStringSubmatchIndex(line)
+		if loc == nil {
 			continue
 		}
 		if start < 0 {
-			if NormalizeKey(m.Group(2)) == wanted {
-				start, level = i, len([]rune(m.Group(1)))
+			if NormalizeKey(line[loc[4]:loc[5]]) == wanted {
+				start, level = i, len([]rune(line[loc[2]:loc[3]]))
 			}
-		} else if len([]rune(m.Group(1))) <= level {
+		} else if len([]rune(line[loc[2]:loc[3]])) <= level {
 			return start, i, true, nil
 		}
 	}
@@ -527,7 +508,7 @@ func ReplaceSection(markdown, heading, text string) (string, bool, error) {
 		return "", false, err
 	}
 	lines := strings.Split(markdown, "\n")
-	out := slices.Concat(lines[:start+1], []string{"", py.Strip(text), ""}, lines[end:])
+	out := slices.Concat(lines[:start+1], []string{"", strings.TrimSpace(text), ""}, lines[end:])
 	joined := rstrip(strings.Join(out, "\n"))
 	if strings.HasSuffix(markdown, "\n") {
 		joined += "\n"
@@ -541,13 +522,13 @@ func AppendToSection(markdown, heading, text string) (string, error) {
 		return "", err
 	}
 	if !ok {
-		return strings.TrimRight(markdown, "\n") + "\n\n## " + py.Strip(heading) + "\n\n" + py.Strip(text), nil
+		return strings.TrimRight(markdown, "\n") + "\n\n## " + strings.TrimSpace(heading) + "\n\n" + strings.TrimSpace(text), nil
 	}
 	lines := strings.Split(markdown, "\n")
 	head := strings.TrimRight(strings.Join(lines[:end], "\n"), "\n")
 	tail := strings.Join(lines[end:], "\n")
-	out := head + "\n\n" + py.Strip(text)
-	if py.Strip(tail) != "" {
+	out := head + "\n\n" + strings.TrimSpace(text)
+	if strings.TrimSpace(tail) != "" {
 		out += "\n\n" + tail
 	}
 	return out, nil
@@ -579,16 +560,16 @@ func (w Wiki) LogPageID(ctx context.Context, d *db.DB, client *Client, root stri
 	err = d.Read.QueryRowContext(ctx,
 		"SELECT id FROM notion_pages WHERE in_trash = 0 AND parent_type = 'page_id' AND parent_id = ? AND title = ?", root, w.LogTitle).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
-		page, err := client.CreatePage(ctx, py.Dict{
-			{Key: "parent", Value: py.Dict{{Key: "page_id", Value: root}}},
-			{Key: "properties", Value: py.Dict{{Key: "title", Value: py.Dict{{Key: "title", Value: []any{
-				py.Dict{{Key: "type", Value: "text"}, {Key: "text", Value: py.Dict{{Key: "content", Value: w.LogTitle}}}}}}}}}},
-			{Key: "markdown", Value: ""},
+		page, err := client.CreatePage(ctx, map[string]any{
+			"parent": map[string]any{"page_id": root},
+			"properties": map[string]any{"title": map[string]any{"title": []any{
+				map[string]any{"type": "text", "text": map[string]any{"content": w.LogTitle}}}}},
+			"markdown": "",
 		})
 		if err != nil {
 			return "", err
 		}
-		id = notionid.Normalize(text(page, "id"))
+		id = notionid.Normalize(page.ID)
 	} else if err != nil {
 		return "", err
 	}
@@ -602,17 +583,17 @@ func PrependLog(ctx context.Context, client *Client, logID string, lines []strin
 	if err != nil {
 		return "", err
 	}
-	if py.Truthy(field(current, "truncated")) {
+	if current.Truncated {
 		return "", WikiError("the Wiki Log page is too large to update safely; archive it and let atrium start a new one")
 	}
-	previous := text(current, "markdown")
+	previous := current.Markdown
 	updated := strings.Join(lines, "\n")
-	if py.Strip(previous) != "" {
+	if strings.TrimSpace(previous) != "" {
 		updated += "\n" + strings.TrimLeft(previous, "\n")
 	}
-	_, err = client.UpdateMarkdown(ctx, logID, py.Dict{
-		{Key: "type", Value: "replace_content"},
-		{Key: "replace_content", Value: py.Dict{{Key: "new_str", Value: updated}}},
+	err = client.UpdateMarkdown(ctx, logID, map[string]any{
+		"type":            "replace_content",
+		"replace_content": map[string]any{"new_str": updated},
 	})
 	return previous, err
 }

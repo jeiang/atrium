@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS proposals (
     created_ts REAL NOT NULL,
     decided_ts REAL,
     applied_ts REAL,
+    undone_ts REAL,
+    recovered INTEGER NOT NULL DEFAULT 0,
     title TEXT NOT NULL,
     payload TEXT NOT NULL DEFAULT '{}',
     preview TEXT NOT NULL DEFAULT '{}',
@@ -17,9 +19,12 @@ CREATE TABLE IF NOT EXISTS proposal_actions (
     id INTEGER PRIMARY KEY,
     proposal_id INTEGER NOT NULL REFERENCES proposals(id),
     ts REAL NOT NULL,
+    lease REAL NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('write','undo')),
+    undo_of INTEGER,
     action TEXT NOT NULL,
     undo TEXT,
-    ok INTEGER NOT NULL,
+    state TEXT NOT NULL,
     error TEXT
 );
 CREATE INDEX IF NOT EXISTS proposal_actions_proposal ON proposal_actions (proposal_id);

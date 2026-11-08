@@ -18,19 +18,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: settingsgen OUTPUT_DIR")
 		os.Exit(2)
 	}
-	if err := generate(os.Args[1], settings.Default.Defs()); err != nil {
+	if err := generate(os.Args[1], settings.New().Defs()); err != nil {
 		fmt.Fprintln(os.Stderr, "settingsgen:", err)
 		os.Exit(1)
 	}
 }
 
 func generate(dir string, all []settings.Def) error {
-	var defs []settings.Def
-	for _, d := range all {
-		if d.Class != settings.Fixed {
-			defs = append(defs, d)
-		}
-	}
+	defs := all
 	slices.SortFunc(defs, func(a, b settings.Def) int {
 		return strings.Compare(config.TOMLName(a), config.TOMLName(b))
 	})
@@ -90,7 +85,7 @@ func schemaJSON(defs []settings.Def) (string, error) {
 			modules[d.Module] = module
 		}
 		props := module["properties"].(map[string]any)
-		if !d.Secret {
+		if !d.IsSecret() {
 			prop := map[string]any{"type": schemaType(d)}
 			if len(d.Choices) > 0 {
 				prop["enum"] = d.Choices
@@ -150,7 +145,7 @@ func referenceDoc(defs []settings.Def) string {
 		if d.Default != "" {
 			def = "`" + d.Default + "`"
 		}
-		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | `%s` |\n", d.Key, typ, def, d.Class, config.EnvName(d))
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | `%s` |\n", d.Key, typ, def, d.Class(), config.EnvName(d))
 	}
 	return b.String()
 }

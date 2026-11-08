@@ -7,6 +7,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
@@ -21,16 +22,13 @@ var maxStepsKeys = map[tool.Kind]string{
 }
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
-	defs := []settings.Def{{
+	defs := []settings.Def{settings.Value(settings.Advanced, settings.Def{
 		Key: DoomLoopThresholdKey, Module: "assistant", Type: settings.Int, Default: "3",
-		Check: settings.Between(2, 20), Class: settings.Advanced, Scopes: instance,
-	}}
+		Check: settings.Between(2, 20)})}
 	for _, kind := range []tool.Kind{tool.Chat, tool.Cron, tool.Nightly} {
-		defs = append(defs, settings.Def{
+		defs = append(defs, settings.Value(settings.Advanced, settings.Def{
 			Key: maxStepsKeys[kind], Module: "assistant", Type: settings.Int, Default: "24",
-			Check: settings.Between(1, 200), Class: settings.Advanced, Scopes: instance,
-		})
+			Check: settings.Between(1, 200)}))
 	}
 	settings.MustRegister(defs...)
 }
@@ -51,7 +49,7 @@ func doomLoopThreshold(ctx context.Context, q db.Querier) (int, error) {
 }
 
 func intSetting(ctx context.Context, q db.Querier, key string) (int, error) {
-	found, err := settings.Default.Resolve(ctx, q, key, 0)
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	if err != nil {
 		return 0, err
 	}
@@ -59,13 +57,13 @@ func intSetting(ctx context.Context, q db.Querier, key string) (int, error) {
 	return int(n), err
 }
 
-func forcedToolChoice(choice *string, model pricing.Model, tools map[string]tool.Tool) (*anthropic.ToolChoice, error) {
+func forcedToolChoice(choice *string, model pricing.Model, set registry.Set) (*anthropic.ToolChoice, error) {
 	if choice == nil || *choice == "" || *choice == "auto" {
 		return nil, nil
 	}
 	out := &anthropic.ToolChoice{Type: anthropic.ToolChoiceAny}
 	if *choice != anthropic.ToolChoiceAny {
-		if _, ok := tools[*choice]; !ok {
+		if !set.Has(*choice) {
 			return nil, RunLimit(fmt.Sprintf("tool_choice names %q, which is not available to this run", *choice))
 		}
 		out = &anthropic.ToolChoice{Type: anthropic.ToolChoiceTool, Name: *choice}

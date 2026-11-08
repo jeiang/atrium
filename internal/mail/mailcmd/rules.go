@@ -1,6 +1,7 @@
 package mailcmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -8,34 +9,35 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/report"
 	"github.com/jeiang/atrium/internal/mail/rules"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func (o Options) RulesCommand() *cli.Command {
 	return group("rules",
 		o.leaf("import", func(a *cli.Args) body {
 			file := a.Arg("file", cli.Opt{})
-			return func(x *Exec) error { return importRules(x, *file) }
+			return func(x *exec) error { return importRules(x, *file) }
 		}),
 		o.leaf("export", func(*cli.Args) body {
-			return func(x *Exec) error {
+			return func(x *exec) error {
 				out, err := rules.ExportRules(x.Ctx, x.DB.Read)
 				if err != nil {
 					return err
 				}
-				x.Print(py.JSONDumps(out, py.JSONOpts{Indent: 2}) + "\n")
+				b, err := json.MarshalIndent(out, "", "  ")
+				if err != nil {
+					return err
+				}
+				x.Print(string(b) + "\n")
 				return nil
 			}
 		}),
 	)
 }
 
-func importRules(x *Exec, file string) error {
+func importRules(x *exec, file string) error {
 	var data []byte
 	var err error
 	if file == "-" {
@@ -46,9 +48,9 @@ func importRules(x *Exec, file string) error {
 	if err != nil {
 		return err
 	}
-	document, err := py.JSONLoads(data)
-	if err != nil {
-		return err
+	var document any
+	if err := json.Unmarshal(data, &document); err != nil {
+		return importJSONError(data, err)
 	}
 	count, err := rules.ImportRules(x.Ctx, x.DB, document)
 	if err != nil {
@@ -62,15 +64,36 @@ func importRules(x *Exec, file string) error {
 	return nil
 }
 
+func importJSONError(data []byte, err error) error {
+	var syn *json.SyntaxError
+	if !errors.As(err, &syn) {
+		return err
+	}
+	i := 0
+	for i < len(data) && (data[i] == ' ' || data[i] == '\t' || data[i] == '\n' || data[i] == '\r') {
+		i++
+	}
+	line, col := 1, 1
+	for j := 0; j < i; j++ {
+		if data[j] == '\n' {
+			line++
+			col = 1
+		} else {
+			col++
+		}
+	}
+	return fmt.Errorf("Expecting value: line %d column %d (char %d)", line, col, i) //nolint:staticcheck // the CLI contract keeps the py-compatible wording
+}
+
 func (o Options) ShadowReportCommand() *cli.Command {
 	return o.leaf("shadow-report", func(a *cli.Args) body {
 		since := a.String("since", "", cli.Opt{})
-		return func(x *Exec) error {
+		return func(x *exec) error {
 			var given *string
 			if a.Has("since") {
 				given = since
 			}
-			out, err := report.Build(x.Ctx, x.DB.Read, config.OS, given, clockTime(x.Now()))
+			out, err := report.Build(x.Ctx, x.DB.Read, o.env(), given, clockTime(x.Now()))
 			if err != nil {
 				return err
 			}
@@ -86,12 +109,12 @@ func clockTime(ts float64) time.Time {
 
 func (o Options) ReindexCommand() *cli.Command {
 	return o.leaf("reindex", func(*cli.Args) body {
-		return func(x *Exec) error {
-			url, err := mail.EmbedURL(x.Ctx, x.DB.Read)
+		return func(x *exec) error {
+			url, err := embed.EmbedURL(x.Ctx, x.DB.Read)
 			if err != nil {
 				return err
 			}
-			ctx, err := mail.WithModels(x.Ctx, x.DB.Read)
+			ctx, err := embed.WithModels(x.Ctx, x.DB.Read)
 			if err != nil {
 				return err
 			}

@@ -14,7 +14,7 @@ import (
 func liveMode(t *testing.T) (string, int, string) {
 	t.Helper()
 	var out, errs bytes.Buffer
-	code := newApp().Run(context.Background(), []string{"live", "status"}, &out, &errs)
+	code := defaultApp(t).Run(context.Background(), []string{"live", "status"}, &out, &errs)
 	if code != cli.ExitOK {
 		return "", code, errs.String()
 	}
@@ -28,12 +28,13 @@ func liveMode(t *testing.T) (string, int, string) {
 }
 
 func TestMailModeAndWriteCapFollowTheRegistryLive(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
-	t.Setenv("ATRIUM_CONFIG", "")
-	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "")
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_CONFIG", "")
+	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "")
 
 	if mode, code, stderr := liveMode(t); code != cli.ExitOK || mode != "shadow" {
 		t.Fatalf("default: mode %q exit %d %q", mode, code, stderr)
@@ -51,11 +52,11 @@ func TestMailModeAndWriteCapFollowTheRegistryLive(t *testing.T) {
 		t.Errorf("a refused write changed the mode to %q", mode)
 	}
 
-	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "live")
+	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "live")
 	if mode, _, _ := liveMode(t); mode != "live" {
 		t.Errorf("env pin live not read: %q", mode)
 	}
-	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "shadow")
+	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "shadow")
 	if mode, _, _ := liveMode(t); mode != "shadow" {
 		t.Errorf("env pin shadow not read: %q", mode)
 	}
@@ -63,8 +64,8 @@ func TestMailModeAndWriteCapFollowTheRegistryLive(t *testing.T) {
 		t.Errorf("unset mail_mode: exit %d, want a refusal", r.code)
 	}
 
-	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "bogus")
-	if _, code, stderr := liveMode(t); code != cli.ExitError || !strings.Contains(stderr, "must be one of ('shadow', 'live'), got 'bogus'") {
+	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "bogus")
+	if _, code, stderr := liveMode(t); code != cli.ExitError || !strings.Contains(stderr, `must be one of ("shadow", "live"), got "bogus"`) {
 		t.Errorf("invalid pin: exit %d stderr %q", code, stderr)
 	}
 }

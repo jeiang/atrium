@@ -14,8 +14,8 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
-func Command() *cli.Command {
-	return &cli.Command{Name: "skills", Commands: []*cli.Command{exportCommand(config.OS), importCommand(config.OS)}}
+func Command(env config.Env) *cli.Command {
+	return &cli.Command{Name: "skills", Commands: []*cli.Command{exportCommand(env), importCommand(env)}}
 }
 
 func open(env *cli.Env, cfgEnv config.Env) (*db.DB, error) {
@@ -27,7 +27,7 @@ func open(env *cli.Env, cfgEnv config.Env) (*db.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := config.Migrate(env.Ctx, d, cfg); err != nil {
+	if err := config.Boot(env.Ctx, cfgEnv, d, cfg); err != nil {
 		_ = d.Close()
 		return nil, err
 	}

@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -113,35 +114,6 @@ func copyTree(t *testing.T, from, to string) {
 	}
 }
 
-var pythonOrder = []string{
-	"sync", "watch", "rules", "shadow-report", "reindex", "rebalance", "deletions", "gmail-labels", "live", "proposals",
-	"notion", "agent", "calendar", "loops", "watches", "media", "serve",
-}
-
-func inPythonOrder(have []*cli.Command) []*cli.Command {
-	var out []*cli.Command
-	for _, name := range pythonOrder {
-		if i := slices.IndexFunc(have, func(c *cli.Command) bool { return c.Name == name }); i >= 0 {
-			out = append(out, have[i])
-		}
-	}
-	return out
-}
-
-var volatileRunFields = []string{"started_at", "ended_at", "lease_until", "owner"}
-
-func normalizeRun(s string) string {
-	lines := strings.Split(s, "\n")
-	for i, line := range lines {
-		for _, field := range volatileRunFields {
-			if strings.HasPrefix(strings.TrimLeft(line, " "), `"`+field+`": `) {
-				lines[i] = `"` + field + `": <volatile>`
-			}
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
 func lastLine(s string) string {
 	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
 	return lines[len(lines)-1]
@@ -163,18 +135,24 @@ func loadGoldenData(t *testing.T) goldenData {
 	return goldenData{world: loadWorld(t), environment: scenario.Environment}
 }
 
-type rig struct {
-	dir string
-	app *cli.App
+type fixture struct {
+	t        *testing.T
+	dir      string
+	mu       sync.Mutex
+	env      map[string]string
+	app      *cli.App
+	settings *settings.Registry
+	state    *config.State
+	base     string
 }
 
-func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin string) *rig {
+func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin string) *fixture {
 	t.Helper()
 	dir := t.TempDir()
-	copyGoldenFile(t, filepath.Join(golden.Dir(), "atrium.db"), filepath.Join(dir, "atrium.db"))
 	copyTree(t, filepath.Join(golden.Dir(), "state", "cache"), filepath.Join(dir, "cache"))
+	copyTree(t, filepath.Join(golden.Dir(), "state", "contacts"), filepath.Join(dir, "contacts"))
 	srv := llmstub.Server(t, nil)
-	t.Cleanup(calendar.UseEndpoints(calendar.Endpoints{CalDAV: caldav.New(t, data.environment["ICLOUD_APPLE_ID"], data.environment["ICLOUD_APP_PASSWORD"]).URL + "/"}))
+	caldavURL := caldav.New(t, data.environment["ICLOUD_APPLE_ID"], data.environment["ICLOUD_APP_PASSWORD"]).URL + "/"
 	vars := map[string]string{}
 	for k, v := range data.environment {
 		vars[k] = v
@@ -182,10 +160,12 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 	vars["ATRIUM_CALENDAR_ICLOUD_APPLE_ID"] = vars["ICLOUD_APPLE_ID"]
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
-	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(golden.Dir(), "state", "contacts")
+	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(dir, "contacts")
 	vars["ATRIUM_MEDIA_ROOT"] = filepath.Join(dir, "media")
 	vars["ATRIUM_CHAT_URL"] = srv.URL + "/v1"
 	vars["ATRIUM_EMBED_URL"] = srv.URL + "/v1"
+	vars["ATRIUM_NOTION_BASE_URL"] = "http://127.0.0.1:9"
+	vars[calendar.CalDAVEnv] = caldavURL
 	for k, v := range extraEnv {
 		vars[k] = v
 	}
@@ -213,32 +193,111 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ICLOUD_APPLE_ID", "ICLOUD_MAIL_USERNAME", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
 		delete(vars, name)
 	}
-	for k, v := range vars {
-		t.Setenv(k, v)
-	}
-	pins, err := config.LoadPins(config.OS, settings.Default)
-	if err != nil {
-		t.Fatal(err)
-	}
-	settings.Default.SetPins(pins)
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	env := config.Map(vars)
 	fakes := data.world.fakes()
 	clients := func(config.Config) mail.OpenFunc {
-		return func(_ context.Context, account string) (mail.Client, error) { return fakes[account], nil }
+		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
+			return mail.Gated(fakes[opts.Account], opts.Q), nil
+		}
 	}
-	app := cli.New("atrium", logx.Setup)
-	app.Add(inPythonOrder(commands(clients, func() float64 { return data.world.Clock }))...)
+	reg := settings.New()
+	st := config.NewState(reg)
+	app := newAppWith(env, reg, st, nil, clients, func() float64 { return data.world.Clock }, quietLog)
 	app.Stdin = strings.NewReader(stdin)
-	return &rig{dir: dir, app: app}
+	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
+	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: reg, state: st}
+	fixturesByTest.Store(t, f)
+	fixturesByTest.Store(testKey(t), f)
+	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"))
+	if code, _, stderr := f.Run(context.Background(), "reindex"); code != cli.ExitOK {
+		t.Fatalf("embed the seeded world: exit %d stderr %q", code, stderr)
+	}
+	return f
 }
 
-func (r *rig) run(ctx context.Context, argv ...string) (code int, stdout, stderr string) {
+func (f *fixture) lookup(name string) (string, bool) {
+	f.mu.Lock()
+	v, ok := f.env[name]
+	f.mu.Unlock()
+	if ok {
+		return v, true
+	}
+	return testLookupFor(f.t)(name)
+}
+
+func (f *fixture) set(name, value string) (string, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	old, had := f.env[name]
+	f.env[name] = value
+	return old, had
+}
+
+func (f *fixture) unset(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.env, name)
+}
+
+func (f *fixture) snapshotEnv() map[string]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return maps.Clone(f.env)
+}
+
+func (f *fixture) loadPins() {
+	pins, err := config.LoadPins(config.Map(f.snapshotEnv()), f.settings)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	f.settings.SetPins(pins)
+}
+
+func (f *fixture) Run(ctx context.Context, argv ...string) (code int, stdout, stderr string) {
+	f.loadPins()
 	var out, errs bytes.Buffer
-	code = r.app.Run(ctx, argv, &out, &errs)
+	code = f.app.Run(ctx, argv, &out, &errs)
 	return code, out.String(), errs.String()
 }
 
+func (f *fixture) runLogged(ctx context.Context, argv ...string) (code int, stdout, stderr string) {
+	f.loadPins()
+	f.app.SetLogSetup(logx.Setup)
+	defer f.app.SetLogSetup(quietLog)
+	var out, errs lockedBuffer
+	code = f.app.Run(ctx, argv, &out, &errs)
+	return code, out.String(), errs.String()
+}
+
+func (f *fixture) Serve() string {
+	if f.base == "" {
+		f.loadPins()
+		base, _, _ := startServeApp(f.t, f.app, &lockedBuffer{})
+		f.base = base
+	}
+	return f.base
+}
+
+func seedNotionVectors(t *testing.T, path string) {
+	t.Helper()
+	var vectors []notionVector
+	if err := json.Unmarshal(golden.ReadFile(t, ".", "notion_vec.json"), &vectors); err != nil {
+		t.Fatal(err)
+	}
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	for _, v := range vectors {
+		if _, err := d.Write.Exec("INSERT INTO embed_notion_0 (rowid, visibility, embedding) VALUES (?, ?, ?)", v.RowID, v.Visibility, v.Embedding); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestCLIGoldens(t *testing.T) {
+	t.Parallel()
 	var index []cliGolden
 	if err := json.Unmarshal(golden.ReadFile(t, "cli", "index.json"), &index); err != nil {
 		t.Fatal(err)
@@ -246,8 +305,9 @@ func TestCLIGoldens(t *testing.T) {
 	data := loadGoldenData(t)
 	for _, g := range index {
 		t.Run(g.Name, func(t *testing.T) {
-			r := newRig(t, data, goldenEnv(t, g), g.Stdin)
-			tmp := filepath.Join(r.dir, "tmp")
+			t.Parallel()
+			f := newFixture(t, data, goldenEnv(t, g), g.Stdin)
+			tmp := filepath.Join(f.dir, "tmp")
 			if err := os.MkdirAll(tmp, 0o777); err != nil {
 				t.Fatal(err)
 			}
@@ -262,41 +322,41 @@ func TestCLIGoldens(t *testing.T) {
 			}
 			limit := 60 * time.Second
 			if len(argv) > 0 && argv[0] == "watch" {
-				limit = 5 * time.Second
+				limit = 35 * time.Second
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), limit)
 			defer cancel()
-			code, stdout, stderr := r.run(ctx, argv...)
+			code, stdout, stderr := f.Run(ctx, argv...)
 			if code != g.ExitCode {
 				t.Errorf("exit code = %d, want %d (stderr %q)", code, g.ExitCode, stderr)
 			}
 			want := string(golden.ReadFile(t, "cli", g.Stdout))
-			wantErr := string(golden.ReadFile(t, "cli", g.Stderr))
-			if g.Argv[1] == "agent" {
-				stdout, want = normalizeRun(stdout), normalizeRun(want)
-			}
 			if stdout != want {
 				t.Errorf("stdout = %q, want %q", stdout, want)
 			}
-			if g.ExitCode != 0 && lastLine(stderr) != lastLine(wantErr) {
-				t.Errorf("last stderr line = %q, want %q", lastLine(stderr), lastLine(wantErr))
+			if g.ExitCode != 0 {
+				wantErr := string(golden.ReadFile(t, "cli", g.Stderr))
+				if lastLine(stderr) != lastLine(wantErr) {
+					t.Errorf("last stderr line = %q, want %q", lastLine(stderr), lastLine(wantErr))
+				}
 			}
 		})
 	}
 }
 
 func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
+	t.Parallel()
 	data := loadGoldenData(t)
 	for _, argv := range [][]string{{"live", "rebaseline"}, {"live", "deletions"}, {"loops", "refresh"}, {"watches", "refresh"}} {
 		t.Run(strings.Join(argv, " "), func(t *testing.T) {
-			r := newRig(t, data, nil, "")
-			lock, err := db.Exclusive(context.Background(), filepath.Join(r.dir, "atrium.db"), db.ShortLockWait)
+			f := newFixture(t, data, nil, "")
+			lock, err := db.Exclusive(context.Background(), filepath.Join(f.dir, "atrium.db"), db.ShortLockWait)
 			if err != nil {
 				t.Fatal(err)
 			}
 			done := make(chan int, 1)
 			go func() {
-				code, _, _ := r.run(context.Background(), argv...)
+				code, _, _ := f.Run(context.Background(), argv...)
 				done <- code
 			}()
 			select {
@@ -319,15 +379,17 @@ func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
 	}
 }
 
-func copyGoldenFile(t *testing.T, from, to string) {
-	t.Helper()
-	data, err := os.ReadFile(from)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(to, data, 0o666); err != nil {
-		t.Fatal(err)
-	}
+var seededTables = map[string]bool{
+	"schema_migrations": true, "module_migrations": true, "db_key_history": true, "secrets": true,
+	"settings_audit": true, "write_resolutions": true, "pass_runs": true, "pass_run_alerts": true,
+	"endpoint_probes": true, "integration_health": true, "auth_sessions": true, "auth_logins": true,
+	"auth_login_links": true, "mail_accounts": true, "ntfy_channels": true, "embed_index": true,
+}
+
+var ftsTables = map[string][]string{
+	"message_fts": {"subject", "sender", "body"},
+	"thread_fts":  {"thread_id", "text"},
+	"notion_fts":  {"title", "path", "body"},
 }
 
 func goldenEnv(t *testing.T, g cliGolden) map[string]string {

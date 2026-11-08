@@ -24,105 +24,107 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_clear_at_least_share` | float | `0.05` | advanced | `ATRIUM_ASSISTANT_AGENT_CLEAR_AT_LEAST_SHARE` |
 | `agent_clear_keep` | int | `3` | advanced | `ATRIUM_ASSISTANT_AGENT_CLEAR_KEEP` |
 | `agent_clear_share` | float | `0.1875` | advanced | `ATRIUM_ASSISTANT_AGENT_CLEAR_SHARE` |
-| `agent_commit_savings` | int | `20000` | advanced | `ATRIUM_ASSISTANT_AGENT_COMMIT_SAVINGS` |
 | `agent_compact_share` | float | `0.875` | advanced | `ATRIUM_ASSISTANT_AGENT_COMPACT_SHARE` |
-| `agent_context_max_ids` | int | `50` | cap | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_IDS` |
-| `agent_context_max_sources` | int | `100` | cap | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_SOURCES` |
-| `agent_context_summary_chars` | int | `4000` | cap | `ATRIUM_ASSISTANT_AGENT_CONTEXT_SUMMARY_CHARS` |
-| `agent_dashboard_items` | int | `60` | cap | `ATRIUM_ASSISTANT_AGENT_DASHBOARD_ITEMS` |
+| `agent_context_max_ids` | int | `50` | advanced | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_IDS` |
+| `agent_context_max_sources` | int | `100` | advanced | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_SOURCES` |
+| `agent_context_summary_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_CONTEXT_SUMMARY_CHARS` |
 | `agent_effort_cron` | enum (low, medium, high, xhigh, max) | `high` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_CRON` |
 | `agent_effort_nightly` | enum (low, medium, high, xhigh, max) | `high` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_NIGHTLY` |
 | `agent_effort_sub` | enum (low, medium, high, xhigh, max) | `medium` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_SUB` |
 | `agent_effort_subagent` | enum (low, medium, high, xhigh, max) | `medium` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_SUBAGENT` |
-| `agent_file_cap_bytes` | int | `33554432` | cap | `ATRIUM_ASSISTANT_AGENT_FILE_CAP_BYTES` |
-| `agent_file_name_chars` | int | `80` | cap | `ATRIUM_ASSISTANT_AGENT_FILE_NAME_CHARS` |
-| `agent_grafana_cell_chars` | int | `300` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_CELL_CHARS` |
-| `agent_grafana_max_alerts` | int | `50` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_ALERTS` |
-| `agent_grafana_max_dashboards` | int | `20` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_DASHBOARDS` |
-| `agent_grafana_max_log_rows` | int | `200` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_LOG_ROWS` |
-| `agent_grafana_max_metric_rows` | int | `50` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_METRIC_ROWS` |
-| `agent_grafana_max_series` | int | `20` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_SERIES` |
-| `agent_grafana_timeout_seconds` | int | `15` | cap | `ATRIUM_ASSISTANT_AGENT_GRAFANA_TIMEOUT_SECONDS` |
+| `agent_file_cap_bytes` | int | `33554432` | advanced | `ATRIUM_ASSISTANT_AGENT_FILE_CAP_BYTES` |
+| `agent_file_name_chars` | int | `80` | advanced | `ATRIUM_ASSISTANT_AGENT_FILE_NAME_CHARS` |
+| `agent_grafana_cell_chars` | int | `300` | advanced | `ATRIUM_ASSISTANT_AGENT_GRAFANA_CELL_CHARS` |
+| `agent_grafana_max_alerts` | int | `50` | advanced | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_ALERTS` |
+| `agent_grafana_max_dashboards` | int | `20` | advanced | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_DASHBOARDS` |
+| `agent_grafana_max_log_rows` | int | `200` | advanced | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_LOG_ROWS` |
+| `agent_grafana_max_metric_rows` | int | `50` | advanced | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_METRIC_ROWS` |
+| `agent_grafana_max_series` | int | `20` | advanced | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_SERIES` |
+| `agent_grafana_timeout_seconds` | int | `15` | advanced | `ATRIUM_ASSISTANT_AGENT_GRAFANA_TIMEOUT_SECONDS` |
 | `agent_journal_lease_seconds` | int | `1800` | advanced | `ATRIUM_ASSISTANT_AGENT_JOURNAL_LEASE_SECONDS` |
-| `agent_mail_body_chars` | int | `8000` | cap | `ATRIUM_ASSISTANT_AGENT_MAIL_BODY_CHARS` |
-| `agent_mail_max_contacts` | int | `10` | cap | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_CONTACTS` |
-| `agent_mail_max_loops_limit` | int | `100` | cap | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_LOOPS_LIMIT` |
-| `agent_mail_max_results` | int | `20` | cap | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_RESULTS` |
-| `agent_mail_snippet_chars` | int | `300` | cap | `ATRIUM_ASSISTANT_AGENT_MAIL_SNIPPET_CHARS` |
-| `agent_manifest_results` | int | `30` | cap | `ATRIUM_ASSISTANT_AGENT_MANIFEST_RESULTS` |
-| `agent_media_torrent_limit` | int | `50` | cap | `ATRIUM_ASSISTANT_AGENT_MEDIA_TORRENT_LIMIT` |
-| `agent_message_cap_bytes` | int | `67108864` | cap | `ATRIUM_ASSISTANT_AGENT_MESSAGE_CAP_BYTES` |
-| `agent_nightly_max_threads` | int | `30` | cap | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_MAX_THREADS` |
-| `agent_nightly_thread_chars` | int | `3000` | cap | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_THREAD_CHARS` |
-| `agent_nightly_total_chars` | int | `40000` | cap | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_TOTAL_CHARS` |
-| `agent_notion_max_markdown_chars` | int | `100000` | cap | `ATRIUM_ASSISTANT_AGENT_NOTION_MAX_MARKDOWN_CHARS` |
-| `agent_notion_max_results` | int | `10` | cap | `ATRIUM_ASSISTANT_AGENT_NOTION_MAX_RESULTS` |
-| `agent_notion_page_chars` | int | `12000` | cap | `ATRIUM_ASSISTANT_AGENT_NOTION_PAGE_CHARS` |
-| `agent_notion_snippet_chars` | int | `300` | cap | `ATRIUM_ASSISTANT_AGENT_NOTION_SNIPPET_CHARS` |
+| `agent_mail_body_chars` | int | `8000` | advanced | `ATRIUM_ASSISTANT_AGENT_MAIL_BODY_CHARS` |
+| `agent_mail_max_loops_limit` | int | `100` | advanced | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_LOOPS_LIMIT` |
+| `agent_mail_max_results` | int | `20` | advanced | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_RESULTS` |
+| `agent_mail_snippet_chars` | int | `300` | advanced | `ATRIUM_ASSISTANT_AGENT_MAIL_SNIPPET_CHARS` |
+| `agent_manifest_results` | int | `30` | advanced | `ATRIUM_ASSISTANT_AGENT_MANIFEST_RESULTS` |
+| `agent_media_torrent_limit` | int | `50` | advanced | `ATRIUM_ASSISTANT_AGENT_MEDIA_TORRENT_LIMIT` |
+| `agent_message_cap_bytes` | int | `67108864` | advanced | `ATRIUM_ASSISTANT_AGENT_MESSAGE_CAP_BYTES` |
+| `agent_nightly_max_threads` | int | `30` | advanced | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_MAX_THREADS` |
+| `agent_nightly_thread_chars` | int | `3000` | advanced | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_THREAD_CHARS` |
+| `agent_nightly_total_chars` | int | `40000` | advanced | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_TOTAL_CHARS` |
+| `agent_notion_max_markdown_chars` | int | `100000` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_MAX_MARKDOWN_CHARS` |
+| `agent_notion_max_results` | int | `10` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_MAX_RESULTS` |
+| `agent_notion_page_chars` | int | `12000` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_PAGE_CHARS` |
+| `agent_notion_snippet_chars` | int | `300` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_SNIPPET_CHARS` |
 | `agent_notion_stale_seconds` | int | `86400` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_STALE_SECONDS` |
 | `agent_preflight_share` | float | `0.95` | advanced | `ATRIUM_ASSISTANT_AGENT_PREFLIGHT_SHARE` |
 | `agent_preserve_messages` | int | `3` | advanced | `ATRIUM_ASSISTANT_AGENT_PRESERVE_MESSAGES` |
 | `agent_preview_chars` | int | `600` | advanced | `ATRIUM_ASSISTANT_AGENT_PREVIEW_CHARS` |
-| `agent_profile_key_chars` | int | `64` | cap | `ATRIUM_ASSISTANT_AGENT_PROFILE_KEY_CHARS` |
-| `agent_profile_value_chars` | int | `500` | cap | `ATRIUM_ASSISTANT_AGENT_PROFILE_VALUE_CHARS` |
-| `agent_project_instruction_chars` | int | `20000` | cap | `ATRIUM_ASSISTANT_AGENT_PROJECT_INSTRUCTION_CHARS` |
-| `agent_project_name_chars` | int | `80` | cap | `ATRIUM_ASSISTANT_AGENT_PROJECT_NAME_CHARS` |
-| `agent_recall_max_page_chars` | int | `16000` | cap | `ATRIUM_ASSISTANT_AGENT_RECALL_MAX_PAGE_CHARS` |
-| `agent_recall_page_chars` | int | `8000` | cap | `ATRIUM_ASSISTANT_AGENT_RECALL_PAGE_CHARS` |
+| `agent_profile_key_chars` | int | `64` | advanced | `ATRIUM_ASSISTANT_AGENT_PROFILE_KEY_CHARS` |
+| `agent_profile_value_chars` | int | `500` | advanced | `ATRIUM_ASSISTANT_AGENT_PROFILE_VALUE_CHARS` |
+| `agent_project_instruction_chars` | int | `20000` | advanced | `ATRIUM_ASSISTANT_AGENT_PROJECT_INSTRUCTION_CHARS` |
+| `agent_project_name_chars` | int | `80` | advanced | `ATRIUM_ASSISTANT_AGENT_PROJECT_NAME_CHARS` |
+| `agent_recall_max_page_chars` | int | `16000` | advanced | `ATRIUM_ASSISTANT_AGENT_RECALL_MAX_PAGE_CHARS` |
+| `agent_recall_page_chars` | int | `8000` | advanced | `ATRIUM_ASSISTANT_AGENT_RECALL_PAGE_CHARS` |
 | `agent_schedule_calendar_candidates` | string | `0 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_CALENDAR_CANDIDATES` |
 | `agent_schedule_daily_nudges` | string | `daily 08:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_DAILY_NUDGES` |
+| `agent_schedule_max_active_jobs` | int | `20` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MAX_ACTIVE_JOBS` |
 | `agent_schedule_media_channels` | string | `*/30 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_CHANNELS` |
 | `agent_schedule_media_sweep` | string | `*/10 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_SWEEP` |
 | `agent_schedule_media_thumbnails` | string | `daily 04:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_THUMBNAILS` |
+| `agent_schedule_memory_work` | string | `*/2 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEMORY_WORK` |
 | `agent_schedule_min_interval_seconds` | int | `3600` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MIN_INTERVAL_SECONDS` |
 | `agent_schedule_nightly` | string | `daily 02:30` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_NIGHTLY` |
+| `agent_schedule_task_reminders` | string | `*/5 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_TASK_REMINDERS` |
 | `agent_schedule_weekly_review` | string | `weekly sun 18:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_WEEKLY_REVIEW` |
 | `agent_scheduler_lease_seconds` | int | `1800` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_LEASE_SECONDS` |
 | `agent_scheduler_missed_grace_seconds` | int | `120` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_MISSED_GRACE_SECONDS` |
 | `agent_scheduler_tick_seconds` | int | `30` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_TICK_SECONDS` |
-| `agent_skill_body_chars` | int | `20000` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_BODY_CHARS` |
-| `agent_skill_description_chars` | int | `160` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_DESCRIPTION_CHARS` |
-| `agent_skill_expand_chars` | int | `20000` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_CHARS` |
-| `agent_skill_expand_max` | int | `5` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_MAX` |
-| `agent_skill_index_chars` | int | `4000` | cap | `ATRIUM_ASSISTANT_AGENT_SKILL_INDEX_CHARS` |
+| `agent_skill_body_chars` | int | `20000` | advanced | `ATRIUM_ASSISTANT_AGENT_SKILL_BODY_CHARS` |
+| `agent_skill_description_chars` | int | `160` | advanced | `ATRIUM_ASSISTANT_AGENT_SKILL_DESCRIPTION_CHARS` |
+| `agent_skill_expand_chars` | int | `20000` | advanced | `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_CHARS` |
+| `agent_skill_expand_max` | int | `5` | advanced | `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_MAX` |
+| `agent_skill_index_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_SKILL_INDEX_CHARS` |
 | `agent_stub_tokens` | int | `2000` | advanced | `ATRIUM_ASSISTANT_AGENT_STUB_TOKENS` |
-| `agent_subagent_context_ids` | int | `20` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_CONTEXT_IDS` |
-| `agent_subagent_description_chars` | int | `160` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_DESCRIPTION_CHARS` |
-| `agent_subagent_digest_chars` | int | `6000` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_DIGEST_CHARS` |
-| `agent_subagent_max_concurrent` | int | `2` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_CONCURRENT` |
-| `agent_subagent_max_cost_usd` | float | `0.25` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_COST_USD` |
-| `agent_subagent_max_steps` | int | `12` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_STEPS` |
-| `agent_subagent_prompt_chars` | int | `4000` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_PROMPT_CHARS` |
-| `agent_subagent_task_chars` | int | `4000` | cap | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_TASK_CHARS` |
+| `agent_subagent_context_ids` | int | `20` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_CONTEXT_IDS` |
+| `agent_subagent_description_chars` | int | `160` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_DESCRIPTION_CHARS` |
+| `agent_subagent_digest_chars` | int | `6000` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_DIGEST_CHARS` |
+| `agent_subagent_max_concurrent` | int | `2` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_CONCURRENT` |
+| `agent_subagent_max_cost_usd` | float | `0.25` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_COST_USD` |
+| `agent_subagent_max_steps` | int | `12` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_STEPS` |
+| `agent_subagent_prompt_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_PROMPT_CHARS` |
+| `agent_subagent_task_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_TASK_CHARS` |
 | `agent_summary_max_tokens` | int | `8192` | advanced | `ATRIUM_ASSISTANT_AGENT_SUMMARY_MAX_TOKENS` |
-| `agent_web_search_max_uses` | int | `5` | cap | `ATRIUM_ASSISTANT_AGENT_WEB_SEARCH_MAX_USES` |
-| `agent_webfetch_max_bytes` | int | `2097152` | cap | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_MAX_BYTES` |
-| `agent_webfetch_max_redirects` | int | `5` | cap | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_MAX_REDIRECTS` |
-| `agent_webfetch_page_text_chars` | int | `60000` | cap | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_PAGE_TEXT_CHARS` |
-| `agent_webfetch_text_default` | int | `12000` | cap | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_TEXT_DEFAULT` |
-| `agent_webfetch_timeout_seconds` | int | `10` | cap | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_TIMEOUT_SECONDS` |
+| `agent_web_search_max_uses` | int | `5` | advanced | `ATRIUM_ASSISTANT_AGENT_WEB_SEARCH_MAX_USES` |
+| `agent_webfetch_max_bytes` | int | `2097152` | advanced | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_MAX_BYTES` |
+| `agent_webfetch_max_redirects` | int | `5` | advanced | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_MAX_REDIRECTS` |
+| `agent_webfetch_page_text_chars` | int | `60000` | advanced | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_PAGE_TEXT_CHARS` |
+| `agent_webfetch_text_default` | int | `12000` | advanced | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_TEXT_DEFAULT` |
+| `agent_webfetch_timeout_seconds` | int | `10` | advanced | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_TIMEOUT_SECONDS` |
 | `agent_webfetch_user_agent` | string | `atrium-webfetch/1` | advanced | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_USER_AGENT` |
-| `agent_workspace_plan_item_chars` | int | `200` | cap | `ATRIUM_ASSISTANT_AGENT_WORKSPACE_PLAN_ITEM_CHARS` |
-| `agent_workspace_plan_items` | int | `20` | cap | `ATRIUM_ASSISTANT_AGENT_WORKSPACE_PLAN_ITEMS` |
+| `agent_workspace_plan_item_chars` | int | `200` | advanced | `ATRIUM_ASSISTANT_AGENT_WORKSPACE_PLAN_ITEM_CHARS` |
+| `agent_workspace_plan_items` | int | `20` | advanced | `ATRIUM_ASSISTANT_AGENT_WORKSPACE_PLAN_ITEMS` |
 | `anthropic_ca_file` | string | none | advanced | `ATRIUM_ASSISTANT_ANTHROPIC_CA_FILE` |
 | `anthropic_proxy` | string | none | advanced | `ATRIUM_ASSISTANT_ANTHROPIC_PROXY` |
-| `budget_chat_share` | float | `1` | cap | `ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE` |
+| `budget_chat_share` | float | `1` | advanced | `ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE` |
 | `budget_unattended_share` | float | `0.8` | advanced | `ATRIUM_ASSISTANT_BUDGET_UNATTENDED_SHARE` |
 | `cache_ttl_chat` | enum (5m, 1h) | `5m` | ui | `ATRIUM_ASSISTANT_CACHE_TTL_CHAT` |
 | `default_context_limit` | enum (90000, 200000, 500000, 1000000) | `90000` | ui | `ATRIUM_ASSISTANT_DEFAULT_CONTEXT_LIMIT` |
 | `default_effort` | enum (low, medium, high, xhigh, max) | `medium` | ui | `ATRIUM_ASSISTANT_DEFAULT_EFFORT` |
 | `default_model` | enum (claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5) | `claude-haiku-5-5` | ui | `ATRIUM_ASSISTANT_DEFAULT_MODEL` |
 | `doom_loop_threshold` | int | `3` | advanced | `ATRIUM_ASSISTANT_DOOM_LOOP_THRESHOLD` |
-| `max_run_cost_usd_haiku_5_5` | float | `2` | cap | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_HAIKU_5_5` |
-| `max_run_cost_usd_opus_5_5` | float | `10` | cap | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_OPUS_5_5` |
-| `max_run_cost_usd_sonnet_5_5` | float | `6` | cap | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_SONNET_5_5` |
+| `max_run_cost_usd_haiku_5_5` | float | `2` | advanced | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_HAIKU_5_5` |
+| `max_run_cost_usd_opus_5_5` | float | `10` | advanced | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_OPUS_5_5` |
+| `max_run_cost_usd_sonnet_5_5` | float | `6` | advanced | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_SONNET_5_5` |
 | `max_steps_chat` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_CHAT` |
 | `max_steps_cron` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_CRON` |
 | `max_steps_nightly` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` |
 | `monthly_budget_usd` | float | `150` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
+| `nightly_stale_months` | int | `6` | advanced | `ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS` |
 | `prompt_subagent` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` |
 | `prompt_summary` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUMMARY` |
 | `prompt_system` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` |
+| `thread_cost_cap_usd` | float | `10` | advanced | `ATRIUM_ASSISTANT_THREAD_COST_CAP_USD` |
 
 ## auth
 
@@ -153,7 +155,9 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `candidate_draft_limit` | int | `10` | advanced | `ATRIUM_CALENDAR_CANDIDATE_DRAFT_LIMIT` |
 | `candidate_scan_limit` | int | `50` | advanced | `ATRIUM_CALENDAR_CANDIDATE_SCAN_LIMIT` |
 | `default_event_minutes` | int | `60` | ui | `ATRIUM_CALENDAR_DEFAULT_EVENT_MINUTES` |
+| `google_calendar_refresh_token` | string | none | secret | `ATRIUM_CALENDAR_GOOGLE_CALENDAR_REFRESH_TOKEN` |
 | `google_client_id` | string | none | ui | `ATRIUM_CALENDAR_GOOGLE_CLIENT_ID` |
+| `google_oauth_client_secret` | string | none | secret | `ATRIUM_CALENDAR_GOOGLE_OAUTH_CLIENT_SECRET` |
 | `icloud_apple_id` | string | none | ui | `ATRIUM_CALENDAR_ICLOUD_APPLE_ID` |
 | `icloud_calendar` | string | none | ui | `ATRIUM_CALENDAR_ICLOUD_CALENDAR` |
 | `max_events` | int | `200` | advanced | `ATRIUM_CALENDAR_MAX_EVENTS` |
@@ -166,6 +170,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
 | `contacts_dir` | string | none | advanced | `ATRIUM_CONTACTS_CONTACTS_DIR` |
+| `contacts_max_results` | int | `10` | advanced | `ATRIUM_CONTACTS_CONTACTS_MAX_RESULTS` |
 
 ## core
 
@@ -222,6 +227,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `gmail_labels_max_messages` | int | `10` | advanced | `ATRIUM_MAIL_GMAIL_LABELS_MAX_MESSAGES` |
 | `gmail_labels_min_overlap` | float | `0.5` | advanced | `ATRIUM_MAIL_GMAIL_LABELS_MIN_OVERLAP` |
 | `gmail_labels_min_target_messages` | int | `10` | advanced | `ATRIUM_MAIL_GMAIL_LABELS_MIN_TARGET_MESSAGES` |
+| `google_gmail_refresh_token` | string | none | secret | `ATRIUM_MAIL_GOOGLE_GMAIL_REFRESH_TOKEN` |
 | `knn_k` | int | `7` | advanced | `ATRIUM_MAIL_KNN_K` |
 | `knn_max` | int | `4096` | advanced | `ATRIUM_MAIL_KNN_MAX` |
 | `knn_min_share` | float | `0.9` | advanced | `ATRIUM_MAIL_KNN_MIN_SHARE` |
@@ -258,7 +264,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `mail_search_snippet_chars` | int | `220` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_CHARS` |
 | `mail_search_snippet_tokens` | int | `24` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_TOKENS` |
 | `mailops_batch` | int | `100` | advanced | `ATRIUM_MAIL_MAILOPS_BATCH` |
-| `openloops_backfill_limit` | int | `2000` | advanced | `ATRIUM_MAIL_OPENLOOPS_BACKFILL_LIMIT` |
 | `openloops_commitment_scan_limit` | int | `20` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_SCAN_LIMIT` |
 | `openloops_commitment_window_days` | int | `14` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_WINDOW_DAYS` |
 | `openloops_commitments_per_message` | int | `5` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENTS_PER_MESSAGE` |
@@ -297,7 +302,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `watches_scan_limit` | int | `25` | advanced | `ATRIUM_MAIL_WATCHES_SCAN_LIMIT` |
 | `watches_stale_package_days` | int | `60` | advanced | `ATRIUM_MAIL_WATCHES_STALE_PACKAGE_DAYS` |
 | `write_attempts` | int | `3` | advanced | `ATRIUM_MAIL_WRITE_ATTEMPTS` |
-| `write_cap` | int | `100` | cap | `ATRIUM_MAIL_WRITE_CAP` |
+| `write_cap` | int | `100` | advanced | `ATRIUM_MAIL_WRITE_CAP` |
 
 ## media
 
@@ -326,9 +331,11 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `media_thumbnail_pass_limit` | int | `200` | advanced | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_PASS_LIMIT` |
 | `media_thumbnail_position` | float | `0.1` | advanced | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_POSITION` |
 | `media_thumbnail_width` | int | `480` | advanced | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_WIDTH` |
+| `media_tmdb_images_url` | string | `https://image.tmdb.org/t/p/w342` | advanced | `ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL` |
 | `media_tmdb_search_limit` | int | `8` | advanced | `ATRIUM_MEDIA_MEDIA_TMDB_SEARCH_LIMIT` |
 | `media_tmdb_timeout_seconds` | int | `15` | advanced | `ATRIUM_MEDIA_MEDIA_TMDB_TIMEOUT_SECONDS` |
 | `media_tmdb_token` | string | none | secret | `ATRIUM_MEDIA_MEDIA_TMDB_TOKEN` |
+| `media_tmdb_url` | string | `https://api.themoviedb.org/3` | advanced | `ATRIUM_MEDIA_MEDIA_TMDB_URL` |
 | `media_torrent_upload_bytes` | int | `1048576` | advanced | `ATRIUM_MEDIA_MEDIA_TORRENT_UPLOAD_BYTES` |
 | `media_tv_url` | string | none | ui | `ATRIUM_MEDIA_MEDIA_TV_URL` |
 | `media_video_extensions` | string | `.mkv,.mp4,.m4v,.avi,.mov,.ts,.wmv` | advanced | `ATRIUM_MEDIA_MEDIA_VIDEO_EXTENSIONS` |
@@ -337,13 +344,26 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `tmdb_ca_file` | string | none | advanced | `ATRIUM_MEDIA_TMDB_CA_FILE` |
 | `tmdb_proxy` | string | none | advanced | `ATRIUM_MEDIA_TMDB_PROXY` |
 
+## memory
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `backfill_done` | string | none | advanced | `ATRIUM_MEMORY_BACKFILL_DONE` |
+| `concurrency` | int | `4` | advanced | `ATRIUM_MEMORY_CONCURRENCY` |
+| `effort` | string | `low` | advanced | `ATRIUM_MEMORY_EFFORT` |
+| `model` | string | `claude-haiku-5-5` | advanced | `ATRIUM_MEMORY_MODEL` |
+| `node_bytes` | int | `512` | advanced | `ATRIUM_MEMORY_NODE_BYTES` |
+| `tail_messages` | int | `6` | advanced | `ATRIUM_MEMORY_TAIL_MESSAGES` |
+| `view_high` | int | `128000` | advanced | `ATRIUM_MEMORY_VIEW_HIGH` |
+| `view_low` | int | `64000` | advanced | `ATRIUM_MEMORY_VIEW_LOW` |
+
 ## notify
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
 | `notify_body_chars` | int | `1000` | advanced | `ATRIUM_NOTIFY_NOTIFY_BODY_CHARS` |
-| `notify_nightly_cap` | int | `1` | cap | `ATRIUM_NOTIFY_NOTIFY_NIGHTLY_CAP` |
-| `notify_per_run_cap` | int | `3` | cap | `ATRIUM_NOTIFY_NOTIFY_PER_RUN_CAP` |
+| `notify_nightly_cap` | int | `1` | advanced | `ATRIUM_NOTIFY_NOTIFY_NIGHTLY_CAP` |
+| `notify_per_run_cap` | int | `3` | advanced | `ATRIUM_NOTIFY_NOTIFY_PER_RUN_CAP` |
 | `notify_title_chars` | int | `120` | advanced | `ATRIUM_NOTIFY_NOTIFY_TITLE_CHARS` |
 | `ntfy_ca_file` | string | none | advanced | `ATRIUM_NOTIFY_NTFY_CA_FILE` |
 | `ntfy_media_topic` | string | none | ui | `ATRIUM_NOTIFY_NTFY_MEDIA_TOPIC` |
@@ -406,3 +426,9 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `project_thread_limit` | int | `100` | advanced | `ATRIUM_WEB_PROJECT_THREAD_LIMIT` |
 | `run_history` | int | `30` | advanced | `ATRIUM_WEB_RUN_HISTORY` |
 | `snooze_choices` | string | `1,3,7,14` | advanced | `ATRIUM_WEB_SNOOZE_CHOICES` |
+
+## web_search
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `dynamic_filtering` | bool | `false` | advanced | `ATRIUM_WEB_SEARCH_DYNAMIC_FILTERING` |

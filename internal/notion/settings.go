@@ -2,11 +2,11 @@ package notion
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notionid"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -35,24 +35,20 @@ const (
 )
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
 	text := func(key, def string) settings.Def {
-		return settings.Def{
+		return settings.Value(settings.UI, settings.Def{
 			Key: key, Module: "notion", Type: settings.String, Default: def,
-			Check: nonBlank, Class: settings.UI, Scopes: instance,
-		}
+			Check: nonBlank})
 	}
 	number := func(key string, typ settings.Type, def string, check func(string) error) settings.Def {
-		return settings.Def{
+		return settings.Value(settings.Advanced, settings.Def{
 			Key: key, Module: "notion", Type: typ, Default: def,
-			Check: check, Class: settings.Advanced, Scopes: instance,
-		}
+			Check: check})
 	}
 	settings.MustRegister(
-		settings.Def{
+		settings.Value(settings.UI, settings.Def{
 			Key: WikiRootKey, Module: "notion", Type: settings.String,
-			Check: pageID, Class: settings.UI, Scopes: instance,
-		},
+			Check: pageID}),
 		text(SensitivityPropertyKey, "sensitivity"),
 		text(PrivateValueKey, "private"),
 		text(WikiLogTitleKey, "Wiki Log"),
@@ -77,7 +73,7 @@ func init() {
 }
 
 func nonBlank(value string) error {
-	if py.Strip(value) == "" {
+	if strings.TrimSpace(value) == "" {
 		return settings.Invalid("must not be blank")
 	}
 	return nil
@@ -108,7 +104,7 @@ func (r *resolver) value(key string) string {
 	if r.err != nil {
 		return ""
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key, 0)
+	found, err := settings.From(r.ctx).Resolve(r.ctx, r.q, key)
 	r.err = err
 	return found.Value
 }
@@ -117,7 +113,7 @@ func (r *resolver) int(key string) int {
 	if r.err != nil {
 		return 0
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key, 0)
+	found, err := settings.From(r.ctx).Resolve(r.ctx, r.q, key)
 	if err != nil {
 		r.err = err
 		return 0
@@ -131,7 +127,7 @@ func (r *resolver) float(key string) float64 {
 	if r.err != nil {
 		return 0
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key, 0)
+	found, err := settings.From(r.ctx).Resolve(r.ctx, r.q, key)
 	if err != nil {
 		r.err = err
 		return 0
@@ -148,29 +144,6 @@ type APILimits struct {
 	Timeout        time.Duration
 	PageSize       int
 	BlockDepth     int
-}
-
-func defaultAPI() APILimits {
-	def := func(key string) string {
-		d, _ := settings.Default.Lookup(key)
-		return d.Default
-	}
-	asInt := func(key string) int {
-		n, _ := py.ParseInt(def(key))
-		return int(n)
-	}
-	asFloat := func(key string) float64 {
-		f, _ := py.ParseFloat(def(key))
-		return f
-	}
-	return APILimits{
-		RetryAfterBase: asFloat(RetryAfterBaseKey),
-		RetryAfterMax:  asFloat(RetryAfterMaxKey),
-		MaxRetries:     asInt(MaxRetriesKey),
-		Timeout:        time.Duration(asInt(TimeoutKey)) * time.Second,
-		PageSize:       asInt(PageSizeKey),
-		BlockDepth:     asInt(BlockDepthKey),
-	}
 }
 
 func LoadAPI(ctx context.Context, q db.Querier) (APILimits, error) {
@@ -230,8 +203,8 @@ type Sensitivity struct {
 func LoadSensitivity(ctx context.Context, q db.Querier) (Sensitivity, error) {
 	r := resolver{ctx: ctx, q: q}
 	out := Sensitivity{
-		Property: py.Lower(py.Strip(r.value(SensitivityPropertyKey))),
-		Private:  py.Lower(py.Strip(r.value(PrivateValueKey))),
+		Property: strings.ToLower(strings.TrimSpace(r.value(SensitivityPropertyKey))),
+		Private:  strings.ToLower(strings.TrimSpace(r.value(PrivateValueKey))),
 	}
 	return out, r.err
 }

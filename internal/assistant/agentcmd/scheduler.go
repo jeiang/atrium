@@ -4,35 +4,54 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/assistant/runner"
+	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
-	"github.com/jeiang/atrium/internal/assistant/service"
+	"github.com/jeiang/atrium/internal/attention"
+	"github.com/jeiang/atrium/internal/attention/digest"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/sdnotify"
+	"github.com/jeiang/atrium/internal/tasks/remind"
 )
 
-func callables(enabled func(module string) bool) map[string]worker.Callable {
-	out := map[string]worker.Callable{}
-	gate := func(calls map[string]worker.Callable, owners ...string) {
-		for name, call := range calls {
-			out[name] = func(ctx context.Context, e worker.Env) (worker.Result, error) {
-				for _, owner := range owners {
-					if !enabled(owner) {
-						return worker.Result{}, nil
-					}
-				}
-				return call(ctx, e)
-			}
-		}
+func attentionSources(ctx context.Context) []attention.Source {
+	set := module.SetFrom(ctx)
+	if set == nil || set.Current() == nil {
+		return nil
 	}
-	gate(calendarcmd.Callables(), module.Calendar, module.Mail)
-	gate(mediacmd.Callables(), module.Media)
+	return set.Current().Attention()
+}
+
+func callables() map[string]worker.Callable {
+	out := map[string]worker.Callable{}
+	for name, call := range calendarcmd.Callables() {
+		out[name] = call
+	}
+	for name, call := range mediacmd.Callables() {
+		out[name] = call
+	}
+	for name, call := range memorycmd.Callables() {
+		out[name] = call
+	}
+	out[scheduler.TaskRemindersName] = worker.Callable{
+		Modules: []string{module.Assistant},
+		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
+			_, err := remind.Due(ctx, e.Service.DB, e.Service.Env, e.Now())
+			return worker.Result{}, err
+		},
+	}
+	out[scheduler.DailyNudgesName] = worker.Callable{
+		Modules: []string{module.Assistant},
+		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
+			_, _, err := digest.Send(ctx, e.Service.DB.Write, e.Service.Env, e.Now(), attentionSources(ctx))
+			return worker.Result{}, err
+		},
+	}
 	return out
 }
 
@@ -53,27 +72,14 @@ func schedulerCommand(cfgEnv config.Env, tools registry.Source, enabled func(mod
 
 func runScheduler(env *cli.Env, cfgEnv config.Env, tools registry.Source, enabled func(module string) bool) error {
 	ctx := env.Ctx
-	cfg, err := config.Load(cfgEnv)
+	svc, closeApp, err := bootstrap(ctx, cfgEnv, tools)
 	if err != nil {
 		return err
 	}
-	d, err := db.Connect(cfg.DBPath)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = d.Close() }()
-	if err := config.Migrate(ctx, d, cfg); err != nil {
-		return err
-	}
-	r, err := runner.New(tools)
-	if err != nil {
-		return err
-	}
-	svc := service.New(ctx, d, cfg, cfgEnv, r)
-	defer svc.Close()
-	notifier := sdnotify.FromEnv()
+	defer closeApp()
+	notifier := sdnotify.New(func(name string) string { v, _ := cfgEnv(name); return v })
 	beat := sdnotify.NewHeartbeat()
-	w, err := worker.New(ctx, svc, callables(enabled))
+	w, err := worker.New(ctx, svc, callables(), enabled)
 	if err != nil {
 		return err
 	}

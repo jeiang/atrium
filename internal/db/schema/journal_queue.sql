@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS thread_queue (
     text TEXT NOT NULL,
     created_at REAL NOT NULL,
     consumed_at REAL,
-    run_id INTEGER
+    run_id INTEGER,
+    files_json TEXT
 );
 CREATE INDEX IF NOT EXISTS thread_queue_open ON thread_queue (thread_id, consumed_at);

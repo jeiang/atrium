@@ -13,6 +13,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
@@ -20,18 +21,19 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/proposals/executors"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
+	"golang.org/x/text/cases"
 )
 
 var log = logx.Logger("atrium.applier")
 
 const (
 	deletionNotBlocked = "NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.account = m.account AND a.digest = m.digest " +
-		"AND ((a.kind = 'trash' AND a.ok IS NOT 0) OR a.undone_ts IS NOT NULL)) " +
+		"AND a.kind = 'trash' AND a.state NOT IN ('failed', 'skipped')) " +
 		"AND (SELECT COUNT(*) FROM auto_actions a WHERE a.account = m.account AND a.digest = m.digest " +
-		"AND a.kind = 'trash' AND a.ok = 0) < :attempts"
+		"AND a.kind = 'trash' AND a.state = 'failed') < :attempts"
 	noCorrection = "NOT EXISTS (SELECT 1 FROM corrections c WHERE c.message_id = m.id)"
 
 	inboxCandidates = `SELECT m.id, m.digest, d.id, d.action, d.dest
@@ -45,28 +47,28 @@ ORDER BY m.id`
 FROM corrections c JOIN messages m ON m.id = c.message_id
 WHERE c.account = :account AND c.ts >= :golive AND m.gone_at IS NULL AND m.sent = 0
 AND NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'correct'
-AND a.dest = c.folder AND a.ok IS NOT 0)
+AND a.dest = c.folder AND a.state NOT IN ('failed', 'skipped'))
 AND (SELECT COUNT(*) FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'correct'
-AND a.dest = c.folder AND a.ok = 0) < :attempts
+AND a.dest = c.folder AND a.state = 'failed') < :attempts
 ORDER BY m.id`
 	flagCandidates = `SELECT m.id, m.digest FROM messages m JOIN flag_decisions f ON f.message_id = m.id
 WHERE m.account = :account AND m.in_inbox = 1 AND m.seen = 0 AND m.flagged = 0 AND m.sent = 0
 AND m.gone_at IS NULL AND f.contacts_match = 1
-AND NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'flag' AND a.ok IS NOT 0)
-AND (SELECT COUNT(*) FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'flag' AND a.ok = 0) < :attempts
+AND NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'flag' AND a.state NOT IN ('failed', 'skipped'))
+AND (SELECT COUNT(*) FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'flag' AND a.state = 'failed') < :attempts
 ORDER BY m.id`
-	deletionCandidates = `SELECT ` + rules.MessageColumns + `, m.seen, m.digest FROM messages m
+	deletionCandidates = `SELECT ` + rules.MessageColumns + ` FROM messages m
 WHERE m.account = :account AND m.gone_at IS NULL AND m.sent = 0 AND m.flagged = 0
 AND m.mailbox_id IN (SELECT mb.id FROM mailboxes mb WHERE mb.role NOT IN ('drafts', 'junk', 'sent', 'system', 'trash'))
 AND ` + noCorrection + ` AND ` + deletionNotBlocked + `
 ORDER BY m.id`
 	priorLabel = "SELECT dest FROM auto_actions WHERE account = ? AND digest = ? AND kind IN ('file', 'correct') " +
-		"AND ok = 1 AND undone_ts IS NULL ORDER BY id DESC LIMIT 1"
+		"AND state = 'applied' ORDER BY id DESC LIMIT 1"
 )
 
 const alreadyThere = "already there"
 
-type check func(account string, item mailops.Verified) string
+type check func(preset, account string, item mailops.Verified) string
 
 type Intent struct {
 	ID         int64
@@ -97,63 +99,62 @@ type Outcome struct {
 	Written int
 	Skipped int
 	Failed  int
-	ByKind  py.Dict
+	ByKind  map[string]int
 	Ran     bool
 }
 
 func (o *Outcome) count(kind string, n int) {
 	o.Written += n
-	o.ByKind = o.ByKind.Set(kind, o.Kind(kind)+n)
+	if o.ByKind == nil {
+		o.ByKind = map[string]int{}
+	}
+	o.ByKind[kind] += n
 }
 
-func (o Outcome) Kind(kind string) int {
-	n, _ := o.ByKind.Get(kind)
-	v, _ := n.(int)
-	return v
-}
+func (o Outcome) Kind(kind string) int { return o.ByKind[kind] }
 
-func inInbox(account string, item mailops.Verified) bool {
-	if config.Preset(account) == config.Gmail {
+func inInbox(preset string, item mailops.Verified) bool {
+	if preset == config.Gmail {
 		return slices.Contains(item.Labels, mailops.InboxLabel)
 	}
-	return py.Casefold(item.IMAPName) == py.Casefold(config.Inbox)
+	return cases.Fold().String(item.IMAPName) == cases.Fold().String(config.Inbox)
 }
 
-func leftInbox(account string, item mailops.Verified) string {
-	if inInbox(account, item) {
+func leftInbox(preset, account string, item mailops.Verified) string {
+	if inInbox(preset, item) {
 		return ""
 	}
 	return "left the inbox"
 }
 
-func readInbox(account string, item mailops.Verified) string {
+func readInbox(preset, account string, item mailops.Verified) string {
 	if !slices.Contains(item.Flags, mailops.Seen) {
 		return "unread"
 	}
 	if slices.Contains(item.Flags, mailops.Flagged) {
 		return "flagged"
 	}
-	return leftInbox(account, item)
+	return leftInbox(preset, account, item)
 }
 
-func unreadInbox(account string, item mailops.Verified) string {
+func unreadInbox(preset, account string, item mailops.Verified) string {
 	if slices.Contains(item.Flags, mailops.Seen) {
 		return "read"
 	}
 	if slices.Contains(item.Flags, mailops.Flagged) {
 		return "flagged"
 	}
-	return leftInbox(account, item)
+	return leftInbox(preset, account, item)
 }
 
-func unflagged(_ string, item mailops.Verified) string {
+func unflagged(_, _ string, item mailops.Verified) string {
 	if slices.Contains(item.Flags, mailops.Flagged) {
 		return "flagged"
 	}
 	return ""
 }
 
-func unflaggedRead(_ string, item mailops.Verified) string {
+func unflaggedRead(_, _ string, item mailops.Verified) string {
 	if slices.Contains(item.Flags, mailops.Flagged) {
 		return "flagged"
 	}
@@ -163,7 +164,7 @@ func unflaggedRead(_ string, item mailops.Verified) string {
 	return "unread"
 }
 
-func anywhere(string, mailops.Verified) string { return "" }
+func anywhere(_, _ string, _ mailops.Verified) string { return "" }
 
 func protectedNames(ctx context.Context, client mail.Client) (map[string]bool, error) {
 	boxes, err := client.ListMailboxes(ctx)
@@ -188,14 +189,14 @@ func safeLabel(name string) bool {
 
 type Applier struct {
 	Live   *live.Live
-	Open   mailops.Opener
+	Open   mail.OpenFunc
 	Resync func(ctx context.Context, account string) error
 	Cap    int
 }
 
-func New(l *live.Live, open mailops.Opener, syncer *mailsync.Syncer) *Applier {
+func New(l *live.Live, open mail.OpenFunc, syncer *mailsync.Syncer) *Applier {
 	return &Applier{Live: l, Open: open, Resync: func(ctx context.Context, account string) error {
-		return mailops.Session(ctx, open, account, func(client mail.Client) error {
+		return mailops.Session(ctx, open, l.DB.Read, account, func(client mail.Client) error {
 			_, err := syncer.Account(ctx, account, client)
 			return err
 		})
@@ -213,7 +214,7 @@ func (a *Applier) cap(ctx context.Context) (int, error) {
 	if a.Cap != 0 {
 		return a.Cap, nil
 	}
-	r := mail.Read(ctx, a.Live.DB.Read)
+	r := endpoint.Read(ctx, a.Live.DB.Read)
 	n := r.Int(mail.KeyWriteCap)
 	return n, r.Err()
 }
@@ -226,24 +227,24 @@ func (a *Applier) query(ctx context.Context, account, query string) (*sql.Rows, 
 	return a.Live.DB.Write.QueryContext(ctx, query, p.Args()...)
 }
 
-func beforeOf(item mailops.Verified) py.Dict {
+func beforeOf(item mailops.Verified) map[string]any {
 	flags := item.Flags
 	if flags == nil {
 		flags = []string{}
 	}
-	return py.Dict{
-		{Key: "imap_name", Value: item.IMAPName}, {Key: "uidvalidity", Value: item.UIDValidity}, {Key: "uid", Value: item.UID},
-		{Key: "msgid", Value: item.MsgID}, {Key: "flags", Value: flags}, {Key: "labels", Value: item.Labels},
+	return map[string]any{
+		"imap_name": item.IMAPName, "uidvalidity": item.UIDValidity, "uid": item.UID,
+		"msgid": item.MsgID, "flags": flags, "labels": item.Labels,
 	}
 }
 
-func moveUndo(account string, item mailops.Verified, destIMAP string, destValidity, destUID any) py.Dict {
-	return py.Dict{
-		{Key: "op", Value: live.OpMoveBack}, {Key: "account", Value: account}, {Key: "src_imap", Value: item.IMAPName},
-		{Key: "dest_imap", Value: destIMAP}, {Key: "dest_uidvalidity", Value: destValidity},
-		{Key: "items", Value: []any{py.Dict{
-			{Key: "id", Value: item.ID}, {Key: "msgid", Value: item.MsgID}, {Key: "uid", Value: item.UID}, {Key: "dest_uid", Value: destUID},
-		}}},
+func moveUndo(account string, item mailops.Verified, destIMAP string, destValidity, destUID any) map[string]any {
+	return map[string]any{
+		"op": live.OpMoveBack, "account": account, "src_imap": item.IMAPName,
+		"dest_imap": destIMAP, "dest_uidvalidity": destValidity,
+		"items": []any{map[string]any{
+			"id": item.ID, "msgid": item.MsgID, "uid": item.UID, "dest_uid": destUID,
+		}},
 	}
 }
 
@@ -335,7 +336,7 @@ func (a *Applier) moveGroup(ctx context.Context, client mail.Client, account str
 		for _, uid := range batch {
 			e := by[uid]
 			validity, destUID := copied(c, uid)
-			after := py.Dict{{Key: "imap_name", Value: g.dest}, {Key: "uidvalidity", Value: validity}, {Key: "uid", Value: destUID}}
+			after := map[string]any{"imap_name": g.dest, "uidvalidity": validity, "uid": destUID}
 			if err := a.Live.Finish(ctx, e.aid, after, moveUndo(account, e.item, g.dest, validity, destUID), nil); err != nil {
 				return ledgerError{err}
 			}
@@ -355,7 +356,7 @@ func (a *Applier) moveGroup(ctx context.Context, client mail.Client, account str
 	if partial, ok := errors.AsType[*mailops.PartialMove](err); ok {
 		for _, uid := range failing {
 			validity, destUID := copied(partial.Copied, uid)
-			after := py.Dict{{Key: "imap_name", Value: g.dest}, {Key: "uidvalidity", Value: validity}, {Key: "uid", Value: destUID}}
+			after := map[string]any{"imap_name": g.dest, "uidvalidity": validity, "uid": destUID}
 			if err := a.Live.Hold(ctx, by[uid].aid, partial.Error(), after); err != nil {
 				return err
 			}
@@ -368,7 +369,7 @@ func (a *Applier) moveGroup(ctx context.Context, client mail.Client, account str
 		return nil
 	}
 	for _, uid := range failing {
-		if err := a.Live.Fail(ctx, by[uid].aid, py.ExceptionText(err)); err != nil {
+		if err := a.Live.Fail(ctx, by[uid].aid, err.Error()); err != nil {
 			return err
 		}
 	}
@@ -388,7 +389,7 @@ func observedLabels(ctx context.Context, client mail.Client, imapName string, ui
 	if err := client.Select(ctx, imapName); err != nil {
 		return fail(err)
 	}
-	msgs, err := client.UIDFetch(ctx, mail.UIDs(uids...), mail.FetchItems{Labels: true})
+	msgs, err := client.UIDFetch(ctx, mail.UIDs(uids...), mail.FetchRequest{Mode: mail.FetchFlags, Labels: true})
 	if err != nil {
 		return fail(err)
 	}
@@ -399,10 +400,10 @@ func observedLabels(ctx context.Context, client mail.Client, imapName string, ui
 	return out
 }
 
-func labelUndo(account string, g *group, uid uint32, add, remove []string) py.Dict {
-	return py.Dict{
-		{Key: "op", Value: live.OpGmailLabels}, {Key: "account", Value: account}, {Key: "imap_name", Value: g.imapName}, {Key: "uidvalidity", Value: g.validity},
-		{Key: "uids", Value: []uint32{uid}}, {Key: "add", Value: add}, {Key: "remove", Value: remove},
+func labelUndo(account string, g *group, uid uint32, add, remove []string) map[string]any {
+	return map[string]any{
+		"op": live.OpGmailLabels, "account": account, "imap_name": g.imapName, "uidvalidity": g.validity,
+		"uids": []uint32{uid}, "add": add, "remove": remove,
 	}
 }
 
@@ -411,7 +412,7 @@ func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account st
 	size := batchSize(ctx)
 	for _, chunk := range mailops.Chunks(uids, size) {
 		if err := mailops.StoreLabels(ctx, client, g.imapName, g.validity, chunk, size, g.added, g.removed); err != nil {
-			text := py.ExceptionText(err)
+			text := err.Error()
 			if errors.Is(err, mailops.ErrValidityChanged) {
 				for _, uid := range chunk {
 					if err := a.Live.Fail(ctx, by[uid].aid, text); err != nil {
@@ -427,6 +428,13 @@ func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account st
 			}
 			actual := observedLabels(ctx, client, g.imapName, chunk)
 			for _, uid := range chunk {
+				if actual == nil {
+					if err := a.Live.Unknown(ctx, by[uid].aid, text); err != nil {
+						return err
+					}
+					out.Failed++
+					continue
+				}
 				e := by[uid]
 				have, known := actual[uid]
 				didAdd, didRemove := []string{}, []string{}
@@ -452,7 +460,7 @@ func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account st
 					return err
 				}
 				undo := labelUndo(account, g, uid, unique(didRemove, priorAdd), unique(didAdd, priorRemove))
-				after := py.Dict{{Key: "add", Value: didAdd}, {Key: "remove", Value: didRemove}}
+				after := map[string]any{"add": didAdd, "remove": didRemove}
 				if slices.Equal(didAdd, g.added) && slices.Equal(didRemove, g.removed) {
 					if err := a.Live.Finish(ctx, e.aid, after, undo, new("completed after: "+text)); err != nil {
 						return err
@@ -473,7 +481,7 @@ func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account st
 		}
 		for _, uid := range chunk {
 			e := by[uid]
-			after := py.Dict{{Key: "add", Value: g.added}, {Key: "remove", Value: g.removed}}
+			after := map[string]any{"add": g.added, "remove": g.removed}
 			priorAdd, priorRemove, err := a.Live.AbsorbLabelUndo(ctx, e.item.ID, e.intent.Kind)
 			if err != nil {
 				return err
@@ -508,7 +516,7 @@ func locateInTrash(ctx context.Context, client mail.Client, trash string, item m
 	}
 	var same []uint32
 	if len(found) > 0 {
-		msgs, err := client.UIDFetch(ctx, mail.UIDs(found...), mail.FetchItems{Labels: true, Header: true, Body: true})
+		msgs, err := client.UIDFetch(ctx, mail.UIDs(found...), mail.FetchRequest{Mode: mail.FetchFull, Labels: true})
 		if err != nil {
 			return fail(err)
 		}
@@ -524,10 +532,10 @@ func locateInTrash(ctx context.Context, client mail.Client, trash string, item m
 	return st.UIDValidity, same[0], true
 }
 
-func untrashUndo(account, trash string, validity, uid any) py.Dict {
-	return py.Dict{
-		{Key: "op", Value: live.OpGmailUntrash}, {Key: "account", Value: account}, {Key: "trash_imap", Value: trash}, {Key: "dest_uidvalidity", Value: validity},
-		{Key: "uids", Value: []any{uid}},
+func untrashUndo(account, trash string, validity, uid any) map[string]any {
+	return map[string]any{
+		"op": live.OpGmailUntrash, "account": account, "trash_imap": trash, "dest_uidvalidity": validity,
+		"uids": []any{uid},
 	}
 }
 
@@ -541,7 +549,7 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 			c, err = mailops.CopyUIDs(ctx, client, g.dest, chunk)
 		}
 		if err != nil {
-			text := py.ExceptionText(err)
+			text := err.Error()
 			_, refused := errors.AsType[safety.WriteRefused](err)
 			refused = refused || errors.Is(err, mailops.ErrValidityChanged)
 			_, unknown := errors.AsType[*mail.WriteInterrupted](err)
@@ -553,7 +561,7 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 					validity, destUID, found = locateInTrash(ctx, client, g.dest, e.item)
 				}
 				if !found && unknown {
-					if err := a.Live.Hold(ctx, e.aid, text, nil); err != nil {
+					if err := a.Live.Unknown(ctx, e.aid, text); err != nil {
 						return err
 					}
 					out.Failed++
@@ -566,7 +574,7 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 					out.Failed++
 					continue
 				}
-				after := py.Dict{{Key: "imap_name", Value: g.dest}, {Key: "uidvalidity", Value: validity}, {Key: "uid", Value: destUID}}
+				after := map[string]any{"imap_name": g.dest, "uidvalidity": validity, "uid": destUID}
 				if err := a.Live.Finish(ctx, e.aid, after, untrashUndo(account, g.dest, validity, destUID), new("partial: "+text)); err != nil {
 					return err
 				}
@@ -595,7 +603,7 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 			if destUID != nil {
 				undo = untrashUndo(account, g.dest, destValidity, destUID)
 			}
-			after := py.Dict{{Key: "imap_name", Value: g.dest}, {Key: "uidvalidity", Value: destValidity}, {Key: "uid", Value: destUID}}
+			after := map[string]any{"imap_name": g.dest, "uidvalidity": destValidity, "uid": destUID}
 			if err := a.Live.Finish(ctx, e.aid, after, undo, nil); err != nil {
 				return err
 			}
@@ -611,7 +619,7 @@ func (a *Applier) flagGroup(ctx context.Context, client mail.Client, account str
 	for _, chunk := range mailops.Chunks(uids, size) {
 		if err := mailops.StoreFlag(ctx, client, g.imapName, g.validity, chunk, size, mailops.Flagged, true); err != nil {
 			for _, uid := range chunk {
-				if err := a.Live.Fail(ctx, by[uid].aid, py.ExceptionText(err)); err != nil {
+				if err := a.Live.Fail(ctx, by[uid].aid, err.Error()); err != nil {
 					return err
 				}
 			}
@@ -624,11 +632,11 @@ func (a *Applier) flagGroup(ctx context.Context, client mail.Client, account str
 		}
 		for _, uid := range chunk {
 			e := by[uid]
-			undo := py.Dict{
-				{Key: "op", Value: live.OpUnflag}, {Key: "account", Value: account}, {Key: "imap_name", Value: g.imapName},
-				{Key: "uidvalidity", Value: g.validity}, {Key: "uids", Value: []uint32{uid}},
+			undo := map[string]any{
+				"op": live.OpUnflag, "account": account, "imap_name": g.imapName,
+				"uidvalidity": g.validity, "uids": []uint32{uid},
 			}
-			if err := a.Live.Finish(ctx, e.aid, py.Dict{{Key: "flag", Value: mailops.Flagged}}, undo, nil); err != nil {
+			if err := a.Live.Finish(ctx, e.aid, map[string]any{"flag": mailops.Flagged}, undo, nil); err != nil {
 				return err
 			}
 			out.count(e.intent.Kind, 1)
@@ -637,7 +645,10 @@ func (a *Applier) flagGroup(ctx context.Context, client mail.Client, account str
 	return nil
 }
 
-func boxKey(parts ...any) string { return py.JSONDumps(parts) }
+func boxKey(parts ...any) string {
+	b, _ := json.Marshal(parts)
+	return string(b)
+}
 
 type batchKey struct{}
 
@@ -684,7 +695,7 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 		return err
 	}
 	folders := map[string]string{}
-	if config.Preset(account) != config.Gmail {
+	if config.From(ctx).Preset(account) != config.Gmail {
 		boxes, err := client.ListMailboxes(ctx)
 		if err != nil {
 			return err
@@ -697,7 +708,7 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 	var moves, labels, trashes, flagging groups
 	for _, item := range items {
 		in := byID[item.ID]
-		reason := in.check(account, item)
+		reason := in.check(config.From(ctx).Preset(account), account, item)
 		if reason == "" && protected[item.IMAPName] {
 			reason = "protected mailbox"
 		}
@@ -711,7 +722,7 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 			switch {
 			case !safeLabel(dest):
 				reason = "unsafe destination"
-			case config.Preset(account) == config.Gmail:
+			case config.From(ctx).Preset(account) == config.Gmail:
 				if !slices.Contains(item.Labels, dest) {
 					added = []string{dest}
 				}
@@ -773,11 +784,11 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 		switch {
 		case in.Kind == live.Flag:
 			flagging.add(boxKey(item.IMAPName, item.UIDValidity), box(a.flagGroup, ""), e)
-		case in.Kind == live.Trash && config.Preset(account) == config.Gmail:
+		case in.Kind == live.Trash && config.From(ctx).Preset(account) == config.Gmail:
 			trashes.add(boxKey(item.IMAPName, item.UIDValidity, trash), box(a.gmailTrashGroup, trash), e)
 		case in.Kind == live.Trash:
 			moves.add(boxKey(item.IMAPName, item.UIDValidity, trash), box(a.moveGroup, trash), e)
-		case config.Preset(account) == config.Gmail:
+		case config.From(ctx).Preset(account) == config.Gmail:
 			labels.add(boxKey(item.IMAPName, item.UIDValidity, added, removed), box(a.labelGroup, ""), e)
 		default:
 			moves.add(boxKey(item.IMAPName, item.UIDValidity, destIMAP), box(a.moveGroup, destIMAP), e)
@@ -790,7 +801,7 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 		}
 		log.Error(account+": group failed unexpectedly", logx.Err, runErr.Error())
 		_, refused := errors.AsType[safety.WriteRefused](runErr)
-		text := py.ExceptionText(runErr)
+		text := runErr.Error()
 		for _, e := range g.entries {
 			var err error
 			if refused {
@@ -818,7 +829,7 @@ func (a *Applier) inboxIntents(ctx context.Context, account string, budget *Budg
 		err := r.Scan(&in.ID, &in.Digest, &decisionID, &action, &in.Dest)
 		in.DecisionID = &decisionID
 		in.check = readInbox
-		if action == rules.ActionDelete {
+		if rules.Action(action) == rules.ActionDelete {
 			in.Kind, in.Dest = live.Trash, nil
 		} else {
 			in.Kind = live.File
@@ -853,7 +864,7 @@ func (a *Applier) correctionIntents(ctx context.Context, account string, budget 
 	var pending []row
 	for _, x := range all {
 		var atTarget bool
-		if config.Preset(account) == config.Gmail {
+		if config.From(ctx).Preset(account) == config.Gmail {
 			var labels []string
 			if err := json.Unmarshal([]byte(x.labels.String), &labels); err != nil {
 				return nil, err
@@ -869,7 +880,7 @@ func (a *Applier) correctionIntents(ctx context.Context, account string, budget 
 	var out []Intent
 	for _, x := range take(budget, pending, "corrections") {
 		var remove []string
-		if config.Preset(account) == config.Gmail {
+		if config.From(ctx).Preset(account) == config.Gmail {
 			var prior sql.NullString
 			err := a.Live.DB.Write.QueryRowContext(ctx, priorLabel, account, x.digest).Scan(&prior)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -901,16 +912,8 @@ func (a *Applier) flagIntents(ctx context.Context, account string, budget *Budge
 }
 
 func hasAge(rule *rules.Rule) bool {
-	return slices.ContainsFunc(rule.Conditions, func(c rules.Condition) bool { return c.Field == rules.AgeField })
+	return slices.ContainsFunc(rule.Conditions, func(c rules.Condition) bool { return c.Field() == rules.AgeField })
 }
-
-type withExtra struct {
-	rows   *sql.Rows
-	seen   *bool
-	digest *string
-}
-
-func (s withExtra) Scan(dest ...any) error { return s.rows.Scan(append(dest, s.seen, s.digest)...) }
 
 func (a *Applier) deletionIntents(ctx context.Context, account string, budget *Budget) ([]Intent, error) {
 	ruleset, err := rules.LoadRules(ctx, a.Live.DB.Write, account)
@@ -925,13 +928,11 @@ func (a *Applier) deletionIntents(ctx context.Context, account string, budget *B
 		return nil, err
 	}
 	type row struct {
-		msg    rules.Message
-		seen   bool
-		digest string
+		msg rules.Message
 	}
 	all, err := db.Collect(rows, func(r *sql.Rows) (row, error) {
 		var x row
-		m, err := rules.ScanMessage(withExtra{r, &x.seen, &x.digest})
+		m, err := rules.ScanMessage(r)
 		x.msg = m
 		return x, err
 	})
@@ -948,7 +949,7 @@ func (a *Applier) deletionIntents(ctx context.Context, account string, budget *B
 		if err != nil {
 			return nil, err
 		}
-		if rule != nil && rule.Action == rules.ActionDelete && (x.seen || hasAge(rule)) {
+		if rule != nil && rule.Action == rules.ActionDelete && (x.msg.Seen || hasAge(rule)) {
 			matched = append(matched, match{x, rule})
 		}
 	}
@@ -958,7 +959,7 @@ func (a *Applier) deletionIntents(ctx context.Context, account string, budget *B
 		if hasAge(m.rule) {
 			c = unflagged
 		}
-		out = append(out, Intent{ID: m.row.msg.ID, Digest: m.row.digest, Kind: live.Trash, check: c})
+		out = append(out, Intent{ID: m.row.msg.ID, Digest: m.row.msg.Digest, Kind: live.Trash, check: c})
 	}
 	return out, nil
 }
@@ -968,11 +969,11 @@ func (a *Applier) deletionDue(ctx context.Context, account string) (bool, error)
 	if err != nil || last == nil {
 		return err == nil, err
 	}
-	ts, err := strconv.ParseFloat(py.Strip(*last), 64)
+	ts, err := strconv.ParseFloat(strings.TrimSpace(*last), 64)
 	if err != nil {
 		return false, err
 	}
-	r := mail.Read(ctx, a.Live.DB.Read)
+	r := endpoint.Read(ctx, a.Live.DB.Read)
 	interval := r.Int(mail.KeyDeletionInterval)
 	if err := r.Err(); err != nil {
 		return false, err
@@ -1015,7 +1016,7 @@ func (a *Applier) runPass(ctx context.Context, account string, build builder, la
 		return out, err
 	}
 	if len(intents) > 0 {
-		err := mailops.Session(auto, a.Open, account, func(client mail.Client) error {
+		err := mailops.Session(auto, a.Open, a.Live.DB.Read, account, func(client mail.Client) error {
 			return a.execute(auto, client, account, intents, &out)
 		})
 		if err != nil {
@@ -1030,10 +1031,10 @@ func (a *Applier) runPass(ctx context.Context, account string, build builder, la
 	if out.Written > 0 || out.Skipped > 0 || out.Failed > 0 || budget.Deferred > 0 {
 		byKind := out.ByKind
 		if byKind == nil {
-			byKind = py.Dict{}
+			byKind = map[string]int{}
 		}
 		log.Info(fmt.Sprintf("%s: %s applied=%s skipped=%d failed=%d deferred=%d",
-			account, label, py.ReprValue(byKind), out.Skipped, out.Failed, budget.Deferred))
+			account, label, fmt.Sprint(byKind), out.Skipped, out.Failed, budget.Deferred))
 	}
 	return out, nil
 }
@@ -1075,7 +1076,7 @@ func (a *Applier) DeletionPass(ctx context.Context, account string, force bool) 
 	if err != nil || !out.Ran {
 		return out, err
 	}
-	return out, live.SetState(context.WithoutCancel(ctx), a.Live.DB.Write, live.DeletionKey+":"+account, py.FloatRepr(a.now()))
+	return out, live.SetState(context.WithoutCancel(ctx), a.Live.DB.Write, live.DeletionKey+":"+account, numx.FloatRepr(a.now()))
 }
 
 func (a *Applier) ApplyAll(ctx context.Context, account string) (applied, deleted Outcome, err error) {

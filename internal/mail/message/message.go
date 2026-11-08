@@ -5,17 +5,19 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net/mail"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
-	SourceRaw   = "raw"
-	SourceIndex = "index"
+	sourceRaw   = "raw"
+	sourceIndex = "index"
 )
 
 var Headers = [...]string{"From", "To", "Cc", "Reply-To", "Date", "Subject", "Message-ID", "List-Id"}
@@ -47,22 +49,70 @@ type View struct {
 	FlagDecision map[string]any    `json:"flag_decision"`
 }
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+type Querier = db.Querier
+
+type Execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+type DecisionRecord struct {
+	MessageID  int64
+	Account    string
+	TS         float64
+	Stage      string
+	Key        *string
+	Action     string
+	Dest       *string
+	Confidence *float64
+	Detail     any
+}
+
+func RecordDecision(ctx context.Context, q Execer, d DecisionRecord) error {
+	detail, err := json.Marshal(d.Detail)
+	if err != nil {
+		return err
+	}
+	_, err = q.ExecContext(ctx,
+		"INSERT INTO decisions (message_id, account, ts, stage, key, action, dest, confidence, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		d.MessageID, d.Account, d.TS, d.Stage, nullableString(d.Key), d.Action, nullableString(d.Dest), nullableFloat(d.Confidence),
+		string(detail))
+	return err
+}
+
+func nullableString(v *string) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
+func nullableFloat(v *float64) any {
+	if v == nil {
+		return nil
+	}
+	return *v
 }
 
 func RawFile(cacheDir, rawPath string) (string, bool) {
 	if rawPath == "" {
 		return "", false
 	}
-	root := py.Resolve(cacheDir)
-	target := rawPath
-	if !strings.HasPrefix(rawPath, "/") {
-		target = root + "/" + rawPath
+	root, err := filepath.Abs(cacheDir)
+	if err != nil {
+		return "", false
 	}
-	resolved := py.Resolve(target)
-	if resolved != root && !strings.HasPrefix(resolved, strings.TrimSuffix(root, "/")+"/") {
+	if root, err = filepath.EvalSymlinks(root); err != nil {
+		return "", false
+	}
+	target := rawPath
+	if !filepath.IsAbs(rawPath) {
+		target = filepath.Join(root, rawPath)
+	}
+	resolved, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		return "", false
+	}
+	if resolved != root && !strings.HasPrefix(resolved, root+string(filepath.Separator)) {
 		return "", false
 	}
 	info, err := os.Stat(resolved)
@@ -72,20 +122,24 @@ func RawFile(cacheDir, rawPath string) (string, bool) {
 	return resolved, true
 }
 
+func displayAddresses(addrs []mail.Address) string {
+	parts := make([]string, len(addrs))
+	for i, a := range addrs {
+		parts[i] = a.String()
+	}
+	return strings.Join(parts, ", ")
+}
+
 func plainBody(msg *mime.Message) string {
 	for _, c := range [...]struct {
 		kind    string
 		convert func(string) string
-	}{{"plain", py.Strip}, {"html", features.StripMarkup}} {
-		part, err := msg.Body(c.kind)
-		if err != nil || part == nil {
+	}{{"plain", strings.TrimSpace}, {"html", features.StripMarkup}} {
+		part := msg.Body(c.kind)
+		if part == nil {
 			continue
 		}
-		content, err := part.Content()
-		if err != nil {
-			continue
-		}
-		if text := c.convert(content); text != "" {
+		if text := c.convert(part.Content()); text != "" {
 			return text
 		}
 	}
@@ -94,21 +148,12 @@ func plainBody(msg *mime.Message) string {
 
 func attachments(msg *mime.Message) []Attachment {
 	found := []Attachment{}
-	parts, _ := msg.Attachments()
-	for _, part := range parts {
+	for _, part := range msg.Attachments() {
 		size := 0
 		if !part.IsMultipart() {
-			payload, err := part.Payload()
-			if err != nil {
-				break
-			}
-			size = len(payload)
+			size = len(part.Payload())
 		}
-		name, _, err := part.Filename()
-		if err != nil {
-			break
-		}
-		found = append(found, Attachment{Filename: name, ContentType: part.ContentType(), Size: size})
+		found = append(found, Attachment{Filename: part.Filename(), ContentType: part.ContentType(), Size: size})
 	}
 	return found
 }
@@ -140,7 +185,7 @@ func rowMap(rows *sql.Rows) (map[string]any, error) {
 	return out, rows.Err()
 }
 
-func LatestDecision(ctx context.Context, q Querier, messageID int64) (map[string]any, error) {
+func latestDecision(ctx context.Context, q Querier, messageID int64) (map[string]any, error) {
 	rows, err := q.QueryContext(ctx, "SELECT * FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1", messageID)
 	if err != nil {
 		return nil, err
@@ -161,6 +206,10 @@ func LatestDecision(ctx context.Context, q Querier, messageID int64) (map[string
 	}
 	row["detail"] = parsed
 	return row, nil
+}
+
+func Body(ctx context.Context, q Querier, messageID int64) (string, error) {
+	return indexBody(ctx, q, messageID)
 }
 
 func indexBody(ctx context.Context, q Querier, messageID int64) (string, error) {
@@ -193,28 +242,28 @@ func Get(ctx context.Context, q Querier, cacheDir string, messageID int64) (*Vie
 		v.Headers[name] = ""
 	}
 	v.Attachments = []Attachment{}
-	v.BodySource = SourceIndex
+	v.BodySource = sourceIndex
 	if path, ok := RawFile(cacheDir, rawPath.String); ok {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, err
 		}
-		msg, err := mime.Parse(data)
-		if err != nil {
-			return nil, err
-		}
+		msg := mime.Parse(data)
 		for _, name := range Headers {
-			if value, _, err := msg.Get(name); err == nil {
-				v.Headers[name] = value
+			switch name {
+			case "From", "To", "Cc", "Reply-To":
+				v.Headers[name] = displayAddresses(msg.Addresses(name))
+			default:
+				v.Headers[name] = msg.Header(name)
 			}
 		}
-		v.Body, v.Attachments, v.BodySource = plainBody(msg), attachments(msg), SourceRaw
+		v.Body, v.Attachments, v.BodySource = plainBody(msg), attachments(msg), sourceRaw
 	}
 	if v.Body == "" {
 		if v.Body, err = indexBody(ctx, q, messageID); err != nil {
 			return nil, err
 		}
-		v.BodySource = SourceIndex
+		v.BodySource = sourceIndex
 	}
 	if v.Headers["Subject"] == "" {
 		v.Headers["Subject"] = v.Subject
@@ -232,7 +281,7 @@ func Get(ctx context.Context, q Querier, cacheDir string, messageID int64) (*Vie
 	if v.FlagDecision, err = rowMap(rows); err != nil {
 		return nil, err
 	}
-	if v.Decision, err = LatestDecision(ctx, q, messageID); err != nil {
+	if v.Decision, err = latestDecision(ctx, q, messageID); err != nil {
 		return nil, err
 	}
 	v.InInbox, v.Seen, v.Flagged = inInbox != 0, seen != 0, flagged != 0

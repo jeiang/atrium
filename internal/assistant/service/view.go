@@ -4,29 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"slices"
 	"strings"
+	"unicode"
 
-	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 )
 
-const (
-	serverToolUse   = "server_tool_use"
-	webSearchResult = "web_search_tool_result"
-	fallbackBlock   = "fallback"
-	draftCreate     = "draft_email_create"
-)
-
-var codeExecutionResults = []string{"bash_code_execution_tool_result", "text_editor_code_execution_tool_result", "code_execution_tool_result"}
+const draftCreate = "draft_email_create"
 
 const (
 	ItemUser       = "user"
@@ -44,78 +39,66 @@ const (
 )
 
 type Attachment struct {
-	ID        any
-	Name      any
-	MediaType any
-	Kind      any
+	ID        any `json:"id"`
+	Name      any `json:"name"`
+	MediaType any `json:"media_type"`
+	Kind      any `json:"kind"`
 }
 
 type Citation struct {
-	URL   string
-	Title string
-	Cited string
+	URL   string `json:"url"`
+	Title string `json:"title"`
+	Cited string `json:"cited"`
 }
 
 type SearchResult struct {
-	URL   any
-	Title any
+	URL   any `json:"url"`
+	Title any `json:"title"`
 }
 
 type Step struct {
-	Kind          string
-	Text          string
-	ID            any
-	Name          string
-	Args          string
-	State         *string
-	Result        *string
-	IsError       bool
-	ChildThreadID any
-	Results       []SearchResult
-	Error         any
+	Kind          string         `json:"kind"`
+	Text          string         `json:"text"`
+	ID            any            `json:"id"`
+	Name          string         `json:"name"`
+	Args          string         `json:"args"`
+	State         *string        `json:"state"`
+	Result        *string        `json:"result"`
+	IsError       bool           `json:"is_error"`
+	ChildThreadID any            `json:"child_thread_id"`
+	Results       []SearchResult `json:"results"`
+	Error         any            `json:"error"`
 }
 
 type Item struct {
-	Seq       int64
-	RunID     *int64
-	CreatedAt float64
-	Kind      string
-	Text      string
-	Files     []Attachment
-	Steps     []*Step
-	Citations []Citation
-	Draft     py.Dict
+	Seq       int64          `json:"seq"`
+	RunID     *int64         `json:"run_id"`
+	CreatedAt float64        `json:"created_at"`
+	Kind      string         `json:"kind"`
+	Text      string         `json:"text"`
+	Files     []Attachment   `json:"files"`
+	Steps     []*Step        `json:"steps"`
+	Citations []Citation     `json:"citations"`
+	Draft     map[string]any `json:"draft"`
 }
 
-func blockKind(raw json.RawMessage) string {
-	var b struct {
-		Type string `json:"type"`
-	}
-	_ = json.Unmarshal(raw, &b)
-	return b.Type
-}
-
-func hasBlock(content []json.RawMessage, kind string) bool {
-	return slices.ContainsFunc(content, func(b json.RawMessage) bool { return blockKind(b) == kind })
-}
-
-func get(d py.Dict, key string, fallback any) any {
-	if v, ok := d.Get(key); ok {
+func get(d map[string]any, key string, fallback any) any {
+	if v, ok := d[key]; ok {
 		return v
 	}
 	return fallback
 }
 
-func text(d py.Dict, key string) string {
+func text(d map[string]any, key string) string {
 	s, _ := get(d, key, "").(string)
 	return s
 }
 
-func citationsOf(block py.Dict) []Citation {
+func citationsOf(block map[string]any) []Citation {
 	list, _ := get(block, "citations", nil).([]any)
 	var found []Citation
 	for _, raw := range list {
-		c, _ := raw.(py.Dict)
+		c, _ := raw.(map[string]any)
 		if url := text(c, "url"); url != "" {
 			title := text(c, "title")
 			if title == "" {
@@ -127,13 +110,13 @@ func citationsOf(block py.Dict) []Citation {
 			if title == "" {
 				title = "attachment"
 			}
-			found = append(found, Citation{Title: title, Cited: py.Strip(cited)})
+			found = append(found, Citation{Title: title, Cited: strings.TrimSpace(cited)})
 		}
 	}
 	return found
 }
 
-func addAnswer(items []*Item, base Item, block py.Dict) []*Item {
+func addAnswer(items []*Item, base Item, block map[string]any) []*Item {
 	var last *Item
 	if n := len(items); n > 0 && items[n-1].Kind == ItemAssistant && items[n-1].Seq == base.Seq {
 		last = items[n-1]
@@ -154,20 +137,20 @@ func addAnswer(items []*Item, base Item, block py.Dict) []*Item {
 		if strings.HasSuffix(body, " ") {
 			trail = " "
 		}
-		body = strings.TrimRightFunc(body, py.IsSpace) + fmt.Sprintf(" [%d]", at+1) + trail
+		body = strings.TrimRightFunc(body, unicode.IsSpace) + fmt.Sprintf(" [%d]", at+1) + trail
 	}
 	last.Text += body
 	return items
 }
 
-func parsed(content string) py.Dict {
-	v, err := py.JSONLoads([]byte(content))
+func parsed(content string) map[string]any {
+	v, err := jsonx.Loads([]byte(content))
 	if err != nil {
-		return py.Dict{}
+		return map[string]any{}
 	}
-	d, ok := v.(py.Dict)
+	d, ok := v.(map[string]any)
 	if !ok {
-		return py.Dict{}
+		return map[string]any{}
 	}
 	return d
 }
@@ -189,33 +172,11 @@ func draftKey(v any) (int64, bool) {
 	return 0, false
 }
 
-func executionResult(block py.Dict) (any, bool) {
-	content, _ := get(block, "content", nil).(py.Dict)
-	if v, ok := content.Get("error_code"); ok {
-		return v, true
+func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int64]map[string]any) ([]*Item, error) {
+	byKey := make(map[journal.CallKey]journal.ToolCall, len(calls))
+	for _, c := range calls {
+		byKey[journal.CallKey{RunID: c.RunID, ToolUseID: c.ToolUseID}] = c
 	}
-	_, hasOut := content.Get("stdout")
-	_, hasErr := content.Get("stderr")
-	if hasOut || hasErr {
-		out, _ := get(content, "stdout", nil).(string)
-		if stderr, _ := get(content, "stderr", nil).(string); stderr != "" {
-			if out != "" {
-				out += "\n"
-			}
-			out += stderr
-		}
-		return out, py.Truthy(get(content, "return_code", nil))
-	}
-	rest := make(py.Dict, 0, len(content))
-	for _, p := range content {
-		if p.Key != "type" {
-			rest = append(rest, p)
-		}
-	}
-	return py.JSONDumps(rest, py.JSONOpts{NoEnsureASCII: true}), false
-}
-
-func Items(messages []journal.Message, calls map[journal.CallKey]journal.ToolCall, drafts map[int64]py.Dict) ([]*Item, error) {
 	items := []*Item{}
 	uses := map[any]*Step{}
 	var attached []Attachment
@@ -233,64 +194,69 @@ func Items(messages []journal.Message, calls map[journal.CallKey]journal.ToolCal
 	}
 	for _, m := range messages {
 		base := Item{Seq: m.Seq, RunID: m.RunID, CreatedAt: m.CreatedAt}
-		final := m.Role == journal.Assistant && !hasBlock(m.Content, actx.ToolUse)
-		for _, raw := range m.Content {
-			v, err := py.JSONLoads(raw)
-			if err != nil {
-				return nil, fmt.Errorf("service: message %d block: %w", m.ID, err)
-			}
-			block, _ := v.(py.Dict)
-			kind, _ := get(block, "type", nil).(string)
+		hasUse, err := block.HasKind(m.Content, block.ToolUse)
+		if err != nil {
+			return nil, fmt.Errorf("service: message %d: %w", m.ID, err)
+		}
+		final := m.Role == journal.Assistant && !hasUse
+		blocks, err := block.DecodeAll(m.Content)
+		if err != nil {
+			return nil, fmt.Errorf("service: message %d: %w", m.ID, err)
+		}
+		for _, b := range blocks {
 			switch {
-			case kind == actx.Attachment && m.Role == journal.User:
+			case b.Kind == block.Attachment && m.Role == journal.User:
+				name := b.String("name")
+				if name == "" {
+					name = "file"
+				}
 				attached = append(attached, Attachment{
-					ID: get(block, "file_id", nil), Name: get(block, "name", "file"), MediaType: get(block, "media_type", ""), Kind: get(block, "kind", nil),
+					ID: b.Get("file_id"), Name: name, MediaType: b.String("media_type"), Kind: b.Get("kind"),
 				})
-			case kind == actx.Text && m.Role == journal.User:
+			case b.Kind == block.Text && m.Role == journal.User:
 				activity = nil
 				item := base
-				item.Kind, item.Text, item.Files = ItemUser, text(block, "text"), attached
+				item.Kind, item.Text, item.Files = ItemUser, b.Text(), attached
 				if item.Files == nil {
 					item.Files = []Attachment{}
 				}
 				items = append(items, &item)
 				attached = nil
-			case kind == actx.Text && final:
+			case b.Kind == block.Text && final:
 				activity = nil
-				items = addAnswer(items, base, block)
-			case kind == actx.Text:
-				if body := text(block, "text"); py.Strip(body) != "" {
+				items = addAnswer(items, base, b.Value)
+			case b.Kind == block.Text:
+				if body := b.Text(); strings.TrimSpace(body) != "" {
 					step(base, &Step{Kind: StepNote, Text: body})
 				}
-			case kind == actx.Thinking || kind == actx.RedactedThinking:
-				if body := text(block, "thinking"); body != "" {
+			case b.Kind == block.Thinking || b.Kind == block.RedactedThinking:
+				if body := b.String("thinking"); body != "" {
 					step(base, &Step{Kind: StepThinking, Text: body})
 				}
-			case kind == actx.ToolUse || kind == serverToolUse:
-				id := get(block, "id", nil)
-				args, err := shortArgs(get(block, "input", nil))
+			case b.Kind == block.ToolUse || b.Kind == block.ServerToolUse:
+				id := b.Get("id")
+				args, err := shortArgs(b.Get("input"))
 				if err != nil {
 					return nil, err
 				}
-				name, _ := get(block, "name", "").(string)
-				found := &Step{Kind: StepTool, ID: id, Name: name, Args: args}
+				found := &Step{Kind: StepTool, ID: id, Name: b.String("name"), Args: args}
 				if s, ok := id.(string); ok && m.RunID != nil {
-					if call, ok := calls[journal.CallKey{RunID: *m.RunID, ToolUseID: s}]; ok {
+					if call, ok := byKey[journal.CallKey{RunID: *m.RunID, ToolUseID: s}]; ok {
 						found.State = new(call.State)
 					}
 				}
 				uses[id] = step(base, found)
-			case kind == actx.ToolResult:
-				found := uses[get(block, "tool_use_id", nil)]
-				content := get(block, "content", "")
+			case b.Kind == block.ToolResult:
+				found := uses[b.Get("tool_use_id")]
+				content := b.Get("content")
 				preview := progress.PreviewOf(content)
-				isError := py.Truthy(get(block, "is_error", nil))
+				isError := jsonx.Truthy(b.Get("is_error"))
 				if found == nil {
-					step(base, &Step{Kind: StepTool, ID: get(block, "tool_use_id", nil), Name: "?", Result: &preview, IsError: isError})
+					step(base, &Step{Kind: StepTool, ID: b.Get("tool_use_id"), Name: "?", Result: &preview, IsError: isError})
 					continue
 				}
 				found.Result, found.IsError = &preview, isError
-				detail := py.Dict{}
+				detail := map[string]any{}
 				if s, ok := content.(string); ok {
 					detail = parsed(s)
 				}
@@ -306,38 +272,33 @@ func Items(messages []journal.Message, calls map[journal.CallKey]journal.ToolCal
 						}
 					}
 				}
-			case kind == webSearchResult:
-				content := get(block, "content", nil)
+			case b.Kind == block.WebSearchResult:
+				content := b.Get("content")
 				results := []SearchResult{}
 				if list, ok := content.([]any); ok {
 					for _, r := range list {
-						d, ok := r.(py.Dict)
-						if !ok || !py.Truthy(get(d, "url", nil)) {
+						d, ok := r.(map[string]any)
+						if !ok || !jsonx.Truthy(get(d, "url", nil)) {
 							continue
 						}
 						title := get(d, "title", nil)
-						if !py.Truthy(title) {
+						if !jsonx.Truthy(title) {
 							title = get(d, "url", nil)
 						}
 						results = append(results, SearchResult{URL: get(d, "url", nil), Title: title})
 					}
 				}
-				if found := uses[get(block, "tool_use_id", nil)]; found != nil {
+				if found := uses[b.Get("tool_use_id")]; found != nil {
 					found.Result = new(fmt.Sprintf("%d results", len(results)))
 				}
 				var errorCode any
-				if d, ok := content.(py.Dict); ok {
+				if d, ok := content.(map[string]any); ok {
 					errorCode = get(d, "error_code", nil)
 				}
 				step(base, &Step{Kind: StepWebSearch, Results: results, Error: errorCode})
-			case slices.Contains(codeExecutionResults, kind):
-				if found := uses[get(block, "tool_use_id", nil)]; found != nil {
-					result, failed := executionResult(block)
-					found.Result, found.IsError = new(progress.PreviewOf(result)), failed
-				}
-			case kind == fallbackBlock:
-				step(base, &Step{Kind: StepNote, Text: fallbackNote(block)})
-			case kind == actx.Compaction:
+			case b.Kind == block.Fallback:
+				step(base, &Step{Kind: StepNote, Text: fallbackNote(b.Value)})
+			case b.Kind == block.Compaction:
 				activity = nil
 				item := base
 				item.Kind = ItemCompaction
@@ -350,14 +311,14 @@ func Items(messages []journal.Message, calls map[journal.CallKey]journal.ToolCal
 
 const loopResearch = "research"
 
-func fallbackNote(block py.Dict) string {
+func fallbackNote(block map[string]any) string {
 	model := func(key string) string {
-		d, _ := get(block, key, nil).(py.Dict)
+		d, _ := get(block, key, nil).(map[string]any)
 		name, _ := get(d, "model", "").(string)
 		return name
 	}
 	note := fmt.Sprintf("%s declined; %s took over", model("from"), model("to"))
-	if trigger, ok := get(block, "trigger", nil).(py.Dict); ok {
+	if trigger, ok := get(block, "trigger", nil).(map[string]any); ok {
 		if category, _ := get(trigger, "category", "").(string); category != "" {
 			note += fmt.Sprintf(" (refusal category: %s)", category)
 		}
@@ -366,13 +327,13 @@ func fallbackNote(block py.Dict) string {
 }
 
 func shortArgs(input any) (string, error) {
-	if !py.Truthy(input) {
-		input = py.Dict{}
+	if !jsonx.Truthy(input) {
+		input = map[string]any{}
 	}
-	if _, ok := input.(py.Dict); !ok {
-		return py.ReprValue(input), nil
+	if _, ok := input.(map[string]any); !ok {
+		return fmt.Sprint(input), nil
 	}
-	return progress.ShortArgs(json.RawMessage(py.JSONDumps(input)))
+	return progress.ShortArgs(json.RawMessage(jsonx.Dumps(input)))
 }
 
 type Meter struct {
@@ -383,22 +344,13 @@ type Meter struct {
 }
 
 func MeterOf(ctx context.Context, q db.Querier, thread threads.Thread) (Meter, error) {
-	r := assistant.Read(ctx, q)
-	shares := actx.Tuning{
-		ClearShare:        r.Float(assistant.KeyClearShare),
-		ClearAtLeastShare: r.Float(assistant.KeyClearAtLeastShare),
-		CompactShare:      r.Float(assistant.KeyCompactShare),
-		PreflightShare:    r.Float(assistant.KeyPreflightShare),
-	}
-	if err := r.Err(); err != nil {
+	tuning, err := actx.ReadTuning(ctx, q)
+	if err != nil {
 		return Meter{}, err
 	}
-	limits := actx.LimitsFor(threads.ContextLimitOf(thread), shares)
-	var tokens int64
-	err := q.QueryRowContext(ctx,
-		"SELECT input_tokens + cache_write_5m + cache_write_1h + cache_read AS prompt FROM usage WHERE thread_id = ? ORDER BY id DESC LIMIT 1",
-		thread.ID).Scan(&tokens)
-	if err != nil && err != sql.ErrNoRows {
+	limits := actx.LimitsFor(threads.ContextLimitOf(thread), tuning)
+	tokens, err := usage.PromptTokens(ctx, q, thread.ID)
+	if err != nil {
 		return Meter{}, err
 	}
 	share := 1.0
@@ -416,11 +368,11 @@ func CostOfThread(ctx context.Context, q db.Querier, threadID int64) (float64, e
 	return cost, err
 }
 
-func DraftsOf(ctx context.Context, q db.Querier, threadID int64) ([]py.Dict, error) {
+func DraftsOf(ctx context.Context, q db.Querier, threadID int64) ([]map[string]any, error) {
 	return rowDicts(ctx, q, "SELECT * FROM drafts WHERE thread_id = ? ORDER BY id", threadID)
 }
 
-func rowDicts(ctx context.Context, q db.Querier, query string, args ...any) ([]py.Dict, error) {
+func rowDicts(ctx context.Context, q db.Querier, query string, args ...any) ([]map[string]any, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -430,7 +382,7 @@ func rowDicts(ctx context.Context, q db.Querier, query string, args ...any) ([]p
 		_ = rows.Close()
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (py.Dict, error) {
+	return db.Collect(rows, func(r *sql.Rows) (map[string]any, error) {
 		values := make([]any, len(columns))
 		ptrs := make([]any, len(columns))
 		for i := range values {
@@ -439,13 +391,13 @@ func rowDicts(ctx context.Context, q db.Querier, query string, args ...any) ([]p
 		if err := r.Scan(ptrs...); err != nil {
 			return nil, err
 		}
-		d := make(py.Dict, len(columns))
+		d := make(map[string]any, len(columns))
 		for i, c := range columns {
 			v := values[i]
 			if b, ok := v.([]byte); ok {
 				v = string(b)
 			}
-			d[i] = py.Pair{Key: c, Value: v}
+			d[c] = v
 		}
 		return d, nil
 	})
@@ -461,6 +413,7 @@ type ThreadView struct {
 	Meter           Meter
 	LastOperatorSeq *int64
 	BranchedFrom    *threads.Thread
+	Question        *Question
 }
 
 func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error) {
@@ -469,11 +422,7 @@ func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error
 		return nil, err
 	}
 	v := &ThreadView{Thread: *thread}
-	messages, err := journal.MessagesOf(ctx, q, threadID, false)
-	if err != nil {
-		return nil, err
-	}
-	calls, err := journal.ToolCallsForThread(ctx, q, threadID)
+	history, err := journal.LoadHistory(ctx, q, threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -481,13 +430,13 @@ func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error
 	if err != nil {
 		return nil, err
 	}
-	drafts := make(map[int64]py.Dict, len(rows))
+	drafts := make(map[int64]map[string]any, len(rows))
 	for _, d := range rows {
 		if id, ok := draftKey(get(d, "id", nil)); ok {
 			drafts[id] = d
 		}
 	}
-	if v.Items, err = Items(messages, calls, drafts); err != nil {
+	if v.Items, err = Items(history.Messages, history.Calls, drafts); err != nil {
 		return nil, err
 	}
 	if v.Runs, err = journal.RunsOf(ctx, q, threadID); err != nil {
@@ -505,12 +454,15 @@ func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error
 	if v.Meter, err = MeterOf(ctx, q, *thread); err != nil {
 		return nil, err
 	}
-	last, err := journal.LastOperatorMessage(ctx, q, threadID)
+	last, err := history.LastOperator()
 	if err != nil {
 		return nil, err
 	}
 	if last != nil {
 		v.LastOperatorSeq = &last.Seq
+	}
+	if v.Question, err = PendingQuestion(ctx, q, threadID); err != nil {
+		return nil, err
 	}
 	if thread.BranchedFromThreadID != nil && *thread.BranchedFromThreadID != 0 {
 		if v.BranchedFrom, err = threads.Get(ctx, q, *thread.BranchedFromThreadID); err != nil {
@@ -520,40 +472,22 @@ func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error
 	return v, nil
 }
 
-type RunView struct {
-	journal.Run
-	Calls  []journal.ToolCall `json:"calls"`
-	Cost   float64            `json:"cost"`
-	Skills []string           `json:"skills"`
-}
-
-func ViewRun(ctx context.Context, q db.Querier, runID int64) (*RunView, error) {
+func RunDict(ctx context.Context, q db.Querier, runID int64) (map[string]any, error) {
 	found, err := journal.GetRun(ctx, q, runID)
-	if err != nil || found == nil {
+	if err != nil {
 		return nil, err
 	}
-	v := &RunView{Run: *found}
-	if v.Calls, err = journal.ToolCallsOf(ctx, q, runID); err != nil {
-		return nil, err
+	if found == nil {
+		return nil, fmt.Errorf("service: no run %d", runID)
 	}
-	if v.Cost, err = usage.RunCost(ctx, q, runID); err != nil {
-		return nil, err
-	}
-	if v.Skills, err = journal.SkillsOf(*found); err != nil {
-		return nil, err
-	}
-	return v, nil
-}
-
-func (v *RunView) Dict(ctx context.Context, q db.Querier) (py.Dict, error) {
-	run, err := rowDicts(ctx, q, "SELECT * FROM runs WHERE id = ?", v.ID)
+	run, err := rowDicts(ctx, q, "SELECT * FROM runs WHERE id = ?", runID)
 	if err != nil {
 		return nil, err
 	}
 	if len(run) == 0 {
-		return nil, fmt.Errorf("service: run %d vanished", v.ID)
+		return nil, fmt.Errorf("service: run %d vanished", runID)
 	}
-	calls, err := rowDicts(ctx, q, "SELECT * FROM tool_calls WHERE run_id = ? ORDER BY id", v.ID)
+	calls, err := rowDicts(ctx, q, "SELECT * FROM tool_calls WHERE run_id = ? ORDER BY id", runID)
 	if err != nil {
 		return nil, err
 	}
@@ -562,8 +496,72 @@ func (v *RunView) Dict(ctx context.Context, q db.Querier) (py.Dict, error) {
 		list[i] = c
 	}
 	var cost any
-	if err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE run_id = ?", v.ID).Scan(&cost); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE run_id = ?", runID).Scan(&cost); err != nil {
 		return nil, err
 	}
-	return append(run[0], py.Pair{Key: "calls", Value: list}, py.Pair{Key: "cost", Value: cost}, py.Pair{Key: "skills", Value: v.Skills}), nil
+	skills, err := journal.SkillsOf(*found)
+	if err != nil {
+		return nil, err
+	}
+	run[0]["calls"] = list
+	run[0]["cost"] = cost
+	run[0]["skills"] = skills
+	return run[0], nil
+}
+
+type Question struct {
+	CallID    int64
+	RunID     int64
+	ToolUseID string
+	Text      string
+}
+
+// PendingQuestion returns the parked run's unanswered ask_operator call.
+func PendingQuestion(ctx context.Context, q db.Querier, threadID int64) (*Question, error) {
+	var out Question
+	var argsJSON string
+	err := q.QueryRowContext(ctx,
+		"SELECT c.id, c.run_id, c.tool_use_id, c.args_json FROM tool_calls c JOIN runs r ON r.id = c.run_id "+
+			"WHERE r.thread_id = ? AND r.state = ? AND c.name = ? AND c.state = ? ORDER BY c.id DESC LIMIT 1",
+		threadID, journal.Parked, "ask_operator", journal.Started).
+		Scan(&out.CallID, &out.RunID, &out.ToolUseID, &argsJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var args struct {
+		Question string `json:"question"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return nil, err
+	}
+	out.Text = args.Question
+	return &out, nil
+}
+
+// Answer stores the operator's answer as the parked tool's result and resumes
+// the run through the normal resume path.
+func (s *Service) Answer(ctx context.Context, threadID int64, text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return fmt.Errorf("answer is required")
+	}
+	q, err := PendingQuestion(ctx, s.DB.Read, threadID)
+	if err != nil {
+		return err
+	}
+	if q == nil {
+		return fmt.Errorf("no pending question")
+	}
+	result := map[string]any{"type": block.ToolResult, "tool_use_id": q.ToolUseID, "content": text}
+	raw := json.RawMessage(jsonx.Dumps(result, jsonx.Opts{Compact: true, NoEnsureASCII: true}))
+	if _, err := journal.AppendMessage(ctx, s.DB, threadID, &q.RunID, journal.User, []json.RawMessage{raw}, s.now(), nil); err != nil {
+		return err
+	}
+	if err := journal.FinishToolCall(ctx, s.DB.Write, q.CallID, journal.OK, s.now(), nil, nil); err != nil {
+		return err
+	}
+	return s.StartResume(ctx, q.RunID)
 }

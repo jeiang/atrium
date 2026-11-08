@@ -11,12 +11,13 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 func runSecrets(t *testing.T, stdin string, args ...string) settingsRun {
 	t.Helper()
 	var out, errs bytes.Buffer
-	app := newApp()
+	app := defaultApp(t)
 	app.Stdin = strings.NewReader(stdin)
 	code := app.Run(context.Background(), append([]string{"secrets"}, args...), &out, &errs)
 	return settingsRun{code, out.String(), errs.String()}
@@ -25,8 +26,8 @@ func runSecrets(t *testing.T, stdin string, args ...string) settingsRun {
 func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	t.Setenv("ATRIUM_DB", path)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 
 	const value = "sk-test-0123456789-never-printed"
 	set := runSecrets(t, value+"\n", "set", secrets.ActionLinkKey)
@@ -59,8 +60,8 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 	if err := d.Read.QueryRow("SELECT value FROM secrets WHERE name = ?", secrets.ActionLinkKey).Scan(&stored); err != nil || stored != value {
 		t.Fatalf("stored secret = %q, %v", stored, err)
 	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 3").Scan(&versions); err != nil || versions != 1 {
-		t.Fatalf("migration 3 rows = %d, %v", versions, err)
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 1").Scan(&versions); err != nil || versions != 1 {
+		t.Fatalf("baseline migration rows = %d, %v", versions, err)
 	}
 
 	if del := runSecrets(t, "", "delete", secrets.ActionLinkKey); del.code != cli.ExitOK || del.stdout != "action_link_key: unset\n" {
@@ -68,7 +69,7 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 	}
 
 	refused := runSecrets(t, value, "set", secrets.AnthropicAdminKey)
-	want := "error: " + secrets.EncryptionRequired(secrets.AnthropicAdminKey).Error() + "\n"
+	want := "error: " + settings.EncryptionRequired(secrets.AnthropicAdminKey).Error() + "\n"
 	if refused.code != cli.ExitError || refused.stdout != "" || refused.stderr != want || !strings.Contains(want, "encrypt the database first") {
 		t.Fatalf("flagged set on plaintext: exit %d stdout %q stderr %q, want %q", refused.code, refused.stdout, refused.stderr, want)
 	}
@@ -77,7 +78,7 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 		t.Errorf("secrets rows after refusal and delete = %d, %v; want 0", rows, err)
 	}
 
-	t.Setenv("ATRIUM_ACTION_LINKS_ACTION_LINK_KEY", "pinned-value")
+	setEnv(t, "ATRIUM_ACTION_LINKS_ACTION_LINK_KEY", "pinned-value")
 	if _, err := d.Write.Exec("INSERT INTO secrets (name, value, set_at, set_by) VALUES (?, 'stale', 1.0, 'cli')", secrets.ActionLinkKey); err != nil {
 		t.Fatal(err)
 	}
@@ -97,17 +98,18 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 }
 
 func TestEmptyPinnedLinkKeyIsRefused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_CONFIG", "")
-	t.Setenv("ATRIUM_MEDIA_LINK_KEY", "")
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_CONFIG", "")
+	setEnv(t, "ATRIUM_MEDIA_LINK_KEY", "")
 	for name, body := range map[string]string{"empty": "", "blank": " \n\t\n"} {
 		path := filepath.Join(dir, name+".key")
 		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		t.Setenv("ATRIUM_MEDIA_LINK_KEY_FILE", path)
+		setEnv(t, "ATRIUM_MEDIA_LINK_KEY_FILE", path)
 		if r := runSecrets(t, "", "status"); r.code != cli.ExitError || !strings.Contains(r.stderr, "ATRIUM_MEDIA_LINK_KEY_FILE") || r.stdout != "" {
 			t.Errorf("%s file: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
 		}
@@ -115,11 +117,11 @@ func TestEmptyPinnedLinkKeyIsRefused(t *testing.T) {
 		if err := os.WriteFile(toml, []byte("[media]\nlink_key_file = \""+path+"\"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		t.Setenv("ATRIUM_MEDIA_LINK_KEY_FILE", "")
-		t.Setenv("ATRIUM_CONFIG", toml)
+		setEnv(t, "ATRIUM_MEDIA_LINK_KEY_FILE", "")
+		setEnv(t, "ATRIUM_CONFIG", toml)
 		if r := runSecrets(t, "", "status"); r.code != cli.ExitError || !strings.Contains(r.stderr, "media.link_key_file") || r.stdout != "" {
 			t.Errorf("%s config file: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
 		}
-		t.Setenv("ATRIUM_CONFIG", "")
+		setEnv(t, "ATRIUM_CONFIG", "")
 	}
 }

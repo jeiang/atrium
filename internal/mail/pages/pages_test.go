@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 func TestMessagePageFullPartialAndMissing(t *testing.T) {
@@ -59,7 +59,7 @@ func TestCorrectFormRendersAccountFolders(t *testing.T) {
 
 func TestCorrectionFromRowRecordsWithoutMailboxWrite(t *testing.T) {
 	opened := 0
-	s := seeded(t, "shadow", Options{Open: func(_ context.Context, _ string) (mail.Client, error) {
+	s := seeded(t, "shadow", Options{Open: func(_ context.Context, _ mail.OpenOptions) (mail.Client, error) {
 		opened++
 		return nil, errors.New("no mailbox in shadow mode")
 	}})
@@ -104,12 +104,11 @@ func TestTriageFullPartialAndPaging(t *testing.T) {
 	s := seeded(t, "shadow", Options{})
 	full := status(t, s.get("/triage"), 200, "full")
 	contains(t, full, "<html", "Weekly news", `id="triage-tabs"`)
-	pageSize = 1
-	t.Cleanup(func() { pageSize = 50 })
-	first := status(t, s.get("/triage", hx), 200, "first")
+	small := seeded(t, "shadow", Options{PageSize: 1})
+	first := status(t, small.get("/triage", hx), 200, "first")
 	contains(t, first, "Show older decisions", `id="decision-list"`)
 	lacks(t, first, "<html", "autofocus")
-	more := status(t, s.get("/triage?offset=1", hx), 200, "more")
+	more := status(t, small.get("/triage?offset=1", hx), 200, "more")
 	contains(t, more, "<li", "autofocus")
 	lacks(t, more, "decision-list", "Show older decisions")
 	status(t, s.get("/triage?stage=operator&agreement=pending&account=icloud", hx), 200, "filtered")
@@ -162,7 +161,7 @@ func TestRulesLifecycle(t *testing.T) {
 	form := url.Values{
 		"id": {"shop"}, "account": {"icloud"}, "action": {"file"}, "dest": {"Bills"},
 		"field": {"from_domain", "dkim_d", "subject"}, "op": {"suffix", "in", "present"},
-		"value": {"shop.test, mail.shop.test", "a.test,b.test", ""},
+		"value": {"shop.test\nmail.shop.test", "a.test\nb.test", ""},
 	}
 	created := s.post("/rules", form)
 	status(t, created, 303, "create")
@@ -286,12 +285,28 @@ func TestRuleMoveAndDelete(t *testing.T) {
 	contains(t, status(t, s.do("DELETE", "/rules/one", nil, hx), 200, "delete again"), "Rule not found")
 }
 
+func urlQuote(s string) string {
+	const hex = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := range len(s) {
+		c := s[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '.' || c == '-' || c == '~' || c == '/' {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(hex[c>>4])
+		b.WriteByte(hex[c&15])
+	}
+	return b.String()
+}
+
 func TestRuleIDsWithSpecialCharactersReachTheRule(t *testing.T) {
 	s := seeded(t, "shadow", Options{})
 	name := "a b&c<d>é?#%"
 	status(t, s.post("/rules", url.Values{"id": {name}, "action": {"file"}, "dest": {"Bills"}, "field": {"from_addr"}, "op": {"eq"}, "value": {"x"}}), 303, "create")
 	list := status(t, s.get("/rules"), 200, "list")
-	escaped := py.URLQuote(name)
+	escaped := urlQuote(name)
 	contains(t, list, `href="/rules/`+escaped+`/edit"`)
 	lacks(t, list, "%2525")
 	status(t, s.get("/rules/"+escaped+"/edit"), 200, "edit")
@@ -310,7 +325,7 @@ func TestRuleEditorSavesAndReopensAnAgeCondition(t *testing.T) {
 	})
 	status(t, saved, 303, "save")
 	rows := s.rows("SELECT id, conditions FROM rules")
-	if len(rows) != 1 || !strings.Contains(rows[0][1].(string), `"value": 7`) {
+	if len(rows) != 1 || !strings.Contains(rows[0][1].(string), `"value":7`) {
 		t.Fatalf("stored = %v", rows)
 	}
 	contains(t, status(t, s.get("/rules/"+rows[0][0].(string)+"/edit"), 200, "reopen"), `value="7"`, "Age in days")
@@ -357,6 +372,5 @@ func TestMutatingRoutesNeedACSRFToken(t *testing.T) {
 }
 
 func matches(pattern, text string) bool {
-	m, _ := rx.MustCompile(pattern, 0).Search(text)
-	return m != nil
+	return regexp.MustCompile(pattern).MatchString(text)
 }

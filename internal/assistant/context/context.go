@@ -2,19 +2,30 @@ package context
 
 import (
 	gocontext "context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/block"
+	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/textx"
 )
+
+func Supersede(ctx gocontext.Context, q db.Querier, threadID, fromSeq int64) error {
+	if _, err := q.ExecContext(ctx,
+		"DELETE FROM context_ledger WHERE state IN (?, ?) AND run_id IN (SELECT id FROM runs WHERE thread_id = ? AND superseded = 1)",
+		StagedDrop, StagedFold, threadID); err != nil {
+		return err
+	}
+	_, err := q.ExecContext(ctx, "DELETE FROM context_projections WHERE thread_id = ? AND base_seq > ?", threadID, fromSeq)
+	return err
+}
 
 const (
 	CharsPerToken = 4
@@ -22,22 +33,15 @@ const (
 )
 
 const (
-	ModelContext          = 1_000_000
-	SummaryEffort         = "low"
-	BetaContextManagement = anthropic.BetaContextManagement
-	BetaCompaction        = anthropic.BetaCompaction
-	ClearToolUses         = "clear_tool_uses_20250919"
-	Compact               = "compact_20260112"
-	Compaction            = "compaction"
-	Text                  = "text"
-	ToolUse               = "tool_use"
-	ToolResult            = "tool_result"
-	Thinking              = "thinking"
-	RedactedThinking      = "redacted_thinking"
-	Attachment            = "attachment"
-	recallTool            = "recall"
-	inputTokens           = "input_tokens"
-	compactionTruncate    = " [truncated for compaction]"
+	ClearToolUses    = "clear_tool_uses_20250919"
+	Compaction       = block.Compaction
+	Text             = block.Text
+	ToolUse          = block.ToolUse
+	ToolResult       = block.ToolResult
+	Thinking         = block.Thinking
+	RedactedThinking = block.RedactedThinking
+	Attachment       = block.Attachment
+	recallTool       = "recall"
 )
 
 const (
@@ -49,35 +53,19 @@ const (
 	StagedFold = "staged_fold"
 	Dropped    = "dropped"
 	Folded     = "folded"
-	KindServer = "server"
-	KindClient = "client"
 	KindCommit = "commit"
 )
 
-const SummarySystem = "You write faithful, source-cited summaries of atrium assistant sessions. Output only the summary."
-
-func SummaryRequest(instructions string) string {
-	return "The conversation above must be compacted. " + instructions + "\nWrite the summary now."
-}
-
-type ContextError string
-
-func (e ContextError) Error() string { return string(e) }
-
-func (ContextError) PyClass() string { return "ContextError" }
-
-func Betas() []string { return []string{BetaContextManagement, BetaCompaction} }
-
 var (
-	compactJSON = py.JSONOpts{Compact: true, NoEnsureASCII: true}
-	valueJSON   = py.JSONOpts{NoEnsureASCII: true}
+	compactJSON = jsonx.Opts{Compact: true, NoEnsureASCII: true}
+	valueJSON   = jsonx.Opts{NoEnsureASCII: true}
 )
 
 func EstimateTokens(text string) int64 {
 	return (int64(utf8.RuneCountInString(text)) + CharsPerToken - 1) / CharsPerToken
 }
 
-func EstimateValue(v any) int64 { return EstimateTokens(py.JSONDumps(v, valueJSON)) }
+func EstimateValue(v any) int64 { return EstimateTokens(jsonx.Dumps(v, valueJSON)) }
 
 func EstimateContent(content []json.RawMessage) (int64, error) {
 	values, err := decodeAll(content)
@@ -87,24 +75,11 @@ func EstimateContent(content []json.RawMessage) (int64, error) {
 	return EstimateValue(values), nil
 }
 
-func Serialize(value any) string {
+func serialize(value any) string {
 	if s, ok := value.(string); ok {
 		return s
 	}
-	return py.JSONDumps(value, valueJSON)
-}
-
-func Store(ctx gocontext.Context, q db.Querier, runID, callID int64, tool, body string, now float64) (int64, int64, error) {
-	tokens := EstimateTokens(body)
-	sum := sha256.Sum256([]byte(body))
-	res, err := q.ExecContext(ctx,
-		"INSERT INTO tool_results (run_id, tool_call_id, tool, tokens, bytes, sha256, body, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		runID, callID, tool, tokens, len(body), hex.EncodeToString(sum[:]), body, now)
-	if err != nil {
-		return 0, 0, err
-	}
-	id, err := res.LastInsertId()
-	return id, tokens, err
+	return jsonx.Dumps(value, valueJSON)
 }
 
 type Tuning struct {
@@ -113,12 +88,10 @@ type Tuning struct {
 	CompactShare      float64
 	PreflightShare    float64
 	ClearKeep         int
-	CommitSavings     int
 	PreserveMessages  int
 	SummaryMaxTokens  int
 	StubTokens        int
 	PreviewChars      int
-	DashboardItems    int
 	ManifestResults   int
 	Summary           string
 }
@@ -131,12 +104,10 @@ func ReadTuning(ctx gocontext.Context, q db.Querier) (Tuning, error) {
 		CompactShare:      r.Float(assistant.KeyCompactShare),
 		PreflightShare:    r.Float(assistant.KeyPreflightShare),
 		ClearKeep:         r.Int(assistant.KeyClearKeep),
-		CommitSavings:     r.Int(assistant.KeyCommitSavings),
 		PreserveMessages:  r.Int(assistant.KeyPreserveMessages),
 		SummaryMaxTokens:  r.Int(assistant.KeySummaryMaxTokens),
 		StubTokens:        r.Int(assistant.KeyStubTokens),
 		PreviewChars:      r.Int(assistant.KeyPreviewChars),
-		DashboardItems:    r.Int(assistant.KeyDashboardItems),
 		ManifestResults:   r.Int(assistant.KeyManifestResults),
 	}
 	if r.Err() != nil {
@@ -148,22 +119,23 @@ func ReadTuning(ctx gocontext.Context, q db.Querier) (Tuning, error) {
 }
 
 func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool string, value any, now float64, t Tuning) (string, *int64, error) {
-	body := Serialize(value)
+	body := serialize(value)
 	if EstimateTokens(body) <= int64(t.StubTokens) {
 		return body, nil, nil
 	}
-	resultID, tokens, err := Store(ctx, q, runID, callID, tool, body, now)
+	tokens := EstimateTokens(body)
+	resultID, err := journal.StoreResult(ctx, q, runID, callID, tool, body, tokens, now)
 	if err != nil {
 		return "", nil, err
 	}
-	stub := py.Dict{
-		{Key: "result_id", Value: resultID},
-		{Key: "tool", Value: tool},
-		{Key: "tokens", Value: tokens},
-		{Key: "preview", Value: py.Clip(body, t.PreviewChars)},
-		{Key: "note", Value: StubNote},
+	stub := map[string]any{
+		"result_id": resultID,
+		"tool":      tool,
+		"tokens":    tokens,
+		"preview":   textx.Clip(body, t.PreviewChars),
+		"note":      StubNote,
 	}
-	return py.JSONDumps(stub, valueJSON), &resultID, nil
+	return jsonx.Dumps(stub, valueJSON), &resultID, nil
 }
 
 type Limits struct {
@@ -176,40 +148,15 @@ type Limits struct {
 }
 
 func LimitsFor(contextLimit int64, t Tuning) Limits {
-	hard := min(contextLimit, ModelContext)
-	share := func(s float64) int64 { return int64(float64(hard) * s) }
+	share := func(s float64) int64 { return int64(float64(contextLimit) * s) }
 	return Limits{
-		Hard:         hard,
+		Hard:         contextLimit,
 		Preflight:    share(t.PreflightShare),
 		Compact:      share(t.CompactShare),
 		Clear:        share(t.ClearShare),
 		ClearAtLeast: share(t.ClearAtLeastShare),
 		Tuning:       t,
 	}
-}
-
-func typed(kind string, value int64) py.Dict {
-	return py.Dict{{Key: "type", Value: kind}, {Key: "value", Value: value}}
-}
-
-func ContextManagement(l Limits) json.RawMessage {
-	edits := []any{
-		py.Dict{
-			{Key: "type", Value: ClearToolUses},
-			{Key: "trigger", Value: typed(inputTokens, l.Clear)},
-			{Key: "keep", Value: typed("tool_uses", int64(l.Tuning.ClearKeep))},
-			{Key: "clear_at_least", Value: typed(inputTokens, l.ClearAtLeast)},
-			{Key: "clear_tool_inputs", Value: false},
-			{Key: "exclude_tools", Value: []string{recallTool}},
-		},
-		py.Dict{
-			{Key: "type", Value: Compact},
-			{Key: "trigger", Value: typed(inputTokens, l.Compact)},
-			{Key: "pause_after_compaction", Value: true},
-			{Key: "instructions", Value: l.Tuning.Summary},
-		},
-	}
-	return json.RawMessage(py.JSONDumps(py.Dict{{Key: "edits", Value: edits}}, compactJSON))
 }
 
 func ClearsOf(m *anthropic.Message) (int64, int64) {
@@ -240,7 +187,7 @@ func HistoryTokens(u anthropic.Usage) int64 {
 func decodeAll(content []json.RawMessage) ([]any, error) {
 	out := make([]any, len(content))
 	for i, b := range content {
-		v, err := py.JSONLoads(b)
+		v, err := jsonx.Loads(b)
 		if err != nil {
 			return nil, fmt.Errorf("context: content block: %w", err)
 		}
@@ -249,11 +196,11 @@ func decodeAll(content []json.RawMessage) ([]any, error) {
 	return out, nil
 }
 
-func encode(v any) json.RawMessage { return json.RawMessage(py.JSONDumps(v, compactJSON)) }
+func encode(v any) json.RawMessage { return json.RawMessage(jsonx.Dumps(v, compactJSON)) }
 
 func str(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
-	return py.ReprValue(v)
+	return fmt.Sprint(v)
 }

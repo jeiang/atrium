@@ -11,6 +11,8 @@ import (
 	"path"
 	"slices"
 	"strings"
+
+	"github.com/jeiang/atrium/internal/config"
 )
 
 //go:embed templates/*.gohtml templates/basecoat/*.gohtml
@@ -24,14 +26,37 @@ const (
 type Config struct {
 	AssetVersion string
 	Globals      map[string]any
-	Extra        fs.FS
 	Modules      []fs.FS
+	State        *config.State
 }
 
 type Toast struct {
 	Category    string
 	Title       string
 	Description string
+}
+
+type NavItem struct {
+	Group      string
+	Label      string
+	URL        string
+	Icon       string
+	Page       string
+	Module     string
+	Auth       bool
+	Settings   bool
+	Primary    bool
+	PrimaryURL string
+	Badge      bool
+	Brand      bool
+	Footer     bool
+	Order      int
+	Current    bool
+}
+
+type NavGroup struct {
+	Label string
+	Items []NavItem
 }
 
 type Frame struct {
@@ -44,13 +69,19 @@ type Frame struct {
 	Page              string
 	Toast             *Toast
 	Auth              AuthView
+	Nav               []NavGroup
+	Settings          []NavItem
+	SettingsURL       string
+	BrandURL          string
+	Footer            []NavItem
 	Data              any
 }
 
 type AuthView struct {
-	Admin   bool
-	SignOut bool
-	NoAuth  bool
+	Admin    bool
+	SignOut  bool
+	NoAuth   bool
+	Settings bool
 }
 
 type ErrorView struct {
@@ -65,6 +96,7 @@ type Engine struct {
 	assetVersion string
 	shared       *template.Template
 	pages        map[string]*template.Template
+	state        *config.State
 }
 
 func AssetURL(version, path string) string {
@@ -76,6 +108,7 @@ func New(cfg Config) (*Engine, error) {
 		globals:      maps.Clone(cfg.Globals),
 		assetVersion: cfg.AssetVersion,
 		pages:        map[string]*template.Template{},
+		state:        cfg.State,
 	}
 	sources, err := collect(cfg)
 	if err != nil {
@@ -92,21 +125,6 @@ func New(cfg Config) (*Engine, error) {
 		e.pages[page] = set
 	}
 	return e, nil
-}
-
-func (e *Engine) Pages() []string {
-	return slices.Sorted(maps.Keys(e.pages))
-}
-
-func (e *Engine) Fragments() []string {
-	var names []string
-	for _, t := range e.shared.Templates() {
-		if strings.HasPrefix(t.Name(), "_") && strings.HasSuffix(t.Name(), ".gohtml") {
-			names = append(names, t.Name())
-		}
-	}
-	slices.Sort(names)
-	return names
 }
 
 func (e *Engine) Page(w io.Writer, name string, f *Frame) error {
@@ -129,7 +147,6 @@ func (e *Engine) Fragment(w io.Writer, name string, f *Frame) error {
 
 func execute(w io.Writer, set *template.Template, name string, f *Frame) error {
 	root := *f
-	root.Data = View(f.Data)
 	var b bytes.Buffer
 	if err := set.ExecuteTemplate(&b, name, &root); err != nil {
 		return err
@@ -179,7 +196,7 @@ func collect(cfg Config) (sources, error) {
 			return out, err
 		}
 	}
-	for _, extra := range append([]fs.FS{cfg.Extra}, cfg.Modules...) {
+	for _, extra := range cfg.Modules {
 		if extra == nil {
 			continue
 		}

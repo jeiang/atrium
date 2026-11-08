@@ -1,13 +1,21 @@
 package webfetch
 
-import "github.com/jeiang/atrium/internal/mail/mime"
+import (
+	"mime"
+	"net/http"
+	"strings"
+)
 
-func contentCharset(h headers) string {
-	value, ok := h.first("content-type")
-	if !ok {
+func contentCharset(h http.Header) string {
+	value := h.Get("Content-Type")
+	if value == "" {
 		return "utf-8"
 	}
-	if charset, ok := mime.ContentCharset(value); ok && charset != "" {
+	_, params, err := mime.ParseMediaType(value)
+	if err != nil {
+		return "utf-8"
+	}
+	if charset := strings.TrimSpace(params["charset"]); charset != "" {
 		return charset
 	}
 	return "utf-8"

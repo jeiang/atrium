@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 )
 
 const (
@@ -45,24 +45,33 @@ type Model struct {
 	Rates         Rates      `json:"rates"`
 	LongRates     *Rates     `json:"long_rates"`
 	ForcedTools   bool       `json:"forced_tools"`
+	RunCapUSD     float64    `json:"run_cap_usd"`
 }
 
-var allEfforts = []string{"low", "medium", "high", "xhigh", "max"}
+const (
+	Low    = "low"
+	Medium = "medium"
+	High   = "high"
+	XHigh  = "xhigh"
+	Max    = "max"
+)
+
+var Efforts = []string{Low, Medium, High, XHigh, Max}
 
 var catalog = []Model{
 	{
-		ID: HaikuID, Name: "Haiku 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: allEfforts, ForcedTools: true,
+		ID: HaikuID, Name: "Haiku 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: Efforts, ForcedTools: true, RunCapUSD: 2,
 		Thinking:  []Thinking{{Type: "adaptive"}, {Type: "disabled", MaxEffort: "high"}},
 		Rates:     Rates{Input: 0.10, Output: 0.50, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01},
 		LongRates: &Rates{Input: 0.50, Output: 2.50, CacheWrite5m: 0.625, CacheWrite1h: 1.00, CacheRead: 0.05},
 	},
 	{
-		ID: SonnetID, Name: "Sonnet 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: allEfforts,
+		ID: SonnetID, Name: "Sonnet 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: Efforts, RunCapUSD: 6,
 		Thinking: []Thinking{{Type: "adaptive"}, {Type: "between_tools", MaxEffort: "high"}},
 		Rates:    Rates{Input: 2, Output: 10, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10},
 	},
 	{
-		ID: OpusID, Name: "Opus 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: allEfforts,
+		ID: OpusID, Name: "Opus 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: Efforts, RunCapUSD: 10,
 		Thinking: []Thinking{{Type: "adaptive"}},
 		Rates:    Rates{Input: 4, Output: 20, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20},
 	},
@@ -73,6 +82,14 @@ type UnknownModel string
 func (e UnknownModel) Error() string { return fmt.Sprintf("model %q is not in the catalog", string(e)) }
 
 func Models() []Model { return slices.Clone(catalog) }
+
+func MaxContextWindow() int64 {
+	var out int64
+	for _, m := range catalog {
+		out = max(out, m.ContextWindow)
+	}
+	return out
+}
 
 func IDs() []string {
 	out := make([]string, len(catalog))
@@ -93,7 +110,61 @@ func Lookup(id string) (Model, error) {
 
 func (m Model) SupportsEffort(effort string) bool { return slices.Contains(m.Efforts, effort) }
 
-func (m Model) Tiered() bool { return m.LongRates != nil }
+func (m Model) SupportsThinking(kind string) bool {
+	for _, t := range m.Thinking {
+		if t.Type == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) ThinkingMaxEffort(kind string) string {
+	for _, t := range m.Thinking {
+		if t.Type == kind {
+			return t.MaxEffort
+		}
+	}
+	return ""
+}
+
+func (m Model) DefaultThinking() string {
+	if len(m.Thinking) == 0 {
+		return ""
+	}
+	return m.Thinking[0].Type
+}
+
+func EffortRank(effort string) int {
+	for i, e := range Efforts {
+		if e == effort {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m Model) ValidThinking(thinking, effort string) bool {
+	if !m.SupportsThinking(thinking) {
+		return false
+	}
+	if limit := m.ThinkingMaxEffort(thinking); limit != "" && EffortRank(effort) > EffortRank(limit) {
+		return false
+	}
+	return true
+}
+
+func ModelRank(id string) int {
+	switch id {
+	case HaikuID:
+		return 0
+	case SonnetID:
+		return 1
+	case OpusID:
+		return 2
+	}
+	return -1
+}
 
 type Tokens struct{ Input, CacheWrite5m, CacheWrite1h, CacheRead, Output int64 }
 
@@ -109,27 +180,49 @@ func (m Model) tier(t Tokens) (string, Rates) {
 	return TierLow, m.Rates
 }
 
-func TierOf(model string, t Tokens) (string, error) {
-	m, err := Lookup(model)
-	if err != nil {
-		return "", err
-	}
-	tier, _ := m.tier(t)
-	return tier, nil
-}
-
 func CostUSD(model string, t Tokens, searches int64) (float64, error) {
 	m, err := Lookup(model)
 	if err != nil {
 		return 0, err
 	}
 	_, r := m.tier(t)
-	total := py.Sum([]float64{
+	return costAt(r, t) + float64(float64(searches)*SearchUSD), nil
+}
+
+func costAt(r Rates, t Tokens) float64 {
+	total := numx.Sum([]float64{
 		float64(float64(t.Input) * r.Input),
 		float64(float64(t.Output) * r.Output),
 		float64(float64(t.CacheWrite5m) * r.CacheWrite5m),
 		float64(float64(t.CacheWrite1h) * r.CacheWrite1h),
 		float64(float64(t.CacheRead) * r.CacheRead),
 	})
-	return float64(total/million) + float64(float64(searches)*SearchUSD), nil
+	return float64(total / million)
+}
+
+func maxRates() Rates {
+	var out Rates
+	for _, m := range catalog {
+		rates := []Rates{m.Rates}
+		if m.LongRates != nil {
+			rates = append(rates, *m.LongRates)
+		}
+		for _, r := range rates {
+			out.Input = max(out.Input, r.Input)
+			out.Output = max(out.Output, r.Output)
+			out.CacheWrite5m = max(out.CacheWrite5m, r.CacheWrite5m)
+			out.CacheWrite1h = max(out.CacheWrite1h, r.CacheWrite1h)
+			out.CacheRead = max(out.CacheRead, r.CacheRead)
+		}
+	}
+	return out
+}
+
+func CostOrMax(model string, t Tokens) (float64, string, bool) {
+	m, err := Lookup(model)
+	if err != nil {
+		return costAt(maxRates(), t), TierHigh, true
+	}
+	tier, r := m.tier(t)
+	return costAt(r, t), tier, false
 }

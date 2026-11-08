@@ -12,7 +12,6 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/logx"
 )
 
 const (
@@ -20,8 +19,6 @@ const (
 	connectTimeout = 5 * time.Second
 	readTimeout    = 10 * time.Minute
 )
-
-var filesLog = logx.Logger("atrium.agent.files")
 
 type Client struct {
 	sdk sdk.Client
@@ -61,6 +58,7 @@ func spendCapNoRetry(req *http.Request, next option.MiddlewareNext) (*http.Respo
 	resp, err := next(req)
 	if resp != nil && resp.StatusCode == http.StatusTooManyRequests && resp.Header.Get("Retry-After") == "" {
 		resp.Header.Set("X-Should-Retry", "false")
+		resp.Header.Set(spendCapHeader, "1")
 	}
 	return resp, err
 }
@@ -77,7 +75,7 @@ func (p Params) sdkParams() sdk.BetaMessageNewParams {
 	for i, b := range p.Betas {
 		betas[i] = sdk.AnthropicBeta(b)
 	}
-	return sdk.BetaMessageNewParams{Model: sdk.Model(p.Model), MaxTokens: p.MaxTokens, Betas: betas}
+	return sdk.BetaMessageNewParams{Betas: betas}
 }
 
 func (c *Client) Create(ctx context.Context, p Params) (*Message, error) {
@@ -100,31 +98,39 @@ func (c *Client) Stream(ctx context.Context, p Params, observe func(Event) error
 	stream := c.sdk.Beta.Messages.NewStreaming(ctx, p.sdkParams(), option.WithRequestBody("application/json", body))
 	defer func() { _ = stream.Close() }()
 	var acc sdk.BetaMessage
+	started := false
 	stopped := false
 	for stream.Next() {
 		ev := stream.Current()
 		if err := acc.Accumulate(ev); err != nil {
 			return nil, fmt.Errorf("anthropic: %w", err)
 		}
+		started = started || ev.Type == "message_start"
 		stopped = stopped || ev.Type == "message_stop"
 		if observe == nil {
 			continue
 		}
-		e, err := eventOf(&acc, ev)
-		if err != nil {
-			return nil, err
-		}
-		if err := observe(e); err != nil {
-			return nil, err
+		if e := eventOf(&acc, ev); e != nil {
+			if err := observe(e); err != nil {
+				return nil, err
+			}
 		}
 	}
-	if err := stream.Err(); err != nil {
+	err = stream.Err()
+	if err == nil && !stopped {
+		err = io.ErrUnexpectedEOF
+	}
+	if err == nil {
+		return decodeMessage(acc.RawJSON())
+	}
+	if !started {
 		return nil, classify(err)
 	}
-	if !stopped {
-		return nil, classify(io.ErrUnexpectedEOF)
+	partial, decodeErr := decodeMessage(acc.RawJSON())
+	if decodeErr != nil {
+		return nil, classify(err)
 	}
-	return decodeMessage(acc.RawJSON())
+	return partial, classify(err)
 }
 
 func (c *Client) ModelIDs(ctx context.Context) ([]string, error) {
@@ -137,13 +143,4 @@ func (c *Client) ModelIDs(ctx context.Context) ([]string, error) {
 		return nil, classify(err)
 	}
 	return ids, nil
-}
-
-func (c *Client) DeleteFile(ctx context.Context, fileID string) {
-	if c == nil || fileID == "" {
-		return
-	}
-	if _, err := c.sdk.Files.Delete(ctx, fileID, sdk.FileDeleteParams{}); err != nil {
-		filesLog.Warn(fmt.Sprintf("Files API delete of %s failed: %s", fileID, classify(err)))
-	}
 }

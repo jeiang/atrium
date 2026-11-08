@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -32,12 +33,10 @@ const (
 	KeyCompactShare      = "agent_compact_share"
 	KeyPreflightShare    = "agent_preflight_share"
 	KeyClearKeep         = "agent_clear_keep"
-	KeyCommitSavings     = "agent_commit_savings"
 	KeyPreserveMessages  = "agent_preserve_messages"
 	KeySummaryMaxTokens  = "agent_summary_max_tokens"
 	KeyStubTokens        = "agent_stub_tokens"
 	KeyPreviewChars      = "agent_preview_chars"
-	KeyDashboardItems    = "agent_dashboard_items"
 	KeyManifestResults   = "agent_manifest_results"
 
 	KeyJournalLeaseSeconds = "agent_journal_lease_seconds"
@@ -88,7 +87,6 @@ const (
 	KeyMailMaxResults    = "agent_mail_max_results"
 	KeyMailSnippetChars  = "agent_mail_snippet_chars"
 	KeyMailBodyChars     = "agent_mail_body_chars"
-	KeyMailMaxContacts   = "agent_mail_max_contacts"
 	KeyMailMaxLoopsLimit = "agent_mail_max_loops_limit"
 
 	KeyNotionMaxResults  = "agent_notion_max_results"
@@ -108,23 +106,32 @@ const (
 	KeyGrafanaCellChars  = "agent_grafana_cell_chars"
 )
 
-var efforts = []string{"low", "medium", "high", "xhigh", "max"}
+const DefaultContextLimit = 90_000
 
-var contextLimits = []string{"90000", "200000", "500000", "1000000"}
+var ContextLimits = []int64{90_000, 200_000, 500_000, 1_000_000}
+
+func contextLimitChoices() []string {
+	out := make([]string, len(ContextLimits))
+	for i, n := range ContextLimits {
+		out[i] = strconv.FormatInt(n, 10)
+	}
+	return out
+}
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
-	def := func(key string, kind settings.Type, class settings.Class, value string, check func(string) error) settings.Def {
-		return settings.Def{Key: key, Module: module, Type: kind, Default: value, Check: check, Class: class, Scopes: instance}
+	def := func(key string, kind settings.Type, surface settings.Surface, value string, check func(string) error) settings.Def {
+		return settings.Value(surface, settings.Def{Key: key, Module: module, Type: kind, Default: value, Check: check})
 	}
 	adv := func(key string, kind settings.Type, value string, check func(string) error) settings.Def {
 		return def(key, kind, settings.Advanced, value, check)
 	}
 	capped := func(key string, kind settings.Type, value string, check func(string) error) settings.Def {
-		return def(key, kind, settings.Cap, value, check)
+		return def(key, kind, settings.Advanced, value, check)
 	}
 	count := func(key string, value, lo, hi int64) settings.Def {
-		return capped(key, settings.Int, strconv.FormatInt(value, 10), settings.Between(float64(lo), float64(hi)))
+		d := capped(key, settings.Int, strconv.FormatInt(value, 10), settings.Between(float64(lo), float64(hi)))
+		d.Min, d.Max = lo, hi
+		return d
 	}
 	share := func(key, value string, peers func(string, func(string) (string, error)) error) settings.Def {
 		d := adv(key, settings.Float, value, settings.Within(0, 1))
@@ -133,15 +140,15 @@ func init() {
 	}
 	effort := func(key, value string) settings.Def {
 		d := adv(key, settings.Enum, value, nil)
-		d.Choices = efforts
+		d.Choices = pricing.Efforts
 		return d
 	}
 	chatModel := def(KeyDefaultModel, settings.Enum, settings.UI, pricing.DefaultModel, nil)
 	chatModel.Choices = pricing.IDs()
-	chatEffort := def(KeyDefaultEffort, settings.Enum, settings.UI, "medium", nil)
-	chatEffort.Choices = efforts
-	contextLimit := def(KeyDefaultContextLimit, settings.Enum, settings.UI, "90000", nil)
-	contextLimit.Choices = contextLimits
+	chatEffort := def(KeyDefaultEffort, settings.Enum, settings.UI, pricing.Medium, nil)
+	chatEffort.Choices = pricing.Efforts
+	contextLimit := def(KeyDefaultContextLimit, settings.Enum, settings.UI, strconv.FormatInt(DefaultContextLimit, 10), nil)
+	contextLimit.Choices = contextLimitChoices()
 	chat := capped(KeyBudgetChat, settings.Float, "1", settings.Within(0, 1))
 	chat.Peers = Ordered(false, []string{KeyBudgetUnattended}, nil)
 	fileCap := count(KeyFileCapBytes, 32<<20, 1<<20, 128<<20)
@@ -168,12 +175,10 @@ func init() {
 		share(KeyCompactShare, "0.875", Ordered(true, []string{KeyClearShare}, []string{KeyPreflightShare})),
 		share(KeyPreflightShare, "0.95", Ordered(true, []string{KeyCompactShare}, nil)),
 		adv(KeyClearKeep, settings.Int, "3", settings.Between(1, 50)),
-		adv(KeyCommitSavings, settings.Int, "20000", settings.Between(1000, 1000000)),
 		adv(KeyPreserveMessages, settings.Int, "3", settings.Between(1, 50)),
 		adv(KeySummaryMaxTokens, settings.Int, "8192", settings.Between(512, 32000)),
 		adv(KeyStubTokens, settings.Int, "2000", settings.Between(100, 50000)),
 		adv(KeyPreviewChars, settings.Int, "600", settings.Between(50, 10000)),
-		count(KeyDashboardItems, 60, 1, 500),
 		count(KeyManifestResults, 30, 1, 500),
 
 		adv(KeyJournalLeaseSeconds, settings.Int, "1800", settings.Between(1800, 86400)),
@@ -224,7 +229,6 @@ func init() {
 		count(KeyMailMaxResults, 20, 1, 200),
 		count(KeyMailSnippetChars, 300, 20, 5000),
 		count(KeyMailBodyChars, 8000, 100, 100000),
-		count(KeyMailMaxContacts, 10, 1, 100),
 		count(KeyMailMaxLoopsLimit, 100, 1, 1000),
 
 		count(KeyNotionMaxResults, 10, 1, 100),
@@ -246,7 +250,7 @@ func init() {
 }
 
 func headerValue(value string) error {
-	if py.Strip(value) == "" {
+	if strings.TrimSpace(value) == "" {
 		return settings.Invalid("must not be blank")
 	}
 	for _, c := range value {
@@ -263,7 +267,7 @@ func Ordered(strict bool, below, above []string) func(string, func(string) (stri
 		atLeast, atMost = "above", "below"
 	}
 	return func(value string, peer func(string) (string, error)) error {
-		own, err := py.ParseFloat(value)
+		own, err := numx.ParseFloat(value)
 		if err != nil {
 			return settings.Invalid("must be a number")
 		}
@@ -272,7 +276,7 @@ func Ordered(strict bool, below, above []string) func(string, func(string) (stri
 			if err != nil {
 				return err
 			}
-			if other, err := py.ParseFloat(text); err == nil && (own < other || strict && own == other) {
+			if other, err := numx.ParseFloat(text); err == nil && (own < other || strict && own == other) {
 				return settings.Invalid(fmt.Sprintf("must be %s %s (%s)", atLeast, key, text))
 			}
 		}
@@ -281,7 +285,7 @@ func Ordered(strict bool, below, above []string) func(string, func(string) (stri
 			if err != nil {
 				return err
 			}
-			if other, err := py.ParseFloat(text); err == nil && (own > other || strict && own == other) {
+			if other, err := numx.ParseFloat(text); err == nil && (own > other || strict && own == other) {
 				return settings.Invalid(fmt.Sprintf("must be %s %s (%s)", atMost, key, text))
 			}
 		}
@@ -303,7 +307,7 @@ func (r *Reader) resolve(key string) settings.Resolved {
 	if r.err != nil {
 		return settings.Resolved{}
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key, 0)
+	found, err := settings.From(r.ctx).Resolve(r.ctx, r.q, key)
 	r.err = err
 	return found
 }

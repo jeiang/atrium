@@ -11,6 +11,7 @@ import (
 )
 
 func TestCommandRefusesNewerSchema(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	d, err := db.Connect(path)
@@ -24,8 +25,8 @@ func TestCommandRefusesNewerSchema(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (9999, 1.0); DELETE FROM skills WHERE name = 'wiki-query'"); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("ATRIUM_DB", path)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 
 	cmd := cliExitProcess(t, "loops refresh")
 	var stdout, stderr bytes.Buffer

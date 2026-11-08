@@ -1,9 +1,8 @@
 package files
 
 import (
+	"path"
 	"strings"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -21,9 +20,9 @@ func contentTypeOf(types *element, partName string) (string, error) {
 			return kind, nil
 		}
 	}
-	ext := strings.TrimPrefix(py.Lower(py.PathSuffix(py.PathName(partName))), ".")
+	ext := strings.TrimPrefix(strings.ToLower(path.Ext(path.Base(partName))), ".")
 	for _, d := range types.kids(nsContentTypes, "Default") {
-		if e, _ := d.attr("", "Extension"); py.Lower(e) == ext {
+		if e, _ := d.attr("", "Extension"); strings.ToLower(e) == ext {
 			kind, _ := d.attr("", "ContentType")
 			return kind, nil
 		}
@@ -349,7 +348,7 @@ func docxText(data []byte, maxText int) (string, error) {
 		body = root.kid(nsWord, "body")
 	}
 	if body == nil {
-		return "", readError("AttributeError")
+		return "", errValue
 	}
 	size := 0
 	var lines []string
@@ -387,7 +386,7 @@ func docxText(data []byte, maxText int) (string, error) {
 					return "", err
 				}
 				for _, t := range texts {
-					stripped := py.Strip(t)
+					stripped := strings.TrimSpace(t)
 					rowBytes += len(stripped) + 1
 					if size+rowBytes > maxText {
 						return "", errTooLarge
@@ -400,5 +399,5 @@ func docxText(data []byte, maxText int) (string, error) {
 			}
 		}
 	}
-	return py.Strip(strings.Join(lines, "\n")), nil
+	return strings.TrimSpace(strings.Join(lines, "\n")), nil
 }

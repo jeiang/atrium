@@ -8,8 +8,9 @@ import (
 	"maps"
 	"net"
 	"net/http"
-	"slices"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/auth/oidc"
@@ -19,13 +20,13 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/sdnotify"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 const (
-	DefaultHost     = "127.0.0.1"
+	defaultHost     = "127.0.0.1"
 	shutdownTimeout = 10 * time.Second
 )
 
@@ -63,83 +64,104 @@ func recoverEvery(ctx context.Context, d *db.DB, cfg config.Config) {
 	}
 }
 
+type NavItem = tpl.NavItem
+
 type Page struct {
 	Module    Module
 	Templates fs.FS
 	Globals   map[string]any
-	Public    func(config.Config, config.Env, *db.DB) func(*http.Request) bool
+	Public    func(config.Config, config.Env, *db.DB, *settings.Registry) func(*http.Request) bool
+	Home      string
+	Start     func(context.Context, *Deps) error
+	Nav       []tpl.NavItem
 }
 
-func ServeCommand(pages ...Page) *cli.Command {
+// Boot opens the application database and starts the modules that own it.
+// The serve command calls Open once, then Start after the modules are
+// registered and before the listener opens.
+type Boot interface {
+	Open(context.Context) (*db.DB, config.Config, error)
+	Start(context.Context, *Deps) error
+}
+
+// BootFunc adapts functions to Boot.
+type BootFunc struct {
+	OpenFunc  func(context.Context) (*db.DB, config.Config, error)
+	StartFunc func(context.Context, *Deps) error
+}
+
+func (b BootFunc) Open(ctx context.Context) (*db.DB, config.Config, error) {
+	return b.OpenFunc(ctx)
+}
+
+func (b BootFunc) Start(ctx context.Context, d *Deps) error {
+	if b.StartFunc == nil {
+		return nil
+	}
+	return b.StartFunc(ctx, d)
+}
+
+func ServeCommand(boot Boot, pages ...Page) *cli.Command {
 	return &cli.Command{
 		Name: "serve",
 		Setup: func(args *cli.Args) cli.Handler {
-			host := args.String("host", DefaultHost, cli.Opt{})
+			host := args.String("host", defaultHost, cli.Opt{})
 			port := args.Int("port", 0, cli.Opt{Required: true})
-			modes := args.Repeated("auth", cli.Opt{Choices: AuthModes[:], Help: "authentication mode; repeatable (proxy and oidc combine; default proxy)"})
+			modes := args.Repeated("auth", cli.Opt{Choices: authModes[:], Help: "authentication mode; repeatable (proxy and oidc combine; default proxy)"})
 			hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
 			force := args.Bool("force-disable-auth", cli.Opt{Help: "start without authentication when none is configured"})
 			return func(env *cli.Env) int {
-				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, forceDisableAuth: *force, pages: pages, env: config.OS})
+				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, forceDisableAuth: *force, pages: pages, env: env.Env, boot: boot})
 			}
 		},
 	}
 }
 
 type serveArgs struct {
-	host  string
-	port  int
-	auth  []string
-	hosts []string
-	pages []Page
-	env   config.Env
+	host     string
+	port     int
+	auth     []string
+	hosts    []string
+	pages    []Page
+	env      config.Env
+	settings *settings.Registry
+	state    *config.State
+	boot     Boot
 
 	forceDisableAuth bool
-	authDisabled     bool
 }
 
 func publicHosts(given []string, env config.Env) []string {
 	if len(given) > 0 {
 		return given
 	}
-	if host, _ := env("ATRIUM_PUBLIC_HOST"); py.Strip(host) != "" {
-		return []string{py.Strip(host)}
+	if host, _ := env("ATRIUM_PUBLIC_HOST"); strings.TrimSpace(host) != "" {
+		return []string{strings.TrimSpace(host)}
 	}
 	return nil
 }
 
 func serve(env *cli.Env, a serveArgs) int {
+	a.settings, a.state = settings.From(env.Ctx), config.From(env.Ctx)
 	hosts := publicHosts(a.hosts, a.env)
-	a, ok := resolveAuth(env.Stderr, a, hosts)
+	a, policy, ok := resolveAuth(env.Stderr, a, hosts)
 	if !ok {
 		return cli.ExitError
 	}
-	cfg, err := config.Load(a.env)
-	if err != nil {
-		_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
-		return cli.ExitError
-	}
-	if _, err := config.Location(a.env); err != nil {
-		_, _ = fmt.Fprintf(env.Stderr, "error: the tz setting is not a time zone: %s. Use an IANA name such as America/Port_of_Spain.\n", py.Repr(config.TZName(a.env)))
-		return cli.ExitError
-	}
-	if err := run(env.Ctx, cfg, a, hosts); err != nil {
+	if err := run(env.Ctx, a, hosts, policy); err != nil {
 		log.Error("serve failed", logx.Err, err.Error())
 		return cli.ExitError
 	}
 	return cli.ExitOK
 }
 
-func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) error {
-	d, err := db.Connect(cfg.DBPath)
+func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error {
+	d, cfg, err := a.boot.Open(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = d.Close() }()
-	if err := config.Migrate(ctx, d, cfg); err != nil {
-		return err
-	}
-	if _, err := config.Location(a.env); err != nil {
+	if _, err := a.state.Location(a.env); err != nil {
 		return fmt.Errorf("the tz setting is not a time zone: %w", err)
 	}
 	if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil {
@@ -162,28 +184,48 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	var templates []fs.FS
 	globals := map[string]any{}
 	var public []func(*http.Request) bool
+	var nav []tpl.NavItem
+	home := ""
 	for _, p := range a.pages {
-		modules = append(modules, p.Module)
+		if p.Module != nil {
+			modules = append(modules, p.Module)
+		}
 		if p.Public != nil {
-			public = append(public, p.Public(cfg, a.env, d))
+			public = append(public, p.Public(cfg, a.env, d, a.settings))
 		}
 		if p.Templates != nil {
 			templates = append(templates, p.Templates)
 		}
+		if p.Home != "" {
+			home = p.Home
+		}
 		maps.Copy(globals, p.Globals)
+		nav = append(nav, p.Nav...)
 	}
 	var sessions *oidc.Service
-	if slices.Contains(a.auth, AuthOIDC) {
+	if policy.OIDC() {
 		sessions = oidc.New(d, a.env)
 		if err := sessions.Check(ctx); err != nil {
 			log.Warn("oidc sign-in is not set up; nobody can sign in until it is", logx.Err, err.Error())
 		}
 	}
-	render, err := NewRenderer(cfg, d, tpl.Config{Modules: templates, Globals: globals})
+	render, err := NewRenderer(tpl.Config{Modules: templates, Globals: globals, State: a.state}, nav...)
 	if err != nil {
 		return err
 	}
-	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, NoAuth: a.authDisabled})
+	srv, err := New(Options{Ctx: ctx, Cfg: cfg, Env: a.env, DB: d, Settings: a.settings, State: a.state, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home, OnReady: func(deps *Deps) error {
+		if err := a.boot.Start(ctx, deps); err != nil {
+			return err
+		}
+		for _, p := range a.pages {
+			if p.Start != nil {
+				if err := p.Start(ctx, deps); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}})
 	if err != nil {
 		return err
 	}
@@ -193,7 +235,13 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	if err != nil {
 		return err
 	}
-	return listenAndShutdown(ctx, listener, srv)
+	if path, _ := a.env("ATRIUM_SERVE_ADDR_FILE"); path != "" {
+		if err := os.WriteFile(path, []byte(listener.Addr().String()), 0o600); err != nil {
+			_ = listener.Close()
+			return err
+		}
+	}
+	return listenAndShutdown(ctx, listener, srv, a.env)
 }
 
 func anyPublic(checks []func(*http.Request) bool) func(*http.Request) bool {
@@ -210,13 +258,13 @@ func anyPublic(checks []func(*http.Request) bool) func(*http.Request) bool {
 	}
 }
 
-func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server) error {
+func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server, env config.Env) error {
 	httpServer := &http.Server{Handler: srv, ReadHeaderTimeout: 30 * time.Second}
 	httpServer.RegisterOnShutdown(srv.StopStreams)
 	failed := make(chan error, 1)
 	go func() { failed <- httpServer.Serve(listener) }()
 	log.Info("listening", "addr", listener.Addr().String())
-	notifier := sdnotify.FromEnv()
+	notifier := sdnotify.New(func(name string) string { v, _ := env(name); return v })
 	srv.Release()
 	notifier.Ready()
 	notifier.Status("serving " + listener.Addr().String())

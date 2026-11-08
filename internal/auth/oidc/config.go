@@ -2,14 +2,15 @@ package oidc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -31,9 +32,7 @@ type Config struct {
 	AdminDomains  []string
 	Idle          time.Duration
 	Max           time.Duration
-	Recheck       time.Duration
 	RedirectURI   string
-	Secure        bool
 }
 
 type ConfigError struct{ Problems []string }
@@ -42,59 +41,63 @@ func (e *ConfigError) Error() string {
 	return "oidc is not configured: " + strings.Join(e.Problems, "; ")
 }
 
-func (c Config) rechecks() bool { return c.GroupsClaim != "" }
-
 func list(value string) []string {
 	var out []string
 	for _, part := range strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' }) {
-		if part = py.Strip(part); part != "" {
+		if part = strings.TrimSpace(part); part != "" {
 			out = append(out, part)
 		}
 	}
 	return out
 }
 
-var valueKeys = []string{
-	KeyPreset, KeyIssuer, KeyClientID, KeyScopes, KeyGroupsClaim, KeyAccessGroup, KeyAdminGroup,
-	KeyAccessEmails, KeyAdminEmails, KeyAccessDomains, KeyAdminDomains, KeyIdleDays, KeyMaxDays, KeyRecheckMinutes,
-}
+var valueKeys = append([]string{KeyPreset}, append(wizardKeys, KeyIdleDays, KeyMaxDays, KeyRecheckMinutes)...)
 
 type values map[string]string
 
-func resolved(ctx context.Context, q db.Querier) (values, []string) {
-	var problems []string
+func resolved(ctx context.Context, q db.Querier) (values, []string, error) {
 	out := values{}
 	for _, key := range valueKeys {
-		found, err := settings.Default.Resolve(ctx, q, key, 0)
+		found, err := settings.From(ctx).Resolve(ctx, q, key)
 		if err != nil {
-			problems = append(problems, err.Error())
+			return nil, nil, err
 		}
-		out[key] = py.Strip(found.Value)
+		out[key] = strings.TrimSpace(found.Value)
 	}
-	return out, problems
+	return out, nil, nil
 }
 
 func load(ctx context.Context, q db.Querier, env config.Env, encrypted bool) (Config, error) {
-	vals, problems := resolved(ctx, q)
+	vals, problems, err := resolved(ctx, q)
+	if err != nil {
+		return Config{}, err
+	}
 	secret, err := secrets.Credential(ctx, q, secrets.OIDCClientSecret)
 	if err != nil {
+		var empty settings.EmptyValue
+		if !errors.As(err, &empty) {
+			return Config{}, err
+		}
 		problems = append(problems, err.Error())
 	}
-	return assemble(vals, py.Strip(secret), env, encrypted, problems)
+	return assemble(ctx, vals, strings.TrimSpace(secret), env, encrypted, problems)
 }
 
-func assemble(get values, secret string, env config.Env, encrypted bool, problems []string) (Config, error) {
-	days := func(key string, unit time.Duration) time.Duration {
-		n, ok := py.ParseInt(get[key])
-		if !ok {
+func assemble(ctx context.Context, get values, secret string, env config.Env, encrypted bool, problems []string) (Config, error) {
+	days := func(key string, unit time.Duration, low, high int64) time.Duration {
+		n, err := strconv.ParseInt(strings.TrimSpace(get[key]), 10, 64)
+		switch {
+		case err != nil:
 			problems = append(problems, key+" is not a number")
+		case n < low || n > high:
+			problems = append(problems, fmt.Sprintf("%s must be between %d and %d", key, low, high))
 		}
 		return time.Duration(n) * unit
 	}
 	name := get[KeyPreset]
 	preset, ok := presetNamed(name)
 	if !ok {
-		problems = append(problems, "unknown preset "+py.Repr(name))
+		problems = append(problems, "unknown preset "+strconv.Quote(name))
 	}
 	c := Config{
 		Preset:        preset,
@@ -108,9 +111,8 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 		AdminEmails:   list(strings.ToLower(get[KeyAdminEmails])),
 		AccessDomains: list(strings.ToLower(get[KeyAccessDomains])),
 		AdminDomains:  list(strings.ToLower(get[KeyAdminDomains])),
-		Idle:          days(KeyIdleDays, 24*time.Hour),
-		Max:           days(KeyMaxDays, 24*time.Hour),
-		Recheck:       days(KeyRecheckMinutes, time.Minute),
+		Idle:          days(KeyIdleDays, 24*time.Hour, 1, 365),
+		Max:           days(KeyMaxDays, 24*time.Hour, 1, 365),
 	}
 	if preset.Issuer != "" && c.Issuer == "" {
 		c.Issuer = preset.Issuer
@@ -122,7 +124,7 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 		c.GroupsClaim = preset.GroupsClaim
 	}
 	c.ClientSecret = secret
-	public := config.PublicURL(env)
+	public := config.From(ctx).PublicURL(env)
 	switch {
 	case c.Issuer == "":
 		problems = append(problems, KeyIssuer+" is not set")
@@ -136,7 +138,6 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 		problems = append(problems, config.KeyPublicURL+" is not set")
 	} else {
 		c.RedirectURI = public + CallbackPath
-		c.Secure = strings.HasPrefix(public, "https://")
 	}
 	if c.GroupsClaim == "" && len(c.AccessEmails) == 0 && len(c.AdminEmails) == 0 && len(c.AccessDomains) == 0 && len(c.AdminDomains) == 0 {
 		problems = append(problems, fmt.Sprintf("nothing grants access: set %s, %s or %s", KeyGroupsClaim, KeyAccessEmails, KeyAccessDomains))
@@ -153,10 +154,13 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 	return c, nil
 }
 
-func AdminGroup(ctx context.Context, q db.Querier) string {
-	found, err := settings.Default.Resolve(ctx, q, KeyAdminGroup, 0)
-	if err != nil || py.Strip(found.Value) == "" {
-		return DefaultAdminGroup
+func AdminGroup(ctx context.Context, q db.Querier) (string, error) {
+	found, err := settings.From(ctx).Resolve(ctx, q, KeyAdminGroup)
+	if err != nil {
+		return "", err
 	}
-	return py.Strip(found.Value)
+	if strings.TrimSpace(found.Value) == "" {
+		return DefaultAdminGroup, nil
+	}
+	return strings.TrimSpace(found.Value), nil
 }

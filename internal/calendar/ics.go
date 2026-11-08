@@ -2,26 +2,26 @@ package calendar
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/emersion/go-ical"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Row struct {
 	UID      string
 	Calendar string
-	Start    string
-	End      string
+	Start    Value
+	End      Value
 	Title    string
 	Location string
 }
 
-func (r Row) Dict() py.Dict {
-	return py.Dict{
-		{Key: "uid", Value: r.UID}, {Key: "calendar", Value: r.Calendar}, {Key: "start", Value: r.Start},
-		{Key: "end", Value: r.End}, {Key: "title", Value: r.Title}, {Key: "location", Value: r.Location},
+func (r Row) Dict(tz *time.Location) map[string]any {
+	return map[string]any{
+		"uid": r.UID, "calendar": r.Calendar, "start": fmtValue(r.Start, tz),
+		"end": fmtValue(r.End, tz), "title": r.Title, "location": r.Location,
 	}
 }
 
@@ -58,8 +58,6 @@ func (e *icsEvent) uidText() string {
 type valueError string
 
 func (e valueError) Error() string { return string(e) }
-
-func (e valueError) PyClass() string { return "ValueError" }
 
 func unescapeText(s string) string {
 	if !strings.Contains(s, `\`) {
@@ -151,7 +149,7 @@ func (z *zones) value(prop ical.Prop) (Value, error) {
 	text := prop.Value
 	upper := strings.ToUpper(text)
 	if strings.HasPrefix(upper, "P") || strings.HasPrefix(upper, "-P") || strings.HasPrefix(upper, "+P") || strings.Contains(upper, "/") {
-		return Value{}, valueError("Expected datetime, date, or time. Got: '" + text + "'")
+		return Value{}, valueError("expected a datetime, date, or time, got " + strconv.Quote(text))
 	}
 	var loc *time.Location
 	if tzid := prop.Params.Get(ical.ParamTimezoneID); tzid != "" {
@@ -162,20 +160,20 @@ func (z *zones) value(prop ical.Prop) (Value, error) {
 		if v, ok := clockValue(text, loc); ok {
 			return v, nil
 		}
-		return Value{}, valueError("Wrong datetime format: " + text)
+		return Value{}, valueError("invalid datetime " + strconv.Quote(text))
 	case 8:
 		y, ok1 := digitsAt(text, 0, 4)
 		mo, ok2 := digitsAt(text, 4, 6)
 		d, ok3 := digitsAt(text, 6, 8)
 		if !ok1 || !ok2 || !ok3 || y < 1 || mo < 1 || mo > 12 || d < 1 || d > time.Date(y, time.Month(mo)+1, 0, 0, 0, 0, 0, time.UTC).Day() {
-			return Value{}, valueError("Wrong date format " + text)
+			return Value{}, valueError("invalid date " + strconv.Quote(text))
 		}
 		if loc != nil {
 			return awareValue(resolve(loc, time.Date(y, time.Month(mo), d, 0, 0, 0, 0, time.UTC))), nil
 		}
 		return dateValue(y, time.Month(mo), d), nil
 	}
-	return Value{}, valueError("Expected datetime, date, or time. Got: '" + text + "'")
+	return Value{}, valueError("expected a datetime, date, or time, got " + strconv.Quote(text))
 }
 
 func (z *zones) list(prop ical.Prop) ([]Value, error) {
@@ -213,8 +211,8 @@ func parseDuration(s string) (time.Duration, bool) {
 		if i == 0 || i >= len(s) || s[i] != unit {
 			return false
 		}
-		n, ok := py.ParseInt(s[:i])
-		if !ok {
+		n, err := strconv.ParseInt(s[:i], 10, 64)
+		if err != nil {
 			return false
 		}
 		total += time.Duration(n) * scale
@@ -280,7 +278,7 @@ func parseEvent(comp *ical.Component, z *zones) (*icsEvent, error) {
 	if p := comp.Props.Get(ical.PropDuration); p != nil {
 		d, ok := parseDuration(p.Value)
 		if !ok {
-			return nil, valueError("Invalid iCalendar duration: " + p.Value)
+			return nil, valueError("invalid iCalendar duration: " + p.Value)
 		}
 		ev.duration = &d
 	}
@@ -375,7 +373,7 @@ func occurrenceEnd(ev *icsEvent, start, end, occ Value, tz *time.Location) (Valu
 	}
 	if occ.isDate() {
 		if !end.isDate() || !start.isDate() {
-			return Value{}, py.TypeError("unsupported operand type(s) for -: 'datetime.datetime' and 'datetime.date'")
+			return Value{}, fmt.Errorf("cannot subtract a date from a datetime")
 		}
 		return dateValue(occ.t.Year(), occ.t.Month(), occ.t.Day()+int(end.t.Sub(start.t).Hours()/24)), nil
 	}
@@ -385,7 +383,7 @@ func occurrenceEnd(ev *icsEvent, start, end, occ Value, tz *time.Location) (Valu
 func longestSpan(master *icsEvent, start, end Value, tz *time.Location) (time.Duration, error) {
 	if !start.isDatetime() {
 		if !end.isDate() {
-			return 0, py.TypeError("unsupported operand type(s) for -: 'datetime.datetime' and 'datetime.date'")
+			return 0, fmt.Errorf("cannot subtract a date from a datetime")
 		}
 		return naiveLocal(end, tz).Sub(naiveLocal(start, tz)), nil
 	}
@@ -404,7 +402,7 @@ func overlaps(s, e, ws, we time.Time) bool {
 }
 
 func (ev *icsEvent) row(calendar string, start, end Value, tz *time.Location) Row {
-	return Row{UID: ev.uidKey(), Calendar: calendar, Start: fmtValue(start, tz), End: fmtValue(end, tz), Title: ev.summary, Location: ev.location}
+	return Row{UID: ev.uidKey(), Calendar: calendar, Start: start, End: end, Title: ev.summary, Location: ev.location}
 }
 
 func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Location, notes *[]string, maxOccurrences int) ([]Row, error) {
@@ -423,7 +421,7 @@ func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Locati
 				overrideOrder = append(overrideOrder, uid)
 			}
 			overrides[uid] = append(overrides[uid], ev)
-		case py.Upper(ev.status) != "CANCELLED":
+		case strings.ToUpper(ev.status) != "CANCELLED":
 			if _, seen := masters[uid]; !seen {
 				masterOrder = append(masterOrder, uid)
 			}
@@ -464,7 +462,7 @@ func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Locati
 	}
 	for _, uid := range overrideOrder {
 		for _, comp := range overrides[uid] {
-			if comp.dtstart == nil || py.Upper(comp.status) == "CANCELLED" {
+			if comp.dtstart == nil || strings.ToUpper(comp.status) == "CANCELLED" {
 				continue
 			}
 			start := *comp.dtstart

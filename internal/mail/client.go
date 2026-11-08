@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -85,13 +86,18 @@ type SearchCriteria struct {
 	GmailRaw    string
 }
 
-type FetchItems struct {
+type FetchMode int
+
+const (
+	FetchFlags FetchMode = iota
+	FetchHeaders
+	FetchFull
+)
+
+type FetchRequest struct {
+	Mode         FetchMode
 	Labels       bool
-	Header       bool
-	Body         bool
-	HeaderOnly   bool
 	ChangedSince uint64
-	BodyCap      int
 }
 
 type WriteInterrupted struct {
@@ -102,10 +108,6 @@ type WriteInterrupted struct {
 func (e *WriteInterrupted) Error() string { return e.Err.Error() }
 
 func (e *WriteInterrupted) Unwrap() error { return e.Err }
-
-func (*WriteInterrupted) PyClass() string { return "abort" }
-
-func (*WriteInterrupted) PyModule() string { return "imaplib.IMAP4" }
 
 type CopyUID struct {
 	UIDValidity uint32
@@ -120,7 +122,7 @@ type Conn interface {
 	Status(ctx context.Context, imapName string) (Status, error)
 	Select(ctx context.Context, imapName string) error
 	UIDSearch(ctx context.Context, criteria SearchCriteria) ([]uint32, error)
-	UIDFetch(ctx context.Context, uids UIDSet, items FetchItems) ([]Message, error)
+	UIDFetch(ctx context.Context, uids UIDSet, req FetchRequest) ([]Message, error)
 	IdleChanges(ctx context.Context, duration time.Duration) (bool, error)
 	Noop(ctx context.Context) error
 
@@ -138,34 +140,23 @@ type Conn interface {
 type Client interface {
 	Conn
 	gated()
-	BindMode(q Querier) Client
-	Settings() Querier
+	Settings() db.Querier
 }
 
-type OpenFunc = func(ctx context.Context, account string) (Client, error)
-
-func BindMode(open OpenFunc, q Querier) OpenFunc {
-	return func(ctx context.Context, account string) (Client, error) {
-		client, err := open(ctx, account)
-		if err != nil {
-			return nil, err
-		}
-		return client.BindMode(q), nil
-	}
+type OpenOptions struct {
+	Account string
+	Q       db.Querier
 }
 
-func Gated(conn Conn) Client { return gate{conn: conn} }
+type OpenFunc func(ctx context.Context, opts OpenOptions) (Client, error)
 
-func (g gate) BindMode(q Querier) Client {
-	g.q = q
-	return g
-}
+func Gated(conn Conn, q db.Querier) Client { return gate{conn: conn, q: q} }
 
-func (g gate) Settings() Querier { return g.q }
+func (g gate) Settings() db.Querier { return g.q }
 
 type gate struct {
 	conn Conn
-	q    Querier
+	q    db.Querier
 }
 
 func (gate) gated() {}
@@ -201,15 +192,8 @@ func (g gate) UIDSearch(ctx context.Context, criteria SearchCriteria) ([]uint32,
 	return g.conn.UIDSearch(ctx, criteria)
 }
 
-func (g gate) UIDFetch(ctx context.Context, uids UIDSet, items FetchItems) ([]Message, error) {
-	if g.q != nil && (items.Header || items.Body) {
-		r := Read(ctx, g.q)
-		items.BodyCap = r.Int(KeyBodyCapBytes)
-		if err := r.Err(); err != nil {
-			return nil, err
-		}
-	}
-	return g.conn.UIDFetch(ctx, uids, items)
+func (g gate) UIDFetch(ctx context.Context, uids UIDSet, req FetchRequest) ([]Message, error) {
+	return g.conn.UIDFetch(ctx, uids, req)
 }
 
 func (g gate) IdleChanges(ctx context.Context, duration time.Duration) (bool, error) {
