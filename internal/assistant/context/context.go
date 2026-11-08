@@ -2,8 +2,6 @@ package context
 
 import (
 	gocontext "context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"unicode/utf8"
@@ -105,10 +103,9 @@ func serialize(value any) string {
 
 func store(ctx gocontext.Context, q db.Querier, runID, callID int64, tool, body string, now float64) (int64, int64, error) {
 	tokens := EstimateTokens(body)
-	sum := sha256.Sum256([]byte(body))
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO tool_results (run_id, tool_call_id, tool, tokens, bytes, sha256, body, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		runID, callID, tool, tokens, len(body), hex.EncodeToString(sum[:]), body, now)
+		runID, callID, tool, tokens, 0, "", body, now)
 	if err != nil {
 		return 0, 0, err
 	}

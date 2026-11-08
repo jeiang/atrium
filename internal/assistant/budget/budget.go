@@ -2,8 +2,6 @@ package budget
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -27,35 +25,6 @@ const (
 type BudgetExceeded string
 
 func (e BudgetExceeded) Error() string { return string(e) }
-
-func GetSetting(ctx context.Context, q db.Querier, key string) (string, bool, error) {
-	var value string
-	err := q.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = ?", key).Scan(&value)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", false, nil
-	}
-	return value, err == nil, err
-}
-
-func SetSetting(ctx context.Context, q db.Querier, key string, value any) error {
-	var text string
-	switch v := value.(type) {
-	case string:
-		text = v
-	case int:
-		text = strconv.Itoa(v)
-	case int64:
-		text = strconv.FormatInt(v, 10)
-	case float64:
-		text = py.FloatRepr(v)
-	case bool:
-		text = map[bool]string{true: "True", false: "False"}[v]
-	default:
-		return fmt.Errorf("budget: setting %q: cannot store a %T", key, value)
-	}
-	_, err := q.ExecContext(ctx, "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, text)
-	return err
-}
 
 func MonthlyBudget(ctx context.Context, q db.Querier) (float64, error) {
 	found, err := settings.Default.Resolve(ctx, q, BudgetKey, 0)
@@ -131,12 +100,6 @@ func Check(ctx context.Context, q db.Querier, now float64, loc *time.Location, u
 
 const RunCapPrefix = "max_run_cost_usd_"
 
-var runCapDefaults = map[string]string{
-	pricing.HaikuID:  "2",
-	pricing.SonnetID: "6",
-	pricing.OpusID:   "10",
-}
-
 func RunCapKey(model string) string {
 	return RunCapPrefix + strings.ReplaceAll(strings.TrimPrefix(model, "claude-"), "-", "_")
 }
@@ -153,9 +116,14 @@ func RunCap(ctx context.Context, q db.Querier, model string) (float64, error) {
 }
 
 func ColdRequestUSD(model string, tokens int64, ttl string) (float64, error) {
-	write := pricing.Tokens{CacheWrite5m: tokens}
-	if ttl == prompts.TTL1h {
+	var write pricing.Tokens
+	switch ttl {
+	case prompts.TTL5m:
+		write = pricing.Tokens{CacheWrite5m: tokens}
+	case prompts.TTL1h:
 		write = pricing.Tokens{CacheWrite1h: tokens}
+	default:
+		return 0, fmt.Errorf("budget: unknown cache TTL %q", ttl)
 	}
 	return pricing.CostUSD(model, write, 0)
 }
@@ -184,9 +152,9 @@ func ThreadCap(ctx context.Context, q db.Querier, threadID int64) (spent, limit 
 
 func registerRunCaps() []settings.Def {
 	var defs []settings.Def
-	for _, id := range pricing.IDs() {
+	for _, m := range pricing.Models() {
 		defs = append(defs, settings.Def{
-			Key: RunCapKey(id), Module: "assistant", Type: settings.Float, Default: runCapDefaults[id],
+			Key: RunCapKey(m.ID), Module: "assistant", Type: settings.Float, Default: strconv.FormatFloat(m.RunCapUSD, 'f', -1, 64),
 			Check: settings.Above(0), Class: settings.Cap, Scopes: []settings.Scope{settings.Instance},
 		})
 	}

@@ -43,7 +43,6 @@ type headMessage struct {
 
 type projection struct {
 	ID             int64
-	Kind           string
 	BaseSeq        int64
 	StripFromSeq   int64
 	StripBeforeSeq int64
@@ -54,8 +53,8 @@ func getProjection(ctx gocontext.Context, q db.Querier, threadID int64) (project
 	var p projection
 	var head string
 	err := q.QueryRowContext(ctx,
-		"SELECT id, kind, base_seq, strip_from_seq, strip_before_seq, head_json FROM context_projections WHERE thread_id = ? ORDER BY id DESC LIMIT 1",
-		threadID).Scan(&p.ID, &p.Kind, &p.BaseSeq, &p.StripFromSeq, &p.StripBeforeSeq, &head)
+		"SELECT id, base_seq, strip_from_seq, strip_before_seq, head_json FROM context_projections WHERE thread_id = ? ORDER BY id DESC LIMIT 1",
+		threadID).Scan(&p.ID, &p.BaseSeq, &p.StripFromSeq, &p.StripBeforeSeq, &head)
 	if errors.Is(err, sql.ErrNoRows) {
 		return projection{Head: []Message{}}, nil
 	}

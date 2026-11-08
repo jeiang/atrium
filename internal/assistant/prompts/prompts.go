@@ -2,6 +2,7 @@ package prompts
 
 import (
 	"context"
+	"fmt"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -77,7 +78,7 @@ func check(value string) error {
 		return settings.Invalid("must not be blank")
 	}
 	if utf8.RuneCountInString(value) > MaxChars {
-		return settings.Invalid("must be at most 50000 characters")
+		return settings.Invalid(fmt.Sprintf("must be at most %d characters", MaxChars))
 	}
 	return nil
 }
