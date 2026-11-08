@@ -240,21 +240,29 @@ func rollupText(r *Rollup) string {
 }
 
 type SearchResult struct {
-	Object         string              `json:"object"`
-	ID             string              `json:"id"`
-	URL            string              `json:"url"`
-	LastEditedTime string              `json:"last_edited_time"`
-	InTrash        bool                `json:"in_trash"`
-	Parent         Parent              `json:"parent"`
-	DatabaseParent Parent              `json:"database_parent"`
-	Title          []RichText          `json:"title"`
-	Properties     map[string]Property `json:"properties"`
+	Object         string          `json:"object"`
+	ID             string          `json:"id"`
+	URL            string          `json:"url"`
+	LastEditedTime string          `json:"last_edited_time"`
+	InTrash        bool            `json:"in_trash"`
+	Parent         Parent          `json:"parent"`
+	DatabaseParent Parent          `json:"database_parent"`
+	Title          []RichText      `json:"title"`
+	Properties     json.RawMessage `json:"properties"`
 }
 
 func (r SearchResult) TitleText() string { return strings.TrimSpace(richTextText(r.Title)) }
 
-func (r SearchResult) RemotePage() RemotePage {
-	return RemotePage{ID: r.ID, URL: r.URL, LastEditedTime: r.LastEditedTime, InTrash: r.InTrash, Parent: r.Parent, Properties: r.Properties}
+func (r SearchResult) RemotePage() (RemotePage, error) {
+	var properties map[string]Property
+	if len(r.Properties) > 0 {
+		var err error
+		properties, err = decode[map[string]Property](r.Properties)
+		if err != nil {
+			return RemotePage{}, err
+		}
+	}
+	return RemotePage{ID: r.ID, URL: r.URL, LastEditedTime: r.LastEditedTime, InTrash: r.InTrash, Parent: r.Parent, Properties: properties}, nil
 }
 
 type Markdown struct {

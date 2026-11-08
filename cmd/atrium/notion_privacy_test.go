@@ -27,11 +27,14 @@ func TestNotionSyncTreatsAFormulaPrivacyValueAsPrivate(t *testing.T) {
 				} `json:"filter"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body.Filter.Value != "page" {
+			switch body.Filter.Value {
+			case "data_source":
+				_, _ = w.Write([]byte(`{"object":"list","results":[{"object":"data_source","id":"22222222-2222-2222-2222-222222222222","title":[{"plain_text":"Projects"}],"parent":{"type":"database_id","database_id":"33333333-3333-3333-3333-333333333333"},"database_parent":{"type":"workspace"},"properties":{"Name":{"id":"title","name":"Name","type":"title","title":{}},"Link":{"id":"link","name":"Link","type":"url","url":{}}}}],"has_more":false,"next_cursor":null}`))
+			case "page":
+				_, _ = w.Write([]byte(`{"object":"list","results":[{"object":"page","id":"` + pageID + `","url":"https://notion.example/secret","last_edited_time":"2026-01-01T00:00:00.000Z","in_trash":false,"parent":{"type":"workspace"},"properties":{"title":{"type":"title","title":[{"plain_text":"Secret page"}]},"sensitivity":{"type":"formula","formula":{"type":"string","string":"private"}}}}],"has_more":false,"next_cursor":null}`))
+			default:
 				_, _ = w.Write([]byte(`{"object":"list","results":[],"has_more":false,"next_cursor":null}`))
-				return
 			}
-			_, _ = w.Write([]byte(`{"object":"list","results":[{"object":"page","id":"` + pageID + `","url":"https://notion.example/secret","last_edited_time":"2026-01-01T00:00:00.000Z","in_trash":false,"parent":{"type":"workspace"},"properties":{"title":{"type":"title","title":[{"plain_text":"Secret page"}]},"sensitivity":{"type":"formula","formula":{"type":"string","string":"private"}}}}],"has_more":false,"next_cursor":null}`))
 		case "/v1/pages/" + pageID + "/markdown":
 			_, _ = w.Write([]byte(`{"markdown":"secret alpha beta","truncated":false}`))
 		default:
