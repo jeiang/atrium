@@ -1,14 +1,17 @@
 {{define "title"}}{{or .Data.View.Thread.Title "Thread"}}{{end}}
 {{define "heading"}}{{or .Data.View.Thread.Title "Thread"}}{{end}}
-{{define "content_class"}}max-w-[96rem]{{end}}
+{{define "header_meta"}}{{template "chat_meter" (dict "view" .Data.View)}}{{end}}
+{{define "header_actions"}}<button type="button" class="btn md:hidden" data-variant="ghost" data-size="icon-sm" id="panel-toggle" data-action="toggle-panel" aria-controls="panel" aria-expanded="false" aria-label="Work panel" title="Work panel">{{icon "panel-right"}}</button>{{end}}
+{{define "preload"}}<link rel="preload" href="/static/fonts/source-serif-4-400-normal.woff2" as="font" type="font/woff2" crossorigin>{{end}}
+{{define "content_class"}}chat-content{{end}}
 {{define "content"}}{{$d := .Data}}{{$t := $d.View.Thread}}
-<div id="workspace" class="flex min-h-[calc(100dvh-6.5rem)] flex-col gap-6 md:grid md:min-h-[calc(100dvh-7.5rem)] md:grid-cols-[minmax(0,1fr)_auto_var(--panel-w)] md:items-start" style="--panel-w: 24rem" data-thread="{{$t.ID}}">
-  <div id="thread" class="flex min-h-full min-w-0 flex-col gap-6">
+<div id="workspace" class="workspace" style="--panel-w: 24rem" data-thread="{{$t.ID}}">
+  <div id="thread" class="reading min-h-full gap-5 pt-4">
     {{template "chat_thread" (dict "d" $d "csrf" .CSRF)}}
   </div>
-  <div id="panel-handle" class="hidden h-full w-1.5 cursor-col-resize rounded-full bg-border transition-colors hover:bg-ring md:block" role="separator" aria-orientation="vertical" aria-label="Resize panel" aria-valuemin="260" aria-valuenow="384" tabindex="0"></div>
-  <div id="panel-backdrop" class="fixed inset-0 z-30 hidden bg-black/40 md:hidden" data-action="toggle-panel"></div>
-  <aside id="panel" class="tabs flex-col gap-3 rounded-lg border bg-card p-3 max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-40 max-md:w-[88vw] max-md:max-w-sm max-md:overflow-y-auto max-md:rounded-none max-md:shadow-xl max-md:hidden max-md:data-open:flex md:sticky md:top-20 md:flex md:max-h-[calc(100dvh-6rem)] md:overflow-y-auto" aria-label="Thread workspace">
+  <div id="panel-handle" class="hidden w-1 cursor-col-resize transition-colors hover:bg-clay/40 focus-visible:bg-clay/40 focus-visible:outline-none md:block" role="separator" aria-orientation="vertical" aria-label="Resize panel" aria-valuemin="260" aria-valuenow="384" tabindex="0"></div>
+  <div id="panel-backdrop" class="fixed inset-0 z-30 hidden bg-black/30 md:hidden" data-action="toggle-panel"></div>
+  <aside id="panel" class="tabs workspace-panel" aria-label="Thread workspace">
     <nav role="tablist" aria-orientation="horizontal" class="w-full">
       <button type="button" role="tab" id="panel-tab-work" aria-controls="panel-work" aria-selected="true" tabindex="0">{{icon "list-checks" "size-3.5"}}Work</button>
       <button type="button" role="tab" id="panel-tab-preview" aria-controls="panel-preview" aria-selected="false" tabindex="-1">{{icon "eye" "size-3.5"}}Preview</button>
@@ -22,7 +25,7 @@
     </div>{{end}}
     <div role="tabpanel" id="panel-preview" aria-labelledby="panel-tab-preview" tabindex="-1" aria-selected="false" hidden>
       <div id="preview-body" data-loading="reader-loading" class="flex flex-col gap-4">
-        <p class="text-sm text-muted-foreground">Open an email, a draft, a Notion page or a file from the conversation or the Work tab to read it here.</p>
+        {{template "empty_state" (dict "icon_name" "eye" "title" "Nothing open")}}
       </div>
     </div>
   </aside>

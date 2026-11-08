@@ -151,7 +151,7 @@ func TestTriageFullPageShowsSummariesAndFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 	page := status(t, s.get("/triage?account=icloud"), 200, "page")
-	contains(t, page, `aria-label="By stage: Rule 2"`, "Unread flags", "Contact", "9B flags", "Shadow mode")
+	contains(t, page, `aria-label="By stage: Rule 2"`, "Unread flags", "Contact", "9B flags", "Shadow</span>")
 	lacks(t, page, `action="/live/pause"`)
 }
 

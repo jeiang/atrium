@@ -36,6 +36,6 @@ func TestEveryPageMarksItsSidebarEntryCurrent(t *testing.T) {
 		if !strings.Contains(text(current), c.label) {
 			t.Errorf("%s marks %q current, want %s", c.target, text(current), c.label)
 		}
-		mustContain(t, page, `<h1 class="truncate px-1 text-sm font-medium">`+c.heading+`</h1>`)
+		mustContain(t, page, `<h1>`+c.heading+`</h1>`)
 	}
 }

@@ -60,7 +60,7 @@ func TestSettingsIndexRedirectsAndTabsRender(t *testing.T) {
 			t.Errorf("%s: the current tab is not marked", tab.id)
 		}
 		mustContain(t, page, "Settings · "+tab.label, `<title>`+tab.label+` · Settings · atrium</title>`,
-			`href="/settings" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Settings" title="Settings" aria-current="page"`)
+			`href="/settings" class="sb-item" title="Settings" aria-current="page"`)
 	}
 }
 
