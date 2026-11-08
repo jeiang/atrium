@@ -10,6 +10,8 @@ type SelectOptions struct {
 //
 // In the old RFC 2060, PermanentFlags, UIDNext and UIDValidity are optional.
 type SelectData struct {
+	// ReadOnly is set when the server reports the mailbox as read-only.
+	ReadOnly bool
 	// Flags defined for this mailbox
 	Flags []Flag
 	// Flags that the client can change permanently

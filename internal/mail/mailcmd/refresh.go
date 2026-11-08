@@ -9,7 +9,7 @@ import (
 func (o Options) RefreshCommands() []*cli.Command {
 	return []*cli.Command{
 		group("loops", o.leaf("refresh", func(*cli.Args) body {
-			return func(x *Exec) error {
+			return func(x *exec) error {
 				return x.Exclusive(func() error {
 					out, err := openloops.Refresh(x.Ctx, x.DB, x.Now(), openloops.Options{Env: o.env(), Clock: o.Now})
 					if err != nil {
@@ -21,7 +21,7 @@ func (o Options) RefreshCommands() []*cli.Command {
 			}
 		})),
 		group("watches", o.leaf("refresh", func(*cli.Args) body {
-			return func(x *Exec) error {
+			return func(x *exec) error {
 				return x.Exclusive(func() error {
 					out, err := watches.Refresh(x.Ctx, x.DB, x.Now(), watches.Options{Env: o.env(), Clock: o.Now})
 					if err != nil {

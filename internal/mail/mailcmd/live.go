@@ -21,7 +21,7 @@ func (o Options) LiveCommand() *cli.Command {
 		o.leaf("pause", func(*cli.Args) body { return setPaused(true) }),
 		o.leaf("resume", func(*cli.Args) body { return setPaused(false) }),
 		o.leaf("status", func(*cli.Args) body {
-			return func(x *Exec) error {
+			return func(x *exec) error {
 				status, err := x.Live.Status(x.Ctx)
 				if err != nil {
 					return err
@@ -34,16 +34,16 @@ func (o Options) LiveCommand() *cli.Command {
 		o.leaf("actions", func(a *cli.Args) body {
 			limit := a.Int("limit", 20, cli.Opt{})
 			kind := a.String("kind", "", cli.Opt{Choices: live.Kinds[:]})
-			return func(x *Exec) error { return listActions(x, *limit, *kind) }
+			return func(x *exec) error { return listActions(x, *limit, *kind) }
 		}),
 		o.leaf("resolve", func(a *cli.Args) body {
 			id := a.IntArg("id", cli.Opt{})
 			outcome := a.String("outcome", "", cli.Opt{Choices: []string{proposals.OutcomeUndone, proposals.OutcomeNotUndone, proposals.OutcomeApplied, proposals.OutcomeNotApplied}, Required: true, Help: "what the mailbox shows for the blocked write"})
-			return func(x *Exec) error { return resolveAction(x, int64(*id), *outcome) }
+			return func(x *exec) error { return resolveAction(x, int64(*id), *outcome) }
 		}),
 		o.leaf("undo", func(a *cli.Args) body {
 			id := a.IntArg("id", cli.Opt{})
-			return func(x *Exec) error { return undoAction(x, int64(*id)) }
+			return func(x *exec) error { return undoAction(x, int64(*id)) }
 		}),
 	)
 }
@@ -52,7 +52,7 @@ func backlogDict(r backlog.Result) py.Dict {
 	return py.Dict{{Key: "created", Value: r.Created}, {Key: "accounts", Value: r.Accounts}}
 }
 
-func liveBacklog(x *Exec) error {
+func liveBacklog(x *exec) error {
 	result, err := backlog.Backlog(x.Ctx, x.DB, x.Now())
 	if err != nil {
 		var backlogErr backlog.Error
@@ -65,7 +65,7 @@ func liveBacklog(x *Exec) error {
 	return nil
 }
 
-func rebaseline(x *Exec) error {
+func rebaseline(x *exec) error {
 	return x.Exclusive(func() error {
 		if err := x.Pass.SyncAll(x.Ctx); err != nil {
 			return err
@@ -84,7 +84,7 @@ func rebaseline(x *Exec) error {
 }
 
 func setPaused(paused bool) body {
-	return func(x *Exec) error {
+	return func(x *exec) error {
 		l := x.Live
 		if err := l.SetPaused(paused); err != nil {
 			return err
@@ -97,7 +97,7 @@ func setPaused(paused bool) body {
 	}
 }
 
-func liveDeletions(x *Exec) error {
+func liveDeletions(x *exec) error {
 	return x.Exclusive(func() error {
 		accounts, err := run.SelectAccounts(x.Cfg, "")
 		if err != nil {
@@ -120,7 +120,7 @@ func liveDeletions(x *Exec) error {
 	})
 }
 
-func listActions(x *Exec, limit int, kind string) error {
+func listActions(x *exec, limit int, kind string) error {
 	actions, err := live.List(x.Ctx, x.DB.Read, "", kind, limit, 0)
 	if err != nil {
 		return err
@@ -137,7 +137,7 @@ func listActions(x *Exec, limit int, kind string) error {
 	return nil
 }
 
-func undoAction(x *Exec, id int64) error {
+func undoAction(x *exec, id int64) error {
 	result, err := x.Live.Undo(x.Ctx, id)
 	if err != nil {
 		var undoErr live.UndoError
@@ -153,7 +153,7 @@ func undoAction(x *Exec, id int64) error {
 	return nil
 }
 
-func resolveAction(x *Exec, id int64, outcome string) error {
+func resolveAction(x *exec, id int64, outcome string) error {
 	result, err := x.Live.Resolve(x.Ctx, id, outcome, operator)
 	if err != nil {
 		var undoErr live.UndoError

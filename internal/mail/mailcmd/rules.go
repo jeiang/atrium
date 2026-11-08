@@ -18,10 +18,10 @@ func (o Options) RulesCommand() *cli.Command {
 	return group("rules",
 		o.leaf("import", func(a *cli.Args) body {
 			file := a.Arg("file", cli.Opt{})
-			return func(x *Exec) error { return importRules(x, *file) }
+			return func(x *exec) error { return importRules(x, *file) }
 		}),
 		o.leaf("export", func(*cli.Args) body {
-			return func(x *Exec) error {
+			return func(x *exec) error {
 				out, err := rules.ExportRules(x.Ctx, x.DB.Read)
 				if err != nil {
 					return err
@@ -33,7 +33,7 @@ func (o Options) RulesCommand() *cli.Command {
 	)
 }
 
-func importRules(x *Exec, file string) error {
+func importRules(x *exec, file string) error {
 	var data []byte
 	var err error
 	if file == "-" {
@@ -63,7 +63,7 @@ func importRules(x *Exec, file string) error {
 func (o Options) ShadowReportCommand() *cli.Command {
 	return o.leaf("shadow-report", func(a *cli.Args) body {
 		since := a.String("since", "", cli.Opt{})
-		return func(x *Exec) error {
+		return func(x *exec) error {
 			var given *string
 			if a.Has("since") {
 				given = since
@@ -84,7 +84,7 @@ func clockTime(ts float64) time.Time {
 
 func (o Options) ReindexCommand() *cli.Command {
 	return o.leaf("reindex", func(*cli.Args) body {
-		return func(x *Exec) error {
+		return func(x *exec) error {
 			url, err := embed.EmbedURL(x.Ctx, x.DB.Read)
 			if err != nil {
 				return err

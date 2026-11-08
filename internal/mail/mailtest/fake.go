@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	netmail "net/mail"
 	"slices"
 	"strings"
 	"time"
@@ -27,6 +28,7 @@ type FakeMessage struct {
 	Flags  []string
 	Labels []string
 	ModSeq uint64
+	Date   time.Time
 }
 
 type FakeBox struct {
@@ -44,7 +46,7 @@ func (b *FakeBox) Add(header, text []byte, flags, labels []string) uint32 {
 	uid := b.NextUID
 	b.NextUID++
 	b.ModSeq++
-	b.Messages[uid] = &FakeMessage{Header: header, Text: text, Flags: slices.Clone(flags), Labels: cloneOrNil(labels), ModSeq: b.ModSeq}
+	b.Messages[uid] = &FakeMessage{Header: header, Text: text, Flags: slices.Clone(flags), Labels: cloneOrNil(labels), ModSeq: b.ModSeq, Date: headerDate(header)}
 	return uid
 }
 
@@ -216,6 +218,27 @@ func (c fakeConn) Select(_ context.Context, imapName string) error {
 	return nil
 }
 
+func headerDate(header []byte) time.Time {
+	for _, line := range strings.Split(string(header), "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if !strings.HasPrefix(strings.ToLower(line), "date:") {
+			continue
+		}
+		value := strings.TrimSpace(line[len("date:"):])
+		if t, err := netmail.ParseDate(value); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+func messageDate(m *FakeMessage) time.Time {
+	if !m.Date.IsZero() {
+		return m.Date
+	}
+	return headerDate(m.Header)
+}
+
 func (c fakeConn) UIDSearch(_ context.Context, criteria mail.SearchCriteria) ([]uint32, error) {
 	c.f.Searches = append(c.f.Searches, criteria)
 	if criteria.GmailRaw != "" {
@@ -228,25 +251,19 @@ func (c fakeConn) UIDSearch(_ context.Context, criteria mail.SearchCriteria) ([]
 	if err != nil {
 		return nil, err
 	}
-	if criteria.UID != nil {
-		var out []uint32
-		for _, uid := range box.UIDs() {
-			if criteria.UID.All() || slices.Contains(criteria.UID.List(), uid) {
-				out = append(out, uid)
-			}
+	var out []uint32
+	for _, uid := range box.UIDs() {
+		switch {
+		case criteria.UID != nil && !criteria.UID.All() && !slices.Contains(criteria.UID.List(), uid):
+			continue
+		case criteria.HeaderName != "" && !strings.Contains(string(box.Messages[uid].Header), criteria.HeaderValue):
+			continue
+		case !criteria.Since.IsZero() && messageDate(box.Messages[uid]).Before(criteria.Since):
+			continue
 		}
-		return out, nil
+		out = append(out, uid)
 	}
-	if criteria.HeaderName != "" {
-		var out []uint32
-		for _, uid := range box.UIDs() {
-			if strings.Contains(string(box.Messages[uid].Header), criteria.HeaderValue) {
-				out = append(out, uid)
-			}
-		}
-		return out, nil
-	}
-	return box.UIDs(), nil
+	return out, nil
 }
 
 func (c fakeConn) UIDFetch(_ context.Context, uids mail.UIDSet, req mail.FetchRequest) ([]mail.Message, error) {

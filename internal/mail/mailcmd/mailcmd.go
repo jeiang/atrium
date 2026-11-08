@@ -49,7 +49,7 @@ func (e *exitError) Error() string { return e.text }
 
 func failure(code int, err error) error { return &exitError{code: code, text: err.Error()} }
 
-type Exec struct {
+type exec struct {
 	*runpkg.Pass
 	Ctx    context.Context
 	Stdin  io.Reader
@@ -59,15 +59,15 @@ type Exec struct {
 	opts Options
 }
 
-func (x *Exec) Now() float64 { return x.opts.now() }
+func (x *exec) Now() float64 { return x.opts.now() }
 
-func (x *Exec) Print(text string) { _, _ = io.WriteString(x.Stdout, text) }
+func (x *exec) Print(text string) { _, _ = io.WriteString(x.Stdout, text) }
 
-func (x *Exec) JSON(value any) {
+func (x *exec) JSON(value any) {
 	x.Print(py.JSONDumps(value, py.JSONOpts{Indent: 2}) + "\n")
 }
 
-func (x *Exec) Exclusive(fn func() error) error {
+func (x *exec) Exclusive(fn func() error) error {
 	lock, err := db.Exclusive(x.Ctx, x.Cfg.DBPath, db.ShortLockWait)
 	if err != nil {
 		return err
@@ -76,7 +76,7 @@ func (x *Exec) Exclusive(fn func() error) error {
 	return fn()
 }
 
-type body func(x *Exec) error
+type body func(x *exec) error
 
 func (o Options) leaf(name string, declare func(a *cli.Args) body) *cli.Command {
 	return &cli.Command{
@@ -119,7 +119,7 @@ func (o Options) run(env *cli.Env, run body) error {
 		return err
 	}
 	defer release()
-	return run(&Exec{Pass: pass, Ctx: env.Ctx, Stdin: env.Stdin, Stdout: env.Stdout, Stderr: env.Stderr, opts: o})
+	return run(&exec{Pass: pass, Ctx: env.Ctx, Stdin: env.Stdin, Stdout: env.Stdout, Stderr: env.Stderr, opts: o})
 }
 
 func openError(path string, err error) error {
