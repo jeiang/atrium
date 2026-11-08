@@ -135,6 +135,7 @@ func Module(o Options) web.Module {
 
 		r.Get("/watches", s.watchesPage)
 		r.Post("/watches/packages/{package_id}/dismiss", s.packageDismiss)
+		s.apiRoutes(d)
 	}
 }
 

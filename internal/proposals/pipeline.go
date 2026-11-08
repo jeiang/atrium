@@ -194,6 +194,18 @@ func ListBlocked(ctx context.Context, q Querier) ([]*Proposal, error) {
 	return db.Collect(rows, func(r *sql.Rows) (*Proposal, error) { return scanProposal(r, false) })
 }
 
+func ListUndoable(ctx context.Context, q Querier, filter string, args []any, limit int) ([]*Proposal, error) {
+	query := "SELECT * FROM (SELECT " + columns + " FROM proposals p) WHERE undoable"
+	if filter != "" {
+		query += " AND " + filter
+	}
+	rows, err := q.QueryContext(ctx, query+" ORDER BY COALESCE(applied_ts, created_ts) DESC, id DESC LIMIT ?", append(args, limit)...)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (*Proposal, error) { return scanProposal(r, true) })
+}
+
 const threadRefs = "SELECT m.thread_id AS thread_id, m.id AS message_id, CASE WHEN b.type = 'object' THEN " +
 	"CASE WHEN json_extract(b.value, '$.type') = 'tool_result' AND NOT COALESCE(json_extract(b.value, '$.is_error'), 0) " +
 	"AND json_valid(json_extract(b.value, '$.content')) THEN json_extract(json_extract(b.value, '$.content'), '$.proposal_id') END " +

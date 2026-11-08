@@ -47,6 +47,11 @@ func (r apiReply) code() string {
 func newAPISite(t *testing.T) *apiSite {
 	t.Helper()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	return startAPISite(t, dir, api)
+}
+
+func startAPISite(t *testing.T, dir string, api *modelLog) *apiSite {
+	t.Helper()
 	idp := oidctest.New(t, oidctest.Options{ClientSecret: "s3cret-for-the-test", GroupsIn: "userinfo"})
 	idp.AddUser(oidctest.User{Name: "owner", Email: "owner@example.com", Groups: []string{"atrium_access", "atrium_admin"}})
 	idp.AddUser(oidctest.User{Name: "guest", Email: "guest@example.com", Groups: []string{"atrium_access"}})

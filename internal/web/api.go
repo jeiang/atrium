@@ -120,9 +120,20 @@ func APIError(w http.ResponseWriter, status int, code, message string, fields ..
 }
 
 func DecodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+	return decodeJSON(w, r, v, false)
+}
+
+func DecodeOptionalJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+	return decodeJSON(w, r, v, true)
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, v any, optional bool) bool {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	err := dec.Decode(v)
+	if optional && errors.Is(err, io.EOF) {
+		return true
+	}
 	if err == nil && dec.More() {
 		err = errors.New("request body must hold one JSON object")
 	}
