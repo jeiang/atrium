@@ -158,7 +158,7 @@ func (s *site) addPage(id, title, markdown string, private int) {
 
 func (s *site) addVector(rid int64, vector []float64) {
 	s.t.Helper()
-	s.exec("INSERT INTO notion_vec (rowid, visibility, embedding) VALUES (?, 'public', ?)", rid, embed.Serialize(vector))
+	s.exec("INSERT INTO embed_notion_0 (rowid, visibility, embedding) VALUES (?, 'public', ?)", rid, embed.Serialize(vector))
 }
 
 func unit(index, other int, weight float64) []float64 {

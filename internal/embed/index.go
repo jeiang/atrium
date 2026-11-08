@@ -26,16 +26,10 @@ type Index struct {
 }
 
 func (i Index) MessageTable() string {
-	if i.Generation == 0 {
-		return "message_vec"
-	}
 	return fmt.Sprintf("embed_message_%d", i.Generation)
 }
 
 func (i Index) NotionTable() string {
-	if i.Generation == 0 {
-		return "notion_vec"
-	}
 	return fmt.Sprintf("embed_notion_%d", i.Generation)
 }
 

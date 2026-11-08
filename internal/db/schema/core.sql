@@ -78,10 +78,6 @@ CREATE INDEX IF NOT EXISTS messages_msgid ON messages (account, msgid);
 CREATE INDEX IF NOT EXISTS messages_gm ON messages (account, gm_msgid);
 CREATE INDEX IF NOT EXISTS messages_mailbox ON messages (mailbox_id, gone_at);
 CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(subject, sender, body);
-CREATE VIRTUAL TABLE IF NOT EXISTS message_vec USING vec0(
-    account TEXT PARTITION KEY,
-    embedding FLOAT[768] DISTANCE_METRIC=cosine
-);
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY,
     ts REAL NOT NULL,

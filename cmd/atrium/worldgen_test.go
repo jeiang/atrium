@@ -44,7 +44,7 @@ func TestGenerateWorldFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"message_vec", "notion_vec"} {
+	for _, table := range []string{"embed_message_0", "embed_notion_0"} {
 		if _, err := d.Write.Exec("DELETE FROM " + table); err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +130,7 @@ func seedWorld(t *testing.T, app *cli.App, target, source string) {
 	}
 	var stmts []string
 	for _, table := range tables {
-		if seededTables[table] || table == "message_vec" || table == "notion_vec" {
+		if seededTables[table] {
 			continue
 		}
 		if strings.HasPrefix(table, "message_fts_") || strings.HasPrefix(table, "thread_fts_") || strings.HasPrefix(table, "notion_fts_") {

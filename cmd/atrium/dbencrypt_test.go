@@ -24,7 +24,7 @@ func TestDatabaseEncryptCopiesAPlaintextDatabaseAndRefusesWhileItIsInUse(t *test
 	t.Setenv("ATRIUM_CONFIG", "")
 	t.Setenv("CREDENTIALS_DIRECTORY", "")
 	path := filepath.Join(dir, "atrium.db")
-	data, err := os.ReadFile(filepath.Join(golden.Dir(), "atrium.db"))
+	data, err := os.ReadFile(filepath.Join(golden.Dir(), "world.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,14 +46,14 @@ func TestDatabaseEncryptCopiesAPlaintextDatabaseAndRefusesWhileItIsInUse(t *test
 		t.Fatal(err)
 	}
 	for i := range 3000 {
-		if _, err := seed.Write.Exec("INSERT INTO message_vec (rowid, account, embedding) VALUES (?, 'bulk', ?)", 100000+i, db.SerializeFloat32(vector())); err != nil {
+		if _, err := seed.Write.Exec("INSERT INTO embed_message_0 (rowid, account, embedding) VALUES (?, 'bulk', ?)", 100000+i, db.SerializeFloat32(vector())); err != nil {
 			t.Fatal(err)
 		}
 	}
 	query := db.SerializeFloat32(vector())
 	nearest := func(d *db.DB) []int64 {
 		t.Helper()
-		rows, err := d.Read.Query("SELECT rowid FROM message_vec WHERE embedding MATCH ? AND k = 25", query)
+		rows, err := d.Read.Query("SELECT rowid FROM embed_message_0 WHERE embedding MATCH ? AND k = 25", query)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -80,7 +80,7 @@ func TestDatabaseEncryptCopiesAPlaintextDatabaseAndRefusesWhileItIsInUse(t *test
 		return strings.Join(lines, "\n")
 	}
 	before := runProcess(t, "db check", dbEnv)
-	if before.code != cli.ExitOK || !strings.Contains(before.stdout, "vec0 message_vec: 3148") {
+	if before.code != cli.ExitOK || !strings.Contains(before.stdout, "vec0 embed_message_0: 3000") {
 		t.Fatalf("db check of the plaintext database: %d %q %q", before.code, before.stdout, before.stderr)
 	}
 	if got := runProcess(t, "db encrypt", dbEnv); got.code != cli.ExitError || !strings.Contains(got.stderr, "no database key") {
