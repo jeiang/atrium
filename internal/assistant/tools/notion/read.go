@@ -214,6 +214,8 @@ func readTools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": ` + notionLimitBound.Schema() + `}, "required": ["query"], "additionalProperties": false}`),
 			Handler:     searchKnowledge,
 			Effect:      tool.Read,
+			Annotated:   true,
+			Flags:       tool.Flags{PrivateData: true},
 			Contexts:    readKinds,
 		},
 		{
@@ -222,6 +224,8 @@ func readTools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"page_id": {"type": "string"}, "max_chars": ` + notionCharsBound.Schema() + `}, "required": ["page_id"], "additionalProperties": false}`),
 			Handler:     fetchKnowledge,
 			Effect:      tool.Read,
+			Annotated:   true,
+			Flags:       tool.Flags{PrivateData: true},
 			Contexts:    readKinds,
 		},
 	}

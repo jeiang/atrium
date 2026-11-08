@@ -240,6 +240,8 @@ func validate(t tool.Tool) error {
 		return InvalidError("tool has no name")
 	case t.Effect == tool.WriteUndo && t.Undo == "":
 		return InvalidError(fmt.Sprintf("tool %s is write_undo without an undo op", t.Name))
+	case !t.Annotated:
+		return InvalidError(fmt.Sprintf("tool %s is not annotated", t.Name))
 	case t.Handler == nil && !t.Server:
 		return InvalidError(fmt.Sprintf("tool %s has no handler", t.Name))
 	case t.Handler != nil && t.Server:

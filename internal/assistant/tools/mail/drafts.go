@@ -3,8 +3,10 @@ package mailtools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 )
 
@@ -31,8 +33,9 @@ func draftTools() []tool.Tool {
 				"headers are set; recipients that were not on the original message are flagged to the operator.",
 			InputSchema: draftCreateSchema,
 			Handler:     draftEmailCreate,
-			Effect:      tool.Write,
-			Contexts:    tool.Kinds{tool.Chat},
+			Effect:      tool.WriteUndo, Undo: "draft_delete",
+			Annotated: true,
+			Contexts:  tool.Kinds{tool.Chat},
 		},
 		{
 			Name: "draft_email_update",
@@ -40,8 +43,9 @@ func draftTools() []tool.Tool {
 				"discarded drafts cannot be edited. Never sends.",
 			InputSchema: draftUpdateSchema,
 			Handler:     draftEmailUpdate,
-			Effect:      tool.Write,
-			Contexts:    tool.Kinds{tool.Chat},
+			Effect:      tool.WriteUndo, Undo: "draft_restore",
+			Annotated: true,
+			Contexts:  tool.Kinds{tool.Chat},
 		},
 	}
 }
@@ -86,6 +90,13 @@ func draftEmailCreate(ctx context.Context, tc *tool.Context, args tool.Args) (an
 	if err != nil {
 		return nil, draftFailed(err)
 	}
+	if _, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
+		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "draft_email_create", Target: fmt.Sprintf("draft:%d", id),
+		After: map[string]any{"draft_id": id, "status": drafts.Draft},
+		Undo:  draftDeleteUndo{Op: "draft_delete", ID: id},
+	}); err != nil {
+		return nil, err
+	}
 	return map[string]any{"draft_id": id, "status": drafts.Draft, "note": notSent}, nil
 }
 
@@ -110,9 +121,28 @@ func draftEmailUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (an
 		}
 		changes[key] = v
 	}
-	row, err := store(tc).Update(ctx, id, changes)
+	store := store(tc)
+	previous, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, draftFailed(err)
+	}
+	row, err := store.Update(ctx, id, changes)
+	if err != nil {
+		return nil, draftFailed(err)
+	}
+	if previous != nil {
+		if _, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
+			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "draft_email_update", Target: fmt.Sprintf("draft:%d", row.ID),
+			Before: map[string]any{"subject": previous.Subject, "body": previous.Body},
+			After:  map[string]any{"subject": row.Subject, "body": row.Body},
+			Undo: draftRestoreUndo{
+				Op: "draft_restore", ID: row.ID, Account: previous.Account, To: previous.ToAddrs, Cc: previous.CcAddrs,
+				Subject: previous.Subject, Body: previous.Body, InReplyToMessageID: previous.InReplyToMessageID,
+				InReplyTo: previous.InReplyTo, Refs: previous.Refs,
+			},
+		}); err != nil {
+			return nil, err
+		}
 	}
 	return map[string]any{"draft_id": row.ID, "status": row.Status, "note": notSent}, nil
 }

@@ -31,3 +31,52 @@ func TestDisabledToolIsNotOffered(t *testing.T) {
 		t.Errorf("enabled profile_get was not offered: %v", names)
 	}
 }
+
+func lastTools(t *testing.T, api *modelLog, ran appRun) []any {
+	t.Helper()
+	requests := api.Requests()
+	if ran.code != cli.ExitOK || len(requests) == 0 {
+		t.Fatalf("agent run: exit %d, %d model requests, stderr %q", ran.code, len(requests), ran.stderr)
+	}
+	tools, _ := requests[len(requests)-1].JSON(t)["tools"].([]any)
+	return tools
+}
+
+func TestNightlyRunOmitsWriteUndoTools(t *testing.T) {
+	_, api := moduleFixture(t, flagsExcept("", ""))
+	ran := runApp("agent", "run", "--text", "hi", "--kind", "nightly")
+	names := offeredTools(t, api, ran)
+	if slices.Contains(names, "profile_set") {
+		t.Errorf("nightly run was offered the write_undo tool profile_set: %v", names)
+	}
+	if !slices.Contains(names, "profile_get") {
+		t.Errorf("nightly run was not offered the read tool profile_get: %v", names)
+	}
+}
+
+func TestWebSearchAllowedCallers(t *testing.T) {
+	dir, api := moduleFixture(t, flagsExcept("", ""))
+	ran := runApp("agent", "run", "--text", "warm")
+	for _, raw := range lastTools(t, api, ran) {
+		entry, _ := raw.(map[string]any)
+		if entry["name"] != "web_search" {
+			continue
+		}
+		callers, _ := entry["allowed_callers"].([]any)
+		if len(callers) != 1 || callers[0] != "direct" {
+			t.Fatalf("web_search allowed_callers = %v, want [direct]", entry["allowed_callers"])
+		}
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('dynamic_filtering', 'true')"); err != nil {
+		t.Fatal(err)
+	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
+	ran = runApp("agent", "run", "--text", "hi")
+	for _, raw := range lastTools(t, api, ran) {
+		entry, _ := raw.(map[string]any)
+		if entry["name"] == "web_search" && entry["allowed_callers"] != nil {
+			t.Errorf("web_search kept allowed_callers with dynamic filtering: %v", entry["allowed_callers"])
+		}
+	}
+}

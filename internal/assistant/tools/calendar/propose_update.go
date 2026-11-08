@@ -56,6 +56,8 @@ var updateTools = []tool.Tool{
 		InputSchema: schema(`"uid":{"type":"string"},`+eventProperties, `["calendar","uid","title","start"]`),
 		Handler:     proposeUpdate,
 		Effect:      tool.Propose,
+		Annotated:   true,
+		Flags:       tool.Flags{ExternalEffect: true},
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	},
 	{
@@ -64,8 +66,10 @@ var updateTools = []tool.Tool{
 			"operator to approve. Only the operator's own response changes.",
 		InputSchema: schema(`"calendar":{"type":"string","enum":["icloud","google"]},"uid":{"type":"string"},`+
 			`"response":{"type":"string","enum":["accepted","declined","tentative"]},"title":{"type":"string"}`, `["calendar","uid","response"]`),
-		Handler:  proposeRSVP,
-		Effect:   tool.Propose,
-		Contexts: tool.Kinds{tool.Chat, tool.Cron},
+		Handler:   proposeRSVP,
+		Effect:    tool.Propose,
+		Annotated: true,
+		Flags:     tool.Flags{ExternalEffect: true},
+		Contexts:  tool.Kinds{tool.Chat, tool.Cron},
 	},
 }

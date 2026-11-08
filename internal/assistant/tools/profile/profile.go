@@ -176,6 +176,8 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"key": {"type": "string"}}, "additionalProperties": false}`),
 			Handler:     get,
 			Effect:      tool.Read,
+			Annotated:   true,
+			Flags:       tool.Flags{PrivateData: true},
 			Contexts:    tool.Kinds{tool.Chat, tool.Cron, tool.Nightly},
 		},
 		{
@@ -183,8 +185,9 @@ func Tools() []tool.Tool {
 			Description: "Record or overwrite one stable operator preference or fact in the profile (key/value). Logged and undoable by the operator. Keep values short and factual; never store secrets.",
 			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"key": %s, "value": %s}, "required": ["key", "value"], "additionalProperties": false}`, keyBound.TextSchema(), valueBound.TextSchema())),
 			Handler:     set,
-			Effect:      tool.Write,
-			Contexts:    tool.Kinds{tool.Chat, tool.Nightly},
+			Effect:      tool.WriteUndo, Undo: "profile_restore",
+			Annotated: true,
+			Contexts:  tool.Kinds{tool.Chat, tool.Nightly},
 		},
 	}
 }

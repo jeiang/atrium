@@ -64,8 +64,10 @@ func Tool(f *Fetcher) tool.Tool {
 		Handler: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 			return handle(ctx, f, tc, args)
 		},
-		Effect:   tool.Read,
-		Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Sub},
+		Effect:    tool.Read,
+		Annotated: true,
+		Flags:     tool.Flags{Web: true, UntrustedOutput: true, ExternalEffect: true},
+		Contexts:  tool.Kinds{tool.Chat, tool.Cron, tool.Sub},
 	}
 }
 

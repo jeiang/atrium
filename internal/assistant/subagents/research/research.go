@@ -93,6 +93,8 @@ func (r *Research) Tool() tool.Tool {
 		InputSchema: json.RawMessage(fmt.Sprintf(schemaFormat, `{"type":"string","description":"Name of an enabled subagent (see Settings › Subagents)."}`)),
 		Handler:     r.handle,
 		Effect:      tool.Read,
+		Annotated:   true,
+		Flags:       tool.Flags{Web: true, UntrustedOutput: true, ExternalEffect: true},
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 		Parallel:    true,
 	}

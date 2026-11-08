@@ -53,7 +53,9 @@ var findSlotTool = tool.Tool{
 		"all-day events do not. Read-only.",
 	InputSchema: schema(`"start":{"type":"string","description":"`+timeNote+`"},"end":{"type":"string","description":"`+timeNote+`"},`+
 		`"duration_minutes":`+durationBound.Schema()+`,"calendar":{"type":"string"}`, `["start","end"]`),
-	Handler:  findSlot,
-	Effect:   tool.Read,
-	Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
+	Handler:   findSlot,
+	Effect:    tool.Read,
+	Annotated: true,
+	Flags:     tool.Flags{PrivateData: true},
+	Contexts:  tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 }

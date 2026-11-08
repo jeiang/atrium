@@ -606,6 +606,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(emptySchema),
 			Handler:     datasources,
 			Effect:      tool.Read,
+			Annotated:   true,
 			Contexts:    contexts,
 		},
 		{
@@ -615,9 +616,10 @@ func Tools() []tool.Tool {
 				`"kind": {"type": "string", "enum": ["prometheus", "logs"]}, "start": {"type": "string", "description": "e.g. now-1h or epoch ms"}, ` +
 				`"end": {"type": "string"}, "step": {"type": "string", "description": "Prometheus step, e.g. 60s"}, ` +
 				`"limit": ` + queryLimitBound.Schema() + `}, "required": ["datasource_uid", "expr"], "additionalProperties": false}`),
-			Handler:  query,
-			Effect:   tool.Read,
-			Contexts: contexts,
+			Handler:   query,
+			Effect:    tool.Read,
+			Annotated: true,
+			Contexts:  contexts,
 		},
 		{
 			Name:        "grafana_alerts",
@@ -625,6 +627,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(emptySchema),
 			Handler:     alerts,
 			Effect:      tool.Read,
+			Annotated:   true,
 			Contexts:    contexts,
 		},
 		{
@@ -633,6 +636,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"query": {"type": "string"}}, "required": [], "additionalProperties": false}`),
 			Handler:     searchDashboards,
 			Effect:      tool.Read,
+			Annotated:   true,
 			Contexts:    contexts,
 		},
 		selfDiagnoseTool,
