@@ -30,6 +30,8 @@ type draftRestoreUndo struct {
 func RegisterUndoer(r *writes.Registry) {
 	r.Register("draft_delete", undoDraftDelete)
 	r.Register("draft_restore", undoDraftRestore)
+	r.Register(UndoFolderDelete, undoFolderDelete)
+	r.Register(UndoMoveBack, undoMailMoveBack)
 }
 
 func undoDraftDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
