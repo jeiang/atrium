@@ -2,12 +2,13 @@ package webfetch
 
 import (
 	"mime"
+	"net/http"
 	"strings"
 )
 
-func contentCharset(h headers) string {
-	value, ok := h.first("content-type")
-	if !ok {
+func contentCharset(h http.Header) string {
+	value := h.Get("Content-Type")
+	if value == "" {
 		return "utf-8"
 	}
 	_, params, err := mime.ParseMediaType(value)

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
@@ -14,44 +16,37 @@ import (
 
 const schemaTextDefault = 12000
 
-var defaultPorts = map[string]int{"http": 80, "https": 443}
-
 func NormalizeURL(raw string) (string, error) {
-	parts, err := py.URLSplit(py.Strip(raw))
+	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		return "", err
+		return "", tool.Error("invalid URL")
 	}
-	host, _ := parts.Hostname()
-	host = py.Lower(host)
-	defaultPort, ok := defaultPorts[parts.Scheme]
-	if !ok || host == "" {
+	scheme := strings.ToLower(u.Scheme)
+	if (scheme != "http" && scheme != "https") || u.Hostname() == "" {
 		return "", tool.Error("only absolute http(s) URLs are allowed")
 	}
-	port, hasPort, err := parts.Port()
-	if err != nil {
-		return "", tool.Error("invalid port")
+	host := strings.ToLower(u.Hostname())
+	port := u.Port()
+	if port == "0" {
+		port = ""
 	}
-	netloc := host
-	if containsColon(host) {
-		netloc = "[" + host + "]"
+	if scheme == "http" && port == "80" || scheme == "https" && port == "443" {
+		port = ""
 	}
-	if hasPort && port != 0 && port != defaultPort {
-		netloc += ":" + strconv.Itoa(port)
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
 	}
-	path := parts.Path
-	if path == "" {
-		path = "/"
+	if port != "" {
+		host += ":" + port
 	}
-	return py.URLUnsplit(parts.Scheme, netloc, path, parts.Query, ""), nil
-}
-
-func containsColon(s string) bool {
-	for i := range len(s) {
-		if s[i] == ':' {
-			return true
-		}
+	u.Scheme = scheme
+	u.Host = host
+	u.User = nil
+	if u.Path == "" {
+		u.Path = "/"
 	}
-	return false
+	u.Fragment = ""
+	return u.String(), nil
 }
 
 var inputSchema = json.RawMessage(`{"type":"object","properties":{"url":{"type":"string"},` +
@@ -81,7 +76,7 @@ func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args py.Dict) (an
 	}
 	url, err := NormalizeURL(text)
 	if err != nil {
-		return nil, raised(err)
+		return nil, err
 	}
 	lim, err := ReadLimits(ctx, tc.DB.Read)
 	if err != nil {
@@ -118,24 +113,9 @@ func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args py.Dict) (an
 }
 
 func fetchFailed(err error) error {
-	var (
-		blocked Blocked
-		fetch   FetchError
-	)
-	if errors.As(err, &blocked) || errors.As(err, &fetch) {
-		return tool.Error("fetch failed: " + err.Error())
-	}
-	return raised(err)
-}
-
-func raised(err error) error {
 	var te tool.Error
 	if errors.As(err, &te) {
 		return err
 	}
-	var c py.Classed
-	if errors.As(err, &c) {
-		return &tool.Raised{Class: c.PyClass()}
-	}
-	return err
+	return tool.Error("fetch failed: " + err.Error())
 }
