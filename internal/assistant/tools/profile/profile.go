@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
@@ -87,6 +86,11 @@ func get(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	return py.Dict{{Key: "entries", Value: entries}}, nil
 }
 
+var (
+	keyBound   = tool.NewBound(assistant.KeyProfileKeyChars, "")
+	valueBound = tool.NewBound(assistant.KeyProfileValueChars, "")
+)
+
 func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	key, keyOK, err := tool.TextArg(args, "key", true)
 	if err != nil {
@@ -99,14 +103,11 @@ func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if !keyOK || !valueOK {
 		return nil, tool.Error("key and value are required")
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	keyChars := r.Int(assistant.KeyProfileKeyChars)
-	valueChars := r.Int(assistant.KeyProfileValueChars)
-	if err := r.Err(); err != nil {
+	if err := keyBound.ClampText(ctx, tc.DB.Read, key, "key"); err != nil {
 		return nil, err
 	}
-	if utf8.RuneCountInString(key) > keyChars || utf8.RuneCountInString(value) > valueChars {
-		return nil, tool.Error(fmt.Sprintf("key is limited to %d characters and value to %d", keyChars, valueChars))
+	if err := valueBound.ClampText(ctx, tc.DB.Read, value, "value"); err != nil {
+		return nil, err
 	}
 	var previous *string
 	var writeID int64
@@ -180,7 +181,7 @@ func Tools() []tool.Tool {
 		{
 			Name:        "profile_set",
 			Description: "Record or overwrite one stable operator preference or fact in the profile (key/value). Logged and undoable by the operator. Keep values short and factual; never store secrets.",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"key": {"type": "string", "maxLength": 64}, "value": {"type": "string", "maxLength": 500}}, "required": ["key", "value"], "additionalProperties": false}`),
+			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"key": %s, "value": %s}, "required": ["key", "value"], "additionalProperties": false}`, keyBound.TextSchema(), valueBound.TextSchema())),
 			Handler:     set,
 			Effect:      tool.Write,
 			Contexts:    tool.Kinds{tool.Chat, tool.Nightly},

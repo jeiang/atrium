@@ -26,8 +26,9 @@ const (
 )
 
 var (
-	readKinds  = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
-	writeKinds = tool.Kinds{tool.Chat}
+	readKinds   = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
+	writeKinds  = tool.Kinds{tool.Chat}
+	searchBound = tool.NewCeiling(20, 1, searchLimitCeiling)
 )
 
 func Tools() []tool.Tool {
@@ -43,7 +44,7 @@ func Tools() []tool.Tool {
 		{
 			Name:        "media_library_search",
 			Description: "Search the media library (movies and TV episodes) by words in the title or file name; returns paths and VPN URLs. The limit is capped by media_search_limit.",
-			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": %d}}, "required": ["query"], "additionalProperties": false}`, searchLimitCeiling)),
+			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": %s}, "required": ["query"], "additionalProperties": false}`, searchBound.Schema())),
 			Handler:     mediaLibrarySearch,
 			Effect:      tool.Read,
 			Contexts:    readKinds,
@@ -229,7 +230,7 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (
 	if err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 20, int64(settings.SearchLimit), 1)
+	limit, err := tool.BoundedInt(args, "limit", searchBound.Default, min(int64(settings.SearchLimit), searchBound.Max), searchBound.Min)
 	if err != nil {
 		return nil, err
 	}
