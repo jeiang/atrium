@@ -490,8 +490,14 @@ func floatString(f float64) string {
 	case math.IsInf(f, -1):
 		return "-inf"
 	}
-	s := strconv.FormatFloat(f, 'g', -1, 64)
-	if !strings.ContainsAny(s, ".eE") {
+	exp := strconv.FormatFloat(f, 'e', -1, 64)
+	at := strings.IndexByte(exp, 'e')
+	e, _ := strconv.Atoi(exp[at+1:])
+	if e < -4 || e >= 16 {
+		return exp
+	}
+	s := strconv.FormatFloat(f, 'f', -1, 64)
+	if !strings.Contains(s, ".") {
 		s += ".0"
 	}
 	return s
