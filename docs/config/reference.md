@@ -155,7 +155,9 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `candidate_draft_limit` | int | `10` | advanced | `ATRIUM_CALENDAR_CANDIDATE_DRAFT_LIMIT` |
 | `candidate_scan_limit` | int | `50` | advanced | `ATRIUM_CALENDAR_CANDIDATE_SCAN_LIMIT` |
 | `default_event_minutes` | int | `60` | ui | `ATRIUM_CALENDAR_DEFAULT_EVENT_MINUTES` |
+| `google_calendar_refresh_token` | string | none | secret | `ATRIUM_CALENDAR_GOOGLE_CALENDAR_REFRESH_TOKEN` |
 | `google_client_id` | string | none | ui | `ATRIUM_CALENDAR_GOOGLE_CLIENT_ID` |
+| `google_oauth_client_secret` | string | none | secret | `ATRIUM_CALENDAR_GOOGLE_OAUTH_CLIENT_SECRET` |
 | `icloud_apple_id` | string | none | ui | `ATRIUM_CALENDAR_ICLOUD_APPLE_ID` |
 | `icloud_calendar` | string | none | ui | `ATRIUM_CALENDAR_ICLOUD_CALENDAR` |
 | `max_events` | int | `200` | advanced | `ATRIUM_CALENDAR_MAX_EVENTS` |
@@ -225,6 +227,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `gmail_labels_max_messages` | int | `10` | advanced | `ATRIUM_MAIL_GMAIL_LABELS_MAX_MESSAGES` |
 | `gmail_labels_min_overlap` | float | `0.5` | advanced | `ATRIUM_MAIL_GMAIL_LABELS_MIN_OVERLAP` |
 | `gmail_labels_min_target_messages` | int | `10` | advanced | `ATRIUM_MAIL_GMAIL_LABELS_MIN_TARGET_MESSAGES` |
+| `google_gmail_refresh_token` | string | none | secret | `ATRIUM_MAIL_GOOGLE_GMAIL_REFRESH_TOKEN` |
 | `knn_k` | int | `7` | advanced | `ATRIUM_MAIL_KNN_K` |
 | `knn_max` | int | `4096` | advanced | `ATRIUM_MAIL_KNN_MAX` |
 | `knn_min_share` | float | `0.9` | advanced | `ATRIUM_MAIL_KNN_MIN_SHARE` |

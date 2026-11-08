@@ -1334,10 +1334,18 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "google_calendar_refresh_token_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "google_client_id": {
           "type": "string"
         },
         "google_client_id_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "google_oauth_client_secret_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -1787,6 +1795,10 @@
           ]
         },
         "gmail_labels_min_target_messages_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "google_gmail_refresh_token_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

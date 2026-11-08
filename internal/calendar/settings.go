@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -57,6 +58,7 @@ type Settings struct {
 	ICloudCalendar string
 	CalendarDir    string
 	GoogleClientID string
+	RefreshToken   string
 	MaxEvents      int
 	MaxOccurrences int
 	DefaultMinutes int
@@ -84,6 +86,10 @@ func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 		func() error { return text(ICloudCalendarKey, &out.ICloudCalendar) },
 		func() error { return text(CalendarDirKey, &out.CalendarDir) },
 		func() error { return text(GoogleClientIDKey, &out.GoogleClientID) },
+		func() error {
+			out.RefreshToken, _ = secrets.Credential(ctx, q, secrets.GoogleCalendarRefreshToken)
+			return nil
+		},
 		func() error { return whole(MaxEventsKey, &out.MaxEvents) },
 		func() error { return whole(MaxOccurrencesKey, &out.MaxOccurrences) },
 		func() error { return whole(DefaultMinutesKey, &out.DefaultMinutes) },
@@ -148,7 +154,10 @@ func ICloudLogin(ctx context.Context, set Settings) (config.CalDAVLogin, error) 
 
 func googleCredentials(env config.Env, set Settings) (config.GoogleCredentials, error) {
 	secret := config.GoogleOAuthSecret(env)
-	refresh, _ := env("GOOGLE_REFRESH_TOKEN")
+	refresh := set.RefreshToken
+	if refresh == "" {
+		refresh, _ = env("GOOGLE_REFRESH_TOKEN")
+	}
 	var missing []string
 	if set.GoogleClientID == "" {
 		missing = append(missing, "ATRIUM_CALENDAR_GOOGLE_CLIENT_ID")

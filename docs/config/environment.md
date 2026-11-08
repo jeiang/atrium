@@ -134,7 +134,11 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_CALENDAR_CANDIDATE_DRAFT_LIMIT` | `calendar.candidate_draft_limit` |
 | `ATRIUM_CALENDAR_CANDIDATE_SCAN_LIMIT` | `calendar.candidate_scan_limit` |
 | `ATRIUM_CALENDAR_DEFAULT_EVENT_MINUTES` | `calendar.default_event_minutes` |
+| `ATRIUM_CALENDAR_GOOGLE_CALENDAR_REFRESH_TOKEN` | `calendar.google_calendar_refresh_token` |
+| `GOOGLE_REFRESH_TOKEN` | `calendar.google_calendar_refresh_token` |
 | `ATRIUM_CALENDAR_GOOGLE_CLIENT_ID` | `calendar.google_client_id` |
+| `ATRIUM_CALENDAR_GOOGLE_OAUTH_CLIENT_SECRET` | `calendar.google_oauth_client_secret` |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | `calendar.google_oauth_client_secret` |
 | `ATRIUM_CALENDAR_ICLOUD_APPLE_ID` | `calendar.icloud_apple_id` |
 | `ATRIUM_CALENDAR_ICLOUD_CALENDAR` | `calendar.icloud_calendar` |
 | `ATRIUM_CALENDAR_MAX_EVENTS` | `calendar.max_events` |
@@ -179,6 +183,8 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MAIL_GMAIL_LABELS_MAX_MESSAGES` | `mail.gmail_labels_max_messages` |
 | `ATRIUM_MAIL_GMAIL_LABELS_MIN_OVERLAP` | `mail.gmail_labels_min_overlap` |
 | `ATRIUM_MAIL_GMAIL_LABELS_MIN_TARGET_MESSAGES` | `mail.gmail_labels_min_target_messages` |
+| `ATRIUM_MAIL_GOOGLE_GMAIL_REFRESH_TOKEN` | `mail.google_gmail_refresh_token` |
+| `GOOGLE_GMAIL_REFRESH_TOKEN` | `mail.google_gmail_refresh_token` |
 | `ATRIUM_MAIL_KNN_K` | `mail.knn_k` |
 | `ATRIUM_MAIL_KNN_MAX` | `mail.knn_max` |
 | `ATRIUM_MAIL_KNN_MIN_SHARE` | `mail.knn_min_share` |
