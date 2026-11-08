@@ -70,7 +70,21 @@ func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name:     module.Assistant,
 		Requires: []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
-		Pages:    []web.Page{{Module: chatpages.Module(chat), Templates: chatpages.Templates(), Home: "/chat"}},
+		Pages: []web.Page{{
+			Module:    chatpages.Module(chat),
+			Templates: chatpages.Templates(),
+			Home:      "/chat",
+			Nav: []web.NavItem{
+				{Group: "Assistant", Label: "Chat", URL: "/chat", Icon: "messages-square", Page: "chat", Order: 10},
+				{Group: "Assistant", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 10},
+				{Group: "Assistant", Label: "Projects", URL: "/projects", Icon: "folder", Page: "projects", Order: 10},
+				{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
+				{Label: "Skills", URL: "/settings/skills", Page: "skills", Settings: true, Order: 20},
+				{Label: "Subagents", URL: "/settings/subagents", Page: "subagents", Settings: true, Order: 30},
+				{Label: "Prompts", URL: "/settings/prompts", Page: "prompts", Settings: true, Order: 40},
+				{Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 80},
+			},
+		}},
 		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled), skillscmd.Command(mc.Env), memorycmd.Command(mc.Env)},
 		Tools:    addTools,
 	}

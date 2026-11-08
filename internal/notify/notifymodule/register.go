@@ -15,7 +15,9 @@ func (Module) Register(module.Context) module.Registration {
 		Requires: []module.Requirement{
 			module.Setting(notify.KeyURL),
 		},
-		Pages: []web.Page{{Module: notify.Module, Templates: notify.Templates()}},
+		Pages: []web.Page{{Module: notify.Module, Templates: notify.Templates(), Nav: []web.NavItem{
+			{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Primary: true, Order: 60},
+		}}},
 		Tools: func(r *registry.Registry) error {
 			return r.Add(notify.Tools()...)
 		},

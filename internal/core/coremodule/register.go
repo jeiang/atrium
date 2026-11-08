@@ -49,11 +49,25 @@ func (m Module) Register(mc module.Context) module.Registration {
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates()},
 			{Module: mailpages.PauseModule},
-			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env), Enabled: enabled}), Templates: reviewpages.Templates()},
+			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env), Enabled: enabled}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
+				{Group: "Review", Label: "Proposals", URL: "/proposals", Icon: "list-checks", Page: "proposals", Order: 20, Badge: true},
+				{Group: "Review", Label: "Activity", URL: "/activity", Icon: "history", Page: "activity", Order: 20},
+				{Group: "Mail", Label: "Drafts", URL: "/drafts", Icon: "mail", Page: "drafts", Order: 30},
+				{Group: "Life", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 40},
+				{Group: "Life", Label: "Watches", URL: "/watches", Icon: "package", Page: "watches", Order: 40},
+			}},
 			{Start: startOps},
 			{Module: startEmbed},
-			{Module: integrations.Module, Templates: integrations.Templates()},
-			{Module: settingspages.Module, Templates: settingspages.Templates()},
+			{Module: integrations.Module, Templates: integrations.Templates(), Nav: []web.NavItem{
+				{Label: "Integrations", URL: "/settings/integrations", Page: "integrations", Settings: true, Order: 70},
+			}},
+			{Module: settingspages.Module, Templates: settingspages.Templates(), Nav: []web.NavItem{
+				{Label: "Configuration", URL: "/settings/config", Page: "config", Settings: true, Order: 110},
+				{Label: "Audit", URL: "/settings/audit", Page: "audit", Settings: true, Order: 120},
+			}},
+			{Nav: []web.NavItem{
+				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Auth: true, Order: 90},
+			}},
 		},
 		Commands: []*cli.Command{
 			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled}),

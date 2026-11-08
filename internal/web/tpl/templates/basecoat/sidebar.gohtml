@@ -17,7 +17,7 @@
 
     <section>
       {{if $menu}}
-        {{template "sidebar_items" (dict "items" $menu "prefix" (ternary (ne $id "") (printf "%s-content" $id) "content"))}}
+        {{template "nav_groups" $menu}}
       {{else}}
         {{opt . "body" ""}}
       {{end}}

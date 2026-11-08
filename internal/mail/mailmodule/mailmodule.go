@@ -83,7 +83,11 @@ func (m Module) Register(mc module.Context) module.Registration {
 			}},
 		},
 		Pages: []web.Page{
-			{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
+			{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
+				{Group: "Mail", Label: "Decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 30},
+				{Group: "Mail", Label: "Rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},
+				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Order: 50},
+			}},
 			{Module: accountpages.Module, Templates: accountpages.Templates()},
 		},
 		Commands: cmds,

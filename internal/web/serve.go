@@ -62,6 +62,8 @@ func recoverEvery(ctx context.Context, d *db.DB, cfg config.Config) {
 	}
 }
 
+type NavItem = tpl.NavItem
+
 type Page struct {
 	Module    Module
 	Templates fs.FS
@@ -69,6 +71,7 @@ type Page struct {
 	Public    func(config.Config, config.Env, *db.DB) func(*http.Request) bool
 	Home      string
 	Start     func(context.Context, *Deps) error
+	Nav       []tpl.NavItem
 }
 
 // Boot opens the application database and starts the modules that own it.
@@ -176,6 +179,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	var templates []fs.FS
 	globals := map[string]any{}
 	var public []func(*http.Request) bool
+	var nav []tpl.NavItem
 	home := ""
 	for _, p := range a.pages {
 		if p.Module != nil {
@@ -191,6 +195,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 			home = p.Home
 		}
 		maps.Copy(globals, p.Globals)
+		nav = append(nav, p.Nav...)
 	}
 	var sessions *oidc.Service
 	if policy.OIDC() {
@@ -199,7 +204,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 			log.Warn("oidc sign-in is not set up; nobody can sign in until it is", logx.Err, err.Error())
 		}
 	}
-	render, err := NewRenderer(tpl.Config{Modules: templates, Globals: globals})
+	render, err := NewRenderer(tpl.Config{Modules: templates, Globals: globals}, nav...)
 	if err != nil {
 		return err
 	}

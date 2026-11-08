@@ -101,7 +101,6 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 			}
 			return strings.Join(strs(l), sep)
 		},
-		"string":  str,
 		"last":    last,
 		"selattr": func(key string, l any) []any { return filter(l, key, true) },
 		"rejattr": func(key string, l any) []any { return filter(l, key, false) },

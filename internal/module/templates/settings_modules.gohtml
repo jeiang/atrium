@@ -1,7 +1,7 @@
 {{define "title"}}Modules · Settings{{end}}
 {{define "heading"}}Settings · Modules{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-{{template "settings_tabs" (dict "Tab" "modules" "Auth" .Auth)}}
+{{template "settings_tabs" (dict "Tab" "modules" "Auth" .Auth "Settings" .Settings)}}
 <div class="flex flex-col divide-y rounded-lg border bg-card text-sm">
   {{range $d.modules}}
   <form method="post" action="/settings/modules/{{.name}}" class="flex flex-wrap items-center gap-2 p-3" data-module="{{.name}}" data-state="{{.state}}">

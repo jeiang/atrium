@@ -60,5 +60,5 @@ func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 	dir, err := contacts.Dir(ctx, s.deps.DB.Read)
 	check(err)
 	data.NoContacts = dir == ""
-	s.page(w, r, http.StatusOK, "triage.gohtml", data, nil)
+	s.page(w, r, http.StatusOK, "triage", "triage.gohtml", data, nil)
 }
