@@ -115,7 +115,9 @@ behavior-parity target.
 - ntfy, qBittorrent (API key) and TMDB (read token) are connection records on the Integrations settings
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-integration CA bundle and proxy. Certificate verification
-  cannot be turned off. The Integrations page also has a Google OAuth wizard:
+  cannot be turned off. Open-Meteo is a keyless connection record for the
+  `weather` tool: current conditions and an hourly/daily forecast for the
+  configured location or a named place, fetched over the shared transport. The Integrations page also has a Google OAuth wizard:
   the Cloud console steps, a Web-application client ID and secret, consent
   per capability (Calendar or Gmail) with PKCE and a paste-back fallback, and
   a Testing-mode warning about 7-day refresh tokens. The state and verifier

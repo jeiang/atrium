@@ -20,6 +20,7 @@ import (
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
 	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
 	taskstools "github.com/jeiang/atrium/internal/assistant/tools/tasks"
+	weathertools "github.com/jeiang/atrium/internal/assistant/tools/weather"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
@@ -60,6 +61,7 @@ func Registry() (*registry.Registry, error) {
 		recalltools.Tools(),
 		skillstools.Tools(),
 		taskstools.Tools(),
+		weathertools.Tools(),
 		proposetools.Tools(),
 		grafanatools.Tools(),
 		notify.Tools(),
