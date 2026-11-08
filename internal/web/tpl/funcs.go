@@ -334,9 +334,9 @@ func pyStr(v any) (string, error) {
 		}
 		return "False", nil
 	case float64:
-		return strconv.FormatFloat(x, 'g', -1, 64), nil
+		return floatString(x), nil
 	case float32:
-		return strconv.FormatFloat(float64(x), 'g', -1, 64), nil
+		return floatString(float64(x)), nil
 	case string:
 		return x, nil
 	case template.HTML:
@@ -479,6 +479,22 @@ func roundTo(x float64, ndigits int) float64 {
 		return x
 	}
 	return out
+}
+
+func floatString(f float64) string {
+	switch {
+	case math.IsNaN(f):
+		return "nan"
+	case math.IsInf(f, 1):
+		return "inf"
+	case math.IsInf(f, -1):
+		return "-inf"
+	}
+	s := strconv.FormatFloat(f, 'g', -1, 64)
+	if !strings.ContainsAny(s, ".eE") {
+		s += ".0"
+	}
+	return s
 }
 
 func urlQuote(s string) string {
