@@ -84,7 +84,8 @@ func (h handlers) ctx(r *http.Request) context.Context {
 func (h handlers) accounts(ctx context.Context) ([]account, error) {
 	var out []account
 	for _, a := range config.Accounts() {
-		v := account{ID: a.Name, Label: a.Label, Preset: a.Preset, Login: a.Login, Enabled: a.Enabled, Pinned: !a.Stored, PasswordSet: a.Password != "", State: integrations.Untested}
+		password, _ := config.Password(a.Name)
+		v := account{ID: a.Name, Label: a.Label, Preset: a.Preset, Login: a.Login, Enabled: a.Enabled, Pinned: a.Pinned, PasswordSet: password != "", State: integrations.Untested}
 		err := h.d.DB.Read.QueryRowContext(ctx, "SELECT state, reason FROM integration_health WHERE name = ?", healthName(a.Name)).Scan(&v.State, &v.Reason)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -142,7 +143,7 @@ func (h handlers) stored(id string) (config.AccountSpec, error) {
 	switch {
 	case !ok:
 		return a, errNotFound
-	case !a.Stored:
+	case a.Pinned:
 		return a, refusal(id + " is set by deployment")
 	}
 	return a, nil
@@ -150,8 +151,8 @@ func (h handlers) stored(id string) (config.AccountSpec, error) {
 
 var errNotFound = errors.New("not found")
 
-func probe(ctx context.Context, a config.AccountSpec) error {
-	if err := imapclient.Login(ctx, a); err != nil {
+func probe(ctx context.Context, a config.AccountSpec, password string) error {
+	if err := imapclient.Login(ctx, a, password); err != nil {
 		return refusal("Test failed: " + err.Error())
 	}
 	return nil
@@ -163,11 +164,11 @@ func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 	kept := map[string]string{"id": field("id"), "label": field("label"), "preset": field("preset"), "login": field("login")}
 	password := web.FormString(form, "password", "")
 	ctx := h.ctx(r)
-	a, err := config.NewAccount(kept["id"], kept["label"], kept["preset"], kept["login"], password, true)
+	a, err := config.NewAccount(kept["id"], kept["label"], kept["preset"], kept["login"], true)
 	switch {
 	case err != nil:
 		err = refusal(err.Error())
-	case a.Login == "" || a.Password == "":
+	case a.Login == "" || password == "":
 		err = refusal("login and password are required")
 	case !h.d.DB.Encrypted():
 		err = settings.EncryptionRequired(config.PasswordKey(a.Name))
@@ -177,10 +178,10 @@ func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err == nil {
-		err = probe(ctx, a)
+		err = probe(ctx, a, config.NormalizePassword(password))
 	}
 	if err == nil {
-		err = h.save(ctx, a, true, true)
+		err = h.save(ctx, a, config.NormalizePassword(password), true, true)
 	}
 	if err != nil {
 		h.fail(w, r, "new", kept, err)
@@ -202,20 +203,20 @@ func (h handlers) update(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		password := web.FormString(form, "password", "")
 		login := strings.TrimSpace(web.FormString(form, "login", current.Login))
-		next := current.Password
+		next, _ := config.Password(id)
 		if password != "" {
-			next = password
+			next = config.NormalizePassword(password)
 		}
-		a, err = config.NewAccount(id, strings.TrimSpace(web.FormString(form, "label", current.Label)), current.Preset, login, next, web.FormString(form, "enabled", "") != "")
+		a, err = config.NewAccount(id, strings.TrimSpace(web.FormString(form, "label", current.Label)), current.Preset, login, web.FormString(form, "enabled", "") != "")
 		if err == nil && a.Login == "" {
 			err = refusal("login is required")
 		}
 		tested := a.Login != current.Login || password != ""
 		if err == nil && tested {
-			err = probe(ctx, a)
+			err = probe(ctx, a, next)
 		}
 		if err == nil {
-			err = h.save(ctx, a, password != "", tested)
+			err = h.save(ctx, a, next, password != "", tested)
 		}
 	}
 	if err != nil {
@@ -225,7 +226,7 @@ func (h handlers) update(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Account saved", Description: "Restart the atrium units to apply it."}, page{})
 }
 
-func (h handlers) save(ctx context.Context, a config.AccountSpec, password, tested bool) error {
+func (h handlers) save(ctx context.Context, a config.AccountSpec, password string, setPassword, tested bool) error {
 	if err := config.RegisterPassword(a.Name); err != nil {
 		return err
 	}
@@ -235,8 +236,8 @@ func (h handlers) save(ctx context.Context, a config.AccountSpec, password, test
 			a.Name, a.Label, a.Preset, a.Login, a.Enabled, stamp()); err != nil {
 			return err
 		}
-		if password {
-			return secrets.NewIn(h.d.DB, tx, h.d.DB).Set(ctx, config.PasswordKey(a.Name), a.Password, "ui")
+		if setPassword {
+			return secrets.NewIn(h.d.DB, tx, h.d.DB).Set(ctx, config.PasswordKey(a.Name), password, "ui")
 		}
 		return nil
 	})
@@ -261,7 +262,8 @@ func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := h.ctx(r)
 	state, reason := integrations.OK, ""
-	if err := imapclient.Login(ctx, a); err != nil {
+	password, _ := config.Password(id)
+	if err := imapclient.Login(ctx, a, password); err != nil {
 		state, reason = integrations.Failing, err.Error()
 	}
 	if err := integrations.RecordResult(ctx, h.d.DB, h.d.Env, healthName(id), a.Label, state, reason, stamp()); err != nil {

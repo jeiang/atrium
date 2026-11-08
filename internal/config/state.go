@@ -9,9 +9,9 @@ import (
 )
 
 type state struct {
-	core         core
-	fileAccounts []AccountSpec
-	accounts     []AccountSpec
+	core      core
+	accounts  []AccountSpec
+	passwords map[string]string
 }
 
 var current atomic.Pointer[state]
@@ -54,14 +54,17 @@ func Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	files, err := loadAccounts(env)
+	files, filePasswords, err := loadAccounts(env)
 	if err != nil {
 		return err
 	}
-	accounts, err := mergeStoredAccounts(ctx, d.Read, files)
+	if err := reconcileAccounts(ctx, d, files); err != nil {
+		return err
+	}
+	accounts, passwords, err := loadAccountsFromDB(ctx, d.Read, filePasswords)
 	if err != nil {
 		return err
 	}
-	current.Store(&state{core: c, fileAccounts: files, accounts: accounts})
+	current.Store(&state{core: c, accounts: accounts, passwords: passwords})
 	return nil
 }

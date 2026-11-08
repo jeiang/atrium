@@ -140,7 +140,8 @@ func ICloudLogin(set Settings) (config.CalDAVLogin, error) {
 	if apple == "" {
 		apple = found[0].Login
 	}
-	return config.CalDAVLogin{AppleID: apple, Password: found[0].Password}, nil
+	password, _ := config.Password(found[0].Name)
+	return config.CalDAVLogin{AppleID: apple, Password: password}, nil
 }
 
 func googleCredentials(env config.Env, set Settings) (config.GoogleCredentials, error) {

@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS mail_accounts (
     preset TEXT NOT NULL CHECK (preset IN ('icloud', 'gmail')),
     login TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
     created_at REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS mailboxes (

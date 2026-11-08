@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS settings_audit (
     new_value TEXT,
     secret INTEGER NOT NULL CHECK (secret IN (0, 1)),
     actor TEXT NOT NULL,
-    source TEXT NOT NULL CHECK (source IN ('cli', 'ui', 'migration')),
+    source TEXT NOT NULL,
     CHECK (secret = 0 OR (old_value IS NULL AND new_value = 'changed'))
 );
 CREATE TRIGGER IF NOT EXISTS settings_audit_no_update BEFORE UPDATE ON settings_audit
