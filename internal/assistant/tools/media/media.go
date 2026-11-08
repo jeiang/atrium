@@ -395,7 +395,7 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any
 	var writeID int64
 	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		var err error
-		if row, err = settings.AddChannel(ctx, tx, name, imdb, pattern, caseSensitive, stored, tc.Now, false); err != nil {
+		if row, err = settings.AddChannel(ctx, tx, name, imdb, pattern, caseSensitive, stored); err != nil {
 			return err
 		}
 		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{

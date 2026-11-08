@@ -49,6 +49,13 @@ var (
 	}
 
 	btih = regexp.MustCompile(`^urn:btih:([0-9a-fA-F]{40}|[A-Za-z2-7]{32})$`)
+
+	activeStates = map[string]bool{
+		"downloading": true, "metaDL": true, "forcedMetaDL": true, "stalledDL": true,
+		"checkingDL": true, "forcedDL": true, "queuedDL": true, "allocating": true,
+		"moving": true, "checkingResumeData": true, "uploading": true, "forcedUP": true,
+		"checkingUP": true,
+	}
 )
 
 type QbitError string
@@ -75,6 +82,8 @@ type TorrentFile struct {
 	Size     *int64  `json:"size"`
 	Progress float64 `json:"progress"`
 }
+
+func (t Torrent) Active() bool { return activeStates[t.State] }
 
 func (t Torrent) HasTag(tag string) bool {
 	for part := range strings.SplitSeq(t.Tags, ",") {
@@ -331,15 +340,12 @@ func (q *Qbit) do(ctx context.Context, method, path string, params []param, body
 }
 
 func (q *Qbit) post(ctx context.Context, path string, form []param) error {
-	body, err := q.do(ctx, http.MethodPost, path, nil, strings.NewReader(encodeParams(form)), "application/x-www-form-urlencoded")
-	if err != nil {
-		return err
-	}
-	return checkAdd(path, body)
+	_, err := q.do(ctx, http.MethodPost, path, nil, strings.NewReader(encodeParams(form)), "application/x-www-form-urlencoded")
+	return err
 }
 
-func checkAdd(path string, body []byte) error {
-	if path == "torrents/add" && !accepted(string(body)) {
+func checkAdd(body []byte) error {
+	if !accepted(string(body)) {
 		text := strings.TrimSpace(string(body))
 		if text == "" {
 			text = "no reply"
@@ -396,7 +402,11 @@ func (q *Qbit) AddMagnet(ctx context.Context, magnet, tags string) error {
 	if tags != "" {
 		form = append(form, param{"tags", tags})
 	}
-	return q.post(ctx, "torrents/add", form)
+	body, err := q.do(ctx, http.MethodPost, "torrents/add", nil, strings.NewReader(encodeParams(form)), "application/x-www-form-urlencoded")
+	if err != nil {
+		return err
+	}
+	return checkAdd(body)
 }
 
 func (q *Qbit) AddFile(ctx context.Context, data []byte, name, tags string) error {
@@ -424,7 +434,7 @@ func (q *Qbit) AddFile(ctx context.Context, data []byte, name, tags string) erro
 	if err != nil {
 		return err
 	}
-	return checkAdd("torrents/add", body)
+	return checkAdd(body)
 }
 
 func (q *Qbit) AddTags(ctx context.Context, hash, tags string) error {

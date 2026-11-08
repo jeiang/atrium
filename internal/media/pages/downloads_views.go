@@ -4,10 +4,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
-	"slices"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/media"
 )
@@ -21,11 +19,6 @@ const (
 )
 
 var dlAddModes = []string{dlModeMedia, dlModePlain}
-
-var dlActiveStates = []string{
-	"downloading", "metaDL", "forcedMetaDL", "stalledDL", "checkingDL", "forcedDL", "queuedDL", "allocating",
-	"moving", "checkingResumeData", "uploading", "forcedUP", "checkingUP",
-}
 
 type TorrentView struct {
 	Hash    string `json:"hash"`
@@ -99,11 +92,10 @@ type filesView struct {
 }
 
 type addView struct {
-	Magnet      string   `json:"magnet"`
-	TorrentName string   `json:"torrent_name"`
-	AddMode     string   `json:"add_mode"`
-	Error       string   `json:"error"`
-	Modes       []string `json:"modes"`
+	Magnet      string `json:"magnet"`
+	TorrentName string `json:"torrent_name"`
+	AddMode     string `json:"add_mode"`
+	Error       string `json:"error"`
 }
 
 func dlHumanSize(n *int64) string {
@@ -164,16 +156,16 @@ func torrentView(t media.Torrent) TorrentView {
 	return TorrentView{
 		Hash: t.Hash, Name: t.Name, Kind: kind, Label: label, Size: dlHumanSize(t.Size),
 		Down: dlSpeedText(t.DLSpeed), Up: dlSpeedText(t.UpSpeed), ETA: dlHumanETA(t.ETA),
-		Percent: int64(math.RoundToEven(t.Progress * 100)),
+		Percent: int64(math.Round(t.Progress * 100)),
 		Filed:   t.HasTag(media.TagFiled), Ignored: t.HasTag(media.TagIgnored),
-		Active: slices.Contains(dlActiveStates, state),
+		Active: t.Active(),
 	}
 }
 
 func fileView(f media.TorrentFile) FileView {
 	return FileView{
 		Index: f.Index, Wanted: f.Priority != media.PrioritySkip, Name: f.Name,
-		SizeText: dlHumanSize(f.Size), Percent: int64(math.RoundToEven(f.Progress * 100)),
+		SizeText: dlHumanSize(f.Size), Percent: int64(math.Round(f.Progress * 100)),
 	}
 }
 
@@ -193,7 +185,7 @@ func dlDecodeTorrent(b64 string, limit int) (data []byte, present bool, err erro
 	if b64 == "" {
 		return nil, false, nil
 	}
-	n := utf8.RuneCountInString(b64)
+	n := len(b64)
 	if n > limit {
 		return nil, false, dlTorrentError("the torrent file is too large")
 	}

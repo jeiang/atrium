@@ -355,8 +355,8 @@ func TestDlDownloadsPageListsTorrentsQueueAndFiles(t *testing.T) {
 	lacks(t, down, `hx-get="/media/torrents"`)
 	fragment := status(t, s.get("/media/torrents/"+dlHashB+"/files"), 502, "files qbit down")
 	contains(t, fragment, "qBittorrent: torrents/info: 500")
-	toggleDown := status(t, s.post("/media/torrents/"+dlHashB+"/files", url.Values{"index": {"0"}}), 502, "toggle qbit down")
-	contains(t, toggleDown, "qBittorrent: torrents/filePrio: 500")
+	toggleDown := status(t, s.post("/media/torrents/"+dlHashB+"/files", url.Values{"index": {"0"}, "wanted": {"0"}}), 502, "toggle qbit down")
+	contains(t, toggleDown, "qBittorrent: torrents/info: 500")
 }
 
 func TestDlDownloadsPageWithoutQbittorrent(t *testing.T) {
@@ -448,7 +448,7 @@ func TestDlImportEntryIsMovedNotIgnored(t *testing.T) {
 	}
 }
 
-func TestDlSelectFilesRunsOnGetAndPoll(t *testing.T) {
+func TestDlPollDoesNotWriteToQbit(t *testing.T) {
 	s, qb, _ := dlWorld(t, nil)
 	qb.add(dlTorrent{
 		hash: dlHashA, name: "Show.S01E01", tags: []string{"media"}, state: "stoppedDL",
@@ -464,13 +464,13 @@ func TestDlSelectFilesRunsOnGetAndPoll(t *testing.T) {
 	})
 
 	status(t, s.get("/media/downloads"), 200, "downloads")
-	if got := qb.prioritiesOf(dlHashA); !slices.Equal(got, []int{1, 0, 1}) {
+	if got := qb.prioritiesOf(dlHashA); !slices.Equal(got, []int{0, 1, 0}) {
 		t.Fatalf("priorities after the page GET %v", got)
 	}
-	if !slices.Contains(qb.tagsOf(dlHashA), "selected") || !slices.Contains(qb.started, dlHashA) {
-		t.Fatalf("tags %v started %v", qb.tagsOf(dlHashA), qb.started)
+	if slices.Contains(qb.tagsOf(dlHashA), "selected") || slices.Contains(qb.started, dlHashA) {
+		t.Fatalf("the page GET wrote to qBittorrent: tags %v started %v", qb.tagsOf(dlHashA), qb.started)
 	}
-	if got := qb.prioritiesOf(dlHashB); !slices.Equal(got, []int{1, 0}) {
+	if got := qb.prioritiesOf(dlHashB); !slices.Equal(got, []int{0, 1}) {
 		t.Fatalf("priorities after the page GET %v", got)
 	}
 
@@ -479,8 +479,11 @@ func TestDlSelectFilesRunsOnGetAndPoll(t *testing.T) {
 		files: []dlFile{{Index: 0, Name: "d.mkv", Priority: 0}, {Index: 1, Name: "d.txt", Priority: 1}},
 	})
 	status(t, s.get("/media/torrents"), 200, "poll")
-	if got := qb.prioritiesOf("dddddddddddddddddddddddddddddddddddddddd"); !slices.Equal(got, []int{1, 0}) {
+	if got := qb.prioritiesOf("dddddddddddddddddddddddddddddddddddddddd"); !slices.Equal(got, []int{0, 1}) {
 		t.Fatalf("priorities after the poll %v", got)
+	}
+	if slices.Contains(qb.tagsOf("dddddddddddddddddddddddddddddddddddddddd"), "selected") || slices.Contains(qb.started, "dddddddddddddddddddddddddddddddddddddddd") {
+		t.Fatalf("the poll wrote to qBittorrent")
 	}
 
 	if got := qb.prioritiesOf(dlHashC); !slices.Equal(got, []int{0, 1}) {

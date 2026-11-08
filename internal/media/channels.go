@@ -131,7 +131,7 @@ func flag(b bool) int {
 	return 0
 }
 
-func (t Tuning) AddChannel(ctx context.Context, q db.Querier, name, imdb, pattern string, caseSensitive bool, tmdbID *int64, now func() float64, primed bool) (*Channel, error) {
+func (t Tuning) AddChannel(ctx context.Context, q db.Querier, name, imdb, pattern string, caseSensitive bool, tmdbID *int64) (*Channel, error) {
 	name = strings.Join(strings.Fields(name), " ")
 	if runes := []rune(name); len(runes) > t.NameChars {
 		name = string(runes[:t.NameChars])
@@ -146,16 +146,13 @@ func (t Tuning) AddChannel(ctx context.Context, q db.Querier, name, imdb, patter
 	if _, err := t.CompilePattern(pattern, caseSensitive); err != nil {
 		return nil, err
 	}
-	if now == nil {
-		now = Now
-	}
 	var tmdb any
 	if tmdbID != nil {
 		tmdb = *tmdbID
 	}
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO media_channels (name, imdb, tmdb_id, pattern, case_sensitive, primed, created) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		name, digits, tmdb, strings.TrimSpace(pattern), flag(caseSensitive), flag(primed), now())
+		"INSERT INTO media_channels (name, imdb, tmdb_id, pattern, case_sensitive, primed, created) VALUES (?, ?, ?, ?, ?, 0, ?)",
+		name, digits, tmdb, strings.TrimSpace(pattern), flag(caseSensitive), Now())
 	if err != nil {
 		return nil, err
 	}
@@ -374,9 +371,8 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings 
 			}
 			sent, err := notify.Send(ctx, q, env, message)
 			if err != nil {
-				return result, err
-			}
-			if !sent.Delivered {
+				result.Errors = append(result.Errors, "ntfy: "+err.Error())
+			} else if !sent.Delivered {
 				result.Errors = append(result.Errors, "ntfy: "+sent.Error)
 			}
 		}

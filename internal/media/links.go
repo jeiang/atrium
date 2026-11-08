@@ -203,13 +203,11 @@ func (s Settings) VPNURL(rel string) string {
 	return base + "/" + urlQuote(rest)
 }
 
-func firstQuery(values []string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
+func QueryValue(values []string) string {
+	if len(values) == 0 {
+		return ""
 	}
-	return ""
+	return values[len(values)-1]
 }
 
 func (l *Links) Verifier() func(*http.Request) bool {
@@ -219,6 +217,6 @@ func (l *Links) Verifier() func(*http.Request) bool {
 			return false
 		}
 		query := r.URL.Query()
-		return l.Verify(r.Context(), rest, firstQuery(query["exp"]), firstQuery(query["sig"]), Now())
+		return l.Verify(r.Context(), rest, QueryValue(query["exp"]), QueryValue(query["sig"]), Now())
 	}
 }

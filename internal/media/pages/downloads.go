@@ -50,10 +50,6 @@ func dlLastValues(form url.Values) map[string]string {
 	return out
 }
 
-func (s *service) dlQbit(ctx context.Context) (*media.Qbit, error) { return s.settings(ctx).Qbit() }
-
-func (s *service) dlRoot(ctx context.Context) (string, error) { return s.settings(ctx).NeedRoot() }
-
 func (s *service) dlPageOut(w http.ResponseWriter, r *http.Request, status int, page, name string, data any, toast *tpl.Toast) {
 	f, err := s.deps.Render.Frame(r, page, data)
 	dlCheck(err)
@@ -68,12 +64,9 @@ func (s *service) dlFragmentOut(w http.ResponseWriter, r *http.Request, status i
 	dlCheck(s.deps.Render.Fragment(w, r, status, name, f))
 }
 
-func (s *service) dlTorrents(ctx context.Context) ([]TorrentView, string) {
+func (s *service) dlTorrents(ctx context.Context, set media.Settings) ([]TorrentView, string) {
 	rows := []TorrentView{}
-	client, err := s.dlQbit(ctx)
-	if err == nil {
-		_, err = media.SelectFiles(ctx, client, nil)
-	}
+	client, err := set.Qbit()
 	var found []media.Torrent
 	if err == nil {
 		found, err = client.Torrents(ctx, "", "", "")
@@ -91,13 +84,13 @@ func (s *service) dlTorrents(ctx context.Context) ([]TorrentView, string) {
 	return rows, ""
 }
 
-func (s *service) dlQueue(ctx context.Context, edited *media.View) ([]QueueView, string) {
+func (s *service) dlQueue(ctx context.Context, set media.Settings, edited *media.View) ([]QueueView, string) {
 	views := []QueueView{}
-	client, err := s.dlQbit(ctx)
+	client, err := set.Qbit()
 	if err != nil {
 		return views, err.Error()
 	}
-	root, err := s.dlRoot(ctx)
+	root, err := set.NeedRoot()
 	if err != nil {
 		return views, err.Error()
 	}
@@ -123,8 +116,9 @@ func dlAnyActive(rows []TorrentView) bool {
 }
 
 func (s *service) dlDownloads(w http.ResponseWriter, r *http.Request, toast *tpl.Toast, status int, edited *media.View) {
-	rows, errText := s.dlTorrents(r.Context())
-	waiting, queueErr := s.dlQueue(r.Context(), edited)
+	set := s.settings(r.Context())
+	rows, errText := s.dlTorrents(r.Context(), set)
+	waiting, queueErr := s.dlQueue(r.Context(), set, edited)
 	view := downloadsView{
 		Torrents: rows, Error: errText, Active: dlAnyActive(rows), Poll: dlPollSeconds,
 		Queue: waiting, QueueError: queueErr, Kinds: media.Kinds,
@@ -142,7 +136,7 @@ func (s *service) dlDownloadsGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) dlTorrentsGet(w http.ResponseWriter, r *http.Request) {
-	rows, errText := s.dlTorrents(r.Context())
+	rows, errText := s.dlTorrents(r.Context(), s.settings(r.Context()))
 	view := torrentsView{Torrents: rows, Error: errText, Active: dlAnyActive(rows), Poll: dlPollSeconds}
 	s.dlFragmentOut(w, r, http.StatusOK, "_media_torrents.gohtml", view, nil)
 }
@@ -154,7 +148,7 @@ func (s *service) dlFilesError(w http.ResponseWriter, r *http.Request, hash, tex
 
 func (s *service) dlFiles(w http.ResponseWriter, r *http.Request, hash string, toast *tpl.Toast) {
 	ctx := r.Context()
-	client, err := s.dlQbit(ctx)
+	client, err := s.settings(ctx).Qbit()
 	var found *media.Torrent
 	if err == nil {
 		found, err = client.Torrent(ctx, hash)
@@ -199,13 +193,13 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 	} else {
 		errs = append(errs, web.BadInt("body", "index", raw))
 	}
-	wanted := int64(1)
-	if raw, found := web.Value(form, "wanted"); found && raw != "" {
-		if n, ok := laxInt64(raw); ok {
-			wanted = n
-		} else {
-			errs = append(errs, web.BadInt("body", "wanted", raw))
-		}
+	var wanted int64
+	if raw, found := web.Value(form, "wanted"); !found || raw == "" {
+		errs = append(errs, web.Missing("body", "wanted"))
+	} else if n, ok := laxInt64(raw); ok {
+		wanted = n
+	} else {
+		errs = append(errs, web.BadInt("body", "wanted", raw))
 	}
 	if len(errs) > 0 {
 		web.Unprocessable(w, errs...)
@@ -215,7 +209,14 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 	if wanted != 0 {
 		priority = media.PriorityNormal
 	}
-	client, err := s.dlQbit(ctx)
+	client, err := s.settings(ctx).Qbit()
+	if err == nil {
+		var found *media.Torrent
+		if found, err = client.Torrent(ctx, hash); err == nil && (found == nil || !found.HasTag(media.TagMedia)) {
+			s.deps.Error(w, r, http.StatusNotFound, "unknown torrent")
+			return
+		}
+	}
 	if err == nil {
 		err = client.SetPriority(ctx, hash, []int{int(index)}, priority)
 	}
@@ -257,7 +258,7 @@ func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {
 		s.dlDownloads(w, r, nil, http.StatusOK, &view)
 		return
 	}
-	if err := client.Apply(ctx, client, item, ops, root); err != nil {
+	if err := client.Apply(ctx, item, ops, root); err != nil {
 		view.Error = err.Error()
 		s.dlDownloads(w, r, nil, http.StatusBadGateway, &view)
 		return
@@ -278,11 +279,12 @@ func dlSoftPlan(err error) (string, bool) {
 }
 
 func (s *service) dlFind(ctx context.Context, id string) (*media.Qbit, string, media.Item, error) {
-	client, err := s.dlQbit(ctx)
+	set := s.settings(ctx)
+	client, err := set.Qbit()
 	if err != nil {
 		return nil, "", media.Item{}, err
 	}
-	root, err := s.dlRoot(ctx)
+	root, err := set.NeedRoot()
 	if err != nil {
 		return nil, "", media.Item{}, err
 	}

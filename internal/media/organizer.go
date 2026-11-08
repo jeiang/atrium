@@ -18,7 +18,6 @@ const (
 	KindMovie  = "movie"
 	KindTV     = "tv"
 	Skipped    = "(skipped)"
-	NotMovie   = "(not the movie)"
 	importPref = Import + "/"
 	dirMode    = 0o775
 )
@@ -106,7 +105,10 @@ func Items(ctx context.Context, qb *Qbit, root string) ([]Item, string, error) {
 	}
 	importDir := filepath.Join(root, Import)
 	if info, err := os.Stat(importDir); err == nil && info.IsDir() {
-		entries, _ := os.ReadDir(importDir)
+		entries, err := os.ReadDir(importDir)
+		if err != nil {
+			return nil, "", err
+		}
 		for _, entry := range entries {
 			entryRoot := filepath.Join(importDir, entry.Name())
 			if files := qb.VideosUnder(entryRoot); len(files) > 0 {
@@ -248,30 +250,10 @@ func Plan(view *View, root string) ([]Op, error) {
 	return ops, nil
 }
 
-func makeDirs(path string, mode os.FileMode) error {
-	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		return nil
-	}
-	if parent := filepath.Dir(path); parent != path {
-		if _, err := os.Stat(parent); err != nil {
-			if err := makeDirs(parent, 0o777); err != nil {
-				return err
-			}
-		}
-	}
-	if err := os.Mkdir(path, mode); err != nil {
-		if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
-			return nil
-		}
-		return err
-	}
-	return nil
-}
-
-func (t Tuning) Apply(ctx context.Context, qb *Qbit, item Item, ops []Op, root string) error {
+func (q *Qbit) Apply(ctx context.Context, item Item, ops []Op, root string) error {
 	for _, op := range ops {
 		full := filepath.Join(root, op.Dst)
-		if err := makeDirs(filepath.Dir(full), dirMode); err != nil {
+		if err := os.MkdirAll(filepath.Dir(full), dirMode); err != nil {
 			return err
 		}
 		if item.Torrent {
@@ -283,9 +265,9 @@ func (t Tuning) Apply(ctx context.Context, qb *Qbit, item Item, ops []Op, root s
 		}
 	}
 	if item.Torrent {
-		return qb.AddTags(ctx, item.ID, TagFiled)
+		return q.AddTags(ctx, item.ID, TagFiled)
 	}
-	if len(t.VideosUnder(item.Root)) == 0 {
+	if len(q.VideosUnder(item.Root)) == 0 {
 		return os.RemoveAll(item.Root)
 	}
 	return nil
@@ -343,7 +325,7 @@ func Sweep(ctx context.Context, qb *Qbit) (SweepResult, error) {
 		return out, nil
 	}
 	for _, t := range torrents {
-		if !t.HasTag(TagFiled) || t.State != StoppedUP {
+		if !t.HasTag(TagMedia) || !t.HasTag(TagFiled) || t.State != StoppedUP {
 			continue
 		}
 		if err := qb.Delete(ctx, t.Hash, true); err != nil {

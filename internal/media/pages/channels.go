@@ -141,7 +141,8 @@ func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
 			tmdb = &id
 		}
 	}
-	row, err := s.settings(ctx).AddChannel(ctx, s.deps.DB.Write, name, imdb, pattern, caseSensitive, tmdb, s.now, false)
+	set := s.settings(ctx)
+	row, err := set.AddChannel(ctx, s.deps.DB.Write, name, imdb, pattern, caseSensitive, tmdb)
 	if err != nil {
 		var refused media.ChannelError
 		if !errors.As(err, &refused) {
@@ -154,13 +155,12 @@ func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
 		s.chPage(w, r, chToast("success", "Watching "+row.Name, "The first poll only records what is already out; later matches are downloaded."), http.StatusOK, "", nil, nil)
 		return
 	}
-	settings := s.settings(ctx)
-	qb, err := settings.Qbit()
+	qb, err := set.Qbit()
 	if err != nil {
 		s.chPage(w, r, chToast("error", "Watching "+row.Name, "Nothing downloaded: "+err.Error()), http.StatusOK, "", nil, nil)
 		return
 	}
-	out, err := media.Poll(ctx, s.deps.DB.Write, s.deps.Env, qb, settings, media.PollOptions{Now: s.now, Only: &row.ID, Force: true})
+	out, err := media.Poll(ctx, s.deps.DB.Write, s.deps.Env, qb, set, media.PollOptions{Now: s.now, Only: &row.ID, Force: true})
 	if err != nil {
 		panic(err)
 	}
