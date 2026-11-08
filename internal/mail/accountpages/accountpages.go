@@ -16,6 +16,7 @@ import (
 	vecindex "github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
+	mailaccounts "github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
@@ -49,6 +50,7 @@ type account struct {
 	Enabled     bool   `json:"enabled"`
 	Pinned      bool   `json:"pinned"`
 	PasswordSet bool   `json:"password_set"`
+	AuthMethod  string `json:"auth_method"`
 	State       string `json:"state"`
 	Reason      string `json:"reason"`
 }
@@ -85,7 +87,8 @@ func (h handlers) accounts(ctx context.Context) ([]account, error) {
 	var out []account
 	for _, a := range config.Accounts() {
 		password, _ := config.Password(a.Name)
-		v := account{ID: a.Name, Label: a.Label, Preset: a.Preset, Login: a.Login, Enabled: a.Enabled, Pinned: a.Pinned, PasswordSet: password != "", State: integrations.Untested}
+		v := account{ID: a.Name, Label: a.Label, Preset: a.Preset, Login: a.Login, Enabled: a.Enabled, Pinned: a.Pinned,
+			PasswordSet: password != "", AuthMethod: string(a.AuthMethod), State: integrations.Untested}
 		err := h.d.DB.Read.QueryRowContext(ctx, "SELECT state, reason FROM integration_health WHERE name = ?", healthName(a.Name)).Scan(&v.State, &v.Reason)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -161,13 +164,18 @@ func probe(ctx context.Context, a config.AccountSpec, password string) error {
 func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	field := func(name string) string { return strings.TrimSpace(web.FormString(form, name, "")) }
-	kept := map[string]string{"id": field("id"), "label": field("label"), "preset": field("preset"), "login": field("login")}
+	kept := map[string]string{"id": field("id"), "label": field("label"), "preset": field("preset"), "login": field("login"), "auth_method": field("auth_method")}
 	password := web.FormString(form, "password", "")
 	ctx := h.ctx(r)
 	a, err := config.NewAccount(kept["id"], kept["label"], kept["preset"], kept["login"], true)
+	if err == nil {
+		a.AuthMethod, err = mailaccounts.Parse(kept["auth_method"])
+	}
 	switch {
 	case err != nil:
 		err = refusal(err.Error())
+	case !mailaccounts.Allowed(a.Preset, a.AuthMethod):
+		err = refusal("XOAUTH2 is Gmail-only")
 	case a.Login == "" || password == "":
 		err = refusal("login and password are required")
 	case !h.d.DB.Encrypted():
@@ -208,6 +216,12 @@ func (h handlers) update(w http.ResponseWriter, r *http.Request) {
 			next = config.NormalizePassword(password)
 		}
 		a, err = config.NewAccount(id, strings.TrimSpace(web.FormString(form, "label", current.Label)), current.Preset, login, web.FormString(form, "enabled", "") != "")
+		if err == nil {
+			a.AuthMethod, err = mailaccounts.Parse(web.FormString(form, "auth_method", string(current.AuthMethod)))
+		}
+		if err == nil && !mailaccounts.Allowed(a.Preset, a.AuthMethod) {
+			err = refusal("XOAUTH2 is Gmail-only")
+		}
 		if err == nil && a.Login == "" {
 			err = refusal("login is required")
 		}
@@ -231,9 +245,9 @@ func (h handlers) save(ctx context.Context, a config.AccountSpec, password strin
 		return err
 	}
 	err := h.d.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, "INSERT INTO mail_accounts (id, label, preset, login, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?) "+
-			"ON CONFLICT(id) DO UPDATE SET label = excluded.label, login = excluded.login, enabled = excluded.enabled",
-			a.Name, a.Label, a.Preset, a.Login, a.Enabled, stamp()); err != nil {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO mail_accounts (id, label, preset, login, enabled, auth_method, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) "+
+			"ON CONFLICT(id) DO UPDATE SET label = excluded.label, login = excluded.login, enabled = excluded.enabled, auth_method = excluded.auth_method",
+			a.Name, a.Label, a.Preset, a.Login, a.Enabled, a.AuthMethod, stamp()); err != nil {
 			return err
 		}
 		if setPassword {

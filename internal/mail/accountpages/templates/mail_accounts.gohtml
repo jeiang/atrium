@@ -30,6 +30,11 @@
       <div role="group" class="field"><label for="label-{{.id}}">Label</label><input id="label-{{.id}}" name="label" value="{{.label}}"></div>
       <div role="group" class="field"><label for="login-{{.id}}">Login</label><input id="login-{{.id}}" name="login" value="{{.login}}" required></div>
       <div role="group" class="field"><label for="password-{{.id}}">App password</label><input id="password-{{.id}}" name="password" type="password" autocomplete="new-password" placeholder="{{if .password_set}}set; type to replace{{end}}"></div>
+      {{if eq .preset "gmail"}}<div role="group" class="field"><label for="auth-{{.id}}">Auth method</label>
+        <select id="auth-{{.id}}" name="auth_method">
+          <option value="password"{{if ne .auth_method "xoauth2"}} selected{{end}}>App password</option>
+          <option value="xoauth2"{{if eq .auth_method "xoauth2"}} selected{{end}}>Google OAuth (XOAUTH2)</option>
+        </select></div>{{end}}
       <label class="flex items-center gap-2"><input type="checkbox" name="enabled" value="1"{{if .enabled}} checked{{end}}>Enabled</label>
     </div>
     {{end}}
@@ -50,6 +55,7 @@
       <div role="group" class="field"><label for="new-preset">Provider</label><select id="new-preset" name="preset">{{$chosen := ""}}{{with $d.form}}{{$chosen = .preset}}{{end}}{{range $d.presets}}<option value="{{.}}"{{if eq . $chosen}} selected{{end}}>{{.}}</option>{{end}}</select></div>
       <div role="group" class="field"><label for="new-login">Login</label><input id="new-login" name="login" value="{{with $d.form}}{{.login}}{{end}}" required></div>
       <div role="group" class="field"><label for="new-password">App password</label><input id="new-password" name="password" type="password" autocomplete="new-password" required></div>
+      <div role="group" class="field"><label for="new-auth">Auth method</label><select id="new-auth" name="auth_method"><option value="password">App password</option><option value="xoauth2">Google OAuth (XOAUTH2)</option></select></div>
     </div>
     <div><button type="submit" class="btn" data-size="sm">{{icon "plus"}}Test and add</button></div>
   </form>
