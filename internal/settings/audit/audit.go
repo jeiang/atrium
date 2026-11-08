@@ -55,7 +55,7 @@ func Record(ctx context.Context, q db.Querier, e Entry) error {
 		old, next = nil, &changed
 	}
 	_, err := q.ExecContext(ctx,
-		"INSERT INTO settings_audit (ts, key, thread_id, old_value, new_value, secret, actor, source) VALUES (?, ?, NULL, ?, ?, ?, ?, ?)",
+		"INSERT INTO settings_audit (ts, key, old_value, new_value, secret, actor, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
 		float64(time.Now().UnixNano())/1e9, e.Key, old, next, e.Secret, o.actor, string(o.source))
 	return err
 }

@@ -64,7 +64,6 @@ type page struct {
 type entry struct {
 	TS     float64 `json:"ts"`
 	Key    string  `json:"key"`
-	Thread *int64  `json:"thread"`
 	Old    *string `json:"old"`
 	New    *string `json:"new"`
 	Actor  string  `json:"actor"`
@@ -249,13 +248,13 @@ func refused(err error) bool {
 
 func (h handlers) audit(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.d.DB.Read.QueryContext(r.Context(),
-		"SELECT ts, key, thread_id, old_value, new_value, actor, source FROM settings_audit ORDER BY id DESC LIMIT ?", auditRows)
+		"SELECT ts, key, old_value, new_value, actor, source FROM settings_audit ORDER BY id DESC LIMIT ?", auditRows)
 	if err != nil {
 		panic(err)
 	}
 	list, err := db.Collect(rows, func(rs *sql.Rows) (entry, error) {
 		var e entry
-		return e, rs.Scan(&e.TS, &e.Key, &e.Thread, &e.Old, &e.New, &e.Actor, &e.Source)
+		return e, rs.Scan(&e.TS, &e.Key, &e.Old, &e.New, &e.Actor, &e.Source)
 	})
 	if err != nil {
 		panic(err)

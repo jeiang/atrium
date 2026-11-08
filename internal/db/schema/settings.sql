@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS settings_audit (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts REAL NOT NULL,
     key TEXT NOT NULL,
-    thread_id INTEGER,
     old_value TEXT,
     new_value TEXT,
     secret INTEGER NOT NULL CHECK (secret IN (0, 1)),
