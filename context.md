@@ -250,6 +250,5 @@ behavior-parity target.
   changes.
 
 Detailed feature scope and acceptance criteria belong in the open issues
-that carry them: #455, #457, #471 and #476 for the remaining v2 work, plus
-the owner gates #227, #233, #245, #247 and #615. They do not belong in this
-file.
+that carry them: #457, #471 and #476 for the remaining v2 work, plus the
+owner gates #233 and #615. They do not belong in this file.
