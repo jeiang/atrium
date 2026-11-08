@@ -7,15 +7,15 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
+	"golang.org/x/text/cases"
 )
 
 const MaxNameChars = 200
 
 func ValidName(value string) (string, error) {
-	name := py.Strip(value)
+	name := strings.TrimSpace(value)
 	if name == "" || utf8.RuneCountInString(name) > MaxNameChars || strings.Contains(name, "|") ||
-		py.Casefold(name) == py.Casefold(config.Inbox) || strings.ContainsFunc(name, func(r rune) bool { return r < 32 }) {
+		cases.Fold().String(name) == cases.Fold().String(config.Inbox) || strings.ContainsFunc(name, func(r rune) bool { return r < 32 }) {
 		return "", proposals.SelectionError("invalid folder name " + strconv.Quote(value))
 	}
 	return name, nil

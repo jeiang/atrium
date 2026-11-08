@@ -11,7 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -113,7 +113,7 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	text := py.Strip(web.FormString(form, "text", ""))
+	text := strings.TrimSpace(web.FormString(form, "text", ""))
 	if text == "" {
 		p.failure(w, r, "Nothing sent", emptyMessage)
 		return
@@ -222,7 +222,7 @@ func (p *pages) chatBranch(w http.ResponseWriter, r *http.Request) {
 	var seq int64
 	if !found || raw == "" {
 		errs = append(errs, web.Missing("body", "seq"))
-	} else if n, ok := py.LaxInt64(raw); ok {
+	} else if n, ok := numx.LaxInt64(raw); ok {
 		seq = n
 	} else {
 		errs = append(errs, web.BadInt("body", "seq", raw))
@@ -279,7 +279,7 @@ func queryAfter(r *http.Request, errs *[]web.FieldError) int64 {
 		return 0
 	}
 	value := raw[len(raw)-1]
-	n, ok := py.LaxInt64(value)
+	n, ok := numx.LaxInt64(value)
 	if !ok {
 		*errs = append(*errs, web.BadInt("query", "after", value))
 	}

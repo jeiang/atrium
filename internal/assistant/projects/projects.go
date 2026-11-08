@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/notionid"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type ProjectError string
@@ -65,7 +64,7 @@ type cleaned struct {
 }
 
 func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
-	name := py.Strip(f.Name)
+	name := strings.TrimSpace(f.Name)
 	if name == "" {
 		return cleaned{}, ProjectError("Give the project a name.")
 	}
@@ -77,7 +76,7 @@ func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
 	if utf8.RuneCountInString(name) > maxName {
 		return cleaned{}, ProjectError(fmt.Sprintf("The name is limited to %d characters.", maxName))
 	}
-	instructions := py.Strip(f.Instructions)
+	instructions := strings.TrimSpace(f.Instructions)
 	if utf8.RuneCountInString(instructions) > maxInstructions {
 		return cleaned{}, ProjectError(fmt.Sprintf("Instructions are limited to %d characters.", maxInstructions))
 	}
@@ -90,7 +89,7 @@ func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
 		return cleaned{}, ProjectError(err.Error())
 	}
 	out := cleaned{Name: name, Instructions: instructions, Effort: effort, ContextLimit: limit}
-	if hub := py.Strip(f.WikiHubID); hub != "" {
+	if hub := strings.TrimSpace(f.WikiHubID); hub != "" {
 		found := notionid.IDsInText(hub)
 		if len(found) == 0 {
 			return cleaned{}, ProjectError("The wiki hub must be a Notion page id or URL.")

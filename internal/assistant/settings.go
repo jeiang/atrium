@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -249,7 +250,7 @@ func init() {
 }
 
 func headerValue(value string) error {
-	if py.Strip(value) == "" {
+	if strings.TrimSpace(value) == "" {
 		return settings.Invalid("must not be blank")
 	}
 	for _, c := range value {
@@ -266,7 +267,7 @@ func Ordered(strict bool, below, above []string) func(string, func(string) (stri
 		atLeast, atMost = "above", "below"
 	}
 	return func(value string, peer func(string) (string, error)) error {
-		own, err := py.ParseFloat(value)
+		own, err := numx.ParseFloat(value)
 		if err != nil {
 			return settings.Invalid("must be a number")
 		}
@@ -275,7 +276,7 @@ func Ordered(strict bool, below, above []string) func(string, func(string) (stri
 			if err != nil {
 				return err
 			}
-			if other, err := py.ParseFloat(text); err == nil && (own < other || strict && own == other) {
+			if other, err := numx.ParseFloat(text); err == nil && (own < other || strict && own == other) {
 				return settings.Invalid(fmt.Sprintf("must be %s %s (%s)", atLeast, key, text))
 			}
 		}
@@ -284,7 +285,7 @@ func Ordered(strict bool, below, above []string) func(string, func(string) (stri
 			if err != nil {
 				return err
 			}
-			if other, err := py.ParseFloat(text); err == nil && (own > other || strict && own == other) {
+			if other, err := numx.ParseFloat(text); err == nil && (own > other || strict && own == other) {
 				return settings.Invalid(fmt.Sprintf("must be %s %s (%s)", atMost, key, text))
 			}
 		}

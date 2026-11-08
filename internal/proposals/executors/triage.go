@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -30,12 +29,12 @@ type TriageItem struct {
 	DueTS  float64 `json:"due_ts,omitempty"`
 }
 
-func (i TriageItem) Dict() py.Dict {
-	return py.Dict{
-		{Key: "id", Value: i.ID}, {Key: "uid", Value: i.UID}, {Key: "uidvalidity", Value: i.UIDValidity},
-		{Key: "msgid", Value: i.MsgID}, {Key: "digest", Value: i.Digest}, {Key: "mailbox", Value: i.Mailbox},
-		{Key: "imap_name", Value: i.IMAPName}, {Key: "action", Value: i.Action}, {Key: "label", Value: i.Label},
-		{Key: "due_ts", Value: i.DueTS},
+func (i TriageItem) Dict() map[string]any {
+	return map[string]any{
+		"id": i.ID, "uid": i.UID, "uidvalidity": i.UIDValidity,
+		"msgid": i.MsgID, "digest": i.Digest, "mailbox": i.Mailbox,
+		"imap_name": i.IMAPName, "action": i.Action, "label": i.Label,
+		"due_ts": i.DueTS,
 	}
 }
 
@@ -43,7 +42,7 @@ type triagePayload struct {
 	Items []TriageItem `json:"items"`
 }
 
-func (e *Executors) recordSkipped(ctx context.Context, pid int64, action py.Dict, text string) error {
+func (e *Executors) recordSkipped(ctx context.Context, pid int64, action map[string]any, text string) error {
 	_, err := proposals.RecordAction(ctx, e.DB.Write, pid, "write", nil, action, nil, ledger.Skipped, &text, e.now())
 	return err
 }
@@ -52,25 +51,25 @@ func triageSelection(selection any) (map[int64]bool, error) {
 	if selection == nil {
 		return nil, nil
 	}
-	dict, ok := selection.(py.Dict)
+	dict, ok := selection.(map[string]any)
 	if !ok {
 		return nil, nil
 	}
-	raw, _ := dict.Get("message_ids")
+	raw := dict["message_ids"]
 	if raw == nil {
 		return nil, nil
 	}
-	list, err := py.Iter(raw)
-	if err != nil {
-		return nil, err
+	list, ok := raw.([]any)
+	if !ok {
+		return nil, proposals.SelectionError("selection is not a list")
 	}
 	out := map[int64]bool{}
 	for _, value := range list {
-		id, err := py.Int(value)
-		if err != nil {
-			return nil, err
+		id, ok := numberToInt64(value)
+		if !ok {
+			return nil, proposals.SelectionError("selection is not a list of message ids")
 		}
-		out[id.Int64()] = true
+		out[id] = true
 	}
 	return out, nil
 }
@@ -138,10 +137,10 @@ func (e *Executors) ExecuteTriage(ctx context.Context, p *proposals.Proposal, se
 	if shadow {
 		state = "recorded; mail mode is not live"
 	}
-	return py.Dict{
-		{Key: "summary", Value: fmt.Sprintf("%d %s, %d skipped as changed", applied, state, skipped)},
-		{Key: "applied", Value: applied}, {Key: "skipped", Value: skipped}, {Key: "shadow", Value: shadow},
-		{Key: "actions", Value: stringList(notes)},
+	return map[string]any{
+		"summary": fmt.Sprintf("%d %s, %d skipped as changed", applied, state, skipped),
+		"applied": applied, "skipped": skipped, "shadow": shadow,
+		"actions": stringList(notes),
 	}, nil
 }
 
@@ -158,7 +157,7 @@ func (e *Executors) triageOne(ctx context.Context, client mail.Client, pid int64
 }
 
 func (e *Executors) triageArchive(ctx context.Context, client mail.Client, pid int64, account string, v mailops.Verified, shadow bool) (int, error) {
-	action := py.Dict{{Key: "op", Value: "archive"}, {Key: "account", Value: account}, {Key: "imap_name", Value: v.IMAPName}, {Key: "uids", Value: uidList([]uint32{v.UID})}}
+	action := map[string]any{"op": "archive", "account": account, "imap_name": v.IMAPName, "uids": uidList([]uint32{v.UID})}
 	if shadow {
 		return 0, e.recordSkipped(ctx, pid, action, "shadow mode: would archive")
 	}
@@ -176,8 +175,8 @@ func (e *Executors) triageLabel(ctx context.Context, client mail.Client, pid int
 	if label == "" {
 		return 0, proposals.SelectionError("a label action needs a label")
 	}
-	action := py.Dict{{Key: "op", Value: "label"}, {Key: "account", Value: account}, {Key: "imap_name", Value: v.IMAPName},
-		{Key: "uids", Value: uidList([]uint32{v.UID})}, {Key: "label", Value: label}}
+	action := map[string]any{"op": "label", "account": account, "imap_name": v.IMAPName,
+		"uids": uidList([]uint32{v.UID}), "label": label}
 	if config.From(ctx).Preset(account) != config.Gmail {
 		return 0, e.recordSkipped(ctx, pid, action, "labels are Gmail-only; the message was not changed")
 	}
@@ -191,8 +190,8 @@ func (e *Executors) triageSnooze(ctx context.Context, client mail.Client, pid in
 	if due <= e.now() {
 		return 0, proposals.SelectionError("a snooze needs a due time in the future")
 	}
-	action := py.Dict{{Key: "op", Value: "snooze"}, {Key: "account", Value: account}, {Key: "imap_name", Value: v.IMAPName},
-		{Key: "uids", Value: uidList([]uint32{v.UID})}, {Key: "due_ts", Value: due}}
+	action := map[string]any{"op": "snooze", "account": account, "imap_name": v.IMAPName,
+		"uids": uidList([]uint32{v.UID}), "due_ts": due}
 	imapName, validity, uid := v.IMAPName, v.UIDValidity, v.UID
 	if config.From(ctx).Preset(account) == config.Gmail {
 		if shadow {
@@ -241,8 +240,8 @@ func (e *Executors) triageSnooze(ctx context.Context, client mail.Client, pid in
 	if err != nil {
 		return 0, err
 	}
-	if err := e.record(ctx, pid, py.Dict{{Key: "op", Value: "snooze"}, {Key: "snooze_id", Value: snoozeID}},
-		py.Dict{{Key: "op", Value: OpCancelSnooze}, {Key: "snooze_id", Value: snoozeID}}); err != nil {
+	if err := e.record(ctx, pid, map[string]any{"op": "snooze", "snooze_id": snoozeID},
+		map[string]any{"op": OpCancelSnooze, "snooze_id": snoozeID}); err != nil {
 		return 0, err
 	}
 	if shadow {
@@ -283,5 +282,5 @@ func (e *Executors) UndoCancelSnooze(ctx context.Context, raw json.RawMessage) (
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "cancelled", Value: n}}, nil
+	return map[string]any{"cancelled": n}, nil
 }

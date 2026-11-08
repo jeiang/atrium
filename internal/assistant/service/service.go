@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,7 +30,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 )
 
@@ -79,7 +79,7 @@ func (s *Service) ResolveClient(ctx context.Context) (*anthropic.Client, error) 
 	if err != nil {
 		return nil, err
 	}
-	return anthropic.New(py.Strip(key), s.Env)
+	return anthropic.New(strings.TrimSpace(key), s.Env)
 }
 
 const catalogCheckTimeout = 30 * time.Second

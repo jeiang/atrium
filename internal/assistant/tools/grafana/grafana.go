@@ -21,7 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/integrations/transport"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/timex"
 )
 
@@ -159,15 +159,15 @@ func request(ctx context.Context, tc *tool.Context, lim limits, method, path, ra
 	if resp.StatusCode >= 400 {
 		return nil, tool.Error("grafana " + strconv.Itoa(resp.StatusCode) + ": " + tool.Clip(strings.ToValidUTF8(string(raw), "\ufffd"), lim.cellChars))
 	}
-	value, err := py.JSONLoads(raw)
+	value, err := jsonx.Loads(raw)
 	if err != nil {
 		return nil, tool.Error("grafana returned non-JSON")
 	}
 	return value, nil
 }
 
-func attr(v any) (py.Dict, error) {
-	d, ok := v.(py.Dict)
+func attr(v any) (map[string]any, error) {
+	d, ok := v.(map[string]any)
 	if !ok {
 		return nil, tool.Error("grafana returned an unexpected object")
 	}
@@ -198,19 +198,18 @@ func truthy(v any) bool {
 		return v != ""
 	case []any:
 		return len(v) > 0
-	case py.Dict:
+	case map[string]any:
 		return len(v) > 0
 	}
 	return true
 }
 
-func get(d py.Dict, key string) any {
-	v, _ := d.Get(key)
-	return v
+func get(d map[string]any, key string) any {
+	return d[key]
 }
 
-func orDefault(d py.Dict, key string, def any) any {
-	if v, ok := d.Get(key); ok {
+func orDefault(d map[string]any, key string, def any) any {
+	if v, ok := d[key]; ok {
 		return v
 	}
 	return def
@@ -229,7 +228,7 @@ func cell(v any, cellChars int) any {
 		return roundTo(v, 6)
 	case string:
 		return tool.Clip(v, cellChars)
-	case py.Dict, []any:
+	case map[string]any, []any:
 		return tool.Clip(fmt.Sprintf("%v", v), cellChars)
 	}
 	return v
@@ -291,7 +290,7 @@ func compactFrame(frameValue any, rowCap, cellChars int) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
-	schema, err := attr(orDefault(frame, "schema", py.Dict{}))
+	schema, err := attr(orDefault(frame, "schema", map[string]any{}))
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +298,7 @@ func compactFrame(frameValue any, rowCap, cellChars int) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
-	data, err := attr(orDefault(frame, "data", py.Dict{}))
+	data, err := attr(orDefault(frame, "data", map[string]any{}))
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +306,7 @@ func compactFrame(frameValue any, rowCap, cellChars int) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
-	fields := make([]py.Dict, len(fieldList))
+	fields := make([]map[string]any, len(fieldList))
 	var keep []int
 	for i, f := range fieldList {
 		if fields[i], err = attr(f); err != nil {
@@ -349,7 +348,7 @@ func compactFrame(frameValue any, rowCap, cellChars int) (map[string]any, error)
 		}
 		rows = append(rows, row)
 	}
-	var labels py.Dict
+	labels := map[string]any{}
 	names := make([]any, 0, len(keep))
 	for _, i := range keep {
 		if l := get(fields[i], "labels"); truthy(l) {
@@ -357,8 +356,8 @@ func compactFrame(frameValue any, rowCap, cellChars int) (map[string]any, error)
 			if err != nil {
 				return nil, err
 			}
-			for _, p := range ld {
-				labels = labels.Set(p.Key, p.Value)
+			for k, v := range ld {
+				labels[k] = v
 			}
 		}
 		names = append(names, orDefault(fields[i], "name", ""))
@@ -385,7 +384,7 @@ func compactResults(payloadValue any, rowCap int, lim limits) (any, error) {
 			return nil, err
 		}
 		for _, p := range rd {
-			result, err := attr(p.Value)
+			result, err := attr(p)
 			if err != nil {
 				return nil, err
 			}
@@ -463,23 +462,20 @@ func query(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	q := py.Dict{
-		{Key: "refId", Value: "A"},
-		{Key: "datasource", Value: py.Dict{{Key: "uid", Value: uid}}},
-		{Key: "expr", Value: expr},
-		{Key: "maxDataPoints", Value: int64(lim.metricRows)},
-	}
+	q := map[string]any{"refId": "A", "datasource": map[string]any{"uid": uid}, "expr": expr, "maxDataPoints": int64(lim.metricRows)}
 	var rowCap int
 	if kind == "prometheus" {
-		q = q.Set("range", true).Set("instant", false)
+		q["range"] = true
+		q["instant"] = false
 		if step, ok, err := tool.TextArg(args, "step", false); err != nil {
 			return nil, err
 		} else if ok {
-			q = q.Set("interval", step)
+			q["interval"] = step
 		}
 		rowCap = int(min(limit, int64(lim.metricRows)))
 	} else {
-		q = q.Set("queryType", "range").Set("maxLines", limit)
+		q["queryType"] = "range"
+		q["maxLines"] = limit
 		rowCap = int(min(limit, int64(lim.logRows)))
 	}
 	start, ok, err := tool.TextArg(args, "start", false)
@@ -496,7 +492,7 @@ func query(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if !ok {
 		end = "now"
 	}
-	body := py.Dict{{Key: "queries", Value: []any{q}}, {Key: "from", Value: start}, {Key: "to", Value: end}}
+	body := map[string]any{"queries": []any{q}, "from": start, "to": end}
 	payload, err := request(ctx, tc, lim, http.MethodPost, "/api/ds/query", "", body)
 	if err != nil {
 		return nil, err
@@ -527,7 +523,7 @@ func alerts(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 			return nil, err
 		}
 	}
-	var firing []py.Dict
+	var firing []map[string]any
 	for _, v := range list {
 		a, err := attr(v)
 		if err != nil {
@@ -552,7 +548,7 @@ func alerts(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 			return nil, tool.Error("grafana returned an unexpected value")
 		}
 		out = append(out, map[string]any{
-			"labels":    orDefault(a, "labels", py.Dict{}),
+			"labels":    orDefault(a, "labels", map[string]any{}),
 			"summary":   tool.Clip(text, lim.cellChars),
 			"active_at": get(a, "activeAt"),
 			"value":     get(a, "value"),

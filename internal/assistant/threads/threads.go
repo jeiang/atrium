@@ -21,8 +21,10 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 type Kind string
@@ -146,9 +148,9 @@ func CleanContextLimit(value any) (int64, error) {
 			limit, ok = int64(v), true
 		}
 	case json.Number:
-		limit, ok = py.ParseInt(string(v))
+		limit, ok = numx.ParseInt(string(v))
 	case string:
-		limit, ok = py.ParseInt(v)
+		limit, ok = numx.ParseInt(v)
 	}
 	if ok && slices.Contains(assistant.ContextLimits, limit) {
 		return limit, nil
@@ -212,7 +214,7 @@ func Defaults(ctx context.Context, q db.Querier) (Options, error) {
 	if err != nil {
 		return out, err
 	}
-	if n, ok := py.ParseInt(found.Value); ok && slices.Contains(assistant.ContextLimits, n) {
+	if n, ok := numx.ParseInt(found.Value); ok && slices.Contains(assistant.ContextLimits, n) {
 		out.ContextLimit = n
 	}
 	return out, nil
@@ -256,15 +258,15 @@ func setPinSafe(ctx context.Context, q db.Querier, key, value string) error {
 }
 
 func TitleFrom(text string) string {
-	for _, line := range py.SplitLines(text) {
-		line = py.Strip(line)
+	for _, line := range textx.SplitLines(text) {
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
 		if utf8.RuneCountInString(line) <= TitleChars {
 			return line
 		}
-		return py.Clip(line, TitleChars-1) + "…"
+		return textx.Clip(line, TitleChars-1) + "…"
 	}
 	return ""
 }
@@ -384,7 +386,7 @@ func Create(ctx context.Context, q db.Querier, now float64, s Spec) (int64, erro
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO threads (kind, title, job_id, parent_thread_id, model, effort, context_limit, project_id, allowed_urls, role, parent_run_id, branched_from_thread_id, branched_from_seq, created_at, updated_at, thinking, web_search, cost_cap_usd, environment, repo, base_branch, agent, beta_set, speed) "+
 			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		s.Kind, s.Title, s.JobID, s.ParentID, o.Model, o.Effort, o.ContextLimit, s.ProjectID, py.JSONDumps(urls), s.Role, s.ParentRunID,
+		s.Kind, s.Title, s.JobID, s.ParentID, o.Model, o.Effort, o.ContextLimit, s.ProjectID, jsonx.Dumps(urls), s.Role, s.ParentRunID,
 		s.BranchedFromThreadID, s.BranchedFromSeq, now, now, o.Thinking, b2i(web), o.CostCapUSD, s.Environment, s.Repo, s.BaseBranch, s.Agent, s.BetaSet, s.Speed)
 	if err != nil {
 		return 0, err
@@ -687,7 +689,7 @@ func AddAllowedURLs(ctx context.Context, d *db.DB, threadID int64, urls []string
 			list = append(list, u)
 		}
 		slices.Sort(list)
-		_, err = tx.ExecContext(ctx, "UPDATE threads SET allowed_urls = ? WHERE id = ?", py.JSONDumps(list), threadID)
+		_, err = tx.ExecContext(ctx, "UPDATE threads SET allowed_urls = ? WHERE id = ?", jsonx.Dumps(list), threadID)
 		return err
 	})
 }

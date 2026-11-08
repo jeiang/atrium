@@ -17,8 +17,8 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type ToolUse = block.Use
@@ -28,11 +28,11 @@ func toolUses(blocks []json.RawMessage) ([]ToolUse, error) {
 }
 
 func toolResult(toolUseID, content string, isError bool) json.RawMessage {
-	block := py.Dict{{Key: "type", Value: actx.ToolResult}, {Key: "tool_use_id", Value: toolUseID}, {Key: "content", Value: content}}
+	block := map[string]any{"type": actx.ToolResult, "tool_use_id": toolUseID, "content": content}
 	if isError {
-		block = append(block, py.Pair{Key: "is_error", Value: true})
+		block["is_error"] = true
 	}
-	return json.RawMessage(py.JSONDumps(block, py.JSONOpts{Compact: true, NoEnsureASCII: true}))
+	return json.RawMessage(jsonx.Dumps(block, jsonx.Opts{Compact: true, NoEnsureASCII: true}))
 }
 
 func replayClass(t *tool.Tool) string {
@@ -147,7 +147,7 @@ func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errT
 		if err := journal.FinishToolCall(ledgerCtx, x.d.Write, callID, journal.Error, x.now(), errText, nil); err != nil {
 			return nil, err
 		}
-		if err := x.tc.Progress.Event(ctx, progress.ToolDone, py.Dict{{Key: "id", Value: use.ID}, {Key: "ok", Value: false}, {Key: "preview", Value: progress.PreviewOf(*errText)}}); err != nil {
+		if err := x.tc.Progress.Event(ctx, progress.ToolDone, map[string]any{"id": use.ID, "ok": false, "preview": progress.PreviewOf(*errText)}); err != nil {
 			return nil, err
 		}
 		return toolResult(use.ID, *errText, true), nil
@@ -159,7 +159,7 @@ func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errT
 	if err := journal.FinishToolCall(ledgerCtx, x.d.Write, callID, journal.OK, x.now(), nil, resultID); err != nil {
 		return nil, err
 	}
-	if err := x.tc.Progress.Event(ctx, progress.ToolDone, py.Dict{{Key: "id", Value: use.ID}, {Key: "ok", Value: true}, {Key: "preview", Value: progress.PreviewOf(content)}}); err != nil {
+	if err := x.tc.Progress.Event(ctx, progress.ToolDone, map[string]any{"id": use.ID, "ok": true, "preview": progress.PreviewOf(content)}); err != nil {
 		return nil, err
 	}
 	return toolResult(use.ID, content, false), nil
@@ -178,7 +178,7 @@ func (x *dispatcher) toolStart(ctx context.Context, use ToolUse, args json.RawMe
 	if err != nil {
 		return err
 	}
-	return x.tc.Progress.Event(ctx, progress.ToolStart, py.Dict{{Key: "id", Value: use.ID}, {Key: "name", Value: use.Name}, {Key: "args", Value: short}})
+	return x.tc.Progress.Event(ctx, progress.ToolStart, map[string]any{"id": use.ID, "name": use.Name, "args": short})
 }
 
 func (x *dispatcher) startCall(ctx context.Context, use ToolUse) (int64, error) {

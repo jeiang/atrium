@@ -12,12 +12,13 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/textx"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -55,15 +56,12 @@ func CleanPlan(ctx context.Context, q db.Querier, items any) ([]PlanItem, error)
 		switch step := item.(type) {
 		case map[string]any:
 			rawText, done = step["text"], step["done"]
-		case py.Dict:
-			rawText, _ = step.Get("text")
-			done, _ = step.Get("done")
 		}
 		text, isText := rawText.(string)
-		if !isText || py.Strip(text) == "" {
+		if !isText || strings.TrimSpace(text) == "" {
 			return nil, PlanError("each step needs a non-empty text")
 		}
-		out = append(out, PlanItem{Text: py.Clip(py.Strip(text), maxChars), Done: py.Truthy(done)})
+		out = append(out, PlanItem{Text: textx.Clip(strings.TrimSpace(text), maxChars), Done: jsonx.Truthy(done)})
 	}
 	return out, nil
 }
@@ -218,16 +216,16 @@ func searchSources(histories []journal.History, roles map[int64]*string) ([]Sour
 					continue
 				}
 				for _, r := range results {
-					hit, ok := r.(py.Dict)
+					hit, ok := r.(map[string]any)
 					if !ok {
 						continue
 					}
-					url, _ := hit.Get("url")
+					url := hit["url"]
 					link, _ := url.(string)
 					if link == "" {
 						continue
 					}
-					title, _ := hit.Get("title")
+					title := hit["title"]
 					label, _ := title.(string)
 					found = append(found, Source{Kind: KindWeb, Key: link, Title: first(label, link), URL: link, Via: roles[h.ThreadID]})
 				}

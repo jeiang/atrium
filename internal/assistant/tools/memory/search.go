@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/mail/search"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const searchName = "search_threads"
@@ -85,15 +84,11 @@ func searchThreads(ctx context.Context, tc *tool.Context, args tool.Args) (any, 
 		if title != nil {
 			titleValue = *title
 		}
-		hit := py.Dict{
-			{Key: "thread_id", Value: threadID}, {Key: "title", Value: titleValue}, {Key: "kind", Value: kind},
-			{Key: "project_id", Value: projectID}, {Key: "from", Value: from}, {Key: "to", Value: to},
-			{Key: "state", Value: state}, {Key: "text", Value: clip(text, int(page))}, {Key: "at", Value: created},
-		}
+		hit := map[string]any{"thread_id": threadID, "title": titleValue, "kind": kind, "project_id": projectID, "from": from, "to": to, "state": state, "text": clip(text, int(page)), "at": created}
 		if threadID == tc.ThreadID {
-			hit = append(hit, py.Pair{Key: "zoom", Value: py.Dict{{Key: "id", Value: from}, {Key: "n", Value: to - from + 1}}})
+			hit["zoom"] = map[string]any{"id": from, "n": to - from + 1}
 		} else {
-			hit = append(hit, py.Pair{Key: "chat", Value: fmt.Sprintf("/chat/%d", threadID)})
+			hit["chat"] = fmt.Sprintf("/chat/%d", threadID)
 		}
 		hits = append(hits, hit)
 	}
@@ -103,7 +98,7 @@ func searchThreads(ctx context.Context, tc *tool.Context, args tool.Args) (any, 
 	if hits == nil {
 		hits = []any{}
 	}
-	return py.Dict{{Key: "hits", Value: hits}}, nil
+	return map[string]any{"hits": hits}, nil
 }
 
 func clip(text string, limit int) string {

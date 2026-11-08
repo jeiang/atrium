@@ -6,11 +6,11 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Row struct {
@@ -212,7 +212,7 @@ func IngestUploads(ctx context.Context, d *db.DB, dir string, uploads []Uploaded
 		if err != nil {
 			return nil, err
 		}
-		name := py.PathName(u.Name)
+		name := path.Base(u.Name)
 		if name == "" {
 			name = "file"
 		}

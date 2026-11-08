@@ -15,7 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 const Prompt = "Nightly consolidation. Call threads_today (no date) to read the last 24 hours of chat and scheduled threads. " +
@@ -49,13 +49,13 @@ func Window(date *string, loc *time.Location, now float64) (float64, float64, er
 	if date == nil {
 		return now - daySeconds, now, nil
 	}
-	day, ok := py.FromISOFormat(*date)
+	day, ok := timex.ParseISO(*date)
 	if !ok {
 		return 0, 0, tool.Error("date must be YYYY-MM-DD")
 	}
-	wall := time.Date(day.Year, time.Month(day.Month), day.Day, 0, 0, 0, 0, time.UTC).Unix()
-	start := float64(py.WallToUnix(loc, wall))
-	end := float64(py.WallToUnix(loc, wall+23*3600+59*60+59))
+	wall := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC).Unix()
+	start := float64(timex.WallToUnix(loc, wall))
+	end := float64(timex.WallToUnix(loc, wall+23*3600+59*60+59))
 	return start, end + 1, nil
 }
 
@@ -64,8 +64,8 @@ func textsOf(content []json.RawMessage) ([]string, error) {
 }
 
 func localISO(ts float64, loc *time.Location) string {
-	sec, us := py.SplitTimestamp(ts)
-	return py.ISOFormat(time.Unix(sec, us*1000).In(loc), "minutes")
+	sec, us := timex.SplitTimestamp(ts)
+	return timex.ISOFormat(time.Unix(sec, us*1000).In(loc), "minutes")
 }
 
 func threadsToday(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -133,9 +133,7 @@ func read(ctx context.Context, q db.Querier, start, end float64) ([]any, error) 
 		}
 		text := tool.Clip(strings.Join(lines, "\n"), min(threadChars, budget))
 		budget -= utf8.RuneCountInString(text)
-		found = append(found, py.Dict{
-			{Key: "thread_id", Value: t.id}, {Key: "kind", Value: t.kind}, {Key: "title", Value: t.title}, {Key: "text", Value: text},
-		})
+		found = append(found, map[string]any{"thread_id": t.id, "kind": t.kind, "title": t.title, "text": text})
 		if budget <= 0 {
 			break
 		}
@@ -158,7 +156,7 @@ func lines(ctx context.Context, q db.Querier, threadID int64, start, end float64
 			return nil, err
 		}
 		for _, text := range texts {
-			if py.Strip(text) != "" {
+			if strings.TrimSpace(text) != "" {
 				out = append(out, m.Role+": "+text)
 			}
 		}

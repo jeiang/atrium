@@ -23,7 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 const Name = loop.Research
@@ -137,9 +137,9 @@ func cleanIDs(args tool.Args, maxIDs int) ([]string, error) {
 	for _, item := range list {
 		switch v := item.(type) {
 		case string:
-			ids = append(ids, py.Clip(v, 200))
+			ids = append(ids, textx.Clip(v, 200))
 		case int, int64, json.Number, *big.Int:
-			ids = append(ids, py.Clip(fmt.Sprint(v), 200))
+			ids = append(ids, textx.Clip(fmt.Sprint(v), 200))
 		default:
 			return nil, tool.Error("context_ids must contain strings or integers")
 		}

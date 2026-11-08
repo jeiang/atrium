@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 )
 
 type CacheControl struct {
@@ -74,22 +74,22 @@ func Signature(system []Block, tools []json.RawMessage) (string, error) {
 	}
 	defs := make([]any, len(tools))
 	for i, raw := range tools {
-		v, err := py.JSONLoads(raw)
+		v, err := jsonx.Loads(raw)
 		if err != nil {
 			return "", err
 		}
-		d, ok := v.(py.Dict)
+		d, ok := v.(map[string]any)
 		if !ok {
 			return "", fmt.Errorf("prompts: tool definition is not an object")
 		}
-		clean := make(py.Dict, 0, len(d))
-		for _, pair := range d {
-			if pair.Key != "cache_control" {
-				clean = append(clean, pair)
+		clean := make(map[string]any, len(d))
+		for k, v := range d {
+			if k != "cache_control" {
+				clean[k] = v
 			}
 		}
 		defs[i] = clean
 	}
-	sum := sha256.Sum256([]byte(py.JSONDumps([]any{texts, defs}, py.JSONOpts{SortKeys: true})))
+	sum := sha256.Sum256([]byte(jsonx.Dumps([]any{texts, defs}, jsonx.Opts{SortKeys: true})))
 	return hex.EncodeToString(sum[:])[:16], nil
 }

@@ -14,7 +14,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var (
@@ -74,9 +73,9 @@ func Get(ctx context.Context, q db.Querier, skill string) (*Skill, error) {
 func matches(re *regexp.Regexp, s string) bool { return re.MatchString(s) }
 
 func Save(ctx context.Context, q db.Querier, skill, description, body string, now float64) error {
-	skill = py.Strip(skill)
-	description = strings.Join(py.Split(description), " ")
-	body = py.Strip(body)
+	skill = strings.TrimSpace(skill)
+	description = strings.Join(strings.Fields(description), " ")
+	body = strings.TrimSpace(body)
 	if !matches(name, skill) {
 		return Error("name must be lowercase letters, digits, - or _ (max 48 characters)")
 	}

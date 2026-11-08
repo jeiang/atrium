@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 )
 
 const (
@@ -190,7 +190,7 @@ func CostUSD(model string, t Tokens, searches int64) (float64, error) {
 }
 
 func costAt(r Rates, t Tokens) float64 {
-	total := py.Sum([]float64{
+	total := numx.Sum([]float64{
 		float64(float64(t.Input) * r.Input),
 		float64(float64(t.Output) * r.Output),
 		float64(float64(t.CacheWrite5m) * r.CacheWrite5m),

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"mime"
+	"path"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
@@ -17,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -115,7 +115,7 @@ func nameChars(ctx context.Context, q db.Querier) (int, error) {
 }
 
 func safeName(name string, chars int) string {
-	cleaned := nameRe.ReplaceAllString(py.PathName(name), "_")
+	cleaned := nameRe.ReplaceAllString(path.Base(name), "_")
 	cleaned = strings.TrimLeft(cleaned, "._")
 	if cleaned == "" {
 		cleaned = "file"

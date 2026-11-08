@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
@@ -32,7 +33,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/tasks"
 	"github.com/jeiang/atrium/internal/web"
@@ -104,7 +104,7 @@ func anthropicKey(ctx context.Context, p module.Probe) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if py.Strip(key) == "" {
+	if strings.TrimSpace(key) == "" {
 		return secrets.AnthropicAPIKey + " is not set", nil
 	}
 	return "", nil

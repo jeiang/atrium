@@ -13,7 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/workspace"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 )
 
 type WorkView struct {
@@ -21,7 +21,7 @@ type WorkView struct {
 	Sources   []workspace.Source `json:"sources"`
 	Subagents []subagents.Card   `json:"subagents"`
 	Files     []files.Row        `json:"files"`
-	Drafts    []py.Dict          `json:"drafts"`
+	Drafts    []map[string]any   `json:"drafts"`
 	Code      []any              `json:"code"`
 }
 
@@ -64,7 +64,7 @@ func workView(ctx context.Context, q db.Querier, threadID int64, now float64) (W
 func decodeBlocks(blocks []json.RawMessage) ([]any, error) {
 	out := make([]any, len(blocks))
 	for i, raw := range blocks {
-		v, err := py.JSONLoads(raw)
+		v, err := jsonx.Loads(raw)
 		if err != nil {
 			return nil, err
 		}

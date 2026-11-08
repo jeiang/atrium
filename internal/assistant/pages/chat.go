@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/projects"
@@ -16,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/search"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -65,7 +65,7 @@ func (p *pages) chatIndex(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, r, http.StatusUnprocessableEntity, "unknown view")
 		return
 	}
-	p.listing(w, r, py.Strip(web.QueryValue(query, "q")), view, 0)
+	p.listing(w, r, strings.TrimSpace(web.QueryValue(query, "q")), view, 0)
 }
 
 func attachmentBlocks(blocks []files.AttachmentBlock) []json.RawMessage {
@@ -104,7 +104,7 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	text := py.Strip(web.FormString(form, "text", ""))
+	text := strings.TrimSpace(web.FormString(form, "text", ""))
 	if len(uploads) > 0 && text == "" {
 		p.failure(w, r, "Nothing sent", "Type a message to go with the files.")
 		return
@@ -186,7 +186,7 @@ func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string, s
 		if view != archived {
 			view = ""
 		}
-		p.listing(w, r, py.Strip(web.FormString(form, "q", "")), view, projectID)
+		p.listing(w, r, strings.TrimSpace(web.FormString(form, "q", "")), view, projectID)
 		return
 	}
 	back := "/chat/" + strconv.FormatInt(threadID, 10)

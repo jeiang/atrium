@@ -4,10 +4,9 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/textx"
 	"github.com/markusmobius/go-trafilatura"
 	"golang.org/x/net/html"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func ExtractText(markup, pageURL string, pageChars int) (title, text string) {
@@ -21,7 +20,7 @@ func ExtractText(markup, pageURL string, pageChars int) (title, text string) {
 	if text == "" {
 		text = fallback
 	}
-	return collapse(title), py.Clip(text, pageChars)
+	return collapse(title), textx.Clip(text, pageChars)
 }
 
 func readable(markup, pageURL string) (title, text string, ok bool) {

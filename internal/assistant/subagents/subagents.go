@@ -22,7 +22,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 const (
@@ -111,7 +112,7 @@ func Pool(reg *registry.Registry) ([]PoolTool, error) {
 func CleanTools(reg *registry.Registry, tools []string) ([]string, error) {
 	var names []string
 	for _, t := range tools {
-		if t = py.Strip(t); t != "" {
+		if t = strings.TrimSpace(t); t != "" {
 			names = append(names, t)
 		}
 	}
@@ -146,9 +147,9 @@ type Definition struct {
 }
 
 func Save(ctx context.Context, q db.Querier, reg *registry.Registry, d Definition, now float64) (*Agent, error) {
-	agent := py.Strip(d.Name)
-	description := strings.Join(py.Split(d.Description), " ")
-	prompt := py.Strip(d.Prompt)
+	agent := strings.TrimSpace(d.Name)
+	description := strings.Join(strings.Fields(d.Description), " ")
+	prompt := strings.TrimSpace(d.Prompt)
 	if !name.MatchString(agent) {
 		return nil, Error("name must be lowercase letters, digits, - or _ (max 32 characters)")
 	}
@@ -174,7 +175,7 @@ func Save(ctx context.Context, q db.Querier, reg *registry.Registry, d Definitio
 		"INSERT INTO subagents (name, description, prompt, effort, tools_json, enabled, builtin, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?) "+
 			"ON CONFLICT(name) DO UPDATE SET description = excluded.description, prompt = excluded.prompt, effort = excluded.effort, "+
 			"tools_json = excluded.tools_json, enabled = excluded.enabled, updated_at = excluded.updated_at",
-		agent, description, prompt, d.Effort, py.JSONDumps(tools), store.Bit(d.Enabled), now); err != nil {
+		agent, description, prompt, d.Effort, jsonx.Dumps(tools), store.Bit(d.Enabled), now); err != nil {
 		return nil, err
 	}
 	return Get(ctx, q, agent)
@@ -230,13 +231,13 @@ func DigestOf(ctx context.Context, q db.Querier, threadID int64) (string, error)
 		if err != nil {
 			return "", fmt.Errorf("subagents: thread %d message %d: %w", threadID, messages[i].ID, err)
 		}
-		if text := py.Strip(strings.Join(texts, "\n")); text != "" {
+		if text := strings.TrimSpace(strings.Join(texts, "\n")); text != "" {
 			r := assistant.Read(ctx, q)
 			limit := r.Int(assistant.KeySubagentDigestChars)
 			if err := r.Err(); err != nil {
 				return "", err
 			}
-			return py.Clip(text, limit), nil
+			return textx.Clip(text, limit), nil
 		}
 	}
 	return "", nil

@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"math"
 	"math/big"
+	"strings"
 	"unicode/utf8"
 
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 func BoundedInt(args Args, name string, def, maximum, minimum int64) (int64, error) {
@@ -105,7 +106,7 @@ func TextArg(args Args, name string, required bool) (text string, ok bool, err e
 	if !isString {
 		return "", false, Error(name + " must be a string")
 	}
-	s = py.Strip(s)
+	s = strings.TrimSpace(s)
 	return s, s != "", nil
 }
 
@@ -113,5 +114,5 @@ func Clip(text string, limit int) string {
 	if utf8.RuneCountInString(text) <= limit {
 		return text
 	}
-	return py.Clip(text, limit-1) + "…"
+	return textx.Clip(text, limit-1) + "…"
 }

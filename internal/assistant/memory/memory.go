@@ -11,7 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -201,7 +201,7 @@ func digest(value any) string {
 	if value == nil {
 		return ""
 	}
-	text := py.JSONDumps(value, py.JSONOpts{Compact: true, NoEnsureASCII: true})
+	text := jsonx.Dumps(value, jsonx.Opts{Compact: true, NoEnsureASCII: true})
 	return clip(text, 200)
 }
 

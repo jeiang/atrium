@@ -9,10 +9,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/textx"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/store"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -36,32 +37,32 @@ const (
 
 var ErrStopped = errors.New("stopped by the operator")
 
-var dataOpts = py.JSONOpts{NoEnsureASCII: true}
+var dataOpts = jsonx.Opts{NoEnsureASCII: true}
 
 func ShortArgs(args json.RawMessage) (string, error) {
-	text, err := py.JSONRedump(args, dataOpts)
+	text, err := jsonx.Redump(args, dataOpts)
 	if err != nil {
 		return "", err
 	}
 	if utf8.RuneCountInString(text) <= ArgsChars {
 		return text, nil
 	}
-	return py.Clip(text, ArgsChars-1) + "…", nil
+	return textx.Clip(text, ArgsChars-1) + "…", nil
 }
 
 func PreviewOf(content any) string {
 	text, ok := content.(string)
 	if !ok {
-		text = py.JSONDumps(content, dataOpts)
+		text = jsonx.Dumps(content, dataOpts)
 	}
 	if utf8.RuneCountInString(text) <= PreviewChars {
 		return text
 	}
-	return py.Clip(text, PreviewChars-1) + "…"
+	return textx.Clip(text, PreviewChars-1) + "…"
 }
 
 func Emit(ctx context.Context, q db.Querier, runID int64, kind string, data any, now float64) error {
-	_, err := q.ExecContext(ctx, "INSERT INTO run_events (run_id, ts, kind, data_json) VALUES (?, ?, ?, ?)", runID, now, kind, py.JSONDumps(data, dataOpts))
+	_, err := q.ExecContext(ctx, "INSERT INTO run_events (run_id, ts, kind, data_json) VALUES (?, ?, ?, ?)", runID, now, kind, jsonx.Dumps(data, dataOpts))
 	return err
 }
 
@@ -111,7 +112,7 @@ func NewWriter(q db.Querier, runID int64, now func() float64) *Writer {
 	return &Writer{q: q, runID: runID, now: now}
 }
 
-func (w *Writer) Event(ctx context.Context, kind string, data py.Dict) error {
+func (w *Writer) Event(ctx context.Context, kind string, data map[string]any) error {
 	if err := w.Flush(ctx); err != nil {
 		return err
 	}
@@ -139,7 +140,7 @@ func (w *Writer) Flush(ctx context.Context) error {
 	if text == "" {
 		return nil
 	}
-	return Emit(ctx, w.q, w.runID, w.kind, py.Dict{{Key: "text", Value: text}}, w.flushedAt)
+	return Emit(ctx, w.q, w.runID, w.kind, map[string]any{"text": text}, w.flushedAt)
 }
 
 func (w *Writer) CheckStop(ctx context.Context, force bool) error {
@@ -171,10 +172,10 @@ func (w *Writer) Observe(ctx context.Context, ev anthropic.Event) error {
 	case anthropic.ToolStartEvent:
 		var args string
 		if args, err = ShortArgs(e.Input); err == nil {
-			err = w.Event(ctx, ToolStart, py.Dict{{Key: "id", Value: e.ID}, {Key: "name", Value: e.Name}, {Key: "args", Value: args}})
+			err = w.Event(ctx, ToolStart, map[string]any{"id": e.ID, "name": e.Name, "args": args})
 		}
 	case anthropic.ToolDoneEvent:
-		err = w.Event(ctx, ToolDone, py.Dict{{Key: "id", Value: e.ID}, {Key: "ok", Value: e.OK}, {Key: "preview", Value: e.Preview}})
+		err = w.Event(ctx, ToolDone, map[string]any{"id": e.ID, "ok": e.OK, "preview": e.Preview})
 	}
 	if err != nil {
 		return err

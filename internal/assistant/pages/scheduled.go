@@ -9,7 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -66,7 +66,7 @@ func stamp(epoch *float64, loc *time.Location) *string {
 	if epoch == nil || *epoch == 0 {
 		return nil
 	}
-	sec, us := py.SplitTimestamp(*epoch)
+	sec, us := timex.SplitTimestamp(*epoch)
 	text := time.Unix(sec, us*1000).In(loc).Format(stampLayout)
 	return &text
 }
