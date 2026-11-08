@@ -16,9 +16,9 @@ Live mode: atrium files read mail, flags unread mail from your contacts and tras
 Shadow mode: nothing is changed automatically. Proposals you approve still run.
 {{- end}}{{end}}
 
-{{define "action_badge"}}{{$badge := badge "action" .status -}}
-{{if not $badge}}{{fail "unknown action status %v" .status}}{{end -}}
-<span class="badge" data-variant="{{$badge.Variant}}"{{if opt . "error" nil}} title="{{.error}}"{{end}}>{{$badge.Label}}</span>
+{{define "action_badge"}}{{$badge := badge "action" .Status -}}
+{{if not $badge}}{{fail "unknown action status %v" .Status}}{{end -}}
+<span class="badge" data-variant="{{$badge.Variant}}"{{if .Error}} title="{{.Error}}"{{end}}>{{$badge.Label}}</span>
 {{- end}}
 
 {{define "stage_badge"}}<span class="badge" data-variant="outline"><span class="size-2 rounded-full {{lbl "stage_dot" . "bg-chart-6"}}" aria-hidden="true"></span>{{lbl "stage" .}}</span>{{end}}
@@ -57,7 +57,7 @@ Shadow mode: nothing is changed automatically. Proposals you approve still run.
 
 {{define "folder_options"}}{{$selected := opt . "selected" nil -}}
 {{range .folders}}
-<option value="{{.folder}}"{{if eq .folder $selected}} selected{{end}}>{{.folder}}</option>
+<option value="{{.Folder}}"{{if eq .Folder (str $selected)}} selected{{end}}>{{.Folder}}</option>
 {{end}}
 {{- end}}
 
@@ -69,9 +69,9 @@ Shadow mode: nothing is changed automatically. Proposals you approve still run.
   </header>
 </div>{{end}}
 
-{{define "condition_text"}}{{$value := opt . "value" nil -}}
-<span class="font-medium">{{lbl "field" .field}}</span>
-<span class="text-muted-foreground">{{lbl "op" .op}}</span>
+{{define "condition_text"}}{{$value := .Value -}}
+<span class="font-medium">{{lbl "field" .Field}}</span>
+<span class="text-muted-foreground">{{lbl "op" .Op}}</span>
 {{- if present $value}}
 <code class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">{{join ", " $value}}</code>
 {{- end}}
@@ -95,7 +95,7 @@ Shadow mode: nothing is changed automatically. Proposals you approve still run.
 
 {{define "external"}}href="{{safeurl .}}" target="_blank" rel="noopener noreferrer"{{end}}
 
-{{define "page_link"}}<a class="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring {{opt . "class" ""}}" href="/notion/{{urlencode .ref.id}}">{{or (opt .ref "title" "") "Untitled"}}</a>{{end}}
+{{define "page_link"}}<a class="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring {{opt . "class" ""}}" href="/notion/{{urlencode (get .ref "id")}}">{{or (get .ref "title") "Untitled"}}</a>{{end}}
 
 {{define "run_badge"}}{{$state := .}}{{with badge "run" .}}<span class="badge" data-variant="{{.Variant}}">{{if eq $state "running"}}{{icon "loader-circle" "animate-spin"}}{{end}}{{.Label}}</span>{{end}}{{end}}
 

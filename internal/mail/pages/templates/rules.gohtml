@@ -1,18 +1,18 @@
 {{define "title"}}Rules{{end}}
 {{define "heading"}}Rules{{end}}
 {{define "body_attrs"}}{{if .Toast}} data-strip-params="saved,created"{{end}}{{end}}
-{{define "mail_rules_operator_tab"}}Operator <span class="badge" data-variant="secondary">{{len .Data.rules}}</span>{{end}}
-{{define "mail_rules_learned_tab"}}Learned <span class="badge" data-variant="secondary">{{len .Data.learned}}</span>{{end}}
+{{define "mail_rules_operator_tab"}}Operator <span class="badge" data-variant="secondary">{{len .Data.Rules}}</span>{{end}}
+{{define "mail_rules_learned_tab"}}Learned <span class="badge" data-variant="secondary">{{len .Data.Learned}}</span>{{end}}
 {{define "mail_rules_operator_panel"}}
 <div class="flex flex-col gap-3 pt-3">
   <p class="text-sm text-muted-foreground">Checked top to bottom before anything learned; the first rule whose conditions all hold decides.</p>
-  {{template "mail_rule_list" (dict "rules" .Data.rules "account" .Data.account "moved" (opt .Data "moved" nil) "focus_id" (opt .Data "focus_id" nil))}}
+  {{template "mail_rule_list" (dict "rules" .Data.Rules "account" .Data.Account "moved" nil "focus_id" nil)}}
 </div>
 {{end}}
-{{define "mail_rules_learned_panel"}}{{$account := .Data.account -}}
+{{define "mail_rules_learned_panel"}}{{$account := .Data.Account -}}
 <div class="flex flex-col gap-3 pt-3">
-  <p class="text-sm text-muted-foreground">Learned from where you file mail with the same sender or subject template. Read-only: correct a message to teach atrium.{{if .Data.learned_limit}} Showing the {{.Data.learned_limit}} keys with the most messages per account.{{end}}</p>
-  {{if .Data.learned}}
+  <p class="text-sm text-muted-foreground">Learned from where you file mail with the same sender or subject template. Read-only: correct a message to teach atrium.{{if .Data.LearnedLimit}} Showing the {{.Data.LearnedLimit}} keys with the most messages per account.{{end}}</p>
+  {{if .Data.Learned}}
   <div class="table-container rounded-lg border bg-card">
     <table class="table">
       <caption class="sr-only">Learned rules, most messages first</caption>
@@ -27,14 +27,14 @@
         </tr>
       </thead>
       <tbody>
-        {{range .Data.learned}}
+        {{range .Data.Learned}}
         <tr>
-          <td class="max-w-80 truncate font-mono text-xs" title="{{.key}}">{{.key}}</td>
-          <td class="text-muted-foreground">{{lbl "level" .level}}</td>
-          <td class="font-medium">{{.dest}}</td>
-          <td class="text-right tabular-nums">{{pct .purity}}</td>
-          <td class="text-right tabular-nums">{{.n}}</td>
-          {{if not $account}}<td class="text-muted-foreground">{{.account}}</td>{{end}}
+          <td class="max-w-80 truncate font-mono text-xs" title="{{.Key}}">{{.Key}}</td>
+          <td class="text-muted-foreground">{{lbl "level" .Level}}</td>
+          <td class="font-medium">{{.Dest}}</td>
+          <td class="text-right tabular-nums">{{pct .Purity}}</td>
+          <td class="text-right tabular-nums">{{.N}}</td>
+          {{if not $account}}<td class="text-muted-foreground">{{.Account}}</td>{{end}}
         </tr>
         {{end}}
       </tbody>
@@ -47,8 +47,8 @@
 {{end}}
 {{define "content"}}
 <div class="flex flex-wrap items-center justify-between gap-3">
-  {{template "account_switch" (dict "path" "/rules" "current" .Data.account)}}
-  <a class="btn" href="/rules/new{{if .Data.account}}?account={{queryval .Data.account}}{{end}}">{{icon "plus"}}New rule</a>
+  {{template "account_switch" (dict "path" "/rules" "current" .Data.Account)}}
+  <a class="btn" href="/rules/new{{if .Data.Account}}?account={{queryval .Data.Account}}{{end}}">{{icon "plus"}}New rule</a>
 </div>
 
 {{template "tabs" (dict

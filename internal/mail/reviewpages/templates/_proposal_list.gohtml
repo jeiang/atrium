@@ -12,4 +12,4 @@
 {{template "empty_state" (dict "icon_name" "list-checks" "title" "No proposals match" "body" "Choose another status or kind.")}}
 {{end}}{{end}}
 
-{{template "proposal_list" (dict "proposals" .Data.proposals "status" .Data.status "kind" .Data.kind "kind_label" .Data.kind_label "partial" .Data.partial "mode" .Mode "toast" .Toast)}}
+{{template "proposal_list" (dict "proposals" .Data.Proposals "status" .Data.Status "kind" .Data.Kind "kind_label" .Data.KindLabel "partial" .Data.Partial "mode" .Mode "toast" .Toast)}}
