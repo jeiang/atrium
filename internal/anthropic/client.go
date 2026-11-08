@@ -12,7 +12,6 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/logx"
 )
 
 const (
@@ -20,8 +19,6 @@ const (
 	connectTimeout = 5 * time.Second
 	readTimeout    = 10 * time.Minute
 )
-
-var filesLog = logx.Logger("atrium.agent.files")
 
 type Client struct {
 	sdk sdk.Client
@@ -137,13 +134,4 @@ func (c *Client) ModelIDs(ctx context.Context) ([]string, error) {
 		return nil, classify(err)
 	}
 	return ids, nil
-}
-
-func (c *Client) DeleteFile(ctx context.Context, fileID string) {
-	if c == nil || fileID == "" {
-		return
-	}
-	if _, err := c.sdk.Files.Delete(ctx, fileID, sdk.FileDeleteParams{}); err != nil {
-		filesLog.Warn(fmt.Sprintf("Files API delete of %s failed: %s", fileID, classify(err)))
-	}
 }

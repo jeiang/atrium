@@ -123,13 +123,6 @@ func archivedProject(project *projects.Project, verb string) (string, bool) {
 	return fmt.Sprintf("“%s” is archived. Restore it to %s.", project.Name, verb), true
 }
 
-func (p *pages) remote(ctx context.Context) files.RemoteDeleter {
-	if client, err := p.svc.ResolveClient(ctx); err == nil {
-		return client
-	}
-	return nil
-}
-
 func (p *pages) threadFile(w http.ResponseWriter, r *http.Request) (*files.Row, string, bool) {
 	threadID, errs := pathInt(r, "thread_id")
 	fileID, more := pathInt(r, "file_id")
@@ -341,7 +334,7 @@ func (p *pages) projectFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	_, err := files.DeleteOne(ctx, p.deps.DB.Write, p.remote(ctx), found.ID)
+	_, err := files.DeleteOne(ctx, p.deps.DB.Write, found.ID)
 	check(err)
 	p.projectFiles(w, r, projectID, http.StatusOK, nil)
 }

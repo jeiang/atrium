@@ -437,14 +437,8 @@ func (s *Service) DeleteThread(ctx context.Context, threadID int64) error {
 			return RunActive(fmt.Sprintf("thread %d has a run in progress", row.ID))
 		}
 	}
-	var remote files.RemoteDeleter
-	if made, err := s.ResolveClient(ctx); err == nil {
-		remote = made
-	} else if !errors.As(err, new(config.NotConfigured)) {
-		return err
-	}
 	for _, row := range append(children, *thread) {
-		if _, err := files.DeleteOwned(ctx, s.DB.Write, s.Cfg.FilesDir(), remote, files.ThreadOwner(row.ID)); err != nil {
+		if _, err := files.DeleteOwned(ctx, s.DB.Write, s.Cfg.FilesDir(), files.ThreadOwner(row.ID)); err != nil {
 			return err
 		}
 		if err := threads.Purge(ctx, s.DB.Write, row.ID, s.now()); err != nil {

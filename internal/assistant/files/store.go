@@ -15,27 +15,26 @@ import (
 )
 
 type Row struct {
-	ID              int64   `json:"id"`
-	ThreadID        *int64  `json:"thread_id"`
-	RunID           *int64  `json:"run_id"`
-	Name            string  `json:"name"`
-	MediaType       string  `json:"media_type"`
-	Bytes           int64   `json:"bytes"`
-	Path            string  `json:"path"`
-	Origin          string  `json:"origin"`
-	CreatedAt       float64 `json:"created_at"`
-	AnthropicFileID *string `json:"anthropic_file_id"`
-	Text            *string `json:"text"`
-	Tokens          int64   `json:"tokens"`
-	ProjectID       *int64  `json:"project_id"`
+	ID        int64   `json:"id"`
+	ThreadID  *int64  `json:"thread_id"`
+	RunID     *int64  `json:"run_id"`
+	Name      string  `json:"name"`
+	MediaType string  `json:"media_type"`
+	Bytes     int64   `json:"bytes"`
+	Path      string  `json:"path"`
+	Origin    string  `json:"origin"`
+	CreatedAt float64 `json:"created_at"`
+	Text      *string `json:"text"`
+	Tokens    int64   `json:"tokens"`
+	ProjectID *int64  `json:"project_id"`
 }
 
-const columns = "id, thread_id, run_id, name, media_type, bytes, path, origin, created_at, anthropic_file_id, text, tokens, project_id"
+const columns = "id, thread_id, run_id, name, media_type, bytes, path, origin, created_at, text, tokens, project_id"
 
 func scan(r interface{ Scan(...any) error }) (Row, error) {
 	var f Row
 	err := r.Scan(&f.ID, &f.ThreadID, &f.RunID, &f.Name, &f.MediaType, &f.Bytes, &f.Path, &f.Origin, &f.CreatedAt,
-		&f.AnthropicFileID, &f.Text, &f.Tokens, &f.ProjectID)
+		&f.Text, &f.Tokens, &f.ProjectID)
 	return f, err
 }
 
@@ -148,8 +147,8 @@ func Store(ctx context.Context, q db.Querier, dir string, f NewFile, now float64
 	}
 	threadID, projectID := f.Owner.columns()
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO thread_files (thread_id, project_id, run_id, name, media_type, bytes, path, origin, created_at, anthropic_file_id, text, tokens) "+
-			"VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, NULL, ?, ?)",
+		"INSERT INTO thread_files (thread_id, project_id, run_id, name, media_type, bytes, path, origin, created_at, text, tokens) "+
+			"VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)",
 		threadID, projectID, nullable(f.RunID), f.Name, f.MediaType, len(f.Data), f.Origin, now, f.Text, f.Tokens)
 	if err != nil {
 		return 0, err
@@ -292,44 +291,26 @@ func copyFile(from, to string) error {
 	return dst.Close()
 }
 
-type RemoteDeleter interface {
-	DeleteFile(ctx context.Context, fileID string)
-}
-
-func deleteRemote(ctx context.Context, remote RemoteDeleter, id *string) {
-	if remote != nil && id != nil && *id != "" {
-		remote.DeleteFile(ctx, *id)
-	}
-}
-
-func DeleteOwned(ctx context.Context, q db.Querier, dir string, remote RemoteDeleter, owner Owner) (int, error) {
+func DeleteOwned(ctx context.Context, q db.Querier, dir string, owner Owner) (int, error) {
 	column, id := owner.where()
-	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE "+column+" = ?", id)
-	if err != nil {
+	var n int
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM thread_files WHERE "+column+" = ?", id).Scan(&n); err != nil {
 		return 0, err
-	}
-	found, err := db.Collect(rows, func(r *sql.Rows) (Row, error) { return scan(r) })
-	if err != nil {
-		return 0, err
-	}
-	for _, r := range found {
-		deleteRemote(ctx, remote, r.AnthropicFileID)
 	}
 	if _, err := q.ExecContext(ctx, "DELETE FROM thread_files WHERE "+column+" = ?", id); err != nil {
 		return 0, err
 	}
 	if err := os.RemoveAll(filepath.Join(dir, owner.dirName())); err != nil {
-		return len(found), err
+		return n, err
 	}
-	return len(found), nil
+	return n, nil
 }
 
-func DeleteOne(ctx context.Context, q db.Querier, remote RemoteDeleter, fileID int64) (bool, error) {
+func DeleteOne(ctx context.Context, q db.Querier, fileID int64) (bool, error) {
 	found, err := Get(ctx, q, fileID)
 	if err != nil || found == nil {
 		return false, err
 	}
-	deleteRemote(ctx, remote, found.AnthropicFileID)
 	if err := os.Remove(found.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}
