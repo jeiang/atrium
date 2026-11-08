@@ -143,11 +143,8 @@ func encodeText(body []byte) (string, []byte) {
 		longest = max(longest, len(l))
 	}
 	normal := joinLines(lines)
-	if longest <= maxLineLength {
-		if isASCII(normal) {
-			return "7bit", normal
-		}
-		return "8bit", normal
+	if longest <= maxLineLength && isASCII(normal) {
+		return "7bit", normal
 	}
 	sniff := joinLines(lines[:min(len(lines), 10)])
 	sniffQP := qpBodyEncode(sniff, maxLineLength)

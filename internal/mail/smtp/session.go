@@ -101,7 +101,6 @@ type session struct {
 	ehloDone   bool
 	doesESMTP  bool
 	features   map[string]string
-	utf8Cmds   bool
 	challenges int
 }
 
@@ -139,10 +138,8 @@ func (s *session) putcmd(cmd, args string) error {
 		line = strings.ReplaceAll(strings.ReplaceAll(line, "\n", `\n`), "\r", `\r`)
 		return &Failure{Kind: "ValueError", Msg: "command and arguments contain prohibited newline characters: " + line}
 	}
-	if !s.utf8Cmds {
-		if !isASCII([]byte(line)) {
-			return &Failure{Kind: "ValueError", Msg: "command and arguments must be ASCII"}
-		}
+	if !isASCII([]byte(line)) {
+		return &Failure{Kind: "ValueError", Msg: "command and arguments must be ASCII"}
 	}
 	return s.send([]byte(line + "\r\n"))
 }
@@ -455,22 +452,12 @@ func quoteaddr(addr string) (string, error) {
 }
 
 func (s *session) rset() {
-	s.utf8Cmds = false
 	_, _, _ = s.docmd("rset", "")
 }
 
 func (s *session) mail(from string, options []string) (int, string, error) {
 	optionlist := ""
 	if len(options) > 0 && s.doesESMTP {
-		for _, o := range options {
-			if strings.EqualFold(o, "smtputf8") {
-				if !s.hasExtn("smtputf8") {
-					return 0, "", &Failure{Kind: notSupported, Msg: "SMTPUTF8 not supported by server"}
-				}
-				s.utf8Cmds = true
-				break
-			}
-		}
 		optionlist = " " + strings.Join(options, " ")
 	}
 	quoted, err := quoteaddr(from)
@@ -526,21 +513,10 @@ func (s *session) SendMessage(msg *Message, from string, to []string) (Refusals,
 	if err := s.ehloOrHelo(); err != nil {
 		return nil, err
 	}
-	international := !isASCII([]byte(from + strings.Join(to, "")))
-	var mailOptions []string
-	if international {
-		if !s.hasExtn("smtputf8") {
-			return nil, &Failure{Kind: notSupported, Msg: "One or more source or delivery addresses require internationalized email support, but the server does not advertise the required SMTPUTF8 capability"}
-		}
-		mailOptions = []string{"SMTPUTF8", "BODY=8BITMIME"}
-	}
-	flat := msg.Bytes("\r\n", international)
+	flat := msg.Bytes("\r\n", false)
 	var opts []string
-	if s.doesESMTP {
-		if s.hasExtn("size") {
-			opts = append(opts, fmt.Sprintf("size=%d", len(flat)))
-		}
-		opts = append(opts, mailOptions...)
+	if s.doesESMTP && s.hasExtn("size") {
+		opts = append(opts, fmt.Sprintf("size=%d", len(flat)))
 	}
 	code, resp, err := s.mail(from, opts)
 	if err != nil {

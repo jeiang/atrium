@@ -7,16 +7,15 @@ import (
 	"github.com/jeiang/atrium/internal/mail/smtp"
 )
 
-type Call struct {
-	Call     string   `json:"call"`
-	Host     string   `json:"host,omitempty"`
-	Port     int      `json:"port,omitempty"`
-	Timeout  int      `json:"timeout,omitempty"`
-	User     string   `json:"user,omitempty"`
-	Password string   `json:"password,omitempty"`
-	From     string   `json:"from_addr,omitempty"`
-	To       []string `json:"to_addrs,omitempty"`
-}
+type Stage string
+
+const (
+	StageConnect  Stage = "connect"
+	StageStartTLS Stage = "starttls"
+	StageLogin    Stage = "login"
+	StageSend     Stage = "send"
+	StageQuit     Stage = "quit"
+)
 
 type Sent struct {
 	Host string
@@ -26,13 +25,12 @@ type Sent struct {
 }
 
 type Server struct {
-	Fail    func(stage string) error
+	Fail    func(stage Stage) error
 	Refused smtp.Refusals
-	Calls   []Call
 	Sent    []Sent
 }
 
-func (s *Server) fail(stage string) error {
+func (s *Server) fail(stage Stage) error {
 	if s.Fail == nil {
 		return nil
 	}
@@ -40,8 +38,7 @@ func (s *Server) fail(stage string) error {
 }
 
 func (s *Server) Factory(_ context.Context, host string, port int, timeout time.Duration) (smtp.Session, error) {
-	s.Calls = append(s.Calls, Call{Call: "connect", Host: host, Port: port, Timeout: int(timeout / time.Second)})
-	if err := s.fail("connect"); err != nil {
+	if err := s.fail(StageConnect); err != nil {
 		return nil, err
 	}
 	return &session{s: s, host: host}, nil
@@ -53,18 +50,15 @@ type session struct {
 }
 
 func (c *session) StartTLS() error {
-	c.s.Calls = append(c.s.Calls, Call{Call: "starttls"})
-	return c.s.fail("starttls")
+	return c.s.fail(StageStartTLS)
 }
 
 func (c *session) Login(user, password string) error {
-	c.s.Calls = append(c.s.Calls, Call{Call: "login", User: user, Password: password})
-	return c.s.fail("login")
+	return c.s.fail(StageLogin)
 }
 
 func (c *session) SendMessage(msg *smtp.Message, from string, to []string) (smtp.Refusals, error) {
-	c.s.Calls = append(c.s.Calls, Call{Call: "send_message", From: from, To: to})
-	if err := c.s.fail("send"); err != nil {
+	if err := c.s.fail(StageSend); err != nil {
 		return nil, err
 	}
 	c.s.Sent = append(c.s.Sent, Sent{Host: c.host, Msg: msg, From: from, To: to})
@@ -72,6 +66,5 @@ func (c *session) SendMessage(msg *smtp.Message, from string, to []string) (smtp
 }
 
 func (c *session) Quit() error {
-	c.s.Calls = append(c.s.Calls, Call{Call: "quit"})
-	return c.s.fail("quit")
+	return c.s.fail(StageQuit)
 }

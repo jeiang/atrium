@@ -33,10 +33,10 @@ func SenderAddress(account, user string) string {
 func Send(ctx context.Context, creds Credentials, account string, msg *Message, recipients []string, factory Factory) (Refusals, error) {
 	user, password, ok := creds.Credential(account)
 	if !ok {
-		return nil, SendError(account + " is not configured: no enabled account with a login and password")
+		return nil, &Failure{Kind: "Config", Msg: account + " is not configured: no enabled account with a login and password"}
 	}
 	if len(recipients) == 0 {
-		return nil, SendError("no recipients")
+		return nil, &Failure{Kind: "NoRecipients", Msg: "no recipients"}
 	}
 	if factory == nil {
 		factory = Dialer{}.Dial
@@ -47,7 +47,7 @@ func Send(ctx context.Context, creds Credentials, account string, msg *Message, 
 		return nil, unknown
 	}
 	if err != nil {
-		return nil, SendError(err.Error())
+		return nil, err
 	}
 	return refused, nil
 }
@@ -66,10 +66,11 @@ func send(ctx context.Context, factory Factory, account, user, password string, 
 		case accepted:
 			log.Warn(fmt.Sprintf("%s SMTP session not closed cleanly after the mail was accepted: %s", account, qerr))
 		default:
-			var unknown *OutcomeUnknown
-			if !errors.As(err, &unknown) {
-				refused, err = nil, qerr
+			if err != nil {
+				log.Warn(fmt.Sprintf("%s SMTP session not closed cleanly after a failed send: %s", account, qerr))
+				break
 			}
+			refused, err = nil, qerr
 		}
 	}()
 	if err := server.StartTLS(); err != nil {

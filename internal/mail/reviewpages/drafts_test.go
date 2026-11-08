@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/smtp"
+	"github.com/jeiang/atrium/internal/mail/smtp/smtptest"
 )
 
 func (s *site) mailAccounts() {
@@ -141,8 +142,8 @@ func TestSendReportsRefusedRecipients(t *testing.T) {
 
 func TestSMTPFailureRevertsToDraft(t *testing.T) {
 	s := newSite(t)
-	s.smtp.Fail = func(stage string) error {
-		if stage == "login" {
+	s.smtp.Fail = func(stage smtptest.Stage) error {
+		if stage == smtptest.StageLogin {
 			return &smtp.ResponseError{Kind: "SMTPAuthenticationError", Code: 535, Msg: "bad"}
 		}
 		return nil
@@ -160,8 +161,8 @@ func TestSMTPFailureRevertsToDraft(t *testing.T) {
 
 func TestSMTPLossAfterDataShowsTheUnknownCard(t *testing.T) {
 	s := newSite(t)
-	s.smtp.Fail = func(stage string) error {
-		if stage == "send" {
+	s.smtp.Fail = func(stage smtptest.Stage) error {
+		if stage == smtptest.StageSend {
 			return &smtp.OutcomeUnknown{Err: &smtp.Failure{Kind: "SMTPServerDisconnected", Msg: "Connection unexpectedly closed"}}
 		}
 		return nil
