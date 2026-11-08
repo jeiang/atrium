@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/llm"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -62,13 +63,13 @@ func Hosted(raw string) bool {
 	return strings.Contains(host, ".")
 }
 
-func Endpoints(ctx context.Context, q Querier) ([]Endpoint, error) {
+func Endpoints(ctx context.Context, q db.Querier) ([]Endpoint, error) {
 	r := Read(ctx, q)
 	chat, embed := r.Text(KeyChatModel), r.Text(KeyEmbedModel)
 	if r.Err() != nil {
 		return nil, r.Err()
 	}
-	store := secrets.NewIn(nil, readOnly{q}, nil)
+	store := secrets.NewIn(nil, q, nil)
 	out := []Endpoint{{Kind: EndpointChat, Model: chat}, {Kind: EndpointEmbed, Model: embed}}
 	for i, pair := range [][2]string{{KeyChatURL, KeyChatKey}, {KeyEmbedURL, KeyEmbedKey}} {
 		u, err := urlOf(ctx, q, pair[0])
@@ -94,10 +95,10 @@ func endpointOf(endpoints []Endpoint, kind string) (Endpoint, bool) {
 
 func Integration(kind string) string { return "mail_" + kind }
 
-func withEndpoints(ctx context.Context, q Querier, endpoints []Endpoint) (context.Context, error) {
+func withEndpoints(ctx context.Context, q db.Querier, endpoints []Endpoint) (context.Context, error) {
 	out := ctx
 	for _, e := range endpoints {
-		client, err := transport.For(ctx, readOnly{q}, Integration(e.Kind), config.HTTPTimeout(config.OS))
+		client, err := transport.For(ctx, q, Integration(e.Kind), config.HTTPTimeout(config.OS))
 		if err != nil {
 			return ctx, err
 		}
@@ -115,6 +116,18 @@ type ProbeResult struct {
 	Dimension int      `json:"dimension,omitempty"`
 	Models    []string `json:"models"`
 	Hosted    bool     `json:"hosted"`
+}
+
+func (r ProbeResult) Dict() py.Dict {
+	d := py.Dict{
+		{Key: "kind", Value: r.Kind}, {Key: "url", Value: r.URL}, {Key: "model", Value: r.Model},
+		{Key: "ok", Value: r.OK}, {Key: "reason", Value: r.Reason}, {Key: "models", Value: r.Models},
+		{Key: "hosted", Value: r.Hosted},
+	}
+	if r.Dimension != 0 {
+		d = append(d[:5], append(py.Dict{{Key: "dimension", Value: r.Dimension}}, d[5:]...)...)
+	}
+	return d
 }
 
 func discover(ctx context.Context, base string) []string {
@@ -244,7 +257,7 @@ func nullDim(n int) any {
 	return n
 }
 
-func ProbeFailures(ctx context.Context, q Querier) (string, error) {
+func ProbeFailures(ctx context.Context, q db.Querier) (string, error) {
 	endpoints, err := Endpoints(ctx, q)
 	if err != nil {
 		return "", err

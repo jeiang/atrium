@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
@@ -37,7 +36,7 @@ func init() {
 
 func probeTest(kind string) func(context.Context, integrations.Conn) (string, error) {
 	return func(ctx context.Context, c integrations.Conn) (string, error) {
-		res, err := mail.ProbeCandidate(ctx, c.DB, kind, c.URL, c.Secret, c.HTTP, float64(time.Now().UnixNano())/1e9)
+		res, err := mail.ProbeCandidate(ctx, c.DB, kind, c.URL, c.Secret, c.HTTP, mail.WallClock())
 		if err != nil {
 			return "", err
 		}
@@ -62,6 +61,18 @@ type Module struct {
 
 func (m Module) Register(mc module.Context) module.Registration {
 	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now}
+	cmds := []*cli.Command{
+		run.SyncCommand(mc.Env, m.Clients),
+		run.WatchCommand(mc.Env, m.Clients),
+		mailCmds.RulesCommand(),
+		mailCmds.ShadowReportCommand(),
+		mailCmds.ReindexCommand(),
+		mailCmds.LiveCommand(),
+		openloops.Command(mc.Env, m.Now),
+		watches.Command(mc.Env, m.Now),
+		mailCmds.EndpointsCommand(),
+	}
+	cmds = append(cmds, mailCmds.ScanCommands()...)
 	return module.Registration{
 		Name: module.Mail,
 		Requires: []module.Requirement{
@@ -75,20 +86,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals()},
 			{Module: accountpages.Module, Templates: accountpages.Templates()},
 		},
-		Commands: []*cli.Command{
-			run.SyncCommand(mc.Env, m.Clients),
-			run.WatchCommand(mc.Env, m.Clients),
-			mailCmds.RulesCommand(),
-			mailCmds.ShadowReportCommand(),
-			mailCmds.ReindexCommand(),
-			mailCmds.RebalanceCommand(),
-			mailCmds.DeletionsCommand(),
-			mailCmds.GmailLabelsCommand(),
-			mailCmds.LiveCommand(),
-			openloops.Command(mc.Env, m.Now),
-			watches.Command(mc.Env, m.Now),
-			mailCmds.EndpointsCommand(),
-		},
+		Commands: cmds,
 		Leaves: map[string]module.Leaf{
 			"live pause":      {Always: true},
 			"live resume":     {Always: true},

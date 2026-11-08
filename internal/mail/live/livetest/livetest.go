@@ -91,7 +91,7 @@ func ICloud(t *testing.T, mode string, seed ...Seed) *World {
 		f.AddBox("Sent Messages", mailtest.NewBox(5), `\Sent`)
 	}, func(w *World) {
 		for _, s := range seed {
-			w.add(w.Fake.Boxes[config.Inbox], s.Subject, "a@x.test", s.Flags, nil)
+			w.add(w.Fake.Boxes[config.Inbox].Box, s.Subject, "a@x.test", s.Flags, nil)
 		}
 	})
 }
@@ -103,7 +103,7 @@ func Gmail(t *testing.T, mode string, seed ...Seed) *World {
 		f.AddBox("[Gmail]/Trash", mailtest.NewBox(5), `\Trash`)
 	}, func(w *World) {
 		for _, s := range seed {
-			w.add(w.Fake.Boxes[config.GmailAllMail], s.Subject, "a@x.test", s.Flags, s.Labels)
+			w.add(w.Fake.Boxes[config.GmailAllMail].Box, s.Subject, "a@x.test", s.Flags, s.Labels)
 		}
 	})
 }
@@ -131,9 +131,9 @@ func (w *World) add(box *mailtest.FakeBox, subject, sender string, flags, labels
 
 func (w *World) InboxBox() *mailtest.FakeBox {
 	if config.Preset(w.Account) == config.Gmail {
-		return w.Fake.Boxes[config.GmailAllMail]
+		return w.Fake.Boxes[config.GmailAllMail].Box
 	}
-	return w.Fake.Boxes[config.Inbox]
+	return w.Fake.Boxes[config.Inbox].Box
 }
 
 func (w *World) Arrive(subject string, flags ...string) uint32 {

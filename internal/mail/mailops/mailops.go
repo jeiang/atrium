@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
@@ -25,7 +26,7 @@ const (
 	TrashLabel = `\Trash`
 )
 
-func batchFrom(ctx context.Context, q mail.Querier) (int, error) {
+func batchFrom(ctx context.Context, q db.Querier) (int, error) {
 	r := mail.Read(ctx, q)
 	n := r.Int(mail.KeyMailopsBatch)
 	return n, r.Err()
@@ -84,7 +85,7 @@ func (e *PartialMove) Error() string {
 
 func (e *PartialMove) Unwrap() error { return e.Err }
 
-func Session(ctx context.Context, open mail.OpenFunc, q mail.Querier, account string, fn func(mail.Client) error) error {
+func Session(ctx context.Context, open mail.OpenFunc, q db.Querier, account string, fn func(mail.Client) error) error {
 	client, err := open(ctx, mail.OpenOptions{Account: account, Q: q})
 	if err != nil {
 		return err
@@ -134,7 +135,7 @@ func (s Skip) Dict() py.Dict {
 	return py.Dict{{Key: "id", Value: s.ID}, {Key: "reason", Value: s.Reason}}
 }
 
-func Snapshots(ctx context.Context, q mail.Querier, ids []int64) ([]Snapshot, error) {
+func Snapshots(ctx context.Context, q db.Querier, ids []int64) ([]Snapshot, error) {
 	var out []Snapshot
 	for _, chunk := range Chunks(ids, 500) {
 		args := make([]any, len(chunk))
@@ -174,7 +175,7 @@ type boxKey struct {
 	validity uint32
 }
 
-func Verify(ctx context.Context, q mail.Querier, client mail.Client, account string, snaps []Snapshot) (ok []Verified, skipped []Skip, err error) {
+func Verify(ctx context.Context, q db.Querier, client mail.Client, account string, snaps []Snapshot) (ok []Verified, skipped []Skip, err error) {
 	batch, err := batchFrom(ctx, q)
 	if err != nil {
 		return nil, nil, err
@@ -211,7 +212,7 @@ func Verify(ctx context.Context, q mail.Querier, client mail.Client, account str
 		}
 		survivors[key] = append(survivors[key], snap)
 	}
-	items := mail.FetchItems{HeaderOnly: true, Labels: config.Preset(account) == config.Gmail}
+	items := mail.FetchRequest{Mode: mail.FetchHeaders, Labels: config.Preset(account) == config.Gmail}
 	for _, key := range order {
 		group := survivors[key]
 		st, err := client.Status(ctx, key.imapName)

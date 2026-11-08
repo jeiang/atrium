@@ -79,7 +79,7 @@ func TestUICorrectionMovesTheMessageInLiveModeAndDefersWhenPaused(t *testing.T) 
 	}
 	moved := status(t, s.post(path, url.Values{"dest": {"Bills"}, "context": {"row"}}, hx), 200, "moved")
 	contains(t, moved, "The message was moved.")
-	if got := w.Fake.Boxes["Bills"].UIDs(); !slices.Equal(got, []uint32{1}) {
+	if got := w.Fake.Boxes["Bills"].Box.UIDs(); !slices.Equal(got, []uint32{1}) {
 		t.Errorf("Bills = %v", got)
 	}
 }

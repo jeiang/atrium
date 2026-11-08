@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/fs"
 	"syscall"
-	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -38,7 +37,7 @@ func (o Options) now() float64 {
 	if o.Now != nil {
 		return o.Now()
 	}
-	return float64(time.Now().UnixNano()) / 1e9
+	return mail.WallClock()
 }
 
 type exitError struct {

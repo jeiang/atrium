@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/calendar/candidates"
@@ -74,7 +75,7 @@ type Pass struct {
 
 func New(env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now func() float64) *Pass {
 	if now == nil {
-		now = wallClock
+		now = mail.WallClock
 	}
 	syncer := &mailsync.Syncer{DB: d, Cfg: cfg, Now: now}
 	registry := proposals.NewRegistry()
@@ -107,8 +108,6 @@ func New(env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now fu
 	}
 	return p
 }
-
-func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.OpenFunc, now func() float64) (*Pass, func(), error) {
 	d, err := db.Connect(cfg.DBPath)
@@ -165,6 +164,7 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 	if err := embed.PendingOrWarn(ctx, p.DB, embedURL, log); err != nil {
 		return err
 	}
+	var failed []string
 	for _, account := range accounts {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -177,14 +177,20 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		if err != nil {
 			return err
 		}
-		log.Info(fmt.Sprintf("%s: %d routed, %d flag judgments", account, routed, flagged))
+		log.Info("account routed", "account", account, "routed", routed, "flagged", flagged)
 		if invites, candidates, err := p.Events(ctx, account); err != nil {
-			log.Error(account+": event scan failed", logx.Err, err.Error())
+			log.Error("event scan failed", "account", account, logx.Err, err.Error())
 		} else {
-			log.Info(fmt.Sprintf("%s: %d invitation proposals, %d event candidates", account, invites, candidates))
+			log.Info("event scan done", "account", account, "invites", invites, "candidates", candidates)
 		}
-		if _, _, err := p.Applier.ApplyAll(ctx, account); err != nil {
-			log.Error(account+": live pass failed", logx.Err, err.Error())
+		applied, deleted, err := p.Applier.ApplyAll(ctx, account)
+		switch {
+		case err != nil:
+			log.Error("live pass failed", "account", account, logx.Err, err.Error())
+			failed = append(failed, account)
+		case applied.Ran && applied.Written == 0 && applied.Failed > 0 && deleted.Written == 0:
+			log.Error("every live action failed", "account", account, "failed", applied.Failed)
+			failed = append(failed, account)
 		}
 	}
 	for _, extra := range p.Extras {
@@ -193,12 +199,18 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		}
 		result, err := extra.Run(ctx)
 		if err != nil {
-			log.Error(extra.Name+" refresh failed", logx.Err, err.Error())
+			log.Error("refresh failed", "name", extra.Name, logx.Err, err.Error())
 			continue
 		}
-		log.Info(extra.Name + ": " + fmt.Sprint(result))
+		log.Info("refreshed", "name", extra.Name, "result", result)
 	}
-	return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("the live pass failed for %s", strings.Join(failed, ", "))
+	}
+	return nil
 }
 
 const checkpointWait = time.Second

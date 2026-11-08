@@ -73,10 +73,7 @@ func (r *Registry) Known(name string) bool {
 	return ok
 }
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type Querier = db.Querier
 
 func Known(ctx context.Context, q Querier, fingerprint string) (bool, error) {
 	var status string

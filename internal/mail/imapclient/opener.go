@@ -15,9 +15,20 @@ func Opener(cfg config.Config) mail.OpenFunc {
 		if !ok || !known {
 			return nil, errors.New("missing credentials for " + opts.Account)
 		}
+		bodyCap := config.BodyCapBytes
+		if opts.Q != nil {
+			r := mail.Read(ctx, opts.Q)
+			bodyCap = r.Int(mail.KeyBodyCapBytes)
+			if err := r.Err(); err != nil {
+				return nil, err
+			}
+		}
 		conn, err := dial(ctx, spec, password)
 		if err != nil {
 			return nil, err
+		}
+		if c, ok := conn.(interface{ setBodyCap(int) }); ok {
+			c.setBodyCap(bodyCap)
 		}
 		return mail.Gated(conn, opts.Q), nil
 	}

@@ -13,23 +13,31 @@ import (
 	"time"
 )
 
+var (
+	ErrAbort    = errors.New("abort")
+	ErrReadonly = errors.New("readonly")
+	ErrProtocol = errors.New("protocol")
+)
+
 type Error struct {
-	Kind string
-	Msg  string
+	Err error
+	Msg string
 }
 
 func (e *Error) Error() string { return e.Msg }
 
+func (e *Error) Unwrap() error { return e.Err }
+
 func pyError(format string, a ...any) *Error {
-	return &Error{Kind: "error", Msg: fmt.Sprintf(format, a...)}
+	return &Error{Err: ErrProtocol, Msg: fmt.Sprintf(format, a...)}
 }
 
 func pyAbort(format string, a ...any) *Error {
-	return &Error{Kind: "abort", Msg: fmt.Sprintf(format, a...)}
+	return &Error{Err: ErrAbort, Msg: fmt.Sprintf(format, a...)}
 }
 
 func pyReadonly(format string, a ...any) *Error {
-	return &Error{Kind: "readonly", Msg: fmt.Sprintf(format, a...)}
+	return &Error{Err: ErrReadonly, Msg: fmt.Sprintf(format, a...)}
 }
 
 var errTimedOut = errors.New("timed out")

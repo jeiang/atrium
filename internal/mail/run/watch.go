@@ -39,7 +39,7 @@ func newBackoff() *retryBackoff {
 	return &retryBackoff{start: config.BackoffStart, ceiling: config.BackoffMax}
 }
 
-func (b *retryBackoff) refresh(ctx context.Context, q mail.Querier) error {
+func (b *retryBackoff) refresh(ctx context.Context, q db.Querier) error {
 	r := mail.Read(ctx, q)
 	start, ceiling := r.Int(mail.KeyBackoffStartSeconds), r.Int(mail.KeyBackoffMaxSeconds)
 	if err := r.Err(); err != nil {
@@ -60,8 +60,7 @@ func (b *retryBackoff) next() int {
 
 func ConnectionLost(err error) bool {
 	var interrupted *mail.WriteInterrupted
-	var imapErr *imapclient.Error
-	if errors.As(err, &interrupted) || errors.As(err, &imapErr) && imapErr.Kind == "readonly" {
+	if errors.As(err, &interrupted) || errors.Is(err, imapclient.ErrReadonly) {
 		return true
 	}
 	var (
@@ -148,7 +147,7 @@ func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
 	return Open(ctx, w.Env, w.Cfg, w.Open, nil)
 }
 
-func settleFor(ctx context.Context, q mail.Querier) (time.Duration, error) {
+func settleFor(ctx context.Context, q db.Querier) (time.Duration, error) {
 	r := mail.Read(ctx, q)
 	seconds := r.Int(mail.KeyIdleSettleSeconds)
 	return time.Duration(seconds) * time.Second, r.Err()

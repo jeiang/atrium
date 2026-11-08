@@ -36,7 +36,7 @@ func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Mess
 	}
 	sent := ""
 	for _, b := range boxes {
-		if mail.MailboxRole(b.Name, b.Flags, account) == "sent" {
+		if mail.MailboxRole(b.Name, b.Flags, config.Preset(account)) == "sent" {
 			sent = b.IMAPName
 			break
 		}

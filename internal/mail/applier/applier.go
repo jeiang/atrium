@@ -388,7 +388,7 @@ func observedLabels(ctx context.Context, client mail.Client, imapName string, ui
 	if err := client.Select(ctx, imapName); err != nil {
 		return fail(err)
 	}
-	msgs, err := client.UIDFetch(ctx, mail.UIDs(uids...), mail.FetchItems{Labels: true})
+	msgs, err := client.UIDFetch(ctx, mail.UIDs(uids...), mail.FetchRequest{Mode: mail.FetchFlags, Labels: true})
 	if err != nil {
 		return fail(err)
 	}
@@ -515,7 +515,7 @@ func locateInTrash(ctx context.Context, client mail.Client, trash string, item m
 	}
 	var same []uint32
 	if len(found) > 0 {
-		msgs, err := client.UIDFetch(ctx, mail.UIDs(found...), mail.FetchItems{Labels: true, Header: true, Body: true})
+		msgs, err := client.UIDFetch(ctx, mail.UIDs(found...), mail.FetchRequest{Mode: mail.FetchFull, Labels: true})
 		if err != nil {
 			return fail(err)
 		}

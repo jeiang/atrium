@@ -2,14 +2,14 @@ package mail
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/py"
@@ -131,7 +131,7 @@ func init() {
 		adv(KeyWriteAttempts, settings.Int, "3", settings.Between(1, 10)),
 		adv(KeyDeletionInterval, settings.Int, "86400", atLeast(3600)),
 		ui(KeyUncertainDest, settings.String, "Misc", nonBlank),
-		adv(KeyBodyCapBytes, settings.Int, "65536", settings.Between(1024, 1048576)),
+		adv(KeyBodyCapBytes, settings.Int, strconv.Itoa(config.BodyCapBytes), settings.Between(1024, 1048576)),
 		count(KeyFetchBatch, 40),
 		count(KeyEmbedBatch, 16),
 		count(KeyFlagBatch, 500),
@@ -280,24 +280,15 @@ func splitInts(value string) ([]int, error) {
 	return out, nil
 }
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
-
-type readOnly struct{ Querier }
-
-func (readOnly) ExecContext(context.Context, string, ...any) (sql.Result, error) {
-	return nil, errors.New("mail settings: read-only querier")
-}
-
 type Reader struct {
 	ctx context.Context
-	q   readOnly
+	q   db.Querier
 	err error
 }
 
-func Read(ctx context.Context, q Querier) *Reader { return &Reader{ctx: ctx, q: readOnly{q}} }
+func Read(ctx context.Context, q db.Querier) *Reader { return &Reader{ctx: ctx, q: q} }
+
+func WallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 func (r *Reader) Err() error { return r.err }
 
@@ -344,8 +335,8 @@ func (r *Reader) Ints(key string) []int {
 
 func (r *Reader) List(key string) []string { return SplitList(r.resolve(key).Value) }
 
-func Mode(ctx context.Context, q Querier) (string, error) {
-	found, err := settings.Default.Resolve(ctx, readOnly{q}, KeyMode)
+func Mode(ctx context.Context, q db.Querier) (string, error) {
+	found, err := settings.Default.Resolve(ctx, q, KeyMode)
 	if err != nil {
 		return "", err
 	}
@@ -355,11 +346,11 @@ func Mode(ctx context.Context, q Querier) (string, error) {
 	return found.Value, nil
 }
 
-func ChatURL(ctx context.Context, q Querier) (string, error) {
+func ChatURL(ctx context.Context, q db.Querier) (string, error) {
 	return urlOf(ctx, q, KeyChatURL)
 }
 
-func EmbedURL(ctx context.Context, q Querier) (string, error) {
+func EmbedURL(ctx context.Context, q db.Querier) (string, error) {
 	active, err := embed.Active(ctx, q)
 	if err != nil || active.URL != "" {
 		return active.URL, err
@@ -367,21 +358,21 @@ func EmbedURL(ctx context.Context, q Querier) (string, error) {
 	return urlOf(ctx, q, KeyEmbedURL)
 }
 
-func urlOf(ctx context.Context, q Querier, key string) (string, error) {
-	found, err := settings.Default.Resolve(ctx, readOnly{q}, key)
+func urlOf(ctx context.Context, q db.Querier, key string) (string, error) {
+	found, err := settings.Default.Resolve(ctx, q, key)
 	return strings.TrimRight(found.Value, "/"), err
 }
 
-func UncertainDest(ctx context.Context, q Querier, account string) (string, error) {
+func UncertainDest(ctx context.Context, q db.Querier, account string) (string, error) {
 	spec, ok := config.Account(account)
 	if !ok || spec.UncertainDest() == "" {
 		return "", nil
 	}
-	found, err := settings.Default.Resolve(ctx, readOnly{q}, KeyUncertainDest)
+	found, err := settings.Default.Resolve(ctx, q, KeyUncertainDest)
 	return found.Value, err
 }
 
-func WithModels(ctx context.Context, q Querier) (context.Context, error) {
+func WithModels(ctx context.Context, q db.Querier) (context.Context, error) {
 	r := Read(ctx, q)
 	s := endpoint.Settings{
 		ChatModel:      r.Text(KeyChatModel),

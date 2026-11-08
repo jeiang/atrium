@@ -40,7 +40,9 @@ var errSexp = errors.New("malformed BODYSTRUCTURE")
 
 func unquote(token string) (string, error) { return unquoteRE.ReplaceAllString(token, "${1}"), nil }
 
-func expandUIDSet(text string) ([]uint32, error) {
+const maxUIDExpansion = 1_000_000
+
+func expandUIDSet(text string, limit int) ([]uint32, error) {
 	var uids []uint32
 	for _, part := range strings.Split(text, ",") {
 		if strings.Contains(part, ":") {
@@ -57,10 +59,16 @@ func expandUIDSet(text string) ([]uint32, error) {
 				return nil, err
 			}
 			low, high = min(low, high), max(low, high)
+			if uint64(high)-uint64(low)+1 > uint64(limit-len(uids)) {
+				return nil, fmt.Errorf("UID set %s exceeds %d entries", strconv.Quote(text), limit)
+			}
 			for u := uint64(low); u <= uint64(high); u++ {
 				uids = append(uids, uint32(u))
 			}
 		} else if part != "" {
+			if len(uids) >= limit {
+				return nil, fmt.Errorf("UID set %s exceeds %d entries", strconv.Quote(text), limit)
+			}
 			u, err := pyInt32(part)
 			if err != nil {
 				return nil, err
@@ -98,7 +106,7 @@ func joinData(data []datum, skipFalsy bool) string {
 	return strings.Join(parts, " ")
 }
 
-func parseCopyUID(data []datum) (*mail.CopyUID, error) {
+func parseCopyUID(data []datum, limit int) (*mail.CopyUID, error) {
 	text := joinData(data, true)
 	loc := copyUIDRE.FindStringSubmatchIndex(text)
 	if loc == nil {
@@ -108,11 +116,11 @@ func parseCopyUID(data []datum) (*mail.CopyUID, error) {
 	if err != nil {
 		return nil, err
 	}
-	src, err := expandUIDSet(text[loc[4]:loc[5]])
+	src, err := expandUIDSet(text[loc[4]:loc[5]], limit)
 	if err != nil {
 		return nil, err
 	}
-	dst, err := expandUIDSet(text[loc[6]:loc[7]])
+	dst, err := expandUIDSet(text[loc[6]:loc[7]], limit)
 	if err != nil {
 		return nil, err
 	}

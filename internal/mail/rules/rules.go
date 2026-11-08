@@ -757,10 +757,7 @@ func InsertMessage(ctx context.Context, q Execer, m MessageInsert) (int64, error
 	return res.LastInsertId()
 }
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type Querier = db.Querier
 
 func loadRules(ctx context.Context, q Querier, keep func(account sql.NullString) bool) ([]Rule, error) {
 	rows, err := q.QueryContext(ctx, "SELECT id, account, action, dest, conditions FROM rules ORDER BY position")
