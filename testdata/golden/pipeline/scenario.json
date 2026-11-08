@@ -43,7 +43,6 @@
     "NTFY_TOKEN": "golden-ntfy-token",
     "ATRIUM_NOTIFY_NTFY_TOPIC": "atrium-golden",
     "ATRIUM_NOTIFY_NTFY_URL": "https://ntfy.test",
-    "PYTHONHASHSEED": "0",
     "QBITTORRENT_URL": "http://qbit.test",
     "TMDB_API_KEY": "k",
     "TZ": "UTC"

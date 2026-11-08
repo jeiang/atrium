@@ -361,8 +361,8 @@ func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 	data := loadGoldenData(t)
 	candidates := func(flag string) int {
-		r := newRig(t, data, map[string]string{flagEnv(module.Calendar): flag}, "")
-		seed, err := db.Connect(filepath.Join(r.dir, "atrium.db"))
+		f := newFixture(t, data, map[string]string{flagEnv(module.Calendar): flag}, "")
+		seed, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -379,10 +379,10 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if code, _, stderr := r.run(ctx, "watch", "--account", "icloud"); code != cli.ExitOK {
+		if code, _, stderr := f.Run(ctx, "watch", "--account", "icloud"); code != cli.ExitOK {
 			t.Fatalf("watch with calendar %s: exit %d %q", flag, code, stderr)
 		}
-		d, err := db.Connect(filepath.Join(r.dir, "atrium.db"))
+		d, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
 		if err != nil {
 			t.Fatal(err)
 		}

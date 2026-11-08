@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/settings"
+
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/logx"
@@ -75,6 +77,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	}
 	run := func(args ...string) appRun {
 		app := cli.New("atrium", logx.Setup)
+		app.Bootstrap = bootstrap(config.OS, settings.Default)
 		app.Add(commands(clients, nil)...)
 		var out, errs bytes.Buffer
 		code := app.Run(context.Background(), args, &out, &errs)

@@ -392,7 +392,7 @@ func TestBackupRestorePlaintextMigratesOlderArchiveAndRefusesNewer(t *testing.T)
 	if err := os.MkdirAll(filepath.Dir(live), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	copyGoldenFile(t, filepath.Join(golden.Dir(), "atrium.db"), live)
+	copyFile(t, filepath.Join(golden.Dir(), "atrium.db"), live)
 	writeStateFiles(t, filepath.Dir(live), map[string]string{"files/threads/9/a.txt": "plain file"})
 	env := []string{"ATRIUM_DB=" + live}
 	archive := filepath.Join(dir, "plain.backup")

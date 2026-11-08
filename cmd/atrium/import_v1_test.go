@@ -22,18 +22,18 @@ func routeLines(text string) string {
 	return strings.Join(out, "\n")
 }
 
-func freshImportRig(t *testing.T) (*rig, string) {
+func freshImportRig(t *testing.T) (*fixture, string) {
 	t.Helper()
-	r := newRig(t, loadGoldenData(t), nil, "")
-	if err := os.Remove(filepath.Join(r.dir, "atrium.db")); err != nil {
+	f := newFixture(t, loadGoldenData(t), nil, "")
+	if err := os.Remove(filepath.Join(f.dir, "atrium.db")); err != nil {
 		t.Fatal(err)
 	}
-	return r, filepath.Join(golden.Dir(), "atrium.db")
+	return f, filepath.Join(golden.Dir(), "atrium.db")
 }
 
 func TestImportV1CopiesLearnedRuleData(t *testing.T) {
 	r, source := freshImportRig(t)
-	code, stdout, stderr := r.run(context.Background(), "db", "import-v1", source)
+	code, stdout, stderr := r.Run(context.Background(), "db", "import-v1", source)
 	if code != 0 {
 		t.Fatalf("import-v1: exit %d stderr %q", code, stderr)
 	}
@@ -43,7 +43,7 @@ func TestImportV1CopiesLearnedRuleData(t *testing.T) {
 		}
 	}
 
-	code, got, stderr := r.run(context.Background(), "rules", "export")
+	code, got, stderr := r.Run(context.Background(), "rules", "export")
 	if code != 0 {
 		t.Fatalf("rules export: exit %d stderr %q", code, stderr)
 	}
@@ -55,7 +55,7 @@ func TestImportV1CopiesLearnedRuleData(t *testing.T) {
 		t.Errorf("rules export differs from the v1 capture:\n got %q\nwant %q", got, string(wantRules))
 	}
 
-	code, got, stderr = r.run(context.Background(), "shadow-report")
+	code, got, stderr = r.Run(context.Background(), "shadow-report")
 	if code != 0 {
 		t.Fatalf("shadow-report: exit %d stderr %q", code, stderr)
 	}
@@ -90,7 +90,7 @@ func TestImportV1RefusesNonRE2RulePattern(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code, stdout, stderr := r.run(context.Background(), "db", "import-v1", broken)
+	code, stdout, stderr := r.Run(context.Background(), "db", "import-v1", broken)
 	if code == 0 {
 		t.Fatalf("import-v1 accepted a lookaround pattern: %s", stdout)
 	}
@@ -137,7 +137,7 @@ func TestImportV1RefusesUnknownRuleField(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code, stdout, stderr := r.run(context.Background(), "db", "import-v1", broken)
+	code, stdout, stderr := r.Run(context.Background(), "db", "import-v1", broken)
 	if code == 0 {
 		t.Fatalf("import-v1 accepted an unknown field: %s", stdout)
 	}

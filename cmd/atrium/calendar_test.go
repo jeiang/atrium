@@ -11,6 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/settings"
+
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
@@ -29,7 +32,8 @@ func pinnedTokens(n int) string { return fmt.Sprintf("golden-token-urlsafe-%d", 
 
 func googleAuthApp() *cli.App {
 	app := cli.New("atrium", logx.Setup)
-	app.Add(pinned([]*cli.Command{calendarcmd.Command(noTools)})...)
+	app.Bootstrap = bootstrap(config.OS, settings.Default)
+	app.Add(calendarcmd.Command(noTools))
 	return app
 }
 

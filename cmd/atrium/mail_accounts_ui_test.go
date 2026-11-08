@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/settings"
+
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -122,6 +124,7 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 		return func(_ context.Context, account string) (mail.Client, error) { return fakes[account], nil }
 	}
 	app := cli.New("atrium", logx.Setup)
+	app.Bootstrap = bootstrap(config.OS, settings.Default)
 	app.Add(commands(clients, nil)...)
 	var out, errs bytes.Buffer
 	if code := app.Run(context.Background(), []string{"sync", "--account", "work"}, &out, &errs); code != 0 {
