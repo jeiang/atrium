@@ -257,13 +257,7 @@ func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error
 	if err != nil {
 		return nil, err
 	}
-	run, err := s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored})
-	if run != nil {
-		if rerr := memory.Rebuild(ctx, s.DB.Write, run.ThreadID, s.now()); rerr != nil {
-			log.Error(fmt.Sprintf("thread %d memory tree rebuild failed", run.ThreadID), logx.RunID, run.ID, logx.Err, rerr)
-		}
-	}
-	return run, err
+	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored})
 }
 
 func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error) {

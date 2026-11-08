@@ -15,6 +15,7 @@ import (
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
@@ -140,6 +141,9 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		errText = new(err.Error())
 	}
 	if errText != nil {
+		if rerr := memory.Rebuild(ctx, d.Write, s.thread.ID, s.now()); rerr != nil {
+			log.Error(fmt.Sprintf("thread %d memory tree rebuild failed", s.thread.ID), logx.RunID, runID, logx.Err, rerr)
+		}
 		if err := journal.FinishRun(ctx, d.Write, runID, journal.Failed, s.now(), errText); err != nil {
 			return nil, err
 		}
@@ -567,6 +571,9 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	}
 	if response.StopReason == anthropic.StopPauseTurn {
 		return false, next, nil
+	}
+	if err := memory.Rebuild(ctx, s.d.Write, s.thread.ID, s.now()); err != nil {
+		return false, next, err
 	}
 	done, err := journal.FinishUnlessQueued(ctx, s.d, s.run.ID, s.thread.ID, journal.Done, s.now())
 	return done, next, err
