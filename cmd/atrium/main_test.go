@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -53,26 +55,46 @@ func startServeLogged(t *testing.T, dir string) (string, *lockedBuffer) {
 
 func startServeStoppable(t *testing.T, dir string) (string, *lockedBuffer, func()) {
 	t.Helper()
+	for attempt := 0; ; attempt++ {
+		base, logs, stop, err := startServeOnce(t, dir)
+		if err == nil {
+			t.Cleanup(stop)
+			return base, logs, stop
+		}
+		if attempt >= 4 || !strings.Contains(err.Error(), "address already in use") {
+			t.Fatalf("serve did not start: %v", err)
+		}
+	}
+}
+
+func startServeOnce(t *testing.T, dir string) (string, *lockedBuffer, func(), error) {
+	t.Helper()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatal(err)
+		return "", nil, nil, err
 	}
 	_, port, _ := net.SplitHostPort(l.Addr().String())
 	_ = l.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
+	var exitCode atomic.Int32
+	exitCode.Store(-1)
 	logs := &lockedBuffer{}
+	envMu.RLock()
 	app := defaultApp()
 	if activeFixture != nil {
 		app = activeFixture.app
 	}
+	envMu.RUnlock()
 	go func() {
 		var stdout bytes.Buffer
-		done <- app.Run(ctx, []string{"serve", "--port", port, "--auth", "local"}, &stdout, logs)
+		code := app.Run(ctx, []string{"serve", "--port", port, "--auth", "local"}, &stdout, logs)
+		exitCode.Store(int32(code))
+		done <- code
 	}()
 	var once sync.Once
 	stop := func() {
@@ -80,7 +102,7 @@ func startServeStoppable(t *testing.T, dir string) (string, *lockedBuffer, func(
 			cancel()
 			select {
 			case code := <-done:
-				if code != cli.ExitOK {
+				if code != cli.ExitOK && !t.Failed() {
 					t.Errorf("exit code %d", code)
 				}
 			case <-time.After(15 * time.Second):
@@ -88,17 +110,22 @@ func startServeStoppable(t *testing.T, dir string) (string, *lockedBuffer, func(
 			}
 		})
 	}
-	t.Cleanup(stop)
 	base := "http://127.0.0.1:" + port
 	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
 		if resp, err := http.Get(base + "/healthz"); err == nil {
 			_ = resp.Body.Close()
-			return base, logs, stop
+			return base, logs, stop, nil
+		}
+		if code := exitCode.Load(); code >= 0 {
+			cancel()
+			<-done
+			return "", logs, nil, fmt.Errorf("serve exited with %d: %s", code, logs.String())
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatal("serve did not start")
-	return "", nil, nil
+	cancel()
+	<-done
+	return "", logs, nil, fmt.Errorf("serve did not start: %s", logs.String())
 }
 
 func fetch(t *testing.T, client *http.Client, method, url string, form url.Values) (int, string, http.Header) {

@@ -62,9 +62,11 @@ func (h *healthServer) notices() []string {
 func unsetEnv(t *testing.T, names ...string) {
 	t.Helper()
 	for _, name := range names {
+		envMu.Lock()
 		if activeFixture != nil {
 			delete(activeFixture.env, name)
 		}
+		envMu.Unlock()
 		setEnv(t, name, "")
 		_ = os.Unsetenv(name)
 	}
@@ -75,11 +77,12 @@ type integrationSite struct {
 	dir    string
 	base   string
 	client *http.Client
+	stop   func()
 }
 
 func (s *integrationSite) start() {
 	s.t.Helper()
-	s.base = startServeIn(s.t, s.dir)
+	s.base, _, s.stop = startServeStoppable(s.t, s.dir)
 	jar, _ := cookiejar.New(nil)
 	s.client = &http.Client{Jar: jar}
 }
@@ -203,6 +206,7 @@ func TestIntegrationTestSavesOnlyWorkingConfigAndHealthNotifiesOncePerChange(t *
 		if got := storedURL(t, dir); got != "" || health(t, dir, "ntfy") != integrations.Untested {
 			t.Fatalf("after disconnect: url %q state %s", got, health(t, dir, "ntfy"))
 		}
+		s.stop()
 		restarted := startServeIn(t, dir)
 		if code, _, _ := fetch(t, http.DefaultClient, http.MethodGet, restarted+"/settings/notifications", nil); code != http.StatusNotFound {
 			t.Errorf("notifications page after disconnect and restart: %d, want 404 (needs settings)", code)
