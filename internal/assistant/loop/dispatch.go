@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 
 	"github.com/jeiang/atrium/internal/assistant/block"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -77,15 +79,15 @@ func toolErrorText(err error) (string, bool) {
 }
 
 type dispatcher struct {
-	d      *db.DB
-	tc     *tool.Context
-	byName map[string]tool.Tool
-	now    func() float64
-	tuning actx.Tuning
-	reg    *registry.Registry
-	guard  func(ctx context.Context) error
-	lost   context.Context
-	abort  context.CancelFunc
+	d       *db.DB
+	tc      *tool.Context
+	byName  map[string]tool.Tool
+	now     func() float64
+	tuning  actx.Tuning
+	guard   func(ctx context.Context) error
+	lost    context.Context
+	abort   context.CancelFunc
+	tainted atomic.Bool
 }
 
 func (x *dispatcher) lookup(name string) *tool.Tool {
@@ -107,8 +109,11 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	}
 	value, err = x.call(ctx, t, tool.Args(args))
 	if err == nil {
-		if x.reg != nil {
-			x.reg.Taint(x.tc.ThreadID, *t)
+		if registry.Taints(*t) {
+			if err := threads.Taint(context.WithoutCancel(ctx), x.d.Write, x.tc.ThreadID, x.now()); err != nil {
+				return nil, nil, err
+			}
+			x.tainted.Store(true)
 		}
 		return nil, value, nil
 	}

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"time"
 	"unicode/utf8"
 
@@ -203,21 +202,13 @@ func mailSearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 }
 
 func mailRead(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	raw, _ := args.Get("message_id")
-	var id int64
-	switch v := raw.(type) {
-	case int64:
-		id = v
-	case *big.Int:
-	default:
-		return nil, tool.Error("message_id must be an integer")
+	id, _, err := tool.IntArg(args, "message_id", true)
+	if err != nil {
+		return nil, err
 	}
 	maxChars, err := mailBodyBound.Clamp(ctx, tc.DB.Read, args, "max_chars")
 	if err != nil {
 		return nil, err
-	}
-	if _, huge := raw.(*big.Int); huge {
-		return nil, tool.Error("value is too large")
 	}
 	found, err := message.Get(ctx, tc.DB.Read, tc.Cfg.CacheDir, id)
 	if err != nil {
