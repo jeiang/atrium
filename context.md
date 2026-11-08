@@ -291,6 +291,16 @@ behavior-parity target.
   configured. The Sign-in settings tab sets up OIDC from provider presets and
   activates a configuration only after a Test sign-in in a separate state
   showed the tested account would keep administrator access.
+- `/api/v1` is a JSON API for a native client, available only in listeners
+  with oidc mode and only when `oidc_api_client_id` names the client. It
+  accepts nothing but a bearer access token from the configured issuer
+  (RFC 9068 `at+jwt`, audience and `client_id` equal to that client, expiry
+  with 60 s skew); session cookies and proxy headers grant nothing there.
+  Groups come from the token or the userinfo endpoint and map to access and
+  administrator exactly as for web sessions. Implemented endpoints: `/me`,
+  thread list, create and transcript, send, stop and answer, the run event
+  stream (SSE), and the administrator inbox. POST to create a thread or send
+  a message honours an `Idempotency-Key` header for ten minutes in memory.
 - Code execution is not part of the application. The code-mode worker
   command and units are removed; coding may return as an external module.
 
@@ -318,7 +328,7 @@ behavior-parity target.
 - **Notifications:** the in-app inbox is canonical; Web Push now (implemented alongside ntfy), APNs with a future iOS app; ntfy is removed after Web Push is checked on a device.
 - **Telemetry:** OpenTelemetry traces to VictoriaTraces, Prometheus metrics, and a `trace_id` in logs.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).
-- **An iOS app** through a JSON API built during the redesign.
+- **An iOS app** through the `/api/v1` JSON API. Chat, the run stream and the inbox are implemented; approvals, undo entries and drafts follow the inline-approval work; attachments, push device registration (APNs) and API rate limiting are deferred.
 - **Birthdays** have no page; the agent keeps access.
 - **Open loops** cover only mail addressed to the owner that needs a reply.
 

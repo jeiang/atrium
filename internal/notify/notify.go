@@ -411,7 +411,16 @@ func nullID(id int64) any {
 }
 
 func Recent(ctx context.Context, q db.Querier, limit int) ([]Notification, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, ts, title, body, thread_id, run_id, thread_link, COALESCE(channel, ''), delivered, error FROM notifications ORDER BY id DESC LIMIT ?", limit)
+	return RecentBefore(ctx, q, 0, limit)
+}
+
+func RecentBefore(ctx context.Context, q db.Querier, before int64, limit int) ([]Notification, error) {
+	query, args := "SELECT id, ts, title, body, thread_id, run_id, thread_link, COALESCE(channel, ''), delivered, error FROM notifications", []any{}
+	if before > 0 {
+		query += " WHERE id < ?"
+		args = append(args, before)
+	}
+	rows, err := q.QueryContext(ctx, query+" ORDER BY id DESC LIMIT ?", append(args, limit)...)
 	if err != nil {
 		return nil, err
 	}

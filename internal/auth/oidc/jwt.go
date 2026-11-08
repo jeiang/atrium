@@ -136,6 +136,7 @@ func (k jwk) public() (crypto.PublicKey, error) {
 type header struct {
 	Alg  string          `json:"alg"`
 	Kid  string          `json:"kid"`
+	Typ  string          `json:"typ"`
 	Crit json.RawMessage `json:"crit"`
 }
 
@@ -253,6 +254,7 @@ type claimRules struct {
 	nonce    string
 	subject  string
 	now      time.Time
+	access   bool
 }
 
 func (t rawToken) checkSignature(keys []namedKey) error {
@@ -299,7 +301,11 @@ func (t rawToken) checkClaims(r claimRules) error {
 	if iss == "" || iss != r.issuer {
 		return tokenError("issuer mismatch")
 	}
-	if err := audienceOK(t.claims, r.audience); err != nil {
+	check := audienceOK
+	if r.access {
+		check = accessAudienceOK
+	}
+	if err := check(t.claims, r.audience); err != nil {
 		return err
 	}
 	exp, ok := numeric(t.claims["exp"])
@@ -337,7 +343,7 @@ func (t rawToken) checkClaims(r claimRules) error {
 	return nil
 }
 
-func audienceOK(claims map[string]any, client string) error {
+func audienceList(claims map[string]any) []string {
 	var audiences []string
 	switch aud := claims["aud"].(type) {
 	case string:
@@ -349,6 +355,26 @@ func audienceOK(claims map[string]any, client string) error {
 			}
 		}
 	}
+	return audiences
+}
+
+func accessAudienceOK(claims map[string]any, client string) error {
+	if !slices.Contains(audienceList(claims), client) {
+		return tokenError("audience mismatch")
+	}
+	if id, _ := claims["client_id"].(string); id != client {
+		return tokenError("client mismatch")
+	}
+	if azp, present := claims["azp"]; present {
+		if s, _ := azp.(string); s != client {
+			return tokenError("authorized party mismatch")
+		}
+	}
+	return nil
+}
+
+func audienceOK(claims map[string]any, client string) error {
+	audiences := audienceList(claims)
 	if !slices.Contains(audiences, client) {
 		return tokenError("audience mismatch")
 	}

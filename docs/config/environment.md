@@ -126,6 +126,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_AUTH_OIDC_ADMIN_DOMAINS` | `auth.oidc_admin_domains` |
 | `ATRIUM_AUTH_OIDC_ADMIN_EMAILS` | `auth.oidc_admin_emails` |
 | `ATRIUM_AUTH_OIDC_ADMIN_GROUP` | `auth.oidc_admin_group` |
+| `ATRIUM_AUTH_OIDC_API_CLIENT_ID` | `auth.oidc_api_client_id` |
 | `ATRIUM_AUTH_OIDC_CLIENT_ID` | `auth.oidc_client_id` |
 | `ATRIUM_AUTH_OIDC_CLIENT_SECRET` | `auth.oidc_client_secret` |
 | `ATRIUM_AUTH_OIDC_GROUPS_CLAIM` | `auth.oidc_groups_claim` |

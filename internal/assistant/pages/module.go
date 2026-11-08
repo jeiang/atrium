@@ -154,6 +154,7 @@ func Module(o Options) web.Module {
 		p.projectRoutes(r)
 		p.scheduledRoutes(r)
 		p.settingsRoutes(r)
+		p.apiRoutes(d)
 	}
 }
 

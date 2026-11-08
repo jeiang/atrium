@@ -186,6 +186,7 @@ func New(o Options) (*Server, error) {
 	if o.Render != nil {
 		deps.OnFrame = o.Render.OnFrame
 	}
+	deps.API(http.MethodGet, "/me", me)
 	s.secure = func(r *http.Request) bool {
 		return hasSecureTransport(r, strings.HasPrefix(o.State.PublicURL(o.Env), "https://"))
 	}
@@ -312,6 +313,10 @@ func (s *Server) allowed(path string) []string {
 }
 
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
+	if isAPI(r) {
+		APIError(w, http.StatusNotFound, "not_found", "Not found.")
+		return
+	}
 	path := r.URL.Path
 	alt := path + "/"
 	if strings.HasSuffix(path, "/") {
@@ -332,6 +337,10 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 func (s *Server) methodNotAllowed(w http.ResponseWriter, r *http.Request) {
 	if allow := s.allowed(r.URL.Path); len(allow) > 0 {
 		w.Header().Set("Allow", strings.Join(allow, ", "))
+	}
+	if isAPI(r) {
+		APIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+		return
 	}
 	s.Error(w, r, http.StatusMethodNotAllowed, "Method Not Allowed")
 }
@@ -377,6 +386,10 @@ func recoverer(next http.Handler) http.Handler {
 				h.Del(name)
 			}
 			log.Error("unhandled exception", logx.Err, fmt.Sprint(rec), "method", r.Method, "path", r.URL.Path)
+			if isAPI(r) {
+				APIError(w, http.StatusInternalServerError, "internal", "Internal error.")
+				return
+			}
 			deny(w, http.StatusInternalServerError, "Internal Server Error")
 		}()
 		next.ServeHTTP(w, r)

@@ -65,6 +65,7 @@ type Guard struct {
 	admin    func(context.Context) (string, error)
 	secure   func(*http.Request) bool
 	classify func(*http.Request) access
+	idem     *idemCache
 }
 
 func newGuard(auth Policy, allowedHosts []string, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
@@ -82,7 +83,7 @@ func newGuard(auth Policy, allowedHosts []string, public func(*http.Request) boo
 	if public == nil {
 		public = func(*http.Request) bool { return false }
 	}
-	return &Guard{auth: auth, hosts: hosts, public: public, classify: classify}
+	return &Guard{auth: auth, hosts: hosts, public: public, classify: classify, idem: newIdemCache()}
 }
 
 func hostname(value string) string {
@@ -151,6 +152,10 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 		}
 		if _, ok := g.hosts[hostname(r.Host)]; !ok {
 			deny(w, http.StatusBadRequest, "Bad Host header")
+			return
+		}
+		if isAPI(r) {
+			g.api(w, r, next)
 			return
 		}
 		static := strings.HasPrefix(r.URL.Path, staticPrefix)

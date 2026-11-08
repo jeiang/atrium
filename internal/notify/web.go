@@ -86,6 +86,7 @@ func Module(r chi.Router, d *web.Deps) {
 	d.Admin(http.MethodPost, page+"/push/unsubscribe", h.unsubscribe)
 	d.Admin(http.MethodPost, page+"/push/test", h.pushTest)
 	d.Admin(http.MethodPost, page+"/push/{id}/remove", h.removeDevice)
+	d.APIAdmin(http.MethodGet, "/inbox", h.apiInbox)
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {
