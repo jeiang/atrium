@@ -171,23 +171,6 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 	if err != nil {
 		return 0, err
 	}
-	if err := threads.SetTitle(ctx, s.DB.Write, threadID, threads.TitleFrom(text)); err != nil {
-		return 0, err
-	}
-	if o.Operator {
-		if err := threads.AddAllowedURLs(ctx, s.DB, threadID, threads.URLsIn(text)); err != nil {
-			return 0, err
-		}
-	}
-	text, used, err := s.Runner.Expand(ctx, s.DB.Write, tool.Kind(o.kind()), text)
-	if err != nil {
-		return 0, err
-	}
-	if o.ParentRunID == nil {
-		if err := progress.ClearThread(ctx, s.DB.Write, threadID); err != nil {
-			return 0, err
-		}
-	}
 	runID, err := journal.StartRun(ctx, s.DB, threadID, o.kind(), thread.Model, thread.Effort, now, o.ParentRunID, new(journal.NewOwner()))
 	if errors.Is(err, journal.ErrRunActive) {
 		return 0, RunActive(fmt.Sprintf("thread %d already has a run in progress", threadID))
@@ -195,19 +178,42 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 	if err != nil {
 		return 0, err
 	}
+	fail := func(err error) (int64, error) {
+		if ferr := journal.FinishRun(ctx, s.DB.Write, runID, journal.Failed, s.now(), new(err.Error())); ferr != nil {
+			return 0, ferr
+		}
+		return 0, err
+	}
+	if err := threads.SetTitle(ctx, s.DB.Write, threadID, threads.TitleFrom(text)); err != nil {
+		return fail(err)
+	}
+	if o.Operator {
+		if err := threads.AddAllowedURLs(ctx, s.DB, threadID, threads.URLsIn(text)); err != nil {
+			return fail(err)
+		}
+	}
+	text, used, err := s.Runner.Expand(ctx, s.DB.Write, tool.Kind(o.kind()), text)
+	if err != nil {
+		return fail(err)
+	}
+	if o.ParentRunID == nil {
+		if err := progress.ClearThread(ctx, s.DB.Write, threadID); err != nil {
+			return fail(err)
+		}
+	}
 	if !emptyLimits(o.Limits) {
 		if err := journal.SetLimits(ctx, s.DB.Write, runID, o.Limits); err != nil {
-			return 0, err
+			return fail(err)
 		}
 	}
 	if len(used) > 0 {
 		if err := journal.SetSkills(ctx, s.DB.Write, runID, used); err != nil {
-			return 0, err
+			return fail(err)
 		}
 	}
 	content := append(append([]json.RawMessage{}, o.Files...), actx.TextBlock(text))
 	if _, err := journal.AppendMessage(ctx, s.DB, threadID, &runID, journal.User, content, now, nil); err != nil {
-		return 0, err
+		return fail(err)
 	}
 	return runID, nil
 }
@@ -290,13 +296,23 @@ func (s *Service) inBackground(runID int64) error {
 	return nil
 }
 
+func (s *Service) launch(ctx context.Context, runID int64) error {
+	if err := s.inBackground(runID); err != nil {
+		if ferr := journal.FinishRun(ctx, s.DB.Write, runID, journal.Failed, s.now(), new(err.Error())); ferr != nil {
+			return ferr
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *Service) StartRun(ctx context.Context, threadID int64, text string, o Start) (int64, error) {
 	ctx = context.WithoutCancel(ctx)
 	runID, err := s.Prepare(ctx, threadID, text, s.now(), o)
 	if err != nil {
 		return 0, err
 	}
-	return runID, s.inBackground(runID)
+	return runID, s.launch(ctx, runID)
 }
 
 type Sent struct {
@@ -367,7 +383,7 @@ func (s *Service) Regenerate(ctx context.Context, threadID int64) (int64, error)
 	if err != nil {
 		return 0, err
 	}
-	return runID, s.inBackground(runID)
+	return runID, s.launch(ctx, runID)
 }
 
 func (s *Service) supersede(ctx context.Context, threadID, fromSeq int64, keepMessage bool) error {

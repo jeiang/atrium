@@ -106,6 +106,11 @@ func deref[T any](p *T) T {
 func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, client *anthropic.Client, runID int64, o Options) (*journal.Run, error) {
 	s, err := r.prepare(ctx, d, cfg, env, client, runID, o)
 	if err != nil {
+		now := float64(time.Now().UnixMicro()) / 1e6
+		if o.Now != nil {
+			now = o.Now()
+		}
+		_ = journal.FinishRun(ctx, d.Write, runID, journal.Failed, now, new(py.ExceptionText(err)))
 		return nil, err
 	}
 	final := journal.Failed
