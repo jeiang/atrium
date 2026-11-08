@@ -38,14 +38,11 @@ func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, erro
 	if extra.Globals == nil {
 		extra.Globals = map[string]any{}
 	}
-	extra.Globals["accounts"] = func() []string {
-		specs := config.Accounts()
-		accounts := make([]string, len(specs))
-		for i, spec := range specs {
-			accounts[i] = spec.Name
-		}
-		return accounts
+	accounts := make([]string, len(config.Accounts()))
+	for i, spec := range config.Accounts() {
+		accounts[i] = spec.Name
 	}
+	extra.Globals["accounts"] = accounts
 	if _, ok := extra.Globals["module_enabled"]; !ok {
 		extra.Globals["module_enabled"] = func(string) bool { return true }
 	}
