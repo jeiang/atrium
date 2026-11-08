@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/mail/birthdays"
 	"github.com/jeiang/atrium/internal/mail/watches"
 )
@@ -74,7 +75,7 @@ func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args) (a
 		return nil, err
 	}
 	if !ok {
-		return nil, tool.NotConfigured("ATRIUM_CONTACTS_CONTACTS_DIR is not set")
+		return nil, tool.NotConfigured(contacts.DirEnv + " is not set")
 	}
 	out := make([]any, len(found))
 	for i, item := range found {

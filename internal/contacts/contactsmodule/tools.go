@@ -80,7 +80,7 @@ func contactsLookup(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 		return nil, err
 	}
 	if dir == "" {
-		return nil, tool.NotConfigured("ATRIUM_CONTACTS_CONTACTS_DIR is not set")
+		return nil, tool.NotConfigured(contacts.DirEnv + " is not set")
 	}
 	found := contacts.Search(dir, query, int(limit))
 	results := make([]any, len(found))
