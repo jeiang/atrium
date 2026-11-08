@@ -8,11 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -21,12 +22,12 @@ const (
 )
 
 var (
-	footerRe    = rx.MustCompile(`^Last reviewed (\d{4}-\d{2}-\d{2})(?: · sources: (.*))?\s*$`, 0)
-	wikiLinkRe  = rx.MustCompile(`\[([^\]]*)\]\(([^)\s]+)\)`, 0)
-	wikiHeadRe  = rx.MustCompile(`^(#{1,6})\s+(.*?)\s*#*\s*$`, 0)
-	wikiURLRe   = rx.MustCompile(`^[a-z][a-z0-9+.-]*://`, rx.IgnoreCase)
-	aliasSplit  = rx.MustCompile(`[,;\n]`, 0)
-	labelSchema = rx.MustCompile(`^[a-z][a-z0-9+.-]*://(www\.)?`, rx.IgnoreCase)
+	footerRe    = regexp.MustCompile(`^Last reviewed (\d{4}-\d{2}-\d{2})(?: · sources: (.*))?\s*$`)
+	wikiLinkRe  = regexp.MustCompile(`\[([^\]]*)\]\(([^)\s]+)\)`)
+	wikiHeadRe  = regexp.MustCompile(`^(#{1,6})\s+(.*?)\s*#*\s*$`)
+	wikiURLRe   = regexp.MustCompile(`(?i)^[a-z][a-z0-9+.-]*://`)
+	aliasSplit  = regexp.MustCompile(`[,;\n]`)
+	labelSchema = regexp.MustCompile(`(?i)^[a-z][a-z0-9+.-]*://(www\.)?`)
 )
 
 type WikiError string
@@ -69,10 +70,7 @@ func stringList(values any, what string) ([]string, error) {
 func (w Wiki) CleanAliases(values any) ([]string, error) {
 	var raw []string
 	if s, ok := values.(string); ok {
-		parts, err := aliasSplit.Split(s, 0)
-		if err != nil {
-			return nil, err
-		}
+		parts := aliasSplit.Split(s, -1)
 		raw = parts
 	} else {
 		var err error
@@ -389,10 +387,7 @@ func AliasMatches(ctx context.Context, q db.Querier, query string) ([]string, er
 func rstrip(s string) string { return strings.TrimRightFunc(s, py.IsSpace) }
 
 func (w Wiki) linkLabel(url string) (string, error) {
-	text, err := labelSchema.Sub("", url, 0)
-	if err != nil {
-		return "", err
-	}
+	text := labelSchema.ReplaceAllString(url, "")
 	text = strings.TrimRight(text, "/")
 	if r := []rune(text); len(r) > w.LabelChars {
 		return string(r[:w.LabelChars-1]) + "…", nil
@@ -401,11 +396,7 @@ func (w Wiki) linkLabel(url string) (string, error) {
 }
 
 func (w Wiki) renderSource(value string) (string, error) {
-	m, err := wikiURLRe.Match(value)
-	if err != nil {
-		return "", err
-	}
-	if m != nil {
+	if wikiURLRe.MatchString(value) {
 		label, err := w.linkLabel(value)
 		return "[" + label + "](" + value + ")", err
 	}
@@ -414,17 +405,10 @@ func (w Wiki) renderSource(value string) (string, error) {
 
 func parseSources(text string) ([]string, error) {
 	var out []string
-	found, err := wikiLinkRe.FindIter(text)
-	if err != nil {
-		return nil, err
+	for _, loc := range wikiLinkRe.FindAllStringSubmatchIndex(text, -1) {
+		out = append(out, text[loc[4]:loc[5]])
 	}
-	for _, m := range found {
-		out = append(out, m.Group(2))
-	}
-	rest, err := wikiLinkRe.Sub("", text, 0)
-	if err != nil {
-		return nil, err
-	}
+	rest := wikiLinkRe.ReplaceAllString(text, "")
 	for _, part := range strings.Split(rest, ",") {
 		if p := py.Strip(part); p != "" {
 			out = append(out, p)
@@ -446,21 +430,19 @@ func dedupe(values []string) []string {
 func SplitFooter(markdown string) (body, reviewed string, sources []string, err error) {
 	trimmed := rstrip(markdown)
 	lines := strings.Split(trimmed, "\n")
-	m, err := footerRe.Match(py.Strip(lines[len(lines)-1]))
-	if err != nil {
-		return "", "", nil, err
-	}
-	if m == nil {
+	last := py.Strip(lines[len(lines)-1])
+	loc := footerRe.FindStringSubmatchIndex(last)
+	if loc == nil {
 		return trimmed, "", []string{}, nil
 	}
-	sources, err = parseSources(m.Group(2))
+	sources, err = parseSources(last[loc[4]:loc[5]])
 	if err != nil {
 		return "", "", nil, err
 	}
 	if sources == nil {
 		sources = []string{}
 	}
-	return rstrip(strings.Join(lines[:len(lines)-1], "\n")), m.Group(1), sources, nil
+	return rstrip(strings.Join(lines[:len(lines)-1], "\n")), last[loc[2]:loc[3]], sources, nil
 }
 
 func (w Wiki) footerLine(date string, sources []string) (string, error) {
@@ -500,18 +482,15 @@ func sectionSpan(markdown, heading string) (start, end int, ok bool, err error) 
 	wanted := NormalizeKey(heading)
 	start, level := -1, 0
 	for i, line := range lines {
-		m, err := wikiHeadRe.Match(line)
-		if err != nil {
-			return 0, 0, false, err
-		}
-		if m == nil {
+		loc := wikiHeadRe.FindStringSubmatchIndex(line)
+		if loc == nil {
 			continue
 		}
 		if start < 0 {
-			if NormalizeKey(m.Group(2)) == wanted {
-				start, level = i, len([]rune(m.Group(1)))
+			if NormalizeKey(line[loc[4]:loc[5]]) == wanted {
+				start, level = i, len([]rune(line[loc[2]:loc[3]]))
 			}
-		} else if len([]rune(m.Group(1))) <= level {
+		} else if len([]rune(line[loc[2]:loc[3]])) <= level {
 			return start, i, true, nil
 		}
 	}

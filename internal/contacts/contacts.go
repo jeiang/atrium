@@ -3,11 +3,11 @@ package contacts
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -16,11 +16,10 @@ const (
 )
 
 var (
-	unfoldRe   = rx.MustCompile(`\r?\n[ \t]`, 0)
-	escapeRe   = rx.MustCompile(`\\([nN,;\\])`, 0)
-	splitRe    = rx.MustCompile(`(?<!\\);`, 0)
-	dateRe     = rx.MustCompile(`^(?:(\d{4})-?|--)(\d{2})-?(\d{2})(?!\d)`, 0)
-	appleLabel = rx.MustCompile(`^_\$!<(.*)>!\$_$`, 0)
+	unfoldRe   = regexp.MustCompile(`\r?\n[ \t]`)
+	escapeRe   = regexp.MustCompile(`\\([nN,;\\])`)
+	dateRe     = regexp.MustCompile(`^(?:(\d{4})-?|--)(\d{2})-?(\d{2})`)
+	appleLabel = regexp.MustCompile(`^_\$!<(.*)>!\$_$`)
 )
 
 var unknownYears = map[int]bool{1604: true, 1900: true}
@@ -56,36 +55,53 @@ type card struct {
 }
 
 func Unfold(text string) string {
-	out, _ := unfoldRe.Sub("", text, 0)
-	return out
+	return unfoldRe.ReplaceAllString(text, "")
 }
 
 func unescape(value string) string {
-	out, _ := escapeRe.SubFunc(value, func(m *rx.Match) string {
-		if g := m.Group(1); g != "n" && g != "N" {
-			return g
+	var b strings.Builder
+	last := 0
+	for _, loc := range escapeRe.FindAllStringSubmatchIndex(value, -1) {
+		b.WriteString(value[last:loc[0]])
+		g := value[loc[2]:loc[3]]
+		if g == "n" || g == "N" {
+			b.WriteString("\n")
+		} else {
+			b.WriteString(g)
 		}
-		return "\n"
-	}, 0)
-	return py.Strip(out)
+		last = loc[1]
+	}
+	b.WriteString(value[last:])
+	return py.Strip(b.String())
 }
 
 func split(value string) []string {
-	parts, _ := splitRe.Split(value, 0)
-	return parts
+	var out []string
+	last := 0
+	for i := range len(value) {
+		if value[i] == ';' && (i == 0 || value[i-1] != '\\') {
+			out = append(out, value[last:i])
+			last = i + 1
+		}
+	}
+	return append(out, value[last:])
 }
 
 func ParseDate(value string) (month, day int, year *int, ok bool) {
-	m, _ := dateRe.Match(py.Strip(value))
-	if m == nil {
+	text := py.Strip(value)
+	loc := dateRe.FindStringSubmatchIndex(text)
+	if loc == nil {
 		return 0, 0, nil, false
 	}
-	month, day = py.DecimalValue(m.Group(2)), py.DecimalValue(m.Group(3))
+	if loc[1] < len(text) && text[loc[1]] >= '0' && text[loc[1]] <= '9' {
+		return 0, 0, nil, false
+	}
+	month, day = py.DecimalValue(text[loc[4]:loc[5]]), py.DecimalValue(text[loc[6]:loc[7]])
 	if month < 1 || month > 12 || day < 1 || day > monthDays(month) {
 		return 0, 0, nil, false
 	}
-	if g, found := m.GroupOK(1); found {
-		if y := py.DecimalValue(g); y != 0 && !unknownYears[y] {
+	if loc[2] >= 0 {
+		if y := py.DecimalValue(text[loc[2]:loc[3]]); y != 0 && !unknownYears[y] {
 			year = new(y)
 		}
 	}
@@ -118,8 +134,8 @@ func dateKind(label string) string {
 
 func cleanLabel(text string) string {
 	text = unescape(text)
-	if m, _ := appleLabel.Match(text); m != nil {
-		text = m.Group(1)
+	if loc := appleLabel.FindStringSubmatchIndex(text); loc != nil {
+		text = text[loc[2]:loc[3]]
 	}
 	return py.Strip(text)
 }

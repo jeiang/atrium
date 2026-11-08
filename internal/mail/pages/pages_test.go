@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 func TestMessagePageFullPartialAndMissing(t *testing.T) {
@@ -357,6 +358,5 @@ func TestMutatingRoutesNeedACSRFToken(t *testing.T) {
 }
 
 func matches(pattern, text string) bool {
-	m, _ := rx.MustCompile(pattern, 0).Search(text)
-	return m != nil
+	return regexp.MustCompile(pattern).MatchString(text)
 }

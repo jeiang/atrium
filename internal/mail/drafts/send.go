@@ -55,7 +55,7 @@ func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Mess
 }
 
 func stripMsgID(id string) string {
-	out, _ := msgidJunkRE.Sub("", id, 0)
+	out := msgidJunkRE.ReplaceAllString(id, "")
 	return out
 }
 

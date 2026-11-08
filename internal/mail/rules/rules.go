@@ -8,10 +8,12 @@ import (
 	"math/big"
 	"strings"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -21,6 +23,8 @@ const (
 	ActionFile    = "file"
 	ActionDelete  = "delete"
 )
+
+var log = logx.Logger("atrium.rules")
 
 var (
 	ListFields = map[string]string{
@@ -78,6 +82,7 @@ type Condition struct {
 	Op       string
 	Value    any
 	HasValue bool
+	matcher  *regexp.Regexp
 }
 
 type Rule struct {
@@ -264,9 +269,7 @@ func number(v any) (float64, bool) {
 	return 0, false
 }
 
-func Pattern(value string) (*rx.Regexp, error) { return rx.Compile(value, rx.IgnoreCase) }
-
-func CheckPattern(value string) (*rx.Regexp, error) { return rx.Compile(value, 0) }
+func compilePattern(value string) (*regexp.Regexp, error) { return regexp.Compile("(?i)" + value) }
 
 func (c Condition) Matches(m *Message, now float64) (bool, error) {
 	if c.Field == AgeField {
@@ -334,19 +337,15 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 		}
 		return false, nil
 	}
-	pattern, ok := c.Value.(string)
-	if !ok {
-		return false, fmt.Errorf("op re: value %s: not a string", py.ReprValue(c.Value))
-	}
-	re, err := Pattern(pattern)
-	if err != nil {
-		return false, err
+	re := c.matcher
+	if re == nil {
+		return false, fmt.Errorf("op re: pattern %s was not compiled", py.ReprValue(c.Value))
 	}
 	for _, v := range values {
 		if v == "" {
 			continue
 		}
-		if found, _ := re.Search(v); found != nil {
+		if re.MatchString(v) {
 			return true, nil
 		}
 	}
@@ -448,7 +447,7 @@ func ValidateCondition(raw any) (Condition, error) {
 		if _, isBool := value.(bool); !opIsStr || op != AgeOp || isBool || !isNum || days <= 0 {
 			return Condition{}, ruleErrorf("%s needs op %s and a positive number of days", AgeField, AgeOp)
 		}
-		return Condition{field, op, value, true}, nil
+		return Condition{Field: field, Op: op, Value: value, HasValue: true}, nil
 	}
 	if !fieldIsStr || (ListFields[field] == "" && ScalarFields[field] == "") {
 		return Condition{}, ruleErrorf("unknown field %s", py.ReprValue(fieldV))
@@ -477,14 +476,19 @@ func ValidateCondition(raw any) (Condition, error) {
 		return Condition{}, ruleErrorf("op suffix needs a string or list of strings")
 	}
 	if op == "re" {
-		if _, err := CheckPattern(text); err != nil {
+		re, err := compilePattern(text)
+		if err != nil {
 			return Condition{}, ruleErrorf("invalid regex %s: %s", py.Repr(text), err)
 		}
+		if isList {
+			value = list
+		}
+		return Condition{Field: field, Op: op, Value: value, HasValue: true, matcher: re}, nil
 	}
 	if isList {
 		value = list
 	}
-	return Condition{field, op, value, true}, nil
+	return Condition{Field: field, Op: op, Value: value, HasValue: true}, nil
 }
 
 func ValidateRule(raw any) (Rule, error) {
@@ -629,9 +633,12 @@ func loadRules(ctx context.Context, q Querier, keep func(account sql.NullString)
 		if dest.Valid {
 			r.Dest = &dest.String
 		}
-		if r.Conditions, err = parseStored(conds); err != nil {
-			return nil, fmt.Errorf("rule %s: %w", id, err)
+		conditions, err := parseStored(conds)
+		if err != nil {
+			log.Warn("skipping rule with invalid conditions", "rule", id, "error", err)
+			continue
 		}
+		r.Conditions = conditions
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -665,7 +672,19 @@ func parseStored(text string) ([]Condition, error) {
 				value = strs
 			}
 		}
-		out[i] = Condition{f, o, value, has}
+		c := Condition{Field: f, Op: o, Value: value, HasValue: has}
+		if o == "re" {
+			text, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("condition %d: pattern is not a string", i)
+			}
+			re, err := compilePattern(text)
+			if err != nil {
+				return nil, fmt.Errorf("condition %d: invalid regex %s: %w", i, py.Repr(text), err)
+			}
+			c.matcher = re
+		}
+		out[i] = c
 	}
 	return out, nil
 }

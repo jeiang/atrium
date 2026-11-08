@@ -14,21 +14,22 @@ import (
 	"time"
 	"unicode"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 	"github.com/jeiang/atrium/internal/secrets"
 )
 
 const notConfigured = "ntfy not configured (" + KeyURL + ")"
 
 var (
-	control    = rx.MustCompile(`[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]`, 0)
-	threadLink = rx.MustCompile(`^/chat/\d+$`, 0)
+	control    = regexp.MustCompile(`[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]`)
+	threadLink = regexp.MustCompile(`^/chat/\d+$`)
 )
 
 type Notification struct {
@@ -63,10 +64,7 @@ type Sent struct {
 
 func Plain(text string, limit int) string {
 	text = py.Strip(text)
-	cleaned, err := control.Sub("", text, 0)
-	if err != nil {
-		cleaned = text
-	}
+	cleaned := control.ReplaceAllString(text, "")
 	return tool.Clip(cleaned, limit)
 }
 
@@ -81,7 +79,7 @@ func LinkFor(raw *string, threadID int64) (string, error) {
 	if isDigits(link) {
 		link = "/chat/" + link
 	}
-	if m, _ := threadLink.Match(link); m == nil {
+	if !threadLink.MatchString(link) {
 		return "", tool.Error("thread_link must be a thread id or /chat/<id>")
 	}
 	return link, nil

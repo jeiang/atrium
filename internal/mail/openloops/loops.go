@@ -8,13 +8,14 @@ import (
 	"strconv"
 	"strings"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/flags"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 var log = logx.Logger("atrium.openloops")
@@ -42,24 +43,21 @@ var (
 	automatedPrecedence = []string{"bulk", "list", "junk"}
 	automatedCategories = []string{"social", "promotions", "updates", "forums"}
 
-	subjectPrefix = rx.MustCompile(`^\s*(re|fwd?|aw|sv)\s*:\s*`, 0)
-	spaceRuns     = rx.MustCompile(`\s+`, 0)
+	subjectPrefix = regexp.MustCompile(`^\s*(re|fwd?|aw|sv)\s*:\s*`)
+	spaceRuns     = regexp.MustCompile(`\s+`)
 )
 
 func NormSubject(subject string) (string, error) {
 	text := py.Casefold(subject)
 	for {
-		stripped, err := subjectPrefix.Sub("", text, 0)
-		if err != nil {
-			return "", err
-		}
+		stripped := subjectPrefix.ReplaceAllString(text, "")
 		if stripped == text {
 			break
 		}
 		text = stripped
 	}
-	text, err := spaceRuns.Sub(" ", text, 0)
-	return py.Strip(text), err
+	text = spaceRuns.ReplaceAllString(text, " ")
+	return py.Strip(text), nil
 }
 
 func IsDraft(labels, flagList string) (bool, error) {

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
@@ -19,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -30,7 +31,7 @@ const (
 	Interrupted = "interrupted"
 )
 
-var name = rx.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`, 0)
+var name = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 
 type Error string
 
@@ -150,7 +151,7 @@ func Save(ctx context.Context, q db.Querier, reg *registry.Registry, d Definitio
 	agent := py.Strip(d.Name)
 	description := strings.Join(py.Split(d.Description), " ")
 	prompt := py.Strip(d.Prompt)
-	if m, _ := name.Match(agent); m == nil {
+	if !name.MatchString(agent) {
 		return nil, Error("name must be lowercase letters, digits, - or _ (max 32 characters)")
 	}
 	r := assistant.Read(ctx, q)

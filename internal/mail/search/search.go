@@ -10,13 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -41,8 +42,8 @@ func readLimits(ctx context.Context, q Querier) (limits, error) {
 }
 
 var (
-	tokenRe = rx.MustCompile(`"([^"]*)"|([^\W_]+)`, 0)
-	wordRe  = rx.MustCompile(`[^\W_]+`, 0)
+	tokenRe = regexp.MustCompile(`"([^"]*)"|([^\W_]+)`)
+	wordRe  = regexp.MustCompile(`[^\W_]+`)
 	truthy  = map[string]bool{"1": true, "true": true, "on": true, "yes": true}
 )
 
@@ -59,20 +60,16 @@ func FTSQuery(text string) (string, error) { return FTSQueryLimit(text, MaxTerms
 
 func FTSQueryLimit(text string, maxTerms int) (string, error) {
 	var terms []string
-	matches, err := tokenRe.FindIter(text)
-	if err != nil {
-		return "", err
-	}
-	for _, m := range matches {
-		if word, ok := m.GroupOK(2); ok && word != "" {
-			terms = append(terms, `"`+word+`"*`)
+	for _, loc := range tokenRe.FindAllStringSubmatchIndex(text, -1) {
+		if loc[4] >= 0 && text[loc[4]:loc[5]] != "" {
+			terms = append(terms, `"`+text[loc[4]:loc[5]]+`"*`)
 			continue
 		}
-		phrase, _ := m.GroupOK(1)
-		words, err := wordRe.FindAll(phrase)
-		if err != nil {
-			return "", err
+		phrase := ""
+		if loc[2] >= 0 {
+			phrase = text[loc[2]:loc[3]]
 		}
+		words := wordRe.FindAllString(phrase, -1)
 		if len(words) > 0 {
 			terms = append(terms, `"`+strings.Join(words, " ")+`"`)
 		}

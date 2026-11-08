@@ -15,10 +15,11 @@ import (
 	goldmarkhtml "github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/util"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 var markdownTags = []string{
@@ -75,36 +76,49 @@ func MarkdownWith(text string, pages map[string]string) template.HTML {
 		return ""
 	}
 	cleaned := strings.ReplaceAll(policy.Sanitize(b.String()), `rel="noreferrer"`, `rel="noopener noreferrer"`)
-	cleaned, _ = emptyHeadRe.Sub("", cleaned, 0)
-	cleaned, _ = taskRe.SubFunc(cleaned, taskBox, 0)
-	cleaned, _ = hrefRe.SubFunc(cleaned, func(m *rx.Match) string { return internalHref(m, pages) }, 0)
+	cleaned = emptyHeadRe.ReplaceAllString(cleaned, "")
+	cleaned = subMatches(taskRe, cleaned, taskBox)
+	cleaned = subMatches(hrefRe, cleaned, func(s string, loc []int) string { return internalHref(s, loc, pages) })
 	return template.HTML(cleaned)
 }
 
+func subMatches(re *regexp.Regexp, s string, fn func(string, []int) string) string {
+	var b strings.Builder
+	last := 0
+	for _, loc := range re.FindAllStringSubmatchIndex(s, -1) {
+		b.WriteString(s[last:loc[0]])
+		b.WriteString(fn(s, loc))
+		last = loc[1]
+	}
+	b.WriteString(s[last:])
+	return b.String()
+}
+
 var (
-	emptyHeadRe = rx.MustCompile(`<thead>\s*<tr>\s*(?:<th>\s*</th>\s*)+</tr>\s*</thead>\s*`, 0)
-	taskRe      = rx.MustCompile(`(<li>(?:\s*<p>)?)\[([ xX])\] `, 0)
-	hrefRe      = rx.MustCompile(`href="([^"]*)"`, 0)
+	emptyHeadRe = regexp.MustCompile(`<thead>\s*<tr>\s*(?:<th>\s*</th>\s*)+</tr>\s*</thead>\s*`)
+	taskRe      = regexp.MustCompile(`(<li>(?:\s*<p>)?)\[([ xX])\] `)
+	hrefRe      = regexp.MustCompile(`href="([^"]*)"`)
 )
 
 var notionHosts = []string{"notion.so", "www.notion.so", "app.notion.com"}
 
-func taskBox(m *rx.Match) string {
+func taskBox(s string, loc []int) string {
 	checked := ""
-	if m.Group(2) != " " {
+	if s[loc[4]:loc[5]] != " " {
 		checked = " checked"
 	}
-	return m.Group(1) + `<input class="input" type="checkbox" disabled` + checked + "> "
+	return s[loc[2]:loc[3]] + `<input class="input" type="checkbox" disabled` + checked + "> "
 }
 
-func internalHref(m *rx.Match, pages map[string]string) string {
-	url := html.UnescapeString(m.Group(1))
+func internalHref(s string, loc []int, pages map[string]string) string {
+	text := s[loc[0]:loc[1]]
+	url := html.UnescapeString(s[loc[2]:loc[3]])
 	parts, err := py.URLSplit(url)
 	if err != nil {
-		return m.Text()
+		return text
 	}
 	if host, _ := parts.Hostname(); !slices.Contains(notionHosts, host) {
-		return m.Text()
+		return text
 	}
 	known := ""
 	for _, id := range notionid.IDsInText(url) {
@@ -113,7 +127,7 @@ func internalHref(m *rx.Match, pages map[string]string) string {
 		}
 	}
 	if known == "" {
-		return m.Text()
+		return text
 	}
 	return `href="/notion/` + known + `"`
 }

@@ -10,6 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
@@ -18,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 var log = logx.Logger("atrium.watches")
@@ -40,27 +41,27 @@ const (
 var Statuses = [...]string{Ordered, Shipped, InTransit, OutForDelivery, Delivered, Delayed, Exception}
 
 var (
-	nonAlnum    = rx.MustCompile(`[^a-z0-9]+`, 0)
-	spaceRuns   = rx.MustCompile(`\s+`, 0)
-	trackingRef = rx.MustCompile(`[A-Za-z0-9-]{6,40}`, 0)
+	nonAlnum    = regexp.MustCompile(`[^a-z0-9]+`)
+	spaceRuns   = regexp.MustCompile(`\s+`)
+	trackingRef = regexp.MustCompile(`[A-Za-z0-9-]{6,40}`)
 
-	upsRE    = rx.MustCompile(`\b(1Z[0-9A-Z]{16})\b`, 0)
-	s10RE    = rx.MustCompile(`\b([A-Z]{2}\d{9}US)\b`, 0)
-	uspsRE   = rx.MustCompile(`\b(9[2-5]\d{18,24})\b`, 0)
-	dhlJDRE  = rx.MustCompile(`\b(JD\d{18})\b`, 0)
-	fedexRE  = rx.MustCompile(`\b(\d{12}|\d{15})\b`, 0)
-	dhlRE    = rx.MustCompile(`\b(\d{10,11})\b`, 0)
-	orderRE  = rx.MustCompile(`\border\s*(?:number|no\.?|#|id|ref(?:erence)?)?\s*[:#]?\s*#?\s*([A-Z0-9][A-Z0-9-]{4,24})`, rx.IgnoreCase)
+	upsRE    = regexp.MustCompile(`\b(1Z[0-9A-Z]{16})\b`)
+	s10RE    = regexp.MustCompile(`\b([A-Z]{2}\d{9}US)\b`)
+	uspsRE   = regexp.MustCompile(`\b(9[2-5]\d{18,24})\b`)
+	dhlJDRE  = regexp.MustCompile(`\b(JD\d{18})\b`)
+	fedexRE  = regexp.MustCompile(`\b(\d{12}|\d{15})\b`)
+	dhlRE    = regexp.MustCompile(`\b(\d{10,11})\b`)
+	orderRE  = regexp.MustCompile(`(?i)\border\s*(?:number|no\.?|#|id|ref(?:erence)?)?\s*[:#]?\s*#?\s*([A-Z0-9][A-Z0-9-]{4,24})`)
 	statuses = [...]struct {
 		status  string
-		pattern *rx.Regexp
+		pattern *regexp.Regexp
 	}{
-		{OutForDelivery, rx.MustCompile(`out for delivery`, rx.IgnoreCase)},
-		{Delivered, rx.MustCompile(`(?<!will be )(?<!to be )(?<!be )\bdelivered\b`, rx.IgnoreCase)},
-		{Exception, rx.MustCompile(`unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception`, rx.IgnoreCase)},
-		{Delayed, rx.MustCompile(`\bdelay(?:ed)?\b|running late`, rx.IgnoreCase)},
-		{InTransit, rx.MustCompile(`in transit|on its way|on the way|arriving|arrives`, rx.IgnoreCase)},
-		{Shipped, rx.MustCompile(`\bshipped\b|has shipped|shipment|label created|picked up`, rx.IgnoreCase)},
+		{OutForDelivery, regexp.MustCompile(`(?i)out for delivery`)},
+		{Delivered, regexp.MustCompile(`(?i)\bdelivered\b`)},
+		{Exception, regexp.MustCompile(`(?i)unable to deliver|delivery attempt|failed delivery|returned to sender|address issue|delivery exception`)},
+		{Delayed, regexp.MustCompile(`(?i)\bdelay(?:ed)?\b|running late`)},
+		{InTransit, regexp.MustCompile(`(?i)in transit|on its way|on the way|arriving|arrives`)},
+		{Shipped, regexp.MustCompile(`(?i)\bshipped\b|has shipped|shipment|label created|picked up`)},
 	}
 )
 
@@ -96,8 +97,8 @@ var PackageSchema = llm.Object{
 }
 
 func MerchantKey(name string) (string, error) {
-	text, err := nonAlnum.Sub(" ", py.Casefold(name), 0)
-	return strings.Join(py.Split(text), " "), err
+	text := nonAlnum.ReplaceAllString(py.Casefold(name), " ")
+	return strings.Join(py.Split(text), " "), nil
 }
 
 func clip(text string, limit int) string {
@@ -190,18 +191,17 @@ type Tracking struct{ Carrier, Number string }
 func FindTracking(text string) ([]Tracking, error) {
 	low := py.Casefold(text)
 	var found []Tracking
-	add := func(carrier string, pattern *rx.Regexp) error {
-		matches, err := pattern.FindIter(text)
-		for _, m := range matches {
-			if item := (Tracking{carrier, m.Group(1)}); !slices.Contains(found, item) {
+	add := func(carrier string, pattern *regexp.Regexp) error {
+		for _, loc := range pattern.FindAllStringSubmatchIndex(text, -1) {
+			if item := (Tracking{carrier, text[loc[2]:loc[3]]}); !slices.Contains(found, item) {
 				found = append(found, item)
 			}
 		}
-		return err
+		return nil
 	}
 	steps := []struct {
 		carrier string
-		pattern *rx.Regexp
+		pattern *regexp.Regexp
 		when    bool
 	}{
 		{"UPS", upsRE, true}, {"USPS", s10RE, true}, {"USPS", uspsRE, true}, {"DHL", dhlJDRE, true},
@@ -227,24 +227,22 @@ func FindTracking(text string) ([]Tracking, error) {
 }
 
 func FindOrderRef(text string) (string, error) {
-	matches, err := orderRE.FindIter(text)
-	for _, m := range matches {
-		ref := py.Upper(m.Group(1))
+	for _, loc := range orderRE.FindAllStringSubmatchIndex(text, -1) {
+		ref := py.Upper(text[loc[2]:loc[3]])
 		if strings.ContainsAny(ref, "0123456789") {
-			return ref, err
+			return ref, nil
 		}
 	}
-	return "", err
+	return "", nil
 }
 
 func ClassifyStatus(subject, body string) (string, error) {
 	for _, text := range [...]string{subject, py.Clip(body, 1500)} {
 		for _, s := range statuses {
-			m, err := s.pattern.Search(text)
-			if err != nil {
-				return "", err
-			}
-			if m != nil {
+			for _, loc := range s.pattern.FindAllStringIndex(text, -1) {
+				if s.status == Delivered && strings.HasSuffix(strings.ToLower(text[:loc[0]]), "be ") {
+					continue
+				}
 				return s.status, nil
 			}
 		}
@@ -312,16 +310,10 @@ func CleanPackage(answer any, text string) (item Item, ok bool, err error) {
 		return Item{}, false, nil
 	}
 	field := func(key string) any { v, _ := reply.Get(key); return v }
-	tracking, err := spaceRuns.Sub("", pyStr(field("tracking_number")), 0)
-	if err != nil {
-		return Item{}, false, err
-	}
+	tracking := spaceRuns.ReplaceAllString(pyStr(field("tracking_number")), "")
 	if tracking != "" {
-		m, err := trackingRef.FullMatch(tracking)
-		if err != nil {
-			return Item{}, false, err
-		}
-		if m == nil || !strings.Contains(py.Casefold(strings.ReplaceAll(text, " ", "")), py.Casefold(tracking)) {
+		loc := trackingRef.FindStringIndex(tracking)
+		if loc == nil || loc[0] != 0 || loc[1] != len(tracking) || !strings.Contains(py.Casefold(strings.ReplaceAll(text, " ", "")), py.Casefold(tracking)) {
 			tracking = ""
 		}
 	}

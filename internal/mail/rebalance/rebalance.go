@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
@@ -21,7 +23,6 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 var log = logx.Logger("atrium.rebalance")
@@ -90,9 +91,9 @@ func nameSchema(maxChars int) llm.Object {
 }
 
 var (
-	termRE   = rx.MustCompile(`[a-z]{3,}`, 0)
-	junkRE   = rx.MustCompile(`[/|\\\x00-\x1f]+`, 0)
-	spacesRE = rx.MustCompile(`\s+`, 0)
+	termRE   = regexp.MustCompile(`[a-z]{3,}`)
+	junkRE   = regexp.MustCompile(`[/|\\\x00-\x1f]+`)
+	spacesRE = regexp.MustCompile(`\s+`)
 )
 
 type row struct {
@@ -584,7 +585,7 @@ func (p params) termsOf(rows []*row) []string {
 	counts := map[string]int{}
 	var words []string
 	for _, r := range rows {
-		found, _ := termRE.FindAll(r.SubjectTmpl)
+		found := termRE.FindAllString(r.SubjectTmpl, -1)
 		seen := map[string]bool{}
 		for _, w := range found {
 			if stopwords[w] || seen[w] {
@@ -602,8 +603,8 @@ func (p params) termsOf(rows []*row) []string {
 }
 
 func CleanName(value string, maxChars int) string {
-	name, _ := junkRE.Sub(" ", value, 0)
-	name, _ = spacesRE.Sub(" ", name, 0)
+	name := junkRE.ReplaceAllString(value, " ")
+	name = spacesRE.ReplaceAllString(name, " ")
 	return py.Strip(py.Clip(py.Strip(name), maxChars))
 }
 
