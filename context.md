@@ -68,8 +68,9 @@ behavior-parity target.
   prompt with the profile and project block, and the older-history lines
   are fixed for the run and carry the cache breakpoints, so later steps read
   them from the prompt cache and write only the new tail. Client- and
-  server-side transcript compaction are gone; the old projection and ledger
-  rows stay untouched.
+  server-side transcript compaction and their settings are gone; the chat
+  meter and the attachment check measure against the thread's context
+  limit, and the old projection and ledger rows stay untouched.
 - Memory is profile, then nightly observations, then wiki. A nightly run
   records durable observations: a first sighting proposes a "sometimes
   uses" note, a different value first seen at least 14 days earlier proposes

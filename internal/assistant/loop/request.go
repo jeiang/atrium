@@ -157,7 +157,7 @@ func (s *state) history(ctx context.Context) (*history, error) {
 	if err != nil {
 		return nil, err
 	}
-	from, err := verbatimFrom(messages, s.run.ID, min(budget, (s.limits.Hard-s.req.fixedTokens)/4))
+	from, err := verbatimFrom(messages, s.run.ID, min(budget, (s.contextLimit-s.req.fixedTokens)/4))
 	if err != nil {
 		return nil, err
 	}

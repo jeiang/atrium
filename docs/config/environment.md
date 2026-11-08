@@ -10,10 +10,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ANTHROPIC_ANTHROPIC_ADMIN_KEY` | `anthropic.anthropic_admin_key` |
 | `ATRIUM_ANTHROPIC_ANTHROPIC_API_KEY` | `anthropic.anthropic_api_key` |
 | `ANTHROPIC_API_KEY` | `anthropic.anthropic_api_key` |
-| `ATRIUM_ASSISTANT_AGENT_CLEAR_AT_LEAST_SHARE` | `assistant.agent_clear_at_least_share` |
-| `ATRIUM_ASSISTANT_AGENT_CLEAR_KEEP` | `assistant.agent_clear_keep` |
-| `ATRIUM_ASSISTANT_AGENT_CLEAR_SHARE` | `assistant.agent_clear_share` |
-| `ATRIUM_ASSISTANT_AGENT_COMPACT_SHARE` | `assistant.agent_compact_share` |
 | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_IDS` | `assistant.agent_context_max_ids` |
 | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_SOURCES` | `assistant.agent_context_max_sources` |
 | `ATRIUM_ASSISTANT_AGENT_CONTEXT_SUMMARY_CHARS` | `assistant.agent_context_summary_chars` |
@@ -46,8 +42,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_NOTION_PAGE_CHARS` | `assistant.agent_notion_page_chars` |
 | `ATRIUM_ASSISTANT_AGENT_NOTION_SNIPPET_CHARS` | `assistant.agent_notion_snippet_chars` |
 | `ATRIUM_ASSISTANT_AGENT_NOTION_STALE_SECONDS` | `assistant.agent_notion_stale_seconds` |
-| `ATRIUM_ASSISTANT_AGENT_PREFLIGHT_SHARE` | `assistant.agent_preflight_share` |
-| `ATRIUM_ASSISTANT_AGENT_PRESERVE_MESSAGES` | `assistant.agent_preserve_messages` |
 | `ATRIUM_ASSISTANT_AGENT_PREVIEW_CHARS` | `assistant.agent_preview_chars` |
 | `ATRIUM_ASSISTANT_AGENT_PROFILE_KEY_CHARS` | `assistant.agent_profile_key_chars` |
 | `ATRIUM_ASSISTANT_AGENT_PROFILE_VALUE_CHARS` | `assistant.agent_profile_value_chars` |
@@ -79,7 +73,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_STEPS` | `assistant.agent_subagent_max_steps` |
 | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_PROMPT_CHARS` | `assistant.agent_subagent_prompt_chars` |
 | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_TASK_CHARS` | `assistant.agent_subagent_task_chars` |
-| `ATRIUM_ASSISTANT_AGENT_SUMMARY_MAX_TOKENS` | `assistant.agent_summary_max_tokens` |
 | `ATRIUM_ASSISTANT_AGENT_WEB_SEARCH_MAX_USES` | `assistant.agent_web_search_max_uses` |
 | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_MAX_BYTES` | `assistant.agent_webfetch_max_bytes` |
 | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_MAX_REDIRECTS` | `assistant.agent_webfetch_max_redirects` |
@@ -109,7 +102,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` | `assistant.open_meteo_ca_file` |
 | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` | `assistant.open_meteo_proxy` |
 | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` | `assistant.prompt_subagent` |
-| `ATRIUM_ASSISTANT_PROMPT_SUMMARY` | `assistant.prompt_summary` |
 | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` | `assistant.prompt_system` |
 | `ATRIUM_ASSISTANT_THREAD_COST_CAP_USD` | `assistant.thread_cost_cap_usd` |
 | `ATRIUM_ASSISTANT_WEATHER_FORECAST_DAYS` | `assistant.weather_forecast_days` |

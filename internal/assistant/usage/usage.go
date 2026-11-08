@@ -32,21 +32,19 @@ type MissingRequestID struct{}
 func (MissingRequestID) Error() string { return "usage: the request has no id" }
 
 type Entry struct {
-	TS            float64
-	RequestID     string
-	Source        string
-	Provider      string
-	ThreadID      int64
-	RunID         int64
-	Kind          string
-	Model         string
-	Effort        string
-	ToolCalls     int64
-	WallMS        int64
-	Partial       bool
-	ClearEdits    int64
-	ClearedTokens int64
-	Compaction    int64
+	TS         float64
+	RequestID  string
+	Source     string
+	Provider   string
+	ThreadID   int64
+	RunID      int64
+	Kind       string
+	Model      string
+	Effort     string
+	ToolCalls  int64
+	WallMS     int64
+	Partial    bool
+	Compaction int64
 }
 
 type Iteration struct {
@@ -154,12 +152,12 @@ func Record(ctx context.Context, d *db.DB, e Entry, u anthropic.Usage) (float64,
 	_, err = d.Write.ExecContext(ctx,
 		"INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, job_name, model, effort, iterations, "+
 			"input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tool_calls, wall_ms, "+
-			"tier, cost_usd, partial, unpriced, clear_edits, cleared_tokens, compaction) "+
+			"tier, cost_usd, partial, unpriced, compaction) "+
 			"VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT j.name FROM threads t JOIN jobs j ON j.id = t.job_id WHERE t.id = ?), ?, ?, ?, "+
-			"?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(request_id) DO NOTHING",
+			"?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(request_id) DO NOTHING",
 		e.TS, e.RequestID, e.Source, e.Provider, nullable(e.ThreadID), nullable(e.RunID), e.Kind, e.ThreadID, e.Model, e.Effort,
 		string(raw), sum.Input, sum.CacheWrite5m, sum.CacheWrite1h, sum.CacheRead, sum.Output, reasoning,
-		searches, e.ToolCalls, e.WallMS, tier, cost, e.Partial, unpriced, e.ClearEdits, e.ClearedTokens, e.Compaction)
+		searches, e.ToolCalls, e.WallMS, tier, cost, e.Partial, unpriced, e.Compaction)
 	if err != nil {
 		return 0, err
 	}

@@ -21,10 +21,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
-| `agent_clear_at_least_share` | float | `0.05` | advanced | `ATRIUM_ASSISTANT_AGENT_CLEAR_AT_LEAST_SHARE` |
-| `agent_clear_keep` | int | `3` | advanced | `ATRIUM_ASSISTANT_AGENT_CLEAR_KEEP` |
-| `agent_clear_share` | float | `0.1875` | advanced | `ATRIUM_ASSISTANT_AGENT_CLEAR_SHARE` |
-| `agent_compact_share` | float | `0.875` | advanced | `ATRIUM_ASSISTANT_AGENT_COMPACT_SHARE` |
 | `agent_context_max_ids` | int | `50` | advanced | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_IDS` |
 | `agent_context_max_sources` | int | `100` | advanced | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_SOURCES` |
 | `agent_context_summary_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_CONTEXT_SUMMARY_CHARS` |
@@ -57,8 +53,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_notion_page_chars` | int | `12000` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_PAGE_CHARS` |
 | `agent_notion_snippet_chars` | int | `300` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_SNIPPET_CHARS` |
 | `agent_notion_stale_seconds` | int | `86400` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_STALE_SECONDS` |
-| `agent_preflight_share` | float | `0.95` | advanced | `ATRIUM_ASSISTANT_AGENT_PREFLIGHT_SHARE` |
-| `agent_preserve_messages` | int | `3` | advanced | `ATRIUM_ASSISTANT_AGENT_PRESERVE_MESSAGES` |
 | `agent_preview_chars` | int | `600` | advanced | `ATRIUM_ASSISTANT_AGENT_PREVIEW_CHARS` |
 | `agent_profile_key_chars` | int | `64` | advanced | `ATRIUM_ASSISTANT_AGENT_PROFILE_KEY_CHARS` |
 | `agent_profile_value_chars` | int | `500` | advanced | `ATRIUM_ASSISTANT_AGENT_PROFILE_VALUE_CHARS` |
@@ -90,7 +84,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_subagent_max_steps` | int | `12` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_STEPS` |
 | `agent_subagent_prompt_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_PROMPT_CHARS` |
 | `agent_subagent_task_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_TASK_CHARS` |
-| `agent_summary_max_tokens` | int | `8192` | advanced | `ATRIUM_ASSISTANT_AGENT_SUMMARY_MAX_TOKENS` |
 | `agent_web_search_max_uses` | int | `5` | advanced | `ATRIUM_ASSISTANT_AGENT_WEB_SEARCH_MAX_USES` |
 | `agent_webfetch_max_bytes` | int | `2097152` | advanced | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_MAX_BYTES` |
 | `agent_webfetch_max_redirects` | int | `5` | advanced | `ATRIUM_ASSISTANT_AGENT_WEBFETCH_MAX_REDIRECTS` |
@@ -120,7 +113,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `open_meteo_ca_file` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` |
 | `open_meteo_proxy` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` |
 | `prompt_subagent` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` |
-| `prompt_summary` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUMMARY` |
 | `prompt_system` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` |
 | `thread_cost_cap_usd` | float | `10` | advanced | `ATRIUM_ASSISTANT_THREAD_COST_CAP_USD` |
 | `weather_forecast_days` | int | `7` | advanced | `ATRIUM_ASSISTANT_WEATHER_FORECAST_DAYS` |

@@ -1,11 +1,11 @@
 {{template "chat_meter" (dict "view" .Data.View "oob" (.Data.OOB))}}
 
 {{define "chat_meter"}}{{$v := .view}}{{$m := $v.Meter}}
-<span id="meter" class="flex min-w-0 items-center gap-2 text-xs text-ink-3 tabular-nums max-sm:hidden" title="Compacts at {{$m.CompactAt}} of the {{$m.Limit}} limit"{{if opt . "oob" false}} hx-swap-oob="true"{{end}}>
+<span id="meter" class="flex min-w-0 items-center gap-2 text-xs text-ink-3 tabular-nums max-sm:hidden" title="Context limit {{$m.Limit}} tokens"{{if opt . "oob" false}} hx-swap-oob="true"{{end}}>
   <span class="chip">{{$v.ModelLabel}} · {{$v.Thread.Effort}}</span>
-  <span class="flex items-center gap-1.5 max-sm:hidden" role="img" aria-label="Context used: {{printf "%.1f" (fdiv $m.Tokens 1000)}}K of {{int (round (fdiv $m.CompactAt 1000))}}K">
+  <span class="flex items-center gap-1.5 max-sm:hidden" role="img" aria-label="Context used: {{printf "%.1f" (fdiv $m.Tokens 1000)}}K of {{int (round (fdiv $m.Limit 1000))}}K">
     <span class="h-1.5 w-16 overflow-hidden rounded-full bg-muted" aria-hidden="true"><span class="block h-full rounded-full {{if ge $m.Share 0.8}}bg-warning{{else}}bg-chart-3{{end}}" style="width: {{int (round (mul $m.Share 100))}}%"></span></span>
-    <span>{{printf "%.1f" (fdiv $m.Tokens 1000)}}K / {{int (round (fdiv $m.CompactAt 1000))}}K</span>
+    <span>{{printf "%.1f" (fdiv $m.Tokens 1000)}}K / {{int (round (fdiv $m.Limit 1000))}}K</span>
   </span>
   <span class="max-md:hidden" data-cost>${{printf "%.3f" $v.Cost}}</span>
 </span>

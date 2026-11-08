@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
@@ -33,7 +32,6 @@ const (
 )
 
 const (
-	ClearToolUses    = "clear_tool_uses_20250919"
 	Compaction       = block.Compaction
 	Text             = block.Text
 	ToolUse          = block.ToolUse
@@ -83,39 +81,19 @@ func serialize(value any) string {
 }
 
 type Tuning struct {
-	ClearShare        float64
-	ClearAtLeastShare float64
-	CompactShare      float64
-	PreflightShare    float64
-	ClearKeep         int
-	PreserveMessages  int
-	SummaryMaxTokens  int
-	StubTokens        int
-	PreviewChars      int
-	ManifestResults   int
-	Summary           string
+	StubTokens      int
+	PreviewChars    int
+	ManifestResults int
 }
 
 func ReadTuning(ctx gocontext.Context, q db.Querier) (Tuning, error) {
 	r := assistant.Read(ctx, q)
 	t := Tuning{
-		ClearShare:        r.Float(assistant.KeyClearShare),
-		ClearAtLeastShare: r.Float(assistant.KeyClearAtLeastShare),
-		CompactShare:      r.Float(assistant.KeyCompactShare),
-		PreflightShare:    r.Float(assistant.KeyPreflightShare),
-		ClearKeep:         r.Int(assistant.KeyClearKeep),
-		PreserveMessages:  r.Int(assistant.KeyPreserveMessages),
-		SummaryMaxTokens:  r.Int(assistant.KeySummaryMaxTokens),
-		StubTokens:        r.Int(assistant.KeyStubTokens),
-		PreviewChars:      r.Int(assistant.KeyPreviewChars),
-		ManifestResults:   r.Int(assistant.KeyManifestResults),
+		StubTokens:      r.Int(assistant.KeyStubTokens),
+		PreviewChars:    r.Int(assistant.KeyPreviewChars),
+		ManifestResults: r.Int(assistant.KeyManifestResults),
 	}
-	if r.Err() != nil {
-		return t, r.Err()
-	}
-	var err error
-	t.Summary, err = prompts.Text(ctx, q, prompts.KeySummary)
-	return t, err
+	return t, r.Err()
 }
 
 func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool string, value any, now float64, t Tuning) (string, *int64, error) {
@@ -136,41 +114,6 @@ func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool strin
 		"note":      StubNote,
 	}
 	return jsonx.Dumps(stub, valueJSON), &resultID, nil
-}
-
-type Limits struct {
-	Hard         int64
-	Preflight    int64
-	Compact      int64
-	Clear        int64
-	ClearAtLeast int64
-	Tuning       Tuning
-}
-
-func LimitsFor(contextLimit int64, t Tuning) Limits {
-	share := func(s float64) int64 { return int64(float64(contextLimit) * s) }
-	return Limits{
-		Hard:         contextLimit,
-		Preflight:    share(t.PreflightShare),
-		Compact:      share(t.CompactShare),
-		Clear:        share(t.ClearShare),
-		ClearAtLeast: share(t.ClearAtLeastShare),
-		Tuning:       t,
-	}
-}
-
-func ClearsOf(m *anthropic.Message) (int64, int64) {
-	if m == nil || m.ContextManagement == nil {
-		return 0, 0
-	}
-	var count, cleared int64
-	for _, e := range m.ContextManagement.AppliedEdits {
-		if e.Type == ClearToolUses {
-			count++
-			cleared += e.ClearedInputTokens
-		}
-	}
-	return count, cleared
 }
 
 func HistoryTokens(u anthropic.Usage) int64 {

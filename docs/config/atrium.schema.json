@@ -29,50 +29,6 @@
     "assistant": {
       "additionalProperties": false,
       "properties": {
-        "agent_clear_at_least_share": {
-          "default": 0.05,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "agent_clear_at_least_share_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_clear_keep": {
-          "default": 3,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_clear_keep_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_clear_share": {
-          "default": 0.1875,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "agent_clear_share_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_compact_share": {
-          "default": 0.875,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "agent_compact_share_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "agent_context_max_ids": {
           "default": 50,
           "type": [
@@ -441,28 +397,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "agent_preflight_share": {
-          "default": 0.95,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "agent_preflight_share_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_preserve_messages": {
-          "default": 3,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_preserve_messages_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "agent_preview_chars": {
           "default": 600,
           "type": [
@@ -774,17 +708,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "agent_summary_max_tokens": {
-          "default": 8192,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_summary_max_tokens_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "agent_web_search_max_uses": {
           "default": 5,
           "type": [
@@ -1088,13 +1011,6 @@
           "type": "string"
         },
         "prompt_subagent_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "prompt_summary": {
-          "type": "string"
-        },
-        "prompt_summary_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
