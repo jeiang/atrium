@@ -9,9 +9,9 @@
     </select>
   </label>
   <label class="flex items-center gap-1 text-muted-foreground">Effort
-    <select id="composer-effort" name="effort" class="select h-7 py-0 text-xs" data-option{{if $live}} hx-post="/chat/{{$live}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML"{{end}}>
+    {{if $c.effort_fixed}}<span class="badge" data-variant="outline" title="Effort is fixed on this thinking mode">{{icon "lock"}}{{$c.effort}}</span>{{else}}<select id="composer-effort" name="effort" class="select h-7 py-0 text-xs" data-option{{if $live}} hx-post="/chat/{{$live}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML"{{end}}>
       {{range $c.efforts}}<option value="{{.Value}}"{{if .Disabled}} disabled{{end}}{{if eq .Value $c.effort}} selected{{end}}>{{.Value}}</option>{{end}}
-    </select>
+    </select>{{end}}
   </label>
   <label class="flex items-center gap-1 text-muted-foreground">Context
     <select id="composer-context" name="context_limit" class="select h-7 py-0 text-xs" data-option{{if $live}} hx-post="/chat/{{$live}}/options" hx-trigger="change" hx-include="#composer [data-option]" hx-target="#meter" hx-swap="outerHTML"{{end}}>

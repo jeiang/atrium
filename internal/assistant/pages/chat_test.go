@@ -17,6 +17,8 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -568,5 +570,24 @@ func TestNewChatComposerShowsTheHaikuCliffAndResetsOnModelChange(t *testing.T) {
 	body = status(t, s.get("/chat/composer-options?model=claude-sonnet-5-5&reset=1&effort=max&context_limit=200000"), http.StatusOK)
 	mustContain(t, body, `value="medium" selected`, `value="90000" selected`)
 	body = status(t, s.get("/chat/composer-options?model=claude-sonnet-5-5&thinking=between_tools&effort=high&context_limit=90000"), http.StatusOK)
-	mustContain(t, body, `value="xhigh" disabled`, `value="high" selected`)
+	mustContain(t, body, `title="Effort is fixed on this thinking mode"`)
+	mustNotContain(t, body, `id="composer-effort"`)
+}
+
+func TestThreadSettingsShowLockedFieldsAndCost(t *testing.T) {
+	s := newSite(t)
+	ctx := context.Background()
+	id, err := threads.Create(ctx, s.db.Write, s.clock, threads.Spec{Kind: threads.Chat, Model: pricing.SonnetID, Effort: pricing.High, Thinking: "between_tools"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Write.Exec("INSERT INTO runs (id, thread_id, kind, model, effort, state, started_at) VALUES (1, ?, 'chat', ?, 'high', 'done', ?)", id, pricing.SonnetID, s.clock-60); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Write.Exec("INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (?, ?, 1, 'chat', ?, 'high', 1000, 0, 0, 500, 10, 0, 'flat', 0.1)", s.clock-60, id, pricing.SonnetID); err != nil {
+		t.Fatal(err)
+	}
+	body := status(t, s.get("/chat/"+strconv.FormatInt(id, 10)), http.StatusOK)
+	mustContain(t, body, "data-cost>$0.100", "between_tools", `title="Effort is fixed on this thinking mode"`)
+	mustNotContain(t, body, "Cache hit share", "switching", "Plan usage")
 }

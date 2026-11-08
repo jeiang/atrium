@@ -335,6 +335,12 @@ func resolve(ctx context.Context, q db.Querier, kind Kind, projectID *int64, exp
 	if explicit.ContextLimit != 0 {
 		chosen.ContextLimit, projectLimit = explicit.ContextLimit, false
 	}
+	if explicit.Thinking != "" {
+		chosen.Thinking = explicit.Thinking
+	}
+	if explicit.CostCapUSD != nil {
+		chosen.CostCapUSD = explicit.CostCapUSD
+	}
 	m, err := CleanModel(chosen.Model)
 	if err != nil {
 		return Options{}, err
