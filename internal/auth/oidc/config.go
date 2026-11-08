@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -47,7 +47,7 @@ func (c Config) rechecks() bool { return c.GroupsClaim != "" }
 func list(value string) []string {
 	var out []string
 	for _, part := range strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' }) {
-		if part = py.Strip(part); part != "" {
+		if part = strings.TrimSpace(part); part != "" {
 			out = append(out, part)
 		}
 	}
@@ -69,7 +69,7 @@ func resolved(ctx context.Context, q db.Querier) (values, []string) {
 		if err != nil {
 			problems = append(problems, err.Error())
 		}
-		out[key] = py.Strip(found.Value)
+		out[key] = strings.TrimSpace(found.Value)
 	}
 	return out, problems
 }
@@ -80,13 +80,13 @@ func load(ctx context.Context, q db.Querier, env config.Env, encrypted bool) (Co
 	if err != nil {
 		problems = append(problems, err.Error())
 	}
-	return assemble(vals, py.Strip(secret), env, encrypted, problems)
+	return assemble(vals, strings.TrimSpace(secret), env, encrypted, problems)
 }
 
 func assemble(get values, secret string, env config.Env, encrypted bool, problems []string) (Config, error) {
 	days := func(key string, unit time.Duration) time.Duration {
-		n, ok := py.ParseInt(get[key])
-		if !ok {
+		n, err := strconv.ParseInt(strings.TrimSpace(get[key]), 10, 64)
+		if err != nil {
 			problems = append(problems, key+" is not a number")
 		}
 		return time.Duration(n) * unit
@@ -94,7 +94,7 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 	name := get[KeyPreset]
 	preset, ok := presetNamed(name)
 	if !ok {
-		problems = append(problems, "unknown preset "+py.Repr(name))
+		problems = append(problems, fmt.Sprintf("unknown preset %q", name))
 	}
 	c := Config{
 		Preset:        preset,
@@ -155,8 +155,8 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 
 func AdminGroup(ctx context.Context, q db.Querier) string {
 	found, err := settings.Default.Resolve(ctx, q, KeyAdminGroup, 0)
-	if err != nil || py.Strip(found.Value) == "" {
+	if err != nil || strings.TrimSpace(found.Value) == "" {
 		return DefaultAdminGroup
 	}
-	return py.Strip(found.Value)
+	return strings.TrimSpace(found.Value)
 }
