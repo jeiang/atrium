@@ -176,33 +176,34 @@ func optionalText(args tool.Args, name string) (string, error) {
 }
 
 type write struct {
+	id           int64
 	tool, target string
 	before       any
 	after        any
 	undo         any
 }
 
+func beginWrite(ctx context.Context, tc *tool.Context, tool, target string) (int64, error) {
+	var thread, run *int64
+	if tc.ThreadID != 0 {
+		thread = &tc.ThreadID
+	}
+	if tc.RunID != 0 {
+		run = &tc.RunID
+	}
+	return writes.Begin(ctx, tc.DB.Write, writes.New{TS: tc.Now(), ThreadID: thread, RunID: run, Tool: tool, Target: target})
+}
+
 func (w write) commit(ctx context.Context, tc *tool.Context, upsert func(*sql.Tx) error) (int64, error) {
-	var id int64
 	err := tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		if err := upsert(tx); err != nil {
 			return err
 		}
-		var err error
-		var thread, run *int64
-		if tc.ThreadID != 0 {
-			thread = &tc.ThreadID
-		}
-		if tc.RunID != 0 {
-			run = &tc.RunID
-		}
-		id, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: thread, RunID: run, Tool: w.tool, Target: w.target,
-			Before: w.before, After: w.after, Undo: w.undo,
+		return writes.Settle(ctx, tx, tc.Undoers, w.id, writes.New{
+			Target: w.target, Before: w.before, After: w.after, Undo: w.undo,
 		})
-		return err
 	})
-	return id, err
+	return w.id, err
 }
 
 func (w write) finish(ctx context.Context, tc *tool.Context, client *notion.Client, wiki notion.Wiki, upsert func(*sql.Tx) error, action string, s summary) (int64, error) {
@@ -318,17 +319,21 @@ func createPage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, err
 	}
+	id, err := beginWrite(ctx, tc, "notion_create_page", title)
+	if err != nil {
+		return nil, err
+	}
 	page, err := client.CreatePage(ctx, py.Dict{
 		{Key: "parent", Value: py.Dict{{Key: "page_id", Value: parent}}},
 		{Key: "properties", Value: py.Dict{{Key: "title", Value: py.Dict{{Key: "title", Value: richText(title)}}}}},
 		{Key: "markdown", Value: body},
 	})
-	var s summary
-	var edited any
-	if err == nil {
-		s = summarize(page)
-		edited, err = editedTime(ctx, client, s.pageID)
+	if err != nil {
+		_ = writes.Discard(ctx, tc.DB.Write, id)
+		return nil, notionError(err)
 	}
+	s := summarize(page)
+	edited, err := editedTime(ctx, client, s.pageID)
 	if err != nil {
 		return nil, notionError(err)
 	}
@@ -337,11 +342,11 @@ func createPage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	after["markdown"] = body
 	after["aliases"] = aliases
 	w := write{
-		tool: "notion_create_page", target: s.pageID,
+		id: id, tool: "notion_create_page", target: s.pageID,
 		after: after,
 		undo:  pageUndo{Op: undoTrash, PageID: s.pageID, AppliedEditedTime: editedText(edited)},
 	}
-	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
+	id, err = w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, s.pageID, tc.Now(), notion.WikiFields{
 			Title: new(title), HubID: new(parent), Aliases: aliases, SetAliases: true, LastReviewed: new(date),
 			Sources: merged, SetSources: true, InTrash: new(false),
@@ -436,17 +441,25 @@ func updatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, err
 	}
+	id, err := beginWrite(ctx, tc, "notion_update_page", pageID)
+	if err != nil {
+		return nil, err
+	}
 	page, previous, updated, merged, edited, err := rewrite(ctx, tc.DB.Read, wiki, client, pageID, replace, appendText, section, date, sources)
 	if err != nil {
+		var te tool.Error
+		if errors.As(err, &te) {
+			_ = writes.Discard(ctx, tc.DB.Write, id)
+		}
 		return nil, notionError(err)
 	}
 	s := summarize(page)
 	w := write{
-		tool: "notion_update_page", target: pageID,
+		id: id, tool: "notion_update_page", target: pageID,
 		before: py.Dict{{Key: "markdown", Value: previous}}, after: py.Dict{{Key: "markdown", Value: updated}},
 		undo: restoreUndo{pageUndo: pageUndo{Op: undoRestore, PageID: pageID, AppliedEditedTime: editedText(edited)}, PreviousMarkdown: previous},
 	}
-	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
+	id, err = w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, pageID, tc.Now(), notion.WikiFields{
 			Title: new(s.title), HubID: new(parentID(page)), LastReviewed: new(date), Sources: merged, SetSources: true, InTrash: new(false),
 		})
@@ -537,17 +550,25 @@ func movePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	if err != nil {
 		return nil, err
 	}
+	id, err := beginWrite(ctx, tc, "notion_move_page", pageID)
+	if err != nil {
+		return nil, err
+	}
 	page, previous, edited, err := relocate(ctx, tc.DB.Read, client, pageID, parent)
 	if err != nil {
+		var te tool.Error
+		if errors.As(err, &te) {
+			_ = writes.Discard(ctx, tc.DB.Write, id)
+		}
 		return nil, notionError(err)
 	}
 	s := summarize(page)
 	w := write{
-		tool: "notion_move_page", target: pageID,
+		id: id, tool: "notion_move_page", target: pageID,
 		before: py.Dict{{Key: "parent_page_id", Value: previous}}, after: py.Dict{{Key: "parent_page_id", Value: parent}},
 		undo: moveUndo{pageUndo: pageUndo{Op: undoMove, PageID: pageID, AppliedEditedTime: editedText(edited)}, PreviousParentID: previous},
 	}
-	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
+	id, err = w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, pageID, tc.Now(), notion.WikiFields{Title: new(s.title), HubID: new(parent), InTrash: new(false)})
 	}, "moved", s)
 	if err != nil {
@@ -595,17 +616,21 @@ func archivePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, er
 	if err != nil {
 		return nil, err
 	}
+	id, err := beginWrite(ctx, tc, "notion_archive_page", pageID)
+	if err != nil {
+		return nil, err
+	}
 	page, previous, edited, err := trash(ctx, tc.DB.Read, client, pageID)
 	if err != nil {
 		return nil, notionError(err)
 	}
 	s := summarize(page)
 	w := write{
-		tool: "notion_archive_page", target: pageID,
+		id: id, tool: "notion_archive_page", target: pageID,
 		before: py.Dict{{Key: "title", Value: s.title}, {Key: "markdown", Value: str(previous, "markdown")}}, after: py.Dict{{Key: "in_trash", Value: true}},
 		undo: pageUndo{Op: undoUntrash, PageID: pageID, AppliedEditedTime: editedText(edited)},
 	}
-	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
+	id, err = w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, pageID, tc.Now(), notion.WikiFields{Title: new(s.title), InTrash: new(true)})
 	}, "archived", s)
 	if err != nil {
@@ -686,12 +711,16 @@ func addAlias(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	if err != nil {
 		return nil, err
 	}
+	id, err := beginWrite(ctx, tc, "notion_add_alias", pageID)
+	if err != nil {
+		return nil, err
+	}
 	w := write{
-		tool: "notion_add_alias", target: pageID,
+		id: id, tool: "notion_add_alias", target: pageID,
 		before: py.Dict{{Key: "aliases", Value: previous}}, after: py.Dict{{Key: "aliases", Value: aliases}},
 		undo: aliasesUndo{Op: undoAliases, PageID: pageID, PreviousAliases: previous},
 	}
-	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
+	id, err = w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, pageID, tc.Now(), notion.WikiFields{
 			Title: new(s.title), HubID: new(parentID(page)), Aliases: aliases, SetAliases: true, InTrash: new(false),
 		})

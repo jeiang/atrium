@@ -88,31 +88,44 @@ func plain(value any) any {
 	return value
 }
 
+func payloads(w New) (before, after, undo *string, err error) {
+	if before, err = dump(w.Before, true); err != nil {
+		return nil, nil, nil, err
+	}
+	if after, err = dump(w.After, true); err != nil {
+		return nil, nil, nil, err
+	}
+	if undo, err = dump(w.Undo, false); err != nil {
+		return nil, nil, nil, err
+	}
+	return before, after, undo, nil
+}
+
+func validateUndo(reg *Registry, undo *string) error {
+	if undo == nil {
+		return nil
+	}
+	var desc map[string]any
+	if err := json.Unmarshal([]byte(*undo), &desc); err != nil {
+		return fmt.Errorf("writes: undo payload: %w", err)
+	}
+	op, _ := desc["op"].(string)
+	if op == "" {
+		return errors.New("writes: undo payload without an op")
+	}
+	if reg == nil || reg.lookup(op) == nil {
+		return UndoError("unknown undo kind " + strconv.Quote(op))
+	}
+	return nil
+}
+
 func Record(ctx context.Context, q db.Querier, reg *Registry, w New) (int64, error) {
-	before, err := dump(w.Before, true)
+	before, after, undo, err := payloads(w)
 	if err != nil {
 		return 0, err
 	}
-	after, err := dump(w.After, true)
-	if err != nil {
+	if err := validateUndo(reg, undo); err != nil {
 		return 0, err
-	}
-	undo, err := dump(w.Undo, false)
-	if err != nil {
-		return 0, err
-	}
-	if undo != nil {
-		var desc map[string]any
-		if err := json.Unmarshal([]byte(*undo), &desc); err != nil {
-			return 0, fmt.Errorf("writes: undo payload: %w", err)
-		}
-		op, _ := desc["op"].(string)
-		if op == "" {
-			return 0, errors.New("writes: undo payload without an op")
-		}
-		if reg == nil || reg.lookup(op) == nil {
-			return 0, UndoError("unknown undo kind " + strconv.Quote(op))
-		}
 	}
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO agent_writes (ts, thread_id, run_id, tool, target, before_json, after_json, undo_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -121,6 +134,49 @@ func Record(ctx context.Context, q db.Querier, reg *Registry, w New) (int64, err
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+func Begin(ctx context.Context, q db.Querier, w New) (int64, error) {
+	before, after, undo, err := payloads(w)
+	if err != nil {
+		return 0, err
+	}
+	res, err := q.ExecContext(ctx,
+		"INSERT INTO agent_writes (ts, thread_id, run_id, tool, target, before_json, after_json, undo_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		w.TS, w.ThreadID, w.RunID, w.Tool, w.Target, before, after, undo)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func Settle(ctx context.Context, q db.Querier, reg *Registry, id int64, w New) error {
+	before, after, undo, err := payloads(w)
+	if err != nil {
+		return err
+	}
+	if err := validateUndo(reg, undo); err != nil {
+		return err
+	}
+	res, err := q.ExecContext(ctx,
+		"UPDATE agent_writes SET target = ?, before_json = ?, after_json = ?, undo_json = ? WHERE id = ?",
+		w.Target, before, after, undo, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return UndoError("write intent " + strconv.FormatInt(id, 10) + " is gone")
+	}
+	return nil
+}
+
+func Discard(ctx context.Context, q db.Querier, id int64) error {
+	_, err := q.ExecContext(ctx, "DELETE FROM agent_writes WHERE id = ? AND undo_json IS NULL", id)
+	return err
 }
 
 type row struct {

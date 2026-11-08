@@ -278,7 +278,14 @@ func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 	if asMedia {
 		tags = media.TagMedia
 	}
+	id, err := writes.Begin(ctx, tc.DB.Write, writes.New{
+		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "media_add_magnet", Target: hash,
+	})
+	if err != nil {
+		return nil, err
+	}
 	if err := qb.AddMagnet(ctx, magnet, tags); err != nil {
+		_ = writes.Discard(ctx, tc.DB.Write, id)
 		return nil, qbitFailed(err)
 	}
 	if asMedia {
@@ -286,12 +293,11 @@ func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 			return nil, qbitFailed(err)
 		}
 	}
-	id, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
-		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "media_add_magnet", Target: hash,
-		After: py.Dict{{Key: "magnet", Value: magnet}, {Key: "media", Value: asMedia}},
-		Undo:  torrentUndo{Op: UndoTorrent, Hash: hash},
-	})
-	if err != nil {
+	if err := writes.Settle(ctx, tc.DB.Write, tc.Undoers, id, writes.New{
+		Target: hash,
+		After:  map[string]any{"magnet": magnet, "media": asMedia},
+		Undo:   torrentUndo{Op: UndoTorrent, Hash: hash},
+	}); err != nil {
 		return nil, err
 	}
 	return map[string]any{"hash": hash, "kind": kindOf(asMedia), "write_id": id}, nil
