@@ -4,7 +4,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -57,10 +56,10 @@ func init() {
 }
 
 func checkIssuer(value string) error {
-	if py.Strip(value) == "" {
+	if strings.TrimSpace(value) == "" {
 		return nil
 	}
-	return checkEndpoint(py.Strip(value))
+	return checkEndpoint(strings.TrimSpace(value))
 }
 
 func checkEndpoint(raw string) error {

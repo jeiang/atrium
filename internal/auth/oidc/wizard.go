@@ -14,7 +14,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
@@ -130,7 +129,7 @@ func (s *Service) View(ctx context.Context, presetName string) (View, error) {
 	if preset.Issuer != "" {
 		vals[KeyIssuer] = preset.Issuer
 	}
-	if len(py.Strip(vals[KeyScopes])) == 0 {
+	if len(strings.TrimSpace(vals[KeyScopes])) == 0 {
 		vals[KeyScopes] = strings.Join(preset.Scopes, " ")
 	}
 	if vals[KeyGroupsClaim] == "" {
@@ -160,8 +159,8 @@ func (f Form) shown(preset Preset) map[string]string {
 	if preset.Issuer == "" {
 		issuer := f.Issuer
 		if preset.Name == PresetEntra {
-			issuer = EntraIssuerPrefix + py.Strip(f.Issuer) + EntraIssuerSuffix
-			if py.Strip(f.Issuer) == "" {
+			issuer = EntraIssuerPrefix + strings.TrimSpace(f.Issuer) + EntraIssuerSuffix
+			if strings.TrimSpace(f.Issuer) == "" {
 				issuer = ""
 			}
 		}
@@ -204,7 +203,7 @@ func (s *Service) draftFrom(ctx context.Context, q db.Querier, f Form) (Draft, e
 	next := map[string]string{KeyPreset: preset.Name}
 	for _, key := range wizardKeys {
 		if v, ok := shown[key]; ok {
-			next[key] = py.Strip(v)
+			next[key] = strings.TrimSpace(v)
 			continue
 		}
 		next[key] = ""
@@ -239,8 +238,8 @@ func (s *Service) draftFrom(ctx context.Context, q db.Querier, f Form) (Draft, e
 	if err != nil {
 		return Draft{}, err
 	}
-	d.secret = py.Strip(stored)
-	if given := py.Strip(f.ClientSecret); given != "" && !s.pinned(secrets.OIDCClientSecret) {
+	d.secret = strings.TrimSpace(stored)
+	if given := strings.TrimSpace(f.ClientSecret); given != "" && !s.pinned(secrets.OIDCClientSecret) {
 		if !s.d.Encrypted() {
 			return Draft{}, ErrNeedsCipher
 		}

@@ -5,9 +5,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textutil"
 )
 
 const (
@@ -58,6 +59,11 @@ func Unfold(text string) string {
 	return unfoldRe.ReplaceAllString(text, "")
 }
 
+func splitLines(text string) []string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	return strings.Split(strings.ReplaceAll(text, "\r", "\n"), "\n")
+}
+
 func unescape(value string) string {
 	var b strings.Builder
 	last := 0
@@ -72,7 +78,7 @@ func unescape(value string) string {
 		last = loc[1]
 	}
 	b.WriteString(value[last:])
-	return py.Strip(b.String())
+	return strings.TrimSpace(b.String())
 }
 
 func split(value string) []string {
@@ -88,7 +94,7 @@ func split(value string) []string {
 }
 
 func ParseDate(value string) (month, day int, year *int, ok bool) {
-	text := py.Strip(value)
+	text := strings.TrimSpace(value)
 	loc := dateRe.FindStringSubmatchIndex(text)
 	if loc == nil {
 		return 0, 0, nil, false
@@ -96,12 +102,13 @@ func ParseDate(value string) (month, day int, year *int, ok bool) {
 	if loc[1] < len(text) && text[loc[1]] >= '0' && text[loc[1]] <= '9' {
 		return 0, 0, nil, false
 	}
-	month, day = py.DecimalValue(text[loc[4]:loc[5]]), py.DecimalValue(text[loc[6]:loc[7]])
+	month, _ = strconv.Atoi(text[loc[4]:loc[5]])
+	day, _ = strconv.Atoi(text[loc[6]:loc[7]])
 	if month < 1 || month > 12 || day < 1 || day > monthDays(month) {
 		return 0, 0, nil, false
 	}
 	if loc[2] >= 0 {
-		if y := py.DecimalValue(text[loc[2]:loc[3]]); y != 0 && !unknownYears[y] {
+		if y, _ := strconv.Atoi(text[loc[2]:loc[3]]); y != 0 && !unknownYears[y] {
 			year = new(y)
 		}
 	}
@@ -119,14 +126,14 @@ func monthDays(month int) int {
 }
 
 func dateKind(label string) string {
-	low := py.Casefold(label)
+	low := textutil.Casefold(label)
 	switch {
 	case strings.Contains(low, "anniversary"):
 		return Anniversary
 	case strings.Contains(low, "birth"):
 		return Birthday
 	}
-	if s := py.Strip(label); s != "" {
+	if s := strings.TrimSpace(label); s != "" {
 		return s
 	}
 	return "date"
@@ -137,13 +144,13 @@ func cleanLabel(text string) string {
 	if loc := appleLabel.FindStringSubmatchIndex(text); loc != nil {
 		text = text[loc[2]:loc[3]]
 	}
-	return py.Strip(text)
+	return strings.TrimSpace(text)
 }
 
 func Parse(text string) []Card {
 	cards := []Card{}
 	var c *card
-	for _, line := range py.SplitLines(Unfold(text)) {
+	for _, line := range splitLines(Unfold(text)) {
 		head, value, ok := strings.Cut(line, ":")
 		if !ok {
 			continue
@@ -155,7 +162,7 @@ func Parse(text string) []Card {
 		}
 		name = strings.ToUpper(name)
 		switch {
-		case name == "BEGIN" && strings.ToUpper(py.Strip(value)) == "VCARD":
+		case name == "BEGIN" && strings.ToUpper(strings.TrimSpace(value)) == "VCARD":
 			c = &card{labels: map[string]string{}}
 		case name == "END" && c != nil:
 			cards = append(cards, c.finish())
@@ -275,7 +282,7 @@ func Load(dir string) []Card {
 	}
 	keys := make(map[string]string, len(found))
 	for _, c := range found {
-		keys[c.Name] = py.Casefold(c.Name)
+		keys[c.Name] = textutil.Casefold(c.Name)
 	}
 	slices.SortStableFunc(found, func(a, b Card) int { return strings.Compare(keys[a.Name], keys[b.Name]) })
 	return found
@@ -301,10 +308,10 @@ func Search(dir, query string, limit int) []Card {
 }
 
 func Filter(cards []Card, query string, limit int) []Card {
-	terms := py.Split(py.Casefold(query))
+	terms := strings.Fields(textutil.Casefold(query))
 	out := []Card{}
 	for _, c := range cards {
-		haystack := py.Casefold(strings.Join(slices.Concat([]string{c.Name, c.Org}, c.Emails, c.Phones), " "))
+		haystack := textutil.Casefold(strings.Join(slices.Concat([]string{c.Name, c.Org}, c.Emails, c.Phones), " "))
 		if !slices.ContainsFunc(terms, func(t string) bool { return !strings.Contains(haystack, t) }) {
 			out = append(out, c)
 			if limit != 0 && len(out) >= limit {

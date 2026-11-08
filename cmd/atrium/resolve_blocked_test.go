@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testing.T) {
@@ -47,14 +46,14 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		return dbtest.AddMessage(t, seed, uid, "body", map[string]any{"subject": "m", "from_addr": "a@shop.test", "date_ts": now})
 	}
 	blockedProposal := func(name, op, text string, ts float64) int64 {
-		id, _, err := proposals.Create(ctx, seed, "deletion_rule", nil, name, py.Dict{}, py.Dict{}, name, now-5000)
+		id, _, err := proposals.Create(ctx, seed, "deletion_rule", nil, name, map[string]any{}, map[string]any{}, name, now-5000)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if _, err := seed.Write.Exec("UPDATE proposals SET status = 'failed', decided_ts = ? WHERE id = ?", now-4000, id); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := proposals.RecordAction(ctx, seed.Write, id, py.Dict{{Key: "op", Value: op}, {Key: "of", Value: int64(1)}}, nil, false, &text, ts); err != nil {
+		if _, err := proposals.RecordAction(ctx, seed.Write, id, map[string]any{"op": op, "of": int64(1)}, nil, false, &text, ts); err != nil {
 			t.Fatal(err)
 		}
 		return id
