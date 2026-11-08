@@ -26,6 +26,7 @@ import (
 const (
 	KindLink       = "notion_link"
 	KindEdit       = "notion_edit"
+	KindCapture    = "notion_capture"
 	UndoRestoreOp  = "notion_restore"
 	relatedHeading = "Related"
 	diffContext    = 2
@@ -578,10 +579,65 @@ func (a *Applier) UndoRestore(ctx context.Context, plan json.RawMessage) (py.Dic
 	return py.Dict{{Key: "restored", Value: pageID}}, nil
 }
 
+func (a *Applier) ExecuteCapture(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
+	var payload struct {
+		Note string `json:"note"`
+	}
+	if err := json.Unmarshal([]byte(p.Payload), &payload); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(payload.Note) == "" {
+		return nil, ProposalError("the wiki note is empty")
+	}
+	client, err := a.client(ctx)
+	if err != nil {
+		return nil, err
+	}
+	wiki, err := LoadWiki(ctx, a.DB.Read)
+	if err != nil {
+		return nil, err
+	}
+	logID, err := wiki.LogPageID(ctx, a.DB, client, wiki.Root)
+	if err != nil {
+		return nil, err
+	}
+	before, err := client.PageMarkdown(ctx, logID)
+	if err != nil {
+		return nil, err
+	}
+	if before.Truncated {
+		return nil, WikiError("the Wiki Log page is too large to update safely; archive it and let atrium start a new one")
+	}
+	action := map[string]any{"type": KindCapture, "page_id": logID, "note": payload.Note}
+	id, err := proposals.BeginAction(ctx, a.DB.Write, p.ID, action, a.now())
+	if err != nil {
+		return nil, err
+	}
+	writer := &Writer{DB: a.DB, Client: client}
+	date := time.Unix(int64(a.now()), 0).UTC().Format("2006-01-02")
+	if err := writer.Capture(ctx, []string{LogLine(date, "note", payload.Note, "")}); err != nil {
+		text := err.Error()
+		_ = proposals.SettleAction(ctx, a.DB.Write, id, action, nil, ledger.Failed, &text, a.now())
+		return nil, err
+	}
+	after, err := client.GetPage(ctx, logID)
+	if err != nil {
+		text := err.Error()
+		_ = proposals.SettleAction(ctx, a.DB.Write, id, action, nil, ledger.Failed, &text, a.now())
+		return nil, err
+	}
+	if err := proposals.SettleAction(ctx, a.DB.Write, id, action, restoreUndo(logID, before.Markdown, after.LastEditedTime), ledger.OK, nil, a.now()); err != nil {
+		return nil, err
+	}
+	return py.Dict{{Key: "summary", Value: "Wiki note added: " + payload.Note}, {Key: "page_id", Value: logID}}, nil
+}
+
 func (a *Applier) Register(r *proposals.Registry, owner string) {
 	r.Executors[KindLink] = a.ExecuteLink
 	r.Executors[KindEdit] = a.ExecuteEdit
 	r.Undoers[UndoRestoreOp] = a.UndoRestore
+	r.Executors[KindCapture] = a.ExecuteCapture
+	r.AddKind(proposals.Kind{Name: KindCapture, Module: owner, Label: "Wiki note", Icon: "notebook-pen"})
 	r.AddKind(proposals.Kind{Name: KindLink, Module: owner, Label: "Notion link", Icon: "link"})
 	r.AddKind(proposals.Kind{Name: KindEdit, Module: owner, Label: "Notion edit", Icon: "pencil"})
 }
