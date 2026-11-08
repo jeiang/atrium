@@ -186,6 +186,6 @@ func proposeLink(ctx context.Context, tc *tool.Context, payload map[string]any) 
 }
 
 func RegisterProposalKinds() {
-	proposetools.Register(notion.KindEdit, proposeEdit)
-	proposetools.Register(notion.KindLink, proposeLink)
+	proposetools.Register(notion.KindEdit, "{page_id, instruction}: propose an edit to a Notion page for the operator to approve", proposeEdit)
+	proposetools.Register(notion.KindLink, "{source_id, target_id}: propose linking two related Notion pages", proposeLink)
 }
