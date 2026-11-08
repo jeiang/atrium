@@ -600,10 +600,18 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 			sets = append(sets, "status = ?", "status_text = ?", "last_event = ?", "last_event_ts = ?", "last_event_hash = ?")
 			args = append(args, advanced, text, text, eventTS, key)
 		}
-		if notifyTransition && next != "" && (advanced == delivered || advanced == exception) && advanced != previous && advanced != notifiedStatus {
-			sets = append(sets, "notified_status = ?")
-			args = append(args, advanced)
+		notify := notifyTransition && next != "" && (advanced == delivered || advanced == exception) && advanced != previous && advanced != notifiedStatus
+		nextNotified := notifiedStatus
+		if previous == exception && advanced != exception {
+			nextNotified = ""
+		}
+		if notify {
+			nextNotified = advanced
 			notified = true
+		}
+		if nextNotified != notifiedStatus {
+			sets = append(sets, "notified_status = ?")
+			args = append(args, nextNotified)
 		}
 		_, err := tx.ExecContext(ctx, "UPDATE packages SET "+strings.Join(sets, ", ")+" WHERE id = ?", append(args, id)...)
 		return err
@@ -646,6 +654,9 @@ func advance(previous, next string) string {
 	}
 	if next == delivered {
 		return delivered
+	}
+	if previous == exception {
+		return next
 	}
 	if statusRank(next) < statusRank(previous) {
 		return previous
