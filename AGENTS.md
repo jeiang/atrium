@@ -12,6 +12,8 @@ settings the operator edits in the UI or pins from the host.
   direction, and open decisions.
 - Keep development rules in this file, product goals in `docs/vision.md`,
   and application context in `context.md`. Do not duplicate their contents.
+- v2 is not a port of the Python application and has no parity target; do
+  not add parity tests or parity notes.
 - Update `context.md` when a change alters the behavior, boundaries, or
   decisions it records. Distinguish implemented behavior from planned
   capabilities; remove superseded statements.
@@ -43,7 +45,7 @@ settings the operator edits in the UI or pins from the host.
 ## Tests: e2e only
 
 - Do not create or retain unit or integration tests. This includes temporary
-  tests and tests disguised as golden, parity, corpus, or module-level e2e.
+  tests and tests disguised as golden, corpus, or module-level e2e.
 - A qualifying test exercises an operator-visible workflow through the real
   CLI command or HTTP application entry point, follows production code, and
   uses a real temporary database when persistence is involved.
@@ -112,12 +114,13 @@ settings the operator edits in the UI or pins from the host.
 - Media writes touch only torrents tagged media. Preserve library group
   permissions and expiring signed file links; public links still check Host.
 - The v2 baseline schema files in `internal/db/schema/` are edited in place
-  until v2 first ships to artemis; afterwards every schema change is a new
-  additive migration in `internal/db/migrate.go` with an e2e. Row rewrites
-  require explicit approval and validation on a database copy. Refuse
-  unknown future schema versions before writes. `atrium db import-v1` is
-  the only path from v1 data: it copies the learned-rule data into a fresh
-  v2 database; everything else is rebuilt.
+  until v2 first ships to artemis; `internal/db/migrate.go` holds only
+  migration 1 (the baseline) until then. Afterwards every schema change is
+  a new additive migration in `internal/db/migrate.go` with an e2e. Row
+  rewrites require explicit approval and validation on a database copy.
+  Refuse unknown future schema versions before writes. `atrium db import-v1`
+  is the only path from v1 data: it copies the learned-rule data into a
+  fresh v2 database; everything else is rebuilt.
 - A binary downgrade can require restoring the pre-migration database,
   losing later writes. Do not imply that changing the binary reverses data.
 - Unit names, environment variable names, and `atrium-run` are host-facing

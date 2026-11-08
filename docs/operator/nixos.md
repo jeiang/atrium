@@ -17,7 +17,7 @@ The module has a small set of typed deployment options. Application settings go 
 | `port` | port | `8480` | Port of the public listener. |
 | `settings` | TOML table per module | `{}` | Rendered to the file named by `ATRIUM_CONFIG`. Every key set here is pinned: it shows read-only and cannot be changed with `atrium settings`. A key unknown to the configuration reference fails evaluation. |
 | `secretFiles` | attribute set of string | `{}` | Secret settings as `"<module>.<key>" = "<host file>"`. Each file is delivered to every unit and to `atrium-run` through systemd `LoadCredential` and pinned as `<key>_file`, so the file can stay owned and readable by root. A key whose `<key>_file` form is unknown fails evaluation. |
-| `mailAccounts` | attribute set of account | `{}` | Mail accounts by id (keep the id stable: it keys the account's cached mail). Each has `preset` (`icloud` or `gmail`), `login`, `passwordFile` (a host file delivered through `LoadCredential` as `mail-account-<id>`), and optional `label` and `enabled` (default `true`). Rendered to the file named by `mail.mail_accounts_file`, which it pins unless `settings` sets that key. |
+| `mailAccounts` | attribute set of account | `{}` | Mail accounts by id (keep the id stable: it keys the account's cached mail). Each has `preset` (`icloud` or `gmail`), `login`, `passwordFile` (a host file delivered through `LoadCredential` as `mail-account-<id>`), and optional `label` and `enabled` (default `true`). Rendered to the file named by `mail.mail_accounts_file`, which it pins unless `settings` sets that key. File accounts use app passwords; a Gmail account added on the Mail settings page may use XOAUTH2. |
 | `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`, for the credentials that are not settings yet: `NTFY_TOKEN`. The TMDB read token, the Notion token and the Grafana token are the secret settings `media.media_tmdb_token`, `notion.notion_token` and `grafana.grafana_viewer_token` (`secretFiles`); the Grafana URL is `settings.grafana.grafana_url`. Calendar and contacts sign in with an iCloud entry of `mailAccounts`. |
 | `modelServerUnits` | list of string | `[]` | Units serving the mail chat and embed endpoints. The application units start after them and want them. |
 
@@ -35,6 +35,26 @@ services.atrium = {
   web.allowedHost = "atrium.example.org";
 };
 ```
+
+## Removed and renamed options
+
+These options are removed; setting one now fails evaluation as an unknown option. Use the replacement instead.
+
+- `id` → `uid`, `user` and `group`
+- `mode` → `settings.mail.mail_mode`
+- `chatUrl`, `embedUrl` → `settings.mail.mail_chat_url`, `settings.mail.mail_embed_url`
+- `publicUrl` → `settings.core.public_url`
+- `timeZone` → `settings.core.tz`
+- `icloudAppleId` → the Settings page or `settings.calendar.icloud_apple_id`
+- `extraEnvironment` → `settings` and `secretFiles`
+- `web.port` → `port`
+- `web.oidc.enable` → `web.auth = "proxy+oidc"` (or `"oidc"` for OIDC only)
+- `ntfy.url`, `ntfy.topic`, `ntfy.mediaTopic` → `settings.notify.*`
+- `media.root`, `media.qbittorrentUrl`, `media.moviesUrl`, `media.tvUrl` → `settings.media.*`
+- `grafanaUrl` → `settings.grafana.grafana_url`
+- `vdirsyncer` options and the `stateDir/vdirsyncer/` directory → `stateDir/mirrors/`; the old directory is not read and the mirrors re-sync.
+
+atrium also logs a warning at startup for each environment variable it no longer reads (for example `ATRIUM_MODE`) and names the variable to use instead.
 
 ## Web listeners
 
@@ -71,6 +91,13 @@ The module defines these units: `atrium-web`, `atrium-watch`, `atrium-agent-sche
 `atrium-web`, `atrium-watch` and `atrium-agent-scheduler` are `Type=notify` units with a systemd watchdog (`WatchdogSec` 1 min, 45 min and 10 min); each signals readiness after its migrations, and a command skipped because its module is off signals readiness before it exits. `atrium-web` serves the ops listener on `127.0.0.1:9180`; `atrium-web-local` runs without it.
 
 `atrium-run` runs the atrium binary through `systemd-run --pipe --wait` as the atrium user, with the same state directory, environment files, credentials (`LoadCredential`) and environment as the units, so CLI commands such as `atrium-run settings set` or `atrium-run db backup` read secrets from `$CREDENTIALS_DIRECTORY` like the units. The `module` flake check compares the credential map of every unit with that of `atrium-run` and refuses an unknown settings key; `module-config` loads the rendered configuration in the real binary.
+
+## Upgrading
+
+- Update the flake input that pins this repository and run `nixos-rebuild switch`. The units run pending migrations when they open the database; a binary refuses a database that records a newer schema, so a downgrade needs a backup taken before the upgrade.
+- From v1: stop the atrium units and timers, take a backup with the v1 binary, update the module to v2, create a fresh v2 database with the same database key, and run `atrium-run db import-v1 <path-to-v1-db>`. The import carries only the learned-rule data; mail re-syncs and the other records are re-entered or rebuilt. v2 refuses a v1 backup archive with a message pointing at `atrium db import-v1`.
+- The old `stateDir/vdirsyncer/` directory is not read; the calendar and contacts mirrors under `stateDir/mirrors/` re-sync from the providers.
+- A database key must be kept outside the host state; an archive made under a key restores only with that key, and archives made before a `db rekey` need the old key.
 
 ## External modules
 
