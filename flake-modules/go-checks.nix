@@ -14,7 +14,7 @@
     goSrc = import ../nix/go-src.nix {inherit lib;};
     inherit (goSrc) src;
     stageAssets = "cp -r --no-preserve=mode ${self'.packages.atrium-static} internal/web/static";
-    base = pkgs.buildGo126Module {
+    base = pkgs.buildGo126Module.override {inherit go;} {
       pname = "atrium-go";
       version = "0";
       inherit src;
