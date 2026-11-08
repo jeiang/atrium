@@ -7,7 +7,6 @@
     ],
     "exit_code": 0,
     "name": "live-status",
-    "stderr": "live-status.stderr",
     "stdout": "live-status.stdout"
   },
   {
@@ -31,7 +30,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-list",
-    "stderr": "proposals-list.stderr",
     "stdout": "proposals-list.stdout"
   },
   {
@@ -42,7 +40,6 @@
     ],
     "exit_code": 0,
     "name": "live-actions",
-    "stderr": "live-actions.stderr",
     "stdout": "live-actions.stdout"
   },
   {
@@ -54,7 +51,6 @@
     ],
     "exit_code": 0,
     "name": "shadow-report-365d",
-    "stderr": "shadow-report-365d.stderr",
     "stdout": "shadow-report-365d.stdout"
   },
   {
@@ -65,7 +61,6 @@
     ],
     "exit_code": 0,
     "name": "rules-export",
-    "stderr": "rules-export.stderr",
     "stdout": "rules-export.stdout"
   },
   {
@@ -77,7 +72,6 @@
     ],
     "exit_code": 0,
     "name": "notion-search-alpha",
-    "stderr": "notion-search-alpha.stderr",
     "stdout": "notion-search-alpha.stdout"
   },
   {
@@ -88,7 +82,6 @@
     ],
     "exit_code": 0,
     "name": "media-poll",
-    "stderr": "media-poll.stderr",
     "stdout": "media-poll.stdout"
   },
   {
@@ -98,7 +91,6 @@
     ],
     "exit_code": 0,
     "name": "sync",
-    "stderr": "sync.stderr",
     "stdout": "sync.stdout"
   },
   {
@@ -110,7 +102,6 @@
     ],
     "exit_code": 0,
     "name": "sync-account-gmail",
-    "stderr": "sync-account-gmail.stderr",
     "stdout": "sync-account-gmail.stdout"
   },
   {
@@ -160,7 +151,6 @@
     ],
     "exit_code": 0,
     "name": "watch-one-pass",
-    "stderr": "watch-one-pass.stderr",
     "stdout": "watch-one-pass.stdout"
   },
   {
@@ -187,7 +177,6 @@
     ],
     "exit_code": 0,
     "name": "rules-import-stdin",
-    "stderr": "rules-import-stdin.stderr",
     "stdin": "{\n  \"rules\": [\n    {\n      \"id\": \"club-news\",\n      \"action\": \"file\",\n      \"dest\": \"Newsletters\",\n      \"when\": [\n        {\n          \"field\": \"from_domain\",\n          \"op\": \"suffix\",\n          \"value\": \"club.example\"\n        }\n      ]\n    },\n    {\n      \"id\": \"promo-spam\",\n      \"account\": \"icloud\",\n      \"action\": \"delete\",\n      \"when\": [\n        {\n          \"field\": \"from_addr\",\n          \"op\": \"eq\",\n          \"value\": \"spam@promo.example\"\n        }\n      ]\n    },\n    {\n      \"id\": \"old-flash\",\n      \"account\": \"gmail\",\n      \"action\": \"delete\",\n      \"when\": [\n        {\n          \"field\": \"subject_tmpl\",\n          \"op\": \"re\",\n          \"value\": \"^flash sale\"\n        },\n        {\n          \"field\": \"age_days\",\n          \"op\": \"gte\",\n          \"value\": 30\n        }\n      ]\n    }\n  ]\n}\n",
     "stdout": "rules-import-stdin.stdout"
   },
@@ -203,7 +192,6 @@
       "rules.json": "{\n  \"rules\": [\n    {\n      \"id\": \"club-news\",\n      \"action\": \"file\",\n      \"dest\": \"Newsletters\",\n      \"when\": [\n        {\n          \"field\": \"from_domain\",\n          \"op\": \"suffix\",\n          \"value\": \"club.example\"\n        }\n      ]\n    },\n    {\n      \"id\": \"promo-spam\",\n      \"account\": \"icloud\",\n      \"action\": \"delete\",\n      \"when\": [\n        {\n          \"field\": \"from_addr\",\n          \"op\": \"eq\",\n          \"value\": \"spam@promo.example\"\n        }\n      ]\n    },\n    {\n      \"id\": \"old-flash\",\n      \"account\": \"gmail\",\n      \"action\": \"delete\",\n      \"when\": [\n        {\n          \"field\": \"subject_tmpl\",\n          \"op\": \"re\",\n          \"value\": \"^flash sale\"\n        },\n        {\n          \"field\": \"age_days\",\n          \"op\": \"gte\",\n          \"value\": 30\n        }\n      ]\n    }\n  ]\n}\n"
     },
     "name": "rules-import-file",
-    "stderr": "rules-import-file.stderr",
     "stdout": "rules-import-file.stdout"
   },
   {
@@ -239,7 +227,6 @@
     ],
     "exit_code": 0,
     "name": "shadow-report",
-    "stderr": "shadow-report.stderr",
     "stdout": "shadow-report.stdout"
   },
   {
@@ -261,7 +248,6 @@
     ],
     "exit_code": 0,
     "name": "reindex",
-    "stderr": "reindex.stderr",
     "stdout": "reindex.stdout"
   },
   {
@@ -272,7 +258,6 @@
     ],
     "exit_code": 0,
     "name": "rebalance-scan",
-    "stderr": "rebalance-scan.stderr",
     "stdout": "rebalance-scan.stdout"
   },
   {
@@ -283,7 +268,6 @@
     ],
     "exit_code": 0,
     "name": "deletions-scan",
-    "stderr": "deletions-scan.stderr",
     "stdout": "deletions-scan.stdout"
   },
   {
@@ -294,7 +278,6 @@
     ],
     "exit_code": 0,
     "name": "gmail-labels-scan",
-    "stderr": "gmail-labels-scan.stderr",
     "stdout": "gmail-labels-scan.stdout"
   },
   {
@@ -305,7 +288,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-scan-all",
-    "stderr": "proposals-scan-all.stderr",
     "stdout": "proposals-scan-all.stdout"
   },
   {
@@ -316,7 +298,6 @@
     ],
     "exit_code": 0,
     "name": "live-backlog",
-    "stderr": "live-backlog.stderr",
     "stdout": "live-backlog.stdout"
   },
   {
@@ -327,7 +308,6 @@
     ],
     "exit_code": 0,
     "name": "live-rebaseline",
-    "stderr": "live-rebaseline.stderr",
     "stdout": "live-rebaseline.stdout"
   },
   {
@@ -338,7 +318,6 @@
     ],
     "exit_code": 0,
     "name": "live-pause",
-    "stderr": "live-pause.stderr",
     "stdout": "live-pause.stdout"
   },
   {
@@ -349,7 +328,6 @@
     ],
     "exit_code": 0,
     "name": "live-resume",
-    "stderr": "live-resume.stderr",
     "stdout": "live-resume.stdout"
   },
   {
@@ -360,7 +338,6 @@
     ],
     "exit_code": 0,
     "name": "live-deletions",
-    "stderr": "live-deletions.stderr",
     "stdout": "live-deletions.stdout"
   },
   {
@@ -375,7 +352,6 @@
     ],
     "exit_code": 0,
     "name": "live-actions-kind",
-    "stderr": "live-actions-kind.stderr",
     "stdout": "live-actions-kind.stdout"
   },
   {
@@ -388,7 +364,6 @@
     ],
     "exit_code": 0,
     "name": "live-actions-limit",
-    "stderr": "live-actions-limit.stderr",
     "stdout": "live-actions-limit.stdout"
   },
   {
@@ -400,7 +375,6 @@
     ],
     "exit_code": 0,
     "name": "live-undo-file-icloud",
-    "stderr": "live-undo-file-icloud.stderr",
     "stdout": "live-undo-file-icloud.stdout"
   },
   {
@@ -424,7 +398,6 @@
     ],
     "exit_code": 0,
     "name": "live-undo-file-gmail",
-    "stderr": "live-undo-file-gmail.stderr",
     "stdout": "live-undo-file-gmail.stdout"
   },
   {
@@ -436,7 +409,6 @@
     ],
     "exit_code": 0,
     "name": "live-undo-flag",
-    "stderr": "live-undo-flag.stderr",
     "stdout": "live-undo-flag.stdout"
   },
   {
@@ -448,7 +420,6 @@
     ],
     "exit_code": 0,
     "name": "live-undo-trash",
-    "stderr": "live-undo-trash.stderr",
     "stdout": "live-undo-trash.stdout"
   },
   {
@@ -460,7 +431,6 @@
     ],
     "exit_code": 0,
     "name": "live-undo-correct",
-    "stderr": "live-undo-correct.stderr",
     "stdout": "live-undo-correct.stdout"
   },
   {
@@ -497,7 +467,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-list-pending",
-    "stderr": "proposals-list-pending.stderr",
     "stdout": "proposals-list-pending.stdout"
   },
   {
@@ -510,7 +479,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-list-kind",
-    "stderr": "proposals-list-kind.stderr",
     "stdout": "proposals-list-kind.stdout"
   },
   {
@@ -522,7 +490,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-approve-7",
-    "stderr": "proposals-approve-7.stderr",
     "stdout": "proposals-approve-7.stdout"
   },
   {
@@ -534,7 +501,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-approve-8",
-    "stderr": "proposals-approve-8.stderr",
     "stdout": "proposals-approve-8.stdout"
   },
   {
@@ -546,7 +512,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-approve-6",
-    "stderr": "proposals-approve-6.stderr",
     "stdout": "proposals-approve-6.stdout"
   },
   {
@@ -560,7 +525,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-approve-selection",
-    "stderr": "proposals-approve-selection.stderr",
     "stdout": "proposals-approve-selection.stdout"
   },
   {
@@ -614,7 +578,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-approve-list-selection",
-    "stderr": "proposals-approve-list-selection.stderr",
     "stdout": "proposals-approve-list-selection.stdout"
   },
   {
@@ -628,7 +591,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-approve-list-selection-deletion",
-    "stderr": "proposals-approve-list-selection-deletion.stderr",
     "stdout": "proposals-approve-list-selection-deletion.stdout"
   },
   {
@@ -656,7 +618,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-approve-list-selection-calendar",
-    "stderr": "proposals-approve-list-selection-calendar.stderr",
     "stdout": "proposals-approve-list-selection-calendar.stdout"
   },
   {
@@ -668,7 +629,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-dismiss",
-    "stderr": "proposals-dismiss.stderr",
     "stdout": "proposals-dismiss.stdout"
   },
   {
@@ -681,7 +641,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-dismiss-forever",
-    "stderr": "proposals-dismiss-forever.stderr",
     "stdout": "proposals-dismiss-forever.stdout"
   },
   {
@@ -693,7 +652,6 @@
     ],
     "exit_code": 0,
     "name": "proposals-undo-3",
-    "stderr": "proposals-undo-3.stderr",
     "stdout": "proposals-undo-3.stdout"
   },
   {
@@ -728,7 +686,6 @@
     ],
     "exit_code": 0,
     "name": "loops-refresh",
-    "stderr": "loops-refresh.stderr",
     "stdout": "loops-refresh.stdout"
   },
   {
@@ -739,7 +696,6 @@
     ],
     "exit_code": 0,
     "name": "watches-refresh",
-    "stderr": "watches-refresh.stderr",
     "stdout": "watches-refresh.stdout"
   },
   {
@@ -755,7 +711,6 @@
     },
     "exit_code": 0,
     "name": "agent-run-not-configured",
-    "stderr": "agent-run-not-configured.stderr",
     "stdout": "agent-run-not-configured.stdout"
   },
   {

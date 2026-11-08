@@ -276,12 +276,14 @@ func TestCLIGoldens(t *testing.T) {
 				t.Errorf("exit code = %d, want %d (stderr %q)", code, g.ExitCode, stderr)
 			}
 			want := string(golden.ReadFile(t, "cli", g.Stdout))
-			wantErr := string(golden.ReadFile(t, "cli", g.Stderr))
 			if stdout != want {
 				t.Errorf("stdout = %q, want %q", stdout, want)
 			}
-			if g.ExitCode != 0 && lastLine(stderr) != lastLine(wantErr) {
-				t.Errorf("last stderr line = %q, want %q", lastLine(stderr), lastLine(wantErr))
+			if g.ExitCode != 0 {
+				wantErr := string(golden.ReadFile(t, "cli", g.Stderr))
+				if lastLine(stderr) != lastLine(wantErr) {
+					t.Errorf("last stderr line = %q, want %q", lastLine(stderr), lastLine(wantErr))
+				}
 			}
 		})
 	}
