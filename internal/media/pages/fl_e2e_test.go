@@ -525,6 +525,7 @@ type flTMDB struct {
 	mu     sync.Mutex
 	images int
 	hits   int
+	URL    string
 }
 
 func flServeTMDB(t *testing.T) *flTMDB {
@@ -569,12 +570,8 @@ func flServeTMDB(t *testing.T) *flTMDB {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	api, images := media.TMDBAPI, media.TMDBImages
-	media.TMDBAPI, media.TMDBImages = srv.URL+"/3", srv.URL+"/t/p/w342"
-	t.Cleanup(func() {
-		media.TMDBAPI, media.TMDBImages = api, images
-		srv.Close()
-	})
+	fake.URL = srv.URL
+	t.Cleanup(srv.Close)
 	return fake
 }
 
@@ -621,7 +618,7 @@ func flPlaceholderCheck(t *testing.T, rec *httptest.ResponseRecorder, label stri
 func TestFlPostersAndThumbnails(t *testing.T) {
 	tmdb := flServeTMDB(t)
 	ff := &flFFmpeg{duration: "1200.5"}
-	w := flNew(t, nil, Options{Exec: ff.run})
+	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_URL": tmdb.URL + "/3", "ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL": tmdb.URL + "/t/p/w342"}, Options{Exec: ff.run})
 
 	flImage(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "movie poster")
 	flImage(t, w.get("/media/art/show/"+urlQuote("Lanterns (2026)")), "show poster")
@@ -740,7 +737,7 @@ func TestFlThumbnailsRunOneAtATime(t *testing.T) {
 func TestFlWithoutTMDBOrRoot(t *testing.T) {
 	tmdb := flServeTMDB(t)
 	ff := &flFFmpeg{duration: "10"}
-	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "", "ATRIUM_MEDIA_MEDIA_ROOT": ""}, Options{Exec: ff.run})
+	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "", "ATRIUM_MEDIA_MEDIA_ROOT": "", "ATRIUM_MEDIA_MEDIA_TMDB_URL": tmdb.URL + "/3", "ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL": tmdb.URL + "/t/p/w342"}, Options{Exec: ff.run})
 	flPlaceholderCheck(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "poster without a TMDB key")
 	flPlaceholderCheck(t, w.get("/media/thumb/"+urlQuote("tv/Lanterns (2026)/Season 01/x.mkv")), "thumbnail without a root")
 	if tmdb.hitCount() != 0 || ff.count() != 0 {
@@ -750,7 +747,7 @@ func TestFlWithoutTMDBOrRoot(t *testing.T) {
 
 func TestFlTMDBFailureGivesPlaceholderWithoutMarker(t *testing.T) {
 	tmdb := flServeTMDB(t)
-	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "wrong"}, Options{})
+	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "wrong", "ATRIUM_MEDIA_MEDIA_TMDB_URL": tmdb.URL + "/3", "ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL": tmdb.URL + "/t/p/w342"}, Options{})
 	flPlaceholderCheck(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "TMDB rejects the key")
 	if tmdb.imageCount() != 0 {
 		t.Errorf("image fetched after TMDB error")

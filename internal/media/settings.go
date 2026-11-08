@@ -47,6 +47,8 @@ const (
 	KeyLinkKey           = "link_key"
 	KeyQbitAPIKey        = "media_qbittorrent_api_key"
 	KeyTMDBToken         = "media_tmdb_token"
+	KeyTMDBURL           = "media_tmdb_url"
+	KeyTMDBImagesURL     = "media_tmdb_images_url"
 )
 
 const (
@@ -69,6 +71,8 @@ func init() {
 		settings.Value(settings.UI, settings.Def{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL}),
 		between(KeyLinkTTL, "43200", 60, 30*86400),
 		adv(KeyEZTVURL, settings.String, defaultEZTVURL, requiredHTTPURL),
+		adv(KeyTMDBURL, settings.String, defaultTMDBAPI, requiredHTTPURL),
+		adv(KeyTMDBImagesURL, settings.String, defaultTMDBImages, requiredHTTPURL),
 		between(KeyEZTVLimit, "100", 1, 100),
 		between(KeyQbitTimeout, "15", 1, 300),
 		between(KeyEZTVTimeout, "30", 1, 300),
@@ -176,16 +180,18 @@ type Tuning struct {
 
 type Settings struct {
 	Tuning
-	Root      string
-	QbitURL   string
-	QbitKey   string
-	MoviesURL string
-	TVURL     string
-	PublicURL string
-	TMDBToken string
-	QbitHTTP  *http.Client
-	TMDBHTTP  *http.Client
-	EZTVHTTP  *http.Client
+	Root       string
+	QbitURL    string
+	QbitKey    string
+	MoviesURL  string
+	TVURL      string
+	PublicURL  string
+	TMDBToken  string
+	TMDBURL    string
+	TMDBImages string
+	QbitHTTP   *http.Client
+	TMDBHTTP   *http.Client
+	EZTVHTTP   *http.Client
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
@@ -232,6 +238,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		return set
 	}
 	out.Root, out.QbitURL = link(KeyRoot), link(KeyQbitURL)
+	out.TMDBURL, out.TMDBImages = link(KeyTMDBURL), link(KeyTMDBImagesURL)
 	out.MoviesURL, out.TVURL = link(KeyMoviesURL), link(KeyTVURL)
 	out.Tuning = Tuning{
 		LinkTTL:         whole(KeyLinkTTL),
@@ -279,7 +286,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 	return out, nil
 }
 
-func (s Settings) TMDB() *TMDB { return NewTMDB(s.TMDBToken, s.TMDBHTTP) }
+func (s Settings) TMDB() *TMDB { return NewTMDBAt(s.TMDBToken, s.TMDBHTTP, s.TMDBURL, s.TMDBImages) }
 
 func (s Settings) NeedRoot() (string, error) {
 	if s.Root == "" {

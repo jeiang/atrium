@@ -69,14 +69,11 @@ func TestMediaCredentialsTestThroughIntegrationsAndAuthenticateEveryRequest(t *t
 		_, _ = w.Write([]byte(`{}`))
 	}))
 	t.Cleanup(tmdb.Close)
-	previous := media.TMDBAPI
-	media.TMDBAPI = tmdb.URL + "/3"
-	t.Cleanup(func() { media.TMDBAPI = previous })
-
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(media.KeyQbitURL), qbSrv.URL)
 	setEnv(t, settingEnv(media.KeyQbitAPIKey), "qbt_good")
 	setEnv(t, settingEnv(media.KeyTMDBToken), "tmdb_good")
+	setEnv(t, settingEnv(media.KeyTMDBURL), tmdb.URL+"/3")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 

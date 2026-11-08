@@ -17,7 +17,7 @@ func init() {
 		Test: testQbit,
 	})
 	integrations.Register(integrations.Integration{
-		Name: "tmdb", Label: "TMDB", Module: module, SecretKey: KeyTMDBToken,
+		Name: "tmdb", Label: "TMDB", Module: module, URLKey: KeyTMDBURL, SecretKey: KeyTMDBToken,
 		Test: testTMDB,
 	})
 }
@@ -49,7 +49,7 @@ func apiKeys(version string) bool {
 }
 
 func testTMDB(ctx context.Context, c integrations.Conn) (string, error) {
-	status, _, err := bearerGet(ctx, c, TMDBAPI+"/configuration")
+	status, _, err := bearerGet(ctx, c, c.URL+"/configuration")
 	if err != nil {
 		return "", err
 	}

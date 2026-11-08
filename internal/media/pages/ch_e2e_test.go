@@ -58,6 +58,7 @@ func (f *chEztv) release(imdb, hash, title string) {
 type chTmdb struct {
 	mu   sync.Mutex
 	fail int
+	URL  string
 }
 
 func chNewTmdb(t *testing.T) *chTmdb {
@@ -86,9 +87,7 @@ func chNewTmdb(t *testing.T) *chTmdb {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	previous := media.TMDBAPI
-	media.TMDBAPI = srv.URL
-	t.Cleanup(func() { media.TMDBAPI = previous })
+	f.URL = srv.URL
 	return f
 }
 
@@ -156,11 +155,11 @@ func chSeen(t *testing.T, s *site, hash string) bool {
 
 func TestChE2EChannelsSearchPreviewAddRemovePoll(t *testing.T) {
 	ez := chNewEztv(t)
-	chNewTmdb(t)
+	tm := chNewTmdb(t)
 	qb := chNewQbit(t)
 	ez.release("1234567", chHashA, "Lanterns S01E01 1080p WEB")
 	ez.release("1234567", chHashB, "lanterns s01e01 720p")
-	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": qb.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "ATRIUM_NOTIFY_NTFY_URL": chNewNtfy(t), "ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "k"}), Options{})
+	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": qb.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "ATRIUM_NOTIFY_NTFY_URL": chNewNtfy(t), "ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "k", "ATRIUM_MEDIA_MEDIA_TMDB_URL": tm.URL}), Options{})
 
 	empty := status(t, s.get("/media/channels"), 200, "channels page")
 	contains(t, empty, "No channels", "Not checked yet.", `name="backfill" value="1" checked`, "Watching (0)")
@@ -220,7 +219,7 @@ func TestChE2EChannelsSearchPreviewAddRemovePoll(t *testing.T) {
 func TestChE2ETmdbFailuresAndMissingBackends(t *testing.T) {
 	tm := chNewTmdb(t)
 	ez := chNewEztv(t)
-	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "k"}), Options{})
+	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "k", "ATRIUM_MEDIA_MEDIA_TMDB_URL": tm.URL}), Options{})
 
 	missing := status(t, s.get("/media/channels?tmdb_id=7"), 200, "no imdb id")
 	contains(t, missing, "No IMDb id on TMDB", "Enter it by hand.")
