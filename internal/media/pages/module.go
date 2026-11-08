@@ -67,5 +67,6 @@ func Module(o Options) web.Module {
 		s.registerChannels(r)
 		s.registerLibrary(r)
 		s.registerFiles(r)
+		s.registerLegacy(r)
 	}
 }

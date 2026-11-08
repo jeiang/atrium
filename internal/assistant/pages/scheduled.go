@@ -42,24 +42,10 @@ type RunView struct {
 	ThreadID    *int64  `json:"thread_id"`
 }
 
-type ScheduleFormValues struct {
-	Name     string `json:"name"`
-	Schedule string `json:"schedule"`
-	Prompt   string `json:"prompt"`
-}
-
 type ScheduledData struct {
 	Jobs []JobView `json:"jobs"`
 	Runs []RunView `json:"runs"`
 	TZ   string    `json:"tz"`
-}
-
-type ScheduleFormData struct {
-	Job    *JobView           `json:"job"`
-	Values ScheduleFormValues `json:"values"`
-	Error  *string            `json:"error"`
-	Runs   []RunView          `json:"runs"`
-	TZ     string             `json:"tz"`
 }
 
 func stamp(epoch *float64, loc *time.Location) *string {
@@ -82,10 +68,6 @@ func jobView(j scheduler.ListedJob, zone *time.Location) JobView {
 	return v
 }
 
-func formJob(j scheduler.Job) JobView {
-	return JobView{ID: j.ID, Name: j.Name, Kind: j.Kind, Schedule: j.Schedule, Prompt: j.Prompt}
-}
-
 func runView(run scheduler.ListedRun, zone *time.Location) RunView {
 	at := run.DueAt
 	if run.StartedAt != nil && *run.StartedAt != 0 {
@@ -102,22 +84,8 @@ func runViews(runs []scheduler.ListedRun, zone *time.Location) []RunView {
 	return out
 }
 
-func formValues(job *scheduler.Job, submitted *ScheduleFormValues) ScheduleFormValues {
-	switch {
-	case submitted != nil:
-		return *submitted
-	case job != nil:
-		return ScheduleFormValues{Name: job.Name, Schedule: job.Schedule, Prompt: job.Prompt}
-	}
-	return ScheduleFormValues{}
-}
-
 func (p *pages) scheduledRoutes(r chi.Router) {
 	r.Get("/scheduled", p.scheduledIndex)
-	r.Get("/scheduled/new", p.scheduleNewForm)
-	r.Get("/scheduled/{job_id}/edit", p.scheduleEditForm)
-	r.Post("/scheduled", p.scheduleCreate)
-	r.Post("/scheduled/{job_id}", p.scheduleUpdate)
 	r.Post("/scheduled/{job_id}/toggle", p.scheduleToggle)
 	r.Post("/scheduled/{job_id}/cancel", p.scheduleCancel)
 }
@@ -140,50 +108,13 @@ func (p *pages) scheduledData(r *http.Request) ScheduledData {
 	return ScheduledData{Jobs: views, Runs: runViews(runs, zone), TZ: tz}
 }
 
-func (p *pages) scheduledShow(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, headers func(http.Header)) {
+func (p *pages) scheduledShow(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast) {
 	data := p.scheduledData(r)
-	if headers != nil {
-		headers(w.Header())
-	}
 	if web.IsPartial(r) {
 		p.renderFragment(w, r, status, "_scheduled_list.gohtml", data, toast)
 		return
 	}
 	p.render(w, r, status, "scheduled", "scheduled.gohtml", data, toast)
-}
-
-func listHeaders(closeDialogs bool) func(http.Header) {
-	return func(h http.Header) {
-		h.Set("HX-Retarget", "#scheduled-list")
-		h.Set("HX-Reswap", "outerHTML")
-		if closeDialogs {
-			h.Set("HX-Trigger", "close-dialogs")
-		}
-	}
-}
-
-func (p *pages) scheduleForm(w http.ResponseWriter, r *http.Request, status int, job *scheduler.Job, problem string, submitted *ScheduleFormValues) {
-	ctx := r.Context()
-	tz := config.From(ctx).TZName(p.deps.Env)
-	var runs []scheduler.ListedRun
-	if job != nil {
-		history, err := config.From(ctx).Limit(ctx, p.deps.DB.Read, config.KeyJobHistory)
-		check(err)
-		found, err := scheduler.ListRuns(ctx, p.deps.DB.Read, job.ID, history)
-		check(err)
-		runs = found
-	}
-	zone, err := scheduler.Zone(tz)
-	check(err)
-	data := ScheduleFormData{Values: formValues(job, submitted), Runs: runViews(runs, zone), TZ: tz}
-	if job != nil {
-		view := formJob(*job)
-		data.Job = &view
-	}
-	if problem != "" {
-		data.Error = &problem
-	}
-	p.renderFragment(w, r, status, "_schedule_form.gohtml", data, nil)
 }
 
 func (p *pages) loadJob(w http.ResponseWriter, r *http.Request, jobID int64) (*scheduler.Job, bool) {
@@ -196,18 +127,10 @@ func (p *pages) loadJob(w http.ResponseWriter, r *http.Request, jobID int64) (*s
 	return job, true
 }
 
-func (p *pages) attempted(w http.ResponseWriter, r *http.Request, err error, success string, job *scheduler.Job, submitted *ScheduleFormValues, inForm bool) {
+func (p *pages) attempted(w http.ResponseWriter, r *http.Request, err error, success string) {
 	var refused scheduler.Error
 	if errors.As(err, &refused) {
-		failed := notice("error", "Not saved", err.Error())
-		switch {
-		case !web.IsPartial(r):
-			p.scheduledShow(w, r, http.StatusUnprocessableEntity, failed, nil)
-		case inForm:
-			p.scheduleForm(w, r, http.StatusUnprocessableEntity, job, err.Error(), submitted)
-		default:
-			p.scheduledShow(w, r, http.StatusUnprocessableEntity, failed, listHeaders(false))
-		}
+		p.scheduledShow(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()))
 		return
 	}
 	check(err)
@@ -215,61 +138,11 @@ func (p *pages) attempted(w http.ResponseWriter, r *http.Request, err error, suc
 		redirect(w, r, "/scheduled")
 		return
 	}
-	p.scheduledShow(w, r, http.StatusOK, notice("success", success, ""), listHeaders(true))
+	p.scheduledShow(w, r, http.StatusOK, notice("success", success, ""))
 }
 
 func (p *pages) scheduledIndex(w http.ResponseWriter, r *http.Request) {
-	p.scheduledShow(w, r, http.StatusOK, nil, nil)
-}
-
-func (p *pages) scheduleNewForm(w http.ResponseWriter, r *http.Request) {
-	p.scheduleForm(w, r, http.StatusOK, nil, "", nil)
-}
-
-func (p *pages) scheduleEditForm(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "job_id")
-	if !ok {
-		return
-	}
-	job, ok := p.loadJob(w, r, id)
-	if !ok {
-		return
-	}
-	p.scheduleForm(w, r, http.StatusOK, job, "", nil)
-}
-
-func submittedSchedule(r *http.Request) ScheduleFormValues {
-	form := web.FormValues(r)
-	return ScheduleFormValues{
-		Name: web.FormString(form, "name", ""), Schedule: web.FormString(form, "schedule", ""), Prompt: web.FormString(form, "prompt", ""),
-	}
-}
-
-func (p *pages) scheduleCreate(w http.ResponseWriter, r *http.Request) {
-	values := submittedSchedule(r)
-	_, err := scheduler.CreateJob(detached(r), p.deps.DB.Write, scheduler.NewJob{
-		Name: values.Name, Prompt: values.Prompt, Schedule: values.Schedule, TZ: config.From(r.Context()).TZName(p.deps.Env), Now: p.now(),
-		CreatedBy: scheduler.Operator, PromptBy: scheduler.Operator,
-	})
-	p.attempted(w, r, err, "Schedule created", nil, &values, true)
-}
-
-func (p *pages) scheduleUpdate(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "job_id")
-	if !ok {
-		return
-	}
-	values := submittedSchedule(r)
-	job, ok := p.loadJob(w, r, id)
-	if !ok {
-		return
-	}
-	update := scheduler.JobUpdate{Schedule: &values.Schedule, Actor: scheduler.Operator, PromptBy: scheduler.Operator}
-	if job.AgentEditable() {
-		update.Name, update.Prompt = &values.Name, &values.Prompt
-	}
-	_, err := scheduler.UpdateJob(detached(r), p.deps.DB.Write, id, p.now(), update)
-	p.attempted(w, r, err, "Schedule saved", job, &values, true)
+	p.scheduledShow(w, r, http.StatusOK, nil)
 }
 
 func (p *pages) scheduleToggle(w http.ResponseWriter, r *http.Request) {
@@ -283,7 +156,7 @@ func (p *pages) scheduleToggle(w http.ResponseWriter, r *http.Request) {
 	}
 	enabled := !job.State.Active()
 	_, err := scheduler.UpdateJob(detached(r), p.deps.DB.Write, id, p.now(), scheduler.JobUpdate{Enabled: &enabled, Actor: scheduler.Operator})
-	p.attempted(w, r, err, "Schedule updated", nil, nil, false)
+	p.attempted(w, r, err, "Schedule updated")
 }
 
 func (p *pages) scheduleCancel(w http.ResponseWriter, r *http.Request) {
@@ -294,5 +167,5 @@ func (p *pages) scheduleCancel(w http.ResponseWriter, r *http.Request) {
 	if _, ok := p.loadJob(w, r, id); !ok {
 		return
 	}
-	p.attempted(w, r, scheduler.CancelJob(detached(r), p.deps.DB.Write, id), "Schedule deleted", nil, nil, false)
+	p.attempted(w, r, scheduler.CancelJob(detached(r), p.deps.DB.Write, id), "Schedule deleted")
 }

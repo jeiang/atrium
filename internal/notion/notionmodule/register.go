@@ -68,7 +68,9 @@ func (m Module) Register(module.Context) module.Registration {
 				return "", err
 			},
 		}},
-		Pages:    []web.Page{{Module: pages.Module(pages.Options{Chat: llm.ChatJSON}), Templates: pages.Templates()}},
+		Pages: []web.Page{{Module: pages.Module(pages.Options{Chat: llm.ChatJSON}), Templates: pages.Templates(), Nav: []web.NavItem{
+			{Section: "library", Label: "Wiki", URL: "/library/wiki", Icon: "book-open", Page: "library_wiki", Order: 10},
+		}}},
 		Commands: []*cli.Command{notion.Command(notion.Options{Env: env})},
 		Tools: func(r *registry.Registry) error {
 			notiontools.RegisterProposalKinds()

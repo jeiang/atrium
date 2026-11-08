@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	DownloadsPage = "/media/downloads"
+	DownloadsPage = "/apps/media/downloads"
 	Import        = "import"
 
 	stateKey = "channels"

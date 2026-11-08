@@ -55,11 +55,10 @@ type siteOption func(env map[string]string)
 
 func reviewNav() []web.NavItem {
 	return []web.NavItem{
-		{Group: "Review", Label: "Proposals", URL: "/proposals", Icon: "list-checks", Page: "proposals", Order: 20, Badge: true},
-		{Group: "Review", Label: "Activity", URL: "/activity", Icon: "history", Page: "activity", Order: 20},
-		{Group: "Mail", Label: "Drafts", URL: "/drafts", Icon: "mail", Page: "drafts", Order: 30},
-		{Group: "Life", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 40},
-		{Group: "Life", Label: "Watches", URL: "/watches", Icon: "package", Page: "watches", Order: 40},
+		{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
+		{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
+		{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
+		{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 	}
 }
 

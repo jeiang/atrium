@@ -82,7 +82,7 @@ func TestMediaCredentialsTestThroughIntegrationsAndAuthenticateEveryRequest(t *t
 	if code, body := s.post("/qbittorrent/test", nil); code != http.StatusOK || health(t, dir, "qbittorrent") != integrations.OK {
 		t.Fatalf("qBittorrent 5.2 with its key: %d %s, state %s", code, body, health(t, dir, "qbittorrent"))
 	}
-	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/media/downloads", nil); code != http.StatusOK || !qb.saw("/api/v2/torrents/info") {
+	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil); code != http.StatusOK || !qb.saw("/api/v2/torrents/info") {
 		t.Errorf("downloads page did not list torrents with the key: %d", code)
 	}
 	if code, body := s.post("/tmdb/test", nil); code != http.StatusOK || health(t, dir, "tmdb") != integrations.OK {

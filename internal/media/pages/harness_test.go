@@ -83,7 +83,7 @@ func newSite(t *testing.T, vars map[string]string, o Options) *site {
 }
 
 func (s *site) handshake() {
-	rec := s.do("GET", "/media/library", nil)
+	rec := s.do("GET", "/apps/media/library", nil)
 	for _, c := range rec.Result().Cookies() {
 		if c.Name == web.CSRFCookie {
 			s.cookie, s.token = c.Name+"="+c.Value, c.Value

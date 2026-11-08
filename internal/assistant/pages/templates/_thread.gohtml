@@ -19,7 +19,7 @@
 <header class="flex flex-wrap items-center gap-1 text-xs text-ink-3">
   {{if ne $t.Kind "chat"}}<span class="badge" data-variant="outline">{{lbl "thread_kind" $t.Kind}}</span>{{end}}
   <span class="px-1 tabular-nums">{{template "when" (dict "epoch" $t.CreatedAt "style" "datetime")}}</span>
-  {{if $t.ProjectID}}<a href="/projects/{{str $t.ProjectID}}" class="btn" data-size="sm" data-variant="ghost">{{icon "folder"}}{{if $d.Project}}{{$d.Project.Name}}{{else}}Project{{end}}</a>{{end}}
+  {{if $t.ProjectID}}<a href="/projects/{{str $t.ProjectID}}/edit" class="btn" data-size="sm" data-variant="ghost">{{icon "folder"}}{{if $d.Project}}{{$d.Project.Name}}{{else}}Project{{end}}</a>{{end}}
   {{if $t.ParentThreadID}}<a href="/chat/{{str $t.ParentThreadID}}" class="btn" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Parent thread</a>{{end}}
   {{with $v.BranchedFrom}}<a href="/chat/{{.ID}}" class="btn" data-size="sm" data-variant="ghost" title="Branched from message {{str $t.BranchedFromSeq}}">{{icon "git-branch"}}Branched from “{{truncate 40 (or .Title "Untitled thread")}}”</a>{{end}}
   {{if eq $t.Kind "chat"}}

@@ -1,0 +1,22 @@
+{{define "title"}}Wiki{{end}}
+{{define "heading"}}Wiki{{end}}
+{{define "content"}}{{$d := .Data}}
+<section class="flex flex-col gap-3" aria-label="Wiki pages">
+  <form id="wiki-search" action="/library/wiki" method="get" role="search" class="flex items-center gap-2"
+        hx-get="/library/wiki" hx-target="#wiki-rows" hx-replace-url="true" hx-sync="this:replace" hx-indicator="#wiki-spinner"
+        hx-trigger="input changed delay:250ms from:#wiki-q, search from:#wiki-q, submit">
+    <div role="group" class="field flex-1">
+      <label for="wiki-q" class="sr-only">Search the wiki</label>
+      <div class="input-group h-9">
+        {{icon "search" "size-4 shrink-0 text-muted-foreground"}}
+        <input id="wiki-q" name="q" type="search" value="{{$d.Q}}" placeholder="Search the wiki" autocomplete="off">
+        {{template "spinner" (dict "id" "wiki-spinner" "label" "Searching")}}
+      </div>
+    </div>
+    <noscript><button type="submit" class="btn" data-variant="outline">Search</button></noscript>
+  </form>
+  <div id="wiki-rows">
+    {{template "library_wiki_rows" (dict "pages" $d.Pages "q" $d.Q)}}
+  </div>
+</section>
+{{end}}

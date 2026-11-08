@@ -415,7 +415,7 @@ func TestListFlagsOptionsProjectsDelete(t *testing.T) {
 	status(t, in, http.StatusNoContent)
 	status(t, s.multipart("/chat", map[string]string{"project_id": "77"}, nil), http.StatusNotFound)
 	list := status(t, s.post(fmt.Sprintf("/chat/%d/pin", thread), url.Values{"pinned": {"1"}, "q": {""}, "view": {""}}, hx, "true"), http.StatusOK)
-	mustContain(t, list, `aria-label="Pinned"`, `"pinned": 0, "project_id": 0`, "Home")
+	mustContain(t, list, `aria-label="Pinned"`, `{"pinned": 0}`, "Home")
 	if r := s.post(fmt.Sprintf("/chat/%d/archive", thread), url.Values{"archived": {"1"}}); r.StatusCode != http.StatusSeeOther || r.Header.Get("Location") != "/chat" {
 		t.Errorf("archive %d %s", r.StatusCode, r.Header.Get("Location"))
 	}
@@ -434,7 +434,7 @@ func TestListFlagsOptionsProjectsDelete(t *testing.T) {
 	if r := s.post(fmt.Sprintf("/chat/%d/project", thread), url.Values{"project_id": {"1"}}); r.StatusCode != http.StatusSeeOther {
 		t.Errorf("move %d", r.StatusCode)
 	}
-	mustContain(t, status(t, s.get(fmt.Sprintf("/chat/%d", thread)), http.StatusOK), `href="/projects/1"`, `<option value="1" selected>Home</option>`)
+	mustContain(t, status(t, s.get(fmt.Sprintf("/chat/%d", thread)), http.StatusOK), `href="/projects/1/edit"`, `<option value="1" selected>Home</option>`)
 	status(t, s.post(fmt.Sprintf("/chat/%d/project", thread), url.Values{"project_id": {"5"}}), http.StatusNotFound)
 	deleted := s.post(fmt.Sprintf("/chat/%d/delete", thread), nil, hx, "true")
 	if deleted.StatusCode != http.StatusNoContent || deleted.Header.Get("HX-Redirect") != "/chat" {
@@ -454,7 +454,9 @@ func TestListFlagsOptionsProjectsDelete(t *testing.T) {
 		t.Errorf("project download %d %v", dl.StatusCode, dl.Header)
 	}
 	status(t, s.get(fmt.Sprintf("/projects/2/files/%d/download", fid)), http.StatusNotFound)
-	mustContain(t, status(t, s.post(fmt.Sprintf("/projects/1/files/%d/delete", fid), nil, hx, "true"), http.StatusOK), "Files every chat in this project can read")
+	emptied := status(t, s.post(fmt.Sprintf("/projects/1/files/%d/delete", fid), nil, hx, "true"), http.StatusOK)
+	mustContain(t, emptied, `action="/projects/1/files"`)
+	mustNotContain(t, emptied, "brief.md", "Files every chat")
 }
 
 func TestRawImageMissingFromStorage(t *testing.T) {

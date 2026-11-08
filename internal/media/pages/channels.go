@@ -13,11 +13,11 @@ import (
 )
 
 func (s *service) registerChannels(r chi.Router) {
-	r.Get("/media/channels", s.channelsIndex)
-	r.Post("/media/channels", s.channelAdd)
-	r.Post("/media/channels/preview", s.channelPreview)
-	r.Post("/media/channels/{channel_id}/delete", s.channelDelete)
-	r.Post("/media/channels/poll", s.channelPoll)
+	r.Get("/apps/media/channels", s.channelsIndex)
+	r.Post("/apps/media/channels", s.channelAdd)
+	r.Post("/apps/media/channels/preview", s.channelPreview)
+	r.Post("/apps/media/channels/{channel_id}/delete", s.channelDelete)
+	r.Post("/apps/media/channels/poll", s.channelPoll)
 }
 
 func chToast(category, title, description string) *tpl.Toast {

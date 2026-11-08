@@ -1,44 +1,34 @@
-{{template "project_form" (dict "project" .Data.Project "values" .Data.Values "efforts" .Data.Efforts "context_limits" .Data.ContextLimits "error" .Data.Error "csrf" .CSRF)}}
+{{template "project_form" (dict "form" .Data "csrf" .CSRF)}}
 
-{{define "project_form"}}{{$v := .values}}{{$action := "/projects"}}{{if .project}}{{$action = printf "/projects/%v" .project.ID}}{{end}}
-<form method="post" action="{{$action}}" class="w-full sm:max-w-2xl" hx-post="{{$action}}" hx-target="#project-dialog" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+{{define "project_form"}}{{$f := .form}}{{$v := $f.Values}}{{$action := "/projects"}}{{if $f.Project}}{{$action = printf "/projects/%v/edit" $f.Project.ID}}{{end}}
+<form method="post" action="{{$action}}" class="flex flex-col gap-4" hx-post="{{$action}}" hx-target="#project-form" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
   <input type="hidden" name="csrf_token" value="{{.csrf}}">
-  <header class="flex-row items-center gap-2">
-    <h2 id="project-dialog-title" class="min-w-0 flex-1 truncate">{{if .project}}Edit {{.project.Name}}{{else}}New project{{end}}</h2>
-    <button type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Close" data-action="close-dialog">{{icon "x"}}</button>
-  </header>
-  <section class="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
-    {{if .error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.error}}</p>{{end}}
+  {{if $f.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$f.Error}}</p>{{end}}
+  <div role="group" class="field">
+    <label for="project-name">Name</label>
+    <input id="project-name" name="name" type="text" value="{{$v.Name}}" required>
+  </div>
+  <div role="group" class="field">
+    <label for="project-instructions">Instructions</label>
+    <textarea id="project-instructions" name="instructions" rows="6" class="w-full" placeholder="Markdown">{{$v.Instructions}}</textarea>
+  </div>
+  <div class="grid gap-3 sm:grid-cols-2">
     <div role="group" class="field">
-      <label for="project-name">Name</label>
-      <input id="project-name" name="name" type="text" value="{{$v.Name}}" required>
+      <label for="project-effort">Default effort</label>
+      <select id="project-effort" name="effort" class="select">
+        {{range $f.Efforts}}<option value="{{.}}"{{if eq . $v.Effort}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
     </div>
     <div role="group" class="field">
-      <label for="project-instructions">Instructions</label>
-      <textarea id="project-instructions" name="instructions" rows="6" class="w-full" placeholder="Markdown">{{$v.Instructions}}</textarea>
+      <label for="project-context">Default context</label>
+      <select id="project-context" name="context_limit" class="select">
+        {{range $f.ContextLimits}}<option value="{{.}}"{{if and $v.ContextLimit (eq . (int $v.ContextLimit))}} selected{{end}}>{{ctxlabel .}}</option>{{end}}
+      </select>
     </div>
-    <div class="grid gap-3 sm:grid-cols-2">
-      <div role="group" class="field">
-        <label for="project-effort">Default effort</label>
-        <select id="project-effort" name="effort" class="select">
-          {{range .efforts}}<option value="{{.}}"{{if eq . $v.Effort}} selected{{end}}>{{.}}</option>{{end}}
-        </select>
-      </div>
-      <div role="group" class="field">
-        <label for="project-context">Default context</label>
-        <select id="project-context" name="context_limit" class="select">
-          {{range .context_limits}}<option value="{{.}}"{{if and $v.ContextLimit (eq . (int $v.ContextLimit))}} selected{{end}}>{{ctxlabel .}}</option>{{end}}
-        </select>
-      </div>
-    </div>
-    {{template "project_hub" (dict "project" .project "hub_id" (or $v.WikiHubID "") "notice" nil "error" nil)}}
-  </section>
-  <footer class="flex-wrap">
-    {{if and .project (not .project.Archived)}}
-    <button type="button" class="btn me-auto" data-size="sm" data-variant="destructive" hx-post="/projects/{{.project.ID}}/archive" hx-confirm="Archive this project? Its threads stay in the chat list.">{{icon "archive"}}Archive</button>
-    {{end}}
-    <button type="button" class="btn" data-variant="outline" data-action="close-dialog">Cancel</button>
-    <button type="submit" class="btn">{{icon "check"}}{{if .project}}Save{{else}}Create{{end}}</button>
-  </footer>
+  </div>
+  {{template "project_hub" (dict "project" $f.Project "hub_id" (or $v.WikiHubID "") "notice" nil "error" nil)}}
+  <div class="flex justify-end">
+    <button type="submit" class="btn">{{icon "check"}}{{if $f.Project}}Save{{else}}Create{{end}}</button>
+  </div>
 </form>
 {{- end}}

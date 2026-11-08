@@ -71,7 +71,7 @@ func sidebarOf(listed []threads.Listed, hidden map[int64]bool, now time.Time) *t
 				}
 				at = len(out.Projects)
 				groups[*l.ProjectID] = at
-				out.Projects = append(out.Projects, tpl.SidebarGroup{Label: name, URL: "/projects/" + strconv.FormatInt(*l.ProjectID, 10)})
+				out.Projects = append(out.Projects, tpl.SidebarGroup{Label: name, URL: "/projects/" + strconv.FormatInt(*l.ProjectID, 10) + "/edit"})
 			}
 			if len(out.Projects[at].Threads) < sidebarPerProject {
 				out.Projects[at].Threads = append(out.Projects[at].Threads, item)

@@ -59,7 +59,7 @@ func TestMainPagesShipNoInlineScript(t *testing.T) {
 	client := &http.Client{}
 	scriptTag := regexp.MustCompile(`<script\b[^>]*>`)
 	handler := regexp.MustCompile(`\son[a-z]+\s*=\s*["']`)
-	for _, path := range []string{"/chat", "/scheduled", "/projects", "/proposals", "/activity", "/drafts", "/settings/assistant", "/settings/modules", "/about"} {
+	for _, path := range []string{"/chat", "/scheduled", "/projects/new", "/library/files", "/library/wiki", "/review", "/proposals", "/activity", "/drafts", "/settings/assistant", "/settings/modules", "/about"} {
 		code, body, header := fetch(t, client, http.MethodGet, base+path, nil)
 		if code != http.StatusOK {
 			t.Errorf("%s: %d", path, code)

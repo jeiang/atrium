@@ -356,6 +356,42 @@ func recent(ctx context.Context, q Querier, limits SearchLimits, includePrivate 
 	return hits, nil
 }
 
+type Listed struct {
+	PageRef
+	EditedTS float64 `json:"edited_ts"`
+}
+
+func ListPages(ctx context.Context, q Querier, query string, limit int) ([]Listed, error) {
+	query = strings.TrimSpace(query)
+	match, err := search.FTSQuery(query)
+	if err != nil {
+		return nil, err
+	}
+	var rows *sql.Rows
+	switch {
+	case query == "":
+		rows, err = q.QueryContext(ctx,
+			"SELECT id, title, url, path, private, edited_ts FROM notion_pages WHERE in_trash = 0 ORDER BY edited_ts DESC, rid DESC LIMIT ?", limit)
+	case match == "":
+		return []Listed{}, nil
+	default:
+		rows, err = q.QueryContext(ctx,
+			"SELECT p.id, p.title, p.url, p.path, p.private, p.edited_ts FROM notion_fts JOIN notion_pages p ON p.rid = notion_fts.rowid "+
+				"WHERE notion_fts MATCH ? AND p.in_trash = 0 ORDER BY p.edited_ts DESC, p.rid DESC LIMIT ?", match, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Listed, error) {
+		var id, title, url, path string
+		var private int64
+		var l Listed
+		err := r.Scan(&id, &title, &url, &path, &private, &l.EditedTS)
+		l.PageRef = pageRef(id, title, url, path, private != 0)
+		return l, err
+	})
+}
+
 type Result struct {
 	Hits     []Hit `json:"hits"`
 	Semantic bool  `json:"semantic"`

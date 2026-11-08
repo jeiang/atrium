@@ -102,7 +102,7 @@ func newRelated(found []notion.Related) []related {
 	return out
 }
 
-var backLabels = map[string]string{"/chat": "Chat", "/triage": "Decisions"}
+var backLabels = map[string]string{"/chat": "Chat", "/triage": "Decisions", "/library/wiki": "Wiki"}
 
 func backTo(r *http.Request) backLink {
 	parts, err := urlx.URLSplit(r.Header.Get("Referer"))

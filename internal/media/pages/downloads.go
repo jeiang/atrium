@@ -14,15 +14,15 @@ import (
 )
 
 func (s *service) registerDownloads(r chi.Router) {
-	r.Get("/media", s.dlHome)
+	r.Get("/apps/media", s.dlHome)
 	r.Get(dlDownloadsPage, s.dlDownloadsGet)
-	r.Get("/media/torrents", s.dlTorrentsGet)
-	r.Get("/media/torrents/{hash}/files", s.dlFilesGet)
-	r.Post("/media/torrents/{hash}/files", s.dlFilesToggle)
-	r.Get("/media/add", s.dlAddGet)
-	r.Post("/media/add", s.dlAddPost)
-	r.Post("/media/file", s.dlFilePost)
-	r.Post("/media/ignore", s.dlIgnorePost)
+	r.Get("/apps/media/torrents", s.dlTorrentsGet)
+	r.Get("/apps/media/torrents/{hash}/files", s.dlFilesGet)
+	r.Post("/apps/media/torrents/{hash}/files", s.dlFilesToggle)
+	r.Get("/apps/media/add", s.dlAddGet)
+	r.Post("/apps/media/add", s.dlAddPost)
+	r.Post("/apps/media/file", s.dlFilePost)
+	r.Post("/apps/media/ignore", s.dlIgnorePost)
 }
 
 func dlCheck(err error) {

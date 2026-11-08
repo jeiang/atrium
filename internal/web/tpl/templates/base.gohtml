@@ -27,6 +27,7 @@
         {{end}}
       </div>
     </header>
+    {{with .Tabs}}<nav class="hub-tabs" aria-label="Sections">{{range .}}<a href="{{.URL}}" class="hub-tab"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}</nav>{{end}}
     </div>
     <div id="content" tabindex="-1" class="{{block "content_class" .}}page-content{{end}}">
       {{block "content" .}}{{end}}
@@ -73,9 +74,10 @@
       <details class="sb-section"{{range .Threads}}{{if eq .URL $path}} open{{end}}{{end}}>
         <summary class="sb-title">{{icon "chevron-right"}}<span class="truncate">{{.Label}}</span></summary>
         {{range .Threads}}{{template "sb_thread" (dict "t" . "path" $path)}}{{end}}
-        <a href="{{.URL}}" class="sb-item sb-thread text-ink-3">{{icon "folder"}}<span class="sb-label">Open project</span></a>
+        <a href="{{.URL}}" class="sb-item sb-thread text-ink-3">{{icon "settings"}}<span class="sb-label">Project settings</span></a>
       </details>
       {{end}}
+      <a href="/projects/new" class="sb-item sb-thread text-ink-3">{{icon "folder"}}<span class="sb-label">New project</span></a>
     </div>
     {{end}}
     {{range .Nav}}

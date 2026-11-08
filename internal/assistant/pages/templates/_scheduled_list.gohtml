@@ -1,15 +1,15 @@
-{{template "scheduled_list" (dict "jobs" .Data.Jobs "runs" .Data.Runs "toast" .Toast)}}
+{{template "scheduled_list" (dict "jobs" .Data.Jobs "runs" .Data.Runs "tz" .Data.TZ "toast" .Toast)}}
 
 {{define "scheduled_status"}}{{$status := .status}}{{$title := .title}}{{with badge "job_run" $status}}<span class="badge" data-variant="{{.Variant}}"{{if $title}} title="{{$title}}"{{end}}>{{.Label}}</span>{{else}}<span class="badge" data-variant="outline"{{if $title}} title="{{$title}}"{{end}}>{{$status}}</span>{{end}}{{end}}
-
-
-
 
 {{define "scheduled_list"}}
 {{with opt . "toast" nil}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
 <div id="scheduled-list" class="flex flex-col gap-8">
   <section class="flex flex-col gap-3" aria-labelledby="schedules-h">
-    <h2 id="schedules-h" class="text-sm font-medium" tabindex="-1" data-focus-fallback>Schedules</h2>
+    <div class="flex items-baseline gap-2">
+      <h2 id="schedules-h" class="text-sm font-medium" tabindex="-1" data-focus-fallback>Schedules</h2>
+      <span class="text-xs text-muted-foreground">{{.tz}}</span>
+    </div>
     {{if .jobs}}
     <ul class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" role="list">
       {{range .jobs}}
@@ -37,13 +37,15 @@
         </dl>
         <footer class="mt-auto flex items-center gap-2">
           <span class="badge" data-variant="outline">{{if has (list "nightly" "builtin") .Kind}}{{lbl "job_source" .Kind}}{{else}}{{lbl "job_source" .CreatedBy}}{{end}}</span>
-          <button id="job-edit-{{.ID}}" type="button" class="btn ms-auto" data-size="sm" data-variant="outline" hx-get="/scheduled/{{.ID}}/edit" hx-target="#schedule-dialog" hx-swap="innerHTML">{{icon "pencil"}}Edit</button>
+          {{if not (has (list "nightly" "builtin") .Kind)}}
+          <button id="job-delete-{{.ID}}" type="button" class="btn ms-auto" data-size="icon-sm" data-variant="ghost" aria-label="Delete {{.Name}}" hx-post="/scheduled/{{.ID}}/cancel" hx-target="#scheduled-list" hx-swap="outerHTML" hx-confirm="Delete {{.Name}}?">{{icon "trash-2" "size-3.5"}}</button>
+          {{end}}
         </footer>
       </li>
       {{end}}
     </ul>
     {{else}}
-    {{template "empty_state" (dict "icon_name" "clock" "title" "No schedules" "body" "Ask the assistant in chat to schedule something, or create one here.")}}
+    {{template "empty_state" (dict "icon_name" "clock" "title" "No schedules")}}
     {{end}}
   </section>
 

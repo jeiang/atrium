@@ -18,8 +18,6 @@
   </li>
   {{end}}
 </ul>
-{{else}}
-<p class="text-xs text-muted-foreground">Files every chat in this project can read: briefs, data, reference documents.</p>
 {{end}}
 {{with .error}}<p class="text-xs text-destructive" role="alert">{{.}}</p>{{end}}
 {{if not $p.Archived}}

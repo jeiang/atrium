@@ -60,8 +60,8 @@ func TestArchivedProjectRefusesAddingContent(t *testing.T) {
 	if download.StatusCode != http.StatusOK {
 		t.Errorf("download %d", download.StatusCode)
 	}
-	status(t, s.get("/projects/"+id), http.StatusOK)
-	status(t, s.post("/projects/"+id, with(kitchen, "name", "Renamed")), http.StatusSeeOther)
+	status(t, s.get("/projects/"+id+"/edit"), http.StatusOK)
+	status(t, s.post("/projects/"+id+"/edit", with(kitchen, "name", "Renamed")), http.StatusSeeOther)
 
 	status(t, s.post("/projects/"+id+"/archive", url.Values{"archived": {"0"}}), http.StatusSeeOther)
 	status(t, s.multipart("/projects/"+id+"/files", nil, []upload{note}, hx, "true"), http.StatusOK)
