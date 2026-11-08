@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -24,10 +26,32 @@ func (e NotConfigured) Error() string { return string(e) }
 func (e NotConfigured) Unwrap() error { return Error(string(e)) }
 
 type Remote struct {
-	Text string
+	Text    string
+	Unknown bool
 }
 
 func (e *Remote) Error() string { return e.Text }
+
+func (e *Remote) OutcomeUnknown() bool { return e.Unknown }
+
+type Partial struct {
+	Err error
+}
+
+func (e *Partial) Error() string { return e.Err.Error() }
+
+func (e *Partial) Unwrap() error { return e.Err }
+
+func (e *Partial) OutcomeUnknown() bool { return true }
+
+func OutcomeUnknown(err error) bool {
+	var remote *Remote
+	if errors.As(err, &remote) {
+		return remote.Unknown
+	}
+	var partial *Partial
+	return errors.As(err, &partial)
+}
 
 func remote(err error) error {
 	var api *googleapi.Error
@@ -40,9 +64,12 @@ func remote(err error) error {
 		if reason == "" {
 			reason = "unknown"
 		}
-		return &Remote{Text: fmt.Sprintf("calendar API %d: %s", api.Code, reason)}
+		return &Remote{Text: fmt.Sprintf("calendar API %d: %s", api.Code, reason), Unknown: api.Code >= 500}
 	case errors.As(err, &refused):
 		return &Remote{Text: "calendar refresh failed: " + strings.TrimSpace(string(refused.Body))}
+	}
+	if code := statusCode(err.Error()); code != 0 {
+		return &Remote{Text: err.Error(), Unknown: code >= 500}
 	}
 	var dns *net.DNSError
 	var timeout interface{ Timeout() bool }
@@ -54,9 +81,24 @@ func remote(err error) error {
 		return &Remote{Text: "temporary failure in name resolution"}
 	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded),
 		errors.As(err, &timeout) && timeout.Timeout():
-		return &Remote{Text: "timed out"}
+		return &Remote{Text: "timed out", Unknown: true}
 	case errors.As(err, &errno):
-		return &Remote{Text: errno.Error()}
+		unknown := errno == syscall.ECONNRESET || errno == syscall.EPIPE || errno == syscall.ECONNABORTED
+		return &Remote{Text: errno.Error(), Unknown: unknown}
 	}
-	return &Remote{Text: err.Error()}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, context.Canceled) {
+		return &Remote{Text: err.Error(), Unknown: true}
+	}
+	return &Remote{Text: err.Error(), Unknown: true}
+}
+
+func statusCode(text string) int {
+	if len(text) < 4 || text[3] != ' ' {
+		return 0
+	}
+	code, err := strconv.Atoi(text[:3])
+	if err != nil || code < 100 || code > 599 {
+		return 0
+	}
+	return code
 }

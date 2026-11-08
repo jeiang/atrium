@@ -398,6 +398,16 @@ func (p *Pipeline) claim(ctx context.Context, id int64, status string) (bool, er
 	return n == 1, err
 }
 
+type unknownOutcome interface{ OutcomeUnknown() bool }
+
+func outcomeUnknown(err error) bool {
+	var unknown unknownOutcome
+	if errors.As(err, &unknown) {
+		return unknown.OutcomeUnknown()
+	}
+	return mailops.OutcomeUnknown(err)
+}
+
 func (p *Pipeline) sync(ctx context.Context, prop *Proposal) *string {
 	if p.Registry == nil || p.Registry.Sync == nil || prop.Account == nil {
 		return nil
@@ -562,7 +572,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		}()
 		if err != nil {
 			state := ledger.UndoFailed
-			if mailops.OutcomeUnknown(err) {
+			if outcomeUnknown(err) {
 				state = ledger.UndoUnknown
 			} else if _, partial := errors.AsType[*mailops.PartialMove](err); partial {
 				state = ledger.UndoPartial

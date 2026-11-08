@@ -51,7 +51,7 @@ func pinnedTokens(n int) string { return fmt.Sprintf("golden-token-urlsafe-%d", 
 func googleAuthApp() *cli.App {
 	app := cli.New("atrium", logx.Setup)
 	app.Bootstrap = bootstrap(testLookup, settings.Default)
-	app.Add(calendarcmd.Command(testLookup, noTools))
+	app.Add(calendarcmd.Command(testLookup, noTools, calendar.AuthOptions{Random: pinnedTokens}))
 	return app
 }
 
@@ -98,9 +98,8 @@ func runGoogleAuth(t *testing.T, redirect, port string, args ...string) authRun 
 func TestGoogleAuthGolden(t *testing.T) {
 	setEnv(t, "ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "golden-google-client-id")
 	setEnv(t, "GOOGLE_OAUTH_CLIENT_SECRET", "golden-google-client-secret")
-	t.Cleanup(calendar.UseTokens(pinnedTokens))
 	srv := golden.Replay(t, golden.LoadScenario(t, "google_auth", "code_exchange").Exchanges)
-	t.Cleanup(calendar.UseEndpoints(calendar.Endpoints{Token: srv.URL + "/token"}))
+	setEnv(t, calendar.GoogleTokenEnv, srv.URL+"/token")
 	port := freePort(t)
 	run := runGoogleAuth(t, "?state=golden-token-urlsafe-16&code=golden-google-code&scope=calendar", port)
 	want := "Open this URL in a browser and approve access:\n\n" + consentURL(port) + "\n\n\nGOOGLE_REFRESH_TOKEN=golden-google-refresh-token\n"
@@ -121,7 +120,6 @@ func TestGoogleAuthRefusals(t *testing.T) {
 	t.Run("provider error", func(t *testing.T) {
 		setEnv(t, "ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "id")
 		setEnv(t, "GOOGLE_OAUTH_CLIENT_SECRET", "secret")
-		t.Cleanup(calendar.UseTokens(pinnedTokens))
 		run := runGoogleAuth(t, "?error=access_denied", freePort(t))
 		if run.code != cli.ExitError || run.stderr != "error: Google returned an error: access_denied\n" {
 			t.Errorf("%+v", run)
@@ -130,7 +128,6 @@ func TestGoogleAuthRefusals(t *testing.T) {
 	t.Run("state mismatch", func(t *testing.T) {
 		setEnv(t, "ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "id")
 		setEnv(t, "GOOGLE_OAUTH_CLIENT_SECRET", "secret")
-		t.Cleanup(calendar.UseTokens(pinnedTokens))
 		run := runGoogleAuth(t, "?state=other&code=x", freePort(t))
 		if run.code != cli.ExitError || run.stderr != "error: state mismatch; start again\n" {
 			t.Errorf("%+v", run)
@@ -139,9 +136,8 @@ func TestGoogleAuthRefusals(t *testing.T) {
 	t.Run("token exchange failed", func(t *testing.T) {
 		setEnv(t, "ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "id")
 		setEnv(t, "GOOGLE_OAUTH_CLIENT_SECRET", "secret")
-		t.Cleanup(calendar.UseTokens(pinnedTokens))
 		srv := httptestServer(t, http.StatusBadRequest, `{"error":"invalid_grant"}`)
-		t.Cleanup(calendar.UseEndpoints(calendar.Endpoints{Token: srv}))
+		setEnv(t, calendar.GoogleTokenEnv, srv)
 		run := runGoogleAuth(t, "?state=golden-token-urlsafe-16&code=x", freePort(t))
 		if run.code != cli.ExitError || !strings.HasPrefix(run.stderr, "error: token exchange failed: 400 {\"error\":\"invalid_grant\"}") {
 			t.Errorf("%+v", run)
@@ -150,9 +146,8 @@ func TestGoogleAuthRefusals(t *testing.T) {
 	t.Run("no refresh token", func(t *testing.T) {
 		setEnv(t, "ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "id")
 		setEnv(t, "GOOGLE_OAUTH_CLIENT_SECRET", "secret")
-		t.Cleanup(calendar.UseTokens(pinnedTokens))
 		srv := httptestServer(t, http.StatusOK, `{"access_token":"a","expires_in":3599,"token_type":"Bearer"}`)
-		t.Cleanup(calendar.UseEndpoints(calendar.Endpoints{Token: srv}))
+		setEnv(t, calendar.GoogleTokenEnv, srv)
 		run := runGoogleAuth(t, "?state=golden-token-urlsafe-16&code=x", freePort(t))
 		if run.code != cli.ExitError || run.stderr != "error: Google returned no refresh token; revoke the app's access and retry\n" {
 			t.Errorf("%+v", run)

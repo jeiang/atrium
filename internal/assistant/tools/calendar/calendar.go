@@ -150,21 +150,30 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
+	intent, err := writes.Begin(ctx, tc.DB.Write, writes.New{
+		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_create",
+		Target: string(target) + ":" + normalized.UID,
+	})
+	if err != nil {
+		return nil, err
+	}
 	ref, err := calendar.CreateEvent(ctx, tc.Env, set, target, normalized, tz)
 	if err != nil {
+		if calendar.OutcomeUnknown(err) {
+			return nil, wrap(err)
+		}
+		_ = writes.Discard(ctx, tc.DB.Write, intent)
 		return nil, wrap(err)
 	}
 	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		if err := calendar.Track(ctx, tx, normalized, target, nil, tc.Now()); err != nil {
 			return err
 		}
-		_, err := writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_create",
+		return writes.Settle(ctx, tx, tc.Undoers, intent, writes.New{
 			Target: string(target) + ":" + normalized.UID,
 			After:  map[string]any{"calendar": string(target), "spec": normalized.Dict()},
 			Undo:   deleteUndo{Op: "calendar_delete", Calendar: string(target), UID: normalized.UID},
 		})
-		return err
 	})
 	if err != nil {
 		return nil, err
@@ -204,20 +213,29 @@ func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, wrap(err)
 	}
+	intent, err := writes.Begin(ctx, tc.DB.Write, writes.New{
+		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_delete",
+		Target: row.Calendar + ":" + uid,
+	})
+	if err != nil {
+		return nil, err
+	}
 	if err := calendar.DeleteEvent(ctx, tc.Env, set, rowTarget, uid); err != nil {
+		if calendar.OutcomeUnknown(err) {
+			return nil, wrap(err)
+		}
+		_ = writes.Discard(ctx, tc.DB.Write, intent)
 		return nil, wrap(err)
 	}
 	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		if err := calendar.Untrack(ctx, tx, uid, tc.Now()); err != nil {
 			return err
 		}
-		_, err := writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_delete",
+		return writes.Settle(ctx, tx, tc.Undoers, intent, writes.New{
 			Target: row.Calendar + ":" + uid,
 			Before: map[string]any{"calendar": row.Calendar, "spec": stored},
 			Undo:   recreateUndo{Op: "calendar_recreate", Calendar: row.Calendar, Spec: stored},
 		})
-		return err
 	})
 	if err != nil {
 		return nil, err

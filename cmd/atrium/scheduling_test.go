@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -202,5 +203,36 @@ func TestCalendarListFiltersByTargetAndCollection(t *testing.T) {
 	input["calendar"] = "google"
 	if got := unescape(toolResult(t, "calendar_list", input)); strings.Contains(got, `"uid": "a"`) {
 		t.Errorf("calendar_list(calendar=google) listed the iCloud mirror: %s", got)
+	}
+}
+
+func TestCalendarUnknownWriteStaysBlocked(t *testing.T) {
+	dir, srv := davFixture(t)
+	path := caldavtest.CalendarPath(0) + "lunch.ics"
+	srv.SetObject(path, invite)
+	update := proposalID(t, toolResult(t, "calendar_update", map[string]any{
+		"calendar": "icloud", "uid": "lunch", "title": "Long lunch", "start": "2026-11-10T12:00:00", "end": "2026-11-10T14:00:00",
+	}))
+	srv.FailPuts = 1
+	srv.PutStatus = http.StatusInternalServerError
+	if got := runApp("proposals", "approve", update); got.code == cli.ExitOK {
+		t.Fatalf("approve with a failing remote write exited 0: %q", got.stdout)
+	}
+	if srv.PutAttempts != 1 {
+		t.Fatalf("%d PUT attempts, want 1", srv.PutAttempts)
+	}
+	if got := runApp("proposals", "approve", update); got.code == cli.ExitOK || !strings.Contains(got.stderr, "resolve it in the mailbox") {
+		t.Fatalf("second approve = %d %q, want an unresolved-write refusal", got.code, got.stderr)
+	}
+	if srv.PutAttempts != 1 {
+		t.Fatalf("the blocked proposal retried the remote write: %d attempts", srv.PutAttempts)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	var state string
+	if err := d.Read.QueryRow("SELECT state FROM proposal_actions WHERE proposal_id = ? ORDER BY id DESC LIMIT 1", update).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != "unknown" {
+		t.Errorf("action state = %q, want unknown", state)
 	}
 }
