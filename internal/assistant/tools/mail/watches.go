@@ -39,7 +39,7 @@ func watchTools() []tool.Tool {
 	}
 }
 
-func packages(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func packages(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	active, ok := args.Get("active_only")
 	if !ok {
 		active = true
@@ -71,7 +71,7 @@ func packages(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	}, nil
 }
 
-func upcomingBirthdays(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	days, err := tool.BoundedInt(args, "days", birthdays.DefaultDays, birthdays.MaxDays, 0)
 	if err != nil {
 		return nil, err

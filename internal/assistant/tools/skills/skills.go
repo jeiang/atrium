@@ -13,7 +13,7 @@ import (
 
 const Name = "load_skill"
 
-func load(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func load(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	name, ok, err := tool.TextArg(args, "name", true)
 	if err != nil {
 		return nil, err

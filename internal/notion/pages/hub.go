@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
@@ -64,11 +65,12 @@ func (s *service) wikiHub(w http.ResponseWriter, r *http.Request) {
 	}
 	tc := &tool.Context{
 		DB: s.deps.DB, Cfg: s.deps.Cfg, Env: s.deps.Env, Kind: tool.Chat, AllowedURLs: map[string]struct{}{}, Now: s.now,
+		Undoers: toolset.Undoers(s.deps.Env),
 	}
-	made, err := notiontools.CreatePage(ctx, tc, py.Dict{
-		{Key: "title", Value: project.Name},
-		{Key: "markdown", Value: projects.HubMarkdown(*project)},
-		{Key: "sources", Value: []any{fmt.Sprintf("atrium project %d", id)}},
+	made, err := notiontools.CreatePage(ctx, tc, tool.Args{
+		"title":    project.Name,
+		"markdown": projects.HubMarkdown(*project),
+		"sources":  []any{fmt.Sprintf("atrium project %d", id)},
 	})
 	if reason, refused := refusal(err); refused {
 		s.fragment(w, r, http.StatusUnprocessableEntity, "_project_hub.gohtml", hubView{Project: project, Error: &reason})

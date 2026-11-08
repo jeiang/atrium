@@ -28,7 +28,7 @@ func Tools() []tool.Tool {
 	}}
 }
 
-func handle(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	title, _, err := tool.TextArg(args, "title", true)
 	if err != nil {
 		return nil, err

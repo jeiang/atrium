@@ -86,18 +86,17 @@ func aliasHits(ctx context.Context, tc *tool.Context, query string, snippetChars
 	return hits, nil
 }
 
-func searchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func searchKnowledge(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	query, err := required(args, "query")
 	if err != nil {
 		return nil, err
 	}
 	r := assistant.Read(ctx, tc.DB.Read)
-	maxResults := r.Int(assistant.KeyNotionMaxResults)
 	snippetChars := r.Int(assistant.KeyNotionSnippet)
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 5, int64(maxResults), 1)
+	limit, err := notionLimitBound.Clamp(ctx, tc.DB.Read, args, "limit")
 	if err != nil {
 		return nil, err
 	}
@@ -166,19 +165,18 @@ func livePage(ctx context.Context, tc *tool.Context, pageID string) (py.Dict, er
 	}, nil
 }
 
-func fetchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func fetchKnowledge(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, err := required(args, "page_id")
 	if err != nil {
 		return nil, err
 	}
 	pageID := normalize(raw)
 	r := assistant.Read(ctx, tc.DB.Read)
-	pageChars := r.Int(assistant.KeyNotionPageChars)
 	staleSecs := r.Int(assistant.KeyNotionStaleSecs)
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	maxChars, err := tool.BoundedInt(args, "max_chars", int64(pageChars), int64(pageChars), 1)
+	maxChars, err := notionCharsBound.Clamp(ctx, tc.DB.Read, args, "max_chars")
 	if err != nil {
 		return nil, err
 	}
@@ -203,12 +201,17 @@ func fetchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, e
 	return withMeta(ctx, tc, page, pageID)
 }
 
+var (
+	notionLimitBound = tool.NewBound(assistant.KeyNotionMaxResults, "")
+	notionCharsBound = tool.NewBound(assistant.KeyNotionPageChars, "")
+)
+
 func readTools() []tool.Tool {
 	return []tool.Tool{
 		{
 			Name:        "search_knowledge",
 			Description: "Search the operator's Notion wiki mirror: exact title/alias matches first, then full-text plus semantic hits. Private pages are never returned. Use fetch_knowledge for a full page.",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 10}}, "required": ["query"], "additionalProperties": false}`),
+			InputSchema: json.RawMessage(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": ` + notionLimitBound.Schema() + `}, "required": ["query"], "additionalProperties": false}`),
 			Handler:     searchKnowledge,
 			Effect:      tool.Read,
 			Contexts:    readKinds,
@@ -216,7 +219,7 @@ func readTools() []tool.Tool {
 		{
 			Name:        "fetch_knowledge",
 			Description: "Fetch a Notion page's markdown by page_id from the local mirror, falling back to live Notion when the mirror is missing or stale.",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"page_id": {"type": "string"}, "max_chars": {"type": "integer", "minimum": 1, "maximum": 12000}}, "required": ["page_id"], "additionalProperties": false}`),
+			InputSchema: json.RawMessage(`{"type": "object", "properties": {"page_id": {"type": "string"}, "max_chars": ` + notionCharsBound.Schema() + `}, "required": ["page_id"], "additionalProperties": false}`),
 			Handler:     fetchKnowledge,
 			Effect:      tool.Read,
 			Contexts:    readKinds,

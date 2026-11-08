@@ -34,6 +34,7 @@ import (
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
 	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
@@ -111,6 +112,7 @@ func newSiteOn(t *testing.T, d *db.DB, options ...siteOption) *site {
 	}
 	reg := allTools(t, s.fetch)
 	s.runner.Registry = reg
+	s.runner.Undoers = toolset.Undoers(config.OS)
 	module := Module(Options{Runner: s.runner, Registry: reg, Client: s.api.Client(), Now: s.now, Poll: 10 * time.Millisecond, KeepAlive: 200 * time.Millisecond})
 	s.srv, err = web.New(web.Options{Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, Render: render, Modules: []web.Module{module}})
 	if err != nil {

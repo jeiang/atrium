@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
@@ -65,7 +64,7 @@ func truthy(v any) bool {
 	return true
 }
 
-func optionalText(args py.Dict, name string) (any, error) {
+func optionalText(args tool.Args, name string) (any, error) {
 	text, ok, err := tool.TextArg(args, name, false)
 	if err != nil || !ok {
 		return nil, err
@@ -73,7 +72,7 @@ func optionalText(args py.Dict, name string) (any, error) {
 	return text, nil
 }
 
-func requiredText(args py.Dict, name string) (any, error) {
+func requiredText(args tool.Args, name string) (any, error) {
 	text, ok, err := tool.TextArg(args, name, true)
 	if err != nil || !ok {
 		return nil, err
@@ -81,7 +80,7 @@ func requiredText(args py.Dict, name string) (any, error) {
 	return text, nil
 }
 
-func spec(args py.Dict, tz *time.Location, defaultMinutes int) (string, calendar.Spec, error) {
+func spec(args tool.Args, tz *time.Location, defaultMinutes int) (string, calendar.Spec, error) {
 	raw := py.Dict{}
 	for _, name := range []string{"end", "location", "notes"} {
 		v, err := optionalText(args, name)
@@ -109,7 +108,7 @@ func spec(args py.Dict, tz *time.Location, defaultMinutes int) (string, calendar
 	return target, normalized, wrap(err)
 }
 
-func list(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func list(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	start, err := requiredText(args, "start")
 	if err != nil {
 		return nil, err
@@ -133,7 +132,7 @@ func list(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	return listing.Dict(), nil
 }
 
-func create(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	tz, err := calendar.Zone(tc.Env)
 	if err != nil {
 		return nil, err
@@ -154,7 +153,7 @@ func create(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		if err := calendar.Track(ctx, tx, normalized, target, nil, tc.Now()); err != nil {
 			return err
 		}
-		_, err := writes.Record(ctx, tx, writes.New{
+		_, err := writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_create",
 			Target: target + ":" + normalized.UID,
 			After:  py.Dict{{Key: "calendar", Value: target}, {Key: "spec", Value: normalized.Dict()}},
@@ -169,7 +168,7 @@ func create(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		py.Pair{Key: "end", Value: normalized.End}), nil
 }
 
-func remove(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	uid, _, err := tool.TextArg(args, "uid", true)
 	if err != nil {
 		return nil, err
@@ -196,7 +195,7 @@ func remove(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 		if err := calendar.Untrack(ctx, tx, uid, tc.Now()); err != nil {
 			return err
 		}
-		_, err := writes.Record(ctx, tx, writes.New{
+		_, err := writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_delete",
 			Target: row.Calendar + ":" + uid,
 			Before: py.Dict{{Key: "calendar", Value: row.Calendar}, {Key: "spec", Value: stored}},
@@ -210,7 +209,7 @@ func remove(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	return py.Dict{{Key: "deleted", Value: uid}, {Key: "calendar", Value: row.Calendar}}, nil
 }
 
-func propose(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw := py.Dict{}
 	for _, name := range []string{"title", "start", "end", "location", "notes"} {
 		v, err := optionalText(args, name)
@@ -223,12 +222,12 @@ func propose(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	target, _ := args.Get("calendar")
 	raw = raw.Set("all_day", truthy(flag)).Set("calendar", target)
 	source := py.Dict{}
-	messageID, hasID := args.Get("source_message_id")
-	switch id := messageID.(type) {
-	case int64, bool, *big.Int:
-		source = source.Set("message_id", id)
-	default:
-		hasID = false
+	if _, hasID := args.Get("source_message_id"); hasID {
+		messageID, _, err := tool.IntArg(args, "source_message_id", true)
+		if err != nil {
+			return nil, err
+		}
+		source = source.Set("message_id", messageID)
 	}
 	proposals := &calendar.Proposals{DB: tc.DB, Now: tc.Now, Env: tc.Env}
 	id, created, err := proposals.Propose(ctx, raw, source, "")
@@ -242,7 +241,7 @@ func propose(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if !created {
 		return py.Dict{{Key: "proposed", Value: false}, {Key: "reason", Value: "an identical proposal already exists"}}, nil
 	}
-	if hasID && truthy(messageID) {
+	if messageID, ok := source.Get("message_id"); ok {
 		if err := candidates.Mark(ctx, tc.DB, messageID, candidates.Drafted, tc.Now()); err != nil {
 			return nil, err
 		}

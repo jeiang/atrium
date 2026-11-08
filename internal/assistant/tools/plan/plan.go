@@ -14,7 +14,7 @@ import (
 
 const Name = "plan"
 
-func plan(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func plan(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, _ := args.Get("items")
 	var items []workspace.PlanItem
 	err := tc.DB.WithTx(ctx, func(tx *sql.Tx) error {

@@ -1,6 +1,7 @@
 package block
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -160,18 +161,20 @@ type Use struct {
 	Input json.RawMessage `json:"input"`
 }
 
-func (u Use) Args() (json.RawMessage, any, error) {
+func (u Use) Args() (json.RawMessage, map[string]any, error) {
 	if len(u.Input) == 0 {
-		return json.RawMessage(`{}`), py.Dict{}, nil
+		return json.RawMessage(`{}`), map[string]any{}, nil
 	}
-	v, err := py.JSONLoads(u.Input)
-	if err != nil {
+	dec := json.NewDecoder(bytes.NewReader(u.Input))
+	dec.UseNumber()
+	var args map[string]any
+	if err := dec.Decode(&args); err != nil {
 		return nil, nil, fmt.Errorf("block: tool %s input: %w", u.Name, err)
 	}
-	if !py.Truthy(v) {
-		return json.RawMessage(`{}`), py.Dict{}, nil
+	if args == nil {
+		args = map[string]any{}
 	}
-	return u.Input, v, nil
+	return u.Input, args, nil
 }
 
 func ToolUses(content []json.RawMessage) ([]Use, error) {

@@ -13,7 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/assistant/writes"
 )
 
 func (s *site) thread() {
@@ -117,8 +117,10 @@ func (s *site) profileSet(run int64, key, value string) map[string]any {
 	s.t.Helper()
 	tools := profiletools.Tools()
 	i := slices.IndexFunc(tools, func(tl tool.Tool) bool { return tl.Name == "profile_set" })
-	tc := &tool.Context{DB: s.db, Cfg: s.cfg, Env: s.env, Kind: tool.Chat, ThreadID: 1, RunID: run, Now: func() float64 { return 100 }}
-	out, err := tools[i].Handler(context.Background(), tc, py.Dict{{Key: "key", Value: key}, {Key: "value", Value: value}})
+	reg := writes.NewRegistry()
+	profiletools.RegisterUndoer(reg)
+	tc := &tool.Context{DB: s.db, Cfg: s.cfg, Env: s.env, Kind: tool.Chat, ThreadID: 1, RunID: run, Now: func() float64 { return 100 }, Undoers: reg}
+	out, err := tools[i].Handler(context.Background(), tc, tool.Args{"key": key, "value": value})
 	if err != nil {
 		s.t.Fatal(err)
 	}

@@ -408,7 +408,7 @@ func compactResults(payloadValue any, rowCap int, lim limits) (any, error) {
 	return py.Dict{{Key: "series", Value: series}, {Key: "total_series", Value: int64(len(frames))}}, nil
 }
 
-func datasources(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
+func datasources(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	lim, err := readLimits(ctx, tc)
 	if err != nil {
 		return nil, err
@@ -432,7 +432,7 @@ func datasources(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) 
 	return py.Dict{{Key: "datasources", Value: out}}, nil
 }
 
-func query(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func query(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	uid, _, err := tool.TextArg(args, "datasource_uid", true)
 	if err != nil {
 		return nil, err
@@ -500,7 +500,7 @@ func query(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	return compactResults(payload, rowCap, lim)
 }
 
-func alerts(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
+func alerts(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	lim, err := readLimits(ctx, tc)
 	if err != nil {
 		return nil, err
@@ -557,7 +557,7 @@ func alerts(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
 	return py.Dict{{Key: "total_firing", Value: int64(len(firing))}, {Key: "alerts", Value: out}}, nil
 }
 
-func searchDashboards(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func searchDashboards(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	text, _, err := tool.TextArg(args, "query", false)
 	if err != nil {
 		return nil, err

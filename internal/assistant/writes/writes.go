@@ -62,7 +62,7 @@ func dump(value any, scrub bool) *string {
 	return &text
 }
 
-func Record(ctx context.Context, q db.Querier, w New) (int64, error) {
+func Record(ctx context.Context, q db.Querier, reg *Registry, w New) (int64, error) {
 	before := dump(w.Before, true)
 	after := dump(w.After, true)
 	undo := dump(w.Undo, false)
@@ -71,8 +71,12 @@ func Record(ctx context.Context, q db.Querier, w New) (int64, error) {
 		if err := json.Unmarshal([]byte(*undo), &desc); err != nil {
 			return 0, fmt.Errorf("writes: undo payload: %w", err)
 		}
-		if op, _ := desc["op"].(string); op == "" {
+		op, _ := desc["op"].(string)
+		if op == "" {
 			return 0, errors.New("writes: undo payload without an op")
+		}
+		if reg == nil || reg.lookup(op) == nil {
+			return 0, UndoError("unknown undo kind " + strconv.Quote(op))
 		}
 	}
 	res, err := q.ExecContext(ctx,

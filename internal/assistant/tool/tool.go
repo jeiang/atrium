@@ -6,12 +6,19 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/progress"
+	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
 
-type Handler func(ctx context.Context, tc *Context, args py.Dict) (any, error)
+type Args map[string]any
+
+func (a Args) Get(name string) (any, bool) {
+	v, ok := a[name]
+	return v, ok
+}
+
+type Handler func(ctx context.Context, tc *Context, args Args) (any, error)
 
 type Tool struct {
 	Name        string
@@ -36,4 +43,5 @@ type Context struct {
 	Now         func() float64
 	Client      *anthropic.Client
 	Progress    *progress.Writer
+	Undoers     *writes.Registry
 }

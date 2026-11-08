@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/usage"
+	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -51,6 +52,7 @@ func (e LeaseLost) Error() string { return string(e) }
 
 type Runner struct {
 	Registry     *registry.Registry
+	Undoers      *writes.Registry
 	Profile      func(ctx context.Context, q db.Querier) (string, error)
 	SkillsIndex  func(ctx context.Context, q db.Querier) (string, error)
 	ExpandSkills func(ctx context.Context, q db.Querier, text string) (expanded string, used []string, err error)
@@ -236,7 +238,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	writer := progress.NewWriter(d.Write, runID, now)
 	tc := &tool.Context{
 		DB: d, Cfg: cfg, Env: env, Kind: kind, ThreadID: thread.ID, RunID: runID, AllowedURLs: allowed,
-		Embed: o.Embed, Now: now, Client: client, Progress: writer,
+		Embed: o.Embed, Now: now, Client: client, Progress: writer, Undoers: r.Undoers,
 	}
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,

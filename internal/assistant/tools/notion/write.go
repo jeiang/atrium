@@ -148,7 +148,7 @@ func hubOf(ctx context.Context, tc *tool.Context, root, value string, defaultRoo
 	return parent, nil
 }
 
-func cleanArgs(wiki notion.Wiki, args py.Dict) (aliases, sources []string, err error) {
+func cleanArgs(wiki notion.Wiki, args tool.Args) (aliases, sources []string, err error) {
 	raw := dictGet(args, "aliases")
 	if !truthy(raw) {
 		raw = []any{}
@@ -165,7 +165,7 @@ func cleanArgs(wiki notion.Wiki, args py.Dict) (aliases, sources []string, err e
 
 func today(tc *tool.Context) (string, error) { return notion.LocalDate(tc.Now(), tc.Env) }
 
-func optionalText(args py.Dict, name string) (string, error) {
+func optionalText(args tool.Args, name string) (string, error) {
 	text, _, err := tool.TextArg(args, name, false)
 	return text, err
 }
@@ -191,7 +191,7 @@ func (w write) commit(ctx context.Context, tc *tool.Context, upsert func(*sql.Tx
 		if tc.RunID != 0 {
 			run = &tc.RunID
 		}
-		id, err = writes.Record(ctx, tx, writes.New{
+		id, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: thread, RunID: run, Tool: w.tool, Target: w.target,
 			Before: w.before, After: w.after, Undo: w.undo,
 		})
@@ -247,7 +247,7 @@ func strs(values []string) []any {
 	return out
 }
 
-func createPage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func createPage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	title, err := required(args, "title")
 	if err != nil {
 		return nil, err
@@ -364,7 +364,7 @@ func newMarkdown(previous string, replace, appendText *string, section string) (
 	return strings.TrimRight(previous, "\n") + "\n\n" + *appendText, nil
 }
 
-func optionalString(args py.Dict, name string) (*string, error) {
+func optionalString(args tool.Args, name string) (*string, error) {
 	v := dictGet(args, name)
 	if v == nil {
 		return nil, nil
@@ -376,7 +376,7 @@ func optionalString(args py.Dict, name string) (*string, error) {
 	return &s, nil
 }
 
-func updatePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func updatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, err := required(args, "page_id")
 	if err != nil {
 		return nil, err
@@ -489,7 +489,7 @@ func replaceContent(text string) py.Dict {
 	return py.Dict{{Key: "type", Value: "replace_content"}, {Key: "replace_content", Value: py.Dict{{Key: "new_str", Value: text}}}}
 }
 
-func movePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func movePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, err := required(args, "page_id")
 	if err != nil {
 		return nil, err
@@ -559,7 +559,7 @@ func relocate(ctx context.Context, q db.Querier, client *notion.Client, pageID, 
 	return
 }
 
-func archivePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func archivePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, err := required(args, "page_id")
 	if err != nil {
 		return nil, err
@@ -609,7 +609,7 @@ func trash(ctx context.Context, q db.Querier, client *notion.Client, pageID stri
 	return
 }
 
-func addAlias(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func addAlias(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, err := required(args, "page_id")
 	if err != nil {
 		return nil, err
@@ -729,6 +729,6 @@ func writeTools() []tool.Tool {
 
 func Tools() []tool.Tool { return append(readTools(), writeTools()...) }
 
-func CreatePage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func CreatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	return createPage(ctx, tc, args)
 }

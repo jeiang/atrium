@@ -68,7 +68,7 @@ func optional(s *string) any {
 	return *s
 }
 
-func get(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func get(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	key, ok, err := tool.TextArg(args, "key", false)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func get(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	return py.Dict{{Key: "entries", Value: entries}}, nil
 }
 
-func set(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	key, keyOK, err := tool.TextArg(args, "key", true)
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func set(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 			key, value, tc.Now()); err != nil {
 			return err
 		}
-		writeID, err = writes.Record(ctx, tx, writes.New{
+		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "profile_set", Target: "profile:" + key,
 			Before: map[string]any{"value": optional(previous)},
 			After:  map[string]any{"value": value},

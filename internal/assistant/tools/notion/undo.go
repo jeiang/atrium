@@ -123,8 +123,8 @@ func RegisterUndoers(r *writes.Registry, env config.Env) {
 	r.Register(undoAliases, undoAliasList)
 }
 
-func pageArg(payload py.Dict, key string) (string, error) {
-	v, _ := dictGet(payload, key).(string)
+func pageArg(payload map[string]any, key string) (string, error) {
+	v, _ := payload[key].(string)
 	if strings.TrimSpace(v) == "" {
 		return "", tool.Error("payload." + key + " must be a Notion page id")
 	}
@@ -143,8 +143,8 @@ func proposer(tc *tool.Context) *notion.Proposer {
 	return &notion.Proposer{DB: tc.DB, Now: tc.Now}
 }
 
-func proposeEdit(ctx context.Context, tc *tool.Context, payload py.Dict) (*int64, error) {
-	instruction, _ := dictGet(payload, "instruction").(string)
+func proposeEdit(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error) {
+	instruction, _ := payload["instruction"].(string)
 	if strings.TrimSpace(instruction) == "" {
 		return nil, tool.Error("payload.instruction must be text")
 	}
@@ -156,7 +156,7 @@ func proposeEdit(ctx context.Context, tc *tool.Context, payload py.Dict) (*int64
 	return id, proposed(err)
 }
 
-func proposeLink(ctx context.Context, tc *tool.Context, payload py.Dict) (*int64, error) {
+func proposeLink(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error) {
 	source, err := pageArg(payload, "source_id")
 	if err != nil {
 		return nil, err

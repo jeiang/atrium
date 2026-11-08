@@ -66,7 +66,7 @@ func localISO(ts float64, loc *time.Location) string {
 	return py.ISOFormat(time.Unix(sec, us*1000).In(loc), "minutes")
 }
 
-func threadsToday(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func threadsToday(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	date, ok, err := tool.TextArg(args, "date", false)
 	if err != nil {
 		return nil, err
