@@ -1,11 +1,11 @@
 package notion
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -14,54 +14,61 @@ const (
 )
 
 var (
-	codeRe   = rx.MustCompile("(^[ \\t]*```[^\\n]*\\n.*?^[ \\t]*```[ \\t]*$|`[^`\\n]+`)", rx.DotAll|rx.Multiline)
-	attrRe   = rx.MustCompile(`([\w-]+)="([^"]*)"`, 0)
-	refRe    = rx.MustCompile(`(?<!\\)<(page|database|mention-page|mention-database|mention-data-source)\b([^>]*?)(?:/>|>(.*?)</\1>)`, rx.DotAll)
-	mediaRe  = rx.MustCompile(`(?<!\\)<(audio|video|file|pdf|embed)\b([^>]*?)(?:/>|>(.*?)</\1>)`, rx.DotAll)
-	dateRe   = rx.MustCompile(`(?<!\\)<mention-date\b([^>]*?)/>`, 0)
-	tableRe  = rx.MustCompile(`(?<!\\)<table\b([^>]*)>(.*?)</table>`, rx.DotAll)
-	rowRe    = rx.MustCompile(`<tr\b[^>]*>(.*?)</tr>`, rx.DotAll)
-	cellRe   = rx.MustCompile(`<t[dh]\b[^>]*>(.*?)</t[dh]>`, rx.DotAll)
-	emptyRe  = rx.MustCompile(`^[ \t]*<empty-block\s*/>[ \t]*$`, rx.Multiline)
-	breakRe  = rx.MustCompile(`(?<!\\)<br\s*/?>`, 0)
-	summary  = rx.MustCompile(`(?<!\\)<summary>(.*?)</summary>`, rx.DotAll)
-	wrapper  = rx.MustCompile(`(?<!\\)</?(?:details|callout|columns|column|span|synced_block|synced_block_reference|mention-user|mention-agent|table_of_contents|custom-block|colgroup|col)\b[^>]*>`, 0)
-	blockAtt = rx.MustCompile(`[ \t]*\{(?:[\w-]+="[^"]*"[ \t]*)+\}[ \t]*$`, rx.Multiline)
-	imageRe  = rx.MustCompile(`!\[([^\]]*)\]\(([^)\s]+)\)`, 0)
-	pipeRe   = rx.MustCompile(`(?<!\\)\|`, 0)
+	codeRe   = regexp.MustCompile("(?sm)(^[ \\t]*```[^\\n]*\\n.*?^[ \\t]*```[ \\t]*$|`[^`\\n]+`)")
+	attrRe   = regexp.MustCompile(`([\w-]+)="([^"]*)"`)
+	refRe    = regexp.MustCompile(`<(page|database|mention-page|mention-database|mention-data-source)\b([^>]*?)(?:/>|>(.*?)</(?:page|database|mention-page|mention-database|mention-data-source)>)`)
+	mediaRe  = regexp.MustCompile(`<(audio|video|file|pdf|embed)\b([^>]*?)(?:/>|>(.*?)</(?:audio|video|file|pdf|embed)>)`)
+	dateRe   = regexp.MustCompile(`<mention-date\b([^>]*?)/>`)
+	tableRe  = regexp.MustCompile(`(?s)<table\b([^>]*)>(.*?)</table>`)
+	rowRe    = regexp.MustCompile(`(?s)<tr\b[^>]*>(.*?)</tr>`)
+	cellRe   = regexp.MustCompile(`(?s)<t[dh]\b[^>]*>(.*?)</t[dh]>`)
+	emptyRe  = regexp.MustCompile(`(?m)^[ \t]*<empty-block\s*/>[ \t]*$`)
+	breakRe  = regexp.MustCompile(`<br\s*/?>`)
+	summary  = regexp.MustCompile(`(?s)<summary>(.*?)</summary>`)
+	wrapper  = regexp.MustCompile(`</?(?:details|callout|columns|column|span|synced_block|synced_block_reference|mention-user|mention-agent|table_of_contents|custom-block|colgroup|col)\b[^>]*>`)
+	blockAtt = regexp.MustCompile(`(?m)[ \t]*\{(?:[\w-]+="[^"]*"[ \t]*)+\}[ \t]*$`)
+	imageRe  = regexp.MustCompile(`!\[([^\]]*)\]\(([^)\s]+)\)`)
+	pipeRe   = regexp.MustCompile(`\|`)
 
-	linkRe     = rx.MustCompile(`\[([^\]]*)\]\([^)]*\)`, 0)
-	headingRe  = rx.MustCompile(`^[ \t]*#{1,6}[ \t]+`, rx.Multiline)
-	listMark   = rx.MustCompile(`^[ \t]*(?:[-*+]|\d+\.)[ \t]+(?:\[[ xX]\][ \t]+)?`, rx.Multiline)
-	quoteRe    = rx.MustCompile(`^[ \t]*>[ \t]?`, rx.Multiline)
-	ruleRe     = rx.MustCompile(`^[ \t]*(?:-{3,}|\*{3,})[ \t]*$`, rx.Multiline)
-	emphasisRe = rx.MustCompile("\\*\\*|__|~~|`", 0)
-	tagRe      = rx.MustCompile(`(?<!\\)</?[a-z][\w-]*\b[^<>]*>`, 0)
-	cutTagRe   = rx.MustCompile(`(?<!\\)<[a-z/][^<>]*$`, 0)
-	escapeRe   = rx.MustCompile(`\\([\\`+"`"+`*_{}\[\]()#+\-.!|~<>$^])`, 0)
+	linkRe     = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+	headingRe  = regexp.MustCompile(`(?m)^[ \t]*#{1,6}[ \t]+`)
+	listMark   = regexp.MustCompile(`(?m)^[ \t]*(?:[-*+]|\d+\.)[ \t]+(?:\[[ xX]\][ \t]+)?`)
+	quoteRe    = regexp.MustCompile(`(?m)^[ \t]*>[ \t]?`)
+	ruleRe     = regexp.MustCompile(`(?m)^[ \t]*(?:-{3,}|\*{3,})[ \t]*$`)
+	emphasisRe = regexp.MustCompile("\\*\\*|__|~~|`")
+	tagRe      = regexp.MustCompile(`</?[a-z][\w-]*\b[^<>]*>`)
+	cutTagRe   = regexp.MustCompile(`<[a-z/][^<>]*$`)
+	escapeRe   = regexp.MustCompile(`\\([\\` + "`" + `*_{}\[\]()#+\-.!|~<>$^])`)
 )
 
-func sub(re *rx.Regexp, s string, fn func(*rx.Match) string) string {
-	out, err := re.SubFunc(s, fn, 0)
-	if err != nil {
-		return s
+func group(s string, loc []int, i int) string {
+	if loc[2*i] < 0 {
+		return ""
 	}
-	return out
+	return s[loc[2*i]:loc[2*i+1]]
 }
 
-func subText(re *rx.Regexp, repl, s string) string {
-	out, err := re.Sub(repl, s, 0)
-	if err != nil {
-		return s
+func sub(re *regexp.Regexp, s string, skipEscaped bool, fn func(loc []int) string) string {
+	var b strings.Builder
+	last := 0
+	for _, loc := range re.FindAllStringSubmatchIndex(s, -1) {
+		if skipEscaped && loc[0] > 0 && s[loc[0]-1] == '\\' {
+			continue
+		}
+		b.WriteString(s[last:loc[0]])
+		b.WriteString(fn(loc))
+		last = loc[1]
 	}
-	return out
+	b.WriteString(s[last:])
+	return b.String()
 }
+
+func subText(re *regexp.Regexp, repl, s string) string { return re.ReplaceAllString(s, repl) }
 
 func attrs(s string) map[string]string {
 	out := map[string]string{}
-	matches, _ := attrRe.FindIter(s)
-	for _, m := range matches {
-		out[m.Group(1)] = m.Group(2)
+	for _, loc := range attrRe.FindAllStringSubmatchIndex(s, -1) {
+		out[group(s, loc, 1)] = group(s, loc, 2)
 	}
 	return out
 }
@@ -73,9 +80,9 @@ func link(label, url string) string {
 	return "[" + label + "](<" + url + ">)"
 }
 
-func refLink(found *rx.Match, titles map[string]string) string {
-	url := attrs(found.Group(2))["url"]
-	title := py.Strip(found.Group(3))
+func refLink(s string, loc []int, titles map[string]string) string {
+	url := attrs(group(s, loc, 2))["url"]
+	title := py.Strip(group(s, loc, 3))
 	if title == "" {
 		if ids := notionid.IDsInText(url); len(ids) > 0 {
 			title = titles[ids[0]]
@@ -95,8 +102,8 @@ func mediaLink(caption, url string) string {
 	return link(label, url)
 }
 
-func dateText(found *rx.Match) string {
-	a := attrs(found.Group(1))
+func dateText(s string, loc []int) string {
+	a := attrs(group(s, loc, 1))
 	join := func(parts ...string) string {
 		var kept []string
 		for _, p := range parts {
@@ -117,14 +124,13 @@ func dateText(found *rx.Match) string {
 	return strings.Join(kept, " → ")
 }
 
-func tableRows(found *rx.Match) ([][]string, int) {
+func tableRows(s string, loc []int) ([][]string, int) {
 	var rows [][]string
-	rowMatches, _ := rowRe.FindIter(found.Group(2))
-	for _, r := range rowMatches {
+	for _, r := range rowRe.FindAllStringSubmatchIndex(group(s, loc, 2), -1) {
 		var cells []string
-		cellMatches, _ := cellRe.FindIter(r.Group(1))
-		for _, c := range cellMatches {
-			cells = append(cells, cellText(c.Group(1)))
+		inner := group(s, loc, 2)
+		for _, c := range cellRe.FindAllStringSubmatchIndex(group(inner, r, 1), -1) {
+			cells = append(cells, cellText(group(group(inner, r, 1), c, 1)))
 		}
 		rows = append(rows, cells)
 	}
@@ -142,17 +148,17 @@ func tableRows(found *rx.Match) ([][]string, int) {
 }
 
 func cellText(raw string) string {
-	flat := subText(breakRe, " ", raw)
-	return subText(pipeRe, `\\|`, strings.Join(py.Split(flat), " "))
+	flat := sub(breakRe, raw, true, func([]int) string { return " " })
+	return sub(pipeRe, flat, true, func([]int) string { return `\\|` })
 }
 
-func tableMarkdown(found *rx.Match) string {
-	rows, width := tableRows(found)
+func tableMarkdown(s string, loc []int) string {
+	rows, width := tableRows(s, loc)
 	if len(rows) == 0 {
 		return ""
 	}
 	head := make([]string, width)
-	if attrs(found.Group(1))["header-row"] == "true" {
+	if attrs(group(s, loc, 1))["header-row"] == "true" {
 		head, rows = rows[0], rows[1:]
 	}
 	rule := make([]string, width)
@@ -166,8 +172,8 @@ func tableMarkdown(found *rx.Match) string {
 	return "\n\n" + strings.Join(lines, "\n") + "\n\n"
 }
 
-func tableWords(found *rx.Match) string {
-	rows, _ := tableRows(found)
+func tableWords(s string, loc []int) string {
+	rows, _ := tableRows(s, loc)
 	var cells []string
 	for _, r := range rows {
 		cells = append(cells, r...)
@@ -175,23 +181,24 @@ func tableWords(found *rx.Match) string {
 	return "\n" + strings.Join(cells, " ") + "\n"
 }
 
-func convert(s string, titles map[string]string, table func(*rx.Match) string) string {
+func convert(s string, titles map[string]string, table func(string, []int) string) string {
 	part := func(chunk string) string {
-		chunk = sub(tableRe, chunk, table)
-		chunk = sub(refRe, chunk, func(m *rx.Match) string { return refLink(m, titles) })
-		chunk = sub(mediaRe, chunk, func(m *rx.Match) string { return mediaLink(m.Group(3), attrs(m.Group(2))["src"]) })
-		chunk = sub(imageRe, chunk, func(m *rx.Match) string { return mediaLink(m.Group(1), m.Group(2)) })
-		chunk = sub(dateRe, chunk, dateText)
-		chunk = sub(summary, chunk, func(m *rx.Match) string { return "**" + py.Strip(m.Group(1)) + "**" })
+		chunk = sub(tableRe, chunk, true, func(loc []int) string { return table(chunk, loc) })
+		chunk = sub(refRe, chunk, true, func(loc []int) string { return refLink(chunk, loc, titles) })
+		chunk = sub(mediaRe, chunk, true, func(loc []int) string {
+			return mediaLink(group(chunk, loc, 3), attrs(group(chunk, loc, 2))["src"])
+		})
+		chunk = sub(imageRe, chunk, false, func(loc []int) string {
+			return mediaLink(group(chunk, loc, 1), group(chunk, loc, 2))
+		})
+		chunk = sub(dateRe, chunk, true, func(loc []int) string { return dateText(chunk, loc) })
+		chunk = sub(summary, chunk, true, func(loc []int) string { return "**" + py.Strip(group(chunk, loc, 1)) + "**" })
 		chunk = subText(emptyRe, "", chunk)
-		chunk = subText(wrapper, "", chunk)
-		chunk = subText(breakRe, "\n", chunk)
+		chunk = sub(wrapper, chunk, true, func([]int) string { return "" })
+		chunk = sub(breakRe, chunk, true, func([]int) string { return "\n" })
 		return subText(blockAtt, "", chunk)
 	}
-	pieces, err := codeRe.Split(s, 0)
-	if err != nil {
-		return s
-	}
+	pieces := splitKeep(codeRe, s)
 	var b strings.Builder
 	for i, piece := range pieces {
 		if i%2 == 1 {
@@ -203,6 +210,19 @@ func convert(s string, titles map[string]string, table func(*rx.Match) string) s
 	return b.String()
 }
 
+func splitKeep(re *regexp.Regexp, s string) []string {
+	var out []string
+	last := 0
+	for _, loc := range re.FindAllStringSubmatchIndex(s, -1) {
+		out = append(out, s[last:loc[0]])
+		for i := 1; i < len(loc)/2; i++ {
+			out = append(out, group(s, loc, i))
+		}
+		last = loc[1]
+	}
+	return append(out, s[last:])
+}
+
 func Commonmark(s string, titles map[string]string) string {
 	return convert(s, titles, tableMarkdown)
 }
@@ -210,12 +230,18 @@ func Commonmark(s string, titles map[string]string) string {
 func Plain(s string, titles map[string]string) string {
 	readable := convert(s, titles, tableWords)
 	for _, step := range []struct {
-		re   *rx.Regexp
-		repl string
+		re      *regexp.Regexp
+		repl    string
+		escaped bool
 	}{
-		{linkRe, `\1`}, {headingRe, ""}, {listMark, ""}, {quoteRe, ""}, {ruleRe, ""},
-		{emphasisRe, ""}, {tagRe, ""}, {cutTagRe, ""}, {escapeRe, `\1`},
+		{linkRe, "${1}", false}, {headingRe, "", false}, {listMark, "", false}, {quoteRe, "", false},
+		{ruleRe, "", false}, {emphasisRe, "", false}, {tagRe, "", true}, {cutTagRe, "", true},
+		{escapeRe, "${1}", false},
 	} {
+		if step.escaped {
+			readable = sub(step.re, readable, true, func([]int) string { return step.repl })
+			continue
+		}
 		readable = subText(step.re, step.repl, readable)
 	}
 	return balanced(strings.Join(py.Split(readable), " "))

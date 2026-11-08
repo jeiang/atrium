@@ -4,37 +4,34 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"html"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const month = `(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?`
 
 var (
-	currencyRE = rx.MustCompile(
-		`(?:[$€£]\s?\d[\d,]*\.\d{2})|(?:\b(?:usd|ttd|tt\$|cad)\s?\d[\d,]*(?:\.\d{2})?)|(?:\b\d[\d,]*\.\d{2}\s?(?:usd|ttd|cad)\b)`,
-		rx.IgnoreCase,
-	)
-	otpRE         = rx.MustCompile(`(?<![\d.,$#-])\d{6}(?![\d.,-])`, 0)
-	vcodeRE       = rx.MustCompile(`verification code|security code|one[- ]time|passcode|your code|login code`, 0)
-	replyPrefixRE = rx.MustCompile(`^\s*(re|fwd?|fw|aw)\s*:\s*`, rx.IgnoreCase)
-	amountRE      = rx.MustCompile(`(?:[$€£]|usd|ttd|tt\$|us\$|cad)\s?\d[\d,]*(?:\.\d+)?|\d[\d,]*(?:\.\d+)?\s?(?:usd|ttd|cad)`, 0)
-	monthDayRE    = rx.MustCompile(`\b`+month+`\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{2,4})?`, 0)
-	dayMonthRE    = rx.MustCompile(`\b\d{1,2}(?:st|nd|rd|th)?\s+`+month+`(?:,?\s+\d{2,4})?`, 0)
-	numericDateRE = rx.MustCompile(`\b\d{1,4}[/-]\d{1,2}[/-]\d{1,4}\b`, 0)
-	numberWordRE  = rx.MustCompile(`\b\w*\d\w*\b`, 0)
-	hashNumberRE  = rx.MustCompile(`#\s*<n>`, 0)
-	spaceRE       = rx.MustCompile(`\s+`, 0)
-	scriptStyleRE = rx.MustCompile(`(?is)<(script|style).*?</\1>`, 0)
-	tagRE         = rx.MustCompile(`<[^>]+>`, 0)
-	digitsRE      = rx.MustCompile(`\d+`, 0)
-	msgidStripRE  = rx.MustCompile(`[<>\s]`, 0)
-	msgidRE       = rx.MustCompile(`<[^<>\s]+>`, 0)
-	dkimDomainRE  = rx.MustCompile(`\bd=([^;\s]+)`, 0)
+	currencyRE    = regexp.MustCompile(`(?i)(?:[$€£]\s?\d[\d,]*\.\d{2})|(?:\b(?:usd|ttd|tt\$|cad)\s?\d[\d,]*(?:\.\d{2})?)|(?:\b\d[\d,]*\.\d{2}\s?(?:usd|ttd|cad)\b)`)
+	otpRE         = regexp.MustCompile(`\d{6}`)
+	vcodeRE       = regexp.MustCompile(`verification code|security code|one[- ]time|passcode|your code|login code`)
+	replyPrefixRE = regexp.MustCompile(`(?i)^\s*(re|fwd?|fw|aw)\s*:\s*`)
+	amountRE      = regexp.MustCompile(`(?:[$€£]|usd|ttd|tt\$|us\$|cad)\s?\d[\d,]*(?:\.\d+)?|\d[\d,]*(?:\.\d+)?\s?(?:usd|ttd|cad)`)
+	monthDayRE    = regexp.MustCompile(`\b` + month + `\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{2,4})?`)
+	dayMonthRE    = regexp.MustCompile(`\b\d{1,2}(?:st|nd|rd|th)?\s+` + month + `(?:,?\s+\d{2,4})?`)
+	numericDateRE = regexp.MustCompile(`\b\d{1,4}[/-]\d{1,2}[/-]\d{1,4}\b`)
+	numberWordRE  = regexp.MustCompile(`\b\w*\d\w*\b`)
+	hashNumberRE  = regexp.MustCompile(`#\s*<n>`)
+	spaceRE       = regexp.MustCompile(`\s+`)
+	scriptStyleRE = regexp.MustCompile(`(?is)<script.*?</script>|<style.*?</style>`)
+	tagRE         = regexp.MustCompile(`<[^>]+>`)
+	digitsRE      = regexp.MustCompile(`\d+`)
+	msgidStripRE  = regexp.MustCompile(`[<>\s]`)
+	msgidRE       = regexp.MustCompile(`<[^<>\s]+>`)
+	dkimDomainRE  = regexp.MustCompile(`\bd=([^;\s]+)`)
 )
 
 var espExact = map[string]string{
@@ -97,14 +94,21 @@ type Features struct {
 	Body        string   `json:"body"`
 }
 
-func sub(re *rx.Regexp, repl, s string) string {
-	out, _ := re.Sub(repl, s, 0)
-	return out
-}
+func sub(re *regexp.Regexp, repl, s string) string { return re.ReplaceAllString(s, repl) }
 
-func found(re *rx.Regexp, s string) bool {
-	m, _ := re.Search(s)
-	return m != nil
+func found(re *regexp.Regexp, s string) bool { return re.MatchString(s) }
+
+func hasOTP(s string) bool {
+	for _, loc := range otpRE.FindAllStringIndex(s, -1) {
+		if loc[0] > 0 && strings.ContainsRune("0123456789.,$#-", rune(s[loc[0]-1])) {
+			continue
+		}
+		if loc[1] < len(s) && strings.ContainsRune("0123456789.,-", rune(s[loc[1]])) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func prefix(s string, n int) string {
@@ -156,7 +160,7 @@ func FilenamePattern(name string) string { return sub(digitsRE, "#", strings.ToL
 func NormalizeMsgID(value string) string { return sub(msgidStripRE, "", value) }
 
 func MsgIDList(value string) []string {
-	ids, _ := msgidRE.FindAll(value)
+	ids := msgidRE.FindAllString(value, -1)
 	out := make([]string, len(ids))
 	for i, id := range ids {
 		out[i] = NormalizeMsgID(id)
@@ -266,8 +270,8 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, 
 	rpath := addresses(msg, "Return-Path")
 	dkim := map[string]bool{}
 	for _, v := range msg.Headers("DKIM-Signature") {
-		if m, _ := dkimDomainRE.Search(v); m != nil {
-			dkim[strings.ToLower(m.Group(1))] = true
+		if loc := dkimDomainRE.FindStringSubmatchIndex(v); loc != nil {
+			dkim[strings.ToLower(v[loc[2]:loc[3]])] = true
 		}
 	}
 	if attachments == nil {
@@ -312,7 +316,7 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, 
 		KReceipt:    strings.Contains(low, "receipt"),
 		KOrder:      strings.Contains(low, "order"),
 		KVCode:      found(vcodeRE, low),
-		KOTP6:       found(otpRE, prefix(body, 600)),
+		KOTP6:       hasOTP(prefix(body, 600)),
 		BodyLen:     len([]rune(body)),
 		Body:        prefix(body, ftsBodyChars),
 	}

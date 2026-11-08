@@ -58,7 +58,7 @@ var labelSets = map[string][]pair{
 		{"eq", "Exact value, case-insensitive"},
 		{"in", "Values separated by commas"},
 		{"suffix", "Domains separated by commas"},
-		{"re", "Python regular expression, case-insensitive"},
+		{"re", "RE2 regular expression, case-insensitive"},
 		{"gte", "Whole number of days"},
 	},
 	"kind": {

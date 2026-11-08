@@ -10,15 +10,16 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 var (
-	name = rx.MustCompile(`^[a-z0-9][a-z0-9_-]{0,47}$`, 0)
-	ref  = rx.MustCompile(`(?<![\w/])/skill:([a-z0-9][a-z0-9_-]{0,47})|\[\[skill:([a-z0-9][a-z0-9_-]{0,47})\]\]`, 0)
+	name = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,47}$`)
+	ref  = regexp.MustCompile(`/skill:([a-z0-9][a-z0-9_-]{0,47})|\[\[skill:([a-z0-9][a-z0-9_-]{0,47})\]\]`)
 )
 
 type Error string
@@ -72,10 +73,7 @@ func Get(ctx context.Context, q db.Querier, skill string) (*Skill, error) {
 	return &s, nil
 }
 
-func matches(re *rx.Regexp, s string) bool {
-	m, _ := re.Match(s)
-	return m != nil
-}
+func matches(re *regexp.Regexp, s string) bool { return re.MatchString(s) }
 
 func Save(ctx context.Context, q db.Querier, skill, description, body string, now float64) error {
 	skill = py.Strip(skill)
@@ -194,13 +192,18 @@ func IndexBlock(ctx context.Context, q db.Querier) (string, error) {
 }
 
 func References(text string) []string {
-	found, _ := ref.FindIter(text)
 	out := []string{}
 	seen := map[string]bool{}
-	for _, m := range found {
-		n := m.Group(1)
-		if n == "" {
-			n = m.Group(2)
+	for _, loc := range ref.FindAllStringSubmatchIndex(text, -1) {
+		if strings.HasPrefix(text[loc[0]:], "/skill:") && loc[0] > 0 && isWordByte(text[loc[0]-1]) {
+			continue
+		}
+		n := ""
+		if loc[2] >= 0 {
+			n = text[loc[2]:loc[3]]
+		}
+		if n == "" && loc[4] >= 0 {
+			n = text[loc[4]:loc[5]]
 		}
 		if !seen[n] {
 			seen[n] = true
@@ -208,6 +211,10 @@ func References(text string) []string {
 		}
 	}
 	return out
+}
+
+func isWordByte(c byte) bool {
+	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
 func SplitKnown(ctx context.Context, q db.Querier, names []string) (known, unknown []string, err error) {

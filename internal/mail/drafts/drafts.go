@@ -16,6 +16,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -23,7 +25,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/mail/smtp"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -170,8 +171,8 @@ func (s *Store) List(ctx context.Context, status string, limit int) ([]Row, erro
 }
 
 var (
-	lineBreakRE = rx.MustCompile(`[\r\n]`, 0)
-	msgidJunkRE = rx.MustCompile(`[<>\s]`, 0)
+	lineBreakRE = regexp.MustCompile(`[\r\n]`)
+	msgidJunkRE = regexp.MustCompile(`[<>\s]`)
 )
 
 func accountError() Error {
@@ -193,7 +194,7 @@ func validAccount(v any) (string, bool) {
 
 func cleanLine(name, value string, limit int) (string, error) {
 	value = py.Strip(value)
-	if m, _ := lineBreakRE.Search(value); m != nil {
+	if lineBreakRE.MatchString(value) {
 		return "", Error(name + " must be a single line")
 	}
 	if utf8.RuneCountInString(value) > limit {

@@ -7,12 +7,13 @@ import (
 	"net/http"
 	"strconv"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 var (
-	imdbRe = rx.MustCompile(`^(?:tt)?(\d{7,9})$`, 0)
+	imdbRe = regexp.MustCompile(`^(?:tt)?(\d{7,9})$`)
 )
 
 type EztvError string
@@ -29,11 +30,12 @@ type Release struct {
 }
 
 func IMDBDigits(value string) (string, bool) {
-	m := matched(imdbRe.Search(py.Strip(value)))
-	if m == nil {
+	text := py.Strip(value)
+	loc := imdbRe.FindStringSubmatchIndex(text)
+	if loc == nil {
 		return "", false
 	}
-	return m.Group(1), true
+	return text[loc[2]:loc[3]], true
 }
 
 func sizeOf(v any) int64 {

@@ -16,8 +16,9 @@ import (
 	"strconv"
 	"strings"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -46,7 +47,7 @@ var (
 		"missingFiles": "missing files", "unknown": "unknown",
 	}
 
-	btih = rx.MustCompile(`^urn:btih:([0-9a-fA-F]{40}|[A-Za-z2-7]{32})$`, 0)
+	btih = regexp.MustCompile(`^urn:btih:([0-9a-fA-F]{40}|[A-Za-z2-7]{32})$`)
 )
 
 type QbitError string
@@ -184,11 +185,11 @@ func MagnetHash(magnet string) (string, bool) {
 		return "", false
 	}
 	for _, xt := range queryValues(parts.Query, "xt") {
-		m := matched(btih.Match(xt))
-		if m == nil {
+		loc := btih.FindStringSubmatchIndex(xt)
+		if loc == nil || loc[0] != 0 {
 			continue
 		}
-		value := m.Group(1)
+		value := xt[loc[2]:loc[3]]
 		if len(value) == 40 {
 			return strings.ToLower(value), true
 		}

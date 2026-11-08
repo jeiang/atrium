@@ -10,13 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -32,8 +33,8 @@ const (
 )
 
 var (
-	propHeadRe = rx.MustCompile(`^#{1,6}\s+(.*?)\s*#*\s*$`, 0)
-	listItemRe = rx.MustCompile(`^\s*(?:[-*+]|\d+\.)\s`, 0)
+	propHeadRe = regexp.MustCompile(`^#{1,6}\s+(.*?)\s*#*\s*$`)
+	listItemRe = regexp.MustCompile(`^\s*(?:[-*+]|\d+\.)\s`)
 )
 
 type ProposalError string
@@ -343,15 +344,12 @@ func relatedAnchor(markdown string) (string, bool, error) {
 	lines := strings.Split(markdown, "\n")
 	start := -1
 	for i, line := range lines {
-		m, err := propHeadRe.Match(line)
-		if err != nil {
-			return "", false, err
-		}
+		loc := propHeadRe.FindStringSubmatchIndex(line)
 		if start < 0 {
-			if m != nil && strings.EqualFold(py.Strip(m.Group(1)), relatedHeading) {
+			if loc != nil && strings.EqualFold(py.Strip(line[loc[2]:loc[3]]), relatedHeading) {
 				start = i
 			}
-		} else if m != nil {
+		} else if loc != nil {
 			return lastListLine(lines, start, i)
 		}
 	}
@@ -363,11 +361,7 @@ func relatedAnchor(markdown string) (string, bool, error) {
 
 func lastListLine(lines []string, start, end int) (string, bool, error) {
 	for i := end - 1; i > start; i-- {
-		m, err := listItemRe.Match(lines[i])
-		if err != nil {
-			return "", false, err
-		}
-		if m != nil {
+		if loc := listItemRe.FindStringIndex(lines[i]); loc != nil && loc[0] == 0 {
 			return lines[i], true, nil
 		}
 		if py.Strip(lines[i]) != "" {
@@ -379,11 +373,8 @@ func lastListLine(lines []string, start, end int) (string, bool, error) {
 
 func hasRelatedSection(markdown string) (bool, error) {
 	for _, line := range strings.Split(markdown, "\n") {
-		m, err := propHeadRe.Match(line)
-		if err != nil {
-			return false, err
-		}
-		if m != nil && strings.EqualFold(py.Strip(m.Group(1)), relatedHeading) {
+		loc := propHeadRe.FindStringSubmatchIndex(line)
+		if loc != nil && strings.EqualFold(py.Strip(line[loc[2]:loc[3]]), relatedHeading) {
 			return true, nil
 		}
 	}

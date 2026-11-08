@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
@@ -16,14 +18,12 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/router"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 var (
 	log = logx.Logger("atrium.flags")
 
-	automatedLocal = rx.MustCompile(
-		`no[-_.]?reply|do[-_.]?not[-_.]?reply|notifications?|mailer-daemon|postmaster|bounces?`, rx.IgnoreCase)
+	automatedLocal = regexp.MustCompile(`(?i)no[-_.]?reply|do[-_.]?not[-_.]?reply|notifications?|mailer-daemon|postmaster|bounces?`)
 )
 
 type Contacts map[string]struct{}
@@ -65,8 +65,7 @@ func ContactsFlag(row Row, contacts Contacts) (bool, error) {
 }
 
 func AutomatedLocal(local string) (bool, error) {
-	m, err := automatedLocal.Search(local)
-	return m != nil, err
+	return automatedLocal.MatchString(local), nil
 }
 
 type Judge func(ctx context.Context, url string, m llm.Message, body string) (llm.Flags, error)

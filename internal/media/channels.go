@@ -9,12 +9,13 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -67,7 +68,7 @@ type PollOptions struct {
 
 func Now() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
 
-func (t Tuning) CompilePattern(pattern string, caseSensitive bool) (*rx.Regexp, error) {
+func (t Tuning) CompilePattern(pattern string, caseSensitive bool) (*regexp.Regexp, error) {
 	pattern = py.Strip(pattern)
 	if pattern == "" {
 		return nil, ChannelError("pattern is empty")
@@ -75,11 +76,11 @@ func (t Tuning) CompilePattern(pattern string, caseSensitive bool) (*rx.Regexp, 
 	if utf8.RuneCountInString(pattern) > t.PatternChars {
 		return nil, ChannelError(fmt.Sprintf("pattern is longer than %d characters", t.PatternChars))
 	}
-	var flags rx.Flags
+	expr := pattern
 	if !caseSensitive {
-		flags = rx.IgnoreCase
+		expr = "(?i)" + expr
 	}
-	re, err := rx.Compile(pattern, flags)
+	re, err := regexp.Compile(expr)
 	if err != nil {
 		return nil, ChannelError(fmt.Sprintf("pattern %s: %v", py.Repr(pattern), err))
 	}
@@ -209,11 +210,7 @@ func (t Tuning) Preview(releases []Release, pattern string, caseSensitive bool) 
 	}
 	out := make([]PreviewRow, 0, len(releases))
 	for _, r := range releases {
-		m, err := re.Search(r.Title)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, PreviewRow{Release: r, Match: m != nil})
+		out = append(out, PreviewRow{Release: r, Match: re.MatchString(r.Title)})
 	}
 	return out, nil
 }
@@ -323,12 +320,7 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings 
 			continue
 		}
 		for _, t := range releases {
-			m, err := regex.Search(t.Title)
-			if err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", rule.Name, err))
-				continue
-			}
-			if m == nil {
+			if !regex.MatchString(t.Title) {
 				continue
 			}
 			seen, err := isSeen(ctx, q, t.Hash)

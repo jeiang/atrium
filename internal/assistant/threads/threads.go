@@ -13,13 +13,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -55,7 +56,7 @@ const (
 	TitleChars = 80
 )
 
-var urlRe = rx.MustCompile(`https?://[^\s<>\"'()\[\]]+`, 0)
+var urlRe = regexp.MustCompile(`https?://[^\s<>\"'()\[\]]+`)
 
 type OptionError string
 
@@ -511,10 +512,10 @@ func AddAllowedURLs(ctx context.Context, d *db.DB, threadID int64, urls []string
 }
 
 func URLsIn(text string) []string {
-	matches, _ := urlRe.FindIter(text)
-	out := make([]string, len(matches))
-	for i, m := range matches {
-		out[i] = strings.TrimRight(m.Text(), ".,;:!?")
+	found := urlRe.FindAllString(text, -1)
+	out := make([]string, len(found))
+	for i, m := range found {
+		out[i] = strings.TrimRight(m, ".,;:!?")
 	}
 	return out
 }

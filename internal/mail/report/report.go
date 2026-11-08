@@ -11,17 +11,18 @@ import (
 	"strings"
 	"time"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const Gone = "(gone)"
 
-var sinceRe = rx.MustCompile(`^(\d+)([hd])$`, 0)
+var sinceRe = regexp.MustCompile(`^(\d+)([hd])$`)
 
 const liveCopy = "(SELECT l.%s FROM messages l WHERE l.account = m.account AND l.digest = m.digest " +
 	"AND l.gone_at IS NULL ORDER BY l.id DESC LIMIT 1)"
@@ -51,16 +52,13 @@ func ParseSince(env config.Env, value *string, at time.Time) (float64, error) {
 	if value == nil {
 		return 0, nil
 	}
-	m, err := sinceRe.Match(*value)
-	if err != nil {
-		return 0, err
-	}
-	if m != nil {
+	match := sinceRe.FindStringSubmatchIndex(*value)
+	if match != nil {
 		n := new(big.Int)
-		for _, r := range m.Group(1) {
+		for _, r := range (*value)[match[2]:match[3]] {
 			n.Mul(n, big.NewInt(10)).Add(n, big.NewInt(int64(py.DigitValue(r))))
 		}
-		if m.Group(2) == "h" {
+		if (*value)[match[4]:match[5]] == "h" {
 			n.Mul(n, big.NewInt(3600))
 		} else {
 			n.Mul(n, big.NewInt(86400))

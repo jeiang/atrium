@@ -35,7 +35,7 @@ in
     pname = "atrium";
     version = "0.1.0";
     inherit src;
-    vendorHash = "sha256-6lVfSTy4LhejmYJ5Qh66nRgG82tWd880D32l0XmbkU8=";
+    vendorHash = "sha256-kXYjw9LQFwvOBMnc2wP3PkkRg6YYhiaincLAtRyAU2Q=";
     proxyVendor = true;
     excludedPackages = ["third_party"];
     tags = ["libsqlite3" "sqlite_fts5"];

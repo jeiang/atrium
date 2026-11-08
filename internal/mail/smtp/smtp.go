@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -33,11 +33,11 @@ func SenderAddress(account, user string) string {
 	return user
 }
 
-var commaRunRE = rx.MustCompile(`[\s,]*,[\s,]*`, 0)
+var commaRunRE = regexp.MustCompile(`[\s,]*,[\s,]*`)
 
 func SplitAddresses(text string) []string {
-	text, _ = commaRunRE.Sub(", ", text, 0)
-	text = strings.Trim(py.Strip(text), ",")
+	text = commaRunRE.ReplaceAllString(text, ", ")
+	text = strings.Trim(strings.TrimSpace(text), ",")
 	out := []string{}
 	for _, a := range mime.ParseAddresses(text) {
 		if strings.Contains(a.Address, "@") && !strings.Contains(a.Address, " ") {

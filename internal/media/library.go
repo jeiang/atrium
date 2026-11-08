@@ -6,13 +6,14 @@ import (
 	"slices"
 	"strings"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 var (
-	seasonDir   = rx.MustCompile(`^Season (\d{1,3})$`, 0)
-	episodeMark = rx.MustCompile(` - S(\d{2})E(\d{2,3})$`, 0)
+	seasonDir   = regexp.MustCompile(`^Season (\d{1,3})$`)
+	episodeMark = regexp.MustCompile(` - S(\d{2})E(\d{2,3})$`)
 )
 
 type NotFound string
@@ -171,12 +172,13 @@ func (t Tuning) Movie(root, name string) (MovieView, error) {
 }
 
 func episodeNumber(name string) (*int, *int) {
-	m := matched(episodeMark.Search(name[:len(name)-len(Ext(name))]))
-	if m == nil {
+	text := name[:len(name)-len(Ext(name))]
+	loc := episodeMark.FindStringSubmatchIndex(text)
+	if loc == nil {
 		return nil, nil
 	}
-	season, errSeason := py.IntString(m.Group(1))
-	episode, errEpisode := py.IntString(m.Group(2))
+	season, errSeason := py.IntString(text[loc[2]:loc[3]])
+	episode, errEpisode := py.IntString(text[loc[4]:loc[5]])
 	if errSeason != nil || errEpisode != nil {
 		return nil, nil
 	}
@@ -192,8 +194,8 @@ func (t Tuning) Show(root, name string) (ShowView, error) {
 	view := ShowView{Entry: t.entryOf(TV, name), Seasons: []Season{}}
 	for _, d := range dirsOf(path) {
 		season := Season{Dir: d, Episodes: []Episode{}}
-		if m := matched(seasonDir.Match(d)); m != nil {
-			if n, err := py.IntString(m.Group(1)); err == nil {
+		if loc := seasonDir.FindStringSubmatchIndex(d); loc != nil && loc[0] == 0 {
+			if n, err := py.IntString(d[loc[2]:loc[3]]); err == nil {
 				v := int(n.Int64())
 				season.Number = &v
 			}

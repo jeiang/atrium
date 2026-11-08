@@ -6,18 +6,24 @@ import (
 	"strings"
 	"unicode/utf16"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
-var utf7ShiftRE = rx.MustCompile(`&([^-]*)-`, 0)
+var utf7ShiftRE = regexp.MustCompile(`&([^-]*)-`)
 
 func UTF7Decode(value string) (string, error) {
 	var failed error
-	out, err := utf7ShiftRE.SubFunc(value, func(m *rx.Match) string {
-		chunk := m.Group(1)
+	var b strings.Builder
+	last := 0
+	for _, loc := range utf7ShiftRE.FindAllStringSubmatchIndex(value, -1) {
+		chunk := value[loc[2]:loc[3]]
+		b.WriteString(value[last:loc[0]])
+		last = loc[1]
 		if chunk == "" {
-			return "&"
+			b.WriteString("&")
+			continue
 		}
 		chunk = strings.ReplaceAll(chunk, ",", "/")
 		chunk += strings.Repeat("=", (4-len([]rune(chunk))%4)%4)
@@ -25,18 +31,16 @@ func UTF7Decode(value string) (string, error) {
 		if err == nil {
 			var text string
 			if text, err = py.DecodeUTF16BE(raw); err == nil {
-				return text
+				b.WriteString(text)
+				continue
 			}
 		}
 		if failed == nil {
 			failed = err
 		}
-		return ""
-	}, 0)
-	if err != nil {
-		return "", err
 	}
-	return out, failed
+	b.WriteString(value[last:])
+	return b.String(), failed
 }
 
 func UTF7Encode(value string) string {

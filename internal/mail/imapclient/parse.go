@@ -5,38 +5,40 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
+
+	"regexp"
 
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 var (
-	listLineRE    = rx.MustCompile(`\((?P<flags>[^)]*)\)\s+(?P<delim>"(?:[^"\\]|\\.)*"|NIL)\s+(?P<name>.+)$`, rx.Bytes|rx.DotAll)
-	tokenRE       = rx.MustCompile(`\(|\)|"((?:[^"\\]|\\.)*)"|([^\s()"]+)`, 0)
-	copyUIDRE     = rx.MustCompile(`COPYUID (\d+) ([\d:,]+) ([\d:,]+)`, 0)
-	unquoteRE     = rx.MustCompile(`\\(.)`, 0)
-	labelRE       = rx.MustCompile(`"((?:[^"\\]|\\.)*)"|(\S+)`, 0)
-	flagsRE       = rx.MustCompile(`\b`+rx.Escape("FLAGS")+` \(`, 0)
-	labelsRE      = rx.MustCompile(`\b`+rx.Escape("X-GM-LABELS")+` \(`, 0)
-	structureRE   = rx.MustCompile(`BODYSTRUCTURE `, 0)
-	groupStartRE  = rx.MustCompile(`\s*\d+ \(`, 0)
-	sectionRE     = rx.MustCompile(`BODY\[(HEADER|TEXT)\]`, 0)
-	uidRE         = rx.MustCompile(`\bUID (\d+)`, 0)
-	modseqRE      = rx.MustCompile(`MODSEQ \((\d+)\)`, 0)
-	sizeRE        = rx.MustCompile(`RFC822\.SIZE (\d+)`, 0)
-	gmMsgIDRE     = rx.MustCompile(`X-GM-MSGID (\d+)`, 0)
-	gmThrIDRE     = rx.MustCompile(`X-GM-THRID (\d+)`, 0)
-	internalRE    = rx.MustCompile(`INTERNALDATE "([^"]+)"`, 0)
-	uidValidityRE = rx.MustCompile(`UIDVALIDITY (\d+)`, 0)
-	uidNextRE     = rx.MustCompile(`UIDNEXT (\d+)`, 0)
-	highestRE     = rx.MustCompile(`HIGHESTMODSEQ (\d+)`, 0)
-	messagesRE    = rx.MustCompile(`MESSAGES (\d+)`, 0)
+	listLineRE    = regexp.MustCompile(`(?s)\((?P<flags>[^)]*)\)\s+(?P<delim>"(?:[^"\\]|\\.)*"|NIL)\s+(?P<name>.+)$`)
+	tokenRE       = regexp.MustCompile(`\(|\)|"((?:[^"\\]|\\.)*)"|([^\s()"]+)`)
+	copyUIDRE     = regexp.MustCompile(`COPYUID (\d+) ([\d:,]+) ([\d:,]+)`)
+	unquoteRE     = regexp.MustCompile(`\\(.)`)
+	labelRE       = regexp.MustCompile(`"((?:[^"\\]|\\.)*)"|(\S+)`)
+	flagsRE       = regexp.MustCompile(`\b` + regexp.QuoteMeta("FLAGS") + ` \(`)
+	labelsRE      = regexp.MustCompile(`\b` + regexp.QuoteMeta("X-GM-LABELS") + ` \(`)
+	structureRE   = regexp.MustCompile(`BODYSTRUCTURE `)
+	groupStartRE  = regexp.MustCompile(`\s*\d+ \(`)
+	sectionRE     = regexp.MustCompile(`BODY\[(HEADER|TEXT)\]`)
+	uidRE         = regexp.MustCompile(`\bUID (\d+)`)
+	modseqRE      = regexp.MustCompile(`MODSEQ \((\d+)\)`)
+	sizeRE        = regexp.MustCompile(`RFC822\.SIZE (\d+)`)
+	gmMsgIDRE     = regexp.MustCompile(`X-GM-MSGID (\d+)`)
+	gmThrIDRE     = regexp.MustCompile(`X-GM-THRID (\d+)`)
+	internalRE    = regexp.MustCompile(`INTERNALDATE "([^"]+)"`)
+	uidValidityRE = regexp.MustCompile(`UIDVALIDITY (\d+)`)
+	uidNextRE     = regexp.MustCompile(`UIDNEXT (\d+)`)
+	highestRE     = regexp.MustCompile(`HIGHESTMODSEQ (\d+)`)
+	messagesRE    = regexp.MustCompile(`MESSAGES (\d+)`)
 )
 
 var errSexp = errors.New("malformed BODYSTRUCTURE")
 
-func unquote(token string) (string, error) { return unquoteRE.Sub(`\1`, token, 0) }
+func unquote(token string) (string, error) { return unquoteRE.ReplaceAllString(token, "${1}"), nil }
 
 func expandUIDSet(text string) ([]uint32, error) {
 	var uids []uint32
@@ -97,19 +99,20 @@ func joinData(data []datum, skipFalsy bool) string {
 }
 
 func parseCopyUID(data []datum) (*mail.CopyUID, error) {
-	m, err := copyUIDRE.Search(joinData(data, true))
-	if err != nil || m == nil {
-		return nil, err
+	text := joinData(data, true)
+	loc := copyUIDRE.FindStringSubmatchIndex(text)
+	if loc == nil {
+		return nil, nil
 	}
-	validity, err := pyInt32(m.Group(1))
+	validity, err := pyInt32(text[loc[2]:loc[3]])
 	if err != nil {
 		return nil, err
 	}
-	src, err := expandUIDSet(m.Group(2))
+	src, err := expandUIDSet(text[loc[4]:loc[5]])
 	if err != nil {
 		return nil, err
 	}
-	dst, err := expandUIDSet(m.Group(3))
+	dst, err := expandUIDSet(text[loc[6]:loc[7]])
 	if err != nil {
 		return nil, err
 	}
@@ -126,21 +129,20 @@ func parseList(lines []datum) ([]mail.MailboxInfo, error) {
 		if line.none || line.tuple {
 			continue
 		}
-		m, err := listLineRE.Match(latin1(line.text))
-		if err != nil {
-			return nil, err
-		}
-		if m == nil {
+		text := latin1(line.text)
+		loc := listLineRE.FindStringSubmatchIndex(text)
+		if loc == nil || loc[0] != 0 {
 			continue
 		}
-		name := py.Strip(m.Group(3))
+		name := py.Strip(text[loc[6]:loc[7]])
+		var err error
 		if strings.HasPrefix(name, `"`) && strings.HasSuffix(name, `"`) {
 			r := []rune(name)
 			if name, err = unquote(string(r[1:max(len(r)-1, 1)])); err != nil {
 				return nil, err
 			}
 		}
-		delim := m.Group(2)
+		delim := text[loc[4]:loc[5]]
 		if delim == "NIL" {
 			delim = ""
 		} else {
@@ -153,25 +155,24 @@ func parseList(lines []datum) ([]mail.MailboxInfo, error) {
 		if err != nil {
 			return nil, err
 		}
-		found = append(found, mail.MailboxInfo{Name: decoded, IMAPName: name, Flags: split(m.Group(1)), Delimiter: delim})
+		found = append(found, mail.MailboxInfo{Name: decoded, IMAPName: name, Flags: split(text[loc[2]:loc[3]]), Delimiter: delim})
 	}
 	return found, nil
 }
 
 func parseLabels(text string) ([]string, error) {
-	ms, err := labelRE.FindIter(text)
-	if err != nil {
-		return nil, err
-	}
-	labels := make([]string, 0, len(ms))
-	for _, m := range ms {
-		raw, quoted := m.GroupOK(1)
-		if quoted {
+	matches := labelRE.FindAllStringSubmatchIndex(text, -1)
+	labels := make([]string, 0, len(matches))
+	var err error
+	for _, loc := range matches {
+		raw := ""
+		if loc[2] >= 0 {
+			raw = text[loc[2]:loc[3]]
 			if raw, err = unquote(raw); err != nil {
 				return nil, err
 			}
 		} else {
-			raw = m.Group(2)
+			raw = text[loc[4]:loc[5]]
 		}
 		label, err := mail.UTF7Decode(raw)
 		if err != nil {
@@ -209,12 +210,12 @@ func balanced(text []rune, start int) ([]rune, bool) {
 	return nil, false
 }
 
-func section(meta string, re *rx.Regexp) (string, bool, error) {
-	m, err := re.Search(meta)
-	if err != nil || m == nil {
-		return "", false, err
+func section(meta string, re *regexp.Regexp) (string, bool, error) {
+	loc := re.FindStringSubmatchIndex(meta)
+	if loc == nil {
+		return "", false, nil
 	}
-	block, ok := balanced([]rune(meta), m.End()-1)
+	block, ok := balanced([]rune(meta), utf8.RuneCountInString(meta[:loc[1]])-1)
 	if !ok {
 		return "", false, nil
 	}
@@ -228,23 +229,20 @@ type sexp struct {
 }
 
 func parseSexp(text string) (sexp, error) {
-	ms, err := tokenRE.FindIter(text)
-	if err != nil {
-		return sexp{}, err
-	}
+	matches := tokenRE.FindAllStringSubmatchIndex(text, -1)
 	type token struct {
 		paren string
 		value string
 	}
-	tokens := make([]token, 0, len(ms))
-	for _, m := range ms {
-		g := m.Text()
+	tokens := make([]token, 0, len(matches))
+	for _, loc := range matches {
+		g := text[loc[0]:loc[1]]
 		switch g {
 		case "(", ")":
 			tokens = append(tokens, token{paren: g})
 		default:
-			if s, ok := m.GroupOK(1); ok {
-				v, err := unquote(s)
+			if loc[2] >= 0 {
+				v, err := unquote(text[loc[2]:loc[3]])
 				if err != nil {
 					return sexp{}, err
 				}
@@ -343,15 +341,16 @@ func attachmentsFromStructure(structure sexp) []mail.Attachment {
 }
 
 func structureAttachments(meta string) ([]mail.Attachment, error) {
-	m, err := structureRE.Search(meta)
-	if err != nil || m == nil {
-		return nil, err
-	}
-	text := []rune(meta)
-	if m.End() >= len(text) || text[m.End()] != '(' {
+	loc := structureRE.FindStringSubmatchIndex(meta)
+	if loc == nil {
 		return nil, nil
 	}
-	block, ok := balanced(text, m.End())
+	text := []rune(meta)
+	end := utf8.RuneCountInString(meta[:loc[1]])
+	if end >= len(text) || text[end] != '(' {
+		return nil, nil
+	}
+	block, ok := balanced(text, end)
 	if !ok {
 		return nil, nil
 	}
@@ -377,11 +376,9 @@ func parseFetch(data []datum) ([]mail.Message, error) {
 		switch {
 		case item.tuple:
 			prefix := latin1(item.text)
-			start, err := groupStartRE.Match(prefix)
-			if err != nil {
-				return nil, err
-			}
-			if start != nil {
+			startLoc := groupStartRE.FindStringIndex(prefix)
+			start := startLoc != nil && startLoc[0] == 0
+			if start {
 				current = &fetchGroup{meta: prefix, header: []byte{}, text: []byte{}}
 				groups = append(groups, current)
 			} else if current != nil {
@@ -390,12 +387,9 @@ func parseFetch(data []datum) ([]mail.Message, error) {
 			if current == nil {
 				continue
 			}
-			m, err := sectionRE.Search(prefix)
-			if err != nil {
-				return nil, err
-			}
-			if m != nil {
-				if m.Group(1) == "HEADER" {
+			loc := sectionRE.FindStringSubmatchIndex(prefix)
+			if loc != nil {
+				if prefix[loc[2]:loc[3]] == "HEADER" {
 					current.header = item.lit
 				} else {
 					current.text = item.lit
@@ -403,11 +397,9 @@ func parseFetch(data []datum) ([]mail.Message, error) {
 			}
 		case !item.none:
 			line := latin1(item.text)
-			start, err := groupStartRE.Match(line)
-			if err != nil {
-				return nil, err
-			}
-			if start != nil {
+			startLoc := groupStartRE.FindStringIndex(line)
+			start := startLoc != nil && startLoc[0] == 0
+			if start {
 				current = &fetchGroup{meta: line, header: []byte{}, text: []byte{}}
 				groups = append(groups, current)
 			} else if current != nil {
@@ -417,11 +409,8 @@ func parseFetch(data []datum) ([]mail.Message, error) {
 	}
 	out := []mail.Message{}
 	for _, g := range groups {
-		m, err := uidRE.Search(g.meta)
-		if err != nil {
-			return nil, err
-		}
-		if m == nil {
+		loc := uidRE.FindStringSubmatchIndex(g.meta)
+		if loc == nil {
 			continue
 		}
 		msg, err := fetched(g)
@@ -433,12 +422,12 @@ func parseFetch(data []datum) ([]mail.Message, error) {
 	return out, nil
 }
 
-func group1(re *rx.Regexp, text string) (string, bool, error) {
-	m, err := re.Search(text)
-	if err != nil || m == nil {
-		return "", false, err
+func group1(re *regexp.Regexp, text string) (string, bool, error) {
+	loc := re.FindStringSubmatchIndex(text)
+	if loc == nil {
+		return "", false, nil
 	}
-	return m.Group(1), true, nil
+	return text[loc[2]:loc[3]], true, nil
 }
 
 func fetched(g *fetchGroup) (mail.Message, error) {
@@ -498,7 +487,7 @@ func parseStatus(data []datum) (mail.Status, error) {
 	text := joinData(data, false)
 	var st mail.Status
 	for _, f := range []struct {
-		re  *rx.Regexp
+		re  *regexp.Regexp
 		set func(string) error
 	}{
 		{uidValidityRE, func(v string) (err error) { st.UIDValidity, err = pyInt32(v); return }},

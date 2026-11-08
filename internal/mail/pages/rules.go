@@ -11,12 +11,13 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail/ruleedit"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/mail/triage"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -31,12 +32,12 @@ var ruleProblems = map[string]string{
 	"op suffix needs a string or list of strings": "“is or ends in domain” needs at least one domain.",
 }
 
-var ruleIDPrefix = rx.MustCompile(`^[^:\s]+: `, 0)
+var ruleIDPrefix = regexp.MustCompile(`^[^:\s]+: `)
 
 func ruleProblem(err error) string {
 	text := err.Error()
-	if loc, _ := ruleIDPrefix.Search(text); loc != nil {
-		text = text[loc.End():]
+	if loc := ruleIDPrefix.FindStringIndex(text); loc != nil {
+		text = text[loc[1]:]
 	}
 	if friendly, ok := ruleProblems[text]; ok {
 		return friendly

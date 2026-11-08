@@ -9,11 +9,12 @@ import (
 	"time"
 	"unicode"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -37,7 +38,7 @@ type Error string
 
 func (e Error) Error() string { return string(e) }
 
-var timePattern = rx.MustCompile(`^(\d{1,2}):(\d{2})$`, 0)
+var timePattern = regexp.MustCompile(`^(\d{1,2}):(\d{2})$`)
 
 var (
 	days       = map[string]int{"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
@@ -107,9 +108,9 @@ func Zone(name string) (*time.Location, error) {
 }
 
 func clock(text string) (int, int, error) {
-	m, err := timePattern.Match(text)
-	if err == nil && m != nil {
-		h, mi := pyInt(m.Group(1)), pyInt(m.Group(2))
+	loc := timePattern.FindStringSubmatchIndex(text)
+	if loc != nil {
+		h, mi := pyInt(text[loc[2]:loc[3]]), pyInt(text[loc[4]:loc[5]])
 		if h <= 23 && mi <= 59 {
 			return h, mi, nil
 		}

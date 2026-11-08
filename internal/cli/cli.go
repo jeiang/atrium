@@ -11,8 +11,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"regexp"
+
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/rx"
 )
 
 const (
@@ -290,7 +291,7 @@ type optTuple struct {
 	hasExplicit bool
 }
 
-var negativeNumber = rx.MustCompile(`-\.?\d`, 0)
+var negativeNumber = regexp.MustCompile(`-\.?\d`)
 
 func (p *parser) parseOptional(s string) []optTuple {
 	if s == "" || s[0] != '-' {
@@ -313,7 +314,7 @@ func (p *parser) parseOptional(s string) []optTuple {
 	if tuples := p.optionTuples(s); len(tuples) > 0 {
 		return tuples
 	}
-	if m, _ := negativeNumber.Match(s); m != nil {
+	if loc := negativeNumber.FindStringIndex(s); loc != nil && loc[0] == 0 {
 		return nil
 	}
 	if strings.Contains(s, " ") {
@@ -588,16 +589,19 @@ func matchPartial(actions []*action, pattern string) []int {
 		for _, a := range actions[:i] {
 			b.WriteString(a.nargsPattern())
 		}
-		m, _ := rx.MustCompile(b.String(), 0).Match(pattern)
-		if m == nil {
+		loc := regexp.MustCompile(b.String()).FindStringSubmatchIndex(pattern)
+		if loc == nil || loc[0] != 0 {
 			continue
 		}
 		counts := make([]int, i)
 		for g := range counts {
-			from, to := m.Span(g + 1)
+			from, to := loc[2*(g+1)], loc[2*(g+1)+1]
+			if from < 0 {
+				from, to = 0, 0
+			}
 			counts[g] = to - from
 		}
-		if m.End() < len(pattern) && pattern[m.End()] == 'O' {
+		if loc[1] < len(pattern) && pattern[loc[1]] == 'O' {
 			for len(counts) > 0 && counts[len(counts)-1] == 0 {
 				counts = counts[:len(counts)-1]
 			}
@@ -717,7 +721,7 @@ type helpItem struct {
 	subs       []helpItem
 }
 
-var longBreak = rx.MustCompile(`\n\n\n+`, 0)
+var longBreak = regexp.MustCompile(`\n\n\n+`)
 
 func (p *parser) help(width int) string {
 	maxHelp := min(24, max(width-20, 4))
@@ -756,7 +760,7 @@ func (p *parser) help(width int) string {
 		}
 		b.WriteString("\n")
 	}
-	out, _ := longBreak.Sub("\n\n", b.String(), 0)
+	out := longBreak.ReplaceAllString(b.String(), "\n\n")
 	return strings.Trim(out, "\n") + "\n"
 }
 
@@ -791,13 +795,62 @@ func formatItem(b *strings.Builder, item helpItem, helpPos, width int) {
 }
 
 var (
-	asciiSpace = rx.MustCompile(`\s+`, rx.ASCII)
-	wordSep    = rx.MustCompile(`([\t\n\x0b\x0c\r ]+|(?<=[\w!"'&.,?])-{2,}(?=\w)|[^\t\n\x0b\x0c\r ]+?(?:-(?:(?<=[^\d\W]{2}-)|(?<=[^\d\W]-[^\d\W]-))(?=[^\d\W]-?[^\d\W])|(?=[\t\n\x0b\x0c\r ]|\z)|(?<=[\w!"'&.,?])(?=-{2,}\w)))`, 0)
+	asciiSpace = regexp.MustCompile(`\s+`)
 )
 
+func splitHelp(text string) []string {
+	var out []string
+	start := 0
+	flush := func(end int) {
+		if end > start {
+			out = append(out, text[start:end])
+			start = end
+		}
+	}
+	space := func(c byte) bool { return c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r' || c == ' ' }
+	word := func(c byte) bool {
+		return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || strings.ContainsRune(`!"'&.,?`, rune(c))
+	}
+	for i := 0; i < len(text); {
+		c := text[i]
+		if space(c) {
+			j := i + 1
+			for j < len(text) && space(text[j]) {
+				j++
+			}
+			flush(i)
+			flush(j)
+			i = j
+			continue
+		}
+		if c == '-' && i > start && word(text[i-1]) {
+			if i+1 < len(text) && text[i+1] == '-' {
+				j := i + 2
+				for j < len(text) && text[j] == '-' {
+					j++
+				}
+				if j < len(text) && word(text[j]) {
+					flush(i)
+					flush(j)
+					i = j
+					continue
+				}
+			}
+			if i+1 == len(text) || space(text[i+1]) || word(text[i+1]) {
+				flush(i + 1)
+				i++
+				continue
+			}
+		}
+		i++
+	}
+	flush(len(text))
+	return out
+}
+
 func splitLines(text string, width int) []string {
-	text, _ = asciiSpace.Sub(" ", text, 0)
-	split, _ := wordSep.Split(py.Strip(text), 0)
+	text = asciiSpace.ReplaceAllString(text, " ")
+	split := splitHelp(py.Strip(text))
 	var chunks [][]rune
 	for i := len(split) - 1; i >= 0; i-- {
 		if split[i] != "" {
