@@ -121,7 +121,7 @@ func (s *Set) gateSetup(owner, path string, needs []string, setup func(*cli.Args
 }
 
 func skip(path string, st Status, msg string) {
-	log.Info(msg, logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Reason, logx.Command, strings.TrimSpace(path))
+	log.Info(msg, logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Reason(), logx.Command, strings.TrimSpace(path))
 	sdnotify.FromEnv().Ready()
 }
 

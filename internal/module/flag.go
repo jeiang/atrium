@@ -125,21 +125,26 @@ func (s *Set) adoptLate(ctx context.Context, d *db.DB) error {
 
 func (s *Set) adopt(ctx context.Context, q db.Querier, only map[string]bool) error {
 	probe := Probe{Settings: s.reg, Q: q, Env: s.env}
-	states := map[string]State{}
+	statuses, _, err := evaluate(ctx, s.regs, func(ctx context.Context, r Registration, states map[string]State) ([]Unmet, bool, error) {
+		unmet, err := s.unmet(ctx, probe, r, states)
+		return unmet, len(unmet) == 0, err
+	})
+	if err != nil {
+		return err
+	}
+	byName := make(map[string]Status, len(statuses))
+	for _, st := range statuses {
+		byName[st.Name] = st
+	}
 	for _, r := range s.regs {
 		if r.Core {
-			states[r.Name] = Enabled
 			continue
 		}
-		unmet, err := s.unmet(ctx, probe, r, states)
-		if err != nil {
-			return err
+		st := byName[r.Name]
+		value := "false"
+		if st.State == Enabled {
+			value = "true"
 		}
-		value, state := "false", NeedsSettings
-		if len(unmet) == 0 {
-			value, state = "true", Enabled
-		}
-		states[r.Name] = state
 		if only != nil && !only[r.Name] {
 			continue
 		}
@@ -152,11 +157,11 @@ func (s *Set) adopt(ctx context.Context, q db.Querier, only map[string]bool) err
 		if err := s.reg.Set(ctx, q, FlagKey(r.Name), value); err != nil {
 			return err
 		}
-		if state == Enabled {
-			log.Info("module enabled by migration", logx.Module, r.Name, logx.State, string(state))
+		if st.State == Enabled {
+			log.Info("module enabled by migration", logx.Module, r.Name, logx.State, string(st.State))
 			continue
 		}
-		log.Warn("module left in needs-settings by migration", logx.Module, r.Name, logx.State, string(state), logx.Reason, joinReasons(unmet))
+		log.Warn("module left in needs-settings by migration", logx.Module, r.Name, logx.State, string(st.State), logx.Reason, st.Reason())
 	}
 	return nil
 }

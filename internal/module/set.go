@@ -127,47 +127,58 @@ type Snapshot struct {
 func (s *Set) Current() *Snapshot { return s.cur.Load() }
 
 func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
-	snap := &Snapshot{set: s}
-	states := map[string]State{}
 	probe := Probe{Settings: s.reg, Q: q, Env: s.env}
-	for _, r := range s.regs {
+	statuses, _, err := evaluate(ctx, s.regs, func(ctx context.Context, r Registration, states map[string]State) ([]Unmet, bool, error) {
+		unmet, err := s.unmet(ctx, probe, r, states)
+		if err != nil {
+			return nil, false, err
+		}
+		found, err := s.reg.Resolve(ctx, q, FlagKey(r.Name))
+		if err != nil {
+			return nil, false, err
+		}
+		return unmet, found.Value == "true", nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &Snapshot{set: s, statuses: statuses}, nil
+}
+
+type check func(ctx context.Context, r Registration, states map[string]State) ([]Unmet, bool, error)
+
+func evaluate(ctx context.Context, regs []Registration, fn check) ([]Status, map[string]State, error) {
+	states := map[string]State{}
+	statuses := make([]Status, 0, len(regs))
+	for _, r := range regs {
 		st := Status{Name: r.Name, State: Enabled}
 		if !r.Core {
-			unmet, err := s.unmet(ctx, probe, r, states)
+			unmet, on, err := fn(ctx, r, states)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			st.Unmet = unmet
-			on, err := s.reg.Resolve(ctx, q, FlagKey(r.Name))
-			if err != nil {
-				return nil, err
-			}
 			switch {
-			case len(st.Unmet) > 0:
-				st.State, st.Reason = NeedsSettings, joinReasons(st.Unmet)
-			case on.Value != "true":
+			case len(unmet) > 0:
+				st.State = NeedsSettings
+			case !on:
 				st.State = Off
 			}
 		}
 		states[r.Name] = st.State
-		snap.statuses = append(snap.statuses, st)
+		statuses = append(statuses, st)
 	}
-	return snap, nil
+	return statuses, states, nil
 }
 
 func (s *Set) coreOnly() *Snapshot {
-	snap := &Snapshot{set: s}
-	for _, r := range s.regs {
-		st := Status{Name: r.Name, State: Off}
-		if r.Core {
-			st.State = Enabled
-		}
-		snap.statuses = append(snap.statuses, st)
-	}
-	return snap
+	statuses, _, _ := evaluate(context.Background(), s.regs, func(context.Context, Registration, map[string]State) ([]Unmet, bool, error) {
+		return nil, false, nil
+	})
+	return &Snapshot{set: s, statuses: statuses}
 }
 
-func (n *Snapshot) Statuses() []Status { return slices.Clone(n.statuses) }
+func (s Status) Reason() string { return joinReasons(s.Unmet) }
 
 func (n *Snapshot) Status(name string) (Status, bool) {
 	for _, st := range n.statuses {

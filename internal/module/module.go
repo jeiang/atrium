@@ -121,10 +121,10 @@ type Unmet struct {
 }
 
 type Status struct {
-	Name   string
-	State  State
-	Reason string
-	Unmet  []Unmet
+	Name  string
+	State State
+
+	Unmet []Unmet
 }
 
 var ErrNotEvaluated = errors.New("module: states are not evaluated yet")
