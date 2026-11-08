@@ -635,6 +635,131 @@ func ImportRules(ctx context.Context, d *db.DB, document any) (int, error) {
 	return len(parsed), err
 }
 
+type Execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+type MessageInsert struct {
+	Account      string
+	MailboxID    int64
+	UIDValidity  int64
+	UID          uint32
+	MsgID        string
+	Digest       string
+	GmMsgID      string
+	GmThrID      string
+	InternalDate string
+	DateTS       float64
+	Size         int64
+	RawPath      string
+	Flags        string
+	Seen         int
+	Flagged      int
+	Labels       string
+	InInbox      int
+	Sent         int
+	Location     string
+	Folder       *string
+	FromAddr     string
+	FromDomain   string
+	FromName     string
+	ToAddrs      string
+	ReplyTo      string
+	RPathDomain  string
+	ListID       string
+	Precedence   string
+	Subject      string
+	SubjectTmpl  string
+	MsgIDDomain  string
+	InReplyTo    string
+	Refs         string
+	DKIMD        string
+	ESP          string
+	AttTypes     string
+	AttNames     string
+	KOrder       bool
+	KVCode       bool
+	KOTP6        bool
+	FirstSeen    float64
+}
+
+var messageInsertColumns = []struct {
+	name  string
+	value func(*MessageInsert) any
+}{
+	{"account", func(m *MessageInsert) any { return m.Account }},
+	{"mailbox_id", func(m *MessageInsert) any { return m.MailboxID }},
+	{"uidvalidity", func(m *MessageInsert) any { return m.UIDValidity }},
+	{"uid", func(m *MessageInsert) any { return m.UID }},
+	{"msgid", func(m *MessageInsert) any { return m.MsgID }},
+	{"digest", func(m *MessageInsert) any { return m.Digest }},
+	{"gm_msgid", func(m *MessageInsert) any { return nullableText(m.GmMsgID) }},
+	{"gm_thrid", func(m *MessageInsert) any { return nullableText(m.GmThrID) }},
+	{"internaldate", func(m *MessageInsert) any { return m.InternalDate }},
+	{"date_ts", func(m *MessageInsert) any { return m.DateTS }},
+	{"size", func(m *MessageInsert) any { return m.Size }},
+	{"raw_path", func(m *MessageInsert) any { return m.RawPath }},
+	{"flags", func(m *MessageInsert) any { return m.Flags }},
+	{"seen", func(m *MessageInsert) any { return m.Seen }},
+	{"flagged", func(m *MessageInsert) any { return m.Flagged }},
+	{"labels", func(m *MessageInsert) any { return m.Labels }},
+	{"in_inbox", func(m *MessageInsert) any { return m.InInbox }},
+	{"sent", func(m *MessageInsert) any { return m.Sent }},
+	{"location", func(m *MessageInsert) any { return m.Location }},
+	{"folder", func(m *MessageInsert) any { return m.Folder }},
+	{"from_addr", func(m *MessageInsert) any { return m.FromAddr }},
+	{"from_domain", func(m *MessageInsert) any { return m.FromDomain }},
+	{"from_name", func(m *MessageInsert) any { return m.FromName }},
+	{"to_addrs", func(m *MessageInsert) any { return m.ToAddrs }},
+	{"reply_to", func(m *MessageInsert) any { return m.ReplyTo }},
+	{"rpath_domain", func(m *MessageInsert) any { return m.RPathDomain }},
+	{"list_id", func(m *MessageInsert) any { return m.ListID }},
+	{"precedence", func(m *MessageInsert) any { return m.Precedence }},
+	{"subject", func(m *MessageInsert) any { return m.Subject }},
+	{"subject_tmpl", func(m *MessageInsert) any { return m.SubjectTmpl }},
+	{"msgid_domain", func(m *MessageInsert) any { return m.MsgIDDomain }},
+	{"in_reply_to", func(m *MessageInsert) any { return m.InReplyTo }},
+	{"refs", func(m *MessageInsert) any { return m.Refs }},
+	{"dkim_d", func(m *MessageInsert) any { return m.DKIMD }},
+	{"esp", func(m *MessageInsert) any { return m.ESP }},
+	{"att_types", func(m *MessageInsert) any { return m.AttTypes }},
+	{"att_names", func(m *MessageInsert) any { return m.AttNames }},
+	{"k_order", func(m *MessageInsert) any { return bit(m.KOrder) }},
+	{"k_vcode", func(m *MessageInsert) any { return bit(m.KVCode) }},
+	{"k_otp6", func(m *MessageInsert) any { return bit(m.KOTP6) }},
+	{"first_seen", func(m *MessageInsert) any { return m.FirstSeen }},
+}
+
+func bit(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func nullableText(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+func InsertMessage(ctx context.Context, q Execer, m MessageInsert) (int64, error) {
+	names := make([]string, len(messageInsertColumns))
+	marks := make([]string, len(messageInsertColumns))
+	args := make([]any, len(messageInsertColumns))
+	for i, c := range messageInsertColumns {
+		names[i] = c.name
+		marks[i] = "?"
+		args[i] = c.value(&m)
+	}
+	res, err := q.ExecContext(ctx, "INSERT INTO messages ("+strings.Join(names, ", ")+") VALUES ("+strings.Join(marks, ", ")+")", args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
