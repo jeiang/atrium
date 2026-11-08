@@ -380,16 +380,9 @@ func recent(ctx context.Context, q Querier, limits SearchLimits, includePrivate 
 	return hits, nil
 }
 
-type Filters struct {
-	Account        string `json:"account"`
-	IncludePrivate bool   `json:"include_private"`
-}
-
 type Result struct {
-	Hits     []Hit   `json:"hits"`
-	Semantic bool    `json:"semantic"`
-	Error    *string `json:"error"`
-	Filters  Filters `json:"filters"`
+	Hits     []Hit `json:"hits"`
+	Semantic bool  `json:"semantic"`
 }
 
 func rank(list []int64) map[int64]int {
@@ -409,10 +402,9 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 		return Result{}, err
 	}
 	query = strings.TrimSpace(query)
-	filters := Filters{Account: Account, IncludePrivate: includePrivate}
 	if query == "" {
 		hits, err := recent(ctx, q, limits, includePrivate, limit)
-		return Result{Hits: hits, Filters: filters}, err
+		return Result{Hits: hits}, err
 	}
 	match, err := search.FTSQuery(query)
 	if err != nil {
@@ -425,7 +417,6 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 		}
 	}
 	var sem []int64
-	var failure *string
 	available := true
 	embedURL, err := mail.EmbedURL(ctx, q)
 	if err != nil {
@@ -449,8 +440,6 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 			return Result{}, err
 		}
 		available = false
-		msg := httpx.Message(err)
-		failure = &msg
 		sem = nil
 	}
 	lexRank := map[int64]int{}
@@ -510,7 +499,7 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 		score := s.Score
 		hits = append(hits, newHit(i, &score, lr, sr, head[s.ID], m))
 	}
-	return Result{Hits: hits, Semantic: available, Error: failure, Filters: filters}, nil
+	return Result{Hits: hits, Semantic: available}, nil
 }
 
 type Related struct {

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -31,14 +30,11 @@ const (
 var noMarkdownStatuses = [...]int{400, 403, 404}
 
 type Stats struct {
-	Sources   int
-	Pages     int
 	New       int
 	Updated   int
 	Unchanged int
 	Trashed   int
 	Failed    int
-	Embedded  int
 	Seconds   float64
 }
 
@@ -480,11 +476,6 @@ func Sync(ctx context.Context, d *db.DB, client *Client, embedTexts embed.TextsF
 	if err := resolvePaths(ctx, d.Write, sensitivity); err != nil {
 		return stats, err
 	}
-	if _, err := d.Write.ExecContext(ctx,
-		"INSERT INTO notion_state (key, value) VALUES ('last_sync_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-		strconv.FormatFloat(stamp, 'f', -1, 64)); err != nil {
-		return stats, err
-	}
 	embedURL, err := mail.EmbedURL(ctx, d.Read)
 	if err != nil {
 		return stats, err
@@ -493,15 +484,13 @@ func Sync(ctx context.Context, d *db.DB, client *Client, embedTexts embed.TextsF
 	if err != nil {
 		return stats, err
 	}
-	embedded, err := embed.NotionPending(modelCtx, d, embedURL, embedTexts)
+	_, err = embed.NotionPending(modelCtx, d, embedURL, embedTexts)
 	if err != nil {
 		var unavailable *httpx.ServiceUnavailable
 		if !errors.As(err, &unavailable) && !errors.Is(err, httpx.ErrPayload) && !errors.Is(err, httpx.ErrMissing) {
 			return stats, err
 		}
 		log.Warn("embedding unavailable: " + httpx.Message(err))
-	} else {
-		stats.Embedded = embedded
 	}
 	stats.Seconds = time.Since(started).Seconds()
 	return stats, nil
@@ -517,10 +506,4 @@ func Totals(ctx context.Context, q db.Querier) (Counts, error) {
 	}
 	err = q.QueryRowContext(ctx, "SELECT COUNT(*) FROM notion_sources").Scan(&c.Sources)
 	return c, err
-}
-
-func Pending(ctx context.Context, q db.Querier) (int64, error) {
-	var n int64
-	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM notion_pages WHERE embedded = 0 AND in_trash = 0").Scan(&n)
-	return n, err
 }
