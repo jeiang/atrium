@@ -234,7 +234,11 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 	reached := 0
 	if wanted != Google {
 		if dir := set.CalendarDir; dir != "" {
-			found, extra, err := MirrorEvents(dir, ws, we, tz, wanted, set.MaxOccurrences)
+			mirror := wanted
+			if mirror == ICloud {
+				mirror = ""
+			}
+			found, extra, err := MirrorEvents(dir, ws, we, tz, mirror, set.MaxOccurrences)
 			var missing NotConfigured
 			switch {
 			case errors.As(err, &missing):
