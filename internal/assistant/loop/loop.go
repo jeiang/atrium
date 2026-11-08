@@ -165,13 +165,16 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		return nil, fmt.Errorf("loop: run %d: no thread %d", runID, found.ThreadID)
 	}
 	kind := tool.Kind(found.Kind)
-	allow := o.Limits.AllowedTools
-	tools, err := r.Registry.Run(ctx, kind, allow, d.Read)
+	allow := registry.All()
+	if o.Limits.AllowedTools != nil {
+		allow = registry.Only(o.Limits.AllowedTools)
+	}
+	set, err := r.Registry.Admit(ctx, kind, allow, d.Read)
 	if err != nil {
 		return nil, err
 	}
-	byName := make(map[string]tool.Tool, len(tools))
-	for _, t := range tools {
+	byName := make(map[string]tool.Tool, len(set.Dispatch))
+	for _, t := range set.Dispatch {
 		byName[t.Name] = t
 	}
 	ttl := prompts.TTL5m
@@ -205,7 +208,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		return nil, err
 	}
 	limits := actx.LimitsFor(min(threads.ContextLimitOf(*thread), model.ContextWindow), tuning)
-	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, tools, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), allow, limits, webSearchMaxUses)
+	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, set, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), limits, webSearchMaxUses)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +239,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if o.Limits.MaxSteps != nil {
 		s.steps = int(*o.Limits.MaxSteps)
 	}
-	s.toolChoice, s.invalid = forcedToolChoice(o.Limits.ToolChoice, model, byName, len(registry.ServerTools(kind, allow, webSearchMaxUses)) > 0)
+	s.toolChoice, s.invalid = forcedToolChoice(o.Limits.ToolChoice, model, set)
 	if o.Limits.MaxCostUSD != nil {
 		s.maxCost = *o.Limits.MaxCostUSD
 	}

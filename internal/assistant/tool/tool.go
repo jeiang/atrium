@@ -20,6 +20,7 @@ type Tool struct {
 	Handler     Handler
 	Effect      Effect
 	Contexts    Kinds
+	Server      bool
 }
 
 type Context struct {

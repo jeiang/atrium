@@ -60,13 +60,13 @@ func intSetting(ctx context.Context, q db.Querier, key string) (int, error) {
 	return int(n), err
 }
 
-func forcedToolChoice(choice *string, model pricing.Model, tools map[string]tool.Tool, webSearch bool) (*anthropic.ToolChoice, error) {
+func forcedToolChoice(choice *string, model pricing.Model, set registry.Set) (*anthropic.ToolChoice, error) {
 	if choice == nil || *choice == "" || *choice == "auto" {
 		return nil, nil
 	}
 	out := &anthropic.ToolChoice{Type: anthropic.ToolChoiceAny}
 	if *choice != anthropic.ToolChoiceAny {
-		if _, ok := tools[*choice]; !ok && !(*choice == registry.WebSearchName && webSearch) {
+		if !set.Has(*choice) {
 			return nil, RunLimit(fmt.Sprintf("tool_choice names %q, which is not available to this run", *choice))
 		}
 		out = &anthropic.ToolChoice{Type: anthropic.ToolChoiceTool, Name: *choice}
