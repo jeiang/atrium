@@ -28,6 +28,7 @@ type Server struct {
 	Fail    func(stage Stage) error
 	Refused smtp.Refusals
 	Sent    []Sent
+	Tokens  []string
 }
 
 func (s *Server) fail(stage Stage) error {
@@ -55,6 +56,18 @@ func (c *session) StartTLS() error {
 
 func (c *session) Login(user, password string) error {
 	return c.s.fail(StageLogin)
+}
+
+func (c *session) LoginXOAUTH2(ctx context.Context, user string, token func(context.Context) (string, error), _ func()) error {
+	if err := c.s.fail(StageLogin); err != nil {
+		return err
+	}
+	value, err := token(ctx)
+	if err != nil {
+		return err
+	}
+	c.s.Tokens = append(c.s.Tokens, value)
+	return nil
 }
 
 func (c *session) SendMessage(msg *smtp.Message, from string, to []string) (smtp.Refusals, error) {

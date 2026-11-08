@@ -2,8 +2,13 @@ package smtp
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"net"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,9 +44,9 @@ func Send(ctx context.Context, creds Credentials, account string, msg *Message, 
 		return nil, &Failure{Kind: "NoRecipients", Msg: "no recipients"}
 	}
 	if factory == nil {
-		factory = Dialer{}.Dial
+		factory = defaultFactory()
 	}
-	refused, err := send(ctx, factory, account, user, password, msg, recipients)
+	refused, err := send(ctx, factory, account, user, password, msg, recipients, nil, nil)
 	var unknown *OutcomeUnknown
 	if errors.As(err, &unknown) {
 		return nil, unknown
@@ -52,9 +57,35 @@ func Send(ctx context.Context, creds Credentials, account string, msg *Message, 
 	return refused, nil
 }
 
-func send(ctx context.Context, factory Factory, account, user, password string, msg *Message, recipients []string) (refused Refusals, err error) {
+func defaultFactory() Factory {
+	d := Dialer{}
+	if path, ok := config.OS("ATRIUM_SMTP_CA"); ok && path != "" {
+		if pem, err := os.ReadFile(path); err == nil {
+			pool := x509.NewCertPool()
+			if pool.AppendCertsFromPEM(pem) {
+				d.TLSConfig = &tls.Config{RootCAs: pool}
+			}
+		}
+	}
+	return d.Dial
+}
+
+func send(ctx context.Context, factory Factory, account, user, password string, msg *Message, recipients []string,
+	token func(context.Context) (string, error), invalidate func()) (refused Refusals, err error) {
 	spec, _ := config.Account(account)
-	server, err := factory(ctx, spec.SMTPHost(), Port, Timeout)
+	host, port := spec.SMTPHost(), Port
+	if addr, ok := config.OS("ATRIUM_SMTP_ADDR"); ok && addr != "" {
+		h, p, splitErr := net.SplitHostPort(addr)
+		if splitErr != nil {
+			return nil, splitErr
+		}
+		n, convErr := strconv.Atoi(p)
+		if convErr != nil {
+			return nil, convErr
+		}
+		host, port = h, n
+	}
+	server, err := factory(ctx, host, port, Timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +107,15 @@ func send(ctx context.Context, factory Factory, account, user, password string, 
 	if err := server.StartTLS(); err != nil {
 		return nil, err
 	}
-	if err := server.Login(user, password); err != nil {
+	if token != nil {
+		auth, ok := server.(XOAUTH2Session)
+		if !ok {
+			return nil, &Failure{Kind: "Config", Msg: "this SMTP transport cannot use XOAUTH2"}
+		}
+		if err := auth.LoginXOAUTH2(ctx, user, token, invalidate); err != nil {
+			return nil, err
+		}
+	} else if err := server.Login(user, password); err != nil {
 		return nil, err
 	}
 	refused, err = server.SendMessage(msg, SenderAddress(account, user), recipients)
