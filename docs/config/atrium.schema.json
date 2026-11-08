@@ -1117,6 +1117,20 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "open_meteo_ca_file": {
+          "type": "string"
+        },
+        "open_meteo_ca_file_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "open_meteo_proxy": {
+          "type": "string"
+        },
+        "open_meteo_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "prompt_subagent": {
           "type": "string"
         },
@@ -1146,6 +1160,82 @@
           ]
         },
         "thread_cost_cap_usd_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "weather_forecast_days": {
+          "default": 7,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "weather_forecast_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "weather_geocoding_url": {
+          "default": "https://geocoding-api.open-meteo.com/v1/search",
+          "type": "string"
+        },
+        "weather_geocoding_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "weather_hourly_hours": {
+          "default": 24,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "weather_hourly_hours_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "weather_latitude": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "weather_latitude_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "weather_location_name": {
+          "type": "string"
+        },
+        "weather_location_name_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "weather_longitude": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "weather_longitude_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "weather_open_meteo_url": {
+          "default": "https://api.open-meteo.com/v1/forecast",
+          "type": "string"
+        },
+        "weather_open_meteo_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "weather_timeout_seconds": {
+          "default": 15,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "weather_timeout_seconds_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }

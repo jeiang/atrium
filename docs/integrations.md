@@ -17,6 +17,7 @@ sections below cover the console work atrium cannot do for you.
 | ntfy | `ntfy` | Optional token | Push notifications | Full text goes only to topics that refuse an anonymous read |
 | qBittorrent | `qbittorrent` | API key | Media torrent and library operations | API keys need qBittorrent 5.2 or newer |
 | TMDB | `tmdb` | API read access token | Media metadata | Read-only; media pages show the attribution |
+| Open-Meteo | `open_meteo` | None | Weather forecasts and place lookup | Public API; no key. The configured coordinates are sent to Open-Meteo |
 | Google Calendar and Gmail | — | OAuth web client | Calendar events and Gmail over IMAP and SMTP | See [Google](#google) |
 | iCloud | — | App-specific password | IMAP, SMTP, CalDAV and CardDAV | See [iCloud](#icloud) |
 | EZTV | — | None | Media channel episode lists | Public API; only torrents tagged media are written |
@@ -145,6 +146,15 @@ optional token. Full text goes only to topics that refuse an anonymous read.
 Create an API read access token in your TMDB account settings and paste it.
 Every request carries it as a Bearer token, never as a query parameter.
 Media pages that show TMDB data carry the attribution.
+
+## Open-Meteo
+
+Weather forecasts and place lookup need no credential. Set the location
+(`weather_latitude`, `weather_longitude` and optionally
+`weather_location_name`) on the assistant Configuration page; the `weather`
+tool reads it, or geocodes a place named in the call. The tool fetches only
+the configured Open-Meteo hosts, and the request carries no operator data
+beyond the coordinates.
 
 ## EZTV
 

@@ -121,10 +121,20 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `max_steps_nightly` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` |
 | `monthly_budget_usd` | float | `150` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
 | `nightly_stale_months` | int | `6` | advanced | `ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS` |
+| `open_meteo_ca_file` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` |
+| `open_meteo_proxy` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` |
 | `prompt_subagent` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` |
 | `prompt_summary` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUMMARY` |
 | `prompt_system` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` |
 | `thread_cost_cap_usd` | float | `10` | advanced | `ATRIUM_ASSISTANT_THREAD_COST_CAP_USD` |
+| `weather_forecast_days` | int | `7` | advanced | `ATRIUM_ASSISTANT_WEATHER_FORECAST_DAYS` |
+| `weather_geocoding_url` | string | `https://geocoding-api.open-meteo.com/v1/search` | advanced | `ATRIUM_ASSISTANT_WEATHER_GEOCODING_URL` |
+| `weather_hourly_hours` | int | `24` | advanced | `ATRIUM_ASSISTANT_WEATHER_HOURLY_HOURS` |
+| `weather_latitude` | float | none | ui | `ATRIUM_ASSISTANT_WEATHER_LATITUDE` |
+| `weather_location_name` | string | none | ui | `ATRIUM_ASSISTANT_WEATHER_LOCATION_NAME` |
+| `weather_longitude` | float | none | ui | `ATRIUM_ASSISTANT_WEATHER_LONGITUDE` |
+| `weather_open_meteo_url` | string | `https://api.open-meteo.com/v1/forecast` | advanced | `ATRIUM_ASSISTANT_WEATHER_OPEN_METEO_URL` |
+| `weather_timeout_seconds` | int | `15` | advanced | `ATRIUM_ASSISTANT_WEATHER_TIMEOUT_SECONDS` |
 
 ## auth
 
