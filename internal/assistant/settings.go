@@ -28,16 +28,9 @@ const (
 
 	KeyWebSearchMaxUses = "agent_web_search_max_uses"
 
-	KeyClearAtLeastShare = "agent_clear_at_least_share"
-	KeyClearShare        = "agent_clear_share"
-	KeyCompactShare      = "agent_compact_share"
-	KeyPreflightShare    = "agent_preflight_share"
-	KeyClearKeep         = "agent_clear_keep"
-	KeyPreserveMessages  = "agent_preserve_messages"
-	KeySummaryMaxTokens  = "agent_summary_max_tokens"
-	KeyStubTokens        = "agent_stub_tokens"
-	KeyPreviewChars      = "agent_preview_chars"
-	KeyManifestResults   = "agent_manifest_results"
+	KeyStubTokens      = "agent_stub_tokens"
+	KeyPreviewChars    = "agent_preview_chars"
+	KeyManifestResults = "agent_manifest_results"
 
 	KeyJournalLeaseSeconds = "agent_journal_lease_seconds"
 
@@ -127,11 +120,6 @@ func init() {
 		d.Min, d.Max = lo, hi
 		return d
 	}
-	share := func(key, value string, peers func(string, func(string) (string, error)) error) settings.Def {
-		d := adv(key, settings.Float, value, settings.Within(0, 1))
-		d.Peers = peers
-		return d
-	}
 	effort := func(key, value string) settings.Def {
 		d := adv(key, settings.Enum, value, nil)
 		d.Choices = pricing.Efforts
@@ -144,15 +132,15 @@ func init() {
 	contextLimit := def(KeyDefaultContextLimit, settings.Enum, settings.UI, strconv.FormatInt(DefaultContextLimit, 10), nil)
 	contextLimit.Choices = contextLimitChoices()
 	chat := capped(KeyBudgetChat, settings.Float, "1", settings.Within(0, 1))
-	chat.Peers = Ordered(false, []string{KeyBudgetUnattended}, nil)
+	chat.Peers = Ordered([]string{KeyBudgetUnattended}, nil)
 	fileCap := count(KeyFileCapBytes, 32<<20, 1<<20, 128<<20)
 	messageCap := count(KeyMessageCapBytes, 64<<20, 1<<20, 256<<20)
-	messageCap.Peers = Ordered(false, []string{KeyFileCapBytes}, nil)
-	fileCap.Peers = Ordered(false, nil, []string{KeyMessageCapBytes})
+	messageCap.Peers = Ordered([]string{KeyFileCapBytes}, nil)
+	fileCap.Peers = Ordered(nil, []string{KeyMessageCapBytes})
 	recallPage := count(KeyRecallPageChars, 8000, 100, 100000)
-	recallPage.Peers = Ordered(false, nil, []string{KeyRecallMaxPageChars})
+	recallPage.Peers = Ordered(nil, []string{KeyRecallMaxPageChars})
 	recallMax := count(KeyRecallMaxPageChars, 16000, 100, 100000)
-	recallMax.Peers = Ordered(false, []string{KeyRecallPageChars}, nil)
+	recallMax.Peers = Ordered([]string{KeyRecallPageChars}, nil)
 	settings.MustRegister(
 		chat,
 		chatModel,
@@ -164,13 +152,6 @@ func init() {
 		effort(KeyEffortSub, "medium"),
 		count(KeyWebSearchMaxUses, 5, 1, 20),
 
-		share(KeyClearAtLeastShare, "0.05", Ordered(true, nil, []string{KeyClearShare})),
-		share(KeyClearShare, "0.1875", Ordered(true, []string{KeyClearAtLeastShare}, []string{KeyCompactShare})),
-		share(KeyCompactShare, "0.875", Ordered(true, []string{KeyClearShare}, []string{KeyPreflightShare})),
-		share(KeyPreflightShare, "0.95", Ordered(true, []string{KeyCompactShare}, nil)),
-		adv(KeyClearKeep, settings.Int, "3", settings.Between(1, 50)),
-		adv(KeyPreserveMessages, settings.Int, "3", settings.Between(1, 50)),
-		adv(KeySummaryMaxTokens, settings.Int, "8192", settings.Between(512, 32000)),
 		adv(KeyStubTokens, settings.Int, "2000", settings.Between(100, 50000)),
 		adv(KeyPreviewChars, settings.Int, "600", settings.Between(50, 10000)),
 		count(KeyManifestResults, 30, 1, 500),
@@ -249,11 +230,7 @@ func headerValue(value string) error {
 	return nil
 }
 
-func Ordered(strict bool, below, above []string) func(string, func(string) (string, error)) error {
-	atLeast, atMost := "at least", "at most"
-	if strict {
-		atLeast, atMost = "above", "below"
-	}
+func Ordered(below, above []string) func(string, func(string) (string, error)) error {
 	return func(value string, peer func(string) (string, error)) error {
 		own, err := numx.ParseFloat(value)
 		if err != nil {
@@ -264,8 +241,8 @@ func Ordered(strict bool, below, above []string) func(string, func(string) (stri
 			if err != nil {
 				return err
 			}
-			if other, err := numx.ParseFloat(text); err == nil && (own < other || strict && own == other) {
-				return settings.Invalid(fmt.Sprintf("must be %s %s (%s)", atLeast, key, text))
+			if other, err := numx.ParseFloat(text); err == nil && own < other {
+				return settings.Invalid(fmt.Sprintf("must be at least %s (%s)", key, text))
 			}
 		}
 		for _, key := range above {
@@ -273,8 +250,8 @@ func Ordered(strict bool, below, above []string) func(string, func(string) (stri
 			if err != nil {
 				return err
 			}
-			if other, err := numx.ParseFloat(text); err == nil && (own > other || strict && own == other) {
-				return settings.Invalid(fmt.Sprintf("must be %s %s (%s)", atMost, key, text))
+			if other, err := numx.ParseFloat(text); err == nil && own > other {
+				return settings.Invalid(fmt.Sprintf("must be at most %s (%s)", key, text))
 			}
 		}
 		return nil

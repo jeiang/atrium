@@ -167,7 +167,7 @@ func init() {
 			Check: settings.Above(0)}),
 		settings.Value(settings.Advanced, settings.Def{
 			Key: UnattendedKey, Module: "assistant", Type: settings.Float, Default: "0.8",
-			Check: settings.Within(0, 1), Peers: assistant.Ordered(false, nil, []string{ChatKey})}),
+			Check: settings.Within(0, 1), Peers: assistant.Ordered(nil, []string{ChatKey})}),
 		settings.Value(settings.Advanced, settings.Def{
 			Key: ThreadCapKey, Module: "assistant", Type: settings.Float, Default: "10",
 			Check: settings.Above(0)}),

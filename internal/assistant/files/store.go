@@ -223,7 +223,7 @@ func IngestUploads(ctx context.Context, d *db.DB, dir string, uploads []Uploaded
 		for i, f := range found {
 			items[i] = nameTokens{f.name, f.info.Tokens}
 		}
-		if err := checkBudget(items, *contextLimit, limits); err != nil {
+		if err := checkBudget(items, *contextLimit); err != nil {
 			return nil, err
 		}
 	}

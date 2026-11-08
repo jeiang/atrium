@@ -66,22 +66,22 @@ type Options struct {
 }
 
 type state struct {
-	r         *Runner
-	d         *db.DB
-	client    *anthropic.Client
-	now       func() float64
-	run       journal.Run
-	thread    threads.Thread
-	kind      tool.Kind
-	limits    actx.Limits
-	req       request
-	writer    *progress.Writer
-	x         *dispatcher
-	env       config.Env
-	steps     int
-	stepIndex int
-	maxCost   float64
-	ttl       string
+	r            *Runner
+	d            *db.DB
+	client       *anthropic.Client
+	now          func() float64
+	run          journal.Run
+	thread       threads.Thread
+	kind         tool.Kind
+	contextLimit int64
+	req          request
+	writer       *progress.Writer
+	x            *dispatcher
+	env          config.Env
+	steps        int
+	stepIndex    int
+	maxCost      float64
+	ttl          string
 
 	callsKey string
 	repeats  int
@@ -280,7 +280,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if err != nil {
 		return nil, err
 	}
-	limits := actx.LimitsFor(min(threads.ContextLimitOf(*thread), model.ContextWindow), tuning)
+	contextLimit := min(threads.ContextLimitOf(*thread), model.ContextWindow)
 	extra := deref(o.Limits.SystemExtra) + memoryPrompt
 	urls, err := threads.AllowedURLs(ctx, d.Read, thread.ID)
 	if err != nil {
@@ -300,7 +300,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		Embed: o.Embed, Now: now, Client: client, Progress: writer, Undoers: r.Undoers,
 	}
 	s := &state{
-		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits,
+		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, contextLimit: contextLimit,
 		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl,
 		x: &dispatcher{d: d, tc: tc, now: now, tuning: tuning},
 		admission: admission{
@@ -433,11 +433,10 @@ func (s *state) stream(ctx context.Context, messages []json.RawMessage) (*anthro
 }
 
 func (s *state) recordUsage(ctx context.Context, response *anthropic.Message, toolCalls, wall int64, partial bool) (float64, error) {
-	clearEdits, cleared := actx.ClearsOf(response)
 	entry := usage.Entry{
 		TS: s.now(), RequestID: response.ID, ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: s.run.Model,
 		Effort: s.run.Effort, ToolCalls: toolCalls, WallMS: wall, Partial: partial,
-		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(response.StopReason == block.Compaction)),
+		Compaction: int64(store.Bit(response.StopReason == block.Compaction)),
 	}
 	return usage.Record(context.WithoutCancel(ctx), s.d, entry, response.Usage)
 }
@@ -547,8 +546,8 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, err
 	}
 	span.SetAttributes(obs.Float(obs.RunCostUSD, spent), obs.Int64(obs.ContextSize, size))
-	if size > s.limits.Hard {
-		return false, nil, RunLimit(fmt.Sprintf("next request would be about %d tokens, over the %d limit", size, s.limits.Hard))
+	if size > s.contextLimit {
+		return false, nil, RunLimit(fmt.Sprintf("next request would be about %d tokens, over the %d limit", size, s.contextLimit))
 	}
 	if err := s.reserve(ctx, size); err != nil {
 		return false, nil, err

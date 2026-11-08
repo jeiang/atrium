@@ -12,7 +12,6 @@ import (
 	"unicode"
 
 	"github.com/jeiang/atrium/internal/assistant/block"
-	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -351,20 +350,16 @@ type Meter struct {
 }
 
 func MeterOf(ctx context.Context, q db.Querier, thread threads.Thread) (Meter, error) {
-	tuning, err := actx.ReadTuning(ctx, q)
-	if err != nil {
-		return Meter{}, err
-	}
-	limits := actx.LimitsFor(threads.ContextLimitOf(thread), tuning)
+	limit := threads.ContextLimitOf(thread)
 	tokens, err := usage.PromptTokens(ctx, q, thread.ID)
 	if err != nil {
 		return Meter{}, err
 	}
 	share := 1.0
-	if limits.Compact != 0 {
-		share = min(float64(tokens)/float64(limits.Compact), 1.0)
+	if limit != 0 {
+		share = min(float64(tokens)/float64(limit), 1.0)
 	}
-	return Meter{Tokens: tokens, CompactAt: limits.Compact, Limit: limits.Hard, Share: share}, nil
+	return Meter{Tokens: tokens, CompactAt: limit, Limit: limit, Share: share}, nil
 }
 
 func CostOfThread(ctx context.Context, q db.Querier, threadID int64) (float64, error) {

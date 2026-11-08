@@ -77,31 +77,23 @@ func (e FileError) Error() string { return string(e) }
 func IsImageType(mediaType string) bool { return imageTypes[mediaType] }
 
 type Limits struct {
-	FileCap      int
-	MessageCap   int
-	NameChars    int
-	CompactShare float64
+	FileCap    int
+	MessageCap int
+	NameChars  int
 }
 
 func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
 	r := assistant.Read(ctx, q)
 	l := Limits{
-		FileCap:      r.Int(assistant.KeyFileCapBytes),
-		MessageCap:   r.Int(assistant.KeyMessageCapBytes),
-		NameChars:    r.Int(assistant.KeyFileNameChars),
-		CompactShare: r.Float(assistant.KeyCompactShare),
+		FileCap:    r.Int(assistant.KeyFileCapBytes),
+		MessageCap: r.Int(assistant.KeyMessageCapBytes),
+		NameChars:  r.Int(assistant.KeyFileNameChars),
 	}
 	return l, r.Err()
 }
 
-func (l Limits) tuning() actx.Tuning { return actx.Tuning{CompactShare: l.CompactShare} }
-
-func (l Limits) textBytes() int {
-	return int(4 * actx.CharsPerToken * compactBudget(pricing.MaxContextWindow(), l))
-}
-
-func compactBudget(contextLimit int64, l Limits) int64 {
-	return actx.LimitsFor(contextLimit, l.tuning()).Compact
+func textBytes() int {
+	return int(4 * actx.CharsPerToken * pricing.MaxContextWindow())
 }
 
 func MessageCapError(cap int) FileError {
@@ -188,10 +180,10 @@ func pdfPages(data []byte) int64 {
 func extractText(data []byte, mediaType string, l Limits) (string, error) {
 	switch mediaType {
 	case DOCXType:
-		text, err := docxText(data, l.textBytes())
+		text, err := docxText(data, textBytes())
 		return text, extractFailure("Word", err)
 	case XLSXType:
-		text, err := xlsxText(data, l.textBytes())
+		text, err := xlsxText(data, textBytes())
 		return text, extractFailure("Excel", err)
 	}
 	if indexZero(data[:min(len(data), binarySniffBytes)]) {
@@ -254,16 +246,15 @@ type nameTokens struct {
 	Tokens int64
 }
 
-func checkBudget(items []nameTokens, contextLimit int64, l Limits) error {
+func checkBudget(items []nameTokens, contextLimit int64) error {
 	if len(items) == 0 {
 		return nil
 	}
-	budget := compactBudget(contextLimit, l)
 	var total int64
 	for _, it := range items {
 		total += it.Tokens
 	}
-	if total <= budget {
+	if total <= contextLimit {
 		return nil
 	}
 	biggest := items[0]
@@ -273,6 +264,6 @@ func checkBudget(items []nameTokens, contextLimit int64, l Limits) error {
 		}
 	}
 	return FileError(fmt.Sprintf(
-		"the attached files are about %dK tokens (%s the largest); this thread's %dK context limit leaves room for %dK. "+
-			"Raise the context limit or attach a smaller file.", total/1000, biggest.Name, contextLimit/1000, budget/1000))
+		"the attached files are about %dK tokens (%s the largest), over this thread's %dK context limit. "+
+			"Raise the context limit or attach a smaller file.", total/1000, biggest.Name, contextLimit/1000))
 }
