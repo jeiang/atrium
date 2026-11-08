@@ -30,14 +30,13 @@ refresh token as a secret that can be pinned with its `*_file` variable.
 
 | Account | Gmail IMAP and SMTP | Calendar | Notes |
 |---|---|---|---|
-| Personal | App password; XOAUTH2 planned | OAuth | An app password needs 2-step verification and Google does not recommend it |
-| Workspace | XOAUTH2, not implemented yet | OAuth | App passwords are not available |
-| Advanced Protection | XOAUTH2, not implemented yet | OAuth | App passwords are refused |
+| Personal | App password or XOAUTH2 | OAuth | An app password needs 2-step verification and Google does not recommend it |
+| Workspace | XOAUTH2 | OAuth | App passwords are not available |
+| Advanced Protection | XOAUTH2 | OAuth | App passwords are refused |
 
 The Gmail consent in the wizard stores a refresh token for the XOAUTH2 mail
-transport. Until that transport lands, a Gmail mail account uses an app
-password, which personal accounts can create and Workspace and Advanced
-Protection accounts cannot.
+transport. Add the Gmail account on the Mail settings page and choose
+XOAUTH2; a personal account may use an app password instead.
 
 ### Setup
 
