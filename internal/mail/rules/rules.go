@@ -199,26 +199,29 @@ func (m *Message) list(field string) string {
 }
 
 func FieldValues(m *Message, field string) ([]string, error) {
-	if _, ok := ListFields[field]; ok {
+	if column, ok := ListFields[field]; ok {
 		raw, err := py.JSONLoads([]byte(m.list(field)))
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", ListFields[field], err)
+			return nil, fmt.Errorf("%s: %w", column, err)
 		}
 		items, ok := raw.([]any)
 		if !ok {
-			return nil, fmt.Errorf("%s: %w", ListFields[field], errNotList)
+			return nil, fmt.Errorf("%s: %w", column, errNotList)
 		}
 		out := make([]string, len(items))
 		for i, item := range items {
 			s, ok := item.(string)
 			if !ok {
-				return nil, fmt.Errorf("%s: %w", ListFields[field], errNotStr)
+				return nil, fmt.Errorf("%s: %w", column, errNotStr)
 			}
 			out[i] = s
 		}
 		return out, nil
 	}
-	return []string{m.scalar(field)}, nil
+	if _, ok := ScalarFields[field]; ok {
+		return []string{m.scalar(field)}, nil
+	}
+	return nil, fmt.Errorf("unknown field %q", field)
 }
 
 var (
@@ -336,20 +339,22 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 			}
 		}
 		return false, nil
-	}
-	re := c.matcher
-	if re == nil {
-		return false, fmt.Errorf("op re: pattern %s was not compiled", py.ReprValue(c.Value))
-	}
-	for _, v := range values {
-		if v == "" {
-			continue
+	case "re":
+		re := c.matcher
+		if re == nil {
+			return false, fmt.Errorf("op re: pattern %s was not compiled", py.ReprValue(c.Value))
 		}
-		if re.MatchString(v) {
-			return true, nil
+		for _, v := range values {
+			if v == "" {
+				continue
+			}
+			if re.MatchString(v) {
+				return true, nil
+			}
 		}
+		return false, nil
 	}
-	return false, nil
+	return false, fmt.Errorf("unknown op %q", c.Op)
 }
 
 func anyNonEmpty(values []string) bool {
@@ -655,50 +660,13 @@ func parseStored(text string) ([]Condition, error) {
 	}
 	out := make([]Condition, len(items))
 	for i, item := range items {
-		d, ok := item.(py.Dict)
-		if !ok {
-			return nil, fmt.Errorf("condition %s: not an object", py.ReprValue(item))
+		cond, err := ValidateCondition(item)
+		if err != nil {
+			return nil, fmt.Errorf("condition %d: %w", i, err)
 		}
-		field, _ := d.Get("field")
-		op, _ := d.Get("op")
-		value, has := d.Get("value")
-		f, fok := field.(string)
-		o, ook := op.(string)
-		if !fok || !ook {
-			return nil, fmt.Errorf("condition %s: field and op must be strings", py.ReprValue(item))
-		}
-		if list, ok := value.([]any); ok {
-			if strs, ok := valueListLoose(list); ok {
-				value = strs
-			}
-		}
-		c := Condition{Field: f, Op: o, Value: value, HasValue: has}
-		if o == "re" {
-			text, ok := value.(string)
-			if !ok {
-				return nil, fmt.Errorf("condition %d: pattern is not a string", i)
-			}
-			re, err := compilePattern(text)
-			if err != nil {
-				return nil, fmt.Errorf("condition %d: invalid regex %s: %w", i, py.Repr(text), err)
-			}
-			c.matcher = re
-		}
-		out[i] = c
+		out[i] = cond
 	}
 	return out, nil
-}
-
-func valueListLoose(list []any) ([]string, bool) {
-	out := make([]string, len(list))
-	for i, item := range list {
-		s, ok := item.(string)
-		if !ok {
-			return nil, false
-		}
-		out[i] = s
-	}
-	return out, true
 }
 
 func LoadRules(ctx context.Context, q Querier, account string) ([]Rule, error) {
