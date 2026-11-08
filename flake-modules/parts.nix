@@ -1,5 +1,5 @@
 {inputs, ...}: {
-  systems = ["x86_64-linux" "aarch64-darwin"];
+  systems = ["x86_64-linux" "aarch64-linux" "aarch64-darwin"];
 
   perSystem = {system, ...}: let
     pkgs = inputs.nixpkgs.legacyPackages.${system};
