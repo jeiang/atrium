@@ -7,28 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 )
 
 func TestMemoryTreeFollowsChatRuns(t *testing.T) {
-	dir := t.TempDir()
+	dir, api := moduleFixture(t, flagsExcept("", ""))
 	reply := anthropictest.Reply("end_turn", anthropictest.Text("hi"))
-	api := &modelLog{Server: anthropictest.New(t, reply, reply, reply)}
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
-	t.Setenv("ATRIUM_CONFIG", "")
-	t.Setenv("ATRIUM_CORE_TZ", "America/Port_of_Spain")
-	for name, value := range requirementEnv(filepath.Join(dir, "media")) {
-		t.Setenv(name, value)
-	}
-	t.Setenv("ANTHROPIC_API_KEY", anthropictest.APIKey)
-	t.Setenv(anthropic.BaseURLEnv, api.URL)
-	for _, name := range moduleNames {
-		t.Setenv(flagEnv(name), "true")
-	}
+	api.Push(reply, reply)
 	ran := runApp("agent", "run", "--text", "one")
 	if ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
