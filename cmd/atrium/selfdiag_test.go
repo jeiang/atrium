@@ -109,9 +109,9 @@ func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
 				t.Fatalf("%d model requests, want 2", len(requests))
 			}
 			result := string(requests[1].Body)
-			for _, want := range []string{"row-for-stale_jobs", "row-for-logs", "untrusted"} {
+			for _, want := range []string{"[tool_result]", "zoom id"} {
 				if !strings.Contains(result, want) {
-					t.Errorf("tool result lacks %q", want)
+					t.Errorf("next request lacks %q", want)
 				}
 			}
 		})

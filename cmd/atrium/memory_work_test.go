@@ -112,3 +112,35 @@ func TestMemoryWorkRetriesLongAnswersAndFallsBack(t *testing.T) {
 		t.Error("the refusal did not store a fallback node")
 	}
 }
+
+func TestMemoryWorkRefusesUnderTheRunCap(t *testing.T) {
+	dir, api := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('max_run_cost_usd_haiku_5_5', '0.0001')"); err != nil {
+		t.Fatal(err)
+	}
+	long := `[{"type":"text","text":"` + strings.Repeat("evidence ", 100) + `"}]`
+	if _, err := d.Write.Exec("INSERT INTO thread_messages (thread_id, seq, role, content_json, created_at) VALUES (1, 3, 'user', ?, 0)", long); err != nil {
+		t.Fatal(err)
+	}
+	if ran := runApp("memory", "view", "1"); ran.code != cli.ExitOK {
+		t.Fatalf("memory view: %d %s", ran.code, ran.stderr)
+	}
+	before := len(api.Requests())
+	if ran := runApp("memory", "work", "1"); ran.code != cli.ExitOK {
+		t.Fatalf("memory work: %d %s", ran.code, ran.stderr)
+	}
+	if got := len(api.Requests()) - before; got != 0 {
+		t.Errorf("summarizer sent %d requests under the run cap", got)
+	}
+	var state, errText string
+	if err := d.Read.QueryRow("SELECT state, COALESCE(error, '') FROM memory_jobs WHERE thread_id = 1 ORDER BY id DESC LIMIT 1").Scan(&state, &errText); err != nil {
+		t.Fatal(err)
+	}
+	if state != "failed" || !strings.Contains(errText, "run cap") {
+		t.Errorf("job state %q error %q, want failed with a run cap error", state, errText)
+	}
+}

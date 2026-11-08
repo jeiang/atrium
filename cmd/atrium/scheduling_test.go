@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -35,7 +36,39 @@ func toolResult(t *testing.T, name string, input map[string]any) string {
 	if len(requests) != 2 {
 		t.Fatalf("%d model requests, want 2", len(requests))
 	}
-	return string(requests[1].Body)
+	d := mustConnect(t, filepath.Join(activeFixture.dir, "atrium.db"))
+	var raw string
+	if err := d.Read.QueryRow("SELECT content_json FROM thread_messages WHERE thread_id = (SELECT MAX(id) FROM threads) AND role = 'user' AND content_json LIKE '%tool_result%' ORDER BY seq DESC LIMIT 1").Scan(&raw); err != nil {
+		t.Fatalf("tool result: %v", err)
+	}
+	var blocks []struct {
+		Type    string `json:"type"`
+		Content any    `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(raw), &blocks); err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range blocks {
+		if b.Type != "tool_result" {
+			continue
+		}
+		switch c := b.Content.(type) {
+		case string:
+			return c
+		case []any:
+			var out strings.Builder
+			for _, part := range c {
+				if p, ok := part.(map[string]any); ok {
+					if text, ok := p["text"].(string); ok {
+						out.WriteString(text)
+					}
+				}
+			}
+			return out.String()
+		}
+	}
+	t.Fatalf("no tool_result block in %s", raw)
+	return ""
 }
 
 func event(uid, start, end string) string {
@@ -88,7 +121,9 @@ func unescape(body string) string {
 			Content json.RawMessage `json:"content"`
 		} `json:"messages"`
 	}
-	_ = json.Unmarshal([]byte(body), &req)
+	if err := json.Unmarshal([]byte(body), &req); err != nil || len(req.Messages) == 0 {
+		return body
+	}
 	var out strings.Builder
 	for _, m := range req.Messages {
 		var blocks []struct {
@@ -124,6 +159,12 @@ const invite = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VE
 func proposalID(t *testing.T, result string) string {
 	t.Helper()
 	text := unescape(result)
+	var parsed map[string]any
+	if json.Unmarshal([]byte(text), &parsed) == nil {
+		if id, ok := parsed["proposal_id"]; ok {
+			return fmt.Sprint(id)
+		}
+	}
 	_, rest, ok := strings.Cut(text, `"proposal_id": `)
 	if !ok {
 		t.Fatalf("no proposal in %s", text)

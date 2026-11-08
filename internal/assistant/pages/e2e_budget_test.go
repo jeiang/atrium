@@ -91,18 +91,18 @@ func TestSpendCap429EndsTheRunAsABudgetStop(t *testing.T) {
 	}
 }
 
-func TestRunCapRefusesTheCompactionRequestBeforeItIsSent(t *testing.T) {
+func TestRunCapRefusesTheNextRequestBeforeItIsSent(t *testing.T) {
 	s := newSite(t)
-	s.store("max_run_cost_usd_opus_5_5", "0.01")
-	r := s.multipart("/chat", map[string]string{"text": strings.Repeat("word ", 120_000), "model": "claude-opus-5-5", "context_limit": "90000"}, nil, hx, "true")
+	s.store("max_run_cost_usd_opus_5_5", "0.00001")
+	r := s.multipart("/chat", map[string]string{"text": "hello", "model": "claude-opus-5-5"}, nil, hx, "true")
 	status(t, r, http.StatusNoContent)
 	id, err := strconv.ParseInt(strings.TrimPrefix(r.Header.Get("HX-Redirect"), "/chat/"), 10, 64)
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := s.settle(s.lastRun(id))
-	if got.State != journal.Failed || got.Error == nil || !strings.Contains(*got.Error, "the summary request is about") || !strings.Contains(*got.Error, "max_run_cost_usd_opus_5_5") {
-		t.Fatalf("run %s %v, want the compaction refused by the run cap", got.State, got.Error)
+	if got.State != journal.Failed || got.Error == nil || !strings.Contains(*got.Error, "run cost cap") || !strings.Contains(*got.Error, "max_run_cost_usd_opus_5_5") {
+		t.Fatalf("run %s %v, want the next request refused by the run cap", got.State, got.Error)
 	}
 	if n := len(s.api.Requests()); n != 0 {
 		t.Fatalf("%d requests sent, want none", n)

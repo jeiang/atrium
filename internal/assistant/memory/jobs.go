@@ -10,7 +10,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/block"
+	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -182,6 +184,10 @@ func runJob(ctx context.Context, d *db.DB, threadID int64, job Job, o WorkOption
 	if err != nil {
 		return false, err
 	}
+	if cerr := capCheck(ctx, d.Read, o.Model, len(text)+len(root)); cerr != nil {
+		msg := cerr.Error()
+		return false, finishJob(ctx, d, job.ID, JobFail, &msg)
+	}
 	answer, resp, retry, err := summarize(ctx, o.Client, o.Model, o.Effort, text, root, limit)
 	if retry {
 		_, uerr := d.Write.ExecContext(ctx,
@@ -321,4 +327,26 @@ func QueuedThreads(ctx context.Context, q db.Querier, now float64) ([]int64, err
 		var id int64
 		return id, r.Scan(&id)
 	})
+}
+
+// capCheck refuses a summary request that would exceed the model's run cost
+// cap, before anything is sent.
+func capCheck(ctx context.Context, q db.Querier, model string, promptBytes int) error {
+	cap, err := budget.RunCap(ctx, q, model)
+	if err != nil || cap <= 0 {
+		return err
+	}
+	tokens := int64(promptBytes/4) + 1
+	cold, err := budget.ColdRequestUSD(model, tokens, "5m")
+	if err != nil {
+		return err
+	}
+	out, err := pricing.CostUSD(model, pricing.Tokens{Output: 1024}, 0)
+	if err != nil {
+		return err
+	}
+	if cold+out > cap {
+		return fmt.Errorf("memory: the summary request would cost $%.2f, over the $%.2f run cap", cold+out, cap)
+	}
+	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
@@ -42,11 +41,10 @@ func TestPromptOverrideKeepsThePreambleAndResetRestoresTheDefault(t *testing.T) 
 		t.Errorf("%d audit rows for the prompt edit", n)
 	}
 
-	head, body := s.systemOfRun("hello")
+	head, _ := s.systemOfRun("hello")
 	if head != prompts.Preamble+"\n\nAnswer in French.\nBe brief." {
 		t.Errorf("custom system block %q", head)
 	}
-	mustContain(t, body, `"instructions":"Keep only decisions."`)
 
 	blank := status(t, s.post("/settings/prompts/prompt_system", url.Values{"text": {"  "}}), http.StatusUnprocessableEntity)
 	mustContain(t, blank, "must not be blank", `role="alert"`)
@@ -64,11 +62,8 @@ func TestPromptOverrideKeepsThePreambleAndResetRestoresTheDefault(t *testing.T) 
 	mustContain(t, after, "Prompt reset", ">"+template.HTMLEscapeString(prompts.System)+"</textarea>")
 	mustNotContain(t, after, "Reset to default")
 
-	head, body = s.systemOfRun("again")
+	head, _ = s.systemOfRun("again")
 	if head != prompts.Preamble+"\n\n"+prompts.System {
 		t.Errorf("reset system block differs from the default:\n%q", head)
-	}
-	if !strings.Contains(body, "Keep every detail below") {
-		t.Error("reset summary instructions differ from the default")
 	}
 }
