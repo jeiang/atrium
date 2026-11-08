@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals/executors"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -98,7 +97,7 @@ func (a *Applier) ApplySnoozes(ctx context.Context, account string) (Outcome, er
 			continue
 		}
 		auto := safety.AutomaticWrites(ctx, pause)
-		before := py.Dict{{Key: "imap_name", Value: s.IMAPName}, {Key: "uidvalidity", Value: s.UIDValidity}, {Key: "uid", Value: s.UID}}
+		before := map[string]any{"imap_name": s.IMAPName, "uidvalidity": s.UIDValidity, "uid": s.UID}
 		id, ok, err := a.Live.Begin(auto, account, s.MessageID, digest, live.SnoozeReturn, &s.IMAPName, &inbox, before, nil)
 		if err != nil {
 			return out, err
@@ -128,7 +127,7 @@ func (a *Applier) ApplySnoozes(ctx context.Context, account string) (Outcome, er
 			out.Failed++
 			continue
 		}
-		after := py.Dict{{Key: "imap_name", Value: config.Inbox}, {Key: "labels", Value: []string{mailops.InboxLabel}}}
+		after := map[string]any{"imap_name": config.Inbox, "labels": []string{mailops.InboxLabel}}
 		if err := a.Live.Finish(ctx, id, after, nil, nil); err != nil {
 			return out, err
 		}
