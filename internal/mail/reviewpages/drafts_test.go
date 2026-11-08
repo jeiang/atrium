@@ -207,14 +207,14 @@ func TestEditFormUpdatesTheDraft(t *testing.T) {
 		t.Errorf("row %+v", row)
 	}
 	fragment := status(t, s.post(target, form("account", "gmail", "to", "", "body", "B"), hx, "true"), http.StatusUnprocessableEntity)
-	mustContain(t, fragment, "Not saved", "to is required", `<textarea id="body-`+fmt.Sprint(id)+`"`)
+	mustContain(t, fragment, "Not saved", "to is required", `<textarea id="body-`+fmt.Sprint(id)+`"`, ">B</textarea>")
 	mustNotContain(t, fragment, "<html")
 	missing := s.post(target, form("to", "x"))
 	if detail := jsonOf(t, status(t, missing, http.StatusUnprocessableEntity))["detail"].([]any)[0].(map[string]any); detail["type"] != "missing" {
 		t.Errorf("detail = %v", detail)
 	}
 	full := status(t, s.post(target, form("account", "gmail", "to", "", "body", "B")), http.StatusUnprocessableEntity)
-	mustContain(t, full, "<html", "to is required", "Drafts")
+	mustContain(t, full, "<html", "to is required", "Drafts", ">B</textarea>")
 }
 
 func TestBodyAndRecipientsAreVerbatim(t *testing.T) {
