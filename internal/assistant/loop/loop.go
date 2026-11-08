@@ -236,7 +236,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if o.Limits.MaxSteps != nil {
 		s.steps = int(*o.Limits.MaxSteps)
 	}
-	s.toolChoice, s.invalid = forcedToolChoice(o.Limits.ToolChoice, model, byName)
+	s.toolChoice, s.invalid = forcedToolChoice(o.Limits.ToolChoice, model, byName, len(registry.ServerTools(kind, allow, webSearchMaxUses)) > 0)
 	if o.Limits.MaxCostUSD != nil {
 		s.maxCost = *o.Limits.MaxCostUSD
 	}

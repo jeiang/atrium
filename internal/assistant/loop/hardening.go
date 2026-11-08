@@ -7,6 +7,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
@@ -59,13 +60,13 @@ func intSetting(ctx context.Context, q db.Querier, key string) (int, error) {
 	return int(n), err
 }
 
-func forcedToolChoice(choice *string, model pricing.Model, tools map[string]tool.Tool) (*anthropic.ToolChoice, error) {
+func forcedToolChoice(choice *string, model pricing.Model, tools map[string]tool.Tool, webSearch bool) (*anthropic.ToolChoice, error) {
 	if choice == nil || *choice == "" || *choice == "auto" {
 		return nil, nil
 	}
 	out := &anthropic.ToolChoice{Type: anthropic.ToolChoiceAny}
 	if *choice != anthropic.ToolChoiceAny {
-		if _, ok := tools[*choice]; !ok {
+		if _, ok := tools[*choice]; !ok && !(*choice == registry.WebSearchName && webSearch) {
 			return nil, RunLimit(fmt.Sprintf("tool_choice names %q, which is not available to this run", *choice))
 		}
 		out = &anthropic.ToolChoice{Type: anthropic.ToolChoiceTool, Name: *choice}

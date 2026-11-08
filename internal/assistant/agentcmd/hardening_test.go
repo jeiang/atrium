@@ -136,6 +136,7 @@ func TestForcedToolChoiceFollowsTheModelCatalog(t *testing.T) {
 	}{
 		{pricing.HaikuID, "any", map[string]any{"type": "any"}},
 		{pricing.HaikuID, "probe", map[string]any{"type": "tool", "name": "probe"}},
+		{pricing.HaikuID, "web_search", map[string]any{"type": "tool", "name": "web_search"}},
 		{pricing.SonnetID, "any", nil},
 		{pricing.OpusID, "probe", nil},
 	} {
