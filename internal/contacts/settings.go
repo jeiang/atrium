@@ -20,7 +20,8 @@ func init() {
 }
 
 func Dir(ctx context.Context, q db.Querier) (string, error) {
-	if on, err := module.FlagOn(ctx, q, module.Contacts); err != nil || !on {
+	on, err := settings.Default.Resolve(ctx, q, module.FlagKey(module.Contacts))
+	if err != nil || on.Value != "true" {
 		return "", err
 	}
 	found, err := settings.Default.Resolve(ctx, q, DirKey)

@@ -25,6 +25,8 @@ const (
 	Contacts      = "contacts"
 )
 
+var Builtins = []string{Mail, Calendar, Notion, Media, Assistant, Notifications, Grafana, Contacts}
+
 type Module interface {
 	Register(mc Context) Registration
 }
@@ -51,7 +53,6 @@ type Registration struct {
 	Name     string
 	Core     bool
 	Needs    []string
-	Soft     []string
 	Requires []Requirement
 	Pages    []web.Page
 	Commands []*cli.Command
@@ -121,10 +122,10 @@ type Unmet struct {
 }
 
 type Status struct {
-	Name   string
-	State  State
-	Reason string
-	Unmet  []Unmet
+	Name  string
+	State State
+
+	Unmet []Unmet
 }
 
 var ErrNotEvaluated = errors.New("module: states are not evaluated yet")
@@ -149,7 +150,7 @@ type UnknownDependency struct {
 }
 
 func (e *UnknownDependency) Error() string {
-	return "module: " + e.Module + " needs " + e.Dependency + ", which is not registered before it"
+	return "module: " + e.Module + " needs " + e.Dependency + ", which is not registered"
 }
 
 type UnknownLeaf struct {
@@ -159,6 +160,24 @@ type UnknownLeaf struct {
 
 func (e *UnknownLeaf) Error() string {
 	return "module: " + e.Module + " has no command " + e.Path
+}
+
+type DependencyCycle struct{ Modules []string }
+
+func (e *DependencyCycle) Error() string {
+	return "module: dependency cycle among " + strings.Join(e.Modules, ", ")
+}
+
+type InvalidLeaf struct{ Module, Path string }
+
+func (e *InvalidLeaf) Error() string {
+	return "module: " + e.Module + " leaf " + e.Path + " sets both Always and Needs"
+}
+
+type InvalidPage struct{ Module string }
+
+func (e *InvalidPage) Error() string {
+	return "module: " + e.Module + " has a page with no Module"
 }
 
 type InvalidCore struct{ Module string }

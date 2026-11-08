@@ -47,20 +47,21 @@ func (s *Set) rows(ctx context.Context, d *web.Deps) ([]row, error) {
 		return nil, err
 	}
 	var out []row
-	for i, st := range snap.Statuses() {
+	for i, st := range snap.statuses {
 		if s.regs[i].Core {
 			continue
 		}
-		on, err := FlagOn(ctx, d.DB.Read, st.Name)
+		found, err := s.reg.Resolve(ctx, d.DB.Read, FlagKey(st.Name))
 		if err != nil {
 			return nil, err
 		}
+		on := found.Value == "true"
 		source, _, err := s.reg.Pinned(FlagKey(st.Name))
 		if err != nil {
 			return nil, err
 		}
 		running, _ := s.Current().Status(st.Name)
-		out = append(out, row{Name: st.Name, State: string(st.State), Reason: st.Reason, On: on, Pinned: source, Restart: running.State != st.State})
+		out = append(out, row{Name: st.Name, State: string(st.State), Reason: st.Reason(), On: on, Pinned: source, Restart: running.State != st.State})
 	}
 	return out, nil
 }

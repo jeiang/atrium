@@ -20,7 +20,6 @@ func (Module) Register(mc module.Context) module.Registration {
 	command := calendarcmd.Command(mc.Env, mc.Tools)
 	return module.Registration{
 		Name:     module.Calendar,
-		Soft:     []string{module.Mail},
 		Requires: []module.Requirement{{Name: "calendar credentials", Check: credentials}},
 		Commands: []*cli.Command{command},
 		Leaves: map[string]module.Leaf{

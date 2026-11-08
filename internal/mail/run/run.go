@@ -88,8 +88,8 @@ func New(env config.Env, d *db.DB, cfg config.Config, open mailops.Opener, now f
 		Router:  &router.Router{DB: d, Now: now},
 		Applier: applier.New(l, open, syncer),
 		Events: func(ctx context.Context, account string) (int, int, error) {
-			if on, err := module.FlagOn(ctx, d.Read, module.Calendar); err != nil || !on {
-				return 0, 0, err
+			if !module.IsEnabled(module.Calendar) {
+				return 0, 0, nil
 			}
 			return candidates.ScanAccount(ctx, d, cfg, account, nil, env, now)
 		},
