@@ -11,9 +11,10 @@ import (
 )
 
 type Options struct {
-	Env   config.Env
-	Judge Judge
-	Clock func() float64
+	Env      config.Env
+	Judge    Judge
+	Clock    func() float64
+	CacheDir string
 }
 
 type RefreshResult struct {
@@ -33,9 +34,9 @@ func Refresh(ctx context.Context, d *db.DB, now float64, o Options) (RefreshResu
 		run  func() (any, error)
 	}{
 		{"loops", func() (any, error) {
-			return Compute(ctx, d, now)
+			return Compute(ctx, d, o.CacheDir, now)
 		}},
-		{"commitments", func() (any, error) { return ScanCommitments(ctx, d, env, now, o.Judge) }},
+		{"commitments", func() (any, error) { return ScanCommitments(ctx, d, o.CacheDir, env, now, o.Judge) }},
 		{"reminders", func() (any, error) { return reminders.Propose(ctx, now, config.From(ctx).TZName(env)) }},
 	}
 	var out RefreshResult

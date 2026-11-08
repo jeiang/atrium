@@ -29,6 +29,9 @@ type Message struct {
 	Category   string
 	ListID     string
 	ToAddrs    string
+	ESP        string
+	ReplyTo    string
+	RawPath    string
 }
 
 type Spec struct {
@@ -49,7 +52,7 @@ type Result struct {
 func candidates(ctx context.Context, q db.Querier, now float64, spec Spec) ([]Message, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT m.id, m.account, m.date_ts, m.subject, m.from_name, m.from_addr, m.from_domain, m.sent, "+
-			"m.labels, m.flags, m.precedence, m.category, m.list_id, m.to_addrs FROM messages m "+
+			"m.labels, m.flags, m.precedence, m.category, m.list_id, m.to_addrs, m.esp, m.reply_to, m.raw_path FROM messages m "+
 			"WHERE m.gone_at IS NULL AND m.date_ts >= ? AND ("+spec.Hint+") AND NOT EXISTS "+
 			"(SELECT 1 FROM messages o JOIN mail_scans s ON s.message_id = o.id "+
 			"WHERE s.kind = ? AND o.account = m.account AND o.digest = m.digest) "+
@@ -60,8 +63,10 @@ func candidates(ctx context.Context, q db.Querier, now float64, spec Spec) ([]Me
 	}
 	all, err := db.Collect(rows, func(r *sql.Rows) (Message, error) {
 		var m Message
+		var rawPath sql.NullString
 		err := r.Scan(&m.ID, &m.Account, &m.DateTS, &m.Subject, &m.FromName, &m.FromAddr, &m.FromDomain, &m.Sent,
-			&m.Labels, &m.Flags, &m.Precedence, &m.Category, &m.ListID, &m.ToAddrs)
+			&m.Labels, &m.Flags, &m.Precedence, &m.Category, &m.ListID, &m.ToAddrs, &m.ESP, &m.ReplyTo, &rawPath)
+		m.RawPath = rawPath.String
 		return m, err
 	})
 	if err != nil {

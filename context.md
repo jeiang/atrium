@@ -58,6 +58,15 @@ behavior-parity target.
   due date, reminder time, priority and an optional source; the assistant can
   list, add, update, complete and propose tasks, and the reminder job inserts
   a task.
+- Open loops come from mail the operator actually needs to answer: the
+  latest message must be addressed directly to the operator in To and must
+  not be bulk or automated (List-Id, List-Unsubscribe, Precedence
+  bulk/list/junk, Auto-Submitted, a bulk Gmail category, an email service
+  provider, a Reply-To that differs from From, or an automated sender
+  address). Commitments follow the same rule and include only items
+  addressed to or requested of the operator; items meant for other
+  recipients of a group message are ignored. Birthdays stay a
+  contacts/calendar concern and are not an open-loop source.
 - Phone actions are HMAC-signed links in a notification that approve or
   dismiss a proposal: `phone_actions_enabled` (default off) and
   `phone_actions_kinds` choose the proposal kinds, and web-only kinds cannot

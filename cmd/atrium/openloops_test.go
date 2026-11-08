@@ -1,0 +1,138 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/testutil/llmstub"
+)
+
+const loopDay = 86400.0
+
+type seededLoopMail struct {
+	uid        int
+	ageDays    float64
+	sent       bool
+	subject    string
+	from       string
+	fromDomain string
+	toAddrs    string
+	esp        string
+	raw        string
+}
+
+func seedLoopMail(t *testing.T, d *db.DB, cacheDir string, m seededLoopMail) {
+	t.Helper()
+	rel := fmt.Sprintf("raw/test/%d.eml", m.uid)
+	path := filepath.Join(cacheDir, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(m.raw), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	now := float64(time.Now().Unix())
+	if _, err := d.Write.Exec(
+		"INSERT INTO messages (account, mailbox_id, uidvalidity, uid, digest, date_ts, sent, subject, from_addr, from_domain, to_addrs, esp, raw_path, first_seen) "+
+			"VALUES ('test', 1, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		m.uid, fmt.Sprintf("digest-%d", m.uid), now-m.ageDays*loopDay, m.sent, m.subject, m.from, m.fromDomain,
+		m.toAddrs, m.esp, rel, now); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	var mu sync.Mutex
+	var bodies []string
+	srv := llmstub.Server(t, func(feature string, body []byte) bool {
+		if feature == "commitments" {
+			mu.Lock()
+			bodies = append(bodies, string(body))
+			mu.Unlock()
+		}
+		return true
+	})
+	setEnv(t, settingEnv(endpoint.KeyChatURL), srv.URL+"/v1")
+	setEnv(t, settingEnv(endpoint.KeyEmbedURL), srv.URL+"/v1")
+	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
+		t.Fatalf("initialize database: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	if _, err := d.Write.Exec("INSERT INTO accounts (name, kind) VALUES ('test', 'icloud')"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO mailboxes (id, account, name, imap_name, role) VALUES (1, 'test', 'INBOX', 'INBOX', 'inbox')"); err != nil {
+		t.Fatal(err)
+	}
+	cacheDir := filepath.Join(dir, "cache")
+	seedLoopMail(t, d, cacheDir, seededLoopMail{
+		uid: 1, ageDays: 100, sent: true, subject: "Earlier note", from: "owner@example.test", fromDomain: "example.test",
+		toAddrs: `["friend@example.test"]`, esp: "[]",
+		raw: "From: Owner <owner@example.test>\r\nTo: Friend <friend@example.test>\r\nSubject: Earlier note\r\n\r\nHello.\r\n",
+	})
+	seedLoopMail(t, d, cacheDir, seededLoopMail{
+		uid: 2, ageDays: 1, subject: "Weekly news", from: "weekly@example.test", fromDomain: "example.test",
+		toAddrs: `["owner@example.test"]`, esp: "[]",
+		raw: "From: Weekly <weekly@example.test>\r\nTo: Owner <owner@example.test>\r\nList-Unsubscribe: <https://example.test/unsubscribe>\r\nSubject: Weekly news\r\n\r\nStories.\r\n",
+	})
+	seedLoopMail(t, d, cacheDir, seededLoopMail{
+		uid: 3, ageDays: 1, subject: "Your order shipped", from: "dispatch@example.test", fromDomain: "example.test",
+		toAddrs: `["owner@example.test"]`, esp: `["mailgun"]`,
+		raw: "From: Dispatch <dispatch@example.test>\r\nTo: Owner <owner@example.test>\r\nSubject: Your order shipped\r\n\r\nOn its way.\r\n",
+	})
+	seedLoopMail(t, d, cacheDir, seededLoopMail{
+		uid: 4, ageDays: 1, subject: "Group thread", from: "colleague@example.test", fromDomain: "example.test",
+		toAddrs: `["other@example.test","owner@example.test"]`, esp: "[]",
+		raw: "From: Colleague <colleague@example.test>\r\nTo: Other <other@example.test>\r\nCc: Owner <owner@example.test>\r\nSubject: Group thread\r\n\r\nFor the group.\r\n",
+	})
+	seedLoopMail(t, d, cacheDir, seededLoopMail{
+		uid: 5, ageDays: 1, subject: "Dinner?", from: "friend@example.test", fromDomain: "example.test",
+		toAddrs: `["owner@example.test"]`, esp: "[]",
+		raw: "From: Friend <friend@example.test>\r\nTo: Owner <owner@example.test>\r\nSubject: Dinner?\r\n\r\nCan you reply by Friday?\r\n",
+	})
+	if ran := runApp(t, "loops", "refresh"); ran.code != cli.ExitOK {
+		t.Fatalf("loops refresh: %d %s", ran.code, ran.stderr)
+	}
+	rows, err := d.Read.Query("SELECT subject FROM open_loops ORDER BY subject")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var subjects []string
+	for rows.Next() {
+		var subject string
+		if err := rows.Scan(&subject); err != nil {
+			t.Fatal(err)
+		}
+		subjects = append(subjects, subject)
+	}
+	if len(subjects) != 1 || subjects[0] != "Dinner?" {
+		t.Fatalf("open loops = %v, want only the direct question", subjects)
+	}
+	var scans int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM mail_scans WHERE kind = 'commitments'").Scan(&scans); err != nil {
+		t.Fatal(err)
+	}
+	if scans != 1 {
+		t.Fatalf("commitment scans = %d, want only the direct question", scans)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(bodies) != 1 {
+		t.Fatalf("commitment prompts = %d, want 1", len(bodies))
+	}
+	for _, want := range []string{"owner@example.test", "ignore items meant for other recipients"} {
+		if !strings.Contains(bodies[0], want) {
+			t.Fatalf("commitment prompt misses %q: %s", want, bodies[0])
+		}
+	}
+}
