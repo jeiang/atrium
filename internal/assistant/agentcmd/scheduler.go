@@ -8,6 +8,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
+	"github.com/jeiang/atrium/internal/attention/digest"
+	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -32,6 +34,13 @@ func callables() map[string]worker.Callable {
 		Modules: []string{module.Assistant},
 		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
 			_, err := remind.Due(ctx, e.Service.DB, e.Service.Env, e.Now())
+			return worker.Result{}, err
+		},
+	}
+	out[scheduler.DailyNudgesName] = worker.Callable{
+		Modules: []string{module.Assistant},
+		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
+			_, _, err := digest.Send(ctx, e.Service.DB.Write, e.Service.Env, e.Now(), attentionsources.Enabled(ctx, module.IsEnabled))
 			return worker.Result{}, err
 		},
 	}

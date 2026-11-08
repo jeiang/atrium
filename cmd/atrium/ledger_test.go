@@ -13,8 +13,8 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 func TestASecondUndoIsRefusedWhileTheFirstRunsAndAPartialUndoBlocksAnother(t *testing.T) {

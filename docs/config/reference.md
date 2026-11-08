@@ -75,6 +75,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_schedule_memory_work` | string | `*/2 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEMORY_WORK` |
 | `agent_schedule_min_interval_seconds` | int | `3600` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MIN_INTERVAL_SECONDS` |
 | `agent_schedule_nightly` | string | `daily 02:30` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_NIGHTLY` |
+| `agent_schedule_task_reminders` | string | `*/5 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_TASK_REMINDERS` |
 | `agent_schedule_weekly_review` | string | `weekly sun 18:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_WEEKLY_REVIEW` |
 | `agent_scheduler_lease_seconds` | int | `1800` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_LEASE_SECONDS` |
 | `agent_scheduler_missed_grace_seconds` | int | `120` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_MISSED_GRACE_SECONDS` |
@@ -119,6 +120,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `max_steps_cron` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_CRON` |
 | `max_steps_nightly` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` |
 | `monthly_budget_usd` | float | `150` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
+| `nightly_stale_months` | int | `6` | advanced | `ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS` |
 | `prompt_subagent` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` |
 | `prompt_summary` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUMMARY` |
 | `prompt_system` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` |

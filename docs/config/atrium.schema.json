@@ -618,6 +618,14 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_schedule_task_reminders": {
+          "default": "*/5 * * * *",
+          "type": "string"
+        },
+        "agent_schedule_task_reminders_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_schedule_weekly_review": {
           "default": "weekly sun 18:00",
           "type": "string"
@@ -1095,6 +1103,17 @@
           ]
         },
         "monthly_budget_usd_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "nightly_stale_months": {
+          "default": 6,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "nightly_stale_months_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

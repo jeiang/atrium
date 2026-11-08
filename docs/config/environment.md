@@ -64,6 +64,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEMORY_WORK` | `assistant.agent_schedule_memory_work` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MIN_INTERVAL_SECONDS` | `assistant.agent_schedule_min_interval_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_NIGHTLY` | `assistant.agent_schedule_nightly` |
+| `ATRIUM_ASSISTANT_AGENT_SCHEDULE_TASK_REMINDERS` | `assistant.agent_schedule_task_reminders` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_WEEKLY_REVIEW` | `assistant.agent_schedule_weekly_review` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_LEASE_SECONDS` | `assistant.agent_scheduler_lease_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_MISSED_GRACE_SECONDS` | `assistant.agent_scheduler_missed_grace_seconds` |
@@ -108,6 +109,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_MAX_STEPS_CRON` | `assistant.max_steps_cron` |
 | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` | `assistant.max_steps_nightly` |
 | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` | `assistant.monthly_budget_usd` |
+| `ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS` | `assistant.nightly_stale_months` |
 | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` | `assistant.prompt_subagent` |
 | `ATRIUM_ASSISTANT_PROMPT_SUMMARY` | `assistant.prompt_summary` |
 | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` | `assistant.prompt_system` |

@@ -53,22 +53,16 @@ const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untruste
 	"5) Commitments due in the next 7 days or overdue: commitments status=open, compared with today's date. " +
 	"6) Next week: upcoming_birthdays days=7 and the calendar for the next 7 days. " +
 	"7) Packages in transit: packages active_only=true. " +
+	"Call the attention tool for the cross-queue view (overdue, due soon, needs decision, waiting on them, upcoming) and use it for sections 2-7. " +
 	"8) Stale wiki pages: call stale_wiki and list them with their last-reviewed dates. " +
 	"Cite message ids for each item so the operator can open the source. Say plainly when a section is empty " +
 	"or when a date is only inferred. Finish by calling notify exactly once with a title and a two-line summary " +
 	"of the most important items."
 
-const dailyNudgesPrompt = "Daily nudges for the operator. " + prompts.Untrusted + " Check, using today's date: " +
-	"upcoming_birthdays days=3 (birthdays and anniversaries) and commitments " +
-	"status=open whose due date is before today (overdue). If NONE of these has an item, reply with the single " +
-	"line 'Nothing to nudge.' and do not call notify. Otherwise call notify exactly once with a short title and " +
-	"a plain list (one line per item: who or what, the date, and the source message id when there is one), " +
-	"then reply with the same list."
-
 var Builtins = []Builtin{
 	{NightlyName, KeyNightlySchedule, "daily 02:30", nightly.Prompt, JobNightly, PromptRun},
 	{WeeklyReviewName, KeyWeeklyReview, "weekly sun 18:00", weeklyReviewPrompt, JobBuiltin, PromptRun},
-	{DailyNudgesName, KeyDailyNudges, "daily 08:00", dailyNudgesPrompt, JobBuiltin, PromptRun},
+	{DailyNudgesName, KeyDailyNudges, "daily 08:00", "Daily: send the attention digest (no model run).", JobBuiltin, CallableRun},
 	{CalendarCandidatesName, KeyCalendarCands, "0 * * * *", "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty).", JobBuiltin, CallableRun},
 	{MediaChannelsName, KeyMediaChannels, "*/30 * * * *", "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run).", JobBuiltin, CallableRun},
 	{MediaSweepName, KeyMediaSweep, "*/10 * * * *", "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).", JobBuiltin, CallableRun},
