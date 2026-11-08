@@ -121,7 +121,7 @@ func OfProject(ctx context.Context, q db.Querier, projectID int64) ([]Row, error
 	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scan(r) })
 }
 
-type NewFile struct {
+type newFile struct {
 	Name      string
 	Data      []byte
 	MediaType string
@@ -133,14 +133,14 @@ type NewFile struct {
 }
 
 func writeStored(dir string, owner Owner, fileID int64, name string, data []byte, chars int) (string, error) {
-	path := filepath.Join(dir, owner.dirName(), strconv.FormatInt(fileID, 10)+"-"+SafeName(name, chars))
+	path := filepath.Join(dir, owner.dirName(), strconv.FormatInt(fileID, 10)+"-"+safeName(name, chars))
 	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		return "", err
 	}
 	return path, os.WriteFile(path, data, 0o666)
 }
 
-func Store(ctx context.Context, q db.Querier, dir string, f NewFile, now float64) (int64, error) {
+func store(ctx context.Context, q db.Querier, dir string, f newFile, now float64) (int64, error) {
 	chars, err := nameChars(ctx, q)
 	if err != nil {
 		return 0, err
@@ -172,20 +172,16 @@ type UploadedFile struct {
 }
 
 type AttachmentBlock struct {
-	Type      string  `json:"type"`
-	FileID    int64   `json:"file_id"`
-	Name      string  `json:"name"`
-	MediaType string  `json:"media_type"`
-	Kind      *string `json:"kind"`
-	Tokens    int64   `json:"tokens"`
+	Type      string `json:"type"`
+	FileID    int64  `json:"file_id"`
+	Name      string `json:"name"`
+	MediaType string `json:"media_type"`
+	Kind      string `json:"kind,omitempty"`
+	Tokens    int64  `json:"tokens"`
 }
 
 func newAttachment(id int64, name, mediaType, kind string, tokens int64) AttachmentBlock {
-	b := AttachmentBlock{Type: Attachment, FileID: id, Name: name, MediaType: mediaType, Tokens: tokens}
-	if kind != "" {
-		b.Kind = &kind
-	}
-	return b
+	return AttachmentBlock{Type: Attachment, FileID: id, Name: name, MediaType: mediaType, Kind: kind, Tokens: tokens}
 }
 
 func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []UploadedFile, now float64, owner Owner, contextLimit *int64) ([]AttachmentBlock, error) {
@@ -210,7 +206,7 @@ func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []Uplo
 	}
 	found := make([]inspected, 0, len(uploads))
 	for _, u := range uploads {
-		info, err := Inspect(u.Name, u.Data, u.Type, limits)
+		info, err := inspect(u.Name, u.Data, u.Type, limits)
 		if err != nil {
 			return nil, err
 		}
@@ -231,7 +227,7 @@ func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []Uplo
 	}
 	blocks := make([]AttachmentBlock, 0, len(found))
 	for _, f := range found {
-		id, err := Store(ctx, q, dir, NewFile{
+		id, err := store(ctx, q, dir, newFile{
 			Name: f.name, Data: f.data, MediaType: f.info.MediaType, Origin: Upload, Owner: owner, Text: f.info.Text, Tokens: f.info.Tokens,
 		}, now)
 		if err != nil {
@@ -261,7 +257,7 @@ func clone(ctx context.Context, q db.Querier, from Scope, fileID, threadID int64
 	if err != nil {
 		return 0, false, err
 	}
-	path := filepath.Join(filepath.Dir(filepath.Dir(found.Path)), ThreadOwner(threadID).dirName(), strconv.FormatInt(id, 10)+"-"+SafeName(found.Name, chars))
+	path := filepath.Join(filepath.Dir(filepath.Dir(found.Path)), ThreadOwner(threadID).dirName(), strconv.FormatInt(id, 10)+"-"+safeName(found.Name, chars))
 	if info, err := os.Stat(found.Path); err == nil && info.Mode().IsRegular() {
 		if err := copyFile(found.Path, path); err != nil {
 			return 0, false, err
