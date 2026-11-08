@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/difflib"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -420,7 +421,11 @@ func (a *Applier) record(ctx context.Context, p *proposals.Proposal, action, und
 		s := failure.Error()
 		text = &s
 	}
-	_, err := proposals.RecordAction(ctx, a.DB.Write, p.ID, action, undo, applied, text, a.now())
+	state := ledger.OK
+	if !applied {
+		state = ledger.Failed
+	}
+	_, err := proposals.RecordAction(ctx, a.DB.Write, p.ID, "write", nil, action, undo, state, text, a.now())
 	return err
 }
 
@@ -584,4 +589,6 @@ func (a *Applier) Register(r *proposals.Registry) {
 	r.Executors[KindLink] = a.ExecuteLink
 	r.Executors[KindEdit] = a.ExecuteEdit
 	r.Undoers[UndoRestoreOp] = a.UndoRestore
+	r.AddKind(proposals.Kind{Name: KindLink, Label: "Notion link", Icon: "link"})
+	r.AddKind(proposals.Kind{Name: KindEdit, Label: "Notion edit", Icon: "pencil"})
 }

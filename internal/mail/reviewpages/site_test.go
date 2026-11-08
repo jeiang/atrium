@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/mail/smtp/smtptest"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/proposals/handlers"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -83,6 +84,7 @@ func newSite(t *testing.T, options ...siteOption) *site {
 		s.clock++
 		return s.clock
 	}
+	handlers.Register(s.registry, handlers.Deps{DB: d, Open: open, Now: tick, Env: env})
 	s.store = &drafts.Store{DB: d, Cfg: cfg, Now: tick}
 	render, err := web.NewRenderer(cfg, d, tpl.Config{Modules: []fs.FS{Templates()}})
 	if err != nil {

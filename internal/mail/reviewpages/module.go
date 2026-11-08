@@ -60,6 +60,7 @@ type service struct {
 	live     *live.Live
 	writes   *writes.Registry
 	drafts   *drafts.Store
+	registry *proposals.Registry
 }
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
@@ -92,6 +93,7 @@ func Module(o Options) web.Module {
 			live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: now},
 			writes:   undo,
 			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Open: drafts.Opener(open), SMTP: o.SMTP, Now: now},
+			registry: registry,
 		}
 
 		r.Get("/proposals", s.proposalsPage)

@@ -830,13 +830,6 @@ func Scan(ctx context.Context, d *db.DB, ts float64, namer Namer) (scanutil.Resu
 		if runs[fp] < int64(p.runsRequired) {
 			continue
 		}
-		known, err := proposals.Known(ctx, d.Write, fp)
-		if err != nil {
-			return scanutil.Result{}, err
-		}
-		if known {
-			continue
-		}
 		b, err := p.build(ctx, d.Read, byID, cand, namer)
 		if err != nil {
 			return scanutil.Result{}, err

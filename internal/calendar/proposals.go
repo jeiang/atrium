@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -160,7 +161,7 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 	}
 	action := append(py.Dict{{Key: "type", Value: Kind}}, ref.Dict()...)
 	undo := py.Dict{{Key: "op", Value: UndoOp}, {Key: "calendar", Value: target}, {Key: "uid", Value: spec.UID}}
-	if _, err := proposals.RecordAction(ctx, p.DB.Write, prop.ID, action, undo, true, nil, p.now()); err != nil {
+	if _, err := proposals.RecordAction(ctx, p.DB.Write, prop.ID, "write", nil, action, undo, ledger.OK, nil, p.now()); err != nil {
 		return nil, err
 	}
 	return append(py.Dict{{Key: "summary", Value: fmt.Sprintf("Added to the %s calendar", target)}}, ref.Dict()...), nil
@@ -193,4 +194,7 @@ func Register(reg *proposals.Registry, p *Proposals) {
 	reg.Executors[UpdateKind] = p.ExecuteUpdate
 	reg.Executors[RSVPKind] = p.ExecuteRSVP
 	reg.Undoers[RestoreOp] = p.Restore
+	reg.AddKind(proposals.Kind{Name: Kind, Label: "Calendar event", Icon: "calendar"})
+	reg.AddKind(proposals.Kind{Name: UpdateKind, Label: "Event change", Icon: "calendar"})
+	reg.AddKind(proposals.Kind{Name: RSVPKind, Label: "Event reply", Icon: "calendar"})
 }

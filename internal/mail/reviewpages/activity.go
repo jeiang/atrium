@@ -112,7 +112,7 @@ func deref(s *string) string {
 	return *s
 }
 
-func timeline(ctx context.Context, q db.Querier, category string, limit, offset int) ([]ActivityEntry, int, error) {
+func timeline(ctx context.Context, q db.Querier, category string, limit, offset int, now float64) ([]ActivityEntry, int, error) {
 	want := offset + limit + 1
 	var entries []ActivityEntry
 	if category == "" || category == categoryMail {
@@ -121,7 +121,7 @@ func timeline(ctx context.Context, q db.Querier, category string, limit, offset 
 			return nil, 0, err
 		}
 		for _, a := range actions {
-			entries = append(entries, mailEntry(a))
+			entries = append(entries, mailEntry(a, now))
 		}
 	}
 	if category == "" || category == categorySettings {
@@ -191,7 +191,7 @@ func (s *service) activityPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	offset = max(offset, 0)
-	entries, next, err := timeline(r.Context(), s.deps.DB.Read, category, pageSize, int(offset))
+	entries, next, err := timeline(r.Context(), s.deps.DB.Read, category, pageSize, int(offset), s.now())
 	check(err)
 	data := activityPage{Entries: entries, Category: category, Categories: categories, NextOffset: next, Offset: int(offset)}
 	if web.IsPartial(r) && offset != 0 {
@@ -238,7 +238,7 @@ func (s *service) undoMail(w http.ResponseWriter, r *http.Request) {
 	}
 	found, err := live.Get(ctx, s.deps.DB.Write, id)
 	check(err)
-	s.undone(w, r, mailEntry(*found), notice)
+	s.undone(w, r, mailEntry(*found, s.now()), notice)
 }
 
 func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
@@ -269,7 +269,7 @@ func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusNotFound, "unknown action")
 		return
 	}
-	s.undone(w, r, mailEntry(*found), notice)
+	s.undone(w, r, mailEntry(*found, s.now()), notice)
 }
 
 func (s *service) undoWrite(w http.ResponseWriter, r *http.Request) {

@@ -576,7 +576,7 @@
       "--selection",
       "[1]"
     ],
-    "exit_code": 0,
+    "exit_code": 1,
     "name": "proposals-approve-list-selection",
     "stdout": "proposals-approve-list-selection.stdout"
   },
@@ -589,7 +589,7 @@
       "--selection",
       "[1]"
     ],
-    "exit_code": 0,
+    "exit_code": 1,
     "name": "proposals-approve-list-selection-deletion",
     "stdout": "proposals-approve-list-selection-deletion.stdout"
   },

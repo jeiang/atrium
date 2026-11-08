@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/mime"
@@ -48,22 +49,6 @@ const (
 	ReasonUnresolved  = "unresolved"
 )
 
-func BlockingTextSQL(column string) string {
-	return "(COALESCE(instr(" + column + ", '" + UnknownPrefix + "'), 0) > 0 OR COALESCE(instr(" + column + ", '" + PartialPrefix + "'), 0) > 0)"
-}
-
-func BlockingActionSQL(alias string) string {
-	return alias + ".ok = 0 AND json_extract(" + alias + ".action, '$.op') IS NOT 'undo' AND (instr(" + alias + ".error, '" +
-		UnknownPrefix + "') > 0 OR instr(" + alias + ".error, '" + PartialPrefix + "') > 0)"
-}
-
-var UnresolvedSQL = "(EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.uids') u WHERE " + BlockingActionSQL("pa") + " AND " +
-	"u.value = m.uid AND COALESCE(json_extract(pa.action, '$.src_uidvalidity'), json_extract(pa.action, '$.uidvalidity')) = m.uidvalidity " +
-	"AND COALESCE(json_extract(pa.action, '$.src_imap'), json_extract(pa.action, '$.imap_name')) = mb.imap_name) OR " +
-	"EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.copied') u WHERE " + BlockingActionSQL("pa") + " AND " +
-	"u.key = CAST(m.uid AS TEXT) AND json_extract(pa.action, '$.src_uidvalidity') = m.uidvalidity " +
-	"AND json_extract(pa.action, '$.src_imap') = mb.imap_name))"
-
 var trashNames = map[string]bool{"deleted messages": true, "deleted items": true, "trash": true, "bin": true}
 
 type Error string
@@ -80,23 +65,12 @@ type PartialMove struct {
 
 const UnknownPrefix = "cancelled, write outcome unknown"
 
-func Blocks(text string) bool {
-	return strings.Contains(text, PartialPrefix) || strings.Contains(text, UnknownPrefix)
-}
-
 func OutcomeUnknown(err error) bool {
 	if partial, ok := errors.AsType[*PartialMove](err); ok {
 		return partial.Unconfirmed
 	}
 	_, ok := errors.AsType[*mail.WriteInterrupted](err)
 	return ok
-}
-
-func UnknownText(err error, text string) string {
-	if OutcomeUnknown(err) && !Blocks(text) {
-		return UnknownPrefix + ": " + text
-	}
-	return text
 }
 
 const PartialPrefix = "copied but not expunged: "
@@ -219,7 +193,7 @@ func Verify(ctx context.Context, q Querier, client mail.Client, account string, 
 		var uid, validity int64
 		var digest, imapName string
 		var unresolved bool
-		err := q.QueryRowContext(ctx, "SELECT m.gone_at, m.uid, m.uidvalidity, m.digest, mb.imap_name, "+UnresolvedSQL+" FROM messages m "+
+		err := q.QueryRowContext(ctx, "SELECT m.gone_at, m.uid, m.uidvalidity, m.digest, mb.imap_name, "+ledger.MailUnresolvedSQL+" FROM messages m "+
 			"JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE m.id = ?", snap.ID).Scan(&gone, &uid, &validity, &digest, &imapName, &unresolved)
 		reason := ""
 		switch {

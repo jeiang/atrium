@@ -6,18 +6,18 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/corrections"
-	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
 )
+
+func Blocked(a Action, now float64) bool {
+	return a.State.UndoBlocked() || (a.State == ledger.UndoHeld && a.UndoStartedAt != nil && now-*a.UndoStartedAt >= proposals.StuckSeconds)
+}
 
 type Resolved struct {
 	ID      int64
 	Outcome string
-}
-
-func Blocked(a Action) bool {
-	return a.UndoneTS == nil && a.UndoneError != nil && mailops.Blocks(*a.UndoneError)
 }
 
 func (l *Live) Resolve(ctx context.Context, id int64, outcome string, who proposals.Resolver) (Resolved, error) {
@@ -28,25 +28,30 @@ func (l *Live) Resolve(ctx context.Context, id int64, outcome string, who propos
 		var kind string
 		var messageID int64
 		var dest *string
-		var undoneTS, started *float64
+		var state ledger.State
 		var undoneError *string
-		err := tx.QueryRowContext(ctx, "SELECT kind, message_id, dest, undone_ts, undone_error, undo_started_at FROM auto_actions WHERE id = ?", id).
-			Scan(&kind, &messageID, &dest, &undoneTS, &undoneError, &started)
+		var started *float64
+		err := tx.QueryRowContext(ctx, "SELECT kind, message_id, dest, state, undone_error, undo_started_at FROM auto_actions WHERE id = ?", id).
+			Scan(&kind, &messageID, &dest, &state, &undoneError, &started)
 		if errors.Is(err, sql.ErrNoRows) {
 			return UndoError(fmt.Sprintf("unknown action %d", id))
 		}
 		if err != nil {
 			return err
 		}
-		if undoneTS != nil || undoneError == nil || !mailops.Blocks(*undoneError) {
+		if !state.UndoBlocked() && state != ledger.UndoHeld {
 			return UndoError(fmt.Sprintf("action %d has no blocked undo", id))
 		}
 		now := l.now()
-		if *undoneError == proposals.InFlightText && started != nil && now-*started < proposals.StuckSeconds {
+		if state == ledger.UndoHeld && started != nil && now-*started < proposals.StuckSeconds {
 			return UndoError(fmt.Sprintf("the undo of action %d may still be running; wait until atrium is idle and try again", id))
 		}
+		prior := ""
+		if undoneError != nil {
+			prior = *undoneError
+		}
 		if outcome == proposals.OutcomeUndone {
-			if _, err = tx.ExecContext(ctx, "UPDATE auto_actions SET undone_ts = ?, undone_error = NULL WHERE id = ?", now, id); err != nil {
+			if _, err = tx.ExecContext(ctx, "UPDATE auto_actions SET state = ?, undone_ts = ?, undone_error = NULL WHERE id = ?", ledger.Undone, now, id); err != nil {
 				return err
 			}
 			if kind == Correct {
@@ -54,10 +59,10 @@ func (l *Live) Resolve(ctx context.Context, id int64, outcome string, who propos
 					return err
 				}
 			}
-		} else if _, err = tx.ExecContext(ctx, "UPDATE auto_actions SET undone_error = ? WHERE id = ?", proposals.SettledText, id); err != nil {
+		} else if _, err = tx.ExecContext(ctx, "UPDATE auto_actions SET state = ?, undone_error = ? WHERE id = ?", ledger.UndoSettled, proposals.SettledText, id); err != nil {
 			return err
 		}
-		return proposals.RecordResolution(ctx, tx, who, now, proposals.ResolveAutoUndo, id, nil, outcome, *undoneError)
+		return proposals.RecordResolution(ctx, tx, who, now, proposals.ResolveAutoUndo, id, nil, outcome, prior)
 	})
 	return Resolved{ID: id, Outcome: outcome}, err
 }

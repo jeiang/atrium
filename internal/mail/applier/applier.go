@@ -29,9 +29,9 @@ var log = logx.Logger("atrium.applier")
 
 const (
 	deletionNotBlocked = "NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.account = m.account AND a.digest = m.digest " +
-		"AND ((a.kind = 'trash' AND a.ok IS NOT 0) OR a.undone_ts IS NOT NULL)) " +
+		"AND a.kind = 'trash' AND a.state NOT IN ('failed', 'skipped')) " +
 		"AND (SELECT COUNT(*) FROM auto_actions a WHERE a.account = m.account AND a.digest = m.digest " +
-		"AND a.kind = 'trash' AND a.ok = 0) < :attempts"
+		"AND a.kind = 'trash' AND a.state = 'failed') < :attempts"
 	noCorrection = "NOT EXISTS (SELECT 1 FROM corrections c WHERE c.message_id = m.id)"
 
 	inboxCandidates = `SELECT m.id, m.digest, d.id, d.action, d.dest
@@ -45,15 +45,15 @@ ORDER BY m.id`
 FROM corrections c JOIN messages m ON m.id = c.message_id
 WHERE c.account = :account AND c.ts >= :golive AND m.gone_at IS NULL AND m.sent = 0
 AND NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'correct'
-AND a.dest = c.folder AND a.ok IS NOT 0)
+AND a.dest = c.folder AND a.state NOT IN ('failed', 'skipped'))
 AND (SELECT COUNT(*) FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'correct'
-AND a.dest = c.folder AND a.ok = 0) < :attempts
+AND a.dest = c.folder AND a.state = 'failed') < :attempts
 ORDER BY m.id`
 	flagCandidates = `SELECT m.id, m.digest FROM messages m JOIN flag_decisions f ON f.message_id = m.id
 WHERE m.account = :account AND m.in_inbox = 1 AND m.seen = 0 AND m.flagged = 0 AND m.sent = 0
 AND m.gone_at IS NULL AND f.contacts_match = 1
-AND NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'flag' AND a.ok IS NOT 0)
-AND (SELECT COUNT(*) FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'flag' AND a.ok = 0) < :attempts
+AND NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'flag' AND a.state NOT IN ('failed', 'skipped'))
+AND (SELECT COUNT(*) FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'flag' AND a.state = 'failed') < :attempts
 ORDER BY m.id`
 	deletionCandidates = `SELECT ` + rules.MessageColumns + ` FROM messages m
 WHERE m.account = :account AND m.gone_at IS NULL AND m.sent = 0 AND m.flagged = 0
@@ -61,7 +61,7 @@ AND m.mailbox_id IN (SELECT mb.id FROM mailboxes mb WHERE mb.role NOT IN ('draft
 AND ` + noCorrection + ` AND ` + deletionNotBlocked + `
 ORDER BY m.id`
 	priorLabel = "SELECT dest FROM auto_actions WHERE account = ? AND digest = ? AND kind IN ('file', 'correct') " +
-		"AND ok = 1 AND undone_ts IS NULL ORDER BY id DESC LIMIT 1"
+		"AND state = 'applied' ORDER BY id DESC LIMIT 1"
 )
 
 const alreadyThere = "already there"
@@ -427,6 +427,13 @@ func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account st
 			}
 			actual := observedLabels(ctx, client, g.imapName, chunk)
 			for _, uid := range chunk {
+				if actual == nil {
+					if err := a.Live.Unknown(ctx, by[uid].aid, text); err != nil {
+						return err
+					}
+					out.Failed++
+					continue
+				}
 				e := by[uid]
 				have, known := actual[uid]
 				didAdd, didRemove := []string{}, []string{}
@@ -553,7 +560,7 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 					validity, destUID, found = locateInTrash(ctx, client, g.dest, e.item)
 				}
 				if !found && unknown {
-					if err := a.Live.Hold(ctx, e.aid, text, nil); err != nil {
+					if err := a.Live.Unknown(ctx, e.aid, text); err != nil {
 						return err
 					}
 					out.Failed++

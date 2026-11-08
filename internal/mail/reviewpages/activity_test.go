@@ -31,10 +31,10 @@ func (s *site) write(ts float64, tool, target string, thread any, before, after,
 	return id
 }
 
-func (s *site) action(ts float64, kind string, src, dest, undo any, ok any) int64 {
+func (s *site) action(ts float64, kind string, src, dest, undo any, state string) int64 {
 	s.t.Helper()
-	res, err := s.db.Write.Exec("INSERT INTO auto_actions (ts, account, message_id, kind, src, dest, undo, ok) VALUES (?, 'icloud', 7, ?, ?, ?, ?, ?)",
-		ts, kind, src, dest, undo, ok)
+	res, err := s.db.Write.Exec("INSERT INTO auto_actions (ts, account, message_id, kind, src, dest, undo, state) VALUES (?, 'icloud', 7, ?, ?, ?, ?, ?)",
+		ts, kind, src, dest, undo, state)
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestActivityMergesMailAndWritesAndFiltersByCategory(t *testing.T) {
 	s.thread()
 	profile := s.write(100, "profile_set", "profile:tone", 1, `{"k":"tone"}`, `{"k":"tone","v":"brief"}`, `{"op":"fake"}`)
 	s.write(105, "notion_update_page", "page", nil, nil, nil, nil)
-	s.action(110, "flag", "INBOX", nil, `{"op":"unflag"}`, 1)
+	s.action(110, "flag", "INBOX", nil, `{"op":"unflag"}`, "applied")
 	page := status(t, s.get("/activity"), http.StatusOK)
 	order := []string{`id="activity-mail-`, "notion_update_page", "profile_set"}
 	last := -1
@@ -98,9 +98,9 @@ func TestActivityPagesThroughShowOlder(t *testing.T) {
 
 func TestActivityMailRowsWithoutPlacesShowGone(t *testing.T) {
 	s := newSite(t)
-	s.action(100, "file", nil, nil, nil, 0)
+	s.action(100, "file", nil, nil, nil, "failed")
 	page := status(t, s.get("/activity?category=mail"), http.StatusOK)
-	mustContain(t, page, "Gone", "(no subject)", "Skipped")
+	mustContain(t, page, "Gone", "(no subject)", "Failed")
 	mustNotContain(t, page, "Undo this")
 }
 

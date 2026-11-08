@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
@@ -214,7 +215,7 @@ func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (
 	}
 	action := py.Dict{{Key: "type", Value: KindReminder}, {Key: "job_id", Value: jobID}}
 	undo := py.Dict{{Key: "op", Value: UndoReminder}, {Key: "job_id", Value: jobID}}
-	if _, err := proposals.RecordAction(ctx, r.DB.Write, p.ID, action, undo, true, nil, r.now()); err != nil {
+	if _, err := proposals.RecordAction(ctx, r.DB.Write, p.ID, "write", nil, action, undo, ledger.OK, nil, r.now()); err != nil {
 		return nil, err
 	}
 	return py.Dict{
@@ -239,4 +240,5 @@ func (r *Reminders) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, er
 func Register(reg *proposals.Registry, r *Reminders) {
 	reg.Executors[KindReminder] = r.Execute
 	reg.Undoers[UndoReminder] = r.Undo
+	reg.AddKind(proposals.Kind{Name: KindReminder, Label: "Reminder", Icon: "scroll-text"})
 }

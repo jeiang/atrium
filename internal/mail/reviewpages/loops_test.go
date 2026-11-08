@@ -221,9 +221,10 @@ func TestPathAndBodyErrorsAreReportedTogether(t *testing.T) {
 	}
 }
 
-func TestKindFilterAcceptsCalendarReminderAndWikiPlan(t *testing.T) {
+func TestKindFilterAcceptsEveryRegisteredKind(t *testing.T) {
 	s := newSite(t)
-	for _, kind := range []string{"calendar_event", "reminder", "notion_wiki_plan"} {
-		status(t, s.get("/proposals?kind="+kind), http.StatusOK)
+	for _, kind := range s.registry.Kinds() {
+		status(t, s.get("/proposals?kind="+kind.Name), http.StatusOK)
 	}
+	status(t, s.get("/proposals?kind=notion_wiki_plan"), http.StatusUnprocessableEntity)
 }

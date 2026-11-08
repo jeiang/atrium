@@ -22,12 +22,8 @@ type Deps struct {
 }
 
 func Register(r *proposals.Registry, deps Deps) {
-	env := deps.Env
-	if env == nil {
-		env = config.OS
-	}
 	executors.Register(r, &executors.Executors{DB: deps.DB, Open: deps.Open, Now: deps.Now}, deps.Syncer)
-	calendar.Register(r, &calendar.Proposals{DB: deps.DB, Now: deps.Now, Env: env})
-	(&notion.Applier{DB: deps.DB, Env: env, NewClient: deps.NewNotion, Now: deps.Now}).Register(r)
+	calendar.Register(r, &calendar.Proposals{DB: deps.DB, Now: deps.Now, Env: deps.Env})
+	(&notion.Applier{DB: deps.DB, Env: deps.Env, NewClient: deps.NewNotion, Now: deps.Now}).Register(r)
 	openloops.Register(r, &openloops.Reminders{DB: deps.DB, Now: deps.Now})
 }

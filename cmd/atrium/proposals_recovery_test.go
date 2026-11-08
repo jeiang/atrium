@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
 )
 
@@ -42,7 +43,7 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 			t.Fatal(err)
 		}
 		undo := map[string]any{"op": "rule_delete", "id": rule}
-		if _, err := proposals.RecordAction(ctx, seed.Write, id, undo, undo, true, nil, settledAt); err != nil {
+		if _, err := proposals.RecordAction(ctx, seed.Write, id, "write", nil, undo, undo, ledger.OK, nil, settledAt); err != nil {
 			t.Fatal(err)
 		}
 		if held {
@@ -117,7 +118,7 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 		return base + "/proposals/" + strconv.FormatInt(id, 10) + "/" + verb
 	}
 	code, body, _ := fetch(t, client, "POST", route(stale, "approve"), url.Values{})
-	if code != http.StatusOK || !strings.Contains(body, "Not approved") || !strings.Contains(body, "unknown or partial outcome") {
+	if code != http.StatusOK || !strings.Contains(body, "Not approved") || !strings.Contains(body, "unresolved write") {
 		t.Errorf("approve of the recovered proposal = %d: %.400s", code, body)
 	}
 	if got := status(stale); got != proposals.Failed {

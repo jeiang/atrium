@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
-	"strconv"
 
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
@@ -24,17 +23,10 @@ func ReadLimits(ctx context.Context, q mail.Querier) (Limits, error) {
 	return l, r.Err()
 }
 
-func Digest(parts ...any) string {
+func Digest(parts ...string) string {
 	h := sha256.New()
 	for _, part := range parts {
-		switch v := part.(type) {
-		case string:
-			h.Write([]byte(v))
-		case int64:
-			h.Write([]byte(strconv.FormatInt(v, 10)))
-		default:
-			panic("scanutil: Digest part must be a string or an int64")
-		}
+		h.Write([]byte(part))
 		h.Write([]byte{0})
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]

@@ -1,7 +1,6 @@
 package reviewpages
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -11,7 +10,6 @@ import (
 	"slices"
 
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/proposals/executors"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -23,16 +21,12 @@ var proposalStatuses = []string{
 	proposals.Pending, proposals.Applied, proposals.Failed, proposals.Dismissed, proposals.Suppressed, allStatuses,
 }
 
-var proposalKinds = []string{
-	executors.RebalanceSplit, executors.RebalanceMerge, executors.InboxBacklog, executors.DeletionRule, executors.GmailLabelMerge,
-	"notion_link", "notion_edit", "calendar_event", "calendar_update", "calendar_rsvp", "reminder", kindWikiPlan,
-}
+func (s *service) kind(name string) (proposals.Kind, bool) { return s.registry.Kind(name) }
 
-var (
-	groupedKinds = []string{executors.RebalanceSplit, executors.InboxBacklog}
-	splitKinds   = []string{executors.RebalanceSplit, executors.RebalanceMerge, executors.InboxBacklog}
-	messageKinds = []string{executors.DeletionRule, executors.GmailLabelMerge}
-)
+func (s *service) kindLabel(name string) string {
+	kind, _ := s.registry.Kind(name)
+	return kind.Label
+}
 
 func (s *service) proposalsPage(w http.ResponseWriter, r *http.Request) {
 	status := web.QueryValue(r.URL.Query(), "status")
@@ -44,7 +38,7 @@ func (s *service) proposalsPage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusUnprocessableEntity, "unknown status")
 		return
 	}
-	if kind != "" && !slices.Contains(proposalKinds, kind) {
+	if kind != "" && !s.registry.Known(kind) {
 		s.fail(w, r, http.StatusUnprocessableEntity, "unknown kind")
 		return
 	}
@@ -57,9 +51,8 @@ func (s *service) proposalsPage(w http.ResponseWriter, r *http.Request) {
 	check(err)
 	counts, err := proposals.CountsByStatus(ctx, s.deps.DB.Read)
 	check(err)
-	views := proposalViews(list)
-	check(s.markBlocked(ctx, views))
-	data := proposalListData{Proposals: views, Status: status, Kind: kind, Counts: counts}
+	views := proposalViews(list, s.registry)
+	data := proposalListData{Proposals: views, Status: status, Kind: kind, KindLabel: s.kindLabel(kind), Counts: counts}
 	if web.IsPartial(r) {
 		data.Partial = true
 		s.fragment(w, r, http.StatusOK, "_proposal_list.gohtml", data, nil)
@@ -75,8 +68,8 @@ func (s *service) card(w http.ResponseWriter, r *http.Request, id int64, notice 
 		s.fail(w, r, http.StatusNotFound, "unknown proposal")
 		return
 	}
-	view := []ProposalView{proposalView(found)}
-	check(s.markBlocked(r.Context(), view))
+	kind, _ := s.registry.Kind(found.Kind)
+	view := []ProposalView{proposalView(found, kind)}
 	s.fragment(w, r, http.StatusOK, "_proposal.gohtml", proposalCardData{Proposal: view[0], PendingOOB: true}, notice)
 }
 
@@ -103,11 +96,11 @@ func previewGet(preview any, key string) any {
 	return nil
 }
 
-func selectionOf(p *proposals.Proposal, form url.Values) (py.Dict, error) {
+func selectionOf(p *proposals.Proposal, kind proposals.Kind, form url.Values) (py.Dict, error) {
 	switch {
-	case slices.Contains(splitKinds, p.Kind):
+	case kind.Groups || kind.Group:
 		var groups []any
-		if slices.Contains(groupedKinds, p.Kind) {
+		if kind.Groups {
 			groups, _ = previewGet(p.Preview, "groups").([]any)
 		} else {
 			groups = []any{previewGet(p.Preview, "group")}
@@ -131,7 +124,7 @@ func selectionOf(p *proposals.Proposal, form url.Values) (py.Dict, error) {
 			out[i] = py.Dict{{Key: "name", Value: name}, {Key: "message_ids", Value: chosen}}
 		}
 		return py.Dict{{Key: "groups", Value: out}}, nil
-	case slices.Contains(messageKinds, p.Kind):
+	case kind.Messages:
 		ids, err := picked(form, 0, previewGet(p.Preview, "messages"))
 		if err != nil {
 			return nil, err
@@ -162,12 +155,13 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 	var done *proposals.Proposal
 	if all, _ := web.FormLast(form, "all"); all == "" {
 		var picked py.Dict
-		if picked, err = selectionOf(found, form); picked != nil {
+		kind, _ := s.registry.Kind(found.Kind)
+		if picked, err = selectionOf(found, kind, form); picked != nil {
 			selection = picked
 		}
 	}
 	if err == nil {
-		done, err = s.pipeline.ApproveAndApply(ctx, id, selection)
+		done, err = s.pipeline.ApproveAndApply(ctx, id, selection, proposals.Resolver{Actor: "operator", Source: "ui"})
 	}
 	var refused proposals.ProposalError
 	if errors.As(err, &refused) {
@@ -191,7 +185,11 @@ func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	forever, _ := web.FormField(web.FormValues(r), "forever")
-	err := proposals.Dismiss(detached(r), s.deps.DB.Write, id, forever != "", s.now())
+	status := proposals.Dismissed
+	if forever != "" {
+		status = proposals.Suppressed
+	}
+	err := proposals.Dismiss(detached(r), s.deps.DB, id, status, proposals.Resolver{Actor: "operator", Source: "ui"}, s.now())
 	var refused proposals.ProposalError
 	if errors.As(err, &refused) {
 		s.card(w, r, id, toast("error", "Not dismissed", err.Error()))
@@ -230,20 +228,6 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.card(w, r, id, toast("error", "Undo did not finish", failed))
-}
-
-func (s *service) markBlocked(ctx context.Context, views []ProposalView) error {
-	for i := range views {
-		if views[i].Status != proposals.Failed && views[i].Status != proposals.Applied {
-			continue
-		}
-		blocked, undo, err := proposals.Blocked(ctx, s.deps.DB.Read, views[i].ID)
-		if err != nil {
-			return err
-		}
-		views[i].Blocked, views[i].BlockedUndo = blocked, undo
-	}
-	return nil
 }
 
 func resolvedToast(outcome string) *tpl.Toast {
