@@ -113,10 +113,11 @@ settings the operator edits in the UI or pins from the host.
   CSP, and loopback listener defaults.
 - Media writes touch only torrents tagged media. Preserve library group
   permissions and expiring signed file links; public links still check Host.
-- The v2 baseline schema files in `internal/db/schema/` are edited in place
-  until v2 first ships to artemis; `internal/db/migrate.go` holds only
-  migration 1 (the baseline) until then. Afterwards every schema change is
-  a new additive migration in `internal/db/migrate.go` with an e2e. Row
+- The v2 baseline schema files in `internal/db/schema/` are frozen: v2
+  shipped to artemis on 2026-11-08, and they are migration 1 exactly as
+  artemis applied it. Never edit them. Every schema change is a new additive
+  migration in `internal/db/migrate.go` with an e2e that migrates a database
+  from the previous version and compares it with a fresh one. Row
   rewrites require explicit approval and validation on a database copy.
   Refuse unknown future schema versions before writes. `atrium db import-v1`
   is the only path from v1 data: it copies the learned-rule data into a
