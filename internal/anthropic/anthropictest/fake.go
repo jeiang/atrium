@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic"
@@ -17,6 +18,8 @@ import (
 )
 
 const APIKey = "fake-anthropic-key"
+
+var fakeIDs atomic.Int64
 
 type Response struct {
 	Content           []json.RawMessage `json:"content"`
@@ -185,7 +188,7 @@ func (s *Server) messages(w http.ResponseWriter, req Request) {
 	resp := s.script[0]
 	s.script = s.script[1:]
 	s.served++
-	id := fmt.Sprintf("msg_fake_%02d", s.served)
+	id := fmt.Sprintf("msg_fake_%d", fakeIDs.Add(1))
 	s.mu.Unlock()
 	switch {
 	case resp.Status != 0:

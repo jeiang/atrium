@@ -8,6 +8,7 @@
     <span class="text-2xl font-semibold tabular-nums">${{printf "%.2f" $b.spent_usd}}</span>
     <span class="text-xs text-muted-foreground">{{$s.calls}} API calls</span>
     <span class="text-xs text-muted-foreground">{{$d.memory.calls}} memory summaries · ${{printf "%.2f" $d.memory.cost}} excluded from the budget</span>
+    {{if $d.subscription.calls}}<span class="text-xs text-muted-foreground">{{$d.subscription.calls}} subscription requests · ${{printf "%.2f" $d.subscription.cost}} uncapped</span>{{end}}
   </div>
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Budget remaining</span>
@@ -22,7 +23,8 @@
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Requests over 100K tokens</span>
     <span class="text-2xl font-semibold tabular-nums">{{$s.high_tier}}</span>
-    <span class="text-xs text-muted-foreground">{{$s.output_tokens}} output tokens · {{$s.searches}} web searches</span>
+    <span class="text-xs text-muted-foreground">{{$s.output_tokens}} output tokens · {{$s.reasoning_tokens}} reasoning · {{$s.searches}} web searches</span>
+    <span class="text-xs text-muted-foreground">{{$s.tool_calls}} tool calls · {{printf "%.1f" (fdiv $s.wall_ms 1000.0)}}s in requests{{if $s.partial}} · {{$s.partial}} partial{{end}}{{if $s.unpriced}} · {{$s.unpriced}} unpriced{{end}}</span>
   </div>
 </section>
 
@@ -30,10 +32,10 @@
   <h2 id="by-kind" class="text-sm font-medium">By kind</h2>
   {{if $d.by_kind}}
   <table class="w-full text-sm">
-    <thead><tr class="text-left text-xs text-muted-foreground"><th class="py-1">Kind</th><th class="py-1 text-right">Calls</th><th class="py-1 text-right">Searches</th><th class="py-1 text-right">Cost</th></tr></thead>
+    <thead><tr class="text-left text-xs text-muted-foreground"><th class="py-1">Kind</th><th class="py-1 text-right">Calls</th><th class="py-1 text-right">Tools</th><th class="py-1 text-right">Time</th><th class="py-1 text-right">Searches</th><th class="py-1 text-right">Cost</th></tr></thead>
     <tbody>
       {{range $d.by_kind}}
-      <tr class="border-t"><td class="py-1">{{.kind}}</td><td class="py-1 text-right tabular-nums">{{.calls}}</td><td class="py-1 text-right tabular-nums">{{.searches}}</td><td class="py-1 text-right tabular-nums">${{printf "%.3f" .cost}}</td></tr>
+      <tr class="border-t"><td class="py-1">{{.kind}}</td><td class="py-1 text-right tabular-nums">{{.calls}}</td><td class="py-1 text-right tabular-nums">{{.tool_calls}}</td><td class="py-1 text-right tabular-nums">{{printf "%.1f" (fdiv .wall_ms 1000.0)}}s</td><td class="py-1 text-right tabular-nums">{{.searches}}</td><td class="py-1 text-right tabular-nums">${{printf "%.3f" .cost}}</td></tr>
       {{end}}
     </tbody>
   </table>
@@ -46,7 +48,7 @@
   <h2 id="by-thread" class="text-sm font-medium">By thread</h2>
   {{if $d.by_thread}}
   <table class="w-full text-sm">
-    <thead><tr class="text-left text-xs text-muted-foreground"><th class="py-1">Thread</th><th class="py-1">Kind</th><th class="py-1 text-right">Calls</th><th class="py-1 text-right" title="Summed over every call in the thread">Prompt tokens (all calls)</th><th class="py-1 text-right" title="Largest single request; over 100K bills at 5x">Largest request</th><th class="py-1 text-right">Output</th><th class="py-1 text-right">Cost</th></tr></thead>
+    <thead><tr class="text-left text-xs text-muted-foreground"><th class="py-1">Thread</th><th class="py-1">Kind</th><th class="py-1 text-right">Calls</th><th class="py-1 text-right" title="Summed over every call in the thread">Prompt tokens (all calls)</th><th class="py-1 text-right" title="Largest single request; over 100K bills at 5x">Largest request</th><th class="py-1 text-right">Output</th><th class="py-1 text-right">Reasoning</th><th class="py-1 text-right">Cost</th></tr></thead>
     <tbody>
       {{range $d.by_thread}}
       <tr class="border-t">
@@ -56,6 +58,7 @@
         <td class="py-1 text-right tabular-nums">{{.prompt_tokens}}</td>
         <td class="py-1 text-right tabular-nums">{{.max_prompt_tokens}}</td>
         <td class="py-1 text-right tabular-nums">{{.output_tokens}}</td>
+        <td class="py-1 text-right tabular-nums">{{.reasoning_tokens}}</td>
         <td class="py-1 text-right tabular-nums">${{printf "%.3f" .cost}}</td>
       </tr>
       {{end}}

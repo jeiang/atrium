@@ -3,31 +3,60 @@ package usage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
-	"slices"
 	"time"
-
-	"github.com/jeiang/atrium/internal/db"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
 
-// KindMemory marks summarizer calls: recorded and visible, never counted
-// against the monthly dollar budget.
-const KindMemory = "memory"
+const (
+	KindMemory = "memory"
+
+	SourceLoop         = "loop"
+	SourceGateway      = "gateway"
+	SourceSubscription = "claude_subscription"
+	SourcePi           = "pi"
+
+	ProviderAnthropic = "anthropic"
+)
+
+type MissingRequestID struct{}
+
+func (MissingRequestID) Error() string { return "usage: the request has no id" }
 
 type Entry struct {
 	TS            float64
+	RequestID     string
+	Source        string
+	Provider      string
 	ThreadID      int64
 	RunID         int64
 	Kind          string
 	Model         string
 	Effort        string
+	ToolCalls     int64
+	WallMS        int64
+	Partial       bool
 	ClearEdits    int64
 	ClearedTokens int64
 	Compaction    int64
+}
+
+type Iteration struct {
+	Type         string  `json:"type"`
+	Model        string  `json:"model"`
+	Input        int64   `json:"input_tokens"`
+	CacheWrite5m int64   `json:"cache_write_5m"`
+	CacheWrite1h int64   `json:"cache_write_1h"`
+	CacheRead    int64   `json:"cache_read"`
+	Output       int64   `json:"output_tokens"`
+	Tier         string  `json:"tier"`
+	CostUSD      float64 `json:"cost_usd"`
+	Unpriced     bool    `json:"unpriced,omitempty"`
 }
 
 func tokensOf(input, creation, read, output int64, split *anthropic.CacheCreation) pricing.Tokens {
@@ -49,106 +78,95 @@ func SearchesOf(u anthropic.Usage) int64 {
 	return u.ServerToolUse.WebSearchRequests
 }
 
-type billed struct {
-	model   string
-	entries []pricing.Tokens
+func ReasoningOf(u anthropic.Usage) int64 {
+	if u.OutputTokensDetails == nil {
+		return 0
+	}
+	return u.OutputTokensDetails.ThinkingTokens
 }
 
-func billedByModel(model string, u anthropic.Usage) []billed {
-	groups := []billed{{model: model}}
+func iterationsOf(model string, u anthropic.Usage) []Iteration {
 	if len(u.Iterations) == 0 {
-		groups[0].entries = []pricing.Tokens{TokensOf(u)}
-		return groups
+		t := TokensOf(u)
+		cost, tier, unpriced := pricing.CostOrMax(model, t)
+		return []Iteration{{
+			Type: "message", Model: model, Input: t.Input, CacheWrite5m: t.CacheWrite5m, CacheWrite1h: t.CacheWrite1h,
+			CacheRead: t.CacheRead, Output: t.Output, Tier: tier, CostUSD: cost, Unpriced: unpriced,
+		}}
 	}
-	for _, it := range u.Iterations {
-		t := tokensOf(it.InputTokens, it.CacheCreationInputTokens, it.CacheReadInputTokens, it.OutputTokens, it.CacheCreation)
+	out := make([]Iteration, len(u.Iterations))
+	for i, it := range u.Iterations {
 		served := model
 		if it.Type == anthropic.IterationFallbackMessage && it.Model != "" {
 			served = it.Model
 		}
-		i := slices.IndexFunc(groups, func(g billed) bool { return g.model == served })
-		if i < 0 {
-			groups = append(groups, billed{model: served})
-			i = len(groups) - 1
+		t := tokensOf(it.InputTokens, it.CacheCreationInputTokens, it.CacheReadInputTokens, it.OutputTokens, it.CacheCreation)
+		cost, tier, unpriced := pricing.CostOrMax(served, t)
+		out[i] = Iteration{
+			Type: it.Type, Model: served, Input: t.Input, CacheWrite5m: t.CacheWrite5m, CacheWrite1h: t.CacheWrite1h,
+			CacheRead: t.CacheRead, Output: t.Output, Tier: tier, CostUSD: cost, Unpriced: unpriced,
 		}
-		groups[i].entries = append(groups[i].entries, t)
 	}
-	return groups
+	return out
 }
 
 func Record(ctx context.Context, d *db.DB, e Entry, u anthropic.Usage) (float64, error) {
-	groups := billedByModel(e.Model, u)
-	if len(groups) < 2 {
-		return recordGroups(ctx, d.Write, e, u, groups)
+	if e.RequestID == "" {
+		return 0, MissingRequestID{}
 	}
-	var cost float64
-	err := d.WithTx(ctx, func(tx *sql.Tx) error {
-		var err error
-		cost, err = recordGroups(ctx, tx, e, u, groups)
-		return err
-	})
-	return cost, err
-}
-
-func recordGroups(ctx context.Context, q db.Querier, e Entry, u anthropic.Usage, groups []billed) (float64, error) {
-	var total []float64
-	for i, g := range groups {
-		row := e
-		var searches int64
-		if i == 0 {
-			searches = SearchesOf(u)
-		} else {
-			row.ClearEdits, row.ClearedTokens, row.Compaction = 0, 0, 0
-		}
-		cost, err := insertRow(ctx, q, row, g, searches)
-		if err != nil {
-			return 0, err
-		}
-		total = append(total, cost)
+	if e.Source == "" {
+		e.Source = SourceLoop
 	}
-	return py.Sum(total), nil
-}
-
-func insertRow(ctx context.Context, q db.Querier, e Entry, g billed, searches int64) (float64, error) {
+	if e.Provider == "" {
+		e.Provider = ProviderAnthropic
+	}
+	iterations := iterationsOf(e.Model, u)
 	var sum pricing.Tokens
-	costs := make([]float64, len(g.entries))
-	high := false
-	flat := false
-	for i, t := range g.entries {
-		sum.Input += t.Input
-		sum.CacheWrite5m += t.CacheWrite5m
-		sum.CacheWrite1h += t.CacheWrite1h
-		sum.CacheRead += t.CacheRead
-		sum.Output += t.Output
-		cost, err := pricing.CostUSD(g.model, t, 0)
-		if err != nil {
-			return 0, err
-		}
-		costs[i] = cost
-		tier, err := pricing.TierOf(g.model, t)
-		if err != nil {
-			return 0, err
-		}
-		high = high || tier == pricing.TierHigh
-		flat = tier == pricing.TierFlat
+	var costs []float64
+	high, flat, unpriced := false, true, false
+	for _, it := range iterations {
+		sum.Input += it.Input
+		sum.CacheWrite5m += it.CacheWrite5m
+		sum.CacheWrite1h += it.CacheWrite1h
+		sum.CacheRead += it.CacheRead
+		sum.Output += it.Output
+		costs = append(costs, it.CostUSD)
+		high = high || it.Tier == pricing.TierHigh
+		flat = flat && it.Tier == pricing.TierFlat
+		unpriced = unpriced || it.Unpriced
 	}
-	cost := py.Sum(costs) + float64(float64(searches)*pricing.SearchUSD)
 	tier := pricing.TierLow
 	if high {
 		tier = pricing.TierHigh
 	} else if flat {
 		tier = pricing.TierFlat
 	}
-	_, err := q.ExecContext(ctx,
-		"INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, "+
-			"cache_read, output_tokens, searches, tier, cost_usd, clear_edits, cleared_tokens, compaction) "+
-			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		e.TS, e.ThreadID, e.RunID, e.Kind, g.model, e.Effort, sum.Input, sum.CacheWrite5m, sum.CacheWrite1h,
-		sum.CacheRead, sum.Output, searches, tier, cost, e.ClearEdits, e.ClearedTokens, e.Compaction)
+	searches := SearchesOf(u)
+	cost := py.Sum(costs) + float64(float64(searches)*pricing.SearchUSD)
+	raw, err := json.Marshal(iterations)
+	if err != nil {
+		return 0, err
+	}
+	_, err = d.Write.ExecContext(ctx,
+		"INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, job_name, model, effort, iterations, "+
+			"input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tool_calls, wall_ms, "+
+			"tier, cost_usd, partial, unpriced, clear_edits, cleared_tokens, compaction) "+
+			"VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT j.name FROM threads t JOIN jobs j ON j.id = t.job_id WHERE t.id = ?), ?, ?, ?, "+
+			"?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(request_id) DO NOTHING",
+		e.TS, e.RequestID, e.Source, e.Provider, nullable(e.ThreadID), nullable(e.RunID), e.Kind, e.ThreadID, e.Model, e.Effort,
+		string(raw), sum.Input, sum.CacheWrite5m, sum.CacheWrite1h, sum.CacheRead, sum.Output, ReasoningOf(u),
+		searches, e.ToolCalls, e.WallMS, tier, cost, e.Partial, unpriced, e.ClearEdits, e.ClearedTokens, e.Compaction)
 	if err != nil {
 		return 0, err
 	}
 	return cost, nil
+}
+
+func nullable(id int64) *int64 {
+	if id == 0 {
+		return nil
+	}
+	return &id
 }
 
 func MonthStart(now float64, loc *time.Location) float64 {
@@ -158,9 +176,12 @@ func MonthStart(now float64, loc *time.Location) float64 {
 	return float64(py.WallToUnix(loc, wall))
 }
 
+const budgetSQL = "kind <> ? AND source <> ?"
+
 func MonthToDate(ctx context.Context, q db.Querier, now float64, loc *time.Location) (float64, error) {
 	var cost float64
-	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE ts >= ? AND kind <> ?", MonthStart(now, loc), KindMemory).Scan(&cost)
+	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE ts >= ? AND "+budgetSQL,
+		MonthStart(now, loc), KindMemory, SourceSubscription).Scan(&cost)
 	return cost, err
 }
 
@@ -182,26 +203,32 @@ func RunCost(ctx context.Context, q db.Querier, runID int64) (float64, error) {
 }
 
 type Summary struct {
-	Calls          int64   `json:"calls"`
-	Cost           float64 `json:"cost"`
-	InputTokens    int64   `json:"input_tokens"`
-	CacheWrite     int64   `json:"cache_write"`
-	CacheRead      int64   `json:"cache_read"`
-	OutputTokens   int64   `json:"output_tokens"`
-	Searches       int64   `json:"searches"`
-	HighTier       int64   `json:"high_tier"`
-	CacheReadShare float64 `json:"cache_read_share"`
+	Calls           int64   `json:"calls"`
+	Cost            float64 `json:"cost"`
+	InputTokens     int64   `json:"input_tokens"`
+	CacheWrite      int64   `json:"cache_write"`
+	CacheRead       int64   `json:"cache_read"`
+	OutputTokens    int64   `json:"output_tokens"`
+	ReasoningTokens int64   `json:"reasoning_tokens"`
+	Searches        int64   `json:"searches"`
+	ToolCalls       int64   `json:"tool_calls"`
+	WallMS          int64   `json:"wall_ms"`
+	HighTier        int64   `json:"high_tier"`
+	Partial         int64   `json:"partial"`
+	Unpriced        int64   `json:"unpriced"`
+	CacheReadShare  float64 `json:"cache_read_share"`
 }
 
-const summarySQL = "SELECT COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost, COALESCE(SUM(input_tokens), 0) AS input_tokens, " +
+const summaryFields = "COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost, COALESCE(SUM(input_tokens), 0) AS input_tokens, " +
 	"COALESCE(SUM(cache_write_5m + cache_write_1h), 0) AS cache_write, COALESCE(SUM(cache_read), 0) AS cache_read, " +
-	"COALESCE(SUM(output_tokens), 0) AS output_tokens, COALESCE(SUM(searches), 0) AS searches, " +
-	"COALESCE(SUM(tier = ?), 0) AS high_tier FROM usage WHERE ts >= ? AND kind <> ?"
+	"COALESCE(SUM(output_tokens), 0) AS output_tokens, COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens, " +
+	"COALESCE(SUM(searches), 0) AS searches, COALESCE(SUM(tool_calls), 0) AS tool_calls, COALESCE(SUM(wall_ms), 0) AS wall_ms, " +
+	"COALESCE(SUM(tier = ?), 0) AS high_tier, COALESCE(SUM(partial), 0) AS partial, COALESCE(SUM(unpriced), 0) AS unpriced"
 
-func MonthSummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
+func scanSummary(row *sql.Row) (Summary, error) {
 	var s Summary
-	err := q.QueryRowContext(ctx, summarySQL, pricing.TierHigh, MonthStart(now, loc), KindMemory).Scan(
-		&s.Calls, &s.Cost, &s.InputTokens, &s.CacheWrite, &s.CacheRead, &s.OutputTokens, &s.Searches, &s.HighTier)
+	err := row.Scan(&s.Calls, &s.Cost, &s.InputTokens, &s.CacheWrite, &s.CacheRead, &s.OutputTokens, &s.ReasoningTokens,
+		&s.Searches, &s.ToolCalls, &s.WallMS, &s.HighTier, &s.Partial, &s.Unpriced)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -211,39 +238,41 @@ func MonthSummary(ctx context.Context, q db.Querier, now float64, loc *time.Loca
 	return s, nil
 }
 
-const memorySummarySQL = "SELECT COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost, COALESCE(SUM(input_tokens), 0) AS input_tokens, " +
-	"COALESCE(SUM(cache_write_5m + cache_write_1h), 0) AS cache_write, COALESCE(SUM(cache_read), 0) AS cache_read, " +
-	"COALESCE(SUM(output_tokens), 0) AS output_tokens, COALESCE(SUM(searches), 0) AS searches, " +
-	"COALESCE(SUM(tier = ?), 0) AS high_tier FROM usage WHERE ts >= ? AND kind = ?"
+func MonthSummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
+	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE ts >= ? AND "+budgetSQL,
+		pricing.TierHigh, MonthStart(now, loc), KindMemory, SourceSubscription))
+}
 
-// MemorySummary totals the memory-kind rows that the budget excludes.
 func MemorySummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
-	var s Summary
-	err := q.QueryRowContext(ctx, memorySummarySQL, pricing.TierHigh, MonthStart(now, loc), KindMemory).Scan(
-		&s.Calls, &s.Cost, &s.InputTokens, &s.CacheWrite, &s.CacheRead, &s.OutputTokens, &s.Searches, &s.HighTier)
-	if err != nil {
-		return Summary{}, err
-	}
-	return s, nil
+	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE ts >= ? AND kind = ?",
+		pricing.TierHigh, MonthStart(now, loc), KindMemory))
+}
+
+func SubscriptionSummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
+	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE ts >= ? AND source = ?",
+		pricing.TierHigh, MonthStart(now, loc), SourceSubscription))
 }
 
 type KindRow struct {
-	Kind     string  `json:"kind"`
-	Calls    int64   `json:"calls"`
-	Cost     float64 `json:"cost"`
-	Searches int64   `json:"searches"`
+	Kind      string  `json:"kind"`
+	Calls     int64   `json:"calls"`
+	Cost      float64 `json:"cost"`
+	Searches  int64   `json:"searches"`
+	ToolCalls int64   `json:"tool_calls"`
+	WallMS    int64   `json:"wall_ms"`
 }
 
 func ByKind(ctx context.Context, q db.Querier, now float64, loc *time.Location) ([]KindRow, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT kind, COUNT(*) AS calls, SUM(cost_usd) AS cost, SUM(searches) AS searches FROM usage "+
-			"WHERE ts >= ? GROUP BY kind ORDER BY cost DESC", MonthStart(now, loc))
+		"SELECT kind, COUNT(*) AS calls, SUM(cost_usd) AS cost, SUM(searches) AS searches, SUM(tool_calls) AS tool_calls, "+
+			"SUM(wall_ms) AS wall_ms FROM usage WHERE ts >= ? AND source <> ? GROUP BY kind ORDER BY cost DESC",
+		MonthStart(now, loc), SourceSubscription)
 	if err != nil {
 		return nil, err
 	}
 	return db.Collect(rows, func(r *sql.Rows) (KindRow, error) {
 		var k KindRow
-		return k, r.Scan(&k.Kind, &k.Calls, &k.Cost, &k.Searches)
+		return k, r.Scan(&k.Kind, &k.Calls, &k.Cost, &k.Searches, &k.ToolCalls, &k.WallMS)
 	})
 }
 
@@ -256,6 +285,7 @@ type ThreadRow struct {
 	PromptTokens    int64   `json:"prompt_tokens"`
 	MaxPromptTokens int64   `json:"max_prompt_tokens"`
 	OutputTokens    int64   `json:"output_tokens"`
+	ReasoningTokens int64   `json:"reasoning_tokens"`
 	Searches        int64   `json:"searches"`
 }
 
@@ -264,15 +294,15 @@ func ByThread(ctx context.Context, q db.Querier, now float64, loc *time.Location
 		"SELECT u.thread_id, t.title, t.kind, COUNT(*) AS calls, SUM(u.cost_usd) AS cost, "+
 			"SUM(u.input_tokens + u.cache_write_5m + u.cache_write_1h + u.cache_read) AS prompt_tokens, "+
 			"MAX(u.input_tokens + u.cache_write_5m + u.cache_write_1h + u.cache_read) AS max_prompt_tokens, "+
-			"SUM(u.output_tokens) AS output_tokens, SUM(u.searches) AS searches "+
-			"FROM usage u JOIN threads t ON t.id = u.thread_id WHERE u.ts >= ? "+
-			"GROUP BY u.thread_id ORDER BY cost DESC LIMIT ?", MonthStart(now, loc), limit)
+			"SUM(u.output_tokens) AS output_tokens, SUM(u.reasoning_tokens) AS reasoning_tokens, SUM(u.searches) AS searches "+
+			"FROM usage u JOIN threads t ON t.id = u.thread_id WHERE u.ts >= ? AND u.source <> ? "+
+			"GROUP BY u.thread_id ORDER BY cost DESC LIMIT ?", MonthStart(now, loc), SourceSubscription, limit)
 	if err != nil {
 		return nil, err
 	}
 	return db.Collect(rows, func(r *sql.Rows) (ThreadRow, error) {
 		var t ThreadRow
-		return t, r.Scan(&t.ThreadID, &t.Title, &t.Kind, &t.Calls, &t.Cost, &t.PromptTokens, &t.MaxPromptTokens, &t.OutputTokens, &t.Searches)
+		return t, r.Scan(&t.ThreadID, &t.Title, &t.Kind, &t.Calls, &t.Cost, &t.PromptTokens, &t.MaxPromptTokens, &t.OutputTokens, &t.ReasoningTokens, &t.Searches)
 	})
 }
 

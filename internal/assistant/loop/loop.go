@@ -392,16 +392,29 @@ func (s *state) size(ctx context.Context, active []actx.Message, a *anchor) (int
 	return s.req.estimate(sent, a)
 }
 
-func (s *state) stream(ctx context.Context, messages []json.RawMessage) (*anthropic.Message, error) {
+func (s *state) stream(ctx context.Context, messages []json.RawMessage) (*anthropic.Message, int64, error) {
 	params := s.req.params
 	params.Messages = messages
 	params.ToolChoice, s.toolChoice = s.toolChoice, nil
 	ledgerCtx := context.WithoutCancel(ctx)
+	started := time.Now()
 	response, err := s.client.Stream(ctx, params, func(ev anthropic.Event) error { return s.writer.Observe(ledgerCtx, ev) })
+	wall := time.Since(started).Milliseconds()
 	if err != nil {
-		return nil, err
+		return response, wall, err
 	}
-	return response, s.writer.Flush(context.WithoutCancel(ctx))
+	return response, wall, s.writer.Flush(context.WithoutCancel(ctx))
+}
+
+func (s *state) recordUsage(ctx context.Context, response *anthropic.Message, toolCalls, wall int64, partial bool) error {
+	clearEdits, cleared := actx.ClearsOf(response)
+	entry := usage.Entry{
+		TS: s.now(), RequestID: response.ID, ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: s.run.Model,
+		Effort: s.run.Effort, ToolCalls: toolCalls, WallMS: wall, Partial: partial,
+		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(response.StopReason == block.Compaction)),
+	}
+	_, err := usage.Record(context.WithoutCancel(ctx), s.d, entry, response.Usage)
+	return err
 }
 
 func (s *state) settlePending(ctx context.Context) error {
@@ -525,8 +538,13 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err != nil {
 		return false, nil, err
 	}
-	response, err := s.stream(ctx, messages)
+	response, wall, err := s.stream(ctx, messages)
 	if err != nil {
+		if response != nil && response.ID != "" {
+			if rerr := s.recordUsage(ctx, response, 0, wall, true); rerr != nil {
+				return false, nil, rerr
+			}
+		}
 		return false, nil, err
 	}
 	if err := journal.BumpSteps(context.WithoutCancel(ctx), s.d.Write, s.run.ID); err != nil {
@@ -538,12 +556,11 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if !compacted {
 		blocks, stop = judge(response, blocks)
 	}
-	clearEdits, cleared := actx.ClearsOf(response)
-	entry := usage.Entry{
-		TS: s.now(), ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: s.run.Model, Effort: s.run.Effort,
-		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(compacted)),
+	uses, err := toolUses(blocks)
+	if err != nil {
+		return false, nil, err
 	}
-	if _, err := usage.Record(context.WithoutCancel(ctx), s.d, entry, response.Usage); err != nil {
+	if err := s.recordUsage(ctx, response, int64(len(uses)), wall, false); err != nil {
 		return false, nil, err
 	}
 	if err := s.renew(ctx); err != nil {
@@ -566,10 +583,6 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, err
 	}
 	if err := s.allowURLs(ctx, urls); err != nil {
-		return false, nil, err
-	}
-	uses, err := toolUses(blocks)
-	if err != nil {
 		return false, nil, err
 	}
 	if len(uses) > 0 {

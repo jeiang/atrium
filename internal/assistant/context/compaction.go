@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/anthropic"
@@ -318,11 +319,14 @@ func ClientCompact(ctx gocontext.Context, d *db.DB, client *anthropic.Client, mo
 	if err != nil {
 		return 0, err
 	}
+	started := time.Now()
 	response, err := client.Create(ctx, params)
+	wall := time.Since(started).Milliseconds()
 	if err != nil {
 		return 0, err
 	}
-	entry := usage.Entry{TS: now, ThreadID: threadID, RunID: runID, Kind: kind, Model: model, Effort: SummaryEffort, Compaction: 1}
+	entry := usage.Entry{TS: now, RequestID: response.ID, ThreadID: threadID, RunID: runID, Kind: kind, Model: model,
+		Effort: SummaryEffort, WallMS: wall, Compaction: 1}
 	if _, err := usage.Record(ctx, d, entry, response.Usage); err != nil {
 		return 0, err
 	}

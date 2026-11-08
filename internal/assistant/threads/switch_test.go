@@ -21,7 +21,7 @@ func TestSwitchModelIsPricedWhileWarmAndDropsThinkingOnADownSwitch(t *testing.T)
 	if _, err := d.Write.Exec("INSERT INTO runs (id, thread_id, kind, model, effort, state, started_at) VALUES (1, ?, 'chat', ?, 'max', 'done', ?)", id, pricing.OpusID, now-60); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (?, ?, 1, 'chat', ?, 'max', 1000, 0, 0, 500, 10, 0, 'flat', 0.1)", now-60, id, pricing.OpusID); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (?, lower(hex(randomblob(16))), 'loop', 'anthropic', ?, 1, 'chat', ?, 'max', '[]', 1000, 0, 0, 500, 10, 0, 'flat', 0.1)", now-60, id, pricing.OpusID); err != nil {
 		t.Fatal(err)
 	}
 	content := `[{"type":"thinking","thinking":"pondering"},{"type":"text","text":"hello"}]`

@@ -138,7 +138,7 @@ func TestMemorySpendDoesNotPauseChat(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := float64(time.Now().Unix())
-	insert := "INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (?, 1, 1, ?, 'm', 'low', 0, 0, 0, 0, 0, 0, 'low', ?)"
+	insert := "INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (?, lower(hex(randomblob(16))), 'loop', 'anthropic', 1, 1, ?, 'm', 'low', '[]', 0, 0, 0, 0, 0, 0, 'low', ?)"
 	if _, err := d.Write.Exec(insert, now, "chat", 1.0); err != nil {
 		t.Fatal(err)
 	}

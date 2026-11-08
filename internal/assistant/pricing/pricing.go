@@ -195,6 +195,10 @@ func CostUSD(model string, t Tokens, searches int64) (float64, error) {
 		return 0, err
 	}
 	_, r := m.tier(t)
+	return costAt(r, t) + float64(float64(searches)*SearchUSD), nil
+}
+
+func costAt(r Rates, t Tokens) float64 {
 	total := py.Sum([]float64{
 		float64(float64(t.Input) * r.Input),
 		float64(float64(t.Output) * r.Output),
@@ -202,5 +206,32 @@ func CostUSD(model string, t Tokens, searches int64) (float64, error) {
 		float64(float64(t.CacheWrite1h) * r.CacheWrite1h),
 		float64(float64(t.CacheRead) * r.CacheRead),
 	})
-	return float64(total/million) + float64(float64(searches)*SearchUSD), nil
+	return float64(total / million)
+}
+
+func maxRates() Rates {
+	var out Rates
+	for _, m := range catalog {
+		rates := []Rates{m.Rates}
+		if m.LongRates != nil {
+			rates = append(rates, *m.LongRates)
+		}
+		for _, r := range rates {
+			out.Input = max(out.Input, r.Input)
+			out.Output = max(out.Output, r.Output)
+			out.CacheWrite5m = max(out.CacheWrite5m, r.CacheWrite5m)
+			out.CacheWrite1h = max(out.CacheWrite1h, r.CacheWrite1h)
+			out.CacheRead = max(out.CacheRead, r.CacheRead)
+		}
+	}
+	return out
+}
+
+func CostOrMax(model string, t Tokens) (float64, string, bool) {
+	m, err := Lookup(model)
+	if err != nil {
+		return costAt(maxRates(), t), TierHigh, true
+	}
+	tier, r := m.tier(t)
+	return costAt(r, t), tier, false
 }

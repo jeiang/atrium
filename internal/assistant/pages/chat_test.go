@@ -584,7 +584,7 @@ func TestThreadSettingsShowLockedFieldsAndCost(t *testing.T) {
 	if _, err := s.db.Write.Exec("INSERT INTO runs (id, thread_id, kind, model, effort, state, started_at) VALUES (1, ?, 'chat', ?, 'high', 'done', ?)", id, pricing.SonnetID, s.clock-60); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Write.Exec("INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (?, ?, 1, 'chat', ?, 'high', 1000, 0, 0, 500, 10, 0, 'flat', 0.1)", s.clock-60, id, pricing.SonnetID); err != nil {
+	if _, err := s.db.Write.Exec("INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (?, lower(hex(randomblob(16))), 'loop', 'anthropic', ?, 1, 'chat', ?, 'high', '[]', 1000, 0, 0, 500, 10, 0, 'flat', 0.1)", s.clock-60, id, pricing.SonnetID); err != nil {
 		t.Fatal(err)
 	}
 	body := status(t, s.get("/chat/"+strconv.FormatInt(id, 10)), http.StatusOK)

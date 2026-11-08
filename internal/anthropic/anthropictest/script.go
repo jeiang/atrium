@@ -10,6 +10,7 @@ type Usage struct {
 	CacheCreation int64
 	CacheRead     int64
 	Output        int64
+	Reasoning     int64
 	Searches      int64
 	Cache1h       int64
 	Iterations    []Iteration
@@ -59,6 +60,7 @@ func (u Usage) JSON() json.RawMessage {
 		"cache_creation":              map[string]int64{"ephemeral_5m_input_tokens": u.CacheCreation - u.Cache1h, "ephemeral_1h_input_tokens": u.Cache1h},
 		"cache_read_input_tokens":     u.CacheRead,
 		"output_tokens":               u.Output,
+		"output_tokens_details":       map[string]int64{"thinking_tokens": u.Reasoning},
 		"server_tool_use":             map[string]int64{"web_search_requests": u.Searches, "web_fetch_requests": 0},
 		"iterations":                  iterations,
 	})

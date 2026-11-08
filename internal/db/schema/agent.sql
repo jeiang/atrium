@@ -95,22 +95,33 @@ CREATE INDEX IF NOT EXISTS tool_results_run ON tool_results (run_id);
 CREATE TABLE IF NOT EXISTS usage (
     id INTEGER PRIMARY KEY,
     ts REAL NOT NULL,
-    thread_id INTEGER NOT NULL REFERENCES threads(id),
-    run_id INTEGER NOT NULL REFERENCES runs(id),
+    request_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    thread_id INTEGER REFERENCES threads(id),
+    run_id INTEGER REFERENCES runs(id),
     kind TEXT NOT NULL,
+    job_name TEXT,
     model TEXT NOT NULL,
     effort TEXT NOT NULL,
+    iterations TEXT NOT NULL,
     input_tokens INTEGER NOT NULL,
     cache_write_5m INTEGER NOT NULL,
     cache_write_1h INTEGER NOT NULL,
     cache_read INTEGER NOT NULL,
     output_tokens INTEGER NOT NULL,
+    reasoning_tokens INTEGER NOT NULL DEFAULT 0,
     searches INTEGER NOT NULL,
+    tool_calls INTEGER NOT NULL DEFAULT 0,
+    wall_ms INTEGER NOT NULL DEFAULT 0,
     tier TEXT NOT NULL,
     cost_usd REAL NOT NULL,
+    partial INTEGER NOT NULL DEFAULT 0,
+    unpriced INTEGER NOT NULL DEFAULT 0,
     clear_edits INTEGER NOT NULL DEFAULT 0,
     cleared_tokens INTEGER NOT NULL DEFAULT 0,
-    compaction INTEGER NOT NULL DEFAULT 0
+    compaction INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (request_id)
 );
 CREATE INDEX IF NOT EXISTS usage_ts ON usage (ts);
 CREATE INDEX IF NOT EXISTS usage_thread ON usage (thread_id);
