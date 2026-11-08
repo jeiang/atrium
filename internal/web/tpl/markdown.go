@@ -3,6 +3,7 @@ package tpl
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"html/template"
 	"slices"
 	"strings"
@@ -11,13 +12,12 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/renderer/html"
+	goldmarkhtml "github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/util"
 
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/pyhtml"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
@@ -33,7 +33,7 @@ var renderer = goldmark.New(
 		parser.WithInlineParsers(without(parser.DefaultInlineParsers(), "*parser.rawHTMLParser")...),
 		parser.WithParagraphTransformers(parser.DefaultParagraphTransformers()...),
 	)),
-	goldmark.WithRendererOptions(html.WithHardWraps()),
+	goldmark.WithRendererOptions(goldmarkhtml.WithHardWraps()),
 )
 
 var policy = func() *bluemonday.Policy {
@@ -98,7 +98,7 @@ func taskBox(m *rx.Match) string {
 }
 
 func internalHref(m *rx.Match, pages map[string]string) string {
-	url := pyhtml.Unescape(m.Group(1))
+	url := html.UnescapeString(m.Group(1))
 	parts, err := py.URLSplit(url)
 	if err != nil {
 		return m.Text()

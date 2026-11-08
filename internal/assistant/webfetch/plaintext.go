@@ -3,8 +3,9 @@ package webfetch
 import (
 	"strings"
 
+	"golang.org/x/net/html"
+
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/pyhtml"
 )
 
 var (
@@ -29,38 +30,52 @@ func PlainText(markup string) (title, text string) {
 		skip      int
 		inTitle   bool
 	)
-	p := &pyhtml.Parser{
-		StartTag: func(tag string, _ []pyhtml.Attr) {
-			switch {
-			case tag == "title":
-				inTitle = true
-			case skipTags[tag]:
-				skip++
-			case blockTags[tag]:
-				parts.WriteByte('\n')
-			}
-		},
-		EndTag: func(tag string) {
-			switch {
-			case tag == "title":
-				inTitle = false
-			case skipTags[tag]:
-				skip = max(skip-1, 0)
-			case blockTags[tag]:
-				parts.WriteByte('\n')
-			}
-		},
-		Data: func(data string) {
+	start := func(tag string) {
+		switch {
+		case tag == "title":
+			inTitle = true
+		case skipTags[tag]:
+			skip++
+		case blockTags[tag]:
+			parts.WriteByte('\n')
+		}
+	}
+	end := func(tag string) {
+		switch {
+		case tag == "title":
+			inTitle = false
+		case skipTags[tag]:
+			skip = max(skip-1, 0)
+		case blockTags[tag]:
+			parts.WriteByte('\n')
+		}
+	}
+	z := html.NewTokenizer(strings.NewReader(markup))
+	for {
+		tt := z.Next()
+		if tt == html.ErrorToken {
+			break
+		}
+		switch tt {
+		case html.StartTagToken:
+			tag, _ := z.TagName()
+			start(string(tag))
+		case html.SelfClosingTagToken:
+			tag, _ := z.TagName()
+			start(string(tag))
+			end(string(tag))
+		case html.EndTagToken:
+			tag, _ := z.TagName()
+			end(string(tag))
+		case html.TextToken:
 			switch {
 			case inTitle:
-				titleText.WriteString(data)
+				titleText.Write(z.Text())
 			case skip == 0:
-				parts.WriteString(data)
+				parts.Write(z.Text())
 			}
-		},
+		}
 	}
-	p.Feed(markup)
-	p.Close()
 	var lines []string
 	for line := range strings.SplitSeq(parts.String(), "\n") {
 		if line = collapse(line); line != "" {

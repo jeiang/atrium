@@ -4,12 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"html"
 	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/pyhtml"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
@@ -151,7 +151,7 @@ func DomainOf(addr string) string {
 func StripMarkup(text string) string {
 	text = sub(scriptStyleRE, " ", text)
 	text = sub(tagRE, " ", text)
-	return mime.Strip(sub(spaceRE, " ", pyhtml.Unescape(text)))
+	return mime.Strip(sub(spaceRE, " ", html.UnescapeString(text)))
 }
 
 func FilenamePattern(name string) string { return sub(digitsRE, "#", mime.Lower(name)) }
