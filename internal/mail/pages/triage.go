@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/mail/triage"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -16,7 +16,7 @@ func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var offset int
 	if values, given := q["offset"]; given {
-		n, ok := py.LaxInt64(web.LastValue(values, ""))
+		n, ok := laxInt64(web.LastValue(values, ""))
 		if !ok {
 			web.Unprocessable(w, web.BadInt("query", "offset", web.LastValue(values, "")))
 			return
@@ -24,7 +24,7 @@ func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 		offset = int(max(n, 0))
 	}
 	account, stage, agreement := web.QueryValue(q, "account"), web.QueryValue(q, "stage"), web.QueryValue(q, "agreement")
-	text := py.Strip(web.QueryValue(q, "q"))
+	text := strings.TrimSpace(web.QueryValue(q, "q"))
 	ctx := r.Context()
 	found, err := triage.Triage(ctx, s.deps.DB.Read, triage.Filter{
 		Account: account, Stage: stage, Agreement: agreement, Limit: pageSize, Offset: offset, Q: text,

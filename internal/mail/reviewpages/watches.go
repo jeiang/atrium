@@ -9,7 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail/birthdays"
 	"github.com/jeiang/atrium/internal/mail/watches"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -28,7 +28,7 @@ func (s *service) showWatches(w http.ResponseWriter, r *http.Request, notice *tp
 	check(err)
 	zone, err := config.Location(s.deps.Env)
 	check(err)
-	sec, _ := py.SplitTimestamp(now)
+	sec, _ := timex.SplitTimestamp(now)
 	year, month, day := time.Unix(sec, 0).In(zone).Date()
 	items, configured, err := birthdays.UpcomingFor(ctx, s.deps.DB.Read, birthdays.Date(year, month, day), birthdayWindowDays)
 	check(err)

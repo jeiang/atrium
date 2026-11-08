@@ -3,13 +3,13 @@ package reviewpages
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/smtp"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func (s *site) mailAccounts() {
@@ -51,7 +51,13 @@ func (s *site) row(id int64) drafts.Row {
 	return *row
 }
 
-func reviewed(row drafts.Row) string { return py.FloatRepr(row.UpdatedAt) }
+func reviewed(row drafts.Row) string {
+	s := strconv.FormatFloat(row.UpdatedAt, 'f', -1, 64)
+	if !strings.Contains(s, ".") {
+		s += ".0"
+	}
+	return s
+}
 
 func TestSendRequiresTheReviewedVersionAndConfirmationIsNotInline(t *testing.T) {
 	s := newSite(t)

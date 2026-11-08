@@ -97,7 +97,7 @@ func TestUICorrectionWhenTheMailboxIsDownStillRecords(t *testing.T) {
 	s := liveSite(t, w, func(context.Context, string) (mail.Client, error) { return nil, errors.New("imap unreachable") })
 	id := w.MID("fix-me")
 	body := status(t, s.post("/messages/"+s.id(id)+"/correct", url.Values{"dest": {"Bills"}, "context": {"row"}}, hx), 200, "down")
-	contains(t, body, "Correction recorded", "It could not be moved yet: RuntimeError.")
+	contains(t, body, "Correction recorded", "It could not be moved yet: imap unreachable.")
 	if got := s.column("SELECT folder FROM corrections WHERE message_id = ?", id); len(got) != 1 || got[0] != "Bills" {
 		t.Errorf("corrections = %v", got)
 	}

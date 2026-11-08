@@ -5,6 +5,8 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -156,9 +158,56 @@ func (s *service) fail(w http.ResponseWriter, r *http.Request, status int, detai
 
 func detached(r *http.Request) context.Context { return context.WithoutCancel(r.Context()) }
 
+func laxInt64(s string) (int64, bool) {
+	body := strings.TrimSpace(s)
+	neg := false
+	if rest, ok := strings.CutPrefix(body, "-"); ok {
+		body, neg = rest, true
+	} else if rest, ok := strings.CutPrefix(body, "+"); ok {
+		body = rest
+	}
+	whole, fraction, hasFraction := strings.Cut(body, ".")
+	if hasFraction && (fraction == "" || strings.Trim(fraction, "0") != "") {
+		return 0, false
+	}
+	if whole == "" || strings.HasPrefix(whole, "_") || strings.HasSuffix(whole, "_") || strings.Contains(whole, "__") {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(strings.ReplaceAll(whole, "_", ""), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	if neg {
+		n = -n
+	}
+	return n, true
+}
+
+func truthy(v any) bool {
+	switch v := v.(type) {
+	case nil:
+		return false
+	case string:
+		return v != ""
+	case bool:
+		return v
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	case []any:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	case py.Dict:
+		return len(v) > 0
+	}
+	return true
+}
+
 func pathInt(r *http.Request, name string) (int64, []web.FieldError) {
 	raw := web.PathParam(r, name)
-	id, ok := py.LaxInt64(raw)
+	id, ok := laxInt64(raw)
 	if !ok {
 		return 0, []web.FieldError{web.BadInt("path", name, raw)}
 	}

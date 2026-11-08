@@ -4,9 +4,9 @@ import (
 	"math/big"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/mail/openloops"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -43,14 +43,35 @@ func (s *service) notFound(w http.ResponseWriter, r *http.Request, found bool, w
 
 func (s *service) loopsPage(w http.ResponseWriter, r *http.Request) { s.showLoops(w, r, nil) }
 
-func clampDays(n *big.Int) int64 {
+func clampDays(raw string) (int64, bool) {
+	body := strings.TrimSpace(raw)
+	neg := false
+	if rest, ok := strings.CutPrefix(body, "-"); ok {
+		body, neg = rest, true
+	} else if rest, ok := strings.CutPrefix(body, "+"); ok {
+		body = rest
+	}
+	whole, fraction, hasFraction := strings.Cut(body, ".")
+	if hasFraction && (fraction == "" || strings.Trim(fraction, "0") != "") {
+		return 0, false
+	}
+	if whole == "" {
+		return 0, false
+	}
+	n, ok := new(big.Int).SetString(strings.ReplaceAll(whole, "_", ""), 10)
+	if !ok {
+		return 0, false
+	}
+	if neg {
+		n.Neg(n)
+	}
 	switch {
 	case n.Cmp(big.NewInt(1)) < 0:
-		return 1
+		return 1, true
 	case n.Cmp(big.NewInt(60)) > 0:
-		return 60
+		return 60, true
 	}
-	return n.Int64()
+	return n.Int64(), true
 }
 
 func plural(n int64, noun string) string {
@@ -66,11 +87,11 @@ func (s *service) loopSnooze(w http.ResponseWriter, r *http.Request) {
 	check(err)
 	days := int64(snooze)
 	if raw, given := web.FormField(web.FormValues(r), "days"); given {
-		n, valid := py.LaxInt(raw)
+		n, valid := clampDays(raw)
 		if !valid {
 			errs = append(errs, web.BadInt("body", "days", raw))
 		} else {
-			days = clampDays(n)
+			days = n
 		}
 	}
 	if len(errs) > 0 {

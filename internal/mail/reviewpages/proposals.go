@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/big"
+	"strconv"
+
 	"net/http"
 	"net/url"
 	"slices"
@@ -80,20 +81,16 @@ func (s *service) card(w http.ResponseWriter, r *http.Request, id int64, notice 
 }
 
 func picked(form url.Values, index int, messages any) ([]any, error) {
-	if !py.Truthy(messages) {
+	if !truthy(messages) {
 		return nil, nil
 	}
 	ids := []any{}
 	for _, value := range form[fmt.Sprintf("msg-%d", index)] {
-		n, err := py.IntString(value)
+		n, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
 			return nil, proposals.SelectionError("invalid message selection")
 		}
-		if n.IsInt64() {
-			ids = append(ids, n.Int64())
-		} else {
-			ids = append(ids, new(big.Int).Set(n))
-		}
+		ids = append(ids, n)
 	}
 	return ids, nil
 }

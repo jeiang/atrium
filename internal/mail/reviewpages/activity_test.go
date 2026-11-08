@@ -122,7 +122,7 @@ func (s *site) profileSet(run int64, key, value string) map[string]any {
 	if err != nil {
 		s.t.Fatal(err)
 	}
-	return jsonOf(s.t, py.JSONDumps(out))
+	return jsonOf(s.t, mustJSON(out))
 }
 
 func (s *site) profile(key string) any {
