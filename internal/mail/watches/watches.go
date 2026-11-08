@@ -441,26 +441,27 @@ func ScanPackages(ctx context.Context, d *db.DB, now float64, o Options) (scanRe
 }
 
 type Package struct {
-	ID              int64   `json:"id"`
-	Carrier         string  `json:"carrier"`
-	TrackingNumber  string  `json:"tracking_number"`
-	Merchant        string  `json:"merchant"`
-	MerchantKey     string  `json:"merchant_key"`
-	OrderRef        string  `json:"order_ref"`
-	Status          string  `json:"status"`
-	StatusText      string  `json:"status_text"`
-	SourceMessageID int64   `json:"source_message_id"`
-	LastMessageID   int64   `json:"last_message_id"`
-	UpdatedTS       float64 `json:"updated_ts"`
-	FirstSeen       float64 `json:"first_seen"`
-	Dismissed       int64   `json:"dismissed"`
-	Updated         string  `json:"updated"`
-	Aggregator      string  `json:"aggregator"`
-	TrackerID       string  `json:"tracker_id"`
-	LastSyncTS      float64 `json:"last_sync_ts"`
-	LastSync        string  `json:"last_sync"`
-	LastEvent       string  `json:"last_event"`
-	LastEventTS     float64 `json:"last_event_ts"`
+	ID                   int64   `json:"id"`
+	Carrier              string  `json:"carrier"`
+	TrackingNumber       string  `json:"tracking_number"`
+	Merchant             string  `json:"merchant"`
+	MerchantKey          string  `json:"merchant_key"`
+	OrderRef             string  `json:"order_ref"`
+	Status               string  `json:"status"`
+	StatusText           string  `json:"status_text"`
+	SourceMessageID      int64   `json:"source_message_id"`
+	LastMessageID        int64   `json:"last_message_id"`
+	UpdatedTS            float64 `json:"updated_ts"`
+	FirstSeen            float64 `json:"first_seen"`
+	Dismissed            int64   `json:"dismissed"`
+	Updated              string  `json:"updated"`
+	Aggregator           string  `json:"aggregator"`
+	TrackerID            string  `json:"tracker_id"`
+	LastSyncTS           float64 `json:"last_sync_ts"`
+	LastSync             string  `json:"last_sync"`
+	LastEvent            string  `json:"last_event"`
+	LastEventDescription string  `json:"last_event_description"`
+	LastEventTS          float64 `json:"last_event_ts"`
 }
 
 func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64, activeOnly, includeDismissed bool) ([]Package, error) {
@@ -478,7 +479,8 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 	}
 	rows, err := q.QueryContext(ctx,
 		"SELECT id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, source_message_id, "+
-			"last_message_id, updated_ts, first_seen, dismissed, aggregator, tracker_id, last_sync_ts, last_event, last_event_ts "+
+			"last_message_id, updated_ts, first_seen, dismissed, aggregator, tracker_id, last_sync_ts, last_event, last_event_ts, "+
+			"COALESCE((SELECT description FROM package_events WHERE package_id = packages.id ORDER BY event_ts DESC LIMIT 1), '') "+
 			"FROM packages"+where+" ORDER BY updated_ts DESC")
 	if err != nil {
 		return nil, err
@@ -487,7 +489,7 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 		var p Package
 		err := r.Scan(&p.ID, &p.Carrier, &p.TrackingNumber, &p.Merchant, &p.MerchantKey, &p.OrderRef, &p.Status, &p.StatusText,
 			&p.SourceMessageID, &p.LastMessageID, &p.UpdatedTS, &p.FirstSeen, &p.Dismissed, &p.Aggregator, &p.TrackerID,
-			&p.LastSyncTS, &p.LastEvent, &p.LastEventTS)
+			&p.LastSyncTS, &p.LastEvent, &p.LastEventTS, &p.LastEventDescription)
 		return p, err
 	})
 	if err != nil {

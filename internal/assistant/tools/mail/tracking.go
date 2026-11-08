@@ -79,10 +79,16 @@ func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 	}
 	result, err := tracking.Register(ctx, tc.DB, tc.Now(), target, settings)
 	if err != nil {
-		_ = writes.Discard(ctx, tc.DB.Write, writeID)
+		ledger := context.WithoutCancel(ctx)
+		if tracking.OutcomeUnknown(err) {
+			_ = writes.SettleUnknown(ledger, tc.DB.Write, writeID, writes.New{Target: fmt.Sprintf("package:%d", target.ID)}, err.Error())
+			return nil, tool.Error("the Ship24 registration outcome is unknown: " + err.Error() +
+				"; the write is blocked until the operator resolves it with 'atrium writes resolve <id>'")
+		}
+		_ = writes.Discard(ledger, tc.DB.Write, writeID)
 		return nil, trackingFailed(err)
 	}
-	if err := writes.Settle(ctx, tc.DB.Write, tc.Undoers, writeID, writes.New{
+	if err := writes.Settle(context.WithoutCancel(ctx), tc.DB.Write, tc.Undoers, writeID, writes.New{
 		Target: fmt.Sprintf("package:%d", target.ID),
 		After:  map[string]any{"tracker_id": result.TrackerID, "status": result.Status},
 		Undo:   tracking.Undo{Op: tracking.UndoUntrack, PackageID: target.ID, TrackerID: result.TrackerID, Before: target},
@@ -97,6 +103,9 @@ func trackingFailed(err error) error {
 	var quota tracking.QuotaError
 	var failure tracking.Error
 	var missing config.NotConfigured
+	var status *tracking.StatusError
+	var limited *tracking.RateLimitError
+	var transport *tracking.TransportError
 	switch {
 	case errors.As(err, &quota):
 		return tool.Error(quota.Error())
@@ -104,6 +113,12 @@ func trackingFailed(err error) error {
 		return tool.Error(failure.Error())
 	case errors.As(err, &missing):
 		return tool.NotConfigured(missing.Error())
+	case errors.As(err, &status):
+		return tool.Error(status.Error())
+	case errors.As(err, &limited):
+		return tool.Error(limited.Error())
+	case errors.As(err, &transport):
+		return tool.Error(transport.Error())
 	}
 	return err
 }
@@ -113,5 +128,13 @@ func undoPackageUntrack(ctx context.Context, q db.Querier, raw json.RawMessage) 
 	if err := json.Unmarshal(raw, &u); err != nil || u.Op != tracking.UndoUntrack || u.PackageID == 0 {
 		return nil, writes.UndoError("package undo payload is invalid")
 	}
-	return tracking.Untrack(ctx, q, 0, u)
+	result, err := tracking.Untrack(ctx, q, u)
+	if err != nil {
+		var missing config.NotConfigured
+		if errors.As(err, &missing) {
+			return nil, writes.UndoError(missing.Error())
+		}
+		return nil, writes.UndoError(err.Error())
+	}
+	return result, nil
 }
