@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/anthropic"
-	actx "github.com/jeiang/atrium/internal/assistant/context"
+	"github.com/jeiang/atrium/internal/assistant/block"
 )
 
 func textBlock(text string) json.RawMessage {
@@ -19,27 +19,12 @@ func textBlock(text string) json.RawMessage {
 	return raw
 }
 
-func hasVisibleText(blocks []json.RawMessage) bool {
-	for _, raw := range blocks {
-		var b struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		}
-		if json.Unmarshal(raw, &b) == nil && b.Type == "text" && strings.TrimSpace(b.Text) != "" {
-			return true
-		}
-	}
-	return false
+func hasVisibleText(blocks []json.RawMessage) (bool, error) {
+	return block.VisibleText(blocks)
 }
 
-func withoutToolUses(blocks []json.RawMessage) []json.RawMessage {
-	out := make([]json.RawMessage, 0, len(blocks))
-	for _, raw := range blocks {
-		if blockType(raw) != actx.ToolUse {
-			out = append(out, raw)
-		}
-	}
-	return out
+func withoutToolUses(blocks []json.RawMessage) ([]json.RawMessage, error) {
+	return block.WithoutToolUses(blocks)
 }
 
 func refusalNote(d *anthropic.StopDetails) (thread, stop string) {
@@ -72,7 +57,10 @@ func judge(response *anthropic.Message, blocks []json.RawMessage) (out []json.Ra
 		thread, reason := refusalNote(response.StopDetails)
 		return []json.RawMessage{textBlock(thread)}, RunLimit(reason)
 	case anthropic.StopMaxTokens, anthropic.StopModelContextWindowExceeded:
-		kept := withoutToolUses(blocks)
+		kept, err := withoutToolUses(blocks)
+		if err != nil {
+			return nil, err
+		}
 		note := "This reply was cut off at the output token limit (stop reason: max_tokens). Any tool call it was writing was dropped."
 		if stopReason == anthropic.StopModelContextWindowExceeded {
 			note = "This reply was cut off because the context window filled (stop reason: model_context_window_exceeded). Any tool call it was writing was dropped."
@@ -84,7 +72,15 @@ func judge(response *anthropic.Message, blocks []json.RawMessage) (out []json.Ra
 				RunLimit("the model paused its turn with no content (stop reason: pause_turn)")
 		}
 	case anthropic.StopEndTurn:
-		if !hasVisibleText(blocks) && len(withoutToolUses(blocks)) == len(blocks) {
+		visible, err := hasVisibleText(blocks)
+		if err != nil {
+			return nil, err
+		}
+		kept, err := withoutToolUses(blocks)
+		if err != nil {
+			return nil, err
+		}
+		if !visible && len(kept) == len(blocks) {
 			return append(blocks, textBlock("The model ended its turn without a reply.")), nil
 		}
 	}

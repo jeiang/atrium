@@ -18,6 +18,5 @@ func New(tools registry.Source) (*loop.Runner, error) {
 	if err := rs.Install(reg); err != nil {
 		return nil, err
 	}
-	r.ResearchBatch = rs.Batch
 	return r, nil
 }

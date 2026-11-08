@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -87,13 +88,17 @@ func itemsOf(ctx gocontext.Context, q db.Querier, threadID int64, ledger Ledger)
 			continue
 		}
 		for _, raw := range m.Content {
-			h := headOf(raw)
-			if h.Type != ToolResult {
+			b, err := block.Decode(raw)
+			if err != nil {
+				return nil, err
+			}
+			if b.Kind != block.ToolResult {
 				continue
 			}
-			call, hasCall := calls[h.ToolUseID]
-			row, hasRow := ledger.Get(h.ToolUseID)
-			it := item{ID: h.ToolUseID, Seq: m.Seq, Tool: "?", State: StateActive}
+			id := b.String("tool_use_id")
+			call, hasCall := calls[id]
+			row, hasRow := ledger.Get(id)
+			it := item{ID: id, Seq: m.Seq, Tool: "?", State: StateActive}
 			if hasRow {
 				it.State = row.State
 				it.ResultID = nonZero(row.ResultID)

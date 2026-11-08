@@ -357,7 +357,10 @@ func (s *Service) lastOperator(ctx context.Context, threadID int64, refusal stri
 	if err != nil {
 		return nil, err
 	}
-	last := history.LastOperator()
+	last, err := history.LastOperator()
+	if err != nil {
+		return nil, err
+	}
 	if last == nil {
 		return nil, NothingToRedo(refusal)
 	}

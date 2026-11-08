@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
@@ -82,20 +83,34 @@ func manifestBlock(ctx gocontext.Context, q db.Querier, threadID int64, t Tuning
 	return TextBlock(text), nil
 }
 
-func unitStart(m Message) bool {
-	return m.Role == journal.Assistant || !hasType(m.Content, ToolResult)
+func unitStart(m Message) (bool, error) {
+	if m.Role == journal.Assistant {
+		return true, nil
+	}
+	has, err := hasType(m.Content, block.ToolResult)
+	return !has, err
 }
 
-func preserved(sent []Message, t Tuning) []Message {
+func preserved(sent []Message, t Tuning) ([]Message, error) {
 	start := max(len(sent)-t.PreserveMessages, 0)
-	for start < len(sent) && !unitStart(sent[start]) {
+	for start < len(sent) {
+		ok, err := unitStart(sent[start])
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			break
+		}
 		start++
 	}
 	var kept []Message
 	for _, m := range sent[start:] {
 		var content []json.RawMessage
 		if m.Role == journal.Assistant {
-			content = StripThinking(m.Content)
+			var err error
+			if content, err = StripThinking(m.Content); err != nil {
+				return nil, err
+			}
 		} else {
 			content = append(content, m.Content...)
 		}
@@ -103,7 +118,7 @@ func preserved(sent []Message, t Tuning) []Message {
 			kept = append(kept, Message{Role: m.Role, Content: content})
 		}
 	}
-	return kept
+	return kept, nil
 }
 
 func ServerCompacted(ctx gocontext.Context, q db.Querier, threadID, runID int64, blocks []json.RawMessage, sent []Message, now float64, t Tuning) (int64, error) {
@@ -111,10 +126,14 @@ func ServerCompacted(ctx gocontext.Context, q db.Querier, threadID, runID int64,
 	if err != nil {
 		return 0, err
 	}
+	kept, err := preserved(sent, t)
+	if err != nil {
+		return 0, err
+	}
 	head := append([]Message{
 		{Role: journal.Assistant, Content: blocks},
 		{Role: journal.User, Content: []json.RawMessage{body}},
-	}, preserved(sent, t)...)
+	}, kept...)
 	base, err := nextSeq(ctx, q, threadID)
 	if err != nil {
 		return 0, err
@@ -241,21 +260,32 @@ func shrink(messages []Message, limit int64, previewChars int) ([]Message, error
 	return result, nil
 }
 
-func lastOperatorBlocks(sent []Message) []json.RawMessage {
+func lastOperatorBlocks(sent []Message) ([]json.RawMessage, error) {
 	for i := len(sent) - 1; i >= 0; i-- {
 		m := sent[i]
-		if m.Role != journal.User || !hasType(m.Content, Text) {
+		if m.Role != journal.User {
 			continue
 		}
+		has, err := hasType(m.Content, block.Text)
+		if err != nil {
+			return nil, err
+		}
+		if !has {
+			continue
+		}
+		blocks, err := block.DecodeAll(m.Content)
+		if err != nil {
+			return nil, err
+		}
 		var out []json.RawMessage
-		for _, raw := range m.Content {
-			if kind := headOf(raw).Type; kind == Text || kind == Attachment {
-				out = append(out, raw)
+		for _, b := range blocks {
+			if b.Kind == block.Text || b.Kind == block.Attachment {
+				out = append(out, b.Raw)
 			}
 		}
-		return out
+		return out, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func summaryParams(model string, active []Message, hardLimit int64, t Tuning) (anthropic.Params, error) {
@@ -296,18 +326,14 @@ func ClientCompact(ctx gocontext.Context, d *db.DB, client *anthropic.Client, mo
 	if _, err := usage.Record(ctx, d, entry, response.Usage); err != nil {
 		return 0, err
 	}
+	blocks, err := block.DecodeAll(response.Content)
+	if err != nil {
+		return 0, err
+	}
 	var texts []string
-	for _, raw := range response.Content {
-		var b struct {
-			Type string  `json:"type"`
-			Text *string `json:"text"`
-		}
-		if json.Unmarshal(raw, &b) == nil && b.Type == Text {
-			text := ""
-			if b.Text != nil {
-				text = *b.Text
-			}
-			texts = append(texts, text)
+	for _, b := range blocks {
+		if b.Kind == block.Text {
+			texts = append(texts, b.Text())
 		}
 	}
 	summary := py.Strip(strings.Join(texts, "\n"))
@@ -319,7 +345,11 @@ func ClientCompact(ctx gocontext.Context, d *db.DB, client *anthropic.Client, mo
 		return 0, err
 	}
 	content := []json.RawMessage{TextBlock("[Context summary written at compaction; earlier messages are no longer shown]\n" + summary), manifest}
-	content = append(content, lastOperatorBlocks(active)...)
+	last, err := lastOperatorBlocks(active)
+	if err != nil {
+		return 0, err
+	}
+	content = append(content, last...)
 	base, err := nextSeq(ctx, d.Read, threadID)
 	if err != nil {
 		return 0, err

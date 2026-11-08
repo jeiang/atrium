@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
@@ -48,11 +49,10 @@ type LeaseLost string
 func (e LeaseLost) Error() string { return string(e) }
 
 type Runner struct {
-	Registry      *registry.Registry
-	Profile       func(ctx context.Context, q db.Querier) (string, error)
-	SkillsIndex   func(ctx context.Context, q db.Querier) (string, error)
-	ExpandSkills  func(ctx context.Context, q db.Querier, text string) (expanded string, used []string, err error)
-	ResearchBatch Batch
+	Registry     *registry.Registry
+	Profile      func(ctx context.Context, q db.Querier) (string, error)
+	SkillsIndex  func(ctx context.Context, q db.Querier) (string, error)
+	ExpandSkills func(ctx context.Context, q db.Querier, text string) (expanded string, used []string, err error)
 }
 
 func (r *Runner) Expand(ctx context.Context, q db.Querier, kind tool.Kind, text string) (string, []string, error) {
@@ -232,7 +232,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
 		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl,
-		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning},
+		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, tuning: tuning},
 	}
 	s.x.guard = s.renew
 	s.x.lost, s.x.abort = context.WithCancel(context.Background())
@@ -303,37 +303,6 @@ func PendingUses(ctx context.Context, q db.Querier, threadID int64) (*journal.Me
 	return last, uses, err
 }
 
-func searchURLs(blocks []json.RawMessage) []string {
-	var urls []string
-	for _, raw := range blocks {
-		if blockType(raw) != webSearchResult {
-			continue
-		}
-		var b struct {
-			Content json.RawMessage `json:"content"`
-		}
-		if json.Unmarshal(raw, &b) != nil {
-			continue
-		}
-		var items []json.RawMessage
-		if json.Unmarshal(b.Content, &items) != nil {
-			continue
-		}
-		for _, item := range items {
-			var r struct {
-				URL any `json:"url"`
-			}
-			if json.Unmarshal(item, &r) != nil {
-				continue
-			}
-			if u, ok := r.URL.(string); ok && u != "" {
-				urls = append(urls, u)
-			}
-		}
-	}
-	return urls
-}
-
 func (s *state) allowURLs(ctx context.Context, urls []string) error {
 	if len(urls) == 0 {
 		return nil
@@ -385,7 +354,7 @@ func (s *state) active(ctx context.Context, loc *time.Location) ([]actx.Message,
 	if err != nil {
 		return nil, err
 	}
-	return stampMessages(active, runs, loc), nil
+	return stampMessages(active, runs, loc)
 }
 
 func (s *state) size(ctx context.Context, active []actx.Message, a *anchor) (int64, error) {
@@ -536,11 +505,8 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err := journal.BumpSteps(context.WithoutCancel(ctx), s.d.Write, s.run.ID); err != nil {
 		return false, nil, err
 	}
-	blocks, err := journalBlocks(response.Content)
-	if err != nil {
-		return false, nil, err
-	}
-	compacted := response.StopReason == actx.Compaction
+	blocks := response.Content
+	compacted := response.StopReason == block.Compaction
 	var stop error
 	if !compacted {
 		blocks, stop = judge(response, blocks)
@@ -568,7 +534,11 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, err
 	}
 	next := &anchor{tokens: actx.HistoryTokens(response.Usage), seq: seq}
-	if err := s.allowURLs(ctx, searchURLs(blocks)); err != nil {
+	urls, err := block.SearchURLs(blocks)
+	if err != nil {
+		return false, nil, err
+	}
+	if err := s.allowURLs(ctx, urls); err != nil {
 		return false, nil, err
 	}
 	uses, err := toolUses(blocks)

@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
@@ -56,19 +57,8 @@ func Window(date *string, loc *time.Location, now float64) (float64, float64, er
 	return start, end + 1, nil
 }
 
-func textsOf(content []json.RawMessage) []string {
-	var out []string
-	for _, raw := range content {
-		var b struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		}
-		if json.Unmarshal(raw, &b) != nil || b.Type != "text" {
-			continue
-		}
-		out = append(out, b.Text)
-	}
-	return out
+func textsOf(content []json.RawMessage) ([]string, error) {
+	return block.Texts(content)
 }
 
 func localISO(ts float64, loc *time.Location) string {
@@ -166,7 +156,11 @@ func lines(ctx context.Context, q db.Querier, threadID int64, start, end float64
 		if m.CreatedAt < start || m.CreatedAt >= end {
 			continue
 		}
-		for _, text := range textsOf(m.Content) {
+		texts, err := textsOf(m.Content)
+		if err != nil {
+			return nil, err
+		}
+		for _, text := range texts {
 			if py.Strip(text) != "" {
 				out = append(out, m.Role+": "+text)
 			}

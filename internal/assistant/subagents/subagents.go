@@ -14,6 +14,7 @@ import (
 	"regexp"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
@@ -225,18 +226,9 @@ func DigestOf(ctx context.Context, q db.Querier, threadID int64) (string, error)
 		if messages[i].Role != journal.Assistant {
 			continue
 		}
-		var texts []string
-		for _, raw := range messages[i].Content {
-			var b struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			}
-			if err := json.Unmarshal(raw, &b); err != nil {
-				return "", fmt.Errorf("subagents: thread %d message %d block: %w", threadID, messages[i].ID, err)
-			}
-			if b.Type == "text" {
-				texts = append(texts, b.Text)
-			}
+		texts, err := block.Texts(messages[i].Content)
+		if err != nil {
+			return "", fmt.Errorf("subagents: thread %d message %d: %w", threadID, messages[i].ID, err)
 		}
 		if text := py.Strip(strings.Join(texts, "\n")); text != "" {
 			r := assistant.Read(ctx, q)

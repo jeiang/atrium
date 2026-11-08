@@ -80,7 +80,11 @@ func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Threa
 	if err != nil {
 		return request{}, err
 	}
-	toolParams, err := set.Params(webSearchMaxUses, cc.JSON())
+	cacheControl, err := cc.JSON()
+	if err != nil {
+		return request{}, err
+	}
+	toolParams, err := set.Params(webSearchMaxUses, cacheControl)
 	if err != nil {
 		return request{}, err
 	}
@@ -131,7 +135,7 @@ func fixedPart(system json.RawMessage, tools []json.RawMessage) (py.Dict, error)
 	return append(fixed, py.Pair{Key: "tools", Value: list}), nil
 }
 
-func stampMessages(active []actx.Message, runs []journal.Run, loc *time.Location) []actx.Message {
+func stampMessages(active []actx.Message, runs []journal.Run, loc *time.Location) ([]actx.Message, error) {
 	started := make(map[int64]float64, len(runs))
 	for _, r := range runs {
 		started[r.ID] = r.StartedAt
@@ -139,7 +143,14 @@ func stampMessages(active []actx.Message, runs []journal.Run, loc *time.Location
 	out := make([]actx.Message, len(active))
 	for i, m := range active {
 		out[i] = m
-		if m.Role != journal.User || m.RunID == nil || !journal.HasText(m.Content) {
+		if m.Role != journal.User || m.RunID == nil {
+			continue
+		}
+		has, err := journal.HasText(m.Content)
+		if err != nil {
+			return nil, err
+		}
+		if !has {
 			continue
 		}
 		at, ok := started[*m.RunID]
@@ -148,7 +159,7 @@ func stampMessages(active []actx.Message, runs []journal.Run, loc *time.Location
 		}
 		out[i].Content = append(slices.Clone(m.Content), actx.TextBlock(TimeStamp(at, loc)))
 	}
-	return out
+	return out, nil
 }
 
 func withProjectFiles(ctx context.Context, q db.Querier, thread threads.Thread, active []actx.Message) ([]actx.Message, error) {

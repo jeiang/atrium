@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -248,45 +249,24 @@ func loadLedger(ctx gocontext.Context, q db.Querier, threadID int64) (Ledger, er
 	return out, nil
 }
 
-type block struct {
-	Type      string `json:"type"`
-	ToolUseID string `json:"tool_use_id"`
+func isThinking(kind string) bool { return kind == block.Thinking || kind == block.RedactedThinking }
+
+func hasType(content []json.RawMessage, kind string) (bool, error) {
+	return block.HasKind(content, kind)
 }
 
-func headOf(raw json.RawMessage) block {
-	var b block
-	_ = json.Unmarshal(raw, &b)
-	return b
-}
-
-func isThinking(kind string) bool { return kind == Thinking || kind == RedactedThinking }
-
-func hasType(content []json.RawMessage, kind string) bool {
-	for _, raw := range content {
-		if headOf(raw).Type == kind {
-			return true
-		}
+func StripThinking(content []json.RawMessage) ([]json.RawMessage, error) {
+	blocks, err := block.DecodeAll(content)
+	if err != nil {
+		return nil, err
 	}
-	return false
-}
-
-func TurnStart(messages []journal.Message) int64 {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == journal.User && journal.HasText(messages[i].Content) {
-			return messages[i].Seq
-		}
-	}
-	return 0
-}
-
-func StripThinking(content []json.RawMessage) []json.RawMessage {
 	out := make([]json.RawMessage, 0, len(content))
-	for _, raw := range content {
-		if !isThinking(headOf(raw).Type) {
-			out = append(out, raw)
+	for _, b := range blocks {
+		if !isThinking(b.Kind) {
+			out = append(out, b.Raw)
 		}
 	}
-	return out
+	return out, nil
 }
 
 func dropStubValue(resultID *int64) string {
@@ -401,18 +381,23 @@ func ActiveMessages(ctx gocontext.Context, q db.Querier, threadID int64, systemS
 			content = make([]json.RawMessage, len(m.Content))
 			for i, raw := range m.Content {
 				content[i] = raw
-				h := headOf(raw)
-				if h.Type != ToolResult {
+				b, err := block.Decode(raw)
+				if err != nil {
+					return nil, err
+				}
+				if b.Kind != block.ToolResult {
 					continue
 				}
-				if r, ok := dropped[h.ToolUseID]; ok {
+				if r, ok := dropped[b.String("tool_use_id")]; ok {
 					if content[i], err = dropStub(raw, r.ResultID); err != nil {
 						return nil, err
 					}
 				}
 			}
 		} else if (p.StripFromSeq <= seq && seq < p.StripBeforeSeq) || (systemSig != "" && (m.SystemSig == nil || *m.SystemSig != systemSig)) {
-			content = StripThinking(content)
+			if content, err = StripThinking(content); err != nil {
+				return nil, err
+			}
 			if len(content) == 0 {
 				continue
 			}
