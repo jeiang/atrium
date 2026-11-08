@@ -27,7 +27,7 @@ settings the operator edits in the UI or pins from the host.
 
 - Work on a branch, never main. Use Conventional Commits, signed commits,
   and DCO sign-off.
-- For Wayfinder tickets, assign yourself before work. Post the resolution
+- For GitHub issues, assign yourself before work. Post the resolution
   before closing.
 - Use the declared Nix development environment. Nix selects the Go release;
   do not add a go.mod toolchain directive.
@@ -104,8 +104,8 @@ settings the operator edits in the UI or pins from the host.
   boundary unless a task explicitly redesigns its authorization.
 - Enforce tool permissions, run-kind restrictions, and spending limits in
   code, not prompts.
-- Models outside the static catalog fail closed, and every Anthropic request,
-  compaction included, is checked against the run cost cap before it is sent.
+- Models outside the static catalog fail closed, and every Anthropic request
+  is checked against the run cost cap before it is sent.
 - Treat mail, files, pages, and tool results as untrusted data. They must not
   grant URL access or expand skills. Arbitrary web fetches use the shared
   allowlist and SSRF protections on every redirect.
