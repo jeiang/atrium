@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
@@ -26,19 +28,15 @@ func BackupCommand() *cli.Command {
 	}
 }
 
-func removeSidecars(path string) {
-	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
-		_ = os.Remove(path + suffix)
+func refuseDestination(cfg config.Config, dest string) error {
+	if filepath.Clean(dest) == filepath.Clean(cfg.DBPath) {
+		return fmt.Errorf("backup destination %s is the database itself", dest)
 	}
-}
-
-func createExclusive(path string) error {
-	removeSidecars(path)
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return err
+	rel, err := filepath.Rel(filepath.Clean(cfg.FilesDir()), filepath.Clean(dest))
+	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("backup destination %s is inside %s; choose a path outside the uploaded files", dest, cfg.FilesDir())
 	}
-	return f.Close()
+	return nil
 }
 
 func backupSetup(a *cli.Args) cli.Handler {
@@ -82,18 +80,23 @@ func writeBackup(ctx context.Context, cfg config.Config, key db.Key, dest string
 	defer func() { _ = d.Close() }()
 	started := float64(time.Now().UnixNano()) / 1e9
 	defer func() { passrun.Record(context.WithoutCancel(ctx), d, passrun.Backup, started, err) }()
-	partial := dest + ".partial"
-	snapshot := partial + ".db"
-	for _, p := range []string{partial, snapshot} {
-		if err := createExclusive(p); err != nil {
-			return 0, err
-		}
-		defer removeSidecars(p)
-	}
-	if err := d.BackupTo(ctx, snapshot, key); err != nil {
+	if err := refuseDestination(cfg, dest); err != nil {
 		return 0, err
 	}
-	header, err := snapshotHeader(ctx, snapshot, key)
+	staged, err := db.Stage(dest, 0o600)
+	if err != nil {
+		return 0, err
+	}
+	defer staged.Discard()
+	snapshot, err := db.Stage(filepath.Join(filepath.Dir(dest), ".atrium-snapshot"), 0o600)
+	if err != nil {
+		return 0, err
+	}
+	defer snapshot.Discard()
+	if err := d.BackupTo(ctx, snapshot.Path(), key); err != nil {
+		return 0, err
+	}
+	header, err := snapshotHeader(ctx, snapshot.Path(), key)
 	if err != nil {
 		return 0, err
 	}
@@ -101,33 +104,37 @@ func writeBackup(ctx context.Context, cfg config.Config, key db.Key, dest string
 	if err != nil {
 		return 0, err
 	}
-	info, err := os.Stat(snapshot)
+	info, err := os.Stat(snapshot.Path())
 	if err != nil {
 		return 0, err
 	}
-	header.Files = len(files)
 	header.Stored = info.Size()
 	for _, f := range files {
+		if f.dir {
+			header.Dirs++
+			continue
+		}
+		header.Files++
 		header.Stored += storedSize(header.Seal, f.size)
 	}
-	out, err := os.OpenFile(partial, os.O_WRONLY|os.O_TRUNC, 0o600)
+	out, err := os.OpenFile(staged.Path(), os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return 0, err
 	}
-	err = writeArchive(out, header, key, snapshot, files)
+	err = writeArchive(out, header, key, snapshot.Path(), files)
 	if err == nil {
 		err = out.Sync()
 	}
 	if err = errors.Join(err, out.Close()); err != nil {
 		return 0, err
 	}
-	if err := verifyWritten(ctx, partial, key); err != nil {
+	if err := verifyWritten(ctx, staged.Path(), key); err != nil {
 		return 0, fmt.Errorf("backup verification: %w", err)
 	}
-	if err := os.Link(partial, dest); err != nil {
+	if err := staged.PublishLink(); err != nil {
 		return 0, err
 	}
-	return len(files), nil
+	return header.Files, nil
 }
 
 func snapshotHeader(ctx context.Context, snapshot string, key db.Key) (Header, error) {

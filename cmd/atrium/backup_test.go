@@ -177,7 +177,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	for n := range entries {
 		names[n] = true
 	}
-	for _, want := range []string{"header.json", "entries.json", "manifest.mac", "atrium.db", "files/threads/1/report.txt", "files/empty.bin", "files/projects/2/notes/a.txt"} {
+	for _, want := range []string{"header.json", "entries.json", "manifest.mac", "atrium.db", "files/threads/", "files/threads/1/", "files/threads/1/report.txt", "files/empty.bin", "files/projects/", "files/projects/2/", "files/projects/2/notes/", "files/projects/2/notes/a.txt"} {
 		if !names[want] {
 			t.Errorf("the archive lacks %s; has %v", want, names)
 		}
