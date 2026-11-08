@@ -98,6 +98,19 @@ func sub(re *regexp.Regexp, repl, s string) string { return re.ReplaceAllString(
 
 func found(re *regexp.Regexp, s string) bool { return re.MatchString(s) }
 
+func hasOTP(s string) bool {
+	for _, loc := range otpRE.FindAllStringIndex(s, -1) {
+		if loc[0] > 0 && strings.ContainsRune("0123456789.,$#-", rune(s[loc[0]-1])) {
+			continue
+		}
+		if loc[1] < len(s) && strings.ContainsRune("0123456789.,-", rune(s[loc[1]])) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 func prefix(s string, n int) string {
 	i := 0
 	for j := range s {
@@ -303,7 +316,7 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, 
 		KReceipt:    strings.Contains(low, "receipt"),
 		KOrder:      strings.Contains(low, "order"),
 		KVCode:      found(vcodeRE, low),
-		KOTP6:       found(otpRE, prefix(body, 600)),
+		KOTP6:       hasOTP(prefix(body, 600)),
 		BodyLen:     len([]rune(body)),
 		Body:        prefix(body, ftsBodyChars),
 	}
