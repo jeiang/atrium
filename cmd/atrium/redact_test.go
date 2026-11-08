@@ -44,4 +44,11 @@ func TestStoredSecretsAreRedactedFromLogsAndAgentWrites(t *testing.T) {
 	if strings.Contains(after, secret) || !strings.Contains(after, logx.Redacted) {
 		t.Errorf("agent_writes snapshot = %q, want the secret replaced by %s", after, logx.Redacted)
 	}
+	var undo string
+	if err := d.Read.QueryRow("SELECT undo_json FROM agent_writes WHERE tool = 'profile_set'").Scan(&undo); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(undo, secret) || !strings.Contains(undo, logx.Redacted) {
+		t.Errorf("agent_writes undo payload = %q, want the secret replaced by %s", undo, logx.Redacted)
+	}
 }

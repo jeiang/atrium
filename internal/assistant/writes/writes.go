@@ -97,7 +97,7 @@ func Record(ctx context.Context, q db.Querier, reg *Registry, w New) (int64, err
 	if err != nil {
 		return 0, err
 	}
-	undo, err := dump(w.Undo, false)
+	undo, err := dump(w.Undo, true)
 	if err != nil {
 		return 0, err
 	}
