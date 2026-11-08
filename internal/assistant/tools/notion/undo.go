@@ -3,7 +3,6 @@ package notiontools
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
@@ -41,9 +40,8 @@ type aliasesUndo struct {
 }
 
 func refuse(err error) error {
-	var failure *notion.Error
-	if errors.As(err, &failure) {
-		return writes.UndoError("notion: " + err.Error())
+	if converted := tool.Domain[*notion.Error, writes.UndoError](err); converted != err {
+		return converted
 	}
 	if msg, ok := tool.Message(err); ok {
 		return writes.UndoError(msg)
@@ -154,11 +152,7 @@ func pageArg(payload map[string]any, key string) (string, error) {
 }
 
 func proposed(err error) error {
-	var pe notion.ProposalError
-	if errors.As(err, &pe) {
-		return tool.Error(string(pe))
-	}
-	return err
+	return tool.Domain[notion.ProposalError, tool.Error](err)
 }
 
 func proposer(tc *tool.Context) *notion.Proposer {

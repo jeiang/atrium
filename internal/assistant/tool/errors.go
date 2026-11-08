@@ -14,6 +14,17 @@ type Raised struct{ Class string }
 
 func (e *Raised) Error() string { return e.Class }
 
+func Domain[T error, R interface {
+	~string
+	error
+}](err error) error {
+	var target T
+	if errors.As(err, &target) {
+		return R(target.Error())
+	}
+	return err
+}
+
 func Message(err error) (string, bool) {
 	var te Error
 	if errors.As(err, &te) {

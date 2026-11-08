@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -24,11 +23,7 @@ const Help = "ISO datetime for a one-off ('2026-11-02T09:00'), 'daily HH:MM', 'w
 var chatOnly = tool.Kinds{tool.Chat}
 
 func raised(err error) error {
-	var se scheduler.Error
-	if errors.As(err, &se) {
-		return tool.Error(se)
-	}
-	return err
+	return tool.Domain[scheduler.Error, tool.Error](err)
 }
 
 func describe(ctx context.Context, q db.Querier, job *scheduler.Job) (py.Dict, error) {

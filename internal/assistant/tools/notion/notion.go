@@ -27,11 +27,7 @@ func makeClient(ctx context.Context, q db.Querier) (*notion.Client, error) {
 }
 
 func notionError(err error) error {
-	var failure *notion.Error
-	if errors.As(err, &failure) {
-		return tool.Error("notion: " + err.Error())
-	}
-	return err
+	return tool.Domain[*notion.Error, tool.Error](err)
 }
 
 func str(d py.Dict, key string) string {

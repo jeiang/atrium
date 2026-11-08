@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -89,11 +90,7 @@ func undoTorrent(env config.Env) writes.Undoer {
 }
 
 func channelFailed(err error) error {
-	var failure media.ChannelError
-	if errors.As(err, &failure) {
-		return writes.UndoError(string(failure))
-	}
-	return err
+	return tool.Domain[media.ChannelError, writes.UndoError](err)
 }
 
 func undoChannelDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {

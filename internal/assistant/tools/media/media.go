@@ -90,11 +90,7 @@ func RegisterUndoer(r *writes.Registry, env config.Env) {
 }
 
 func qbitFailed(err error) error {
-	var failure media.QbitError
-	if errors.As(err, &failure) {
-		return tool.Error(string(failure))
-	}
-	return err
+	return tool.Domain[media.QbitError, tool.Error](err)
 }
 
 func qbitOf(settings media.Settings) (*media.Qbit, error) {
@@ -359,11 +355,7 @@ func showFromIMDB(ctx context.Context, client *media.TMDB, imdb, name string) (s
 }
 
 func tmdbFailed(err error) error {
-	var failure media.TmdbError
-	if errors.As(err, &failure) {
-		return tool.Error(string(failure))
-	}
-	return err
+	return tool.Domain[media.TmdbError, tool.Error](err)
 }
 
 func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

@@ -3,7 +3,6 @@ package mailtools
 import (
 	"context"
 	"encoding/json"
-	"errors"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/mail/drafts"
@@ -53,11 +52,7 @@ func store(tc *tool.Context) *drafts.Store {
 }
 
 func draftFailed(err error) error {
-	var de drafts.Error
-	if errors.As(err, &de) {
-		return tool.Error(string(de))
-	}
-	return err
+	return tool.Domain[drafts.Error, tool.Error](err)
 }
 
 func replyID(args tool.Args) (any, error) {
