@@ -28,10 +28,10 @@ const bigModel = "wide-embedder"
 
 type fakeEmbedder struct {
 	*httptest.Server
-	mu     sync.Mutex
-	allow  int
-	texts  map[string]int
-	models []string
+	mu         sync.Mutex
+	allow      int
+	texts      map[string]int
+	queryModel string
 }
 
 func newFakeEmbedder(t *testing.T) *fakeEmbedder {
@@ -62,7 +62,11 @@ func newFakeEmbedder(t *testing.T) *fakeEmbedder {
 		}
 		f.mu.Lock()
 		f.texts[req.Model] += len(req.Input)
-		f.models = append(f.models, req.Model)
+		for _, text := range req.Input {
+			if strings.Contains(text, "task: search result") {
+				f.queryModel = req.Model
+			}
+		}
 		f.mu.Unlock()
 		data := make([]any, len(req.Input))
 		for i, text := range req.Input {
@@ -96,13 +100,10 @@ func (f *fakeEmbedder) embedded(model string) int {
 	return f.texts[model]
 }
 
-func (f *fakeEmbedder) lastModel() string {
+func (f *fakeEmbedder) lastQueryModel() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if len(f.models) == 0 {
-		return ""
-	}
-	return f.models[len(f.models)-1]
+	return f.queryModel
 }
 
 func hashedVector(text string, dim int) []float64 {
@@ -180,8 +181,8 @@ func TestAFirstServeWithANewDimensionRebuildsTheIndexInsteadOfAdoptingIt(t *test
 	if err := d.Read.QueryRow("SELECT generation FROM embed_index WHERE state = 'active' AND dimension = 1024").Scan(&generation); err != nil || generation != 1 {
 		t.Fatalf("active index after the first serve: generation %d (%v)", generation, err)
 	}
-	if got := runApp(t, "notion", "search", "project notes"); got.code != cli.ExitOK || got.stdout == "" || fake.lastModel() != bigModel {
-		t.Fatalf("search on the rebuilt index: %d %q %q (query model %q)", got.code, got.stdout, got.stderr, fake.lastModel())
+	if got := runApp(t, "notion", "search", "project notes"); got.code != cli.ExitOK || got.stdout == "" || fake.lastQueryModel() != bigModel {
+		t.Fatalf("search on the rebuilt index: %d %q %q (query model %q)", got.code, got.stdout, got.stderr, fake.lastQueryModel())
 	}
 }
 
@@ -208,8 +209,8 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 		return strings.Contains(page, "embeddinggemma · 768 dimensions")
 	})
 	stop()
-	if after := search(); after != before || fake.lastModel() != "embeddinggemma" {
-		t.Fatalf("search with an unchanged embedder: %q, was %q (model %q)", after, before, fake.lastModel())
+	if after := search(); after != before || fake.lastQueryModel() != "embeddinggemma" {
+		t.Fatalf("search with an unchanged embedder: %q, was %q (model %q)", after, before, fake.lastQueryModel())
 	}
 
 	setEnv(t, settingEnv(endpoint.KeyEmbedModel), bigModel)
@@ -221,8 +222,8 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 		first, total, page = embedProgress(t, base)
 		return first > 0 && first < total && strings.Contains(page, "embeddinggemma · 768 dimensions")
 	})
-	if during := search(); during != before || fake.lastModel() != "embeddinggemma" {
-		t.Fatalf("search while re-embedding (%d of %d): %q, was %q (query model %q)", first, total, during, before, fake.lastModel())
+	if during := search(); during != before || fake.lastQueryModel() != "embeddinggemma" {
+		t.Fatalf("search while re-embedding (%d of %d): %q, was %q (query model %q)", first, total, during, before, fake.lastQueryModel())
 	}
 	fake.release(1)
 	waitFor(t, func() bool {
@@ -256,7 +257,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	if sent := fake.embedded(bigModel); sent > total+40+8 {
 		t.Errorf("the restart re-embedded finished rows: %d texts sent for %d documents", sent, total)
 	}
-	if after := search(); after == "" || fake.lastModel() != bigModel {
-		t.Errorf("search after the swap: %q (query model %q)", after, fake.lastModel())
+	if after := search(); after == "" || fake.lastQueryModel() != bigModel {
+		t.Errorf("search after the swap: %q (query model %q)", after, fake.lastQueryModel())
 	}
 }
