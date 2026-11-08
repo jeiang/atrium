@@ -27,7 +27,7 @@ func TestLibraryFilesListsThreadAndProjectFilesNewestFirst(t *testing.T) {
 		"plan.pdf", "Kitchen", fmt.Sprintf(`href="/projects/%d/edit"`, project), fmt.Sprintf(`href="/projects/%d/files/%d/download"`, project, plan),
 		"notes.txt", "Untitled thread")
 	mustNotContain(t, page, "No files yet")
-	if !(strings.Index(page, "plan.pdf") < strings.Index(page, "budget.csv") && strings.Index(page, "budget.csv") < strings.Index(page, "notes.txt")) {
+	if strings.Index(page, "plan.pdf") >= strings.Index(page, "budget.csv") || strings.Index(page, "budget.csv") >= strings.Index(page, "notes.txt") {
 		t.Errorf("files are not newest first: %s", mainOf(page))
 	}
 }
