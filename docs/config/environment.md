@@ -285,6 +285,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MEDIA_QBITTORRENT_PROXY` | `media.qbittorrent_proxy` |
 | `ATRIUM_MEDIA_TMDB_CA_FILE` | `media.tmdb_ca_file` |
 | `ATRIUM_MEDIA_TMDB_PROXY` | `media.tmdb_proxy` |
+| `ATRIUM_MEMORY_NODE_BYTES` | `memory.node_bytes` |
 | `ATRIUM_NOTIFY_NOTIFY_BODY_CHARS` | `notify.notify_body_chars` |
 | `ATRIUM_NOTIFY_NOTIFY_NIGHTLY_CAP` | `notify.notify_nightly_cap` |
 | `ATRIUM_NOTIFY_NOTIFY_PER_RUN_CAP` | `notify.notify_per_run_cap` |
@@ -335,3 +336,4 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_WEB_PROJECT_THREAD_LIMIT` | `web.project_thread_limit` |
 | `ATRIUM_WEB_RUN_HISTORY` | `web.run_history` |
 | `ATRIUM_WEB_SNOOZE_CHOICES` | `web.snooze_choices` |
+| `ATRIUM_WEB_SEARCH_DYNAMIC_FILTERING` | `web_search.dynamic_filtering` |

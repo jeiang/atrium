@@ -337,6 +337,12 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `tmdb_ca_file` | string | none | advanced | `ATRIUM_MEDIA_TMDB_CA_FILE` |
 | `tmdb_proxy` | string | none | advanced | `ATRIUM_MEDIA_TMDB_PROXY` |
 
+## memory
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `node_bytes` | int | `512` | advanced | `ATRIUM_MEMORY_NODE_BYTES` |
+
 ## notify
 
 | Key | Type | Default | Class | Environment variable |
@@ -406,3 +412,9 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `project_thread_limit` | int | `100` | advanced | `ATRIUM_WEB_PROJECT_THREAD_LIMIT` |
 | `run_history` | int | `30` | advanced | `ATRIUM_WEB_RUN_HISTORY` |
 | `snooze_choices` | string | `1,3,7,14` | advanced | `ATRIUM_WEB_SNOOZE_CHOICES` |
+
+## web_search
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `dynamic_filtering` | bool | `false` | advanced | `ATRIUM_WEB_SEARCH_DYNAMIC_FILTERING` |
