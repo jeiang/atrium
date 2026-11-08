@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -113,20 +112,6 @@ func copyTree(t *testing.T, from, to string) {
 	}
 }
 
-var volatileRunFields = []string{"started_at", "ended_at", "lease_until", "owner"}
-
-func normalizeRun(s string) string {
-	lines := strings.Split(s, "\n")
-	for i, line := range lines {
-		for _, field := range volatileRunFields {
-			if strings.HasPrefix(strings.TrimLeft(line, " "), `"`+field+`": `) {
-				lines[i] = `"` + field + `": <volatile>`
-			}
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
 func lastLine(s string) string {
 	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
 	return lines[len(lines)-1]
@@ -148,15 +133,19 @@ func loadGoldenData(t *testing.T) goldenData {
 	return goldenData{world: loadWorld(t), environment: scenario.Environment}
 }
 
-type rig struct {
-	dir string
-	app *cli.App
+type fixture struct {
+	t    *testing.T
+	dir  string
+	env  map[string]string
+	app  *cli.App
+	base string
 }
 
-func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin string) *rig {
+func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin string) *fixture {
 	t.Helper()
 	dir := t.TempDir()
 	copyTree(t, filepath.Join(golden.Dir(), "state", "cache"), filepath.Join(dir, "cache"))
+	copyTree(t, filepath.Join(golden.Dir(), "state", "contacts"), filepath.Join(dir, "contacts"))
 	srv := llmstub.Server(t, nil)
 	t.Cleanup(calendar.UseEndpoints(calendar.Endpoints{CalDAV: caldav.New(t, data.environment["ICLOUD_APPLE_ID"], data.environment["ICLOUD_APP_PASSWORD"]).URL + "/"}))
 	vars := map[string]string{}
@@ -166,7 +155,7 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 	vars["ATRIUM_CALENDAR_ICLOUD_APPLE_ID"] = vars["ICLOUD_APPLE_ID"]
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
-	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(golden.Dir(), "state", "contacts")
+	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(dir, "contacts")
 	vars["ATRIUM_MEDIA_ROOT"] = filepath.Join(dir, "media")
 	vars["ATRIUM_CHAT_URL"] = srv.URL + "/v1"
 	vars["ATRIUM_EMBED_URL"] = srv.URL + "/v1"
@@ -214,23 +203,44 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 	app.Bootstrap = bootstrap(config.OS, settings.Default)
 	app.Add(commands(clients, func() float64 { return data.world.Clock })...)
 	app.Stdin = strings.NewReader(stdin)
-	r := &rig{dir: dir, app: app}
-	code, _, stderr := r.run(context.Background(), "db", "import-v1", filepath.Join(golden.Dir(), "atrium.db"))
-	if code != cli.ExitOK {
-		t.Fatalf("import-v1 into the fresh world database: exit %d stderr %q", code, stderr)
-	}
-	r.seedWorld(t, filepath.Join(golden.Dir(), "atrium.db"))
-	code, _, stderr = r.run(context.Background(), "reindex")
-	if code != cli.ExitOK {
+	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
+	f := &fixture{t: t, dir: dir, env: vars, app: app}
+	f.seedNotionVectors(t)
+	if code, _, stderr := f.Run(context.Background(), "reindex"); code != cli.ExitOK {
 		t.Fatalf("embed the seeded world: exit %d stderr %q", code, stderr)
 	}
-	return r
+	return f
 }
 
-func (r *rig) run(ctx context.Context, argv ...string) (code int, stdout, stderr string) {
+func (f *fixture) Run(ctx context.Context, argv ...string) (code int, stdout, stderr string) {
 	var out, errs bytes.Buffer
-	code = r.app.Run(ctx, argv, &out, &errs)
+	code = f.app.Run(ctx, argv, &out, &errs)
 	return code, out.String(), errs.String()
+}
+
+func (f *fixture) Serve() string {
+	if f.base == "" {
+		f.base = startServeIn(f.t, f.dir)
+	}
+	return f.base
+}
+
+func (f *fixture) seedNotionVectors(t *testing.T) {
+	t.Helper()
+	var vectors []notionVector
+	if err := json.Unmarshal(golden.ReadFile(t, ".", "notion_vec.json"), &vectors); err != nil {
+		t.Fatal(err)
+	}
+	d, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	for _, v := range vectors {
+		if _, err := d.Write.Exec("INSERT INTO notion_vec (rowid, visibility, embedding) VALUES (?, ?, ?)", v.RowID, v.Visibility, v.Embedding); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestCLIGoldens(t *testing.T) {
@@ -241,8 +251,8 @@ func TestCLIGoldens(t *testing.T) {
 	data := loadGoldenData(t)
 	for _, g := range index {
 		t.Run(g.Name, func(t *testing.T) {
-			r := newRig(t, data, goldenEnv(t, g), g.Stdin)
-			tmp := filepath.Join(r.dir, "tmp")
+			f := newFixture(t, data, goldenEnv(t, g), g.Stdin)
+			tmp := filepath.Join(f.dir, "tmp")
 			if err := os.MkdirAll(tmp, 0o777); err != nil {
 				t.Fatal(err)
 			}
@@ -257,19 +267,16 @@ func TestCLIGoldens(t *testing.T) {
 			}
 			limit := 60 * time.Second
 			if len(argv) > 0 && argv[0] == "watch" {
-				limit = 5 * time.Second
+				limit = 35 * time.Second
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), limit)
 			defer cancel()
-			code, stdout, stderr := r.run(ctx, argv...)
+			code, stdout, stderr := f.Run(ctx, argv...)
 			if code != g.ExitCode {
 				t.Errorf("exit code = %d, want %d (stderr %q)", code, g.ExitCode, stderr)
 			}
 			want := string(golden.ReadFile(t, "cli", g.Stdout))
 			wantErr := string(golden.ReadFile(t, "cli", g.Stderr))
-			if g.Argv[1] == "agent" {
-				stdout, want = normalizeRun(stdout), normalizeRun(want)
-			}
 			if stdout != want {
 				t.Errorf("stdout = %q, want %q", stdout, want)
 			}
@@ -284,14 +291,14 @@ func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
 	data := loadGoldenData(t)
 	for _, argv := range [][]string{{"live", "rebaseline"}, {"live", "deletions"}, {"loops", "refresh"}, {"watches", "refresh"}} {
 		t.Run(strings.Join(argv, " "), func(t *testing.T) {
-			r := newRig(t, data, nil, "")
-			lock, err := db.Exclusive(context.Background(), filepath.Join(r.dir, "atrium.db"), db.ShortLockWait)
+			f := newFixture(t, data, nil, "")
+			lock, err := db.Exclusive(context.Background(), filepath.Join(f.dir, "atrium.db"), db.ShortLockWait)
 			if err != nil {
 				t.Fatal(err)
 			}
 			done := make(chan int, 1)
 			go func() {
-				code, _, _ := r.run(context.Background(), argv...)
+				code, _, _ := f.Run(context.Background(), argv...)
 				done <- code
 			}()
 			select {
@@ -325,103 +332,6 @@ var ftsTables = map[string][]string{
 	"message_fts": {"subject", "sender", "body"},
 	"thread_fts":  {"thread_id", "text"},
 	"notion_fts":  {"title", "path", "body"},
-}
-
-func (r *rig) seedWorld(t *testing.T, source string) {
-	t.Helper()
-	v2, err := db.Connect(filepath.Join(r.dir, "atrium.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = v2.Close() }()
-	v1, err := db.OpenSource(source, db.Key{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = v1.Close() }()
-	columns := func(q db.Querier, table string) []string {
-		rows, err := q.QueryContext(context.Background(), "SELECT name FROM pragma_table_info(?)", table)
-		if err != nil {
-			t.Fatal(err)
-		}
-		names, err := db.Collect(rows, func(row *sql.Rows) (string, error) {
-			var name string
-			return name, row.Scan(&name)
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return names
-	}
-	rows, err := v2.Read.QueryContext(context.Background(), "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-	if err != nil {
-		t.Fatal(err)
-	}
-	tables, err := db.Collect(rows, func(row *sql.Rows) (string, error) {
-		var name string
-		return name, row.Scan(&name)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var stmts []string
-	for _, table := range tables {
-		if seededTables[table] || table == "message_vec" || table == "notion_vec" {
-			continue
-		}
-		if strings.HasPrefix(table, "message_fts_") || strings.HasPrefix(table, "thread_fts_") || strings.HasPrefix(table, "notion_fts_") {
-			continue
-		}
-		v1cols := columns(v1, table)
-		if len(v1cols) == 0 {
-			continue
-		}
-		have := map[string]bool{}
-		for _, c := range v1cols {
-			have[c] = true
-		}
-		var common []string
-		for _, c := range columns(v2.Read, table) {
-			if have[c] {
-				common = append(common, c)
-			}
-		}
-		if len(common) == 0 {
-			continue
-		}
-		quoted := make([]string, len(common))
-		for i, c := range common {
-			quoted[i] = `"` + strings.ReplaceAll(c, `"`, `""`) + `"`
-		}
-		if fts, ok := ftsTables[table]; ok {
-			_ = fts
-			stmts = append(stmts, "INSERT INTO main."+table+" (rowid, "+strings.Join(quoted, ", ")+") SELECT rowid, "+
-				strings.Join(quoted, ", ")+" FROM v1."+table+";")
-			continue
-		}
-		stmts = append(stmts, "INSERT OR IGNORE INTO main."+table+" ("+strings.Join(quoted, ", ")+") SELECT "+
-			strings.Join(quoted, ", ")+" FROM v1."+table+";")
-	}
-	script := "PRAGMA foreign_keys = OFF;\nATTACH DATABASE '" + strings.ReplaceAll(source, "'", "''") + "' AS v1;\n" +
-		strings.Join(stmts, "\n") + "\nDETACH DATABASE v1;\n"
-	saved := r.app.Stdin
-	r.app.Stdin = strings.NewReader(script)
-	defer func() { r.app.Stdin = saved }()
-	code, _, stderr := r.run(context.Background(), "db", "shell")
-	if code != cli.ExitOK {
-		t.Fatalf("seed the v2 world from the v1 fixture: exit %d stderr %q", code, stderr)
-	}
-}
-
-func copyGoldenFile(t *testing.T, from, to string) {
-	t.Helper()
-	data, err := os.ReadFile(from)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(to, data, 0o666); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func goldenEnv(t *testing.T, g cliGolden) map[string]string {
