@@ -11,6 +11,7 @@ import (
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
+	memorytools "github.com/jeiang/atrium/internal/assistant/tools/memory"
 	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
@@ -45,6 +46,7 @@ func Registry() (*registry.Registry, error) {
 	for _, group := range [][]tool.Tool{
 		askoperatortools.Tools(),
 		filetools.Tools(),
+		memorytools.Tools(),
 		mailtools.Tools(),
 		calendartools.Tools(),
 		mediatools.Tools(),

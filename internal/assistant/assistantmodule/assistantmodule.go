@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
+	memorytools "github.com/jeiang/atrium/internal/assistant/tools/memory"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
@@ -91,7 +92,7 @@ func anthropicKey(ctx context.Context, p module.Probe) (string, error) {
 
 func addTools(r *registry.Registry) error {
 	for _, tools := range [][]tool.Tool{
-		askoperator.Tools(), filetools.Tools(),
+		askoperator.Tools(), filetools.Tools(), memorytools.Tools(),
 		nightly.Tools(), webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
 		profiletools.Tools(), proposetools.Tools(), scheduletools.Tools(), skillstools.Tools(),
 	} {
