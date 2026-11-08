@@ -30,8 +30,13 @@ type needsData struct {
 	Configured map[string]bool `json:"configured"`
 }
 
-func (s *service) needsPage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+type needsLists struct {
+	pending []*proposals.Proposal
+	blocked []*proposals.Proposal
+	drafts  []drafts.Row
+}
+
+func (s *service) needs(ctx context.Context) needsLists {
 	pending, err := proposals.List(ctx, s.deps.DB.Read, proposals.Pending, "")
 	check(err)
 	blocked, err := proposals.ListBlocked(ctx, s.deps.DB.Read)
@@ -42,9 +47,15 @@ func (s *service) needsPage(w http.ResponseWriter, r *http.Request) {
 	check(err)
 	rows := append(unknown, open...)
 	slices.SortStableFunc(rows, func(a, b drafts.Row) int { return cmp.Compare(b.UpdatedAt, a.UpdatedAt) })
+	return needsLists{pending: pending, blocked: blocked, drafts: rows}
+}
+
+func (s *service) needsPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	found := s.needs(ctx)
 	data := needsData{
-		Proposals: proposalViews(pending, s.registry), Blocked: proposalViews(blocked, s.registry),
-		Drafts: s.draftViews(r, rows), Configured: accountConfigured(ctx),
+		Proposals: proposalViews(found.pending, s.registry), Blocked: proposalViews(found.blocked, s.registry),
+		Drafts: s.draftViews(r, found.drafts), Configured: accountConfigured(ctx),
 	}
 	s.page(w, r, http.StatusOK, "review_needs", "review.gohtml", data, nil)
 }
