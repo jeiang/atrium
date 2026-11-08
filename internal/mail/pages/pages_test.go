@@ -325,7 +325,7 @@ func TestRuleEditorSavesAndReopensAnAgeCondition(t *testing.T) {
 	})
 	status(t, saved, 303, "save")
 	rows := s.rows("SELECT id, conditions FROM rules")
-	if len(rows) != 1 || !strings.Contains(rows[0][1].(string), `"value": 7`) {
+	if len(rows) != 1 || !strings.Contains(rows[0][1].(string), `"value":7`) {
 		t.Fatalf("stored = %v", rows)
 	}
 	contains(t, status(t, s.get("/rules/"+rows[0][0].(string)+"/edit"), 200, "reopen"), `value="7"`, "Age in days")

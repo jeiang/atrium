@@ -1,6 +1,7 @@
 package mailcmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/mail/report"
 	"github.com/jeiang/atrium/internal/mail/rules"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func (o Options) RulesCommand() *cli.Command {
@@ -26,7 +26,11 @@ func (o Options) RulesCommand() *cli.Command {
 				if err != nil {
 					return err
 				}
-				x.Print(py.JSONDumps(out, py.JSONOpts{Indent: 2}) + "\n")
+				b, err := json.MarshalIndent(out, "", "  ")
+				if err != nil {
+					return err
+				}
+				x.Print(string(b) + "\n")
 				return nil
 			}
 		}),
@@ -44,9 +48,9 @@ func importRules(x *exec, file string) error {
 	if err != nil {
 		return err
 	}
-	document, err := py.JSONLoads(data)
-	if err != nil {
-		return err
+	var document any
+	if err := json.Unmarshal(data, &document); err != nil {
+		return importJSONError(data, err)
 	}
 	count, err := rules.ImportRules(x.Ctx, x.DB, document)
 	if err != nil {
@@ -58,6 +62,27 @@ func importRules(x *exec, file string) error {
 	}
 	x.Print(fmt.Sprintf("imported %d rules\n", count))
 	return nil
+}
+
+func importJSONError(data []byte, err error) error {
+	var syn *json.SyntaxError
+	if !errors.As(err, &syn) {
+		return err
+	}
+	i := 0
+	for i < len(data) && (data[i] == ' ' || data[i] == '\t' || data[i] == '\n' || data[i] == '\r') {
+		i++
+	}
+	line, col := 1, 1
+	for j := 0; j < i; j++ {
+		if data[j] == '\n' {
+			line++
+			col = 1
+		} else {
+			col++
+		}
+	}
+	return fmt.Errorf("Expecting value: line %d column %d (char %d)", line, col, i)
 }
 
 func (o Options) ShadowReportCommand() *cli.Command {
