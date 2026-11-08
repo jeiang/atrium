@@ -20,6 +20,11 @@
         {{if $e.error}}<span class="truncate" title="{{$e.error}}">{{$e.error}}</span>{{end}}
       </div>
     </div>
+    {{else if eq $e.source "phone"}}
+    <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
+      <span class="text-sm font-medium">approved via phone</span>
+      <p class="text-xs text-muted-foreground">{{$e.actor}} · {{$e.kind}} · {{$e.status}} · {{$e.target}}</p>
+    </div>
     {{else if eq $e.source "settings"}}
     <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
       <div class="flex min-w-0 flex-wrap items-center gap-2">
