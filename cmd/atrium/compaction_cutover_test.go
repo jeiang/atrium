@@ -12,8 +12,8 @@ import (
 )
 
 func TestMemoryViewReplacesCompaction(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -47,7 +47,7 @@ func TestMemoryViewReplacesCompaction(t *testing.T) {
 		level = next
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	ran := runApp("agent", "run", "--thread", "1", "--text", "continue")
+	ran := runApp(t, "agent", "run", "--thread", "1", "--text", "continue")
 	if ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}

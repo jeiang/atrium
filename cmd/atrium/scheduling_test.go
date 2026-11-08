@@ -36,7 +36,7 @@ func toolResult(t *testing.T, name string, input map[string]any) string {
 	if len(requests) != 2 {
 		t.Fatalf("%d model requests, want 2", len(requests))
 	}
-	d := mustConnect(t, filepath.Join(activeFixture.dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(fixtureFor(t).dir, "atrium.db"))
 	var raw string
 	if err := d.Read.QueryRow("SELECT content_json FROM thread_messages WHERE thread_id = (SELECT MAX(id) FROM threads) AND role = 'user' AND content_json LIKE '%tool_result%' ORDER BY seq DESC LIMIT 1").Scan(&raw); err != nil {
 		t.Fatalf("tool result: %v", err)
