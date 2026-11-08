@@ -5,7 +5,10 @@ default:
   @just --list
 
 verify:
-  {{dev}} bash -c 'go vet ./... && go build ./...'
+  {{dev}} bash -c 'go vet ./... && go build ./... && go run ./cmd/toolsdocs -check'
+
+tools-docs:
+  {{dev}} go run ./cmd/toolsdocs
 
 e2e pattern pkg="./cmd/atrium":
   {{dev}} go test -count=1 -run "{{pattern}}" {{pkg}}
