@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/tool"
@@ -17,8 +19,8 @@ const hubCreated = "Wiki hub created under Wiki Home."
 
 func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 	raw := web.PathParam(r, name)
-	id, ok := py.LaxInt64(raw)
-	if !ok {
+	id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil {
 		web.Unprocessable(w, web.BadInt("path", name, raw))
 		return 0, false
 	}

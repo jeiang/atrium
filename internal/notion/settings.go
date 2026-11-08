@@ -2,11 +2,12 @@ package notion
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notionid"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -77,7 +78,7 @@ func init() {
 }
 
 func nonBlank(value string) error {
-	if py.Strip(value) == "" {
+	if strings.TrimSpace(value) == "" {
 		return settings.Invalid("must not be blank")
 	}
 	return nil
@@ -156,11 +157,11 @@ func defaultAPI() APILimits {
 		return d.Default
 	}
 	asInt := func(key string) int {
-		n, _ := py.ParseInt(def(key))
+		n, _ := strconv.ParseInt(strings.TrimSpace(def(key)), 10, 64)
 		return int(n)
 	}
 	asFloat := func(key string) float64 {
-		f, _ := py.ParseFloat(def(key))
+		f, _ := strconv.ParseFloat(strings.TrimSpace(def(key)), 64)
 		return f
 	}
 	return APILimits{
@@ -230,8 +231,8 @@ type Sensitivity struct {
 func LoadSensitivity(ctx context.Context, q db.Querier) (Sensitivity, error) {
 	r := resolver{ctx: ctx, q: q}
 	out := Sensitivity{
-		Property: py.Lower(py.Strip(r.value(SensitivityPropertyKey))),
-		Private:  py.Lower(py.Strip(r.value(PrivateValueKey))),
+		Property: strings.ToLower(strings.TrimSpace(r.value(SensitivityPropertyKey))),
+		Private:  strings.ToLower(strings.TrimSpace(r.value(PrivateValueKey))),
 	}
 	return out, r.err
 }

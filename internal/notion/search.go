@@ -114,7 +114,7 @@ func propertyText(prop py.Dict) string {
 		d := asDict(value)
 		var parts []string
 		for _, k := range []string{"start", "end"} {
-			if s := field(d, k); py.Truthy(s) {
+			if s := field(d, k); truthy(s) {
 				parts = append(parts, pyStr(s))
 			}
 		}
@@ -357,7 +357,7 @@ func heads(ctx context.Context, q Querier, limits SearchLimits, rids []int64) (m
 		return nil, err
 	}
 	for _, h := range list {
-		out[h.rid] = py.Clip(Plain(h.text, titles), limits.Snippet)
+		out[h.rid] = clip(Plain(h.text, titles), limits.Snippet)
 	}
 	return out, nil
 }
@@ -456,7 +456,7 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 	if err != nil {
 		return Result{}, err
 	}
-	query = py.Strip(query)
+	query = strings.TrimSpace(query)
 	filters := Filters{Account: Account, IncludePrivate: includePrivate}
 	if query == "" {
 		hits, err := recent(ctx, q, limits, includePrivate, limit)
@@ -573,16 +573,13 @@ func RelatedPages(ctx context.Context, q Querier, pageID string, limit int) ([]R
 		return []Related{}, err
 	}
 	allowPrivate := page.Private != 0
-	var linkIDs []any
-	if v, err := py.JSONLoads([]byte(page.Links)); err == nil {
-		linkIDs, _ = v.([]any)
-	} else {
+	var linkIDs []string
+	if err := json.Unmarshal([]byte(page.Links), &linkIDs); err != nil {
 		return nil, err
 	}
 	var linked []string
 	for _, id := range linkIDs {
-		s, _ := id.(string)
-		linked = append(linked, notionid.Normalize(s))
+		linked = append(linked, notionid.Normalize(id))
 	}
 	rows, err := q.QueryContext(ctx,
 		"SELECT p.id FROM notion_pages p, json_each(p.links) j WHERE j.value = ? AND p.id != ?", page.ID, page.ID)

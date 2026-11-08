@@ -14,6 +14,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/difflib"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -105,14 +106,38 @@ func (p *Proposer) chat(ctx context.Context, system, user, schema string, maxTok
 	}
 	d, ok := v.(py.Dict)
 	if !ok {
-		return nil, py.AttributeError(v, "get")
+		return nil, fmt.Errorf("model reply is %T, not an object", v)
 	}
 	return d, nil
 }
 
 func fingerprint(parts ...any) string {
-	sum := sha256.Sum256([]byte(py.JSONDumps(parts)))
+	quoted := make([]string, len(parts))
+	for i, part := range parts {
+		encoded, _ := json.Marshal(part)
+		quoted[i] = string(encoded)
+	}
+	sum := sha256.Sum256([]byte("[" + strings.Join(quoted, ", ") + "]"))
 	return hex.EncodeToString(sum[:])[:32]
+}
+
+func clip(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	i := 0
+	for pos := range s {
+		if i == n {
+			return s[:pos]
+		}
+		i++
+	}
+	return s
+}
+
+func splitLines(text string) []string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	return strings.Split(strings.ReplaceAll(text, "\r", "\n"), "\n")
 }
 
 func (p *Proposer) load(ctx context.Context, id string) (*Page, error) {
@@ -157,11 +182,11 @@ func (p *Proposer) ProposeLink(ctx context.Context, sourceID, targetID string) (
 	if (source.Private != 0) != (target.Private != 0) {
 		return nil, ProposalError("private and non-private pages are never compared")
 	}
-	links, err := py.JSONLoads([]byte(source.Links))
-	if err != nil {
+	var links []string
+	if err := json.Unmarshal([]byte(source.Links), &links); err != nil {
 		return nil, err
 	}
-	if items, _ := links.([]any); slices.Contains(items, any(target.ID)) {
+	if slices.Contains(links, target.ID) {
 		return nil, nil
 	}
 	limits, err := LoadProposals(ctx, p.DB.Read)
@@ -169,13 +194,13 @@ func (p *Proposer) ProposeLink(ctx context.Context, sourceID, targetID string) (
 		return nil, err
 	}
 	block := func(label string, page *Page) string {
-		return label + ":\nTitle: " + page.Title + "\nLocation: " + page.Path + "\nText:\n" + py.Clip(page.Markdown, limits.LinkPageChars)
+		return label + ":\nTitle: " + page.Title + "\nLocation: " + page.Path + "\nText:\n" + clip(page.Markdown, limits.LinkPageChars)
 	}
 	answer, err := p.chat(ctx, linkSystem, block("Page A", source)+"\n\n"+block("Page B", target), linkSchemaJSON, limits.LinkMaxTokens)
 	if err != nil {
 		return nil, err
 	}
-	if v, _ := answer.Get("link"); !py.Truthy(v) {
+	if v, _ := answer.Get("link"); !truthy(v) {
 		return nil, nil
 	}
 	reason := ""
@@ -234,10 +259,10 @@ func validUpdates(markdown string, raw []any) []update {
 }
 
 func diffLines(before, after string) []any {
-	old, updated := py.SplitLines(before), py.SplitLines(after)
+	old, updated := splitLines(before), splitLines(after)
 	out := []any{}
 	line := func(op, text string) any { return py.Dict{{Key: "op", Value: op}, {Key: "text", Value: text}} }
-	for _, group := range py.GroupedOpcodes(old, updated, diffContext) {
+	for _, group := range difflib.GroupedOpcodes(old, updated, diffContext) {
 		if len(out) > 0 {
 			out = append(out, line("same", "…"))
 		}
@@ -264,7 +289,7 @@ func (p *Proposer) ProposeEdit(ctx context.Context, pageID, instruction string) 
 	if err != nil {
 		return nil, err
 	}
-	instruction = py.Strip(instruction)
+	instruction = strings.TrimSpace(instruction)
 	if instruction == "" {
 		return nil, ProposalError("empty instruction")
 	}
@@ -273,7 +298,7 @@ func (p *Proposer) ProposeEdit(ctx context.Context, pageID, instruction string) 
 		return nil, err
 	}
 	markdown := page.Markdown
-	user := "Instruction: " + instruction + "\n\nPage title: " + page.Title + "\nPage Markdown:\n" + py.Clip(markdown, limits.EditPageChars)
+	user := "Instruction: " + instruction + "\n\nPage title: " + page.Title + "\nPage Markdown:\n" + clip(markdown, limits.EditPageChars)
 	answer, err := p.chat(ctx, editSystem, user, editSchemaJSON, limits.EditMaxTokens)
 	if err != nil {
 		return nil, err
@@ -331,7 +356,7 @@ func freshPage(ctx context.Context, client *Client, pageID, snapshot string) err
 	if err != nil {
 		return err
 	}
-	if py.Truthy(field(live, "in_trash")) {
+	if truthy(field(live, "in_trash")) {
 		return StaleError("page is in the trash")
 	}
 	if edited := field(live, "last_edited_time"); edited != any(snapshot) {
@@ -346,7 +371,7 @@ func relatedAnchor(markdown string) (string, bool, error) {
 	for i, line := range lines {
 		loc := propHeadRe.FindStringSubmatchIndex(line)
 		if start < 0 {
-			if loc != nil && strings.EqualFold(py.Strip(line[loc[2]:loc[3]]), relatedHeading) {
+			if loc != nil && strings.EqualFold(strings.TrimSpace(line[loc[2]:loc[3]]), relatedHeading) {
 				start = i
 			}
 		} else if loc != nil {
@@ -364,7 +389,7 @@ func lastListLine(lines []string, start, end int) (string, bool, error) {
 		if loc := listItemRe.FindStringIndex(lines[i]); loc != nil && loc[0] == 0 {
 			return lines[i], true, nil
 		}
-		if py.Strip(lines[i]) != "" {
+		if strings.TrimSpace(lines[i]) != "" {
 			return "", false, nil
 		}
 	}
@@ -374,7 +399,7 @@ func lastListLine(lines []string, start, end int) (string, bool, error) {
 func hasRelatedSection(markdown string) (bool, error) {
 	for _, line := range strings.Split(markdown, "\n") {
 		loc := propHeadRe.FindStringSubmatchIndex(line)
-		if loc != nil && strings.EqualFold(py.Strip(line[loc[2]:loc[3]]), relatedHeading) {
+		if loc != nil && strings.EqualFold(strings.TrimSpace(line[loc[2]:loc[3]]), relatedHeading) {
 			return true, nil
 		}
 	}
@@ -537,22 +562,25 @@ func validPayloadUpdates(raw []any) []update {
 }
 
 func (a *Applier) UndoRestore(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
-	v, err := py.JSONLoads(plan)
-	if err != nil {
+	var info struct {
+		PageID            string `json:"page_id"`
+		PreviousMarkdown  string `json:"previous_markdown"`
+		AppliedEditedTime string `json:"applied_edited_time"`
+	}
+	if err := json.Unmarshal(plan, &info); err != nil {
 		return nil, err
 	}
-	info := asDict(v)
 	client, err := a.client(ctx)
 	if err != nil {
 		return nil, err
 	}
-	pageID := text(info, "page_id")
-	if err := freshPage(ctx, client, pageID, pyStr(field(info, "applied_edited_time"))); err != nil {
+	pageID := info.PageID
+	if err := freshPage(ctx, client, pageID, info.AppliedEditedTime); err != nil {
 		return nil, err
 	}
 	if _, err := client.UpdateMarkdown(ctx, pageID, py.Dict{
 		{Key: "type", Value: "replace_content"},
-		{Key: "replace_content", Value: py.Dict{{Key: "new_str", Value: field(info, "previous_markdown")}}},
+		{Key: "replace_content", Value: py.Dict{{Key: "new_str", Value: info.PreviousMarkdown}}},
 	}); err != nil {
 		return nil, err
 	}

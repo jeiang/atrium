@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/notionid"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -82,7 +81,7 @@ func link(label, url string) string {
 
 func refLink(s string, loc []int, titles map[string]string) string {
 	url := attrs(group(s, loc, 2))["url"]
-	title := py.Strip(group(s, loc, 3))
+	title := strings.TrimSpace(group(s, loc, 3))
 	if title == "" {
 		if ids := notionid.IDsInText(url); len(ids) > 0 {
 			title = titles[ids[0]]
@@ -95,7 +94,7 @@ func refLink(s string, loc []int, titles map[string]string) string {
 }
 
 func mediaLink(caption, url string) string {
-	label := py.Strip(caption)
+	label := strings.TrimSpace(caption)
 	if label == "" {
 		label = url
 	}
@@ -192,7 +191,7 @@ func convert(s string, titles map[string]string, table func(string, []int) strin
 			return mediaLink(group(chunk, loc, 1), group(chunk, loc, 2))
 		})
 		chunk = sub(dateRe, chunk, true, func(loc []int) string { return dateText(chunk, loc) })
-		chunk = sub(summary, chunk, true, func(loc []int) string { return "**" + py.Strip(group(chunk, loc, 1)) + "**" })
+		chunk = sub(summary, chunk, true, func(loc []int) string { return "**" + strings.TrimSpace(group(chunk, loc, 1)) + "**" })
 		chunk = subText(emptyRe, "", chunk)
 		chunk = sub(wrapper, chunk, true, func([]int) string { return "" })
 		chunk = sub(breakRe, chunk, true, func([]int) string { return "\n" })
@@ -244,7 +243,7 @@ func Plain(s string, titles map[string]string) string {
 		}
 		readable = subText(step.re, step.repl, readable)
 	}
-	return balanced(strings.Join(py.Split(readable), " "))
+	return balanced(strings.Join(strings.Fields(readable), " "))
 }
 
 func balanced(s string) string {
