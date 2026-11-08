@@ -133,20 +133,29 @@ func SpendCap() BudgetExceeded { return BudgetExceeded(SpendCapText) }
 
 const ThreadCapKey = "thread_cost_cap_usd"
 
-func ThreadCap(ctx context.Context, q db.Querier, threadID int64) (spent, limit float64, err error) {
+func ThreadCap(ctx context.Context, q db.Querier, threadID int64) (spent, limit float64, own bool, err error) {
 	found, err := settings.From(ctx).Resolve(ctx, q, ThreadCapKey)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, false, err
 	}
 	if limit, err = found.Float(); err != nil {
-		return 0, 0, err
+		return 0, 0, false, err
 	}
+	var threadCap *float64
 	err = q.QueryRowContext(ctx,
 		"WITH RECURSIVE up(id, parent) AS (SELECT id, parent_thread_id FROM threads WHERE id = ? "+
 			"UNION SELECT t.id, t.parent_thread_id FROM threads t JOIN up ON t.id = up.parent), "+
-			"tree(id) AS (SELECT id FROM up WHERE parent IS NULL UNION SELECT t.id FROM threads t JOIN tree ON t.parent_thread_id = tree.id) "+
-			"SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE thread_id IN (SELECT id FROM tree)", threadID).Scan(&spent)
-	return spent, limit, err
+			"root(id) AS (SELECT id FROM up WHERE parent IS NULL), "+
+			"tree(id) AS (SELECT id FROM root UNION SELECT t.id FROM threads t JOIN tree ON t.parent_thread_id = tree.id) "+
+			"SELECT (SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE thread_id IN (SELECT id FROM tree)), "+
+			"(SELECT cost_cap_usd FROM threads WHERE id = (SELECT id FROM root))", threadID).Scan(&spent, &threadCap)
+	if err != nil {
+		return 0, 0, false, err
+	}
+	if threadCap != nil && *threadCap < limit {
+		limit, own = *threadCap, true
+	}
+	return spent, limit, own, nil
 }
 
 func registerRunCaps() []settings.Def {
