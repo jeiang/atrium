@@ -3,12 +3,30 @@ package urlx
 import (
 	"fmt"
 	"net/netip"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 
 	"golang.org/x/text/unicode/norm"
 )
+
+const MaxReturnLen = 2048
+
+func SafeReturn(target string) string {
+	if target == "" || len(target) > MaxReturnLen || target[0] != '/' || strings.HasPrefix(target, "//") || strings.ContainsAny(target, "\\\r\n\t") {
+		return "/"
+	}
+	u, err := url.Parse(target)
+	if err != nil || u.Scheme != "" || u.Host != "" {
+		return "/"
+	}
+	path := u.Path
+	if path == "" || path[0] != '/' || strings.HasPrefix(path, "//") || strings.ContainsAny(path, "\\\r\n\t") || strings.HasPrefix(path, "/auth/") {
+		return "/"
+	}
+	return target
+}
 
 type URLParts struct {
 	Scheme, Netloc, Path, Query, Fragment       string

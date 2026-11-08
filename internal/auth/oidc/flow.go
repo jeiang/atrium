@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 const (
@@ -29,7 +30,6 @@ const (
 	slideInterval = time.Minute
 	recheckGrace  = time.Hour
 	retryGap      = time.Minute
-	maxReturnLen  = 2048
 )
 
 var (
@@ -102,20 +102,7 @@ func challenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-func SafeReturn(target string) string {
-	if target == "" || len(target) > maxReturnLen || target[0] != '/' || strings.HasPrefix(target, "//") || strings.ContainsAny(target, "\\\r\n\t") {
-		return "/"
-	}
-	u, err := url.Parse(target)
-	if err != nil || u.Scheme != "" || u.Host != "" {
-		return "/"
-	}
-	path := u.Path
-	if path == "" || path[0] != '/' || strings.HasPrefix(path, "//") || strings.ContainsAny(path, "\\\r\n\t") || strings.HasPrefix(path, "/auth/") {
-		return "/"
-	}
-	return target
-}
+func SafeReturn(target string) string { return urlx.SafeReturn(target) }
 
 type Login struct {
 	URL     string
