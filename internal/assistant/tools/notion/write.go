@@ -165,6 +165,11 @@ func cleanArgs(wiki notion.Wiki, args tool.Args) (aliases, sources []string, err
 
 func today(tc *tool.Context) (string, error) { return notion.LocalDate(tc.Now(), tc.Env) }
 
+func editedText(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
 func optionalText(args tool.Args, name string) (string, error) {
 	text, _, err := tool.TextArg(args, name, false)
 	return text, err
@@ -330,7 +335,7 @@ func createPage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	w := write{
 		tool: "notion_create_page", target: s.pageID,
 		after: append(s.dict(), py.Pair{Key: "parent_page_id", Value: parent}, py.Pair{Key: "markdown", Value: body}, py.Pair{Key: "aliases", Value: aliases}),
-		undo:  py.Dict{{Key: "op", Value: undoTrash}, {Key: "page_id", Value: s.pageID}, {Key: "applied_edited_time", Value: edited}},
+		undo:  pageUndo{Op: undoTrash, PageID: s.pageID, AppliedEditedTime: editedText(edited)},
 	}
 	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, s.pageID, tc.Now(), notion.WikiFields{
@@ -431,7 +436,7 @@ func updatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	w := write{
 		tool: "notion_update_page", target: pageID,
 		before: py.Dict{{Key: "markdown", Value: previous}}, after: py.Dict{{Key: "markdown", Value: updated}},
-		undo: py.Dict{{Key: "op", Value: undoRestore}, {Key: "page_id", Value: pageID}, {Key: "previous_markdown", Value: previous}, {Key: "applied_edited_time", Value: edited}},
+		undo: restoreUndo{pageUndo: pageUndo{Op: undoRestore, PageID: pageID, AppliedEditedTime: editedText(edited)}, PreviousMarkdown: previous},
 	}
 	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, pageID, tc.Now(), notion.WikiFields{
@@ -529,7 +534,7 @@ func movePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	w := write{
 		tool: "notion_move_page", target: pageID,
 		before: py.Dict{{Key: "parent_page_id", Value: previous}}, after: py.Dict{{Key: "parent_page_id", Value: parent}},
-		undo: py.Dict{{Key: "op", Value: undoMove}, {Key: "page_id", Value: pageID}, {Key: "previous_parent_id", Value: previous}, {Key: "applied_edited_time", Value: edited}},
+		undo: moveUndo{pageUndo: pageUndo{Op: undoMove, PageID: pageID, AppliedEditedTime: editedText(edited)}, PreviousParentID: previous},
 	}
 	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, pageID, tc.Now(), notion.WikiFields{Title: new(s.title), HubID: new(parent), InTrash: new(false)})
@@ -584,7 +589,7 @@ func archivePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, er
 	w := write{
 		tool: "notion_archive_page", target: pageID,
 		before: py.Dict{{Key: "title", Value: s.title}, {Key: "markdown", Value: str(previous, "markdown")}}, after: py.Dict{{Key: "in_trash", Value: true}},
-		undo: py.Dict{{Key: "op", Value: undoUntrash}, {Key: "page_id", Value: pageID}, {Key: "applied_edited_time", Value: edited}},
+		undo: pageUndo{Op: undoUntrash, PageID: pageID, AppliedEditedTime: editedText(edited)},
 	}
 	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, pageID, tc.Now(), notion.WikiFields{Title: new(s.title), InTrash: new(true)})
@@ -667,7 +672,7 @@ func addAlias(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	w := write{
 		tool: "notion_add_alias", target: pageID,
 		before: py.Dict{{Key: "aliases", Value: previous}}, after: py.Dict{{Key: "aliases", Value: aliases}},
-		undo: py.Dict{{Key: "op", Value: undoAliases}, {Key: "page_id", Value: pageID}, {Key: "previous_aliases", Value: previous}},
+		undo: aliasesUndo{Op: undoAliases, PageID: pageID, PreviousAliases: previous},
 	}
 	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
 		return notion.UpsertWiki(ctx, tx, pageID, tc.Now(), notion.WikiFields{

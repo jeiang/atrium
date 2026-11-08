@@ -1,12 +1,14 @@
 package writes
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -19,7 +21,7 @@ type UndoError string
 
 func (e UndoError) Error() string { return string(e) }
 
-type Undoer func(ctx context.Context, q db.Querier, info map[string]any) (any, error)
+type Undoer func(ctx context.Context, q db.Querier, payload json.RawMessage) (any, error)
 
 type Registry struct {
 	mu sync.RWMutex
@@ -51,21 +53,54 @@ type New struct {
 	Undo     any
 }
 
-func dump(value any, scrub bool) *string {
+func dump(value any, scrub bool) (*string, error) {
 	if value == nil {
-		return nil
+		return nil, nil
 	}
-	text := py.JSONDumps(value, py.JSONOpts{SortKeys: true})
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(plain(value)); err != nil {
+		return nil, fmt.Errorf("writes: payload: %w", err)
+	}
+	text := strings.TrimSuffix(buf.String(), "\n")
 	if scrub {
 		text = logx.Scrub(text)
 	}
-	return &text
+	return &text, nil
+}
+
+func plain(value any) any {
+	switch v := value.(type) {
+	case py.Dict:
+		out := make(map[string]any, len(v))
+		for _, p := range v {
+			out[p.Key] = plain(p.Value)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, e := range v {
+			out[i] = plain(e)
+		}
+		return out
+	}
+	return value
 }
 
 func Record(ctx context.Context, q db.Querier, reg *Registry, w New) (int64, error) {
-	before := dump(w.Before, true)
-	after := dump(w.After, true)
-	undo := dump(w.Undo, false)
+	before, err := dump(w.Before, true)
+	if err != nil {
+		return 0, err
+	}
+	after, err := dump(w.After, true)
+	if err != nil {
+		return 0, err
+	}
+	undo, err := dump(w.Undo, false)
+	if err != nil {
+		return 0, err
+	}
 	if undo != nil {
 		var desc map[string]any
 		if err := json.Unmarshal([]byte(*undo), &desc); err != nil {
@@ -150,7 +185,7 @@ func (l *idLocks) lock(id int64) func() {
 
 var undoing idLocks
 
-func (r *Registry) resolve(ctx context.Context, q db.Querier, writeID int64) (Undoer, map[string]any, error) {
+func (r *Registry) resolve(ctx context.Context, q db.Querier, writeID int64) (Undoer, json.RawMessage, error) {
 	row, err := get(ctx, q, writeID)
 	if err != nil {
 		return nil, nil, err
@@ -161,22 +196,24 @@ func (r *Registry) resolve(ctx context.Context, q db.Querier, writeID int64) (Un
 	if row.UndoneAt != nil {
 		return nil, nil, UndoError("already undone")
 	}
-	var info any
+	var raw json.RawMessage
 	if row.UndoJSON != nil && *row.UndoJSON != "" {
-		if err := json.Unmarshal([]byte(*row.UndoJSON), &info); err != nil {
-			return nil, nil, fmt.Errorf("writes: write %d undo_json: %w", writeID, err)
-		}
+		raw = json.RawMessage(*row.UndoJSON)
 	}
-	if !py.Truthy(info) {
+	if len(raw) == 0 {
 		return nil, nil, UndoError("this write has no undo")
 	}
-	desc, _ := info.(map[string]any)
-	op, _ := desc["op"].(string)
-	fn := r.lookup(op)
-	if fn == nil {
-		return nil, nil, UndoError("unknown undo kind " + strconv.Quote(op))
+	var head struct {
+		Op string `json:"op"`
 	}
-	return fn, desc, nil
+	if err := json.Unmarshal(raw, &head); err != nil {
+		return nil, nil, fmt.Errorf("writes: write %d undo_json: %w", writeID, err)
+	}
+	fn := r.lookup(head.Op)
+	if fn == nil {
+		return nil, nil, UndoError("unknown undo kind " + strconv.Quote(head.Op))
+	}
+	return fn, raw, nil
 }
 
 func mark(ctx context.Context, q db.Querier, writeID int64, now func() float64) error {
@@ -194,7 +231,7 @@ func mark(ctx context.Context, q db.Querier, writeID int64, now func() float64) 
 
 func (r *Registry) Undo(ctx context.Context, d *db.DB, writeID int64, now func() float64) (any, error) {
 	defer undoing.lock(writeID)()
-	fn, desc, err := r.resolve(ctx, d.Read, writeID)
+	fn, payload, err := r.resolve(ctx, d.Read, writeID)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +240,7 @@ func (r *Registry) Undo(ctx context.Context, d *db.DB, writeID int64, now func()
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	result, err := fn(ctx, tx, desc)
+	result, err := fn(ctx, tx, payload)
 	if err != nil {
 		return nil, err
 	}

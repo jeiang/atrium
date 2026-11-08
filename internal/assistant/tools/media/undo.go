@@ -2,6 +2,7 @@ package mediatools
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/jeiang/atrium/internal/assistant/writes"
@@ -11,9 +12,53 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
+type torrentUndo struct {
+	Op   string `json:"op"`
+	Hash string `json:"hash"`
+}
+
+type channelDeleteUndo struct {
+	Op string `json:"op"`
+	ID int64  `json:"id"`
+}
+
+type channelRestoreUndo struct {
+	Op  string      `json:"op"`
+	Row channelUndo `json:"row"`
+}
+
+type channelUndo struct {
+	ID            int64   `json:"id"`
+	Name          string  `json:"name"`
+	IMDB          string  `json:"imdb"`
+	Pattern       string  `json:"pattern"`
+	CaseSensitive bool    `json:"case_sensitive"`
+	Primed        bool    `json:"primed"`
+	Created       float64 `json:"created"`
+	TMDBID        *int64  `json:"tmdb_id"`
+}
+
+func channelUndoOf(c media.Channel) channelUndo {
+	return channelUndo{
+		ID: c.ID, Name: c.Name, IMDB: c.IMDB, Pattern: c.Pattern, CaseSensitive: c.CaseSensitive,
+		Primed: c.Primed, Created: c.Created, TMDBID: c.TMDBID,
+	}
+}
+
+func (c channelUndo) channel() media.Channel {
+	return media.Channel{
+		ID: c.ID, Name: c.Name, IMDB: c.IMDB, Pattern: c.Pattern, CaseSensitive: c.CaseSensitive,
+		Primed: c.Primed, Created: c.Created, TMDBID: c.TMDBID,
+	}
+}
+
 func undoTorrent(env config.Env) writes.Undoer {
-	return func(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
-		hash, _ := info["hash"].(string)
+	return func(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
+		var u torrentUndo
+		if err := json.Unmarshal(raw, &u); err != nil {
+			return nil, writes.UndoError("media undo payload is invalid")
+		}
+		hash := u.Hash
 		settings, err := media.Load(ctx, q, env)
 		if err != nil {
 			return nil, err
@@ -43,16 +88,6 @@ func undoTorrent(env config.Env) writes.Undoer {
 	}
 }
 
-func number(v any) int64 {
-	switch n := v.(type) {
-	case float64:
-		return int64(n)
-	case int64:
-		return n
-	}
-	return 0
-}
-
 func channelFailed(err error) error {
 	var failure media.ChannelError
 	if errors.As(err, &failure) {
@@ -61,33 +96,25 @@ func channelFailed(err error) error {
 	return err
 }
 
-func undoChannelDelete(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
-	id := number(info["id"])
+func undoChannelDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
+	var u channelDeleteUndo
+	if err := json.Unmarshal(raw, &u); err != nil {
+		return nil, writes.UndoError("media undo payload is invalid")
+	}
+	id := u.ID
 	if _, err := media.DeleteChannel(ctx, q, id); err != nil {
 		return nil, channelFailed(err)
 	}
 	return py.Dict{{Key: "removed", Value: id}}, nil
 }
 
-func channelOf(row map[string]any) media.Channel {
-	c := media.Channel{ID: number(row["id"])}
-	c.Name, _ = row["name"].(string)
-	c.IMDB, _ = row["imdb"].(string)
-	c.Pattern, _ = row["pattern"].(string)
-	c.CaseSensitive, _ = row["case_sensitive"].(bool)
-	c.Primed, _ = row["primed"].(bool)
-	c.Created, _ = row["created"].(float64)
-	if row["tmdb_id"] != nil {
-		id := number(row["tmdb_id"])
-		c.TMDBID = &id
+func undoChannelRestore(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
+	var u channelRestoreUndo
+	if err := json.Unmarshal(raw, &u); err != nil {
+		return nil, writes.UndoError("media undo payload is invalid")
 	}
-	return c
-}
-
-func undoChannelRestore(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
-	row, _ := info["row"].(map[string]any)
-	if _, err := media.RestoreChannel(ctx, q, channelOf(row)); err != nil {
+	if _, err := media.RestoreChannel(ctx, q, u.Row.channel()); err != nil {
 		return nil, channelFailed(err)
 	}
-	return py.Dict{{Key: "restored", Value: number(row["id"])}}, nil
+	return py.Dict{{Key: "restored", Value: u.Row.ID}}, nil
 }

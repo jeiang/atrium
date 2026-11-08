@@ -125,7 +125,7 @@ func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "profile_set", Target: "profile:" + key,
 			Before: map[string]any{"value": optional(previous)},
 			After:  map[string]any{"value": value},
-			Undo:   map[string]any{"op": UndoOp, "key": key, "previous": optional(previous), "applied": value},
+			Undo:   profileUndo{Op: UndoOp, Key: key, Previous: previous, Applied: value},
 		})
 		return err
 	})
@@ -135,25 +135,34 @@ func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	return py.Dict{{Key: "key", Value: key}, {Key: "value", Value: value}, {Key: "previous", Value: optional(previous)}, {Key: "write_id", Value: writeID}}, nil
 }
 
-func undo(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
-	key, _ := info["key"].(string)
-	found, err := current(ctx, q, key)
+type profileUndo struct {
+	Op       string  `json:"op"`
+	Key      string  `json:"key"`
+	Previous *string `json:"previous"`
+	Applied  string  `json:"applied"`
+}
+
+func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, error) {
+	var u profileUndo
+	if err := json.Unmarshal(payload, &u); err != nil {
+		return nil, writes.UndoError("profile undo payload is invalid")
+	}
+	found, err := current(ctx, q, u.Key)
 	if err != nil {
 		return nil, err
 	}
-	if optional(found) != info["applied"] {
-		return nil, writes.UndoError(fmt.Sprintf("profile %s changed since this write", strconv.Quote(key)))
+	if optional(found) != u.Applied {
+		return nil, writes.UndoError(fmt.Sprintf("profile %s changed since this write", strconv.Quote(u.Key)))
 	}
-	previous, restored := info["previous"].(string)
-	if !restored {
-		_, err = q.ExecContext(ctx, "DELETE FROM agent_profile WHERE key = ?", key)
+	if u.Previous == nil {
+		_, err = q.ExecContext(ctx, "DELETE FROM agent_profile WHERE key = ?", u.Key)
 	} else {
-		_, err = q.ExecContext(ctx, "UPDATE agent_profile SET value = ? WHERE key = ?", previous, key)
+		_, err = q.ExecContext(ctx, "UPDATE agent_profile SET value = ? WHERE key = ?", *u.Previous, u.Key)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "key", Value: key}, {Key: "restored", Value: info["previous"]}}, nil
+	return py.Dict{{Key: "key", Value: u.Key}, {Key: "restored", Value: optional(u.Previous)}}, nil
 }
 
 func RegisterUndoer(r *writes.Registry) { r.Register(UndoOp, undo) }

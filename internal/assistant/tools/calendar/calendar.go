@@ -157,7 +157,7 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_create",
 			Target: target + ":" + normalized.UID,
 			After:  py.Dict{{Key: "calendar", Value: target}, {Key: "spec", Value: normalized.Dict()}},
-			Undo:   py.Dict{{Key: "op", Value: "calendar_delete"}, {Key: "calendar", Value: target}, {Key: "uid", Value: normalized.UID}},
+			Undo:   deleteUndo{Op: "calendar_delete", Calendar: target, UID: normalized.UID},
 		})
 		return err
 	})
@@ -199,7 +199,7 @@ func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_delete",
 			Target: row.Calendar + ":" + uid,
 			Before: py.Dict{{Key: "calendar", Value: row.Calendar}, {Key: "spec", Value: stored}},
-			Undo:   py.Dict{{Key: "op", Value: "calendar_recreate"}, {Key: "calendar", Value: row.Calendar}, {Key: "spec", Value: stored}},
+			Undo:   recreateUndo{Op: "calendar_recreate", Calendar: row.Calendar, Spec: stored},
 		})
 		return err
 	})
@@ -249,9 +249,24 @@ func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 	return py.Dict{{Key: "proposed", Value: true}, {Key: "proposal_id", Value: id}}, nil
 }
 
-func undoDelete(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
-	target, _ := info["calendar"].(string)
-	uid, _ := info["uid"].(string)
+type deleteUndo struct {
+	Op       string `json:"op"`
+	Calendar string `json:"calendar"`
+	UID      string `json:"uid"`
+}
+
+type recreateUndo struct {
+	Op       string `json:"op"`
+	Calendar string `json:"calendar"`
+	Spec     any    `json:"spec"`
+}
+
+func undoDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
+	var u deleteUndo
+	if err := json.Unmarshal(raw, &u); err != nil {
+		return nil, writes.UndoError("calendar undo payload is invalid")
+	}
+	target, uid := u.Calendar, u.UID
 	set, err := calendar.LoadSettings(ctx, q)
 	if err != nil {
 		return nil, err
@@ -269,9 +284,13 @@ func undoDelete(ctx context.Context, q db.Querier, info map[string]any) (any, er
 	return py.Dict{{Key: "deleted", Value: uid}}, nil
 }
 
-func undoRecreate(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
-	target, _ := info["calendar"].(string)
-	restored, err := calendar.SpecOf(info["spec"])
+func undoRecreate(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
+	var u recreateUndo
+	if err := json.Unmarshal(raw, &u); err != nil {
+		return nil, writes.UndoError("calendar undo payload is invalid")
+	}
+	target := u.Calendar
+	restored, err := calendar.SpecOf(u.Spec)
 	if err != nil {
 		return nil, err
 	}
