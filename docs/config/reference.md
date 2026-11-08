@@ -325,9 +325,11 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `media_thumbnail_pass_limit` | int | `200` | advanced | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_PASS_LIMIT` |
 | `media_thumbnail_position` | float | `0.1` | advanced | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_POSITION` |
 | `media_thumbnail_width` | int | `480` | advanced | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_WIDTH` |
+| `media_tmdb_images_url` | string | `https://image.tmdb.org/t/p/w342` | advanced | `ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL` |
 | `media_tmdb_search_limit` | int | `8` | advanced | `ATRIUM_MEDIA_MEDIA_TMDB_SEARCH_LIMIT` |
 | `media_tmdb_timeout_seconds` | int | `15` | advanced | `ATRIUM_MEDIA_MEDIA_TMDB_TIMEOUT_SECONDS` |
 | `media_tmdb_token` | string | none | secret | `ATRIUM_MEDIA_MEDIA_TMDB_TOKEN` |
+| `media_tmdb_url` | string | `https://api.themoviedb.org/3` | advanced | `ATRIUM_MEDIA_MEDIA_TMDB_URL` |
 | `media_torrent_upload_bytes` | int | `1048576` | advanced | `ATRIUM_MEDIA_MEDIA_TORRENT_UPLOAD_BYTES` |
 | `media_tv_url` | string | none | ui | `ATRIUM_MEDIA_MEDIA_TV_URL` |
 | `media_video_extensions` | string | `.mkv,.mp4,.m4v,.avi,.mov,.ts,.wmv` | advanced | `ATRIUM_MEDIA_MEDIA_VIDEO_EXTENSIONS` |

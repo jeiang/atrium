@@ -2755,6 +2755,14 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "media_tmdb_images_url": {
+          "default": "https://image.tmdb.org/t/p/w342",
+          "type": "string"
+        },
+        "media_tmdb_images_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "media_tmdb_search_limit": {
           "default": 8,
           "type": [
@@ -2778,6 +2786,14 @@
           "type": "string"
         },
         "media_tmdb_token_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_tmdb_url": {
+          "default": "https://api.themoviedb.org/3",
+          "type": "string"
+        },
+        "media_tmdb_url_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

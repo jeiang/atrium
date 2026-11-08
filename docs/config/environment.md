@@ -274,9 +274,11 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_PASS_LIMIT` | `media.media_thumbnail_pass_limit` |
 | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_POSITION` | `media.media_thumbnail_position` |
 | `ATRIUM_MEDIA_MEDIA_THUMBNAIL_WIDTH` | `media.media_thumbnail_width` |
+| `ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL` | `media.media_tmdb_images_url` |
 | `ATRIUM_MEDIA_MEDIA_TMDB_SEARCH_LIMIT` | `media.media_tmdb_search_limit` |
 | `ATRIUM_MEDIA_MEDIA_TMDB_TIMEOUT_SECONDS` | `media.media_tmdb_timeout_seconds` |
 | `ATRIUM_MEDIA_MEDIA_TMDB_TOKEN` | `media.media_tmdb_token` |
+| `ATRIUM_MEDIA_MEDIA_TMDB_URL` | `media.media_tmdb_url` |
 | `ATRIUM_MEDIA_MEDIA_TORRENT_UPLOAD_BYTES` | `media.media_torrent_upload_bytes` |
 | `ATRIUM_MEDIA_MEDIA_TV_URL` | `media.media_tv_url` |
 | `ATRIUM_MEDIA_MEDIA_VIDEO_EXTENSIONS` | `media.media_video_extensions` |
