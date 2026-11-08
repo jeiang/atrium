@@ -23,17 +23,20 @@ import (
 const KeyMailAccountsFile = "mail_accounts_file"
 
 type AccountSpec struct {
-	Name          string
-	Label         string
-	Preset        string
-	Login         string
-	Password      string
-	Enabled       bool
-	Host          string
-	SMTPHost      string
-	UncertainDest string
-	Stored        bool
+	Name     string
+	Label    string
+	Preset   string
+	Login    string
+	Password string
+	Enabled  bool
+	Stored   bool
 }
+
+func (a AccountSpec) Host() string { return presets[a.Preset].host }
+
+func (a AccountSpec) SMTPHost() string { return presets[a.Preset].smtpHost }
+
+func (a AccountSpec) UncertainDest() string { return presets[a.Preset].uncertainDest }
 
 type preset struct{ host, smtpHost, uncertainDest string }
 
@@ -137,7 +140,7 @@ func mergeStoredAccounts(ctx context.Context, q db.Querier, base []AccountSpec) 
 }
 
 func NewAccount(name, label, presetName, login, password string, enabled bool) (AccountSpec, error) {
-	p, ok := presets[presetName]
+	_, ok := presets[presetName]
 	if !ok {
 		return AccountSpec{}, fmt.Errorf("preset must be %s or %s", ICloud, Gmail)
 	}
@@ -150,7 +153,6 @@ func NewAccount(name, label, presetName, login, password string, enabled bool) (
 	return AccountSpec{
 		Name: name, Label: label, Preset: presetName, Login: py.Strip(login),
 		Password: strings.Join(py.Split(password), ""), Enabled: enabled,
-		Host: p.host, SMTPHost: p.smtpHost, UncertainDest: p.uncertainDest,
 	}, nil
 }
 

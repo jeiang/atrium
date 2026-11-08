@@ -75,7 +75,7 @@ func Send(ctx context.Context, creds Credentials, account string, msg *Message, 
 
 func send(ctx context.Context, factory Factory, account, user, password string, msg *Message, recipients []string) (refused Refusals, err error) {
 	spec, _ := config.Account(account)
-	server, err := factory(ctx, spec.SMTPHost, Port, Timeout)
+	server, err := factory(ctx, spec.SMTPHost(), Port, Timeout)
 	if err != nil {
 		return nil, err
 	}

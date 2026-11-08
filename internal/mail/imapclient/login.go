@@ -21,7 +21,7 @@ func dial(ctx context.Context, a config.AccountSpec) (mail.Conn, error) {
 	if d := dialer.Load(); d != nil {
 		return (*d)(ctx, a)
 	}
-	c := New(a.Host, a.Login, a.Password)
+	c := New(a.Host(), a.Login, a.Password)
 	if err := c.Connect(ctx); err != nil {
 		c.Close()
 		return nil, err

@@ -374,7 +374,7 @@ func urlOf(ctx context.Context, q Querier, key string) (string, error) {
 
 func UncertainDest(ctx context.Context, q Querier, account string) (string, error) {
 	spec, ok := config.Account(account)
-	if !ok || spec.UncertainDest == "" {
+	if !ok || spec.UncertainDest() == "" {
 		return "", nil
 	}
 	found, err := settings.Default.Resolve(ctx, readOnly{q}, KeyUncertainDest)
