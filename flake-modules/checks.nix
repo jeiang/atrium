@@ -9,6 +9,7 @@
     ...
   }: let
     inherit (inputs.nixpkgs) lib;
+    sqlcipherLib = pkgs.callPackage ../nix/sqlcipher.nix {};
     host = atrium:
       inputs.nixpkgs.lib.nixosSystem {
         modules = [
@@ -54,30 +55,9 @@
 
     exampleEvaluates = assert failing nixos == [] && failing defaults == []; true;
     unknownKeyRefused = assert refusedWith "unknown keys mail.mail_bogus" {settings.mail.mail_bogus = true;}; assert refusedWith "unknown keys bogus" {settings.bogus.x = 1;}; assert refusedWith "unknown keys anthropic.anthropic_bogus_file" {secretFiles."anthropic.anthropic_bogus" = "/run/x";}; true;
-    removedOptions = [
-      {mode = "live";}
-      {id = 1;}
-      {chatUrl = "x";}
-      {embedUrl = "x";}
-      {publicUrl = "x";}
-      {grafanaUrl = "x";}
-      {timeZone = "UTC";}
-      {icloudAppleId = "x";}
-      {extraEnvironment = {};}
-      {web.port = 1;}
-      {ntfy.url = "x";}
-      {ntfy.topic = "x";}
-      {ntfy.mediaTopic = "x";}
-      {media.root = "x";}
-      {media.qbittorrentUrl = "x";}
-      {media.moviesUrl = "x";}
-      {media.tvUrl = "x";}
-    ];
-    removedOptionsPoint = assert builtins.all (refusedWith "see docs/config/reference.md") removedOptions; true;
-
     cfg = nixos.config.services.atrium;
     unitText = name: nixos.config.systemd.units.${name}.text;
-    appUnits = ["atrium-web.service" "atrium-web-local.service" "atrium-watch.service" "atrium-agent-scheduler.service" "atrium-sync.service" "atrium-notion-sync.service" "atrium-scan.service" "atrium-dav-sync.service" "atrium-backup.service"];
+    appUnits = builtins.filter (lib.hasSuffix ".service") cfg.unitNames;
     credentialLines = ["LoadCredential=anthropic.anthropic_api_key:/run/secrets/anthropic-api-key" "LoadCredential=action_links.action_link_key:/run/secrets/action-link-key" "LoadCredential=mail-account-icloud:/run/secrets/icloud-app-password"];
     sharedLines = credentialLines ++ ["EnvironmentFile=/run/secrets/atrium.env" "User=atrium" "Group=atrium" "StateDirectory=atrium"];
     credentialsMatch = assert builtins.all (line: builtins.elem line cfg.runProperties) sharedLines;
@@ -91,22 +71,7 @@
       assert builtins.all notifying notifyUnits;
       assert !(builtins.any notifying ["atrium-sync.service" "atrium-scan.service" "atrium-notion-sync.service" "atrium-backup.service"]); true;
     unit = name: pkgs.writeText name (builtins.unsafeDiscardStringContext nixos.config.systemd.units.${name}.text);
-    unitNames = [
-      "atrium-agent-scheduler.service"
-      "atrium-backup.service"
-      "atrium-backup.timer"
-      "atrium-notion-sync.service"
-      "atrium-notion-sync.timer"
-      "atrium-scan.service"
-      "atrium-scan.timer"
-      "atrium-sync.service"
-      "atrium-sync.timer"
-      "atrium-dav-sync.service"
-      "atrium-dav-sync.timer"
-      "atrium-watch.service"
-      "atrium-web-local.service"
-      "atrium-web.service"
-    ];
+    inherit (cfg) unitNames;
     configFile = (pkgs.formats.toml {}).generate "atrium.toml" cfg.renderedSettings;
   in {
     checks =
@@ -118,7 +83,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && unknownKeyRefused && removedOptionsPoint && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning;
+        module = assert exampleEvaluates && unknownKeyRefused && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;
@@ -130,6 +95,33 @@
           dashboard-linter lint --strict ${../nix/monitoring/atrium-dashboard.json}
           touch $out
         '';
+
+        sqlcipher-provenance = pkgs.runCommand "atrium-sqlcipher-provenance" {nativeBuildInputs = [pkgs.binutils pkgs.gnugrep];} ''
+          set -euo pipefail
+          for member in libcrypto-lib-evp_enc.o libcrypto-lib-hmac.o libcrypto-lib-aes_cfb.o libcrypto-lib-sha256.o; do
+            ar t ${sqlcipherLib}/lib/libsqlite3.a | grep -qx "$member"
+          done
+          grep -q '#define SQLITE_VERSION        "3.53.4"' ${sqlcipherLib}/include/sqlite3.h
+          grep -q 'sqlite3_key(' ${sqlcipherLib}/include/sqlite3.h
+          touch $out
+        '';
+
+        sqlite-vec-provenance =
+          pkgs.runCommand "atrium-sqlite-vec-provenance" {
+            nativeBuildInputs = [pkgs.gnutar pkgs.gzip pkgs.diffutils pkgs.gnugrep];
+            src = pkgs.fetchurl {
+              url = "https://github.com/asg017/sqlite-vec/releases/download/v0.1.9/sqlite-vec-0.1.9-amalgamation.tar.gz";
+              hash = "sha256-Os1ny0r/CAxwUJJv08+CJ5Bf5bfuOCnY7lAkqxKDz2E=";
+            };
+          } ''
+            set -euo pipefail
+            tar -xzf $src
+            diff -u sqlite-vec.c ${../third_party/sqlite-vec/sqlite-vec.c}
+            diff -u sqlite-vec.h ${../third_party/sqlite-vec/sqlite-vec.h}
+            grep -q '#define SQLITE_VEC_VERSION "v0.1.9"' ${../third_party/sqlite-vec/sqlite-vec.h}
+            grep -q '#define SQLITE_VERSION        "3.53.4"' ${../third_party/sqlite-vec/sqlite3.h}
+            touch $out
+          '';
       }
       // lib.optionalAttrs (self'.packages ? atrium) {
         module-config = pkgs.runCommand "atrium-module-config" {nativeBuildInputs = [self'.packages.atrium pkgs.gnugrep];} ''

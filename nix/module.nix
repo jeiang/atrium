@@ -13,7 +13,7 @@
 
   stateDirName = lib.removePrefix "/var/lib/" cfg.stateDir;
   cacheDir = "${cfg.stateDir}/cache";
-  davDir = "${cfg.stateDir}/vdirsyncer";
+  mirrorDir = "${cfg.stateDir}/mirrors";
 
   splitKey = key: let
     parts = lib.splitString "." key;
@@ -62,16 +62,16 @@
     ATRIUM_CONFIG = "${configFile}";
   };
 
-  runProperties =
-    [
-      "User=${cfg.user}"
-      "Group=${cfg.group}"
-      "StateDirectory=${stateDirName}"
-      "StateDirectoryMode=0750"
-      "UMask=0027"
-    ]
-    ++ map (file: "EnvironmentFile=${file}") cfg.environmentFiles
-    ++ map (credential: "LoadCredential=${credential}") credentials;
+  runPropertyNames = ["User" "Group" "StateDirectory" "StateDirectoryMode" "UMask" "EnvironmentFile" "LoadCredential"];
+  runProperties = lib.concatMap (name: let
+    value = hardening.${name};
+  in
+    map (entry: "${name}=${entry}") (
+      if builtins.isList value
+      then value
+      else [value]
+    ))
+  runPropertyNames;
 
   atriumRun = pkgs.writeShellApplication {
     name = "atrium-run";
@@ -118,38 +118,25 @@
     exec ${lib.getExe cfg.package} backup "${cfg.backup.directory}/atrium-$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ).backup"
   '';
 
-  appService = args:
-    lib.recursiveUpdate
-    {
-      after = ["network-online.target"] ++ cfg.modelServerUnits;
-      wants = ["network-online.target"] ++ cfg.modelServerUnits;
-      environment = appEnvironment;
-      serviceConfig = hardening;
-    }
-    args;
+  authArgs = auth: lib.concatMapStringsSep " " (mode: "--auth ${mode}") (lib.splitString "+" auth);
 
-  webService = {
+  webUnit = {
     description,
     host,
     port,
     auth,
-    oidc ? false,
     force ? false,
-    ops ? true,
+    environment ? {},
   }: let
-    needsHost = auth != "local" || oidc || (force && cfg.web.allowedHost != null);
-    authArgs = lib.concatMapStringsSep " " (mode: "--auth ${mode}") ([auth] ++ lib.optional (oidc && auth != "oidc") "oidc");
+    needsHost = auth != "local" || (force && cfg.web.allowedHost != null);
   in {
     inherit description;
-    after = ["network-online.target"] ++ cfg.modelServerUnits;
-    wants = ["network-online.target"] ++ cfg.modelServerUnits;
-    environment = appEnvironment // lib.optionalAttrs needsHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;} // lib.optionalAttrs (!ops) {ATRIUM_CORE_OPS_LISTEN = "off";};
+    environment = appEnvironment // environment // lib.optionalAttrs needsHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
     path = mediaPath;
     serviceConfig =
-      hardening
-      // mediaWriter
+      mediaWriter
       // {
-        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString force " --force-disable-auth";
+        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString force " --force-disable-auth";
         Type = "notify";
         WatchdogSec = "1min";
         TimeoutStartSec = writeTimeout;
@@ -159,29 +146,151 @@
     wantedBy = ["multi-user.target"];
   };
 
-  removed = path: replacement:
-    lib.mkRemovedOptionModule (["services" "atrium"] ++ path) "${replacement}; see ${reference}.";
-in {
-  imports = [
-    (removed ["id"] "Use services.atrium.uid, user and group")
-    (removed ["mode"] "Set services.atrium.settings.mail.mail_mode")
-    (removed ["chatUrl"] "Set services.atrium.settings.mail.mail_chat_url")
-    (removed ["embedUrl"] "Set services.atrium.settings.mail.mail_embed_url")
-    (removed ["publicUrl"] "Set services.atrium.settings.core.public_url")
-    (removed ["timeZone"] "Set services.atrium.settings.core.tz (defaults to time.timeZone)")
-    (removed ["icloudAppleId"] "Set the Apple ID on the Settings page or in services.atrium.settings.calendar.icloud_apple_id; atrium-dav-sync now always runs")
-    (removed ["extraEnvironment"] "Set application settings in services.atrium.settings and credentials in services.atrium.secretFiles")
-    (removed ["web" "port"] "Use services.atrium.port")
-    (removed ["ntfy" "url"] "Set services.atrium.settings.notify.ntfy_url")
-    (removed ["ntfy" "topic"] "Set services.atrium.settings.notify.ntfy_topic")
-    (removed ["ntfy" "mediaTopic"] "Set services.atrium.settings.notify.ntfy_media_topic")
-    (removed ["media" "root"] "Set services.atrium.settings.media.media_root")
-    (removed ["media" "qbittorrentUrl"] "Set services.atrium.settings.media.media_qbittorrent_url")
-    (removed ["media" "moviesUrl"] "Set services.atrium.settings.media.media_movies_url")
-    (removed ["grafanaUrl"] "Set services.atrium.settings.grafana.grafana_url and the secretFiles entry grafana.grafana_viewer_token")
-    (removed ["media" "tvUrl"] "Set services.atrium.settings.media.media_tv_url")
-  ];
+  unitBase = {
+    after = ["network-online.target"] ++ cfg.modelServerUnits;
+    wants = ["network-online.target"] ++ cfg.modelServerUnits;
+    environment = appEnvironment;
+    serviceConfig = hardening;
+  };
 
+  units =
+    {
+      atrium-watch = {
+        description = "Watch the atrium mailboxes for new mail";
+        serviceConfig = {
+          ExecStart = "${lib.getExe cfg.package} watch";
+          Type = "notify";
+          WatchdogSec = writeTimeout;
+          TimeoutStartSec = writeTimeout;
+          TimeoutStopSec = writeTimeout;
+          Restart = "on-failure";
+          RestartSec = 10;
+        };
+        wantedBy = ["multi-user.target"];
+      };
+
+      atrium-agent-scheduler = {
+        description = "Run atrium's scheduled and nightly agent jobs";
+        path = mediaPath;
+        serviceConfig =
+          mediaWriter
+          // {
+            ExecStart = "${lib.getExe cfg.package} agent scheduler";
+            Type = "notify";
+            WatchdogSec = "10min";
+            TimeoutStartSec = writeTimeout;
+            Restart = "on-failure";
+            RestartSec = 10;
+          };
+        wantedBy = ["multi-user.target"];
+      };
+
+      atrium-web = webUnit {
+        description = "atrium web UI";
+        inherit (cfg.web) host auth;
+        inherit (cfg) port;
+        force = cfg.web.forceDisableAuth;
+      };
+
+      atrium-sync = {
+        description = "Reconcile the atrium mail index";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${lib.getExe cfg.package} sync";
+          TimeoutStopSec = writeTimeout;
+        };
+        timer = {
+          wantedBy = ["timers.target"];
+          timerConfig = {
+            OnActiveSec = "2m";
+            OnUnitActiveSec = "15m";
+          };
+        };
+      };
+
+      atrium-notion-sync = {
+        description = "Mirror Notion into the atrium index";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${lib.getExe cfg.package} notion sync";
+        };
+        timer = {
+          wantedBy = ["timers.target"];
+          timerConfig = {
+            OnActiveSec = "3m";
+            OnUnitActiveSec = "15m";
+          };
+        };
+      };
+
+      atrium-scan = {
+        description = "Scan the mailboxes for rebalance, deletion and label proposals";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${lib.getExe cfg.package} proposals scan-all";
+          TimeoutStopSec = writeTimeout;
+          TimeoutStartSec = "2h";
+        };
+        timer = {
+          wantedBy = ["timers.target"];
+          timerConfig = {
+            OnCalendar = "monthly";
+            Persistent = true;
+          };
+        };
+      };
+
+      atrium-dav-sync = {
+        description = "Mirror the iCloud calendars and address books";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = ["${lib.getExe cfg.package} calendar sync" "${lib.getExe cfg.package} contacts sync"];
+        };
+        timer = {
+          wantedBy = ["timers.target"];
+          timerConfig = {
+            OnActiveSec = "1m";
+            OnUnitActiveSec = "15m";
+          };
+        };
+      };
+    }
+    // lib.optionalAttrs cfg.backup.enable {
+      atrium-backup = {
+        description = "Write an atrium backup archive";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = backupScript;
+          ReadWritePaths = [cfg.backup.directory];
+          TimeoutStartSec = "2h";
+        };
+        timer = {
+          wantedBy = ["timers.target"];
+          timerConfig = {
+            OnCalendar = cfg.backup.onCalendar;
+            Persistent = true;
+          };
+        };
+      };
+    }
+    // lib.optionalAttrs cfg.web.local.enable {
+      atrium-web-local = webUnit {
+        description = "atrium web UI (loopback, no proxy auth)";
+        host = "127.0.0.1";
+        port = cfg.web.local.port;
+        auth = "local";
+        environment = {ATRIUM_CORE_OPS_LISTEN = "off";};
+      };
+    };
+
+  unitNames = let
+    timers = lib.filterAttrs (_: unit: unit ? timer) units;
+  in
+    lib.sort builtins.lessThan (
+      map (name: "${name}.service") (builtins.attrNames units)
+      ++ map (name: "${name}.timer") (builtins.attrNames timers)
+    );
+in {
   options.services.atrium = {
     enable = mkEnableOption "atrium";
 
@@ -275,7 +384,7 @@ in {
     environmentFiles = mkOption {
       type = types.listOf types.str;
       default = [];
-      description = "EnvironmentFile= paths for the credentials that are not settings yet (the iCloud calendar password, Notion, Grafana and ntfy tokens); read by every unit and atrium-run.";
+      description = "EnvironmentFile= paths for credentials that are not settings yet (the ntfy token); read by every unit and atrium-run.";
     };
 
     modelServerUnits = mkOption {
@@ -293,21 +402,15 @@ in {
       };
 
       auth = mkOption {
-        type = types.enum ["proxy" "oidc" "local"];
+        type = types.enum ["proxy" "oidc" "proxy+oidc" "local"];
         default = "proxy";
-        description = "Auth mode of the public listener: proxy trusts Remote-Groups from the reverse proxy and needs allowedHost; oidc accepts OIDC sessions only and needs allowedHost; local trusts every request.";
+        description = "Auth modes of the public listener, rendered as one --auth flag per mode: proxy trusts Remote-Groups from the reverse proxy and needs allowedHost; oidc accepts OIDC sessions only and needs allowedHost; proxy+oidc accepts both; local trusts every request.";
       };
 
       allowedHost = mkOption {
         type = types.nullOr types.str;
         default = null;
-        description = "The one Host header the public listener accepts (ATRIUM_PUBLIC_HOST). Required with auth = \"proxy\" or \"oidc\", or oidc.enable.";
-      };
-
-      oidc.enable = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Also accept OIDC sign-in on the public listener (--auth oidc), next to the selected auth mode. The provider is configured through the auth settings.";
+        description = "The one Host header the public listener accepts (ATRIUM_PUBLIC_HOST). Required unless web.auth = \"local\".";
       };
 
       forceDisableAuth = mkOption {
@@ -381,6 +484,14 @@ in {
       description = "systemd properties atrium-run passes to systemd-run.";
     };
 
+    unitNames = mkOption {
+      type = types.listOf types.str;
+      internal = true;
+      readOnly = true;
+      default = unitNames;
+      description = "Every systemd service and timer the module defines.";
+    };
+
     renderedSettings = mkOption {
       type = types.attrs;
       internal = true;
@@ -393,8 +504,8 @@ in {
   config = mkIf cfg.enable {
     services.atrium.settings = {
       core.tz = lib.mkIf (config.time.timeZone != null) (lib.mkDefault config.time.timeZone);
-      calendar.calendar_dir = lib.mkDefault "${davDir}/calendars";
-      contacts.contacts_dir = lib.mkDefault "${davDir}/contacts";
+      calendar.calendar_dir = lib.mkDefault "${mirrorDir}/calendars";
+      contacts.contacts_dir = lib.mkDefault "${mirrorDir}/contacts";
     };
 
     assertions = [
@@ -411,8 +522,8 @@ in {
         message = "services.atrium.media.enable needs services.atrium.settings.media.media_root";
       }
       {
-        assertion = (cfg.web.auth == "local" && !cfg.web.oidc.enable) || cfg.web.allowedHost != null;
-        message = "services.atrium.web.allowedHost is required with web.auth = \"proxy\", \"oidc\" or web.oidc.enable";
+        assertion = cfg.web.auth == "local" || cfg.web.allowedHost != null;
+        message = "services.atrium.web.allowedHost is required with web.auth = \"proxy\", \"oidc\" or \"proxy+oidc\"";
       }
       {
         assertion = cfg.web.auth != "local" || cfg.web.forceDisableAuth || lib.hasPrefix "127." cfg.web.host || builtins.elem cfg.web.host ["localhost" "::1" "[::1]"];
@@ -421,10 +532,6 @@ in {
       {
         assertion = !cfg.web.forceDisableAuth || cfg.web.allowedHost != null || lib.hasPrefix "127." cfg.web.host || builtins.elem cfg.web.host ["localhost" "::1" "[::1]"];
         message = "services.atrium.web.forceDisableAuth on a non-loopback services.atrium.web.host needs services.atrium.web.allowedHost";
-      }
-      {
-        assertion = !(cfg.web.oidc.enable && cfg.web.auth == "local");
-        message = "services.atrium.web.oidc.enable cannot combine with web.auth = \"local\"";
       }
     ];
 
@@ -441,145 +548,8 @@ in {
       ++ lib.optional cfg.backup.enable "d ${cfg.backup.directory} 0750 ${cfg.user} ${cfg.group} -";
 
     systemd = {
-      services =
-        {
-          atrium-watch = appService {
-            description = "Watch the atrium mailboxes for new mail";
-            serviceConfig = {
-              ExecStart = "${lib.getExe cfg.package} watch";
-              Type = "notify";
-              WatchdogSec = writeTimeout;
-              TimeoutStartSec = writeTimeout;
-              TimeoutStopSec = writeTimeout;
-              Restart = "on-failure";
-              RestartSec = 10;
-            };
-            wantedBy = ["multi-user.target"];
-          };
-
-          atrium-agent-scheduler = appService {
-            description = "Run atrium's scheduled and nightly agent jobs";
-            path = mediaPath;
-            serviceConfig =
-              mediaWriter
-              // {
-                ExecStart = "${lib.getExe cfg.package} agent scheduler";
-                Type = "notify";
-                WatchdogSec = "10min";
-                TimeoutStartSec = writeTimeout;
-                Restart = "on-failure";
-                RestartSec = 10;
-              };
-            wantedBy = ["multi-user.target"];
-          };
-
-          atrium-web = webService {
-            description = "atrium web UI";
-            inherit (cfg.web) host auth;
-            inherit (cfg) port;
-            oidc = cfg.web.oidc.enable;
-            force = cfg.web.forceDisableAuth;
-          };
-
-          atrium-sync = appService {
-            description = "Reconcile the atrium mail index";
-            serviceConfig = {
-              Type = "oneshot";
-              ExecStart = "${lib.getExe cfg.package} sync";
-              TimeoutStopSec = writeTimeout;
-            };
-          };
-
-          atrium-notion-sync = appService {
-            description = "Mirror Notion into the atrium index";
-            serviceConfig = {
-              Type = "oneshot";
-              ExecStart = "${lib.getExe cfg.package} notion sync";
-            };
-          };
-
-          atrium-scan = appService {
-            description = "Scan the mailboxes for rebalance, deletion and label proposals";
-            serviceConfig = {
-              Type = "oneshot";
-              ExecStart = "${lib.getExe cfg.package} proposals scan-all";
-              TimeoutStopSec = writeTimeout;
-              TimeoutStartSec = "2h";
-            };
-          };
-
-          atrium-dav-sync = appService {
-            description = "Mirror the iCloud calendars and address books";
-            serviceConfig = {
-              Type = "oneshot";
-              ExecStart = ["${lib.getExe cfg.package} calendar sync" "${lib.getExe cfg.package} contacts sync"];
-            };
-          };
-        }
-        // lib.optionalAttrs cfg.backup.enable {
-          atrium-backup = appService {
-            description = "Write an atrium backup archive";
-            serviceConfig = {
-              Type = "oneshot";
-              ExecStart = backupScript;
-              ReadWritePaths = [cfg.backup.directory];
-              TimeoutStartSec = "2h";
-            };
-          };
-        }
-        // lib.optionalAttrs cfg.web.local.enable {
-          atrium-web-local = webService {
-            description = "atrium web UI (loopback, no proxy auth)";
-            host = "127.0.0.1";
-            port = cfg.web.local.port;
-            auth = "local";
-            ops = false;
-          };
-        };
-
-      timers =
-        {
-          atrium-sync = {
-            wantedBy = ["timers.target"];
-            timerConfig = {
-              OnActiveSec = "2m";
-              OnUnitActiveSec = "15m";
-            };
-          };
-
-          atrium-notion-sync = {
-            wantedBy = ["timers.target"];
-            timerConfig = {
-              OnActiveSec = "3m";
-              OnUnitActiveSec = "15m";
-            };
-          };
-
-          atrium-scan = {
-            wantedBy = ["timers.target"];
-            timerConfig = {
-              OnCalendar = "monthly";
-              Persistent = true;
-            };
-          };
-
-          atrium-dav-sync = {
-            wantedBy = ["timers.target"];
-            timerConfig = {
-              OnActiveSec = "1m";
-              OnUnitActiveSec = "15m";
-            };
-          };
-        }
-        // lib.optionalAttrs cfg.backup.enable {
-          atrium-backup = {
-            wantedBy = ["timers.target"];
-            timerConfig = {
-              OnCalendar = cfg.backup.onCalendar;
-              Persistent = true;
-            };
-          };
-        };
+      services = lib.mapAttrs (_: unit: lib.recursiveUpdate unitBase (lib.removeAttrs unit ["timer"])) units;
+      timers = lib.mapAttrs' (name: unit: lib.nameValuePair name unit.timer) (lib.filterAttrs (_: unit: unit ? timer) units);
     };
   };
 }
