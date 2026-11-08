@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -65,6 +66,15 @@ func Record(ctx context.Context, q db.Querier, w New) (int64, error) {
 	before := dump(w.Before, true)
 	after := dump(w.After, true)
 	undo := dump(w.Undo, false)
+	if undo != nil {
+		var desc map[string]any
+		if err := json.Unmarshal([]byte(*undo), &desc); err != nil {
+			return 0, fmt.Errorf("writes: undo payload: %w", err)
+		}
+		if op, _ := desc["op"].(string); op == "" {
+			return 0, errors.New("writes: undo payload without an op")
+		}
+	}
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO agent_writes (ts, thread_id, run_id, tool, target, before_json, after_json, undo_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 		w.TS, w.ThreadID, w.RunID, w.Tool, w.Target, before, after, undo)
@@ -160,11 +170,7 @@ func (r *Registry) resolve(ctx context.Context, q db.Querier, writeID int64) (Un
 	op, _ := desc["op"].(string)
 	fn := r.lookup(op)
 	if fn == nil {
-		shown := "None"
-		if s, ok := desc["op"].(string); ok {
-			shown = py.Repr(s)
-		}
-		return nil, nil, UndoError("unknown undo kind " + shown)
+		return nil, nil, UndoError("unknown undo kind " + strconv.Quote(op))
 	}
 	return fn, desc, nil
 }

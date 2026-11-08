@@ -82,7 +82,7 @@ func (p *pages) attach(w http.ResponseWriter, r *http.Request, thread *threads.T
 		return nil, true
 	}
 	limit := threads.ContextLimitOf(*thread)
-	blocks, err := files.IngestUploads(detached(r), p.deps.DB.Write, p.deps.Cfg.FilesDir(), uploads, p.now(), files.ThreadOwner(thread.ID), &limit)
+	blocks, err := files.IngestUploads(detached(r), p.deps.DB, p.deps.Cfg.FilesDir(), uploads, p.now(), files.ThreadOwner(thread.ID), &limit)
 	var refused files.FileError
 	if errors.As(err, &refused) {
 		p.failure(w, r, "Not attached", err.Error())

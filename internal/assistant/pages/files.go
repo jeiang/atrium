@@ -95,7 +95,7 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 
 func uploadReadError(err error, messageCap int) error {
 	if errors.As(err, new(*http.MaxBytesError)) {
-		return files.FileError(fmt.Sprintf("files in one message must total under %d MB", messageCap>>20))
+		return files.MessageCapError(messageCap)
 	}
 	return errBadBody
 }
@@ -274,7 +274,7 @@ func (p *pages) projectFilesUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil {
 		limit := project.ContextLimit
-		_, err = files.IngestUploads(detached(r), p.deps.DB.Write, p.deps.Cfg.FilesDir(), uploads, p.now(), files.ProjectOwner(projectID), &limit)
+		_, err = files.IngestUploads(detached(r), p.deps.DB, p.deps.Cfg.FilesDir(), uploads, p.now(), files.ProjectOwner(projectID), &limit)
 	}
 	var refused files.FileError
 	if errors.As(err, &refused) {

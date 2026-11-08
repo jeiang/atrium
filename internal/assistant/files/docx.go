@@ -349,7 +349,7 @@ func docxText(data []byte, maxText int) (string, error) {
 		body = root.kid(nsWord, "body")
 	}
 	if body == nil {
-		return "", readError("AttributeError")
+		return "", errValue
 	}
 	size := 0
 	var lines []string

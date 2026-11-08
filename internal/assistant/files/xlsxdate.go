@@ -3,7 +3,6 @@ package files
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -160,176 +159,63 @@ func formatDelta(value float64) (string, bool) {
 	return formatTimedelta(days, secs, us), true
 }
 
-func digits(s string, n int) (int, bool) {
-	if len(s) < n {
-		return 0, false
-	}
-	for i := range n {
-		if s[i] < '0' || s[i] > '9' {
-			return 0, false
-		}
-	}
-	v, _ := strconv.Atoi(s[:n])
-	return v, true
-}
-
 func fromISO8601(value string) (string, error) {
-	s := value
-	var year, month, day, hour, minute, second, micro int
-	hasDate, hasTime := false, false
-	if y, ok := digits(s, 4); ok && len(s) >= 10 && s[4] == '-' && s[7] == '-' {
-		m, okM := digits(s[5:], 2)
-		d, okD := digits(s[8:], 2)
-		if okM && okD {
-			year, month, day, hasDate = y, m, d, true
-			s = s[10:]
+	for _, layout := range []string{
+		"2006-01-02T15:04:05.999999999",
+		"2006-01-02T15:04",
+		"2006-01-02",
+		"15:04:05.999999999",
+		"15:04",
+	} {
+		t, err := time.Parse(layout, value)
+		if err != nil {
+			continue
+		}
+		switch {
+		case strings.Contains(layout, "2006") && strings.Contains(layout, "15"):
+			return formatDateTime(t), nil
+		case strings.Contains(layout, "2006"):
+			return t.Format("2006-01-02"), nil
+		default:
+			return formatClockTime(t), nil
 		}
 	}
-	s = strings.TrimPrefix(s, "T")
-	if h, ok := digits(s, 2); ok && len(s) >= 5 && s[2] == ':' {
-		if mi, ok := digits(s[3:], 2); ok {
-			hour, minute, hasTime = h, mi, true
-			s = s[5:]
-			if len(s) >= 3 && s[0] == ':' {
-				if sec, ok := digits(s[1:], 2); ok {
-					second = sec
-					s = s[3:]
-					if len(s) >= 2 && s[0] == '.' {
-						n := 1
-						for n < len(s) && n <= 3 && s[n] >= '0' && s[n] <= '9' {
-							n++
-						}
-						if n > 1 {
-							f, _ := strconv.ParseFloat(s[:n], 64)
-							micro = int(f * 1_000_000)
-						}
-					}
-				}
-			}
-		}
-	}
-	if !hasDate && !hasTime {
+	if strings.HasPrefix(value, "PT") {
 		return durationISO(value)
 	}
-	switch {
-	case hasDate && !hasTime:
-		if _, err := validDate(year, month, day); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%04d-%02d-%02d", year, month, day), nil
-	case !hasDate:
-		if hour > 23 || minute > 59 || second > 59 {
-			return "", errValue
-		}
-		text := fmt.Sprintf("%02d:%02d:%02d", hour, minute, second)
-		if micro != 0 {
-			text += fmt.Sprintf(".%06d", micro)
-		}
-		return text, nil
-	}
-	if hour > 23 || minute > 59 || second > 59 {
-		return "", errValue
-	}
-	if _, err := validDate(year, month, day); err != nil {
-		return "", err
-	}
-	text := fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second)
-	if micro != 0 {
-		text += fmt.Sprintf(".%06d", micro)
-	}
-	return text, nil
+	return "", errValue
 }
 
-func validDate(year, month, day int) (time.Time, error) {
-	t := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
-	if year < 1 || month < 1 || month > 12 || t.Day() != day || int(t.Month()) != month {
-		return t, errValue
+func formatDateTime(t time.Time) string {
+	text := t.Format("2006-01-02 15:04:05")
+	if t.Nanosecond() != 0 {
+		text += fmt.Sprintf(".%06d", t.Nanosecond()/1000)
 	}
-	return t, nil
+	return text
 }
 
-func takeDigits(s string) (digits, rest string) {
-	n := 0
-	for n < len(s) && s[n] >= '0' && s[n] <= '9' {
-		n++
+func formatClockTime(t time.Time) string {
+	text := t.Format("15:04:05")
+	if t.Nanosecond() != 0 {
+		text += fmt.Sprintf(".%06d", t.Nanosecond()/1000)
 	}
-	return s[:n], s[n:]
+	return text
 }
-
-func takeUnit(s string, unit byte) (digits, rest string, ok bool) {
-	d, r := takeDigits(s)
-	if d != "" && r != "" && r[0] == unit {
-		return d, r[1:], true
-	}
-	return "", s, false
-}
-
-func takeSeconds(s string) (whole, millis, rest string, ok bool) {
-	d, r := takeDigits(s)
-	if d == "" {
-		return "", "", s, false
-	}
-	if strings.HasPrefix(r, "S") {
-		return d, "", r[1:], true
-	}
-	if strings.HasPrefix(r, ".") {
-		frac, after := takeDigits(r[1:])
-		if len(frac) >= 1 && len(frac) <= 3 && strings.HasPrefix(after, "S") {
-			return d, frac, after[1:], true
-		}
-	}
-	return "", "", s, false
-}
-
-var errOverflow = readError("OverflowError")
 
 func durationISO(value string) (string, error) {
 	rest, ok := strings.CutPrefix(value, "PT")
 	if !ok {
 		return "", errValue
 	}
-	var hours, minutes, secs, millis int64
-	matched := false
-	parse := func(digits string) (int64, error) {
-		n, err := strconv.ParseInt(digits, 10, 64)
-		if err != nil || n > 1<<40 {
-			return 0, errOverflow
-		}
-		return n, nil
-	}
-	if d, r, ok := takeUnit(rest, 'H'); ok {
-		var err error
-		if hours, err = parse(d); err != nil {
-			return "", err
-		}
-		rest, matched = r, true
-	}
-	if d, r, ok := takeUnit(rest, 'M'); ok {
-		var err error
-		if minutes, err = parse(d); err != nil {
-			return "", err
-		}
-		rest, matched = r, true
-	}
-	if whole, frac, _, ok := takeSeconds(rest); ok {
-		var err error
-		if secs, err = parse(whole); err != nil {
-			return "", err
-		}
-		if frac != "" {
-			f, _ := strconv.ParseInt((frac + "00")[:3], 10, 64)
-			millis = f
-		}
-		matched = true
-	}
-	if !matched {
+	d, err := time.ParseDuration(strings.ToLower(rest))
+	if err != nil {
 		return "", errValue
 	}
-	total := hours*3600 + minutes*60 + secs
-	if total/86400 > 999_999_999 {
-		return "", errOverflow
-	}
-	return formatTimedelta(total/86400, total%86400, millis*1000), nil
+	days := d / (24 * time.Hour)
+	remainder := d - days*24*time.Hour
+	secs := remainder / time.Second
+	us := (remainder % time.Second) / time.Microsecond
+	return formatTimedelta(int64(days), int64(secs), int64(us)), nil
 }
 
 func formatTimedelta(days, secs, us int64) string {

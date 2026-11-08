@@ -333,7 +333,7 @@ func TestUploadsLimitsAndFileServing(t *testing.T) {
 func TestForeignAttachmentIsUnavailable(t *testing.T) {
 	s := newSite(t)
 	owner := s.startThread("")
-	blocks, err := files.IngestUploads(context.Background(), s.db.Write, s.cfg.FilesDir(),
+	blocks, err := files.IngestUploads(context.Background(), s.db, s.cfg.FilesDir(),
 		[]files.UploadedFile{{Name: "secret.txt", Data: []byte("TOPSECRET"), Type: "text/plain"}}, 1, files.ThreadOwner(owner), nil)
 	if err != nil {
 		t.Fatal(err)

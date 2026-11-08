@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -184,11 +183,11 @@ func newAttachment(id int64, name, mediaType, kind string, tokens int64) Attachm
 	return AttachmentBlock{Type: Attachment, FileID: id, Name: name, MediaType: mediaType, Kind: kind, Tokens: tokens}
 }
 
-func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []UploadedFile, now float64, owner Owner, contextLimit *int64) ([]AttachmentBlock, error) {
+func IngestUploads(ctx context.Context, d *db.DB, dir string, uploads []UploadedFile, now float64, owner Owner, contextLimit *int64) ([]AttachmentBlock, error) {
 	if len(uploads) == 0 {
 		return nil, nil
 	}
-	limits, err := ReadLimits(ctx, q)
+	limits, err := ReadLimits(ctx, d.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +196,7 @@ func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []Uplo
 		total += len(u.Data)
 	}
 	if total > limits.MessageCap {
-		return nil, FileError(fmt.Sprintf("files in one message must total under %d MB", limits.MessageCap>>20))
+		return nil, MessageCapError(limits.MessageCap)
 	}
 	type inspected struct {
 		name string
@@ -226,14 +225,20 @@ func IngestUploads(ctx context.Context, q db.Querier, dir string, uploads []Uplo
 		}
 	}
 	blocks := make([]AttachmentBlock, 0, len(found))
-	for _, f := range found {
-		id, err := store(ctx, q, dir, newFile{
-			Name: f.name, Data: f.data, MediaType: f.info.MediaType, Origin: Upload, Owner: owner, Text: f.info.Text, Tokens: f.info.Tokens,
-		}, now)
-		if err != nil {
-			return nil, err
+	err = d.WithTx(ctx, func(tx *sql.Tx) error {
+		for _, f := range found {
+			id, err := store(ctx, tx, dir, newFile{
+				Name: f.name, Data: f.data, MediaType: f.info.MediaType, Origin: Upload, Owner: owner, Text: f.info.Text, Tokens: f.info.Tokens,
+			}, now)
+			if err != nil {
+				return err
+			}
+			blocks = append(blocks, newAttachment(id, f.name, f.info.MediaType, f.info.Kind, f.info.Tokens))
 		}
-		blocks = append(blocks, newAttachment(id, f.name, f.info.MediaType, f.info.Kind, f.info.Tokens))
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return blocks, nil
 }

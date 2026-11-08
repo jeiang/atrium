@@ -81,7 +81,7 @@ func subtree(dec *xml.Decoder, start xml.StartElement, parent *element) (*elemen
 	for {
 		tok, err := dec.Token()
 		if err != nil {
-			return nil, parseFailure(err)
+			return nil, errParse
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
@@ -207,7 +207,7 @@ func sheetsOf(a *archive, types *element) ([]sheetRef, []string, bool, error) {
 		for _, s := range list.kids(nsSheet, "sheet") {
 			title, ok := s.attr("", "name")
 			if !ok {
-				return nil, nil, false, readError("TypeError")
+				return nil, nil, false, errValue
 			}
 			id, _ := s.attr(nsOfficeRels, "id")
 			if id == "" {
@@ -238,7 +238,7 @@ func sheetsOf(a *archive, types *element) ([]sheetRef, []string, bool, error) {
 			}
 			if strings.Contains(found.kind, "chartsheet") {
 				if !a.has(relsPath(target)) {
-					return nil, nil, false, readError("AttributeError")
+					return nil, nil, false, errValue
 				}
 				continue
 			}
@@ -272,7 +272,7 @@ func readStyles(a *archive) (styleFormats, error) {
 			}
 			code, ok := f.attr("", "formatCode")
 			if !ok {
-				return formats, readError("TypeError")
+				return formats, errValue
 			}
 			custom[id] = code
 		}
@@ -423,7 +423,7 @@ func (p *sheetParser) run(r io.Reader) error {
 func (p *sheetParser) setDimension(e *element) error {
 	ref, ok := e.attr("", "ref")
 	if !ok {
-		return readError("TypeError")
+		return errValue
 	}
 	_, _, col, row, err := rangeBoundaries(ref)
 	if err != nil {
