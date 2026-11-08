@@ -11,30 +11,14 @@
       CGO_CFLAGS = "-I${sqlcipherLib}/include";
       CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
     };
-    root = ../.;
-    src = lib.fileset.toSource {
-      inherit root;
-      fileset = lib.fileset.unions [
-        (root + "/go.mod")
-        (lib.fileset.maybeMissing (root + "/go.sum"))
-        (root + "/cmd")
-        (root + "/internal")
-        (root + "/sdk")
-        (root + "/tools/settingsgen")
-        (root + "/docs/config")
-        (root + "/nix/monitoring")
-        (lib.fileset.maybeMissing (root + "/third_party"))
-        (lib.fileset.maybeMissing (root + "/testdata"))
-        (root + "/LICENSE")
-        (root + "/.golangci.yml")
-      ];
-    };
+    goSrc = import ../nix/go-src.nix {inherit lib;};
+    inherit (goSrc) src;
     stageAssets = "cp -r --no-preserve=mode ${self'.packages.atrium-static} internal/web/static";
-    base = pkgs.buildGo126Module.override {inherit go;} {
+    base = pkgs.buildGo126Module {
       pname = "atrium-go";
       version = "0";
       inherit src;
-      vendorHash = "sha256-kXYjw9LQFwvOBMnc2wP3PkkRg6YYhiaincLAtRyAU2Q=";
+      inherit (goSrc) vendorHash;
       proxyVendor = true;
       env = cgoEnv;
       doCheck = false;
@@ -60,13 +44,6 @@
           runHook postInstall
         '';
       });
-    notices = pkgs.writeText "third-party-notices.tmpl" ''
-      {{range .}}================================================================
-      {{.Name}} {{.Version}} ({{.LicenseName}})
-      ================================================================
-
-      {{.LicenseText}}
-      {{end}}'';
     eachDriver = cmd: ''
       for tags in libsqlite3,sqlite_fts5 modernc; do
         echo "tags: $tags"
@@ -110,13 +87,12 @@
 
       go-test-modernc = goCheck "test-modernc" [] (testTags "modernc");
 
-      go-licenses = goCheck "licenses" [pkgs.go-licenses] ''
-        ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" go-licenses check ./... --disallowed_types=forbidden,unknown''}
+      go-licenses = goCheck "licenses" [pkgs.go-licenses pkgs.diffutils] ''
+        ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" ${goSrc.licenseCheck}''}
         mkdir -p $out
-        GOFLAGS="$GOFLAGS -tags=libsqlite3,sqlite_fts5" go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --ignore github.com/jeiang/atrium/sdk --template ${notices} >$out/THIRD_PARTY_NOTICES
+        GOFLAGS="$GOFLAGS -tags=libsqlite3,sqlite_fts5" ${goSrc.licenseReport "$out/THIRD_PARTY_NOTICES"}
         ${sqlcipherLib.appendNotices "$out/THIRD_PARTY_NOTICES"}
-        cp $out/THIRD_PARTY_NOTICES internal/about/THIRD_PARTY_NOTICES
-        test -s internal/about/THIRD_PARTY_NOTICES
+        diff -u internal/about/THIRD_PARTY_NOTICES $out/THIRD_PARTY_NOTICES
       '';
 
       govulncheck = let
