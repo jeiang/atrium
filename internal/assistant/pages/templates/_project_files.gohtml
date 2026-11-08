@@ -8,7 +8,7 @@
   <li class="flex items-center gap-2 rounded-md border px-3 py-2">
     {{template "file_icon" (dict "media_type" .MediaType)}}
     <span class="truncate">{{.Name}}</span>
-    <span class="text-xs text-muted-foreground tabular-nums">{{filesizeformat .Bytes}} · ~{{pystr (round (fdiv .Tokens 1000) 1)}}K tokens</span>
+    <span class="text-xs text-muted-foreground tabular-nums">{{filesizeformat .Bytes}} · ~{{scalar (round (fdiv .Tokens 1000) 1)}}K tokens</span>
     <span class="ms-auto flex items-center gap-1">
       <a class="btn" data-size="icon-sm" data-variant="ghost" href="/projects/{{$p.ID}}/files/{{.ID}}/download" download aria-label="Download {{.Name}}">{{icon "download" "size-3.5"}}</a>
       {{if not $p.Archived}}
