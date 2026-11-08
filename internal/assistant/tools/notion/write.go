@@ -103,10 +103,6 @@ func livePageOf(ctx context.Context, q db.Querier, client *notion.Client, pageID
 	return page, nil
 }
 
-func richText(text string) []any {
-	return []any{map[string]any{"type": "text", "text": map[string]any{"content": text}}}
-}
-
 type summary struct{ pageID, title, url string }
 
 func summarize(page notion.RemotePage) summary {
@@ -211,12 +207,8 @@ func (w write) finish(ctx context.Context, tc *tool.Context, client *notion.Clie
 		return 0, err
 	}
 	logged := func() error {
-		logID, err := wiki.LogPageID(ctx, tc.DB, client, wiki.Root)
-		if err != nil {
-			return err
-		}
-		_, err = notion.PrependLog(ctx, client, logID, []string{notion.LogLine(date, action, s.title, s.url)})
-		return err
+		writer := &notion.Writer{DB: tc.DB, Client: client}
+		return writer.Capture(ctx, []string{notion.LogLine(date, action, s.title, s.url)})
 	}
 	if err := logged(); err != nil {
 		var failure notion.WikiError
@@ -318,11 +310,8 @@ func createPage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, err
 	}
-	page, err := client.CreatePage(ctx, map[string]any{
-		"parent":     map[string]any{"page_id": parent},
-		"properties": map[string]any{"title": map[string]any{"title": richText(title)}},
-		"markdown":   body,
-	})
+	writer := &notion.Writer{DB: tc.DB, Client: client}
+	page, err := writer.Create(ctx, parent, title, body)
 	if err != nil {
 		_ = writes.Discard(ctx, tc.DB.Write, id)
 		return nil, notionError(err)
@@ -440,7 +429,7 @@ func updatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, err
 	}
-	page, previous, updated, merged, edited, err := rewrite(ctx, tc.DB.Read, wiki, client, pageID, replace, appendText, section, date, sources)
+	page, previous, updated, merged, edited, err := rewrite(ctx, tc.DB, wiki, client, pageID, replace, appendText, section, date, sources)
 	if err != nil {
 		var te tool.Error
 		if errors.As(err, &te) {
@@ -468,45 +457,10 @@ func updatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	return out, nil
 }
 
-func rewrite(ctx context.Context, q db.Querier, wiki notion.Wiki, client *notion.Client, pageID string, replace, appendText *string, section, date string, sources []string) (
+func rewrite(ctx context.Context, d *db.DB, wiki notion.Wiki, client *notion.Client, pageID string, replace, appendText *string, section, date string, sources []string) (
 	page notion.RemotePage, previous, updated string, merged []string, edited string, err error) {
-	if page, err = livePageOf(ctx, q, client, pageID); err != nil {
-		return
-	}
-	current, err := client.PageMarkdown(ctx, pageID)
-	if err != nil {
-		return
-	}
-	if current.Truncated {
-		err = tool.Error("page is too large to rewrite safely")
-		return
-	}
-	previous = current.Markdown
-	body, _, prior, err := notion.SplitFooter(previous)
-	if err != nil {
-		return
-	}
-	next, err := newMarkdown(body, replace, appendText, section)
-	if err != nil {
-		return
-	}
-	if updated, merged, err = wiki.WithFooter(next, date, append(append([]string{}, prior...), sources...)); err != nil {
-		return
-	}
-	limits := assistant.Read(ctx, q)
-	maxMarkdown := limits.Int(assistant.KeyNotionMaxMarkdown)
-	if err = limits.Err(); err != nil {
-		return
-	}
-	if len([]rune(updated)) > maxMarkdown {
-		err = tool.Error("page would exceed " + strconv.Itoa(maxMarkdown) + " characters")
-		return
-	}
-	if err = client.UpdateMarkdown(ctx, pageID, replaceContent(updated)); err != nil {
-		return
-	}
-	edited, err = editedTime(ctx, client, pageID)
-	return
+	writer := &notion.Writer{DB: d, Client: client}
+	return writer.Rewrite(ctx, pageID, replace, appendText, section, date, sources)
 }
 
 func replaceContent(text string) map[string]any {
@@ -549,7 +503,7 @@ func movePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	if err != nil {
 		return nil, err
 	}
-	page, previous, edited, err := relocate(ctx, tc.DB.Read, client, pageID, parent)
+	page, previous, edited, err := relocate(ctx, tc.DB, client, pageID, parent)
 	if err != nil {
 		var te tool.Error
 		if errors.As(err, &te) {
@@ -575,23 +529,9 @@ func movePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	return out, nil
 }
 
-func relocate(ctx context.Context, q db.Querier, client *notion.Client, pageID, parent string) (page notion.RemotePage, previous, edited string, err error) {
-	if page, err = livePageOf(ctx, q, client, pageID); err != nil {
-		return
-	}
-	if previous = parentID(page); previous == "" {
-		err = tool.Error("only pages whose parent is a page can be moved; database rows stay where they are")
-		return
-	}
-	if previous == parent {
-		err = tool.Error("the page is already under that parent")
-		return
-	}
-	if err = client.MovePage(ctx, pageID, map[string]any{"type": "page_id", "page_id": parent}); err != nil {
-		return
-	}
-	edited, err = editedTime(ctx, client, pageID)
-	return
+func relocate(ctx context.Context, d *db.DB, client *notion.Client, pageID, parent string) (page notion.RemotePage, previous, edited string, err error) {
+	writer := &notion.Writer{DB: d, Client: client}
+	return writer.Move(ctx, pageID, parent)
 }
 
 func archivePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -615,7 +555,7 @@ func archivePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, er
 	if err != nil {
 		return nil, err
 	}
-	page, previous, edited, err := trash(ctx, tc.DB.Read, client, pageID)
+	page, previous, edited, err := trash(ctx, tc.DB, client, pageID)
 	if err != nil {
 		return nil, notionError(err)
 	}
@@ -637,18 +577,9 @@ func archivePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, er
 	return out, nil
 }
 
-func trash(ctx context.Context, q db.Querier, client *notion.Client, pageID string) (page notion.RemotePage, previous notion.Markdown, edited string, err error) {
-	if page, err = livePageOf(ctx, q, client, pageID); err != nil {
-		return
-	}
-	if previous, err = client.PageMarkdown(ctx, pageID); err != nil {
-		return
-	}
-	if err = client.SetTrash(ctx, pageID, true); err != nil {
-		return
-	}
-	edited, err = editedTime(ctx, client, pageID)
-	return
+func trash(ctx context.Context, d *db.DB, client *notion.Client, pageID string) (page notion.RemotePage, previous notion.Markdown, edited string, err error) {
+	writer := &notion.Writer{DB: d, Client: client}
+	return writer.Archive(ctx, pageID)
 }
 
 func addAlias(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
