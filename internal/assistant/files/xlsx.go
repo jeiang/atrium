@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 )
 
 const (
@@ -742,7 +742,7 @@ func (n number) String() string {
 	if n.isInt {
 		return n.i.String()
 	}
-	return py.FloatRepr(n.f)
+	return numx.FloatRepr(n.f)
 }
 
 func (n number) float() float64 {

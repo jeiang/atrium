@@ -10,7 +10,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/textutil"
 	"github.com/jeiang/atrium/internal/textx"
 )
@@ -106,13 +105,7 @@ func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args tool.Args) (
 	}
 	markup := textutil.Decode(page.Body, page.Charset)
 	title, body := ExtractText(markup, page.URL, lim.PageChars)
-	return py.Dict{
-		{Key: "untrusted", Value: true},
-		{Key: "url", Value: page.URL},
-		{Key: "title", Value: title},
-		{Key: "text", Value: textx.Clip(body, int(maxChars))},
-		{Key: "truncated", Value: int64(utf8.RuneCountInString(body)) > maxChars},
-	}, nil
+	return map[string]any{"untrusted": true, "url": page.URL, "title": title, "text": textx.Clip(body, int(maxChars)), "truncated": int64(utf8.RuneCountInString(body)) > maxChars}, nil
 }
 
 func fetchFailed(err error) error {

@@ -13,7 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/textx"
 )
 
@@ -61,15 +61,15 @@ type ContextError string
 func (e ContextError) Error() string { return string(e) }
 
 var (
-	compactJSON = py.JSONOpts{Compact: true, NoEnsureASCII: true}
-	valueJSON   = py.JSONOpts{NoEnsureASCII: true}
+	compactJSON = jsonx.Opts{Compact: true, NoEnsureASCII: true}
+	valueJSON   = jsonx.Opts{NoEnsureASCII: true}
 )
 
 func EstimateTokens(text string) int64 {
 	return (int64(utf8.RuneCountInString(text)) + CharsPerToken - 1) / CharsPerToken
 }
 
-func EstimateValue(v any) int64 { return EstimateTokens(py.JSONDumps(v, valueJSON)) }
+func EstimateValue(v any) int64 { return EstimateTokens(jsonx.Dumps(v, valueJSON)) }
 
 func EstimateContent(content []json.RawMessage) (int64, error) {
 	values, err := decodeAll(content)
@@ -83,7 +83,7 @@ func serialize(value any) string {
 	if s, ok := value.(string); ok {
 		return s
 	}
-	return py.JSONDumps(value, valueJSON)
+	return jsonx.Dumps(value, valueJSON)
 }
 
 type Tuning struct {
@@ -139,7 +139,7 @@ func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool strin
 		"preview":   textx.Clip(body, t.PreviewChars),
 		"note":      StubNote,
 	}
-	return py.JSONDumps(stub, valueJSON), &resultID, nil
+	return jsonx.Dumps(stub, valueJSON), &resultID, nil
 }
 
 type Limits struct {
@@ -163,8 +163,8 @@ func LimitsFor(contextLimit int64, t Tuning) Limits {
 	}
 }
 
-func typed(kind string, value int64) py.Dict {
-	return py.Dict{{Key: "type", Value: kind}, {Key: "value", Value: value}}
+func typed(kind string, value int64) map[string]any {
+	return map[string]any{"type": kind, "value": value}
 }
 
 func ClearsOf(m *anthropic.Message) (int64, int64) {
@@ -195,7 +195,7 @@ func HistoryTokens(u anthropic.Usage) int64 {
 func decodeAll(content []json.RawMessage) ([]any, error) {
 	out := make([]any, len(content))
 	for i, b := range content {
-		v, err := py.JSONLoads(b)
+		v, err := jsonx.Loads(b)
 		if err != nil {
 			return nil, fmt.Errorf("context: content block: %w", err)
 		}
@@ -204,7 +204,7 @@ func decodeAll(content []json.RawMessage) ([]any, error) {
 	return out, nil
 }
 
-func encode(v any) json.RawMessage { return json.RawMessage(py.JSONDumps(v, compactJSON)) }
+func encode(v any) json.RawMessage { return json.RawMessage(jsonx.Dumps(v, compactJSON)) }
 
 func str(v any) string {
 	if s, ok := v.(string); ok {

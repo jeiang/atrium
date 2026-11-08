@@ -13,7 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 )
 
 var Kinds = func() []string {
@@ -123,6 +123,6 @@ func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(env.Stdout, py.JSONDumps(out, py.JSONOpts{Indent: 2}))
+	_, err = fmt.Fprintln(env.Stdout, jsonx.Dumps(out, jsonx.Opts{Indent: 2}))
 	return err
 }

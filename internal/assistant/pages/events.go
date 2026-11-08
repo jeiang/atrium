@@ -4,33 +4,35 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/progress"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 )
 
 var log = logx.Logger("atrium.web.chat")
 
 func sseFrame(e progress.Event) (string, error) {
-	decoded, err := py.JSONLoads(e.Data)
+	decoded, err := jsonx.Loads(e.Data)
 	if err != nil {
 		return "", err
 	}
-	data := py.Dict{{Key: "run_id", Value: e.RunID}}
-	fields, _ := decoded.(py.Dict)
-	for _, pair := range fields {
-		if pair.Key == "run_id" {
-			data[0].Value = pair.Value
+	data := map[string]any{"run_id": e.RunID}
+	fields, _ := decoded.(map[string]any)
+	for k, v := range fields {
+		if k == "run_id" {
+			data["run_id"] = v
 			continue
 		}
-		data = append(data, pair)
+		data[k] = v
 	}
-	return fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", e.ID, e.Kind, py.JSONDumps(data, py.JSONOpts{NoEnsureASCII: true})), nil
+	return fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", e.ID, e.Kind, jsonx.Dumps(data, jsonx.Opts{NoEnsureASCII: true})), nil
 }
 
 func (p *pages) chatEvents(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +40,7 @@ func (p *pages) chatEvents(w http.ResponseWriter, r *http.Request) {
 	var runID int64
 	if values := r.URL.Query()["run"]; len(values) == 0 {
 		errs = append(errs, web.Missing("query", "run"))
-	} else if n, ok := py.LaxInt64(values[len(values)-1]); ok {
+	} else if n, ok := numx.LaxInt64(values[len(values)-1]); ok {
 		runID = n
 	} else {
 		errs = append(errs, web.BadInt("query", "run", values[len(values)-1]))
@@ -49,8 +51,8 @@ func (p *pages) chatEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if header := r.Header.Get("Last-Event-ID"); header != "" {
-		n, err := py.IntString(header)
-		if err != nil {
+		n, ok := new(big.Int).SetString(header, 10)
+		if !ok {
 			p.fail(w, r, http.StatusBadRequest, "invalid Last-Event-ID")
 			return
 		}
@@ -105,7 +107,7 @@ func (p *pages) stream(r *http.Request, w io.Writer, flusher *http.ResponseContr
 			if found != nil {
 				state = found.State
 			}
-			_, _ = io.WriteString(w, "event: done\ndata: "+py.JSONDumps(py.Dict{{Key: "state", Value: state}}, py.JSONOpts{NoEnsureASCII: true})+"\n\n")
+			_, _ = io.WriteString(w, "event: done\ndata: "+jsonx.Dumps(map[string]any{"state": state}, jsonx.Opts{NoEnsureASCII: true})+"\n\n")
 			_ = flusher.Flush()
 			return nil
 		}

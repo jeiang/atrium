@@ -15,7 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -229,8 +229,8 @@ func summarize(ctx context.Context, client *anthropic.Client, model, effort, sou
 		params := anthropic.Params{
 			Model:     model,
 			MaxTokens: 1024,
-			System:    json.RawMessage(py.JSONDumps(systemPrompt)),
-			Messages:  []json.RawMessage{json.RawMessage(py.JSONDumps(py.Dict{{Key: "role", Value: "user"}, {Key: "content", Value: prompt}}))},
+			System:    json.RawMessage(jsonx.Dumps(systemPrompt)),
+			Messages:  []json.RawMessage{json.RawMessage(jsonx.Dumps(map[string]any{"role": "user", "content": prompt}))},
 		}
 		resp, err := client.Stream(ctx, params, nil)
 		if err != nil {

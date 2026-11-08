@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -22,7 +23,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -197,7 +197,7 @@ func contentType(media string) string {
 }
 
 func disposition(name string) string {
-	if quoted := py.URLQuote(name); quoted != name {
+	if quoted := url.PathEscape(name); quoted != name {
 		return "attachment; filename*=utf-8''" + quoted
 	}
 	return `attachment; filename="` + name + `"`
@@ -386,7 +386,7 @@ func previewOf(found files.Row, previewBytes int) (render string, text string, r
 	if body == nil {
 		return "", "", rows, false, nil
 	}
-	suffix := strings.ToLower(py.PathSuffix(py.PathName(found.Path)))
+	suffix := strings.ToLower(path.Ext(path.Base(found.Path)))
 	switch {
 	case slices.Contains(markdownTypes, media) || suffix == ".md" || suffix == ".markdown":
 		return "markdown", *body, rows, truncated, nil

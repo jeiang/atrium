@@ -13,8 +13,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/textx"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 const (
@@ -229,18 +229,18 @@ func Parse(text, tz string) (Spec, error) {
 		}
 		return newSpec(KindCron, tz, loc, fields[0], fields[1], restricted(2), restricted(3), restricted(4)), nil
 	}
-	moment, ok := py.FromISOFormat(text)
+	moment, ok := timex.ParseISO(text)
 	if !ok {
 		return Spec{}, Error(errUnrecognised)
 	}
-	onceAt := moment.Timestamp(loc)
+	onceAt := timex.TimestampIn(moment, loc)
 	s := newSpec(KindOnce, tz, loc, []int{}, []int{}, nil, nil, nil)
 	s.OnceAt = onceAt
 	return s, nil
 }
 
 func localTime(ts float64, loc *time.Location) time.Time {
-	sec, us := py.SplitTimestamp(ts)
+	sec, us := timex.SplitTimestamp(ts)
 	return time.Unix(sec, us*1000).In(loc)
 }
 
@@ -265,7 +265,7 @@ func (s Spec) NextAfter(after float64) (float64, bool) {
 	for range searchDays {
 		if s.dayMatches(day) {
 			for _, t := range s.times {
-				stamp := float64(py.WallToUnix(s.Loc, day.Unix()+int64(t[0])*3600+int64(t[1])*60))
+				stamp := float64(timex.WallToUnix(s.Loc, day.Unix()+int64(t[0])*3600+int64(t[1])*60))
 				if stamp > after {
 					return stamp, true
 				}

@@ -21,7 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -222,7 +222,7 @@ func hxRedirect(w http.ResponseWriter, to string) {
 
 func pathInt(r *http.Request, name string) (int64, []web.FieldError) {
 	raw := web.PathParam(r, name)
-	id, ok := py.LaxInt64(raw)
+	id, ok := numx.LaxInt64(raw)
 	if !ok {
 		return 0, []web.FieldError{web.BadInt("path", name, raw)}
 	}
@@ -243,7 +243,7 @@ func formInt(form map[string][]string, where, name string, def int64, errs *[]we
 	if !ok || raw == "" {
 		return def
 	}
-	n, valid := py.LaxInt64(raw)
+	n, valid := numx.LaxInt64(raw)
 	if !valid {
 		*errs = append(*errs, web.BadInt(where, name, raw))
 	}

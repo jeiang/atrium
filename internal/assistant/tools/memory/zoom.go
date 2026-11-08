@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const Name = "zoom"
@@ -70,10 +69,7 @@ func zoom(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	var children []any
 	for i := range nodes {
 		if nodes[i].Level == level-1 && (nodes[i].Index == parent.Index*2 || nodes[i].Index == parent.Index*2+1) {
-			children = append(children, py.Dict{
-				{Key: "id", Value: nodes[i].FromSeq}, {Key: "n", Value: n / 2}, {Key: "to", Value: nodes[i].ToSeq},
-				{Key: "state", Value: nodes[i].State}, {Key: "text", Value: nodes[i].Text},
-			})
+			children = append(children, map[string]any{"id": nodes[i].FromSeq, "n": n / 2, "to": nodes[i].ToSeq, "state": nodes[i].State, "text": nodes[i].Text})
 		}
 	}
 	if len(children) != 2 {

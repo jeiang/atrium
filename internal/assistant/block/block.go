@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 )
 
 const (
@@ -24,20 +24,20 @@ const (
 
 type Block struct {
 	Kind  string
-	Value py.Dict
+	Value map[string]any
 	Raw   json.RawMessage
 }
 
 func Decode(raw json.RawMessage) (Block, error) {
-	v, err := py.JSONLoads(raw)
+	v, err := jsonx.Loads(raw)
 	if err != nil {
 		return Block{}, fmt.Errorf("block: %w", err)
 	}
-	d, ok := v.(py.Dict)
+	d, ok := v.(map[string]any)
 	if !ok {
 		return Block{}, fmt.Errorf("block: not an object")
 	}
-	kind, _ := d.Get("type")
+	kind := d["type"]
 	name, _ := kind.(string)
 	return Block{Kind: name, Value: d, Raw: raw}, nil
 }
@@ -55,7 +55,7 @@ func DecodeAll(content []json.RawMessage) ([]Block, error) {
 }
 
 func (b Block) Get(key string) any {
-	v, _ := b.Value.Get(key)
+	v := b.Value[key]
 	return v
 }
 
@@ -141,11 +141,11 @@ func SearchURLs(content []json.RawMessage) ([]string, error) {
 			continue
 		}
 		for _, raw := range list {
-			d, ok := raw.(py.Dict)
+			d, ok := raw.(map[string]any)
 			if !ok {
 				continue
 			}
-			if u, ok := d.Get("url"); ok {
+			if u, ok := d["url"]; ok {
 				if s, ok := u.(string); ok && s != "" {
 					urls = append(urls, s)
 				}

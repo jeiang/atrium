@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/big"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -66,4 +67,39 @@ func SplitTimestamp(ts float64) (sec, us int64) {
 		frac -= microsecondsPerSec
 	}
 	return int64(whole), int64(frac)
+}
+
+// ParseISO parses a date or datetime without a zone as UTC wall time.
+func ParseISO(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	for _, layout := range []string{
+		"2006-01-02T15:04:05.999999999",
+		"2006-01-02T15:04:05",
+		"2006-01-02T15:04",
+		"2006-01-02",
+	} {
+		if t, err := time.ParseInLocation(layout, s, time.UTC); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// ISOFormat renders t with the requested timespec.
+func ISOFormat(t time.Time, timespec string) string {
+	switch timespec {
+	case "minutes":
+		return t.Format("2006-01-02T15:04")
+	case "seconds":
+		return t.Format("2006-01-02T15:04:05")
+	case "milliseconds":
+		return t.Format("2006-01-02T15:04:05.000")
+	}
+	return t.Format("2006-01-02T15:04:05")
+}
+
+// TimestampIn interprets t's wall-clock fields in loc and returns Unix seconds.
+func TimestampIn(t time.Time, loc *time.Location) float64 {
+	wall := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.UTC).Unix()
+	return float64(WallToUnix(loc, wall)) + float64(t.Nanosecond())/1e9
 }

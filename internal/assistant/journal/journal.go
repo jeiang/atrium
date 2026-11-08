@@ -17,7 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 )
 
 const (
@@ -179,7 +179,7 @@ func LimitsOf(ctx context.Context, q db.Querier, runID int64) (Limits, error) {
 }
 
 func SetSkills(ctx context.Context, q db.Querier, runID int64, names []string) error {
-	_, err := q.ExecContext(ctx, "UPDATE runs SET skills_json = ? WHERE id = ?", py.JSONDumps(append([]string{}, names...)), runID)
+	_, err := q.ExecContext(ctx, "UPDATE runs SET skills_json = ? WHERE id = ?", jsonx.Dumps(append([]string{}, names...)), runID)
 	return err
 }
 

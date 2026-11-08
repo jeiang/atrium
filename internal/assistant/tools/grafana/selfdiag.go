@@ -8,7 +8,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -75,12 +74,9 @@ func selfDiagnose(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 		}
 		var queries []any
 		for _, m := range selfMetrics {
-			queries = append(queries, py.Dict{
-				{Key: "refId", Value: m.ref}, {Key: "datasource", Value: py.Dict{{Key: "uid", Value: metricsUID}}},
-				{Key: "expr", Value: m.expr}, {Key: "instant", Value: true}, {Key: "range", Value: false},
-			})
+			queries = append(queries, map[string]any{"refId": m.ref, "datasource": map[string]any{"uid": metricsUID}, "expr": m.expr, "instant": true, "range": false})
 		}
-		payload, err := request(ctx, tc, lim, http.MethodPost, "/api/ds/query", "", py.Dict{{Key: "queries", Value: queries}, {Key: "from", Value: from}, {Key: "to", Value: "now"}})
+		payload, err := request(ctx, tc, lim, http.MethodPost, "/api/ds/query", "", map[string]any{"queries": queries, "from": from, "to": "now"})
 		if err != nil {
 			return nil, err
 		}
@@ -97,11 +93,8 @@ func selfDiagnose(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 		if logsQuery == "" {
 			logsQuery = defaultLogQueries[logsType]
 		}
-		q := py.Dict{
-			{Key: "refId", Value: "logs"}, {Key: "datasource", Value: py.Dict{{Key: "uid", Value: logsUID}}},
-			{Key: "expr", Value: logsQuery}, {Key: "queryType", Value: "range"}, {Key: "maxLines", Value: int64(lim.logRows)},
-		}
-		payload, err := request(ctx, tc, lim, http.MethodPost, "/api/ds/query", "", py.Dict{{Key: "queries", Value: []any{q}}, {Key: "from", Value: from}, {Key: "to", Value: "now"}})
+		q := map[string]any{"refId": "logs", "datasource": map[string]any{"uid": logsUID}, "expr": logsQuery, "queryType": "range", "maxLines": int64(lim.logRows)}
+		payload, err := request(ctx, tc, lim, http.MethodPost, "/api/ds/query", "", map[string]any{"queries": []any{q}, "from": from, "to": "now"})
 		if err != nil {
 			return nil, err
 		}

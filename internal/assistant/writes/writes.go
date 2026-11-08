@@ -13,8 +13,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type UndoError string
@@ -74,10 +72,10 @@ func dump(value any, scrub bool) (*string, error) {
 
 func plain(value any) any {
 	switch v := value.(type) {
-	case py.Dict:
+	case map[string]any:
 		out := make(map[string]any, len(v))
-		for _, p := range v {
-			out[p.Key] = plain(p.Value)
+		for k, val := range v {
+			out[k] = plain(val)
 		}
 		return out
 	case []any:

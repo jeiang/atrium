@@ -237,15 +237,15 @@ func TestCalendarListFiltersByTargetAndCollection(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := map[string]any{"start": "2026-11-10T00:00:00", "end": "2026-11-11T00:00:00", "calendar": "icloud"}
-	if got := unescape(toolResult(t, "calendar_list", input)); !strings.Contains(got, `"uid": "a"`) {
+	if got := unescape(toolResult(t, "calendar_list", input)); !strings.Contains(got, `"uid": "a"`) && !strings.Contains(got, `"uid":"a"`) {
 		t.Errorf("calendar_list(calendar=icloud) did not list the mirror: %s", got)
 	}
 	input["calendar"] = "home"
-	if got := unescape(toolResult(t, "calendar_list", input)); !strings.Contains(got, `"uid": "a"`) {
+	if got := unescape(toolResult(t, "calendar_list", input)); !strings.Contains(got, `"uid": "a"`) && !strings.Contains(got, `"uid":"a"`) {
 		t.Errorf("calendar_list(calendar=home) did not list the collection: %s", got)
 	}
 	input["calendar"] = "google"
-	if got := unescape(toolResult(t, "calendar_list", input)); strings.Contains(got, `"uid": "a"`) {
+	if got := unescape(toolResult(t, "calendar_list", input)); strings.Contains(got, `"uid": "a"`) || strings.Contains(got, `"uid":"a"`) {
 		t.Errorf("calendar_list(calendar=google) listed the iCloud mirror: %s", got)
 	}
 }

@@ -29,7 +29,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -115,7 +114,7 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		if o.Now != nil {
 			now = o.Now()
 		}
-		_ = journal.FinishRun(ctx, d.Write, runID, journal.Failed, now, new(py.ExceptionText(err)))
+		_ = journal.FinishRun(ctx, d.Write, runID, journal.Failed, now, new(err.Error()))
 		return nil, err
 	}
 	final := journal.Failed
@@ -156,7 +155,7 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 			return nil, err
 		}
 	}
-	if err := s.writer.Event(ctx, progress.RunDone, py.Dict{{Key: "state", Value: final}, {Key: "error", Value: optional(errText)}}); err != nil {
+	if err := s.writer.Event(ctx, progress.RunDone, map[string]any{"state": final, "error": optional(errText)}); err != nil {
 		return nil, err
 	}
 	return journal.GetRun(ctx, d.Read, runID)
@@ -314,13 +313,7 @@ func (s *state) heartbeat(ctx context.Context) func() {
 }
 
 func (s *state) runStart(ctx context.Context) error {
-	return s.writer.Event(ctx, progress.RunStart, py.Dict{
-		{Key: "thread_id", Value: s.thread.ID},
-		{Key: "thread_kind", Value: string(s.thread.Kind)},
-		{Key: "role", Value: optional(s.thread.Role)},
-		{Key: "title", Value: optional(s.thread.Title)},
-		{Key: "effort", Value: s.run.Effort},
-	})
+	return s.writer.Event(ctx, progress.RunStart, map[string]any{"thread_id": s.thread.ID, "thread_kind": string(s.thread.Kind), "role": optional(s.thread.Role), "title": optional(s.thread.Title), "effort": s.run.Effort})
 }
 
 func PendingUses(ctx context.Context, q db.Querier, threadID int64) (*journal.Message, []ToolUse, error) {
@@ -367,7 +360,7 @@ func (s *state) injectQueued(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	for _, row := range taken {
-		if err := s.writer.Event(ctx, progress.User, py.Dict{{Key: "text", Value: texts[row.ID]}, {Key: "queue_id", Value: row.ID}}); err != nil {
+		if err := s.writer.Event(ctx, progress.User, map[string]any{"text": texts[row.ID], "queue_id": row.ID}); err != nil {
 			return false, err
 		}
 	}

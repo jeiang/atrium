@@ -10,7 +10,8 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 const (
@@ -142,7 +143,7 @@ func Record(ctx context.Context, d *db.DB, e Entry, u anthropic.Usage) (float64,
 		tier = pricing.TierFlat
 	}
 	searches := SearchesOf(u)
-	cost := py.Sum(costs) + float64(float64(searches)*pricing.SearchUSD)
+	cost := numx.Sum(costs) + float64(float64(searches)*pricing.SearchUSD)
 	raw, err := json.Marshal(iterations)
 	if err != nil {
 		return 0, err
@@ -170,10 +171,10 @@ func nullable(id int64) *int64 {
 }
 
 func MonthStart(now float64, loc *time.Location) float64 {
-	sec, us := py.SplitTimestamp(now)
+	sec, us := timex.SplitTimestamp(now)
 	year, month, _ := time.Unix(sec, us*1000).In(loc).Date()
 	wall := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC).Unix()
-	return float64(py.WallToUnix(loc, wall))
+	return float64(timex.WallToUnix(loc, wall))
 }
 
 const budgetSQL = "kind <> ? AND source <> ?"

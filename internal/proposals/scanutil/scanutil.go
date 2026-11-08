@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
-	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
@@ -14,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
-	"github.com/jeiang/atrium/internal/textx"
 )
 
 type Limits struct {
@@ -92,10 +90,10 @@ func (l Limits) SampleSubjectsOf(rows []Message) []string {
 	seen := map[string]bool{}
 	out := []string{}
 	for _, r := range sorted {
-		subject := strings.TrimSpace(r.Subject)
+		subject := py.Strip(r.Subject)
 		if subject != "" && !seen[subject] {
 			seen[subject] = true
-			out = append(out, textx.Clip(subject, 120))
+			out = append(out, py.Clip(subject, 120))
 		}
 		if len(out) >= l.SampleSubjects {
 			break

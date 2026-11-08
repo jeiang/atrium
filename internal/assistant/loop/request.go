@@ -17,7 +17,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 func MaxTokensFor(effort string) int64 {
@@ -28,14 +29,14 @@ func MaxTokensFor(effort string) int64 {
 }
 
 func TimeStamp(startedAt float64, loc *time.Location) string {
-	sec, us := py.SplitTimestamp(startedAt)
+	sec, us := timex.SplitTimestamp(startedAt)
 	return "Current date and time: " + time.Unix(sec, us*1000).In(loc).Format("Monday 2006-01-02 15:04 MST")
 }
 
-func cacheControlDict(cc prompts.CacheControl) py.Dict {
-	d := py.Dict{{Key: "type", Value: cc.Type}}
+func cacheControlDict(cc prompts.CacheControl) map[string]any {
+	d := map[string]any{"type": cc.Type}
 	if cc.TTL != "" {
-		d = append(d, py.Pair{Key: "ttl", Value: cc.TTL})
+		d["ttl"] = cc.TTL
 	}
 	return d
 }
@@ -119,22 +120,23 @@ func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Threa
 	}, nil
 }
 
-func fixedPart(system json.RawMessage, tools []json.RawMessage) (py.Dict, error) {
-	sys, err := py.JSONLoads(system)
+func fixedPart(system json.RawMessage, tools []json.RawMessage) (map[string]any, error) {
+	sys, err := jsonx.Loads(system)
 	if err != nil {
 		return nil, err
 	}
-	fixed := py.Dict{{Key: "system", Value: sys}}
+	fixed := map[string]any{"system": sys}
 	if len(tools) == 0 {
 		return fixed, nil
 	}
 	list := make([]any, len(tools))
 	for i, raw := range tools {
-		if list[i], err = py.JSONLoads(raw); err != nil {
+		if list[i], err = jsonx.Loads(raw); err != nil {
 			return nil, err
 		}
 	}
-	return append(fixed, py.Pair{Key: "tools", Value: list}), nil
+	fixed["tools"] = list
+	return fixed, nil
 }
 
 func stampMessages(active []actx.Message, runs []journal.Run, loc *time.Location) ([]actx.Message, error) {

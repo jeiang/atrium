@@ -12,7 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 )
 
 type Message struct {
@@ -25,7 +25,7 @@ type Message struct {
 func (m Message) Wire() json.RawMessage {
 	var b strings.Builder
 	b.WriteString(`{"role":`)
-	b.WriteString(py.JSONDumps(m.Role, compactJSON))
+	b.WriteString(jsonx.Dumps(m.Role, compactJSON))
 	b.WriteString(`,"content":[`)
 	for i, raw := range m.Content {
 		if i > 0 {
@@ -80,9 +80,9 @@ func dumpHead(head []Message) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		items[i] = py.Dict{{Key: "role", Value: m.Role}, {Key: "content", Value: content}}
+		items[i] = map[string]any{"role": m.Role, "content": content}
 	}
-	return py.JSONDumps(items, compactJSON), nil
+	return jsonx.Dumps(items, compactJSON), nil
 }
 
 func saveProjection(ctx gocontext.Context, q db.Querier, threadID, runID int64, baseSeq, stripFromSeq, stripBeforeSeq int64, head []Message, savedTokens int64, now float64) (int64, error) {
@@ -207,7 +207,7 @@ func decodeSources(raw *string) ([]any, error) {
 	if raw == nil || *raw == "" {
 		return nil, nil
 	}
-	v, err := py.JSONLoads([]byte(*raw))
+	v, err := jsonx.Loads([]byte(*raw))
 	if err != nil {
 		return nil, fmt.Errorf("context: ledger source_ids_json: %w", err)
 	}
@@ -274,7 +274,7 @@ func dropStubValue(resultID *int64) string {
 	if resultID != nil {
 		id = *resultID
 	}
-	return py.JSONDumps(py.Dict{{Key: "result_id", Value: id}, {Key: "dropped", Value: true}})
+	return jsonx.Dumps(map[string]any{"result_id": id, "dropped": true})
 }
 
 func dropStub(raw json.RawMessage, resultID *int64) (json.RawMessage, error) {
@@ -286,7 +286,8 @@ func SetField(raw json.RawMessage, key string, value any) (json.RawMessage, erro
 	if err != nil {
 		return nil, err
 	}
-	return encode(d.Set(key, value)), nil
+	d[key] = value
+	return encode(d), nil
 }
 
 func foldBlock(e Entry) json.RawMessage {
@@ -298,7 +299,7 @@ func foldBlock(e Entry) json.RawMessage {
 }
 
 func TextBlock(text string) json.RawMessage {
-	return encode(py.Dict{{Key: "type", Value: Text}, {Key: "text", Value: text}})
+	return encode(map[string]any{"type": Text, "text": text})
 }
 
 func mergeRoles(messages []Message) []Message {
@@ -341,14 +342,14 @@ func inFold(folds []Entry, seq int64) bool {
 	return false
 }
 
-func blockDict(raw json.RawMessage) (py.Dict, error) {
-	v, err := py.JSONLoads(raw)
+func blockDict(raw json.RawMessage) (map[string]any, error) {
+	v, err := jsonx.Loads(raw)
 	if err != nil {
 		return nil, fmt.Errorf("context: content block: %w", err)
 	}
-	d, ok := v.(py.Dict)
+	d, ok := v.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("context: content block is %s, not an object", py.TypeName(v))
+		return nil, fmt.Errorf("context: content block is %s, not an object", fmt.Sprintf("%T", v))
 	}
 	return d, nil
 }

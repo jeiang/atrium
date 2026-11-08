@@ -8,7 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 )
 
 func callsByUse(ctx gocontext.Context, q db.Querier, threadID int64) (map[string]journal.ToolCall, error) {
@@ -35,15 +35,15 @@ type item struct {
 }
 
 func resultContent(raw json.RawMessage) (any, error) {
-	v, err := py.JSONLoads(raw)
+	v, err := jsonx.Loads(raw)
 	if err != nil {
 		return nil, fmt.Errorf("context: content block: %w", err)
 	}
-	d, ok := v.(py.Dict)
+	d, ok := v.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("context: content block is %s, not an object", py.TypeName(v))
+		return nil, fmt.Errorf("context: content block is %s, not an object", fmt.Sprintf("%T", v))
 	}
-	if c, ok := d.Get("content"); ok {
+	if c, ok := d["content"]; ok {
 		return c, nil
 	}
 	return "", nil

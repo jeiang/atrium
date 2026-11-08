@@ -22,7 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/textx"
 )
 
@@ -175,7 +175,7 @@ func Save(ctx context.Context, q db.Querier, reg *registry.Registry, d Definitio
 		"INSERT INTO subagents (name, description, prompt, effort, tools_json, enabled, builtin, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?) "+
 			"ON CONFLICT(name) DO UPDATE SET description = excluded.description, prompt = excluded.prompt, effort = excluded.effort, "+
 			"tools_json = excluded.tools_json, enabled = excluded.enabled, updated_at = excluded.updated_at",
-		agent, description, prompt, d.Effort, py.JSONDumps(tools), store.Bit(d.Enabled), now); err != nil {
+		agent, description, prompt, d.Effort, jsonx.Dumps(tools), store.Bit(d.Enabled), now); err != nil {
 		return nil, err
 	}
 	return Get(ctx, q, agent)

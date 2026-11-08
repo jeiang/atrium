@@ -14,7 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -73,7 +73,7 @@ func submittedValues(f projects.Fields, fallback ProjectFormValues) ProjectFormV
 	}
 	limit := *fallback.ContextLimit
 	if raw, ok := f.ContextLimit.(string); ok {
-		if submitted, valid := py.LaxInt64(raw); valid {
+		if submitted, valid := numx.LaxInt64(raw); valid {
 			for _, choice := range assistant.ContextLimits {
 				if submitted == choice {
 					limit = submitted

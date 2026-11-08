@@ -1,9 +1,8 @@
 package files
 
 import (
+	"path"
 	"strings"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -21,7 +20,7 @@ func contentTypeOf(types *element, partName string) (string, error) {
 			return kind, nil
 		}
 	}
-	ext := strings.TrimPrefix(strings.ToLower(py.PathSuffix(py.PathName(partName))), ".")
+	ext := strings.TrimPrefix(strings.ToLower(path.Ext(path.Base(partName))), ".")
 	for _, d := range types.kids(nsContentTypes, "Default") {
 		if e, _ := d.attr("", "Extension"); strings.ToLower(e) == ext {
 			kind, _ := d.attr("", "ContentType")

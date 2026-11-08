@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -88,7 +87,7 @@ func get(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 		if ok && e.Key != key {
 			continue
 		}
-		entries = append(entries, py.Dict{{Key: "key", Value: e.Key}, {Key: "value", Value: e.Value}})
+		entries = append(entries, map[string]any{"key": e.Key, "value": e.Value})
 	}
 	return map[string]any{"entries": entries}, nil
 }
@@ -226,12 +225,12 @@ func (e *UpdateExecutor) Execute(ctx context.Context, p *proposals.Proposal, _ a
 		payload.Key, payload.Value, e.now()); err != nil {
 		return nil, err
 	}
-	action := py.Dict{{Key: "type", Value: KindProfileUpdate}, {Key: "key", Value: payload.Key}}
-	undo := py.Dict{{Key: "op", Value: UndoProfileUpdate}, {Key: "key", Value: payload.Key}, {Key: "previous", Value: payload.Previous}}
+	action := map[string]any{"type": KindProfileUpdate, "key": payload.Key}
+	undo := map[string]any{"op": UndoProfileUpdate, "key": payload.Key, "previous": payload.Previous}
 	if _, err := proposals.RecordAction(ctx, e.DB.Write, p.ID, "write", nil, action, undo, ledger.OK, nil, e.now()); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "summary", Value: "Profile updated: " + payload.Key}}, nil
+	return map[string]any{"summary": "Profile updated: " + payload.Key}, nil
 }
 
 func (e *UpdateExecutor) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
@@ -249,7 +248,7 @@ func (e *UpdateExecutor) Undo(ctx context.Context, plan json.RawMessage) (any, e
 	} else if _, err := e.DB.Write.ExecContext(ctx, "UPDATE agent_profile SET value = ?, updated_at = ? WHERE key = ?", info.Previous, e.now(), info.Key); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "restored", Value: info.Key}}, nil
+	return map[string]any{"restored": info.Key}, nil
 }
 
 func RegisterProposal(reg *proposals.Registry, e *UpdateExecutor, owner string) {
