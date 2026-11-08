@@ -26,10 +26,10 @@ func TestGenerateWorldFixture(t *testing.T) {
 	}
 	dir := t.TempDir()
 	world := filepath.Join(dir, "atrium.db")
-	t.Setenv("ATRIUM_DB", world)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_CONFIG", "")
-	t.Setenv("ATRIUM_DB_KEY", "")
+	setEnv(t, "ATRIUM_DB", world)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_CONFIG", "")
+	setEnv(t, "ATRIUM_DB_KEY", "")
 	app := defaultApp()
 	run := func(argv ...string) {
 		var out, errs strings.Builder

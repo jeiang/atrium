@@ -26,10 +26,10 @@ import (
 
 func backupEnv(t *testing.T, dir string) {
 	t.Helper()
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_DB_KEY", "")
-	t.Setenv("ATRIUM_CONFIG", "")
-	t.Setenv("CREDENTIALS_DIRECTORY", "")
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_DB_KEY", "")
+	setEnv(t, "ATRIUM_CONFIG", "")
+	setEnv(t, "CREDENTIALS_DIRECTORY", "")
 }
 
 func seedBackupDB(t *testing.T, path string, key db.Key) {

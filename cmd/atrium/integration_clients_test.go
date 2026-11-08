@@ -28,8 +28,8 @@ func TestIntegrationClientsUseTheRecordTransportAndAFailedRequestChecksAtOnce(t 
 	t.Cleanup(srv.Close)
 
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(settingEnv(media.KeyQbitURL), srv.URL)
-	t.Setenv(settingEnv(media.KeyQbitAPIKey), "qbt_good")
+	setEnv(t, settingEnv(media.KeyQbitURL), srv.URL)
+	setEnv(t, settingEnv(media.KeyQbitAPIKey), "qbt_good")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 	waitFor(t, func() bool { return health(t, dir, "qbittorrent") == integrations.Failing })

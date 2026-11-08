@@ -75,10 +75,10 @@ func TestCredentialIntegrationsTestWithSpecificReasonsAndSaveOnlyWorkingSecrets(
 
 	dir, api := moduleFixture(t, flagsExcept("", ""))
 	api.RejectKey = "sk-ant-bad"
-	t.Setenv("ATRIUM_DB_KEY", rightKeyHex)
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	unsetEnv(t, "ANTHROPIC_API_KEY", settingEnv(notion.TokenKey), settingEnv(grafanatools.KeyURL), settingEnv(grafanatools.KeyToken))
-	t.Setenv("NOTION_TOKEN", "ntn_legacy")
+	setEnv(t, "NOTION_TOKEN", "ntn_legacy")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 

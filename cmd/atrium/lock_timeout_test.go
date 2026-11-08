@@ -46,8 +46,8 @@ func TestRefreshReportsExclusiveLockTimeout(t *testing.T) {
 	if err := d.Close(); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("ATRIUM_DB", path)
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 
 	cmd := exec.Command(os.Args[0], "-test.run=^$")
 	cmd.Env = append(os.Environ(), lockHolderEnv+"="+path)

@@ -62,7 +62,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 var log = logx.Logger("atrium.core")
 
 func startOps(ctx context.Context, d *web.Deps) error {
-	stop, err := ops.Start(ctx, d.DB)
+	stop, err := ops.Start(ctx, d.DB, d.Env)
 	if err != nil {
 		log.Error("ops listener did not start", logx.Err, err.Error())
 		return nil

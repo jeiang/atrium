@@ -133,7 +133,7 @@ func compareBody(want Request, contentType string, body []byte) string {
 		if err != nil {
 			return err.Error()
 		}
-		return diffValues(pairs, got)
+		return diffValues(loopbackPorts(pairs), loopbackPorts(got))
 	case "multipart":
 		var parts []multipartPart
 		if err := json.Unmarshal(want.Body, &parts); err != nil {
@@ -167,6 +167,21 @@ func compareBody(want Request, contentType string, body []byte) string {
 		return ""
 	}
 	return "unknown body_encoding " + want.BodyEncoding
+}
+
+func loopbackPorts(pairs [][]string) [][]string {
+	for _, pair := range pairs {
+		if len(pair) != 2 || pair[0] != "redirect_uri" {
+			continue
+		}
+		u, err := url.Parse(pair[1])
+		if err != nil || u.Hostname() != "127.0.0.1" {
+			continue
+		}
+		u.Host = "127.0.0.1"
+		pair[1] = u.String()
+	}
+	return pairs
 }
 
 func diffBytes(want, got []byte) string {

@@ -33,17 +33,17 @@ func runProcessStdin(t *testing.T, stdin, args string, env ...string) cliRun {
 
 func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_DB_KEY", "")
-	t.Setenv("ATRIUM_CONFIG", "")
-	t.Setenv("CREDENTIALS_DIRECTORY", "")
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_DB_KEY", "")
+	setEnv(t, "ATRIUM_CONFIG", "")
+	setEnv(t, "CREDENTIALS_DIRECTORY", "")
 	vector := make([]float64, config.EmbedDim)
 	vector[0] = 1
 	embedder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{"index": 0, "embedding": vector}}})
 	}))
 	defer embedder.Close()
-	t.Setenv("ATRIUM_MAIL_MAIL_EMBED_URL", embedder.URL)
+	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", embedder.URL)
 	keyEnv := func(hex string) string { return "ATRIUM_DB_KEY=" + hex }
 	dbEnv := func(path string) string { return "ATRIUM_DB=" + path }
 	const hit = "Alpha page\thttps://notion.example/p1\n"

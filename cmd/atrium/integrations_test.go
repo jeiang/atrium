@@ -65,7 +65,7 @@ func unsetEnv(t *testing.T, names ...string) {
 		if activeFixture != nil {
 			delete(activeFixture.env, name)
 		}
-		t.Setenv(name, "")
+		setEnv(t, name, "")
 		_ = os.Unsetenv(name)
 	}
 }
@@ -128,8 +128,8 @@ func TestIntegrationTestSavesOnlyWorkingConfigAndHealthNotifiesOncePerChange(t *
 	t.Cleanup(badSrv.Close)
 
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(settingEnv(notify.KeyURL), "")
-	t.Setenv(settingEnv(media.KeyQbitURL), "")
+	setEnv(t, settingEnv(notify.KeyURL), "")
+	setEnv(t, settingEnv(media.KeyQbitURL), "")
 	s := &integrationSite{t: t, dir: dir}
 
 	t.Run("a failed test keeps the stored config", func(t *testing.T) {
@@ -256,7 +256,7 @@ func TestIntegrationTransportTrustsOnlyTheConfiguredCAAndUsesTheProxy(t *testing
 	t.Cleanup(proxy.Close)
 
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(settingEnv(notify.KeyURL), "")
+	setEnv(t, settingEnv(notify.KeyURL), "")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 

@@ -11,10 +11,10 @@ import (
 
 func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
-	t.Setenv("ATRIUM_CONFIG", "")
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_CONFIG", "")
 
 	accepted := func(args ...string) {
 		t.Helper()
@@ -38,9 +38,9 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	refused("budget_unattended_share must be at most budget_chat_share (0.5)", "set", "budget_unattended_share", "0.9")
 	refused("budget_unattended_share must be at most budget_chat_share (0.5)", "unset", "budget_unattended_share")
 
-	t.Setenv("ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE", "0.3")
+	setEnv(t, "ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE", "0.3")
 	refused("budget_unattended_share must be at most budget_chat_share (0.3)", "set", "budget_unattended_share", "0.35")
-	t.Setenv("ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE", "")
+	setEnv(t, "ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE", "")
 
 	refused("agent_clear_share must be below agent_compact_share (0.875)", "set", "agent_clear_share", "0.9")
 	refused("agent_preflight_share must be above agent_compact_share (0.875)", "set", "agent_preflight_share", "0.8")

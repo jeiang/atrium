@@ -140,9 +140,9 @@ func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, pa
 		t.Fatal(err)
 	}
 	seedNotionVectors(t, path)
-	t.Setenv(settingEnv(mail.KeyEmbedURL), fake.URL+"/v1")
-	t.Setenv(settingEnv(mail.KeyEmbedModel), model)
-	t.Setenv(settingEnv(mail.KeyEmbedBatch), "40")
+	setEnv(t, settingEnv(mail.KeyEmbedURL), fake.URL+"/v1")
+	setEnv(t, settingEnv(mail.KeyEmbedModel), model)
+	setEnv(t, settingEnv(mail.KeyEmbedBatch), "40")
 	return dir, path
 }
 
@@ -196,7 +196,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 		t.Fatalf("search with an unchanged embedder: %q, was %q (model %q)", after, before, fake.lastModel())
 	}
 
-	t.Setenv(settingEnv(mail.KeyEmbedModel), bigModel)
+	setEnv(t, settingEnv(mail.KeyEmbedModel), bigModel)
 	fake.release(1)
 	base, _, stop = startServeStoppable(t, dir)
 	var first, total int

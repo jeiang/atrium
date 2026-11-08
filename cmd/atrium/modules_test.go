@@ -64,7 +64,7 @@ var activeFixture *fixture
 func runApp(args ...string) appRun { return runAppWith(nil, args...) }
 
 func runAppWith(mods []module.Module, args ...string) appRun {
-	env := config.OS
+	env := config.Env(testLookup)
 	if activeFixture != nil {
 		env = activeFixture.lookup
 	}
@@ -232,18 +232,18 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 func clearModuleEnv(t *testing.T) {
 	t.Helper()
 	for name := range requirementEnv("") {
-		t.Setenv(name, "")
+		setEnv(t, name, "")
 	}
 	for _, name := range moduleNames {
-		t.Setenv(flagEnv(name), "")
+		setEnv(t, flagEnv(name), "")
 	}
 }
 
 func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	clearModuleEnv(t)
 	for _, tc := range []struct{ module, reason string }{
 		{module.Mail, "mail_chat_url is not set"},
@@ -264,7 +264,7 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		}
 	}
 	for name, value := range requirementEnv(filepath.Join(dir, "media")) {
-		t.Setenv(name, value)
+		setEnv(t, name, value)
 	}
 	for _, name := range []string{module.Mail, module.Notifications} {
 		if got := runSettings(t, "set", module.FlagKey(name), "true"); got.code != cli.ExitOK || got.row(t).Value == nil || *got.row(t).Value != "true" {
@@ -284,8 +284,8 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 
 func TestSettingsListWorksFromTheRootCommand(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	clearModuleEnv(t)
 	got := runApp("settings", "list")
 	var rows []settingRow
@@ -313,13 +313,13 @@ func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 	phaseA := func(t *testing.T, populated bool) (base string, path string) {
 		dir := t.TempDir()
 		path = filepath.Join(dir, "atrium.db")
-		t.Setenv("ATRIUM_DB", path)
-		t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-		t.Setenv("ATRIUM_PUBLIC_HOST", "")
-		t.Setenv("ATRIUM_CONFIG", "")
+		setEnv(t, "ATRIUM_DB", path)
+		setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+		setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+		setEnv(t, "ATRIUM_CONFIG", "")
 		clearModuleEnv(t)
 		for name, value := range requirementEnv(filepath.Join(dir, "media")) {
-			t.Setenv(name, value)
+			setEnv(t, name, value)
 		}
 		if got := runSettings(t, "list"); got.code != cli.ExitOK {
 			t.Fatalf("settings list: exit %d %q", got.code, got.stderr)

@@ -228,6 +228,8 @@ func (s *server) run(ctx context.Context, c Check) error {
 	return err
 }
 
+var checkEnv = config.OS
+
 func init() {
 	Ready(Check{Name: "db", Critical: true, Run: func(ctx context.Context, d *db.DB) error {
 		if err := d.Read.PingContext(ctx); err != nil {
@@ -236,15 +238,18 @@ func init() {
 		return db.RefuseFutureSchema(ctx, d.Read)
 	}})
 	Ready(Check{Name: "config", Critical: true, Run: func(context.Context, *db.DB) error {
-		if _, err := config.Load(config.OS); err != nil {
+		if _, err := config.Load(checkEnv); err != nil {
 			return err
 		}
-		_, err := config.Location(config.OS)
+		_, err := config.Location(checkEnv)
 		return err
 	}})
 }
 
-func Start(ctx context.Context, d *db.DB) (stop func(), err error) {
+func Start(ctx context.Context, d *db.DB, env config.Env) (stop func(), err error) {
+	if env != nil {
+		checkEnv = env
+	}
 	addr, err := settings.Default.Resolve(ctx, d.Read, ListenKey)
 	if err != nil {
 		return nil, err
