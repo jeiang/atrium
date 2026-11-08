@@ -5,11 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
-	"github.com/jeiang/atrium/internal/assistant/skills"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
@@ -36,23 +34,7 @@ func describe(ctx context.Context, q db.Querier, job *scheduler.Job) (map[string
 		sec, us := timex.SplitTimestamp(*job.NextDue)
 		due = time.Unix(sec, us*1000).In(loc).Format("2006-01-02T15:04-07:00")
 	}
-	found := map[string]any{"id": job.ID, "name": job.Name, "prompt": job.Prompt, "schedule": job.Schedule, "enabled": job.State.Active(), "next_due": due, "created_by": job.CreatedBy}
-	if q == nil {
-		return found, nil
-	}
-	refs := skills.References(job.Prompt)
-	if len(refs) == 0 {
-		return found, nil
-	}
-	known, unknown, err := skills.SplitKnown(ctx, q, refs)
-	if err != nil {
-		return nil, err
-	}
-	found["skills"] = known
-	if len(unknown) > 0 {
-		found["note"] = "unknown skills in prompt (left as text): " + strings.Join(unknown, ", ")
-	}
-	return found, nil
+	return map[string]any{"id": job.ID, "name": job.Name, "prompt": job.Prompt, "schedule": job.Schedule, "enabled": job.State.Active(), "next_due": due, "created_by": job.CreatedBy}, nil
 }
 
 func agentJob(ctx context.Context, q db.Querier, args tool.Args) (*scheduler.Job, error) {

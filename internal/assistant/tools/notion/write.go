@@ -658,13 +658,13 @@ func writeTools() []tool.Tool {
 	return []tool.Tool{
 		{
 			Name:        "notion_create_page",
-			Description: "Create a wiki page under a hub page (parent_page_id; Wiki Home when omitted). Search first (search_knowledge): a page whose title or alias already matches is refused unless allow_duplicate is true. " + markdownNote + wikiNote,
+			Description: "Create a wiki page under a hub page (parent_page_id; Wiki Home when omitted). Search first (search_knowledge): a page whose title or alias already matches is refused unless allow_duplicate is true. Give aliases for the subject's other names and sources for the footer. One page per subject, durable facts only: not one-off events, receipts, or facts mail or the calendar can answer again. " + markdownNote + wikiNote,
 			InputSchema: schema(`{"parent_page_id": {"type": "string"}, "title": {"type": "string"}, "markdown": {"type": "string"}, "aliases": `+aliasesProp+`, "sources": `+sourcesProp+`, "allow_duplicate": {"type": "boolean"}}`, "title", "markdown"),
 			Handler:     createPage, Effect: tool.WriteUndo, Undo: "notion_page_trash", Annotated: true, Contexts: writeKinds,
 		},
 		{
 			Name:        "notion_update_page",
-			Description: "Change a wiki page: replace its body (markdown_replace) or append to it (append_markdown); with section (a heading text) only that section is replaced or appended to, and a missing section is added by append. Fetch the page first. " + markdownNote + wikiNote,
+			Description: "Change a wiki page: replace its body (markdown_replace) or append to it (append_markdown); with section (a heading text) only that section is replaced or appended to, and a missing section is added by append. Fetch the page first and change only the part that changed; keep the old value with its date when a fact changes. " + markdownNote + wikiNote,
 			InputSchema: schema(`{"page_id": {"type": "string"}, "markdown_replace": {"type": "string"}, "append_markdown": {"type": "string"}, "section": {"type": "string"}, "sources": `+sourcesProp+`}`, "page_id"),
 			Handler:     updatePage, Effect: tool.WriteUndo, Undo: "notion_page_restore", Annotated: true, Contexts: writeKinds,
 		},
@@ -676,7 +676,7 @@ func writeTools() []tool.Tool {
 		},
 		{
 			Name:        "notion_archive_page",
-			Description: "Move a wiki page to the trash (never deleted)." + wikiNote,
+			Description: "Move a wiki page to the trash (never deleted). Archive a duplicate only after the operator approved the merge in this thread." + wikiNote,
 			InputSchema: schema(`{"page_id": {"type": "string"}}`, "page_id"),
 			Handler:     archivePage, Effect: tool.WriteUndo, Undo: "notion_page_untrash", Annotated: true, Contexts: writeKinds,
 		},

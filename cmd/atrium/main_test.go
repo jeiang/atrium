@@ -306,7 +306,6 @@ func TestServeRendersAssistantPages(t *testing.T) {
 		{"/scheduled/new", 200, "New schedule"},
 		{"/settings/assistant", 200, "Default effort"},
 		{"/settings/usage", 200, "No usage yet"},
-		{"/settings/skills", 200, `data-skill="wiki-capture"`},
 		{"/settings/subagents", 200, `data-agent="mail"`},
 		{"/settings/notifications", 200, "No notifications"},
 	} {

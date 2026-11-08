@@ -1,8 +1,6 @@
 package pages
 
 import (
-	"archive/zip"
-	"bytes"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -28,7 +26,7 @@ func assertNoConfirmOnAction(t *testing.T, page, action string) {
 }
 
 var settingsTabs = []struct{ id, label string }{
-	{"assistant", "Assistant"}, {"skills", "Skills"}, {"subagents", "Subagents"}, {"prompts", "Prompts"}, {"notifications", "Notifications"}, {"usage", "Usage"},
+	{"assistant", "Assistant"}, {"subagents", "Subagents"}, {"prompts", "Prompts"}, {"notifications", "Notifications"}, {"usage", "Usage"},
 }
 
 func TestSettingsIndexRedirectsAndTabsRender(t *testing.T) {
@@ -66,7 +64,7 @@ func TestSettingsIndexRedirectsAndTabsRender(t *testing.T) {
 
 func TestOldSettingsUrlsAreGone(t *testing.T) {
 	s := newSite(t)
-	for _, path := range []string{"/usage", "/skills", "/schedules", "/notifications", "/settings/schedules"} {
+	for _, path := range []string{"/usage", "/skills", "/schedules", "/notifications", "/settings/schedules", "/settings/skills"} {
 		status(t, s.get(path), http.StatusNotFound)
 	}
 }
@@ -109,61 +107,6 @@ func TestUsagePage(t *testing.T) {
 	mustContain(t, page, "$80.00", "$70.00", "53% of $150 used", "1 API calls", ">90%</span>", "900 read · 0 written · 100 uncached", "50 output tokens · 0 reasoning · 2 web searches", "Requests over 100K tokens",
 		"$80.000", fmt.Sprintf(`href="/chat/%d"`, thread), "Untitled thread", "Prompt tokens (all calls)", "Largest request")
 	mustNotContain(t, page, "No usage yet")
-}
-
-func TestSkillsEditor(t *testing.T) {
-	s := newSite(t)
-	mustContain(t, status(t, s.get("/settings/skills"), http.StatusOK), `data-skill="wiki-capture"`, "New skill", `action="/settings/skills"`, `data-confirm-submit="Delete the skill`)
-	leafResponse := s.post("/settings/skills", url.Values{"name": {" b "}, "description": {"Bee"}, "body": {"leaf"}})
-	if leafResponse.StatusCode != http.StatusSeeOther || leafResponse.Header.Get("Location") != "/settings/skills?saved=b" || leafResponse.body != "" {
-		t.Fatalf("skill save: %d %q %q", leafResponse.StatusCode, leafResponse.Header.Get("Location"), leafResponse.body)
-	}
-	mustContain(t, status(t, s.get(leafResponse.Header.Get("Location")), http.StatusOK), "Skill saved", `data-skill="b"`, `data-strip-params="saved,deleted,created,updated,unchanged"`, `open`)
-	savedResponse := s.post("/settings/skills", url.Values{"name": {"a"}, "description": {"Ay"}, "body": {"see /skill:b and /skill:ghost"}})
-	if savedResponse.StatusCode != http.StatusSeeOther || savedResponse.Header.Get("Location") != "/settings/skills?saved=a" || savedResponse.body != "" {
-		t.Fatalf("skill update: %d %q %q", savedResponse.StatusCode, savedResponse.Header.Get("Location"), savedResponse.body)
-	}
-	s.exec("INSERT INTO skills (name, description, body, updated_at) VALUES ('referrer', 'Refers to a', '/skill:a', 1)")
-	saved := status(t, s.get(savedResponse.Header.Get("Location")), http.StatusOK)
-	mustContain(t, saved, "references skills that do not exist: ghost", `data-category="warning"`, `data-skill="a" open`, "autofocus", `data-confirm-submit="Delete the skill “a”? referrer references it and will show an unknown reference. This cannot be undone."`)
-
-	mustNotContain(t, status(t, s.get("/settings/skills?saved=nope"), http.StatusOK), `data-category=`)
-	mustNotContain(t, status(t, s.get("/settings/skills?deleted=a"), http.StatusOK), `data-category=`)
-
-	s.exec("INSERT INTO skills (name, description, body, updated_at) VALUES ('weekly-review', 'Review the week', 'check the calendar', 1), ('trip-plan', 'Plan trips', 'book flights', 1)")
-	byBody := status(t, s.get("/settings/skills?q=FLIGHTS"), http.StatusOK)
-	mustContain(t, byBody, `data-skill="trip-plan"`, `value="FLIGHTS"`)
-	mustNotContain(t, byBody, `data-skill="weekly-review"`)
-	byDescription := status(t, s.get("/settings/skills?q=+review+the+"), http.StatusOK)
-	mustContain(t, byDescription, `data-skill="weekly-review"`)
-	mustNotContain(t, byDescription, `data-skill="trip-plan"`)
-	none := status(t, s.get(`/settings/skills?q=<script>alert("xss")</script>`), http.StatusOK)
-	mustContain(t, none, "No skills match", `Nothing matches &#34;&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;&#34;.`)
-	mustNotContain(t, none, `data-skill="`, `<script>alert`)
-
-	bad := status(t, s.post("/settings/skills", url.Values{"name": {"BAD"}, "description": {"d"}, "body": {"b"}}), http.StatusUnprocessableEntity)
-	mustContain(t, bad, "Not saved", "name must be lowercase letters, digits, - or _ (max 48 characters)", `data-category="error"`, `<input id="new-name" name="name" type="text" value="BAD"`, `<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>name must be lowercase`)
-	editBad := status(t, s.post("/settings/skills", url.Values{"name": {"a"}, "description": {"Draft description"}, "body": {""}, "from": {"edit"}}), http.StatusUnprocessableEntity)
-	mustContain(t, editBad, `data-skill="a" open`, `value="Draft description"`, `<textarea id="b-a" name="body" rows="10" class="w-full font-mono text-xs"></textarea>`, `role="alert"`)
-	newBad := status(t, s.post("/settings/skills", url.Values{"name": {"a"}, "description": {"New draft"}, "body": {""}}), http.StatusUnprocessableEntity)
-	mustContain(t, newBad, `data-skill="a"`, `value="a"`, `value="New draft"`)
-	if strings.Contains(newBad[strings.Index(newBad, `data-skill="a"`):], `data-skill="a" open`) {
-		t.Error("existing skill opened for a new-form validation error")
-	}
-
-	recipe := s.post("/settings/skills", url.Values{"name": {"recipe"}, "description": {"Cooking steps"}, "body": {"# Cook"}})
-	if recipe.StatusCode != http.StatusSeeOther {
-		t.Fatalf("recipe save: %d %s", recipe.StatusCode, recipe.body)
-	}
-	mustContain(t, s.get("/settings/skills?saved=recipe").body, "Cooking steps")
-	deleted := s.post("/settings/skills/recipe/delete", nil)
-	if deleted.StatusCode != http.StatusSeeOther || deleted.Header.Get("Location") != "/settings/skills?deleted=recipe" || deleted.body != "" {
-		t.Fatalf("skill delete: %d %q %q", deleted.StatusCode, deleted.Header.Get("Location"), deleted.body)
-	}
-	deletedPage := status(t, s.get(deleted.Header.Get("Location")), http.StatusOK)
-	mustContain(t, deletedPage, "Skill deleted", `data-strip-params="saved,deleted,created,updated,unchanged"`)
-	mustNotContain(t, deletedPage, `data-skill="recipe"`)
-	status(t, s.post("/settings/skills/recipe/delete", nil), http.StatusNotFound)
 }
 
 func TestSubagentsSettings(t *testing.T) {
@@ -258,98 +201,4 @@ func TestSubagentsSettings(t *testing.T) {
 	}
 	status(t, s.post("/settings/subagents/nope/toggle", nil), http.StatusNotFound)
 	status(t, s.post("/settings/subagents/nope/delete", nil), http.StatusNotFound)
-}
-
-func TestSkillsImportExportAndIndexWarning(t *testing.T) {
-	s := newSite(t)
-	exported := s.get("/settings/skills/export")
-	if exported.StatusCode != http.StatusOK || exported.Header.Get("Content-Type") != "application/zip" || !strings.Contains(exported.Header.Get("Content-Disposition"), "atrium-skills.zip") {
-		t.Fatalf("export: %d %v", exported.StatusCode, exported.Header)
-	}
-	archive, err := zip.NewReader(strings.NewReader(exported.body), int64(len(exported.body)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var names []string
-	for _, f := range archive.File {
-		names = append(names, f.Name)
-	}
-	if strings.Join(names, ",") != "wiki-capture/SKILL.md,wiki-ingest/SKILL.md,wiki-query/SKILL.md,wiki-review/SKILL.md" {
-		t.Fatalf("exported entries %v", names)
-	}
-	status(t, s.get("/settings/skills/export?name=ghost"), http.StatusNotFound)
-
-	card := "---\nname: weekly-review\ndescription: Review the week\n---\n\ncheck the calendar\n"
-	imported := s.multipart("/settings/skills/import", nil, []upload{{name: "SKILL.md", contentType: "text/markdown", data: []byte(card)}})
-	if imported.StatusCode != http.StatusSeeOther || imported.Header.Get("Location") != "/settings/skills?created=1&updated=0&unchanged=0" {
-		t.Fatalf("import: %d %q %s", imported.StatusCode, imported.Header.Get("Location"), imported.body)
-	}
-	mustContain(t, status(t, s.get(imported.Header.Get("Location")), http.StatusOK), "Skills imported", "1 created, 0 updated, 0 unchanged", `data-skill="weekly-review"`)
-
-	var zipped bytes.Buffer
-	w := zip.NewWriter(&zipped)
-	for _, name := range []string{"one", "two"} {
-		f, _ := w.Create(name + "/SKILL.md")
-		_, _ = f.Write([]byte("---\nname: " + name + "\ndescription: Skill " + name + "\n---\n\nbody\n"))
-	}
-	_ = w.Close()
-	viaZip := s.multipart("/settings/skills/import", nil, []upload{{name: "skills.zip", contentType: "application/zip", data: zipped.Bytes()}})
-	if viaZip.StatusCode != http.StatusSeeOther || viaZip.Header.Get("Location") != "/settings/skills?created=2&updated=0&unchanged=0" {
-		t.Fatalf("zip import: %d %q", viaZip.StatusCode, viaZip.Header.Get("Location"))
-	}
-
-	s.exec("UPDATE skills SET updated_at = 1 WHERE name = 'weekly-review'")
-	again := s.multipart("/settings/skills/import", nil, []upload{{name: "SKILL.md", contentType: "text/markdown", data: []byte(card)}})
-	if again.Header.Get("Location") != "/settings/skills?created=0&updated=0&unchanged=1" || s.count("SELECT count(*) FROM skills WHERE name = 'weekly-review' AND updated_at = 1") != 1 {
-		t.Fatalf("unchanged re-import: %q", again.Header.Get("Location"))
-	}
-
-	broken := s.multipart("/settings/skills/import", nil, []upload{{name: "bad.md", contentType: "text/markdown", data: []byte("no frontmatter")}})
-	mustContain(t, status(t, broken, http.StatusUnprocessableEntity), "Not imported", "bad.md: missing the --- frontmatter")
-	partial := "---\nname: fine\ndescription: ok\n---\n\nbody\n"
-	var mixed bytes.Buffer
-	mw := zip.NewWriter(&mixed)
-	f, _ := mw.Create("fine/SKILL.md")
-	_, _ = f.Write([]byte(partial))
-	f, _ = mw.Create("Bad/SKILL.md")
-	_, _ = f.Write([]byte("---\ndescription: d\n---\nbody\n"))
-	_ = mw.Close()
-	refused := s.multipart("/settings/skills/import", nil, []upload{{name: "mixed.zip", contentType: "application/zip", data: mixed.Bytes()}})
-	mustContain(t, status(t, refused, http.StatusUnprocessableEntity), "Not imported")
-	mustNotContain(t, status(t, s.get("/settings/skills"), http.StatusOK), `data-skill="fine"`)
-	status(t, s.multipart("/settings/skills/import", nil, nil), http.StatusUnprocessableEntity)
-
-	mustNotContain(t, status(t, s.get("/settings/skills"), http.StatusOK), "Not indexed")
-	s.exec("INSERT INTO settings (key, value) VALUES ('agent_skill_index_chars', '300') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-	over := status(t, s.get("/settings/skills"), http.StatusOK)
-	mustContain(t, over, "Not indexed")
-}
-
-func TestSkillsImportRefusesOversizedUploads(t *testing.T) {
-	s := newSite(t)
-	huge := s.multipart("/settings/skills/import", nil, []upload{{name: "skills.zip", contentType: "application/zip", data: bytes.Repeat([]byte{'x'}, 18<<20)}})
-	mustContain(t, status(t, huge, http.StatusUnprocessableEntity), "the upload is too large")
-
-	var bomb bytes.Buffer
-	w := zip.NewWriter(&bomb)
-	f, _ := w.Create("bomb/SKILL.md")
-	_, _ = f.Write([]byte("---\nname: bomb\ndescription: d\n---\n\n" + strings.Repeat("a", 1<<20)))
-	_ = w.Close()
-	if bomb.Len() > 64<<10 {
-		t.Fatalf("fixture is not compressible: %d", bomb.Len())
-	}
-	oversize := s.multipart("/settings/skills/import", nil, []upload{{name: "bomb.zip", contentType: "application/zip", data: bomb.Bytes()}})
-	mustContain(t, status(t, oversize, http.StatusUnprocessableEntity), "bomb/SKILL.md: larger than")
-
-	var many bytes.Buffer
-	mw := zip.NewWriter(&many)
-	for i := 0; i < 10001; i++ {
-		_, _ = mw.Create(fmt.Sprintf("f%d.txt", i))
-	}
-	_ = mw.Close()
-	crowded := s.multipart("/settings/skills/import", nil, []upload{{name: "many.zip", contentType: "application/zip", data: many.Bytes()}})
-	mustContain(t, status(t, crowded, http.StatusUnprocessableEntity), "files in the archive")
-	if n := s.count("SELECT count(*) FROM skills WHERE name = 'bomb'"); n != 0 {
-		t.Fatalf("refused import left %d rows", n)
-	}
 }

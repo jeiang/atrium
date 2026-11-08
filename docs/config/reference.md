@@ -81,11 +81,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_scheduler_lease_seconds` | int | `1800` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_LEASE_SECONDS` |
 | `agent_scheduler_missed_grace_seconds` | int | `120` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_MISSED_GRACE_SECONDS` |
 | `agent_scheduler_tick_seconds` | int | `30` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_TICK_SECONDS` |
-| `agent_skill_body_chars` | int | `20000` | advanced | `ATRIUM_ASSISTANT_AGENT_SKILL_BODY_CHARS` |
-| `agent_skill_description_chars` | int | `160` | advanced | `ATRIUM_ASSISTANT_AGENT_SKILL_DESCRIPTION_CHARS` |
-| `agent_skill_expand_chars` | int | `20000` | advanced | `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_CHARS` |
-| `agent_skill_expand_max` | int | `5` | advanced | `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_MAX` |
-| `agent_skill_index_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_SKILL_INDEX_CHARS` |
 | `agent_stub_tokens` | int | `2000` | advanced | `ATRIUM_ASSISTANT_AGENT_STUB_TOKENS` |
 | `agent_subagent_context_ids` | int | `20` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_CONTEXT_IDS` |
 | `agent_subagent_description_chars` | int | `160` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_DESCRIPTION_CHARS` |

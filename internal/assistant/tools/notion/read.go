@@ -210,7 +210,7 @@ func readTools() []tool.Tool {
 	return []tool.Tool{
 		{
 			Name:        "search_knowledge",
-			Description: "Search the operator's Notion wiki mirror: exact title/alias matches first, then full-text plus semantic hits. Private pages are never returned. Use fetch_knowledge for a full page.",
+			Description: "Search the operator's Notion wiki mirror: exact title/alias matches first, then full-text plus semantic hits. Private pages are never returned. Use fetch_knowledge for a full page; search two or three name variants before creating a page.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": ` + notionLimitBound.Schema() + `}, "required": ["query"], "additionalProperties": false}`),
 			Handler:     searchKnowledge,
 			Effect:      tool.Read,
@@ -220,7 +220,7 @@ func readTools() []tool.Tool {
 		},
 		{
 			Name:        "fetch_knowledge",
-			Description: "Fetch a Notion page's markdown by page_id from the local mirror, falling back to live Notion when the mirror is missing or stale.",
+			Description: "Fetch a Notion page's markdown by page_id from the local mirror, falling back to live Notion when the mirror is missing or stale. Check its Last reviewed date and dated 'as of' claims; report the page as possibly stale when they are old.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"page_id": {"type": "string"}, "max_chars": ` + notionCharsBound.Schema() + `}, "required": ["page_id"], "additionalProperties": false}`),
 			Handler:     fetchKnowledge,
 			Effect:      tool.Read,

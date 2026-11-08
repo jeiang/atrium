@@ -67,3 +67,9 @@ func TestPromptOverrideKeepsThePreambleAndResetRestoresTheDefault(t *testing.T) 
 		t.Errorf("reset system block differs from the default:\n%q", head)
 	}
 }
+
+func TestPromptCarriesNoSkillsIndex(t *testing.T) {
+	s := newSite(t)
+	_, body := s.systemOfRun("hello")
+	mustNotContain(t, body, "load_skill", "Skills (operator-written")
+}

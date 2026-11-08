@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/jsonx"
 )
 
 const (
@@ -75,18 +74,17 @@ type Run struct {
 	LimitsJSON    *string    `json:"limits_json"`
 	Owner         *string    `json:"owner"`
 	LeaseUntil    *float64   `json:"lease_until"`
-	SkillsJSON    *string    `json:"skills_json"`
 	Superseded    store.Flag `json:"superseded"`
 	StopRequested store.Flag `json:"stop_requested"`
 }
 
 const runColumns = "id, thread_id, parent_run_id, kind, model, effort, state, error, steps, started_at, ended_at, limits_json, " +
-	"owner, lease_until, skills_json, superseded, stop_requested"
+	"owner, lease_until, superseded, stop_requested"
 
 func scanRun(row interface{ Scan(...any) error }) (Run, error) {
 	var r Run
 	err := row.Scan(&r.ID, &r.ThreadID, &r.ParentRunID, &r.Kind, &r.Model, &r.Effort, &r.State, &r.Error, &r.Steps, &r.StartedAt,
-		&r.EndedAt, &r.LimitsJSON, &r.Owner, &r.LeaseUntil, &r.SkillsJSON, &r.Superseded, &r.StopRequested)
+		&r.EndedAt, &r.LimitsJSON, &r.Owner, &r.LeaseUntil, &r.Superseded, &r.StopRequested)
 	return r, err
 }
 
@@ -176,22 +174,6 @@ func LimitsOf(ctx context.Context, q db.Querier, runID int64) (Limits, error) {
 		out.AllowedTools = *stored.AllowedTools
 	}
 	return out, nil
-}
-
-func SetSkills(ctx context.Context, q db.Querier, runID int64, names []string) error {
-	_, err := q.ExecContext(ctx, "UPDATE runs SET skills_json = ? WHERE id = ?", jsonx.Dumps(append([]string{}, names...)), runID)
-	return err
-}
-
-func SkillsOf(r Run) ([]string, error) {
-	if r.SkillsJSON == nil || *r.SkillsJSON == "" {
-		return []string{}, nil
-	}
-	var names []string
-	if err := json.Unmarshal([]byte(*r.SkillsJSON), &names); err != nil {
-		return nil, fmt.Errorf("journal: run %d skills_json: %w", r.ID, err)
-	}
-	return names, nil
 }
 
 func GetRun(ctx context.Context, q db.Querier, runID int64) (*Run, error) {

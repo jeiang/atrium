@@ -70,11 +70,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_LEASE_SECONDS` | `assistant.agent_scheduler_lease_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_MISSED_GRACE_SECONDS` | `assistant.agent_scheduler_missed_grace_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_TICK_SECONDS` | `assistant.agent_scheduler_tick_seconds` |
-| `ATRIUM_ASSISTANT_AGENT_SKILL_BODY_CHARS` | `assistant.agent_skill_body_chars` |
-| `ATRIUM_ASSISTANT_AGENT_SKILL_DESCRIPTION_CHARS` | `assistant.agent_skill_description_chars` |
-| `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_CHARS` | `assistant.agent_skill_expand_chars` |
-| `ATRIUM_ASSISTANT_AGENT_SKILL_EXPAND_MAX` | `assistant.agent_skill_expand_max` |
-| `ATRIUM_ASSISTANT_AGENT_SKILL_INDEX_CHARS` | `assistant.agent_skill_index_chars` |
 | `ATRIUM_ASSISTANT_AGENT_STUB_TOKENS` | `assistant.agent_stub_tokens` |
 | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_CONTEXT_IDS` | `assistant.agent_subagent_context_ids` |
 | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_DESCRIPTION_CHARS` | `assistant.agent_subagent_description_chars` |

@@ -44,16 +44,15 @@ type Block struct {
 }
 
 type Parts struct {
-	System      string
-	Profile     string
-	SkillsIndex string
-	Extra       string
-	Project     string
+	System  string
+	Profile string
+	Extra   string
+	Project string
 }
 
 func SystemBlocks(p Parts, cc CacheControl) []Block {
 	blocks := []Block{{Type: "text", Text: WithPreamble(p.System), CacheControl: &cc}}
-	for _, text := range []string{p.Profile, p.SkillsIndex, p.Extra} {
+	for _, text := range []string{p.Profile, p.Extra} {
 		if text != "" {
 			blocks = append(blocks, Block{Type: "text", Text: text})
 		}

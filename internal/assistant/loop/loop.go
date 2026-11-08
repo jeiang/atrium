@@ -52,18 +52,9 @@ type LeaseLost string
 func (e LeaseLost) Error() string { return string(e) }
 
 type Runner struct {
-	Registry     *registry.Registry
-	Undoers      *writes.Registry
-	Profile      func(ctx context.Context, q db.Querier) (string, error)
-	SkillsIndex  func(ctx context.Context, q db.Querier) (string, error)
-	ExpandSkills func(ctx context.Context, q db.Querier, text string) (expanded string, used []string, err error)
-}
-
-func (r *Runner) Expand(ctx context.Context, q db.Querier, kind tool.Kind, text string) (string, []string, error) {
-	if r.ExpandSkills == nil || kind == tool.Sub {
-		return text, nil, nil
-	}
-	return r.ExpandSkills(ctx, q, text)
+	Registry *registry.Registry
+	Undoers  *writes.Registry
+	Profile  func(ctx context.Context, q db.Querier) (string, error)
 }
 
 type Options struct {
@@ -378,13 +369,9 @@ func (s *state) injectQueued(ctx context.Context) (bool, error) {
 	}
 	texts := make(map[int64]string, len(queued))
 	taken, err := journal.ConsumeQueued(ctx, s.d, s.thread.ID, s.run.ID, s.now(), func(q db.Querier, row journal.QueuedMessage) error {
-		text, _, err := s.r.Expand(ctx, q, s.kind, row.Text)
-		if err != nil {
-			return err
-		}
-		texts[row.ID] = text
-		content := append(append([]json.RawMessage{}, row.Files...), actx.TextBlock(text))
-		_, err = journal.AppendMessageTx(ctx, q, s.thread.ID, &s.run.ID, journal.User, content, s.now(), nil)
+		texts[row.ID] = row.Text
+		content := append(append([]json.RawMessage{}, row.Files...), actx.TextBlock(row.Text))
+		_, err := journal.AppendMessageTx(ctx, q, s.thread.ID, &s.run.ID, journal.User, content, s.now(), nil)
 		return err
 	})
 	if err != nil {

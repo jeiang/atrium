@@ -499,13 +499,9 @@ func RunDict(ctx context.Context, q db.Querier, runID int64) (map[string]any, er
 	if err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE run_id = ?", runID).Scan(&cost); err != nil {
 		return nil, err
 	}
-	skills, err := journal.SkillsOf(*found)
-	if err != nil {
-		return nil, err
-	}
+	delete(run[0], "skills_json")
 	run[0]["calls"] = list
 	run[0]["cost"] = cost
-	run[0]["skills"] = skills
 	return run[0], nil
 }
 

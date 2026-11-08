@@ -675,61 +675,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "agent_skill_body_chars": {
-          "default": 20000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_skill_body_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_skill_description_chars": {
-          "default": 160,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_skill_description_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_skill_expand_chars": {
-          "default": 20000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_skill_expand_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_skill_expand_max": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_skill_expand_max_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_skill_index_chars": {
-          "default": 4000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_skill_index_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "agent_stub_tokens": {
           "default": 2000,
           "type": [

@@ -22,7 +22,7 @@ func TestCommandRefusesNewerSchema(t *testing.T) {
 	if err := db.Migrate(t.Context(), d, path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (9999, 1.0); DELETE FROM skills WHERE name = 'wiki-query'"); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (9999, 1.0); DELETE FROM subagents WHERE name = 'web'"); err != nil {
 		t.Fatal(err)
 	}
 	setEnv(t, "ATRIUM_DB", path)
@@ -35,11 +35,11 @@ func TestCommandRefusesNewerSchema(t *testing.T) {
 	if code != cli.ExitError || stdout.Len() != 0 || !strings.Contains(stderr.String(), "does not know") || !strings.Contains(stderr.String(), "9999") {
 		t.Errorf("loops refresh on a newer schema exited %d, stdout %q, stderr %q; want %d, empty stdout and the unknown-migration message", code, stdout.String(), stderr.String(), cli.ExitError)
 	}
-	var skills int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM skills WHERE name = 'wiki-query'").Scan(&skills); err != nil {
+	var subagents int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM subagents WHERE name = 'web'").Scan(&subagents); err != nil {
 		t.Fatal(err)
 	}
-	if skills != 0 {
+	if subagents != 0 {
 		t.Error("the refused start re-seeded the database")
 	}
 }
