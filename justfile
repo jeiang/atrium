@@ -1,5 +1,72 @@
+dev := if env("ATRIUM_DEV_SHELL", "") == "1" { "" } else { "nix develop --impure -c" }
+reexec := 'if [ -z "${ATRIUM_DEV_SHELL:-}" ]; then exec nix develop --impure -c bash "$0"; fi'
+
 default:
   @just --list
+
+verify:
+  {{dev}} bash -c 'go vet ./... && go build ./...'
+
+e2e pattern pkg="./cmd/atrium":
+  {{dev}} go test -count=1 -run "{{pattern}}" {{pkg}}
+
+test-pkg pkg run=".":
+  {{dev}} go test -count=1 -run "{{run}}" {{pkg}}
+
+changed base="v2-develop":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  {{reexec}}
+  base="{{base}}"
+  from=$(git merge-base HEAD "$base")
+  mapfile -t files < <(git diff --name-only "$from" -- '*.go'; git ls-files --others --exclude-standard -- '*.go')
+  pkgs=()
+  if [ ${#files[@]} -gt 0 ]; then
+    for dir in $(printf '%s\n' "${files[@]}" | xargs -n1 dirname | sort -u); do
+      [ -n "$(find "$dir" -maxdepth 1 -name '*.go' -print -quit)" ] && pkgs+=("./$dir")
+    done
+  fi
+  if [ ${#pkgs[@]} -eq 0 ]; then
+    echo "no Go packages changed against $base"
+  else
+    printf '%s\n' "${pkgs[@]}"
+  fi
+  just verify
+  [ ${#pkgs[@]} -eq 0 ] || go test -count=1 "${pkgs[@]}"
+
+check-eval:
+  nix flake check --no-build --impure
+
+check-quick:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  {{reexec}}
+  statix check
+  treefmt --fail-on-change
+  unformatted=$(find . \( -name .devenv -o -name .direnv -o -name .worktrees -o -name vendor -o -name testdata \) -prune -o -name '*.go' -exec gofmt -l {} +)
+  if [ -n "$unformatted" ]; then
+    echo "gofmt would reformat:" >&2
+    echo "$unformatted" >&2
+    exit 1
+  fi
+  nix eval --raw ".#checks.$(nix eval --impure --raw --expr builtins.currentSystem).module.drvPath" >/dev/null
+
+# Build one x86_64-linux check on artemis; flake sources are git-tracked files only, so git add new files first
+linux check *args:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  host=${ARTEMIS_HOST:-artemis}
+  exec nix build --eval-store auto --store "ssh-ng://$host" --no-link -L \
+    ".#checks.x86_64-linux.{{check}}" "$@"
+
+# Build every x86_64-linux check on artemis; flake sources are git-tracked files only, so git add new files first
+linux-all *args:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  host=${ARTEMIS_HOST:-artemis}
+  mapfile -t checks < <(nix eval --json '.#checks.x86_64-linux' --apply builtins.attrNames | tr -d '[]"' | tr ',' '\n')
+  exec nix build --eval-store auto --store "ssh-ng://$host" --no-link -L \
+    "${checks[@]/#/.#checks.x86_64-linux.}" "$@"
 
 fmt:
   nix fmt
