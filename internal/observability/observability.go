@@ -58,7 +58,7 @@ func Start(ctx context.Context, env config.Env) (func(context.Context), error) {
 	provider := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(obs.Filter(exporter)),
 		sdktrace.WithResource(resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceName("atrium"))),
-		sdktrace.WithSpanLimits(sdktrace.SpanLimits{
+		sdktrace.WithRawSpanLimits(sdktrace.SpanLimits{
 			AttributeValueLengthLimit: 256,
 			AttributeCountLimit:       64,
 			EventCountLimit:           0,
