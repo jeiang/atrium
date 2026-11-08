@@ -8,11 +8,12 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db/dbtest"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 func TestSwitchModelIsPricedWhileWarmAndDropsThinkingOnADownSwitch(t *testing.T) {
 	d := dbtest.Schema(t)
-	ctx := context.Background()
+	ctx := settings.With(context.Background(), settings.New())
 	now := 1_800_000_000.0
 	id, err := Create(ctx, d.Write, now-120, Spec{Kind: Chat, Model: pricing.OpusID, Effort: pricing.Max, Thinking: "adaptive"})
 	if err != nil {

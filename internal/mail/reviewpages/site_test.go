@@ -102,7 +102,7 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	}
 	handlers.Register(s.registry, handlers.Deps{DB: d, Open: open, Now: tick, Env: env})
 	s.store = &drafts.Store{DB: d, Cfg: cfg, Now: tick}
-	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}, State: st})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}, State: st}, reviewNav()...)
 	if err != nil {
 		t.Fatal(err)
 	}

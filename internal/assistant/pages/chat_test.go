@@ -576,7 +576,7 @@ func TestNewChatComposerShowsTheHaikuCliffAndResetsOnModelChange(t *testing.T) {
 
 func TestThreadSettingsShowLockedFieldsAndCost(t *testing.T) {
 	s := newSite(t)
-	ctx := context.Background()
+	ctx := s.ctx()
 	id, err := threads.Create(ctx, s.db.Write, s.clock, threads.Spec{Kind: threads.Chat, Model: pricing.SonnetID, Effort: pricing.High, Thinking: "between_tools"})
 	if err != nil {
 		t.Fatal(err)
