@@ -8,13 +8,13 @@ import (
 
 func init() {
 	registerFuncs(map[string]any{
-		"pystr":  pyScalar,
-		"pyattr": pyAttr,
-		"pylen":  pyLen,
+		"scalar": scalar,
+		"attr":   attr,
+		"length": length,
 	})
 }
 
-func pyScalar(v any) (string, error) {
+func scalar(v any) (string, error) {
 	switch v.(type) {
 	case nil, bool, float32, float64, string, template.HTML:
 		return pyStr(v)
@@ -25,7 +25,7 @@ func pyScalar(v any) (string, error) {
 	return fmt.Sprint(v), nil
 }
 
-func pyAttr(m any, key string) (string, error) {
+func attr(m any, key string) (string, error) {
 	var v any
 	var found bool
 	switch x := m.(type) {
@@ -42,10 +42,10 @@ func pyAttr(m any, key string) (string, error) {
 	if !found {
 		return "", nil
 	}
-	return pyScalar(v)
+	return scalar(v)
 }
 
-func pyLen(v any) int {
+func length(v any) int {
 	if v == nil {
 		return 0
 	}
