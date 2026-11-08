@@ -332,3 +332,61 @@ func TestTaskAddAcceptsANumericRemindAt(t *testing.T) {
 		t.Fatalf("remind_at = %v", remind)
 	}
 }
+
+func TestMailFolderUndoWorksInShadowMode(t *testing.T) {
+	fx := newFolderFixture(t, "live")
+	script := folderLogin + folderList("") + folderList("") +
+		`C: {t} CREATE "News"
+S: {t} OK CREATE completed
+C: {t} SUBSCRIBE "News"
+S: {t} OK SUBSCRIBE completed
+` + folderList(`S: * LIST () "/" "News"
+`) + folderClose +
+		`! accept
+` + folderLogin + folderList(`S: * LIST () "/" "News"
+`) +
+		`C/ ^{t} STATUS "News" \(.*\)$
+S: * STATUS "News" (MESSAGES 0 UIDVALIDITY 1544650202 UIDNEXT 902 HIGHESTMODSEQ 1)
+S: {t} OK STATUS completed
+C: {t} DELETE "News"
+S: {t} OK DELETE completed
+` + folderClose
+	server, ca := imapscript.ServeTLS(t, imapscript.MustParse(t, script))
+	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+
+	fx.api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "mail_folder_create", map[string]any{"account": "icloud", "name": "News"})))
+	fx.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+	if ran := runApp(t, "agent", "run", "--text", "create a news folder"); ran.code != cli.ExitOK {
+		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	}
+	d, err := db.Connect(filepath.Join(fx.dir, "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	var id int64
+	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE tool = 'mail_folder_create'").Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, settingEnv(mail.KeyMode), "shadow")
+	base := startServeIn(t, fx.dir)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, body, _ := fetch(t, client, "GET", base+"/activity", nil); status != http.StatusOK {
+		t.Fatalf("GET /activity = %d %s", status, body)
+	}
+	if status, body, _ := fetch(t, client, "POST", base+"/activity/write/"+strconv.FormatInt(id, 10)+"/undo", url.Values{}); status != http.StatusSeeOther {
+		t.Fatalf("undo in shadow mode = %d %s", status, body)
+	}
+	var undone *float64
+	if err := d.Read.QueryRow("SELECT undone_at FROM agent_writes WHERE id = ?", id).Scan(&undone); err != nil {
+		t.Fatal(err)
+	}
+	if undone == nil {
+		t.Fatal("write was not marked undone")
+	}
+}

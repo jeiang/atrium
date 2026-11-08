@@ -66,8 +66,8 @@ func folderTools() []tool.Tool {
 	}
 }
 
-func openMail() mail.OpenFunc {
-	return imapclient.Opener(config.Config{})
+func openMail(tc *tool.Context) mail.OpenFunc {
+	return imapclient.Opener(tc.Cfg)
 }
 
 func mailWriteRefused(err error) error {
@@ -159,7 +159,7 @@ func mailFolderCreate(ctx context.Context, tc *tool.Context, args tool.Args) (an
 		return nil, err
 	}
 	created := false
-	err = mailops.Session(ctx, openMail(), tc.DB.Read, account, func(client mail.Client) error {
+	err = mailops.Session(ctx, openMail(tc), tc.DB.Read, account, func(client mail.Client) error {
 		existing, protected, err := resolveFolder(ctx, client, name)
 		if err != nil {
 			return err
@@ -264,7 +264,7 @@ func mailMove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	}
 	moved := 0
 	var skipped []mailops.Skip
-	err = mailops.Session(ctx, openMail(), tc.DB.Read, account, func(client mail.Client) error {
+	err = mailops.Session(ctx, openMail(tc), tc.DB.Read, account, func(client mail.Client) error {
 		imapName, protected, err := resolveFolder(ctx, client, folder)
 		if err != nil {
 			return err
@@ -429,6 +429,7 @@ func moveGroupTool(ctx context.Context, tc *tool.Context, client mail.Client, ac
 }
 
 func undoFolderDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
+	ctx = safety.ApprovedWrites(ctx, "undo")
 	var plan struct {
 		Account  string `json:"account"`
 		IMAPName string `json:"imap_name"`
@@ -465,6 +466,7 @@ func undoFolderDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (a
 }
 
 func undoMailMoveBack(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
+	ctx = safety.ApprovedWrites(ctx, "undo")
 	var plan live.MoveBack
 	if err := json.Unmarshal(raw, &plan); err != nil {
 		return nil, writes.UndoError("move undo payload is invalid")
