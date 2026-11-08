@@ -100,11 +100,15 @@ func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Threa
 	if err != nil {
 		return request{}, err
 	}
+	thinking := &anthropic.Thinking{Type: "adaptive", Display: "summarized"}
+	if thread.Thinking == "disabled" {
+		thinking = nil
+	}
 	return request{
 		params: anthropic.Params{
 			Model:             model,
 			MaxTokens:         MaxTokensFor(effort),
-			Thinking:          &anthropic.Thinking{Type: "adaptive", Display: "summarized"},
+			Thinking:          thinking,
 			OutputConfig:      &anthropic.OutputConfig{Effort: effort},
 			System:            systemJSON,
 			ContextManagement: actx.ContextManagement(limits),

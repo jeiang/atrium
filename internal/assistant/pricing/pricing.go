@@ -110,6 +110,62 @@ func Lookup(id string) (Model, error) {
 
 func (m Model) SupportsEffort(effort string) bool { return slices.Contains(m.Efforts, effort) }
 
+func (m Model) SupportsThinking(kind string) bool {
+	for _, t := range m.Thinking {
+		if t.Type == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) ThinkingMaxEffort(kind string) string {
+	for _, t := range m.Thinking {
+		if t.Type == kind {
+			return t.MaxEffort
+		}
+	}
+	return ""
+}
+
+func (m Model) DefaultThinking() string {
+	if len(m.Thinking) == 0 {
+		return ""
+	}
+	return m.Thinking[0].Type
+}
+
+func EffortRank(effort string) int {
+	for i, e := range Efforts {
+		if e == effort {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m Model) ValidThinking(thinking, effort string) bool {
+	if !m.SupportsThinking(thinking) {
+		return false
+	}
+	if limit := m.ThinkingMaxEffort(thinking); limit != "" && EffortRank(effort) > EffortRank(limit) {
+		return false
+	}
+	return true
+}
+
+func ModelRank(id string) int {
+	switch id {
+	case HaikuID:
+		return 0
+	case SonnetID:
+		return 1
+	case OpusID:
+		return 2
+	}
+	return -1
+}
+
 type Tokens struct{ Input, CacheWrite5m, CacheWrite1h, CacheRead, Output int64 }
 
 func (t Tokens) Prompt() int64 { return t.Input + t.CacheWrite5m + t.CacheWrite1h + t.CacheRead }
