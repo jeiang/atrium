@@ -78,7 +78,8 @@ behavior-parity target.
   email service provider, a Reply-To that differs from From, or an
   automated sender address) and must not be addressed to the operator only
   in Cc. A message that lists the operator in To, or in neither To nor Cc
-  (BCC, mail merge or a missing To header), still counts. Commitments
+  (BCC, mail merge or a missing To header), still counts, as does a message
+  whose cached raw headers are unavailable. Commitments
   follow the same rule and include only items
   addressed to or requested of the operator; items meant for other
   recipients of a group message are ignored. Birthdays stay a
