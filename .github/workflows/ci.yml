@@ -25,7 +25,7 @@ jobs:
   discover:
     runs-on: ubuntu-latest
     outputs:
-      checks: ${{ steps.discover.outputs.checks }}
+      targets: ${{ steps.discover.outputs.targets }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -44,8 +44,14 @@ jobs:
       - name: Discover checks
         id: discover
         run: |
-          checks=$(nix eval --json '.#checks.x86_64-linux' --apply builtins.attrNames)
-          echo "checks=$checks" >> "$GITHUB_OUTPUT"
+          targets=$(nix eval --impure --json '.#checks' --apply '
+            checks: let system = builtins.currentSystem; in
+            map (check: {inherit system check;}) (builtins.attrNames checks.${system})')
+          if [ -z "$targets" ] || [ "$targets" = "[]" ]; then
+            echo "::error::no checks discovered for the runner system"
+            exit 1
+          fi
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
 
   build:
     needs: discover
@@ -56,7 +62,8 @@ jobs:
       fail-fast: false
       max-parallel: 10
       matrix:
-        check: ${{ fromJson(needs.discover.outputs.checks) }}
+        target: ${{ fromJson(needs.discover.outputs.targets) }}
+    name: build (${{ matrix.target.system }}.${{ matrix.target.check }})
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -78,21 +85,20 @@ jobs:
             post-build-hook = ${{ runner.temp }}/garret-hook
 
       - name: Start pushing to garret as paths are built
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.check != 'statix' && matrix.check != 'treefmt'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.target.check != 'statix' && matrix.target.check != 'treefmt'
         continue-on-error: true
         run: ./.ci/garret.sh watch
 
       - name: Build check
         env:
-          CHECKS: ${{ matrix.check }}
-          SYSTEM: x86_64-linux
+          SYSTEM: ${{ matrix.target.system }}
+          CHECK: ${{ matrix.target.check }}
         run: |
-          installables=()
-          for attr in $CHECKS; do installables+=(".#checks.${SYSTEM}.${attr}"); done
-          nix build --keep-going --show-trace --no-link --print-out-paths "${installables[@]}" >"$RUNNER_TEMP/garret-outputs"
+          nix build --keep-going --show-trace --no-link --print-out-paths \
+            ".#checks.${SYSTEM}.${CHECK}" >"$RUNNER_TEMP/garret-outputs"
 
       - name: Push to garret what the watcher has not
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.check != 'statix' && matrix.check != 'treefmt'
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.target.check != 'statix' && matrix.target.check != 'treefmt'
         continue-on-error: true
         timeout-minutes: 30
         run: ./.ci/garret.sh drain
