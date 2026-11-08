@@ -293,7 +293,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (model, type) (rate(atrium_llm_tokens_total{job=~\"$job\", instance=~\"$instance\"}[5m]))",
+          "expr": "sum by (model, type) (rate(atrium_llm_tokens_total{job=~\"$job\", instance=~\"$instance\"}[$__rate_interval]))",
           "legendFormat": "{{model}} {{type}}"
         }
       ]
@@ -326,7 +326,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (model) (rate(atrium_llm_cost_usd_total{job=~\"$job\", instance=~\"$instance\"}[5m]))",
+          "expr": "sum by (model) (rate(atrium_llm_cost_usd_total{job=~\"$job\", instance=~\"$instance\"}[$__rate_interval]))",
           "legendFormat": "{{model}}"
         }
       ]
@@ -359,7 +359,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (tool, ok) (rate(atrium_tool_calls_total{job=~\"$job\", instance=~\"$instance\"}[5m]))",
+          "expr": "sum by (tool, ok) (rate(atrium_tool_calls_total{job=~\"$job\", instance=~\"$instance\"}[$__rate_interval]))",
           "legendFormat": "{{tool}} ok={{ok}}"
         }
       ]
@@ -392,7 +392,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "histogram_quantile(0.9, sum by (le, tool) (rate(atrium_tool_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\"}[5m])))",
+          "expr": "histogram_quantile(0.9, sum by (le, tool) (rate(atrium_tool_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\"}[$__rate_interval])))",
           "legendFormat": "{{tool}}"
         }
       ]
@@ -491,7 +491,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "histogram_quantile(0.9, sum by (le, account) (rate(atrium_mail_sync_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\"}[5m])))",
+          "expr": "histogram_quantile(0.9, sum by (le, account) (rate(atrium_mail_sync_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\"}[$__rate_interval])))",
           "legendFormat": "{{account}}"
         }
       ]
