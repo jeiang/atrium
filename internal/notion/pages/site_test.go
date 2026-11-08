@@ -226,6 +226,7 @@ func (s *site) hubOf(id string) *string { return s.projectOf(id).WikiHubID }
 
 type fakeNotion struct {
 	mu       sync.Mutex
+	srv      *httptest.Server
 	pages    map[string]map[string]any
 	titles   map[string]string
 	parents  map[string]string
@@ -237,8 +238,8 @@ func newFakeNotion(t *testing.T) *fakeNotion {
 	t.Helper()
 	f := &fakeNotion{pages: map[string]map[string]any{}, titles: map[string]string{}, parents: map[string]string{}, markdown: map[string]string{}}
 	srv := httptest.NewServer(f)
+	f.srv = srv
 	t.Cleanup(srv.Close)
-	t.Setenv("ATRIUM_NOTION_BASE_URL", srv.URL)
 	return f
 }
 

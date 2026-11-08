@@ -12,6 +12,7 @@ import (
 
 	"regexp"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/difflib"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -304,6 +305,7 @@ func (p *Proposer) ProposeEdit(ctx context.Context, pageID, instruction string) 
 
 type Applier struct {
 	DB  *db.DB
+	Env config.Env
 	Now func() float64
 }
 
@@ -315,7 +317,7 @@ func (a *Applier) now() float64 {
 }
 
 func (a *Applier) client(ctx context.Context) (*Client, error) {
-	return NewClient(ctx, a.DB.Read)
+	return NewClient(ctx, a.DB.Read, a.Env)
 }
 
 func freshPage(ctx context.Context, client *Client, pageID, snapshot string) error {

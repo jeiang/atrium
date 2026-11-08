@@ -23,6 +23,6 @@ type Deps struct {
 func Register(r *proposals.Registry, deps Deps) {
 	executors.Register(r, &executors.Executors{DB: deps.DB, Open: deps.Open, Now: deps.Now}, deps.Syncer)
 	calendar.Register(r, &calendar.Proposals{DB: deps.DB, Now: deps.Now, Env: deps.Env})
-	(&notion.Applier{DB: deps.DB, Now: deps.Now}).Register(r)
+	(&notion.Applier{DB: deps.DB, Env: deps.Env, Now: deps.Now}).Register(r)
 	openloops.Register(r, &openloops.Reminders{DB: deps.DB, Now: deps.Now})
 }

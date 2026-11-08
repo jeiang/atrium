@@ -29,8 +29,8 @@ func Token(ctx context.Context, q db.Querier) (string, error) {
 	return token, nil
 }
 
-func SharedPages(ctx context.Context, q db.Querier, token string, hc *http.Client) (shared int, more bool, err error) {
-	client, err := newCandidate(ctx, q, token, hc)
+func SharedPages(ctx context.Context, q db.Querier, env config.Env, token string, hc *http.Client) (shared int, more bool, err error) {
+	client, err := newCandidate(ctx, q, env, token, hc)
 	if err != nil {
 		return 0, false, err
 	}

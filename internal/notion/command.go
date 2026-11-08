@@ -70,7 +70,7 @@ func (o Options) sync(ctx context.Context, d *db.DB, cfg config.Config, env *cli
 }
 
 func (o Options) syncPass(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
-	client, err := NewClient(ctx, d.Read)
+	client, err := NewClient(ctx, d.Read, o.env())
 	if err != nil {
 		return err
 	}

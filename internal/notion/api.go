@@ -9,11 +9,11 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
 )
@@ -51,22 +51,27 @@ type Client struct {
 	paced   bool
 }
 
-func baseURL() string {
-	if u := strings.TrimRight(os.Getenv("ATRIUM_NOTION_BASE_URL"), "/"); u != "" {
-		return u
+func baseURL(env config.Env) string {
+	if env == nil {
+		env = config.OS
+	}
+	if u, ok := env("ATRIUM_NOTION_BASE_URL"); ok {
+		if u = strings.TrimRight(u, "/"); u != "" {
+			return u
+		}
 	}
 	return BaseURL
 }
 
-func NewClient(ctx context.Context, q db.Querier) (*Client, error) {
+func NewClient(ctx context.Context, q db.Querier, env config.Env) (*Client, error) {
 	token, err := Token(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	return newCandidate(ctx, q, token, nil)
+	return newCandidate(ctx, q, env, token, nil)
 }
 
-func newCandidate(ctx context.Context, q db.Querier, token string, hc *http.Client) (*Client, error) {
+func newCandidate(ctx context.Context, q db.Querier, env config.Env, token string, hc *http.Client) (*Client, error) {
 	limits, err := LoadAPI(ctx, q)
 	if err != nil {
 		return nil, err
@@ -77,7 +82,7 @@ func newCandidate(ctx context.Context, q db.Querier, token string, hc *http.Clie
 			return nil, err
 		}
 	}
-	return &Client{token: token, BaseURL: baseURL(), HTTP: hc, API: limits}, nil
+	return &Client{token: token, BaseURL: baseURL(env), HTTP: hc, API: limits}, nil
 }
 
 func sleep(ctx context.Context, seconds float64) error {

@@ -10,8 +10,8 @@ import (
 	"github.com/jeiang/atrium/internal/notion"
 )
 
-func makeClient(ctx context.Context, q db.Querier) (*notion.Client, error) {
-	client, err := notion.NewClient(ctx, q)
+func makeClient(ctx context.Context, q db.Querier, env config.Env) (*notion.Client, error) {
+	client, err := notion.NewClient(ctx, q, env)
 	var missing config.NotConfigured
 	if errors.As(err, &missing) {
 		return nil, tool.NotConfigured(err.Error())

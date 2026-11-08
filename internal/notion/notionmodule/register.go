@@ -29,7 +29,7 @@ func init() {
 }
 
 func testToken(ctx context.Context, c integrations.Conn) (string, error) {
-	shared, more, err := notion.SharedPages(ctx, c.DB.Read, c.Secret, c.HTTP)
+	shared, more, err := notion.SharedPages(ctx, c.DB.Read, c.Env, c.Secret, c.HTTP)
 	var failure *notion.Error
 	switch {
 	case errors.As(err, &failure) && failure.Status == http.StatusUnauthorized:

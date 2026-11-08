@@ -142,7 +142,7 @@ func searchKnowledge(ctx context.Context, tc *tool.Context, args tool.Args) (any
 }
 
 func livePage(ctx context.Context, tc *tool.Context, pageID string) (map[string]any, error) {
-	client, err := makeClient(ctx, tc.DB.Read)
+	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
 	if err != nil {
 		return nil, err
 	}

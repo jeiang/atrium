@@ -61,7 +61,7 @@ func fresh(ctx context.Context, client *notion.Client, pageID, applied string) e
 
 func guarded(env config.Env, fn func(ctx context.Context, q db.Querier, client *notion.Client, payload json.RawMessage) (any, error)) writes.Undoer {
 	return func(ctx context.Context, q db.Querier, payload json.RawMessage) (any, error) {
-		client, err := makeClient(ctx, q)
+		client, err := makeClient(ctx, q, env)
 		if err != nil {
 			return nil, refuse(err)
 		}
