@@ -47,8 +47,8 @@ var (
 	idleChanges = []string{"EXISTS", "EXPUNGE", "FETCH", "RECENT"}
 )
 
-func New(host, user, password string) mail.Client {
-	return mail.Gated(newConn(host, user, password))
+func New(host, user, password string) *conn {
+	return newConn(host, user, password)
 }
 
 func newConn(host, user, password string) *conn {

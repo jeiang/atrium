@@ -188,13 +188,13 @@ func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, er
 	return py.Dict{{Key: "deleted", Value: info.UID}}, nil
 }
 
-func Register(reg *proposals.Registry, p *Proposals) {
+func Register(reg *proposals.Registry, p *Proposals, owner string) {
 	reg.Executors[Kind] = p.Execute
 	reg.Undoers[UndoOp] = p.Undo
 	reg.Executors[UpdateKind] = p.ExecuteUpdate
 	reg.Executors[RSVPKind] = p.ExecuteRSVP
 	reg.Undoers[RestoreOp] = p.Restore
-	reg.AddKind(proposals.Kind{Name: Kind, Label: "Calendar event", Icon: "calendar"})
-	reg.AddKind(proposals.Kind{Name: UpdateKind, Label: "Event change", Icon: "calendar"})
-	reg.AddKind(proposals.Kind{Name: RSVPKind, Label: "Event reply", Icon: "calendar"})
+	reg.AddKind(proposals.Kind{Name: Kind, Module: owner, Label: "Calendar event", Icon: "calendar"})
+	reg.AddKind(proposals.Kind{Name: UpdateKind, Module: owner, Label: "Event change", Icon: "calendar"})
+	reg.AddKind(proposals.Kind{Name: RSVPKind, Module: owner, Label: "Event reply", Icon: "calendar"})
 }

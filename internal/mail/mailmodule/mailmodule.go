@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
@@ -55,7 +56,7 @@ func probeTest(kind string) func(context.Context, integrations.Conn) (string, er
 }
 
 type Module struct {
-	Clients run.Clients
+	Clients func(config.Config) mail.OpenFunc
 	Now     func() float64
 }
 

@@ -84,15 +84,8 @@ func (e *PartialMove) Error() string {
 
 func (e *PartialMove) Unwrap() error { return e.Err }
 
-type Opener func(ctx context.Context, account string) (mail.Client, error)
-
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
-
-func Session(ctx context.Context, open Opener, account string, fn func(mail.Client) error) error {
-	client, err := open(ctx, account)
+func Session(ctx context.Context, open mail.OpenFunc, q mail.Querier, account string, fn func(mail.Client) error) error {
+	client, err := open(ctx, mail.OpenOptions{Account: account, Q: q})
 	if err != nil {
 		return err
 	}
@@ -141,7 +134,7 @@ func (s Skip) Dict() py.Dict {
 	return py.Dict{{Key: "id", Value: s.ID}, {Key: "reason", Value: s.Reason}}
 }
 
-func Snapshots(ctx context.Context, q Querier, ids []int64) ([]Snapshot, error) {
+func Snapshots(ctx context.Context, q mail.Querier, ids []int64) ([]Snapshot, error) {
 	var out []Snapshot
 	for _, chunk := range Chunks(ids, 500) {
 		args := make([]any, len(chunk))
@@ -181,7 +174,7 @@ type boxKey struct {
 	validity uint32
 }
 
-func Verify(ctx context.Context, q Querier, client mail.Client, account string, snaps []Snapshot) (ok []Verified, skipped []Skip, err error) {
+func Verify(ctx context.Context, q mail.Querier, client mail.Client, account string, snaps []Snapshot) (ok []Verified, skipped []Skip, err error) {
 	batch, err := batchFrom(ctx, q)
 	if err != nil {
 		return nil, nil, err

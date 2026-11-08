@@ -92,7 +92,7 @@ type FakeAppend struct {
 }
 
 type FakeClient struct {
-	mail.Client
+	fakeConn
 
 	Boxes        map[string]*FakeBox
 	Order        []string
@@ -126,13 +126,12 @@ func NewFakeClient() *FakeClient {
 		Caps:         map[string]bool{"IDLE": true, "CONDSTORE": true, "UIDPLUS": true},
 		CategoryUIDs: map[string][]uint32{},
 	}
-	f.Client = mail.Gated(fakeConn{f})
+	f.fakeConn = fakeConn{f}
 	return f
 }
 
-func (f *FakeClient) BindMode(q mail.Querier) mail.Client {
-	f.Client = f.Client.BindMode(q)
-	return f
+func (f *FakeClient) Open(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
+	return mail.Gated(f, opts.Q), nil
 }
 
 func (f *FakeClient) AddBox(imapName string, box *FakeBox, flags ...string) *FakeBox {

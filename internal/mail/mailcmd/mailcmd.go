@@ -13,22 +13,17 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/mail/run"
-	mailsync "github.com/jeiang/atrium/internal/mail/sync"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
+	runpkg "github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/proposals/handlers"
 	"github.com/jeiang/atrium/internal/py"
 )
-
-type Clients = run.Clients
 
 var operator = proposals.Resolver{Actor: "operator", Source: "cli"}
 
 type Options struct {
 	Env     config.Env
-	Clients Clients
+	Clients func(config.Config) mail.OpenFunc
 	Now     func() float64
 }
 
@@ -56,9 +51,8 @@ func (e *exitError) Error() string { return e.text }
 func failure(code int, err error) error { return &exitError{code: code, text: err.Error()} }
 
 type Exec struct {
+	*runpkg.Pass
 	Ctx    context.Context
-	Cfg    config.Config
-	DB     *db.DB
 	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
@@ -72,24 +66,6 @@ func (x *Exec) Print(text string) { _, _ = io.WriteString(x.Stdout, text) }
 
 func (x *Exec) JSON(value any) {
 	x.Print(py.JSONDumps(value, py.JSONOpts{Indent: 2}) + "\n")
-}
-
-func (x *Exec) Open() mailops.Opener {
-	return mailops.Opener(mail.BindMode(x.opts.Clients(x.Cfg), x.DB.Read))
-}
-
-func (x *Exec) Syncer() *mailsync.Syncer {
-	return &mailsync.Syncer{DB: x.DB, Cfg: x.Cfg, Now: x.opts.Now}
-}
-
-func (x *Exec) Registry() *proposals.Registry {
-	registry := proposals.NewRegistry()
-	handlers.Register(registry, handlers.Deps{DB: x.DB, Open: x.Open(), Syncer: x.Syncer(), Now: x.opts.Now, Env: config.OS})
-	return registry
-}
-
-func (x *Exec) Live() *live.Live {
-	return &live.Live{DB: x.DB, Cfg: x.Cfg, Registry: x.Registry(), Now: x.opts.Now}
 }
 
 func (x *Exec) Exclusive(fn func() error) error {
@@ -135,15 +111,16 @@ func (o Options) run(env *cli.Env, run body) error {
 	if err != nil {
 		return err
 	}
-	d, err := db.Connect(cfg.DBPath)
+	clients := o.Clients
+	if clients == nil {
+		clients = imapclient.Opener
+	}
+	pass, release, err := runpkg.Open(env.Ctx, o.env(), cfg, clients(cfg), o.Now)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = d.Close() }()
-	if err := config.Boot(env.Ctx, o.env(), d, cfg); err != nil {
-		return err
-	}
-	return run(&Exec{Ctx: env.Ctx, Cfg: cfg, DB: d, Stdin: env.Stdin, Stdout: env.Stdout, Stderr: env.Stderr, opts: o})
+	defer release()
+	return run(&Exec{Pass: pass, Ctx: env.Ctx, Stdin: env.Stdin, Stdout: env.Stdout, Stderr: env.Stderr, opts: o})
 }
 
 func openError(path string, err error) error {

@@ -26,6 +26,7 @@ type SyncHook func(ctx context.Context, account string) error
 
 type Kind struct {
 	Name     string
+	Module   string
 	Label    string
 	Icon     string
 	Picker   bool
@@ -60,6 +61,11 @@ func (r *Registry) Kinds() []Kind { return r.kinds }
 func (r *Registry) Kind(name string) (Kind, bool) {
 	k, ok := r.byName[name]
 	return k, ok
+}
+
+func (r *Registry) mustKind(name string) Kind {
+	k, _ := r.Kind(name)
+	return k
 }
 
 func (r *Registry) Known(name string) bool {

@@ -59,10 +59,8 @@ func (s *Syncer) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-type Opener func(ctx context.Context, account string) (mail.Client, error)
-
-func (s *Syncer) One(ctx context.Context, account string, open Opener) (Stats, error) {
-	client, err := open(ctx, account)
+func (s *Syncer) One(ctx context.Context, account string, open mail.OpenFunc) (Stats, error) {
+	client, err := open(ctx, mail.OpenOptions{Account: account, Q: s.DB.Read})
 	if err != nil {
 		return Stats{}, err
 	}

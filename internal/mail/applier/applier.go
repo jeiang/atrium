@@ -188,14 +188,14 @@ func safeLabel(name string) bool {
 
 type Applier struct {
 	Live   *live.Live
-	Open   mailops.Opener
+	Open   mail.OpenFunc
 	Resync func(ctx context.Context, account string) error
 	Cap    int
 }
 
-func New(l *live.Live, open mailops.Opener, syncer *mailsync.Syncer) *Applier {
+func New(l *live.Live, open mail.OpenFunc, syncer *mailsync.Syncer) *Applier {
 	return &Applier{Live: l, Open: open, Resync: func(ctx context.Context, account string) error {
-		return mailops.Session(ctx, open, account, func(client mail.Client) error {
+		return mailops.Session(ctx, open, l.DB.Read, account, func(client mail.Client) error {
 			_, err := syncer.Account(ctx, account, client)
 			return err
 		})
@@ -1012,7 +1012,7 @@ func (a *Applier) runPass(ctx context.Context, account string, build builder, la
 		return out, err
 	}
 	if len(intents) > 0 {
-		err := mailops.Session(auto, a.Open, account, func(client mail.Client) error {
+		err := mailops.Session(auto, a.Open, a.Live.DB.Read, account, func(client mail.Client) error {
 			return a.execute(auto, client, account, intents, &out)
 		})
 		if err != nil {

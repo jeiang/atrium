@@ -585,10 +585,10 @@ func (a *Applier) UndoRestore(ctx context.Context, plan json.RawMessage) (py.Dic
 	return py.Dict{{Key: "restored", Value: pageID}}, nil
 }
 
-func (a *Applier) Register(r *proposals.Registry) {
+func (a *Applier) Register(r *proposals.Registry, owner string) {
 	r.Executors[KindLink] = a.ExecuteLink
 	r.Executors[KindEdit] = a.ExecuteEdit
 	r.Undoers[UndoRestoreOp] = a.UndoRestore
-	r.AddKind(proposals.Kind{Name: KindLink, Label: "Notion link", Icon: "link"})
-	r.AddKind(proposals.Kind{Name: KindEdit, Label: "Notion edit", Icon: "pencil"})
+	r.AddKind(proposals.Kind{Name: KindLink, Module: owner, Label: "Notion link", Icon: "link"})
+	r.AddKind(proposals.Kind{Name: KindEdit, Module: owner, Label: "Notion edit", Icon: "pencil"})
 }

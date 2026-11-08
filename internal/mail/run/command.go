@@ -10,25 +10,22 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/mailops"
 )
 
-type runner func(ctx context.Context, env config.Env, cfg config.Config, requested string, open mailops.Opener) error
+type runner func(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc) error
 
-type Clients = func(cfg config.Config) mail.OpenFunc
-
-func SyncCommand(env config.Env, clients Clients) *cli.Command {
-	return command(env, "sync", clients, func(ctx context.Context, env config.Env, cfg config.Config, requested string, open mailops.Opener) error {
+func SyncCommand(env config.Env, clients func(config.Config) mail.OpenFunc) *cli.Command {
+	return command(env, "sync", clients, func(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc) error {
 		_, err := Sync(ctx, env, cfg, requested, open)
 		return err
 	})
 }
 
-func WatchCommand(env config.Env, clients Clients) *cli.Command {
+func WatchCommand(env config.Env, clients func(config.Config) mail.OpenFunc) *cli.Command {
 	return command(env, "watch", clients, Watch)
 }
 
-func command(cfgEnv config.Env, name string, clients Clients, run runner) *cli.Command {
+func command(cfgEnv config.Env, name string, clients func(config.Config) mail.OpenFunc, run runner) *cli.Command {
 	return &cli.Command{
 		Name: name,
 		Setup: func(a *cli.Args) cli.Handler {
@@ -40,7 +37,7 @@ func command(cfgEnv config.Env, name string, clients Clients, run runner) *cli.C
 	}
 }
 
-func execute(env *cli.Env, cfgEnv config.Env, requested string, run runner, clients Clients) int {
+func execute(env *cli.Env, cfgEnv config.Env, requested string, run runner, clients func(config.Config) mail.OpenFunc) int {
 	cfg, err := config.Load(cfgEnv)
 	if err == nil {
 		err = run(env.Ctx, cfgEnv, cfg, requested, clients(cfg))

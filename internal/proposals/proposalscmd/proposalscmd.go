@@ -12,9 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
-	"github.com/jeiang/atrium/internal/mail/run"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -34,9 +32,10 @@ func nullable[T any](v *T) any {
 }
 
 type Options struct {
-	Clients run.Clients
+	Clients func(config.Config) mail.OpenFunc
 	Now     func() float64
 	Env     config.Env
+	Enabled func(context.Context, db.Querier, string) (bool, error)
 }
 
 func (o Options) env() config.Env {
@@ -83,7 +82,7 @@ func (x *exec) Registry() *proposals.Registry {
 	if clients == nil {
 		clients = imapclient.Opener
 	}
-	open := mailops.Opener(mail.BindMode(clients(x.Cfg), x.DB.Read))
+	open := clients(x.Cfg)
 	handlers.Register(registry, handlers.Deps{
 		DB: x.DB, Open: open, Syncer: &mailsync.Syncer{DB: x.DB, Cfg: x.Cfg, Now: x.opts.Now}, Now: x.opts.Now, Env: x.opts.env(),
 	})
@@ -91,7 +90,7 @@ func (x *exec) Registry() *proposals.Registry {
 }
 
 func (x *exec) Pipeline() *proposals.Pipeline {
-	return &proposals.Pipeline{DB: x.DB, Registry: x.Registry(), Now: x.opts.Now}
+	return &proposals.Pipeline{DB: x.DB, Registry: x.Registry(), Now: x.opts.Now, Enabled: x.opts.Enabled}
 }
 
 type body func(x *exec) error

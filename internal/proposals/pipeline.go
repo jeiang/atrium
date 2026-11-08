@@ -374,6 +374,18 @@ type Pipeline struct {
 	DB       *db.DB
 	Registry *Registry
 	Now      func() float64
+	Enabled  func(context.Context, db.Querier, string) (bool, error)
+}
+
+func (p *Pipeline) enabled(ctx context.Context, kind string) (bool, error) {
+	if p.Registry == nil || p.Enabled == nil {
+		return true, nil
+	}
+	k, ok := p.Registry.Kind(kind)
+	if !ok || k.Module == "" {
+		return true, nil
+	}
+	return p.Enabled(ctx, p.DB.Read, k.Module)
 }
 
 func (p *Pipeline) now() float64 {
@@ -419,6 +431,13 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any,
 	}
 	if prop == nil {
 		return nil, ProposalError(fmt.Sprintf("unknown proposal %d", id))
+	}
+	on, err := p.enabled(ctx, prop.Kind)
+	if err != nil {
+		return nil, err
+	}
+	if !on {
+		return nil, ProposalError(fmt.Sprintf("the %s module is disabled", p.Registry.mustKind(prop.Kind).Module))
 	}
 	var executor Executor
 	if p.Registry != nil {
@@ -496,6 +515,15 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	prop, err := Get(ctx, p.DB.Write, id)
 	if err != nil {
 		return UndoResult{}, err
+	}
+	if prop != nil {
+		on, err := p.enabled(ctx, prop.Kind)
+		if err != nil {
+			return UndoResult{}, err
+		}
+		if !on {
+			return UndoResult{}, ProposalError(fmt.Sprintf("the %s module is disabled", p.Registry.mustKind(prop.Kind).Module))
+		}
 	}
 	if prop == nil || (prop.Status != Applied && prop.Status != Failed) {
 		return UndoResult{}, ProposalError(fmt.Sprintf("proposal %d is not applied", id))

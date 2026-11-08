@@ -134,28 +134,17 @@ type Conn interface {
 type Client interface {
 	Conn
 	gated()
-	BindMode(q Querier) Client
 	Settings() Querier
 }
 
-type OpenFunc = func(ctx context.Context, account string) (Client, error)
-
-func BindMode(open OpenFunc, q Querier) OpenFunc {
-	return func(ctx context.Context, account string) (Client, error) {
-		client, err := open(ctx, account)
-		if err != nil {
-			return nil, err
-		}
-		return client.BindMode(q), nil
-	}
+type OpenOptions struct {
+	Account string
+	Q       Querier
 }
 
-func Gated(conn Conn) Client { return gate{conn: conn} }
+type OpenFunc func(ctx context.Context, opts OpenOptions) (Client, error)
 
-func (g gate) BindMode(q Querier) Client {
-	g.q = q
-	return g
-}
+func Gated(conn Conn, q Querier) Client { return gate{conn: conn, q: q} }
 
 func (g gate) Settings() Querier { return g.q }
 

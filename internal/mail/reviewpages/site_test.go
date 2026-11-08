@@ -75,11 +75,11 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	}
 	s.imap.AddBox("INBOX", mailtest.NewBox(1))
 	s.imap.AddBox("Sent Messages", mailtest.NewBox(1), `\Sent`)
-	open := func(ctx context.Context, account string) (mail.Client, error) {
+	open := func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
 		if err := s.imap.Connect(ctx); err != nil {
 			return nil, err
 		}
-		return s.imap, nil
+		return mail.Gated(s.imap, opts.Q), nil
 	}
 	tick := func() float64 {
 		s.clock++

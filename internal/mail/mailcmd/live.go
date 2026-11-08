@@ -22,7 +22,7 @@ func (o Options) LiveCommand() *cli.Command {
 		o.leaf("resume", func(*cli.Args) body { return setPaused(false) }),
 		o.leaf("status", func(*cli.Args) body {
 			return func(x *Exec) error {
-				status, err := x.Live().Status(x.Ctx)
+				status, err := x.Live.Status(x.Ctx)
 				if err != nil {
 					return err
 				}
@@ -67,10 +67,10 @@ func liveBacklog(x *Exec) error {
 
 func rebaseline(x *Exec) error {
 	return x.Exclusive(func() error {
-		if err := run.New(x.opts.env(), x.DB, x.Cfg, x.Open(), x.opts.Now).SyncAll(x.Ctx); err != nil {
+		if err := x.Pass.SyncAll(x.Ctx); err != nil {
 			return err
 		}
-		baseline, err := x.Live().Rebaseline(x.Ctx)
+		baseline, err := x.Live.Rebaseline(x.Ctx)
 		if err != nil {
 			return err
 		}
@@ -85,7 +85,7 @@ func rebaseline(x *Exec) error {
 
 func setPaused(paused bool) body {
 	return func(x *Exec) error {
-		l := x.Live()
+		l := x.Live
 		if err := l.SetPaused(paused); err != nil {
 			return err
 		}
@@ -103,10 +103,10 @@ func liveDeletions(x *Exec) error {
 		if err != nil {
 			return err
 		}
-		syncer := x.Syncer()
+		syncer := x.Syncer
 		out := py.Dict{}
 		for _, account := range accounts {
-			done, err := applier.New(x.Live(), x.Open(), syncer).DeletionPass(x.Ctx, account, true)
+			done, err := applier.New(x.Live, x.Open, syncer).DeletionPass(x.Ctx, account, true)
 			if err != nil {
 				return err
 			}
@@ -138,7 +138,7 @@ func listActions(x *Exec, limit int, kind string) error {
 }
 
 func undoAction(x *Exec, id int64) error {
-	result, err := x.Live().Undo(x.Ctx, id)
+	result, err := x.Live.Undo(x.Ctx, id)
 	if err != nil {
 		var undoErr live.UndoError
 		if errors.As(err, &undoErr) {
@@ -154,7 +154,7 @@ func undoAction(x *Exec, id int64) error {
 }
 
 func resolveAction(x *Exec, id int64, outcome string) error {
-	result, err := x.Live().Resolve(x.Ctx, id, outcome, operator)
+	result, err := x.Live.Resolve(x.Ctx, id, outcome, operator)
 	if err != nil {
 		var undoErr live.UndoError
 		if errors.As(err, &undoErr) {
